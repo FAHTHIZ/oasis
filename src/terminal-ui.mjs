@@ -439,6 +439,11 @@ export function describeToolResult(name, result, { color = true } = {}) {
     const files = new Set(result.matches.map((m) => m.path)).size;
     return '  ⎿ ' + dim + result.matches.length + ' match' + (result.matches.length === 1 ? '' : 'es') + ' in ' + files + ' file' + (files === 1 ? '' : 's') + (result.truncated ? ' (more not shown)' : '') + off;
   }
+  // glob_files reports `matches` (paths); it printed nothing at all before.
+  if (name === 'glob_files' && Array.isArray(result.matches)) {
+    const count = result.matches.length;
+    return '  ⎿ ' + dim + (count ? count + ' file' + (count === 1 ? '' : 's') : 'No files found') + (result.truncated ? ' (more not shown)' : '') + off;
+  }
   if ((name === 'list_files' || name === 'glob_files') && Array.isArray(result.files)) {
     return '  ⎿ ' + dim + result.files.length + ' file' + (result.files.length === 1 ? '' : 's') + (result.truncated ? ' (more not shown)' : '') + off;
   }
