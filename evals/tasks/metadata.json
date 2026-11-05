@@ -162,6 +162,11 @@
       "difficulty": "medium",
       "rationale": "All-or-nothing batch command with validation before any write."
     },
+    "taskflow-csv": {
+      "category": "input-validation",
+      "difficulty": "large",
+      "rationale": "Multi-file feature: an RFC 4180 CSV parser and writer with formula-injection guarding, an all-or-nothing store import with header, row and timestamp validation and ID continuation, and new CLI commands."
+    },
     "taskflow-dependencies": {
       "category": "data-structures",
       "difficulty": "large",

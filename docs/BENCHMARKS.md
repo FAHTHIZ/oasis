@@ -1,8 +1,8 @@
 # OASIS coding-agent benchmarks
 
-**Status (2026-11-05):** the model-free harness microbenchmark exists; the agent fixture suite has 51 tasks (18 `taskflow-*` tasks); runner code exists for live comparisons. No public live same-model head-to-head against Claude Code has been published.
+**Status (2026-11-05):** the model-free harness microbenchmark exists; the agent fixture suite has 52 tasks (19 `taskflow-*` tasks); runner code exists for live comparisons. No public live same-model head-to-head against Claude Code has been published.
 
-The classifications in `evals/tasks/metadata.json` currently say 19 small, 28 medium, and 4 large. These labels are maintainer-authored estimates, not calibrated difficulty scores. All four `large` labels are concentrated in one small Taskflow repository snapshot, so they do not establish broad large-repository coverage.
+The classifications in `evals/tasks/metadata.json` currently say 19 small, 28 medium, and 5 large. These labels are maintainer-authored estimates, not calibrated difficulty scores. All four `large` labels are concentrated in one small Taskflow repository snapshot, so they do not establish broad large-repository coverage.
 
 This page separates what is implemented, what has actually been measured, and what is only a proposed protocol. It does not claim OASIS is faster, cheaper, or more accurate than another agent without controlled completed runs.
 
@@ -11,7 +11,7 @@ This page separates what is implemented, what has actually been measured, and wh
 | Measurement | What it actually measures | Evidence status | What it does not establish |
 |---|---|---|---|
 | `bench/harness/` | Deterministic synthetic inputs sent to selected runtime helpers and guards; includes an intentionally primitive baseline | Historical report from 2026-11-01 at source revision `4541f1d`; CI publishes fresh per-Node artifacts | Real-model task success, real-world damage rates, or parity with another product |
-| `evals/tasks/` | 51 frozen task fixtures with disposable snapshots, reference patches, and independent verifiers | Validator is in `npm run check`; the exact 2026-11-04 HEAD quality workflow passed | Model pass rate; broad SWE-bench-scale coverage; statistically reliable performance |
+| `evals/tasks/` | 52 frozen task fixtures with disposable snapshots, reference patches, and independent verifiers | Validator is in `npm run check`; the exact 2026-11-04 HEAD quality workflow passed | Model pass rate; broad SWE-bench-scale coverage; statistically reliable performance |
 | `scripts/bench-live.mjs` | Runs selected agent CLIs on identical task fixtures and summarizes verified matched trials | Runner and fake-CLI tests exist; no live public head-to-head result is published | Same-model harness isolation unless actual routed model/version and policy differences are verified |
 | `scripts/bench-web-search.mjs` | Expected-domain retrieval, reciprocal rank, result counts, provider errors, and sequential latency on 10 fixed queries | Diagnostic utility; supports repeated counterbalanced trials | Factual correctness, completeness, source credibility, or research-answer quality |
 | `scripts/measure-startup.mjs` | Repeated launch time for the locally installed `oasis --version` command | Local diagnostic; reports samples and median | Model-request latency, interactive responsiveness, or controlled cold-start performance |
@@ -68,9 +68,9 @@ Tokens are estimated as characters / 4. Times are medians of five sequential `oa
 
 It does not measure task success with a real model, and it does not compare OASIS with Claude Code, Codex CLI or any other product. It shows that, for the same model output, the OASIS runtime recovers more calls, applies more edits correctly and stops more damage than a harness without these layers. Task success needs the agent suite below, run with the same model in each harness.
 
-## What the current 51-task fixture suite proves (and does not prove)
+## What the current 52-task fixture suite proves (and does not prove)
 
-The repository has 51 deterministic evaluation fixtures under **evals/tasks/**. Eighteen `taskflow-*` fixtures share one small multi-module CLI project snapshot (`evals/snapshots/taskflow`), whose `test/` directory contains seven test files. Four tasks are labelled `large` (`taskflow-dependencies`, `taskflow-recurring`, `taskflow-undo`, and `taskflow-urgent-priority`); all four still exercise that same project snapshot, not four independent large repositories. Two other coordinated regression tasks (`config-strict-integer-bounds` and `session-history-truncation`) target the shared OASIS source snapshot. Most remaining fixtures focus on bounded helpers, parsing, validation, configuration, or security utilities. The fixture catalogue below lists nine added helper/regression tasks. Each fixture has a task prompt, a disposable repository snapshot, a reference patch, and an external verifier. The suite validator checks that the untouched baseline fails and the reference patch passes; it does not execute an agent or score model quality.
+The repository has 52 deterministic evaluation fixtures under **evals/tasks/**. Nineteen `taskflow-*` fixtures share one small multi-module CLI project snapshot (`evals/snapshots/taskflow`), whose `test/` directory contains seven test files. Four tasks are labelled `large` (`taskflow-dependencies`, `taskflow-recurring`, `taskflow-undo`, and `taskflow-urgent-priority`); all four still exercise that same project snapshot, not four independent large repositories. Two other coordinated regression tasks (`config-strict-integer-bounds` and `session-history-truncation`) target the shared OASIS source snapshot. Most remaining fixtures focus on bounded helpers, parsing, validation, configuration, or security utilities. The fixture catalogue below lists nine added helper/regression tasks. Each fixture has a task prompt, a disposable repository snapshot, a reference patch, and an external verifier. The suite validator checks that the untouched baseline fails and the reference patch passes; it does not execute an agent or score model quality.
 
 ### Added fixture catalogue
 
@@ -224,15 +224,15 @@ The comparator now fingerprints each task's prompt, shared repository snapshot, 
 4. Treat deterministic verifier outcomes as the success signal. Do not use a model to judge itself and do not count a task as passed just because the agent says done.
 5. Run three trials at minimum and publish every failure and timeout. Report task-balanced, category-balanced, and difficulty-balanced pass rates plus total trial counts.
 6. Report cost only when supported by per-run usage metadata or documented token rates. Subscription usage with no per-run dollar amount is **unknown**, not zero. OASIS's token-price setting produces an estimate and does not account for every cache/billing modifier; label it as an estimate.
-7. Do not claim "90%" or "at the same level as Claude Code" from this 51-fixture suite alone. A credible public claim needs more independent repositories, larger bug-fix/refactor tasks, independent hidden tests, leakage checks, and multiple trials.
+7. Do not claim "90%" or "at the same level as Claude Code" from this 52-fixture suite alone. A credible public claim needs more independent repositories, larger bug-fix/refactor tasks, independent hidden tests, leakage checks, and multiple trials.
 
 ## Coverage audit and result limits
 
-The checked-in evaluator currently has **51 deterministic task fixtures**: 19 labelled small, 28 medium and 4 large. The 18 `taskflow-*` tasks share one small repository snapshot; the four large labels all come from that same snapshot. Two additional tasks require coordinated production-code and regression-test changes on the OASIS snapshot. All 51 passed the suite validator in the successful quality workflow for source revision `d4999691770fd0e28f4150c67c0073b7a4124077`. That proves fixture integrity at that revision, not agent success. One shared project and many utility-focused tasks are not representative SWE-bench-scale coverage.
+The checked-in evaluator currently has **52 deterministic task fixtures**: 19 labelled small, 28 medium and 5 large. The 19 `taskflow-*` tasks share one small repository snapshot; the four large labels all come from that same snapshot. Two additional tasks require coordinated production-code and regression-test changes on the OASIS snapshot. All 51 passed the suite validator in the successful quality workflow for source revision `d4999691770fd0e28f4150c67c0073b7a4124077`. That proves fixture integrity at that revision, not agent success. One shared project and many utility-focused tasks are not representative SWE-bench-scale coverage.
 
 The static audit identified these priorities:
 
-1. Done (November 1, 2026): 17 `taskflow-*` fixtures were added, bringing the suite to 50. Added November 4, 2026: `taskflow-dependencies`, bringing the total to 51 and the Taskflow group to 18. Still open: more independent pinned repositories, broader multi-file features, real bug fixes, failing-test diagnosis/recovery, context continuity, permission denial, cancellation, and unrelated-change preservation.
+1. Done (November 1, 2026): 17 `taskflow-*` fixtures were added, bringing the suite to 50. Added November 4, 2026: `taskflow-dependencies`, bringing the total to 51 and the Taskflow group to 18. Added November 5, 2026: `taskflow-csv` (RFC 4180 parsing and writing, formula-injection guarding, all-or-nothing import), bringing the total to 52 and the Taskflow group to 19. Still open: more independent pinned repositories, broader multi-file features, real bug fixes, failing-test diagnosis/recovery, context continuity, permission denial, cancellation, and unrelated-change preservation.
 2. Pin source revision, task and snapshot fingerprints, model/provider, prompt, permission policy, budget, timeout and environment for every run.
 3. Run stochastic tasks at least three times and retain raw results, including all failures and timeouts.
 4. Keep independent deterministic acceptance separate from blinded human diff review for correctness, regressions and maintainability.
@@ -314,7 +314,7 @@ The five-track work measures narrow failure modes—context durability, token ef
 
 This suite measures five narrow, falsifiable behaviors: context durability, token efficiency, task-list fidelity, ambiguity safety, and long-horizon completion. It is not a training system and it does not train, tune, or modify a model.
 
-The existing `evals/tasks/` suite remains a separate utility-focused regression suite. Its 51 fixtures, disposable snapshots, reference patches, external verifiers, snapshot fingerprints, validator, Claude Code runner, and JSON/HTML comparison reports are reused rather than rebuilt. The fixtures must not be presented as a representative coding-quality score.
+The existing `evals/tasks/` suite remains a separate utility-focused regression suite. Its 52 fixtures, disposable snapshots, reference patches, external verifiers, snapshot fingerprints, validator, Claude Code runner, and JSON/HTML comparison reports are reused rather than rebuilt. The fixtures must not be presented as a representative coding-quality score.
 
 ## Measurement rules
 
