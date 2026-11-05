@@ -164,7 +164,7 @@ export function taskToolDefinition(agents) {
   // Keep the schema lean: projects with dozens of custom agents used to send
   // every 600-char description on every request. Clip each entry and cap the list.
   const clip = (text, max) => { const value = String(text || '').replace(/\s+/g, ' ').trim(); return value.length > max ? value.slice(0, max - 1).trimEnd() + '…' : value; };
-  const entries = Object.values(agents).map((agent) => '- ' + agent.name + ': ' + clip(agent.description, 220) + (agent.tools ? ' (tools: ' + clip(agent.tools.join(', '), 120) + ')' : ''));
+  const entries = Object.values(agents).map((agent) => '- ' + agent.name + ': ' + clip(agent.description, 220) + (agent.tools && agent.source !== 'built-in' ? ' (tools: ' + clip(agent.tools.join(', '), 120) + ')' : ''));
   const kept = [];
   let used = 0;
   for (const entry of entries) {
@@ -183,8 +183,8 @@ export function taskToolDefinition(agents) {
       subagent_type: { type: 'string', enum: Object.keys(agents), description: 'Which agent to use; default general-purpose' },
       run_in_background: { type: 'boolean', description: 'Start the agent and return its id immediately, so you can keep working (or launch more agents) while it runs. You are notified with its report when it finishes. In the background it cannot ask for approval: actions not already allowed by permission rules are denied, so prefer read-only agents or worktree isolation.' },
       isolation: { type: 'string', enum: ['worktree'], description: 'Set to "worktree" to run an editing subagent in its own git worktree and branch, so parallel agents never clash and the user can review or merge each result. The result lists the branch, changed files and merge command.' },
-      team_id: { type: 'string', description: 'Optional named team ID created by team_create (for example team_1). Team members share a roster and can message one another directly.' },
-      model: { type: 'string', description: 'Optional model ID for this child. OASIS checks it against the models available to the parent; omit to inherit the parent or agent-configured model.' },
+      team_id: { type: 'string', description: 'Optional team ID from team_create.' },
+      model: { type: 'string', description: 'Optional model ID; omit to inherit.' },
       fork_context: { type: 'boolean', description: 'Include a bounded copy of the parent conversation in the child context. Off by default; use only when earlier discussion is needed, because it increases context and may disclose unrelated conversation details to the child.' }
     }, required: ['description', 'prompt'] }
   } };

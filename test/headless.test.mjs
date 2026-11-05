@@ -16,7 +16,7 @@ async function tmp() { return await mkdtemp(path.join(os.tmpdir(), 'oasis-headle
 test('json output reports the result, usage, and denied approvals', async (t) => {
   const root = await tmp();
   t.after(() => rm(root, { recursive: true, force: true }));
-  const { config } = await scriptedModel(t, [toolCall('c1', 'run_command', { command: 'git', args: ['--version'] }), { content: 'Could not write.' }]);
+  const { config } = await scriptedModel(t, [toolCall('c1', 'run_command', { command: 'git', args: ['init', '--quiet', 'sub'] }), { content: 'Could not write.' }]);
   let out = '';
   const { exitCode, summary } = await runHeadless({ prompt: 'write a.txt', root, config, outputFormat: 'json', sessionOptions: { settings }, write: (text) => { out += text; } });
   assert.equal(exitCode, 0);
@@ -27,7 +27,7 @@ test('json output reports the result, usage, and denied approvals', async (t) =>
   assert.ok(parsed.num_turns >= 2);
   assert.equal(parsed.usage.total_tokens, parsed.num_turns * 15);
   assert.equal(parsed.permission_denials.length, 1);
-  assert.match(parsed.permission_denials[0].detail, /git "--version"/);
+  assert.match(parsed.permission_denials[0].detail, /git "init"/);
   assert.equal(parsed.permission_denials[0].tool_name, 'run_command');
   assert.deepEqual(summary, parsed);
 });

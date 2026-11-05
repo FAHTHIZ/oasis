@@ -35,7 +35,7 @@ test('allow rules let matching commands run without a prompt; others still ask',
   const { config, requests } = await scriptedModel(t, [
     { content: null, tool_calls: [
       { id: 'c1', type: 'function', function: { name: 'run_command', arguments: JSON.stringify({ command: process.execPath, args: ['ok.js'] }) } },
-      { id: 'c2', type: 'function', function: { name: 'run_command', arguments: JSON.stringify({ command: 'git', args: ['--version'] }) } }
+      { id: 'c2', type: 'function', function: { name: 'run_command', arguments: JSON.stringify({ command: 'git', args: ['init', '--quiet', 'sub'] }) } }
     ] },
     { content: 'done' }
   ]);
@@ -53,15 +53,17 @@ test('answering "always" remembers a session rule so the next matching call skip
   const root = await tmp();
   t.after(() => rm(root, { recursive: true, force: true }));
   const { config } = await scriptedModel(t, [
-    toolCall('c1', 'run_command', { command: 'git', args: ['--version'] }),
-    toolCall('c2', 'run_command', { command: 'git', args: ['--version'] }),
+    toolCall('c1', 'run_command', { command: 'git', args: ['init', '--quiet', 'sub'] }),
+    toolCall('c2', 'run_command', { command: 'git', args: ['init', '--quiet', 'sub'] }),
     { content: 'done' }
   ]);
   const session = await createSession({ root, config, settings: settingsWith({}) });
   let asked = 0;
-  await runAgentTurn(session, 'run twice', { approval: async (message, force, meta) => { asked++; assert.equal(meta.suggestion, 'run_command(git:*)'); return 'always'; } });
+  const seen = [];
+  await runAgentTurn(session, 'run twice', { approval: async (message, force, meta) => { asked++; seen.push(meta.suggestion); return 'always'; } });
+  assert.deepEqual(seen, ['run_command(git init:*)']);
   assert.equal(asked, 1);
-  assert.deepEqual(session.permissions.describe().session, ['run_command(git:*)']);
+  assert.deepEqual(session.permissions.describe().session, ['run_command(git init:*)']);
 });
 
 test('PreToolUse hooks can block a tool with exit code 2 and PostToolUse feedback reaches the model', async (t) => {

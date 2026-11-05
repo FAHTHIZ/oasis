@@ -547,7 +547,7 @@ test('web terminal runner pauses for an explicit approval before starting a comm
   const base = 'http://127.0.0.1:' + app.port;
   const headers = { authorization: 'Bearer ' + app.token, 'content-type': 'application/json' };
   const start = await fetch(base + '/api/terminal/command', {
-    method: 'POST', headers, body: JSON.stringify({ command: 'node', args: ['--version'] })
+    method: 'POST', headers, body: JSON.stringify({ command: 'node', args: ['-e', 'console.log(1)'] })
   });
   assert.equal(start.status, 202);
   const { jobId } = await start.json();

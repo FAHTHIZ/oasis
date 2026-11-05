@@ -17,7 +17,7 @@ test('rare built-in tools are deferred, listed, and opt-out works', async (t) =>
   assert.ok(names(lean).includes('tool_search'));
   assert.ok(names(lean).includes('read_file'));
   assert.ok(lean.deferredTools.has('configure_provider'));
-  assert.match(lean.messages[0].content, /Deferred tools \(\d+\):.*configure_provider/);
+  assert.match(lean.messages[0].content, /More tools, loaded when needed \(\d+\)[\s\S]*configure_provider/);
   const full = await createSession({ root, config: { ...base(9), leanTools: false } });
   assert.ok(names(full).includes('configure_provider'));
   assert.ok(!full.deferredTools || !full.deferredTools.has('configure_provider'));
