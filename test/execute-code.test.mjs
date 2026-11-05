@@ -31,10 +31,10 @@ test('the agent exposes execute_code and nested calls use the normal tool path a
   await mkdir(path.join(root, 'src'));
   await writeFile(path.join(root, 'src', 'one.js'), '// TODO one\n');
   await writeFile(path.join(root, 'src', 'two.js'), 'ok\n// TODO two\n');
-  const code = 'const files = await tools.glob_files({ pattern: "src/*.js" }); const list = files.files || files.matches || []; const out = []; for (const f of list) { const r = await tools.read_file({ path: typeof f === "string" ? f : f.path }); out.push(String(r.content || "").includes("TODO")); } const denied = await tools.run_command({ command: "node", args: ["-v"] }).catch((e) => "blocked: " + e.message); return { count: out.filter(Boolean).length, denied };';
+  const code = 'const files = await tools.glob_files({ pattern: "src/*.js" }); const list = files.files || files.matches || []; const out = []; for (const f of list) { const r = await tools.read_file({ path: typeof f === "string" ? f : f.path }); out.push(String(r.content || "").includes("TODO")); } const denied = await tools.run_command({ command: "node", args: ["-e", "1"] }).catch((e) => "blocked: " + e.message); return { count: out.filter(Boolean).length, denied };';
   const { config, requests } = await scriptedModel(t, [toolCall('c1', 'execute_code', { code }), { content: 'Both files have TODOs.' }]);
   const session = await createSession({ root, config: { ...config, maxSteps: 4 }, env: { ...process.env, OASIS_SANDBOX: '0' } });
-  assert.ok(session.toolDefinitions.some((tool) => tool.function.name === 'execute_code'));
+  assert.ok((session.toolDefinitions.some((tool) => tool.function.name === 'execute_code') || session.deferredTools.has('execute_code')));
   let asked = 0;
   const result = await runAgentTurn(session, 'count TODO files', { approval: async () => { asked++; return false; } });
   assert.match(result.text, /TODOs/);

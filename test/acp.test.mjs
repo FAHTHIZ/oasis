@@ -176,7 +176,7 @@ test('ACP editor terminals (opt-in) run approved commands in the editor and embe
   const root = await tmp(t);
   const home = await tmp(t, 'oasis-acp-home-');
   const { config } = await scriptedModel(t, [
-    toolCall('c1', 'run_command', { command: 'echo', args: ['hi from the editor'] }),
+    toolCall('c1', 'run_command', { command: 'node', args: ['-e', 'console.log("hi from the editor")'] }),
     { content: 'Done.' }
   ]);
   const child = spawn(process.execPath, [CLI, 'acp', '--editor-terminal'], { cwd: root, env: { ...process.env, HOME: home, OASIS_CONFIG_DIR: path.join(home, 'cfg'), OASIS_PROTOCOL: 'openai-compatible', OASIS_BASE_URL: config.baseURL, OASIS_MODEL: 'fixture', OASIS_API_KEY: '', OASIS_SANDBOX: '0' }, stdio: ['pipe', 'pipe', 'pipe'] });

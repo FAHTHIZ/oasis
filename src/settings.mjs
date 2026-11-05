@@ -219,7 +219,11 @@ export async function loadSettings(root, options = {}) {
     permissions: { allow: [], ask: [], deny: [], defaultMode: 'default', additionalDirectories: [] },
     hooks: {},
     sandbox: { enabled: false, network: false, autoAllowCommands: true, maskSensitivePaths: true },
-    shell: { enabled: false },
+    // run_shell (pipes, &&, redirects) is on by default on macOS and Linux,
+    // as in Claude Code and Codex. Each line is still parsed into its simple
+    // commands for blocking, risk and approval. Windows uses the powershell
+    // tool. Turn it off with shell.enabled: false or OASIS_SHELL=0.
+    shell: { enabled: process.platform !== 'win32' && !['0', 'false', 'off'].includes(String(env.OASIS_SHELL || '').toLowerCase()) },
     model: null,
     outputStyle: null,
     agent: null,

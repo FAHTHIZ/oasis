@@ -27,7 +27,7 @@ test('single-executable commands fail closed before approval when an enabled san
 test('shell commands fail closed before approval when an enabled sandbox is unavailable', async () => {
   let approvalCalls = 0;
   await assert.rejects(
-    () => executePowerTool('run_shell', { command: 'echo should-not-run' }, {
+    () => executePowerTool('run_shell', { command: 'mkdir should-not-run' }, {
       sandbox: unavailableSandbox,
       approval: async () => { approvalCalls++; return true; },
       env: process.env
@@ -46,7 +46,7 @@ test('direct sandbox wrapping also rejects an unavailable explicitly enabled san
 
 test('free-form shell commands still require approval when only argv auto-approval is enabled', async () => {
   let approvalCalls = 0;
-  const result = await executePowerTool('run_shell', { command: 'echo should-not-run' }, {
+  const result = await executePowerTool('run_shell', { command: 'mkdir should-not-run' }, {
     sandbox: {
       enabled: true,
       available: true,

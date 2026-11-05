@@ -38,7 +38,7 @@ test('headless JSON results carry reported findings', async (t) => {
   ]);
   let out = '';
   const { summary } = await runHeadless({ root, config, prompt: 'review', outputFormat: 'json', write: (chunk) => { out += chunk; }, sessionOptions: { settings: { permissions: { allow: [], ask: [], deny: [], defaultMode: 'default' }, hooks: {}, sandbox: { enabled: false }, shell: { enabled: false } } } });
-  assert.ok(requests[0].tools.some((tool) => tool.function.name === 'report_findings'));
+  assert.ok(requests[1].tools.some((tool) => tool.function.name === 'report_findings'), 'loaded on first use');
   assert.equal(summary.findings.length, 1);
   assert.equal(summary.findings[0].severity, 'high');
   assert.equal(summary.findings_summary, 'One leak.');

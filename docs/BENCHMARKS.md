@@ -60,12 +60,21 @@ Notes:
 
 ### Context overhead and startup
 
-| Profile | Tools sent | System prompt | Tool schemas | First request | Time to first model request | End to end |
-| --- | --- | --- | --- | --- | --- | --- |
-| Default | 68 | ~4,969 tok | ~12,650 tok | ~17,619 tok | ~225 ms | ~243 ms |
-| Small-context (windows of 16K or less) | 13 | ~1,791 tok | ~2,191 tok | ~3,982 tok | ~223 ms | ~240 ms |
+| Profile | Tools sent | System prompt | Tool schemas | First request |
+| --- | --- | --- | --- | --- |
+| Default, before (`579145b`) | 68 | ~4,969 tok | ~12,650 tok | ~17,619 tok |
+| Default, now | 23 | ~2,654 tok | ~4,456 tok | ~7,110 tok |
+| Small-context (windows of 16K or less), now | 12 | ~1,646 tok | ~2,036 tok | ~3,683 tok |
 
-Tokens are estimated as characters / 4. Measured on 2026-11-05 at `579145b` (the 2026-11-01 report had 64 tools and ~15,430 tokens; the four tools added since are counted here). Times are medians of five sequential `oasis -p` runs against a local fixture server on a 2-CPU machine; they are host-specific measurements, not a general startup claim. Rarely used tools in the small-context profile stay reachable through `tool_search`.
+Tokens are estimated as characters / 4, measured on 2026-11-05 for `oasis -p hi` in an empty project against a local fixture server that records each request. The default first request is about 60% smaller than before. Three changes did it:
+
+- Core tools only. 23 tools go out up front: files, search, commands, todos, subagents, the web, memory and plan exit. The other 45 or so (git writes and worktrees, code intelligence, background agents and terminals, the task board and teams, setup) are listed by group in the prompt and load on first use, through `tool_search` or by calling them directly. Subagents can reach them the same way.
+- A short core prompt. It covers how to work, how to stay honest and how to stay safe. Notes for rarer tools (git commits, the task board, plugin installs, MCP setup and so on) now arrive with the tool the first time it loads, not on every turn.
+- A short skill catalogue. Each skill gets one line of at most 200 characters, giving its purpose and when to use it. Skills marked `disable-model-invocation: true` stay out of the catalogue, but the user can still run them as `/name`.
+
+Startup time was not re-measured for this table because the machine was running the test suite at the same time. The earlier medians were ~225 ms to the first model request and ~243 ms end to end, on a 2-CPU machine.
+
+Why it matters: a same-model comparison by [Tensorlake](https://www.tensorlake.ai/blog/best-ai-coding-agents-2026) found that Pi, with 4 tools and a prompt under 1k tokens, solved 20 of 30 tasks. Claude Code, with about 33k tokens of overhead, solved 16 of 30. Less fixed context leaves more room for the user's code and costs less on every turn. With `--tools` or `leanTools: false`, everything is sent up front as before.
 
 ### What this benchmark does not show
 
