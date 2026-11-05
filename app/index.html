@@ -50,6 +50,12 @@
 
   <main class="main">
    <div class="chat-col">
+    <div class="update-bar" id="updateBar" role="status" hidden>
+      <span class="update-text"><b id="updateTitle"></b> <span id="updateDetail"></span></span>
+      <button type="button" class="btn small primary" id="updateAction"></button>
+      <button type="button" class="btn small ghost" id="updateNotes">What's new</button>
+      <button type="button" class="icon-btn small" id="updateLater" title="Not now" aria-label="Not now"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M5 5l10 10M15 5L5 15" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg></button>
+    </div>
     <section class="chat" id="chat" aria-live="polite">
       <div class="welcome" id="welcome">
         <img src="icons/oasis-mark.svg" alt="" width="64" height="64" class="welcome-mark">

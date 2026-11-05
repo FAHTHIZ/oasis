@@ -64,6 +64,10 @@ svg{width:20px;height:20px;flex:none}
 
 .main{min-height:0;display:flex;position:relative}
 .chat-col{flex:1;min-width:0;display:flex;flex-direction:column}
+.update-bar{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:8px 10px 8px 14px;border-bottom:1px solid var(--accent-line);background:var(--accent-soft);font-size:13.5px}
+.update-bar[hidden]{display:none}
+.update-text{flex:1 1 220px;min-width:0;color:var(--muted)}
+.update-text b{color:var(--text);font-weight:600}
 .chat{flex:1;min-height:0;overflow-y:auto;overscroll-behavior:contain;padding:18px 14px 24px;scroll-behavior:smooth}
 .transcript,.welcome{max-width:var(--chat-w);margin:0 auto}
 
@@ -315,6 +319,7 @@ details.manual fieldset{margin:0}
 #pluginCount{font-size:11px;font-weight:700;color:var(--accent)}
 #pluginCount[hidden]{display:none}
 .plugin-chip svg{width:16px;height:16px}
+@media (max-width:440px){.composer-row{gap:4px}.plugin-chip{padding:5px 8px}.composer{padding-left:12px}}
 #dictateButton.listening{color:var(--accent-ink);background:var(--accent);border-color:var(--accent);animation:listen 1.6s ease-in-out infinite}
 #dictateButton.working{opacity:.6;cursor:progress}
 @keyframes listen{50%{box-shadow:0 0 0 5px var(--accent-soft)}}
