@@ -11,7 +11,8 @@ const APP_TO_RUNTIME = { openai: 'openai-compatible', anthropic: 'anthropic' };
 export function runtimeConfigFromConnection(result, { fallbackCount = 3 } = {}) {
   const { connection, model } = result;
   const protocol = APP_TO_RUNTIME[connection.protocol] || 'openai-compatible';
-  const fallbacks = connection.models.filter((id) => id && id !== model).slice(0, fallbackCount);
+  const unusable = new Set(result.unusable || []);
+  const fallbacks = connection.models.filter((id) => id && id !== model && !unusable.has(id)).slice(0, fallbackCount);
   return { protocol, baseURL: connection.baseURL, model, apiKey: connection.apiKey || '', fallbackModel: fallbacks.join(',') };
 }
 
