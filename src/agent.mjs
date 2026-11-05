@@ -2688,6 +2688,13 @@ async function requestCompletionRaw(session, options = {}) {
     }
     const message = data.choices && data.choices[0] && data.choices[0].message;
     if (!message) throw new Error('The model provider returned no assistant message.');
+    // Gemini ends a reply with finish_reason "function_call_filter:
+    // MALFORMED_FUNCTION_CALL" and nothing else when its own tool call failed
+    // to parse. That is not a final answer (it used to end the task with no
+    // changes); ask again, as Gemini CLI does.
+    if (/MALFORMED_FUNCTION_CALL/i.test(String(data.choices[0].finish_reason || '')) && !(typeof message.content === 'string' && message.content.trim()) && !(Array.isArray(message.tool_calls) && message.tool_calls.length)) {
+      throw Object.assign(new Error('The model stream was interrupted: the model produced a malformed tool call (' + data.choices[0].finish_reason + ').'), { code: 'OASIS_STREAM_INTERRUPTED' });
+    }
     if (typeof options.onDelta === 'function' && !streamed && typeof message.content === 'string' && message.content) options.onDelta(message.content);
     const chatTruncated = data.choices[0].finish_reason === 'length';
     return { ...message, usage: usageOrEstimate(data.usage, bodyText, message), ...(chatTruncated ? { truncated: true, outputLimit } : {}) };
@@ -5604,7 +5611,7 @@ async function runAgentTurnRaw(session, prompt, options = {}) {
       // Smaller models often answer "create X" with a tutorial instead of doing it.
       // They also announce the next step ("I need to create the file") and stop.
       if (actionNudges < 2 && !verification.changedPaths.size && !options.planOnly && permissionMode(session, options) !== 'plan' && asksForAction(request)) {
-        const kind = claimsUnmadeChange(text) ? 'false-claim' : readsLikeInstructions(text) ? 'described' : announcesNextStep(text) ? 'announced' : givesUpEarly(text) ? 'gave-up' : '';
+        const kind = !String(text || '').trim() ? 'empty' : claimsUnmadeChange(text) ? 'false-claim' : readsLikeInstructions(text) ? 'described' : announcesNextStep(text) ? 'announced' : givesUpEarly(text) ? 'gave-up' : '';
         if (kind) {
           actionNudges++;
           // A false "I created it" in context gets repeated by small models; drop it.
