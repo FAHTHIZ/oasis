@@ -143,6 +143,9 @@ svg{width:20px;height:20px;flex:none}
 .busy .send{background:var(--text);color:var(--bg)}
 .busy .send .i-send{display:none}
 .busy .send .i-stop{display:block}
+.busy.steering .send{background:var(--accent);color:#fff}
+.busy.steering .send .i-send{display:block}
+.busy.steering .send .i-stop{display:none}
 .todos{max-width:var(--chat-w);margin:0 auto 8px;border:1px solid var(--line);border-radius:var(--r-md);background:var(--panel);padding:8px 12px;font-size:13px;max-height:120px;overflow:auto}
 .todos div{display:flex;gap:8px;color:var(--text-2)}
 .todos .completed{color:var(--faint);text-decoration:line-through}

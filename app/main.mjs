@@ -425,6 +425,8 @@ async function autoDetectLocal() {
 function setBusy(busy) {
   document.body.classList.toggle('busy', busy);
   $('sendButton').setAttribute('aria-label', busy ? 'Stop' : 'Send');
+  if (typeof updateSteering === 'function') updateSteering();
+  $('input').placeholder = busy ? 'Add a note for OASIS while it works…' : 'Ask OASIS to build, fix or explain…';
 }
 
 function summarizeArgs(name, args = {}) {
@@ -816,11 +818,28 @@ $('input').addEventListener('keydown', (event) => {
     $('composer').requestSubmit();
   }
 });
-$('composer').addEventListener('submit', (event) => {
+$('composer').addEventListener('submit', async (event) => {
   event.preventDefault();
-  if (agent.busy) { agent.stop(); return; }
+  if (agent.busy) {
+    // Typing while OASIS works adds a note to the running task (like Claude
+    // Code and Codex); an empty box makes the button Stop.
+    const note = $('input').value.trim();
+    if (note && typeof agent.steer === 'function' && !looksLikeConnection(note)) {
+      $('input').value = ''; autosize(); updateSteering();
+      if (!(await agent.steer(note))) { $('input').value = note; autosize(); updateSteering(); toast('That task just finished. Send it as a new message.'); }
+      return;
+    }
+    agent.stop();
+    return;
+  }
   send($('input').value);
 });
+function updateSteering() {
+  const steering = document.body.classList.contains('busy') && Boolean($('input').value.trim());
+  document.body.classList.toggle('steering', steering);
+  $('sendButton').setAttribute('aria-label', steering ? 'Send to the running task' : document.body.classList.contains('busy') ? 'Stop' : 'Send');
+}
+$('input').addEventListener('input', updateSteering);
 
 function updateModeUI() {
   const mode = providerConfig().mode;

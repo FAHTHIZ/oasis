@@ -122,6 +122,17 @@ export class RuntimeAgent {
 
   snapshot() { return { sessionId: this.sessionId }; }
 
+  /** Send a note into the running task; the runtime reads it before its next step. */
+  async steer(text) {
+    const note = String(text || '').trim();
+    if (!this.busy || !this.jobId || !note) return false;
+    try {
+      await this.client.api('/api/jobs/' + this.jobId + '/steer', { method: 'POST', body: { message: note } });
+      this.emit('user', { content: note, steer: true });
+      return true;
+    } catch { return false; }
+  }
+
   stop() {
     if (this.jobId) this.client.api('/api/jobs/' + this.jobId + '/cancel', { method: 'POST', body: {} }).catch(() => {});
     if (this.controller) this.controller.abort();
