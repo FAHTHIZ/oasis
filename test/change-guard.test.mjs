@@ -138,3 +138,12 @@ test('generic "rest of the <thing> unchanged" comments are elisions; descriptive
   for (const text of ['/* rest of styles unchanged */', '# remaining tasks unchanged', '// other handlers stay unchanged']) assert.ok(findElisionPlaceholder(text + '\n'), text);
   for (const text of ['// the rest of the arguments are passed through', '// existing behavior unchanged', '// existing API unchanged', 'const next = { ...prev };']) assert.ok(!findElisionPlaceholder(text + '\n'), text);
 });
+
+test('bracketed and bare placeholder comments are caught; ordinary comments are not', () => {
+  for (const text of ['    # ... (rest of the function remains the same)', '  // [previous code here]', '    // same as before', '// unchanged', '<!-- [ ... existing markup ... ] -->']) {
+    assert.ok(findElisionPlaceholder(text), text);
+  }
+  for (const text of ['// Same as before, we retry three times on failure.', 'x = 1 // unchanged', '# no changes needed for windows paths because they are normalized', '/* ... */', '// TODO: handle the remaining codes']) {
+    assert.equal(findElisionPlaceholder(text), '', text);
+  }
+});
