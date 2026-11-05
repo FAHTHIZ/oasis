@@ -30,3 +30,11 @@ __pycache__/
 # Universal app build output (scripts/build-app.mjs)
 site/app/
 site/src/
+
+# Android build output
+android/.gradle/
+android/build/
+android/app/build/
+android/local.properties
+*.keystore
+*.p12
