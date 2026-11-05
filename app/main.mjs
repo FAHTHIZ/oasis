@@ -1818,11 +1818,13 @@ async function startRuntime(found) {
 let updateState = null;
 let updateRetries = 0;
 async function checkForUpdate() {
-  if (!RT || !RT.client) return;
+  // Before the link's token is pasted every call is refused; the page reloads
+  // with the token and checks then.
+  if (!RT || !RT.client || RT.needsToken) return;
   const state = await RT.client.api('/api/app/update').catch(() => null);
   // A failed check (runtime still starting, a dropped request) is retried
-  // soon instead of waiting for the 30-minute timer.
-  if (!state) { if (updateRetries++ < 3) setTimeout(checkForUpdate, 3000 * updateRetries); return; }
+  // soon instead of waiting for the 30-minute timer: 1.5, 3, 4.5, 6, 7.5 s.
+  if (!state) { if (updateRetries++ < 5) setTimeout(checkForUpdate, 1500 * updateRetries); return; }
   updateRetries = 0;
   updateState = state;
   const version = state && state.latest && state.latest.version;
