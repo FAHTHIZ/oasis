@@ -139,3 +139,26 @@ test('oasis -p waits out a Gemini per-minute limit and retries the same model', 
     await fs.rm(home, { recursive: true, force: true });
   }
 });
+
+test('the browser app fails fast on daily quota and waits out per-minute limits', async () => {
+  const { chat, retryPlan } = await import('../app/core/providers.mjs');
+  const minute = geminiQuota429('GenerateRequestsPerMinutePerProjectPerModel-FreeTier', 'Generate content requests per minute limit exceeded on Free Tier.', '0.2s', '0s');
+  const daily = geminiQuota429('GenerateRequestsPerDayPerProjectPerModel-FreeTier', 'Generate content requests per day limit exceeded on Free Tier.', '21h11m1.6s', '76261s');
+  assert.deepEqual(retryPlan(429, daily), { retryable: false });
+  assert.deepEqual(retryPlan(429, minute), { retryable: true, retryAfterMs: 500 });
+  assert.deepEqual(retryPlan(429, 'Too many requests'), { retryable: true });
+  assert.deepEqual(retryPlan(503, ''), { retryable: true });
+  assert.deepEqual(retryPlan(400, ''), { retryable: false });
+  const config = { protocol: 'openai', baseURL: 'https://generativelanguage.googleapis.com/v1beta/openai', apiKey: 'k', model: 'gemini-3-flash' };
+  let calls = 0;
+  const started = Date.now();
+  const err = await chat(config, { messages: [{ role: 'user', content: 'x' }], fetchImpl: async () => { calls++; return new Response(daily, { status: 429 }); } }).catch((e) => e);
+  assert.equal(calls, 1, 'a daily quota is not retried');
+  assert.ok(Date.now() - started < 1000);
+  assert.equal(err.status, 429);
+  calls = 0;
+  const waits = [];
+  const ok = await chat(config, { messages: [{ role: 'user', content: 'x' }], onRetry: (n, e) => waits.push(e.retryAfterMs), fetchImpl: async () => (++calls === 1 ? new Response(minute, { status: 429 }) : new Response(JSON.stringify({ choices: [{ message: { content: 'ok' } }] }), { status: 200, headers: { 'content-type': 'application/json' } })) });
+  assert.equal(ok.content, 'ok');
+  assert.deepEqual(waits, [500]);
+});
