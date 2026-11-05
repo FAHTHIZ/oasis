@@ -171,6 +171,15 @@ export async function classifyAction(state, request, evaluate, options = {}) {
   if (state.blockedInRow >= AUTO_MODE_LIMITS.blockedInRow || state.blockedTotal >= AUTO_MODE_LIMITS.blockedTotal) {
     return { decision: 'ask', reason: 'Auto mode is paused after ' + (state.blockedInRow >= AUTO_MODE_LIMITS.blockedInRow ? state.blockedInRow + ' blocks in a row' : state.blockedTotal + ' blocks') + '; asking you instead.', paused: true };
   }
+  // The classifier sees only the action and the user's words. Asking again
+  // about the same action under the same intent cannot get a better answer,
+  // only spend a request (agents rerun `npm test` many times per task).
+  const key = allowCacheKey(request);
+  if (key && state.allowed instanceof Map && state.allowed.has(key)) {
+    state.cacheHits = (state.cacheHits || 0) + 1;
+    state.blockedInRow = 0;
+    return { ...state.allowed.get(key), cached: true };
+  }
   let verdict = null;
   try {
     const system = options.config ? classifierSystem(effectiveAutoModeConfig(options.config)) : SYSTEM;
@@ -182,12 +191,32 @@ export async function classifyAction(state, request, evaluate, options = {}) {
   if (!verdict) return { decision: 'ask', reason: 'The auto mode classifier gave no clear answer; asking you instead.' };
   state.checked = (state.checked || 0) + 1;
   if (verdict.decision === 'block') { state.blockedInRow += 1; state.blockedTotal += 1; }
-  else if (verdict.decision === 'allow') state.blockedInRow = 0;
+  else if (verdict.decision === 'allow') {
+    state.blockedInRow = 0;
+    if (key) {
+      if (!(state.allowed instanceof Map)) state.allowed = new Map();
+      state.allowed.set(key, verdict);
+      if (state.allowed.size > 200) state.allowed.delete(state.allowed.keys().next().value);
+    }
+  }
   return verdict;
 }
 
+function stableJson(value) {
+  if (Array.isArray(value)) return '[' + value.map(stableJson).join(',') + ']';
+  if (value && typeof value === 'object') return '{' + Object.keys(value).sort().map((k) => JSON.stringify(k) + ':' + stableJson(value[k])).join(',') + '}';
+  return JSON.stringify(value === undefined ? null : value);
+}
+
+// Same tool, same input (key order ignored), same user intent, rules and workspace.
+export function allowCacheKey({ toolName, args, messages, root, rules = [] } = {}) {
+  try {
+    return stableJson({ t: toolName, a: args, i: userIntent(messages), r: root, p: rules });
+  } catch { return ''; }
+}
+
 export function newAutoModeState() {
-  return { blockedInRow: 0, blockedTotal: 0, checked: 0, log: [] };
+  return { blockedInRow: 0, blockedTotal: 0, checked: 0, cacheHits: 0, allowed: new Map(), log: [] };
 }
 
 // /auto-mode-setup (Claude Code): draft autoMode.environment entries from the project — git
