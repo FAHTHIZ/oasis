@@ -138,8 +138,49 @@ export function splitSimpleCommandLine(line) {
  * normal "one executable path" error still explains the problem. The rewritten
  * call goes through the same permission and safety checks as any other.
  */
+// Models sometimes send args as one string: a JSON array, a JavaScript-style
+// array (with '...' or `...` literals), or a plain argument line. Returns the
+// argv, or null when the string cannot be read unambiguously.
+export function parseArgsString(text) {
+  const raw = String(text);
+  const trimmed = raw.trim();
+  if (!trimmed) return [];
+  if (trimmed.startsWith('[') && trimmed.endsWith(']')) {
+    try { const value = JSON.parse(trimmed); if (Array.isArray(value) && value.every((item) => typeof item === 'string' || typeof item === 'number')) return value.map(String); } catch { /* try the JavaScript form */ }
+    const out = [];
+    let i = 1;
+    const body = trimmed.slice(0, -1);
+    const ESC = { n: '\n', t: '\t', r: '\r', '0': '\0', b: '\b', f: '\f', v: '\v' };
+    while (i < body.length) {
+      while (i < body.length && /[\s,]/.test(body[i])) i++;
+      if (i >= body.length) break;
+      const quote = body[i];
+      if (!['"', "'", '`'].includes(quote)) return null;
+      let value = '';
+      i++;
+      let closed = false;
+      while (i < body.length) {
+        const char = body[i];
+        if (char === '\\') { const next = body[i + 1]; value += ESC[next] !== undefined ? ESC[next] : next; i += 2; continue; }
+        if (char === quote) { closed = true; i++; break; }
+        if (quote === '`' && char === '$' && body[i + 1] === '{') return null;
+        value += char;
+        i++;
+      }
+      if (!closed) return null;
+      out.push(value);
+    }
+    return out;
+  }
+  return splitSimpleCommandLine(trimmed);
+}
+
 export function normalizeRunCommandCall(args, available) {
   if (!args || typeof args !== 'object') return null;
+  if (typeof args.args === 'string' && typeof args.command === 'string' && args.command.trim() && !/\s/.test(args.command.trim())) {
+    const argv = parseArgsString(args.args);
+    return argv ? { name: 'run_command', args: { ...args, command: args.command.trim(), args: argv } } : null;
+  }
   const command = typeof args.command === 'string' ? args.command.trim() : '';
   if (!command || !/\s/.test(command)) return null;
   const extra = Array.isArray(args.args) ? args.args.map(String) : [];
