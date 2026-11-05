@@ -1,0 +1,266 @@
+diff --git a/src/cli.mjs b/src/cli.mjs
+index 565e137..961490e 100644
+--- a/src/cli.mjs
++++ b/src/cli.mjs
+@@ -5,6 +5,8 @@ import { pathToFileURL } from 'node:url';
+ import { openStore } from './store.mjs';
+ import { filterTasks, sortTasks, paginate } from './query.mjs';
+ import { formatList } from './format.mjs';
++import { exportCsv } from './csv.mjs';
++import { readFile } from 'node:fs/promises';
+ 
+ const VALUE_FLAGS = new Set(['priority', 'due', 'tag', 'status', 'sort', 'page', 'size', 'notes', 'file']);
+ const BOOLEAN_FLAGS = new Set(['overdue', 'help']);
+@@ -85,8 +87,19 @@ export async function run(argv, { stdout = process.stdout, env = process.env, no
+       print(`Removed ${args.length} task(s).`);
+       return 0;
+     }
++    case 'export': {
++      const tasks = sortTasks(filterTasks(store.all(), { status: flags.status || 'all' }), 'id');
++      stdout.write(exportCsv(tasks));
++      return 0;
++    }
++    case 'import': {
++      if (!args[0]) throw new Error('import needs a file');
++      const added = await store.importCsv(await readFile(args[0], 'utf8'));
++      print(`Imported ${added.length} task(s).`);
++      return 0;
++    }
+     default:
+-      print('Usage: taskflow <add|list|done|reopen|tag|rm> [options]');
++      print('Usage: taskflow <add|list|done|reopen|tag|rm|export|import> [options]');
+       return command ? 2 : 0;
+   }
+ }
+diff --git a/src/csv.mjs b/src/csv.mjs
+new file mode 100644
+index 0000000..7dd10ef
+--- /dev/null
++++ b/src/csv.mjs
+@@ -0,0 +1,93 @@
++// CSV in the RFC 4180 dialect: comma-separated, LF or CRLF records, double-quoted
++// fields that may hold commas, line breaks and "" for a quote.
++export const CSV_COLUMNS = ['id', 'title', 'priority', 'status', 'due', 'tags', 'notes', 'created', 'completed'];
++
++export function parseCsv(text) {
++  let input = String(text);
++  if (input.charCodeAt(0) === 0xfeff) input = input.slice(1);
++  const records = [];
++  let record = [];
++  let field = '';
++  let line = 1;
++  let i = 0;
++  let fieldStarted = false;
++  let quoted = false;
++  const endField = () => { record.push(field); field = ''; fieldStarted = false; };
++  const endRecord = () => {
++    endField();
++    if (!(record.length === 1 && record[0] === '' && !quoted)) records.push(record);
++    record = [];
++    quoted = false;
++  };
++  while (i < input.length) {
++    const ch = input[i];
++    if (ch === '"' && !fieldStarted) {
++      const startLine = line;
++      i++;
++      for (;;) {
++        if (i >= input.length) throw new Error(`CSV line ${startLine}: unterminated quoted field`);
++        const c = input[i];
++        if (c === '"') {
++          if (input[i + 1] === '"') { field += '"'; i += 2; continue; }
++          i++;
++          break;
++        }
++        if (c === '\n') line++;
++        field += c;
++        i++;
++      }
++      fieldStarted = true;
++      quoted = true;
++      const next = input[i];
++      if (next !== undefined && next !== ',' && next !== '\n' && !(next === '\r' && input[i + 1] === '\n')) throw new Error(`CSV line ${line}: unexpected quote`);
++      continue;
++    }
++    if (ch === ',') { endField(); i++; continue; }
++    if (ch === '\n' || (ch === '\r' && input[i + 1] === '\n')) {
++      endRecord();
++      i += ch === '\r' ? 2 : 1;
++      line++;
++      continue;
++    }
++    if (ch === '"') throw new Error(`CSV line ${line}: unexpected quote`);
++    field += ch;
++    fieldStarted = true;
++    i++;
++  }
++  if (fieldStarted || field !== '' || record.length) endRecord();
++  return records;
++}
++
++const FORMULA_START = /^[=+\-@]/;
++
++function quote(value) {
++  const text = String(value);
++  return /[",\r\n]|^ | $/.test(text) ? '"' + text.replace(/"/g, '""') + '"' : text;
++}
++
++function guard(value) {
++  const text = String(value ?? '');
++  return FORMULA_START.test(text) ? "'" + text : text;
++}
++
++export function exportCsv(tasks) {
++  const lines = [CSV_COLUMNS.join(',')];
++  for (const task of tasks) {
++    lines.push([
++      task.id,
++      guard(task.title),
++      task.priority,
++      task.status,
++      task.due || '',
++      (task.tags || []).join(';'),
++      guard(task.notes),
++      task.created || '',
++      task.completed || ''
++    ].map(quote).join(','));
++  }
++  return lines.join('\n') + '\n';
++}
++
++export function unguard(value) {
++  return /^'[=+\-@]/.test(value) ? value.slice(1) : value;
++}
+diff --git a/src/store.mjs b/src/store.mjs
+index c501ef5..3785ff4 100644
+--- a/src/store.mjs
++++ b/src/store.mjs
+@@ -2,6 +2,8 @@ import { readFile, writeFile, rename } from 'node:fs/promises';
+ import { createEmitter } from './events.mjs';
+ import { createTask, updateTask } from './task.mjs';
+ import { nextId } from './ids.mjs';
++import { CSV_COLUMNS, parseCsv, unguard } from './csv.mjs';
++import { parseDue } from './dates.mjs';
+ 
+ // The task file holds { version: 1, tasks: [...] }. Writes go to a temporary
+ // file first and are renamed into place, so a crash never leaves half a file.
+@@ -47,6 +49,58 @@ export async function openStore(file, { now = () => new Date() } = {}) {
+       if (before.status !== 'done' && after.status === 'done') events.emit('completed', after);
+       return after;
+     },
++    async importCsv(text) {
++      const records = parseCsv(text);
++      if (!records.length) return [];
++      const header = records[0].map((name) => name.trim());
++      const seen = new Set();
++      for (const name of header) {
++        if (!CSV_COLUMNS.includes(name)) throw new Error(`Unknown CSV column: ${name}`);
++        if (seen.has(name)) throw new Error(`Duplicate CSV column: ${name}`);
++        seen.add(name);
++      }
++      if (!seen.has('title')) throw new Error('Missing CSV column: title');
++      const stamp = (value) => {
++        if (value === '') return null;
++        const ms = Date.parse(value);
++        if (Number.isNaN(ms)) throw new Error(`Invalid timestamp: ${value}`);
++        return new Date(ms).toISOString();
++      };
++      const created = [];
++      let pool = tasks;
++      records.slice(1).forEach((record, index) => {
++        try {
++          if (record.length !== header.length) throw new Error(`expected ${header.length} fields, found ${record.length}`);
++          const row = Object.fromEntries(header.map((name, i) => [name, record[i]]));
++          const due = row.due === undefined || row.due === '' ? '' : row.due;
++          if (due && !/^\d{4}-\d{2}-\d{2}$/.test(due)) throw new Error(`Invalid due date: ${due}`);
++          const status = row.status === undefined || row.status === '' ? 'open' : row.status;
++          if (status !== 'open' && status !== 'done') throw new Error(`Unknown status: ${status}`);
++          const createdAt = stamp(row.created ?? '');
++          const completedAt = stamp(row.completed ?? '');
++          const when = now();
++          const task = createTask({
++            title: unguard(row.title ?? ''),
++            priority: row.priority || undefined,
++            due: due || undefined,
++            tags: (row.tags ?? '').split(';').filter((tag) => tag !== ''),
++            notes: row.notes ? unguard(row.notes) : undefined
++          }, { id: nextId(pool), now: when });
++          if (due) task.due = parseDue(due, when);
++          if (createdAt) task.created = createdAt;
++          if (status === 'done') { task.status = 'done'; task.completed = completedAt || when.toISOString(); }
++          created.push(task);
++          pool = [...pool, task];
++        } catch (error) {
++          throw new Error(`CSV row ${index + 1}: ${error.message}`);
++        }
++      });
++      if (!created.length) return [];
++      tasks = pool;
++      await save();
++      for (const task of created) events.emit('added', task);
++      return created;
++    },
+     async remove(id) {
+       const task = find(id);
+       tasks = tasks.filter((t) => t.id !== id);
+diff --git a/test/csv.test.mjs b/test/csv.test.mjs
+new file mode 100644
+index 0000000..55fc1fe
+--- /dev/null
++++ b/test/csv.test.mjs
+@@ -0,0 +1,55 @@
++import test from 'node:test';
++import assert from 'node:assert/strict';
++import { readFile, writeFile } from 'node:fs/promises';
++import { parseCsv, exportCsv } from '../src/csv.mjs';
++import { openStore } from '../src/store.mjs';
++import { run } from '../src/cli.mjs';
++import { NOW, tempFile, sink } from './helpers.mjs';
++
++const now = () => NOW;
++
++test('parseCsv handles quotes, line breaks, CRLF, BOM and blank lines', () => {
++  assert.deepEqual(parseCsv('\ufeffa,b\r\n"x,""y""\nz",2\n\n3,\n'), [['a', 'b'], ['x,"y"\nz', '2'], ['3', '']]);
++  assert.deepEqual(parseCsv('a\n""'), [['a'], ['']]);
++  assert.deepEqual(parseCsv(''), []);
++  assert.throws(() => parseCsv('a\n"b\nc'), { message: 'CSV line 2: unterminated quoted field' });
++  assert.throws(() => parseCsv('a\nb"c'), { message: 'CSV line 2: unexpected quote' });
++  assert.throws(() => parseCsv('"a"x'), { message: 'CSV line 1: unexpected quote' });
++});
++
++test('exportCsv quotes when needed and guards formulas', () => {
++  const text = exportCsv([{ id: 1, title: '=SUM(A1)', priority: 'high', status: 'open', due: null, tags: ['a', 'b'], notes: 'say "hi", ok', created: '2026-11-01T00:00:00.000Z' }]);
++  assert.equal(text, 'id,title,priority,status,due,tags,notes,created,completed\n1,\'=SUM(A1),high,open,,a;b,"say ""hi"", ok",2026-11-01T00:00:00.000Z,\n');
++});
++
++test('importCsv validates every row before saving and round-trips exports', async (t) => {
++  const file = await tempFile(t);
++  const store = await openStore(file, { now });
++  await store.add({ title: 'existing' });
++  await assert.rejects(store.importCsv('title,priority\nok,\nbad,urgent\n'), { message: 'CSV row 2: Unknown priority: urgent' });
++  assert.equal(store.all().length, 1);
++  await assert.rejects(store.importCsv('title,colour\nx,red\n'), { message: 'Unknown CSV column: colour' });
++  await assert.rejects(store.importCsv('priority\nhigh\n'), { message: 'Missing CSV column: title' });
++  const added = await store.importCsv('tags,title,status,due\nA;;b,"=1+1",done,2026-12-01\n');
++  assert.equal(added[0].id, 2);
++  assert.equal(added[0].title, '=1+1');
++  assert.deepEqual(added[0].tags, ['a', 'b']);
++  assert.equal(added[0].completed, NOW.toISOString());
++  const again = await openStore(file, { now });
++  const copy = await again.importCsv(exportCsv(again.all()));
++  assert.deepEqual(copy.map((task) => task.title), ['existing', '=1+1']);
++});
++
++test('taskflow export and import', async (t) => {
++  const env = { TASKFLOW_FILE: await tempFile(t) };
++  const say = async (...args) => { const out = sink(); await run(args, { stdout: out, env, now }); return out.text; };
++  await say('add', 'one');
++  await say('add', 'two');
++  await say('done', '2');
++  assert.equal((await say('export', '--status', 'open')).split('\n').length, 3);
++  const source = env.TASKFLOW_FILE + '.csv';
++  await writeFile(source, await say('export'));
++  assert.equal(await say('import', source), 'Imported 2 task(s).\n');
++  assert.equal(JSON.parse(await readFile(env.TASKFLOW_FILE, 'utf8')).tasks.length, 4);
++  assert.match(await say('help'), /export\|import/);
++});
