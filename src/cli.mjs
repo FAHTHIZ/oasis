@@ -24,7 +24,7 @@ import { executeTool, listAvailableSkills } from './tools.mjs';
 import { resolveUninstallPlan } from './uninstall.mjs';
 import { parseInstallIntent, planPackageInstall } from './installer.mjs';
 import { listBackups, restoreBackup } from './backups.mjs';
-import { runEvalCommand } from './eval.mjs';
+import { runEvalCommand, evalModelPassthrough } from './eval.mjs';
 import { managePlugins } from './plugins.mjs';
 import { inspectGitHubExtension, inspectGitHubMcpServers, selectReviewedMcpServers, resolveImportedSlashCommand, installGitHubExtension, updateGitHubExtension, rollbackGitHubExtension, listInstalledExtensions, removeGitHubExtension } from './extensions.mjs';
 import { startOasisWebServer } from './web.mjs';
@@ -3603,7 +3603,11 @@ async function main() {
     return;
   }
   if (command === 'eval') {
-    const result = await runEvalCommand(rest, { autoApprove, env: process.env });
+    // The global option parser above consumes --model before `eval` sees it.
+    // Hand it back: external agents take it as their own --model; OASIS's own
+    // eval reads the model from its provider config (OASIS_MODEL).
+    const { args: evalArgs, env: evalEnv } = evalModelPassthrough(rest, SESSION_OPTIONS.model, process.env);
+    const result = await runEvalCommand(evalArgs, { autoApprove, env: evalEnv });
     if (!result.ok) process.exitCode = 1;
     return result;
   }
