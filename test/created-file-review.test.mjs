@@ -22,3 +22,11 @@ test('a created source file still needs a passing check', () => {
   const state = base({ changedPaths: new Set(['src/lib.mjs']), createdPaths: new Set(['src/lib.mjs']), lastVerificationExitCode: null, lastVerificationKind: null });
   assert.deepEqual(verificationIssues(state), ['no relevant test, check, lint, build, or type-check command has passed after the latest code edit']);
 });
+
+test('the gate asks to exercise a new module directly when no test changed', async () => {
+  const { untestedNewCode } = await import('../src/agent.mjs');
+  assert.match(untestedNewCode({ changedPaths: new Set(['src/lib.mjs']), createdPaths: new Set(['src/lib.mjs']) })[0], /^New code in src\/lib\.mjs is not exercised/);
+  assert.deepEqual(untestedNewCode({ changedPaths: new Set(['src/lib.mjs', 'test/lib.test.mjs']), createdPaths: new Set(['src/lib.mjs']) }), []);
+  assert.deepEqual(untestedNewCode({ changedPaths: new Set(['notes.md']), createdPaths: new Set(['notes.md']) }), []);
+  assert.deepEqual(untestedNewCode({ changedPaths: new Set(['src/a.mjs']) }), []);
+});
