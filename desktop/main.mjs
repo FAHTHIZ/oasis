@@ -188,6 +188,8 @@ async function injectRuntimeToken() {
   try { await mainWindow.webContents.executeJavaScript(source, true); } catch {}
 }
 
+const DESKTOP_PORT = Number(process.env.OASIS_DESKTOP_PORT) || 47615;
+
 async function openWorkspace(root) {
   const resolved = path.resolve(root);
   if (!(await isDirectory(resolved))) throw new Error('That folder no longer exists. Choose a folder available on this computer.');
@@ -197,7 +199,12 @@ async function openWorkspace(root) {
     activeOrigin = null;
     await previous.close();
   }
-  runtime = await startOasisWebServer({ root: resolved, host: '127.0.0.1', port: 0, env: desktopEnv, onProviderConfig: persistDesktopProviderConfig, appUpdate: updater ? desktopUpdateBridge() : undefined, confirmUnencryptedPhoneLink });
+  // A stable local port keeps the same page origin across launches, so the
+  // app's saved chats (stored per origin and per folder) are still there next
+  // time. Another program on that port just means a random one this time.
+  const serverOptions = { root: resolved, host: '127.0.0.1', env: desktopEnv, onProviderConfig: persistDesktopProviderConfig, appUpdate: updater ? desktopUpdateBridge() : undefined, confirmUnencryptedPhoneLink };
+  try { runtime = await startOasisWebServer({ ...serverOptions, port: DESKTOP_PORT }); }
+  catch { runtime = await startOasisWebServer({ ...serverOptions, port: 0 }); }
   activeOrigin = 'http://127.0.0.1:' + runtime.port;
   await saveWorkspace(resolved);
   const window = createWindow();
