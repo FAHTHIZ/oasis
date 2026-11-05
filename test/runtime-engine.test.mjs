@@ -7,7 +7,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { mkdtemp, mkdir, rm, writeFile, symlink } from 'node:fs/promises';
 import { listWorkspaceFiles } from '../src/workspace-files.mjs';
-import { carryUndeliveredSteering, pendingSteering, steerSession } from '../src/agent.mjs';
+import { carryUndeliveredSteering, pendingSteering, sessionRestoreSnapshot, steerSession } from '../src/agent.mjs';
 import { saveSession, loadSession } from '../src/sessions.mjs';
 import { runtimeConfigFromConnection, connectFromPaste } from '../src/provider-connect.mjs';
 import { tokenFromPaste, runtimeToken, RuntimeWorkspace, RuntimeAgent } from '../app/core/runtime.mjs';
@@ -169,4 +169,18 @@ test('!command runs through the runtime with approval, and its output goes with 
   const chat = calls.find(([url]) => url === '/api/chat')[1];
   assert.match(chat.message, /^Commands I ran in my terminal \(for context\):\n<bash-input>npm test<\/bash-input>\n<bash-output exit-code="1">\nnot ok 1 adds\n<\/bash-output>\n\nfix it$/);
   assert.deepEqual(agent.pendingShell, []);
+});
+
+
+test('session rebuild snapshots retain bounded pending steering', () => {
+  const snapshot = sessionRestoreSnapshot({
+    sessionId: 'session-1',
+    sessionName: 'My session',
+    messages: [{ role: 'system', content: 'System.' }],
+    todos: [],
+    sharedTasks: null,
+    pendingSteering: ['Use tabs.', 'Keep tests.']
+  });
+  assert.deepEqual(snapshot.pendingSteering, ['Use tabs.', 'Keep tests.']);
+  assert.equal(snapshot.messages[0].role, 'system');
 });

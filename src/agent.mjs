@@ -1017,12 +1017,23 @@ export async function reloadSessionSettings(session) {
  * current settings, plugins, skills, agents, hooks and MCP servers, keeping the
  * conversation, todos and name. Returns { session, summary }.
  */
+export function sessionRestoreSnapshot(session) {
+  return {
+    id: session.sessionId || null,
+    name: session.sessionName || null,
+    messages: session.messages,
+    todos: session.todos,
+    sharedTasks: session.sharedTasks,
+    pendingSteering: Array.isArray(session.pendingSteering) ? session.pendingSteering.slice(-STEER_LIMIT) : []
+  };
+}
+
 export async function rebuildSession(session, createOptions = {}, what = 'plugins') {
   const root = createOptions.root || session.root;
   const env = createOptions.env || process.env;
   const countSkills = async () => { try { const { listAvailableSkills } = await import('./tools.mjs'); return (await listAvailableSkills(root, { env })).length; } catch { return 0; } };
   const before = { plugins: (session.settings && session.settings.plugins || []).length };
-  const snapshot = { id: session.sessionId || null, name: session.sessionName || null, messages: session.messages, todos: session.todos, sharedTasks: session.sharedTasks };
+  const snapshot = sessionRestoreSnapshot(session);
   const running = session.background ? [...session.background.values()].filter((entry) => entry.status === 'running').length : 0;
   const config = session.config;
   await closeSession(session);
@@ -2495,6 +2506,7 @@ export async function runAgentPlan(session, prompt, options = {}) {
   } finally {
     planSession.messages[0] = originalSystem;
     session.messages = planSession.messages;
+    session.pendingSteering = planSession.pendingSteering;
     session.toolCallsThisSession = planSession.toolCallsThisSession;
   }
 }
