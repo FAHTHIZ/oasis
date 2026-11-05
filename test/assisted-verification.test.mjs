@@ -43,7 +43,7 @@ test('detectProjectTestCommand ignores the npm placeholder script', async (t) =>
   assert.deepEqual(await detectProjectTestCommand(root), { command: 'npm', args: ['test'] });
 });
 
-test('small-window model that edits and stops gets a harness-run diff and syntax check', async (t) => {
+test('small-window model that creates a file and stops gets a harness-run syntax check (a new file needs no diff)', async (t) => {
   const root = await mkdtemp(path.join(os.tmpdir(), 'oasis-av-'));
   t.after(() => rm(root, { recursive: true, force: true }));
   execFileSync('git', ['init', '-q'], { cwd: root });
@@ -58,7 +58,7 @@ test('small-window model that edits and stops gets a harness-run diff and syntax
     env: { ...process.env, OASIS_ASSISTED_VERIFICATION: '', OASIS_AUTO_TEST: '' },
     onToolResult: (event) => ran.push(event.name),
   });
-  assert.ok(ran.includes('git_diff'), 'harness ran git_diff: ' + ran.join(','));
+  assert.ok(!ran.includes('git_diff'), 'a file the model just wrote in full needs no diff: ' + ran.join(','));
   assert.ok(ran.filter((name) => name === 'run_command').length >= 1, 'harness ran a syntax check');
   const toolText = seen.slice(1).flatMap((p) => p.messages).filter((m) => m.role === 'tool').map((m) => String(m.content)).join('\n');
   assert.match(toolText, /lib\.mjs/);
@@ -121,7 +121,7 @@ test('a small model that keeps pasting the new file as a code block gets it writ
   await runAgentTurn(session, 'Create src/twice.mjs exporting twice(x)', { autoApprove: true, env: { ...process.env, OASIS_ASSISTED_VERIFICATION: '', OASIS_AUTO_TEST: '' }, onToolResult: (event) => ran.push(event.name) });
   const { readFile } = await import('node:fs/promises');
   assert.match(await readFile(path.join(root, 'src/twice.mjs'), 'utf8'), /return x \* 2/);
-  assert.ok(ran.includes('write_file') && ran.includes('git_diff'), ran.join(','));
+  assert.ok(ran.includes('write_file') && ran.includes('run_command'), ran.join(','));
 });
 
 test('after a failed check, a corrected whole file pasted as a code block replaces the file the model created', async (t) => {
