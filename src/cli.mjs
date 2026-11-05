@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import { probeLocalContext, isLocalModelEndpoint, localContextAdvice, SMALL_CONTEXT_TOKENS, RECOMMENDED_LOCAL_CONTEXT } from './local-context.mjs';
 import { notifyAttention } from './attention.mjs';
+import { playSound, configureSounds, completedTodoCount, DONE_SOUND_AFTER_MS } from './sounds.mjs';
 import { cronState, formatFindings } from './session-tools.mjs';
 import { hasHooks as hasConfiguredHooks } from './hooks.mjs';
 import { startPluginMonitorsFor } from './monitors.mjs';
@@ -388,6 +389,7 @@ async function askLineRaw(question, external = null) {
 }
 
 async function askQuestionInTerminal(question) {
+  playSound('attention', { stream: stdout });
   const lines = ['', '[question] ' + (question.header ? question.header + ': ' : '') + question.question];
   question.options.forEach((option, index) => lines.push('  ' + (index + 1) + '. ' + option.label + (option.description ? ' - ' + option.description : '')));
   lines.push('  (' + (question.multiSelect ? 'numbers separated by spaces' : 'a number') + ', or type your own answer; Enter to skip)');
@@ -927,7 +929,8 @@ async function askApprovalLocal(prompt, forceInteractive, meta, signal = null) {
   if (process.env.OASIS_PERMISSION_PROMPTS === 'none') { stdout.write('\n[permissions] Denied without asking (--permission-prompts none): ' + approval.message.split('\n').filter(Boolean)[0] + '\n'); return false; }
   try {
     stdout.write('\n' + approval.message + '\n');
-    if (CURRENT_TURN_STARTED_AT) notifyAttention('OASIS needs your approval: ' + approval.message.split('\n').filter(Boolean)[0], { elapsedMs: Date.now() - CURRENT_TURN_STARTED_AT, stream: stdout });
+    const approvalSound = playSound('attention', { stream: stdout });
+    if (CURRENT_TURN_STARTED_AT) notifyAttention('OASIS needs your approval: ' + approval.message.split('\n').filter(Boolean)[0], { elapsedMs: Date.now() - CURRENT_TURN_STARTED_AT, soundPlayed: approvalSound, stream: stdout });
     const offerAlways = meta && meta.suggestion && !forceInteractive;
     if (signal && (!stdin.isTTY || !stdout.isTTY)) { await new Promise((resolve) => { signal.addEventListener('abort', resolve, { once: true }); setTimeout(resolve, 300000).unref?.(); }); return false; }
     if (stdin.isTTY && stdout.isTTY && typeof stdin.setRawMode === 'function' && process.env.OASIS_LINE_APPROVALS !== '1') {
@@ -1936,6 +1939,8 @@ async function runPrompt(prompt, root, autoApprove, session = null, persistence 
   if (stdin.isTTY) process.on('SIGINT', onInterrupt);
   const turnStartedAt = Date.now();
   CURRENT_TURN_STARTED_AT = turnStartedAt;
+  if (session && session.settings) configureSounds({ enabled: typeof session.settings.sounds === 'boolean' ? session.settings.sounds : undefined, volume: session.settings.soundVolume });
+  let todosDone = completedTodoCount(session && session.todos);
   turnKeys = startTurnKeys(onInterrupt, (text) => !controller.signal.aborted && !modeOptions.fork && steerSession(session, text));
   try {
     const fork = modeOptions.fork;
@@ -1968,6 +1973,7 @@ async function runPrompt(prompt, root, autoApprove, session = null, persistence 
       // MessageDisplay hooks see whole messages, so streaming is off while any are configured.
       ...(stdout.isTTY && process.env.OASIS_NO_STREAM !== '1' && !hasConfiguredHooks(session.hooks || {}, 'MessageDisplay') ? { onDelta: streamDelta } : {}),
       onToolResult: ({ name, result, call }) => {
+        if (name === 'todo_write' && result && !result.error) { const done = completedTodoCount(Array.isArray(result.todos) ? result.todos : session.todos); if (done > todosDone) playSound('task', { stream: stdout }); todosDone = done; }
         if (richOutput() && call && ['edit_file', 'multi_edit', 'write_file'].includes(name)) {
           let args = {};
           try { args = JSON.parse(call.function && call.function.arguments || '{}'); } catch {}
@@ -2046,7 +2052,8 @@ async function runPrompt(prompt, root, autoApprove, session = null, persistence 
       }
     }
     if (richOutput()) stdout.write('\x1b[2m  ' + formatTurnSummary({ ms: Date.now() - turnStartedAt, toolCalls: result.toolCalls, tokens: result.tokensUsed, finished: result.finished !== false }) + '\x1b[22m\n');
-    notifyAttention('OASIS · ' + formatTurnSummary({ ms: Date.now() - turnStartedAt, toolCalls: result.toolCalls, tokens: result.tokensUsed, finished: result.finished !== false }), { elapsedMs: Date.now() - turnStartedAt, stream: stdout });
+    const doneSound = Date.now() - turnStartedAt >= DONE_SOUND_AFTER_MS && playSound('done', { stream: stdout });
+    notifyAttention('OASIS · ' + formatTurnSummary({ ms: Date.now() - turnStartedAt, toolCalls: result.toolCalls, tokens: result.tokensUsed, finished: result.finished !== false }), { elapsedMs: Date.now() - turnStartedAt, soundPlayed: doneSound, stream: stdout });
   } catch (error) {
     endStream();
     if (controller.signal.aborted || error.name === 'AbortError') {
@@ -2054,6 +2061,7 @@ async function runPrompt(prompt, root, autoApprove, session = null, persistence 
       stdout.write('[interrupted] Task stopped. Changes made before the interruption remain; use /rewind 1 to undo them.\n');
     } else {
       stdout.write('\nOASIS error: ' + (error.message || String(error)) + '\n');
+      playSound('error', { stream: stdout });
       haltAutoContinue(error);
     }
   } finally {
