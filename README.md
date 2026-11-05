@@ -77,7 +77,7 @@ OASIS fixes each of those in the runtime, so the fix holds whichever model you c
 <tr>
 <td valign="top">
 
-**"Done" means verified.** The agent can't finish until it has reviewed its own diff and run a relevant check. It is told when it claims a file it never wrote, weakens a test to make it pass, or repeats the same failing fix.
+**"Done" means verified.** The agent can't finish until a relevant check has passed after its last edit, and it must review the diff of any existing file it rewrote wholesale. It is told when it claims a file it never wrote, weakens a test to make it pass, or repeats the same failing fix.
 
 </td>
 <td valign="top">
@@ -157,7 +157,7 @@ The agent evaluator has **52 tasks**: 33 focused fixtures plus 19 repository-lev
 
 | Common frustration with coding agents | What OASIS does |
 |---|---|
-| "It said it was done, but never ran the tests." | A post-edit verification gate: the agent must review its diff and run a relevant check before it can finish, and any later edit resets that. |
+| "It said it was done, but never ran the tests." | A post-edit verification gate: the agent must run a relevant check (and review the diff of any file it rewrote wholesale) before it can finish, and any later edit resets that. |
 | "Ten patches, and the same error every time." | Fix-thrash detection. On the 3rd identical failure after edits the agent is told to step back and diagnose; on the 5th, to change approach or ask you. |
 | "It changed the test to match the broken code." | Weakened-test detection (skips, `.only`, deleted tests, removed assertions, an exact check swapped for `toBeDefined()`). |
 | "It replaced my function with `// ... rest unchanged`." | A change guard blocks placeholder edits and flags large, unexplained deletions. |
