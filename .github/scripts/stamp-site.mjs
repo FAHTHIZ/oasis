@@ -45,11 +45,17 @@ try {
   const release = await res.json();
   const assets = Array.isArray(release.assets) ? release.assets : [];
   const pick = (re) => assets.find((a) => re.test(a.name));
+  // One row per installer and CPU type. data-os is "<os>-<arch>" so the page can
+  // highlight (and the hero button can link straight to) the right file.
   const rows = [
-    ['win', 'Windows x64', pick(/\.exe$/i)],
-    ['mac', 'macOS Apple silicon', pick(/\.dmg$/i)],
-    ['linux', 'Linux AppImage', pick(/\.AppImage$/i)],
-    ['linux-deb', 'Linux .deb', pick(/\.deb$/i)],
+    ['win-x64', 'Windows x64', pick(/(x64|amd64)\.exe$/i) || pick(/^(?!.*arm64).*\.exe$/i)],
+    ['win-arm64', 'Windows ARM64', pick(/arm64\.exe$/i)],
+    ['mac-arm64', 'macOS Apple silicon', pick(/arm64\.dmg$/i)],
+    ['mac-x64', 'macOS Intel', pick(/x64\.dmg$/i)],
+    ['linux-x64', 'Linux AppImage x86_64', pick(/(x86_64|x64|amd64)\.AppImage$/i)],
+    ['linux-arm64', 'Linux AppImage ARM64', pick(/(arm64|aarch64)\.AppImage$/i)],
+    ['linux-deb-x64', 'Debian/Ubuntu .deb x86_64', pick(/amd64\.deb$/i)],
+    ['linux-deb-arm64', 'Debian/Ubuntu .deb ARM64', pick(/arm64\.deb$/i)],
     ['sums', 'SHA256SUMS', pick(/^SHA256SUMS$/)]
   ].filter((r) => r[2]);
   const mb = (n) => (n / 1048576).toFixed(0) + ' MB';
