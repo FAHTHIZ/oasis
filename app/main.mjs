@@ -238,9 +238,21 @@ async function send(text) {
   sentThumbs = attachments.map((item) => item.url);
   attachments = [];
   renderAttachments();
+  let settle;
+  turnSettled = new Promise((resolve) => { settle = resolve; });
   try { await agent.send(message, { maxSteps: Number(settings.maxSteps) || 40, plugins, images }); }
   catch { /* shown through the error event */ }
-  finally { setBusy(false); persistChat(); refreshFiles(); }
+  finally { setBusy(false); persistChat(); refreshFiles(); settle(); }
+}
+
+// Switching chats stops the running turn and waits for it to wind down, so
+// its last save lands in the chat it belongs to (it used to run after the
+// switch and copy the old conversation into the new chat).
+let turnSettled = Promise.resolve();
+async function stopTurn() {
+  if (!agent.busy) return;
+  agent.stop();
+  await Promise.race([turnSettled, new Promise((resolve) => setTimeout(resolve, 5000))]);
 }
 
 /* ---------- Smart connect ---------- */
@@ -669,30 +681,42 @@ function chatTitle() {
 // the reply that just finished.
 let chatSaving = Promise.resolve();
 function persistChat() {
-  chatSaving = chatSaving.then(saveChat, saveChat);
+  // Capture which chat and what content now: a save queued behind another
+  // must not pick up a chat id or transcript that changed in the meantime.
+  if (!workspace) return chatSaving;
+  let snapshot;
+  try { snapshot = {
+    projectId: workspace.project.id,
+    id: chatId,
+    title: chatTitle(),
+    display: display.slice(-200).map((entry) => ({ ...entry, tools: entry.tools && entry.tools.map((t) => ({ ...t, content: (t.content || '').slice(0, 2000) })) })),
+    messages: RT ? agent.snapshot() : agent.messages.slice(-300).map((m) => (Array.isArray(m.content) ? { ...m, content: textOf(m.content) + ' (image not kept in saved chats)' } : m)),
+    ...(!RT ? { pendingSteering: agent.steering.slice(0, 20) } : {})
+  }; } catch { return chatSaving; }
+  const save = () => saveChat(snapshot);
+  chatSaving = chatSaving.then(save, save);
   return chatSaving;
 }
-async function saveChat() {
-  if (!workspace) return;
-  const trimmed = display.slice(-200).map((entry) => ({ ...entry, tools: entry.tools && entry.tools.map((t) => ({ ...t, content: (t.content || '').slice(0, 2000) })) }));
+async function saveChat(snapshot) {
+  const { projectId, id, display: trimmed } = snapshot;
   try {
-    const projectId = workspace.project.id;
-    await store.setValue(chatKey(projectId, chatId), {
-      messages: RT ? agent.snapshot() : agent.messages.slice(-300).map((m) => (Array.isArray(m.content) ? { ...m, content: textOf(m.content) + ' (image not kept in saved chats)' } : m)),
-      ...(!RT ? { pendingSteering: agent.steering.slice(0, 20) } : {}),
+    await store.setValue(chatKey(projectId, id), {
+      messages: snapshot.messages,
+      ...(snapshot.pendingSteering ? { pendingSteering: snapshot.pendingSteering } : {}),
       display: trimmed
     });
     const index = await chatIndex(projectId);
-    index.current = chatId;
-    index.list = index.list.filter((item) => item.id !== chatId);
-    if (trimmed.length) index.list.unshift({ id: chatId, title: chatTitle(), updatedAt: Date.now() });
+    // The chat open right now stays current, even if this save is for one the user just left.
+    index.current = workspace && workspace.project.id === projectId ? chatId : index.current || id;
+    index.list = index.list.filter((item) => item.id !== id);
+    if (trimmed.length) index.list.unshift({ id, title: snapshot.title, updatedAt: Date.now() });
     index.list = index.list.slice(0, 50);
     await store.setValue('chats:' + projectId, index);
   } catch { /* storage full: chat stays in memory */ }
 }
 
 async function newChat() {
-  if (agent.busy) agent.stop();
+  await stopTurn();
   if (workspace) await persistChat();
   chatId = Math.random().toString(36).slice(2, 10);
   if (workspace) { const index = await chatIndex(workspace.project.id); index.current = chatId; await store.setValue('chats:' + workspace.project.id, index); }
@@ -703,7 +727,7 @@ async function newChat() {
 
 async function openChat(id) {
   if (!workspace || id === chatId) return;
-  if (agent.busy) agent.stop();
+  await stopTurn();
   await persistChat();
   chatId = id;
   const index = await chatIndex(workspace.project.id);
@@ -1346,7 +1370,7 @@ $('settingsForm').addEventListener('submit', (event) => {
   toast(RT ? 'Settings saved.' : 'Settings saved on this device.');
 });
 $('clearChat').addEventListener('click', async () => {
-  if (agent.busy) agent.stop();
+  await stopTurn();
   agent.reset();
   display = [];
   if (workspace) await store.setValue(chatKey(workspace.project.id, chatId), null);
