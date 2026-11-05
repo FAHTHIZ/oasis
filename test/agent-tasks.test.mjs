@@ -310,7 +310,9 @@ test('background teammates can message each other and deliver messages into the 
   senderRelease.open();
 
   await until(() => session.agentTasks.agents.get('agent_2')?.child?.inbox?.some((entry) => entry.kind === 'peer-message'));
-  assert.ok(childRequests.some((request) => request.tools.some((tool) => tool.function.name === 'team_send_message')));
+  // team_send_message is deferred: its schema loads on first use, so it shows
+  // up in the sender's next request, which may still be in flight here.
+  await until(() => childRequests.some((request) => request.tools.some((tool) => tool.function.name === 'team_send_message')));
   receiverRelease.open();
   await until(() => ['agent_1', 'agent_2'].every((id) => session.agentTasks.agents.get(id)?.status !== 'running'));
   assert.match(session.agentTasks.agents.get('agent_2').report, /received the direct message/);
