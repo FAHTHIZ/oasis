@@ -78,7 +78,7 @@ export function resolveFallbackConfig(entry, baseConfig, env = process.env) {
 }
 
 const NETWORK_OR_STALL = /\b(429|500|502|503|504|529)\b|overload|rate.?limit|capacity|unavailable|bounded retries|ECONNRESET|ECONNREFUSED|ETIMEDOUT|ENOTFOUND|fetch failed|stream stalled|timed out after \d+ seconds waiting/i;
-const CREDITS = /insufficient[_ ](?:quota|credits?|balance|funds)|out of credits?|credit balance|billing|payment required|exceeded your current quota|quota exceeded/i;
+const CREDITS = /insufficient[_ ](?:quota|credits?|balance|funds)|out of credits?|credit balance|billing|payment required|exceeded your current quota|quota exceeded|(?:not have|without) enough (?:remaining )?credits?|credit limit/i;
 const MODEL_GONE = /model[^.]{0,60}(?:not found|does not exist|not available|unavailable|decommissioned|deprecated)|model_not_found|unknown model|no endpoints found|does not support tool/i;
 
 // Why a failure should move to the next model, or '' when it should not.
@@ -89,8 +89,11 @@ export function fallbackReason(error, { onFallbackProvider = false } = {}) {
   const status = Number(error.status || error.statusCode) || 0;
   const text = String(error.message || error);
   if (/context.?length|context window|prompt is too long|too many tokens|maximum context/i.test(text) || status === 413) return '';
-  if (status === 401 || status === 403 || /unauthori[sz]ed|invalid api key|incorrect api key|authentication/i.test(text)) return onFallbackProvider ? 'auth' : '';
-  if (status === 402 || CREDITS.test(text)) return 'credits';
+  // 402 first: credit messages often add "not an invalid API key" or "not an
+  // authentication failure", which must not read as a bad key.
+  if (status === 402) return 'credits';
+  if (status === 401 || status === 403 || (/unauthori[sz]ed|invalid api key|incorrect api key|authentication/i.test(text) && !/\bnot an? (?:invalid )?api.?key|not an? (?:api.?key )?authentication/i.test(text))) return onFallbackProvider ? 'auth' : '';
+  if (CREDITS.test(text)) return 'credits';
   if (status === 429 || /rate.?limit/i.test(text)) return 'rate';
   if (status === 404 || MODEL_GONE.test(text)) return 'model';
   if (status >= 500 || NETWORK_OR_STALL.test(text)) return 'server';

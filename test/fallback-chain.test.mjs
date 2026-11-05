@@ -58,6 +58,8 @@ test('only failures another model can fix move down the chain', () => {
   assert.equal(fallbackReason(err(400, 'No endpoints found that support tool use')), 'model');
   assert.equal(fallbackReason(err(400, 'invalid tool schema')), '');
   assert.equal(fallbackReason(err(400, 'maximum context length is 8192 tokens')), '');
+  assert.equal(fallbackReason(err(402, 'Model provider returned HTTP 402: Insufficient credits. This is a billing or quota limit, not an API-key authentication failure.')), 'credits', 'credit text that mentions authentication is still credits');
+  assert.equal(fallbackReason(err(0, 'OpenRouter does not have enough remaining credits. This is a credit limit, not an invalid API key.')), 'credits');
   assert.equal(fallbackReason(err(401)), '', 'a bad main key needs the user');
   assert.equal(fallbackReason(err(401), { onFallbackProvider: true }), 'auth');
   assert.equal(fallbackReason(Object.assign(new Error('aborted'), { name: 'AbortError' })), '');
