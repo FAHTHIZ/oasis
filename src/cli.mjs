@@ -2001,7 +2001,7 @@ export function streamRestartNotice(info = {}, partialShown = false) {
   const count = ' (' + (info.attempt || 1) + '/' + (info.limit || 2) + ')';
   if (info.kind === 'malformed-call') return "[retry] The model's tool call could not be parsed; asking it to send the call again" + count + '.';
   const reason = String(info.reason || '');
-  const what = /stalled/i.test(reason) ? 'The model response stalled' : /malformed/i.test(reason) ? "The model's tool call could not be parsed" : /high demand|overloaded|503|unavailable/i.test(reason) ? 'The provider broke off the response (overloaded)' : 'The model connection dropped mid-response';
+  const what = /stalled/i.test(reason) ? 'The model response stalled' : /malformed/i.test(reason) ? "The model's tool call could not be parsed" : Number(info.status) >= 500 || /high demand|overloaded|503|unavailable|internal error/i.test(reason) ? 'The provider broke off the response with a server error' + (Number(info.status) >= 500 ? ' (' + info.status + ')' : '') : 'The model connection dropped mid-response';
   return '[network] ' + what + '; retrying' + count + '.' + (partialShown ? ' The partial reply above is discarded.' : '');
 }
 
