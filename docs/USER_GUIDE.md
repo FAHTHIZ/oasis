@@ -694,7 +694,7 @@ The native `node-pty` component is an optional dependency. The browser workspace
 | Esc | While a turn runs: interrupt it |
 | Enter (during a turn) | Steer: the agent reads the line at its next step and keeps going |
 | Tab (during a turn) | Queue the line as the next message after the turn ends |
-| Esc Esc | Clear the input, or rewind when it is empty |
+| Esc Esc | Clear the input, or, when it is empty, open the rewind picker: choose a message, then restore code and conversation, the conversation only, or code only. The message goes back into the input box to edit and resend. |
 | Ctrl+L, Ctrl+D | Clear the screen, exit |
 
 ### Voice dictation

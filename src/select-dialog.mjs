@@ -105,6 +105,23 @@ export async function pickerFor(command, { session = null, env = process.env, se
     const options = list.map((theme) => ({ label: theme.id + (theme.name !== theme.id ? ' — ' + theme.name : '') + (theme.id === preference ? ' (current)' : ''), value: theme.id }));
     return { context: 'ThemePicker', options: [...options, cancel], initial: Math.max(0, list.findIndex((theme) => theme.id === preference)) };
   }
+  if (command === 'rewind') {
+    // Double Esc / bare /rewind: pick a turn, then what to restore (as in Claude Code).
+    const { listCheckpoints } = await import('./checkpoints.mjs');
+    const turns = session ? listCheckpoints(session).slice(0, 15) : [];
+    if (!turns.length) return null;
+    const clip = (text, max) => (text.length > max ? text.slice(0, max - 1) + '…' : text);
+    const options = turns.map((turn) => ({ label: clip(String(turn.prompt || '').replace(/\s+/g, ' '), 60) + (turn.files.length ? ' · ' + clip(turn.files.slice(0, 3).join(', ') + (turn.files.length > 3 ? ' +' + (turn.files.length - 3) : ''), 40) : ' · no file changes'), value: String(turn.number), files: turn.files.length, prompt: String(turn.prompt || '') }));
+    return { context: 'Select', options: [...options, cancel], initial: 0 };
+  }
+  if (command === 'rewind-mode') {
+    return { context: 'Select', options: [
+      { label: 'Restore code and conversation', value: '' },
+      { label: 'Restore conversation only', value: 'chat' },
+      { label: 'Restore code only', value: 'code' },
+      cancel
+    ], initial: 0 };
+  }
   if (command === 'color') {
     const { PROMPT_COLORS, getPromptColor } = await import('./terminal-ui.mjs');
     const current = getPromptColor && getPromptColor();

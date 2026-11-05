@@ -77,3 +77,10 @@ test('pickers list models (respecting availableModels), themes and colors', asyn
   assert.ok(color.options.some((o) => o.value === 'purple'));
   assert.equal(await pickerFor('cost', {}), null);
 });
+
+test('rewind pickers offer turns and what to restore', async () => {
+  const { pickerFor } = await import('../src/select-dialog.mjs');
+  assert.equal(await pickerFor('rewind', { session: null }), null);
+  const modes = await pickerFor('rewind-mode');
+  assert.deepEqual(modes.options.map((option) => option.value), ['', 'chat', 'code', null]);
+});

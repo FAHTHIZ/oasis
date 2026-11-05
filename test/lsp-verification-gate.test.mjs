@@ -114,3 +114,10 @@ test('files missing the same language server share one short notice line', () =>
   assert.equal((text.match(/language server installed/g) || []).length, 1);
   assert.doesNotMatch(text, /Meanwhile/);
 });
+
+test('a passing project check drops the missing-language-server note', async () => {
+  const { appendLspUnavailableNotice } = await import('../src/agent.mjs');
+  const state = { changedPaths: new Set(['add.mjs']), lspVerificationByPath: new Map([['add.mjs', { status: 'unavailable', reason: 'No typescript language server found. Install one with: npm i -g typescript-language-server.' }]]) };
+  assert.match(appendLspUnavailableNotice('Fixed.', state), /LSP verification unavailable/);
+  assert.equal(appendLspUnavailableNotice('Fixed.', { ...state, lastVerificationKind: 'test', lastVerificationExitCode: 0 }), 'Fixed.');
+});
