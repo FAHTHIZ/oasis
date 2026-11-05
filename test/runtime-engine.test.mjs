@@ -8,6 +8,7 @@ import path from 'node:path';
 import { mkdtemp, mkdir, rm, writeFile, symlink } from 'node:fs/promises';
 import { listWorkspaceFiles } from '../src/workspace-files.mjs';
 import { carryUndeliveredSteering, pendingSteering, steerSession } from '../src/agent.mjs';
+import { saveSession, loadSession } from '../src/sessions.mjs';
 import { runtimeConfigFromConnection, connectFromPaste } from '../src/provider-connect.mjs';
 import { tokenFromPaste, runtimeToken, RuntimeWorkspace, RuntimeAgent } from '../app/core/runtime.mjs';
 
@@ -87,8 +88,21 @@ test('a note typed while the runtime works goes to the running job', async () =>
 });
 
 
-test('undelivered runtime steering is moved into session history before persistence', () => {
-  const session = { messages: [{ role: 'user', content: 'Build a counter.' }] };
+test('undelivered runtime steering is preserved as bounded session state', async (t) => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'oasis-steering-session-'));
+  const configDir = await mkdtemp(path.join(os.tmpdir(), 'oasis-steering-config-'));
+  const env = { ...process.env, OASIS_CONFIG_DIR: configDir };
+  t.after(async () => { await rm(root, { recursive: true, force: true }); await rm(configDir, { recursive: true, force: true }); });
+
+  const session = {
+    root,
+    sessionId: 'abcdefab-cdef-1234-5678-abcdefabcdef',
+    config: { protocol: 'openai-compatible', baseURL: 'https://example.invalid/v1', model: 'test-model' },
+    messages: [
+      { role: 'system', content: 'System instructions.' },
+      ...Array.from({ length: 119 }, (_, index) => ({ role: index % 2 ? 'assistant' : 'user', content: 'History ' + index }))
+    ]
+  };
   assert.equal(steerSession(session, 'Use tabs for indentation.'), true);
   assert.equal(steerSession(session, 'Keep the existing tests.'), true);
   assert.equal(pendingSteering(session), 2);
@@ -96,10 +110,19 @@ test('undelivered runtime steering is moved into session history before persiste
   const carried = carryUndeliveredSteering(session);
   assert.deepEqual(carried, ['Use tabs for indentation.', 'Keep the existing tests.']);
   assert.equal(pendingSteering(session), 0);
-  assert.equal(session.messages.length, 2);
-  assert.equal(session.messages[1].role, 'user');
-  assert.match(session.messages[1].content, /1\. Use tabs for indentation\./);
-  assert.match(session.messages[1].content, /2\. Keep the existing tests\./);
-  assert.match(session.messages[1].content, /takes priority over earlier plans/);
-  assert.deepEqual(carryUndeliveredSteering(session), [], 'carried notes are not duplicated');
+  assert.equal(session.messages.length, 120, 'the capped conversation is not mutated');
+  assert.deepEqual(session.pendingSteering, carried);
+
+  const saved = await saveSession(session, { env });
+  const restored = await loadSession(root, saved.id, { env });
+  assert.equal(restored.messages.length, 120);
+  assert.equal(restored.messages[0].role, 'system');
+  assert.deepEqual(restored.pendingSteering, carried);
+
+  const invalid = [...Array.from({ length: 22 }, (_, i) => 'saved ' + i), 'x'.repeat(25_000), 42, '   '];
+  const second = await saveSession({ ...session, pendingSteering: invalid }, { env });
+  const bounded = await loadSession(root, second.id, { env });
+  assert.equal(bounded.pendingSteering.length, 20);
+  assert.deepEqual(bounded.pendingSteering.slice(0, -1), Array.from({ length: 19 }, (_, i) => 'saved ' + (i + 3)));
+  assert.equal(bounded.pendingSteering.at(-1), 'x'.repeat(20_000));
 });
