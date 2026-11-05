@@ -15,7 +15,8 @@ async function tmp(t) {
   return dir;
 }
 // node -e counts as high risk (inline code), which always goes to the user; use plain flags here.
-const run = () => ({ command: process.execPath, args: ['--version'] });
+// The label only makes the two actions distinct; both run `node --version`.
+const run = (label = '') => ({ command: process.execPath, args: ['--version'], ...(label ? { description: label } : {}) });
 
 test('the classifier prompt holds user intent and the action, never tool output', () => {
   const prompt = JSON.parse(buildClassifierPrompt({
@@ -134,4 +135,29 @@ test('relayed and injected user-role notices never count as the user intent', as
   const text = typeof prompt === 'string' ? prompt : JSON.stringify(prompt);
   assert.match(text, /fix the failing test/);
   assert.doesNotMatch(text, /CROSS-SESSION|approved deleting|push --force is fine|Stop hook/);
+});
+
+test('an allowed action is not reclassified when the agent repeats it', async () => {
+  const { classifyAction, newAutoModeState } = await import('../src/auto-mode.mjs');
+  const state = newAutoModeState();
+  let calls = 0;
+  const evaluate = async () => { calls += 1; return '{"decision":"allow","reason":"the user asked to run the tests"}'; };
+  const messages = [{ role: 'user', content: 'fix it and run npm test' }];
+  const first = await classifyAction(state, { toolName: 'Bash', args: { command: 'npm', args: ['test'] }, messages, root: '/p' }, evaluate);
+  const again = await classifyAction(state, { toolName: 'Bash', args: { args: ['test'], command: 'npm' }, messages, root: '/p' }, evaluate);
+  assert.equal(first.decision, 'allow');
+  assert.equal(again.decision, 'allow');
+  assert.equal(again.cached, true);
+  assert.equal(calls, 1, 'key order in the input does not matter');
+  await classifyAction(state, { toolName: 'Bash', args: { command: 'npm', args: ['publish'] }, messages, root: '/p' }, evaluate);
+  assert.equal(calls, 2, 'a different command is classified');
+  await classifyAction(state, { toolName: 'Bash', args: { command: 'npm', args: ['test'] }, messages: [...messages, { role: 'user', content: 'now deploy' }], root: '/p' }, evaluate);
+  assert.equal(calls, 3, 'new user intent is classified again');
+  const blocker = async () => { calls += 1; return '{"decision":"block","reason":"no"}'; };
+  const blocked = newAutoModeState();
+  await classifyAction(blocked, { toolName: 'Bash', args: { command: 'rm' }, messages, root: '/p' }, blocker);
+  await classifyAction(blocked, { toolName: 'Bash', args: { command: 'rm' }, messages, root: '/p' }, blocker);
+  assert.equal(blocked.blockedTotal, 2, 'blocks are never cached');
+  const restored = { ...newAutoModeState(), allowed: {} };
+  assert.equal((await classifyAction(restored, { toolName: 'Bash', args: { command: 'ls' }, messages, root: '/p' }, evaluate)).decision, 'allow', 'state restored from JSON still works');
 });
