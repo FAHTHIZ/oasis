@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { FALLBACK_PROVIDERS } from './fallback-chain.mjs';
 import { probeLocalContext, isLocalModelEndpoint, localContextAdvice, SMALL_CONTEXT_TOKENS, RECOMMENDED_LOCAL_CONTEXT } from './local-context.mjs';
 import { notifyAttention } from './attention.mjs';
 import { playSound, configureSounds, completedTodoCount, DONE_SOUND_AFTER_MS } from './sounds.mjs';
@@ -679,7 +680,48 @@ function redactSecretText(message, secret) {
   return out.slice(0, 1200);
 }
 
+const CONNECT_USAGE = [
+  'Usage: oasis connect [KEY | MODEL LINK | SERVER ADDRESS]',
+  '       oasis connect --from-env [PROVIDER]',
+  '',
+  'Paste an API key, a model page link (Hugging Face, OpenRouter, Ollama) or a',
+  'local server address. OASIS works out the provider, lists its models, tests',
+  'the best ones with a real tool call and saves the first that works, plus',
+  'backups for when it runs out of credit.',
+  '',
+  'With nothing after it, OASIS asks for the paste so the key stays out of your',
+  'shell history. --from-env uses a key already in the environment, such as',
+  'GEMINI_API_KEY, OPENROUTER_API_KEY, GROQ_API_KEY or OPENAI_API_KEY.'
+].join('\n') + '\n';
+
+// Cloud provider keys already exported in the shell, in FALLBACK_PROVIDERS order.
+function providerKeysInEnv(env = process.env) {
+  const found = [];
+  for (const [provider, entry] of Object.entries(FALLBACK_PROVIDERS)) {
+    for (const name of entry.keyEnv || []) {
+      const value = String(env[name] || '').trim();
+      if (value && !found.some((item) => item.value === value)) { found.push({ provider, name, value }); break; }
+    }
+  }
+  return found;
+}
+
+async function connectFromEnvironment(wanted = '') {
+  const keys = providerKeysInEnv();
+  const pick = wanted ? keys.find((item) => item.provider === wanted.toLowerCase() || item.name === wanted.toUpperCase()) : keys[0];
+  if (!pick) {
+    throw new Error(wanted
+      ? 'No key for ' + wanted + ' in the environment. Known variables: ' + Object.values(FALLBACK_PROVIDERS).flatMap((entry) => entry.keyEnv).join(', ') + '.'
+      : 'No provider API key found in the environment (looked for ' + Object.values(FALLBACK_PROVIDERS).flatMap((entry) => entry.keyEnv).join(', ') + ').');
+  }
+  if (keys.length > 1 && !wanted) stdout.write('Found keys for ' + keys.map((item) => item.provider).join(', ') + '; using ' + pick.name + ' (pass a provider name to choose).\n');
+  else stdout.write('Using ' + pick.name + ' from the environment.\n');
+  await connectFromTerminalPaste(pick.value);
+}
+
 async function connectCommand(rest, root) {
+  if (['--help', '-h', 'help'].includes(rest[0])) { stdout.write(CONNECT_USAGE); return; }
+  if (rest[0] === '--from-env') { await connectFromEnvironment(rest[1] || ''); return; }
   const inline = rest.join(' ').trim();
   if (inline) {
     await connectFromTerminalPaste(inline);
@@ -690,7 +732,8 @@ async function connectCommand(rest, root) {
     const chunks = [];
     for await (const chunk of stdin) chunks.push(chunk);
     const piped = Buffer.concat(chunks).toString('utf8').trim();
-    if (!piped) throw new Error('Usage: oasis connect, then paste a model API key, a model link or a local server address.');
+    if (!piped && providerKeysInEnv().length) { await connectFromEnvironment(); return; }
+    if (!piped) throw new Error('Usage: oasis connect, then paste a model API key, a model link or a local server address (or run oasis connect --help).');
     await connectFromTerminalPaste(piped);
     return;
   }
@@ -2254,6 +2297,10 @@ async function printMode(root, headless, args, autoApprove, persistence) {
   const config = await loadConfig();
   if (SESSION_OPTIONS.model) config.model = SESSION_OPTIONS.model;
   if (SESSION_OPTIONS.effort) Object.assign(config, applyEffort(config, SESSION_OPTIONS.effort));
+  if (!config.configured) {
+    const envKeys = providerKeysInEnv();
+    if (envKeys.length) throw new Error('No model provider is configured, but ' + envKeys.map((item) => item.name).join(', ') + (envKeys.length > 1 ? ' are' : ' is') + ' set.\n  Run: oasis connect --from-env' + (envKeys.length > 1 ? ' [' + envKeys.map((item) => item.provider).join('|') + ']' : '') + '\n  It finds a model that works with that key and saves it.');
+  }
   if (!config.configured) throw new Error('No model provider is configured.\n  Pick one:\n    oasis connect        paste an API key, model link or local server address\n    oasis setup          guided setup in this terminal (API key, free gateway, or Ollama)\n    oasis setup --auto   detect this computer and any local model server, then configure the best fit\n    oasis web --open     set it up in the browser workspace instead\n    OASIS_PROTOCOL, OASIS_BASE_URL, OASIS_MODEL + API key variable   for CI and scripts\n  Guide: https://github.com/FAHTHIZ/oasis/blob/main/docs/INSTALL.md');
   if (SESSION_OPTIONS.channels.length || SESSION_OPTIONS.devChannels.length) stderr.write('[channels] Channels need an interactive session; ignored with -p.\n');
   // CI runners and supervisors stop jobs with SIGTERM. Commands run in their own

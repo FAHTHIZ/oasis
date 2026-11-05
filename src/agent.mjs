@@ -1,3 +1,4 @@
+import { briefFailure } from '../app/core/providers.mjs';
 import { atomicWriteFile } from './atomic-write.mjs';
 import { sessionKeyPool, ROTATE_STATUSES } from './key-pool.mjs';
 import { explainNetworkError } from './network-doctor.mjs';
@@ -2175,16 +2176,7 @@ async function requestCompletion(session, options = {}) {
 
 // One line per failed model, e.g. "daily free-tier quota used up (retry in 21h11m)".
 export function shortProviderReason(error) {
-  let text = String(error && error.message || error || '').replace(/\s+/g, ' ').trim();
-  text = text.replace(/^Model provider returned HTTP \d+:\s*/i, '').replace(/\.?\s*Check the configured [^.]*\.?$/i, '');
-  const retry = /retry in (?:(\d+)h)?(?:(\d+)m)?(?:([\d.]+)s)?/i.exec(text);
-  const parts = retry ? [retry[1] && retry[1] + 'h', retry[2] && retry[2] + 'm', !retry[1] && retry[3] && Math.ceil(Number(retry[3])) + 's'].filter(Boolean) : [];
-  const when = parts.length ? ' (retry in ' + parts.join('') + ')' : '';
-  if (/per ?day|PerDay/i.test(text) && /quota|limit/i.test(text)) return 'daily ' + (/free.?tier/i.test(text) ? 'free-tier ' : '') + 'quota used up' + when;
-  if (/per ?minute|PerMinute/i.test(text) && /quota|limit/i.test(text)) return 'per-minute rate limit' + when;
-  if (/no longer available|deprecated|decommissioned|retired/i.test(text)) return 'model retired by the provider';
-  const status = Number(error && (error.status || error.statusCode)) || 0;
-  return (status ? 'HTTP ' + status + ': ' : '') + text.split(/(?<=[.!?])\s/)[0].slice(0, 140);
+  return briefFailure(error && error.message || error, error && (error.status || error.statusCode));
 }
 
 // When the whole chain fails, say what happened to every model, not just the
