@@ -94,7 +94,9 @@ test('universal app end to end: paste to connect, tool-calling task, credit fall
   await waitFor(page, `document.readyState === 'complete' && !window.__stale && document.documentElement.dataset.ready === '1' && !!document.getElementById('modelChip') && document.getElementById('modelChip').textContent === 'Connect a model'`);
 
   // 1. Paste the server address straight into the message box.
-  assert.equal(await evaluate(page, `getComputedStyle(document.getElementById('connectForm')).display !== 'none'`), true, 'connect card shows before a model is set up');
+  // A wait, not a one-shot read: the app may still swap in a fresh page (service
+  // worker update) right after the first ready signal.
+  await waitFor(page, `document.documentElement.dataset.ready === '1' && !!document.getElementById('connectForm') && getComputedStyle(document.getElementById('connectForm')).display !== 'none'`, { label: 'connect card shows before a model is set up' });
   await evaluate(page, paste('#input', provider.url));
   await waitFor(page, `[...document.querySelectorAll('.connect-note li.ready')].some((li) => /Locked in acme\\/coder-pro/.test(li.textContent))`, { label: 'locked in the best model' });
   assert.equal(await evaluate(page, `document.getElementById('input').value`), '', 'the pasted address never stays in the message box');
