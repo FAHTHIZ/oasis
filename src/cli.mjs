@@ -230,6 +230,7 @@ function printHelp() {
     '  --append-system-prompt TEXT   Add instructions to the system prompt',
     '  --agent NAME                  Run the session as a subagent (its prompt and tools), e.g. feature-dev:code-architect',
     '  --append-system-prompt-file F Add instructions from a file',
+    '  --output-style NAME           Use an output style for this session (default, explanatory, learning, or a custom/plugin style)',
     '  --system-prompt TEXT | --system-prompt-file F  Replace the default system prompt',
     '  --fallback-model ID           Switch to this model when the main one is overloaded or failing',
     '  --chrome, --no-chrome         Give the agent a Chrome browser tool (navigate, click, type, screenshot, console)',
@@ -3180,6 +3181,7 @@ async function main() {
     if (arg === '--append-system-prompt') { SESSION_OPTIONS.appendSystemPrompt = [SESSION_OPTIONS.appendSystemPrompt, rawArgs[++i] || ''].filter(Boolean).join('\n\n'); continue; }
     const needValue = (flag) => { const value = rawArgs[i + 1]; if (value === undefined) throw new Error(flag + ' requires a value.'); i += 1; return value; };
     if (arg === '--system-prompt') { SESSION_OPTIONS.systemPromptOverride = needValue(arg); continue; }
+    if (arg === '--output-style' || arg.startsWith('--output-style=')) { const value = arg.includes('=') ? arg.slice(arg.indexOf('=') + 1) : needValue(arg); if (!String(value).trim()) throw new Error('--output-style requires a style name.'); SESSION_OPTIONS.outputStyle = String(value).trim(); continue; }
     if (arg === '--system-prompt-file') { SESSION_OPTIONS.pendingFiles.push({ kind: 'system', file: needValue(arg) }); continue; }
     if (arg === '--append-system-prompt-file') { SESSION_OPTIONS.pendingFiles.push({ kind: 'append', file: needValue(arg) }); continue; }
     if (arg === '--fallback-model') { SESSION_OPTIONS.fallbackModel = needValue(arg); continue; }
