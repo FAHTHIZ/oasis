@@ -135,7 +135,8 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
-      actions: read
+      # write: dispatch the homepage workflow after publishing (below).
+      actions: write
     steps:
       - name: Check out the exact release source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -271,3 +272,12 @@ jobs:
           fail_on_unmatched_files: true
           draft: false
           files: release-assets/*
+      - name: Refresh the homepage download links
+        # Releases created with the workflow token do not trigger other workflows,
+        # so ask the homepage workflow to restamp its download rows for this release.
+        if: steps.release-version.outputs.publish == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        shell: bash
+        run: gh workflow run pages.yml --ref main || echo "::warning::Could not dispatch the homepage workflow; it will restamp on the next push to main."
