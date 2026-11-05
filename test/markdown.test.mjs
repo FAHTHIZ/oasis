@@ -17,3 +17,14 @@ test('rendered prose wraps at word boundaries with aligned continuation rows', a
   stream.end();
   assert.ok(chunks.join('').includes('const a = "a very long code line that must not be wrapped at all";'));
 });
+
+test('code fences show no language label that could be copied as a command', async () => {
+  const { MarkdownStream } = await import('../src/markdown.mjs');
+  let out = '';
+  const stream = new MarkdownStream({ write: (chunk) => { out += chunk; }, color: true, columns: () => 80 });
+  stream.push('Run it:\n\n```bash\nnode test.mjs\n```\n');
+  stream.end();
+  const plain = out.replace(/\x1b\[[0-9;]*[A-Za-z]/g, '');
+  assert.doesNotMatch(plain, /^\s*bash\s*$/m);
+  assert.match(plain, /node test\.mjs/);
+});
