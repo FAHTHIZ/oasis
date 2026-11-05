@@ -26,7 +26,7 @@ import { startPluginMonitorsFor } from './monitors.mjs';
 import { parseChannelEntries, mcpInstructionsSection, flushPendingChannels } from './channels.mjs';
 import { SESSION_TOOL_DEFINITIONS, SESSION_TOOL_NAMES, SESSION_READ_ONLY_TOOLS, deferMcpTools, deferRareBuiltinTools, loadDeferredTool, deferredToolsPrompt, toolGuidanceFor, runSessionTool, stopCron, TOOL_SEARCH_DEFINITION } from './session-tools.mjs';
 import { loadOutputStyles, systemPromptWithStyle, BUILTIN_STYLES } from './output-styles.mjs';
-import { priceFor, estimateCostUsd, BudgetExceededError, recordBudgetSpend, formatUsd } from './pricing.mjs';
+import { priceFor, estimateCostUsd, BudgetExceededError, recordBudgetSpend, formatUsd, cloudModelBehindGateway } from './pricing.mjs';
 import { recentImageSet, hasImages, toChatMessagesWithImages, anthropicImageBlocks, responsesImageItems } from './images.mjs';
 import { beginCheckpoint, captureBeforeChange, checkpointPersistenceEnabled, FILE_CHANGING_TOOLS, loadCheckpoints } from './checkpoints.mjs';
 import { nestedMemoryFor } from './memory.mjs';
@@ -5394,7 +5394,7 @@ async function runAgentTurnRaw(session, prompt, options = {}) {
     let assistant;
     const waitHook = typeof options.onModelWait === 'function' ? options.onModelWait : null;
     if (waitHook) {
-      try { waitHook({ phase: 'start', step: step + 1, inputTokens: estimateTokens(session.messages || []), model: session.config && session.config.model, local: isLoopbackProvider(session.config) }); } catch {}
+      try { waitHook({ phase: 'start', step: step + 1, inputTokens: estimateTokens(session.messages || []), model: session.config && session.config.model, local: isLoopbackProvider(session.config) && !cloudModelBehindGateway(session.config && session.config.model, session.config) }); } catch {}
     }
     try {
       assistant = await requestCompletion(session, {
