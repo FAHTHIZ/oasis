@@ -34,7 +34,10 @@ test('hardware detection: Apple Silicon, NVIDIA, CPU-only and Termux', async () 
 test('model memory budgets follow the accelerator', () => {
   assert.equal(modelMemoryBudget({ gpu: { vramGB: 24 } }), 21.6);
   assert.equal(modelMemoryBudget({ appleSilicon: true, memoryGB: 32 }), 20.8);
-  assert.equal(modelMemoryBudget({ memoryGB: 16 }), 6);
+  assert.equal(modelMemoryBudget({ memoryGB: 16 }), 9.6);
+  assert.equal(modelMemoryBudget({ memoryGB: 7.8 }), 3.3);
+  assert.equal(localModelTier(modelMemoryBudget({ memoryGB: 7.8 })).model, 'qwen3:4b', 'an 8 GB laptop can run the 4b model');
+  assert.equal(localModelTier(modelMemoryBudget({ memoryGB: 16 })).model, 'qwen3:8b');
   assert.equal(modelMemoryBudget({ memoryGB: 4 }), 0);
 });
 

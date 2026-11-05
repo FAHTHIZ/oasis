@@ -143,8 +143,10 @@ export function modelMemoryBudget(hw) {
   if (hw.gpu && hw.gpu.vramGB) return round1(hw.gpu.vramGB * 0.9);
   // Unified memory: macOS lets the GPU use roughly two thirds of RAM by default.
   if (hw.appleSilicon) return round1(hw.memoryGB * 0.65);
-  // CPU-only: leave room for the OS, the editor and the browser.
-  return round1(Math.max(0, hw.memoryGB - 4) * 0.5);
+  // CPU-only: keep ~4.5 GB for the OS, editor and browser, and never plan on
+  // more than 60% of RAM. An 8 GB laptop gets ~3.3 GB (enough for qwen3:4b);
+  // 16 GB gets ~9.6 GB (qwen3:8b with room for its context).
+  return round1(Math.max(0, Math.min(hw.memoryGB - 4.5, hw.memoryGB * 0.6)));
 }
 
 // Recommended local models by memory budget. Sizes are typical 4-bit downloads.
