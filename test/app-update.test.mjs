@@ -205,3 +205,10 @@ test('the CLI notice is instant from cache, bounded on a cold start, and respect
     await rm(dir, { recursive: true, force: true });
   }
 });
+
+test('installPlan refuses anything but a file path', async () => {
+  const { installPlan } = await import('../src/app-update.mjs');
+  assert.throws(() => installPlan('deb', { filePath: '/tmp/x.deb' }), TypeError);
+  assert.throws(() => installPlan('nsis', ''), TypeError);
+  assert.equal(installPlan('nsis', 'C:\\OASIS.exe').command, 'C:\\OASIS.exe');
+});

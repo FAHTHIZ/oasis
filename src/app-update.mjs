@@ -234,6 +234,7 @@ export async function downloadVerifiedAsset(update, { directory, fetchImpl = fet
 // What the desktop host should do with a verified file. Pure so it can be tested
 // on any OS; the Electron side only executes the returned plan.
 export function installPlan(kind, filePath, { env = process.env } = {}) {
+  if (typeof filePath !== 'string' || (!filePath && kind !== 'cli')) throw new TypeError('installPlan needs the downloaded file path (downloadVerifiedAsset(...).filePath).');
   if (kind === 'nsis') {
     // electron-builder one-click installers accept /S (silent) and relaunch with --force-run.
     return { action: 'spawn-and-quit', command: filePath, args: ['/S', '--updated', '--force-run'], message: 'OASIS will close, update and reopen.' };
