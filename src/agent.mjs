@@ -3120,7 +3120,7 @@ function questionBudget(session, options = {}) {
 
 const ASK_USER_TOOL_DEFINITION = { type: 'function', function: {
   name: 'ask_user_question',
-  description: 'Ask the user a multiple-choice question when a decision really changes the work (which approach, library, scope, or behavior) and you cannot settle it from the code or the request. Offer 2-4 concrete options; the user can also type their own answer. Do not use it for permission (tools ask for that automatically) or for things you can find out yourself. Ask at most one or two questions per turn; for minor choices pick a sensible default and state it.',
+  description: 'Ask the user a multiple-choice question when a decision really changes the work (which approach, library, scope, or behavior) and you cannot settle it from the code or the request. Offer 2-4 concrete options; the user can also type their own answer. Not for permission (tools ask automatically) or things you can find out yourself. For minor choices pick a default and say so.',
   parameters: { type: 'object', properties: {
     question: { type: 'string', description: 'One clear question ending with a question mark' },
     header: { type: 'string', description: 'Very short label, up to 12 characters' },
