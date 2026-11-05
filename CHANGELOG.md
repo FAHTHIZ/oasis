@@ -4,7 +4,11 @@ This file records notable user-facing product changes. It does not imply that an
 
 ## Unreleased
 
-Changes after 1.0.0. Entries include feature work, reliability improvements, and security hardening; benchmark-driven fixes and their regression evidence are documented alongside the relevant changes.
+Changes after 1.1.0. Entries include feature work, reliability improvements, and security hardening; benchmark-driven fixes and their regression evidence are documented alongside the relevant changes.
+
+## 1.1.0 — stable (November 5, 2026)
+
+Release notes: [docs/releases/v1.1.0.md](docs/releases/v1.1.0.md). Changes after 1.0.0. Entries include feature work, reliability improvements, and security hardening; benchmark-driven fixes and their regression evidence are documented alongside the relevant changes.
 
 - **Phones and tablets.**
   - When `oasis web` listens on the network, it prints this computer's real private addresses (Wi-Fi first, then Tailscale, then virtual adapters) as links that include the token. It also prints a terminal QR code to scan with the phone camera; `OASIS_NO_QR=1` hides it.

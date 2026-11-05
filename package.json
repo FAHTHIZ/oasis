@@ -1,6 +1,6 @@
 {
   "name": "oasis-oss",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Open-source, local-first agentic development workspace with CLI, browser, desktop and editor interfaces, multi-provider models, integrations, agent coordination, and verification.",
   "type": "module",
   "main": "./src/sdk.mjs",
@@ -151,7 +151,7 @@
   },
   "oasisRelease": {
     "channel": "stable",
-    "stableTag": "v1.0.0",
+    "stableTag": "v1.1.0",
     "published": true
   }
 }

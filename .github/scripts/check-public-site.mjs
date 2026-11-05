@@ -84,9 +84,9 @@ assert.ok(
   'LICENSE must contain the full Apache License 2.0 text, including its terms and appendix.'
 );
 assert.ok(expectedDescription.length <= 160, 'Search description should fit a typical snippet length.');
-assert.equal(pkg.version, '1.0.0', 'The desktop package must retain numeric stable SemVer.');
+assert.match(pkg.version, /^1\.\d+\.\d+$/, 'The desktop package must retain numeric stable 1.x SemVer.');
 assert.equal(pkg.oasisRelease?.channel, 'stable', 'The package must carry the stable channel.');
 assert.equal(pkg.oasisRelease?.candidate, undefined, 'A stable package must not carry a candidate number.');
-assert.equal(pkg.oasisRelease?.stableTag, 'v1.0.0', 'The package must identify the intended stable tag.');
+assert.equal(pkg.oasisRelease?.stableTag, 'v' + pkg.version, 'The package must identify the intended stable tag.');
 assert.ok(readme.includes('1.0.0') && readme.includes('stable') && !/Release Candidate 1|\bRC1\b/.test(readme), 'README must describe the stable 1.0 lifecycle.');
 console.log('OASIS public-site checks passed: metadata, links, stable 1.0 branding, canonical repo, and Apache-2.0 license consistency.');
