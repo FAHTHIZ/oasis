@@ -25,6 +25,7 @@ import { estimateTokens, contextWindowSize } from './context.mjs';
 import { PtySessionManager } from './pty-sessions.mjs';
 import { createCloudTaskStore } from './cloud-task-store.mjs';
 import { createWorktree, finishWorktree, removeWorktree, readWorktreeDiff, readWorktreeWorkingDiff, readWorkspaceDiff, inspectWorktree, mergeWorktree, isCommitIntegrated } from './worktrees.mjs';
+import { createPhoneLink } from './phone-link.mjs';
 
 // Commands that only make sense in the terminal (the web UI has its own session picker).
 const WEB_UNSUPPORTED_COMMANDS = new Set(['resume']);
@@ -1603,6 +1604,43 @@ export function createOasisWebServer(options = {}) {
       return;
     }
 
+    if (pathname === '/api/phone/link') {
+      // Share this workspace with a phone. Managed only from this computer; the
+      // phone itself never sees or changes the link.
+      if (!isLoopbackClient(req)) { json(res, 403, { error: 'Phone links can be managed only from the same computer.' }); return; }
+      if (!isLoopbackBindHost(bindHost)) {
+        // Already listening on the network (oasis web --host …): nothing to open.
+        json(res, 200, { mode: 'server', active: true, encrypted: Boolean(tlsOptions), network: 'server', urls: [], hint: 'This workspace is already reachable on the network. Use the links printed in the terminal.' });
+        return;
+      }
+      const link = getPhoneLink();
+      if (req.method === 'GET') { json(res, 200, { mode: 'link', nativeConfirm: typeof options.confirmUnencryptedPhoneLink === 'function', ...link.status() }); return; }
+      if (req.method !== 'POST') { json(res, 405, { error: 'Method not allowed.' }); return; }
+      const body = await readJsonBody(req);
+      const action = String(body && body.action || '');
+      try {
+        if (action === 'stop') { json(res, 200, { mode: 'link', nativeConfirm: typeof options.confirmUnencryptedPhoneLink === 'function', ...(await link.stop()) }); return; }
+        if (action === 'start') {
+          const network = body && body.network === 'lan' ? 'lan' : 'tailscale';
+          let allowUnencrypted = Boolean(tlsOptions);
+          if (network === 'lan' && !tlsOptions) {
+            // The desktop app asks with a native dialog the page cannot fake;
+            // the CLI-hosted page must send the user's explicit confirmation.
+            allowUnencrypted = typeof options.confirmUnencryptedPhoneLink === 'function'
+              ? Boolean(await options.confirmUnencryptedPhoneLink())
+              : body.allowUnencrypted === true;
+            if (!allowUnencrypted) { json(res, 409, { error: 'Wi-Fi sharing was not confirmed.', cancelled: true }); return; }
+          }
+          json(res, 200, { mode: 'link', nativeConfirm: typeof options.confirmUnencryptedPhoneLink === 'function', ...(await link.start({ network, allowUnencrypted })) });
+          return;
+        }
+        json(res, 400, { error: 'Unknown phone link action.' });
+      } catch (error) {
+        json(res, 400, { error: String(error && error.message || error) });
+      }
+      return;
+    }
+
     if (req.method === 'GET' && pathname === '/api/provider/local-models') {
       // This status check never accepts a caller-supplied URL: it can only query
       // the conventional local Ollama endpoint and is never exposed to phone clients.
@@ -2246,6 +2284,11 @@ export function createOasisWebServer(options = {}) {
     });
   };
   const server = tlsOptions ? createHttpsServer(tlsOptions, requestHandler) : createHttpServer(requestHandler);
+  let phoneLink = options.phoneLink || null;
+  function getPhoneLink() {
+    if (!phoneLink) phoneLink = createPhoneLink({ server, token }, { scheme: tlsOptions ? 'https' : 'http', interfaces: options.networkInterfaces });
+    return phoneLink;
+  }
 
   return {
     server,
@@ -2261,6 +2304,7 @@ export function createOasisWebServer(options = {}) {
       for (const session of activeSessions.values()) closeSession(session);
       activeSessions.clear();
       try { ptyManager.closeAll(); } catch {}
+      if (phoneLink) { try { await phoneLink.stop(); } catch {} }
       if (server.listening) {
         // server.close() waits for every open socket. Browsers keep event streams
         // and keep-alive sockets open indefinitely, so drop idle sockets now and

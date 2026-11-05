@@ -6,6 +6,7 @@ This file records notable user-facing product changes. It does not imply that an
 
 Changes after 1.1.0. Entries include feature work, reliability improvements, and security hardening; benchmark-driven fixes and their regression evidence are documented alongside the relevant changes.
 
+- **Connect a phone.** **File → Connect a phone…** in the desktop app and **Settings → Devices → Connect a phone** in the browser workspace share the running workspace with a phone through a QR code, with no restart or terminal. Tailscale (encrypted) is the default. Plain home Wi-Fi needs an explicit warning confirmation, which the desktop app shows as a native dialog the page cannot answer. The main server stays on loopback: extra listeners open only on the chosen private addresses and hand connections to the same server, so the phone sees the same chats and approvals. **Stop sharing** also disconnects phones that are already connected. Managing the link (`/api/phone/link`) is limited to the computer itself.
 - The hardware summary on the first-run card and in `oasis doctor` skips fields it cannot detect instead of printing `undefined`. The browser end-to-end test now checks the "Recommended for this computer" card and the update banner (including "Later") on desktop.
 ## 1.1.0 — stable (November 5, 2026)
 

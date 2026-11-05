@@ -965,3 +965,15 @@ svg.gi{display:inline-block;width:1em;height:1em;vertical-align:-0.125em;flex:no
 .first-run-recommend-label{font-size:11.5px;letter-spacing:.04em;text-transform:uppercase;color:var(--accent)}
 .first-run-recommend-text small{color:var(--muted);font-size:12.5px;line-height:1.45}
 .first-run-recommend-hw{font-family:var(--mono);font-size:11.5px}
+
+/* Connect a phone */
+.phone-card{max-width:560px}
+.phone-choices{display:flex;gap:8px;flex-wrap:wrap}
+.phone-choices[hidden]{display:none}
+.phone-link{display:flex;gap:16px;align-items:center;flex-wrap:wrap;padding:12px;border-radius:var(--r-md);background:var(--raised);border:1px solid var(--line-strong)}
+.phone-link[hidden]{display:none}
+.phone-qr{width:200px;height:200px;flex:none;border-radius:8px;overflow:hidden;background:#fff}
+.phone-qr svg{display:block;width:100%;height:100%}
+.phone-link-text{display:grid;gap:6px;flex:1 1 220px;min-width:0}
+.phone-link-text code{font-size:12px;word-break:break-all;user-select:all}
+.phone-link-text small{color:var(--muted);font-size:12.5px;line-height:1.4}
