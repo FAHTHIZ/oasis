@@ -3589,6 +3589,16 @@ async function activeLspBaseline(session, file, callContext, options) {
 // A file the agent created in this turn needs no diff review: write_file sent
 // every byte of it, so rereading only costs a model round trip. Edited and
 // overwritten files still need git_diff or a full reread.
+// Seen live: a model wrote a new module, ran the existing test suite (which
+// never imports it), and finished with a bug the suite could not catch.
+export function untestedNewCode(state) {
+  const changed = [...(state.changedPaths || [])];
+  if (changed.some((item) => isTestPath(item))) return [];
+  const created = [...(state.createdPaths || [])].filter((item) => /\.(?:[cm]?[jt]sx?|py|go|rs|rb|java|kt|cs|php|swift)$/i.test(item) && !isTestPath(item));
+  if (!created.length) return [];
+  return ['New code in ' + created.join(', ') + ' is not exercised by existing tests unless one imports it. Call it directly too — a short script or test with the cases from the request, including edge cases (negative numbers, zero, empty or malformed input) — and fix whatever fails.'];
+}
+
 export function diffReviewComplete(state) {
   if (state.diffReviewedAll) return true;
   const created = state.createdPaths instanceof Set ? state.createdPaths : new Set();
@@ -5826,6 +5836,7 @@ async function runAgentTurnRaw(session, prompt, options = {}) {
             'Before finalizing, complete the post-edit verification gate. You changed: ' + [...verification.changedPaths].join(', ') + '.',
             'Outstanding items: ' + issues.join('; ') + '.',
             'Use git_diff to review the complete change set when Git metadata is available. In a non-Git workspace, reread every changed file after editing. For changed source/config code, inspect the project scripts and run a relevant test/check/lint/build/type-check command; fix failures and rerun checks after fixes.',
+            ...untestedNewCode(verification),
             'Do not claim completion of the gate based on the file-write result. If a check cannot run or permission is denied, state that limitation honestly.'
           ].join('\n')
         });
