@@ -244,3 +244,10 @@ test('three server errors in a row no longer fail the task', async () => {
   assert.match(run.out, /Recovered\./);
   assert.equal(run.models.length, 4);
 });
+
+test('longer provider retries are announced instead of looking like a hang', async () => {
+  const run = await runAgainstRateLimitedGemini({ fails: 0, serverErrors: 4 });
+  assert.equal(run.code, 0, run.err);
+  assert.match(run.out, /Recovered\./);
+  assert.match(run.err, /\[retry\] Provider error 50\d.*retrying in \d+s \(4\/8\)/);
+});

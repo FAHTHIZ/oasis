@@ -259,6 +259,7 @@ export async function runHeadless(options) {
       onText: (text) => emit({ type: 'assistant', text }),
       onAutoMode: ({ tool, decision, reason }) => emit({ type: 'system', subtype: 'auto_mode', tool, decision, reason }),
       // Notice on stderr in every output format, so text results on stdout stay clean.
+      onProviderRetry: ({ status, attempt, limit, waitMs, reason }) => { process.stderr.write('[retry] Provider ' + (status ? 'error ' + status : 'connection failed') + (reason && status ? ' (' + reason + ')' : '') + '; retrying in ' + formatWait(waitMs) + ' (' + attempt + '/' + limit + ').\n'); emit({ type: 'system', subtype: 'api_retry', attempt, max_retries: limit, retry_delay_ms: waitMs, error_status: status || null }); },
       onRateLimitWait: ({ waitMs, until, attempt, compactTools }) => { process.stderr.write('[rate limit] Waiting ' + formatWait(waitMs) + ' for the provider limit to reset (until ' + until + ').' + (compactTools ? ' Switched to the compact tool set to fit its per-minute token limit; other tools stay available through tool_search.' : '') + '\n'); emit({ type: 'system', subtype: 'rate_limit_wait', wait_ms: waitMs, until, attempt, ...(compactTools ? { compact_tools: true } : {}) }); },
       ...(includePartial && outputFormat === 'stream-json' ? { onDelta: (accumulated) => {
         const text = String(accumulated || '');
