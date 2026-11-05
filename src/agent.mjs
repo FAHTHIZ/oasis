@@ -2253,6 +2253,9 @@ export async function suggestNextPrompt(session, options = {}) {
 // A response that dies mid-stream never yields tool calls (they're only returned
 // once the stream completes), so retrying the same request can't run anything twice.
 const MAX_STREAM_RESTARTS = 2;
+// Gemini's MALFORMED_FUNCTION_CALL: its own tool call did not parse.
+const MAX_MALFORMED_CALL_RECOVERIES = 3;
+const MALFORMED_CALL_NUDGE = '<system-reminder>\nYour last tool call could not be parsed (the provider rejected it as a malformed function call), so nothing ran. Call the tool again with valid JSON arguments. If it carried a long file body, split the work: write a short file first, then add to it with edit_file.\n</system-reminder>';
 
 async function requestCompletionWithStreamRestarts(session, options = {}) {
   for (let restart = 0; ; restart++) {
@@ -2261,7 +2264,9 @@ async function requestCompletionWithStreamRestarts(session, options = {}) {
     } catch (error) {
       // A provider that reported overload mid-stream gets one more, slower try.
       const overloaded = Number(error && error.status) >= 500;
-      if (!error || error.code !== 'OASIS_STREAM_INTERRUPTED' || restart >= MAX_STREAM_RESTARTS + (overloaded ? 1 : 0) || (options.signal && options.signal.aborted)) throw error;
+      // A malformed tool call tends to repeat on the identical request, so the
+      // turn loop retries it with a corrective note instead (see below).
+      if (!error || error.code !== 'OASIS_STREAM_INTERRUPTED' || error.malformedCall || restart >= MAX_STREAM_RESTARTS + (overloaded ? 1 : 0) || (options.signal && options.signal.aborted)) throw error;
       if (typeof options.onStreamRestart === 'function') options.onStreamRestart({ attempt: restart + 1, reason: error.message });
       await waitForProviderRetry(providerRetryDelayMs(restart + (overloaded ? 3 : 1)), options.signal || new AbortController().signal);
     }
@@ -2693,7 +2698,7 @@ async function requestCompletionRaw(session, options = {}) {
     // to parse. That is not a final answer (it used to end the task with no
     // changes); ask again, as Gemini CLI does.
     if (/MALFORMED_FUNCTION_CALL/i.test(String(data.choices[0].finish_reason || '')) && !(typeof message.content === 'string' && message.content.trim()) && !(Array.isArray(message.tool_calls) && message.tool_calls.length)) {
-      throw Object.assign(new Error('The model stream was interrupted: the model produced a malformed tool call (' + data.choices[0].finish_reason + ').'), { code: 'OASIS_STREAM_INTERRUPTED' });
+      throw Object.assign(new Error('The model stream was interrupted: the model produced a malformed tool call (' + data.choices[0].finish_reason + ').'), { code: 'OASIS_STREAM_INTERRUPTED', malformedCall: true });
     }
     if (typeof options.onDelta === 'function' && !streamed && typeof message.content === 'string' && message.content) options.onDelta(message.content);
     const chatTruncated = data.choices[0].finish_reason === 'length';
@@ -5302,6 +5307,7 @@ async function runAgentTurnRaw(session, prompt, options = {}) {
   let stopHookContinuations = 0;
   let outputRecoveries = 0;
   let overflowRecoveries = 0;
+  let malformedCallRecoveries = 0;
   let pendingTruncationNotice = '';
   const { maxSteps, tokenBudget, maxToolCalls } = resolveTurnLimits(options, session.config);
   const context = {
@@ -5420,6 +5426,13 @@ async function runAgentTurnRaw(session, prompt, options = {}) {
       if (waitHook) { try { waitHook({ phase: 'end', step: step + 1 }); } catch {} }
     } catch (error) {
       if (waitHook) { try { waitHook({ phase: 'end', step: step + 1, error: true }); } catch {} }
+      if (error && error.malformedCall && malformedCallRecoveries < MAX_MALFORMED_CALL_RECOVERIES && !(options.signal && options.signal.aborted)) {
+        malformedCallRecoveries++;
+        if (typeof options.onStreamRestart === 'function') { try { options.onStreamRestart({ attempt: malformedCallRecoveries, reason: error.message }); } catch {} }
+        session.messages.push({ role: 'user', content: MALFORMED_CALL_NUDGE });
+        step--;
+        continue;
+      }
       if (isContextOverflowError(error) && overflowRecoveries < 2 && !(options.signal && options.signal.aborted)) {
         overflowRecoveries++;
         const recovered = await recoverFromContextOverflow(session, activeRequestIndex, options, overflowRecoveries, error);
