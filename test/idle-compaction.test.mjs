@@ -117,3 +117,28 @@ test('the browser workspace wires idle compaction between jobs', async () => {
   const html = await readFile(new URL('../index.html', import.meta.url), 'utf8');
   assert.match(html, /summarized while you were away/);
 });
+
+test('compaction replies that are not summaries are rejected', async (t) => {
+  const { usableCompactionSummary } = await import('../src/agent.mjs');
+  for (const bad of ['', '   ', "I'm sorry, but I can't help with that.", 'I cannot summarize this.', 'Sorry, no.', '<tool_call>{"name":"read_file"}</tool_call>',
+    '{"name": "bash", "arguments": {"command": "npm test"}}', 'Let me run the tests again.', "I'll now check src/lib.mjs.", 'I will continue with the refactor.']) {
+    assert.equal(usableCompactionSummary(bad), '', bad);
+  }
+  assert.equal(usableCompactionSummary('  The user wants X. Files: src/a.mjs. Tests pass.  '), 'The user wants X. Files: src/a.mjs. Tests pass.');
+  assert.equal(usableCompactionSummary('IDLE SUMMARY'), 'IDLE SUMMARY');
+
+  // Idle compaction keeps the full history instead of a bad digest.
+  const { session, env } = await fixtureSession(t, (res) => { res.writeHead(200, { 'content-type': 'application/json' }); res.end(JSON.stringify({ choices: [{ message: { role: 'assistant', content: "Let me continue with the next step." } }] })); });
+  const original = JSON.stringify(session.messages);
+  const idle = await compactHistoryIfNeeded(session, { env, thresholdChars: idleCompactThreshold(session, env), discardOnAbort: true, idle: true, signal: new AbortController().signal, persistSessionNotes: false });
+  assert.equal(idle.compacted, false);
+  assert.equal(idle.rejectedSummary, true);
+  assert.equal(JSON.stringify(session.messages), original);
+
+  // Size-driven compaction still shrinks history, using OASIS's own digest.
+  const errors = [];
+  const forced = await compactHistoryIfNeeded(session, { env, force: true, persistSessionNotes: false, onCompactionError: (error) => errors.push(error.message) });
+  assert.equal(forced.compacted, true);
+  assert.doesNotMatch(JSON.stringify(session.messages), /Let me continue with the next step/);
+  assert.match(errors.join('\n'), /not a usable summary/);
+});
