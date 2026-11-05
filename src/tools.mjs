@@ -153,7 +153,7 @@ export const TOOL_DEFINITIONS = [
   { type: 'function', function: { name: 'read_file', description: 'Read a text file inside the workspace. Images (png, jpg, gif, webp) are shown to you visually, Jupyter notebooks are shown cell by cell, and PDFs are returned as text page by page (pass pages like "1-10" for long PDFs). Use offset and limit to inspect line ranges in larger files. Secret files such as .env and private keys are blocked.', parameters: { type: 'object', properties: { path: { type: 'string', description: 'Workspace-relative file path' }, offset: { type: 'integer', description: 'Optional 1-based first line to return' }, limit: { type: 'integer', description: 'Optional maximum lines to return, 1 to 2000' }, pages: { type: 'string', description: 'PDF only: page or range such as "3" or "1-10" (at most 50 pages)' } }, required: ['path'] } } },
   { type: 'function', function: { name: 'repo_map', description: 'Get a compact, ranked map of the repository: source files with their top-level functions, classes and types (with line numbers). Most-referenced files come first. Use it first in an unfamiliar codebase, or with focus to find where something lives, before reading whole files.', parameters: { type: 'object', properties: { path: { type: 'string', description: 'Workspace-relative directory to map; defaults to the whole workspace' }, focus: { type: 'array', items: { type: 'string' }, description: 'Files, directories or symbol names to rank first' }, max_chars: { type: 'integer', description: 'Output budget in characters, 1000 to 60000; defaults to 12000' } } } } },
   { type: 'function', function: { name: 'glob_files', description: 'Find workspace files by glob pattern such as src/**/*.mjs or **/*.test.js. Supports **, *, and ?. Skips dependencies, Git internals, and sensitive files.', parameters: { type: 'object', properties: { pattern: { type: 'string', description: 'Workspace-relative glob pattern; cannot contain ..' }, path: { type: 'string', description: 'Folder to search in; defaults to the project root' }, limit: { type: 'integer', description: 'Maximum paths to return, 1 to 500; defaults to 200' } }, required: ['pattern'] } } },
-  { type: 'function', function: { name: 'search_files', description: 'Search workspace text files for a literal case-insensitive string. Returns matching lines and paths, excluding secret files and dependency/build directories.', parameters: { type: 'object', properties: { query: { type: 'string', description: 'Literal phrase or symbol to search for' }, limit: { type: 'integer', description: 'Maximum matching lines, 1 to 60; defaults to 25' } }, required: ['query'] } } },
+  { type: 'function', function: { name: 'search_files', description: 'Search workspace text files for a literal case-insensitive string. Returns matching lines and paths, excluding secret files and dependency/build directories.', parameters: { type: 'object', properties: { query: { type: 'string', description: 'Literal phrase or symbol to search for' }, path: { type: 'string', description: 'Folder or file to search in; default the whole workspace' }, limit: { type: 'integer', description: 'Maximum matching lines, 1 to 60; defaults to 25' } }, required: ['query'] } } },
   { type: 'function', function: { name: 'write_file', description: 'Create or replace a text file inside the workspace. Existing file contents are snapshotted first for later recovery. Never use this for secrets or files outside the workspace.', parameters: { type: 'object', properties: { path: { type: 'string', description: 'Workspace-relative file path' }, content: { type: 'string', description: 'Complete new text contents' } }, required: ['path', 'content'] } } },
   { type: 'function', function: { name: 'todo_write', description: 'Create or update the current task checklist. Send the COMPLETE list each time. Use pending, in_progress, and completed; complete items only after verification. This changes session state only and never edits files.', parameters: { type: 'object', properties: { todos: { type: 'array', maxItems: 50, items: { type: 'object', properties: { content: { type: 'string', minLength: 1, maxLength: 200 }, status: { type: 'string', enum: ['pending', 'in_progress', 'completed'] } }, required: ['content', 'status'], additionalProperties: false } } }, required: ['todos'], additionalProperties: false } } },
   { type: 'function', function: { name: 'delete_file', description: 'Delete one file inside the workspace. Requires explicit interactive approval even in auto mode. Directories and sensitive files cannot be deleted with this tool.', parameters: { type: 'object', properties: { path: { type: 'string', description: 'Workspace-relative file path' } }, required: ['path'] } } },
@@ -454,12 +454,32 @@ export async function globWorkspaceFiles(root, pattern, limit = 200) {
   }
   return result;
 }
-export async function searchWorkspaceFiles(root, query, limit = 25) {
+// Long lines (minified CSS/JS) are cut to a window around the first match so
+// one hit does not cost hundreds of characters of unrelated text.
+function matchSnippet(line, lowerNeedle) {
+  if (line.length <= 240) return line;
+  const at = Math.max(0, line.toLowerCase().indexOf(lowerNeedle));
+  const start = Math.max(0, at - 80);
+  return (start > 0 ? '…' : '') + line.slice(start, start + 200) + (start + 200 < line.length ? '…' : '');
+}
+
+export async function searchWorkspaceFiles(root, query, limit = 25, scope) {
   const needle = String(query || '');
   if (!needle.trim()) throw new Error('Search query cannot be empty.');
   if (needle.length > 500) throw new Error('Search query is too long.');
   const maxResults = Math.max(1, Math.min(60, Number.parseInt(limit, 10) || 25));
-  const files = await walkFiles(await realpath(root), { includeHidden: true, maxFiles: 1800, maxDepth: 10 });
+  let prefix = '';
+  if (scope && !/^\.?\/?$/.test(String(scope))) {
+    const target = await resolveWorkspacePath(root, scope, { workspaceOnly: true });
+    prefix = target.relative.split(path.sep).join('/');
+  }
+  const lowerNeedle = needle.toLowerCase();
+  const files = (await walkFiles(await realpath(root), { includeHidden: true, maxFiles: 1800, maxDepth: 10 }))
+    .filter((file) => {
+      if (!prefix || prefix === '.') return true;
+      const rel = file.relative.split(path.sep).join('/');
+      return rel === prefix || rel.startsWith(prefix + '/');
+    });
   const matches = [];
   for (const file of files) {
     let info;
@@ -470,8 +490,8 @@ export async function searchWorkspaceFiles(root, query, limit = 25) {
     if (content.includes('\0')) continue;
     const lines = content.split(/\r?\n/);
     for (let i = 0; i < lines.length; i++) {
-      if (lines[i].toLowerCase().includes(needle.toLowerCase())) {
-        matches.push({ path: file.relative.split(path.sep).join('/'), line: i + 1, text: lines[i].slice(0, 400) });
+      if (lines[i].toLowerCase().includes(lowerNeedle)) {
+        matches.push({ path: file.relative.split(path.sep).join('/'), line: i + 1, text: matchSnippet(lines[i], lowerNeedle) });
         if (matches.length >= maxResults) return { query: needle, matches, truncated: true };
       }
     }
@@ -1466,7 +1486,7 @@ export async function executeTool(name, args = {}, context = {}) {
       return await buildRepoMap(root, { path: args.path, focus: args.focus, maxChars: args.max_chars });
     }
     case 'search_files':
-      return await searchWorkspaceFiles(root, args.query, args.limit);
+      return await searchWorkspaceFiles(root, args.query, args.limit ?? args.max_results, args.path);
     case 'list_skills':
       return { skills: await listAvailableSkills(root, { env: context.env || process.env }) };
     case 'load_skill':
