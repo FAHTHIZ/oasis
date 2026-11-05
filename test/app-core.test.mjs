@@ -441,6 +441,15 @@ test('steering queue is bounded by message count and note size', () => {
   oversized.running = true;
   assert.equal(oversized.steer('x'.repeat(12_001)), false);
   assert.equal(oversized.steering.length, 0);
+
+  const restored = new Agent({
+    getConfig: () => ({}), getContext: () => ({}), approve: async () => true,
+    chatImpl: async () => ({ content: 'unused', tool_calls: [] })
+  });
+  restored.load([], [...Array.from({ length: 22 }, (_, i) => 'saved ' + i), 'x'.repeat(12_001), 42, '   ']);
+  assert.deepEqual(restored.steering, Array.from({ length: 20 }, (_, i) => 'saved ' + i));
+  restored.reset();
+  assert.deepEqual(restored.steering, []);
 });
 
 test('a steering note queued on the last allowed step is carried into the next send', async () => {
@@ -462,12 +471,23 @@ test('a steering note queued on the last allowed step is carried into the next s
 
   assert.match(await agent.send('read a.txt', { maxSteps: 1 }), /Stopped after 1 steps/);
   assert.equal(agent.steering.length, 1);
-  assert.equal(await agent.send('continue'), 'I followed the note.');
+
+  // A page reload creates a new Agent instance. Restore the saved messages and
+  // pending queue, then confirm the visible note is actually sent to the model.
+  const restored = new Agent({
+    getConfig: () => ({ mode: 'ask' }),
+    getContext: () => ({ workspace: ws }),
+    approve: async () => true,
+    chatImpl
+  });
+  restored.load(agent.messages, agent.steering);
+  assert.equal(restored.steering.length, 1);
+  assert.equal(await restored.send('continue'), 'I followed the note.');
 
   const secondPrompt = seen[1];
   const carriedIndex = secondPrompt.findIndex((message) => message.role === 'user' && message.content === 'finish the check briefly');
   const nextPromptIndex = secondPrompt.findIndex((message) => message.role === 'user' && message.content === 'continue');
   assert.ok(carriedIndex >= 0, 'the queued note is included in the next model request');
   assert.ok(nextPromptIndex > carriedIndex, 'the carried note stays in chronological order');
-  assert.equal(agent.steering.length, 0);
+  assert.equal(restored.steering.length, 0);
 });
