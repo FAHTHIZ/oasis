@@ -8,7 +8,8 @@ import { access, lstat, mkdir, readFile, realpath, rename, rm } from 'node:fs/pr
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { isIP } from 'node:net';
-import { createSession, runAgentTurn, closeSession, testProviderConnection, steerSession, takeSteering } from './agent.mjs';
+import { createSession, runAgentTurn, closeSession, testProviderConnection, steerSession, takeSteering, compactHistoryIfNeeded } from './agent.mjs';
+import { startIdleCompaction, idleCompactMinutes } from './idle-compaction.mjs';
 import { loadConfig, saveConfig, getProviderSummary, validateProtocol, validateBaseUrl, isLoopbackUrl } from './config.mjs';
 import { saveSession, loadSession, listSessions, deleteSession } from './sessions.mjs';
 import { executeTool, resolveWorkspacePath, sensitivePath } from './tools.mjs';
@@ -760,9 +761,14 @@ export function createOasisWebServer(options = {}) {
     releaseJobReservation = null;
     if (sessionId) startingSessions.delete(sessionId);
     busySessions.add(activeId);
+    // A summary written while this conversation sat idle is cancelled (no changes) if it is still running.
+    const idleCompaction = session.idleCompaction;
+    session.idleCompaction = null;
     emit(job, 'started', { sessionId: activeId, isolation, ...(taskWorktree ? { branch: taskWorktree.branch, worktreePath: taskWorktree.relative, baseCommit: taskWorktree.base } : {}) });
     void (async () => {
       try {
+        const idleInfo = idleCompaction ? await idleCompaction.settle().catch(() => null) : null;
+        if (idleInfo) emit(job, 'compaction_completed', { savedTokens: Math.max(0, (idleInfo.beforeTokens || 0) - (idleInfo.afterTokens || 0)), beforeTokens: idleInfo.beforeTokens || 0, afterTokens: idleInfo.afterTokens || 0, removedMessages: 0, notesSaved: false, usedModelSummary: true, midTurn: false, idle: true });
         let prompt = message;
         let images = [];
         let planOnly = false;
@@ -988,6 +994,20 @@ export function createOasisWebServer(options = {}) {
       } finally {
         job.steerTarget = null;
         busySessions.delete(activeId);
+        if (!taskWorktree && job.status === 'completed') {
+          session.idleCompaction = startIdleCompaction(session, {
+            minutes: idleCompactMinutes(session.settings, env),
+            env,
+            compact: async (target, options) => {
+              if (busySessions.has(activeId)) return { compacted: false };
+              const before = estimateTokens(target.messages);
+              const outcome = await compactHistoryIfNeeded(target, { ...options, mustPreserve: target.mustPreserve });
+              if (!outcome || !outcome.compacted) return outcome;
+              await saveSession(target, { env }).catch(() => {});
+              return { ...outcome, beforeTokens: before, afterTokens: estimateTokens(target.messages) };
+            }
+          });
+        }
         if (taskWorktree) {
           for (const [sessionKey, activeSession] of activeSessions) if (activeSession === session) activeSessions.delete(sessionKey);
           try { await closeSession(session); } catch {}
