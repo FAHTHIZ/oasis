@@ -45,7 +45,7 @@ flowchart TB
   end
 
   MODEL["Chosen model endpoint<br/>hosted or local"]
-  EXT["External tools and services<br/>GitHub · MCP servers · OpenHands · LSP servers"]
+  EXT["External tools and services<br/>GitHub · MCP servers · LSP servers"]
 
   CLI --> CORE
   BROWSER <--> WEB
@@ -286,7 +286,6 @@ Integrations are separate trust domains. Enabling an integration makes its tool 
 | Compatible plugin marketplaces | `src/claude-plugins.mjs` supports a substantial set of Claude Code-compatible marketplace/plugin components, including commands, skills, hooks, MCP, LSP, monitors and executable plugin bins. This is feature-specific compatibility, not a guarantee that every third-party plugin works identically. Plugin hooks, MCP servers and executables can run with the user's permissions. |
 | Native OASIS plugin packages | `src/native-plugins.mjs` validates local package manifests and explicit permissions, and supports staged installation/update/uninstall. Capability changes require explicit acceptance. This is a distinct package format from the compatible marketplace adapter. |
 | GitHub extension import | `src/extensions.mjs` inspects a public GitHub repository, presents detected components, and pins import/update to a reviewed commit. Markdown agent/skill prompts and approved portable text resources can be imported with source/integrity metadata. It does not activate imported scripts, hooks, binaries, dependencies or MCP servers as part of prompt import. |
-| OpenHands bridge | `delegate_openhands` connects to an already-running Agent Server and server-owned Agent Profile. Delegation requires OASIS approval; OASIS does not pass its own model credential to OpenHands and does not approve OpenHands tool confirmations. |
 | Language servers | `src/lsp.mjs` manages configured LSP processes for symbol navigation and diagnostics. Servers start on demand with approval; an unavailable server is reported as unavailable, not as a clean check. |
 
 ### GitHub paths
@@ -333,7 +332,7 @@ The important boundaries are:
 1. **Model provider:** prompts, selected context, and tool results needed for the task may leave the machine when using a hosted model. Provider retention and processing are governed by the provider's own terms.
 2. **Project workspace:** repository files and project instructions are untrusted input. Workspace path checks limit OASIS file tools, but they do not make project scripts benign.
 3. **Operating-system process:** approved commands and installers execute code. Without the optional OS sandbox, they run with the launching user's OS privileges.
-4. **Third-party integration:** MCP servers, hooks, plugins, imported skills, LSP servers, and OpenHands are distinct components with their own code and data access. Their permissions and network behavior must be reviewed.
+4. **Third-party integration:** MCP servers, hooks, plugins, imported skills and LSP servers are distinct components with their own code and data access. Their permissions and network behavior must be reviewed.
 5. **Browser client:** the local API is protected by a random bearer token and same-origin/host validation. Anyone who obtains that token and can reach the listener may be able to act through the local runtime; keep it private.
 6. **Persisted local data:** sessions, job history, task metadata, and browser local storage contain project/workflow context. Restrictive file permissions are not the same as encryption.
 

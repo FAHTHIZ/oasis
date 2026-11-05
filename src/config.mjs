@@ -11,7 +11,7 @@ export const DEFAULT_MODEL = 'gpt-6.1-sol';
 export const DEFAULT_PROTOCOL = 'openai-responses';
 
 const SETUP_PROVIDER_PRESETS = new Set([
-  'omniroute', 'openai', 'anthropic', 'openrouter', 'gemini', 'ollama', 'bedrock', 'vertex', 'foundry', 'custom'
+  'openai', 'anthropic', 'openrouter', 'gemini', 'ollama', 'bedrock', 'vertex', 'foundry', 'custom'
 ]);
 
 // A fresh setup should work for users who do not already have a paid-provider key.
@@ -20,18 +20,17 @@ export function shouldPromptForProviderBaseURL(presetName) {
   return String(presetName || '').trim().toLowerCase() === 'custom';
 }
 
-export function resolveSetupProviderPreset(raw, fallback = 'omniroute') {
+export function resolveSetupProviderPreset(raw, fallback = 'openai') {
   const candidate = String(raw || '').trim().toLowerCase();
   if (SETUP_PROVIDER_PRESETS.has(candidate)) return candidate;
   const safeFallback = String(fallback || '').trim().toLowerCase();
-  return SETUP_PROVIDER_PRESETS.has(safeFallback) ? safeFallback : 'omniroute';
+  return SETUP_PROVIDER_PRESETS.has(safeFallback) ? safeFallback : 'openai';
 }
 
 // Preserve a provider the user already configured when they re-open interactive setup.
-// Unknown endpoints intentionally map to "custom"; fresh/unconfigured installs still use
-// OmniRoute so first-run setup does not change its no-key starting point.
+// Unknown endpoints intentionally map to "custom"; fresh installs start at the API-key choice.
 export function inferSetupProviderPreset(config) {
-  if (!config || config.configured !== true) return 'omniroute';
+  if (!config || config.configured !== true) return 'openai';
   let url;
   try { url = new URL(String(config.baseURL || '')); }
   catch { return 'custom'; }
@@ -43,7 +42,6 @@ export function inferSetupProviderPreset(config) {
   if (protocol === 'openai-compatible') {
     if (host === 'openrouter.ai') return 'openrouter';
     if (host === 'generativelanguage.googleapis.com') return 'gemini';
-    if (['localhost', '127.0.0.1', '::1', '[::1]'].includes(host) && url.port === '20128') return 'omniroute';
     if (['localhost', '127.0.0.1', '::1', '[::1]'].includes(host) && url.port === '11434') return 'ollama';
   }
   return 'custom';

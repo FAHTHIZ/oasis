@@ -20,7 +20,7 @@ The installer checks for Node.js 22 or newer. If it is missing, it offers to ins
 
 The easy command runs the installer from the official repository over HTTPS. For the checksum-verified copyable command and current installer hash, use [Install OASIS](INSTALL.md#command-line-installation).
 
-During provider setup, choose the free OmniRoute gateway to let OASIS offer to install the gateway through npm, start it locally, and verify the model connection. Read each approval prompt; npm packages may run third-party install scripts. A free gateway may be limited or unavailable, and OASIS does not include an AI model or subscription. You can instead choose a provider for which you already have an API key.
+During provider setup, choose a provider for which you have an API key (OpenRouter offers free models), or point OASIS at a model server on another computer. OASIS does not include an AI model or subscription.
 
 Keep Termux open until installation and provider verification finish. If the installer says it added the OASIS command folder to your shell startup file, open a new Termux session before using `oasis`.
 
