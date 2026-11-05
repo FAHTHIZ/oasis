@@ -421,7 +421,7 @@ export function describeToolResult(name, result, { color = true } = {}) {
   const green = color ? '\x1b[32m' : '';
   const off = color ? '\x1b[0m' : '';
   const clip = (text, max = 160) => { const t = String(text).replace(/\s+/g, ' ').trim(); return t.length > max ? t.slice(0, max - 1) + '…' : t; };
-  if (result.error) return '  ⎿ ' + red + '✗ ' + clip(result.error, 300) + off;
+  if (result.error) return '  ⎿ ' + red + '✗ ' + clip(friendlyToolError(result.error), 300) + off;
   if (['edit_file', 'multi_edit', 'write_file'].includes(name)) return '';
   if (['run_command', 'run_shell', 'auto_test'].includes(name) && result.exitCode !== undefined) {
     const combined = String(result.stdout || '') + '\n' + String(result.stderr || '');
@@ -532,4 +532,51 @@ export function changeCounts(added, removed) {
   if (added || !removed) parts.push(added + ' addition' + (added === 1 ? '' : 's'));
   if (removed) parts.push(removed + ' removal' + (removed === 1 ? '' : 's'));
   return parts.join(' and ');
+}
+
+// Read-only exploration calls the CLI folds into one line when a model sends
+// several at once ("Read 3 files, searched 1 pattern"), like Claude Code's
+// "Read 3 files" and Codex's "Explored" group.
+export const EXPLORE_TOOLS = new Set(['read_file', 'list_files', 'glob_files', 'grep', 'search_files', 'ast_grep']);
+
+function exploreTarget(name, args = {}) {
+  if (name === 'read_file') return String(args.path || args.file || '?');
+  if (name === 'list_files') return String(args.path || '.');
+  const pattern = String(args.pattern || args.query || '?');
+  return '"' + (pattern.length > 40 ? pattern.slice(0, 37) + '...' : pattern) + '"' + (args.path && args.path !== '.' ? ' in ' + args.path : '');
+}
+
+const plural = (count, one, many) => count + ' ' + (count === 1 ? one : many);
+
+export function describeExploration(items, { color = true } = {}) {
+  const groups = [
+    ['read_file', (n) => 'Read ' + plural(n, 'file', 'files')],
+    ['search', (n) => 'searched ' + plural(n, 'pattern', 'patterns')],
+    ['list_files', (n) => 'listed ' + plural(n, 'directory', 'directories')]
+  ];
+  const kind = (name) => name === 'read_file' || name === 'list_files' ? name : 'search';
+  const parts = [];
+  for (const [key, label] of groups) {
+    const count = items.filter((item) => kind(item.name) === key).length;
+    if (count) parts.push(label(count));
+  }
+  let title = parts.join(', ');
+  title = title.charAt(0).toUpperCase() + title.slice(1);
+  let targets = items.map((item) => exploreTarget(item.name, item.args)).join(', ');
+  if (targets.length > 100) targets = targets.slice(0, 97) + '...';
+  if (!color) return '[tool] ' + title + ': ' + targets;
+  const dot = (themeFg('claude') || '\x1b[36m') + '⏺\x1b[39m ';
+  return dot + ANSI.bold + title + ANSI.noBold + '\n  ⎿ ' + ANSI.dim + targets + ANSI.noBold;
+}
+
+// Node's errno text ("ENOENT: no such file or directory, stat '/abs/x.mjs'")
+// shown as people say it. The model still gets the full error.
+export function friendlyToolError(error) {
+  const text = String(error || '');
+  const errno = /^(ENOENT|EACCES|EPERM|EISDIR|ENOTDIR|EEXIST): [^,]+, \w+ '([^']+)'/.exec(text);
+  if (!errno) return text;
+  const where = path.relative(process.cwd(), errno[2]) || errno[2];
+  const shown = where.startsWith('..') ? errno[2] : where;
+  const meaning = { ENOENT: 'Not found', EACCES: 'Permission denied', EPERM: 'Not permitted', EISDIR: 'Is a directory, not a file', ENOTDIR: 'Not a directory', EEXIST: 'Already exists' }[errno[1]];
+  return meaning + ': ' + shown;
 }

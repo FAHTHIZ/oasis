@@ -48,7 +48,7 @@ import { createCompleter } from './completion.mjs';
 import { MarkdownStream, colorEnabled, wrapRendered } from './markdown.mjs';
 import { createActivityIndicator } from './activity-indicator.mjs';
 import { formatApprovalMessage, redactApprovalSecrets } from './approval-language.mjs';
-import { formatTurnSummary, showStartupBanner, promptFor, footerFor, nextMode, runShellPassthrough, shellContextBlock, describeTool, describeEdit, describeToolResult, verboseToolOutput } from './terminal-ui.mjs';
+import { formatTurnSummary, showStartupBanner, promptFor, footerFor, nextMode, runShellPassthrough, shellContextBlock, describeTool, describeEdit, describeToolResult, verboseToolOutput, describeExploration, EXPLORE_TOOLS } from './terminal-ui.mjs';
 import { estimateTokens, contextWindowSize } from './context.mjs';
 import { formatUsd, priceFor } from './pricing.mjs';
 import { discoverLocalOllamaModels } from './ollama-discovery.mjs';
@@ -1132,10 +1132,44 @@ let waitIndicator = null;
 function onModelWait(event = {}) {
   if (event.phase === 'progress') { if (waitIndicator) waitIndicator.update({ promptProgress: event.promptProgress }); return; }
   if (event.phase !== 'start') { stopWaitIndicator(); return; }
+  flushExploration();
   if (!waitIndicator) waitIndicator = createActivityIndicator({ stream: stdout, env: process.env, color: richOutput() });
   waitIndicator.start(event);
 }
-function stopWaitIndicator() { if (waitIndicator) waitIndicator.stop(); }
+function stopWaitIndicator() { flushExploration(); if (waitIndicator) waitIndicator.stop(); }
+// Read-only lookups (reads, searches, listings) are held until the batch ends,
+// then shown as one "Read 3 files, searched 1 pattern" line. Failures, and a
+// lone lookup, keep the usual header and result lines.
+let explorationBatch = [];
+function holdExploration(event) {
+  if (waitIndicator) waitIndicator.stop();
+  endText();
+  explorationBatch.push({ id: event.call && event.call.id, name: event.name, args: event.args || {}, event, done: false, result: null });
+}
+function exploredResult(call, result) {
+  const item = call && explorationBatch.find((entry) => entry.id === call.id && !entry.done);
+  if (!item) return false;
+  item.done = true;
+  item.result = result;
+  return true;
+}
+function flushExploration() {
+  if (!explorationBatch.length) return;
+  const items = explorationBatch;
+  explorationBatch = [];
+  const failed = (item) => !item.done || (item.result && item.result.error);
+  const ok = items.filter((item) => !failed(item));
+  const single = (item) => {
+    stdout.write('\n' + describeTool(item.event, { color: true }) + '\n');
+    if (!item.done) return;
+    const summary = describeToolResult(item.name, item.result, { color: true });
+    if (summary) stdout.write(summary + '\n');
+    else if (item.result && item.result.error) stdout.write('[tool result] ' + item.name + ': ' + String(item.result.error).slice(0, 700) + '\n');
+  };
+  if (ok.length > 1) stdout.write('\n' + describeExploration(ok, { color: true }) + '\n');
+  else ok.forEach(single);
+  items.filter(failed).forEach(single);
+}
 function streamDelta(accumulated) {
   stopWaitIndicator();
   const text = String(accumulated || '');
@@ -1153,6 +1187,9 @@ function streamDelta(accumulated) {
 }
 function endStream() {
   stopWaitIndicator();
+  return endText();
+}
+function endText() {
   if (!streamedSoFar) return false;
   if (markdownStream) { markdownStream.end(); markdownStream = null; }
   else stdout.write('\n');
@@ -2144,7 +2181,9 @@ async function runPrompt(prompt, root, autoApprove, session = null, persistence 
       onRateLimitWait: (event) => { stopWaitIndicator(); process.stderr.write('[rate limit] Waiting ' + formatWait(event.waitMs) + ' for the provider limit to reset (until ' + event.until + ').' + (event.compactTools ? ' Switched to the compact tool set to fit its per-minute token limit; other tools stay available through tool_search.' : '') + '\n'); },
       approval: (message, forceInteractive = false, meta = {}) => approve(message, forceInteractive, autoApprove, meta),
       ...(stdin.isTTY && stdout.isTTY ? { askUser: (question) => { endStream(); return askQuestionInTerminal(question); } } : {}),
-      onToolStart: (event) => { endStream(); lastToolHeader = event && event.call ? event.call.id : null; stdout.write('\n' + (richOutput() ? describeTool(event, { color: true }) : describeToolStart(event)) + '\n'); },
+      onToolStart: (event) => {
+        if (richOutput() && !verboseEnabled(session) && event && !event.subagent && EXPLORE_TOOLS.has(event.name)) { holdExploration(event); return; }
+        endStream(); lastToolHeader = event && event.call ? event.call.id : null; stdout.write('\n' + (richOutput() ? describeTool(event, { color: true }) : describeToolStart(event)) + '\n'); },
       onAutoMode: (event) => { endStream(); stdout.write('[auto] ' + (event.decision === 'allow' ? 'Allowed' : event.decision === 'block' ? 'Blocked' : 'Asking you about') + ' ' + event.tool + (event.reason ? ': ' + event.reason : '') + '\n'); },
       onUsage: (usage) => recordUsage(USAGE, usage),
       onThrash: (info) => { endStream(); stdout.write('[stuck?] `' + info.command + '` has failed the same way after ' + info.count + ' rounds of edits; Oasis asked the model to step back and diagnose before editing again.\n'); },
@@ -2156,6 +2195,7 @@ async function runPrompt(prompt, root, autoApprove, session = null, persistence 
       ...(stdout.isTTY && process.env.OASIS_NO_STREAM !== '1' && !hasConfiguredHooks(session.hooks || {}, 'MessageDisplay') ? { onDelta: streamDelta } : {}),
       onToolResult: ({ name, result, call }) => {
         if (persistence.enabled) saveMidTurn(session);
+        if (exploredResult(call, result)) return;
         if (name === 'todo_write' && result && !result.error) { const done = completedTodoCount(Array.isArray(result.todos) ? result.todos : session.todos); if (done > todosDone) playSound('task', { stream: stdout }); todosDone = done; }
         if (richOutput() && call && ['edit_file', 'multi_edit', 'write_file'].includes(name)) {
           let args = {};
@@ -2181,7 +2221,7 @@ async function runPrompt(prompt, root, autoApprove, session = null, persistence 
         if (richOutput()) { const md = new MarkdownStream({ write: (chunk) => stdout.write(chunk), color: true, columns: () => stdout.columns || 80, prefix: '\x1b[38;2;251;191;36m●\x1b[39m ' }); md.push(String(text)); md.end(); }
         else stdout.write('\nOasis> ' + text + '\n');
       }
-    }).finally(() => { if (granted >= 0) session.permissions.sessionAllow.length = granted; });
+    }).finally(() => { flushExploration(); if (granted >= 0) session.permissions.sessionAllow.length = granted; });
     USAGE.turns += 1;
     if (result.modelRouting && result.modelRouting.enabled) {
       const taskUsage = result.taskUsage || {};

@@ -277,3 +277,22 @@ test('edit summaries leave out a zero count', async () => {
   assert.equal(changeCounts(0, 3), '3 removals');
   assert.equal(changeCounts(0, 0), '0 additions');
 });
+
+test('file errors read as plain words with a relative path', async () => {
+  const { friendlyToolError } = await import('../src/terminal-ui.mjs');
+  const path = await import('node:path');
+  assert.equal(friendlyToolError("ENOENT: no such file or directory, stat '" + path.join(process.cwd(), 'src', 'missing.mjs') + "'"), 'Not found: ' + path.join('src', 'missing.mjs'));
+  assert.equal(friendlyToolError("EACCES: permission denied, open '/etc/shadow'"), 'Permission denied: /etc/shadow');
+  assert.equal(friendlyToolError('old_string was not found'), 'old_string was not found');
+});
+
+test('parallel lookups fold into one line', async () => {
+  const { describeExploration } = await import('../src/terminal-ui.mjs');
+  const shown = describeExploration([
+    { name: 'read_file', args: { path: 'a.mjs' } },
+    { name: 'read_file', args: { path: 'b.mjs' } },
+    { name: 'grep', args: { pattern: 'todo', path: 'src' } },
+    { name: 'list_files', args: {} }
+  ], { color: false });
+  assert.equal(shown, '[tool] Read 2 files, searched 1 pattern, listed 1 directory: a.mjs, b.mjs, "todo" in src, .');
+});
