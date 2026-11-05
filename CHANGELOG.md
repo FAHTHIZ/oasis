@@ -6,6 +6,7 @@ This file records notable user-facing product changes. It does not imply that an
 
 Changes after 1.1.0. Entries include feature work, reliability improvements, and security hardening; benchmark-driven fixes and their regression evidence are documented alongside the relevant changes.
 
+- The desktop app retries a failed background update check after 2, 10 and 30 minutes instead of waiting six hours, so a launch while offline still finds new releases soon after the connection returns.
 - `oasis eval --aider` passes `--timeout` equal to the task timeout. Aider's default 600-second request timeout cut off every reply from a slow local model (a same-model run on Qwen3-4B never got an answer back), which made comparisons unfair to Aider.
 - Saving settings over a config file that is not valid JSON (often a hand edit with a typo) now keeps a copy (`config.json.invalid-<time>`) instead of silently dropping its other settings, and the load error names the file and how to recover.
 - Compaction no longer accepts a model reply that is not a summary (a refusal, a tool call, or "Let me run the tests…" from a model that kept working). Idle compaction then keeps the full history; size-driven and mid-turn compaction fall back to OASIS's own digest and say so.
