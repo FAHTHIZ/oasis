@@ -136,3 +136,13 @@ test('live benchmark enforces eval-compatible trial limits and valid router URLs
   assert.throws(() => parseBenchArgs(['--agents', '']), /at least one agent/);
   assert.throws(() => parseBenchArgs(['--router', 'file:///tmp/gateway']), /HTTP\(S\) URL/);
 });
+
+test('OpenCode gets a generated gateway provider, since it ignores OPENAI_BASE_URL', () => {
+  const options = parseBenchArgs(['--agents', 'opencode', '--model', 'qwen3-coder', '--router', 'http://127.0.0.1:8789', '--yes']);
+  const env = agentEnvironment('opencode', options, { OASIS_BENCH_API_KEY: 'k' });
+  const config = JSON.parse(env.OPENCODE_CONFIG_CONTENT);
+  assert.equal(config.provider.bench.options.baseURL, 'http://127.0.0.1:8789/v1');
+  assert.equal(config.provider.bench.options.apiKey, 'k');
+  assert.ok(config.provider.bench.models['qwen3-coder'].tool_call);
+  assert.equal(agentEnvironment('opencode', options, { OPENCODE_CONFIG: '/x.json' }).OPENCODE_CONFIG_CONTENT, undefined);
+});
