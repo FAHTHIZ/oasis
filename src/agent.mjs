@@ -2429,6 +2429,10 @@ async function requestCompletionRaw(session, options = {}) {
     const requestHeaders = cloudAnthropic ? await cloudHeaders(config, providerEnv, endpoint, bodyText, headers) : headers;
     let limitWaits = 0;
     let keyRotations = 0;
+    // Per-minute limits: with a backup model, wait once and then let the
+    // fallback chain move on; with none, waiting beats failing the task.
+    let shortWaits = 0;
+    const shortWaitBudget = parseFallbackChain(session && session.fallbackModel).length ? 1 : 3;
     for (let attempt = 0; attempt <= MAX_PROVIDER_RETRIES; attempt++) {
       try {
         response = await fetchImpl(endpoint, {
@@ -2460,12 +2464,13 @@ async function requestCompletionRaw(session, options = {}) {
           continue;
         }
       }
-      const shortWait = status === 429 && attempt < 1 ? shortRateLimitMs(errorBody) : null;
+      const shortWait = status === 429 && shortWaits < shortWaitBudget ? shortRateLimitMs(errorBody) : null;
       if (shortWait !== null) {
         clearTimeout(timer);
         if (typeof options.onRateLimitWait === 'function') {
-          try { options.onRateLimitWait({ waitMs: shortWait, until: new Date(Date.now() + shortWait).toISOString(), attempt: 1, perMinute: true }); } catch {}
+          try { options.onRateLimitWait({ waitMs: shortWait, until: new Date(Date.now() + shortWait).toISOString(), attempt: shortWaits + 1, perMinute: true }); } catch {}
         }
+        shortWaits++;
         await waitForProviderRetry(shortWait, controller.signal);
         timer = setTimeout(() => { timedOut = true; controller.abort(); }, timeoutMs);
         attempt = MAX_PROVIDER_RETRIES - 1;
