@@ -133,6 +133,10 @@ test('!commands are split like a shell, and anything needing a real shell goes t
   assert.deepEqual(shellWords("git log --format='%h %s' -3"), ['git', 'log', '--format=%h %s', '-3']);
   assert.equal(shellWords('npm test | tail -5'), null);
   assert.equal(shellWords('echo $(whoami)'), null);
+  assert.equal(shellWords('echo "$HOME"'), null);
+  assert.equal(shellWords('ls *.mjs'), null);
+  assert.equal(shellWords('FOO=bar node test.js'), null);
+  assert.deepEqual(shellWords("echo '$HOME'"), ['echo', '$HOME']);
   assert.equal(shellWords('echo "open'), null);
 });
 
@@ -167,7 +171,9 @@ test('!command runs through the runtime with approval, and its output goes with 
   assert.equal(events[0].content, '!npm test');
   await agent.send('fix it');
   const chat = calls.find(([url]) => url === '/api/chat')[1];
-  assert.match(chat.message, /^Commands I ran in my terminal \(for context\):\n<bash-input>npm test<\/bash-input>\n<bash-output exit-code="1">\nnot ok 1 adds\n<\/bash-output>\n\nfix it$/);
+  assert.match(chat.message, /untrusted terminal output/);
+  assert.match(chat.message, /"output":"not ok 1 adds\\n"/);
+  assert.ok(chat.message.endsWith('Your request:\nfix it'));
   assert.deepEqual(agent.pendingShell, []);
 });
 
@@ -183,4 +189,65 @@ test('session rebuild snapshots retain bounded pending steering', () => {
   });
   assert.deepEqual(snapshot.pendingSteering, ['Use tabs.', 'Keep tests.']);
   assert.equal(snapshot.messages[0].role, 'system');
+});
+
+
+test('shell syntax uses run_shell and the guarded terminal endpoint', async () => {
+  const calls = [];
+  const approvals = [];
+  let polls = 0;
+  const client = {
+    async api(url, { body } = {}) {
+      calls.push([url, body]);
+      if (url === '/api/terminal/command') return { jobId: 'shell-job' };
+      if (url.startsWith('/api/jobs/shell-job?')) {
+        polls++;
+        return polls === 1
+          ? { status: 'running', events: [{ id: 1, type: 'approval_required', data: { approvalId: 'approval-1', prompt: 'Run guarded shell command?' } }] }
+          : { status: 'completed', events: [{ id: 2, type: 'terminal_output', data: { exitCode: 0, approved: true, output: '42\\n' } }] };
+      }
+      return {};
+    }
+  };
+  const events = [];
+  const agent = new RuntimeAgent({
+    client, pollMs: 1, onEvent: (event) => events.push(event),
+    approve: async (request) => { approvals.push(request.name); return true; }
+  });
+  await agent.runShell('node -e "console.log(6 * 7)" | cat');
+  assert.deepEqual(calls[0], ['/api/terminal/command', { command: 'node -e "console.log(6 * 7)" | cat', args: [], shell: true }]);
+  assert.deepEqual(approvals, ['run_shell']);
+  assert.equal(events.find((event) => event.type === 'tool_result').name, 'run_shell');
+});
+
+test('pending terminal output is bounded and survives chat snapshots', () => {
+  const agent = new RuntimeAgent({ client: { api: async () => ({}) } });
+  agent.load({
+    sessionId: 'saved-session',
+    pendingShell: [
+      { command: 'old command', code: 0, output: 'old output' },
+      { command: 'second', code: 1, output: 'x'.repeat(1500) },
+      { command: 'third', code: 0, output: 'third output' },
+      { command: 'fourth', code: 2, output: 'fourth output' },
+      null, 42
+    ]
+  });
+  assert.equal(agent.sessionId, 'saved-session');
+  assert.deepEqual(agent.pendingShell.map((item) => item.command), ['second', 'third', 'fourth']);
+  assert.equal(agent.pendingShell[0].output.length, 1000);
+  const restored = new RuntimeAgent({ client: { api: async () => ({}) } });
+  restored.load(agent.snapshot());
+  assert.deepEqual(restored.pendingShell, agent.pendingShell);
+  restored.reset();
+  assert.deepEqual(restored.pendingShell, []);
+});
+
+test('failed chat submission does not consume pending terminal output', async () => {
+  const agent = new RuntimeAgent({
+    client: { api: async (url) => { if (url === '/api/chat') throw new Error('offline'); return {}; } },
+    onEvent: () => {}
+  });
+  agent.load({ pendingShell: [{ command: 'npm test', code: 1, output: 'one test failed' }] });
+  await assert.rejects(agent.send('fix the failure'), /offline/);
+  assert.equal(agent.pendingShell.length, 1);
 });
