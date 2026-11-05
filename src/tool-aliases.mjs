@@ -23,6 +23,14 @@ const ALIASES = {
       if (args.timeout !== undefined) next.timeoutSeconds = Math.max(5, Math.min(600, Math.round(Number(args.timeout) / 1000) || 120));
       if (args.run_in_background !== undefined) next.run_in_background = args.run_in_background;
       return next;
+    }],
+    // Without run_shell, a simple command line can still run as argv.
+    ['run_command', (args) => {
+      const argv = splitSimpleCommandLine(args.command);
+      const next = argv ? { command: argv[0], args: argv.slice(1) } : { command: args.command, args: [] };
+      if (args.timeout !== undefined) next.timeoutSeconds = Math.max(5, Math.min(600, Math.round(Number(args.timeout) / 1000) || 120));
+      if (args.run_in_background !== undefined) next.run_in_background = args.run_in_background;
+      return next;
     }]
   ],
   glob: [['glob_files', (args) => ({ pattern: args.path && args.pattern && !String(args.pattern).startsWith(String(args.path)) ? String(args.path).replace(/\/+$/, '') + '/' + args.pattern : args.pattern })]],
@@ -76,4 +84,73 @@ export function resolveToolAlias(requested, args, available) {
     .slice(0, 3)
     .map((item) => item.name);
   return { error: 'There is no tool named "' + requested + '".' + (ranked.length ? ' Did you mean: ' + ranked.join(', ') + '?' : '') + ' Only call tools from your tool list.' };
+}
+
+// Characters that only mean something to a shell outside quotes. Inside double
+// quotes a shell still expands $, ` and \, so those stay refused there too.
+const SHELL_SYNTAX = /[|&;<>()$`*?[\]{}~!#\\]/;
+const DOUBLE_QUOTE_SYNTAX = /[$`\\!]/;
+
+/**
+ * Split a simple command line ("python3 hello.py", "node -e 'x(1)'") into argv,
+ * honouring single and double quotes. Returns null when the line needs a shell
+ * (pipes, redirects, globs, variables, escapes, newlines) or a quote is unbalanced.
+ */
+export function splitSimpleCommandLine(line) {
+  const text = String(line || '').trim();
+  if (!text || /[\n\r]/.test(text)) return null;
+  const argv = [];
+  let current = '';
+  let started = false;
+  let quote = '';
+  for (const char of text) {
+    if (quote === "'") {
+      if (char === "'") quote = '';
+      else current += char;
+    } else if (quote === '"') {
+      if (char === '"') quote = '';
+      else if (DOUBLE_QUOTE_SYNTAX.test(char)) return null;
+      else current += char;
+    } else if (char === '"' || char === "'") {
+      quote = char;
+      started = true;
+    } else if (/\s/.test(char)) {
+      if (started) { argv.push(current); current = ''; started = false; }
+    } else if (SHELL_SYNTAX.test(char)) {
+      return null;
+    } else {
+      current += char;
+      started = true;
+    }
+  }
+  if (quote) return null;
+  if (started) argv.push(current);
+  // FOO=1 cmd is a shell variable assignment, not an executable named FOO=1.
+  if (!argv.length || argv[0].includes('=')) return null;
+  return argv;
+}
+
+/**
+ * Models trained on Bash-style tools often send run_command a whole command
+ * line ("python3 hello.py") instead of command plus args. Rewrite that into the
+ * argv form when it is unambiguous, or onto run_shell when the line needs a
+ * shell and run_shell is available. Anything else is returned unchanged, so the
+ * normal "one executable path" error still explains the problem. The rewritten
+ * call goes through the same permission and safety checks as any other.
+ */
+export function normalizeRunCommandCall(args, available) {
+  if (!args || typeof args !== 'object') return null;
+  const command = typeof args.command === 'string' ? args.command.trim() : '';
+  if (!command || !/\s/.test(command)) return null;
+  const extra = Array.isArray(args.args) ? args.args.map(String) : [];
+  if (args.args !== undefined && !Array.isArray(args.args)) return null;
+  const argv = splitSimpleCommandLine(command);
+  if (argv) return { name: 'run_command', args: { ...args, command: argv[0], args: argv.slice(1).concat(extra) } };
+  const names = available instanceof Set ? available : new Set(available || []);
+  if (names.has('run_shell') && !extra.length && args.interactive !== true) {
+    const next = { command };
+    for (const key of ['timeoutSeconds', 'run_in_background', 'max_seconds']) if (args[key] !== undefined) next[key] = args[key];
+    return { name: 'run_shell', args: next };
+  }
+  return null;
 }

@@ -12,7 +12,7 @@ import { extractCorrections, addCorrections, correctionsReminder, correctionViol
 import { scriptedEditKind } from './inplace-edit-check.mjs';
 import { extractHardRules, extractBranchRules, ruleRefreshReminder } from './rule-refresh.mjs';
 import { newClaimState, recordCheck as recordClaimCheck, recordEdit as recordClaimEdit, claimIssue } from './claim-check.mjs';
-import { resolveToolAlias } from './tool-aliases.mjs';
+import { resolveToolAlias, normalizeRunCommandCall } from './tool-aliases.mjs';
 import { scopeViolation, editScopeFromEnv } from './scope-lock.mjs';
 import { shellExitTarget } from './pipe-status.mjs';
 import { loadPins, savePins } from './mcp-trust.mjs';
@@ -4343,6 +4343,13 @@ async function executeOneCall(session, call, context, options) {
     if (alias && alias.name) {
       call.function.name = alias.name;
       call.function.arguments = JSON.stringify(alias.args || {});
+    }
+    if (call.function.name === 'run_command') {
+      const rewritten = normalizeRunCommandCall(safeToolArguments(call.function.arguments), availableToolNames(session));
+      if (rewritten) {
+        call.function.name = rewritten.name;
+        call.function.arguments = JSON.stringify(rewritten.args);
+      }
     }
     loadDeferredTool(session, call.function.name);
   }

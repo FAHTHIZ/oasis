@@ -4,7 +4,8 @@ import { createServer } from 'node:http';
 import { mkdtemp, writeFile, rm } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import { resolveToolAlias } from '../src/tool-aliases.mjs';
+import { resolveToolAlias, splitSimpleCommandLine, normalizeRunCommandCall } from '../src/tool-aliases.mjs';
+import { scriptedModel, toolCall } from './helpers/scripted-model.mjs';
 import { createSession, runAgentTurn } from '../src/agent.mjs';
 
 const TOOLS = new Set(['read_file', 'write_file', 'edit_file', 'run_shell', 'run_command', 'glob_files', 'grep', 'list_files', 'todo_write', 'command_output']);
@@ -47,4 +48,41 @@ test('an agent calling Read with file_path just works', async (t) => {
   assert.match(tools[1], /Did you mean: read_file/);
   const assistant = payloads[1].messages.find((m) => m.role === 'assistant' && m.tool_calls);
   assert.equal(assistant.tool_calls[0].function.name, 'read_file', 'history is rewritten consistently');
+});
+
+test('splitSimpleCommandLine splits plain command lines and refuses shell syntax', () => {
+  assert.deepEqual(splitSimpleCommandLine('python3 hello.py'), ['python3', 'hello.py']);
+  assert.deepEqual(splitSimpleCommandLine('  npm   run "build all" --x=\'a b\' '), ['npm', 'run', 'build all', '--x=a b']);
+  assert.deepEqual(splitSimpleCommandLine('git commit -m ""'), ['git', 'commit', '-m', '']);
+  assert.deepEqual(splitSimpleCommandLine(`node -e 'console.log($x | 1)'`), ['node', '-e', 'console.log($x | 1)'], 'single quotes are literal');
+  assert.deepEqual(splitSimpleCommandLine('python3 -c "print(6*7)"'), ['python3', '-c', 'print(6*7)']);
+  for (const line of ['ls | wc -l', 'echo $HOME', 'cat a > b', 'ls *.py', 'a && b', 'echo "unbalanced', 'echo `id`', 'a\\ b', 'cd x; ls', '', 'FOO=1 node a.js', 'echo "$HOME"', 'a\nb']) {
+    assert.equal(splitSimpleCommandLine(line), null, line);
+  }
+});
+
+test('normalizeRunCommandCall rewrites whole command lines onto argv or run_shell', () => {
+  const withShell = new Set(['run_command', 'run_shell']);
+  const noShell = new Set(['run_command']);
+  assert.deepEqual(normalizeRunCommandCall({ command: 'python3 hello.py' }, noShell), { name: 'run_command', args: { command: 'python3', args: ['hello.py'] } });
+  assert.deepEqual(normalizeRunCommandCall({ command: 'npm test', args: ['--', '-u'], timeoutSeconds: 30 }, noShell).args, { command: 'npm', args: ['test', '--', '-u'], timeoutSeconds: 30 });
+  assert.deepEqual(normalizeRunCommandCall({ command: 'ls | wc -l', timeoutSeconds: 9 }, withShell), { name: 'run_shell', args: { command: 'ls | wc -l', timeoutSeconds: 9 } });
+  assert.equal(normalizeRunCommandCall({ command: 'ls | wc -l' }, noShell), null, 'no shell tool: keep the explanatory error');
+  assert.equal(normalizeRunCommandCall({ command: 'ls | wc -l', args: ['x'] }, withShell), null, 'mixed forms are ambiguous');
+  assert.equal(normalizeRunCommandCall({ command: 'git', args: ['status'] }, withShell), null, 'already argv');
+  assert.equal(normalizeRunCommandCall({ command: 'a b', args: 'oops' }, withShell), null);
+  assert.equal(resolveToolAlias('Bash', { command: 'node -v' }, noShell).args.command, 'node');
+  assert.deepEqual(resolveToolAlias('Bash', { command: 'node -v' }, noShell).args.args, ['-v']);
+});
+
+test('a run_command call with a whole command line runs instead of failing', async (t) => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'oasis-runcmd-line-'));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const { config, requests } = await scriptedModel(t, [toolCall('c1', 'run_command', { command: 'node -e "console.log(6*7)"' }), { content: 'done' }]);
+  const session = await createSession({ root, config });
+  await runAgentTurn(session, 'print 42', { approval: async () => true });
+  const tool = requests[1].messages.find((m) => m.role === 'tool');
+  assert.match(String(tool.content), /42/);
+  const assistant = requests[1].messages.find((m) => m.role === 'assistant' && m.tool_calls);
+  assert.deepEqual(JSON.parse(assistant.tool_calls[0].function.arguments), { command: 'node', args: ['-e', 'console.log(6*7)'] });
 });
