@@ -3687,6 +3687,27 @@ async function main() {
   if (command === 'update' || command === 'self-update') return await selfUpdate(autoApprove);
   if (command === 'config' || command === 'status') return printConfig(await loadConfig());
   if (command === 'mcp') return await manageMcp(rest, workspace);
+  if (command === 'add' && rest.filter((word) => !/^--/.test(word)).length - (rest.includes('--name') ? 1 : 0) === 1) {
+    // oasis add <anything>: GitHub link, owner/repo, plugin@marketplace, MCP URL,
+    // npm MCP package or MCP Registry name. One summary, one yes, done.
+    const { addAnything } = await import('./add-anything.mjs');
+    const words = rest.filter((word) => !/^--/.test(word));
+    const scope = rest.includes('--project') ? 'project' : 'user';
+    const nameAt = rest.indexOf('--name');
+    const name = nameAt >= 0 ? rest[nameAt + 1] : undefined;
+    const source = words.filter((word) => word !== name).join(' ');
+    if (!source) { stdout.write('Usage: oasis add <GitHub link | owner/repo[#name] | plugin@marketplace | MCP URL | npm package | registry name> [--project] [--name NAME]\n'); process.exitCode = 1; return; }
+    stdout.write('Looking at ' + source + '…\n');
+    const result = await addAnything(source, { root: workspace, env: process.env, scope, name, approve: async (summary) => {
+      stdout.write(summary + '\n');
+      if (autoApprove) return true;
+      if (!stdin.isTTY) { stdout.write('Run again with --yes to install without a prompt.\n'); return false; }
+      return /^y(es)?$/i.test(String(await askLine('Install it? [y/N] ')).trim());
+    } });
+    stdout.write(result.message + '\n');
+    if (result.approved === false) process.exitCode = 1;
+    return result;
+  }
   if (command === 'ide') { const { ideCli } = await import('./ide.mjs'); return await ideCli(workspace, rest, { env: process.env }); }
   if (command === 'extensions' || command === 'extension') return await manageExternalExtensions(workspace, rest, autoApprove);
   if (command === 'plugins' || command === 'plugin') {

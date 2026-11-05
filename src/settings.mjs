@@ -219,9 +219,13 @@ export async function loadSettings(root, options = {}) {
     permissions: { allow: [], ask: [], deny: [], defaultMode: 'default', additionalDirectories: [] },
     hooks: {},
     sandbox: { enabled: false, network: false, autoAllowCommands: true, maskSensitivePaths: true },
-    // run_shell (pipes, &&, redirects) is opt-in: shell.enabled: true in
-    // settings, OASIS_SHELL=1, or an available OS sandbox.
-    shell: { enabled: ['1', 'true', 'on'].includes(String(env.OASIS_SHELL || '').toLowerCase()) },
+    // The agent's run_shell (pipes, &&, redirects) is on by default on macOS
+    // and Linux, as in Claude Code and Codex: every line is still split into
+    // its simple commands for blocking, risk checks and approval. Windows uses
+    // the powershell tool. shell.enabled: false or OASIS_SHELL=0 turns it off.
+    // shell.explicit records a user choice; the app's terminal box only takes
+    // shell syntax when the user turned it on (see web.mjs).
+    shell: { enabled: process.platform !== 'win32' && !['0', 'false', 'off'].includes(String(env.OASIS_SHELL || '').toLowerCase()), explicit: ['1', 'true', 'on'].includes(String(env.OASIS_SHELL || '').toLowerCase()) },
     model: null,
     outputStyle: null,
     agent: null,
@@ -327,7 +331,7 @@ export async function loadSettings(root, options = {}) {
       if (typeof settings.sandbox.memory === 'string' && /^\d+(?:\.\d+)?[bkmg]?$/i.test(settings.sandbox.memory)) result.sandbox.memory = settings.sandbox.memory;
       if ((typeof settings.sandbox.cpus === 'string' || typeof settings.sandbox.cpus === 'number') && /^\d+(?:\.\d+)?$/.test(String(settings.sandbox.cpus))) result.sandbox.cpus = String(settings.sandbox.cpus);
     }
-    if (settings.shell && typeof settings.shell === 'object' && typeof settings.shell.enabled === 'boolean') result.shell.enabled = settings.shell.enabled;
+    if (settings.shell && typeof settings.shell === 'object' && typeof settings.shell.enabled === 'boolean') { result.shell.enabled = settings.shell.enabled; result.shell.explicit = settings.shell.enabled; }
     if (typeof settings.model === 'string' && settings.model.trim()) result.model = settings.model.trim();
     if (Array.isArray(settings.availableModels)) result.availableModels = settings.availableModels.filter((item) => typeof item === 'string' && item.trim()).map((item) => item.trim()).slice(0, 100);
     if (typeof settings.chrome === 'boolean') result.chrome = settings.chrome;

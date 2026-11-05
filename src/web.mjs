@@ -1242,7 +1242,9 @@ export function createOasisWebServer(options = {}) {
     }
     const terminalSettings = await loadSettings(activeRoot, { env });
     const terminalSandbox = resolveSandbox(terminalSettings, activeRoot);
-    const shellEnabled = Boolean(terminalSettings.shell && terminalSettings.shell.enabled) ||
+    // The agent has run_shell by default; this box takes shell syntax only when
+    // the user turned shell on themselves (or a sandbox is available).
+    const shellEnabled = Boolean(terminalSettings.shell && terminalSettings.shell.enabled && terminalSettings.shell.explicit) ||
       Boolean(terminalSandbox.enabled && terminalSandbox.available);
     if (shell && !shellEnabled) {
       throw Object.assign(new Error('Shell syntax is disabled. Enable shell access in your OASIS user settings, or configure an available OS sandbox. Single executables can still run without shell syntax.'), { statusCode: 403 });

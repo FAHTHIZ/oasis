@@ -188,7 +188,7 @@ A simple request such as `oasis install pnpm` uses the package installer directl
 - Chat-driven provider switching: the agent probes the provider with a non-executed tool call and changes the user-level provider only after verification succeeds.
 - MCP stdio server integration configured either by CLI or normal chat; chat setup requires a dedicated manual approval, validates the server handshake before persistence, and exposes discovered tools in the current session. Every MCP tool call still requires its own approval by default.
 - Workspace file listing, glob matching, literal search, line-ranged reads, exact-string `edit_file` patches, whole-file writes, and approved deletes.
-- Command execution through an executable plus argument array, without shell expansion; an optional `run_shell` tool (enabled by `shell.enabled: true`, `OASIS_SHELL=1` or an available OS sandbox) handles pipes and `&&`. Read-only commands inside the project (`ls`, `cat`, `grep`, `rg`, `find`, `git status`/`diff`/`log`, `--version` and similar) run without a prompt; anything with redirects, substitution, paths outside the project or secret files still asks (`OASIS_READ_ONLY_COMMANDS=0` turns this off). Every `run_shell` line is parsed into its simple commands first: catastrophic ones (recursive deletes of home, root or system folders, raw disk writes, package publishing, force pushes, `gh repo delete`) are refused, and high-risk ones (`curl … | sh`, `git branch -D`, `git clean -x`, `terraform destroy`, `kubectl delete`, SQL `DROP`, cloud deletes) always ask for approval, even in `bypassPermissions` mode, with allow rules, or in the sandbox. Long-running commands can run in the background.
+- Command execution through an executable plus argument array, without shell expansion; a `run_shell` tool handles pipes and `&&` (on by default on macOS and Linux; `shell.enabled: false` or `OASIS_SHELL=0` turns it off; the app's terminal box takes shell syntax only after you set `shell.enabled: true` or `OASIS_SHELL=1`). Read-only commands inside the project (`ls`, `cat`, `grep`, `rg`, `find`, `git status`/`diff`/`log`, `--version` and similar) run without a prompt; anything with redirects, substitution, paths outside the project or secret files still asks (`OASIS_READ_ONLY_COMMANDS=0` turns this off). Every `run_shell` line is parsed into its simple commands first: catastrophic ones (recursive deletes of home, root or system folders, raw disk writes, package publishing, force pushes, `gh repo delete`) are refused, and high-risk ones (`curl … | sh`, `git branch -D`, `git clean -x`, `terraform destroy`, `kubectl delete`, SQL `DROP`, cloud deletes) always ask for approval, even in `bypassPermissions` mode, with allow rules, or in the sandbox. Long-running commands can run in the background.
 - Package installation for npm, Python/pip, system package managers, Cargo, and Go when supported on the host.
 - Public HTTP/HTTPS documentation fetches with private-network URL checks and response limits.
 - Bundled skills for debugging, code review, testing, environment setup, shipping features, mobile development, web app development, API development, and security review.
@@ -242,6 +242,26 @@ Updates require a higher plugin version. Any change to requested or granted capa
 Every case runs in a fresh temporary workspace holding only its `files`, once with the plugin and once without (the baseline). Checks are `contains`, `notContains`, `regex` (on the final answer), `files` (path to a regex, `true` for exists or `false` for absent), `toolsUsed` and `toolsNotUsed`. A `rubric` is graded by the configured model, which sees the task, the answer and the resulting files. Anthropic skill-creator files (`evals` with `expected_output` and `expectations`) and JSONL work too. The report shows each case's score next to the baseline and the overall delta, tool calls and time. Use `--runs N` to repeat noisy cases, `--no-baseline` to skip the comparison, `--cases FILE` for another case file, and `--json` or `--out FILE` for machine-readable results; the exit code is non-zero unless every case passes. `oasis plugin eval init DIR [--count N]` asks the model to draft cases from the plugin's skills (or writes a template without a model). Case runs default to `acceptEdits` and deny any other approval.
 
 ## Plugins, integrations, and installation
+
+### Add anything with one command
+
+Paste whatever you have. OASIS works out what it is, shows one summary, and installs and configures it when you say yes:
+
+```bash
+oasis add obra/superpowers                          # a Claude Code plugin marketplace (installs its only plugin)
+oasis add wshobson/agents#debugging-toolkit         # one plugin from a large marketplace
+oasis add anthropics/skills#pdf                     # one Agent Skill from a repository
+oasis add https://github.com/microsoft/playwright-mcp   # an MCP server repo: uses its MCP Registry entry
+oasis add modelcontextprotocol/servers#memory       # one server from a repository of servers
+oasis add https://mcp.context7.com/mcp              # a remote MCP server (…/sse links use SSE)
+oasis add @modelcontextprotocol/server-memory       # an npm MCP package
+oasis add github                                    # search the MCP Registry; the vendor's own server wins
+oasis add commit-commands@claude-code-plugins       # a plugin from a marketplace you already added
+```
+
+In a chat, type `/add LINK`, or just tell the agent "install this: LINK". The agent calls `add_extension`, asks you once (even with `--yes`), and starts any new MCP server in the same chat. Plugins and skills load in the next session, or straight away with `/reload-plugins`.
+
+What gets detected, in order: a Claude Code marketplace (`.claude-plugin/marketplace.json`), a Claude Code plugin (`.claude-plugin/plugin.json`), a native OASIS package (`plugin.json` with `schemaVersion: 1`), an MCP server (`server.json`, an MCP SDK dependency, or a folder of servers under `src/`, `packages/` or `servers/`), Agent Skills (`SKILL.md`), then Markdown agents and commands. Skills under hidden folders such as `.claude/skills` are treated as the repository's own maintainer tools and are skipped when there is something else to install. Use `#name` to pick one plugin, skill or server, `--project` to install for this project only, and `--name` to choose an MCP server's local name. Inspection only clones the repository (hooks off) and reads files; nothing from it runs until you approve.
 
 OASIS separates three things that are often all called “plugins”:
 
