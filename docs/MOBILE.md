@@ -37,7 +37,7 @@ Behind the scenes OASIS keeps its server on `127.0.0.1` and opens an extra liste
 
    OASIS prints a link for each private network address of the computer and a QR code in the terminal. Set `OASIS_NO_QR=1` to hide the QR code.
 2. Scan the QR code with the phone camera, or type the link. The link includes the connection token, so the phone connects without pasting anything.
-3. Add it to the home screen:
+3. Add it to the home screen. **Settings → Devices → Install OASIS as an app** does this in one tap on Android and desktop Chrome or Edge, and shows the steps on iPhone. Or by hand:
    - **iPhone/iPad:** Share, then **Add to Home Screen**.
    - **Android (Chrome):** the menu, then **Install app** (or **Add to Home screen**).
 
