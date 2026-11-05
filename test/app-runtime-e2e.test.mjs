@@ -97,7 +97,9 @@ const busy = `document.getElementById('app').classList.contains('busy')`;
 
 test('runtime engine end to end: app at /, paste to connect, approve a real edit, files and changes', { skip: chrome ? false : 'no Chrome/Chromium installed', timeout: 180000 }, async (t) => {
   const provider = await mockProvider();
-  const root = await mkdtemp(path.join(os.tmpdir(), 'oasis-runtime-app-'));
+  const parent = await mkdtemp(path.join(os.tmpdir(), 'oasis-runtime-app-'));
+  const root = path.join(parent, 'counter-app');
+  await mkdir(root);
   const configDir = await mkdtemp(path.join(os.tmpdir(), 'oasis-runtime-config-'));
   await writeFile(path.join(root, 'README.md'), '# Demo\n');
   await writeFile(path.join(root, '.env'), 'SECRET=1\n');
@@ -110,7 +112,7 @@ test('runtime engine end to end: app at /, paste to connect, approve a real edit
   const env = { ...process.env, OASIS_CONFIG_DIR: configDir, OASIS_API_KEY: '', OPENAI_API_KEY: '', ANTHROPIC_API_KEY: '', OPENROUTER_API_KEY: '' };
   const app = await startOasisWebServer({ root, host: '127.0.0.1', port: 0, env, token: 'test-runtime-token-0123456789abcdef' });
   const browser = await Browser.launch({ env: { ...process.env, OASIS_CHROME_HEADLESS: '1' }, executable: chrome });
-  t.after(async () => { await browser.close(); await app.close(); provider.server.close(); await rm(root, { recursive: true, force: true }); await rm(configDir, { recursive: true, force: true }); });
+  t.after(async () => { await browser.close(); await app.close(); provider.server.close(); await rm(parent, { recursive: true, force: true }); await rm(configDir, { recursive: true, force: true }); });
   const origin = 'http://127.0.0.1:' + app.port;
   const page = await browser.newPage('about:blank');
   await page.send('Runtime.enable');
