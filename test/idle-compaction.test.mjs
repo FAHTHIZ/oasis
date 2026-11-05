@@ -107,3 +107,13 @@ test('an aborted idle compaction leaves the history untouched', async (t) => {
   assert.equal(result.cancelled, true);
   assert.equal(JSON.stringify(session.messages), original);
 });
+
+test('the browser workspace wires idle compaction between jobs', async () => {
+  const { readFile } = await import('node:fs/promises');
+  const web = await readFile(new URL('../src/web.mjs', import.meta.url), 'utf8');
+  assert.match(web, /session\.idleCompaction = startIdleCompaction\(session/);
+  assert.match(web, /await idleCompaction\.settle\(\)/);
+  assert.match(web, /job\.status === 'completed'/);
+  const html = await readFile(new URL('../index.html', import.meta.url), 'utf8');
+  assert.match(html, /summarized while you were away/);
+});
