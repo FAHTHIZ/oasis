@@ -6,6 +6,10 @@ OASIS `1.1.0` is the stable-channel version on `main`.
 
 Use a project folder you trust, review permission prompts, and keep important work in version control before running an agent on it.
 
+## Universal app — nothing to install
+
+Open [fahthiz.github.io/oasis/app](https://fahthiz.github.io/oasis/app/) on any phone, tablet or computer, then add it to the home screen (Chrome/Edge: **Install**; iPhone/iPad Safari: Share → **Add to Home Screen**). It runs offline once installed, keeps projects in the browser, and sends model requests straight to your provider. It cannot run shell commands. To serve it from your own machine, run `oasis app` (add `--lan` for a QR code your phone can scan). See [OASIS on a phone or tablet](MOBILE.md#universal-app).
+
 ## Desktop app — no terminal required
 
 > **Downloads:** desktop installers are on the [latest release](https://github.com/FAHTHIZ/oasis/releases/latest) page. They are **not code-signed**, so Windows SmartScreen and macOS Gatekeeper will warn on first launch; verify the file against `SHA256SUMS` first (below). To build them yourself, run `npm install && npm run desktop:dist` (output in `release/`). Installation and packaging are tested on clean CI runners for Windows, macOS and Linux, not by hand on physical machines.
@@ -139,7 +143,7 @@ Let your shell finish `oasis` commands and options when you press Tab. Run the l
 
 `oasis setup --auto` looks at this computer, then picks the best way to run a model here:
 
-- **What it checks:** the OS, CPU cores, memory and GPU (NVIDIA through `nvidia-smi`; AMD and Intel cards through Linux sysfs or the Windows registry, which reports real VRAM above 4 GB; Apple Silicon unified memory; integrated graphics under 2 GB are ignored in favour of system memory), plus any model server already running on its usual local port (Ollama, LM Studio, llama.cpp, Jan, vLLM, OmniRoute).
+- **What it checks:** the OS, CPU cores, memory and GPU (NVIDIA through `nvidia-smi`; AMD and Intel cards through Linux sysfs or the Windows registry, which reports real VRAM above 4 GB; Apple Silicon unified memory; integrated graphics under 2 GB are ignored in favour of system memory), plus any model server already running on its usual local port (Ollama, LM Studio, llama.cpp, Jan, vLLM).
 - **What it chooses:** a running model that fits, a local gateway, an Ollama model sized to your memory (with the exact `ollama pull` command), or a hosted model if the device is too small.
 - **What it saves:** the route only after a real test request succeeds. Add `--dry-run` to see the recommendation without saving.
 
