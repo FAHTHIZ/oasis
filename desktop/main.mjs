@@ -195,7 +195,7 @@ async function openWorkspace(root) {
     activeOrigin = null;
     await previous.close();
   }
-  runtime = await startOasisWebServer({ root: resolved, host: '127.0.0.1', port: 0, env: desktopEnv, onProviderConfig: persistDesktopProviderConfig, appUpdate: updater ? desktopUpdateBridge() : undefined });
+  runtime = await startOasisWebServer({ root: resolved, host: '127.0.0.1', port: 0, env: desktopEnv, onProviderConfig: persistDesktopProviderConfig, appUpdate: updater ? desktopUpdateBridge() : undefined, confirmUnencryptedPhoneLink });
   activeOrigin = 'http://127.0.0.1:' + runtime.port;
   await saveWorkspace(resolved);
   const window = createWindow();
@@ -231,10 +231,32 @@ function desktopUpdateBridge() {
   };
 }
 
+// Native warning before sharing the workspace over plain Wi-Fi HTTP. The page
+// cannot fake this answer, so a compromised page cannot silently open the LAN.
+async function confirmUnencryptedPhoneLink() {
+  const { response } = await dialog.showMessageBox(mainWindow || undefined, {
+    type: 'warning',
+    buttons: ['Share over Wi-Fi', 'Cancel'],
+    defaultId: 1,
+    cancelId: 1,
+    title: 'Share over unencrypted Wi-Fi?',
+    message: 'Wi-Fi sharing is unencrypted.',
+    detail: 'Your workspace and its connection token travel over this network without encryption, so anyone on the same Wi-Fi could watch or reuse them. Use it only on your own home network, never on public Wi-Fi. Tailscale gives an encrypted link instead.'
+  });
+  return response === 0;
+}
+
+function openPhoneDialog() {
+  if (!mainWindow || mainWindow.isDestroyed()) return;
+  mainWindow.show();
+  void mainWindow.webContents.executeJavaScript('window.oasisConnectPhone && window.oasisConnectPhone()', true).catch(() => {});
+}
+
 function installMenu() {
   Menu.setApplicationMenu(Menu.buildFromTemplate([
     { label: 'File', submenu: [
       { label: 'Open project folder…', accelerator: 'CmdOrCtrl+O', click: () => { void chooseAndOpenWorkspace(); } },
+      { label: 'Connect a phone…', click: openPhoneDialog },
       { type: 'separator' }, { role: 'quit', label: 'Quit OASIS' }
     ]},
     { label: 'View', submenu: [

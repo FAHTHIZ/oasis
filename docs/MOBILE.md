@@ -12,6 +12,19 @@ There is no App Store or Play Store app. The browser workspace installs to the h
 
 ## Browser workspace from your phone
 
+### The quick way: Connect a phone
+
+In the desktop app choose **File → Connect a phone…**. In the browser workspace open **Settings → Devices → Connect a phone**. You get two choices:
+
+- **Share over Tailscale (encrypted).** Recommended. [Tailscale](https://tailscale.com) encrypts traffic between your own devices and also works away from home. Install it on the computer and the phone and sign in to the same account; the button is greyed out until the computer is connected.
+- **Share over Wi-Fi (unencrypted).** For your own home network only. OASIS first shows a warning, and the desktop app uses a native dialog that the page cannot answer by itself. Anyone on the same Wi-Fi could read the traffic, so never use it on public Wi-Fi.
+
+OASIS then shows a QR code and a link. Scan it with the phone camera and add the page to the home screen (below). The phone uses the same chats, runs and approvals as the computer, not a separate copy. **Stop sharing** closes the link and disconnects phones that are already connected. Closing OASIS also closes it.
+
+Behind the scenes OASIS keeps its server on `127.0.0.1` and opens an extra listener only on the chosen private addresses (never on every network interface). The connection token still protects every request, and features that only make sense on the computer itself (provider keys, hardware detection, updates, and phone sharing itself) stay unavailable on the phone.
+
+### From the terminal
+
 1. On the computer, start the workspace so other devices can reach it:
 
    ```bash
