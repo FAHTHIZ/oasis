@@ -274,7 +274,10 @@ async function chatOpenAI(config, { messages, tools, signal, onText: rawOnText, 
       if (index < 0) {
         const given = part.index !== undefined && part.index !== null ? Number(part.index) : null;
         const existing = given !== null ? calls[given] : null;
-        if (given !== null && !(part.id && existing && existing.id && existing.id !== part.id && existing.function.name)) index = given;
+        // A new index with no id and no name continues the previous call (a
+        // gateway sent call 0's closing "}" as index 1).
+        if (given !== null && !existing && !part.id && !(part.function && part.function.name) && calls.length) index = calls.length - 1;
+        else if (given !== null && !(part.id && existing && existing.id && existing.id !== part.id && existing.function.name)) index = given;
         else index = part.id || !calls.length ? calls.length : calls.length - 1;
       }
       const call = calls[index] || (calls[index] = { id: '', type: 'function', function: { name: '', arguments: '' } });

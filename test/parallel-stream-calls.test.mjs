@@ -53,3 +53,26 @@ test('the app splits Gemini parallel calls too', async () => {
   const calls = reply.toolCalls || reply.tool_calls || [];
   assert.equal(calls.length, 2, JSON.stringify(reply));
 });
+
+// Captured from a live Pollinations (gpt-oss-20b) stream: the closing brace
+// of call 0 arrived as index 1 with no id or name.
+test('a stray fragment at a new index with no id or name continues the previous call', () => {
+  assert.deepEqual(assemble([
+    { index: 0, id: 'chatcmpl-tool-1', type: 'function', function: fn('read_file', '') },
+    { index: 0, function: { arguments: '{"path":"a.mjs","limit":200' } },
+    { index: 1, function: { arguments: '}' } }
+  ]), ['chatcmpl-tool-1:read_file:{"path":"a.mjs","limit":200}']);
+});
+
+test('the app keeps a stray new-index fragment with the previous call', async () => {
+  const sse = (obj) => 'data: ' + JSON.stringify(obj) + '\n\n';
+  const body = sse({ choices: [{ delta: { tool_calls: [{ index: 0, id: 'c1', type: 'function', function: fn('read_file', '') }] }, index: 0 }] })
+    + sse({ choices: [{ delta: { tool_calls: [{ index: 0, function: { arguments: '{"path":"a.mjs"' } }] }, index: 0 }] })
+    + sse({ choices: [{ delta: { tool_calls: [{ index: 1, function: { arguments: '}' } }] }, index: 0 }] })
+    + sse({ choices: [{ delta: {}, finish_reason: 'tool_calls', index: 0 }] }) + 'data: [DONE]\n\n';
+  const fetchImpl = async () => new Response(body, { status: 200, headers: { 'content-type': 'text/event-stream' } });
+  const reply = await chat({ protocol: 'openai-compatible', baseURL: 'https://example.test/v1', model: 'm', apiKey: 'k' }, { messages: [{ role: 'user', content: 'hi' }], tools: [], fetchImpl, onText: () => {} });
+  const calls = reply.toolCalls || reply.tool_calls || [];
+  assert.equal(calls.length, 1, JSON.stringify(reply));
+  assert.equal(calls[0].function.arguments, '{"path":"a.mjs"}');
+});
