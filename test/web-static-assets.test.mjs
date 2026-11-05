@@ -56,7 +56,9 @@ test('the browser server delivers every asset referenced by the app shell', asyn
         ? 'text/css'
         : extension === '.js'
           ? 'text/javascript'
-          : null;
+          : extension === '.png'
+            ? 'image/png'
+            : null;
     assert.ok(expectedType, 'add a content-type expectation for ' + asset);
 
     const response = await fetch(base + asset);

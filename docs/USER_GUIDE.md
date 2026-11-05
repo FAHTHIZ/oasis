@@ -56,6 +56,12 @@ oasis web --open
 
 For access from another device, prefer HTTPS with a certificate trusted by the phone and with a subject alternative name matching the computer's LAN IP. OASIS supports `oasis web --host 0.0.0.0 --tls-cert /path/to/cert.pem --tls-key /path/to/key.pem`. Non-loopback plaintext requires an explicit `--allow-insecure-lan` opt-in, which exposes traffic and bearer tokens to network observation. Do not port-forward the bridge or expose it to the public Internet. Real Android/Termux and device-trust workflows still need additional platform testing.
 
+When it listens on the network (`--host 0.0.0.0`), `oasis web` lists this computer's private addresses as ready-to-open links, including Tailscale. It also prints a QR code you can scan with the phone camera (`OASIS_NO_QR=1` hides it). The page installs to the phone's home screen as an app. The full walkthrough, including creating a trusted certificate with mkcert, is in [MOBILE.md](MOBILE.md).
+
+**Updates.** When a newer stable release is published, a banner offers **Update**, **What's new**, **Later** and **Skip this version**. In the desktop app, **Update** downloads the installer, checks it against the release `SHA256SUMS` and installs it after you confirm in a native dialog. In a workspace started with `oasis web`, it copies `oasis update` for you to run in a terminal. The interactive CLI prints the same notice once at startup. Checks are cached for six hours, never delay startup, and stop with `OASIS_NO_UPDATE_CHECK=1` (they are always off in CI). See [Updates](INSTALL.md#updates).
+
+**Recommended setup.** On first run, the setup screen shows **Recommended for this computer**, worked out from the CPU, memory, GPU and any local model server it finds. **Use this** fills in the provider form, and **Get Ollama** opens the download page with the model to pull. The same check is available as `oasis setup --auto`.
+
 Supported provider shapes:
 
 - Native OpenAI Responses API (`openai-responses`), recommended for current OpenAI reasoning models that require Responses for tool calling.
