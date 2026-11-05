@@ -89,6 +89,10 @@ export function resolveToolAlias(requested, args, available) {
   }
   // Same name with different casing or separators: ReadFile, read-file, readFile.
   for (const name of names) if (squash(name) === key) return { name, args, aliasedFrom: requested };
+  // Singular/plural slips (search_file, read_files) are unambiguous; mapping
+  // them saves a turn. Permission checks still apply to the real tool.
+  const plural = [...names].filter((name) => squash(name) === key + 's' || squash(name) + 's' === key);
+  if (plural.length === 1) return { name: plural[0], args, aliasedFrom: requested };
   const ranked = [...names]
     .map((name) => ({ name, score: Math.min(distance(key, squash(name)), squash(name).includes(key) || key.includes(squash(name)) ? 1 : Infinity) }))
     .sort((a, b) => a.score - b.score || a.name.localeCompare(b.name))
