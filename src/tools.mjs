@@ -417,7 +417,17 @@ export async function globWorkspaceFiles(root, pattern, limit = 200) {
     matches.push(relative);
     if (matches.length >= maxResults) return { pattern: text, matches, truncated: true };
   }
-  return { pattern: text, matches, truncated: files.length >= 5000 };
+  const result = { pattern: text, matches, truncated: files.length >= 5000 };
+  // "*.mjs" only covers the project root. Models often mean "anywhere" and
+  // then conclude the files do not exist, so say where they are.
+  if (!matches.length && !text.includes('/') && !text.startsWith('**')) {
+    const deep = globToRegExp('**/' + text);
+    const nested = files.map((file) => file.relative.split(path.sep).join('/')).filter((relative) => deep.test(relative));
+    if (nested.length) {
+      result.hint = 'No file at the project root matches "' + text + '", but ' + nested.length + ' file' + (nested.length === 1 ? '' : 's') + ' in subfolders match "**/' + text + '", for example: ' + nested.slice(0, 5).join(', ') + '.';
+    }
+  }
+  return result;
 }
 export async function searchWorkspaceFiles(root, query, limit = 25) {
   const needle = String(query || '');
