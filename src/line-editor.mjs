@@ -476,6 +476,9 @@ export function readInput(options = {}) {
     let lastCtrlC = 0;
     let lastEscape = 0;
     let completion = null; // { range, candidates, index }
+    // The live slash/@ menu shown while typing: ↑/↓ pick an entry, Enter or
+    // Tab takes it, Esc closes it (as in Claude Code, Codex and Cursor).
+    let liveMenu = null; // { kind, start, end, candidates, selected }
     let palette = null;
     let paletteScreen = false;
     let busy = Promise.resolve();
@@ -804,9 +807,44 @@ export function readInput(options = {}) {
       else if (ch === 'G' || key.name === 'end') pager.top = pager.lines.length;
       drawPager();
     };
+    const liveMenuKey = (key) => {
+      if (!liveMenu || state.search || (state.vim && state.vim.mode === 'normal')) return false;
+      const count = Math.min(8, liveMenu.candidates.length);
+      if (!count) return false;
+      if (key.name === 'down' || key.name === 'up') {
+        const step = key.name === 'down' ? 1 : -1;
+        liveMenu.selected = liveMenu.selected < 0 ? (step > 0 ? 0 : count - 1) : (liveMenu.selected + step + count) % count;
+        hints = [hints[0], ...renderCandidates(liveMenu.candidates, liveMenu.selected, color)];
+        draw();
+        return true;
+      }
+      if ((key.name === 'enter' || key.name === 'tab') && liveMenu.selected >= 0) {
+        const candidate = liveMenu.candidates[liveMenu.selected];
+        const menu = liveMenu;
+        liveMenu = null;
+        hints = [];
+        const value = candidate.value + (candidate.value.endsWith('/') || candidate.noSpace ? '' : ' ');
+        if (menu.kind === 'command' && key.name === 'enter' && !candidate.value.endsWith('/') && !candidate.takesArgument) {
+          state = applyCompletion(state, { start: menu.start, end: menu.end }, candidate.value);
+          finish({ type: 'submit', text: state.text });
+          return true;
+        }
+        state = applyCompletion(state, { start: menu.start, end: menu.end }, value);
+        draw();
+        return true;
+      }
+      if (key.name === 'escape' && liveMenu.selected >= 0) {
+        liveMenu = null;
+        hints = [];
+        draw();
+        return true;
+      }
+      return false;
+    };
     const handle = async (rawKey) => {
       if (pager) { pagerKey(rawKey); return; }
       if (palette) { paletteKey(rawKey); return; }
+      if (liveMenuKey(rawKey)) return;
       const key = await bindKey(rawKey);
       if (done) return;
       if (!key) { if (palette) drawPalette(); else draw(); return; }
@@ -893,12 +931,14 @@ export function readInput(options = {}) {
         if ((commandPrefix || mentionPrefix) && options.complete && !completion && action !== 'escape' && action !== 'submit') {
           try {
             const result = await options.complete(state.text, state.cursor);
-            hints = result && result.candidates && result.candidates.length
-              ? [DIM((commandPrefix ? 'Slash commands' : 'Files') + ' · Tab to complete · type to filter', color), ...renderCandidates(result.candidates, -1, color)]
-              : [];
-          } catch { hints = []; }
-        } else if (!commandPrefix && !mentionPrefix && !completion && hints.length && hints[0] && MENU_HINT.test(stripAnsi(hints[0]))) {
-          hints = [];
+            if (result && result.candidates && result.candidates.length) {
+              liveMenu = { kind: commandPrefix ? 'command' : 'file', start: result.start ?? 0, end: result.end ?? state.cursor, candidates: result.candidates, selected: -1 };
+              hints = [DIM((commandPrefix ? 'Slash commands' : 'Files') + ' · Tab to complete · ↑↓ to pick · type to filter', color), ...renderCandidates(result.candidates, -1, color)];
+            } else { liveMenu = null; hints = []; }
+          } catch { liveMenu = null; hints = []; }
+        } else {
+          liveMenu = null;
+          if (!commandPrefix && !mentionPrefix && !completion && hints.length && hints[0] && MENU_HINT.test(stripAnsi(hints[0]))) hints = [];
         }
         draw();
       }
@@ -928,8 +968,8 @@ function renderCandidates(candidates, selected, color) {
   const lines = shown.map((candidate, index) => {
     const label = (candidate.display || candidate.value).padEnd(width);
     const description = candidate.description ? DIM(candidate.description, color) : '';
-    const line = '  ' + label + description;
-    return index === selected && color ? '\x1b[7m' + stripAnsi('  ' + label) + '\x1b[27m' + description : line;
+    if (index !== selected) return '  ' + label + description;
+    return color ? '\x1b[7m' + stripAnsi('› ' + label) + '\x1b[27m' + description : '› ' + label + description;
   });
   if (candidates.length > shown.length) lines.push(DIM('  … ' + (candidates.length - shown.length) + ' more (keep typing to narrow)', color));
   return lines;
