@@ -11,8 +11,19 @@
 // Shared by the CLI (src/agent.mjs) and the browser app (app/core).
 
 const OPEN = /^\s*<(think|thinking|thought|reasoning)>/i;
+// Gemini flags thought chunks (extra_content.google.thought) and those go to
+// reasoning, but Gemma's closing tag arrives in the first answer chunk:
+// "</thought>I'll start by...". A reply never means to begin with one.
+const ORPHAN_CLOSE = /^\s*<\/(think|thinking|thought|reasoning)>\s*/i;
 const TAG_NAMES = ['think', 'thinking', 'thought', 'reasoning'];
 const LONGEST_OPEN = Math.max(...TAG_NAMES.map((name) => name.length)) + 2;
+
+// Text that could still grow into an opening (or orphan closing) tag.
+function partialTag(trimmed) {
+  if (trimmed.length > LONGEST_OPEN || !trimmed.startsWith('<')) return false;
+  const lower = trimmed.toLowerCase();
+  return TAG_NAMES.some((name) => ('<' + name + '>').startsWith(lower) || ('</' + name + '>').startsWith(lower));
+}
 
 /**
  * Splits leading reasoning blocks from a finished reply.
@@ -32,7 +43,11 @@ export function splitThinking(text) {
     thoughts.push(after.slice(0, end.index).trim());
     rest = after.slice(end.index + end[0].length);
   }
-  if (!thoughts.length) return { content: typeof text === 'string' ? text : '', reasoning: '' };
+  if (!thoughts.length) {
+    const value = typeof text === 'string' ? text : '';
+    const orphan = ORPHAN_CLOSE.exec(value);
+    return { content: orphan ? value.slice(orphan[0].length) : value, reasoning: '' };
+  }
   return { content: rest.replace(/^\s+/, ''), reasoning: thoughts.filter(Boolean).join('\n\n') };
 }
 
@@ -53,6 +68,8 @@ export function createThinkFilter(onText, onThinking = null) {
       if (state === 'start') {
         const trimmed = buffer.replace(/^\s+/, '');
         if (!trimmed) return;
+        const orphan = !closeTag && ORPHAN_CLOSE.exec(buffer);
+        if (orphan) { buffer = buffer.slice(orphan[0].length); continue; }
         const open = OPEN.exec(buffer);
         if (open) {
           closeTag = '</' + open[1].toLowerCase() + '>';
@@ -61,8 +78,7 @@ export function createThinkFilter(onText, onThinking = null) {
           continue;
         }
         // Could still become an opening tag once more text arrives.
-        const partial = trimmed.length < LONGEST_OPEN && trimmed.startsWith('<') && TAG_NAMES.some((name) => ('<' + name + '>').startsWith(trimmed.toLowerCase()));
-        if (partial) return;
+        if (partialTag(trimmed)) return;
         state = 'text';
         buffer = trimmed;
         continue;
@@ -99,6 +115,6 @@ export function createThinkFilter(onText, onThinking = null) {
 export function visibleReply(text) {
   const value = typeof text === 'string' ? text : '';
   const trimmed = value.replace(/^\s+/, '');
-  if (trimmed.length < LONGEST_OPEN && trimmed.startsWith('<') && TAG_NAMES.some((name) => ('<' + name + '>').startsWith(trimmed.toLowerCase()))) return '';
+  if (partialTag(trimmed)) return '';
   return splitThinking(value).content;
 }
