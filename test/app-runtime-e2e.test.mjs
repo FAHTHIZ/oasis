@@ -50,8 +50,8 @@ function mockProvider() {
       const part = lastUser.content.find((p) => p.type === 'image_url');
       return reply(res, 200, text('I can see your image (' + String(part.image_url.url).slice(0, 22) + ').'));
     }
-    const shellOut = last.role === 'user' && /<bash-output exit-code="0">\n([^\n]*)/.exec(String(last.content));
-    if (shellOut) return reply(res, 200, text('Your command printed ' + shellOut[1] + '.'));
+    const shellOut = last.role === 'user' && /"output":"42\\n"/.test(String(last.content));
+    if (shellOut) return reply(res, 200, text('Your command printed 42.'));
     if (messages.some((m) => m.role === 'user' && /slow check/i.test(String(m.content)))) {
       if (last.role === 'tool') {
         const note = messages.slice(1).find((m) => m.role === 'user' && /tabs/.test(String(m.content)));
@@ -243,7 +243,7 @@ test('runtime engine end to end: app at /, paste to connect, approve a real edit
   // 10. `!command` runs on this computer after approval, without the model,
   // and its output goes with the next message.
   await waitFor(page, `Boolean(document.getElementById('input')) && !${busy}`, { label: 'app ready after reload' });
-  await evaluate(page, type('!node -e "console.log(6 * 7)"'));
+  await evaluate(page, type('!node -e "console.log(6 * 7)" | cat'));
   await evaluate(page, submit);
   await waitFor(page, `!document.getElementById('approvalSheet').hidden`, { label: 'approval for the ! command', timeout: 30000 });
   assert.match(await evaluate(page, `document.querySelector('#approvalSummary').textContent`), /node/);
