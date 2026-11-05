@@ -16,6 +16,8 @@ Open **[fahthiz.github.io/oasis/app](https://fahthiz.github.io/oasis/app/)** and
 - **Android, ChromeOS, Windows, macOS, Linux (Chrome or Edge):** tap **Install** in the app, or the browser menu, then **Install app**.
 - **iPhone and iPad (Safari):** Share, then **Add to Home Screen**. The app shows this hint the first time.
 
+**Android app (APK).** [Download OASIS-android.apk](https://github.com/FAHTHIZ/oasis/releases/download/android-latest/OASIS-android.apk) ([all builds and checksums](https://github.com/FAHTHIZ/oasis/releases/tag/android-latest)), open it, and allow installs from your browser or file manager when Android asks (Android 7 or newer). The APK carries the whole app, so it starts with no connection at all. It adds a native file picker, saving exports anywhere through the system file dialog, the back button closing panels, and sharing a GitHub link or text to OASIS from any app to start a task. Every push to `main` rebuilds and signs it in CI (`.github/workflows/android.yml`); it is not on Google Play yet.
+
 After installing, it opens full screen with its own icon and works offline. The whole agent runs on the device: the loop, tools, projects and chat history live in the browser, and model requests go straight from the device to the provider you pick. There is no OASIS server in between.
 
 **What it does**
