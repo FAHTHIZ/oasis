@@ -1725,6 +1725,11 @@ export function toolCallSlot(calls, part) {
   if (hasIndex) {
     const slot = Number(part.index);
     const existing = calls.get(slot);
+    // A new index with no id and no name is a stray continuation: a live
+    // Pollinations stream sent the closing "}" of call 0 as index 1. Keep it
+    // with the previous call instead of opening a nameless one.
+    const named = part.function && typeof part.function.name === 'string' && part.function.name;
+    if (!existing && !id && !named && calls.size) return next - 1;
     // Same index but a different, already-named call: some gateways number every call 0.
     if (id && existing && existing.function.name && existing.id && !existing.id.startsWith('stream-tool-') && existing.id !== id) return next;
     return slot;
