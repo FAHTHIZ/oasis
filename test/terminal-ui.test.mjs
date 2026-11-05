@@ -283,7 +283,8 @@ test('file errors read as plain words with a relative path', async () => {
   const path = await import('node:path');
   assert.equal(friendlyToolError("ENOENT: no such file or directory, stat '" + path.join(process.cwd(), 'src', 'missing.mjs') + "'"), 'Not found: ' + path.join('src', 'missing.mjs'));
   assert.equal(friendlyToolError("EACCES: permission denied, open '/etc/shadow'"), 'Permission denied: /etc/shadow');
-  assert.equal(friendlyToolError('old_string was not found'), 'old_string was not found');
+  assert.equal(friendlyToolError('old_string was not found'), 'Text to replace not found');
+  assert.equal(friendlyToolError('command exited 2'), 'command exited 2');
 });
 
 test('parallel lookups fold into one line', async () => {
@@ -295,4 +296,36 @@ test('parallel lookups fold into one line', async () => {
     { name: 'list_files', args: {} }
   ], { color: false });
   assert.equal(shown, '[tool] Read 2 files, searched 1 pattern, listed 1 directory: a.mjs, b.mjs, "todo" in src, .');
+});
+
+test('Esc and Ctrl+C interrupts say what happens next', async () => {
+  const { interruptNotice } = await import('../src/cli.mjs');
+  assert.equal(interruptNotice('escape'), '  ⎿ Interrupted · tell Oasis what to do instead');
+  assert.equal(interruptNotice('ctrlC'), '  ⎿ Interrupted · press Ctrl+C again to quit');
+});
+
+test('edit misses show the gist, not the instructions meant for the model', async () => {
+  const { friendlyToolError } = await import('../src/terminal-ui.mjs');
+  assert.equal(friendlyToolError('old_string was not found. It must match the file exactly, including whitespace and indentation. Closest match (65% similar) starts at line 3: 3| assert.equal(add(2, 3), 5); Copy old_string exactly'), 'Text to replace not found (closest match: line 3, 65% similar)');
+});
+
+test('streamed replies drop trailing and repeated blank lines', async () => {
+  const { MarkdownStream } = await import('../src/markdown.mjs');
+  let out = '';
+  const stream = new MarkdownStream({ write: (chunk) => { out += chunk; }, color: false, columns: () => 80, prefix: '● ' });
+  stream.push('I will read the files.\n\n\n\n');
+  stream.end();
+  assert.equal(out.replace(/\x1b\[[0-9;]*[A-Za-z]|\r/g, ''), '\n● I will read the files.\n\n');
+  out = '';
+  stream.push('One.\n\n\nTwo.\n');
+  stream.end();
+  assert.equal(out.replace(/\x1b\[[0-9;]*[A-Za-z]|\r/g, ''), '\n● One.\n\nTwo.\n\n');
+});
+
+test('rate-limit waits read as one dim line with local clock time', async () => {
+  const { rateLimitNotice } = await import('../src/cli.mjs');
+  const until = new Date(Date.now() + 13000);
+  const shown = rateLimitNotice({ waitMs: 13000, until: until.toISOString(), compactTools: true });
+  assert.match(shown, /^  ⎿ Rate limited · waiting 13s \(until \d\d:\d\d:\d\d\)\n  ⎿ Using the compact tool set/);
+  assert.doesNotMatch(rateLimitNotice({ waitMs: 60000, until: until.toISOString(), compactTools: true }), /compact tool set/);
 });

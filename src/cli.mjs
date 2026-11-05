@@ -345,8 +345,33 @@ function attachMonitors(session) {
     for (const error of (session.settings && session.settings.pluginMonitorErrors) || []) stdout.write('[monitors] ' + error + '\n');
   }
 }
+// Esc reads as Claude Code's "Interrupted · What should Claude do instead?";
+// only Ctrl+C mentions that a second press quits.
+export function interruptNotice(kind, color = false) {
+  const text = kind === 'escape' ? '  ⎿ Interrupted · tell Oasis what to do instead' : '  ⎿ Interrupted · press Ctrl+C again to quit';
+  return color ? '\x1b[31m' + text + '\x1b[39m' : text;
+}
+// "  ⎿ Rate limited · waiting 13s (until 14:51:00)", in the dim style of the
+// provider-retry line. The compact-tools switch is said once per session.
+let compactToolsNoticeShown = false;
+export function rateLimitNotice(event = {}, color = false) {
+  const until = event.until ? new Date(event.until) : null;
+  const clock = until && !Number.isNaN(until.getTime()) ? ' (until ' + until.toTimeString().slice(0, 8) + ')' : '';
+  let text = '  ⎿ Rate limited · waiting ' + formatWait(event.waitMs) + clock;
+  if (event.compactTools && !compactToolsNoticeShown) {
+    compactToolsNoticeShown = true;
+    text += '\n  ⎿ Using the compact tool set to fit the per-minute token limit; other tools load through tool_search';
+  }
+  return color ? '\x1b[2m' + text + '\x1b[22m' : text;
+}
 let queuedDraft = '';
 let turnKeys = null;
+// A line printed between keystrokes while a turn runs: inside a streaming
+// reply it goes above the partial line instead of splitting the reply.
+function noticeLine(text) {
+  if (markdownStream && markdownStream.started) markdownStream.interject(text);
+  else stdout.write('\n' + text + '\n');
+}
 function startTurnKeys(onInterrupt, onSteer = null) {
   if (!stdin.isTTY || !stdout.isTTY || typeof stdin.setRawMode !== 'function' || process.env.OASIS_SIMPLE_INPUT === '1') return null;
   const decoder = new KeyDecoder();
@@ -362,10 +387,10 @@ function startTurnKeys(onInterrupt, onSteer = null) {
       else if ((key.name === 'enter' || key.name === 'tab') && buffer.trim()) {
         const preview = buffer.replace(/\s+/g, ' ').slice(0, 90);
         if (key.name === 'enter' && onSteer && onSteer(buffer)) {
-          stdout.write('\n' + dim('  ↳ sent: ' + preview + ' · Oasis reads it at the next step (Tab queues for after the turn)') + '\n');
+          noticeLine(dim('  ↳ sent: ' + preview + ' · Oasis reads it at the next step (Tab queues for after the turn)'));
         } else {
           QUEUED_INPUT.push(buffer);
-          stdout.write('\n' + dim('  ↳ queued for after this turn: ' + preview) + '\n');
+          noticeLine(dim('  ↳ queued for after this turn: ' + preview));
         }
         buffer = '';
       }
@@ -2150,7 +2175,7 @@ async function runPrompt(prompt, root, autoApprove, session = null, persistence 
     if (controller.signal.aborted && kind === 'escape') return;
     if (controller.signal.aborted) { stdout.write('\nExiting Oasis.\n'); closeSession(session); process.exit(130); }
     endStream();
-    stdout.write('\n[interrupted] Stopping the current task. Press Ctrl+C again to quit' + '.\n');
+    stdout.write('\n' + interruptNotice(kind, colorEnabled(stdout)) + '\n');
     controller.abort();
   };
   if (stdin.isTTY) process.on('SIGINT', onInterrupt);
@@ -2178,7 +2203,7 @@ async function runPrompt(prompt, root, autoApprove, session = null, persistence 
       onSteer: (info) => { endStream(); stdout.write((colorEnabled(stdout) ? '\x1b[2m' : '') + '  ↳ Oasis read your ' + (info.delivered === 1 ? 'message' : info.delivered + ' messages') + ' and is adjusting' + (colorEnabled(stdout) ? '\x1b[22m' : '') + '\n'); },
       ...(stdout.isTTY ? { onModelWait } : {}),
       onProviderRetry: (event) => { stopWaitIndicator(); const dim = colorEnabled(process.stderr); process.stderr.write((dim ? '\x1b[2m' : '') + '  ⎿ Provider ' + (event.status ? 'error ' + event.status : 'connection failed') + (event.reason && event.status ? ' (' + event.reason + ')' : '') + ' · retrying in ' + formatWait(event.waitMs) + ' (' + event.attempt + '/' + event.limit + ')' + (dim ? '\x1b[22m' : '') + '\n'); },
-      onRateLimitWait: (event) => { stopWaitIndicator(); process.stderr.write('[rate limit] Waiting ' + formatWait(event.waitMs) + ' for the provider limit to reset (until ' + event.until + ').' + (event.compactTools ? ' Switched to the compact tool set to fit its per-minute token limit; other tools stay available through tool_search.' : '') + '\n'); },
+      onRateLimitWait: (event) => { stopWaitIndicator(); process.stderr.write(rateLimitNotice(event, colorEnabled(process.stderr)) + '\n'); },
       approval: (message, forceInteractive = false, meta = {}) => approve(message, forceInteractive, autoApprove, meta),
       ...(stdin.isTTY && stdout.isTTY ? { askUser: (question) => { endStream(); return askQuestionInTerminal(question); } } : {}),
       onToolStart: (event) => {
@@ -2295,7 +2320,9 @@ async function runPrompt(prompt, root, autoApprove, session = null, persistence 
     endStream();
     if (controller.signal.aborted || error.name === 'AbortError') {
       repairInterruptedHistory(session);
-      stdout.write('[interrupted] Task stopped. Changes made before the interruption remain; use /rewind 1 to undo them.\n');
+      let changed = [];
+      try { const { listCheckpoints } = await import('./checkpoints.mjs'); const latest = listCheckpoints(session)[0]; changed = latest && latest.files || []; } catch {}
+      if (changed.length) stdout.write('  ⎿ ' + (changed.length === 1 ? changed[0] + ' was' : changed.length + ' files were') + ' changed before you stopped; /rewind 1 undoes ' + (changed.length === 1 ? 'it' : 'them') + '.\n');
     } else {
       stdout.write('\nOASIS error: ' + (error.message || String(error)) + '\n');
       playSound('error', { stream: stdout });

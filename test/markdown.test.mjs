@@ -28,3 +28,31 @@ test('code fences show no language label that could be copied as a command', asy
   assert.doesNotMatch(plain, /^\s*bash\s*$/m);
   assert.match(plain, /node test\.mjs/);
 });
+
+test('a notice written mid-stream does not split or repeat the reply', async () => {
+  const { MarkdownStream } = await import('../src/markdown.mjs');
+  const pyteLike = (raw) => {
+    // Minimal terminal: handles \r, \n, ESC[nA, ESC[J.
+    const rows = ['']; let r = 0; let c = 0;
+    for (let i = 0; i < raw.length; i++) {
+      const ch = raw[i];
+      if (ch === '\x1b') {
+        const m = /^\x1b\[(\d*)([AJm])/.exec(raw.slice(i));
+        if (m) { if (m[2] === 'A') r = Math.max(0, r - Number(m[1] || 1)); if (m[2] === 'J') { rows[r] = rows[r].slice(0, c); rows.length = r + 1; } i += m[0].length - 1; continue; }
+      }
+      if (ch === '\r') { c = 0; continue; }
+      if (ch === '\n') { r++; c = 0; if (rows.length <= r) rows.push(''); continue; }
+      rows[r] = rows[r].slice(0, c) + ch + rows[r].slice(c + 1); c++;
+    }
+    return rows.join('\n');
+  };
+  let out = '';
+  const stream = new MarkdownStream({ write: (chunk) => { out += chunk; }, color: false, columns: () => 80, prefix: '● ' });
+  stream.push('word0 word1 ');
+  stream.interject('  ↳ sent: note');
+  stream.push('word2 word3');
+  stream.end();
+  const screen = pyteLike(out);
+  assert.equal(screen.match(/word0/g).length, 1, screen);
+  assert.match(screen, /↳ sent: note\n● word0 word1 word2 word3/);
+});

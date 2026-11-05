@@ -196,6 +196,20 @@ export class MarkdownStream {
     this.shownChars = 0;
   }
 
+  // Writes a full line (a notice) while a reply is streaming: the shown
+  // partial line is lifted out, the notice printed, and the partial redrawn
+  // below it, so the reply is not left half above and repeated below.
+  interject(line) {
+    const text = String(line || '').replace(/\n+$/, '') + '\n';
+    if (!this.started || (!this.shownPartialWidth && !this.lineStartWidth)) { this.write(text); return; }
+    const width = this.shownPartialWidth + (this.lineStartWidth || 0);
+    const cols = Math.max(10, this.columns());
+    const up = width > 0 ? Math.floor((width - 1) / cols) : 0;
+    const prefix = this.lineStartWidth ? this.prefix : '';
+    const shown = this.partial.slice(0, this.shownChars || 0);
+    this.write((up ? '\x1b[' + up + 'A' : '') + '\r\x1b[J' + text + prefix + shown);
+  }
+
   push(text) {
     if (!text) return;
     this.begin();
@@ -207,6 +221,10 @@ export class MarkdownStream {
       this.erasePartial();
       const prose = !this.state.fence && !/^\s*(```|~~~|\|)/.test(line);
       const rendered = renderMarkdownLine(line, this.state, { color: this.color, columns: this.columns() });
+      // Blank prose lines wait for more text: runs collapse to one, and a
+      // reply's trailing blank lines never print (no gap before tool lines).
+      if (rendered !== null && prose && !line.trim() && !this.lineStartWidth) { this.pendingBlank = true; continue; }
+      if (rendered !== null && this.pendingBlank) { this.write('\n'); this.pendingBlank = false; }
       if (rendered !== null) this.write((prose ? wrapRendered(rendered, this.columns(), { offset: this.lineStartWidth || 0 }) : rendered) + '\n');
       else if (this.lineStartWidth) this.write('\n');
       this.lineStartWidth = 0;
@@ -219,6 +237,8 @@ export class MarkdownStream {
 
   end() {
     if (!this.started) return false;
+    if (this.partial && this.partial.trim() && this.pendingBlank) { this.erasePartial(); this.write('\n'); }
+    this.pendingBlank = false;
     if (this.partial) {
       this.erasePartial();
       const prose = !this.state.fence && !/^\s*(```|~~~|\|)/.test(this.partial);
