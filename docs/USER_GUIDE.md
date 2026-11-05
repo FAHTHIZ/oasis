@@ -686,6 +686,7 @@ The native `node-pty` component is an optional dependency. The browser workspace
 | Shift+Enter, Alt+Enter, Ctrl+J, or `\` then Enter | New line (`/terminal-setup` explains Shift+Enter for VS Code, Alacritty, Apple Terminal and tmux) |
 | ↑ / ↓, Ctrl+R | History for this workspace (saved in `~/.oasis/history.jsonl`; `OASIS_NO_HISTORY=1` turns it off), reverse search |
 | Tab | Complete `/commands`, skills and `@files` (fuzzy; secret files are skipped) |
+| ↑ / ↓ in the live `/` or `@` list | Pick an entry; Enter runs the command or inserts the file, Tab inserts it, Esc closes the list (with nothing picked, ↑ is still history and Enter sends what you typed) |
 | Shift+Tab | Cycle permission modes: default → acceptEdits → plan → auto |
 | `!command` | Run a shell command yourself; its output goes into your next message as context |
 | `#note` | Save a memory note |
