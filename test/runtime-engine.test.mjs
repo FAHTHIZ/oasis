@@ -7,6 +7,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { mkdtemp, mkdir, rm, writeFile, symlink } from 'node:fs/promises';
 import { listWorkspaceFiles } from '../src/workspace-files.mjs';
+import { carryUndeliveredSteering, pendingSteering, steerSession } from '../src/agent.mjs';
 import { runtimeConfigFromConnection, connectFromPaste } from '../src/provider-connect.mjs';
 import { tokenFromPaste, runtimeToken, RuntimeWorkspace, RuntimeAgent } from '../app/core/runtime.mjs';
 
@@ -83,4 +84,22 @@ test('a note typed while the runtime works goes to the running job', async () =>
   assert.deepEqual(events, [{ type: 'user', content: 'use tabs', steer: true }]);
   client.api = async () => { throw new Error('That task is no longer running.'); };
   assert.equal(await agent.steer('late'), false);
+});
+
+
+test('undelivered runtime steering is moved into session history before persistence', () => {
+  const session = { messages: [{ role: 'user', content: 'Build a counter.' }] };
+  assert.equal(steerSession(session, 'Use tabs for indentation.'), true);
+  assert.equal(steerSession(session, 'Keep the existing tests.'), true);
+  assert.equal(pendingSteering(session), 2);
+
+  const carried = carryUndeliveredSteering(session);
+  assert.deepEqual(carried, ['Use tabs for indentation.', 'Keep the existing tests.']);
+  assert.equal(pendingSteering(session), 0);
+  assert.equal(session.messages.length, 2);
+  assert.equal(session.messages[1].role, 'user');
+  assert.match(session.messages[1].content, /1\. Use tabs for indentation\./);
+  assert.match(session.messages[1].content, /2\. Keep the existing tests\./);
+  assert.match(session.messages[1].content, /takes priority over earlier plans/);
+  assert.deepEqual(carryUndeliveredSteering(session), [], 'carried notes are not duplicated');
 });

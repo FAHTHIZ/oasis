@@ -1923,6 +1923,18 @@ export function steeringMessage(texts) {
     'This is their latest instruction and takes priority over earlier plans. Acknowledge it in one short sentence, adjust your plan, and keep going. ' +
     'Do not restart work that is already done, and stop only if they asked you to stop.';
 }
+
+/**
+ * Move steering notes that the active turn could not consume into session
+ * history, so the next turn still receives them after the session is saved.
+ */
+export function carryUndeliveredSteering(session) {
+  const texts = takeSteering(session);
+  if (!texts.length) return [];
+  if (!Array.isArray(session.messages)) session.messages = [];
+  session.messages.push({ role: 'user', content: steeringMessage(texts) });
+  return texts;
+}
 function deliverSteering(session, options) {
   if (options.isSubagent) return 0;
   const texts = takeSteering(session);
