@@ -20,7 +20,7 @@ test('maps Claude Code tool names and argument shapes', () => {
 });
 
 test('unknown names get did-you-mean suggestions', () => {
-  assert.match(resolveToolAlias('read_files', {}, TOOLS).error, /Did you mean: read_file/);
+  assert.match(resolveToolAlias('read_fiel', {}, TOOLS).error, /Did you mean: read_file/);
   assert.match(resolveToolAlias('totally_made_up', {}, TOOLS).error, /There is no tool named "totally_made_up"\. Only call/);
 });
 
@@ -111,4 +111,13 @@ test('leaked harmony tokens and namespaces are cleaned from tool names', async (
   assert.equal(cleanToolCallName('repo_browser.open_file'), 'repo_browser_open_file');
   assert.equal(cleanToolCallName('read_file'), 'read_file');
   assert.match(cleanToolCallName('x'.repeat(90)), /^x{64}$/);
+});
+
+// Live gpt-oss-20b run: "search_file" got a "Did you mean" error and cost a turn.
+test('singular and plural slips map to the one matching tool', () => {
+  const tools = new Set(['search_files', 'read_file', 'list_files', 'grep']);
+  assert.equal(resolveToolAlias('search_file', { query: 'x' }, tools).name, 'search_files');
+  assert.equal(resolveToolAlias('read_files', { path: 'a' }, tools).name, 'read_file');
+  assert.equal(resolveToolAlias('list_file', {}, tools).name, 'list_files');
+  assert.ok(resolveToolAlias('search_thing', {}, tools).error);
 });
