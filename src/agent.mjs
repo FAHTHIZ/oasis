@@ -3042,7 +3042,15 @@ function isDirectVerificationRunner(executable, args) {
   return true;
 }
 
-function isVerificationCommand(command, args) {
+function isTestScriptPath(value) {
+  const text = String(value || '').toLowerCase().replace(/\\/g, '/');
+  if (!/\.(?:c|m)?(?:js|ts|jsx|tsx)$|\.(?:py|rb|php|sh|bash|zsh)$/.test(text)) return false;
+  const base = text.split('/').pop().replace(/\.[^.]+$/, '');
+  if (/(?:^|[._-])(?:tests?|spec|specs|check|checks|verify|selftest)(?:[._-]|$)/.test(base)) return true;
+  return /(?:^|\/)(?:tests?|__tests__|spec)\//.test(text);
+}
+
+export function isVerificationCommand(command, args) {
   const executable = executableName(command);
   const argv = (Array.isArray(args) ? args : []).map((item) => String(item || '').toLowerCase());
   if (!executable || hasHelpOrVersionArgument(argv)) return false;
@@ -3080,6 +3088,14 @@ function isVerificationCommand(command, args) {
     }
   }
 
+  // A script whose own name says it is a test (node test.mjs, python
+  // test_parser.py, bash run_tests.sh, ./check.sh) is a project's test entry.
+  if (isTestScriptPath(command)) return true;
+  if (['node', 'nodejs', 'deno', 'python', 'python3', 'py', 'ruby', 'php', 'bash', 'sh', 'zsh', 'tsx', 'ts-node'].includes(executable)) {
+    const script = argv.find((item) => item && !item.startsWith('-'));
+    if (script && (executable !== 'deno' || script === 'run') && isTestScriptPath(executable === 'deno' ? argv.filter((item) => item && !item.startsWith('-'))[1] : script)) return true;
+    if (executable === 'deno' && (script === 'test' || script === 'check' || script === 'lint')) return true;
+  }
   if (executable === 'node' || executable === 'nodejs') {
     return argv.includes('--test') || (argv.includes('--check') && argv.some((item) => /\.(?:c|m)?(?:js|jsx|ts|tsx)$/i.test(item)));
   }
