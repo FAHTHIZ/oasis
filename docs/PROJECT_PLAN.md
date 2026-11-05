@@ -2,7 +2,7 @@
 
 **Product lifecycle:** Stable  
 **Package version:** `1.1.0`  
-**Release channel:** stable ([`v1.0.0`](https://github.com/FAHTHIZ/oasis/releases/tag/v1.0.0) published November 4, 2026 from commit `1417117`; `v1.1.0` publishes automatically from the first `main` commit at that version that passes every gate)  
+**Release channel:** stable ([`v1.0.0`](https://github.com/FAHTHIZ/oasis/releases/tag/v1.0.0) published November 4, 2026 from commit `1417117`; [`v1.1.0`](https://github.com/FAHTHIZ/oasis/releases/tag/v1.1.0) published automatically November 5, 2026 from commit `900c76f` after every same-commit gate passed)  
 **Release source:** `main`  
 **Previous release:** `v0.4.0` (historical Beta; the tag and GitHub Release are no longer present in the repository)  
 **License:** Apache-2.0

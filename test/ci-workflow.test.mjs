@@ -39,14 +39,15 @@ test('CI keeps latest pending concurrency per ref and lets active quality runs f
   assert.ok(publishing.includes('group: oasis-public-launch-${{ github.ref }}'));
 });
 
-test('public product lifecycle is stable 1.0, not a candidate or Beta', async () => {
+test('public product lifecycle is a stable 1.x release, not a candidate or Beta', async () => {
   const readme = await readFile(new URL('../README.md', import.meta.url), 'utf8');
   const status = await readFile(new URL('../docs/PROJECT_PLAN.md', import.meta.url), 'utf8');
   const pkg = JSON.parse(await readFile(new URL('../package.json', import.meta.url), 'utf8'));
   // The current stable version's curated notes (1.0.0, 1.1.0, ...).
   const notes = await readFile(new URL('../docs/releases/v' + pkg.version + '.md', import.meta.url), 'utf8');
   assert.match(readme, /stage-stable/);
-  assert.match(readme, /Current lifecycle.*OASIS 1\.0, stable/i);
+  const minor = pkg.version.split('.').slice(0, 2).join('\\.');
+  assert.match(readme, new RegExp('Current lifecycle.*OASIS ' + minor + ', stable', 'i'));
   assert.doesNotMatch(readme, /OASIS is in beta|status-alpha|OASIS is in alpha|Release Candidate 1/i);
   assert.match(status, /\*\*Product lifecycle:\*\* Stable/);
   assert.match(status, /\*\*Release channel:\*\* stable/);
