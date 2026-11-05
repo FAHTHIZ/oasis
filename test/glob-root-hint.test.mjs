@@ -32,3 +32,24 @@ test('the app glob tool already matches a slash-free pattern in any folder', asy
   const ctx = { workspace: { paths: async () => ['src/a.ts', 'src/b.ts', 'README.md'] } };
   assert.equal(await executeTool('glob_files', { pattern: '*.ts' }, ctx), 'src/a.ts\nsrc/b.ts');
 });
+
+test('glob_files honours a path argument', async (t) => {
+  const { globPatternWithPath, executeTool } = await import('../src/tools.mjs');
+  assert.equal(globPatternWithPath('*.mjs', 'src'), 'src/*.mjs');
+  assert.equal(globPatternWithPath('*.mjs', 'src/'), 'src/*.mjs');
+  assert.equal(globPatternWithPath('src/*.mjs', 'src'), 'src/*.mjs');
+  assert.equal(globPatternWithPath('*.mjs', ''), '*.mjs');
+  assert.equal(globPatternWithPath('*.mjs', '.'), '*.mjs');
+  assert.equal(globPatternWithPath('**/*.mjs', './test'), 'test/**/*.mjs');
+  const root = await mkdtemp(path.join(os.tmpdir(), 'oasis-glob-path-'));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  await mkdir(path.join(root, 'src'), { recursive: true });
+  await writeFile(path.join(root, 'src', 'a.mjs'), '');
+  const result = await executeTool('glob_files', { path: 'src', pattern: '*.mjs' }, { root });
+  assert.deepEqual(result.matches, ['src/a.mjs']);
+  const absolute = await executeTool('glob_files', { path: path.join(root, 'src'), pattern: '*.mjs' }, { root });
+  assert.deepEqual(absolute.matches, ['src/a.mjs']);
+  const atRoot = await executeTool('glob_files', { path: root, pattern: 'src/*.mjs' }, { root });
+  assert.deepEqual(atRoot.matches, ['src/a.mjs']);
+  await assert.rejects(executeTool('glob_files', { path: os.tmpdir(), pattern: '*.mjs' }, { root }), /relative to the workspace/);
+});

@@ -152,7 +152,7 @@ export const TOOL_DEFINITIONS = [
   { type: 'function', function: { name: 'list_files', description: 'List workspace files and folders. Paths are relative to the workspace root. Skips dependencies, build output, Git internals, and secret files.', parameters: { type: 'object', properties: { path: { type: 'string', description: 'Directory relative to the workspace root; default .' }, includeHidden: { type: 'boolean', description: 'Include ordinary hidden files, still excluding secret files' } }, required: [] } } },
   { type: 'function', function: { name: 'read_file', description: 'Read a text file inside the workspace. Images (png, jpg, gif, webp) are shown to you visually, Jupyter notebooks are shown cell by cell, and PDFs are returned as text page by page (pass pages like "1-10" for long PDFs). Use offset and limit to inspect line ranges in larger files. Secret files such as .env and private keys are blocked.', parameters: { type: 'object', properties: { path: { type: 'string', description: 'Workspace-relative file path' }, offset: { type: 'integer', description: 'Optional 1-based first line to return' }, limit: { type: 'integer', description: 'Optional maximum lines to return, 1 to 2000' }, pages: { type: 'string', description: 'PDF only: page or range such as "3" or "1-10" (at most 50 pages)' } }, required: ['path'] } } },
   { type: 'function', function: { name: 'repo_map', description: 'Get a compact, ranked map of the repository: source files with their top-level functions, classes and types (with line numbers). Most-referenced files come first. Use it first in an unfamiliar codebase, or with focus to find where something lives, before reading whole files.', parameters: { type: 'object', properties: { path: { type: 'string', description: 'Workspace-relative directory to map; defaults to the whole workspace' }, focus: { type: 'array', items: { type: 'string' }, description: 'Files, directories or symbol names to rank first' }, max_chars: { type: 'integer', description: 'Output budget in characters, 1000 to 60000; defaults to 12000' } } } } },
-  { type: 'function', function: { name: 'glob_files', description: 'Find workspace files by glob pattern such as src/**/*.mjs or **/*.test.js. Supports **, *, and ?. Skips dependencies, Git internals, and sensitive files.', parameters: { type: 'object', properties: { pattern: { type: 'string', description: 'Workspace-relative glob pattern; cannot contain ..' }, limit: { type: 'integer', description: 'Maximum paths to return, 1 to 500; defaults to 200' } }, required: ['pattern'] } } },
+  { type: 'function', function: { name: 'glob_files', description: 'Find workspace files by glob pattern such as src/**/*.mjs or **/*.test.js. Supports **, *, and ?. Skips dependencies, Git internals, and sensitive files.', parameters: { type: 'object', properties: { pattern: { type: 'string', description: 'Workspace-relative glob pattern; cannot contain ..' }, path: { type: 'string', description: 'Folder to search in; defaults to the project root' }, limit: { type: 'integer', description: 'Maximum paths to return, 1 to 500; defaults to 200' } }, required: ['pattern'] } } },
   { type: 'function', function: { name: 'search_files', description: 'Search workspace text files for a literal case-insensitive string. Returns matching lines and paths, excluding secret files and dependency/build directories.', parameters: { type: 'object', properties: { query: { type: 'string', description: 'Literal phrase or symbol to search for' }, limit: { type: 'integer', description: 'Maximum matching lines, 1 to 60; defaults to 25' } }, required: ['query'] } } },
   { type: 'function', function: { name: 'write_file', description: 'Create or replace a text file inside the workspace. Existing file contents are snapshotted first for later recovery. Never use this for secrets or files outside the workspace.', parameters: { type: 'object', properties: { path: { type: 'string', description: 'Workspace-relative file path' }, content: { type: 'string', description: 'Complete new text contents' } }, required: ['path', 'content'] } } },
   { type: 'function', function: { name: 'todo_write', description: 'Create or update the current task checklist. Send the COMPLETE list each time. Use pending, in_progress, and completed; complete items only after verification. This changes session state only and never edits files.', parameters: { type: 'object', properties: { todos: { type: 'array', maxItems: 50, items: { type: 'object', properties: { content: { type: 'string', minLength: 1, maxLength: 200 }, status: { type: 'string', enum: ['pending', 'in_progress', 'completed'] } }, required: ['content', 'status'], additionalProperties: false } } }, required: ['todos'], additionalProperties: false } } },
@@ -400,6 +400,16 @@ function globToRegExp(pattern) {
     else source += char;
   }
   return new RegExp('^' + source + '$');
+}
+
+// Models trained on Claude Code send { path: "src", pattern: "*.mjs" }. The
+// folder used to be ignored, so the search ran at the root and found nothing.
+export function globPatternWithPath(pattern, folder) {
+  const text = String(pattern || '').trim();
+  const base = String(folder || '').trim().replace(/\\/g, '/').replace(/^\.\/?/, '').replace(/\/+$/, '');
+  if (!base || base === '.' || !text) return text;
+  if (text === base || text.startsWith(base + '/')) return text;
+  return base + '/' + text.replace(/^\.\//, '');
 }
 
 export async function globWorkspaceFiles(root, pattern, limit = 200) {
@@ -1423,7 +1433,16 @@ export async function executeTool(name, args = {}, context = {}) {
         return read;
       }
     case 'glob_files':
-      return await globWorkspaceFiles(root, args.pattern, args.limit);
+      {
+        let folder = args.path;
+        if (typeof folder === 'string' && path.isAbsolute(folder)) {
+          const inside = path.relative(await realpath(root), await realpath(folder).catch(() => folder));
+          // Inside the project: use the relative folder. Outside: keep it
+          // absolute so the glob is rejected.
+          if (!inside.startsWith('..') && !path.isAbsolute(inside)) folder = inside;
+        }
+        return await globWorkspaceFiles(root, globPatternWithPath(args.pattern, folder), args.limit);
+      }
     case 'repo_map': {
       const { buildRepoMap } = await import('./repo-map.mjs');
       await resolveWorkspacePath(root, args.path || '.');
