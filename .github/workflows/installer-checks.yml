@@ -54,6 +54,9 @@ jobs:
       - name: Test PowerShell release fallback parsing
         shell: pwsh
         run: ./test/installer-powershell-fallback.test.ps1
+      - name: Test PowerShell installer PATH handling and safe failures
+        shell: pwsh
+        run: ./test/installer-powershell-paths.test.ps1
       - name: Install exact commit under test and run doctor
         shell: pwsh
         env:
