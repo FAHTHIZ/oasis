@@ -162,7 +162,7 @@ The agent evaluator has **52 tasks**: 33 focused fixtures plus 19 repository-lev
 
 | Common frustration with coding agents | What OASIS does |
 |---|---|
-| "It said it was done, but never ran the tests." | A post-edit verification gate: the agent must run a relevant check (and review the diff of any file it rewrote wholesale) before it can finish, and any later edit resets that. |
+| "It said it was done, but never ran the tests." | A post-edit verification gate. A reply that ends the turn before a relevant check has passed (and before the diff of any rewritten file was reviewed) is sent back once, naming the files and the command to rerun; any later edit resets it. If the model still stops short, the turn ends marked "Not fully checked" with what is missing, rather than reported as done. |
 | "Ten patches, and the same error every time." | Fix-thrash detection. On the 3rd identical failure after edits the agent is told to step back and diagnose; on the 5th, to change approach or ask you. |
 | "It changed the test to match the broken code." | Weakened-test detection (skips, `.only`, deleted tests, removed assertions, an exact check swapped for `toBeDefined()`). |
 | "It replaced my function with `// ... rest unchanged`." | A change guard blocks placeholder edits and flags large, unexplained deletions. |
