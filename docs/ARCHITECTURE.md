@@ -156,7 +156,7 @@ The model proposes actions; OASIS owns the local policy decision and execution b
 
 ## Model and provider boundary
 
-The provider adapter code is primarily in `src/config.mjs`, `src/cloud-providers.mjs`, and the request/stream handling in `src/agent.mjs`.
+The provider adapter code is primarily in `src/config.mjs`, `src/cloud-providers.mjs`, and the request/stream handling in `src/agent.mjs`. When a request fails in a way another model can fix (credit, rate limit, overload, model gone), `requestCompletion` walks the ordered chain from `src/fallback-chain.mjs`: entries on the same provider reuse its config, `provider:model` entries get that provider's preset endpoint and their own key from the environment (never the main key or key pool), and `restorePrimaryModel` puts the original provider config back after the cooldown.
 
 | Provider protocol / route | How it is connected |
 |---|---|

@@ -76,6 +76,7 @@ import { loadAgentDefinitions, taskToolDefinition, BUILTIN_AGENTS, MAX_PARALLEL_
 import { createSharedTaskStore, SHARED_TASK_TOOL_NAMES, runSharedTaskTool } from './shared-tasks.mjs';
 import { saveSessionNotes } from './session-notes.mjs';
 import { unrequestedGitWrite } from './git-intent.mjs';
+import { parseFallbackChain, remainingFallbacks, fallbackReason, FALLBACK_REASON_TEXT } from './fallback-chain.mjs';
 import { repairToolArguments, extractTextToolCalls, unknownTextToolCalls } from './tool-call-repair.mjs';
 import { isLocalModelEndpoint, probeLocalContext, probeProviderModelWindow, applySmallContextProfile, localContextAdvice, SMALL_CONTEXT_TOKENS, RECOMMENDED_LOCAL_CONTEXT } from './local-context.mjs';
 
@@ -1951,13 +1952,12 @@ export function restorePrimaryModel(session, env = process.env, now = Date.now()
   if (!active || !session.config) return false;
   if (session.config.model !== active.to) { session.fallbackActive = null; return false; }
   if (now - (Number(active.at) || 0) < fallbackCooldownMs(env)) return false;
-  session.config = { ...session.config, model: active.from };
+  session.config = active.fromConfig ? { ...active.fromConfig } : { ...session.config, model: active.from };
   session.fallbackActive = null;
   (session.hookMessages ||= []).push('[fallback] back to ' + active.from + ' after the cooldown; ' + active.to + ' will be used again only if it fails.');
   return true;
 }
 
-const FALLBACK_TRIGGER = /\b(429|500|502|503|504|529)\b|overload|rate.?limit|capacity|unavailable|bounded retries|ECONNRESET|ETIMEDOUT|fetch failed|stream stalled|timed out after \d+ seconds waiting/i;
 
 // --prompt-suggestions: one short guess at the user's next message, from the recent conversation.
 export async function suggestNextPrompt(session, options = {}) {
@@ -1991,17 +1991,29 @@ async function requestCompletionWithStreamRestarts(session, options = {}) {
 }
 
 async function requestCompletion(session, options = {}) {
-  try {
-    return await requestCompletionWithStreamRestarts(session, options);
-  } catch (error) {
-    const fallback = session && session.fallbackModel;
-    if (!fallback || !session.config || session.config.model === fallback || (options.signal && options.signal.aborted) || !FALLBACK_TRIGGER.test(String(error && error.message || error))) throw error;
-    const previous = session.config.model;
-    session.config = { ...session.config, model: fallback };
-    session.fallbackActive = { from: previous, to: fallback, reason: String(error.message || error).slice(0, 200), at: Date.now() };
-    (session.hookMessages ||= []).push('[fallback] ' + previous + ' failed (' + String(error.message || error).slice(0, 120) + '); switched to ' + fallback + '.');
-    if (typeof options.onFallback === 'function') options.onFallback(session.fallbackActive);
-    return requestCompletionWithStreamRestarts(session, options);
+  const chain = parseFallbackChain(session && session.fallbackModel);
+  if (!chain.length || !session.config) return requestCompletionWithStreamRestarts(session, options);
+  const env = options.env || session.providerEnv || process.env;
+  const failed = new Set();
+  for (;;) {
+    try {
+      return await requestCompletionWithStreamRestarts(session, options);
+    } catch (error) {
+      if (options.signal && options.signal.aborted) throw error;
+      const current = session.config;
+      const kind = fallbackReason(error, { onFallbackProvider: Boolean(current.fallbackProvider) });
+      if (!kind) throw error;
+      failed.add((current.fallbackProvider ? current.fallbackProvider + ':' : '') + current.model);
+      const active = session.fallbackActive;
+      const fromConfig = active && active.fromConfig ? active.fromConfig : current;
+      const next = remainingFallbacks(chain, { current, baseConfig: fromConfig, failed, env })[0];
+      if (!next) throw error;
+      const reason = String(error && error.message || error);
+      session.config = next.config;
+      session.fallbackActive = { from: active ? active.from : current.model, to: next.config.model, fromConfig, kind, provider: next.entry.provider || '', reason: reason.slice(0, 200), at: Date.now() };
+      (session.hookMessages ||= []).push('[fallback] ' + current.model + ' ' + (FALLBACK_REASON_TEXT[kind] || 'failed') + ' (' + reason.slice(0, 120) + '); switched to ' + (next.entry.provider ? next.entry.provider + ':' : '') + next.config.model + '.');
+      if (typeof options.onFallback === 'function') options.onFallback(session.fallbackActive);
+    }
   }
 }
 
@@ -2081,7 +2093,7 @@ async function requestCompletionRaw(session, options = {}) {
     apiKey = await apiKeyFromHelper(config.apiKeyHelper, { env: providerEnv, cwd: session.root, refresh: Boolean(options.refreshApiKey) });
   }
   // OASIS_API_KEY_POOL / OASIS_API_KEY_POOL_FILE: rotate across keys on 429/401/402/403.
-  const keyPool = !cloudAnthropic && !config.apiKeyHelper && (providerEnv.OASIS_API_KEY_POOL || providerEnv.OASIS_API_KEY_POOL_FILE) ? sessionKeyPool(session, providerEnv, apiKey) : null;
+  const keyPool = !cloudAnthropic && !config.apiKeyHelper && !config.fallbackProvider && (providerEnv.OASIS_API_KEY_POOL || providerEnv.OASIS_API_KEY_POOL_FILE) ? sessionKeyPool(session, providerEnv, apiKey) : null;
   if (keyPool) apiKey = keyPool.current() || apiKey;
   let fastRequest = null;
   session.lastRequestSpeed = '';
