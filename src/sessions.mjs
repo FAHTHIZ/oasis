@@ -212,12 +212,30 @@ export async function loadAgentTranscript(root, sessionId, agentId, env = proces
   return { type: String(data.type || ''), model: String(data.model || ''), messages: data.messages };
 }
 
+/**
+ * Drop a trailing assistant tool-call message whose results have not all
+ * arrived (and the partial results after it). Sessions are saved mid-turn, so
+ * a crash or closed terminal must still leave a transcript every provider
+ * accepts on resume.
+ */
+export function completeExchanges(messages) {
+  const list = Array.isArray(messages) ? messages : [];
+  for (let i = list.length - 1; i >= 0; i--) {
+    const message = list[i];
+    if (!message || message.role !== 'assistant' || !Array.isArray(message.tool_calls) || !message.tool_calls.length) continue;
+    const answered = new Set(list.slice(i + 1).filter((m) => m && m.role === 'tool').map((m) => m.tool_call_id));
+    if (message.tool_calls.every((call) => call && answered.has(call.id))) return list;
+    return list.slice(0, i);
+  }
+  return list;
+}
+
 export async function saveSession(session, options = {}) {
   if (!session || !Array.isArray(session.messages)) throw new Error('There is no active session to save.');
   const env = options.env || process.env;
   const id = session.sessionId && validateId(session.sessionId) || randomUUID();
   // Image attachments are not saved; the text note in the tool result remains.
-  const messages = validateMessages(session.messages.slice(-MAX_MESSAGES).map((message) => message && message.images ? (({ images, ...rest }) => rest)(message) : message));
+  const messages = validateMessages(completeExchanges(session.messages).slice(-MAX_MESSAGES).map((message) => message && message.images ? (({ images, ...rest }) => rest)(message) : message));
   await saveAgentTranscripts(session, id, env);
   const payload = {
     schemaVersion: 1,
