@@ -3009,8 +3009,55 @@ function fitToolResultToWindow(session, content, env = process.env) {
 function serializableResult(value) {
   let text;
   try { text = JSON.stringify(value); } catch { text = String(value); }
-  if (text.length > MAX_REPLY_CHARS) return text.slice(0, MAX_REPLY_CHARS) + '\n[Tool result truncated.]';
+  if (text.length > MAX_REPLY_CHARS) {
+    const fitted = fitLargeResult(value, MAX_REPLY_CHARS);
+    if (fitted) return fitted;
+    return text.slice(0, MAX_REPLY_CHARS) + '\n[Tool result truncated.]';
+  }
   return text;
+}
+
+// Shrinks an oversized result but keeps it valid JSON. A file read is cut at
+// a line boundary with exact line numbers and where to continue (cutting the
+// JSON mid-string left the model no idea which lines it had seen); otherwise
+// the largest text field keeps its head and tail.
+export function fitLargeResult(value, max = MAX_REPLY_CHARS) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  if (typeof value.content === 'string' && typeof value.path === 'string') {
+    const lines = value.content.split('\n');
+    const start = Number.isInteger(value.startLine) ? value.startLine : 1;
+    const total = Number.isInteger(value.totalLines) ? value.totalLines : (value.startLine ? undefined : lines.length);
+    const shell = JSON.stringify({ ...value, content: '' }).length + 400;
+    let used = 0;
+    let kept = 0;
+    for (const line of lines) {
+      const cost = JSON.stringify(line).length - 1;
+      if (shell + used + cost > max) break;
+      used += cost;
+      kept++;
+    }
+    if (kept === 0) return null;
+    const endLine = start + kept - 1;
+    const note = 'Showing lines ' + start + '-' + endLine + (total ? ' of ' + total : '') + '; the rest did not fit in one result. Continue with read_file offset=' + (endLine + 1) + ', or grep for what you need.';
+    const out = JSON.stringify({ ...value, content: lines.slice(0, kept).join('\n'), startLine: start, endLine, ...(total ? { totalLines: total } : {}), truncated: true, note });
+    return out.length <= max + 200 ? out : null;
+  }
+  const keys = Object.keys(value).filter((key) => typeof value[key] === 'string').sort((a, b) => value[b].length - value[a].length);
+  if (!keys.length) return null;
+  const key = keys[0];
+  const rest = JSON.stringify({ ...value, [key]: '' }).length;
+  const room = max - rest - 200;
+  if (room < 1000) return null;
+  const textValue = value[key];
+  const marker = '\n…[' + (textValue.length - room).toLocaleString('en-US') + ' characters cut from the middle]…\n';
+  // Escaping can grow the text; shrink until the JSON fits.
+  for (let budget = room; budget > 500; budget = Math.floor(budget * 0.8)) {
+    const head = Math.ceil(budget * 0.6);
+    const shortened = textValue.slice(0, head) + marker + textValue.slice(textValue.length - (budget - head));
+    const out = JSON.stringify({ ...value, [key]: shortened });
+    if (out.length <= max + 200) return out;
+  }
+  return null;
 }
 
 // Some OpenAI-compatible gateways never report usage, even with include_usage.
