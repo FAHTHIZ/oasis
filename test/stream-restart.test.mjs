@@ -121,3 +121,43 @@ test('a tool call with broken JSON arguments is shown, not silently skipped', as
   assert.deepEqual(started, ['read_file']);
   assert.match(results[0].error, /not valid JSON/);
 });
+
+// Seen live in a benchmark run: Gemini returned an empty message with
+// finish_reason "function_call_filter: MALFORMED_FUNCTION_CALL"; OASIS ended
+// the task there with no changes.
+test('a malformed-function-call finish is retried, not taken as the final answer', async (t) => {
+  let requests = 0;
+  const server = createServer(async (req, res) => {
+    for await (const chunk of req) void chunk;
+    requests++;
+    res.writeHead(200, { 'content-type': 'application/json' });
+    if (requests === 1) res.end(JSON.stringify({ choices: [{ finish_reason: 'function_call_filter: MALFORMED_FUNCTION_CALL', index: 0, message: { role: 'assistant' } }], usage: { prompt_tokens: 5, completion_tokens: 0 } }));
+    else res.end(JSON.stringify({ choices: [{ finish_reason: 'stop', index: 0, message: { role: 'assistant', content: 'Implemented.' } }] }));
+  });
+  await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
+  t.after(() => new Promise((resolve) => server.close(resolve)));
+  const config = { protocol: 'openai-compatible', baseURL: 'http://127.0.0.1:' + server.address().port + '/v1', model: 'fixture', apiKey: '', maxSteps: 4 };
+  const result = await runAgentTurn(await session(t, config), 'hi', {});
+  assert.equal(result.text, 'Implemented.');
+  assert.equal(requests, 2);
+});
+
+test('an empty reply to a request for changes gets a continue nudge, not an empty finish', async (t) => {
+  let requests = 0;
+  const bodies = [];
+  const server = createServer(async (req, res) => {
+    let body = '';
+    for await (const chunk of req) body += chunk;
+    bodies.push(JSON.parse(body));
+    requests++;
+    res.writeHead(200, { 'content-type': 'application/json' });
+    if (requests === 1) res.end(JSON.stringify({ choices: [{ finish_reason: 'stop', index: 0, message: { role: 'assistant', content: '' } }] }));
+    else res.end(JSON.stringify({ choices: [{ finish_reason: 'stop', index: 0, message: { role: 'assistant', content: 'I could not find the file to change.' } }] }));
+  });
+  await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
+  t.after(() => new Promise((resolve) => server.close(resolve)));
+  const config = { protocol: 'openai-compatible', baseURL: 'http://127.0.0.1:' + server.address().port + '/v1', model: 'fixture', apiKey: '', maxSteps: 4 };
+  const result = await runAgentTurn(await session(t, config), 'Add a search option to src/query.mjs', {});
+  assert.equal(requests, 2);
+  assert.match(result.text, /could not find/);
+});
