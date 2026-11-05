@@ -221,6 +221,14 @@ async function send(text) {
   await ensureWorkspace();
   $('input').value = '';
   autosize();
+  if (RT && agent.runShell && /^!\s*\S/.test(message) && !attachments.length) {
+    setBusy(true);
+    try { await agent.runShell(message.slice(1)); }
+    catch { /* shown in the tool card */ }
+    finally { setBusy(false); persistChat(); refreshFiles(); }
+    if (agent.pendingShell && agent.pendingShell.length) toast('The output goes with your next message.');
+    return;
+  }
   const plugins = pluginsFor([...new Set([...enabledPluginIds(), ...turnPlugins])]);
   turnPlugins = [];
   renderPluginSuggest();
@@ -467,6 +475,8 @@ function toolCard(tool) {
   if (el.open) fill();
   el.addEventListener('toggle', () => { if (el.open) fill(); });
   el.append(summary, pre);
+  // A command the user typed (`!npm test`) shows its output straight away.
+  if (tool.open && tool.ok !== undefined) { el.open = true; fill(); }
   return el;
 }
 
@@ -581,7 +591,7 @@ function handleEvent(event) {
       break;
     }
     case 'tool_start': {
-      const tool = { id: event.id, name: event.name, args: event.args };
+      const tool = { id: event.id, name: event.name, args: event.args, ...(event.open ? { open: true } : {}) };
       currentTurn.entry.tools.push(tool);
       currentTurn.tools.appendChild(toolCard(tool));
       scrollDown();
@@ -651,7 +661,14 @@ function chatTitle() {
   return first ? String(first.content).replace(/\s+/g, ' ').trim().slice(0, 80) : 'New chat';
 }
 
-async function persistChat() {
+// The latest save, so the Chats list never shows a chat as it was before
+// the reply that just finished.
+let chatSaving = Promise.resolve();
+function persistChat() {
+  chatSaving = chatSaving.then(saveChat, saveChat);
+  return chatSaving;
+}
+async function saveChat() {
   if (!workspace) return;
   const trimmed = display.slice(-200).map((entry) => ({ ...entry, tools: entry.tools && entry.tools.map((t) => ({ ...t, content: (t.content || '').slice(0, 2000) })) }));
   try {
@@ -701,6 +718,7 @@ async function deleteChats(projectId) {
 async function openChats() {
   const list = $('chatList');
   list.replaceChildren();
+  await chatSaving.catch(() => {});
   const index = workspace ? await chatIndex(workspace.project.id) : { list: [] };
   // A chat saved before the list existed shows up as the first entry.
   if (workspace && !index.list.some((item) => item.id === 'main')) {
