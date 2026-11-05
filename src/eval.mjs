@@ -1097,8 +1097,14 @@ export function evalModelPassthrough(args, model, env = process.env) {
   return { args: list, env: { ...env, OASIS_MODEL: String(model) } };
 }
 
+// Aider sends one non-streaming request per reply. litellm's default request
+// timeout (600 s) cuts off slow local models long before the task limit, so the
+// per-request timeout follows the task timeout, as OASIS's own requests do.
 export function buildAiderArgs(config, prompt) {
-  return ['--message', prompt, '--yes-always', '--no-auto-commits', '--no-dirty-commits', '--no-check-update', '--no-analytics', '--no-show-model-warnings', '--no-pretty', '--no-stream', ...(config.model ? ['--model', config.model] : [])];
+  const seconds = Number(config.timeoutSeconds);
+  return ['--message', prompt, '--yes-always', '--no-auto-commits', '--no-dirty-commits', '--no-check-update', '--no-analytics', '--no-show-model-warnings', '--no-pretty', '--no-stream',
+    ...(Number.isFinite(seconds) && seconds > 0 ? ['--timeout', String(Math.ceil(seconds))] : []),
+    ...(config.model ? ['--model', config.model] : [])];
 }
 
 export const EXTERNAL_AGENTS = {
