@@ -6,6 +6,12 @@ This file records notable user-facing product changes. It does not imply that an
 
 Changes after 1.0.0. Entries include feature work, reliability improvements, and security hardening; benchmark-driven fixes and their regression evidence are documented alongside the relevant changes.
 
+- **Phones and tablets.**
+  - When `oasis web` listens on the network, it prints this computer's real private addresses (Wi-Fi first, then Tailscale, then virtual adapters) as links that include the token. It also prints a terminal QR code to scan with the phone camera; `OASIS_NO_QR=1` hides it.
+  - The QR code comes from a new dependency-free encoder in `src/qr.mjs`, which is checked bit for bit against the python `qrcode` library.
+  - The web app now has PNG icons (192, 512, maskable 512 and an Apple touch icon), so Android installs it as an app and iOS shows a real home-screen icon.
+  - The desktop installers use the OASIS icon instead of Electron's default.
+  - New guide: [docs/MOBILE.md](docs/MOBILE.md).
 - **Update notifications and installs, on every surface.** A new module, `src/app-update.mjs`, checks the GitHub releases for a newer stable version. Results are cached for six hours and checks never delay startup.
   - **Desktop app:** a native notification, a Help menu item ("Check for updates…"), and an "Install and restart" option. The installer is downloaded only from GitHub and must match the release `SHA256SUMS` before it runs. Each install type has its own path: a silent one-click NSIS reinstall on Windows, an in-place AppImage swap with relaunch on Linux, and the system installer for macOS `.dmg` and `.deb`.
   - **Browser workspace:** an update banner with Update, What's new, Later and Skip this version (`/api/app/update`).

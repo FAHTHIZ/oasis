@@ -10,15 +10,27 @@ Use a project folder you trust, review permission prompts, and keep important wo
 
 > **Downloads:** desktop installers are on the [latest release](https://github.com/FAHTHIZ/oasis/releases/latest) page. They are **not code-signed**, so Windows SmartScreen and macOS Gatekeeper will warn on first launch; verify the file against `SHA256SUMS` first (below). To build them yourself, run `npm install && npm run desktop:dist` (output in `release/`). Installation and packaging are tested on clean CI runners for Windows, macOS and Linux, not by hand on physical machines.
 
-The Electron app is configured for Windows, macOS and Linux. Choose the matching asset from the [latest release](https://github.com/FAHTHIZ/oasis/releases/latest): Windows x64 `.exe`, macOS Apple Silicon / arm64 `.dmg`, or Linux x86_64 `.AppImage` / `.deb`. The packaged app includes its own runtime: you do not need to install Node.js or Git separately.
+The Electron app is configured for Windows, macOS and Linux. Choose the matching asset from the [latest release](https://github.com/FAHTHIZ/oasis/releases/latest): Windows x64 `.exe`, macOS Apple Silicon / arm64 `.dmg`, or Linux x86_64 `.AppImage` / `.deb`. Starting with v1.1.0, releases also include Windows ARM64, macOS Intel (x64) and Linux ARM64 builds whenever those optional CI builds succeed. The [download page](https://fahthiz.github.io/oasis/) detects your system and links to the matching file. The packaged app includes its own runtime: you do not need to install Node.js or Git separately.
 
 | Operating system | Download | First launch |
 |---|---|---|
 | Windows 10/11, x64 | `.exe` installer | Run the installer. It installs for the current user and adds Start Menu/Desktop shortcuts. |
 | macOS, Apple Silicon (arm64) | `.dmg` disk image | Open the image and drag OASIS into Applications. |
 | Linux, x86_64 | `.AppImage` or `.deb` | Run the AppImage or open the package with your software installer. |
+| Windows on ARM, macOS Intel, Linux ARM64 (from v1.1.0) | `-arm64.exe`, `-x64.dmg`, `-arm64.AppImage` / `-arm64.deb` | Same as above. These are optional builds, so a release can be missing one. |
+| iPhone, iPad, Android | No store app | Use the browser workspace from your phone, or Termux on Android: see [MOBILE.md](MOBILE.md). |
 
-Desktop builds are unsigned. Verify downloads against the release `SHA256SUMS` file, downloaded from the same release page. Checksums detect corruption and tampering in transit; they are not a publisher signature. Automatic desktop updates are not configured.
+Desktop builds are unsigned. Verify downloads against the release `SHA256SUMS` file, downloaded from the same release page. Checksums detect corruption and tampering in transit; they are not a publisher signature.
+
+### Updates
+
+From v1.1.0, the desktop app checks GitHub for a new stable release 15 seconds after launch and every six hours after that. When one is out, you get a system notification and a banner in the workspace. **Help → Check for updates…** checks right away. Choosing **Install and restart** downloads the installer for your system from the GitHub release. It checks the file against that release's `SHA256SUMS` and deletes it if it doesn't match. Then:
+
+- **Windows:** reinstalls silently and reopens.
+- **Linux AppImage:** replaces the AppImage in place and restarts.
+- **macOS `.dmg` and Linux `.deb`:** opens the file so you can finish with the system installer. Unsigned macOS apps cannot replace themselves.
+
+You can also choose **Later** or **Skip this version**. Projects, settings and keys are never touched. Set `OASIS_NO_UPDATE_CHECK=1` to turn checks off, or `OASIS_UPDATE_CHANNEL=beta` to include pre-releases. The CLI and `oasis web` show the same notice and point to `oasis update`. v1.0.0 has no update checker, so install v1.1.0 once by hand; later updates are offered automatically.
 
 ```sh
 # macOS / Linux, in the folder with both files
@@ -101,6 +113,16 @@ Let your shell finish `oasis` commands and options when you press Tab. Run the l
 | zsh | `eval "$(oasis completion zsh)"` | `~/.zshrc` |
 | fish | `oasis completion fish > ~/.config/fish/completions/oasis.fish` | (saved file) |
 | PowerShell | `oasis completion powershell \| Out-String \| Invoke-Expression` | `$PROFILE` |
+
+## Automatic setup for your hardware
+
+`oasis setup --auto` looks at this computer, then picks the best way to run a model here:
+
+- **What it checks:** the OS, CPU cores, memory and GPU (NVIDIA through `nvidia-smi`, Apple Silicon unified memory), plus any model server already running on its usual local port (Ollama, LM Studio, llama.cpp, Jan, vLLM, OmniRoute).
+- **What it chooses:** a running model that fits, a local gateway, an Ollama model sized to your memory (with the exact `ollama pull` command), or a hosted model if the device is too small.
+- **What it saves:** the route only after a real test request succeeds. Add `--dry-run` to see the recommendation without saving.
+
+`oasis doctor` prints the same hardware summary. The desktop app and the browser workspace show it as **Recommended for this computer** on the first-run screen.
 
 ## First useful session
 
