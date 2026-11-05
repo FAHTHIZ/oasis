@@ -1,6 +1,6 @@
 # OASIS user guide
 
-**Version channel:** OASIS `1.0.0`, stable channel. The installer resolves the latest stable `v*` tag, currently [`v1.0.0`](https://github.com/FAHTHIZ/oasis/releases/tag/v1.0.0) (published November 4, 2026). See [the project plan](PROJECT_PLAN.md) for the release gates and known limits.
+**Version channel:** OASIS `1.1.0`, stable channel. The installer resolves the latest stable `v*` tag, currently [`v1.1.0`](https://github.com/FAHTHIZ/oasis/releases/tag/v1.1.0) (published November 5, 2026). See [the project plan](PROJECT_PLAN.md) for the release gates and known limits.
 
 Need a topic-first overview? Start with the [user-guide map](USER_GUIDE_MAP.md). For the project overview and quickest start, see the [main README](../README.md). For the system map and component boundaries, see the [architecture guide](ARCHITECTURE.md). For the implementation inventory and known gaps, see [Current status](PROJECT_PLAN.md) and [the security/reliability audit](SECURITY_RELIABILITY_AUDIT.md). This guide keeps the full setup, configuration, integration, safety, CLI, and developer reference in one place.
 

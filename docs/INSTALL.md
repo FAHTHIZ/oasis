@@ -1,6 +1,6 @@
 # Installing and starting OASIS
 
-OASIS `1.0.0` is the stable-channel version on `main`.
+OASIS `1.1.0` is the stable-channel version on `main`.
 
 > **Publication status (checked November 5, 2026):** [`v1.1.0`](https://github.com/FAHTHIZ/oasis/releases/tag/v1.1.0) is published as the latest GitHub Release. The stable installer, `oasis update` and the desktop download links resolve to it.
 
@@ -15,11 +15,22 @@ The Electron app is configured for Windows, macOS and Linux. Choose the matching
 | Operating system | Download | First launch |
 |---|---|---|
 | Windows 10/11, x64 | `.exe` installer | Run the installer. It installs for the current user and adds Start Menu/Desktop shortcuts. |
-| macOS, Apple Silicon (arm64) | `.dmg` disk image | Open the image and drag OASIS into Applications. |
+| macOS 13 Ventura or later, Apple Silicon (arm64) | `.dmg` disk image | Open the image and drag OASIS into Applications. |
 | Linux, x86_64 | `.AppImage` or `.deb` | Run the AppImage or open the package with your software installer. |
 | macOS Intel, Linux ARM64 (from v1.1.0) | `-x64.dmg`, `-arm64.AppImage` / `-arm64.deb` | Same as above. |
 | Windows on ARM | `-arm64.exe` when published, otherwise the x64 `.exe` | The x64 installer runs through Windows' built-in emulation. The native ARM64 build is optional, so a release can be missing it. |
 | iPhone, iPad, Android | No store app | Use the browser workspace from your phone, or Termux on Android: see [MOBILE.md](MOBILE.md). |
+
+### Homebrew (macOS)
+
+The repository is also a Homebrew tap. The cask installs the right `.dmg` for your Mac and checks it against the release checksum:
+
+```sh
+brew tap fahthiz/oasis https://github.com/FAHTHIZ/oasis
+brew install --cask fahthiz/oasis/oasis
+```
+
+The release workflow updates `Casks/oasis.rb` for each stable release. The app still offers updates itself, so `brew upgrade` skips it unless you pass `--greedy`; `brew upgrade --cask --greedy fahthiz/oasis/oasis` updates through Homebrew instead. The app is unsigned, so on first launch choose **Open Anyway** in System Settings → Privacy & Security. Electron 44 and later need macOS 13 Ventura or newer.
 
 Desktop builds are unsigned. Verify downloads against the release `SHA256SUMS` file, downloaded from the same release page. Checksums detect corruption and tampering in transit; they are not a publisher signature.
 
@@ -40,7 +51,7 @@ sha256sum -c SHA256SUMS --ignore-missing   # macOS: shasum -a 256 -c SHA256SUMS 
 
 ```powershell
 # Windows PowerShell: compare with the matching line in SHA256SUMS
-(Get-FileHash .\OASIS-1.0.0-x64.exe -Algorithm SHA256).Hash.ToLower()
+(Get-FileHash .\OASIS-1.1.0-x64.exe -Algorithm SHA256).Hash.ToLower()
 ```
 
 On first launch:
@@ -54,16 +65,16 @@ The CLI guided setup can install OmniRoute through npm, request approval to star
 
 ## Command-line installation
 
-The supported installer resolves the latest stable versioned Git tag to an immutable commit SHA. It does not install the moving `main` branch. `v1.0.0` is currently the install and update target. Install from source only when you deliberately want unreleased changes from `main`. Node.js 22 or newer is required; on Termux, the installer can offer to install Node.js using `pkg`.
+The supported installer resolves the latest stable versioned Git tag to an immutable commit SHA. It does not install the moving `main` branch. `v1.1.0` is currently the install and update target. Install from source only when you deliberately want unreleased changes from `main`. Node.js 22 or newer is required; on Termux, the installer can offer to install Node.js using `pkg`.
 
 Maintainer and CI smoke tests may set `OASIS_INSTALL_COMMIT` to a full 40-character Git SHA to install one exact source revision. This override is intended for validating the installer against the commit under test; normal installations should leave it unset so the installer resolves the latest stable release.
 
 ### macOS, Linux and Android/Termux
 
-Quick install, using the script from the immutable `v1.0.0` tag:
+Quick install, using the script from the immutable `v1.1.0` tag:
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/FAHTHIZ/oasis/v1.0.0/scripts/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/FAHTHIZ/oasis/v1.1.0/scripts/install.sh | sh
 ```
 
 To verify the installer's SHA-256 before it runs, use the checksum-verified bootstrap instead:

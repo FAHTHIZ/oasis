@@ -40,7 +40,7 @@ Work after 1.0 is refinement: stronger agents, better tool selection and task co
 ## 2. Version and release channels
 
 - `v0.4.0` was published as Beta; its [release notes](releases/v0.4.0.md) remain in the tree, but the tag and GitHub Release are no longer present in the repository (checked November 4, 2026). The other remaining tag is `0.6.7`.
-- `package.json` is version `1.0.0` with `oasisRelease.channel` set to `stable`. The `v1.0.0` tag and GitHub Release are created by the desktop workflow (manual dispatch with `publish_release` and `confirm_stable_release`) from a verified `main` commit; the stable CLI installer then resolves `v1.0.0`. That run completed on November 4, 2026 (commit `1417117`), with Windows, macOS and Linux installers and `SHA256SUMS`.
+- `package.json` is version `1.1.0` with `oasisRelease.channel` set to `stable`. `v1.1.0` was published automatically on November 5, 2026 (commit `900c76f`) and is the current install and update target; the history of `v1.0.0` follows. The `v1.0.0` tag and GitHub Release are created by the desktop workflow (manual dispatch with `publish_release` and `confirm_stable_release`) from a verified `main` commit; the stable CLI installer then resolves `v1.0.0`. That run completed on November 4, 2026 (commit `1417117`), with Windows, macOS and Linux installers and `SHA256SUMS`.
 - Never move or retag a published tag. Fixes ship as new versions (`1.1.1`, `1.2.0`, ...). From 1.1.0, a push to `main` whose `package.json` version has no tag yet publishes it automatically, once `docs/releases/vX.Y.Z.md` exists and the same-commit gates pass. Manual dispatch still works.
 
 ## 3. Product scope for 1.0

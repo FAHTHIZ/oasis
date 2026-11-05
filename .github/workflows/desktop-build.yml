@@ -282,3 +282,28 @@ jobs:
           GH_REPO: ${{ github.repository }}
         shell: bash
         run: gh workflow run pages.yml --ref main || echo "::warning::Could not dispatch the homepage workflow; it will restamp on the next push to main."
+      - name: Refresh the Homebrew cask on main
+        # Casks/oasis.rb pins each release's dmg checksums. Pushes made with the
+        # workflow token do not start other workflows, so this cannot loop.
+        # Stable releases only: release candidates keep the cask on the last stable.
+        if: steps.release-version.outputs.publish == 'true' && steps.release-version.outputs.prerelease == 'false'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ steps.release-version.outputs.tag }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          RELEASE_VERSION="${RELEASE_TAG#v}"
+          git clone --quiet --depth 20 --branch main "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" cask-main
+          cd cask-main
+          node scripts/homebrew-cask.mjs --version "$RELEASE_VERSION" --sums ../release-assets/SHA256SUMS
+          if git diff --quiet -- Casks/oasis.rb; then echo "Cask already current."; exit 0; fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add Casks/oasis.rb
+          git commit --quiet -m "Update Homebrew cask to OASIS $RELEASE_VERSION"
+          for attempt in 1 2 3; do
+            if git push --quiet origin HEAD:main; then exit 0; fi
+            git pull --quiet --rebase origin main
+          done
+          echo "::warning::Could not push the Homebrew cask update; run node scripts/homebrew-cask.mjs --version $RELEASE_VERSION --sums SHA256SUMS and commit Casks/oasis.rb."
