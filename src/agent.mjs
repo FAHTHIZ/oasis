@@ -1662,6 +1662,29 @@ export function mergeAnthropicUsage(target, source) {
   return target;
 }
 
+/**
+ * Which streamed tool call a delta belongs to. OpenAI sends `index`; Gemini's
+ * OpenAI endpoint sends each parallel call whole, with its own id and no
+ * index, which used to merge two reads into one "read_fileread_file" call
+ * with doubled JSON. A delta with a new id is a new call; one with no id and
+ * no index continues the latest call.
+ */
+export function toolCallSlot(calls, part) {
+  const next = calls.size ? Math.max(...calls.keys()) + 1 : 0;
+  const id = part && typeof part.id === 'string' && part.id ? part.id : '';
+  if (id) for (const [slot, call] of calls) if (call.id === id) return slot;
+  const hasIndex = part && part.index !== undefined && part.index !== null && Number.isFinite(Number(part.index));
+  if (hasIndex) {
+    const slot = Number(part.index);
+    const existing = calls.get(slot);
+    // Same index but a different, already-named call: some gateways number every call 0.
+    if (id && existing && existing.function.name && existing.id && !existing.id.startsWith('stream-tool-') && existing.id !== id) return next;
+    return slot;
+  }
+  if (id) return next;
+  return calls.size ? next - 1 : 0;
+}
+
 /** A JSON error body ({ error } or [{ error }]) found outside SSE events, if any. */
 export function strayStreamError(text) {
   const raw = String(text || '').trim();
@@ -1778,7 +1801,7 @@ async function readProviderStream(response, protocol, onDelta, onProgress) {
         onDelta(delta.content);
       }
       for (const part of Array.isArray(delta.tool_calls) ? delta.tool_calls : []) {
-        const index = Number(part.index || 0);
+        const index = toolCallSlot(calls, part);
         const tool = calls.get(index) || { id: 'stream-tool-' + index, type: 'function', function: { name: '', arguments: '' } };
         if (part.id) tool.id = part.id;
         if (part.type) tool.type = part.type;

@@ -262,7 +262,15 @@ async function chatOpenAI(config, { messages, tools, signal, onText: rawOnText, 
     if (!delta) continue;
     if (delta.content) { content += delta.content; if (onText) onText(delta.content); }
     for (const part of delta.tool_calls || []) {
-      const index = part.index ?? calls.length;
+      // Gemini sends each parallel call whole, with its own id and no index;
+      // OpenAI sends index. A new id is a new call (some gateways number all 0).
+      let index = part.id ? calls.findIndex((c) => c && c.id === part.id) : -1;
+      if (index < 0) {
+        const given = part.index !== undefined && part.index !== null ? Number(part.index) : null;
+        const existing = given !== null ? calls[given] : null;
+        if (given !== null && !(part.id && existing && existing.id && existing.id !== part.id && existing.function.name)) index = given;
+        else index = part.id || !calls.length ? calls.length : calls.length - 1;
+      }
       const call = calls[index] || (calls[index] = { id: '', type: 'function', function: { name: '', arguments: '' } });
       if (part.id) call.id = part.id;
       if (part.function && part.function.name) call.function.name += part.function.name;
