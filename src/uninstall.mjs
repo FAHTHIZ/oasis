@@ -7,7 +7,8 @@ const PACKAGE_NAME = 'oasis-oss';
  * global npm prefix. This is deliberately a pure function so path-safety rules
  * can be regression-tested without invoking npm or changing the machine.
  */
-export function resolveUninstallPlan(appRoot, installedPackage) {
+export function resolveUninstallPlan(appRoot, installedPackage, { pathImpl = path } = {}) {
+  const path = pathImpl; // path.win32 in tests, to check Windows install layouts
   const applicationRoot = path.resolve(String(appRoot || ''));
   const nodeModules = path.dirname(applicationRoot);
   if (path.basename(nodeModules) !== 'node_modules') {
