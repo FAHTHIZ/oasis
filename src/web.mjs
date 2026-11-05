@@ -26,6 +26,9 @@ import { PtySessionManager } from './pty-sessions.mjs';
 import { createCloudTaskStore } from './cloud-task-store.mjs';
 import { createWorktree, finishWorktree, removeWorktree, readWorktreeDiff, readWorktreeWorkingDiff, readWorkspaceDiff, inspectWorktree, mergeWorktree, isCommitIntegrated } from './worktrees.mjs';
 import { createPhoneLink } from './phone-link.mjs';
+import { appSharedModules, resolveAppPath, skillsIndex } from './app-server.mjs';
+import { listWorkspaceFiles } from './workspace-files.mjs';
+import { connectFromPaste } from './provider-connect.mjs';
 
 // Commands that only make sense in the terminal (the web UI has its own session picker).
 const WEB_UNSUPPORTED_COMMANDS = new Set(['resume']);
@@ -301,8 +304,10 @@ const MAX_FILE_PREVIEW_BYTES = 256 * 1024;
 const MAX_JOBS = 20;
 const MAX_EVENTS_PER_JOB = 120;
 const SESSION_ID_PATTERN = /^[a-f0-9-]{20,80}$/i;
+// `/` opens the app (app/). The previous browser workspace stays available
+// at /classic while it is phased out.
 const STATIC_FILES = new Map([
-  ['/', ['index.html', 'text/html; charset=utf-8']],
+  ['/classic', ['index.html', 'text/html; charset=utf-8']],
   ['/index.html', ['index.html', 'text/html; charset=utf-8']],
   ['/manifest.webmanifest', ['manifest.webmanifest', 'application/manifest+json; charset=utf-8']],
   ['/sw.js', ['sw.js', 'text/javascript; charset=utf-8']],
@@ -409,6 +414,18 @@ const MAX_TRANSCRIBE_BYTES = 12 * 1024 * 1024;
 // anything injected into the page (say, through model output rendered as HTML) cannot run,
 // load remote code, be framed, or send data anywhere but this server.
 const cspCache = new Map();
+const APP_TYPES = {
+  '.html': 'text/html; charset=utf-8', '.mjs': 'text/javascript; charset=utf-8', '.js': 'text/javascript; charset=utf-8',
+  '.css': 'text/css; charset=utf-8', '.json': 'application/json; charset=utf-8', '.webmanifest': 'application/manifest+json',
+  '.svg': 'image/svg+xml', '.png': 'image/png', '.woff2': 'font/woff2', '.md': 'text/markdown; charset=utf-8', '.txt': 'text/plain; charset=utf-8'
+};
+
+// The app page: like the workspace page, it may only talk to this runtime.
+// Model calls, shell and files all go through the token-protected API.
+export function appContentSecurityPolicy(body) {
+  return pageContentSecurityPolicy(body).replace("frame-src 'none'", "frame-src 'self' blob:").replace("frame-ancestors 'none'", "frame-ancestors 'self'");
+}
+
 export function pageContentSecurityPolicy(body) {
   const html = Buffer.isBuffer(body) ? body.toString('utf8') : String(body || '');
   const key = createHash('sha256').update(html).digest('base64');
@@ -712,6 +729,15 @@ export function createOasisWebServer(options = {}) {
       sessionId = temporaryId;
     }
     const activeId = sessionId || session.sessionId;
+    // The app sends its permission chip with every message (never bypass).
+    const requestedMode = typeof input.permissionMode === 'string' ? input.permissionMode : '';
+    if (['default', 'acceptEdits', 'plan', 'auto'].includes(requestedMode) && session.permissions) {
+      try {
+        if (typeof session.permissions.setMode === 'function') session.permissions.setMode(requestedMode);
+        else session.permissions.mode = requestedMode;
+        if (session.webOptions) session.webOptions.permissionMode = requestedMode;
+      } catch { /* the mode stays as it was */ }
+    }
     const taskWorkspaceKey = path.resolve(taskRoot);
     const job = newJob();
     job.type = 'agent';
@@ -1263,6 +1289,38 @@ export function createOasisWebServer(options = {}) {
     return { jobId: job.id, jobType: 'terminal' };
   }
 
+  // The universal app (app/) served from this runtime: same files as
+  // `oasis app`, but here it drives this computer's agent through the API.
+  let appShared = null;
+  let appSkillsIndex = null;
+  async function serveApp(req, res, pathname) {
+    const headers = { 'x-content-type-options': 'nosniff', 'referrer-policy': 'no-referrer', 'cache-control': 'no-cache', 'x-frame-options': 'SAMEORIGIN' };
+    try {
+      appShared = appShared || new Set(await appSharedModules(assetRoot));
+      const target = resolveAppPath(assetRoot, pathname, appShared);
+      if (!target) throw Object.assign(new Error('missing'), { code: 'ENOENT' });
+      if (target.redirect) { res.writeHead(302, { ...headers, location: target.redirect }); res.end(); return; }
+      if (target.index) {
+        appSkillsIndex = appSkillsIndex || JSON.stringify(await skillsIndex(assetRoot));
+        res.writeHead(200, { ...headers, 'content-type': 'application/json; charset=utf-8' });
+        res.end(req.method === 'HEAD' ? undefined : appSkillsIndex);
+        return;
+      }
+      if (!target.file) throw Object.assign(new Error('missing'), { code: 'ENOENT' });
+      const info = await lstat(target.file);
+      if (!info.isFile()) throw Object.assign(new Error('missing'), { code: 'ENOENT' });
+      let body = await readFile(target.file);
+      if (target.file.endsWith(path.sep + 'sw.js')) body = Buffer.from(body.toString('utf8').replace('__BUILD__', 'runtime-' + Date.now().toString(36)));
+      const ext = path.extname(target.file);
+      const type = APP_TYPES[ext] || 'application/octet-stream';
+      res.writeHead(200, { ...headers, 'content-type': type, ...(ext === '.html' ? { 'content-security-policy': appContentSecurityPolicy(body) } : {}) });
+      res.end(req.method === 'HEAD' ? undefined : body);
+    } catch {
+      res.writeHead(404, { ...headers, 'content-type': 'text/plain; charset=utf-8' });
+      res.end('Not found');
+    }
+  }
+
   async function handle(req, res) {
     const parsedUrl = new URL(req.url || '/', 'http://localhost');
     const pathname = parsedUrl.pathname;
@@ -1291,6 +1349,17 @@ export function createOasisWebServer(options = {}) {
         ...(contentType.startsWith('text/html') ? { 'content-security-policy': pageContentSecurityPolicy(body) } : {})
       });
       res.end(body);
+      return;
+    }
+
+    if ((req.method === 'GET' || req.method === 'HEAD') && pathname === '/') {
+      res.writeHead(302, { location: '/app/' + (parsedUrl.search || ''), 'cache-control': 'no-store', 'x-content-type-options': 'nosniff', 'referrer-policy': 'no-referrer' });
+      res.end();
+      return;
+    }
+
+    if ((req.method === 'GET' || req.method === 'HEAD') && (pathname === '/app' || pathname.startsWith('/app/') || pathname.startsWith('/src/'))) {
+      await serveApp(req, res, pathname);
       return;
     }
 
@@ -1512,11 +1581,13 @@ export function createOasisWebServer(options = {}) {
     if (req.method === 'GET' && pathname === '/api/status') {
       let provider = null;
       let providerConfigured = false;
+      let fallbacks = [];
       let setupHint = '';
       try {
         const config = await getConfig();
         provider = { ...getProviderSummary(config), baseURL: config.baseURL };
         providerConfigured = Boolean(config.configured);
+        fallbacks = String(config.fallbackModel || '').split(',').map((id) => id.trim()).filter(Boolean).slice(0, 6);
         if (!providerConfigured) setupHint = 'No model API key is configured for the selected provider. Run oasis setup in the terminal, or configure OASIS_API_KEY in the runtime environment.';
       } catch (error) {
         providerConfigured = false;
@@ -1526,6 +1597,7 @@ export function createOasisWebServer(options = {}) {
         connected: true,
         providerConfigured,
         provider: provider ? { provider: provider.provider, protocol: provider.protocol, model: provider.model, baseURL: provider.baseURL, authentication: provider.authentication } : null,
+        fallbacks,
         providerSetupAvailable: isLoopbackClient(req),
         workspaceName: path.basename(activeRoot),
         workspacePath: activeRoot,
@@ -1679,6 +1751,44 @@ export function createOasisWebServer(options = {}) {
       return;
     }
 
+    if (req.method === 'POST' && (pathname === '/api/provider/connect' || pathname === '/api/provider/model')) {
+      // Paste-to-connect and model switching. Keys stay on this computer:
+      // allowed only over loopback, and never echoed back.
+      if (!isLoopbackClient(req)) {
+        json(res, 403, { error: 'Connect a model on the computer running OASIS. Keys are never sent over the phone link.' });
+        return;
+      }
+      const body = await readJsonBody(req);
+      let next;
+      let reply = {};
+      try {
+        if (pathname === '/api/provider/model') {
+          const current = await getConfig();
+          const model = String(body.model || '').trim();
+          if (!model || model.length > 200) throw Object.assign(new Error('Choose a model.'), { statusCode: 400 });
+          const chain = String(current.fallbackModel || '').split(',').map((id) => id.trim()).filter(Boolean);
+          next = { protocol: current.protocol, baseURL: current.baseURL, model, apiKey: current.apiKey || '', fallbackModel: [current.model, ...chain].filter((id) => id && id !== model).slice(0, 3).join(',') };
+          reply = { label: new URL(current.baseURL).host };
+        } else {
+          const text = String(body.text || '').trim();
+          if (!text || text.length > 8000) throw Object.assign(new Error('Paste an API key, a model page link or a local server address.'), { statusCode: 400 });
+          const steps = [];
+          const result = await connectFromPaste(text, { onStatus: (status) => { steps.push(status); } });
+          next = result.config;
+          reply = { label: result.label, provider: result.provider, models: result.models, toolCalling: result.toolCalling, notes: result.notes, masked: result.masked, steps: steps.slice(-12) };
+        }
+        if (typeof options.onProviderConfig === 'function') await options.onProviderConfig(next);
+        else await saveConfig(next, { env });
+      } catch (error) {
+        const raw = String(error && error.message || 'Could not connect.');
+        const key = next && next.apiKey;
+        json(res, error && error.statusCode || 422, { saved: false, error: (key ? raw.split(key).join('[redacted]') : raw).slice(0, 1600) });
+        return;
+      }
+      json(res, 200, { saved: true, ...reply, provider: { protocol: next.protocol, baseURL: next.baseURL, model: next.model, provider: reply.provider || '' }, fallbacks: next.fallbackModel ? next.fallbackModel.split(',') : [] });
+      return;
+    }
+
     if (req.method === 'POST' && pathname === '/api/provider/config') {
       // Provider credentials may only be submitted over the local loopback connection.
       // The remote-device HTTP bridge is intentionally not allowed to receive API keys.
@@ -1806,6 +1916,16 @@ export function createOasisWebServer(options = {}) {
         const status = error && error.code === 'ENOENT' ? 404 :
           (/sensitive|outside the workspace|symbolic link|resolves outside/i.test(message) ? 403 : 400);
         json(res, status, { error: status === 403 ? 'This path is protected or outside the task workspace.' : message.slice(0, 500) });
+      }
+      return;
+    }
+
+    if (req.method === 'GET' && pathname === '/api/workspace/files') {
+      try {
+        const result = await listWorkspaceFiles(activeRoot, { limit: 5000, isSecretPath: sensitivePath });
+        json(res, 200, { workspaceName: path.basename(activeRoot), ...result });
+      } catch (error) {
+        json(res, 500, { error: 'Could not list workspace files: ' + String(error && error.message || error).slice(0, 300) });
       }
       return;
     }

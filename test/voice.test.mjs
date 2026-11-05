@@ -166,6 +166,6 @@ test('web: /api/transcribe needs the token, accepts browser audio and uses the u
   assert.equal(ok.status, 200);
   assert.deepEqual(await ok.json(), { text: 'from the desktop' });
   assert.match(server.seen[0].body, /filename="dictation.webm"/);
-  const page = await fetch(base + '/');
+  const page = await fetch(base + '/classic');
   assert.match(page.headers.get('permissions-policy') || '', /microphone=\(self\), camera=\(\)/);
 });

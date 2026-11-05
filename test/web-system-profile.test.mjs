@@ -26,7 +26,7 @@ test('the setup page gets a hardware-aware recommendation from the same computer
   assert.match(body.summary, /macOS arm64 · 10 CPU cores · 32 GB memory · Apple Silicon/);
   assert.deepEqual(seen, [false], 'the current provider state is passed through');
 
-  const html = await (await fetch(base + '/')).text();
+  const html = await (await fetch(base + '/classic')).text();
   assert.match(html, /id="firstRunRecommend"/);
   assert.match(html, /id="updateBanner"/);
 });

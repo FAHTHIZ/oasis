@@ -2926,11 +2926,11 @@ async function startWebWorkspace(root, args) {
   const scheme = app.secure ? 'https' : 'http';
   const urlHost = host.includes(':') ? '[' + host + ']' : host;
   const localUrl = scheme + '://' + (host === '0.0.0.0' ? '127.0.0.1' : urlHost) + ':' + app.port + '/';
-  const connectUrl = localUrl + '#token=' + app.token;
-  stdout.write('\nOASIS browser workspace is running for ' + root + '\n\n');
+  const connectUrl = localUrl + 'app/#token=' + app.token;
+  stdout.write('\nOASIS is running for ' + root + '\n\n');
   stdout.write('  Open this link to start: ' + connectUrl + '\n');
-  stdout.write('  It connects this browser automatically. Keep it private: anyone with the link can use this workspace.\n\n');
-  stdout.write('  Using another browser? Open ' + localUrl + ' and paste this connection token:\n  ' + app.token + '\n\n');
+  stdout.write('  Keep it private: anyone with the link can use this folder.\n\n');
+  stdout.write('  Another browser? Open ' + localUrl + ' and paste the link above into the message box.\n\n');
   stdout.write('Commands, package installs, file deletions and bundle installs always ask for your approval in the browser first.\n');
   if (host === '0.0.0.0' || (isIP(host) > 0 && !['127.0.0.1', '::1'].includes(host))) {
     // Print real phone links (and a QR code to scan) instead of a placeholder.
@@ -2939,7 +2939,7 @@ async function startWebWorkspace(root, args) {
       const { lanAddresses } = await import('./lan-addresses.mjs');
       const addresses = host === '0.0.0.0' ? lanAddresses() : [{ address: host, name: '', virtual: false, tailscale: false }];
       if (addresses.length) {
-        const phoneUrl = (address) => scheme + '://' + address + ':' + app.port + '/#token=' + app.token;
+        const phoneUrl = (address) => scheme + '://' + address + ':' + app.port + '/app/#token=' + app.token;
         stdout.write('\n  Phone or tablet on the same private network, open:\n');
         for (const entry of addresses.slice(0, 4)) stdout.write('    ' + phoneUrl(entry.address) + (entry.tailscale ? '   (Tailscale)' : entry.virtual ? '   (virtual adapter)' : '') + '\n');
         if (stdout.isTTY && process.env.OASIS_NO_QR !== '1') {

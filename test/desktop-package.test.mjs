@@ -69,7 +69,7 @@ test('desktop stores API keys through Electron OS-backed encryption rather than 
   assert.match(desktopMain, /onProviderConfig: persistDesktopProviderConfig/);
   assert.match(desktopMain, /const previousSecret = await loadDesktopApiKey/);
   assert.match(desktopMain, /await saveDesktopApiKey\(previousSecret \|\| ''/);
-  assert.match(desktopMain, /saveConfig\(\{ protocol, baseURL, model, apiKey: '' \}/);
+  assert.match(desktopMain, /saveConfig\(\{ protocol, baseURL, model, apiKey: '',/);
   assert.match(desktopMain, /saveConfig\(\{ \.\.\.legacy, apiKey: '' \}/);
   assert.match(webRuntime, /await options\.onProviderConfig\(\{ protocol, baseURL, model, apiKey \}\)/);
   assert.match(desktopSecrets, /encryptString/);

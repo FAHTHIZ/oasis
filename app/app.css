@@ -48,14 +48,14 @@ svg{width:20px;height:20px;flex:none}
 /* Layout */
 .app{height:100dvh;display:grid;grid-template-rows:auto 1fr;padding-left:var(--safe-left);padding-right:var(--safe-right)}
 .topbar{display:flex;align-items:center;gap:8px;min-height:calc(var(--topbar) + var(--safe-top));padding:var(--safe-top) 10px 0 8px;border-bottom:1px solid var(--line);background:color-mix(in srgb,var(--bg) 88%,transparent);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);position:relative;z-index:5}
-.brand{display:flex;align-items:center;gap:10px;min-width:0;padding:6px 8px;border-radius:var(--r-md);text-align:left}
+.brand{display:flex;align-items:center;gap:10px;min-width:0;flex:0 1 auto;overflow:hidden;padding:6px 8px;border-radius:var(--r-md);text-align:left}
 .brand:hover{background:var(--raised)}
 .brand img{flex:none}
 .brand-text{display:flex;flex-direction:column;min-width:0;line-height:1.15}
 .brand-name{font-weight:700;letter-spacing:.06em;font-size:13px}
 .project-name{font-size:13px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:46vw}
-.chev{width:14px;height:14px;color:var(--faint)}
-.topbar-actions{margin-left:auto;display:flex;gap:4px}
+.chev{width:14px;height:14px;color:var(--faint);flex:none}
+.topbar-actions{margin-left:auto;display:flex;gap:4px;flex:none}
 .icon-btn{position:relative;display:inline-grid;place-items:center;width:42px;height:42px;border-radius:var(--r-md);color:var(--text-2)}
 .icon-btn:hover{background:var(--raised);color:var(--text)}
 .icon-btn.small{width:34px;height:34px}
@@ -330,3 +330,13 @@ html.lite .connect-card{background:var(--panel)}
 html.lite .topbar{backdrop-filter:none;-webkit-backdrop-filter:none;background:var(--bg)}
 
 .sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;border:0}
+.settings .field{display:grid;gap:7px}
+.settings .field[hidden],.settings fieldset[hidden]{display:none}
+.question-options{display:grid;gap:8px;margin:12px 0}
+.btn.option{flex-direction:column;align-items:flex-start;gap:2px;white-space:normal;text-align:left}
+.btn.option span{font-size:12.5px;color:var(--muted);font-weight:400}
+.btn.option span:empty{display:none}
+#questionForm .row input{flex:1;min-width:0}
+.approval-summary .approval-line{display:block}
+.approval-summary .approval-command{display:block;margin:8px 0;padding:8px 10px;border-radius:8px;background:var(--sunken);font-size:13px;white-space:pre-wrap;word-break:break-word}
+.risk-badge{display:inline-block;margin-bottom:6px;padding:2px 8px;border-radius:999px;background:var(--danger-soft);color:var(--danger);font-size:12px;font-weight:600}
