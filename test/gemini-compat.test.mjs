@@ -76,3 +76,66 @@ test('the browser app keeps Gemini thought signatures across turns', async () =>
   const err = await chat({ ...config, maxRetries: 0 }, { messages: [{ role: 'user', content: 'x' }], fetchImpl: async () => new Response('[{"error":{"code":400,"message":"Unknown name required"}}]', { status: 400 }) }).catch((e) => e);
   assert.match(err.message, /Unknown name required/, 'array-wrapped errors are readable');
 });
+
+function geminiQuota429(quotaId, description, retry, retryDelay) {
+  return JSON.stringify([{ error: { code: 429, message: 'You exceeded your current quota, please check your plan and billing details. * Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_requests, limit: 5, model: gemini-3-flash, description: ' + description + '\nPlease retry in ' + retry + '.', status: 'RESOURCE_EXHAUSTED', details: [{ '@type': 'type.googleapis.com/google.rpc.QuotaFailure', violations: [{ quotaId }] }, { '@type': 'type.googleapis.com/google.rpc.RetryInfo', retryDelay }] } }], null, 2);
+}
+
+test('a Gemini per-minute limit is a short wait, not a billing error', async () => {
+  const { shortRateLimitMs, isHardQuotaError, stopFailureType, formatWait } = await import('../src/agent.mjs');
+  const minute = geminiQuota429('GenerateRequestsPerMinutePerProjectPerModel-FreeTier', 'Generate content requests per minute limit exceeded on Free Tier.', '34.2s', '34s');
+  const daily = geminiQuota429('GenerateRequestsPerDayPerProjectPerModel-FreeTier', 'Generate content requests per day limit exceeded on Free Tier.', '21h11m1.6s', '76261s');
+  assert.equal(shortRateLimitMs(minute), 34500);
+  assert.equal(isHardQuotaError(minute), false);
+  assert.equal(shortRateLimitMs(daily), null);
+  assert.equal(isHardQuotaError(daily), true);
+  assert.equal(stopFailureType(Object.assign(new Error(minute), { status: 429 })) === 'billing_error', false);
+  assert.equal(shortRateLimitMs('insufficient_quota'), null);
+  assert.equal(formatWait(34500), '35s');
+  assert.equal(formatWait(150000), '3 min');
+});
+
+test('oasis -p waits out a Gemini per-minute limit and retries the same model', async () => {
+  const http = await import('node:http');
+  const { spawn } = await import('node:child_process');
+  const fs = await import('node:fs/promises');
+  const os = await import('node:os');
+  const path = await import('node:path');
+  const models = [];
+  const server = http.createServer((req, res) => {
+    let raw = '';
+    req.on('data', (c) => { raw += c; });
+    req.on('end', () => {
+      const body = JSON.parse(raw || '{}');
+      models.push(body.model);
+      if (models.length === 1) {
+        res.writeHead(429, { 'content-type': 'application/json' });
+        res.end(geminiQuota429('GenerateRequestsPerMinutePerProjectPerModel-FreeTier', 'Generate content requests per minute limit exceeded on Free Tier.', '0.4s', '0s'));
+        return;
+      }
+      const reply = { role: 'assistant', content: 'Recovered.' };
+      if (!body.stream) { res.writeHead(200, { 'content-type': 'application/json' }); res.end(JSON.stringify({ choices: [{ message: reply, finish_reason: 'stop' }] })); return; }
+      res.writeHead(200, { 'content-type': 'text/event-stream' });
+      res.write('data: ' + JSON.stringify({ choices: [{ delta: { content: 'Recovered.' } }] }) + '\n\n');
+      res.end('data: [DONE]\n\n');
+    });
+  });
+  await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
+  const home = await fs.mkdtemp(path.join(os.tmpdir(), 'oasis-rpm-'));
+  try {
+    const env = { ...process.env, HOME: home, OASIS_CONFIG_DIR: path.join(home, 'cfg'), OASIS_PROTOCOL: 'openai-compatible', OASIS_BASE_URL: 'http://127.0.0.1:' + server.address().port + '/v1', OASIS_MODEL: 'gemini-3-flash', OASIS_FALLBACK_MODEL: 'gemini-3.1-flash-lite', OASIS_API_KEY: '', OASIS_SANDBOX: '0' };
+    const child = spawn(process.execPath, [new URL('../src/cli.mjs', import.meta.url).pathname, '-p', 'hi'], { cwd: home, env, stdio: ['ignore', 'pipe', 'pipe'] });
+    let out = '';
+    let err = '';
+    child.stdout.on('data', (c) => { out += c; });
+    child.stderr.on('data', (c) => { err += c; });
+    const code = await new Promise((resolve) => child.on('close', resolve));
+    assert.equal(code, 0, err);
+    assert.match(out, /Recovered\./);
+    assert.deepEqual(models, ['gemini-3-flash', 'gemini-3-flash'], 'retried the same model instead of falling back');
+    assert.match(err, /\[rate limit\] Waiting 1s/);
+  } finally {
+    server.close();
+    await fs.rm(home, { recursive: true, force: true });
+  }
+});
