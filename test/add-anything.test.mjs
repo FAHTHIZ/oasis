@@ -239,10 +239,39 @@ test('an MCP server installed from the chat starts in that chat and its tool wor
   const session = await createSession({ root, config, env });
   t.after(() => closeSession(session));
   const asked = [];
-  await runAgentTurn(session, 'install this: claude mcp add pinger -- node ' + serverFile, { autoApprove: true, approval: async (q) => { asked.push(q); return true; } });
+  await runAgentTurn(session, 'install this: claude mcp add pinger -- node ' + serverFile, { env, autoApprove: true, approval: async (q) => { asked.push(q); return true; } });
   assert.equal(asked.filter((q) => /pinger/.test(q)).length, 1);
   const results = session.messages.filter((m) => m.role === 'tool').map((m) => String(m.content));
   assert.match(results[0], /"started":\["pinger"\]/);
   assert.match(results[1], /pong from oasis/);
   assert.ok(requests[1].tools.some((tool) => tool.function.name === 'mcp_pinger_ping') || /mcp_pinger_ping/.test(JSON.stringify(requests[1])));
+});
+
+test('a plugin installed from the chat brings its skills and MCP servers into that same chat', async (t) => {
+  const SERVER = "let b='';process.stdin.setEncoding('utf8');const r=(id,result)=>process.stdout.write(JSON.stringify({jsonrpc:'2.0',id,result})+'\\n');process.stdin.on('data',(c)=>{b+=c;let i;while((i=b.indexOf('\\n'))>=0){const l=b.slice(0,i);b=b.slice(i+1);let m;try{m=JSON.parse(l)}catch{continue}if(m.id===undefined)continue;if(m.method==='initialize')r(m.id,{protocolVersion:'2025-03-26',capabilities:{tools:{}}});else if(m.method==='tools/list')r(m.id,{tools:[{name:'ping',description:'Ping',inputSchema:{type:'object',properties:{}}}]});else if(m.method==='tools/call')r(m.id,{content:[{type:'text',text:'plugin pong'}]});else r(m.id,{})}});";
+  const base = await mkdtemp(path.join(os.tmpdir(), 'oasis-add-plugin-live-'));
+  t.after(() => rm(base, { recursive: true, force: true }));
+  const root = path.join(base, 'proj');
+  const plugin = path.join(base, 'toolkit');
+  await mkdir(root);
+  await mkdir(path.join(plugin, '.claude-plugin'), { recursive: true });
+  await mkdir(path.join(plugin, 'skills', 'deploy-check'), { recursive: true });
+  await writeFile(path.join(plugin, 'server.cjs'), SERVER);
+  await writeFile(path.join(plugin, '.claude-plugin', 'plugin.json'), JSON.stringify({ name: 'toolkit', version: '1.0.0', mcpServers: { tk: { command: 'node', args: ['${CLAUDE_PLUGIN_ROOT}/server.cjs'] } } }));
+  await writeFile(path.join(plugin, 'skills', 'deploy-check', 'SKILL.md'), '---\nname: deploy-check\ndescription: Check a deploy\n---\nRun the deploy checklist.\n');
+  const env = { ...process.env, OASIS_CONFIG_DIR: path.join(base, 'cfg'), HOME: path.join(base, 'home'), PATH: path.dirname(process.execPath) + path.delimiter + process.env.PATH };
+  const { config } = await scriptedModel(t, [
+    toolCall('a1', 'add_extension', { source: plugin }),
+    toolCall('s1', 'load_skill', { name: 'deploy-check' }),
+    toolCall('p1', 'mcp_tk_ping', {}),
+    { content: 'done' }
+  ]);
+  const session = await createSession({ root, config, env });
+  t.after(() => closeSession(session));
+  await runAgentTurn(session, 'install ' + plugin, { env, autoApprove: true, approval: async () => true });
+  const results = session.messages.filter((m) => m.role === 'tool').map((m) => String(m.content));
+  assert.match(results[0], /"started":\["tk"\]/);
+  assert.match(results[0], /usable now with load_skill: deploy-check/);
+  assert.match(results[1], /Run the deploy checklist/);
+  assert.match(results[2], /plugin pong/);
 });
