@@ -10,14 +10,15 @@ Use a project folder you trust, review permission prompts, and keep important wo
 
 > **Downloads:** desktop installers are on the [latest release](https://github.com/FAHTHIZ/oasis/releases/latest) page. They are **not code-signed**, so Windows SmartScreen and macOS Gatekeeper will warn on first launch; verify the file against `SHA256SUMS` first (below). To build them yourself, run `npm install && npm run desktop:dist` (output in `release/`). Installation and packaging are tested on clean CI runners for Windows, macOS and Linux, not by hand on physical machines.
 
-The Electron app is configured for Windows, macOS and Linux. Choose the matching asset from the [latest release](https://github.com/FAHTHIZ/oasis/releases/latest): Windows x64 `.exe`, macOS Apple Silicon / arm64 `.dmg`, or Linux x86_64 `.AppImage` / `.deb`. Starting with v1.1.0, releases also include Windows ARM64, macOS Intel (x64) and Linux ARM64 builds whenever those optional CI builds succeed. The [download page](https://fahthiz.github.io/oasis/) detects your system and links to the matching file. The packaged app includes its own runtime: you do not need to install Node.js or Git separately.
+The Electron app is configured for Windows, macOS and Linux. Choose the matching asset from the [latest release](https://github.com/FAHTHIZ/oasis/releases/latest): Windows x64 `.exe`, macOS Apple Silicon / arm64 `.dmg`, or Linux x86_64 `.AppImage` / `.deb`. Starting with v1.1.0, releases also include macOS Intel (x64) and Linux ARM64 builds, plus Windows ARM64 whenever that optional CI build succeeds (v1.1.0 shipped without it; Windows on ARM runs the x64 installer through emulation). The [download page](https://fahthiz.github.io/oasis/) detects your system and links to the matching file. The packaged app includes its own runtime: you do not need to install Node.js or Git separately.
 
 | Operating system | Download | First launch |
 |---|---|---|
 | Windows 10/11, x64 | `.exe` installer | Run the installer. It installs for the current user and adds Start Menu/Desktop shortcuts. |
 | macOS, Apple Silicon (arm64) | `.dmg` disk image | Open the image and drag OASIS into Applications. |
 | Linux, x86_64 | `.AppImage` or `.deb` | Run the AppImage or open the package with your software installer. |
-| Windows on ARM, macOS Intel, Linux ARM64 (from v1.1.0) | `-arm64.exe`, `-x64.dmg`, `-arm64.AppImage` / `-arm64.deb` | Same as above. These are optional builds, so a release can be missing one. |
+| macOS Intel, Linux ARM64 (from v1.1.0) | `-x64.dmg`, `-arm64.AppImage` / `-arm64.deb` | Same as above. |
+| Windows on ARM | `-arm64.exe` when published, otherwise the x64 `.exe` | The x64 installer runs through Windows' built-in emulation. The native ARM64 build is optional, so a release can be missing it. |
 | iPhone, iPad, Android | No store app | Use the browser workspace from your phone, or Termux on Android: see [MOBILE.md](MOBILE.md). |
 
 Desktop builds are unsigned. Verify downloads against the release `SHA256SUMS` file, downloaded from the same release page. Checksums detect corruption and tampering in transit; they are not a publisher signature.

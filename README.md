@@ -253,7 +253,7 @@ What 1.0 does not claim: the desktop installers are unsigned (SHA-256 checksums 
 |---|---|
 | **CLI** | Primary workflow; Node.js 22+. |
 | **Browser workspace** | Local, authenticated, backed by the shared runtime; not a hosted service. Some browser-side project, task and note state is separate from CLI state. |
-| **Desktop** | Windows x64, macOS arm64 and Linux x86_64, built and packaged in CI from the release commit. Unsigned, with SHA-256 checksums. |
+| **Desktop** | Windows x64; macOS arm64 and Intel; Linux x86_64 and arm64; built and packaged in CI from the release commit. Unsigned, with SHA-256 checksums. |
 | **VS Code-family editors** | Supported integration; not every editor extension ecosystem is covered. |
 | **ACP editors (Zed, JetBrains, Neovim, Emacs)** | `oasis acp` implements the core Agent Client Protocol, inline edit diffs and editor `fs/*` (unsaved buffers are read, open buffers are updated). With `oasis acp --editor-terminal`, approved commands run in the editor's terminal panel (`terminal/*`); by default they run in OASIS's own process and sandbox. |
 | **SDK and GitHub Action** | Programmatic and repository automation; unattended use still needs deliberate permissions and isolation. |
