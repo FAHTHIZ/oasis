@@ -2678,6 +2678,13 @@ async function interactive(root, autoApprove, persistence = {}) {
       if (notice) stdout.write(notice + '\n');
     } catch {}
   }
+  if (stdout.isTTY && !SESSION_OPTIONS.safeMode) {
+    try {
+      const { importStartupNotice } = await import('./importers.mjs');
+      const notice = await Promise.race([importStartupNotice(root, { env: process.env }), new Promise((resolve) => setTimeout(() => resolve(''), 1500).unref())]);
+      if (notice) stdout.write(notice + '\n');
+    } catch {}
+  }
   if (SESSION_OPTIONS.devChannels.length) {
     stdout.write('\n\x1b[1mWARNING: loading development channels\x1b[22m\n  ' + SESSION_OPTIONS.devChannels.join('\n  ') + '\nAnything that can reach these servers can put text in front of the agent' + '. Only use channels you trust.\n');
     const answer = await askLine('Type "yes" if you are using this for local development (anything else exits): ').catch(() => '');
