@@ -269,3 +269,11 @@ test('turn summary line reports time, tool calls and tokens', async () => {
   assert.equal(formatTurnSummary({ ms: 2000, finished: false }), 'Paused · 2s');
   assert.equal(formatTurnSummary({ ms: 0, stopped: true }), 'Stopped · 0s');
 });
+
+test('edit summaries leave out a zero count', async () => {
+  const { changeCounts } = await import('../src/terminal-ui.mjs');
+  assert.equal(changeCounts(1, 1), '1 addition and 1 removal');
+  assert.equal(changeCounts(1, 0), '1 addition');
+  assert.equal(changeCounts(0, 3), '3 removals');
+  assert.equal(changeCounts(0, 0), '0 additions');
+});
