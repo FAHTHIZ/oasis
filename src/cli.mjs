@@ -987,6 +987,12 @@ async function doctorWorkspaceReport(root, status = {}) {
   stdout.write('  gh: ' + (commandAvailable('gh') ? 'available (/review can read pull requests)' : 'not found (/review PR-number needs the GitHub CLI)') + '\n');
   const search = process.env.OASIS_WEB_SEARCH === 'off' ? 'off' : searchBackend(process.env);
   stdout.write('  Web search: ' + search + (search === 'duckduckgo' ? ' (no key; set TAVILY_API_KEY or BRAVE_SEARCH_API_KEY for more reliable results)' : '') + '\n');
+  // Loaded here only: QuickJS is optional and never touched at startup.
+  const { workflowRuntimeStatus } = await import('./workflow-sandbox.mjs');
+  const workflow = await workflowRuntimeStatus();
+  stdout.write('  Workflow runtime: ' + (workflow.available
+    ? 'available (QuickJS; saved JavaScript workflows can run)'
+    : (/need quickjs-emscripten/i.test(workflow.reason || '') ? 'not installed' : 'unavailable: ' + workflow.reason) + ' (only needed for saved JavaScript workflows; run npm install in ' + APP_ROOT + ' or reinstall OASIS)') + '\n');
   stdout.write('\nWorkspace: ' + root + '\n');
   let settings = null;
   try {
