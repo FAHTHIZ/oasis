@@ -1530,6 +1530,11 @@ export function isGoogleGenerativeBaseURL(baseURL) {
 // Tool calls keep Google's extra_content (the Gemini 3 thought signature) so
 // the next turn can echo it back, which Gemini requires. Requests to other
 // models drop the field, so a session that falls back elsewhere stays valid.
+export function replaysReasoning(config) {
+  if (!config || config.protocol !== 'openai-compatible') return false;
+  return /deepseek|moonshot|kimi/i.test(String(config.baseURL || '') + ' ' + String(config.model || ''));
+}
+
 export function withProviderExtraContent(messages, baseURL, model = '') {
   // Gemini behind a gateway (LiteLLM, a local proxy) needs the signature too.
   if (isGoogleGenerativeBaseURL(baseURL) || /gemini/i.test(String(model || ''))) return messages;
@@ -1806,6 +1811,7 @@ async function readProviderStream(response, protocol, onDelta, onProgress) {
   }
 
   let content = '';
+  let reasoning = '';
   const calls = new Map();
   let usage = {};
   let finishReason = null;
@@ -1819,9 +1825,17 @@ async function readProviderStream(response, protocol, onDelta, onProgress) {
     for (const choice of Array.isArray(event.choices) ? event.choices : []) {
       const delta = choice.delta || {};
       if (choice.finish_reason) finishReason = choice.finish_reason;
+      // Reasoning is not the answer: DeepSeek/vLLM send reasoning_content,
+      // OpenRouter-style gateways send reasoning, and Google's endpoint marks
+      // thought chunks with extra_content.google.thought.
+      if (typeof delta.reasoning_content === 'string') reasoning += delta.reasoning_content;
+      else if (typeof delta.reasoning === 'string') reasoning += delta.reasoning;
       if (typeof delta.content === 'string') {
-        content += delta.content;
-        onDelta(delta.content);
+        if (delta.extra_content && delta.extra_content.google && delta.extra_content.google.thought === true) reasoning += delta.content;
+        else {
+          content += delta.content;
+          onDelta(delta.content);
+        }
       }
       for (const part of Array.isArray(delta.tool_calls) ? delta.tool_calls : []) {
         const index = toolCallSlot(calls, part);
@@ -1842,7 +1856,7 @@ async function readProviderStream(response, protocol, onDelta, onProgress) {
   const streamError = finishReason ? null : strayStreamError(stray);
   if (streamError) throw Object.assign(new Error('The model stream was interrupted: ' + streamError.message), { code: 'OASIS_STREAM_INTERRUPTED', status: streamError.status });
   const toolCalls = [...calls.entries()].sort((a, b) => a[0] - b[0]).map(([, call]) => call);
-  return { choices: [{ message: { role: 'assistant', content: content || null, ...(toolCalls.length ? { tool_calls: toolCalls } : {}) }, finish_reason: finishReason }], usage };
+  return { choices: [{ message: { role: 'assistant', content: content || null, ...(reasoning ? { reasoning_content: reasoning } : {}), ...(toolCalls.length ? { tool_calls: toolCalls } : {}) }, finish_reason: finishReason }], usage };
 }
 
 // Two quick retries for blips, then (server errors and dropped connections
@@ -5539,6 +5553,9 @@ async function runAgentTurnRaw(session, prompt, options = {}) {
     const toolCallRepairs = normalizeAssistantToolCalls(session, assistant, step);
     if ((toolCallRepairs.textCalls || toolCallRepairs.repairedArguments || toolCallRepairs.invalidArguments) && typeof options.onToolCallRepair === 'function') options.onToolCallRepair(toolCallRepairs);
     const assistantMessage = { role: 'assistant', content: assistant.content ?? null };
+    // DeepSeek (thinking mode with tools) and Kimi return 400 unless every
+    // later request replays the reasoning; other providers never see it.
+    if (typeof assistant.reasoning_content === 'string' && assistant.reasoning_content && replaysReasoning(session.config)) assistantMessage.reasoning_content = assistant.reasoning_content;
     if (Array.isArray(assistant.responseItems)) assistantMessage.responseItems = assistant.responseItems;
     if (Array.isArray(assistant.thinkingBlocks) && assistant.thinkingBlocks.length) assistantMessage.thinkingBlocks = assistant.thinkingBlocks;
     if (Array.isArray(assistant.tool_calls) && assistant.tool_calls.length) {
