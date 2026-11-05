@@ -340,3 +340,10 @@ html.lite .topbar{backdrop-filter:none;-webkit-backdrop-filter:none;background:v
 .approval-summary .approval-line{display:block}
 .approval-summary .approval-command{display:block;margin:8px 0;padding:8px 10px;border-radius:8px;background:var(--sunken);font-size:13px;white-space:pre-wrap;word-break:break-word}
 .risk-badge{display:inline-block;margin-bottom:6px;padding:2px 8px;border-radius:999px;background:var(--danger-soft);color:var(--danger);font-size:12px;font-weight:600}
+
+.phone-link{display:grid;gap:10px;justify-items:start}
+.phone-qr{background:#fff;padding:10px;border-radius:12px;line-height:0}
+.phone-qr svg{width:200px;height:200px;display:block}
+.phone-link .approval-command{max-width:100%;overflow-wrap:anywhere;white-space:normal}
+.error-text{color:var(--danger)}
+.error-text:empty{display:none}
