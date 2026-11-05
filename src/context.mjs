@@ -42,6 +42,12 @@ export function estimateTokens(messages) {
 // Unknown and local models keep the conservative 32K default; set contextWindow in
 // the provider config or OASIS_CONTEXT_WINDOW to override.
 const MODEL_WINDOWS = [
+  // Claude: 1M at standard pricing for Fable, Mythos, Opus/Sonnet 4.6+ and 5+
+  // (docs.anthropic.com context windows, Nov 2026). Haiku 5.5 also serves 1M,
+  // but prompts over 100K bill at a higher rate, so it keeps a 200K working
+  // window (override with contextWindow). Older Claude models are 200K.
+  [/claude-(?:fable|mythos)/, 1_000_000],
+  [/claude-(?:opus|sonnet)-(?:4[.-][6-9]|[5-9])(?![0-9])/, 1_000_000],
   [/claude/, 200_000],
   [/gpt-4\.1/, 1_000_000],
   // GPT-5.5+ and GPT-6 serve 1.05M, but prompts over 272K bill at 2x input and
