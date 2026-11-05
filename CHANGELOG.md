@@ -10,6 +10,9 @@ Changes after 1.1.0. Entries include feature work, reliability improvements, and
   - gpt-oss tool names leaking harmony tokens (`edit_file<|channel|>commentary`, `functions.read_file`) are cleaned before dispatch. One such name made the gateway reject the whole request with HTTP 400.
   - A streamed tool-call fragment that arrives at a new index with no id or name (one gateway sent call 0's closing `}` as index 1) now continues the previous call instead of becoming a broken, nameless one. OpenCode crashed on the same stream with "Expected 'id' to be a string".
   - `run_command` accepts `args` sent as one string.
+  - `glob_files` accepts a `path` folder, as Claude Code's Glob does; it used to be ignored, so `{path: "src", pattern: "*.mjs"}` searched the root, found nothing, and the model decided the project had no modules. A root-only pattern with no matches now lists matching files in subfolders.
+  - Singular/plural slips in tool names (`search_file`) map to the one matching tool instead of costing a turn.
+  - `oasis eval` records the source revision loaded at start and flags runs where HEAD moved; a long run had been credited to a fix committed after it started.
   - The verification gate no longer asks for a separate diff review after a passing check for targeted edits, so a finished turn no longer produces a second, contradictory final answer. Files the agent created are exempt; existing files it rewrote wholesale still need a diff review. When new code has no test change, the gate asks the model to call the new module directly with edge cases.
   - Waits after the first rate-limit wait in a turn count down in the status line.
   - Smaller requests: the README in context is clipped to 2.5k characters, skill catalogue lines to 160, and the `task`, `run_command`, `run_shell`, `fetch_url` and `ask_user_question` schemas are shorter (about 1.6k fewer characters per request).
