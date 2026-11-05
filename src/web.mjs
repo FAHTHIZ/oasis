@@ -26,7 +26,7 @@ import { createWorktree, finishWorktree, removeWorktree, readWorktreeDiff, readW
 // Commands that only make sense in the terminal (the web UI has its own session picker).
 const WEB_UNSUPPORTED_COMMANDS = new Set(['resume']);
 // Built-ins that only make sense in the terminal; the browser explains instead of running them.
-const WEB_TERMINAL_ONLY_COMMANDS = new Set(['copy', 'sandbox', 'loop', 'cd', 'test', 'exit', 'vim', 'voice', 'terminal-setup', 'keybindings']);
+const WEB_TERMINAL_ONLY_COMMANDS = new Set(['copy', 'sandbox', 'loop', 'cd', 'test', 'exit', 'vim', 'voice', 'terminal-setup', 'keybindings', 'sounds', 'sound']);
 
 // Compact session status for the browser: permission mode, context use, token totals.
 export function webSessionState(session, env = process.env) {

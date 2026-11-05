@@ -44,9 +44,11 @@ export function attentionSequence(mode, message) {
 }
 
 /** Writes a notification if the turn has run long enough. Returns what was written. */
-export function notifyAttention(message, { elapsedMs = 0, env = process.env, stream = process.stdout, force = false } = {}) {
+export function notifyAttention(message, { elapsedMs = 0, env = process.env, stream = process.stdout, force = false, soundPlayed = false } = {}) {
   const mode = attentionMode(env, stream);
   if (mode === 'off') return '';
+  // A sound effect already got your attention; the bell would only add a second beep.
+  if (mode === 'bell' && soundPlayed) return '';
   if (!force && Number(elapsedMs || 0) < notifyAfterMs(env)) return '';
   const sequence = attentionSequence(mode, message);
   if (sequence) {
