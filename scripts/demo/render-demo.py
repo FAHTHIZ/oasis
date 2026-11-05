@@ -102,10 +102,10 @@ def backdrop():
     for i, c in enumerate([(255, 95, 86), (255, 189, 46), (39, 201, 63)]):
         cx, cy = MARGIN + 22 * SCALE + i * 20 * SCALE, MARGIN + BAR // 2
         d.ellipse([cx - 6 * SCALE, cy - 6 * SCALE, cx + 6 * SCALE, cy + 6 * SCALE], fill=c)
-    title = 'oasis  —  ~/taskflow'
+    title = os.environ.get('OASIS_DEMO_TITLE', 'oasis  —  ~/taskflow')
     tf = ImageFont.truetype(REG.path, 13 * SCALE)
     d.text((MARGIN + TERM_W / 2 - tf.getlength(title) / 2, MARGIN + BAR / 2 - 8 * SCALE), title, font=tf, fill=(139, 148, 158))
-    caption = 'Real OASIS 1.0 runtime, tools and safety policy  ·  model replies scripted for reproducibility  ·  scripts/demo/'
+    caption = os.environ.get('OASIS_DEMO_CAPTION', 'Real OASIS runtime, tools and safety policy  ·  model replies scripted for reproducibility  ·  scripts/demo/')
     cf = ImageFont.truetype(REG.path, 12 * SCALE)
     d.text((W / 2 - cf.getlength(caption) / 2, MARGIN + TERM_H + 16 * SCALE), caption, font=cf, fill=(160, 174, 168))
     return img
