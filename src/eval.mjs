@@ -839,7 +839,7 @@ function parseArgs(args) {
     }
     throw new Error('Unknown oasis eval option: ' + arg);
   }
-  if (config.task && !safeId(config.task)) throw new Error('Task IDs may contain lowercase letters, numbers, and hyphens.');
+  if (config.task && !String(config.task).split(',').every((id) => safeId(id))) throw new Error('Task IDs may contain lowercase letters, numbers, and hyphens (separate several with commas).');
   if ((config.compareOutput || config.compareHtml) && !config.compare) {
     throw new Error('--out and --html are only valid with --compare.');
   }
@@ -1132,8 +1132,11 @@ async function runClaudeCodeEval(config, options = {}) {
   const env = options.env || process.env;
   const tasksDir = options.tasksDir || DEFAULT_TASKS_DIR;
   const allDirs = await listTaskDirectories(tasksDir);
-  const selectedDirs = config.task ? allDirs.filter((dir) => path.basename(dir) === config.task) : allDirs;
-  if (!selectedDirs.length) throw new Error(config.task ? 'No evaluation task named "' + config.task + '" was found.' : 'No evaluation tasks were found in ' + tasksDir);
+  const wanted = config.task ? String(config.task).split(',') : null;
+  const selectedDirs = wanted ? allDirs.filter((dir) => wanted.includes(path.basename(dir))) : allDirs;
+  const missingTask = wanted && wanted.find((id) => !selectedDirs.some((dir) => path.basename(dir) === id));
+  if (missingTask) throw new Error('No evaluation task named "' + missingTask + '" was found.');
+  if (!selectedDirs.length) throw new Error('No evaluation tasks were found in ' + tasksDir);
 
   const command = String(env[adapter.binEnv] || adapter.bin);
   const runCli = options.claudeRunner || ((args, runnerOptions) => runEvalProcess(command, args, runnerOptions));
@@ -1331,8 +1334,11 @@ export async function runEvalCommand(args = [], options = {}) {
 
   if (!options.autoApprove) throw new Error('Model evaluation executes edits and commands in disposable task copies. Review the evaluation suite, then explicitly run oasis eval --yes [--task ID] [--trials N]. OS-level sandboxing is not provided.');
   const allDirs = await listTaskDirectories(tasksDir);
-  const selectedDirs = config.task ? allDirs.filter((dir) => path.basename(dir) === config.task) : allDirs;
-  if (!selectedDirs.length) throw new Error(config.task ? 'No evaluation task named "' + config.task + '" was found.' : 'No evaluation tasks were found in ' + tasksDir);
+  const wanted = config.task ? String(config.task).split(',') : null;
+  const selectedDirs = wanted ? allDirs.filter((dir) => wanted.includes(path.basename(dir))) : allDirs;
+  const missingTask = wanted && wanted.find((id) => !selectedDirs.some((dir) => path.basename(dir) === id));
+  if (missingTask) throw new Error('No evaluation task named "' + missingTask + '" was found.');
+  if (!selectedDirs.length) throw new Error('No evaluation tasks were found in ' + tasksDir);
   const provider = await loadConfig({ env });
   if (!provider.configured) throw new Error('Configure a model provider before running eval tasks.');
   const startedAt = new Date().toISOString();

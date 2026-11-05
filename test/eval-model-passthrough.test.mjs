@@ -42,3 +42,23 @@ test('oasis eval --aider --model reaches Aider and the report names that model',
     await rm(dir, { recursive: true, force: true });
   }
 });
+
+test('oasis eval --task accepts a comma-separated list and rejects unknown IDs', { skip: process.platform === 'win32' }, async () => {
+  const dir = await mkdtemp(path.join(os.tmpdir(), 'oasis-eval-tasks-'));
+  try {
+    const bin = path.join(dir, 'fake-aider');
+    await writeFile(bin, '#!' + process.execPath + '\nconsole.log("Tokens: 1 sent, 1 received.");\n');
+    await chmod(bin, 0o755);
+    const cli = fileURLToPath(new URL('../src/cli.mjs', import.meta.url));
+    const env = { ...process.env, OASIS_AIDER_BIN: bin, OASIS_EVAL_RESULTS_DIR: path.join(dir, 'results'), OASIS_CONFIG_DIR: path.join(dir, 'cfg'), HOME: dir, OASIS_NO_UPDATE_CHECK: '1' };
+    const run = (tasks) => spawnSync(process.execPath, [cli, 'eval', '--aider', '--task', tasks, '--trials', '1', '--timeout-seconds', '60', '--yes'], { env, encoding: 'utf8', timeout: 120000 });
+    const ok = run('bounded-pagination,clamp-integer');
+    const report = JSON.parse(await readFile(/result: (\S+\.json)/.exec(ok.stdout)[1], 'utf8'));
+    assert.deepEqual([...new Set(report.results.map((row) => row.taskId))].sort(), ['bounded-pagination', 'clamp-integer']);
+    const bad = run('clamp-integer,no-such-task');
+    assert.notEqual(bad.status, 0);
+    assert.match(bad.stderr + bad.stdout, /no-such-task/);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
