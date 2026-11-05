@@ -89,13 +89,13 @@ async function waitFor(page, expression, { timeout = 60000, label = expression }
     if (last) return last;
     await new Promise((r) => setTimeout(r, 100));
   }
-  const seen = await evaluate(page, `JSON.stringify({ transcript: document.getElementById('transcript').textContent.slice(-600), toasts: document.getElementById('toasts').textContent, log: document.getElementById('connectLog').textContent, suggest: document.getElementById('pluginSuggest').outerHTML.slice(0, 400), msgs: window.__msgs, input: document.getElementById('input').value.slice(0, 80), chip: (document.getElementById('modelChip') || {}).textContent, ready: document.documentElement.dataset.ready, stale: !!window.__stale, sheets: [...document.querySelectorAll('.sheet')].filter((el) => !el.hidden).map((el) => el.id), adds: (window.__adds || []).slice(0, 4), nav: (performance.getEntriesByType('navigation')[0] || {}).type, age: Math.round(performance.now()), busy: document.getElementById('app').classList.contains('busy') })`).catch(() => '');
+  const seen = await evaluate(page, `JSON.stringify({ transcript: document.getElementById('transcript').textContent.slice(-600), toasts: document.getElementById('toasts').textContent, log: document.getElementById('connectLog').textContent, suggest: document.getElementById('pluginSuggest').outerHTML.slice(0, 400), msgs: window.__msgs, input: document.getElementById('input').value.slice(0, 80), chip: (document.getElementById('modelChip') || {}).textContent, ready: document.documentElement.dataset.ready, stale: !!window.__stale, sheets: [...document.querySelectorAll('.sheet')].filter((el) => !el.hidden).map((el) => el.id), adds: (window.__adds || []).slice(0, 4), nav: (performance.getEntriesByType('navigation')[0] || {}).type, age: Math.round(performance.now()), busy: document.body.classList.contains('busy') })`).catch(() => '');
   throw new Error('Timed out waiting for: ' + label + ' (last: ' + JSON.stringify(last) + ') page: ' + seen);
 }
 const paste = (selector, value) => `(() => { const el = document.querySelector(${JSON.stringify(selector)}); el.focus(); const dt = new DataTransfer(); dt.setData('text/plain', ${JSON.stringify(value)}); el.dispatchEvent(new ClipboardEvent('paste', { clipboardData: dt, bubbles: true, cancelable: true })); return true; })()`;
 const type = (value) => `(() => { const el = document.getElementById('input'); el.value = ${JSON.stringify(value)}; el.dispatchEvent(new Event('input', { bubbles: true })); return true; })()`;
 const submit = `(() => { document.getElementById('composer').requestSubmit(); return true; })()`;
-const busy = `document.getElementById('app').classList.contains('busy')`;
+const busy = `document.body.classList.contains('busy')`; // setBusy() toggles it on <body>
 
 test('runtime engine end to end: app at /, paste to connect, approve a real edit, files and changes', { skip: chrome ? false : 'no Chrome/Chromium installed', timeout: 360000 }, async (t) => {
   const provider = await mockProvider();
@@ -144,7 +144,8 @@ test('runtime engine end to end: app at /, paste to connect, approve a real edit
   await evaluate(page, `document.getElementById('connectInput').value = ${JSON.stringify(origin + '/app/#token=' + app.token)}; document.getElementById('connectForm').requestSubmit(); true`);
   await waitFor(page, `document.readyState === 'complete' && !window.__stale && document.documentElement.dataset.ready === '1' && document.documentElement.classList.contains('runtime') && document.getElementById('welcomeTitle').textContent === 'Paste a key to start.' && !/^(No project|This computer)$/.test(document.getElementById('projectName').textContent)`, { label: 'connected to the runtime after pasting the link' });
   assert.equal(await evaluate(page, `location.hash`), '', 'the token never stays in the address bar');
-  assert.match(await evaluate(page, `document.getElementById('projectName').textContent`), new RegExp(path.basename(root)));
+  // The name settles once the runtime's project list loads.
+  await waitFor(page, `document.getElementById('projectName').textContent.includes(${JSON.stringify(path.basename(root))})`, { label: 'project name shown', timeout: 20000 });
 
   // A newer release shows one slim bar; "Not now" hides it for this session.
   await waitFor(page, `!document.getElementById('updateBar').hidden && document.getElementById('updateTitle').textContent === 'OASIS 99.0.0 is out.' && /oasis update/.test(document.getElementById('updateAction').textContent)`, { label: 'update bar for a newer release', timeout: 15000 });
