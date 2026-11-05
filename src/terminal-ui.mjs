@@ -112,7 +112,10 @@ export async function showStartupBanner({ root, model = '', provider = '', mode 
   const height = LOGO.length;
   const width = LOGO[0].length;
   output.write('\n');
-  if (animate) {
+  // Narrow terminals (a phone in Termux, a split pane) skip the logo instead of wrapping it.
+  const narrow = Number(output.columns || 0) > 0 && Number(output.columns) < width + 4;
+  if (narrow) {}
+  else if (animate) {
     output.write('\x1b[?25l');
     try {
       for (let i = 0; i < height; i += 1) output.write('\n');

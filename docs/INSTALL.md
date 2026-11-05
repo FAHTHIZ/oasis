@@ -163,7 +163,7 @@ Review every proposed command and file change before approving it.
 
 ## Troubleshooting
 
-- **No model connected:** open Model provider or run `oasis setup`, then test the connection.
+- **No model connected:** run `oasis connect` and paste an API key, model link or local server address (or paste it into the app's message box).
 - **Ollama not found:** install/start Ollama, pull a model, and retry model discovery.
 - **Provider test fails:** check provider, exact model ID, endpoint URL, account access and key. Failed tests do not replace the current provider configuration.
 - **Command approval appears:** read the operation and target. Deny it if its effect is unclear.

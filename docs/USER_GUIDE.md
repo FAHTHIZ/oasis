@@ -24,7 +24,7 @@ Start with the overview you need, then jump straight to a workflow or reference.
 
 Use the current [Install OASIS guide](INSTALL.md) for desktop downloads, the checksum-verified CLI installer, updates and uninstall. The CLI requires Node.js 22 or newer. The installer resolves the latest stable versioned tag to an immutable commit SHA; it does not install the moving `main` branch.
 
-When you launch `oasis` for the first time without a configured model, OASIS shows three choices: use an API key, use a model on this computer (Ollama), or set it up later. Press Enter for the API-key route, or choose `1`, `2` or `3`. The first-run screen is designed for a person who does not yet know provider names. The same guided setup is offered when launching `oasis web` or starting a one-shot task from an interactive terminal without a provider. Software installation and provider changes are confirmed and verified. To change providers later, run `oasis setup`; to check live tool calling, run `oasis doctor --test-provider`.
+When you launch `oasis` for the first time without a configured model, OASIS asks for one thing: paste an API key, a model page link or a local server address (for example `http://localhost:11434`). Input is hidden. OASIS works out the provider from the paste (OpenAI, Anthropic, OpenRouter, Gemini, Groq, Hugging Face, Ollama, LM Studio and other OpenAI-compatible servers), lists the models it can use, picks the best one for coding, proves it can call tools, keeps the next ones as automatic backups and starts the chat. Press Enter instead for the step-by-step menu (cloud providers such as Bedrock, Vertex AI and Foundry live there), or type `later` to skip. `oasis connect` runs the same paste flow at any time; `echo "$KEY" | oasis connect` works in scripts. To check live tool calling later, run `oasis doctor --test-provider`.
 
 During setup, choose a provider preset or a custom endpoint: OpenAI, Anthropic, OpenRouter, Google Gemini, or local Ollama. OpenRouter uses `https://openrouter.ai/api/v1`; Gemini uses `https://generativelanguage.googleapis.com/v1beta/openai/`; local Ollama uses `http://localhost:11434/v1`. For OpenRouter and Ollama, enter the exact model ID available to your account or local server. During terminal first-run, OASIS checks Ollama on `127.0.0.1:11434` and lists up to 100 installed model names when it is running. If it is missing or empty, the prompt gives you the official download page and the `ollama pull <model-name>` command.
 
@@ -49,12 +49,12 @@ During setup, choose a provider preset or a custom endpoint: OpenAI, Anthropic, 
 The authenticated browser runtime and extension hub are included in the default `main` installation. From the project you want OASIS to operate on:
 
 ~~~bash
-oasis setup
+oasis connect
 cd /path/to/your/project
 oasis web --open
 ~~~
 
-`--open` opens the workspace in your default browser and connects it for you. Without it, open the "Open this link to start" link that OASIS prints; it carries the one-time connection token in the `#fragment`, so the browser connects without pasting anything. In another browser, open the plain local URL and paste the printed token into **Agent → Connect runtime**. Then describe your task in plain English. The token is generated for that running server and is not your model API key. The **Model provider** panel can test and save a provider; provider keys are accepted only from the same device over localhost. For a phone-to-computer connection, configure model credentials in the host terminal with `oasis setup` instead. GitHub browsing and cloning reuse the host's GitHub CLI login: install `gh`, run `gh auth login`, then use **Check connection** and **Refresh repositories**. Repository cloning requires approval and switches new agent tasks to the clone under `.oasis/workspaces/`.
+`--open` opens the OASIS app in your default browser, already connected to this folder. Without it, open the "Open this link to start" link that OASIS prints; it carries the one-time connection token in the `#fragment`. In another browser, paste that link into the message box. The token belongs to that running server and is not your model API key. If no model is connected yet, paste a model API key into the same box; keys are accepted only from the same device over localhost, so for a phone-to-computer connection run `oasis connect` on the computer instead. Then describe your task in plain English. Cloning from GitHub reuses the host's GitHub CLI login (`gh auth login`) and switches new tasks to the clone under `.oasis/workspaces/`. The older all-in-one workspace page is still at `/classic` while its remaining panels move into the app.
 
 For access from another device, prefer HTTPS with a certificate trusted by the phone and with a subject alternative name matching the computer's LAN IP. OASIS supports `oasis web --host 0.0.0.0 --tls-cert /path/to/cert.pem --tls-key /path/to/key.pem`. Non-loopback plaintext requires an explicit `--allow-insecure-lan` opt-in, which exposes traffic and bearer tokens to network observation. Do not port-forward the bridge or expose it to the public Internet. Real Android/Termux and device-trust workflows still need additional platform testing.
 
@@ -1389,7 +1389,8 @@ A post-edit result distinguishes diagnostics from server availability. If a conf
 |---|---|
 | `oasis` | Start an interactive coding session |
 | `oasis "task"` | Run a plain-English task |
-| `oasis setup` | Configure a provider |
+| `oasis connect` | Paste a key, model link or local server; OASIS picks the provider, model and backups |
+| `oasis setup` | Configure a provider (paste first, Enter for the menu) |
 | `oasis doctor` | Check Node, package managers, and provider config |
 | `oasis init` | Create an `OASIS.md` project context file |
 | `oasis plan "task"` | Inspect the workspace and create a read-only implementation plan |
