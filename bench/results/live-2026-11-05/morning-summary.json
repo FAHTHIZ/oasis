@@ -1,0 +1,141 @@
+{
+  "date": "2026-11-05T12:50:31.053Z",
+  "oasisVersion": "1.1.0",
+  "requestedModels": {
+    "oasis": "gemini-flash-lite-latest",
+    "gemini": "gemini-flash-lite-latest",
+    "opencode": "gw/gemini-flash-lite-latest",
+    "aider": "openai/gemini-flash-lite-latest"
+  },
+  "router": "127.0.0.1:8787",
+  "trialsPerTask": 1,
+  "requestedAgents": [
+    "oasis",
+    "gemini",
+    "opencode",
+    "aider"
+  ],
+  "sharedTaskIds": [
+    "clamp-integer",
+    "safe-relative-path",
+    "taskflow-search"
+  ],
+  "sharedTasks": [
+    "clamp-integer",
+    "safe-relative-path",
+    "taskflow-search"
+  ],
+  "excludedTasks": [],
+  "unverifiedTasks": [],
+  "fingerprintMismatchTasks": [],
+  "metadataMismatchTasks": [],
+  "incompleteTasks": [],
+  "taskMetadata": {
+    "clamp-integer": {
+      "category": "utility-logic",
+      "difficulty": "small"
+    },
+    "safe-relative-path": {
+      "category": "security-boundaries",
+      "difficulty": "medium"
+    },
+    "taskflow-search": {
+      "category": "data-structures",
+      "difficulty": "medium"
+    }
+  },
+  "caveats": [
+    "Agent adapters do not use identical tool surfaces, approval modes, or sandbox policies. This is a configured-product comparison, not an isolated measurement of harness code.",
+    "A shared gateway URL and requested model ID do not prove that every client was served the same underlying model or model version. Verify gateway/provider logs before calling this a same-model harness comparison.",
+    "Token and cost fields are adapter-reported usage. Cost may be absent or calculated differently by providers; it is not a normalized billing audit.",
+    "Only 3 task(s) have complete, identical SHA-256 fingerprints and the requested number of trials across all completed agents; the guide targets at least 50 representative tasks.",
+    "Only 1 trial(s) per task were requested. One trial is a smoke test; three trials are a minimum diagnostic repeat, not a confidence interval or significance test.",
+    "No verified matched task is labeled large; this run does not test larger repository-level work.",
+    "The selected agents do not all have one identical, explicitly requested model ID."
+  ],
+  "agents": [
+    {
+      "agent": "oasis",
+      "name": "OASIS",
+      "label": "OASIS 1.1.0 (gemini-flash-lite-latest)",
+      "file": "oasis.json",
+      "requestedModel": "gemini-flash-lite-latest",
+      "reportedModel": "gemini-flash-lite-latest",
+      "cliVersion": null,
+      "sourceRevision": "caea8249938dc86a2016ede312024ab8ec3a9046",
+      "runtime": {
+        "node": "v22.20.0",
+        "platform": "linux",
+        "arch": "x64"
+      },
+      "passRate": 0,
+      "passedTrials": 0,
+      "trials": 3,
+      "medianTrialTimeMs": 75350,
+      "totalTokens": 225163,
+      "totalReportedCostUSD": 0,
+      "perTask": {
+        "clamp-integer": 0,
+        "safe-relative-path": 0,
+        "taskflow-search": 0
+      }
+    },
+    {
+      "agent": "gemini",
+      "name": "Gemini CLI",
+      "label": "Gemini CLI 0.67.0 (gemini-flash-lite-latest)",
+      "file": "gemini.json",
+      "requestedModel": "gemini-flash-lite-latest",
+      "reportedModel": "gemini-flash-lite-latest",
+      "cliVersion": "0.67.0",
+      "sourceRevision": "e4505c8def7382ee66d495724cf49a3e297dbb65",
+      "runtime": {
+        "node": "v22.20.0",
+        "platform": "linux",
+        "arch": "x64"
+      },
+      "passRate": 0.3333333333333333,
+      "passedTrials": 1,
+      "trials": 3,
+      "medianTrialTimeMs": 396310,
+      "totalTokens": null,
+      "totalReportedCostUSD": null,
+      "perTask": {
+        "clamp-integer": 0,
+        "safe-relative-path": 0,
+        "taskflow-search": 1
+      }
+    },
+    {
+      "agent": "opencode",
+      "name": "OpenCode",
+      "skipped": "every trial ended in an agent error before verification (first: OpenCode exited with code 1: t9jGOfyPZ1mefYKehTan+85wOEaIDPdCOpN1M1L7zKhQQrVvFwIMdOIgVpk8jo5C785NilJJKiByAcKAEgA1A==\"}},\"id\":\"prt_1abdcb7f3001LXpllYr8C3jONU\",\"sessionID\":\"ses_e542352c3ffejapRAmF6phECX)"
+    },
+    {
+      "agent": "aider",
+      "name": "Aider",
+      "label": "Aider aider 0.86.2 (openai/gemini-flash-lite-latest)",
+      "file": "aider.json",
+      "requestedModel": "openai/gemini-flash-lite-latest",
+      "reportedModel": "openai/gemini-flash-lite-latest",
+      "cliVersion": "aider 0.86.2",
+      "sourceRevision": "e4505c8def7382ee66d495724cf49a3e297dbb65",
+      "runtime": {
+        "node": "v22.20.0",
+        "platform": "linux",
+        "arch": "x64"
+      },
+      "passRate": 0.3333333333333333,
+      "passedTrials": 1,
+      "trials": 3,
+      "medianTrialTimeMs": 5233,
+      "totalTokens": 3038,
+      "totalReportedCostUSD": null,
+      "perTask": {
+        "clamp-integer": 1,
+        "safe-relative-path": 0,
+        "taskflow-search": 0
+      }
+    }
+  ]
+}
