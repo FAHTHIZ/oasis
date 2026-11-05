@@ -1594,7 +1594,7 @@ function responseText(output) {
 
 const MAX_PROVIDER_STREAM_BYTES = 8 * 1024 * 1024;
 
-async function consumeServerSentEvents(response, onEvent) {
+async function consumeServerSentEvents(response, onEvent, onStray) {
   if (!response.body || typeof response.body.getReader !== 'function') {
     throw new Error('The provider announced streaming but returned no readable event stream.');
   }
@@ -1618,6 +1618,7 @@ async function consumeServerSentEvents(response, onEvent) {
     const value = colon < 0 ? '' : line.slice(colon + 1).replace(/^ /, '');
     if (field === 'event') eventName = value;
     else if (field === 'data') dataLines.push(value);
+    else if (field !== 'id' && field !== 'retry' && typeof onStray === 'function') onStray(line);
   };
   try {
     while (true) {
@@ -1659,6 +1660,22 @@ export function mergeAnthropicUsage(target, source) {
     if (Number.isFinite(value) && value >= 0 && (value > 0 || target[field] === undefined)) target[field] = value;
   }
   return target;
+}
+
+/** A JSON error body ({ error } or [{ error }]) found outside SSE events, if any. */
+export function strayStreamError(text) {
+  const raw = String(text || '').trim();
+  if (!raw) return null;
+  let parsed;
+  try { parsed = JSON.parse(raw); } catch {
+    const match = /"message"\s*:\s*"((?:[^"\\]|\\.)*)"/.exec(raw);
+    return /"error"/.test(raw) ? { message: match ? match[1] : 'the provider sent an error', status: Number((/"code"\s*:\s*(\d{3})/.exec(raw) || [])[1]) || 0 } : null;
+  }
+  const body = Array.isArray(parsed) ? parsed[0] : parsed;
+  const error = body && typeof body === 'object' ? body.error : null;
+  if (!error) return null;
+  const message = typeof error === 'string' ? error : String(error.message || error.status || 'the provider sent an error');
+  return { message: message.slice(0, 400), status: Number(error.code) || 0 };
 }
 
 async function readProviderStream(response, protocol, onDelta, onProgress) {
@@ -1746,6 +1763,7 @@ async function readProviderStream(response, protocol, onDelta, onProgress) {
   const calls = new Map();
   let usage = {};
   let finishReason = null;
+  let stray = '';
   await consumeServerSentEvents(response, ({ data }) => {
     if (data === '[DONE]') return;
     const event = parseProviderEvent(data);
@@ -1771,7 +1789,12 @@ async function readProviderStream(response, protocol, onDelta, onProgress) {
         calls.set(index, tool);
       }
     }
-  });
+  }, (line) => { if (stray.length < 16384) stray += line + '\n'; });
+  // Gemini's OpenAI endpoint can fail mid-stream (503 "high demand") by
+  // appending a plain JSON error body after some data events, with no
+  // [DONE]. That is a broken reply, not a short answer: restart it.
+  const streamError = finishReason ? null : strayStreamError(stray);
+  if (streamError) throw Object.assign(new Error('The model stream was interrupted: ' + streamError.message), { code: 'OASIS_STREAM_INTERRUPTED', status: streamError.status });
   const toolCalls = [...calls.entries()].sort((a, b) => a[0] - b[0]).map(([, call]) => call);
   return { choices: [{ message: { role: 'assistant', content: content || null, ...(toolCalls.length ? { tool_calls: toolCalls } : {}) }, finish_reason: finishReason }], usage };
 }
@@ -2191,9 +2214,11 @@ async function requestCompletionWithStreamRestarts(session, options = {}) {
     try {
       return await requestCompletionTraced(session, options);
     } catch (error) {
-      if (!error || error.code !== 'OASIS_STREAM_INTERRUPTED' || restart >= MAX_STREAM_RESTARTS || (options.signal && options.signal.aborted)) throw error;
+      // A provider that reported overload mid-stream gets one more, slower try.
+      const overloaded = Number(error && error.status) >= 500;
+      if (!error || error.code !== 'OASIS_STREAM_INTERRUPTED' || restart >= MAX_STREAM_RESTARTS + (overloaded ? 1 : 0) || (options.signal && options.signal.aborted)) throw error;
       if (typeof options.onStreamRestart === 'function') options.onStreamRestart({ attempt: restart + 1, reason: error.message });
-      await waitForProviderRetry(providerRetryDelayMs(restart + 1), options.signal || new AbortController().signal);
+      await waitForProviderRetry(providerRetryDelayMs(restart + (overloaded ? 3 : 1)), options.signal || new AbortController().signal);
     }
   }
 }
