@@ -1,0 +1,113 @@
+{
+  "date": "2026-11-05T15:19:57.156Z",
+  "oasisVersion": "1.1.0",
+  "requestedModels": {
+    "oasis": "gpt-oss-20b",
+    "aider": "openai/gpt-oss-20b",
+    "opencode": "gpt-oss-20b"
+  },
+  "router": "127.0.0.1:8788",
+  "trialsPerTask": 1,
+  "requestedAgents": [
+    "oasis",
+    "aider",
+    "opencode"
+  ],
+  "sharedTaskIds": [
+    "clamp-integer",
+    "safe-relative-path",
+    "taskflow-search"
+  ],
+  "sharedTasks": [
+    "clamp-integer",
+    "safe-relative-path",
+    "taskflow-search"
+  ],
+  "excludedTasks": [],
+  "unverifiedTasks": [],
+  "fingerprintMismatchTasks": [],
+  "metadataMismatchTasks": [],
+  "incompleteTasks": [],
+  "taskMetadata": {
+    "clamp-integer": {
+      "category": "utility-logic",
+      "difficulty": "small"
+    },
+    "safe-relative-path": {
+      "category": "security-boundaries",
+      "difficulty": "medium"
+    },
+    "taskflow-search": {
+      "category": "data-structures",
+      "difficulty": "medium"
+    }
+  },
+  "caveats": [
+    "Agent adapters do not use identical tool surfaces, approval modes, or sandbox policies. This is a configured-product comparison, not an isolated measurement of harness code.",
+    "A shared gateway URL and requested model ID do not prove that every client was served the same underlying model or model version. Verify gateway/provider logs before calling this a same-model harness comparison.",
+    "Token and cost fields are adapter-reported usage. Cost may be absent or calculated differently by providers; it is not a normalized billing audit.",
+    "Only 3 task(s) have complete, identical SHA-256 fingerprints and the requested number of trials across all completed agents; the guide targets at least 50 representative tasks.",
+    "Only 1 trial(s) per task were requested. One trial is a smoke test; three trials are a minimum diagnostic repeat, not a confidence interval or significance test.",
+    "No verified matched task is labeled large; this run does not test larger repository-level work.",
+    "The selected agents do not all have one identical, explicitly requested model ID."
+  ],
+  "agents": [
+    {
+      "agent": "oasis",
+      "name": "OASIS",
+      "label": "OASIS 1.1.0 (gpt-oss-20b)",
+      "file": "oasis.json",
+      "requestedModel": "gpt-oss-20b",
+      "reportedModel": "gpt-oss-20b",
+      "cliVersion": "1.1.0",
+      "sourceRevision": "d8eaed86496c02b5881478bcdfd835cdf67a4a26",
+      "runtime": {
+        "node": "v22.20.0",
+        "platform": "linux",
+        "arch": "x64"
+      },
+      "passRate": 0.3333333333333333,
+      "passedTrials": 1,
+      "trials": 3,
+      "medianTrialTimeMs": 372784,
+      "totalTokens": 259538,
+      "totalReportedCostUSD": 0,
+      "perTask": {
+        "clamp-integer": 0,
+        "safe-relative-path": 1,
+        "taskflow-search": 0
+      }
+    },
+    {
+      "agent": "aider",
+      "name": "Aider",
+      "label": "Aider aider 0.86.2 (openai/gpt-oss-20b)",
+      "file": "aider.json",
+      "requestedModel": "openai/gpt-oss-20b",
+      "reportedModel": "openai/gpt-oss-20b",
+      "cliVersion": "aider 0.86.2",
+      "sourceRevision": "d8eaed86496c02b5881478bcdfd835cdf67a4a26",
+      "runtime": {
+        "node": "v22.20.0",
+        "platform": "linux",
+        "arch": "x64"
+      },
+      "passRate": 0.6666666666666666,
+      "passedTrials": 2,
+      "trials": 3,
+      "medianTrialTimeMs": 59730,
+      "totalTokens": 4697,
+      "totalReportedCostUSD": null,
+      "perTask": {
+        "clamp-integer": 1,
+        "safe-relative-path": 1,
+        "taskflow-search": 0
+      }
+    },
+    {
+      "agent": "opencode",
+      "name": "OpenCode",
+      "skipped": "every trial ended in an agent error before verification (first: OpenCode exited with code 1: Unexpected server error. Check server logs for details.)"
+    }
+  ]
+}

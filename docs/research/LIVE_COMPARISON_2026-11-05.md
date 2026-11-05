@@ -25,6 +25,8 @@ Read the caveats before quoting any number: 3 tasks and 1 trial per task is a sm
 | OpenCode (native Google provider) | 0/3 | — | Two tasks ended in HTTP 400 "Requests ending with a model turn are not supported" after an empty step; the third ended on a 503 without retrying. |
 | Gemini CLI | not valid | — | The key's daily free-tier quota (500 requests/day) was used up when its turn came; every trial failed in about 2 s with HTTP 429. Its earlier result is below. |
 
+> **Correction (later on 2026-11-05).** A later run found a harness bug: OpenCode takes its project folder from the inherited `PWD` variable, not from the process working directory, so in these runs it was pointed at the folder the benchmark started from, not the task workspace. The HTTP 400s above are OpenCode's own provider errors and would have failed the trials anyway, but the 0/3 is not a fair measure of OpenCode. Fixed in `bb25890` (the harness now sets `PWD`); OpenCode reruns are in [LIVE_COMPARISON_2026-11-05b.md](LIVE_COMPARISON_2026-11-05b.md).
+
 ### Morning run (OASIS before today's fixes)
 
 | Agent | Passed | What happened |
