@@ -36,7 +36,7 @@ Desktop builds are unsigned. Verify downloads against the release `SHA256SUMS` f
 
 ### Updates
 
-From v1.1.0, the desktop app checks GitHub for a new stable release 15 seconds after launch and every six hours after that. When one is out, you get a system notification and a banner in the workspace. **Help → Check for updates…** checks right away. Choosing **Install and restart** downloads the installer for your system from the GitHub release. It checks the file against that release's `SHA256SUMS` and deletes it if it doesn't match. Then:
+From v1.1.0, the desktop app checks GitHub for a new stable release 15 seconds after launch and every six hours after that. If a check fails (for example, you are offline), it tries again after 2, 10 and 30 minutes. When one is out, you get a system notification and a banner in the workspace. **Help → Check for updates…** checks right away. Choosing **Install and restart** downloads the installer for your system from the GitHub release. It checks the file against that release's `SHA256SUMS` and deletes it if it doesn't match. Then:
 
 - **Windows:** reinstalls silently and reopens.
 - **Linux AppImage:** replaces the AppImage in place and restarts.
