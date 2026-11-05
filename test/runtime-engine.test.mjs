@@ -8,7 +8,7 @@ import path from 'node:path';
 import { mkdtemp, mkdir, rm, writeFile, symlink } from 'node:fs/promises';
 import { listWorkspaceFiles } from '../src/workspace-files.mjs';
 import { runtimeConfigFromConnection, connectFromPaste } from '../src/provider-connect.mjs';
-import { tokenFromPaste, runtimeToken, RuntimeWorkspace } from '../app/core/runtime.mjs';
+import { tokenFromPaste, runtimeToken, RuntimeWorkspace, RuntimeAgent } from '../app/core/runtime.mjs';
 
 test('workspace file list skips dependencies, secrets and symlinks, and is capped', async (t) => {
   const root = await mkdtemp(path.join(os.tmpdir(), 'oasis-files-'));
@@ -69,4 +69,18 @@ test('runtime workspace maps git status and per-file diffs for the Changes tab',
   assert.equal(ws.project.name, 'demo');
   assert.deepEqual(await ws.changes(), [{ path: 'a.js', status: 'modified' }, { path: 'new.txt', status: 'added' }]);
   assert.deepEqual(ws.fileDiff('a.js').map((l) => l.type + ':' + l.text), ['note:@@ -1 +1 @@', 'del:old', 'add:new', 'same:']);
+});
+
+test('a note typed while the runtime works goes to the running job', async () => {
+  const calls = [];
+  const events = [];
+  const client = { api: async (path, options = {}) => { calls.push([path, options.body]); return { queued: true }; } };
+  const agent = new RuntimeAgent({ client, onEvent: (e) => events.push(e) });
+  assert.equal(await agent.steer('use tabs'), false, 'nothing is running yet');
+  agent.busy = true; agent.jobId = '11111111-2222-3333-4444-555555555555';
+  assert.equal(await agent.steer('  use tabs  '), true);
+  assert.deepEqual(calls, [['/api/jobs/11111111-2222-3333-4444-555555555555/steer', { message: 'use tabs' }]]);
+  assert.deepEqual(events, [{ type: 'user', content: 'use tabs', steer: true }]);
+  client.api = async () => { throw new Error('That task is no longer running.'); };
+  assert.equal(await agent.steer('late'), false);
 });
