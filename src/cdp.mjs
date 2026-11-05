@@ -3,9 +3,8 @@
 // RFC 6455 WebSocket client (Node 20 has no global WebSocket without a flag).
 import { spawn } from 'node:child_process';
 import { existsSync, readdirSync } from 'node:fs';
-import { mkdtemp, rm } from 'node:fs/promises';
+import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import http from 'node:http';
-import net from 'node:net';
 import os from 'node:os';
 import path from 'node:path';
 import crypto from 'node:crypto';
@@ -52,13 +51,11 @@ function getJson(port, pathname, method = 'GET') {
   });
 }
 
-function freePort() {
-  return new Promise((resolve, reject) => {
-    const server = net.createServer();
-    server.unref();
-    server.on('error', reject);
-    server.listen(0, '127.0.0.1', () => { const { port } = server.address(); server.close(() => resolve(port)); });
-  });
+async function readDevToolsPort(profile) {
+  try {
+    const port = Number(String(await readFile(path.join(profile, 'DevToolsActivePort'), 'utf8')).split('\n')[0]);
+    return Number.isInteger(port) && port > 0 && port < 65536 ? port : 0;
+  } catch { return 0; }
 }
 
 // --- WebSocket (client side, text frames only, masked as the RFC requires) ---
@@ -175,9 +172,12 @@ export class Browser {
   static async launch({ env = process.env, headless = true, executable = null, timeoutMs = 45000 } = {}) {
     const exe = executable || findChrome(env);
     if (!exe) throw new Error('No Chrome, Chromium or Edge found. Install one, or set OASIS_CHROME_PATH to its executable.');
-    const port = await freePort();
+    // Port 0 lets Chrome bind its own DevTools port and report it in
+    // <profile>/DevToolsActivePort. Picking a "free" port first and handing it
+    // over is racy: under parallel load another process (or another Chrome)
+    // can take it, and we would end up driving someone else's browser.
     const profile = await mkdtemp(path.join(os.tmpdir(), 'oasis-chrome-'));
-    const args = ['--remote-debugging-port=' + port, '--user-data-dir=' + profile, '--no-first-run', '--no-default-browser-check', '--disable-background-networking', '--disable-sync', '--window-size=1280,900'];
+    const args = ['--remote-debugging-port=0', '--user-data-dir=' + profile, '--no-first-run', '--no-default-browser-check', '--disable-background-networking', '--disable-sync', '--window-size=1280,900'];
     // GitHub-hosted Linux runners and small-memory containers can have a tiny
     // /dev/shm. Chrome otherwise may start slowly or fail before opening CDP.
     if (process.platform === 'linux') args.push('--disable-dev-shm-usage');
@@ -190,10 +190,11 @@ export class Browser {
     let stderr = '';
     child.stderr?.on('data', (chunk) => { stderr = (stderr + chunk.toString('utf8')).slice(-4000); });
     child.on('error', (error) => { spawnError = error; });
-    const browser = new Browser({ port, child, profile });
+    const browser = new Browser({ port: 0, child, profile });
     const started = Date.now();
     for (;;) {
-      try { await getJson(port, '/json/version'); break; } catch {}
+      if (!browser.port) browser.port = await readDevToolsPort(profile);
+      if (browser.port) { try { await getJson(browser.port, '/json/version'); break; } catch {} }
       if (spawnError) {
         await browser.close();
         throw new Error('Could not start Chrome: ' + spawnError.message + (stderr ? '\n' + stderr : ''));
