@@ -94,6 +94,7 @@ The terminal (`oasis`) is the same agent with the same safety rules, for people 
 
 <p align="center">
   <a href="assets/demo/oasis-terminal-demo.mp4"><img src="assets/demo/oasis-terminal-demo.gif" alt="OASIS in a terminal: it finds a time-zone bug, fixes it with a one-line change, adds a regression test, runs the tests after approval, reviews its diff, then refuses a destructive git clean" width="100%" /></a>
+  <br/><sub>The real CLI in a pseudo-terminal from <code>scripts/demo/record-demo.mjs</code>; the model's replies are scripted so the recording is reproducible.</sub>
 </p>
 
 | | Terminal (`oasis`) | App (phone, browser, desktop) | Editor |
@@ -150,7 +151,7 @@ The [model-free harness benchmark](docs/BENCHMARKS.md#model-free-harness-benchma
 
 Every miss above was then fixed and turned into a regression test, so the current runtime scores 100% on all four case sets except one deliberate secret-scanner miss. Those post-fix numbers measure tuning, not generalization, which is why the table shows the untuned ones.
 
-The agent evaluator has **52 tasks**: 33 focused fixtures plus 19 repository-level bug reports and multi-file features, scored by hidden assertions the agent never sees (`oasis eval`). Head-to-head runs against Claude Code, Codex CLI, Gemini CLI, OpenCode and Aider on the same tasks and the same model take one command, [`npm run bench:live`](docs/BENCHMARKS.md#head-to-head-in-one-command). The first live smoke run (2026-11-05, one free-tier Gemini Flash-Lite model for every agent, 3 tasks × 1 trial) is [published with its caveats](docs/research/LIVE_COMPARISON_2026-11-05.md): OASIS 3/3, Aider 2/3, OpenCode 0/3, and Gemini CLI's run hit the key's daily quota. That is too small to rank anyone, and Claude Code and Codex could not run on that model, so OASIS does not claim to beat them. Live runs with small local models, including the failures, are in [Benchmarks](docs/BENCHMARKS.md).
+The agent evaluator has **52 tasks**: 33 focused fixtures plus 19 repository-level bug reports and multi-file features, scored by hidden assertions the agent never sees (`oasis eval`). Head-to-head runs against Claude Code, Codex CLI, Gemini CLI, OpenCode and Aider on the same tasks and the same model take one command, [`npm run bench:live`](docs/BENCHMARKS.md#head-to-head-in-one-command). The first live smoke run (2026-11-05, one free-tier Gemini Flash-Lite model for every agent, 3 tasks × 1 trial) is [published with its caveats](docs/research/LIVE_COMPARISON_2026-11-05.md): OASIS 3/3, Aider 2/3, OpenCode 0/3 (that OpenCode score is not valid: a harness bug, since fixed, ran it in the wrong folder), and Gemini CLI's run hit the key's daily quota. That is too small to rank anyone, and Claude Code and Codex could not run on that model, so OASIS does not claim to beat them. Live runs with small local models, including the failures, are in [Benchmarks](docs/BENCHMARKS.md).
 
 ## What it fixes
 
