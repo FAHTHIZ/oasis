@@ -31,7 +31,7 @@ From v1.1.0, the desktop app checks GitHub for a new stable release 15 seconds a
 - **Linux AppImage:** replaces the AppImage in place and restarts.
 - **macOS `.dmg` and Linux `.deb`:** opens the file so you can finish with the system installer. Unsigned macOS apps cannot replace themselves.
 
-You can also choose **Later** or **Skip this version**. Projects, settings and keys are never touched. Set `OASIS_NO_UPDATE_CHECK=1` to turn checks off, or `OASIS_UPDATE_CHANNEL=beta` to include pre-releases. The CLI and `oasis web` show the same notice and point to `oasis update`. v1.0.0 has no update checker, so install v1.1.0 once by hand; later updates are offered automatically.
+You can also choose **Later** or **Skip this version**. To check right away, use **Help → Check for updates…** in the desktop app or **Settings → Devices → Updates** in the browser workspace. Projects, settings and keys are never touched. Set `OASIS_NO_UPDATE_CHECK=1` to turn checks off, or `OASIS_UPDATE_CHANNEL=beta` to include pre-releases. The CLI and `oasis web` show the same notice and point to `oasis update`. v1.0.0 has no update checker, so install v1.1.0 once by hand; later updates are offered automatically.
 
 ```sh
 # macOS / Linux, in the folder with both files
