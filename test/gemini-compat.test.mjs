@@ -95,7 +95,7 @@ test('a Gemini per-minute limit is a short wait, not a billing error', async () 
   assert.equal(formatWait(150000), '3 min');
 });
 
-test('oasis -p waits out a Gemini per-minute limit and retries the same model', async () => {
+async function runAgainstRateLimitedGemini({ fails, fallback = '' }) {
   const http = await import('node:http');
   const { spawn } = await import('node:child_process');
   const fs = await import('node:fs/promises');
@@ -108,9 +108,9 @@ test('oasis -p waits out a Gemini per-minute limit and retries the same model', 
     req.on('end', () => {
       const body = JSON.parse(raw || '{}');
       models.push(body.model);
-      if (models.length === 1) {
+      if (models.length <= fails) {
         res.writeHead(429, { 'content-type': 'application/json' });
-        res.end(geminiQuota429('GenerateRequestsPerMinutePerProjectPerModel-FreeTier', 'Generate content requests per minute limit exceeded on Free Tier.', '0.4s', '0s'));
+        res.end(geminiQuota429('GenerateContentInputTokensPerModelPerMinute-FreeTier', 'Generate content input tokens per minute limit exceeded on Free Tier.', '0.4s', '0s'));
         return;
       }
       const reply = { role: 'assistant', content: 'Recovered.' };
@@ -123,21 +123,35 @@ test('oasis -p waits out a Gemini per-minute limit and retries the same model', 
   await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
   const home = await fs.mkdtemp(path.join(os.tmpdir(), 'oasis-rpm-'));
   try {
-    const env = { ...process.env, HOME: home, OASIS_CONFIG_DIR: path.join(home, 'cfg'), OASIS_PROTOCOL: 'openai-compatible', OASIS_BASE_URL: 'http://127.0.0.1:' + server.address().port + '/v1', OASIS_MODEL: 'gemini-3-flash', OASIS_FALLBACK_MODEL: 'gemini-3.1-flash-lite', OASIS_API_KEY: '', OASIS_SANDBOX: '0' };
-    const child = spawn(process.execPath, [new URL('../src/cli.mjs', import.meta.url).pathname, '-p', 'hi'], { cwd: home, env, stdio: ['ignore', 'pipe', 'pipe'] });
+    const env = { ...process.env, HOME: home, OASIS_CONFIG_DIR: path.join(home, 'cfg'), OASIS_PROTOCOL: 'openai-compatible', OASIS_BASE_URL: 'http://127.0.0.1:' + server.address().port + '/v1', OASIS_MODEL: 'gemini-3-flash', OASIS_API_KEY: '', OASIS_SANDBOX: '0' };
+    const args = [new URL('../src/cli.mjs', import.meta.url).pathname, '-p', 'hi'];
+    if (fallback) args.push('--fallback-model', fallback);
+    const child = spawn(process.execPath, args, { cwd: home, env, stdio: ['ignore', 'pipe', 'pipe'] });
     let out = '';
     let err = '';
     child.stdout.on('data', (c) => { out += c; });
     child.stderr.on('data', (c) => { err += c; });
     const code = await new Promise((resolve) => child.on('close', resolve));
-    assert.equal(code, 0, err);
-    assert.match(out, /Recovered\./);
-    assert.deepEqual(models, ['gemini-3-flash', 'gemini-3-flash'], 'retried the same model instead of falling back');
-    assert.match(err, /\[rate limit\] Waiting 1s/);
+    return { code, out, err, models };
   } finally {
     server.close();
     await fs.rm(home, { recursive: true, force: true });
   }
+}
+
+test('oasis -p waits out a Gemini per-minute limit on the same model when there is no backup', async () => {
+  const run = await runAgainstRateLimitedGemini({ fails: 2 });
+  assert.equal(run.code, 0, run.err);
+  assert.match(run.out, /Recovered\./);
+  assert.deepEqual(run.models, ['gemini-3-flash', 'gemini-3-flash', 'gemini-3-flash']);
+  assert.match(run.err, /\[rate limit\] Waiting 1s/);
+});
+
+test('with a backup model, a per-minute limit waits once and then falls back', async () => {
+  const run = await runAgainstRateLimitedGemini({ fails: 2, fallback: 'gemini-3.1-flash-lite' });
+  assert.equal(run.code, 0, run.err);
+  assert.match(run.out, /Recovered\./);
+  assert.deepEqual(run.models, ['gemini-3-flash', 'gemini-3-flash', 'gemini-3.1-flash-lite']);
 });
 
 test('the browser app fails fast on daily quota and waits out per-minute limits', async () => {
