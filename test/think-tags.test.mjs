@@ -111,3 +111,18 @@ test('the browser app streams and returns replies without thoughts', async () =>
   assert.equal(reply.content, 'Hi there');
   assert.equal(shown, 'Hi there');
 });
+
+test('an orphan closing tag left after flagged Gemini thoughts is hidden', async () => {
+  const { splitThinking, visibleReply, createThinkFilter } = await import('../app/core/think-tags.mjs');
+  // Seen live on gemma-4-31b-it: thought chunks were flagged, the close tag was not.
+  assert.equal(splitThinking("</thought>I'll start by listing the files.").content, "I'll start by listing the files.");
+  assert.equal(visibleReply('</tho'), '');
+  assert.equal(visibleReply('</thought>I will'), 'I will');
+  let shown = '';
+  const filter = createThinkFilter((chunk) => { shown += chunk; });
+  filter.push('</th'); filter.push('ought>Hello'); filter.push(' there');
+  filter.flush();
+  assert.equal(shown, 'Hello there');
+  // An answer that merely talks about tags is left alone.
+  assert.equal(splitThinking('Use </thought> to close it.').content, 'Use </thought> to close it.');
+});
