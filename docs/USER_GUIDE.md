@@ -11,7 +11,7 @@ Start with the overview you need, then jump straight to a workflow or reference.
 | Area | Go to |
 |---|---|
 | Getting started | [Install and set up](#install-the-terminal-agent) · [Connect the browser workspace](#connected-browser-workspace-and-runtime) · [Try plain-English tasks](#use-it-in-plain-english) |
-| Product capabilities | [Implemented capabilities](#what-is-implemented) · [Native plugin packages](#native-oasis-plugin-packages) · [Plugins and integrations](#plugins-integrations-and-installation) · [Editor integration](#vs-code-cursor-and-windsurf) · [OpenHands bridge](#optional-openhands-delegation) |
+| Product capabilities | [Implemented capabilities](#what-is-implemented) · [Native plugin packages](#native-oasis-plugin-packages) · [Plugins and integrations](#plugins-integrations-and-installation) · [Editor integration](#vs-code-cursor-and-windsurf) |
 | Safety and configuration | [Safety model](#safety-model) · [Permissions](#permission-rules-and-modes) · [MCP servers](#project-mcp-servers-mcpjson) · [Hooks](#hooks) · [Settings](#settings-pane) |
 | Terminal and sessions | [Interactive terminal](#the-interactive-terminal) · [PTY sessions](#interactive-pty-terminal-sessions) · [Slash commands](#slash-commands-mentions-and-memory) · [Auto memory](#auto-memory) · [Clear local data](#clearing-local-data) |
 | Automation and developer tools | [Headless mode](#headless-mode-for-scripts-and-ci) · [GitHub Action](#github-mention-oasis) · [SDK](#sdk-build-on-oasis-from-node) · [OpenTelemetry](#opentelemetry) · [Subagents](#subagents) · [Workflows](#dynamic-workflows) · [Agent tools](#extra-agent-tools) · [LSP and diagnostics](#lsp-verification-and-context-estimates) · [Watch mode](#watch-mode-ai-comments-in-your-editor) · [Auto-test](#auto-test-after-edits) · [Weakened-test detection](#weakened-test-detection) |
@@ -24,9 +24,9 @@ Start with the overview you need, then jump straight to a workflow or reference.
 
 Use the current [Install OASIS guide](INSTALL.md) for desktop downloads, the checksum-verified CLI installer, updates and uninstall. The CLI requires Node.js 22 or newer. The installer resolves the latest stable versioned tag to an immutable commit SHA; it does not install the moving `main` branch.
 
-When you launch `oasis` for the first time without a configured model, OASIS shows three routes: use an API key, use the OmniRoute gateway, or use a local Ollama model. Press Enter to take the default OmniRoute route, choose `1`, `2`, or `3` explicitly, or choose `4` to set it up later. The first-run screen is designed for a person who does not yet know provider names. The same guided setup is offered when launching `oasis web` or starting a one-shot task from an interactive terminal without a provider. Software installation, gateway startup, and provider changes are confirmed and verified; free/keyless model routes depend on upstream availability and limits. To change providers later, run `oasis setup`; to check live tool calling, run `oasis doctor --test-provider`.
+When you launch `oasis` for the first time without a configured model, OASIS shows three choices: use an API key, use a model on this computer (Ollama), or set it up later. Press Enter for the API-key route, or choose `1`, `2` or `3`. The first-run screen is designed for a person who does not yet know provider names. The same guided setup is offered when launching `oasis web` or starting a one-shot task from an interactive terminal without a provider. Software installation and provider changes are confirmed and verified. To change providers later, run `oasis setup`; to check live tool calling, run `oasis doctor --test-provider`.
 
-During setup, choose a provider preset or a custom endpoint: **OmniRoute**, OpenAI, Anthropic, OpenRouter, Google Gemini, or local Ollama. OmniRoute uses the local OpenAI-compatible endpoint `http://127.0.0.1:20128/v1` with model `auto`; `oasis setup` can install and start the gateway after approval, then verifies tool calling before changing the provider configuration. Some OmniRoute configurations require a local endpoint key from the gateway dashboard. OpenRouter uses `https://openrouter.ai/api/v1`; Gemini uses `https://generativelanguage.googleapis.com/v1beta/openai/`; local Ollama uses `http://localhost:11434/v1`. For OpenRouter and Ollama, enter the exact model ID available to your account or local server. During terminal first-run, OASIS checks Ollama on `127.0.0.1:11434` and lists up to 100 installed model names when it is running. If it is missing or empty, the prompt gives you the official download page and the `ollama pull <model-name>` command. The browser provider form includes an OmniRoute preset for an already-running gateway.
+During setup, choose a provider preset or a custom endpoint: OpenAI, Anthropic, OpenRouter, Google Gemini, or local Ollama. OpenRouter uses `https://openrouter.ai/api/v1`; Gemini uses `https://generativelanguage.googleapis.com/v1beta/openai/`; local Ollama uses `http://localhost:11434/v1`. For OpenRouter and Ollama, enter the exact model ID available to your account or local server. During terminal first-run, OASIS checks Ollama on `127.0.0.1:11434` and lists up to 100 installed model names when it is running. If it is missing or empty, the prompt gives you the official download page and the `ollama pull <model-name>` command.
 
 **Setup verifies before saving.** OASIS sends a small test prompt with one inert tool schema and saves provider credentials only after the model returns the expected tool-call response. The probe is inspected but never executed. A failed test does not overwrite the current config. Key input is hidden in the CLI; the browser provider form accepts credentials only from the same device over localhost. In the Electron desktop app, the provider form stores keys through Electron's OS-backed secure storage and refuses to save a new key when encryption is unavailable. In CLI/browser mode (`oasis setup` or `oasis web` outside the desktop host), the key is stored in the user-level OASIS configuration file with restrictive POSIX permissions where supported; this is not OS-backed encryption. The API key is never returned to the browser after saving and should never be pasted into a chat prompt, source file, or screenshot.
 
@@ -130,11 +130,10 @@ oasis "Install Playwright and set up browser tests"
 oasis skills list
 oasis skills install debugging
 oasis skills find frontend-design
-oasis skills inspect vercel-labs/agent-skills
-oasis skills add vercel-labs/agent-skills --skill web-design-guidelines
-oasis skills add vercel-labs/agent-skills --all --global
-oasis "Set up OmniRoute and connect it as my model provider"
-oasis "Add the web-design-guidelines skill from vercel-labs/agent-skills to this project"
+oasis skills inspect anthropics/skills
+oasis skills add anthropics/skills --skill pdf
+oasis skills add OWNER/REPO --all --global
+oasis "Add the pdf skill from anthropics/skills to this project"
 oasis "Install the code-quality capability plugin"
 oasis plugins list
 oasis plugins install code-quality
@@ -148,14 +147,14 @@ oasis extensions list
 oasis extensions rollback agents --commit 0123456789abcdef0123456789abcdef01234567 --scope project
 ~~~
 
-A simple request such as `oasis install pnpm` uses the package installer directly and does not require an AI API. Compound tasks are routed through the agent and need a configured model. Once the model is live, requests such as “set up OmniRoute”, “add this Agent Skill”, or “install the code-quality plugin” can be made in the same chat; OASIS selects the appropriate setup tool and asks for approval before installing packages, switching providers, or importing external instructions. Provider credentials are never requested through chat messages. The Skills commands integrate the pinned Vercel Skills CLI on demand: `find` searches skills.sh, `inspect` lists a source's skills, and `add` installs only the chosen skill (or all skills when explicitly requested) into the universal `.agents/skills/` path or its global equivalent. OASIS loads those standard `SKILL.md` files in new sessions and treats them as external/untrusted instructions. The external CLI requires Node.js 22.20+; telemetry is disabled for OASIS-launched runs.
+A simple request such as `oasis install pnpm` uses the package installer directly and does not require an AI API. Compound tasks are routed through the agent and need a configured model. Once the model is live, requests such as “switch to OpenRouter”, “add this Agent Skill”, or “install the code-quality plugin” can be made in the same chat; OASIS selects the appropriate setup tool and asks for approval before installing packages, switching providers, or importing external instructions. Provider credentials are never requested through chat messages. The Skills commands are built into OASIS: `find` searches GitHub for skill repositories, `inspect` lists a source's `SKILL.md` packages, and `add` installs only the chosen skill (or all skills when explicitly requested) into `.agents/skills/` in the project or the global skills folder. OASIS downloads and copies the files itself with Git hooks and submodules disabled, skips symlinks and oversized files, and never runs anything from the source. Installed skills load in new sessions and are treated as external, untrusted instructions.
 
 ## What is implemented
 
 ### Terminal agent
 - Interactive sessions and one-shot plain-English tasks.
 - Multi-step native OpenAI Responses, OpenAI-compatible Chat Completions, and Anthropic Messages tool-calling loops, with incremental text streaming in the browser, safe cancellation of active model requests/commands, and a JSON-response fallback for gateways that do not stream.
-- Chat-driven provider switching and OmniRoute bootstrap: the agent can request approved CLI installation/startup, probe the gateway with a non-executed tool call, and change the user-level provider only after verification succeeds. Free routes and provider quotas depend on the gateway and upstream service.
+- Chat-driven provider switching: the agent probes the provider with a non-executed tool call and changes the user-level provider only after verification succeeds.
 - MCP stdio server integration configured either by CLI or normal chat; chat setup requires a dedicated manual approval, validates the server handshake before persistence, and exposes discovered tools in the current session. Every MCP tool call still requires its own approval by default.
 - Workspace file listing, glob matching, literal search, line-ranged reads, exact-string `edit_file` patches, whole-file writes, and approved deletes.
 - Command execution through an executable plus argument array, without shell expansion; an optional `run_shell` tool (enabled by settings or the OS sandbox) handles pipes and `&&`. Every `run_shell` line is parsed into its simple commands first: catastrophic ones (recursive deletes of home, root or system folders, raw disk writes, package publishing, force pushes, `gh repo delete`) are refused, and high-risk ones (`curl … | sh`, `git branch -D`, `git clean -x`, `terraform destroy`, `kubectl delete`, SQL `DROP`, cloud deletes) always ask for approval, even in `bypassPermissions` mode, with allow rules, or in the sandbox. Long-running commands can run in the background.
@@ -177,7 +176,7 @@ A simple request such as `oasis install pnpm` uses the package installer directl
 - Notes that save locally, plus JSON export/import.
 - Light/dark themes and an installable PWA shell with a service worker for offline static assets.
 - A connected Agent page when served by `oasis web`: authenticated chat, resumable saved chat history, visible tool activity, and browser-based approval for commands, installs, deletion, and capability-bundle installation.
-- OmniRoute provider preset for an already-running local gateway; provider keys remain restricted to the local browser session and are never echoed by the runtime.
+- Provider keys entered in the browser stay restricted to the local browser session and are never echoed by the runtime.
 - Typing `/` in the agent composer lists every command the browser can run: built-in commands, your project, user and plugin custom commands, and skills, with substring search. Custom commands (`/ship 2.1.0`) and skills (`/skill-name request`) expand in the browser exactly as they do in the terminal.
 - Saved chats can be deleted from the sidebar (the × on hover, with a confirmation); a chat that is still running cannot be deleted. The API is `DELETE /api/sessions/:id`.
 - Settings → Appearance has Chat width (Comfortable, Wide or Full width; also "Cycle chat width" in the Ctrl+K palette) and Send key. Both are remembered in this browser.
@@ -336,24 +335,6 @@ oasis -C ~/code/my-app gateway slack
 ~~~
 
 Discord answers direct messages and messages that mention the bot; each channel has one session. Slack answers direct messages and @mentions; each DM and each channel thread is its own session and replies go to the thread. Only allowlisted users reach the agent or can press approval buttons; anyone else gets their ID once. Slack reserves `/`, so use `!new`, `!stop`, `!status` and `!mode` there (the `!` form works everywhere). Both reconnect with backoff. Text only for now.
-
-## Optional OpenHands delegation
-
-OASIS can delegate a bounded task to an already-running OpenHands Agent Server. This is an optional bridge, not an OpenHands installation wizard or a replacement for OASIS's own runtime. Set the connection details in the environment used to start OASIS:
-
-~~~bash
-export OPENHANDS_AGENT_SERVER_URL=http://127.0.0.1:8000
-export OPENHANDS_AGENT_PROFILE_ID=your-reviewed-agent-profile
-# If the server requires session authentication, set OPENHANDS_SESSION_API_KEY
-# in your local environment/secret manager; never paste it into an OASIS prompt.
-# For a remote HTTPS server, also set the absolute workspace path as seen by that server:
-# export OPENHANDS_WORKSPACE_PATH=/workspace/project
-oasis "Delegate a code review to OpenHands"
-~~~
-
-OPENHANDS_AGENT_PROFILE_ID must identify an Agent Profile already configured on the server, including its model provider and credentials. OASIS never sends its own provider key to OpenHands. A local server can use the current workspace path by default; a remote server must use HTTPS and an explicit OPENHANDS_WORKSPACE_PATH, because the path on your computer may not exist on the server.
-
-Delegation always asks for explicit approval, even with --yes. The conversation requests OpenHands' AlwaysConfirm policy and a Git worktree where supported. If OpenHands pauses for its own tool confirmation, you must review and approve it in OpenHands' interface; OASIS will not accept those actions on your behalf. Non-Git workspaces can fall back to a shared directory. If a delegated task is still running when OASIS stops waiting, OASIS returns its conversation ID instead of silently resubmitting it. Review delegated changes in the OpenHands workspace before integrating them.
 
 ## Corporate proxies and custom certificates
 

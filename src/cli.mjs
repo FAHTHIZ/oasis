@@ -450,23 +450,6 @@ async function askSecret(question) {
   });
 }
 
-async function configureOmniRoute(root = process.cwd()) {
-  const runSetup = (localApiKey = '') => executeTool('setup_omniroute', localApiKey ? { localApiKey } : {}, {
-    root, env: process.env, autoApprove: false,
-    approval: (message) => approve(message, true, false)
-  });
-  let result = await runSetup();
-  if (!result.connected && result.needsLocalApiKey) {
-    const localApiKey = await askSecret('OmniRoute local endpoint key (input hidden; leave blank if your gateway does not require one): ');
-    if (localApiKey) result = await runSetup(localApiKey);
-  }
-  stdout.write((result.message || 'OmniRoute setup did not complete.') + '\n');
-  if (result.connected) stdout.write('OmniRoute tool calling was verified; Oasis is now connected to model "auto".\n');
-  else stdout.write('The previous provider configuration was left unchanged. Resolve the message above and retry oasis setup.\n');
-  return result;
-}
-
-
 // Hardware-aware setup: detect this computer and its local model servers, then
 // save the best working route. Only a route that answers a real test request is
 // saved; anything else prints the recommendation and the next step.
@@ -478,7 +461,7 @@ async function autoSetup(root, { dryRun = false } = {}) {
   const rec = await profileThisComputer({ configured: Boolean(current && current.configured) });
   stdout.write(describeRecommendation(rec) + '\n');
   const primary = rec.primary;
-  if (primary.route !== 'local' && primary.route !== 'gateway') {
+  if (primary.route !== 'local') {
     stdout.write(primary.route === 'local-install'
       ? '\nInstall Ollama and pull the model above, then run oasis setup --auto again.\n'
       : '\nRun oasis setup to connect a hosted model with an API key.\n');
@@ -501,7 +484,7 @@ async function autoSetup(root, { dryRun = false } = {}) {
 
 async function configureProvider(root = process.cwd(), options = {}) {
   stdout.write('\nOasis setup — choose and verify your model provider\n');
-  stdout.write('A successful model response is required before settings are saved or coding tools are used. Presets include OmniRoute, OpenAI, Anthropic, OpenRouter, Gemini, local Ollama, AWS Bedrock, Google Vertex AI, and Microsoft Foundry.\n');
+  stdout.write('A successful model response is required before settings are saved or coding tools are used. Presets include OpenAI, Anthropic, OpenRouter, Gemini, local Ollama, AWS Bedrock, Google Vertex AI, and Microsoft Foundry.\n');
   const rl = createInterface({ input: stdin, output: stdout });
   let protocol, baseURL, model, presetName;
   const presets = {
@@ -510,7 +493,6 @@ async function configureProvider(root = process.cwd(), options = {}) {
     openrouter: { protocol: 'openai-compatible', baseURL: 'https://openrouter.ai/api/v1', model: '' },
     gemini: { protocol: 'openai-compatible', baseURL: 'https://generativelanguage.googleapis.com/v1beta/openai/', model: 'gemini-3.8-flash' },
     ollama: { protocol: 'openai-compatible', baseURL: 'http://localhost:11434/v1', model: '' },
-    omniroute: { protocol: 'openai-compatible', baseURL: 'http://127.0.0.1:20128/v1', model: 'auto' },
     bedrock: { protocol: 'bedrock', baseURL: defaultCloudBaseURL('bedrock', process.env), model: process.env.ANTHROPIC_MODEL || '' },
     vertex: { protocol: 'vertex', baseURL: defaultCloudBaseURL('vertex', process.env), model: process.env.ANTHROPIC_MODEL || '' },
     foundry: { protocol: 'foundry', baseURL: (() => { try { return defaultCloudBaseURL('foundry', process.env); } catch { return ''; } })() || 'https://RESOURCE.services.ai.azure.com/anthropic', model: process.env.ANTHROPIC_MODEL || process.env.ANTHROPIC_DEFAULT_SONNET_MODEL || '' }
@@ -537,24 +519,20 @@ async function configureProvider(root = process.cwd(), options = {}) {
     } else {
       stdout.write('\nChoose how you want to connect OASIS:\n');
       stdout.write('  1. I have an API key\n');
-      stdout.write('  2. Use the free OmniRoute gateway (may be slow or limited)\n');
-      stdout.write('  3. Use a model on this computer (Ollama)\n');
-      stdout.write('  4. Advanced provider or custom endpoint\n');
-      const defaultChoice = defaultPreset === 'omniroute' ? '2'
-        : defaultPreset === 'ollama' ? '3'
-        : ['bedrock', 'vertex', 'foundry', 'custom'].includes(defaultPreset) ? '4' : '1';
-      const answer = (await rl.question('Choose [1/2/3/4] (default ' + defaultChoice + '): ')).trim().toLowerCase() || defaultChoice;
-      const directPresets = ['omniroute', 'openai', 'anthropic', 'openrouter', 'gemini', 'ollama', 'bedrock', 'vertex', 'foundry', 'custom'];
+      stdout.write('  2. Use a model on this computer (Ollama)\n');
+      stdout.write('  3. Advanced provider or custom endpoint\n');
+      const defaultChoice = defaultPreset === 'ollama' ? '2'
+        : ['bedrock', 'vertex', 'foundry', 'custom'].includes(defaultPreset) ? '3' : '1';
+      const answer = (await rl.question('Choose [1/2/3] (default ' + defaultChoice + '): ')).trim().toLowerCase() || defaultChoice;
+      const directPresets = ['openai', 'anthropic', 'openrouter', 'gemini', 'ollama', 'bedrock', 'vertex', 'foundry', 'custom'];
       if (directPresets.includes(answer)) {
         // Keep accepting named presets for existing scripts and experienced users.
         presetName = answer;
       } else if (answer === '2') {
-        presetName = 'omniroute';
-      } else if (answer === '3') {
         presetName = 'ollama';
       } else if (answer === '1') {
         presetName = await chooseApiPreset(defaultPreset);
-      } else if (answer === '4') {
+      } else if (answer === '3') {
         stdout.write('\nChoose an advanced provider:\n');
         stdout.write('  1. AWS Bedrock\n  2. Google Vertex AI\n  3. Microsoft Foundry\n  4. Custom / compatible endpoint\n');
         const advancedDefault = ({ bedrock: '1', vertex: '2', foundry: '3', custom: '4' })[defaultPreset] || '4';
@@ -563,7 +541,7 @@ async function configureProvider(root = process.cwd(), options = {}) {
         presetName = advancedProviders[advancedAnswer] || (['bedrock', 'vertex', 'foundry', 'custom'].includes(advancedAnswer) ? advancedAnswer : '');
         if (!presetName) throw new Error('Choose a number from 1 to 4 for the advanced provider.');
       } else {
-        throw new Error('Choose 1, 2, 3, or 4. No provider settings were changed.');
+        throw new Error('Choose 1, 2, or 3. No provider settings were changed.');
       }
     }
     if (shouldPromptForProviderBaseURL(presetName)) {
@@ -575,7 +553,7 @@ async function configureProvider(root = process.cwd(), options = {}) {
       model = (await rl.question(modelPrompt)).trim() || defaultModel;
     } else {
       const selected = presets[presetName];
-      if (!selected) throw new Error('Unknown provider preset. Choose omniroute, openai, anthropic, openrouter, gemini, ollama, bedrock, vertex, foundry, or custom.');
+      if (!selected) throw new Error('Unknown provider preset. Choose openai, anthropic, openrouter, gemini, ollama, bedrock, vertex, foundry, or custom.');
       protocol = selected.protocol;
       baseURL = selected.baseURL;
       model = selected.model;
@@ -606,15 +584,12 @@ async function configureProvider(root = process.cwd(), options = {}) {
           }
         }
       }
-      if (presetName !== 'omniroute') {
-        stdout.write('Using the standard ' + presetName + ' endpoint. To use a different URL, choose Advanced > Custom.\n');
-        const modelPrompt = model ? 'Model name [' + model + ']: ' : 'Model name (exact model ID required, after installing a model): ';
-        model = (await rl.question(modelPrompt)).trim() || model;
-      }
+      stdout.write('Using the standard ' + presetName + ' endpoint. To use a different URL, choose Advanced > Custom.\n');
+      const modelPrompt = model ? 'Model name [' + model + ']: ' : 'Model name (exact model ID required, after installing a model): ';
+      model = (await rl.question(modelPrompt)).trim() || model;
     }
     if (!model) throw new Error('Enter the exact model name supported by this provider before continuing.');
   } finally { rl.close(); }
-  if (presetName === 'omniroute') return await configureOmniRoute(root);
   protocol = validateProtocol(protocol);
   baseURL = validateBaseUrl(baseURL);
   const existing = await loadConfig().catch(() => ({ apiKey: '', baseURL: '', protocol: '' }));
@@ -661,21 +636,20 @@ async function ensureModelProviderSetup(root, options = {}) {
     stdout.write('OASIS is the workspace; the model you choose is its brain. Choose one way to connect.\n');
   }
   stdout.write('\n  1. I have an API key (OpenAI, Anthropic, OpenRouter, Gemini, or a custom provider)\n');
-  stdout.write('  2. Use a free gateway (OmniRoute; it can be slow or limited)\n');
-  stdout.write('  3. Use a model on this computer (Ollama; smaller models may be weaker)\n');
-  stdout.write('  4. Set this up later\n');
-  const choices = { '1': 'openai', '2': 'omniroute', '3': 'ollama' };
+  stdout.write('  2. Use a model on this computer (Ollama; smaller models may be weaker)\n');
+  stdout.write('  3. Set this up later\n');
+  const choices = { '1': 'openai', '2': 'ollama' };
   let preset = null;
   for (let attempt = 0; attempt < 3 && !preset; attempt++) {
     let answer;
-    try { answer = (await askLine('Choose [1/2/3/4] (default 2): ')).trim().toLowerCase() || '2'; }
+    try { answer = (await askLine('Choose [1/2/3] (default 1): ')).trim().toLowerCase() || '1'; }
     catch { return false; }
-    if (['4', 'later', 'n', 'no', 'skip', 'q', 'quit', 'exit', '/exit', '/quit'].includes(answer)) {
+    if (['3', 'later', 'n', 'no', 'skip', 'q', 'quit', 'exit', '/exit', '/quit'].includes(answer)) {
       stdout.write('Setup skipped. Run oasis setup when you are ready.\n');
       return false;
     }
     preset = choices[answer] || null;
-    if (!preset) stdout.write(attempt < 2 ? 'Type 1, 2, 3 or 4 and press Enter (4 sets this up later).\n' : 'No setup was run. Run oasis setup when you are ready.\n');
+    if (!preset) stdout.write(attempt < 2 ? 'Type 1, 2 or 3 and press Enter (3 sets this up later).\n' : 'No setup was run. Run oasis setup when you are ready.\n');
   }
   if (!preset) return false;
   try {
@@ -684,10 +658,6 @@ async function ensureModelProviderSetup(root, options = {}) {
     stdout.write('Guided setup did not complete: ' + String(error && error.message || error) + '. Nothing new was saved unless the provider test succeeded. Run oasis setup to try again.\n');
   }
   try { return Boolean((await loadConfig()).configured); } catch { return false; }
-}
-
-function isOmniRouteSetupIntent(text) {
-  return /\b(?:add|install|setup|set\s*up|configure|connect|use|switch|route)\b[\s\S]{0,120}\bomniroute\b/i.test(String(text || ''));
 }
 
 async function doctor(args = [], root = process.cwd()) {
@@ -1548,80 +1518,44 @@ async function listSkills(root) {
   }
 }
 
-const SKILLS_CLI_PACKAGE = 'skills@1.7.4';
-
-function supportsSkillsCliNodeVersion() {
-  const [major, minor] = process.versions.node.split('.').map(Number);
-  return major > 22 || (major === 22 && minor >= 20);
+// Search GitHub for repositories that publish SKILL.md packages.
+async function findSkillRepositories(query) {
+  const terms = String(query || '').trim();
+  const q = encodeURIComponent((terms ? terms + ' ' : '') + 'SKILL.md in:readme,description,name') + '+topic:agent-skills';
+  const tries = [
+    'https://api.github.com/search/repositories?per_page=15&sort=stars&q=' + q,
+    'https://api.github.com/search/repositories?per_page=15&sort=stars&q=' + encodeURIComponent((terms || 'skills') + ' agent skills SKILL.md')
+  ];
+  const headers = { accept: 'application/vnd.github+json', 'user-agent': 'oasis-cli' };
+  if (process.env.GITHUB_TOKEN) headers.authorization = 'Bearer ' + process.env.GITHUB_TOKEN;
+  for (const url of tries) {
+    const response = await fetch(url, { headers, signal: AbortSignal.timeout(20000) });
+    if (!response.ok) throw new Error('GitHub search failed (' + response.status + '). Set GITHUB_TOKEN if you hit the anonymous rate limit.');
+    const data = await response.json();
+    const items = Array.isArray(data.items) ? data.items : [];
+    if (items.length) return items;
+  }
+  return [];
 }
 
-function validateSkillsSource(raw) {
-  const source = String(raw || '').trim();
-  if (!source || source.length > 600 || /[\r\n\0]/.test(source) || source.startsWith('-')) {
-    throw new Error('Provide a valid skill source (GitHub owner/repo, HTTPS source URL, or local path).');
+async function skillsFromSource(root, source, options, autoApprove) {
+  const { installSkillsFromSource } = await import('./skill-install.mjs');
+  if (!options.list) {
+    const ok = autoApprove || await approve('Download "' + source + '" and copy ' + (options.all ? 'all of its skills' : 'the skill "' + options.skill + '"') + ' into ' + options.targetDir + '? Nothing from the source is run; the instructions are treated as untrusted context.', true, false);
+    if (!ok) { stdout.write('Skill installation cancelled.\n'); return; }
   }
-  if (/^[a-z0-9_.-]+\/[a-z0-9_.-]+$/i.test(source)) return source;
-  if (/^(?:\.{1,2}[\\/]|[\\/]|[a-z]:[\\/])/i.test(source)) return source;
-  if (/^(?:git@|ssh:\/\/|git:\/\/)/i.test(source)) return source;
-  if (/^https:\/\//i.test(source)) {
-    let url;
-    try { url = new URL(source); } catch { throw new Error('The skill source URL is invalid.'); }
-    if (url.username || url.password || url.hash) throw new Error('Skill source URLs must not contain credentials or fragments.');
-    if (/[\r\n\0]/.test(url.href)) throw new Error('The skill source URL contains invalid characters.');
-    return source;
+  const result = await installSkillsFromSource(source, { ...options, env: process.env });
+  if (options.list) {
+    if (!result.available.length) { stdout.write('No SKILL.md packages found in ' + source + '.\n'); return result; }
+    stdout.write('Skills in ' + source + ':\n');
+    for (const item of result.available) stdout.write('  ' + item.name + (item.description ? ' — ' + item.description : '') + '\n');
+    stdout.write('Install one with: oasis skills add ' + source + ' --skill NAME\n');
+    return result;
   }
-  throw new Error('Unsupported skill source. Use owner/repo, an HTTPS URL, an SSH/Git URL, or a local path.');
-}
-
-function quoteWindowsCommandArgument(raw) {
-  const value = String(raw);
-  if (/[\r\n%!"&|<>^]/.test(value)) throw new Error('This value contains shell metacharacters that cannot safely be passed through the Windows command launcher.');
-  return '"' + value.replace(/"/g, '""') + '"';
-}
-
-async function runVercelSkillsCli(root, cliArgs, description, autoApprove) {
-  if (!supportsSkillsCliNodeVersion()) {
-    throw new Error('The Vercel Skills CLI requires Node.js 22.20 or later. Oasis itself can run on Node 22, but upgrade Node to use the skills ecosystem integration.');
-  }
-  const approved = await approve(
-    'Run the pinned Vercel Skills CLI (' + SKILLS_CLI_PACKAGE + ') to ' + description + '?\n' +
-    'The command may download the CLI and skill source. Oasis disables telemetry, uses shell-free argv where supported, copies skills instead of creating symlinks, and does not execute imported skill scripts. Review the skill instructions as untrusted content.',
-    false,
-    autoApprove
-  );
-  if (!approved) { stdout.write('Skills operation cancelled; no source was installed.\n'); return; }
-
-  const args = ['--yes', SKILLS_CLI_PACKAGE, ...cliArgs];
-  const env = {
-    ...scrubChildEnvironment(),
-    DISABLE_TELEMETRY: '1',
-    DO_NOT_TRACK: '1'
-  };
-  const childCommand = process.platform === 'win32' ? (process.env.ComSpec || 'cmd.exe') : 'npx';
-  const windowsCommandLine = ['npx.cmd', ...args].map(quoteWindowsCommandArgument).join(' ');
-  const childArgs = process.platform === 'win32'
-    ? ['/d', '/v:off', '/s', '/c', '"' + windowsCommandLine + '"']
-    : args;
-  const result = await new Promise((resolve) => {
-    const child = spawn(childCommand, childArgs, {
-      cwd: root,
-      env,
-      shell: false,
-      windowsHide: true,
-      stdio: 'inherit'
-    });
-    let settled = false;
-    const finish = (value) => { if (settled) return; settled = true; resolve(value); };
-    child.on('error', (error) => finish({ exitCode: null, error: error.message }));
-    child.on('close', (code, signal) => finish({ exitCode: code, signal }));
-  });
-  if (result.error) throw new Error('Could not start the Vercel Skills CLI: ' + result.error);
-  if (result.exitCode !== 0) {
-    process.exitCode = result.exitCode || 1;
-    stdout.write('The Vercel Skills CLI exited with code ' + result.exitCode + '. No success is assumed; inspect the output above.\n');
-    return;
-  }
-  return { ok: true };
+  stdout.write(result.message + '\n');
+  for (const item of result.installed) if (item.skipped.length) stdout.write('  skipped in ' + item.name + ': ' + item.skipped.join(', ') + '\n');
+  if (!result.installed.length) process.exitCode = 1;
+  return { ok: result.installed.length > 0, ...result };
 }
 
 async function installSkill(root, name) {
@@ -1644,16 +1578,19 @@ async function manageSkills(root, args, autoApprove) {
     if (rest.length > 4) throw new Error('Use "oasis skills find [a few keywords]" to search the skills directory.');
     if (rest.some((value) => /^--/.test(value))) throw new Error('Search terms cannot start with command flags.');
     const query = rest.join(' ').trim();
-    return await runVercelSkillsCli(root, ['find', ...(query ? [query] : [])], 'search the public skills directory' + (query ? ' for "' + query + '"' : ''), autoApprove);
+    const items = await findSkillRepositories(query);
+    if (!items.length) { stdout.write('No skill repositories found' + (query ? ' for "' + query + '"' : '') + '.\n'); return; }
+    for (const item of items) stdout.write('  ' + item.full_name + '  ★' + item.stargazers_count + (item.description ? '  ' + String(item.description).slice(0, 100) : '') + '\n');
+    stdout.write('Review one with: oasis skills inspect OWNER/REPO\n');
+    return;
   }
   if (action === 'inspect') {
     if (rest.length !== 1) throw new Error('Usage: oasis skills inspect SOURCE');
-    const source = validateSkillsSource(rest[0]);
-    return await runVercelSkillsCli(root, ['add', source, '--list'], 'list available skills from ' + source, autoApprove);
+    return await skillsFromSource(root, rest[0], { list: true }, autoApprove);
   }
   if (action === 'add') {
     if (rest.length < 1) throw new Error('Usage: oasis skills add SOURCE --skill NAME, or oasis skills add SOURCE --all.');
-    const source = validateSkillsSource(rest[0]);
+    const source = rest[0];
     let skillName = '';
     let allSkills = false;
     let global = false;
@@ -1676,11 +1613,9 @@ async function manageSkills(root, args, autoApprove) {
     if (skillName && (skillName.length > 128 || /[\r\n\0"]/.test(skillName) || /^-/.test(skillName))) {
       throw new Error('Skill names must be 1–128 characters and cannot contain quotes, line breaks, NUL, or start with a flag.');
     }
-    const scopeArgs = global ? ['--global'] : [];
-    const selectionArgs = allSkills ? ['--skill', '*'] : ['--skill', skillName];
-    const cliArgs = ['add', source, ...selectionArgs, '--agent', 'universal', '--copy', ...scopeArgs, '--yes'];
-    const result = await runVercelSkillsCli(root, cliArgs, 'install ' + (allSkills ? 'all skills' : 'skill "' + skillName + '"') + ' from ' + source + (global ? ' globally' : ' into this project'), autoApprove);
-    if (result && result.ok) stdout.write('Skills installed to the Vercel universal skill path. Oasis now scans .agents/skills and the global universal skill directory on new sessions.\n');
+    const { getUniversalGlobalSkillsDirectory } = await import('./tools.mjs');
+    const targetDir = global ? getUniversalGlobalSkillsDirectory(process.env) : path.join(root, '.agents', 'skills');
+    const result = await skillsFromSource(root, source, { skill: skillName, all: allSkills, targetDir }, autoApprove);
     return result;
   }
   throw new Error('Unknown skills action. Use oasis skills list, find, inspect, add, or install.');
@@ -2860,24 +2795,6 @@ async function interactive(root, autoApprove, persistence = {}) {
       stdout.write('Unknown command. Type /help to list built-in and custom commands.\n');
       continue;
     }
-    let providerReadyForThisTurn = false;
-    try { providerReadyForThisTurn = Boolean((await loadConfig()).configured); } catch {}
-    if (isOmniRouteSetupIntent(text)) {
-      if (!providerReadyForThisTurn) {
-        try {
-          await configureOmniRoute(root);
-          closeSession(session);
-          session = null;
-          persistence.resumeId = null;
-        } catch (error) {
-          stdout.write('OmniRoute setup failed: ' + String(error && error.message || error) + '\n');
-        }
-      } else {
-        session = await runPrompt(text, root, autoApprove, session, persistence);
-        persistence.resumeId = null;
-      }
-      continue;
-    }
     const direct = parseInstallIntent(text);
     if (direct) {
       try { await installRequest(direct, root, autoApprove); } catch (error) { stdout.write('Install request failed: ' + error.message + '\n'); }
@@ -3698,21 +3615,17 @@ async function main() {
     return await installRequest(request, workspace, autoApprove);
   }
   const fullPrompt = args.join(' ');
-  const omniIntent = isOmniRouteSetupIntent(fullPrompt);
-  let providerReadyForCommand = false;
-  try { providerReadyForCommand = Boolean((await loadConfig()).configured); } catch {}
-  if (omniIntent && !providerReadyForCommand) return await configureOmniRoute(workspace);
-  if (!omniIntent) {
+  {
     const direct = parseInstallIntent(fullPrompt);
     if (direct) return await installRequest(direct, workspace, autoApprove);
   }
-  // Like `claude "query"`: on a terminal, the task opens an interactive session so you
+  // On a terminal, a task given on the command line opens an interactive session so you
   // can follow up. Scripts (no TTY) and OASIS_ONE_SHOT=1 keep the one-shot run; -p is headless.
   if (stdin.isTTY && stdout.isTTY && !/^(?:1|true|yes|on)$/i.test(String(process.env.OASIS_ONE_SHOT || ''))) {
     QUEUED_INPUT.push(fullPrompt);
     return await interactive(workspace, autoApprove, persistence);
   }
-  if (!providerReadyForCommand) await ensureModelProviderSetup(workspace);
+  await ensureModelProviderSetup(workspace);
   const session = await runPrompt(fullPrompt, workspace, autoApprove, null, persistence);
   closeSession(session);
 }

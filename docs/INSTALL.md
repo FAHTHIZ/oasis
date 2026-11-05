@@ -56,12 +56,12 @@ sha256sum -c SHA256SUMS --ignore-missing   # macOS: shasum -a 256 -c SHA256SUMS 
 
 On first launch:
 1. Choose a project folder, not your entire home directory.
-2. Open **Model provider** and choose an API key, an already-running OmniRoute-compatible gateway, or a local Ollama model.
+2. Open **Model provider** and choose an API key, a local model server (Ollama, LM Studio, llama.cpp, vLLM, Jan), or any OpenAI-compatible endpoint.
 3. For API keys, select the provider and enter the key into the masked field. The Electron app uses OS-backed secure storage and refuses to save a new key if encryption is unavailable.
 4. For Ollama, install and start Ollama, download a model, and then select the model from OASIS.
 5. Test the provider before starting a coding task. The provider probe checks whether the model can return an inert tool call; it never executes that tool.
 
-The CLI guided setup can install OmniRoute through npm, request approval to start its local gateway, and verify tool calling before saving the provider. The desktop setup does not yet provide that entire gateway-install flow inside its UI; use an API key or an already-running local provider. OASIS does not include a model or paid subscription.
+OASIS does not include a model or paid subscription; bring a provider key or run a local model.
 
 ## Command-line installation
 

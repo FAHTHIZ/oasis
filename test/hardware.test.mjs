@@ -84,8 +84,8 @@ test('without a server, capable machines get an install plan and small devices g
   const phone = recommendSetup({ os: 'android', arch: 'arm64', memoryGB: 6, cores: 8, accelerator: 'cpu', termux: true }, []);
   assert.equal(phone.primary.route, 'cloud');
   assert.ok(phone.notes.some((n) => /Android/.test(n)));
-  const gateway = recommendSetup({ os: 'linux', arch: 'x64', memoryGB: 8, cores: 4, accelerator: 'cpu' }, [{ id: 'omniroute', name: 'OmniRoute gateway', baseURL: 'http://127.0.0.1:20128/v1', running: true, models: [], gateway: true }]);
-  assert.equal(gateway.primary.route, 'gateway');
+  const empty = recommendSetup({ os: 'linux', arch: 'x64', memoryGB: 8, cores: 4, accelerator: 'cpu' }, [{ id: 'vllm', name: 'vLLM', baseURL: 'http://127.0.0.1:8000/v1', running: true, models: [] }]);
+  assert.equal(empty.primary.route, 'cloud', 'a running server with no models is not a route');
   assert.match(describeRecommendation(desktop), /Install Ollama/);
 });
 
@@ -95,12 +95,12 @@ test('local server discovery probes fixed loopback ports and reads both API shap
     seen.push(url);
     if (url === 'http://127.0.0.1:11434/api/tags') return { ok: true, status: 200, json: async () => ({ models: [{ name: 'qwen3:8b' }, { name: 'qwen3:8b' }] }) };
     if (url === 'http://127.0.0.1:1234/v1/models') return { ok: true, status: 200, json: async () => ({ data: [{ id: 'qwen/qwen3-14b' }] }) };
-    if (url === 'http://127.0.0.1:20128/v1/models') return { ok: false, status: 401, json: async () => ({}) };
+    if (url === 'http://127.0.0.1:8000/v1/models') return { ok: false, status: 401, json: async () => ({}) };
     throw new Error('ECONNREFUSED');
   };
   const servers = await discoverLocalServers({ fetchImpl });
   assert.ok(seen.every((url) => url.startsWith('http://127.0.0.1:')), 'only loopback is probed');
-  assert.deepEqual(servers.map((s) => s.id), ['ollama', 'lmstudio', 'omniroute']);
+  assert.deepEqual(servers.map((s) => s.id), ['ollama', 'lmstudio', 'vllm']);
   assert.deepEqual(servers[0].models, ['qwen3:8b']);
   assert.equal(servers[2].needsKey, true);
   assert.ok(!('probe' in servers[0]));

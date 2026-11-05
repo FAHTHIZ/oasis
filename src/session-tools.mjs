@@ -429,8 +429,8 @@ export async function waitForMcpServers(session, args = {}, options = {}) {
 // They stay callable: their names are listed in the system prompt, tool_search
 // loads them, and a direct call auto-loads them (see loadDeferredTool).
 export const RARE_BUILTIN_TOOLS = Object.freeze([
-  'install_extension', 'setup_omniroute', 'configure_provider', 'install_external_skill',
-  'configure_mcp_server', 'delegate_openhands', 'install_plugin', 'worktree_inspect', 'worktree_merge',
+  'install_extension', 'configure_provider', 'install_external_skill',
+  'configure_mcp_server', 'install_plugin', 'worktree_inspect', 'worktree_merge',
   'terminal_read', 'terminal_list', 'terminal_input', 'terminal_resize', 'terminal_interrupt', 'terminal_stop',
   'cron_create', 'cron_list', 'cron_delete', 'memory_delete', 'run_specialist_review',
 ]);
