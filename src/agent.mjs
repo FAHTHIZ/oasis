@@ -5441,7 +5441,7 @@ async function runAgentTurnRaw(session, prompt, options = {}) {
     let assistant;
     const waitHook = typeof options.onModelWait === 'function' ? options.onModelWait : null;
     if (waitHook) {
-      try { waitHook({ phase: 'start', step: step + 1, inputTokens: estimateTokens(session.messages || []), model: session.config && session.config.model, local: isLoopbackProvider(session.config) && !cloudModelBehindGateway(session.config && session.config.model, session.config) }); } catch {}
+      try { waitHook({ phase: 'start', step: step + 1, inputTokens: estimateTokens(session.messages || []) + Math.ceil(JSON.stringify(session.toolDefinitions || TOOL_DEFINITIONS).length / 4), model: session.config && session.config.model, local: isLoopbackProvider(session.config) && !cloudModelBehindGateway(session.config && session.config.model, session.config) }); } catch {}
     }
     try {
       assistant = await requestCompletion(session, {
