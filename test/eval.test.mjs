@@ -482,6 +482,107 @@ test('model eval runs in a disposable copy and records result metrics as JSON', 
   assert.equal(requests, 4);
 });
 
+test('a local model eval reports $0 API cost instead of unknown', async (t) => {
+  const tmp = await temporaryDirectory();
+  t.after(() => rm(tmp, { recursive: true, force: true }));
+  const configDir = path.join(tmp, 'user-config');
+  const resultsDir = path.join(tmp, 'eval-results');
+  const tasksDir = path.join(tmp, 'tasks');
+  await mkdir(tasksDir);
+  const taskDir = await createFixtureTask(tasksDir);
+  let requests = 0;
+  const server = createServer(async (req, res) => {
+    let raw = '';
+    for await (const chunk of req) raw += chunk.toString('utf8');
+    requests++;
+    res.writeHead(200, { 'content-type': 'application/json' });
+    if (requests === 1) {
+      const request = JSON.parse(raw);
+      assert.ok(Array.isArray(request.tools));
+      res.end(JSON.stringify({
+        choices: [{
+          message: {
+            role: 'assistant',
+            content: '',
+            tool_calls: [{
+              id: 'eval-write-1',
+              type: 'function',
+              function: { name: 'write_file', arguments: JSON.stringify({ path: 'demo.txt', content: 'new\n' }) }
+            }]
+          }
+        }],
+        usage: { prompt_tokens: 10, completion_tokens: 2, total_tokens: 12 }
+      }));
+    } else if (requests === 2) {
+      res.end(JSON.stringify({
+        choices: [{ message: { role: 'assistant', content: 'Updated and verified.' } }],
+        usage: { prompt_tokens: 8, completion_tokens: 3, total_tokens: 11 }
+      }));
+    } else if (requests === 3) {
+      const request = JSON.parse(raw);
+      assert.ok(request.messages.some((message) => message.role === 'user' && String(message.content).includes('post-edit verification gate')));
+      res.end(JSON.stringify({
+        choices: [{
+          message: {
+            role: 'assistant',
+            content: 'I will reread the changed text file because this fixture is not a Git repository.',
+            tool_calls: [{
+              id: 'eval-review-1',
+              type: 'function',
+              function: { name: 'read_file', arguments: JSON.stringify({ path: 'demo.txt' }) }
+            }]
+          }
+        }],
+        usage: { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 }
+      }));
+    } else {
+      res.end(JSON.stringify({
+        choices: [{ message: { role: 'assistant', content: 'I reread demo.txt and verified the updated contents.' } }],
+        usage: { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 }
+      }));
+    }
+  });
+  await new Promise((resolve, reject) => {
+    server.once('error', reject);
+    server.listen(0, '127.0.0.1', resolve);
+  });
+  t.after(() => new Promise((resolve) => server.close(resolve)));
+
+  const env = {
+    ...process.env,
+    OASIS_CONFIG_DIR: configDir,
+    GITHUB_SHA: 'a'.repeat(40),
+    OASIS_EVAL_INPUT_USD_PER_MILLION_TOKENS: '',
+    OASIS_EVAL_OUTPUT_USD_PER_MILLION_TOKENS: ''
+  };
+  await saveConfig({
+    protocol: 'openai-compatible',
+    baseURL: 'http://127.0.0.1:' + server.address().port + '/v1',
+    model: 'fixture-model',
+    apiKey: '',
+    maxSteps: 4
+  }, { env });
+
+  const output = { text: '', write(value) { this.text += String(value); } };
+  const result = await runEvalCommand(['--task', 'fixture-task', '--trials', '1'], {
+    autoApprove: true,
+    env,
+    tasksDir,
+    resultsDir,
+    output
+  });
+
+  assert.equal(result.ok, true, output.text);
+  assert.equal(result.summary.sourceRevision, 'a'.repeat(40));
+  assert.equal(result.summary.passed, 1);
+  assert.equal(result.summary.failed, 0);
+  assert.equal(result.results[0].status, 'passed');
+  assert.equal(result.results[0].inputTokens, 18);
+  assert.equal(result.results[0].outputTokens, 5);
+  assert.equal(result.results[0].costUSD, 0);
+  assert.match(result.results[0].costSource, /local model/);
+});
+
 
 test('eval suite rejects symlinked task files and patches that target secrets', async (t) => {
   const tmp = await temporaryDirectory();
