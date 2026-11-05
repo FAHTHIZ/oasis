@@ -71,12 +71,27 @@ export function isLocalProvider(config = {}) {
   return config.protocol === 'ollama' || /\/\/(localhost|127\.0\.0\.1|\[::1\]|0\.0\.0\.0)(:|\/|$)/i.test(base);
 }
 
+// A loopback URL is usually a local model (Ollama, LM Studio, llama-server),
+// but a gateway such as LiteLLM on localhost:4000 forwards to paid cloud
+// models. A cloud-only model name on a non-local-server port is priced as the
+// cloud model instead of shown as free.
+const LOCAL_MODEL_PORTS = new Set(['11434', '1234', '8080']);
+const CLOUD_ONLY_MODEL = /^(?:[\w.-]+\/)?(?:gpt-|o[1-9](?:-|$)|claude|gemini-|grok-)/i;
+export function cloudModelBehindGateway(model, config = {}) {
+  if (config.protocol === 'ollama') return false;
+  if (!CLOUD_ONLY_MODEL.test(String(model || ''))) return false;
+  try {
+    const url = new URL(String(config.baseURL || ''));
+    return !LOCAL_MODEL_PORTS.has(url.port);
+  } catch { return false; }
+}
+
 export function priceFor(model, { config = {}, overrides = {}, env = process.env } = {}) {
   const name = String(model || '');
   if (env.OASIS_PRICE_INPUT || env.OASIS_PRICE_OUTPUT) {
     return { input: Number(env.OASIS_PRICE_INPUT) || 0, output: Number(env.OASIS_PRICE_OUTPUT) || 0, cacheRead: Number(env.OASIS_PRICE_CACHE_READ) || 0, cacheWrite: 0, custom: true };
   }
-  if (isLocalProvider(config)) return { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, local: true };
+  if (isLocalProvider(config) && !cloudModelBehindGateway(name, config)) return { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, local: true };
   if (overrides && typeof overrides === 'object') {
     for (const [key, value] of Object.entries(overrides)) {
       if (value && typeof value === 'object' && name.toLowerCase().includes(key.toLowerCase())) {

@@ -829,7 +829,7 @@ Replies render as Markdown with syntax-highlighted code, and edits show as color
 
 ### Sessions and cost
 
-Sessions are saved by default. `oasis -c` continues the latest one, `oasis -r ID` resumes one, and `--no-session-persistence` (or `OASIS_PERSIST_SESSIONS=0`) skips saving. `/cost` shows tokens and an estimated USD cost. `--max-budget-usd 2` stops a run at that spend. Local models count as free. Set `OASIS_PRICE_INPUT` and `OASIS_PRICE_OUTPUT` (USD per million tokens) to override pricing.
+Sessions are saved by default. `oasis -c` continues the latest one, `oasis -r ID` resumes one, and `--no-session-persistence` (or `OASIS_PERSIST_SESSIONS=0`) skips saving. `/cost` shows tokens and an estimated USD cost. `--max-budget-usd 2` stops a run at that spend. Local models count as free; a cloud model name (gpt-, claude, gemini-, grok-) behind a localhost gateway such as LiteLLM is priced as that cloud model. Set `OASIS_PRICE_INPUT` and `OASIS_PRICE_OUTPUT` (USD per million tokens) to override pricing.
 
 ### Cost-aware model routing
 
