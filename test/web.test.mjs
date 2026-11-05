@@ -506,6 +506,30 @@ test('web terminal runner executes an approved command and captures its output',
   assert.ok(snapshot.events.some((event) => event.type === 'terminal_output' && event.data.output.includes(process.versions.node)));
 });
 
+test('web terminal shell mode remains disabled unless settings or an available sandbox enables it', async (t) => {
+  const root = await tempDir();
+  const configDir = path.join(root, 'config');
+  const app = await startOasisWebServer({
+    root,
+    host: '127.0.0.1',
+    port: 0,
+    env: { OASIS_CONFIG_DIR: configDir },
+    token: 'test-runtime-token-0123456789'
+  });
+  t.after(async () => {
+    await app.close();
+    await rm(root, { recursive: true, force: true });
+  });
+
+  const response = await fetch('http://127.0.0.1:' + app.port + '/api/terminal/command', {
+    method: 'POST',
+    headers: { authorization: 'Bearer ' + app.token, 'content-type': 'application/json' },
+    body: JSON.stringify({ command: 'printf safe | cat', args: [], shell: true })
+  });
+  assert.equal(response.status, 403);
+  assert.match((await response.json()).error, /shell syntax is disabled/i);
+});
+
 test('web terminal runner pauses for an explicit approval before starting a command', async (t) => {
   const root = await tempDir();
   const app = await startOasisWebServer({

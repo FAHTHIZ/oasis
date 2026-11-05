@@ -21,6 +21,7 @@ import { BUILTIN_COMMANDS, runBuiltinCommand, createUsageTracker, recordUsage } 
 import { expandFileMentions, resolveCustomCommand, resolveSkillCommand, loadCustomCommands } from './commands.mjs';
 import { visionEnabled, imageInputCapability, MAX_IMAGE_BYTES } from './images.mjs';
 import { loadSettings } from './settings.mjs';
+import { resolveSandbox } from './sandbox.mjs';
 import { estimateTokens, contextWindowSize } from './context.mjs';
 import { PtySessionManager } from './pty-sessions.mjs';
 import { createCloudTaskStore } from './cloud-task-store.mjs';
@@ -1239,6 +1240,13 @@ export function createOasisWebServer(options = {}) {
     if (!Number.isInteger(timeoutSeconds) || timeoutSeconds < 5 || timeoutSeconds > 600) {
       throw Object.assign(new Error('timeoutSeconds must be an integer between 5 and 600.'), { statusCode: 400 });
     }
+    const terminalSettings = await loadSettings(activeRoot, { env });
+    const terminalSandbox = resolveSandbox(terminalSettings, activeRoot);
+    const shellEnabled = Boolean(terminalSettings.shell && terminalSettings.shell.enabled) ||
+      Boolean(terminalSandbox.enabled && terminalSandbox.available);
+    if (shell && !shellEnabled) {
+      throw Object.assign(new Error('Shell syntax is disabled. Enable shell access in your OASIS user settings, or configure an available OS sandbox. Single executables can still run without shell syntax.'), { statusCode: 403 });
+    }
     const workspaceKey = path.resolve(activeRoot);
     if (workspaceIsBusy(workspaceKey)) throw Object.assign(new Error('This workspace already has an active task. Finish or cancel it before running another command.'), { statusCode: 409 });
     const releaseJobReservation = reserveJobSlot();
@@ -1261,6 +1269,7 @@ export function createOasisWebServer(options = {}) {
           env,
           autoApprove: false,
           maxCommandSeconds: timeoutSeconds,
+          sandbox: terminalSandbox,
           approval: (prompt) => approvalFor(job, prompt),
           signal: job.controller.signal,
           ...(interactive ? { session: ptySession } : {})
