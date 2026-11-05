@@ -39,3 +39,14 @@ test('small files load untouched without notices', async (t) => {
   assert.match(text, /Use tabs\.$/);
   assert.deepEqual(notices, []);
 });
+
+test('a long README is clipped to its opening at a line boundary, with a pointer to the rest', async () => {
+  const { clipReadme } = await import('../src/memory.mjs');
+  const long = Array.from({ length: 200 }, (_, i) => 'Line ' + i + ' of the readme explains something.').join('\n');
+  const out = clipReadme(long);
+  assert.ok(out.length < 3700, String(out.length));
+  assert.match(out, /^Line 0 /);
+  assert.match(out, /\n\[README continues \(\d+ characters in all\); read_file README\.md for the rest\]$/);
+  assert.match(out.split('\n').at(-2), /^Line \d+ of the readme explains something\.$/);
+  assert.equal(clipReadme('short readme'), 'short readme');
+});

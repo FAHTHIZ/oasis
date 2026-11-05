@@ -20,6 +20,9 @@ import { getConfigDirectory } from './config.mjs';
 const MAX_MEMORY_FILE = 40 * 1024;
 const MAX_TOTAL = 40000;
 const PER_FILE_LIMIT = 9000;
+// The README is background sent with every request; its opening (what the
+// project is, how to run it) is what helps. The model can read the rest.
+const README_LIMIT = 3500;
 export const OTHER_AGENT_RULES = ['GEMINI.md', path.join('.github', 'copilot-instructions.md'), '.cursorrules', '.windsurfrules', '.clinerules', 'CONVENTIONS.md'];
 
 export function memoryFiles(root, options = {}) {
@@ -120,7 +123,7 @@ export async function loadMemory(root, options = {}) {
     if (file.label !== 'readme') content = await readImports(root, content);
     const name = file.label === 'user' || file.label === 'parent' ? file.path.replace(os.homedir(), '~') : path.relative(path.resolve(root), file.path);
     const heading = file.label === 'user' ? 'User memory (applies to all projects)' : file.label === 'local' ? 'Personal project memory' : file.label === 'parent' ? 'Parent directory memory' : 'Project context';
-    const block = '--- ' + heading + ': ' + name + ' ---\n' + (file.label === 'readme' ? readmeText(content).slice(0, PER_FILE_LIMIT) : clipInstruction(name, content, notices));
+    const block = '--- ' + heading + ': ' + name + ' ---\n' + (file.label === 'readme' ? clipReadme(readmeText(content)) : clipInstruction(name, content, notices));
     if (file.label === 'readme') readmePart = block;
     else parts.push(block);
   }
@@ -152,6 +155,13 @@ export async function loadMemory(root, options = {}) {
   const instructionsOnly = parts.slice(0, readmePart ? -1 : undefined).join('\n\n');
   if (instructionsOnly.length > MAX_TOTAL - marker.length) notices.push('Instruction files total ' + instructionsOnly.length + ' characters; only the first ' + MAX_TOTAL + ' were loaded.');
   return joined.slice(0, MAX_TOTAL - marker.length) + marker;
+}
+
+export function clipReadme(text, limit = README_LIMIT) {
+  if (text.length <= limit) return text;
+  const cut = text.slice(0, limit);
+  const end = Math.max(cut.lastIndexOf('\n\n'), cut.lastIndexOf('\n'));
+  return (end > limit * 0.6 ? cut.slice(0, end) : cut.replace(/\s+\S*$/, '')).trimEnd() + '\n[README continues (' + text.length + ' characters in all); read_file README.md for the rest]';
 }
 
 // README as background: drop markup the model cannot use (HTML comments, badges,
