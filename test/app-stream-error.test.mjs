@@ -26,3 +26,15 @@ test('a normal stream without stray text is untouched', async () => {
   assert.equal(reply.content, 'Hi.');
   assert.equal(strayStreamError(': keep-alive'), null);
 });
+
+test('the app asks again when Gemini ends with MALFORMED_FUNCTION_CALL and no output', async () => {
+  let calls = 0;
+  const fetchImpl = async () => {
+    calls++;
+    if (calls === 1) return streamResponse(sse({ choices: [{ delta: { role: 'assistant' }, finish_reason: 'function_call_filter: MALFORMED_FUNCTION_CALL', index: 0 }] }) + 'data: [DONE]\n\n');
+    return streamResponse(sse({ choices: [{ delta: { content: 'Fixed.' } }] }) + sse({ choices: [{ delta: {}, finish_reason: 'stop' }] }) + 'data: [DONE]\n\n');
+  };
+  const reply = await chat({ protocol: 'openai-compatible', baseURL: 'https://example.test/v1', model: 'm', apiKey: 'k', maxRetries: 2 }, { messages: [{ role: 'user', content: 'hi' }], fetchImpl, onText: () => {}, onRetry: () => {} });
+  assert.equal(reply.content, 'Fixed.');
+  assert.equal(calls, 2);
+});
