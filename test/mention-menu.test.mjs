@@ -34,3 +34,58 @@ test('typing an @mention shows matching files before Tab', async () => {
   input.write('\r');
   assert.equal((await done).text, 'explain @ad ok');
 });
+
+function harness() {
+  const input = new PassThrough();
+  input.isTTY = true;
+  input.setRawMode = () => {};
+  const output = new PassThrough();
+  output.columns = 80;
+  output.rows = 20;
+  const box = { rendered: '' };
+  output.on('data', (chunk) => { box.rendered += chunk; });
+  return { input, output, box };
+}
+
+test('arrow keys pick an @file from the live list and Enter inserts it', async () => {
+  const { input, output, box } = harness();
+  const complete = async (text, cursor) => {
+    const token = /@[^\s@]*$/.exec(text.slice(0, cursor));
+    if (!token) return { candidates: [] };
+    return { start: token.index, end: cursor, candidates: ['add.mjs', 'src/adder.mjs'].filter((f) => f.includes(token[0].slice(1))).map((f) => ({ value: '@' + f })) };
+  };
+  const done = readInput({ input, output, prompt: '> ', color: false, complete });
+  for (const ch of 'fix @ad') { input.write(ch); await tick(); }
+  input.write('\x1b[B'); await tick();
+  input.write('\x1b[B'); await tick();
+  assert.match(stripAnsi(box.rendered), /↑↓ to pick/);
+  input.write('\r'); await tick();
+  input.write('now'); await tick();
+  input.write('\r');
+  assert.equal((await done).text, 'fix @src/adder.mjs now');
+});
+
+test('arrow keys pick a slash command and Enter runs it; Up without the menu is still history', async () => {
+  const { input, output } = harness();
+  const complete = async (text) => ({ start: 0, end: text.length, candidates: ['/clear', '/compact', '/context'].filter((c) => c.startsWith(text)).map((value) => ({ value })) });
+  const done = readInput({ input, output, prompt: '> ', color: false, complete });
+  for (const ch of '/c') { input.write(ch); await tick(); }
+  input.write('\x1b[A'); await tick(); // wraps to the last entry
+  input.write('\r');
+  assert.equal((await done).text, '/context');
+
+  const second = harness();
+  const again = readInput({ input: second.input, output: second.output, prompt: '> ', color: false, complete, history: ['earlier prompt'] });
+  second.input.write('\x1b[A'); await tick();
+  second.input.write('\r');
+  assert.equal((await again).text, 'earlier prompt');
+});
+
+test('Enter with no entry picked still submits what was typed', async () => {
+  const { input, output } = harness();
+  const complete = async (text) => ({ start: 0, end: text.length, candidates: ['/clear', '/compact'].filter((c) => c.startsWith(text)).map((value) => ({ value })) });
+  const done = readInput({ input, output, prompt: '> ', color: false, complete });
+  for (const ch of '/c') { input.write(ch); await tick(); }
+  input.write('\r');
+  assert.equal((await done).text, '/c');
+});
