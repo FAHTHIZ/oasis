@@ -1214,7 +1214,10 @@ async function runClaudeCodeEval(config, options = {}) {
         const prompt = task.taskText.trim() + '\n\nBenchmark constraints: solve this task using only the current workspace. Do not access files outside this workspace, use the network, change the task harness, or bypass verification. The harness runs the task verifier independently after you finish.';
         cliResult = await runCli(adapter.buildArgs(config, prompt), {
           cwd: workspace,
-          env,
+          // OpenCode (and other Bun/shell-based CLIs) take the project from
+          // $PWD, not the process cwd; an inherited PWD sent it to edit the
+          // directory the benchmark was started from.
+          env: { ...env, PWD: workspace },
           timeoutMs: config.timeoutSeconds * 1000,
           outputLimit: 1024 * 1024
         });
