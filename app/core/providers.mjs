@@ -112,6 +112,10 @@ function explain(status, body, config) {
 }
 
 /** A JSON error body ({ error } or [{ error }]) that arrived outside SSE events. */
+export function malformedCallFinish(reason) {
+  return /MALFORMED_FUNCTION_CALL/i.test(String(reason || ''));
+}
+
 export function strayStreamError(text) {
   const raw = String(text || '').trim();
   if (!raw) return null;
@@ -242,6 +246,7 @@ async function chatOpenAI(config, { messages, tools, signal, onText: rawOnText, 
     const data = await response.json();
     const message = (data.choices && data.choices[0] && data.choices[0].message) || {};
     const plain = splitThinking(message.content || '').content;
+    if (malformedCallFinish(data.choices && data.choices[0] && data.choices[0].finish_reason) && !plain.trim() && !(message.tool_calls || []).length) throw new ProviderError('The model produced a malformed tool call; asking again.', { retryable: true });
     if (plain && rawOnText) rawOnText(plain);
     return { content: plain, tool_calls: message.tool_calls || [], usage: normalizeUsage(data.usage) };
   }
@@ -249,6 +254,7 @@ async function chatOpenAI(config, { messages, tools, signal, onText: rawOnText, 
   const calls = [];
   let usage = null;
   let finished = false;
+  let finishReason = '';
   let stray = '';
   for await (const { event, data } of sseEvents(response, signal)) {
     if (event === 'stray') { if (stray.length < 16384) stray += data + '\n'; continue; }
@@ -257,7 +263,7 @@ async function chatOpenAI(config, { messages, tools, signal, onText: rawOnText, 
     try { chunk = JSON.parse(data); } catch { continue; }
     if (chunk.error) throw new ProviderError('The provider reported an error mid-stream: ' + (chunk.error.message || JSON.stringify(chunk.error)), { retryable: true });
     if (chunk.usage) usage = normalizeUsage(chunk.usage);
-    if (chunk.choices && chunk.choices[0] && chunk.choices[0].finish_reason) finished = true;
+    if (chunk.choices && chunk.choices[0] && chunk.choices[0].finish_reason) { finished = true; finishReason = String(chunk.choices[0].finish_reason); }
     const delta = chunk.choices && chunk.choices[0] && chunk.choices[0].delta;
     if (!delta) continue;
     if (delta.content) { content += delta.content; if (onText) onText(delta.content); }
@@ -282,6 +288,9 @@ async function chatOpenAI(config, { messages, tools, signal, onText: rawOnText, 
   // reply is broken, so retry it instead of keeping the fragment.
   const broken = finished ? null : strayStreamError(stray);
   if (broken) throw new ProviderError('The provider reported an error mid-stream: ' + broken.message, { status: broken.status, retryable: true });
+  // Gemini ends with "function_call_filter: MALFORMED_FUNCTION_CALL" and no
+  // output when its own tool call failed to parse; that is not an answer.
+  if (malformedCallFinish(finishReason) && !content.trim() && !calls.filter(Boolean).length) throw new ProviderError('The model produced a malformed tool call; asking again.', { retryable: true });
   if (thinkFilter) thinkFilter.flush();
   const toolCalls = calls.filter(Boolean).map((call, i) => ({ ...call, id: call.id || 'call_' + Date.now().toString(36) + i }));
   return { content: splitThinking(content).content, tool_calls: toolCalls, usage };
