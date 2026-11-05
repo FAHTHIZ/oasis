@@ -350,6 +350,21 @@ export async function readWorkspaceFile(root, rawPath, options = {}) {
 }
 
 const MAX_LINE_CHARS = 2000;
+// Models often send line ranges in other shapes (line_start/line_end,
+// start_line/end_line, startLine/endLine). Ignoring them returned the whole
+// file, wasting context; map them onto offset/limit instead.
+export function readRangeArgs(args = {}) {
+  const pick = (...keys) => { for (const key of keys) { const value = Number.parseInt(args[key], 10); if (Number.isFinite(value)) return value; } return undefined; };
+  let offset = args.offset;
+  let limit = args.limit;
+  const start = pick('line_start', 'start_line', 'startLine', 'lineStart', 'from_line', 'start');
+  const end = pick('line_end', 'end_line', 'endLine', 'lineEnd', 'to_line', 'end');
+  if (offset === undefined && start !== undefined) offset = Math.max(1, start);
+  if (limit === undefined && end !== undefined) limit = Math.max(1, end - (Number.parseInt(offset, 10) || 1) + 1);
+  if (limit === undefined) { const count = pick('lines', 'num_lines', 'count', 'max_lines'); if (count !== undefined) limit = Math.max(1, count); }
+  return { offset, limit };
+}
+
 function bigFileNote(size, startLine, endLine, totalLines, clipped) {
   return 'File is ' + (size / 1048576).toFixed(1) + ' MB; showing lines ' + startLine + '-' + endLine + (totalLines ? ' of ' + totalLines : '') + (clipped ? ', long lines cut at ' + MAX_LINE_CHARS + ' characters' : '') + '. Pass offset and limit to read other parts, or grep for what you need.';
 }
@@ -1428,7 +1443,8 @@ export async function executeTool(name, args = {}, context = {}) {
       }
       if (isNotebookPath(args.path) && args.offset === undefined && args.limit === undefined) return await readNotebook(root, args.path);
       {
-        const read = await readWorkspaceFile(root, args.path, { offset: args.offset, limit: args.limit, context });
+        const range = readRangeArgs(args);
+        const read = await readWorkspaceFile(root, args.path, { offset: range.offset, limit: range.limit, context });
         const partial = read && read.totalLines && (read.startLine > 1 || read.truncated) ? 'lines ' + read.startLine + '-' + read.endLine + ' of ' + read.totalLines : '';
         await recordFileState(context, (await resolveWorkspacePath(root, args.path)).absolute, { partial });
         return read;
