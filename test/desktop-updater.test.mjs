@@ -175,3 +175,38 @@ test('OASIS_NO_UPDATE_CHECK disables background checks entirely', async (t) => {
   assert.equal(scheduled, 0);
   assert.equal(fetched, false);
 });
+
+test('a failed background check retries after 2, 10 and 30 minutes, then waits for the regular interval', async (t) => {
+  const { UPDATE_RETRY_DELAYS_MS } = await import('../desktop/updater.mjs');
+  const dir = await mkdtemp(path.join(os.tmpdir(), 'oasis-desktop-update-'));
+  t.after(() => rm(dir, { recursive: true, force: true }));
+  const electron = fakeElectron();
+  const scheduled = [];
+  let online = false;
+  const working = releaseFetch();
+  const updater = createDesktopUpdater({
+    ...electron, currentVersion: '1.0.0', statePath: path.join(dir, 'state.json'), downloadDirectory: path.join(dir, 'updates'),
+    platform: 'win32', arch: 'x64', env: {},
+    fetchImpl: async (...args) => { if (!online) throw new TypeError('fetch failed'); return working(...args); },
+    setTimer: (fn, ms) => { scheduled.push({ fn, ms }); return scheduled.length; }, setRepeat: () => ({ unref() {} })
+  });
+  await updater.check();
+  assert.equal(updater.status().phase, 'error');
+  await updater.check();
+  assert.equal(scheduled.length, 1, 'one retry is pending at a time');
+  for (const expected of UPDATE_RETRY_DELAYS_MS.slice(1)) {
+    const { fn } = scheduled.at(-1);
+    fn();
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    assert.equal(scheduled.at(-1).ms, expected);
+  }
+  scheduled.at(-1).fn();
+  await new Promise((resolve) => setTimeout(resolve, 20));
+  assert.deepEqual(scheduled.map((item) => item.ms), UPDATE_RETRY_DELAYS_MS, 'no retries beyond the schedule');
+  // Manual checks never schedule retries; a success resets the schedule.
+  await updater.check({ manual: true });
+  assert.equal(scheduled.length, 3);
+  online = true;
+  await updater.check({ manual: true });
+  assert.equal(updater.status().phase, 'available');
+});

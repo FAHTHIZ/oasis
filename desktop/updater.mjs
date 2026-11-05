@@ -13,6 +13,8 @@ import {
 
 const FIRST_CHECK_DELAY_MS = 15 * 1000;
 
+export const UPDATE_RETRY_DELAYS_MS = [2 * 60 * 1000, 10 * 60 * 1000, 30 * 60 * 1000];
+
 export function createDesktopUpdater({
   app, dialog, shell, Notification, getWindow = () => null,
   currentVersion, statePath, downloadDirectory,
@@ -28,6 +30,9 @@ export function createDesktopUpdater({
   let notifiedVersion = null;
   const listeners = new Set();
   const timers = [];
+  let failures = 0;
+  let retryTimer = null;
+  let retryPending = false;
 
   const snapshot = () => ({
     phase, kind, current: currentVersion, channel,
@@ -50,6 +55,7 @@ export function createDesktopUpdater({
     try {
       latest = await cachedUpdateCheck({ statePath, force: manual, currentVersion, channel, kind, arch, fetchImpl });
       lastError = '';
+      failures = 0;
       setPhase(latest.available ? 'available' : 'current');
       const state = await readUpdateState(statePath);
       if (latest.available && (manual || (shouldNotify(latest, state) && notifiedVersion !== latest.latest.version))) {
@@ -66,6 +72,15 @@ export function createDesktopUpdater({
       lastError = String(error && error.message || error);
       log('update check failed: ' + lastError);
       setPhase('error');
+      // A launch while offline (or a brief GitHub outage) should not wait the full
+      // interval: retry background checks after 2, 10 and 30 minutes.
+      if (!manual && failures < UPDATE_RETRY_DELAYS_MS.length && !retryPending) {
+        const delay = UPDATE_RETRY_DELAYS_MS[failures++];
+        retryPending = true;
+        retryTimer = setTimer(() => { retryTimer = null; retryPending = false; void check(); }, delay);
+        if (retryTimer && typeof retryTimer.unref === 'function') retryTimer.unref();
+        log('retrying the update check in ' + Math.round(delay / 60000) + ' min');
+      }
       if (manual) {
         await dialog.showMessageBox(getWindow() || undefined, {
           type: 'warning', buttons: ['OK'], title: 'Could not check for updates',
@@ -199,7 +214,10 @@ export function createDesktopUpdater({
     timers.push(repeat);
   }
 
-  function stop() { for (const timer of timers.splice(0)) { clearTimeout(timer); clearInterval(timer); } }
+  function stop() {
+    for (const timer of timers.splice(0)) { clearTimeout(timer); clearInterval(timer); }
+    if (retryPending) { clearTimeout(retryTimer); retryTimer = null; retryPending = false; }
+  }
 
   return {
     kind, start, stop, check, prompt, install, skip, status: snapshot,
