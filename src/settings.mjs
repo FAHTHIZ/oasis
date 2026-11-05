@@ -280,12 +280,13 @@ export async function loadSettings(root, options = {}) {
     if (settings.textToolCalls === false) result.textToolCalls = false;
     // Sound effects only affect this terminal, so any scope may set them.
     if (typeof settings.sounds === 'boolean') result.sounds = settings.sounds;
+    if (settings.idleCompactMinutes === false || (Number.isFinite(settings.idleCompactMinutes) && settings.idleCompactMinutes >= 0)) result.idleCompactMinutes = settings.idleCompactMinutes === false ? 0 : Math.min(1440, settings.idleCompactMinutes);
     if (Number.isFinite(settings.soundVolume)) result.soundVolume = Math.max(0, Math.min(100, Math.round(settings.soundVolume)));
     if (!trusted) {
       const routingEnabled = settings.modelRouting && typeof settings.modelRouting === 'object' && (settings.modelRouting.enabled === true || Boolean(String(settings.modelRouting.easyModel || '').trim()) || Boolean(String(settings.modelRouting.strongModel || '').trim()));
       const loosening = stringList(permissions.allow).length || settings.hooks || permissions.defaultMode || settings.sandbox || settings.shell || settings.statusLine || settings.lspServers || settings.autoMode || routingEnabled || settings.env || settings.apiKeyHelper || settings.customHeadersHelper || settings.autoTest;
       // Any other key is also skipped until trust; say so instead of dropping it silently.
-      const untrustedSafe = new Set(['$schema', 'permissions', 'outputStyle', 'editorMode', 'language', 'worktree', 'avoidPhrases', 'codeComments', 'theme', 'agent', 'channelsEnabled', 'autoMemory', 'autoLearning', 'memoryWriteApproval', 'memory', 'executeCode', 'sessionSearch', 'textToolCalls', 'sounds', 'soundVolume']);
+      const untrustedSafe = new Set(['$schema', 'permissions', 'outputStyle', 'editorMode', 'language', 'worktree', 'avoidPhrases', 'codeComments', 'theme', 'agent', 'channelsEnabled', 'autoMemory', 'autoLearning', 'memoryWriteApproval', 'memory', 'executeCode', 'sessionSearch', 'textToolCalls', 'sounds', 'soundVolume', 'idleCompactMinutes']);
       const skipped = Object.keys(settings).filter((key) => !untrustedSafe.has(key));
       if (loosening || skipped.length) result.ignoredUntrusted.push(file);
       return;

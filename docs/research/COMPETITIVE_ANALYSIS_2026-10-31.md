@@ -94,7 +94,7 @@ OASIS stores workspace-scoped sessions and has explicit recall, history compacti
 
 **Test evidence:** Runtime tests assert that older history is summarized before a later request and that mid-turn compaction preserves the current task and the latest call/result pair.
 
-**Comparison result:** Claude Code 2.1.314 documents idle compaction for Desktop and VS Code conversations above 200K tokens that remain idle. OASIS compacts older history at configured thresholds before a later request and has a separate mid-turn compaction path; it does not currently provide the same idle-triggered Desktop/VS Code behavior. Neither product's public contracts prove its internal memory-ranking quality. A meaningful quality comparison requires long-session tasks with predefined facts, context pressure, interruption/restart and measured recall correctness.
+**Comparison result:** Claude Code 2.1.314 documents idle compaction for Desktop and VS Code conversations above 200K tokens that remain idle. OASIS compacts older history at configured thresholds before a later request and has a separate mid-turn compaction path; since November 5, 2026 it also compacts while you are idle at the terminal prompt (after 15 minutes, from half the normal threshold, cancelled without changes if you start typing), the counterpart to Claude Code's idle compaction. Neither product's public contracts prove its internal memory-ranking quality. A meaningful quality comparison requires long-session tasks with predefined facts, context pressure, interruption/restart and measured recall correctness.
 
 ### 5. Delegation, task coordination and workflows
 
