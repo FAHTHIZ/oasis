@@ -50,6 +50,8 @@ function mockProvider() {
       const part = lastUser.content.find((p) => p.type === 'image_url');
       return reply(res, 200, text('I can see your image (' + String(part.image_url.url).slice(0, 22) + ').'));
     }
+    const shellOut = last.role === 'user' && /<bash-output exit-code="0">\n([^\n]*)/.exec(String(last.content));
+    if (shellOut) return reply(res, 200, text('Your command printed ' + shellOut[1] + '.'));
     if (messages.some((m) => m.role === 'user' && /slow check/i.test(String(m.content)))) {
       if (last.role === 'tool') {
         const note = messages.slice(1).find((m) => m.role === 'user' && /tabs/.test(String(m.content)));
@@ -217,7 +219,21 @@ test('runtime engine end to end: app at /, paste to connect, approve a real edit
   await evaluate(page, `location.reload(); true`);
   await waitFor(page, `document.readyState === 'complete' && document.documentElement.classList.contains('runtime') && /Done\\. I built the counter/.test(document.getElementById('transcript').textContent)`, { label: 'the open chat is remembered across reloads' });
 
-  // 9. The desktop menu's "Connect a phone…" opens the app's phone sheet.
+  // 9. `!command` runs on this computer after approval, without the model,
+  // and its output goes with the next message.
+  await waitFor(page, `Boolean(document.getElementById('input')) && !${busy}`, { label: 'app ready after reload' });
+  await evaluate(page, type('!node -e "console.log(6 * 7)"'));
+  await evaluate(page, submit);
+  await waitFor(page, `!document.getElementById('approvalSheet').hidden`, { label: 'approval for the ! command', timeout: 30000 });
+  assert.match(await evaluate(page, `document.querySelector('#approvalSummary').textContent`), /node/);
+  await evaluate(page, `document.getElementById('allowButton').click(); true`);
+  await waitFor(page, `!${busy} && [...document.querySelectorAll('.tool')].at(-1).className === 'tool ok' && /42/.test([...document.querySelectorAll('.tool')].at(-1).textContent)`, { label: 'the ! command ran and its output is shown', timeout: 30000 });
+  await shot('8-shell');
+  await evaluate(page, type('What did that print?'));
+  await evaluate(page, submit);
+  await waitFor(page, `!${busy} && /Your command printed 42\\./.test(document.getElementById('transcript').textContent)`, { label: 'the next message carried the command output', timeout: 30000 });
+
+  // 10. The desktop menu's "Connect a phone…" opens the app's phone sheet.
   await evaluate(page, `window.oasisConnectPhone(); true`);
   await waitFor(page, `!document.getElementById('phoneSheet').hidden && /home network|Tailscale|reachable/.test(document.getElementById('phoneHint').textContent) && !document.getElementById('phoneError').textContent`, { label: 'phone sheet shows the network choices' });
   await shot('6-phone');
