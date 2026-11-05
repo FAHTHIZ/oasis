@@ -325,11 +325,12 @@ test('subagents cannot manage other agents', async (t) => {
   });
   const session = await createSession({ root, config, settings });
   t.after(() => closeSession(session));
-  assert.ok(session.toolDefinitions.some((d) => d.function.name === 'send_message'));
+  assert.ok((session.toolDefinitions.some((tool) => tool.function.name === 'send_message') || session.deferredTools.has('send_message')));
   await runAgentTurn(session, 'delegate');
   const names = childRequests[0].tools.map((tool) => tool.function.name);
   for (const name of ['task', 'agent_status', 'send_message', 'agent_stop']) assert.ok(!names.includes(name), name);
-  assert.ok(names.includes('team_send_message'), 'subagents can message peers without managing their lifecycle');
+  // team_send_message is deferred like in the parent: reachable through tool_search or a direct call.
+  assert.ok(names.includes('team_send_message') || names.includes('tool_search'), 'subagents can message peers without managing their lifecycle');
   assert.equal(session.agentTasks.agents.get('agent_1').status, 'completed', 'foreground agents are registered too');
 });
 

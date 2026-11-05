@@ -1,3 +1,4 @@
+import { readOnlyShellLine, readOnlyCommandsEnabled, readOnlyGitEnv } from './read-only-commands.mjs';
 import { securityWarning } from './security-patterns.mjs';
 // Additional OASIS tools for deeper repository work and interactive process control:
 //   grep           regex search (ripgrep when available, JS fallback) with globs, context, and modes
@@ -5,7 +6,7 @@ import { securityWarning } from './security-patterns.mjs';
 //   command_output read new output from a background process
 //   kill_command   stop a background process
 //   list_background list background processes
-//   run_shell      opt-in shell command (pipes, &&, redirects); enabled by settings or the sandbox
+//   run_shell      shell command line (pipes, &&, redirects); on by default except on Windows
 import { leadingSleepSeconds, longSleepError } from './sleep-guard.mjs';
 import { atomicWriteFile } from './atomic-write.mjs';
 import { injectionHoldReason } from './untrusted-content.mjs';
@@ -534,7 +535,11 @@ async function runShell(root, args, context, flavor = 'sh') {
   const hardRisk = shellHighRisk(command) || (injectionHold ? 'needs a person because ' + injectionHold : null);
   const appRisk = appControlRisk(command) || (protectedEditsAllowed(context.env || process.env) ? null : protectedShellWrite(command));
   const bypass = Boolean(context.autoApprove && context.permissionMode === 'bypassPermissions');
-  const autoAllowed = !hardRisk && !install.forceAsk && !(appRisk && !bypass) && (context.ruleAllowed || (sandbox && sandbox.autoAllowShellCommands === true) || (context.autoApprove && context.permissionMode === 'bypassPermissions'));
+  const env0 = context.env || process.env;
+  // `ls src && git status` and other read-only lines inside the workspace run without asking.
+  const readOnly = flavor !== 'powershell' && process.platform !== 'win32' && !hardRisk && !appRisk && !install.forceAsk && readOnlyCommandsEnabled(env0, (context.session && context.session.settings) || {}) && readOnlyShellLine(command, { root: path.resolve(root) });
+  if (readOnly && /(^|[\s;&|])git\s/.test(command)) { const overlay = Object.create(context); overlay.env = readOnlyGitEnv(env0); context = overlay; }
+  const autoAllowed = readOnly || (!hardRisk && !install.forceAsk && !(appRisk && !bypass) && (context.ruleAllowed || (sandbox && sandbox.autoAllowShellCommands === true) || (context.autoApprove && context.permissionMode === 'bypassPermissions')));
   if (!autoAllowed) {
     const ok = context.approval && await context.approval((install.approvalNote ? install.approvalNote + '\n' : '') + (hardRisk ? 'HIGH RISK: this command ' + hardRisk + '. Auto-approval does not apply.\n' : '') + (appRisk ? 'Warning: ' + appRisk + (/^it appears to write|^it sets a git config/.test(appRisk) ? '.\n' : '. Unsaved work in those apps could be lost.\n') : '') + 'Run this ' + (flavor === 'powershell' ? 'PowerShell' : 'shell') + ' command in the workspace?\n  ' + command + (sandbox ? (sandbox.kind === 'ssh' ? '\nIt will run on ' + sandbox.ssh.host + ' over SSH.' : '\nIt will run inside the OS sandbox (' + sandbox.kind + ').') : '\nThis runs through a real shell WITHOUT an OS sandbox and can do anything your user account can.'), !sandbox || Boolean(appRisk) || Boolean(hardRisk));
     if (!ok) return { approved: false, command, message: 'Shell command was not approved. Nothing ran.' };

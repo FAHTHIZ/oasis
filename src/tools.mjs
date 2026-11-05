@@ -1,3 +1,4 @@
+import { readOnlyArgv, readOnlyCommandsEnabled, readOnlyGitEnv } from './read-only-commands.mjs';
 import { installSkillsFromSource, parseSkillSource } from './skill-install.mjs';
 import { securityWarning } from './security-patterns.mjs';
 import { argvSleepSeconds, longSleepError } from './sleep-guard.mjs';
@@ -154,7 +155,7 @@ export const TOOL_DEFINITIONS = [
   { type: 'function', function: { name: 'write_file', description: 'Create or replace a text file inside the workspace. Existing file contents are snapshotted first for later recovery. Never use this for secrets or files outside the workspace.', parameters: { type: 'object', properties: { path: { type: 'string', description: 'Workspace-relative file path' }, content: { type: 'string', description: 'Complete new text contents' } }, required: ['path', 'content'] } } },
   { type: 'function', function: { name: 'todo_write', description: 'Create or update the current task checklist. Send the COMPLETE list each time. Use pending, in_progress, and completed; complete items only after verification. This changes session state only and never edits files.', parameters: { type: 'object', properties: { todos: { type: 'array', maxItems: 50, items: { type: 'object', properties: { content: { type: 'string', minLength: 1, maxLength: 200 }, status: { type: 'string', enum: ['pending', 'in_progress', 'completed'] } }, required: ['content', 'status'], additionalProperties: false } } }, required: ['todos'], additionalProperties: false } } },
   { type: 'function', function: { name: 'delete_file', description: 'Delete one file inside the workspace. Requires explicit interactive approval even in auto mode. Directories and sensitive files cannot be deleted with this tool.', parameters: { type: 'object', properties: { path: { type: 'string', description: 'Workspace-relative file path' } }, required: ['path'] } } },
-  { type: 'function', function: { name: 'run_command', description: 'Run one executable with argv arguments in the workspace, without shell expansion. Requires approval unless the user explicitly enabled --yes. Set interactive=true to start a persistent real PTY terminal session for REPLs, prompts, and terminal-aware tools; use terminal_read/input/resize/interrupt/stop to control it. Interactive sessions end when stopped or when OASIS closes the session. Destructive executables and shell interpreters remain blocked unless explicitly allowed.', parameters: { type: 'object', properties: { command: { type: 'string', description: 'One executable name or path, such as npm or git' }, args: { type: 'array', items: { type: 'string' }, description: 'Argument array, for example ["test"]' }, timeoutSeconds: { type: 'integer', description: 'Timeout from 5 to 600 seconds; defaults to 120 for non-interactive commands. A command still running at the timeout moves to the background (read it with command_output) rather than being stopped.' }, run_in_background: { type: 'boolean', description: 'Start a piped long-running process such as a dev server or watcher and return immediately with an id. Read its output with command_output and stop it with kill_command.' }, max_seconds: { type: 'integer', description: 'With run_in_background: stop the process automatically after this many seconds (for example 1800 for a long test run). You are notified when it ends.' }, interactive: { type: 'boolean', description: 'Run inside a real pseudo-terminal and keep the session open for terminal_input, terminal_read, terminal_resize, terminal_interrupt, and terminal_stop. Cannot be combined with run_in_background.' } }, required: ['command', 'args'] } } },
+  { type: 'function', function: { name: 'run_command', description: 'Run one program with an argument list in the workspace (no shell syntax). Read-only commands run straight away; others ask for approval unless --yes is on. interactive=true opens a real terminal for REPLs and prompts (control it with the terminal_* tools). Destructive programs and shell interpreters stay blocked unless allowed.', parameters: { type: 'object', properties: { command: { type: 'string', description: 'One executable name or path, such as npm or git' }, args: { type: 'array', items: { type: 'string' }, description: 'Argument array, for example ["test"]' }, timeoutSeconds: { type: 'integer', description: 'Timeout from 5 to 600 seconds; defaults to 120 for non-interactive commands. A command still running at the timeout moves to the background (read it with command_output) rather than being stopped.' }, run_in_background: { type: 'boolean', description: 'Start a piped long-running process such as a dev server or watcher and return immediately with an id. Read its output with command_output and stop it with kill_command.' }, max_seconds: { type: 'integer', description: 'With run_in_background: stop the process automatically after this many seconds (for example 1800 for a long test run). You are notified when it ends.' }, interactive: { type: 'boolean', description: 'Run inside a real pseudo-terminal and keep the session open for terminal_input, terminal_read, terminal_resize, terminal_interrupt, and terminal_stop. Cannot be combined with run_in_background.' } }, required: ['command', 'args'] } } },
   { type: 'function', function: { name: 'install_package', description: 'Install one requested package or developer tool using a detected package manager. Accepts auto, npm, npm-global, pip, pipx, system, cargo, or go ecosystems. Installation requires approval unless --yes was explicitly enabled.', parameters: { type: 'object', properties: { packageName: { type: 'string', description: 'A single package identifier, not a URL or shell command' }, ecosystem: { type: 'string', enum: ['auto', 'npm', 'npm-global', 'pip', 'pipx', 'system', 'cargo', 'go'], description: 'Package ecosystem; auto chooses based on known tools and the project' } }, required: ['packageName'] } } },
   { type: 'function', function: { name: 'fetch_url', description: 'Fetch a public HTTP or HTTPS page. HTML is reduced to its main content (navigation, sidebars, footers and cookie banners removed) and returned as Markdown with headings, links, lists, tables and fenced code blocks. Long pages are returned in pages: when truncated is true, call again with start_index set to nextStartIndex. Private/local network addresses, credentials, redirects, and large responses are blocked.', parameters: { type: 'object', properties: { url: { type: 'string', description: 'Public URL using HTTP or HTTPS' }, start_index: { type: 'integer', description: 'Character offset to continue reading a long page from (use nextStartIndex from the previous result)' }, max_length: { type: 'integer', description: 'Maximum characters to return (500-24576, default 24576)' }, raw: { type: 'boolean', description: 'Return the raw HTML source instead of Markdown' }, full_page: { type: 'boolean', description: 'Convert the whole page instead of only the main content' } }, required: ['url'] } } },
 
@@ -457,7 +458,10 @@ export async function runWorkspaceCommand(root, command, args = [], options = {}
     : protectedShellWrite([command].concat(args).join(' '));
   const highRisk = configRisk || (analysis.highRisk && !options.ruleAllowed ? analysis.highRisk : null) || (options.injectionHold ? 'needs a person because ' + options.injectionHold : null);
   const sandboxAutoAllowed = sandbox && sandbox.available && sandbox.autoAllowCommands !== false && !highRisk;
-  const needsApproval = highRisk ? true : !(options.autoApprove || options.ruleAllowed || sandboxAutoAllowed);
+  // ls, cat, grep, git status/diff/log and friends: read-only, inside the workspace.
+  const readOnly = !highRisk && !options.interactive && options.readOnlyCommands !== false && readOnlyCommandsEnabled(options.env || process.env) && readOnlyArgv(command, args, { root: path.resolve(root) });
+  if (readOnly && command === 'git') options = { ...options, env: readOnlyGitEnv(options.env || process.env) };
+  const needsApproval = highRisk ? true : !(options.autoApprove || options.ruleAllowed || sandboxAutoAllowed || readOnly);
   if (needsApproval) {
     const ok = approval && await approval('Run this command in the workspace?\n  ' + command + ' ' + args.map((arg) => JSON.stringify(arg)).join(' ') +
       (highRisk ? '\nHIGH RISK: ' + (configRisk ? configRisk : 'this command ' + highRisk) + '. Auto-approval does not apply.' : '') +
@@ -911,6 +915,9 @@ export async function listAvailableSkills(root, options = {}) {
         const skill = {
           name: meta.name,
           description: meta.description,
+          // Claude Code's disable-model-invocation: the user can still run it
+          // as /name, but it stays out of the model's skill catalogue.
+          modelInvocable: !/^disable-model-invocation:\s*true\s*$/m.test((/^---\r?\n([\s\S]*?)\r?\n---/.exec(content) || [])[1] || ''),
           source,
           directoryName: entry.name,
           relativePath: localSource ? path.posix.join(relativePrefix, entry.name, 'SKILL.md') : entry.name,
@@ -1132,9 +1139,21 @@ export async function loadSkillResource(root, rawName, rawRelativePath, options 
 }
 
 export async function loadSkillDescriptions(root, options = {}) {
-  const skills = await listAvailableSkills(root, options);
+  const skills = (await listAvailableSkills(root, options)).filter((item) => item.modelInvocable !== false);
   if (!skills.length) return '';
-  return skills.map((item) => '- ' + item.name + ' [' + (['global-extension', 'project-extension', 'portable-workspace', 'global-portable'].includes(item.source) ? 'EXTERNAL UNTRUSTED PROMPT' : item.source) + ']: ' + item.description).join('\n').slice(0, 16000);
+  return skills.map((item) => '- ' + item.name + ' [' + (['global-extension', 'project-extension', 'portable-workspace', 'global-portable'].includes(item.source) ? 'EXTERNAL UNTRUSTED PROMPT' : item.source) + ']: ' + skillCatalogueLine(item.description)).join('\n').slice(0, 16000);
+}
+
+// One catalogue line per skill: what it does plus its "Use for/when" trigger,
+// at most 200 characters. load_skill returns the full instructions.
+export function skillCatalogueLine(description) {
+  const text = String(description || '').replace(/\s+/g, ' ').trim();
+  if (text.length <= 200) return text;
+  const sentences = text.split(/(?<=[.!?])\s+/);
+  const trigger = sentences.slice(1).find((sentence) => /^use (for|when|on|after)\b/i.test(sentence)) || '';
+  let line = sentences[0] + (trigger ? ' ' + trigger : '');
+  if (line.length > 200) line = line.slice(0, 197).replace(/[\s,]+\S*$/, '') + '…';
+  return line;
 }
 
 async function runReadOnlyGit(root, args) {
@@ -1471,6 +1490,7 @@ export async function executeTool(name, args = {}, context = {}) {
         sandbox: context.sandbox,
         ruleAllowed: Boolean(context.ruleAllowed) && !install.forceAsk,
         bypassPermissions: Boolean(context.autoApprove && context.permissionMode === 'bypassPermissions'),
+        readOnlyCommands: readOnlyCommandsEnabled(env, (context.session && context.session.settings) || {}),
         background: args.run_in_background === true,
         interactive: args.interactive === true,
         ptyManager: context.session && (context.session.ptyManager ||= new PtySessionManager()),

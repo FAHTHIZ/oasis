@@ -25,7 +25,7 @@ test('PreToolUse input rewrites cannot inherit an allow rule for the original co
       type: 'command',
       command: printJson({
         hookSpecificOutput: {
-          updatedInput: { command: 'echo', args: ['rewritten'] }
+          updatedInput: { command: 'mkdir', args: ['rewritten'] }
         }
       })
     }, 'Bash')]

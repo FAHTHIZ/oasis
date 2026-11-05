@@ -82,7 +82,7 @@ test('activity summary reports a waiting approval', () => {
 for (const behavior of ['allow', 'deny']) {
   test('a headless background run relays its approval and ' + (behavior === 'allow' ? 'runs' : 'skips') + ' the command', async (t) => {
     const { env, id, home } = await fixture(t, behavior === 'allow' ? 'bg-relayallow' : 'bg-relaydeny');
-    const { config } = await scriptedModel(t, [toolCall('c1', 'run_command', { command: 'git', args: ['--version'] }), { content: 'finished' }]);
+    const { config } = await scriptedModel(t, [toolCall('c1', 'run_command', { command: 'git', args: ['init', '--quiet', 'sub'] }), { content: 'finished' }]);
     let out = '';
     const runEnv = { ...env, OASIS_BACKGROUND_ID: id, OASIS_BACKGROUND_RUN_ID: 'r1' };
     const run = runHeadless({ prompt: 'check git', root: home, config, env: runEnv, outputFormat: 'stream-json', sessionOptions: { settings }, write: (text) => { out += text; } });

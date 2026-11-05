@@ -119,7 +119,7 @@ test('the agent can enter plan mode and schedule a prompt through tools', async 
   ]);
   const session = await createSession({ root, config, env });
   t.after(() => closeSession(session));
-  assert.ok(session.toolDefinitions.some((tool) => tool.function.name === 'monitor_command'));
+  assert.ok((session.toolDefinitions.some((tool) => tool.function.name === 'monitor_command') || session.deferredTools.has('monitor_command')));
   await runAgentTurn(session, 'plan a refactor and check the build every 5 minutes', { env, autoApprove: false, approval: async () => false });
   assert.equal(session.permissions.mode, 'plan');
   const listed = await runBuiltinCommand('schedule', 'list', { root, session, env });

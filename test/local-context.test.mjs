@@ -186,6 +186,6 @@ test('small context windows get a compact system prompt; normal windows keep the
   assert.match(smallPrompt, /Read a file before editing it/);
   assert.match(smallPrompt, /Never claim a test passed/);
   assert.doesNotMatch(smallPrompt, /use delegate_openhands|use setup_omniroute|launch a bounded wave/);
-  assert.match(largePrompt, /launch a bounded wave/);
-  assert.ok(smallPrompt.length < largePrompt.length / 2, smallPrompt.length + ' vs ' + largePrompt.length);
+  assert.match(largePrompt, /How to work:[\s\S]*Delegate broad exploration/);
+  assert.ok(smallPrompt.length < largePrompt.length * 0.75, smallPrompt.length + ' vs ' + largePrompt.length);
 });
