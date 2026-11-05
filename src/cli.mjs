@@ -2616,7 +2616,7 @@ async function interactive(root, autoApprove, persistence = {}) {
         minutes: idleCompactMinutes(session && session.settings, process.env),
         compact: async (target, options) => {
           const before = estimateTokens(target.messages);
-          const result = await compactHistoryIfNeeded(target, { ...hookOptions(target), ...options, mustPreserve: target.mustPreserve });
+          const result = await compactHistoryIfNeeded(target, { ...options, mustPreserve: target.mustPreserve });
           if (result && result.tokensUsed) recordUsage(USAGE, { totalTokens: result.tokensUsed, phase: 'compaction' });
           return result && result.compacted ? { ...result, beforeTokens: before, afterTokens: estimateTokens(target.messages) } : result;
         }

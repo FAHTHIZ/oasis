@@ -26,7 +26,7 @@ export function idleCompactMinutes(settings = {}, env = process.env) {
   if (raw === false || /^(off|false|no)$/i.test(String(raw))) return 0;
   const value = Number(raw);
   if (!Number.isFinite(value) || value <= 0) return 0;
-  return Math.min(24 * 60, Math.max(1, value));
+  return Math.min(24 * 60, Math.max(0.01, value));
 }
 
 export function historyChars(messages = []) {
