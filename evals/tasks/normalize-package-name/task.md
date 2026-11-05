@@ -1,2 +1,2 @@
-Create src/lib.mjs exporting normalizePackageName(value) to solve this task: Accept one valid npm package identifier, including optional scope and version. Reject shell fragments, filesystem paths, URLs, empty names, and strings containing whitespace.
+Create src/lib.mjs exporting normalizePackageName(value) to solve this task: Accept one valid npm package identifier, including optional scope and version. Return a valid identifier unchanged. Reject shell fragments, filesystem paths, URLs, empty names, and strings containing whitespace by throwing an Error whose message contains "package identifier".
 The verifier runs existing repository checks and then validates the helper. Preserve the existing repository's safety guards.
