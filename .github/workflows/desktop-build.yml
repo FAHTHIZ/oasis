@@ -90,7 +90,8 @@ jobs:
         if: matrix.command == 'win'
         uses: microsoft/setup-msbuild@30375c66a4eea26614e0d39710365f22f8b0af57 # v3
         with:
-          vs-version: '[17.0,18.0)'
+          # The Windows ARM runner image ships a newer Visual Studio than x64.
+          vs-version: ${{ matrix.arch == 'arm64' && '[17.0,)' || '[17.0,18.0)' }}
       - name: Install app and packaging dependencies
         env:
           GYP_MSVS_VERSION: ${{ matrix.command == 'win' && '2022' || '' }}
