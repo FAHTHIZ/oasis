@@ -1543,13 +1543,14 @@ export function createOasisWebServer(options = {}) {
       const statePath = path.join(getBaseConfigDirectory(env), 'update-state.json');
       if (req.method === 'GET') {
         try {
+          // ?refresh=1 is a manual "Check now": skip the 6-hour cache.
+          const force = parsedUrl.searchParams.get('refresh') === '1';
           if (bridge) {
-            const force = parsedUrl.searchParams.get('refresh') === '1';
             json(res, 200, { host: 'desktop', ...(force || !bridge.status().checkedAt ? await bridge.check() : bridge.status()) });
             return;
           }
           if (updateChecksDisabled(env)) { json(res, 200, { host: 'cli', phase: 'disabled', available: false, current: oasisVersion() }); return; }
-          const result = await cachedUpdateCheck({ statePath, currentVersion: oasisVersion(), kind: 'cli', fetchImpl: options.updateFetchImpl || fetch });
+          const result = await cachedUpdateCheck({ statePath, currentVersion: oasisVersion(), kind: 'cli', fetchImpl: options.updateFetchImpl || fetch, force });
           json(res, 200, {
             host: 'cli', phase: result.available ? 'available' : 'current', available: result.available,
             current: result.current, latest: result.latest, skippedVersion: result.skippedVersion,
