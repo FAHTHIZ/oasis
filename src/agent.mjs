@@ -2458,7 +2458,10 @@ async function requestCompletionRaw(session, options = {}) {
   const providerEnv = options.env || session.providerEnv || process.env;
   const nativeResponses = config.protocol === 'openai-responses';
   // schedule_wakeup only exists while a self-paced /loop is running.
-  const availableTools = options.noTools ? [] : (session.toolDefinitions || TOOL_DEFINITIONS).filter((tool) => (tool.function.name !== 'schedule_wakeup' || Boolean(session.selfPacedLoop)) && (tool.function.name !== 'wait_for_mcp_servers' || Boolean(session.mcpNonBlocking)));
+  // Tools that can only answer "not available" right now are not sent: no
+  // one to ask in a headless run, and exit_plan_mode is a no-op outside plan
+  // mode. Calls still work if the model names them anyway.
+  const availableTools = options.noTools ? [] : (session.toolDefinitions || TOOL_DEFINITIONS).filter((tool) => (tool.function.name !== 'schedule_wakeup' || Boolean(session.selfPacedLoop)) && (tool.function.name !== 'wait_for_mcp_servers' || Boolean(session.mcpNonBlocking)) && (tool.function.name !== 'ask_user_question' || session.turnCanAskUser !== false) && (tool.function.name !== 'exit_plan_mode' || Boolean(session.permissions && session.permissions.mode === 'plan')));
   const headers = { 'content-type': 'application/json', accept: 'application/json' };
   let apiKey = config.apiKey;
   if (!apiKey && config.apiKeyHelper) {
@@ -5507,6 +5510,7 @@ async function runAgentTurnRaw(session, prompt, options = {}) {
   const persistentFailures = new Map();
   let editEpoch = 0;
   session.turnQuestionCount = 0;
+  session.turnCanAskUser = typeof options.askUser === 'function';
 
   for (let step = 0; step < maxSteps; step++) {
     throwIfCancelled(options.signal);
