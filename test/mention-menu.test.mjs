@@ -32,5 +32,5 @@ test('typing an @mention shows matching files before Tab', async () => {
   input.write(' ok');
   await tick();
   input.write('\r');
-  assert.equal(await done, 'explain @ad ok');
+  assert.equal((await done).text, 'explain @ad ok');
 });
