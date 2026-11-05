@@ -598,8 +598,8 @@ export async function runBuiltinCommand(name, argument, state) {
       const mcpNames = session.mcpToolMap instanceof Map ? new Set(session.mcpToolMap.keys()) : new Set();
       const mcpDefinitions = definitions.filter((item) => item && item.function && mcpNames.has(item.function.name));
       const localDefinitions = definitions.filter((item) => !item || !item.function || !mcpNames.has(item.function.name));
-      const localTools = Math.round(JSON.stringify(localDefinitions).length / 4);
-      const mcpTools = Math.round(JSON.stringify(mcpDefinitions).length / 4);
+      const localTools = localDefinitions.length ? Math.round(JSON.stringify(localDefinitions).length / 4) : 0;
+      const mcpTools = mcpDefinitions.length ? Math.round(JSON.stringify(mcpDefinitions).length / 4) : 0;
       const startup = system + localTools + mcpTools;
       // Tool schemas are sent with requests but are not represented in session.messages.
       // Include them in the displayed context estimate so a tool-heavy setup is visible.
@@ -642,8 +642,8 @@ export async function runBuiltinCommand(name, argument, state) {
           return { index: index + 1, role: message.role || 'unknown', name: message.name || (message.function && message.function.name) || '', tokens: estimateTokens([message]), preview: body };
         }).sort((a, b) => b.tokens - a.tokens).slice(0, 8);
         const conversationTokens = estimateTokens(session.messages);
-        const localTools = Math.round(JSON.stringify(localDefinitions).length / 4);
-        const mcpTools = Math.round(JSON.stringify(mcpDefinitions).length / 4);
+        const localTools = localDefinitions.length ? Math.round(JSON.stringify(localDefinitions).length / 4) : 0;
+        const mcpTools = mcpDefinitions.length ? Math.round(JSON.stringify(mcpDefinitions).length / 4) : 0;
         const used = conversationTokens + localTools + mcpTools;
         return { output: [
           'Detailed estimated context — categories below can overlap; tool results and loaded memory are subsets of history/system prompt, not additive totals.',

@@ -2924,6 +2924,16 @@ async function interactive(root, autoApprove, persistence = {}) {
         } catch (error) { stdout.write('[picker] ' + error.message + '\n'); continue; }
       }
       try {
+        // /context before the first message: start the session now (the first
+        // prompt would anyway) so it shows the real system prompt and tool cost,
+        // as Claude Code does, instead of "no conversation yet".
+        if (slash[1].toLowerCase() === 'context' && !session && !persistence.resumeId) {
+          try {
+            const config = await loadConfig();
+            if (SESSION_OPTIONS.model) config.model = SESSION_OPTIONS.model;
+            if (config.configured) session = await createSession({ root, config, ...sessionCreateOptions(), watchFiles: true });
+          } catch { /* fall back to the plain message */ }
+        }
         const handled = await runBuiltinCommand(slash[1].toLowerCase(), String(slash[2] || '').trim(), { root, session, env: process.env, usage: USAGE, sessionOptions: SESSION_OPTIONS, autoApprove, print: (line) => stdout.write(line + '\n'), color: Boolean(stdout.isTTY && colorEnabled(stdout)), width: stdout.columns || 100, confirm: (question) => askApproval(question, true, {}) });
         if (handled) {
           if (handled.output) stdout.write(handled.output + '\n');
