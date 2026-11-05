@@ -2112,3 +2112,9 @@ test('workspace cancellation force-kills a descendant that ignores SIGTERM after
   assert.equal(alive, false, 'force-kill escalation must stop descendants even after the process leader has exited');
 });
 
+
+test('running a test file counts as a test check', async () => {
+  const { verificationCommandKindForTest } = await import('../src/agent.mjs');
+  assert.equal(verificationCommandKindForTest('node', ['test.mjs']), 'test');
+  assert.equal(verificationCommandKindForTest('node', ['build.mjs']), 'check');
+});

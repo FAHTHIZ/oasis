@@ -553,6 +553,23 @@ export async function describeProject(root, env = process.env) {
 
 // A short snapshot of the environment, like Claude Code's <env> block: platform,
 // date, and (for Git repositories) the branch, status summary, and recent commits.
+// A few dozen tokens that save the model its first glob/list round trips:
+// every path in a small repo, else top-level entries with file counts.
+export function fileLayout(paths, { maxFiles = 40, maxEntries = 30 } = {}) {
+  const list = paths.map((item) => String(item || '').trim()).filter((item) => item && !item.startsWith('.oasis/'));
+  if (!list.length) return '';
+  if (list.length <= maxFiles) return 'Files (' + list.length + '): ' + list.sort().join(', ');
+  const counts = new Map();
+  for (const item of list) {
+    const slash = item.indexOf('/');
+    const key = slash === -1 ? item : item.slice(0, slash + 1);
+    counts.set(key, (counts.get(key) || 0) + 1);
+  }
+  const entries = [...counts.entries()].sort((a, b) => a[0].localeCompare(b[0]));
+  const shown = entries.slice(0, maxEntries).map(([key, count]) => key.endsWith('/') ? key + ' (' + count + ')' : key);
+  return 'Top-level layout (' + list.length + ' files): ' + shown.join(', ') + (entries.length > maxEntries ? ', +' + (entries.length - maxEntries) + ' more' : '');
+}
+
 async function describeEnvironment(root, env = process.env) {
   const lines = ['Platform: ' + process.platform + ' ' + os.release() + ' (' + process.arch + '), Node ' + process.version, "Today's date: " + new Date().toISOString().slice(0, 10)];
   const git = async (args) => {
@@ -565,12 +582,15 @@ async function describeEnvironment(root, env = process.env) {
   if (project) lines.push(project);
   const inside = await git(['rev-parse', '--is-inside-work-tree']);
   if (inside !== 'true') { lines.push('Git repository: no'); return lines.join('\n'); }
-  const [branch, status, log] = await Promise.all([
+  const [branch, status, log, files] = await Promise.all([
     git(['branch', '--show-current']),
     git(['status', '--porcelain']),
-    git(['log', '--oneline', '-n', '5', '--no-decorate'])
+    git(['log', '--oneline', '-n', '5', '--no-decorate']),
+    git(['ls-files', '--cached', '--others', '--exclude-standard'])
   ]);
   lines.push('Git repository: yes' + (branch ? ', branch ' + branch : ', detached HEAD'));
+  const layout = files === null || env.OASIS_FILE_LAYOUT === '0' ? '' : fileLayout(files.split('\n'));
+  if (layout) lines.push(layout);
   if (status !== null) {
     const changed = status ? status.split('\n').length : 0;
     lines.push('Working tree: ' + (changed ? changed + ' changed or untracked path' + (changed === 1 ? '' : 's') + ' (use git_status for details)' : 'clean'));
@@ -3557,6 +3577,9 @@ export function appendLspUnavailableNotice(text, state) {
   const unavailable = [...(state && state.lspVerificationByPath instanceof Map ? state.lspVerificationByPath.entries() : [])]
     .filter(([file, result]) => changed.has(file) && result && result.status === 'unavailable');
   if (!unavailable.length) return String(text || '');
+  // A passing project check already verified the change; a missing language
+  // server is then noise on every reply (it stays in /status and -p JSON).
+  if (state && state.lastVerificationKind && state.lastVerificationExitCode === 0) return String(text || '');
   // Group files that share the same reason so one missing server is one short line.
   const groups = new Map();
   for (const [file, result] of unavailable) {
@@ -3581,6 +3604,7 @@ export function formatLspVerificationBlocker(issues) {
 }
 
 
+export { verificationCommandKind as verificationCommandKindForTest };
 function verificationCommandKind(command, args) {
   const executable = executableName(command);
   const argv = (Array.isArray(args) ? args : []).map((item) => String(item || '').toLowerCase());
@@ -3590,7 +3614,9 @@ function verificationCommandKind(command, args) {
   const testRunners = new Set(['pytest', 'vitest', 'jest', 'mocha', 'tap', 'ava', 'phpunit']);
   const lintRunners = new Set(['eslint', 'prettier', 'ruff', 'flake8', 'stylelint', 'shellcheck', 'golangci-lint', 'swiftlint']);
   const typeCheckRunners = new Set(['tsc', 'pyright', 'mypy', 'phpstan']);
-  if (argv.includes('--test') || testRunners.has(executable) || argv.some((item) => testRunners.has(executableName(item))) ||
+  // `node test.mjs`, `python tests.py`, `bash test.sh`: running a test file is a test run.
+  const runsTestFile = argv.some((item) => !item.startsWith('-') && isTestPath(item));
+  if (argv.includes('--test') || runsTestFile || testRunners.has(executable) || argv.some((item) => testRunners.has(executableName(item))) ||
       taskTokens.some((item) => item === 'test' || item === 'tests' || item.startsWith('test:'))) return 'test';
   if (lintRunners.has(executable) || argv.some((item) => lintRunners.has(executableName(item))) ||
       taskTokens.some((item) => item === 'lint' || item.startsWith('lint:'))) return 'lint';
@@ -5473,9 +5499,12 @@ async function runAgentTurnRaw(session, prompt, options = {}) {
           try { waitHook({ phase: 'progress', step: step + 1, promptProgress: { total: Number(progress.total) || 0, cache: Number(progress.cache) || 0, processed: Number(progress.processed) || 0, time_ms: Number(progress.time_ms) || 0 } }); } catch {}
         } } : {}),
         onStreamRestart: (event) => {
+          // Whether this request had shown any text, so the notice does not
+          // call an earlier, finished answer "discarded".
+          const partialShown = Boolean(visibleReply(streamedText).trim());
           streamedText = '';
           if (typeof options.onDelta === 'function') options.onDelta('');
-          if (typeof options.onStreamRestart === 'function') options.onStreamRestart(event);
+          if (typeof options.onStreamRestart === 'function') options.onStreamRestart({ ...event, partialShown });
         }
       });
       if (waitHook) { try { waitHook({ phase: 'end', step: step + 1 }); } catch {} }

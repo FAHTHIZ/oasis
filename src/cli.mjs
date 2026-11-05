@@ -2212,7 +2212,7 @@ async function runPrompt(prompt, root, autoApprove, session = null, persistence 
       onAutoMode: (event) => { endStream(); stdout.write('[auto] ' + (event.decision === 'allow' ? 'Allowed' : event.decision === 'block' ? 'Blocked' : 'Asking you about') + ' ' + event.tool + (event.reason ? ': ' + event.reason : '') + '\n'); },
       onUsage: (usage) => recordUsage(USAGE, usage),
       onThrash: (info) => { endStream(); stdout.write('[stuck?] `' + info.command + '` has failed the same way after ' + info.count + ' rounds of edits; Oasis asked the model to step back and diagnose before editing again.\n'); },
-      onStreamRestart: (info) => { const partial = endStream(); stdout.write(streamRestartNotice(info, partial) + '\n'); },
+      onStreamRestart: (info) => { const ended = endStream(); stdout.write(streamRestartNotice(info, typeof info.partialShown === 'boolean' ? info.partialShown : ended) + '\n'); },
       onContextOverflow: (info) => { endStream(); stdout.write(info.smallContextTools ? '\n[context] The model server has a ' + info.contextWindow + '-token window; switched to the small-context tool set (others stay reachable through tool_search) and retrying.\n' : '\n[context] The provider said the request was too long for the context window; compacted (' + Math.round(info.beforeChars / 1000) + 'k → ' + Math.round(info.afterChars / 1000) + 'k chars) and retrying.\n'); },
       onCompactionStart: (info) => { endStream(); stdout.write('\n[context] Compacting ' + info.messages + ' older messages (about ' + Number(info.beforeTokens || 0).toLocaleString('en-US') + ' tokens; local fallback after ' + info.timeoutSeconds + 's)…\n'); },
       onCompaction: (info) => stdout.write('\n[context] ' + String(info.note || 'Compacted older conversation history.') + (info.notesSaved ? ' Continuity note saved in .oasis/session-notes.md.' : ' Continuity note was not saved.') + '\n'),
@@ -2980,14 +2980,27 @@ async function interactive(root, autoApprove, persistence = {}) {
         continue;
       }
       // /model, /theme and /color without an argument open a picker in a terminal.
-      if (!String(slash[2] || '').trim() && stdin.isTTY && stdout.isTTY && typeof stdin.setRawMode === 'function' && ['model', 'theme', 'color'].includes(slash[1].toLowerCase())) {
+      if (!String(slash[2] || '').trim() && stdin.isTTY && stdout.isTTY && typeof stdin.setRawMode === 'function' && ['model', 'theme', 'color', 'rewind'].includes(slash[1].toLowerCase()) && (slash[1].toLowerCase() !== 'rewind' || session)) {
         try {
           const { pickerFor, selectDialog } = await import('./select-dialog.mjs');
-          const picker = await pickerFor(slash[1].toLowerCase(), { session, env: process.env, settings: (session && session.settings) || await loadSettings(root).catch(() => null) });
-          stdout.write('Select ' + slash[1].toLowerCase() + ':\n');
-          const chosen = await selectDialog({ input: stdin, output: stdout, options: picker.options, initial: picker.initial, context: picker.context, color: colorEnabled(stdout) });
-          if (!chosen) { stdout.write('Cancelled.\n'); continue; }
-          slash[2] = chosen;
+          const command = slash[1].toLowerCase();
+          const picker = await pickerFor(command, { session, env: process.env, settings: (session && session.settings) || await loadSettings(root).catch(() => null) });
+          if (picker) {
+            stdout.write(command === 'rewind' ? 'Rewind to before which message?\n' : 'Select ' + command + ':\n');
+            const chosen = await selectDialog({ input: stdin, output: stdout, options: picker.options, initial: picker.initial, context: picker.context, color: colorEnabled(stdout) });
+            if (!chosen) { stdout.write('Cancelled.\n'); continue; }
+            slash[2] = chosen;
+            if (command === 'rewind') {
+              const modes = await pickerFor('rewind-mode');
+              stdout.write('Restore what?\n');
+              const mode = await selectDialog({ input: stdin, output: stdout, options: modes.options, initial: 0, context: modes.context, color: colorEnabled(stdout) });
+              if (mode === null || mode === undefined) { stdout.write('Cancelled.\n'); continue; }
+              slash[2] = (chosen + ' ' + mode).trim();
+              // Put the rewound message back in the input box to edit and resend.
+              const picked = picker.options.find((option) => option.value === chosen);
+              if (mode !== 'code' && picked && picked.prompt) queuedDraft = picked.prompt;
+            }
+          }
         } catch (error) { stdout.write('[picker] ' + error.message + '\n'); continue; }
       }
       try {
