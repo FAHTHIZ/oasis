@@ -86,3 +86,19 @@ test('a run_command call with a whole command line runs instead of failing', asy
   const assistant = requests[1].messages.find((m) => m.role === 'assistant' && m.tool_calls);
   assert.deepEqual(JSON.parse(assistant.tool_calls[0].function.arguments), { command: 'node', args: ['-e', 'console.log(6*7)'] });
 });
+
+test('run_command args sent as one string (JSON, JavaScript array or argument line) become an argv', async () => {
+  const { normalizeRunCommandCall, parseArgsString } = await import('../src/tool-aliases.mjs');
+  const js = normalizeRunCommandCall({ command: 'node', args: '["--input-type=module", "-e", `\nimport { f } from \'./src/lib.mjs\';\nconsole.log(f(1))\n`]' }, new Set());
+  assert.deepEqual(js, { name: 'run_command', args: { command: 'node', args: ['--input-type=module', '-e', "\nimport { f } from './src/lib.mjs';\nconsole.log(f(1))\n"] } });
+  assert.deepEqual(normalizeRunCommandCall({ command: 'npm', args: '["run", "check"]' }, new Set()).args.args, ['run', 'check']);
+  assert.deepEqual(normalizeRunCommandCall({ command: 'npm', args: 'run check' }, new Set()).args.args, ['run', 'check']);
+  assert.equal(parseArgsString('[`${HOME}`]'), null);
+  assert.equal(parseArgsString('a | b'), null);
+  assert.equal(normalizeRunCommandCall({ command: 'npm', args: 'test | tee out' }, new Set()), null);
+});
+
+test('the scratch-space prompt gives the import depth back to the project root', async () => {
+  const { scratchPrompt } = await import('../src/scratch.mjs');
+  assert.match(scratchPrompt('.oasis/scratch/19713cb2'), /e\.g\. "\.\.\/\.\.\/\.\.\/src\/…"/);
+});

@@ -34,7 +34,8 @@ export function isScratchPath(relative) {
 
 export function scratchPrompt(relative) {
   return '<scratch-space>\nFor throwaway files — repro scripts, probes, sample input, temporary output — use ' + relative +
-    '/ instead of the project root. It is git-ignored, is not counted as a project change, and is cleaned up after a week. Never put real deliverables there.\n</scratch-space>';
+    '/ instead of the project root. It is git-ignored, is not counted as a project change, and is cleaned up after a week. Never put real deliverables there.' +
+    ' A script there imports project files relative to that folder, e.g. ' + JSON.stringify('../'.repeat(String(relative).split('/').filter(Boolean).length) + 'src/…') + '.\n</scratch-space>';
 }
 
 /** Creates the folder and its .gitignore, and prunes week-old sibling folders. Best effort. */
