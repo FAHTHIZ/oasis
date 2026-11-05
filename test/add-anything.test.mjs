@@ -275,3 +275,17 @@ test('a plugin installed from the chat brings its skills and MCP servers into th
   assert.match(results[1], /Run the deploy checklist/);
   assert.match(results[2], /plugin pong/);
 });
+
+test('"Add to Cursor" and "Install in VS Code" links install the server they describe', async () => {
+  const { classifySource: c } = await import('../src/add-anything.mjs');
+  const b64 = Buffer.from(JSON.stringify({ command: 'npx', args: ['-y', '@upstash/context7-mcp'], env: { DEFAULT_MINIMUM_TOKENS: '1000' } })).toString('base64');
+  const cursor = c('cursor://anysphere.cursor-deeplink/mcp/install?name=context7&config=' + encodeURIComponent(b64));
+  assert.equal(cursor.kind, 'stdio-mcp'); assert.equal(cursor.name, 'context7'); assert.deepEqual(cursor.args, ['-y', '@upstash/context7-mcp']); assert.deepEqual(cursor.env, { DEFAULT_MINIMUM_TOKENS: '1000' });
+  const web = c('https://cursor.com/en/install-mcp?name=linear&config=' + encodeURIComponent(Buffer.from(JSON.stringify({ url: 'https://mcp.linear.app/sse' })).toString('base64')));
+  assert.equal(web.kind, 'remote-mcp'); assert.equal(web.name, 'linear'); assert.equal(web.transport, 'sse');
+  const vscode = c('vscode:mcp/install?' + encodeURIComponent(JSON.stringify({ name: 'playwright', command: 'npx', args: ['@playwright/mcp@latest'] })));
+  assert.equal(vscode.name, 'playwright'); assert.deepEqual(vscode.args, ['-y', '@playwright/mcp@latest']);
+  const redirect = c('https://insiders.vscode.dev/redirect/mcp/install?name=github&config=' + encodeURIComponent(JSON.stringify({ type: 'http', url: 'https://api.githubcopilot.com/mcp/' })));
+  assert.equal(redirect.kind, 'remote-mcp'); assert.equal(redirect.name, 'github'); assert.equal(redirect.transport, 'http');
+  assert.throws(() => c('cursor://anysphere.cursor-deeplink/mcp/install?name=x&config=%%%'), /no readable MCP server config/);
+});

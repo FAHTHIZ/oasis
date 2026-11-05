@@ -63,6 +63,34 @@ function serverNameFor(command, args) {
   return slug(!short || /^(mcp|server|mcp-server)$/.test(short) ? (scopeName ? scopeName[1] : pkg) : short, 'mcp');
 }
 
+// cursor://anysphere.cursor-deeplink/mcp/install?name=N&config=BASE64(JSON),
+// https://cursor.com/(en/)install-mcp?name=N&config=BASE64, vscode:mcp/install?JSON,
+// https://(insiders.)vscode.dev/redirect/mcp/install?name=N&config=JSON.
+function installDeeplink(text) {
+  let url;
+  try { url = new URL(text); } catch { return null; }
+  const host = url.hostname.toLowerCase();
+  const where = url.protocol + '//' + host + url.pathname;
+  let name = url.searchParams.get('name') || '';
+  let config = null;
+  const parse = (raw) => { try { return JSON.parse(raw); } catch { return null; } };
+  const decode = (raw) => { try { return Buffer.from(raw.replace(/-/g, '+').replace(/_/g, '/'), 'base64').toString('utf8'); } catch { return ''; } };
+  if (/^cursor:/i.test(url.protocol) || /(^|\.)cursor\.(com|sh)$/.test(host) && /install-mcp|mcp\/install/.test(url.pathname)) {
+    const raw = url.searchParams.get('config') || '';
+    config = parse(raw) || parse(decode(raw));
+  } else if (/^vscode(-insiders)?:/i.test(url.protocol) && /mcp\/install/.test(where)) {
+    config = parse(decodeURIComponent(url.search.slice(1)));
+    if (config && config.name) name = config.name;
+  } else if (/(^|\.)vscode\.dev$/.test(host) && /\/redirect\/mcp\/install/.test(url.pathname)) {
+    config = parse(url.searchParams.get('config') || '');
+  } else return null;
+  if (!config || typeof config !== 'object') throw new Error('That install link has no readable MCP server config.');
+  if (config.mcpServers && typeof config.mcpServers === 'object') { const [first] = Object.entries(config.mcpServers); if (first) { name = name || first[0]; config = first[1]; } }
+  if (config.url) return { text: String(config.url), name: name || 'mcp', transport: config.type === 'sse' || /\/sse\/?$/.test(config.url) ? 'sse' : 'http', headers: Object.entries(config.headers || {}).map(([k, v]) => k + ': ' + v) };
+  if (!config.command) throw new Error('That install link has neither a command nor a URL.');
+  return { stdio: { name: slug(name || serverNameFor(String(config.command), (config.args || []).map(String)), 'mcp'), command: String(config.command), args: Array.isArray(config.args) ? config.args.map(String) : [], env: config.env && typeof config.env === 'object' ? Object.fromEntries(Object.entries(config.env).map(([k, v]) => [k, String(v)])) : {} } };
+}
+
 // Turn what people copy out of READMEs into a source: install commands from
 // Claude Code, Codex, Gemini CLI and the skills CLI, bare npx/uvx/docker
 // commands, and package, directory and raw-file pages.
@@ -121,6 +149,9 @@ export function normalizePasted(raw) {
     const command = words[0];
     return { stdio: { name: serverNameFor(command, words.slice(1)), command, args: words.slice(1), env: {} } };
   }
+  // "Add to Cursor" and "Install in VS Code" buttons carry the server config.
+  const deeplink = installDeeplink(text);
+  if (deeplink) return deeplink;
   const ssh = /^git@github\.com:([\w.-]+)\/([\w.-]+?)(?:\.git)?(#.*)?$/i.exec(text);
   if (ssh) return { text: 'https://github.com/' + ssh[1] + '/' + ssh[2] + (ssh[3] || '') };
   if (/^https?:\/\//i.test(text)) {
