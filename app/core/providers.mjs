@@ -67,6 +67,8 @@ function explain(status, body, config) {
   const text = String(body || '').slice(0, 16000);
   let parsed = null;
   try { parsed = JSON.parse(text); } catch {}
+  // Google wraps errors in an array: [{ error: {...} }].
+  if (Array.isArray(parsed)) parsed = parsed.find((item) => item && typeof item === 'object') || null;
   let detail = parsed
     ? (parsed.error && (parsed.error.message || parsed.error)) || parsed.message || text
     : text.slice(0, 600);
@@ -129,9 +131,33 @@ function openRouterCapKey(config) {
   return [config.connectionId || config.provider || '', trimSlash(config.baseURL), config.model || ''].join('|');
 }
 
+// Gemini 3 returns extra_content.google.thought_signature on tool calls and
+// rejects the next turn unless it comes back. Keep it for Gemini (direct or
+// through a gateway) and strip it for every other model.
+function geminiTarget(config) {
+  let host = '';
+  try { host = new URL(String(config.baseURL || '')).hostname.toLowerCase(); } catch {}
+  return host === 'generativelanguage.googleapis.com' || /gemini/i.test(String(config.model || ''));
+}
+
+function withExtraContentFor(config, messages) {
+  if (geminiTarget(config) || !messages.some((m) => Array.isArray(m && m.tool_calls) && m.tool_calls.some((c) => c && c.extra_content))) return messages;
+  return messages.map((m) => Array.isArray(m && m.tool_calls)
+    ? { ...m, tool_calls: m.tool_calls.map((c) => { if (!c || !c.extra_content) return c; const { extra_content: _drop, ...rest } = c; return rest; }) }
+    : m);
+}
+
+// Strict servers (Gemini) reject unknown keys under tools[].function.
+function cleanTool(tool) {
+  if (!tool || !tool.function) return tool;
+  const fn = {};
+  for (const key of ['name', 'description', 'parameters', 'strict']) if (tool.function[key] !== undefined) fn[key] = tool.function[key];
+  return { type: 'function', function: fn };
+}
+
 async function chatOpenAI(config, { messages, tools, signal, onText, fetchImpl }) {
-  const body = { model: config.model, messages, stream: true };
-  if (tools && tools.length) body.tools = tools;
+  const body = { model: config.model, messages: withExtraContentFor(config, messages), stream: true };
+  if (tools && tools.length) body.tools = tools.map(cleanTool);
   const openRouter = isOpenRouterEndpoint(config.baseURL);
   const learnedLimit = openRouter ? openRouterOutputCaps.get(openRouterCapKey(config)) : 0;
   const requestedLimit = learnedLimit
@@ -187,6 +213,7 @@ async function chatOpenAI(config, { messages, tools, signal, onText, fetchImpl }
       if (part.id) call.id = part.id;
       if (part.function && part.function.name) call.function.name += part.function.name;
       if (part.function && part.function.arguments) call.function.arguments += part.function.arguments;
+      if (part.extra_content && typeof part.extra_content === 'object') call.extra_content = { ...(call.extra_content || {}), ...part.extra_content };
     }
   }
   const toolCalls = calls.filter(Boolean).map((call, i) => ({ ...call, id: call.id || 'call_' + Date.now().toString(36) + i }));
