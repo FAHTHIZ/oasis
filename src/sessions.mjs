@@ -231,6 +231,9 @@ export async function saveSession(session, options = {}) {
     },
     ...(session.sessionName ? { name: String(session.sessionName).slice(0, 120) } : {}),
     messages,
+    pendingSteering: Array.isArray(session.pendingSteering)
+      ? session.pendingSteering.filter((note) => typeof note === 'string').map((note) => safePersistedText(note.trim(), 20000)).filter(Boolean).slice(-20)
+      : [],
     todos: sanitizeTodos(session.todos),
     sharedTasks: sanitizeSharedTaskStore(session.sharedTasks),
     mustPreserve: sanitizeMustPreserve(session.mustPreserve),
@@ -283,6 +286,9 @@ export async function loadSession(root, id, options = {}) {
     provider: payload.provider || {},
     name: typeof payload.name === 'string' ? payload.name.slice(0, 120) : '',
     messages: validateMessages(payload.messages),
+    pendingSteering: Array.isArray(payload.pendingSteering)
+      ? payload.pendingSteering.filter((note) => typeof note === 'string').map((note) => safePersistedText(note.trim(), 20000)).filter(Boolean).slice(-20)
+      : [],
     todos: sanitizeTodos(payload.todos),
     sharedTasks: sanitizeSharedTaskStore(payload.sharedTasks),
     mustPreserve: sanitizeMustPreserve(payload.mustPreserve),
