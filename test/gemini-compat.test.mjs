@@ -251,3 +251,14 @@ test('longer provider retries are announced instead of looking like a hang', asy
   assert.match(run.out, /Recovered\./);
   assert.match(run.err, /\[retry\] Provider error 50\d.*retrying in \d+s \(4\/8\)/);
 });
+
+test('error advice fits the error: a used-up daily quota is not blamed on the endpoint', async () => {
+  const { apiErrorAdvice } = await import('../src/agent.mjs');
+  const daily = apiErrorAdvice(429, 'Generate content requests per day limit exceeded on Free Tier.\nPlease retry in 18h12m2.339487691s');
+  assert.match(daily, /daily request quota/);
+  assert.match(daily, /18h12m/);
+  assert.doesNotMatch(daily, /endpoint|tool-calling/);
+  assert.match(apiErrorAdvice(429, 'Too many requests'), /rate-limiting/);
+  assert.match(apiErrorAdvice(401, 'bad key'), /API key/);
+  assert.match(apiErrorAdvice(400, 'bad request'), /tool-calling support/);
+});
