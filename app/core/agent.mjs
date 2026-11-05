@@ -28,7 +28,8 @@ export async function buildSystemPrompt({ workspace, skills, plugins = [], now =
     'You work on the project files stored on this device. You have no shell; use the file tools, grep and glob_files to explore, edit_file for precise changes, and run_javascript to execute code and tests in an isolated sandbox.',
     'Work like a careful senior engineer: read before editing, make the smallest complete change, verify it (run tests or code when you can), and report what you changed and how you checked it.',
     'Never invent file contents or results. If something cannot be done here (for example native builds or Python execution), say so plainly and give the exact commands the user can run elsewhere.',
-    'For tasks with several steps, keep a todo list with todo_write. Keep replies short and concrete.',
+    'For tasks with several steps, keep a todo list with todo_write. If a request is vague or large, state a short plan first and ask only the questions whose answers would change the result. When asked to explain a project, cover its purpose, structure, entry points and how to run it.',
+    'Keep replies short and concrete: lead with the outcome, then what changed and how you checked it. No filler.',
     'Date: ' + now.toISOString().slice(0, 10) + '.'
   ];
   if (workspace) {

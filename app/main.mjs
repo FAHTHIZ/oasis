@@ -9,7 +9,6 @@ import { createZip, readZip } from './core/zip.mjs';
 import { renderMarkdown } from './markdown.mjs';
 import { smartConnect, looksLikeConnection, parsePaste, scanLocal, buildChain, nextInChain, configFor, classifyFailure, maskSecret, isGitHubToken } from './core/connect.mjs';
 import { PLUGINS, getPlugin, pluginsFor, suggestPlugins } from './core/plugins.mjs';
-import { buildPreview } from './core/preview.mjs';
 
 const APP_VERSION = '1.3.0';
 const $ = (id) => document.getElementById(id);
@@ -480,7 +479,6 @@ function handleEvent(event) {
       let tool = currentTurn.entry.tools.find((t) => t.id === event.id);
       if (!tool) { tool = { id: event.id, name: event.name, args: {} }; currentTurn.entry.tools.push(tool); currentTurn.tools.appendChild(toolCard(tool)); }
       tool.ok = event.ok;
-      if (event.ok && /^(write_file|edit_file|multi_edit|apply_patch)$/.test(tool.name) && tool.args && tool.args.path) lastWrites.push(tool.args.path);
       tool.content = event.content.length > 6000 ? event.content.slice(0, 6000) + '\n…' : event.content;
       const card = currentTurn.tools.querySelector('[data-id="' + CSS.escape(event.id) + '"]');
       if (card) card.replaceWith(toolCard(tool));
@@ -507,7 +505,6 @@ function handleEvent(event) {
       removeThinking();
       currentTurn = null;
       trimTranscript();
-      offerPreview();
       break;
     default: break;
   }
@@ -747,36 +744,27 @@ function renderWelcome() {
   const ready = modelReady();
   const entry = activeEntry();
   $('connectForm').hidden = ready;
-  $('welcomeTitle').textContent = ready ? 'What should we build?' : 'Build from anywhere.';
+  $('welcomeTitle').textContent = ready ? 'What should we build?' : 'Paste a key to start.';
   $('welcomeLede').textContent = ready
-    ? 'Connected to ' + entry.model + ' on ' + entry.connection.label + '. Describe a task, tap a plugin, or paste another key at any time to add more models.'
-    : 'Paste an API key or a model link and OASIS sets everything up. It runs right here on this device; your projects and keys only ever go to the model provider.';
+    ? 'Using ' + entry.model + ' on ' + entry.connection.label + '. Describe what you want in plain words.'
+    : 'OASIS finds the provider, picks the best model and sets everything up. It runs on this device; your code and keys go only to the model provider.';
   if (!ready) autoDetectLocal().catch(() => {});
   const steps = $('setupSteps');
   steps.replaceChildren();
-  const items = [
-    { done: ready, title: 'Connect a model', sub: ready ? entry.connection.label + ' · ' + entry.model : 'Paste a key or link above, or right into the message box', action: () => (ready ? openSettings() : $('connectInput').focus()) },
-    { done: Boolean(workspace), title: 'Open a project', sub: workspace ? workspace.project.name : 'From GitHub, a folder, a zip, or start empty', action: () => openProjects() },
-    { done: false, title: 'Ask OASIS', sub: 'It reads, edits, runs and tests the code on this device', action: () => $('input').focus() }
-  ];
-  // Once a model is connected the lede says so; only the optional project
-  // step is left, so the screen stays short on phones.
-  const shown = ready ? (workspace ? [] : [{ ...items[1], title: 'Open a project (optional)', sub: 'From GitHub, a folder or a zip. Or just ask: OASIS starts a scratch project.' }]) : items;
+  // Before a model is connected the paste box is the only thing to do; after,
+  // only the optional project step is left, so the screen stays short.
+  const shown = ready && !workspace ? [{ title: 'Open a project (optional)', sub: 'From GitHub, a folder or a zip. Or just ask: OASIS starts a scratch project.', action: () => openProjects() }] : [];
   steps.hidden = !shown.length;
-  shown.forEach((item, index) => {
+  shown.forEach((item) => {
     const button = document.createElement('button');
-    button.className = 'step' + (item.done ? ' done' : '');
+    button.className = 'step';
     button.innerHTML = '<span class="num"></span><span><strong></strong><span class="sub"></span></span>';
-    button.querySelector('.num').textContent = item.done ? '✓' : ready ? '+' : String(index + 1);
+    button.querySelector('.num').textContent = '+';
     button.querySelector('strong').textContent = item.title;
     button.querySelector('.sub').textContent = item.sub;
     button.addEventListener('click', item.action);
     steps.appendChild(button);
   });
-  const strip = $('pluginStrip');
-  strip.replaceChildren();
-  strip.hidden = !ready;
-  if (ready) for (const plugin of PLUGINS.slice(0, 8)) strip.appendChild(pluginTile(plugin, { compact: true }));
   const box = $('suggestions');
   box.replaceChildren();
   if (ready) for (const text of SUGGESTIONS) {
@@ -794,23 +782,19 @@ const ICON_PATHS = {
   check: 'M4 10.5l4 4 8-9',
   eye: 'M2.5 10s2.8-5 7.5-5 7.5 5 7.5 5-2.8 5-7.5 5-7.5-5-7.5-5zM10 12.3a2.3 2.3 0 100-4.6 2.3 2.3 0 000 4.6z',
   shield: 'M10 2.5l6 2.3v4.6c0 3.9-2.5 6.6-6 8.1-3.5-1.5-6-4.2-6-8.1V4.8zM7.3 10l2 2 3.5-3.8',
-  spark: 'M10 2.5l1.6 4.9 4.9 1.6-4.9 1.6L10 15.5l-1.6-4.9L3.5 9l4.9-1.6zM15.5 14l.6 1.9 1.9.6-1.9.6-.6 1.9-.6-1.9-1.9-.6 1.9-.6z',
   globe: 'M10 17.5a7.5 7.5 0 100-15 7.5 7.5 0 000 15zM2.5 10h15M10 2.5c2 2.1 3 4.6 3 7.5s-1 5.4-3 7.5c-2-2.1-3-4.6-3-7.5s1-5.4 3-7.5z',
   plug: 'M7 2.5v4M13 2.5v4M5 6.5h10v3a5 5 0 01-10 0zM10 14.5v3',
   phone: 'M6.5 2.5h7a1 1 0 011 1v13a1 1 0 01-1 1h-7a1 1 0 01-1-1v-13a1 1 0 011-1zM9 15h2',
   book: 'M3.5 4.5c2.5-1 4.7-1 6.5.5 1.8-1.5 4-1.5 6.5-.5v11c-2.5-1-4.7-1-6.5.5-1.8-1.5-4-1.5-6.5-.5zM10 5v11',
-  map: 'M2.5 5l5-2 5 2 5-2v12l-5 2-5-2-5 2zM7.5 3v12M12.5 5v12',
-  feather: 'M16 4c-4.5 0-9 3.5-9 9v3.5M7 13l6-6M4 16.5h6',
-  list: 'M7.5 5.5h9M7.5 10h9M7.5 14.5h9M3.5 5.5h.01M3.5 10h.01M3.5 14.5h.01',
   branch: 'M6 3.5v13M6 16.5a1.8 1.8 0 100-3.6M14 3.5a1.8 1.8 0 110 3.6 1.8 1.8 0 010-3.6zM14 7.1c0 4-8 3-8 6'
 };
 function pluginIcon(name) {
   return '<svg viewBox="0 0 20 20" width="18" height="18" aria-hidden="true"><path d="' + (ICON_PATHS[name] || ICON_PATHS.plug) + '" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>';
 }
-function pluginTile(plugin, { compact = false } = {}) {
+function pluginTile(plugin) {
   const on = enabledPluginIds().includes(plugin.id);
   const tile = document.createElement('div');
-  tile.className = 'plugin-tile' + (on ? ' on' : '') + (compact ? ' compact' : '');
+  tile.className = 'plugin-tile' + (on ? ' on' : '');
   tile.dataset.plugin = plugin.id;
   const head = document.createElement('button');
   head.type = 'button';
@@ -820,30 +804,24 @@ function pluginTile(plugin, { compact = false } = {}) {
   head.querySelector('.plugin-icon').innerHTML = pluginIcon(plugin.icon);
   head.querySelector('strong').textContent = plugin.name;
   head.querySelector('.plugin-text span').textContent = plugin.description;
-  head.querySelector('.plugin-state').textContent = on ? 'On' : compact ? 'Use' : 'Off';
-  head.addEventListener('click', () => {
-    if (compact) { runStarter(plugin, plugin.starters[0]); return; }
-    setPluginEnabled(plugin.id, !enabledPluginIds().includes(plugin.id));
-  });
+  head.querySelector('.plugin-state').textContent = on ? 'On' : 'Off';
+  head.addEventListener('click', () => setPluginEnabled(plugin.id, !enabledPluginIds().includes(plugin.id)));
   tile.appendChild(head);
-  if (!compact) {
-    const starters = document.createElement('div');
-    starters.className = 'plugin-starters';
-    for (const starter of plugin.starters) {
-      const chip = document.createElement('button');
-      chip.type = 'button';
-      chip.className = 'suggestion';
-      chip.textContent = starter;
-      chip.addEventListener('click', () => runStarter(plugin, starter));
-      starters.appendChild(chip);
-    }
-    tile.appendChild(starters);
+  const starters = document.createElement('div');
+  starters.className = 'plugin-starters';
+  for (const starter of plugin.starters) {
+    const chip = document.createElement('button');
+    chip.type = 'button';
+    chip.className = 'suggestion';
+    chip.textContent = starter;
+    chip.addEventListener('click', () => runStarter(plugin, starter));
+    starters.appendChild(chip);
   }
+  tile.appendChild(starters);
   return tile;
 }
 function runStarter(plugin, starter) {
   closeSheet('pluginsSheet');
-  if (plugin.actions && plugin.actions.includes('preview') && /^preview/i.test(starter)) { openPreview(); return; }
   if (plugin.actions && plugin.actions.includes('github') && !settings.githubToken && /push|pull request/i.test(starter)) {
     toast('Paste a GitHub token (ghp_… or github_pat_…) into the message box first.');
     $('input').focus();
@@ -871,21 +849,6 @@ function renderPluginSuggest() {
   const picks = text.trim().length >= 6 && !looksLikeConnection(text) ? suggestPlugins(text, { active: [...active], limit: 2 }) : [];
   const pinned = turnPlugins.map(getPlugin).filter(Boolean);
   box.replaceChildren();
-  if (pendingFix) {
-    const fix = document.createElement('button');
-    fix.type = 'button';
-    fix.className = 'suggest-chip on';
-    fix.textContent = 'Fix the preview error';
-    fix.title = pendingFix;
-    fix.addEventListener('click', () => {
-      const message = pendingFix;
-      pendingFix = '';
-      closeSheet('previewSheet');
-      turnPlugins = ['debug'];
-      send(message + '. Find the cause and fix it.');
-    });
-    box.appendChild(fix);
-  }
   for (const plugin of pinned) {
     const chip = document.createElement('button');
     chip.type = 'button';
@@ -908,86 +871,6 @@ function renderPluginSuggest() {
 }
 $('pluginsButton').addEventListener('click', () => { renderPluginGrid(); openSheet('pluginsSheet'); });
 $('composerPlugins').addEventListener('click', () => { renderPluginGrid(); openSheet('pluginsSheet'); });
-
-/* ---------- Preview ---------- */
-async function htmlFiles() {
-  if (!workspace) return [];
-  return (await workspace.paths()).filter((path) => /\.html?$/i.test(path)).sort((a, b) => (/(^|\/)index\.html?$/i.test(a) ? -1 : 0) - (/(^|\/)index\.html?$/i.test(b) ? -1 : 0) || a.length - b.length);
-}
-let previewErrors = [];
-let previewGeneration = 0;
-let previewListener = null;
-async function openPreview(path) {
-  const pages = await htmlFiles();
-  if (!pages.length) { toast('No HTML page in this project yet. Ask OASIS to build one.'); return; }
-  const select = $('previewSelect');
-  select.replaceChildren(...pages.map((page) => new Option(page, page)));
-  select.value = path && pages.includes(path) ? path : pages[0];
-  openSheet('previewSheet');
-  await loadPreview();
-}
-async function loadPreview() {
-  const entry = $('previewSelect').value;
-  const generation = ++previewGeneration;
-  $('previewTitle').textContent = entry;
-  previewErrors = [];
-  // buildPreview reads synchronously, so load the page's possible assets first.
-  const texts = new Map();
-  for (const file of (await workspace.paths()).filter((p) => /\.(html?|css|m?js|svg|json)$/i.test(p)).slice(0, 400)) {
-    try { texts.set(file, await workspace.read(file)); } catch { /* unreadable: reported as missing */ }
-  }
-  let built;
-  try { built = buildPreview(entry, (p) => (texts.has(p) ? texts.get(p) : null)); }
-  catch (error) { toast(error.message, 'error'); return; }
-  if (generation !== previewGeneration) return;
-  const frame = $('previewFrame');
-  // Only the latest load may answer the frame, so switching pages quickly
-  // never shows the previous page.
-  if (previewListener) removeEventListener('message', previewListener);
-  previewListener = (event) => {
-    if (generation !== previewGeneration || event.source !== frame.contentWindow || !event.data || event.data.oasisPreview !== 'ready' || event.data.load !== String(generation)) return;
-    removeEventListener('message', previewListener);
-    previewListener = null;
-    frame.contentWindow.postMessage({ html: built.html }, '*');
-  };
-  addEventListener('message', previewListener);
-  frame.src = 'preview.html?load=' + generation;
-  if (built.missing.length) toast('Not found in the project: ' + built.missing.slice(0, 3).join(', '));
-}
-addEventListener('message', (event) => {
-  const data = event.data;
-  if (!data || event.source !== $('previewFrame').contentWindow || data.oasisPreview !== 'error') return;
-  previewErrors.push(data.text);
-  if (previewErrors.length === 1) {
-    const message = 'The preview of ' + $('previewSelect').value + ' reported an error: ' + data.text;
-    toast(message, 'error');
-    if (modelReady()) offerFix(message);
-  }
-});
-let pendingFix = '';
-function offerFix(message) {
-  pendingFix = message;
-  renderPluginSuggest();
-}
-$('previewSelect').addEventListener('change', loadPreview);
-$('previewReload').addEventListener('click', loadPreview);
-$('previewButton').addEventListener('click', () => openPreview());
-$('editorPreview').addEventListener('click', () => { const path = $('editorTitle').textContent; closeSheet('editorSheet'); openPreview(path); });
-let lastWrites = [];
-async function offerPreview() {
-  const pages = lastWrites.filter((path) => /\.(html?|css|js)$/i.test(path));
-  lastWrites = [];
-  if (!pages.length) return;
-  const html = pages.find((path) => /\.html?$/i.test(path));
-  const all = await htmlFiles();
-  if (!all.length) return;
-  const note = addMessage('note', '');
-  const button = document.createElement('button');
-  button.className = 'btn small';
-  button.textContent = 'Open preview of ' + (html || all[0]);
-  button.addEventListener('click', () => openPreview(html || all[0]));
-  note.appendChild(button);
-}
 
 /* ---------- Settings sheet ---------- */
 function fillProviderOptions() {

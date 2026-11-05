@@ -50,17 +50,16 @@
     <section class="chat" id="chat" aria-live="polite">
       <div class="welcome" id="welcome">
         <img src="icons/oasis-mark.svg" alt="" width="64" height="64" class="welcome-mark">
-        <h1 id="welcomeTitle">Build from anywhere.</h1>
+        <h1 id="welcomeTitle">Paste a key to start.</h1>
         <p class="lede" id="welcomeLede">OASIS runs right here on this device. Your projects and keys never leave it, except to reach the model provider you choose.</p>
         <form class="connect-card" id="connectForm" autocomplete="off">
-          <label for="connectInput">Paste an API key or a model link</label>
-          <div class="row"><input id="connectInput" placeholder="sk-or-…  sk-ant-…  AIza…  hf_…  or ollama.com/library/qwen3-coder" autocapitalize="off" spellcheck="false" enterkeyhint="go"><button class="btn primary" type="submit" id="connectButton">Connect</button></div>
+          <label for="connectInput" class="sr-only">API key, model link or server address</label>
+          <div class="row"><input id="connectInput" placeholder="Paste a key or link" autocapitalize="off" spellcheck="false" enterkeyhint="go"><button class="btn primary" type="submit" id="connectButton">Connect</button></div>
           <ol class="connect-log" id="connectLog" aria-live="polite"></ol>
           <div class="connect-found" id="connectFound" hidden></div>
-          <p class="hint">OASIS recognises the provider, picks the best model your key can use, tests that it can call tools, and keeps the next-best models ready in case one runs out. Works with OpenRouter, Anthropic, OpenAI, Gemini, Groq, DeepSeek, Mistral, xAI, Moonshot, Hugging Face, Together, Fireworks, Cerebras, NVIDIA, Ollama, LM Studio, llama.cpp and any OpenAI-compatible server. No key yet? <a href="https://openrouter.ai/keys" target="_blank" rel="noopener">Get a free OpenRouter key</a>.</p>
+          <p class="hint">Works with OpenRouter, Anthropic, OpenAI, Gemini, Groq, DeepSeek, Hugging Face, Ollama and any OpenAI-compatible server. No key yet? <a href="https://openrouter.ai/keys" target="_blank" rel="noopener">Get a free OpenRouter key</a>.</p>
         </form>
         <div class="setup-steps" id="setupSteps"></div>
-        <div class="plugin-strip" id="pluginStrip"></div>
         <div class="suggestions" id="suggestions"></div>
       </div>
       <div class="transcript" id="transcript"></div>
@@ -104,7 +103,6 @@
       <div class="file-list" id="fileList"></div>
       <div class="changes-list" id="changesList" hidden></div>
       <div class="panel-foot" id="panelFoot">
-        <button class="btn ghost small" id="previewButton" hidden>Preview</button>
         <button class="btn ghost small" id="exportButton">Export zip</button>
         <button class="btn primary small" id="pushButton" hidden>Push to GitHub</button>
       </div>
@@ -204,7 +202,6 @@
   <div class="sheet-head">
     <h2 id="editorTitle" class="mono"></h2>
     <div class="row">
-      <button class="btn small ghost" id="editorPreview" hidden>Preview</button>
       <button class="btn small ghost" id="diffToggle" hidden>Diff</button>
       <button class="btn small ghost" id="revertButton" hidden>Revert</button>
       <button class="btn small ghost danger" id="deleteFileButton">Delete</button>
@@ -223,19 +220,6 @@
     <div class="plugin-grid" id="pluginGrid"></div>
   </div>
 </section>
-
-<section class="sheet wide" id="previewSheet" role="dialog" aria-modal="true" aria-labelledby="previewTitle" hidden>
-  <div class="sheet-head">
-    <h2 id="previewTitle" class="mono">Preview</h2>
-    <div class="row">
-      <select id="previewSelect" aria-label="Page to preview"></select>
-      <button class="btn small ghost" id="previewReload">Reload</button>
-      <button class="icon-btn small" data-close="previewSheet" aria-label="Close"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M5 5l10 10M15 5L5 15" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg></button>
-    </div>
-  </div>
-  <iframe class="preview-frame" id="previewFrame" title="Live preview" sandbox="allow-scripts allow-forms allow-modals allow-popups"></iframe>
-</section>
-
 <section class="sheet" id="approvalSheet" role="alertdialog" aria-modal="true" aria-labelledby="approvalTitle" hidden>
   <div class="sheet-head"><h2 id="approvalTitle">Allow this?</h2></div>
   <div class="sheet-body">

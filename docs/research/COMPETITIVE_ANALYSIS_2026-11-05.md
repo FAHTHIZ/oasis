@@ -4,7 +4,7 @@
 
 **Question.** How many steps does a new user need before an agent is working on their code, on any device, and what happens when the model runs out? We compared OASIS with Claude Code, OpenAI Codex, DeepSeek Harness, Codewhale (formerly DeepSeek-TUI), Qwen Code, Hermes Agent, OpenCode and Gemini CLI.
 
-**OASIS snapshot.** The `main` branch on November 5, 2026, after the universal-app 1.3 work (smart connect, automatic model fallback, built-in plugins, live preview, lite mode). We read the source and ran the app's tests: `test/app-connect.test.mjs` (21 tests) and `test/app-e2e.test.mjs`, which drives the real app in Chromium against a mock provider.
+**OASIS snapshot.** The `main` branch on November 5, 2026, after the universal-app 1.3 work (smart connect, automatic model fallback, built-in plugins, lite mode; the live preview was added and then removed as unnecessary). We read the source and ran the app's tests: `test/app-connect.test.mjs` (20 tests) and `test/app-e2e.test.mjs`, which drives the real app in Chromium against a mock provider.
 
 **Method.** We read each competitor's public documentation, changelogs and issue trackers (all linked below). We did not run them side by side. Where a document might be out of date, we say so.
 
@@ -55,7 +55,7 @@ What OASIS does not have: hosted cloud sessions that keep running when the devic
 
 ## Plugins
 
-**OASIS app.** Thirteen built-in plugins bundle the repository's skills with starter tasks: Debugger, Test writer, Code reviewer, Security audit, Feature builder, Web app studio (with live preview), API builder, Mobile apps, Explainer, Planner, Minimal code, Docs writer and GitHub. Turning one on for a project loads its skills into every request. As you type, matching plugins appear above the message box, and one tap applies a plugin to that message. The CLI also installs Claude Code-format plugins and has its own catalog (`plugins/catalog.json`).
+**OASIS app.** Nine built-in plugins bundle the repository's skills with starter tasks: Debugger, Test writer, Code reviewer, Security audit, Web app studio, API builder, Mobile apps, Docs writer and GitHub. Planning, small changes and explaining a project are default agent behaviour, not plugins. Turning one on for a project loads its skills into every request. As you type, matching plugins appear above the message box, and one tap applies a plugin to that message. The CLI also installs Claude Code-format plugins and has its own catalog (`plugins/catalog.json`).
 
 **Others.** Codex has the largest directory, with 90+ plugins that bundle skills, apps and MCP servers ([OpenAI Help](https://help.openai.com/en/articles/20001256-plugins-in-chatgpt-and-codex)). Gemini CLI extensions bundle MCP servers, commands, skills and subagents, and install from a GitHub URL ([Gemini CLI extensions](https://geminicli.com/docs/extensions/), [gallery](https://geminicli.com/extensions/)). In DeepSeek Harness everything is a plugin ([DeepSeek Harness](https://www.deepseek.com/harness/en/)). Hermes Agent has a skills hub and plugins ([Hermes Agent](https://github.com/NousResearch/hermes-agent)).
 

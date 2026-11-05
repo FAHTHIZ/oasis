@@ -1,7 +1,7 @@
 // End-to-end test of the universal app in a real Chromium, driven like a user:
 // paste a server address into the message box, watch OASIS connect and lock in
 // a model, run a task that calls tools, survive a model running out of credit,
-// open plugins, and open the live preview. Skipped when no Chrome is installed.
+// open plugins. Skipped when no Chrome is installed.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import http from 'node:http';
@@ -46,11 +46,9 @@ function mockProvider() {
         if (wrote === 1) return reply(res, 200, toolCall('write_file', { path: 'style.css', content: 'h1{color:green}' }));
         return reply(res, 200, toolCall('write_file', { path: 'app.js', content: "const b=document.getElementById('b');b.onclick=()=>b.textContent=Number(b.textContent)+1;" }));
       }
-      if (/broken/i.test(ask)) return reply(res, 200, text('Broken page written.'));
       return reply(res, 200, text('Done. I built the counter in index.html with style.css and app.js.'));
     }
     if (/counter/i.test(ask)) return reply(res, 200, toolCall('write_file', { path: 'index.html', content: PAGE }));
-    if (/broken/i.test(ask)) return reply(res, 200, toolCall('write_file', { path: 'broken.html', content: '<!doctype html><p>hi</p><script>throw new Error("kaboom")</script>' }));
     state.tasks += 1;
     return reply(res, 200, text('Answer from ' + body.model + '.'));
   });
@@ -78,7 +76,7 @@ const type = (value) => `(() => { const el = document.getElementById('input'); e
 const submit = `(() => { document.getElementById('composer').requestSubmit(); return true; })()`;
 const busy = `document.getElementById('app').classList.contains('busy')`;
 
-test('universal app end to end: paste to connect, tool-calling task, credit fallback, plugins, preview', { skip: chrome ? false : 'no Chrome/Chromium installed', timeout: 180000 }, async (t) => {
+test('universal app end to end: paste to connect, tool-calling task, credit fallback, plugins', { skip: chrome ? false : 'no Chrome/Chromium installed', timeout: 180000 }, async (t) => {
   const provider = await mockProvider();
   const app = await startAppServer({ root, port: 0 });
   const browser = await Browser.launch({ env: { ...process.env, OASIS_CHROME_HEADLESS: '1' }, executable: chrome });
@@ -120,23 +118,7 @@ test('universal app end to end: paste to connect, tool-calling task, credit fall
   // Tool output is only rendered when a card is opened.
   assert.equal(await evaluate(page, `document.querySelector('.tool pre').textContent`), '');
 
-  // 3. Preview: OASIS offers it after a turn that wrote HTML.
-  await waitFor(page, `[...document.querySelectorAll('.msg.note .btn')].some((b) => /Open preview of index\\.html/.test(b.textContent))`, { label: 'preview offered' });
-  await evaluate(page, `[...document.querySelectorAll('.msg.note .btn')].find((b) => /Open preview/.test(b.textContent)).click(); true`);
-  await waitFor(page, `!document.getElementById('previewSheet').hidden && /preview\\.html/.test(document.getElementById('previewFrame').src)`, { label: 'preview sheet open' });
-
-  // 4. A page with an error: the preview reports it and offers a fix.
-  await evaluate(page, `document.querySelector('[data-close="previewSheet"]').click(); true`);
-  await evaluate(page, type('Make a broken page'));
-  await evaluate(page, submit);
-  await waitFor(page, `!${busy} && /Broken page written/.test(document.getElementById('transcript').textContent)`, { label: 'broken page written' });
-  await evaluate(page, `window.__msgs = []; addEventListener('message', (e) => window.__msgs.push(JSON.stringify(e.data).slice(0, 120) + ' src=' + document.getElementById('previewFrame').src.slice(-12))); document.getElementById('previewButton').click(); true`);
-  await waitFor(page, `[...document.getElementById('previewSelect').options].some((o) => o.value === 'broken.html')`);
-  await evaluate(page, `(() => { const s = document.getElementById('previewSelect'); s.value = 'broken.html'; s.dispatchEvent(new Event('change')); return true; })()`);
-  await waitFor(page, `/kaboom/.test(document.getElementById('toasts').textContent) && /Fix the preview error/.test(document.getElementById('pluginSuggest').textContent)`, { label: 'preview error reported' });
-  await evaluate(page, `document.querySelector('[data-close="previewSheet"]').click(); true`);
-
-  // 5. The best model runs out of credit mid-session: OASIS moves on by itself.
+  // 3. The best model runs out of credit mid-session: OASIS moves on by itself.
   provider.state.failModel = 'acme/coder-pro';
   await evaluate(page, type('What does this project do?'));
   await evaluate(page, submit);
@@ -144,13 +126,13 @@ test('universal app end to end: paste to connect, tool-calling task, credit fall
   assert.match(await evaluate(page, `document.getElementById('transcript').textContent`), /coder-pro ran out of credit\. Switched to acme\/coder-mini/);
   assert.match(await evaluate(page, `document.getElementById('modelChip').textContent`), /coder-mini/, 'the new model stays active');
 
-  // 6. Plugins: one tap turns a plugin on for the project.
+  // 4. Plugins: one tap turns a plugin on for the project.
   await evaluate(page, `document.getElementById('pluginsButton').click(); true`);
-  await waitFor(page, `document.querySelectorAll('#pluginGrid .plugin-tile').length >= 10`);
+  await waitFor(page, `document.querySelectorAll('#pluginGrid .plugin-tile').length === 9`);
   await evaluate(page, `document.querySelector('#pluginGrid [data-plugin="security"] .plugin-head').click(); true`);
   await waitFor(page, `document.querySelector('#pluginGrid [data-plugin="security"]').classList.contains('on') && document.getElementById('pluginCount').textContent === '1'`, { label: 'plugin switched on' });
 
-  // 7. Pasting a second key in Settings adds a connection without touching the first.
+  // 5. Pasting a second key in Settings adds a connection without touching the first.
   await evaluate(page, `document.querySelector('[data-close="pluginsSheet"]').click(); document.getElementById('settingsButton').click(); true`);
   await waitFor(page, `document.querySelectorAll('#connectionList .connection').length === 1`);
   assert.equal(await evaluate(page, `document.getElementById('manualSetup').open`), false, 'manual provider fields stay tucked away');
