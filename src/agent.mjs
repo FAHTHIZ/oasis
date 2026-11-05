@@ -14,7 +14,7 @@ import { extractCorrections, addCorrections, correctionsReminder, correctionViol
 import { scriptedEditKind } from './inplace-edit-check.mjs';
 import { extractHardRules, extractBranchRules, ruleRefreshReminder } from './rule-refresh.mjs';
 import { newClaimState, recordCheck as recordClaimCheck, recordEdit as recordClaimEdit, claimIssue } from './claim-check.mjs';
-import { resolveToolAlias, normalizeRunCommandCall } from './tool-aliases.mjs';
+import { resolveToolAlias, normalizeRunCommandCall, cleanToolCallName } from './tool-aliases.mjs';
 import { scopeViolation, editScopeFromEnv } from './scope-lock.mjs';
 import { shellExitTarget } from './pipe-status.mjs';
 import { loadPins, savePins } from './mcp-trust.mjs';
@@ -5647,7 +5647,7 @@ async function runAgentTurnRaw(session, prompt, options = {}) {
         const copy = {
           id: call.id,
           type: 'function',
-          function: { name: call.function && call.function.name, arguments: call.function && call.function.arguments }
+          function: { name: cleanToolCallName(call.function && call.function.name), arguments: call.function && call.function.arguments }
         };
         if (call.extra_content && typeof call.extra_content === 'object') copy.extra_content = call.extra_content;
         if (call.__oasisArgumentError) toolArgumentErrors.set(copy, call.__oasisArgumentError);
