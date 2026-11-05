@@ -1574,8 +1574,26 @@ function formatApiError(status, body, protocol, baseURL = '') {
   }
   const mode = protocol === 'anthropic' ? 'native Anthropic Messages API' : protocol === 'bedrock' ? 'AWS Bedrock (Claude)' : protocol === 'vertex' ? 'Google Vertex AI (Claude)' : protocol === 'foundry' ? 'Microsoft Foundry (Claude)' :
     protocol === 'openai-responses' ? 'OpenAI Responses API' : 'OpenAI-compatible chat completions';
-  return 'Model provider returned HTTP ' + status + (detail ? ': ' + detail : '') +
-    (status === 402 ? '. This is a billing or quota limit, not an API-key authentication failure.' : '. Check the configured ' + mode + ' endpoint, model name, credentials, and tool-calling support.');
+  detail = detail.trim().replace(/\.+$/, '');
+  return 'Model provider returned HTTP ' + status + (detail ? ': ' + detail : '') + '. ' + apiErrorAdvice(status, detail, mode);
+}
+
+// The closing hint fits the error: a used-up quota or a rate limit is not a
+// wrong endpoint, and saying so sends people looking in the wrong place.
+export function apiErrorAdvice(status, detail = '', mode = 'OpenAI-compatible chat completions') {
+  const text = String(detail || '');
+  if (status === 402) return 'This is a billing or quota limit, not an API-key authentication failure.';
+  if (status === 429 && /per ?day|daily|PerDay/i.test(text)) {
+    const wait = /retry in ([0-9hms.]+?)(?:\d*\.\d+)?s\b/i.exec(text) || /retry in ([^.\n]+)/i.exec(text);
+    const when = wait ? ' (the provider says it resets in ' + wait[1].replace(/m(\d+)$/, 'm') + ')' : '';
+    return 'The daily request quota for this model is used up' + when + '. Switch to another model with /model, or use a key with billing enabled.';
+  }
+  if (status === 429 && /quota|billing|insufficient/i.test(text)) return 'This is a quota or billing limit, not a wrong key or endpoint. Check the plan for this key, or switch models with /model.';
+  if (status === 429) return 'The provider is rate-limiting requests. Wait a little and try again, or lower the request rate.';
+  if (status === 401 || status === 403) return 'Check the API key for this provider (oasis setup, or the matching environment variable).';
+  if (status === 404) return 'Check the model name and the ' + mode + ' endpoint URL.';
+  if (status >= 500) return 'The provider had a server-side problem. Try again shortly.';
+  return 'Check the configured ' + mode + ' endpoint, model name, credentials, and tool-calling support.';
 }
 
 function responseText(output) {
