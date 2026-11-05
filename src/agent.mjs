@@ -628,6 +628,7 @@ function systemPrompt(root, projectContext, skillDescriptions = '', environment 
       '- Request independent read-only lookups together in one response; they run in parallel.',
       '- Delegate broad exploration or an independent slice with task (subagent_type "explore" for read-only search). Subagents know nothing of this conversation: give a complete prompt and say what to report, and use fork_context only when earlier parent discussion is genuinely required. Never give two parallel subagents the same files. For consequential diffs, the read-only "code-review" and "security-review" agents can check the change; verify each finding before acting on it.',
       '- Use web_search, then fetch_url, for current documentation or unfamiliar errors; prefer official sources.',
+      '- When the user asks to install or add a plugin, skill, MCP server or link, call add_extension with exactly what they gave.',
       '- For large or unclear work, plan first (plan mode). For work that needs many agents at once (repo-wide audits, migrations, fix-until-green loops), or when the user says ultracode, use the workflow tool.'
     ].join('\n'),
     [
@@ -3458,7 +3459,7 @@ async function runWorkflowTool(session, args, context, options) {
   return out;
 }
 
-export const RESTRICTED_TOOL_NAMES = new Set(['run_command', 'powershell', 'monitor', 'command_output', 'kill_command', 'list_background', 'fetch_url', 'web_search', 'browser', 'install_package', 'install_extension', 'install_plugin', 'install_external_skill', 'configure_mcp_server', 'git_push', 'create_pull_request']);
+export const RESTRICTED_TOOL_NAMES = new Set(['run_command', 'powershell', 'monitor', 'command_output', 'kill_command', 'list_background', 'fetch_url', 'web_search', 'browser', 'install_package', 'install_extension', 'install_plugin', 'add_extension', 'install_external_skill', 'configure_mcp_server', 'git_push', 'create_pull_request']);
 
 async function runSubagent(parent, args, context, options) {
   if (options.isSubagent) throw new Error('Subagents cannot launch further subagents.');

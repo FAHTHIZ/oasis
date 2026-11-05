@@ -162,3 +162,23 @@ test('settings can turn auto memory off, even untrusted', async (t) => {
   t.after(() => closeSession(session));
   assert.equal(session.autoMemory, undefined);
 });
+
+test('project memory is shared by every subfolder and worktree of a repository', async () => {
+  const { memoryProjectRoot } = await import('../src/auto-memory.mjs');
+  const { mkdtemp, mkdir: mk, writeFile: wf, realpath } = await import('node:fs/promises');
+  const os = await import('node:os');
+  const base = await realpath(await mkdtemp(path.join(os.tmpdir(), 'oasis-memroot-')));
+  const repo = path.join(base, 'repo');
+  await mk(path.join(repo, '.git', 'worktrees', 'feature'), { recursive: true });
+  await mk(path.join(repo, 'src', 'deep'), { recursive: true });
+  const worktree = path.join(base, 'feature-wt');
+  await mk(path.join(worktree, 'lib'), { recursive: true });
+  await wf(path.join(worktree, '.git'), 'gitdir: ' + path.join(repo, '.git', 'worktrees', 'feature') + '\n');
+  assert.equal(memoryProjectRoot(path.join(repo, 'src', 'deep')), repo);
+  assert.equal(memoryProjectRoot(path.join(worktree, 'lib')), repo);
+  const env = { ...process.env, OASIS_CONFIG_DIR: path.join(base, 'cfg') };
+  assert.equal(memoryRoots(path.join(repo, 'src'), env).project, memoryRoots(worktree, env).project);
+  const plain = path.join(base, 'plain');
+  await mk(plain);
+  assert.equal(memoryProjectRoot(plain), plain);
+});
