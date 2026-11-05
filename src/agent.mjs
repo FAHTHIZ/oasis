@@ -1900,6 +1900,12 @@ const RETRYABLE_PROVIDER_STATUSES = new Set([408, 425, 429, 500, 502, 503, 504])
 // A 429 that means "out of quota / billing / account on hold" will not clear by
 // retrying; retrying only burns time (and, on some providers, more quota).
 const HARD_QUOTA_PATTERN = /insufficient_quota|exceeded your current quota|billing|credit balance|payment required|account[_ ](?:is )?(?:on[_ ]hold|suspended|disabled|deactivated)|usage limit reached|weekly limit|monthly limit|spend(?:ing)? limit/i;
+// gpt-oss behind some gateways: the server fails to parse the model's own
+// harmony output and returns 400 "Unknown role: assistant<|channel|>commentary".
+// Our request was valid; the same request usually works on a retry.
+export function isMalformedGenerationError(status, text) {
+  return status === 400 && /<\|(?:channel|message|start|end|call|constrain|return)\|>/.test(String(text || ''));
+}
 export function isHardQuotaError(text) {
   return HARD_QUOTA_PATTERN.test(String(text || '')) && shortRateLimitMs(text) === null;
 }
@@ -2665,7 +2671,7 @@ async function requestCompletionRaw(session, options = {}) {
         attempt -= 1; // bounded by shortWaitBudget; leaves 5xx retries intact
         continue;
       }
-      if (attempt < providerRetryLimit(status, options.env) && RETRYABLE_PROVIDER_STATUSES.has(status) && !isHardQuotaError(errorBody) && !(status === 429 && shortRateLimitMs(errorBody) !== null)) {
+      if (attempt < providerRetryLimit(status, options.env) && (RETRYABLE_PROVIDER_STATUSES.has(status) || isMalformedGenerationError(status, errorBody)) && !isHardQuotaError(errorBody) && !(status === 429 && shortRateLimitMs(errorBody) !== null)) {
         const delay = providerRetryDelayMs(attempt + 1, response.headers.get('retry-after'));
         notifyProviderRetry(options, { status, attempt: attempt + 1, limit: providerRetryLimit(status, options.env), waitMs: delay, reason: providerErrorSummary(errorBody) });
         await waitForProviderRetry(delay, controller.signal);

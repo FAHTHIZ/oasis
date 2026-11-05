@@ -54,6 +54,10 @@ export function retryPlan(status, body = '') {
     if (/insufficient_quota|exceeded your current quota|billing|PerDay|per ?day|limit: ?0\b/i.test(text)) return { retryable: false };
     return { retryable: true };
   }
+  // gpt-oss behind some gateways: the server could not parse the model's own
+  // harmony output ("Unknown role: assistant<|channel|>commentary"); the
+  // request itself was fine, so a retry usually works.
+  if (status === 400 && /<\|(?:channel|message|start|end|call|constrain|return)\|>/.test(text)) return { retryable: true };
   return { retryable: status >= 500 };
 }
 
