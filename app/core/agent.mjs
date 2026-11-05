@@ -16,6 +16,8 @@ export function textOf(content) {
 }
 
 export const DEFAULT_MAX_STEPS = 40;
+const MAX_STEERING_MESSAGES = 20;
+const MAX_STEERING_NOTE_CHARS = 12_000;
 const INSTRUCTION_FILES = ['OASIS.md', 'AGENTS.md', 'CLAUDE.md', '.oasis/instructions.md'];
 
 const SCHEMAS = new Map(TOOL_DEFINITIONS.map((tool) => [tool.function.name, tool.function.parameters]));
@@ -114,9 +116,12 @@ export class Agent {
 
   stop() { if (this.controller) this.controller.abort(); }
 
-  reset() { this.messages = []; this.todos = []; this.usage = { input: 0, output: 0 }; }
+  reset() { this.messages = []; this.todos = []; this.usage = { input: 0, output: 0 }; this.steering = []; }
 
-  load(messages) { this.messages = Array.isArray(messages) ? messages.filter((m) => m && m.role !== 'system') : []; }
+  load(messages) {
+    this.messages = Array.isArray(messages) ? messages.filter((m) => m && m.role !== 'system') : [];
+    this.steering = [];
+  }
 
   async compact(config, signal) {
     const limit = Number(config.contextChars) || 240000;
@@ -173,7 +178,7 @@ export class Agent {
   /** Add a note to the running task; it is read before the next step. */
   steer(text) {
     const note = String(text || '').trim();
-    if (!this.running || !note) return false;
+    if (!this.running || !note || note.length > MAX_STEERING_NOTE_CHARS || this.steering.length >= MAX_STEERING_MESSAGES) return false;
     this.steering.push(note);
     this.onEvent({ type: 'user', content: note, steer: true });
     return true;
@@ -181,10 +186,13 @@ export class Agent {
 
   async send(text, { maxSteps = DEFAULT_MAX_STEPS, plugins = [], images = [] } = {}) {
     if (this.running) throw new Error('OASIS is already working. Stop it first.');
+    // A note can arrive after the final permitted step. Carry it into the next
+    // prompt instead of clearing it when the next send starts.
+    const pendingSteering = this.steering.splice(0);
     this.running = true;
-    this.steering = [];
     this.controller = new AbortController();
     const signal = this.controller.signal;
+    for (const note of pendingSteering) this.messages.push({ role: 'user', content: note });
     const pictures = (Array.isArray(images) ? images : []).filter((image) => image && image.mediaType && image.data).slice(0, 4);
     this.messages.push({ role: 'user', content: pictures.length ? [{ type: 'text', text: String(text) }, ...pictures.map((image) => ({ type: 'image_url', image_url: { url: 'data:' + image.mediaType + ';base64,' + image.data } }))] : String(text) });
     this.onEvent({ type: 'user', content: String(text), images: pictures.length });

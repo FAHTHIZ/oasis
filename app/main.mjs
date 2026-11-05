@@ -927,7 +927,7 @@ $('composer').addEventListener('submit', async (event) => {
     const note = $('input').value.trim();
     if (note && typeof agent.steer === 'function' && !looksLikeConnection(note)) {
       $('input').value = ''; autosize(); updateSteering();
-      if (!(await agent.steer(note))) { $('input').value = note; autosize(); updateSteering(); toast('That task just finished. Send it as a new message.'); }
+      if (!(await agent.steer(note))) { $('input').value = note; autosize(); updateSteering(); toast('Could not queue that note. Try a shorter message or send it as a new message.'); }
       return;
     }
     agent.stop();
