@@ -217,7 +217,21 @@ test('browser runtime serves the app but requires a bearer token for every agent
   });
 
   const base = 'http://127.0.0.1:' + app.port;
-  const home = await fetch(base + '/');
+  // `/` opens the universal app; its shell and engine load without a token,
+  // the agent API never does.
+  const root_ = await fetch(base + '/', { redirect: 'manual' });
+  assert.equal(root_.status, 302);
+  assert.equal(root_.headers.get('location'), '/app/');
+  const appPage = await fetch(base + '/app/');
+  assert.equal(appPage.status, 200);
+  const appHtml = await appPage.text();
+  assert.match(appHtml, /id="composer"/);
+  assert.match(appPage.headers.get('content-security-policy'), /connect-src 'self'/, 'the app page may only talk to this runtime');
+  assert.equal((await fetch(base + '/app/core/runtime.mjs')).status, 200);
+  assert.equal((await fetch(base + '/app/skills/index.json')).headers.get('content-type').startsWith('application/json'), true);
+  assert.equal((await fetch(base + '/app/../package.json')).status, 404);
+  assert.equal((await fetch(base + '/src/web.mjs')).status, 404, 'only browser-safe shared modules are served');
+  const home = await fetch(base + '/classic');
   assert.equal(home.status, 200);
   const homeHtml = await home.text();
   assert.match(homeHtml, /id="view-agent"/);

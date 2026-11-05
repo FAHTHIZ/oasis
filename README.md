@@ -70,7 +70,7 @@ OASIS fixes each of those in the runtime, so the fix holds whichever model you c
 
 ## Terminal or browser
 
-Same agent, same safety policy, two front ends. `oasis web` opens a local browser workspace: chat on the left, live activity grouped by step, approval cards that show the exact command or diff, and a Changes panel to review everything before you keep it. Type while it works and the agent reads your message at its next step (shown here: "Keep the CLI output format unchanged").
+Same agent, same safety policy, two front ends. `oasis web --open` (or the desktop app) opens the same app you use on a phone, now driving the agent on your computer: paste a key to connect, then chat, approve commands in a sheet that shows the exact command, and browse the folder and its git changes. The previous browser workspace, shown below with steering and per-step activity, is still at `/classic` while its remaining features move into the app.
 
 <p align="center">
   <a href="assets/demo/oasis-web-demo.mp4"><img src="assets/demo/oasis-web-demo.gif" alt="OASIS web workspace: the user asks for a bug fix, sends a steering message while the agent works, approves two edits and a test run, then reviews the diff in the Changes panel" width="100%" /></a>
