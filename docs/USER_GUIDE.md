@@ -274,6 +274,7 @@ oasis add npx skills add anthropics/skills --skill pdf
 oasis add gemini extensions install https://github.com/gemini-cli-extensions/security
 oasis add codex plugin marketplace add openai/plugins
 oasis add https://skills.sh/anthropics/skills/pdf    # also npmjs.com, pypi.org, smithery.ai and raw.githubusercontent.com pages
+oasis add 'cursor://anysphere.cursor-deeplink/mcp/install?name=...&config=...'   # "Add to Cursor" / "Install in VS Code" button links
 ```
 
 The `-y` inside a pasted `npx -y` belongs to npx, not to OASIS, so it still asks you first; add `--yes` at the end to skip the question. `npx` servers always get `-y` so they never stop at npm's "Ok to proceed?" question. Environment values from `-e KEY=VALUE` go into your MCP config (owner-only file), and the summary names the keys but never shows the values.
