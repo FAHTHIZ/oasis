@@ -2,7 +2,7 @@
 
 **Status (2026-11-05):** the model-free harness microbenchmark exists; the agent fixture suite has 52 tasks (19 `taskflow-*` tasks); runner code exists for live comparisons. No public live same-model head-to-head against Claude Code has been published.
 
-The classifications in `evals/tasks/metadata.json` currently say 19 small, 28 medium, and 5 large. These labels are maintainer-authored estimates, not calibrated difficulty scores. All four `large` labels are concentrated in one small Taskflow repository snapshot, so they do not establish broad large-repository coverage.
+The classifications in `evals/tasks/metadata.json` currently say 19 small, 28 medium, and 5 large. These labels are maintainer-authored estimates, not calibrated difficulty scores. All five `large` labels are concentrated in one small Taskflow repository snapshot, so they do not establish broad large-repository coverage.
 
 This page separates what is implemented, what has actually been measured, and what is only a proposed protocol. It does not claim OASIS is faster, cheaper, or more accurate than another agent without controlled completed runs.
 
@@ -10,7 +10,7 @@ This page separates what is implemented, what has actually been measured, and wh
 
 | Measurement | What it actually measures | Evidence status | What it does not establish |
 |---|---|---|---|
-| `bench/harness/` | Deterministic synthetic inputs sent to selected runtime helpers and guards; includes an intentionally primitive baseline | Historical report from 2026-11-01 at source revision `4541f1d`; CI publishes fresh per-Node artifacts | Real-model task success, real-world damage rates, or parity with another product |
+| `bench/harness/` | Deterministic synthetic inputs sent to selected runtime helpers and guards; includes an intentionally primitive baseline | Rerun on 2026-11-05 at source revision `579145b` (`bench/results/harness-2026-11-05.json`): 100% on every track of all three sets except the one deliberate secret-scanner miss; CI publishes fresh per-Node artifacts | Real-model task success, real-world damage rates, or parity with another product |
 | `evals/tasks/` | 52 frozen task fixtures with disposable snapshots, reference patches, and independent verifiers | Validator is in `npm run check`; the exact 2026-11-04 HEAD quality workflow passed | Model pass rate; broad SWE-bench-scale coverage; statistically reliable performance |
 | `scripts/bench-live.mjs` | Runs selected agent CLIs on identical task fixtures and summarizes verified matched trials | Runner and fake-CLI tests exist; no live public head-to-head result is published | Same-model harness isolation unless actual routed model/version and policy differences are verified |
 | `scripts/bench-web-search.mjs` | Expected-domain retrieval, reciprocal rank, result counts, provider errors, and sequential latency on 10 fixed queries | Diagnostic utility; supports repeated counterbalanced trials | Factual correctness, completeness, source credibility, or research-answer quality |
@@ -19,7 +19,7 @@ This page separates what is implemented, what has actually been measured, and wh
 
 A green fixture validator means the fixture/reference-patch/verifier contract is internally consistent. A passing synthetic harness case means the specific hand-authored input received the expected runtime outcome. Neither is a real agent benchmark. Keep raw reports, revisions, model identities, configuration, and failures alongside every public comparison.
 
-## Model-free harness benchmark (historical report dated 2026-11-01)
+## Model-free harness benchmark (2026-11-05)
 
 A coding agent is a model plus a harness. This benchmark measures the harness alone: it feeds OASIS the outputs that real models actually produce (malformed tool calls, drifting edits, dangerous commands, placeholder rewrites, weakened tests, leaked credentials) and checks what the runtime does with them. No model, network or API key is needed, so anyone can reproduce it in a few seconds:
 
@@ -59,10 +59,10 @@ Notes:
 
 | Profile | Tools sent | System prompt | Tool schemas | First request | Time to first model request | End to end |
 | --- | --- | --- | --- | --- | --- | --- |
-| Default | 64 | ~4,232 tok | ~11,198 tok | ~15,430 tok | ~266 ms | ~348 ms |
-| Small-context (windows of 16K or less) | 13 | ~1,576 tok | ~2,161 tok | ~3,737 tok | ~264 ms | ~344 ms |
+| Default | 68 | ~4,969 tok | ~12,650 tok | ~17,619 tok | ~225 ms | ~243 ms |
+| Small-context (windows of 16K or less) | 13 | ~1,791 tok | ~2,191 tok | ~3,982 tok | ~223 ms | ~240 ms |
 
-Tokens are estimated as characters / 4. Times are medians of five sequential `oasis -p` runs against a local fixture server on a 2-CPU machine; they are host-specific measurements, not a general startup claim. Rarely used tools in the small-context profile stay reachable through `tool_search`.
+Tokens are estimated as characters / 4. Measured on 2026-11-05 at `579145b` (the 2026-11-01 report had 64 tools and ~15,430 tokens; the four tools added since are counted here). Times are medians of five sequential `oasis -p` runs against a local fixture server on a 2-CPU machine; they are host-specific measurements, not a general startup claim. Rarely used tools in the small-context profile stay reachable through `tool_search`.
 
 ### What this benchmark does not show
 
@@ -304,7 +304,7 @@ The default classifier sends only short, clearly read-only prompts to the easy m
 
 ## Five-track measurement contract (design only; no implemented scores)
 
-The five-track work measures narrow failure modes—context durability, token efficiency, task-list fidelity, ambiguity safety and long-horizon completion. It is separate from the existing 51-task regression evaluator and is not a training system; it does not train, tune or modify a model. A track is publishable only after frozen tasks, hash validation, a deterministic scorer, a negative control, at least three seeds, CI and a raw result artifact all exist. None of these five track implementations or results currently exists.
+The five-track work measures narrow failure modes—context durability, token efficiency, task-list fidelity, ambiguity safety and long-horizon completion. It is separate from the existing 52-task regression evaluator and is not a training system; it does not train, tune or modify a model. A track is publishable only after frozen tasks, hash validation, a deterministic scorer, a negative control, at least three seeds, CI and a raw result artifact all exist. None of these five track implementations or results currently exists.
 
 **Status: benchmark infrastructure is being built in gated stages. No five-track result has been published.**
 
@@ -442,4 +442,4 @@ The README summary must distinguish wins, ties, and losses. Missing runs and una
 
 ## Five-track implementation status
 
-As of November 5, 2026, the five-track protocol and required layout are design documentation only: the frozen inputs, hashes, runners, scorers, negative controls, CI gates, and results do not exist, and no five-track result or OASIS-vs-Claude Code score has been published. External issue reports and paper figures in the design are hypotheses for constructing falsifiable tasks, not population baselines. The current 51-task evaluator and its report comparator remain distinct from these future track-specific runners and scorers.
+As of November 5, 2026, the five-track protocol and required layout are design documentation only: the frozen inputs, hashes, runners, scorers, negative controls, CI gates, and results do not exist, and no five-track result or OASIS-vs-Claude Code score has been published. External issue reports and paper figures in the design are hypotheses for constructing falsifiable tasks, not population baselines. The current 52-task evaluator and its report comparator remain distinct from these future track-specific runners and scorers.

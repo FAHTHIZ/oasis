@@ -114,7 +114,7 @@ Other ways in:
 
 ## Measured, not claimed
 
-The [model-free harness benchmark](docs/BENCHMARKS.md#model-free-harness-benchmark-2026-11-01) feeds the runtime outputs that real models actually produce and scores what happens. It needs no model or API key and runs in seconds: `npm run bench:harness`.
+The [model-free harness benchmark](docs/BENCHMARKS.md#model-free-harness-benchmark-2026-11-05) feeds the runtime outputs that real models actually produce and scores what happens. It needs no model or API key and runs in seconds: `npm run bench:harness`.
 
 | What the model sends | No harness layer | OASIS, on held-out cases it was never tuned on |
 | --- | --- | --- |
