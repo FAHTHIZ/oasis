@@ -765,3 +765,29 @@ export function parseImportArgs(args) {
   }
   return { sources, dryRun, yes };
 }
+
+const SOURCE_LABELS = { codex: 'Codex', gemini: 'Gemini CLI', cursor: 'Cursor', claude: 'Claude Code', hermes: 'Hermes', opencode: 'OpenCode', antigravity: 'Antigravity', windsurf: 'Windsurf', cline: 'Cline' };
+
+// Startup hint for people arriving from another agent: name what /import would
+// bring over. Shown once for a given set of items; a new item shows it again.
+export async function importStartupNotice(root, options = {}) {
+  const env = options.env || process.env;
+  if (env.OASIS_IMPORT_NOTICE === '0') return '';
+  const plan = await planImport(root, { env, home: options.home });
+  const pending = plan.items.filter((item) => item.action !== 'skip');
+  if (!pending.length) return '';
+  const { createHash } = await import('node:crypto');
+  const signature = createHash('sha256').update(pending.map((item) => item.source + ':' + item.kind + ':' + item.name).sort().join('\n')).digest('hex').slice(0, 16);
+  const statePath = options.statePath || path.join(getConfigDirectory(env), 'import-notice.json');
+  const state = (await readJson(statePath)) || {};
+  const seen = Array.isArray(state.seen) ? state.seen : [];
+  if (seen.includes(signature)) return '';
+  await mkdir(path.dirname(statePath), { recursive: true });
+  await writeFile(statePath, JSON.stringify({ seen: [...seen, signature].slice(-50) }, null, 2) + '\n');
+  const sources = [...new Set(pending.map((item) => SOURCE_LABELS[item.source] || item.source))];
+  const nouns = { mcp: 'MCP server', instructions: 'instructions file', command: 'command', rule: 'rule', skill: 'skill', memory: 'memory', agent: 'subagent' };
+  const counts = new Map();
+  for (const item of pending) counts.set(item.kind, (counts.get(item.kind) || 0) + 1);
+  const parts = [...counts].map(([kind, n]) => n + ' ' + (nouns[kind] || kind) + (n === 1 ? '' : (kind === 'memory' ? '' : 's')));
+  return 'Found your setup from ' + sources.join(', ') + ' (' + parts.join(', ') + '). Type /import to bring it over; nothing changes until you confirm.';
+}
