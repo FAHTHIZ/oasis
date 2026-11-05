@@ -1,6 +1,0 @@
-<?xml version="1.0" encoding="utf-8"?>
-<!-- Plain HTTP is allowed so a model server on your own network (Ollama,
-     llama.cpp, LM Studio) can be used. Hosted providers are HTTPS. -->
-<network-security-config>
-    <base-config cleartextTrafficPermitted="true" />
-</network-security-config>

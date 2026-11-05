@@ -16,7 +16,7 @@ OASIS is on the **stable channel**. The latest release is [`v1.1.0`](https://git
 | Understand product scope and maturity | [Root README](../README.md) |
 | Check release blockers and supported platforms | [Project and qualification plan](PROJECT_PLAN.md) |
 | Install stable downloads or build from source | [Installation guide](INSTALL.md) |
-| Use OASIS on a phone or tablet (universal app, Android APK, remote, Termux) | [Phone and tablet guide](MOBILE.md) · [Termux guide](TERMUX.md) |
+| Use OASIS on a phone or tablet (universal app, remote, Termux) | [Phone and tablet guide](MOBILE.md) · [Termux guide](TERMUX.md) |
 | Find a topic in the full manual | [User-guide map](USER_GUIDE_MAP.md) |
 | Learn every command, setting, tool, and integration | [Full user guide](USER_GUIDE.md) |
 

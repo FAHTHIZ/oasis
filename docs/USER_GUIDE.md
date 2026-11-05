@@ -10,7 +10,7 @@ Start with the overview you need, then jump straight to a workflow or reference.
 
 | Area | Go to |
 |---|---|
-| Getting started | [Install and set up](#install-the-terminal-agent) · [Universal and Android app](#universal-app-and-android-app) · [Connect the browser workspace](#connected-browser-workspace-and-runtime) · [Try plain-English tasks](#use-it-in-plain-english) |
+| Getting started | [Install and set up](#install-the-terminal-agent) · [Universal app](#universal-app) · [Connect the browser workspace](#connected-browser-workspace-and-runtime) · [Try plain-English tasks](#use-it-in-plain-english) |
 | Product capabilities | [Implemented capabilities](#what-is-implemented) · [Native plugin packages](#native-oasis-plugin-packages) · [Plugins and integrations](#plugins-integrations-and-installation) · [Editor integration](#vs-code-cursor-and-windsurf) |
 | Safety and configuration | [Safety model](#safety-model) · [Permissions](#permission-rules-and-modes) · [MCP servers](#project-mcp-servers-mcpjson) · [Hooks](#hooks) · [Settings](#settings-pane) |
 | Terminal and sessions | [Interactive terminal](#the-interactive-terminal) · [PTY sessions](#interactive-pty-terminal-sessions) · [Slash commands](#slash-commands-mentions-and-memory) · [Auto memory](#auto-memory) · [Clear local data](#clearing-local-data) |
@@ -74,9 +74,9 @@ Supported provider shapes:
 
 OASIS does not include an API subscription or a model. A provider must be reachable and the selected model must support tool calling.
 
-## Universal app and Android app
+## Universal app
 
-The universal app is OASIS for phones, tablets and any browser, with no install and no server: open [fahthiz.github.io/oasis/app](https://fahthiz.github.io/oasis/app/) and add it to the home screen. On Android you can install the [APK](https://github.com/FAHTHIZ/oasis/releases/download/android-latest/OASIS-android.apk) instead, which bundles the same app.
+The universal app is OASIS for phones, tablets and any browser, with no install and no server: open [fahthiz.github.io/oasis/app](https://fahthiz.github.io/oasis/app/) and add it to the home screen.
 
 - **Settings** (gear): choose a provider preset or any OpenAI-compatible URL, a model and a key. Keys stay in this device's browser storage. **Test connection** sends one short request.
 - **Projects** (folder): import a GitHub repository (`owner/name` or a URL; add a token for private repositories and for pushing), a ZIP, a folder or loose files, or start empty. **Export zip** saves the project.

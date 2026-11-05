@@ -58,7 +58,7 @@ The intended 1.0 product is a unified runtime with multiple interfaces—not a c
 | Agent coordination | Bounded subagents, specialist reviews, task boards, dependency-aware dispatch, background records, and workflow automation. |
 | Integrations | MCP, hooks, Agent Skills, plugins, extension import/export, search integrations, GitHub workflows, and editor bridges. |
 | Code intelligence and verification | Diagnostics, language-server support where configured, project checks, automatic testing, weakened-test detection, diff review, and claim checks. |
-| Developer surfaces | CLI, authenticated local browser workspace, Electron desktop shell, universal app and Android APK, VS Code-family integration, SDK, and GitHub Action. |
+| Developer surfaces | CLI, authenticated local browser workspace, Electron desktop shell, universal app (one installable app for phones, tablets and computers), VS Code-family integration, SDK, and GitHub Action. |
 
 Implementation presence does not mean every feature works identically across all providers, operating systems, editors, or third-party integrations. Use the support matrix below and the relevant subsystem tests.
 
@@ -74,7 +74,6 @@ Implementation presence does not mean every feature works identically across all
 | VS Code-family integration | Implemented integration | Do not claim universal parity with every editor or extension marketplace. |
 | SDK / GitHub Action | Implemented integration | Unattended execution must be deliberately scoped and isolated by the adopting repository/operator. |
 | Universal app (browser, installable) | Available at [fahthiz.github.io/oasis/app](https://fahthiz.github.io/oasis/app/) | On-device agent with no server; no shell commands. Core modules are unit-tested under Node and the UI is checked in desktop and mobile-emulated Chromium; no physical-device journey on iOS Safari or older Android browsers yet. Data lives in browser storage, which the browser may clear. |
-| Android app (APK) | Signed APK built in CI on every push to `main` | Bundles the universal app in a WebView with a small native bridge (file picker, save, back, share). Not tested on physical devices yet; not on Google Play. |
 | Android / Termux | Experimental CLI path | PTY, background behavior, and real-device reliability are not fully qualified. |
 | Remote access / phone pairing | LAN pairing | The desktop app's **Connect a phone…** and `oasis web --host` with TLS pair a phone on the same private network by QR code. There is no internet relay or trusted-device enrollment service. |
 | Tor/onion access | Not in 1.0 scope | Not a shipped capability. |

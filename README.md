@@ -93,7 +93,7 @@ OASIS also runs as an installable app on phones, tablets and computers, with not
 - Commit and push to a new branch or open a pull request, always after you approve.
 - Works offline once installed. Skills load only when a task needs them, so it stays fast on low-end phones and small models.
 - Ten provider presets plus any OpenAI-compatible endpoint, including Ollama and llama.cpp on your own machine.
-- On Android, also a native app: [download the APK](https://github.com/FAHTHIZ/oasis/releases/download/android-latest/OASIS-android.apk). It bundles the whole app, so it runs with no connection, and adds a native file picker, saving exports, the back button and "share to OASIS".
+- One app for every device: the same installed app runs on Android, iPhone, iPad, ChromeOS, Windows, macOS and Linux, with no separate download per platform.
 
 It cannot run shell commands; for that, use the CLI or desktop app, or [connect your phone to them](docs/MOBILE.md#browser-workspace-from-your-phone). `oasis app --lan` serves the same app from your computer with a QR code. Details: [OASIS on a phone or tablet](docs/MOBILE.md#universal-app).
 
@@ -274,7 +274,7 @@ What 1.0 does not claim: the desktop installers are unsigned (SHA-256 checksums 
 | **VS Code-family editors** | Supported integration; not every editor extension ecosystem is covered. |
 | **ACP editors (Zed, JetBrains, Neovim, Emacs)** | `oasis acp` implements the core Agent Client Protocol, inline edit diffs and editor `fs/*` (unsaved buffers are read, open buffers are updated). With `oasis acp --editor-terminal`, approved commands run in the editor's terminal panel (`terminal/*`); by default they run in OASIS's own process and sandbox. |
 | **SDK and GitHub Action** | Programmatic and repository automation; unattended use still needs deliberate permissions and isolation. |
-| **Universal app** | Installable web app for Android, iOS, iPadOS, ChromeOS and desktop browsers, plus a signed Android APK built in CI; runs on the device with no server. No shell commands. Tested in desktop and mobile-emulated Chromium; real-device testing on iOS Safari and older Android browsers is in progress. The APK has not yet been tested on physical devices, and neither app is in an app store yet. |
+| **Universal app** | Installable web app for Android, iOS, iPadOS, ChromeOS and desktop browsers, one codebase for every platform; runs on the device with no server. No shell commands. Tested in desktop and mobile-emulated Chromium; real-device testing on iOS Safari and older Android browsers is in progress. It is not in an app store; install it from the browser. |
 | **Android / Termux** | The full CLI runs in Termux; Android is not a fully qualified CLI platform. |
 
 </details>

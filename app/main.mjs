@@ -54,13 +54,16 @@ function openSheet(id) {
   el.hidden = false;
   $('backdrop').hidden = false;
   openSheets.push(id);
+  try { history.pushState({ sheet: id }, ''); } catch { /* sandboxed frames */ }
   const focusable = el.querySelector('input,select,textarea,button:not([data-close])');
   if (focusable && matchMedia('(pointer:fine)').matches) focusable.focus();
 }
-function closeSheet(id) {
+let ignorePop = false;
+function closeSheet(id, { fromHistory = false } = {}) {
   const el = $(id);
   if (!el || el.hidden) return;
   el.hidden = true;
+  if (!fromHistory && history.state && history.state.sheet === id) { ignorePop = true; history.back(); }
   openSheets.splice(openSheets.indexOf(id), 1);
   if (!openSheets.length) $('backdrop').hidden = true;
   if (id === 'approvalSheet' && approvalResolve) { approvalResolve(false); approvalResolve = null; }
@@ -82,15 +85,18 @@ document.addEventListener('keydown', (event) => {
   }
 });
 
-// The Android app's back button: close the top sheet or menu first, then leave.
-window.oasisBack = () => {
+// The system back button and gesture (Android, browsers, desktop mice): each
+// open sheet adds a history entry, so Back closes the top sheet instead of
+// leaving the app.
+function closeTopLayer() {
   if (!$('modeMenu').hidden) { $('modeMenu').hidden = true; return true; }
   const top = openSheets[openSheets.length - 1];
-  if (top && top !== 'approvalSheet') { closeSheet(top); return true; }
+  if (top && top !== 'approvalSheet') { closeSheet(top, { fromHistory: true }); return true; }
   if (top) return true;
   if (!$('filesPanel').hidden && innerWidth < 1024) { toggleFiles(false); return true; }
   return false;
-};
+}
+addEventListener('popstate', () => { if (ignorePop) { ignorePop = false; return; } if (openSheets.length || !$('modeMenu').hidden) closeTopLayer(); });
 
 /* ---------- Agent ---------- */
 const agent = new Agent({
@@ -807,13 +813,6 @@ $('exportButton').addEventListener('click', async () => {
   for (const path of await workspace.paths()) files.push({ path, content: await workspace.read(path) });
   const blob = new Blob([createZip(files)], { type: 'application/zip' });
   const name = workspace.project.name.replace(/[^\w.-]+/g, '-') + '.zip';
-  if (window.OasisNative && window.OasisNative.saveFile) {
-    const bytes = new Uint8Array(await blob.arrayBuffer());
-    let binary = '';
-    for (let i = 0; i < bytes.length; i += 0x8000) binary += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
-    window.OasisNative.saveFile(name, 'application/zip', btoa(binary));
-    return;
-  }
   const file = new File([blob], name, { type: 'application/zip' });
   if (navigator.canShare && navigator.canShare({ files: [file] }) && matchMedia('(pointer:coarse)').matches) {
     try { await navigator.share({ files: [file], title: name }); return; } catch { /* fall back to download */ }
@@ -858,7 +857,7 @@ $('installButton').addEventListener('click', async () => {
   toast('On iPhone or iPad: tap Share, then Add to Home Screen.');
 });
 const standalone = matchMedia('(display-mode: standalone)').matches || navigator.standalone;
-if (!standalone && !window.OasisNative && /iphone|ipad|ipod/i.test(navigator.userAgent)) $('installButton').hidden = false;
+if (!standalone && /iphone|ipad|ipod/i.test(navigator.userAgent)) $('installButton').hidden = false;
 
 /* ---------- Boot ---------- */
 async function boot() {
@@ -872,7 +871,7 @@ async function boot() {
   if (localStorage.getItem('oasis.files') === '1' || (localStorage.getItem('oasis.files') === null && innerWidth >= 1024 && workspace)) toggleFiles(true);
   refreshFiles();
   if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => {});
-  if ('serviceWorker' in navigator && location.protocol !== 'file:' && !window.OasisNative) navigator.serviceWorker.register('sw.js').catch(() => {});
+  if ('serviceWorker' in navigator && location.protocol !== 'file:') navigator.serviceWorker.register('sw.js').catch(() => {});
   const shared = new URLSearchParams(location.search);
   if (shared.get('repo')) { $('repoInput').value = shared.get('repo'); openProjects(); }
   if (shared.get('q')) { $('input').value = shared.get('q'); autosize(); }
