@@ -118,9 +118,17 @@ export class Agent {
 
   reset() { this.messages = []; this.todos = []; this.usage = { input: 0, output: 0 }; this.steering = []; }
 
-  load(messages) {
+  load(messages, pendingSteering = []) {
     this.messages = Array.isArray(messages) ? messages.filter((m) => m && m.role !== 'system') : [];
-    this.steering = [];
+    // Persisted browser state is untrusted and may be stale or malformed.
+    // Restore only bounded, non-empty string notes accepted by steer().
+    this.steering = Array.isArray(pendingSteering)
+      ? pendingSteering
+        .filter((note) => typeof note === 'string')
+        .map((note) => note.trim())
+        .filter((note) => note && note.length <= MAX_STEERING_NOTE_CHARS)
+        .slice(0, MAX_STEERING_MESSAGES)
+      : [];
   }
 
   async compact(config, signal) {

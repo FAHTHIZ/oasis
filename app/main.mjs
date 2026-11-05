@@ -656,7 +656,11 @@ async function persistChat() {
   const trimmed = display.slice(-200).map((entry) => ({ ...entry, tools: entry.tools && entry.tools.map((t) => ({ ...t, content: (t.content || '').slice(0, 2000) })) }));
   try {
     const projectId = workspace.project.id;
-    await store.setValue(chatKey(projectId, chatId), { messages: RT ? agent.snapshot() : agent.messages.slice(-300).map((m) => (Array.isArray(m.content) ? { ...m, content: textOf(m.content) + ' (image not kept in saved chats)' } : m)), display: trimmed });
+    await store.setValue(chatKey(projectId, chatId), {
+      messages: RT ? agent.snapshot() : agent.messages.slice(-300).map((m) => (Array.isArray(m.content) ? { ...m, content: textOf(m.content) + ' (image not kept in saved chats)' } : m)),
+      ...(!RT ? { pendingSteering: agent.steering.slice(0, 20) } : {}),
+      display: trimmed
+    });
     const index = await chatIndex(projectId);
     index.current = chatId;
     index.list = index.list.filter((item) => item.id !== chatId);
@@ -746,7 +750,8 @@ async function restoreChat({ keepChat = false } = {}) {
   if (!keepChat) chatId = (await chatIndex(workspace.project.id)).current || 'main';
   const saved = await store.getValue(chatKey(workspace.project.id, chatId));
   if (saved && saved.display && saved.display.length) {
-    agent.load(saved.messages);
+    if (RT) agent.load(saved.messages);
+    else agent.load(saved.messages, saved.pendingSteering);
     display = saved.display;
     for (const entry of display) {
       const el = addMessage(entry.role, entry.content);
