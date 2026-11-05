@@ -177,3 +177,36 @@ test('Gemini and Codex install commands are understood too', async () => {
   assert.equal(c('codex plugin marketplace add openai/plugins').owner, 'openai');
   assert.equal(c('codex plugin marketplace add acme/mono --ref v2.1.0').name, 'mono');
 });
+
+test('an add-on that needs a key says so, and the key the user pastes is saved without reinstalling', async (t) => {
+  const { addAnything } = await import('../src/add-anything.mjs');
+  const base = await mkdtemp(path.join(os.tmpdir(), 'oasis-add-values-'));
+  t.after(() => rm(base, { recursive: true, force: true }));
+  const env = { PATH: process.env.PATH, OASIS_CONFIG_DIR: path.join(base, 'cfg'), HOME: path.join(base, 'home') };
+  const asked = [];
+  const approve = async (s) => { asked.push(s); return true; };
+  const first = await addAnything('npx docs-mcp --token ${DOCS_TOKEN}', { root: base, env, approve });
+  assert.deepEqual(first.needs, { docs: ['DOCS_TOKEN'] });
+  assert.match(first.message, /docs needs DOCS_TOKEN/);
+  assert.match(first.agentHint, /source "docs" and env \{"DOCS_TOKEN": "\.\.\."\}/);
+  const saved = await addAnything('docs', { root: base, env, values: { DOCS_TOKEN: 'sekret-1', EXTRA_FLAG: 'on' }, approve });
+  assert.equal(saved.kind, 'configure');
+  assert.equal(saved.reconnect, true);
+  assert.match(asked[asked.length - 1], /^Save DOCS_TOKEN, EXTRA_FLAG for the MCP server "docs"/);
+  assert.doesNotMatch(asked.join('\n'), /sekret-1/);
+  const entry = JSON.parse(await readFile(path.join(base, 'cfg', 'mcp.json'), 'utf8')).mcpServers.docs;
+  assert.deepEqual(entry.args, ['-y', 'docs-mcp', '--token', 'sekret-1']);
+  assert.deepEqual(entry.env, { EXTRA_FLAG: 'on' });
+  if (process.platform !== 'win32') assert.equal((await stat(path.join(base, 'cfg', 'mcp.json'))).mode & 0o777, 0o600);
+  const declined = await addAnything('docs', { root: base, env, values: { DOCS_TOKEN: 'x' }, approve: async () => false });
+  assert.equal(declined.approved, false);
+  // Values given with the install are applied straight away.
+  const once = await addAnything('npx other-mcp --key ${OTHER_KEY}', { root: base, env, values: { OTHER_KEY: 'k2' }, approve });
+  assert.equal(once.needs, undefined);
+  assert.deepEqual(JSON.parse(await readFile(path.join(base, 'cfg', 'mcp.json'), 'utf8')).mcpServers.other.args.slice(-1), ['k2']);
+  // A remote server gets a pasted token as its Authorization header.
+  await addAnything('https://mcp.example.com/mcp', { root: base, env, name: 'remote', approve });
+  await addAnything('remote', { root: base, env, values: { GITHUB_TOKEN: 'ghp_1' }, approve });
+  await addAnything('remote', { root: base, env, values: { 'X-Api-Key': 'k3' }, approve });
+  assert.deepEqual(JSON.parse(await readFile(path.join(base, 'cfg', 'mcp.json'), 'utf8')).mcpServers.remote.headers, { Authorization: 'Bearer ghp_1', 'X-Api-Key': 'k3' });
+});

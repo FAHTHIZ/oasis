@@ -588,7 +588,9 @@ function npmPlan(pkg, source, { root, env, scope, name }) {
 async function writeStdioServer(name, entry, { root, env, scope }) {
   if (!NAME.test(name)) throw new Error('Invalid server name: ' + name);
   const { parseMcpServerEntries } = await import('./mcp-project.mjs');
-  const check = parseMcpServerEntries({ mcpServers: { [name]: entry } }, env, scope);
+  // A variable nobody has set yet is reported after the install, not refused.
+  const placeholders = Object.fromEntries([...JSON.stringify(entry).matchAll(/\$\{([A-Za-z_][A-Za-z0-9_]*)/g)].filter((m) => env[m[1]] === undefined).map((m) => [m[1], 'x']));
+  const check = parseMcpServerEntries({ mcpServers: { [name]: entry } }, { ...env, ...placeholders }, scope);
   if (check.failures && check.failures.length) throw new Error('MCP server "' + name + '" is not usable: ' + check.failures[0].error);
   const file = scope === 'project' ? path.join(root, '.mcp.json') : path.join(getConfigDirectory(env), 'mcp.json');
   const parsed = (await readJsonFile(file)) || {};
@@ -599,7 +601,118 @@ async function writeStdioServer(name, entry, { root, env, scope }) {
 }
 
 // Plan, ask once, install. approve(summary) -> boolean.
+const VAR = /\$\{([A-Za-z_][A-Za-z0-9_]*)(?::-[^}]*)?\}/g;
+const isSecretName = (key) => /KEY|TOKEN|SECRET|PASSWORD|PASS|AUTH|CREDENTIAL|PAT\b/i.test(key);
+
+function mcpFiles(root, env) {
+  return [path.join(getConfigDirectory(env), 'mcp.json'), path.join(root, '.mcp.json')];
+}
+
+// Find an installed MCP server (user or project) or plugin by name or id.
+async function findInstalled(name, { env, root }) {
+  const wanted = String(name || '').trim();
+  if (!wanted) return null;
+  for (const file of mcpFiles(root, env)) {
+    const doc = await readJsonFile(file);
+    const servers = doc && doc.mcpServers;
+    if (servers && servers[wanted] && typeof servers[wanted] === 'object') return { type: 'mcp', name: wanted, file, doc, entry: servers[wanted] };
+  }
+  const { loadEnabledPlugins } = await import('./claude-plugins.mjs');
+  const plugins = await loadEnabledPlugins(root, { env }).catch(() => []);
+  const plugin = plugins.find((p) => p.id === wanted) || plugins.find((p) => p.name === wanted);
+  return plugin ? { type: 'plugin', name: plugin.id, plugin } : null;
+}
+
+// Keys an installed add-on still needs: ${VAR} in an MCP entry that nothing
+// sets, or plugin options with no value and no environment variable.
+async function missingValues(names, { env, root }) {
+  const out = {};
+  for (const name of names || []) {
+    const found = await findInstalled(name, { env, root });
+    if (!found) continue;
+    const need = new Set();
+    if (found.type === 'mcp') {
+      const text = JSON.stringify(found.entry);
+      for (const m of text.matchAll(VAR)) if (!/:-/.test(m[0]) && env[m[1]] === undefined) need.add(m[1]);
+    } else {
+      const schema = (found.plugin.manifest && found.plugin.manifest.userConfig) || {};
+      const values = found.plugin.options || found.plugin.config || {};
+      for (const [key, option] of Object.entries(schema)) {
+        if (option && option.required === false) continue;
+        if (values[key] === undefined && env[key] === undefined && (!option || option.default === undefined) && /^[A-Z][A-Z0-9_]*$/.test(key)) need.add(key);
+      }
+    }
+    if (need.size) out[found.name] = [...need];
+  }
+  return out;
+}
+
+// Save values (API keys and the like) for an installed MCP server or plugin.
+// MCP values go into its entry in the owner-only config; plugin values become
+// plugin options (secret ones in the keychain).
+export async function configureInstalled(name, values, { env, root }) {
+  const found = await findInstalled(name, { env, root });
+  if (!found) return null;
+  const keys = Object.keys(values);
+  if (found.type === 'mcp') {
+    const replace = (value) => typeof value === 'string' ? value.replace(VAR, (m, key) => key in values ? String(values[key]) : m) : value;
+    const entry = JSON.parse(JSON.stringify(found.entry), (key, value) => replace(value));
+    const loose = keys.filter((k) => !JSON.stringify(found.entry).includes('${' + k));
+    if (entry.command) entry.env = { ...(entry.env || {}), ...Object.fromEntries(loose.filter((k) => !k.includes('-')).map((k) => [k, String(values[k])])) };
+    else if (entry.url && loose.length) {
+      // Remote servers take keys as headers: header names as given, and a
+      // bare token as "Authorization: Bearer <token>".
+      const headers = { ...(entry.headers || {}) };
+      for (const k of loose) {
+        const value = String(values[k]);
+        if (/^[A-Z][a-z]+(-[A-Za-z]+)*$/.test(k) || /^x-/i.test(k)) headers[k] = value;
+        else if (isSecretName(k)) headers.Authorization = /^(Bearer|Basic|token)\s/i.test(value) ? value : 'Bearer ' + value;
+      }
+      if (Object.keys(headers).length) entry.headers = headers;
+    }
+    const user = found.file === mcpFiles(root, env)[0];
+    await writeFile(found.file, JSON.stringify({ ...found.doc, mcpServers: { ...found.doc.mcpServers, [found.name]: entry } }, null, 2) + '\n', user ? { mode: 0o600 } : {});
+    return { type: 'mcp', name: found.name, keys, file: found.file };
+  }
+  const { setPluginOption } = await import('./claude-plugins.mjs');
+  for (const key of keys) await setPluginOption(found.plugin, key, String(values[key]), { env });
+  return { type: 'plugin', name: found.name, keys };
+}
+
+const valuesNote = (needs) => Object.entries(needs).map(([name, keys]) => name + ' needs ' + keys.join(', ')).join('; ');
+
 export async function addAnything(raw, options = {}) {
+  const values = options.values && typeof options.values === 'object' ? Object.fromEntries(Object.entries(options.values).filter(([k, v]) => /^[A-Za-z_][A-Za-z0-9_-]{0,99}$/.test(k) && v !== undefined && v !== null && String(v) !== '')) : {};
+  const where = { env: options.env || process.env, root: path.resolve(options.root || process.cwd()) };
+  // Keys for something already installed: save them, no reinstall.
+  if (Object.keys(values).length && (await findInstalled(raw, where))) {
+    const target = await findInstalled(raw, where);
+    const approve = options.approve || (async () => false);
+    const summary = 'Save ' + Object.keys(values).join(', ') + ' for ' + (target.type === 'mcp' ? 'the MCP server "' + target.name + '" in ' + target.file : 'the plugin ' + target.name) + '? The values stay on this machine and are not shown.';
+    if (!(await approve(summary, { kind: 'configure' }))) return { kind: 'configure', approved: false, installed: [], message: 'Nothing was saved.' };
+    const saved = await configureInstalled(raw, values, where);
+    const needs = await missingValues([saved.name], where);
+    return { kind: 'configure', approved: true, installed: [saved.name], configured: saved.keys, reconnect: saved.type === 'mcp',
+      message: 'Saved ' + saved.keys.join(', ') + ' for ' + saved.name + '.' + (Object.keys(needs).length ? ' Still missing: ' + valuesNote(needs) + '.' : '') };
+  }
+  const result = await addAnythingOnce(raw, options);
+  if (!result.approved || !result.installed || !result.installed.length) return result;
+  const names = result.installed;
+  if (Object.keys(values).length) {
+    for (const name of names) await configureInstalled(name, values, where).catch(() => null);
+    result.configured = Object.keys(values);
+  }
+  const needs = await missingValues(names, where);
+  if (Object.keys(needs).length) {
+    result.needs = needs;
+    const first = Object.keys(needs)[0];
+    result.message += ' Not set yet: ' + valuesNote(needs) + '. Paste ' + (Object.values(needs).flat().some(isSecretName) ? 'the key' : 'the value') + ' in a chat ("use this for ' + first + ': ...") or set ' + Object.values(needs).flat().join(', ') + ' in your environment.';
+    result.agentHint = 'Ask the user for ' + Object.values(needs).flat().join(', ') + ', then call add_extension with source "' + first + '" and env {' + needs[first].map((k) => '"' + k + '": "..."').join(', ') + '}.';
+  }
+  return result;
+}
+
+async function addAnythingOnce(raw, options = {}) {
   const plan = await planAddon(raw, options);
   if (plan.kind === 'none' || plan.kind === 'zip') return { ...(await plan.run()), kind: plan.kind, approved: true };
   const approve = options.approve || (async () => false);
