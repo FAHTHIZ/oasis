@@ -67,7 +67,7 @@ import { PermissionPolicy, suggestRule, EDIT_TOOLS } from './permissions.mjs';
 import { classifyAction, newAutoModeState } from './auto-mode.mjs';
 import { runHooks, hasHooks, CLAUDE_TOOL_NAMES } from './hooks.mjs';
 import { resolveSandbox } from './sandbox.mjs';
-import { webSearchEnabled, searchBackends, searchBackend } from './web-search.mjs';
+import { webSearchEnabled, searchBackends, searchBackend, webSearchToolDefinition } from './web-search.mjs';
 import { loadProjectMcpServers } from './mcp-project.mjs';
 import { access, lstat, mkdir, readFile, realpath, stat, writeFile } from 'node:fs/promises';
 
@@ -807,7 +807,7 @@ export async function createSession({ root, config, restore = null, permissionMo
     mcpFailures: mcp.failures,
     mcpToolMap: dynamic.map,
     mcpPins,
-    toolDefinitions: TOOL_DEFINITIONS.filter((tool) => tool.function.name !== 'web_search' || webSearchEnabled(env)).concat(dynamic.definitions),
+    toolDefinitions: TOOL_DEFINITIONS.filter((tool) => tool.function.name !== 'web_search' || webSearchEnabled(env)).map((tool) => tool.function.name === 'web_search' ? webSearchToolDefinition(env) : tool).concat(dynamic.definitions),
     toolCallsThisSession: 0,
     todos: Array.isArray(restore && restore.todos) ? restore.todos : [],
     sharedTasks: createSharedTaskStore(restore && restore.sharedTasks),
