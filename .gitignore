@@ -24,3 +24,5 @@ artifacts/
 
 # Demo videos are copied into the homepage by the Pages workflow
 site/assets/demo/
+__pycache__/
+*.pyc
