@@ -111,6 +111,22 @@ function explain(status, body, config) {
   return 'The provider returned ' + status + '. ' + detail;
 }
 
+/** A JSON error body ({ error } or [{ error }]) that arrived outside SSE events. */
+export function strayStreamError(text) {
+  const raw = String(text || '').trim();
+  if (!raw) return null;
+  let parsed;
+  try { parsed = JSON.parse(raw); } catch {
+    if (!/"error"/.test(raw)) return null;
+    const match = /"message"\s*:\s*"((?:[^"\\]|\\.)*)"/.exec(raw);
+    return { message: match ? match[1] : 'the provider sent an error', status: Number((/"code"\s*:\s*(\d{3})/.exec(raw) || [])[1]) || 0 };
+  }
+  const body = Array.isArray(parsed) ? parsed[0] : parsed;
+  const error = body && typeof body === 'object' ? body.error : null;
+  if (!error) return null;
+  return { message: String(typeof error === 'string' ? error : error.message || error.status || 'the provider sent an error').slice(0, 400), status: Number(error.code) || 0 };
+}
+
 async function* sseEvents(response, signal) {
   const reader = response.body.getReader();
   const decoder = new TextDecoder();
@@ -132,8 +148,11 @@ async function* sseEvents(response, signal) {
           else if (line.startsWith('data:')) data.push(line.slice(5).replace(/^ /, ''));
         }
         if (data.length) yield { event, data: data.join('\n') };
+        else if (raw.trim() && !/^(?::|id:|retry:|event:)/.test(raw.trim())) yield { event: 'stray', data: raw };
       }
     }
+    buffer += decoder.decode();
+    if (buffer.trim()) yield { event: 'stray', data: buffer };
   } finally {
     try { reader.releaseLock(); } catch {}
   }
@@ -229,12 +248,16 @@ async function chatOpenAI(config, { messages, tools, signal, onText: rawOnText, 
   let content = '';
   const calls = [];
   let usage = null;
-  for await (const { data } of sseEvents(response, signal)) {
+  let finished = false;
+  let stray = '';
+  for await (const { event, data } of sseEvents(response, signal)) {
+    if (event === 'stray') { if (stray.length < 16384) stray += data + '\n'; continue; }
     if (data === '[DONE]') break;
     let chunk;
     try { chunk = JSON.parse(data); } catch { continue; }
     if (chunk.error) throw new ProviderError('The provider reported an error mid-stream: ' + (chunk.error.message || JSON.stringify(chunk.error)), { retryable: true });
     if (chunk.usage) usage = normalizeUsage(chunk.usage);
+    if (chunk.choices && chunk.choices[0] && chunk.choices[0].finish_reason) finished = true;
     const delta = chunk.choices && chunk.choices[0] && chunk.choices[0].delta;
     if (!delta) continue;
     if (delta.content) { content += delta.content; if (onText) onText(delta.content); }
@@ -247,6 +270,10 @@ async function chatOpenAI(config, { messages, tools, signal, onText: rawOnText, 
       if (part.extra_content && typeof part.extra_content === 'object') call.extra_content = { ...(call.extra_content || {}), ...part.extra_content };
     }
   }
+  // Gemini can end a stream with a bare JSON 503 body after some text; that
+  // reply is broken, so retry it instead of keeping the fragment.
+  const broken = finished ? null : strayStreamError(stray);
+  if (broken) throw new ProviderError('The provider reported an error mid-stream: ' + broken.message, { status: broken.status, retryable: true });
   if (thinkFilter) thinkFilter.flush();
   const toolCalls = calls.filter(Boolean).map((call, i) => ({ ...call, id: call.id || 'call_' + Date.now().toString(36) + i }));
   return { content: splitThinking(content).content, tool_calls: toolCalls, usage };
