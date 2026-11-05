@@ -1086,6 +1086,17 @@ export function buildOpenCodeArgs(config, prompt) {
   return ['run', '--format', 'json', ...(config.model ? ['-m', config.model] : []), prompt];
 }
 
+const EXTERNAL_AGENT_FLAGS = ['--claude-code', '--codex', '--gemini-cli', '--opencode', '--aider'];
+
+// `oasis eval ... --model X` arrives with --model already removed by the CLI's
+// global parser. Route it to the external agent, or to OASIS's provider config.
+export function evalModelPassthrough(args, model, env = process.env) {
+  const list = Array.isArray(args) ? [...args] : [];
+  if (!model || list.includes('--model')) return { args: list, env };
+  if (list.some((arg) => EXTERNAL_AGENT_FLAGS.includes(arg))) return { args: [...list, '--model', String(model)], env };
+  return { args: list, env: { ...env, OASIS_MODEL: String(model) } };
+}
+
 export function buildAiderArgs(config, prompt) {
   return ['--message', prompt, '--yes-always', '--no-auto-commits', '--no-dirty-commits', '--no-check-update', '--no-analytics', '--no-show-model-warnings', '--no-pretty', '--no-stream', ...(config.model ? ['--model', config.model] : [])];
 }
