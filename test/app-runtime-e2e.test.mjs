@@ -81,7 +81,7 @@ async function evaluate(page, expression) {
   if (result.exceptionDetails) throw new Error((result.exceptionDetails.exception && result.exceptionDetails.exception.description) || result.exceptionDetails.text);
   return result.result.value;
 }
-async function waitFor(page, expression, { timeout = 20000, label = expression } = {}) {
+async function waitFor(page, expression, { timeout = 60000, label = expression } = {}) { // generous: Chromium shares the CPU with the parallel suite
   const end = Date.now() + timeout;
   let last;
   while (Date.now() < end) {
@@ -89,7 +89,7 @@ async function waitFor(page, expression, { timeout = 20000, label = expression }
     if (last) return last;
     await new Promise((r) => setTimeout(r, 100));
   }
-  const seen = await evaluate(page, `JSON.stringify({ transcript: document.getElementById('transcript').textContent.slice(-600), toasts: document.getElementById('toasts').textContent, log: document.getElementById('connectLog').textContent, suggest: document.getElementById('pluginSuggest').outerHTML.slice(0, 400), msgs: window.__msgs })`).catch(() => '');
+  const seen = await evaluate(page, `JSON.stringify({ transcript: document.getElementById('transcript').textContent.slice(-600), toasts: document.getElementById('toasts').textContent, log: document.getElementById('connectLog').textContent, suggest: document.getElementById('pluginSuggest').outerHTML.slice(0, 400), msgs: window.__msgs, ready: document.documentElement.dataset.ready, stale: !!window.__stale, sheets: [...document.querySelectorAll('.sheet')].filter((el) => !el.hidden).map((el) => el.id), adds: (window.__adds || []).slice(0, 4) })`).catch(() => '');
   throw new Error('Timed out waiting for: ' + label + ' (last: ' + JSON.stringify(last) + ') page: ' + seen);
 }
 const paste = (selector, value) => `(() => { const el = document.querySelector(${JSON.stringify(selector)}); el.focus(); const dt = new DataTransfer(); dt.setData('text/plain', ${JSON.stringify(value)}); el.dispatchEvent(new ClipboardEvent('paste', { clipboardData: dt, bubbles: true, cancelable: true })); return true; })()`;
@@ -97,7 +97,7 @@ const type = (value) => `(() => { const el = document.getElementById('input'); e
 const submit = `(() => { document.getElementById('composer').requestSubmit(); return true; })()`;
 const busy = `document.getElementById('app').classList.contains('busy')`;
 
-test('runtime engine end to end: app at /, paste to connect, approve a real edit, files and changes', { skip: chrome ? false : 'no Chrome/Chromium installed', timeout: 180000 }, async (t) => {
+test('runtime engine end to end: app at /, paste to connect, approve a real edit, files and changes', { skip: chrome ? false : 'no Chrome/Chromium installed', timeout: 360000 }, async (t) => {
   const provider = await mockProvider();
   const parent = await mkdtemp(path.join(os.tmpdir(), 'oasis-runtime-app-'));
   const root = path.join(parent, 'counter-app');
@@ -139,10 +139,10 @@ test('runtime engine end to end: app at /, paste to connect, approve a real edit
 
   // 1. Without the link's token the app asks for it, and the paste box takes the link.
   await page.send('Page.navigate', { url: origin + '/' });
-  await waitFor(page, `document.readyState === 'complete' && location.pathname === '/app/' && document.getElementById('welcomeTitle').textContent === 'Paste your OASIS link.'`, { label: 'asks for the runtime link' });
+  await waitFor(page, `document.readyState === 'complete' && !window.__stale && document.documentElement.dataset.ready === '1' && location.pathname === '/app/' && document.getElementById('welcomeTitle').textContent === 'Paste your OASIS link.'`, { label: 'asks for the runtime link' });
   await shot('1-link');
   await evaluate(page, `document.getElementById('connectInput').value = ${JSON.stringify(origin + '/app/#token=' + app.token)}; document.getElementById('connectForm').requestSubmit(); true`);
-  await waitFor(page, `document.readyState === 'complete' && document.documentElement.classList.contains('runtime') && document.getElementById('welcomeTitle').textContent === 'Paste a key to start.' && !/^(No project|This computer)$/.test(document.getElementById('projectName').textContent)`, { label: 'connected to the runtime after pasting the link' });
+  await waitFor(page, `document.readyState === 'complete' && !window.__stale && document.documentElement.dataset.ready === '1' && document.documentElement.classList.contains('runtime') && document.getElementById('welcomeTitle').textContent === 'Paste a key to start.' && !/^(No project|This computer)$/.test(document.getElementById('projectName').textContent)`, { label: 'connected to the runtime after pasting the link' });
   assert.equal(await evaluate(page, `location.hash`), '', 'the token never stays in the address bar');
   assert.match(await evaluate(page, `document.getElementById('projectName').textContent`), new RegExp(path.basename(root)));
 
@@ -191,8 +191,8 @@ test('runtime engine end to end: app at /, paste to connect, approve a real edit
 
   await shot('5-files');
   // 5. The session continues on reload.
-  await evaluate(page, `location.reload(); true`);
-  await waitFor(page, `document.readyState === 'complete' && document.documentElement.classList.contains('runtime') && /Done\\. I built the counter/.test(document.getElementById('transcript').textContent)`, { label: 'chat restored after reload' });
+  await evaluate(page, `window.__stale = true; location.reload(); true`);
+  await waitFor(page, `document.readyState === 'complete' && !window.__stale && document.documentElement.dataset.ready === '1' && document.documentElement.classList.contains('runtime') && /Done\\. I built the counter/.test(document.getElementById('transcript').textContent)`, { label: 'chat restored after reload' });
 
   // 6. Typing while OASIS works adds a note to the running task.
   await evaluate(page, type('Run a slow check'));
@@ -218,6 +218,7 @@ test('runtime engine end to end: app at /, paste to connect, approve a real edit
   // 8. New chat starts fresh; the earlier chat is one tap away in Chats.
   await evaluate(page, `document.getElementById('chatsButton').click(); true`);
   await waitFor(page, `!document.getElementById('chatsSheet').hidden && document.querySelectorAll('#chatList .project-item').length === 1 && /Build a counter/.test(document.getElementById('chatList').textContent)`, { label: 'chats list shows the current chat' });
+  await evaluate(page, `(() => { window.__adds = []; const t = document.getElementById('transcript'); const add = t.appendChild.bind(t); t.appendChild = (node) => { window.__adds.push((node.className || '') + ' @ ' + new Error().stack.split('\\n').slice(2, 6).join(' | ')); return add(node); }; return true; })()`);
   await evaluate(page, `document.getElementById('newChatButton').click(); true`);
   await waitFor(page, `document.getElementById('chatsSheet').hidden && !document.querySelector('#transcript .msg') && !document.getElementById('welcome').hidden`, { label: 'new chat is empty' });
   await evaluate(page, type('Say hi'));
@@ -228,8 +229,8 @@ test('runtime engine end to end: app at /, paste to connect, approve a real edit
   await shot('7-chats');
   await evaluate(page, `[...document.querySelectorAll('#chatList .project-item .open')].find((b) => /Build a counter/.test(b.textContent)).click(); true`);
   await waitFor(page, `/Done\\. I built the counter/.test(document.getElementById('transcript').textContent) && !/Say hi/.test(document.getElementById('transcript').textContent)`, { label: 'earlier chat reopened' });
-  await evaluate(page, `location.reload(); true`);
-  await waitFor(page, `document.readyState === 'complete' && document.documentElement.classList.contains('runtime') && /Done\\. I built the counter/.test(document.getElementById('transcript').textContent)`, { label: 'the open chat is remembered across reloads' });
+  await evaluate(page, `window.__stale = true; location.reload(); true`);
+  await waitFor(page, `document.readyState === 'complete' && !window.__stale && document.documentElement.dataset.ready === '1' && document.documentElement.classList.contains('runtime') && /Done\\. I built the counter/.test(document.getElementById('transcript').textContent)`, { label: 'the open chat is remembered across reloads' });
 
   // 9. Dictation writes into the message box and sends nothing by itself.
   await waitFor(page, `Boolean(document.getElementById('input')) && !${busy} && !document.getElementById('dictateButton').hidden`, { label: 'app ready after reload, with a microphone button' });

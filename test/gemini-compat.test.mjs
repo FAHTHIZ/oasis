@@ -237,3 +237,10 @@ test('server errors right after a per-minute wait still get their retries', asyn
   assert.match(run.out, /Recovered\./);
   assert.equal(run.models.length, 4);
 });
+
+test('three server errors in a row no longer fail the task', async () => {
+  const run = await runAgainstRateLimitedGemini({ fails: 0, serverErrors: 3 });
+  assert.equal(run.code, 0, run.err);
+  assert.match(run.out, /Recovered\./);
+  assert.equal(run.models.length, 4);
+});

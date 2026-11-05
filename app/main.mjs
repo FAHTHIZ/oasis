@@ -1961,7 +1961,8 @@ async function boot() {
   if (shared.get('q')) { $('input').value = shared.get('q'); autosize(); renderPluginSuggest(); }
   if (!modelReady() && !workspace) $('connectInput').focus({ preventScroll: true });
 }
-boot().catch((error) => toast(error.message, 'error'));
+// data-ready tells automation (and tests) that boot finished on this page load.
+boot().catch((error) => toast(error.message, 'error')).finally(() => { document.documentElement.dataset.ready = '1'; });
 
 // Phone link (runtime on this computer only): share this session with a phone
 // over Tailscale (encrypted) or home Wi-Fi, shown as a QR code.

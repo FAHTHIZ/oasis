@@ -1776,7 +1776,14 @@ async function readProviderStream(response, protocol, onDelta, onProgress) {
   return { choices: [{ message: { role: 'assistant', content: content || null, ...(toolCalls.length ? { tool_calls: toolCalls } : {}) }, finish_reason: finishReason }], usage };
 }
 
-const MAX_PROVIDER_RETRIES = 2;
+// Two quick retries for blips, then (server errors and dropped connections
+// only) three patient ones of about 2, 5 and 12 seconds. A live run on
+// Google's Gemma endpoint saw three 5xx in a row inside a minute; giving up
+// after half a second of backoff failed whole tasks.
+const MAX_PROVIDER_RETRIES = 5;
+const QUICK_PROVIDER_RETRIES = 2;
+const PATIENT_RETRY_STEPS_MS = [2000, 5000, 12000];
+const PATIENT_RETRY_STATUSES = new Set([500, 502, 503, 504]);
 const MAX_PROVIDER_RETRY_DELAY_MS = 5000;
 const RETRYABLE_PROVIDER_STATUSES = new Set([408, 425, 429, 500, 502, 503, 504]);
 // A 429 that means "out of quota / billing / account on hold" will not clear by
@@ -1864,12 +1871,23 @@ export function rateLimitWaitMs({ status, headers, body = '', maxMinutes = 0, no
   return Math.round(wait + 1000);
 }
 
+// How many retries a failure gets. status 0 = the connection itself failed.
+// OASIS_PROVIDER_RETRIES caps the total (0 disables retries).
+export function providerRetryLimit(status, env = process.env) {
+  const base = status === 0 || PATIENT_RETRY_STATUSES.has(status) ? MAX_PROVIDER_RETRIES : QUICK_PROVIDER_RETRIES;
+  const raw = (env || process.env).OASIS_PROVIDER_RETRIES;
+  const cap = raw === undefined || raw === '' ? Infinity : Number(raw);
+  return Number.isInteger(cap) && cap >= 0 ? Math.min(base, cap) : base;
+}
+
 export function providerRetryDelayMs(retryNumber, retryAfter = null, random = Math.random) {
   const advertised = parseRetryAfterMs(retryAfter);
   if (advertised !== null) return advertised;
   // Exponential backoff with jitter (50-100% of the step), so parallel subagents that hit
   // the same rate limit do not all retry in the same instant and collide again.
-  const step = Math.min(MAX_PROVIDER_RETRY_DELAY_MS, 250 * (2 ** Math.max(0, retryNumber - 1)));
+  const step = retryNumber > QUICK_PROVIDER_RETRIES
+    ? PATIENT_RETRY_STEPS_MS[Math.min(PATIENT_RETRY_STEPS_MS.length - 1, retryNumber - QUICK_PROVIDER_RETRIES - 1)]
+    : Math.min(MAX_PROVIDER_RETRY_DELAY_MS, 250 * (2 ** Math.max(0, retryNumber - 1)));
   return Math.round(step * (0.5 + 0.5 * Math.min(1, Math.max(0, Number(random()) || 0))));
 }
 
@@ -2455,7 +2473,7 @@ async function requestCompletionRaw(session, options = {}) {
           body: bodyText
         });
       } catch (error) {
-        if (attempt < MAX_PROVIDER_RETRIES && error instanceof TypeError && !controller.signal.aborted) {
+        if (attempt < providerRetryLimit(0, options.env) && error instanceof TypeError && !controller.signal.aborted) {
           await waitForProviderRetry(providerRetryDelayMs(attempt + 1), controller.signal);
           continue;
         }
@@ -2495,7 +2513,7 @@ async function requestCompletionRaw(session, options = {}) {
         attempt -= 1; // bounded by shortWaitBudget; leaves 5xx retries intact
         continue;
       }
-      if (attempt < MAX_PROVIDER_RETRIES && RETRYABLE_PROVIDER_STATUSES.has(status) && !isHardQuotaError(errorBody) && !(status === 429 && shortRateLimitMs(errorBody) !== null)) {
+      if (attempt < providerRetryLimit(status, options.env) && RETRYABLE_PROVIDER_STATUSES.has(status) && !isHardQuotaError(errorBody) && !(status === 429 && shortRateLimitMs(errorBody) !== null)) {
         await waitForProviderRetry(providerRetryDelayMs(attempt + 1, response.headers.get('retry-after')), controller.signal);
         continue;
       }

@@ -60,7 +60,7 @@ async function evaluate(page, expression) {
   if (result.exceptionDetails) throw new Error((result.exceptionDetails.exception && result.exceptionDetails.exception.description) || result.exceptionDetails.text);
   return result.result.value;
 }
-async function waitFor(page, expression, { timeout = 20000, label = expression } = {}) {
+async function waitFor(page, expression, { timeout = 60000, label = expression } = {}) { // generous: Chromium shares the CPU with the parallel suite
   const end = Date.now() + timeout;
   let last;
   while (Date.now() < end) {
@@ -68,7 +68,7 @@ async function waitFor(page, expression, { timeout = 20000, label = expression }
     if (last) return last;
     await new Promise((r) => setTimeout(r, 100));
   }
-  const seen = await evaluate(page, `JSON.stringify({ transcript: document.getElementById('transcript').textContent.slice(-600), toasts: document.getElementById('toasts').textContent, log: document.getElementById('connectLog').textContent, suggest: document.getElementById('pluginSuggest').outerHTML.slice(0, 400), msgs: window.__msgs })`).catch(() => '');
+  const seen = await evaluate(page, `JSON.stringify({ transcript: document.getElementById('transcript').textContent.slice(-600), toasts: document.getElementById('toasts').textContent, log: document.getElementById('connectLog').textContent, suggest: document.getElementById('pluginSuggest').outerHTML.slice(0, 400), msgs: window.__msgs, ready: document.documentElement.dataset.ready, stale: !!window.__stale, sheets: [...document.querySelectorAll('.sheet')].filter((el) => !el.hidden).map((el) => el.id) })`).catch(() => '');
   throw new Error('Timed out waiting for: ' + label + ' (last: ' + JSON.stringify(last) + ') page: ' + seen);
 }
 const paste = (selector, value) => `(() => { const el = document.querySelector(${JSON.stringify(selector)}); el.focus(); const dt = new DataTransfer(); dt.setData('text/plain', ${JSON.stringify(value)}); el.dispatchEvent(new ClipboardEvent('paste', { clipboardData: dt, bubbles: true, cancelable: true })); return true; })()`;
@@ -76,7 +76,7 @@ const type = (value) => `(() => { const el = document.getElementById('input'); e
 const submit = `(() => { document.getElementById('composer').requestSubmit(); return true; })()`;
 const busy = `document.getElementById('app').classList.contains('busy')`;
 
-test('universal app end to end: paste to connect, tool-calling task, credit fallback, plugins', { skip: chrome ? false : 'no Chrome/Chromium installed', timeout: 180000 }, async (t) => {
+test('universal app end to end: paste to connect, tool-calling task, credit fallback, plugins', { skip: chrome ? false : 'no Chrome/Chromium installed', timeout: 360000 }, async (t) => {
   const provider = await mockProvider();
   const app = await startAppServer({ root, port: 0 });
   const browser = await Browser.launch({ env: { ...process.env, OASIS_CHROME_HEADLESS: '1' }, executable: chrome });
@@ -88,10 +88,10 @@ test('universal app end to end: paste to connect, tool-calling task, credit fall
   page.on('Runtime.exceptionThrown', (event) => errors.push(event.exceptionDetails.exception ? event.exceptionDetails.exception.description : event.exceptionDetails.text));
   await page.send('Page.enable');
   await page.send('Page.navigate', { url: base });
-  await waitFor(page, `document.readyState === 'complete' && !!document.getElementById('connectInput')`);
+  await waitFor(page, `document.readyState === 'complete' && !window.__stale && document.documentElement.dataset.ready === '1' && !!document.getElementById('connectInput')`);
   // Full auto, so the test does not stop at approval sheets.
-  await evaluate(page, `localStorage.setItem('oasis.settings', JSON.stringify({ mode: 'auto' })); location.reload(); true`);
-  await waitFor(page, `document.readyState === 'complete' && !!document.getElementById('modelChip') && document.getElementById('modelChip').textContent === 'Connect a model'`);
+  await evaluate(page, `localStorage.setItem('oasis.settings', JSON.stringify({ mode: 'auto' })); window.__stale = true; location.reload(); true`);
+  await waitFor(page, `document.readyState === 'complete' && !window.__stale && document.documentElement.dataset.ready === '1' && !!document.getElementById('modelChip') && document.getElementById('modelChip').textContent === 'Connect a model'`);
 
   // 1. Paste the server address straight into the message box.
   assert.equal(await evaluate(page, `getComputedStyle(document.getElementById('connectForm')).display !== 'none'`), true, 'connect card shows before a model is set up');
