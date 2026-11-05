@@ -148,7 +148,7 @@ export function summarize(runs, options, now = new Date()) {
     const tokens = rows.map((row) => row.totalTokens), costs = rows.map((row) => row.costUSD);
     return { agent: run.agent, name: run.name, label: run.summary && run.summary.label || run.name, file: run.file || null,
       requestedModel: modelFor(run.agent, options) || null, reportedModel: provider.model || run.summary && run.summary.model || null,
-      cliVersion: provider.cliVersion || null, sourceRevision: run.summary && run.summary.sourceRevision || null, runtime: run.summary && run.summary.runtime || null,
+      cliVersion: provider.cliVersion || (run.agent === 'oasis' ? oasisVersion() : null), sourceRevision: run.summary && run.summary.sourceRevision || null, runtime: run.summary && run.summary.runtime || null,
       passRate: mean(Object.values(perTask)), passedTrials: rows.filter((row) => row.status === 'passed').length, trials: rows.length,
       medianTrialTimeMs: median(rows.map((row) => row.wallTimeMs)),
       totalTokens: rows.length && tokens.every(Number.isFinite) ? tokens.reduce((sum, value) => sum + value, 0) : null,
