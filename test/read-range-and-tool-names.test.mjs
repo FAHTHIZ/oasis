@@ -51,3 +51,34 @@ test('search_files honours a path scope and trims long minified lines', async ()
   assert.ok(html.text.length <= 202 && html.text.includes('clamp('), html.text);
   await assert.rejects(() => searchWorkspaceFiles(root, 'clamp', 25, '../'), /outside the workspace/);
 });
+
+test('edit_file accepts old_str/new_str and small unified diffs; explains the shape otherwise', async () => {
+  const { editFileArgs } = await import('../src/tools.mjs');
+  assert.deepEqual(editFileArgs({ path: 'a', old_str: 'x', new_str: 'y' }).old_string, 'x');
+  const fromDiff = editFileArgs({ path: 'a', line_start: 1, changes: '-const a = 1;\n+const a = 2;\n keep();' });
+  assert.equal(fromDiff.old_string, 'const a = 1;\nkeep();');
+  assert.equal(fromDiff.new_string, 'const a = 2;\nkeep();');
+  assert.throws(() => editFileArgs({ path: 'a', line_start: 1, line_end: 3 }), /needs old_string .*got path, line_start, line_end/);
+  const root = await mkdtemp(path.join(os.tmpdir(), 'oasis-edit-'));
+  await writeFile(path.join(root, 'a.mjs'), 'const a = 1;\nkeep();\n');
+  await executeTool('edit_file', { path: 'a.mjs', changes: '-const a = 1;\n+const a = 2;' }, { root, autoApprove: true });
+  const { readFile } = await import('node:fs/promises');
+  assert.equal(await readFile(path.join(root, 'a.mjs'), 'utf8'), 'const a = 2;\nkeep();\n');
+});
+
+test('search/grep aliases and harmony-suffixed names resolve', () => {
+  const names = ['grep', 'search_files', 'read_file'];
+  const s = resolveToolAlias('search', { path: 'src', pattern: 'notes' }, names);
+  assert.equal(s.name, 'grep');
+  assert.equal(s.args.pattern, 'notes');
+  assert.equal(resolveToolAlias('grepl_commentary', { query: 'x' }, names).name, 'grep');
+  assert.equal(resolveToolAlias('read_file_analysis', {}, names).name, 'read_file');
+});
+
+test('grep accepts regex/query as the pattern', async () => {
+  const { grepWorkspace } = await import('../src/power-tools.mjs');
+  const root = await mkdtemp(path.join(os.tmpdir(), 'oasis-grep-'));
+  await writeFile(path.join(root, 'a.txt'), 'hello list\n');
+  const result = await grepWorkspace(root, { regex: 'list' });
+  assert.ok(JSON.stringify(result).includes('a.txt'), JSON.stringify(result));
+});
