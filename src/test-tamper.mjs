@@ -9,7 +9,9 @@ const TEST_PATH = [
   /\.(test|spec)\.[cm]?[jt]sx?$/i,
   /(_test|_spec)\.(go|py|rb|exs?|rs)$/i,
   /(^|\/)test_[^/]+\.py$/i,
-  /(Test|Tests|Spec)\.(java|kt|scala|cs|swift|php)$/
+  /(Test|Tests|Spec)\.(java|kt|scala|cs|swift|php)$/,
+  // A single test script: test.mjs, tests.py, spec.js, test.sh.
+  /(^|\/)(tests?|specs?)\.([cm]?[jt]sx?|py|rb|sh)$/i
 ];
 
 export function isTestPath(file) {

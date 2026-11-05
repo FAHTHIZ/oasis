@@ -16,7 +16,7 @@ test('retry notices say what happened and only mention a partial reply when one 
   const { streamRestartNotice } = await import('../src/cli.mjs');
   assert.equal(streamRestartNotice({ attempt: 1, limit: 3, kind: 'malformed-call' }), "[retry] The model's tool call could not be parsed; asking it to send the call again (1/3).");
   assert.equal(streamRestartNotice({ attempt: 1, limit: 2, reason: 'The model stream was interrupted: the connection closed' }, false), '[network] The model connection dropped mid-response; retrying (1/2).');
-  assert.match(streamRestartNotice({ attempt: 2, limit: 3, reason: 'HTTP 503 high demand' }, true), /overloaded.*\(2\/3\)\. The partial reply above is discarded\./);
+  assert.match(streamRestartNotice({ attempt: 2, limit: 3, reason: 'interrupted: Internal error encountered.', status: 500 }, true), /server error \(500\); retrying \(2\/3\)\. The partial reply above is discarded\./);
   assert.match(streamRestartNotice({ attempt: 1, reason: 'The model stream stalled: no data arrived for 120 seconds' }), /stalled/);
 });
 

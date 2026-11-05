@@ -117,6 +117,8 @@ test('a request for new tests is not finished until a test file changes', async 
   const base = { diffReviewedAll: true, diffReviewedPaths: new Set(), lastVerificationExitCode: 0, testsRequested: true };
   assert.match(verificationIssues({ ...base, changedPaths: new Set(['src/query.mjs']) }).join('; '), /asked for new tests/);
   assert.deepEqual(verificationIssues({ ...base, changedPaths: new Set(['src/query.mjs', 'test/query.test.mjs']) }), []);
+  // Seen live: a test added to a root-level test.mjs was not counted.
+  assert.deepEqual(verificationIssues({ ...base, changedPaths: new Set(['add.mjs', 'test.mjs']) }), []);
   assert.deepEqual(verificationIssues({ ...base, testsRequested: false, changedPaths: new Set(['src/query.mjs']) }), []);
   assert.equal(asksForNewTests('Keep every existing test passing and add tests for the new behavior.'), true);
   assert.equal(asksForNewTests('Write unit tests for parse()'), true);
