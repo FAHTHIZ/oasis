@@ -1219,15 +1219,22 @@ export function createOasisWebServer(options = {}) {
   }
 
   async function startTerminalJob(input) {
+    const shell = input.shell === true;
+    if (input.shell !== undefined && typeof input.shell !== 'boolean') {
+      throw Object.assign(new Error('shell must be a boolean.'), { statusCode: 400 });
+    }
     const command = String(input.command || '').trim();
-    if (!command || command.length > 200 || command.includes('\0')) {
-      throw Object.assign(new Error('Enter one executable name or path (200 characters maximum).'), { statusCode: 400 });
+    const commandLimit = shell ? 8000 : 200;
+    if (!command || command.length > commandLimit || command.includes('\0')) {
+      throw Object.assign(new Error(shell ? 'Shell command must be 8,000 characters or fewer.' : 'Enter one executable name or path (200 characters maximum).'), { statusCode: 400 });
     }
     const args = input.args === undefined ? [] : input.args;
     if (!Array.isArray(args) || args.length > 80 || args.some((arg) => typeof arg !== 'string' || arg.length > 5000 || arg.includes('\0'))) {
       throw Object.assign(new Error('Arguments must be an array of up to 80 strings; each argument is limited to 5,000 characters.'), { statusCode: 400 });
     }
+    if (shell && args.length) throw Object.assign(new Error('Shell commands must be sent as one command string, without an argument array.'), { statusCode: 400 });
     const interactive = input.interactive === true;
+    if (shell && interactive) throw Object.assign(new Error('Shell syntax is not available for interactive terminal sessions.'), { statusCode: 400 });
     const timeoutSeconds = input.timeoutSeconds === undefined ? 120 : Number(input.timeoutSeconds);
     if (!Number.isInteger(timeoutSeconds) || timeoutSeconds < 5 || timeoutSeconds > 600) {
       throw Object.assign(new Error('timeoutSeconds must be an integer between 5 and 600.'), { statusCode: 400 });
@@ -1243,11 +1250,13 @@ export function createOasisWebServer(options = {}) {
     jobs.set(job.id, job);
     busyWorkspaces.add(workspaceKey);
     releaseJobReservation();
-    emit(job, 'terminal_started', { command, args, interactive });
+    emit(job, 'terminal_started', { command, args, interactive, shell });
     let holdWorkspaceForPty = false;
     void (async () => {
       try {
-        const result = await executeTool('run_command', { command, args, timeoutSeconds, ...(interactive ? { interactive: true } : {}) }, {
+        const toolName = shell ? 'run_shell' : 'run_command';
+        const toolArgs = shell ? { command, timeoutSeconds } : { command, args, timeoutSeconds, ...(interactive ? { interactive: true } : {}) };
+        const result = await executeTool(toolName, toolArgs, {
           root: activeRoot,
           env,
           autoApprove: false,
@@ -1256,7 +1265,7 @@ export function createOasisWebServer(options = {}) {
           signal: job.controller.signal,
           ...(interactive ? { session: ptySession } : {})
         });
-        job.result = { ...result, jobType: interactive ? 'terminal-pty' : 'terminal' };
+        job.result = { ...result, jobType: interactive ? 'terminal-pty' : 'terminal', ...(shell ? { shell: true } : {}) };
         if (interactive && result && result.id && result.state) {
           ptyWorkspaceLocks.set(result.id, workspaceKey);
           holdWorkspaceForPty = true;
