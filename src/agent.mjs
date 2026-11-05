@@ -1498,10 +1498,54 @@ export function applyAnthropicCacheBreakpoints(request, tools = []) {
   return request;
 }
 
+function mergeExtraContent(current, next) {
+  if (!current) return next;
+  const merged = { ...current };
+  for (const [key, value] of Object.entries(next)) {
+    merged[key] = value && typeof value === 'object' && !Array.isArray(value) && current[key] && typeof current[key] === 'object' ? { ...current[key], ...value } : value;
+  }
+  return merged;
+}
+
+export function isGoogleGenerativeBaseURL(baseURL) {
+  try { return new URL(String(baseURL || '')).hostname.toLowerCase() === 'generativelanguage.googleapis.com'; } catch { return false; }
+}
+
+// Tool calls keep Google's extra_content (the Gemini 3 thought signature) so
+// the next turn can echo it back, which Gemini requires. Requests to other
+// models drop the field, so a session that falls back elsewhere stays valid.
+export function withProviderExtraContent(messages, baseURL, model = '') {
+  // Gemini behind a gateway (LiteLLM, a local proxy) needs the signature too.
+  if (isGoogleGenerativeBaseURL(baseURL) || /gemini/i.test(String(model || ''))) return messages;
+  if (!messages.some((message) => Array.isArray(message && message.tool_calls) && message.tool_calls.some((call) => call && call.extra_content))) return messages;
+  return messages.map((message) => {
+    if (!Array.isArray(message && message.tool_calls) || !message.tool_calls.some((call) => call && call.extra_content)) return message;
+    return { ...message, tool_calls: message.tool_calls.map((call) => {
+      if (!call || !call.extra_content) return call;
+      const { extra_content: _dropped, ...rest } = call;
+      return rest;
+    }) };
+  });
+}
+
+// Chat-completions tools carry only these fields. OpenAI ignores extras, but
+// stricter servers (Google's Gemini endpoint) reject the whole request with
+// 'Unknown name ... at tools[0].function', so a stray key on one tool, ours or
+// an MCP server's, would break every turn.
+const CHAT_TOOL_FUNCTION_KEYS = ['name', 'description', 'parameters', 'strict'];
+export function chatCompletionTool(tool) {
+  if (!tool || tool.type !== 'function' || !tool.function) return tool;
+  const fn = {};
+  for (const key of CHAT_TOOL_FUNCTION_KEYS) if (tool.function[key] !== undefined) fn[key] = tool.function[key];
+  return { type: 'function', function: fn };
+}
+
 function formatApiError(status, body, protocol, baseURL = '') {
   let detail = '';
   try {
-    const parsed = JSON.parse(body);
+    let parsed = JSON.parse(body);
+    // Google's OpenAI-compatible endpoint wraps the error in an array: [{ error: {...} }].
+    if (Array.isArray(parsed)) parsed = parsed.find((item) => item && typeof item === 'object') || {};
     detail = parsed.error && (parsed.error.message || parsed.error.code || parsed.error.type)
       ? String(parsed.error.message || parsed.error.code || parsed.error.type) : (typeof parsed.message === 'string' ? parsed.message : '');
   } catch { detail = String(body || '').slice(0, 500); }
@@ -1707,6 +1751,8 @@ async function readProviderStream(response, protocol, onDelta, onProgress) {
         if (part.type) tool.type = part.type;
         if (part.function && typeof part.function.name === 'string') tool.function.name += part.function.name;
         if (part.function && typeof part.function.arguments === 'string') tool.function.arguments += part.function.arguments;
+        // Gemini 3 sends a thought signature here and rejects the next turn without it.
+        if (part.extra_content && typeof part.extra_content === 'object') tool.extra_content = mergeExtraContent(tool.extra_content, part.extra_content);
         calls.set(index, tool);
       }
     }
@@ -2103,6 +2149,7 @@ async function requestCompletion(session, options = {}) {
   if (!chain.length || !session.config) return requestCompletionWithStreamRestarts(session, options);
   const env = options.env || session.providerEnv || process.env;
   const failed = new Set();
+  const attempts = [];
   for (;;) {
     try {
       return await requestCompletionWithStreamRestarts(session, options);
@@ -2110,12 +2157,13 @@ async function requestCompletion(session, options = {}) {
       if (options.signal && options.signal.aborted) throw error;
       const current = session.config;
       const kind = fallbackReason(error, { onFallbackProvider: Boolean(current.fallbackProvider) });
-      if (!kind) throw error;
+      if (!kind) throw summarizeFallbackFailure(error, attempts);
       failed.add((current.fallbackProvider ? current.fallbackProvider + ':' : '') + current.model);
+      attempts.push({ model: (current.fallbackProvider ? current.fallbackProvider + ':' : '') + current.model, reason: shortProviderReason(error) });
       const active = session.fallbackActive;
       const fromConfig = active && active.fromConfig ? active.fromConfig : current;
       const next = remainingFallbacks(chain, { current, baseConfig: fromConfig, failed, env })[0];
-      if (!next) throw error;
+      if (!next) throw summarizeFallbackFailure(error, attempts);
       const reason = String(error && error.message || error);
       session.config = next.config;
       session.fallbackActive = { from: active ? active.from : current.model, to: next.config.model, fromConfig, kind, provider: next.entry.provider || '', reason: reason.slice(0, 200), at: Date.now() };
@@ -2123,6 +2171,35 @@ async function requestCompletion(session, options = {}) {
       if (typeof options.onFallback === 'function') options.onFallback(session.fallbackActive);
     }
   }
+}
+
+// One line per failed model, e.g. "daily free-tier quota used up (retry in 21h11m)".
+export function shortProviderReason(error) {
+  let text = String(error && error.message || error || '').replace(/\s+/g, ' ').trim();
+  text = text.replace(/^Model provider returned HTTP \d+:\s*/i, '').replace(/\.?\s*Check the configured [^.]*\.?$/i, '');
+  const retry = /retry in (?:(\d+)h)?(?:(\d+)m)?(?:([\d.]+)s)?/i.exec(text);
+  const parts = retry ? [retry[1] && retry[1] + 'h', retry[2] && retry[2] + 'm', !retry[1] && retry[3] && Math.ceil(Number(retry[3])) + 's'].filter(Boolean) : [];
+  const when = parts.length ? ' (retry in ' + parts.join('') + ')' : '';
+  if (/per ?day|PerDay/i.test(text) && /quota|limit/i.test(text)) return 'daily ' + (/free.?tier/i.test(text) ? 'free-tier ' : '') + 'quota used up' + when;
+  if (/per ?minute|PerMinute/i.test(text) && /quota|limit/i.test(text)) return 'per-minute rate limit' + when;
+  if (/no longer available|deprecated|decommissioned|retired/i.test(text)) return 'model retired by the provider';
+  const status = Number(error && (error.status || error.statusCode)) || 0;
+  return (status ? 'HTTP ' + status + ': ' : '') + text.split(/(?<=[.!?])\s/)[0].slice(0, 140);
+}
+
+// When the whole chain fails, say what happened to every model, not just the
+// last backup (which is often a retired model and hides the real cause).
+export function summarizeFallbackFailure(error, attempts) {
+  if (!attempts.length || !error || typeof error !== 'object') return error;
+  const lastModel = attempts[attempts.length - 1].model;
+  const lines = attempts.map((attempt) => '  ' + attempt.model + ': ' + attempt.reason);
+  const allQuota = attempts.every((attempt) => /quota|rate limit/.test(attempt.reason));
+  const hint = allQuota ? '\nEvery model is out of quota. Wait for the limit to reset, add billing, or connect another key with `oasis connect`.' : '\nRun `oasis connect` to pick models that work, or set fallbackModel in config.';
+  try {
+    error.message = 'All ' + attempts.length + ' models in the fallback chain failed:\n' + lines.join('\n') + hint + '\nLast error (' + lastModel + '): ' + error.message;
+  } catch {}
+  error.fallbackAttempts = attempts;
+  return error;
 }
 
 async function requestCompletionTraced(session, options = {}) {
@@ -2301,9 +2378,9 @@ async function requestCompletionRaw(session, options = {}) {
       model: config.model,
       ...(explicitChatLimit ? { max_tokens: explicitChatLimit } : {}),
       ...samplingTemperature(config, providerEnv),
-      messages: hasImages(session.messages) ? toChatMessagesWithImages(session.messages) : session.messages,
+      messages: withProviderExtraContent(hasImages(session.messages) ? toChatMessagesWithImages(session.messages) : session.messages, config.baseURL, config.model),
       ...(session.reasoningEffort && !options.forceTool ? { reasoning_effort: session.reasoningEffort } : {}),
-      ...(availableTools.length ? { tools: availableTools, tool_choice: options.forceTool ? { type: 'function', function: { name: options.forceTool } } : 'auto', parallel_tool_calls: parallelToolCalls(config, providerEnv) } : {}),
+      ...(availableTools.length ? { tools: availableTools.map(chatCompletionTool), tool_choice: options.forceTool ? { type: 'function', function: { name: options.forceTool } } : 'auto', parallel_tool_calls: parallelToolCalls(config, providerEnv) } : {}),
       ...(typeof options.onDelta === 'function' ? { stream: true } : {}),
       // Without include_usage, OpenAI-compatible streams report no token counts,
       // so cost, /cost and --max-budget-usd silently read zero.
@@ -5233,6 +5310,7 @@ async function runAgentTurnRaw(session, prompt, options = {}) {
           type: 'function',
           function: { name: call.function && call.function.name, arguments: call.function && call.function.arguments }
         };
+        if (call.extra_content && typeof call.extra_content === 'object') copy.extra_content = call.extra_content;
         if (call.__oasisArgumentError) toolArgumentErrors.set(copy, call.__oasisArgumentError);
         return copy;
       });
