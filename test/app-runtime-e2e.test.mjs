@@ -163,5 +163,10 @@ test('runtime engine end to end: app at /, paste to connect, approve a real edit
   // 5. The session continues on reload.
   await evaluate(page, `location.reload(); true`);
   await waitFor(page, `document.readyState === 'complete' && document.documentElement.classList.contains('runtime') && /Done\\. I built the counter/.test(document.getElementById('transcript').textContent)`, { label: 'chat restored after reload' });
+
+  // 6. The desktop menu's "Connect a phone…" opens the app's phone sheet.
+  await evaluate(page, `window.oasisConnectPhone(); true`);
+  await waitFor(page, `!document.getElementById('phoneSheet').hidden && /home network|Tailscale|reachable/.test(document.getElementById('phoneHint').textContent) && !document.getElementById('phoneError').textContent`, { label: 'phone sheet shows the network choices' });
+  await shot('6-phone');
   assert.deepEqual(errors, [], 'no uncaught errors in the app');
 });

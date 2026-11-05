@@ -1132,6 +1132,7 @@ function openSettings() {
   $('runtimeInfo').hidden = !RT;
   if (RT && RT.status) $('runtimeInfo').textContent = 'Running on this computer in ' + (RT.status.workspacePath || RT.status.workspaceName) + '. Model keys are saved by OASIS on this computer, and backup models take over automatically.';
   $('wipeAll').hidden = Boolean(RT);
+  $('phoneSettings').hidden = !(RT && RT.client && RT.phone);
   if (navigator.storage && navigator.storage.estimate) navigator.storage.estimate().then(({ usage, quota }) => { $('storageInfo').textContent = 'Using ' + (usage / 1048576).toFixed(1) + ' MB of ' + (quota / 1073741824).toFixed(1) + ' GB available on this device.'; });
   openSheet('settingsSheet');
 }
@@ -1616,6 +1617,8 @@ async function startRuntime(found) {
     return;
   }
   RT.rootPath = RT.status.workspacePath;
+  // Sharing with a phone is managed only from the computer itself.
+  RT.phone = /^(?:127\.\d+\.\d+\.\d+|localhost|\[::1\])$/.test(location.hostname);
   // On a computer, file edits are checkpointed and undoable; approvals are
   // about commands and other actions with effects outside the files.
   const RUNTIME_MODES = { ask: 'Approve commands and risky actions. Edits can be undone.', edits: 'Also run routine file operations without asking.', auto: 'Decides on its own; asks only for risky actions.' };
@@ -1658,3 +1661,60 @@ async function boot() {
   if (!modelReady() && !workspace) $('connectInput').focus({ preventScroll: true });
 }
 boot().catch((error) => toast(error.message, 'error'));
+
+// Phone link (runtime on this computer only): share this session with a phone
+// over Tailscale (encrypted) or home Wi-Fi, shown as a QR code.
+let phoneState = null;
+function renderPhone(st) {
+  phoneState = st;
+  $('phoneError').textContent = '';
+  if (st.mode === 'server') {
+    $('phoneChoices').hidden = true; $('phoneLink').hidden = true;
+    $('phoneHint').textContent = st.hint || 'This computer is already reachable on the network. Use the links printed in the terminal.';
+    return;
+  }
+  $('phoneChoices').hidden = false;
+  $('phoneTailscale').disabled = !st.tailscaleAvailable;
+  $('phoneLan').disabled = !st.lanAvailable;
+  const hints = [];
+  if (!st.tailscaleAvailable) hints.push('For an encrypted link that also works away from home, install Tailscale on this computer and the phone and sign in on both.');
+  if (!st.lanAvailable) hints.push('No home network address was found on this computer.');
+  else hints.push('Wi-Fi sharing is not encrypted: use it only on your own home network.');
+  $('phoneHint').textContent = hints.join(' ');
+  const on = Boolean(st.active && st.urls && st.urls.length);
+  $('phoneLink').hidden = !on;
+  if (on) {
+    // The QR is an SVG built by the runtime from the link alone.
+    const svg = new DOMParser().parseFromString(st.qr || '', 'image/svg+xml').documentElement;
+    $('phoneQr').replaceChildren(...(svg && svg.nodeName === 'svg' ? [document.importNode(svg, true)] : []));
+    $('phoneNetwork').textContent = st.network === 'tailscale' ? 'Shared over Tailscale (encrypted).' : 'Shared over Wi-Fi (not encrypted).';
+    $('phoneUrl').textContent = st.urls[0];
+  }
+}
+async function openPhone() {
+  if (!(RT && RT.client)) return;
+  if (!$('settingsSheet').hidden) closeSheet('settingsSheet');
+  $('phoneHint').textContent = 'Checking this computer’s networks…';
+  $('phoneLink').hidden = true; $('phoneError').textContent = '';
+  openSheet('phoneSheet');
+  try { renderPhone(await RT.client.api('/api/phone/link')); }
+  catch (error) { $('phoneHint').textContent = ''; $('phoneError').textContent = error.message; }
+}
+async function phoneAction(body) {
+  $('phoneError').textContent = '';
+  try { renderPhone(await RT.client.api('/api/phone/link', { method: 'POST', body })); }
+  catch (error) { if (!/not confirmed/i.test(error.message)) $('phoneError').textContent = error.message; }
+}
+$('phoneButton').addEventListener('click', openPhone);
+$('phoneTailscale').addEventListener('click', () => phoneAction({ action: 'start', network: 'tailscale' }));
+$('phoneLan').addEventListener('click', () => {
+  // The desktop app confirms with its own dialog; in a browser, confirm here.
+  if (phoneState && phoneState.nativeConfirm) return phoneAction({ action: 'start', network: 'lan' });
+  if (!confirm('Wi-Fi sharing is not encrypted. Anyone on the same network could watch or reuse the link. Share only on your own home network?')) return;
+  return phoneAction({ action: 'start', network: 'lan', allowUnencrypted: true });
+});
+$('phoneStop').addEventListener('click', () => phoneAction({ action: 'stop' }));
+$('phoneCopy').addEventListener('click', async () => {
+  try { await navigator.clipboard.writeText($('phoneUrl').textContent); $('phoneCopy').textContent = 'Copied'; setTimeout(() => { $('phoneCopy').textContent = 'Copy link'; }, 1500); } catch {}
+});
+window.oasisConnectPhone = openPhone;
