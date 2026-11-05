@@ -103,6 +103,7 @@ test('runtime engine end to end: app at /, paste to connect, approve a real edit
   const root = path.join(parent, 'counter-app');
   await mkdir(root);
   const configDir = await mkdtemp(path.join(os.tmpdir(), 'oasis-runtime-config-'));
+  await writeFile(path.join(configDir, 'settings.json'), JSON.stringify({ shell: { enabled: true } }));
   await writeFile(path.join(root, 'README.md'), '# Demo\n');
   await writeFile(path.join(root, '.env'), 'SECRET=1\n');
   let git = true;
