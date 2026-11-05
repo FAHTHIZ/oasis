@@ -238,7 +238,7 @@ function printHelp() {
     '  --append-system-prompt-file F Add instructions from a file',
     '  --output-style NAME           Use an output style for this session (default, explanatory, learning, or a custom/plugin style)',
     '  --system-prompt TEXT | --system-prompt-file F  Replace the default system prompt',
-    '  --fallback-model ID           Switch to this model when the main one is overloaded or failing',
+    '  --fallback-model ID[,ID...]   Models to switch to, in order, when the main one runs out of credit, is rate-limited, overloaded or gone (provider:model for another provider)',
     '  --chrome, --no-chrome         Give the agent a Chrome browser tool (navigate, click, type, screenshot, console)',
     '  --max-budget-usd N            Stop once the estimated model cost reaches N dollars',
     '  --tools "Read,Edit,Bash"      Only offer these tools (Claude or Oasis names; "" for none)',
@@ -703,6 +703,12 @@ async function doctor(args = [], root = process.cwd()) {
     detail('  Model: ' + (modelConfigured ? summary.model : 'not set yet') + '\n');
     detail('  Authentication: ' + summary.authentication + '\n');
     detail('  Config: ' + summary.configPath + '\n');
+    try {
+      const { parseFallbackChain, describeFallbackChain } = await import('./fallback-chain.mjs');
+      const loaded = await loadSettings(root).catch(() => ({}));
+      const chain = parseFallbackChain(SESSION_OPTIONS.fallbackModel || (loaded && loaded.fallbackModel) || '');
+      detail('  Fallback models: ' + (chain.length ? describeFallbackChain(chain, config).map((item) => item.id + (item.usable ? '' : ' (skipped: set ' + item.missing + ')')).join(', ') : 'none (--fallback-model or fallbackModel in settings)') + '\n');
+    } catch {}
     const proxyNote = currentProxy();
     detail('  Network proxy: ' + (proxyNote ? proxyNote + ((process.env.NO_PROXY || process.env.no_proxy) ? ' (NO_PROXY: ' + (process.env.NO_PROXY || process.env.no_proxy) + ')' : '') : 'none (set HTTPS_PROXY to use one)') + (process.env.NODE_EXTRA_CA_CERTS ? '; extra CA certificates: ' + process.env.NODE_EXTRA_CA_CERTS : '') + '\n');
     if (modelConfigured && isLoopbackUrl(config.baseURL)) await doctorLocalServer(config, detail);
