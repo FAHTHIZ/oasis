@@ -227,7 +227,7 @@ export class Agent {
             signal,
             fetchImpl: ctx.providerFetch,
             onText: (delta) => { streamed += delta; this.onEvent({ type: 'delta', delta, step }); },
-            onRetry: (attempt, error) => this.onEvent({ type: 'retry', attempt, message: error.message, waitMs: error && Number.isFinite(error.retryAfterMs) ? error.retryAfterMs : 0 })
+            onRetry: (attempt, error) => (streamed = '', this.onEvent({ type: 'retry', attempt, message: error.message, waitMs: error && Number.isFinite(error.retryAfterMs) ? error.retryAfterMs : 0 }))
           };
         }, step);
         if (reply.usage) {

@@ -349,6 +349,7 @@ async function runtimeConnect(text, { surface = 'welcome' } = {}) {
     const token = tokenFromPaste(value);
     if (!token) { say('error', 'Paste the link OASIS printed in your terminal (it ends in #token=…).'); return false; }
     saveRuntimeToken(token);
+    delete document.documentElement.dataset.ready;
     location.reload();
     return true;
   }
@@ -570,6 +571,8 @@ function handleEvent(event) {
       queueRender();
       break;
     case 'retry':
+      // A retried request starts its reply over; drop any half-streamed text.
+      if (currentTurn) { currentTurn.text = ''; currentTurn.body.innerHTML = ''; }
       toast(event.waitMs ? 'Rate limited for a moment; retrying in ' + Math.ceil(event.waitMs / 1000) + 's…' : 'Provider busy, retrying (' + event.attempt + ')…');
       break;
     case 'model_switch': {
@@ -1357,6 +1360,7 @@ $('wipeAll').addEventListener('click', async () => {
   localStorage.clear();
   await new Promise((resolve) => { const req = indexedDB.deleteDatabase('oasis-universal'); req.onsuccess = req.onerror = req.onblocked = resolve; });
   if ('caches' in window) for (const key of await caches.keys()) await caches.delete(key);
+  delete document.documentElement.dataset.ready;
   location.reload();
 });
 
