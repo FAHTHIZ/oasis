@@ -864,6 +864,7 @@ export function createOasisWebServer(options = {}) {
         session.elicit = (request) => elicitationFor(job, request);
         const result = await runAgentTurn(session, prompt, {
           autoApprove: false,
+          onVerificationGate: (gate) => emit(job, 'verification_gate', { steps: (Array.isArray(gate && gate.steps) ? gate.steps : []).slice(0, 6).map((step) => String(step).slice(0, 120)) }),
           onSteer: (info) => emit(job, 'steered', { delivered: Math.max(0, Math.min(20, Number(info && info.delivered) || 0)) }),
           ...(planOnly ? { planOnly: true } : {}),
           env,
