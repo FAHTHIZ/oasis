@@ -18,7 +18,9 @@ import { WEB_SEARCH_TOOL_DEFINITION, webSearch } from './web-search.mjs';
 import { fetchPublicUrl } from './public-fetch.mjs';
 import { gitVisibleFiles } from './git-visible-files.mjs';
 import { createHash } from 'node:crypto';
-import { readdir, readFile, writeFile, mkdir, unlink, lstat, realpath, stat } from 'node:fs/promises';
+import { readdir, readFile, writeFile, mkdir, unlink, lstat, realpath, stat, open as openFile } from 'node:fs/promises';
+import { createReadStream } from 'node:fs';
+import { createInterface } from 'node:readline';
 import path from 'node:path';
 import os from 'node:os';
 import { fileURLToPath } from 'node:url';
@@ -323,9 +325,12 @@ export async function readWorkspaceFile(root, rawPath, options = {}) {
   const target = await resolveWorkspacePath(root, rawPath);
   const info = await stat(target.absolute);
   if (!info.isFile()) throw new Error('That path is not a file.');
-  const ranged = options.offset !== undefined || options.limit !== undefined;
-  if (!ranged && info.size > MAX_TEXT_FILE) throw new Error('File is larger than the 256 KiB text limit. Pass offset and limit to read part of it, or use a narrower search.');
-  if (ranged && info.size > MAX_RANGED_FILE) throw new Error('File is larger than the 4 MiB limit even for ranged reads.');
+  let ranged = options.offset !== undefined || options.limit !== undefined;
+  // A big file without a range: show its start, as Claude Code's Read does,
+  // instead of an error that costs the model a round trip.
+  const implicit = !ranged && info.size > MAX_TEXT_FILE;
+  if (implicit) ranged = true;
+  if (info.size > MAX_RANGED_FILE) return streamFileSlice(target, info, options, implicit);
   const fromClient = options.context ? await clientReadText(options.context, target.absolute) : null;
   const content = fromClient !== null ? fromClient : await readFile(target.absolute, 'utf8');
   if (content.includes('\0')) throw new Error('This looks like a binary file and is not supported by read_file.');
@@ -334,11 +339,50 @@ export async function readWorkspaceFile(root, rawPath, options = {}) {
   const lines = content.split('\n');
   const startLine = Math.max(1, Number.parseInt(options.offset, 10) || 1);
   const count = Math.max(1, Math.min(2000, Number.parseInt(options.limit, 10) || 2000));
-  const slice = lines.slice(startLine - 1, startLine - 1 + count);
+  let slice = lines.slice(startLine - 1, startLine - 1 + count);
+  let clipped = false;
+  if (implicit) slice = slice.map((line) => { if (line.length <= MAX_LINE_CHARS) return line; clipped = true; return line.slice(0, MAX_LINE_CHARS) + ' …[line truncated]'; });
   let text = slice.join('\n');
   let truncated = false;
   if (text.length > MAX_TEXT_FILE) { text = text.slice(0, MAX_TEXT_FILE); truncated = true; }
-  return { path: relativePath, content: text, startLine, endLine: startLine + slice.length - 1, totalLines: lines.length, truncated: truncated || startLine - 1 + count < lines.length };
+  const endLine = startLine + slice.length - 1;
+  return { path: relativePath, content: text, startLine, endLine, totalLines: lines.length, truncated: truncated || clipped || startLine - 1 + count < lines.length, ...(implicit ? { note: bigFileNote(info.size, startLine, endLine, lines.length, clipped) } : {}) };
+}
+
+const MAX_LINE_CHARS = 2000;
+function bigFileNote(size, startLine, endLine, totalLines, clipped) {
+  return 'File is ' + (size / 1048576).toFixed(1) + ' MB; showing lines ' + startLine + '-' + endLine + (totalLines ? ' of ' + totalLines : '') + (clipped ? ', long lines cut at ' + MAX_LINE_CHARS + ' characters' : '') + '. Pass offset and limit to read other parts, or grep for what you need.';
+}
+
+// Files over 4 MiB: read only the requested lines from a stream.
+async function streamFileSlice(target, info, options, implicit) {
+  const handle = await openFile(target.absolute, 'r');
+  try {
+    const probe = Buffer.alloc(8192);
+    const { bytesRead } = await handle.read(probe, 0, probe.length, 0);
+    if (probe.subarray(0, bytesRead).includes(0)) throw new Error('This looks like a binary file and is not supported by read_file.');
+  } finally { await handle.close(); }
+  const startLine = Math.max(1, Number.parseInt(options.offset, 10) || 1);
+  const count = Math.max(1, Math.min(2000, Number.parseInt(options.limit, 10) || 2000));
+  const stream = createReadStream(target.absolute, { encoding: 'utf8' });
+  const reader = createInterface({ input: stream, crlfDelay: Infinity });
+  const slice = [];
+  let lineNumber = 0;
+  let clipped = false;
+  let more = false;
+  let bytes = 0;
+  for await (const line of reader) {
+    lineNumber++;
+    if (lineNumber < startLine) continue;
+    if (slice.length >= count || bytes > MAX_TEXT_FILE) { more = true; break; }
+    const shown = line.length > MAX_LINE_CHARS ? (clipped = true, line.slice(0, MAX_LINE_CHARS) + ' …[line truncated]') : line;
+    slice.push(shown);
+    bytes += shown.length + 1;
+  }
+  reader.close(); stream.destroy();
+  const relativePath = target.relative.split(path.sep).join('/');
+  const endLine = startLine + slice.length - 1;
+  return { path: relativePath, content: slice.join('\n'), startLine, endLine, ...(more ? {} : { totalLines: lineNumber }), truncated: more || clipped, note: bigFileNote(info.size, startLine, endLine, more ? 0 : lineNumber, clipped) };
 }
 function globToRegExp(pattern) {
   let source = '';
@@ -595,7 +639,7 @@ export async function runWorkspaceCommand(root, command, args = [], options = {}
         stderr: stderrBuffer.text(logFiles.stderrLogPath, logFiles.stderrLogTruncated),
         stdoutTruncated: stdoutBuffer.truncated, stderrTruncated: stderrBuffer.truncated,
         ...logFiles,
-        error: error.message, timedOut, cancelled
+        error: spawnErrorText(error, command), timedOut, cancelled
       });
     });
     child.on('close', (code, signal) => {
@@ -1735,4 +1779,13 @@ TOOL_DEFINITIONS.push(...GIT_TOOL_DEFINITIONS);
 
 export function toolCount() {
   return TOOL_DEFINITIONS.length;
+}
+
+// "spawn foo ENOENT" means the program is missing; say so, and how to check.
+export function spawnErrorText(error, command) {
+  const code = error && error.code;
+  const name = String(command || (error && error.path) || 'the command');
+  if (code === 'ENOENT') return 'Command not found: ' + name + '. It is not installed or not on PATH (check with `command -v ' + name.replace(/[^\w@./+-]/g, '') + '`), or the working directory does not exist.';
+  if (code === 'EACCES') return 'Permission denied running ' + name + ': the file is not executable (chmod +x) or not a program.';
+  return String((error && error.message) || error);
 }
