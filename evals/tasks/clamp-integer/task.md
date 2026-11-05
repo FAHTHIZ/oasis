@@ -1,2 +1,2 @@
-Create src/lib.mjs exporting clampInteger(value, fallback, min, max) to solve this task: Return fallback for non-integer input, otherwise clamp the parsed integer inclusively between min and max. Explicit zero must not be mistaken for invalid input.
+Create src/lib.mjs exporting clampInteger(value, fallback, min, max) to solve this task: The value may be a string such as '8': parse it as a base-10 integer. Return fallback when it does not parse to an integer, otherwise clamp the parsed integer inclusively between min and max. Explicit zero must not be mistaken for invalid input.
 The evaluation verifier runs the existing repository checks and then tests the new helper. Preserve the existing repository's safety guards.
