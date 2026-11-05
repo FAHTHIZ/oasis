@@ -42,18 +42,19 @@ test('CI keeps latest pending concurrency per ref and lets active quality runs f
 test('public product lifecycle is stable 1.0, not a candidate or Beta', async () => {
   const readme = await readFile(new URL('../README.md', import.meta.url), 'utf8');
   const status = await readFile(new URL('../docs/PROJECT_PLAN.md', import.meta.url), 'utf8');
-  const notes = await readFile(new URL('../docs/releases/v1.0.0.md', import.meta.url), 'utf8');
   const pkg = JSON.parse(await readFile(new URL('../package.json', import.meta.url), 'utf8'));
+  // The current stable version's curated notes (1.0.0, 1.1.0, ...).
+  const notes = await readFile(new URL('../docs/releases/v' + pkg.version + '.md', import.meta.url), 'utf8');
   assert.match(readme, /stage-stable/);
   assert.match(readme, /Current lifecycle.*OASIS 1\.0, stable/i);
   assert.doesNotMatch(readme, /OASIS is in beta|status-alpha|OASIS is in alpha|Release Candidate 1/i);
   assert.match(status, /\*\*Product lifecycle:\*\* Stable/);
   assert.match(status, /\*\*Release channel:\*\* stable/);
   assert.match(status, /not code-signed/);
-  assert.match(notes, /^# OASIS 1\.0\.0/);
+  assert.ok(notes.startsWith('# OASIS ' + pkg.version), 'release notes start with the version heading');
   assert.match(notes, /not code-signed/);
   assert.match(notes, /CI-only/);
-  assert.equal(pkg.version, '1.0.0');
+  assert.match(pkg.version, /^1\.\d+\.\d+$/, 'stable 1.x numeric SemVer');
   assert.equal(pkg.oasisRelease?.channel, 'stable');
   assert.equal(pkg.oasisRelease?.candidate, undefined);
 });

@@ -20,10 +20,10 @@ test('the canonical project license and package/README declarations agree on Apa
   assert.match(readme, /license-Apache--2\.0/);
   assert.match(readme, /Apache License 2\.0 — see \[LICENSE\]\(LICENSE\)/);
   assert.match(projectPlan, /\*\*Product lifecycle:\*\* Stable/);
-  assert.match(projectPlan, /\*\*Package version:\*\* `1\.0\.0`/);
-  assert.equal(pkg.version, '1.0.0');
+  assert.ok(projectPlan.includes('**Package version:** `' + pkg.version + '`'), 'PROJECT_PLAN states the package version');
+  assert.match(pkg.version, /^1\.\d+\.\d+$/);
   assert.equal(pkg.oasisRelease?.channel, 'stable');
-  assert.equal(pkg.oasisRelease?.stableTag, 'v1.0.0');
+  assert.equal(pkg.oasisRelease?.stableTag, 'v' + pkg.version);
 });
 
 test('published documentation describes the project as Apache-2.0, not MIT', async () => {
