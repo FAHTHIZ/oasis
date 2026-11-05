@@ -68,6 +68,18 @@ function distance(a, b) {
  * Returns { name, args, aliasedFrom } when it can be mapped, or
  * { error } with suggestions, or null when the name is already valid.
  */
+// gpt-oss and other harmony-format models sometimes leak their channel tokens
+// into the function name ("edit_file<|channel|>commentary") or keep the
+// "functions." namespace. Providers then reject the echoed tool result with a
+// 400 ("Names must match ^[a-zA-Z0-9_-]{1,64}$"), ending the whole run.
+export function cleanToolCallName(name) {
+  if (typeof name !== 'string') return name;
+  let out = name.replace(/<\|[\s\S]*$/, '').trim().replace(/^(?:functions?|tools?)\./, '');
+  if (!out) out = name.trim();
+  if (!/^[a-zA-Z0-9_-]{1,64}$/.test(out)) out = out.replace(/[^a-zA-Z0-9_-]+/g, '_').replace(/^_+|_+$/g, '').slice(0, 64) || 'unknown_tool';
+  return out;
+}
+
 export function resolveToolAlias(requested, args, available) {
   const names = available instanceof Set ? available : new Set(available || []);
   if (!requested || names.has(requested)) return null;

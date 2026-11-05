@@ -102,3 +102,13 @@ test('the scratch-space prompt gives the import depth back to the project root',
   const { scratchPrompt } = await import('../src/scratch.mjs');
   assert.match(scratchPrompt('.oasis/scratch/19713cb2'), /e\.g\. "\.\.\/\.\.\/\.\.\/src\/…"/);
 });
+
+test('leaked harmony tokens and namespaces are cleaned from tool names', async () => {
+  const { cleanToolCallName } = await import('../src/tool-aliases.mjs');
+  assert.equal(cleanToolCallName('edit_file<|channel|>commentary'), 'edit_file');
+  assert.equal(cleanToolCallName('functions.read_file'), 'read_file');
+  assert.equal(cleanToolCallName(' run_command '), 'run_command');
+  assert.equal(cleanToolCallName('repo_browser.open_file'), 'repo_browser_open_file');
+  assert.equal(cleanToolCallName('read_file'), 'read_file');
+  assert.match(cleanToolCallName('x'.repeat(90)), /^x{64}$/);
+});
