@@ -2,7 +2,7 @@
 
 OASIS `1.0.0` is the stable-channel version on `main`.
 
-> **Publication status (checked November 4, 2026):** [`v1.0.0`](https://github.com/FAHTHIZ/oasis/releases/tag/v1.0.0) is published as the latest GitHub Release. The stable installer, `oasis update` and the desktop download links resolve to it.
+> **Publication status (checked November 5, 2026):** [`v1.1.0`](https://github.com/FAHTHIZ/oasis/releases/tag/v1.1.0) is published as the latest GitHub Release. The stable installer, `oasis update` and the desktop download links resolve to it.
 
 Use a project folder you trust, review permission prompts, and keep important work in version control before running an agent on it.
 
@@ -87,7 +87,7 @@ $d=Join-Path $env:TEMP ('oasis-install-' + [guid]::NewGuid().ToString('N')); New
 
 If any checksum differs, do not run the downloaded file. The installer sets up the CLI, runs `oasis doctor` and opens guided provider setup. npm publishing is not enabled; the source-archive install path is used.
 
-After installation, `oasis update` checks the latest stable release, resolves it to an immutable commit and asks before replacing the CLI. `oasis uninstall` asks before removing the CLI and retains projects, settings, saved sessions, memory and API keys.
+After installation, `oasis update` checks the latest stable release, resolves it to an immutable commit and asks before replacing the CLI (`--check` only reports; `--help` lists the options). If the GitHub API is rate-limited (60 unauthenticated requests an hour per IP address), the update check reads the same release from github.com pages; setting `GH_TOKEN` or `GITHUB_TOKEN` raises the API limit. `oasis uninstall` asks before removing the CLI and retains projects, settings, saved sessions, memory and API keys.
 
 
 ### Run from source

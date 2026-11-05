@@ -11,6 +11,7 @@ import { mkdir, readFile, rename, rm, stat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
+import { fetchLatestRelease, githubApiHeaders } from './github-release.mjs';
 
 export const UPDATE_REPOSITORY = 'FAHTHIZ/oasis';
 export const RELEASES_PAGE = 'https://github.com/' + UPDATE_REPOSITORY + '/releases/latest';
@@ -109,7 +110,7 @@ export function parseChecksums(text) {
 
 function githubRequest(options = {}) {
   return {
-    headers: { accept: 'application/vnd.github+json', 'user-agent': 'oasis-app-update' },
+    headers: githubApiHeaders(options.env, 'oasis-app-update'),
     redirect: 'follow',
     signal: AbortSignal.timeout(options.timeoutMs || 15000)
   };
@@ -125,23 +126,22 @@ export async function checkForAppUpdate({
   arch = process.arch,
   fetchImpl = fetch,
   repository = UPDATE_REPOSITORY,
-  timeoutMs
+  timeoutMs,
+  env = process.env
 } = {}) {
   if (!parseVersion(currentVersion)) throw new Error('The installed OASIS version is not a valid version: ' + JSON.stringify(currentVersion) + '.');
   const api = 'https://api.github.com/repos/' + repository;
   let release;
   if (channel === 'beta') {
     // The beta channel also accepts pre-releases; take the newest by version.
-    const response = await fetchImpl(api + '/releases?per_page=20', githubRequest({ timeoutMs }));
+    const response = await fetchImpl(api + '/releases?per_page=20', githubRequest({ timeoutMs, env }));
     if (!response.ok) throw new Error('GitHub returned HTTP ' + response.status + ' while checking for updates.');
     const releases = (await response.json() || []).filter((item) => item && !item.draft && parseVersion(item.tag_name));
     releases.sort((x, y) => compareVersions(y.tag_name, x.tag_name));
     release = releases[0];
   } else {
-    const response = await fetchImpl(api + '/releases/latest', githubRequest({ timeoutMs }));
-    if (response.status === 404) release = null;
-    else if (!response.ok) throw new Error('GitHub returned HTTP ' + response.status + ' while checking for updates.');
-    else release = await response.json();
+    // Falls back to github.com pages when the API is rate limited.
+    release = await fetchLatestRelease(repository, { fetchImpl, env, timeoutMs, userAgent: 'oasis-app-update' });
     if (release && (release.draft || release.prerelease)) release = null;
   }
   const checkedAt = new Date().toISOString();

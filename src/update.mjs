@@ -3,6 +3,7 @@ import path from 'node:path';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { access } from 'node:fs/promises';
+import { fetchLatestRelease, resolveTagCommit } from './github-release.mjs';
 
 const execFileAsync = promisify(execFile);
 export const UPDATE_REPO = 'FAHTHIZ/oasis';
@@ -14,22 +15,13 @@ async function run(command, args, options = {}) {
 }
 
 export async function latestReleaseCommit(options = {}) {
-  const fetchImpl = options.fetch || fetch;
-  const api = 'https://api.github.com/repos/' + UPDATE_REPO;
-  const request = () => ({
-    headers: { accept: 'application/vnd.github+json', 'user-agent': 'oasis-update' },
-    signal: AbortSignal.timeout(options.timeoutMs || 15000)
-  });
-  const releaseResponse = await fetchImpl(api + '/releases/latest', request());
-  if (!releaseResponse.ok) throw new Error('GitHub returned HTTP ' + releaseResponse.status + ' while checking for the latest stable release.');
-  const release = await releaseResponse.json();
+  // API first (with GH_TOKEN/GITHUB_TOKEN when set); github.com pages when the
+  // API is rate limited. See src/github-release.mjs.
+  const lookup = { fetchImpl: options.fetch || fetch, env: options.env || process.env, timeoutMs: options.timeoutMs, userAgent: 'oasis-update' };
+  const release = await fetchLatestRelease(UPDATE_REPO, lookup);
   const tag = String(release && release.tag_name || '');
-  if (release.draft || release.prerelease || !/^v\d+\.\d+\.\d+$/.test(tag)) throw new Error('GitHub did not return a valid latest stable OASIS release.');
-  const commitResponse = await fetchImpl(api + '/commits/' + encodeURIComponent(tag), request());
-  if (!commitResponse.ok) throw new Error('GitHub returned HTTP ' + commitResponse.status + ' while resolving release ' + tag + '.');
-  const commit = await commitResponse.json();
-  const sha = String(commit && commit.sha || '').toLowerCase();
-  if (!/^[0-9a-f]{40}$/.test(sha)) throw new Error('GitHub did not return a valid commit id for release ' + tag + '.');
+  if (!release || release.draft || release.prerelease || !/^v\d+\.\d+\.\d+$/.test(tag)) throw new Error('GitHub did not return a valid latest stable OASIS release.');
+  const sha = await resolveTagCommit(UPDATE_REPO, tag, lookup);
   const releaseName = String(release.name || '').trim();
   const bodyLine = String(release.body || '').split('\n').map((line) => line.trim()).find(Boolean) || '';
   const message = (releaseName && releaseName !== tag ? releaseName : bodyLine).slice(0, 160);
