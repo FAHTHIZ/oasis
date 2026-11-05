@@ -300,7 +300,7 @@ function normalizeServer(raw, flavor) {
   return out;
 }
 
-function geminiCommandToMarkdown(toml) {
+export function geminiCommandToMarkdown(toml) {
   const data = parseToml(toml);
   if (typeof data.prompt !== 'string') return null;
   let body = data.prompt

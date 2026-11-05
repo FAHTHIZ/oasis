@@ -237,7 +237,7 @@ export function pluginVariables(plugin, env = process.env, root = '') {
 export function expandPluginVariables(text, vars) {
   return String(text)
     .replace(/\$\{(CLAUDE_PLUGIN_ROOT|CLAUDE_PLUGIN_DATA|CLAUDE_PROJECT_DIR)\}/g, (match, name) => vars[name] ?? match)
-    .replace(/\$\{user_config\.([A-Za-z_][A-Za-z0-9_]*)\}/g, (match, key) => vars['CLAUDE_PLUGIN_OPTION_' + key.toUpperCase()] ?? '');
+    .replace(/\$\{user_config\.([A-Za-z_][A-Za-z0-9_]*)\}/g, (match, key) => vars['CLAUDE_PLUGIN_OPTION_' + key.toUpperCase()] ?? (/^[A-Z][A-Z0-9_]*$/.test(key) ? process.env[key] : undefined) ?? '');
 }
 
 // ---------- userConfig ----------

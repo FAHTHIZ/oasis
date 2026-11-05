@@ -126,3 +126,54 @@ test('/add installs straight from the command and asks for a source when empty',
   const out = await runBuiltinCommand('add', 'https://mcp.example.test/sse', { root: dir, env });
   assert.match(out.output, /remote MCP server "example" \(sse\)[\s\S]*Added MCP server "example"/);
 });
+
+test('install commands and pages copied from READMEs are understood', async () => {
+  const { classifySource: c } = await import('../src/add-anything.mjs');
+  const pick = (s) => { const r = c(s); delete r.display; return r; };
+  assert.deepEqual(pick('npx -y @playwright/mcp@latest'), { kind: 'stdio-mcp', name: 'playwright', command: 'npx', args: ['-y', '@playwright/mcp@latest'], env: {} });
+  assert.deepEqual(pick('npx firecrawl-mcp').args, ['-y', 'firecrawl-mcp']);
+  assert.equal(pick('uvx mcp-server-fetch').name, 'fetch');
+  assert.equal(pick('docker run -i --rm ghcr.io/github/github-mcp-server').name, 'github');
+  assert.deepEqual(pick('claude mcp add -e API_KEY=abc --scope user airtable -- npx -y airtable-mcp-server'), { kind: 'stdio-mcp', name: 'airtable', command: 'npx', args: ['-y', 'airtable-mcp-server'], env: { API_KEY: 'abc' } });
+  assert.equal(pick('codex mcp add docs -- npx -y docs-mcp').name, 'docs');
+  assert.deepEqual(pick('gemini mcp add fs npx -y @modelcontextprotocol/server-filesystem .').args.slice(-1), ['.']);
+  const remote = pick('claude mcp add --transport sse -H "Authorization: Bearer x" linear https://mcp.linear.app/sse');
+  assert.equal(remote.kind, 'remote-mcp'); assert.equal(remote.name, 'linear'); assert.equal(remote.transport, 'sse'); assert.deepEqual(remote.headers, ['Authorization: Bearer x']);
+  assert.equal(pick('/plugin marketplace add anthropics/claude-code').owner, 'anthropics');
+  assert.equal(pick('/plugin install commit-commands@claude-code-plugins').spec, 'commit-commands@claude-code-plugins');
+  assert.equal(pick('claude plugin install commit-commands@claude-code-plugins --scope project').spec, 'commit-commands@claude-code-plugins');
+  assert.equal(pick('npx skills add anthropics/skills --skill pdf').pick, 'pdf');
+  assert.equal(pick('$ npx skills add https://github.com/vercel-labs/agent-skills').name, 'agent-skills');
+  assert.equal(pick('https://skills.sh/anthropics/skills/pdf').pick, 'pdf');
+  assert.equal(pick('https://raw.githubusercontent.com/anthropics/skills/main/skills/pdf/SKILL.md').subdir, 'skills/pdf');
+  assert.equal(pick('https://www.npmjs.com/package/@playwright/mcp').pkg, '@playwright/mcp');
+  assert.equal(pick('https://pypi.org/project/mcp-server-fetch/').command, 'uvx');
+  assert.equal(pick('https://smithery.ai/server/@upstash/context7-mcp').pkg, '@upstash/context7-mcp');
+  assert.equal(pick('git@github.com:obra/superpowers.git').owner, 'obra');
+  assert.equal(pick('`obra/superpowers`').name, 'superpowers');
+  assert.throws(() => c('npx "unclosed'), /quote/);
+});
+
+test('a pasted stdio command is written as-is after one approval', async (t) => {
+  const { addAnything } = await import('../src/add-anything.mjs');
+  const base = await mkdtemp(path.join(os.tmpdir(), 'oasis-add-stdio-'));
+  t.after(() => rm(base, { recursive: true, force: true }));
+  const env = { ...process.env, OASIS_CONFIG_DIR: path.join(base, 'cfg') };
+  const asked = [];
+  const result = await addAnything('claude mcp add -e TOKEN=t1 docs -- npx docs-mcp --port 0', { root: base, env, approve: async (s) => { asked.push(s); return true; } });
+  assert.equal(asked.length, 1);
+  assert.match(asked[0], /TOKEN set/);
+  assert.doesNotMatch(asked[0], /t1/);
+  const saved = JSON.parse(await readFile(path.join(base, 'cfg', 'mcp.json'), 'utf8'));
+  assert.deepEqual(saved.mcpServers.docs, { command: 'npx', args: ['-y', 'docs-mcp', '--port', '0'], env: { TOKEN: 't1' } });
+  assert.deepEqual(result.installed, ['docs']);
+});
+
+test('Gemini and Codex install commands are understood too', async () => {
+  const { classifySource: c } = await import('../src/add-anything.mjs');
+  assert.equal(c('gemini extensions install https://github.com/gemini-cli-extensions/security').owner, 'gemini-cli-extensions');
+  assert.equal(c('gemini extensions install github.com/user/repo --ref v2.0.0').ref, 'v2.0.0');
+  assert.equal(c('gemini extensions install https://github.com/a/b --auto-update --consent').name, 'b');
+  assert.equal(c('codex plugin marketplace add openai/plugins').owner, 'openai');
+  assert.equal(c('codex plugin marketplace add acme/mono --ref v2.1.0').name, 'mono');
+});
