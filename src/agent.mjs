@@ -196,6 +196,19 @@ export function undoCompaction(session) {
   return { restored: true, messages: session.messages.length, carriedOver: added.length, trigger: undo.trigger };
 }
 
+// A compaction reply replaces real history, so it must look like a summary: not
+// empty, not a refusal, and not a tool call or a plan to act (a model that keeps
+// working instead of summarizing). Returns '' when the reply is unusable.
+export function usableCompactionSummary(text) {
+  const summary = String(text || '').trim();
+  if (!summary) return '';
+  const head = summary.slice(0, 200);
+  if (/^(?:I(?:'m| am)? (?:sorry|unable|not able)|I can(?:'|no)t|Sorry\b|As an AI\b)/i.test(head)) return '';
+  if (/^(?:<tool_call>|<function=|\{\s*"(?:name|tool|function|arguments)"\s*:)/i.test(head)) return '';
+  if (/^(?:Let me|I(?:'ll| will) (?:now |first |start |begin |run |check |read |look |continue))/i.test(head)) return '';
+  return summary;
+}
+
 export async function compactHistoryIfNeeded(session, options = {}) {
   const messages = session.messages || [];
   const thresholdChars = Number.isFinite(options.thresholdChars) && options.thresholdChars > 0 ? options.thresholdChars : compactionThresholdChars(session.config || {}, options.env || process.env);
@@ -252,7 +265,13 @@ export async function compactHistoryIfNeeded(session, options = {}) {
     if (options.onCompactionError) options.onCompactionError(compactionError(deadline, error));
   }
   if (options.discardOnAbort && options.signal && options.signal.aborted) return { compacted: false, tokensUsed, costUsd, cancelled: true };
-  if (!summary) summary = deterministicHistorySummary(oldMessages);
+  const modelSummary = usableCompactionSummary(summary);
+  if (summary && !modelSummary) {
+    // Idle compaction is optional: keep the full history rather than a bad digest.
+    if (options.idle) return { compacted: false, tokensUsed, costUsd, rejectedSummary: true };
+    if (options.onCompactionError) options.onCompactionError(new Error('The model\'s compaction reply was not a usable summary; OASIS used its own digest of the earlier history instead.'));
+  }
+  summary = modelSummary || deterministicHistorySummary(oldMessages);
   if (preserveBlock) summary = appendMustPreserveContext(summary, mustPreserve, 20000);
   const restored = await runPostCompactHooks(session, trigger, summary, options);
 
@@ -276,7 +295,7 @@ export async function compactHistoryIfNeeded(session, options = {}) {
     removedMessages: oldMessages.length,
     retainedMessages: session.messages.length - 1,
     summaryChars: summary.length,
-    usedModelSummary: Boolean(tokensUsed)
+    usedModelSummary: Boolean(modelSummary)
   });
   return { compacted: true, tokensUsed, costUsd };
 }
@@ -438,8 +457,9 @@ async function compactMidTurnHistoryIfNeeded(session, requestIndex, options = {}
     if (options.signal && options.signal.aborted) throw error;
     if (options.onCompactionError) options.onCompactionError(compactionError(deadline, error));
   }
-  if (!summary) summary = deterministicHistorySummary(oldMessages);
-  summary = summary.slice(0, 12_000);
+  const modelSummary = usableCompactionSummary(summary);
+  if (summary && !modelSummary && options.onCompactionError) options.onCompactionError(new Error('The model\'s compaction reply was not a usable summary; OASIS used its own digest of the earlier tool rounds instead.'));
+  summary = (modelSummary || deterministicHistorySummary(oldMessages)).slice(0, 12_000);
   if (preserveBlock) summary = appendMustPreserveContext(summary, mustPreserve, 20000);
   const restored = await runPostCompactHooks(session, 'auto', summary, options);
 
@@ -457,7 +477,7 @@ async function compactMidTurnHistoryIfNeeded(session, requestIndex, options = {}
     removedToolResults,
     retainedMessages: session.messages.length - 1,
     summaryChars: summary.length,
-    usedModelSummary: Boolean(tokensUsed),
+    usedModelSummary: Boolean(modelSummary),
     beforeChars,
     afterChars
   });
