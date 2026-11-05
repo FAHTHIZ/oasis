@@ -972,7 +972,7 @@ function updateModeUI() {
   $('modeLabel').textContent = mode === 'auto' ? 'Full auto' : mode === 'edits' ? 'Auto edit' : 'Ask first';
   for (const button of $('modeMenu').querySelectorAll('button')) button.setAttribute('aria-checked', String(button.dataset.mode === mode));
   const entry = activeEntry();
-  $('modelChip').textContent = entry ? entry.model.split('/').pop().replace(/:free$/, ' (free)') : 'Connect a model';
+  $('modelChip').textContent = entry ? entry.model.split('/').pop().replace(/:free$/, ' (free)') : (innerWidth < 440 ? 'Connect' : 'Connect a model');
   $('modelChip').classList.toggle('empty', !entry);
   $('modelChip').title = entry ? entry.connection.label + ' · ' + entry.model : 'Paste an API key or model link to connect';
 }
@@ -1783,6 +1783,57 @@ async function startRuntime(found) {
   await restoreChat();
 }
 
+/* ---------- Updates ---------- */
+// On a computer, the runtime knows whether a newer OASIS is out. One slim bar,
+// never a dialog: the desktop app installs after its own confirmation, and
+// `oasis web` copies the one command to run.
+let updateState = null;
+async function checkForUpdate() {
+  if (!RT || !RT.client) return;
+  const state = await RT.client.api('/api/app/update').catch(() => null);
+  updateState = state;
+  const version = state && state.latest && state.latest.version;
+  let later = '';
+  try { later = sessionStorage.getItem('oasis.update.later') || ''; } catch { /* private mode */ }
+  const show = Boolean(state && state.available && version && state.skippedVersion !== version && later !== version);
+  $('updateBar').hidden = !show;
+  if (!show) return;
+  $('updateTitle').textContent = 'OASIS ' + version + ' is out.';
+  if (state.host === 'desktop') {
+    const downloading = state.phase === 'downloading' && state.progress && state.progress.total;
+    $('updateDetail').textContent = downloading ? 'Downloading… ' + Math.round(100 * state.progress.received / state.progress.total) + '%' : 'You have ' + state.current + '.';
+    $('updateAction').textContent = state.canInstall ? 'Install and restart' : 'Download';
+  } else {
+    $('updateDetail').textContent = 'You have ' + state.current + '. Your chats and keys stay.';
+    $('updateAction').textContent = 'Copy “oasis update”';
+  }
+}
+function setupUpdates() {
+  $('updateAction').addEventListener('click', async () => {
+    const state = updateState;
+    if (!state) return;
+    if (state.host === 'desktop') {
+      try { await RT.client.api('/api/app/update', { method: 'POST', body: { action: 'install' } }); toast(state.canInstall ? 'Confirm the update in the OASIS window.' : 'Opening the release page…'); }
+      catch (error) { toast('Update failed: ' + error.message, 'error'); }
+      return;
+    }
+    try { await navigator.clipboard.writeText('oasis update'); toast('Copied. Run it in a terminal, then start OASIS again.'); }
+    catch { toast('Run “oasis update” in a terminal, then start OASIS again.'); }
+  });
+  $('updateNotes').addEventListener('click', () => {
+    const state = updateState;
+    const url = (state && state.latest && state.latest.url) || (state && state.releasesPage) || 'https://github.com/FAHTHIZ/oasis/releases/latest';
+    if (/^https:\/\/github\.com\//.test(url)) window.open(url, '_blank', 'noopener,noreferrer');
+  });
+  $('updateLater').addEventListener('click', () => {
+    try { if (updateState && updateState.latest) sessionStorage.setItem('oasis.update.later', updateState.latest.version); } catch { /* private mode */ }
+    $('updateBar').hidden = true;
+  });
+  if (!RT) return;
+  checkForUpdate();
+  setInterval(() => { if (!document.hidden) checkForUpdate(); }, 30 * 60 * 1000);
+}
+
 /* ---------- Dictation ---------- */
 // The browser's own speech recognition where it works (Chrome, Edge, Safari).
 // Where it does not (the desktop app, Firefox) and OASIS runs on this
@@ -1898,6 +1949,7 @@ async function boot() {
   renderWelcome();
   renderPluginState();
   setupDictation();
+  setupUpdates();
   // The side panel comes back open only where it sits beside the chat; on a
   // phone it would cover the conversation.
   if (innerWidth >= 1024 && (localStorage.getItem('oasis.files') === '1' || (localStorage.getItem('oasis.files') === null && workspace))) toggleFiles(true);

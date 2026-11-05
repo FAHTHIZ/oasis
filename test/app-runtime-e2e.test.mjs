@@ -112,7 +112,10 @@ test('runtime engine end to end: app at /, paste to connect, approve a real edit
     execFileSync('git', ['-c', 'user.email=t@t', '-c', 'user.name=t', 'commit', '-qm', 'init'], { cwd: root });
   } catch { git = false; }
   const env = { ...process.env, OASIS_CONFIG_DIR: configDir, OASIS_API_KEY: '', OPENAI_API_KEY: '', ANTHROPIC_API_KEY: '', OPENROUTER_API_KEY: '' };
-  const app = await startOasisWebServer({ root, host: '127.0.0.1', port: 0, env, token: 'test-runtime-token-0123456789abcdef' });
+  delete env.OASIS_NO_UPDATE_CHECK;
+  delete env.OASIS_UPDATE_CHECK;
+  const updateFetchImpl = async () => ({ ok: true, status: 200, json: async () => ({ tag_name: 'v99.0.0', name: 'OASIS v99.0.0', html_url: 'https://github.com/FAHTHIZ/oasis/releases/tag/v99.0.0', assets: [] }) });
+  const app = await startOasisWebServer({ root, host: '127.0.0.1', port: 0, env, token: 'test-runtime-token-0123456789abcdef', updateFetchImpl });
   const browser = await Browser.launch({ env: { ...process.env, OASIS_CHROME_HEADLESS: '1' }, executable: chrome });
   t.after(async () => { await browser.close(); await app.close(); provider.server.close(); await rm(parent, { recursive: true, force: true }); await rm(configDir, { recursive: true, force: true }); });
   const origin = 'http://127.0.0.1:' + app.port;
@@ -141,6 +144,12 @@ test('runtime engine end to end: app at /, paste to connect, approve a real edit
   await waitFor(page, `document.readyState === 'complete' && document.documentElement.classList.contains('runtime') && document.getElementById('welcomeTitle').textContent === 'Paste a key to start.' && !/^(No project|This computer)$/.test(document.getElementById('projectName').textContent)`, { label: 'connected to the runtime after pasting the link' });
   assert.equal(await evaluate(page, `location.hash`), '', 'the token never stays in the address bar');
   assert.match(await evaluate(page, `document.getElementById('projectName').textContent`), new RegExp(path.basename(root)));
+
+  // A newer release shows one slim bar; "Not now" hides it for this session.
+  await waitFor(page, `!document.getElementById('updateBar').hidden && document.getElementById('updateTitle').textContent === 'OASIS 99.0.0 is out.' && /oasis update/.test(document.getElementById('updateAction').textContent)`, { label: 'update bar for a newer release', timeout: 15000 });
+  await shot('1-update');
+  await evaluate(page, `document.getElementById('updateLater').click(); true`);
+  assert.equal(await evaluate(page, `document.getElementById('updateBar').hidden && sessionStorage.getItem('oasis.update.later') === '99.0.0'`), true);
 
   await shot('2-key');
   // 2. Paste the model server address: the runtime finds the best model and saves it.
