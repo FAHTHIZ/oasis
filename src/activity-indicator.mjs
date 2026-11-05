@@ -68,6 +68,7 @@ export function formatTokens(count) {
 // Words for the label; chosen by what the agent is waiting for, not at random.
 export function waitLabel(info = {}, elapsedMs = 0) {
   if (info.label) return String(info.label);
+  if (Number(info.rateLimitMs) > elapsedMs) return 'Rate limited';
   const progress = info.promptProgress;
   if (progress && Number(progress.total) > 0) return Number(progress.processed) < Number(progress.total) ? 'Local model is reading the prompt' : 'Thinking';
   if (info.local && elapsedMs >= 15000 && Number(info.inputTokens || 0) > 2000) return 'Local model is reading the prompt';
@@ -99,6 +100,8 @@ export function promptProgressText(progress, ageMs = 0) {
 
 // The status text without escape codes. Exported so it can be tested.
 export function describeWait(info = {}, elapsedMs = 0) {
+  // A rate-limit wait counts down in place instead of printing a line per retry.
+  if (!info.label && Number(info.rateLimitMs) > elapsedMs) return 'Rate limited… · retrying in ' + formatElapsed(Number(info.rateLimitMs) - elapsedMs + 999) + ' · esc to stop';
   const parts = [waitLabel(info, elapsedMs) + '…', formatElapsed(elapsedMs)];
   const reading = promptProgressText(info.promptProgress, Number(info.promptProgressAgeMs) || 0);
   if (reading) parts.push(reading);
