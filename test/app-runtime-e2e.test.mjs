@@ -50,7 +50,7 @@ function mockProvider() {
       const part = lastUser.content.find((p) => p.type === 'image_url');
       return reply(res, 200, text('I can see your image (' + String(part.image_url.url).slice(0, 22) + ').'));
     }
-    const shellOut = last.role === 'user' && /"output":"42\\n"/.test(String(last.content));
+    const shellOut = last.role === 'user' && /"output":"42"/.test(String(last.content));
     if (shellOut) return reply(res, 200, text('Your command printed 42.'));
     if (messages.some((m) => m.role === 'user' && /slow check/i.test(String(m.content)))) {
       if (last.role === 'tool') {
