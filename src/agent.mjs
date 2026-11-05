@@ -27,6 +27,7 @@ import { parseChannelEntries, mcpInstructionsSection, flushPendingChannels } fro
 import { SESSION_TOOL_DEFINITIONS, SESSION_TOOL_NAMES, SESSION_READ_ONLY_TOOLS, deferMcpTools, deferRareBuiltinTools, loadDeferredTool, deferredToolsPrompt, toolGuidanceFor, runSessionTool, stopCron, TOOL_SEARCH_DEFINITION } from './session-tools.mjs';
 import { loadOutputStyles, systemPromptWithStyle, BUILTIN_STYLES } from './output-styles.mjs';
 import { priceFor, estimateCostUsd, BudgetExceededError, recordBudgetSpend, formatUsd, cloudModelBehindGateway } from './pricing.mjs';
+import { isTestPath } from './test-tamper.mjs';
 import { recentImageSet, hasImages, toChatMessagesWithImages, anthropicImageBlocks, responsesImageItems } from './images.mjs';
 import { beginCheckpoint, captureBeforeChange, checkpointPersistenceEnabled, FILE_CHANGING_TOOLS, loadCheckpoints } from './checkpoints.mjs';
 import { nestedMemoryFor } from './memory.mjs';
@@ -3202,6 +3203,12 @@ const FILE_EDITING_TOOL_NAMES = new Set(['edit_file', 'write_file', 'multi_edit'
 const RETRY_TRACKED_COMMANDS = new Set(['run_command', 'run_shell', 'powershell']);
 // "Create src/lib.mjs ...", "fix the failing test", "add a flag": a request to
 // change something, not a question about how to.
+export function asksForNewTests(request) {
+  const text = String(request || '');
+  if (/\b(?:no|without|don'?t|do not|skip|never)\b[^.\n]{0,30}\b(?:new |unit |more )?tests?\b/i.test(text)) return false;
+  return /\b(?:add|write|create|include|cover\b[^.\n]{0,20}\bwith)\b[^.\n]{0,60}(?<!\b(?:existing|the|all|current|other|my|our|your) )\b(?:unit |regression |new )?tests?\b(?!\s*(?:still\s+)?(?:pass|passing|green|suite\s+pass))/i.test(text);
+}
+
 export function asksForAction(request) {
   const text = String(request || '').trim().replace(/^(?:please|pls|can you|could you|would you|go ahead and|now)[\s,]+/i, '');
   if (/^(?:how|what|why|which|when|where|who|explain|describe|summari[sz]e|review|compare|list|show me how|tell me)\b/i.test(text)) return false;
@@ -3479,6 +3486,9 @@ export function verificationIssues(state) {
   }
   if (changed.some((item) => SOURCE_EXTENSIONS.has(path.extname(item).toLowerCase())) && state.lastVerificationExitCode !== 0) {
     issues.push('no relevant test, check, lint, build, or type-check command has passed after the latest code edit');
+  }
+  if (state.testsRequested && !changed.some((item) => isTestPath(item))) {
+    issues.push('the request asked for new tests, but no test file was added or changed; add tests that cover the new behavior and run them');
   }
   if (Array.isArray(state.testTampering) && state.testTampering.length) {
     issues.push('tests were weakened instead of the code being fixed (' + state.testTampering.map((item) => item.file + ': ' + item.reason).join('; ') + '); restore them, or explain to the user why this is intended');
@@ -5327,6 +5337,9 @@ async function runAgentTurnRaw(session, prompt, options = {}) {
   let lastToolOutcome = null;
   let loopBreakMessage = '';
   const verification = { changedPaths: new Set(), diffReviewedPaths: new Set(), diffReviewedAll: false, lastVerificationExitCode: null, lastVerificationKind: null, lspVerificationByPath: new Map(), nudgeUsed: false };
+  // "...and add tests": finishing with no test file touched is a miss that
+  // every agent made in the live benchmark (taskflow-search), so it is gated.
+  verification.testsRequested = asksForNewTests(request);
   // Expose the live per-turn verification state to tools that must be gated
   // on real runtime evidence, not model-reported claims.
   context.verification = verification;
