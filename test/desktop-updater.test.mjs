@@ -139,7 +139,6 @@ test('an Intel Mac without a matching image is sent to the release page', async 
 test('skip this version silences later background checks', async (t) => {
   const { updater, dir } = await setup(t, { responses: ['Skip this version'] });
   await updater.check({ manual: true });
-  await new Promise((resolve) => setTimeout(resolve, 20));
   assert.equal(updater.status().skippedVersion, '1.1.0');
   const electron = fakeElectron();
   const nextRun = createDesktopUpdater({ ...electron, currentVersion: '1.0.0', statePath: path.join(dir, 'update-state.json'), downloadDirectory: dir, fetchImpl: releaseFetch(), platform: 'win32', arch: 'x64', env: {} });

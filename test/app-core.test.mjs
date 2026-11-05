@@ -420,3 +420,54 @@ test('agent sends attached images as image parts, and Anthropic gets image block
   assert.deepEqual(messages[0].content.map((b) => b.type), ['text', 'image']);
   assert.deepEqual(messages[0].content[1].source, { type: 'base64', media_type: 'image/png', data: png });
 });
+
+
+test('steering queue is bounded by message count and note size', () => {
+  const events = [];
+  const agent = new Agent({
+    getConfig: () => ({}), getContext: () => ({}), approve: async () => true,
+    onEvent: (event) => events.push(event), chatImpl: async () => ({ content: 'unused', tool_calls: [] })
+  });
+  agent.running = true;
+  for (let i = 0; i < 20; i++) assert.equal(agent.steer('note ' + i), true);
+  assert.equal(agent.steer('one too many'), false);
+  assert.equal(agent.steering.length, 20);
+  assert.equal(events.length, 20, 'rejected notes do not emit misleading user events');
+
+  const oversized = new Agent({
+    getConfig: () => ({}), getContext: () => ({}), approve: async () => true,
+    chatImpl: async () => ({ content: 'unused', tool_calls: [] })
+  });
+  oversized.running = true;
+  assert.equal(oversized.steer('x'.repeat(12_001)), false);
+  assert.equal(oversized.steering.length, 0);
+});
+
+test('a steering note queued on the last allowed step is carried into the next send', async () => {
+  const ws = await project([{ path: 'a.txt', content: 'hello' }]);
+  let agent;
+  const { chatImpl, seen } = scripted([
+    { content: '', tool_calls: [{ id: '1', function: { name: 'read_file', arguments: '{"path":"a.txt"}' } }] },
+    { content: 'I followed the note.', tool_calls: [] }
+  ]);
+  agent = new Agent({
+    getConfig: () => ({ mode: 'ask' }),
+    getContext: () => ({ workspace: ws }),
+    approve: async () => true,
+    chatImpl,
+    onEvent: (event) => {
+      if (event.type === 'tool_result') assert.equal(agent.steer('finish the check briefly'), true);
+    }
+  });
+
+  assert.match(await agent.send('read a.txt', { maxSteps: 1 }), /Stopped after 1 steps/);
+  assert.equal(agent.steering.length, 1);
+  assert.equal(await agent.send('continue'), 'I followed the note.');
+
+  const secondPrompt = seen[1];
+  const carriedIndex = secondPrompt.findIndex((message) => message.role === 'user' && message.content === 'finish the check briefly');
+  const nextPromptIndex = secondPrompt.findIndex((message) => message.role === 'user' && message.content === 'continue');
+  assert.ok(carriedIndex >= 0, 'the queued note is included in the next model request');
+  assert.ok(nextPromptIndex > carriedIndex, 'the carried note stays in chronological order');
+  assert.equal(agent.steering.length, 0);
+});

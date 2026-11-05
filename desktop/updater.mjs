@@ -60,7 +60,7 @@ export function createDesktopUpdater({
       const state = await readUpdateState(statePath);
       if (latest.available && (manual || (shouldNotify(latest, state) && notifiedVersion !== latest.latest.version))) {
         notifiedVersion = latest.latest.version;
-        announce({ manual });
+        await announce({ manual });
       } else if (manual && !latest.available) {
         await dialog.showMessageBox(getWindow() || undefined, {
           type: 'info', buttons: ['OK'], title: 'OASIS is up to date',
@@ -103,9 +103,12 @@ export function createDesktopUpdater({
       });
       note.on('click', show);
       note.show();
-    } else {
-      show();
+      return;
     }
+    // A manual check owns a dialog interaction. Await the user's choice so the
+    // caller and tests observe the completed decision, not a half-finished prompt.
+    if (manual) return prompt();
+    show();
   }
 
   async function prompt() {
