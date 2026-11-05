@@ -1,4 +1,4 @@
-// Smart connect, model fallback, plugins and live preview for the universal app.
+// Smart connect, model fallback and plugins for the universal app.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { existsSync } from 'node:fs';
@@ -7,7 +7,6 @@ import {
   rankModels, scoreModel, smartConnect, classifyFailure, buildChain, nextInChain, configFor, scanLocal
 } from '../app/core/connect.mjs';
 import { PLUGINS, getPlugin, pluginsFor, suggestPlugins } from '../app/core/plugins.mjs';
-import { buildPreview, resolvePath, PREVIEW_PRELUDE } from '../app/core/preview.mjs';
 import { Agent, buildSystemPrompt } from '../app/core/agent.mjs';
 import { ProviderError } from '../app/core/providers.mjs';
 
@@ -270,7 +269,7 @@ test('agent switches models mid-task without losing the conversation', async () 
 });
 
 test('plugins: every plugin points at real skills and has starters', () => {
-  assert.ok(PLUGINS.length >= 12);
+  assert.equal(PLUGINS.length, 9, "a short, curated catalog");
   const ids = new Set();
   for (const plugin of PLUGINS) {
     assert.ok(!ids.has(plugin.id), 'unique id ' + plugin.id);
@@ -302,27 +301,4 @@ test('plugins load their skills into the system prompt', async () => {
   assert.match(prompt, /BODY OF diagnose/);
   const none = await buildSystemPrompt({ skills, plugins: [] });
   assert.doesNotMatch(none, /Active plugins/);
-});
-
-test('preview inlines local assets and reports what is missing', () => {
-  const files = {
-    'site/index.html': '<!doctype html><html><head><link rel="stylesheet" href="css/app.css"><link rel="stylesheet" href="https://cdn.example/x.css"></head><body><img src="../logo.svg"><script src="js/app.js"></script><script src="missing.js"></script></body></html>',
-    'site/css/app.css': 'body{color:red}',
-    'site/js/app.js': 'console.log("</script>")',
-    'logo.svg': '<svg xmlns="http://www.w3.org/2000/svg"/>'
-  };
-  const { html, missing, inlined } = buildPreview('site/index.html', (p) => files[p] ?? null);
-  assert.match(html, /<style data-from="css\/app.css">body\{color:red\}<\/style>/);
-  assert.match(html, /https:\/\/cdn\.example\/x\.css/, 'remote stylesheets are left alone');
-  assert.match(html, /data:image\/svg\+xml/);
-  assert.match(html, /console\.log\("<\\\/script>"\)/, 'a closing script tag inside code cannot break out');
-  assert.deepEqual(missing, ['site/missing.js']);
-  assert.deepEqual(inlined.sort(), ['logo.svg', 'site/css/app.css', 'site/js/app.js']);
-  assert.ok(html.indexOf('oasisPreview') < html.indexOf('data-from'), 'the error reporter loads before the page scripts');
-  assert.equal(resolvePath('a/b/index.html', '../c.css'), 'a/c.css');
-  assert.equal(resolvePath('a/index.html', '/root.js?v=1'), 'root.js');
-  assert.throws(() => buildPreview('none.html', () => null), /No file/);
-  const bare = buildPreview('x.html', () => '<p>hi</p>').html;
-  assert.match(bare, /^<!doctype html><html><head>/);
-  assert.ok(PREVIEW_PRELUDE.includes('localStorage'));
 });

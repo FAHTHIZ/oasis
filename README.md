@@ -95,7 +95,7 @@ OASIS also runs as an installable app on phones, tablets and computers, with not
 - Commit and push to a new branch or open a pull request, always after you approve.
 - Works offline once installed. Skills load only when a task needs them, so it stays fast on low-end phones and small models.
 - Recognises keys from OpenRouter, Anthropic, OpenAI, Gemini, Groq, DeepSeek, Mistral, xAI, Moonshot, Hugging Face, Together, Fireworks, Cerebras and NVIDIA, and works with any OpenAI-compatible server. Ollama, LM Studio and llama.cpp running on the device are found automatically, and an Ollama library link downloads the model.
-- Thirteen built-in plugins (Debugger, Test writer, Code reviewer, Security audit, Web app studio with live preview, GitHub and more). The right one appears above the message box as you type; one tap applies it.
+- Nine built-in plugins (Debugger, Test writer, Code reviewer, Security audit, Web app studio, API builder, Mobile apps, Docs writer, GitHub). The right one appears above the message box as you type; one tap applies it.
 - A lite mode for old phones and low-end computers: no animation, fewer repaints while a reply streams, and a shorter transcript kept in memory.
 - One app for every device: the same installed app runs on Android, iPhone, iPad, ChromeOS, Windows, macOS and Linux, with no separate download per platform.
 
