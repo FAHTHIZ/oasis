@@ -24,6 +24,8 @@ export const PRESETS = {
   custom: { label: 'Custom (OpenAI-compatible)', protocol: 'openai', baseURL: '', model: '', keyHint: '' }
 };
 
+import { splitThinking, createThinkFilter } from './think-tags.mjs';
+
 export class ProviderError extends Error {
   constructor(message, { status = 0, retryable = false } = {}) {
     super(message);
@@ -155,7 +157,10 @@ function cleanTool(tool) {
   return { type: 'function', function: fn };
 }
 
-async function chatOpenAI(config, { messages, tools, signal, onText, fetchImpl }) {
+async function chatOpenAI(config, { messages, tools, signal, onText: rawOnText, fetchImpl }) {
+  // Leading <think>/<thought> blocks are reasoning, not the reply.
+  const thinkFilter = rawOnText ? createThinkFilter(rawOnText) : null;
+  const onText = thinkFilter ? (chunk) => thinkFilter.push(chunk) : null;
   const body = { model: config.model, messages: withExtraContentFor(config, messages), stream: true };
   if (tools && tools.length) body.tools = tools.map(cleanTool);
   const openRouter = isOpenRouterEndpoint(config.baseURL);
@@ -192,8 +197,9 @@ async function chatOpenAI(config, { messages, tools, signal, onText, fetchImpl }
   if (!type.includes('event-stream')) {
     const data = await response.json();
     const message = (data.choices && data.choices[0] && data.choices[0].message) || {};
-    if (message.content && onText) onText(message.content);
-    return { content: message.content || '', tool_calls: message.tool_calls || [], usage: normalizeUsage(data.usage) };
+    const plain = splitThinking(message.content || '').content;
+    if (plain && rawOnText) rawOnText(plain);
+    return { content: plain, tool_calls: message.tool_calls || [], usage: normalizeUsage(data.usage) };
   }
   let content = '';
   const calls = [];
@@ -216,8 +222,9 @@ async function chatOpenAI(config, { messages, tools, signal, onText, fetchImpl }
       if (part.extra_content && typeof part.extra_content === 'object') call.extra_content = { ...(call.extra_content || {}), ...part.extra_content };
     }
   }
+  if (thinkFilter) thinkFilter.flush();
   const toolCalls = calls.filter(Boolean).map((call, i) => ({ ...call, id: call.id || 'call_' + Date.now().toString(36) + i }));
-  return { content, tool_calls: toolCalls, usage };
+  return { content: splitThinking(content).content, tool_calls: toolCalls, usage };
 }
 
 function normalizeUsage(usage) {

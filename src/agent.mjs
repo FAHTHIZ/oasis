@@ -1,4 +1,5 @@
 import { briefFailure } from '../app/core/providers.mjs';
+import { splitThinking, visibleReply } from '../app/core/think-tags.mjs';
 import { atomicWriteFile } from './atomic-write.mjs';
 import { sessionKeyPool, ROTATE_STATUSES } from './key-pool.mjs';
 import { explainNetworkError } from './network-doctor.mjs';
@@ -5221,7 +5222,7 @@ async function runAgentTurnRaw(session, prompt, options = {}) {
         ...(typeof options.fetchImpl === 'function' ? { fetchImpl: options.fetchImpl } : {}),
         ...(typeof options.onDelta === 'function' ? { onDelta: (delta) => {
           streamedText = (streamedText + String(delta || '')).slice(0, MAX_REPLY_CHARS);
-          options.onDelta(streamedText);
+          options.onDelta(visibleReply(streamedText));
         } } : {}),
         // Deltas are cumulative, so a restarted stream replaces the partial text
         // instead of appending a second copy.
@@ -5287,6 +5288,15 @@ async function runAgentTurnRaw(session, prompt, options = {}) {
       if (outputRecoveries <= MAX_OUTPUT_RECOVERIES) {
         truncationNotice = truncationRecoveryPrompt(assistant.outputLimit || maxOutputTokensFor(session.config, options.env || process.env), dropped && dropped.function && dropped.function.name);
         if (typeof options.onOutputTruncated === 'function') options.onOutputTruncated({ limit: assistant.outputLimit || 0, droppedTool: dropped && dropped.function && dropped.function.name || null, attempt: outputRecoveries });
+      }
+    }
+    // <think>/<thought> blocks written into the reply (Gemma 4, R1-style
+    // local models) are reasoning, not the answer.
+    if (assistant && typeof assistant.content === 'string') {
+      const split = splitThinking(assistant.content);
+      if (split.reasoning || split.content !== assistant.content) {
+        assistant.content = split.content;
+        if (split.reasoning && !assistant.reasoning_content && !assistant.reasoning) assistant.reasoning_content = split.reasoning;
       }
     }
     if (debugEnabled('raw')) debugLog('raw', 'model reply before cleanup: ' + JSON.stringify({ content: typeof assistant.content === 'string' ? assistant.content.slice(0, 4000) : assistant.content, tool_calls: assistant.tool_calls || [] }).slice(0, 6000));
