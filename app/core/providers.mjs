@@ -27,12 +27,34 @@ export const PRESETS = {
 import { splitThinking, createThinkFilter } from './think-tags.mjs';
 
 export class ProviderError extends Error {
-  constructor(message, { status = 0, retryable = false } = {}) {
+  constructor(message, { status = 0, retryable = false, retryAfterMs = null } = {}) {
     super(message);
     this.name = 'ProviderError';
     this.status = status;
     this.retryable = retryable;
+    this.retryAfterMs = retryAfterMs;
   }
+}
+
+/**
+ * Whether a failed request is worth retrying, and when. A daily or billing
+ * quota will not clear in seconds, so it fails at once (and the agent can
+ * fall back). Gemini words per-minute limits like exhausted quota; its
+ * quota id and RetryInfo say how long to wait.
+ */
+export function retryPlan(status, body = '') {
+  const text = String(body || '');
+  if (status === 429) {
+    const perMinute = /PerMinute|per ?minute/i.test(text) && !/PerDay|per ?day/i.test(text);
+    if (perMinute) {
+      const delay = /"retryDelay"\s*:\s*"(\d+(?:\.\d+)?)s"/.exec(text) || /retry in (\d+(?:\.\d+)?)s\b/i.exec(text);
+      const ms = delay ? Number(delay[1]) * 1000 : 20000;
+      return ms <= 90000 ? { retryable: true, retryAfterMs: Math.ceil(ms) + 500 } : { retryable: false };
+    }
+    if (/insufficient_quota|exceeded your current quota|billing|PerDay|per ?day|limit: ?0\b/i.test(text)) return { retryable: false };
+    return { retryable: true };
+  }
+  return { retryable: status >= 500 };
 }
 
 function trimSlash(url) {
@@ -186,13 +208,16 @@ async function chatOpenAI(config, { messages, tools, signal, onText: rawOnText, 
       response = await fetchImpl(url, { method: 'POST', headers, body: JSON.stringify(body), signal });
       if (!response.ok) {
         const retryBody = await response.text().catch(() => '');
-        throw new ProviderError(explain(response.status, retryBody, config), { status: response.status, retryable: response.status === 429 || response.status >= 500 });
+        throw new ProviderError(explain(response.status, retryBody, config), { status: response.status, ...retryPlan(response.status, retryBody) });
       }
     } else {
-      throw new ProviderError(explain(response.status, errorBody, config), { status: response.status, retryable: response.status === 429 || response.status >= 500 });
+      throw new ProviderError(explain(response.status, errorBody, config), { status: response.status, ...retryPlan(response.status, errorBody) });
     }
   }
-  if (!response.ok) throw new ProviderError(explain(response.status, await response.text().catch(() => ''), config), { status: response.status, retryable: response.status === 429 || response.status >= 500 });
+  if (!response.ok) {
+    const errorBody = await response.text().catch(() => '');
+    throw new ProviderError(explain(response.status, errorBody, config), { status: response.status, ...retryPlan(response.status, errorBody) });
+  }
   const type = response.headers.get('content-type') || '';
   if (!type.includes('event-stream')) {
     const data = await response.json();
@@ -287,7 +312,10 @@ async function chatAnthropic(config, { messages, tools, signal, onText, fetchImp
     body: JSON.stringify(body),
     signal
   });
-  if (!response.ok) throw new ProviderError(explain(response.status, await response.text().catch(() => ''), config), { status: response.status, retryable: response.status === 429 || response.status >= 500 || response.status === 529 });
+  if (!response.ok) {
+    const errorBody = await response.text().catch(() => '');
+    throw new ProviderError(explain(response.status, errorBody, config), { status: response.status, ...retryPlan(response.status, errorBody) });
+  }
   let content = '';
   const blocks = [];
   const usage = { input: 0, output: 0 };
@@ -333,7 +361,12 @@ export async function chat(config, request) {
       }
       attempt += 1;
       if (request.onRetry) request.onRetry(attempt, error);
-      await new Promise((resolve) => setTimeout(resolve, 800 * 2 ** attempt));
+      const wait = error && Number.isFinite(error.retryAfterMs) ? error.retryAfterMs : 800 * 2 ** attempt;
+      if (error && Number.isFinite(error.retryAfterMs)) attempt = Math.max(attempt, Number.isInteger(config.maxRetries) ? config.maxRetries : 3);
+      await new Promise((resolve, reject) => {
+        const timer = setTimeout(resolve, wait);
+        if (request.signal) request.signal.addEventListener('abort', () => { clearTimeout(timer); reject(Object.assign(new Error('Cancelled'), { name: 'AbortError' })); }, { once: true });
+      });
     }
   }
 }

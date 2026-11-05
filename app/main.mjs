@@ -570,7 +570,7 @@ function handleEvent(event) {
       queueRender();
       break;
     case 'retry':
-      toast('Provider busy, retrying (' + event.attempt + ')…');
+      toast(event.waitMs ? 'Rate limited for a moment; retrying in ' + Math.ceil(event.waitMs / 1000) + 's…' : 'Provider busy, retrying (' + event.attempt + ')…');
       break;
     case 'model_switch': {
       const kind = classifyFailure({ message: event.reason, status: Number((String(event.reason).match(/\((\d{3})\)/) || [])[1] || 0) });
