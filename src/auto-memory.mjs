@@ -368,9 +368,9 @@ export async function memoryIndexPrompt(root, { env = process.env, budget = INDE
   const memories = await listMemories(root, { env });
   // Small windows get the one-sentence version of the same policy.
   const intro = compact ? 'Auto memory: save lasting preferences, corrections, decisions and non-obvious project facts with memory_save (never secrets or one-off details); look them up with memory_search, and verify a memory against the code before relying on it.' : [
-    'Auto memory: you keep durable notes across sessions with memory_save, and look them up with memory_search.',
-    'Save a memory when the user states a preference or corrects you, when a decision is made with a reason, when you learn a non-obvious fact about this project (how to build, test, deploy; where things live; gotchas), or when a fix only worked after several attempts (save the lesson). Use scope "user" for preferences that apply to every project.',
-    'Do not save secrets, one-off task details, or facts that are obvious from the code. Update an existing memory instead of adding a near-duplicate. Memories can be outdated: verify against current code or reliable evidence before relying on them, then use memory_verify to record current, outdated, or uncertain status with a short evidence reference.'
+    'Auto memory: memory_save keeps notes for later sessions; memory_search finds them.',
+    'Save user preferences and corrections, decisions with their reason, non-obvious project facts (build, test, deploy, where things live, gotchas) and lessons from fixes that took several attempts; scope "user" for preferences that apply to every project.',
+    'Never save secrets, one-off details or what the code already shows; update a memory rather than adding a near-duplicate. Memories can be outdated: check them against the code before relying on them, then record current, outdated or uncertain with memory_verify.'
   ].join(' ');
   if (!memories.length) return intro + '\nNo memories saved yet.';
   const sorted = memories.slice().sort((a, b) => (b.scope === 'user') - (a.scope === 'user') || String(b.updated).localeCompare(String(a.updated)));
