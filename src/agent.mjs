@@ -3599,10 +3599,17 @@ export function untestedNewCode(state) {
   return ['New code in ' + created.join(', ') + ' is not exercised by existing tests unless one imports it. Call it directly too — a short script or test with the cases from the request, including edge cases (negative numbers, zero, empty or malformed input) — and fix whatever fails.'];
 }
 
+// Once a check has passed after the latest edit, targeted edits (edit_file,
+// multi_edit) need no reread either: the model chose each replacement and the
+// tool result echoed it. Seen live: the extra review round trip produced a
+// second, contradicting final answer. Whole-file overwrites of existing files
+// still need a diff, since they can silently drop content.
 export function diffReviewComplete(state) {
   if (state.diffReviewedAll) return true;
   const created = state.createdPaths instanceof Set ? state.createdPaths : new Set();
-  return [...state.changedPaths].every((item) => state.diffReviewedPaths.has(item) || created.has(item));
+  const overwritten = state.overwrittenPaths instanceof Set ? state.overwrittenPaths : null;
+  const checked = state.lastVerificationExitCode === 0;
+  return [...state.changedPaths].every((item) => state.diffReviewedPaths.has(item) || created.has(item) || (checked && overwritten && !overwritten.has(item)));
 }
 
 export function verificationIssues(state) {
@@ -6075,6 +6082,7 @@ async function runAgentTurnRaw(session, prompt, options = {}) {
         recordClaimEdit(claimState);
         verification.changedPaths.add(changedPath);
         if (name === 'write_file' && result.backedUpExistingFile === false) (verification.createdPaths ||= new Set()).add(changedPath);
+        if (name === 'write_file' && result.backedUpExistingFile === true && !(verification.createdPaths && verification.createdPaths.has(changedPath))) (verification.overwrittenPaths ||= new Set()).add(changedPath);
         verification.lspVerificationByPath.delete(changedPath);
         verification.diffReviewedAll = false;
         verification.diffReviewedPaths.clear();

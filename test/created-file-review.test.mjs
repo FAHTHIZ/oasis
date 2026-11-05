@@ -30,3 +30,14 @@ test('the gate asks to exercise a new module directly when no test changed', asy
   assert.deepEqual(untestedNewCode({ changedPaths: new Set(['notes.md']), createdPaths: new Set(['notes.md']) }), []);
   assert.deepEqual(untestedNewCode({ changedPaths: new Set(['src/a.mjs']) }), []);
 });
+
+test('after a passing check, targeted edits need no reread but whole-file overwrites do', () => {
+  const state = base({ changedPaths: new Set(['add.mjs', 'test.mjs']), overwrittenPaths: new Set() });
+  assert.equal(diffReviewComplete(state), true);
+  state.overwrittenPaths.add('test.mjs');
+  assert.equal(diffReviewComplete(state), false);
+  state.diffReviewedPaths.add('test.mjs');
+  assert.equal(diffReviewComplete(state), true);
+  const unchecked = base({ changedPaths: new Set(['add.mjs']), overwrittenPaths: new Set(), lastVerificationExitCode: null });
+  assert.equal(diffReviewComplete(unchecked), false);
+});
