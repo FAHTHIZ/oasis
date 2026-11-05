@@ -885,14 +885,19 @@ export function readInput(options = {}) {
         // Keep the small slash-command menu visible while a command name is typed.
         // Tab still performs the existing completion; Enter still submits the prompt.
         const commandPrefix = state.text.startsWith('/') && !/\s/.test(state.text) && state.cursor === state.text.length;
-        if (commandPrefix && options.complete && !completion && action !== 'escape' && action !== 'submit') {
+        // The same live list for an @file mention being typed (like Claude Code
+        // and Cursor): "explain @ad" shows matching files before Tab.
+        const beforeCursor = state.text.slice(0, state.cursor);
+        const mentionPrefix = !commandPrefix && /(?:^|\s)@[^\s@]*$/.test(beforeCursor) && !/^\S/.test(state.text.slice(state.cursor));
+        const MENU_HINT = /^(?:Slash commands|Files) · Tab to complete/;
+        if ((commandPrefix || mentionPrefix) && options.complete && !completion && action !== 'escape' && action !== 'submit') {
           try {
             const result = await options.complete(state.text, state.cursor);
             hints = result && result.candidates && result.candidates.length
-              ? [DIM('Slash commands · Tab to complete · type to filter', color), ...renderCandidates(result.candidates, -1, color)]
+              ? [DIM((commandPrefix ? 'Slash commands' : 'Files') + ' · Tab to complete · type to filter', color), ...renderCandidates(result.candidates, -1, color)]
               : [];
           } catch { hints = []; }
-        } else if (!commandPrefix && !completion && hints.length && hints[0] && /Slash commands · Tab to complete/.test(stripAnsi(hints[0]))) {
+        } else if (!commandPrefix && !mentionPrefix && !completion && hints.length && hints[0] && MENU_HINT.test(stripAnsi(hints[0]))) {
           hints = [];
         }
         draw();
