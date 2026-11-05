@@ -142,6 +142,27 @@ test('a malformed-function-call finish is retried, not taken as the final answer
   assert.equal(requests, 2);
 });
 
+test('a repeated malformed call is retried with a corrective note, not the identical request', async (t) => {
+  const bodies = [];
+  const server = createServer(async (req, res) => {
+    let body = '';
+    for await (const chunk of req) body += chunk;
+    bodies.push(JSON.parse(body));
+    res.writeHead(200, { 'content-type': 'application/json' });
+    if (bodies.length <= 2) res.end(JSON.stringify({ choices: [{ finish_reason: 'function_call_filter: MALFORMED_FUNCTION_CALL', index: 0, message: { role: 'assistant' } }] }));
+    else res.end(JSON.stringify({ choices: [{ finish_reason: 'stop', index: 0, message: { role: 'assistant', content: 'Done.' } }] }));
+  });
+  await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
+  t.after(() => new Promise((resolve) => server.close(resolve)));
+  const config = { protocol: 'openai-compatible', baseURL: 'http://127.0.0.1:' + server.address().port + '/v1', model: 'fixture', apiKey: '', maxSteps: 6 };
+  const result = await runAgentTurn(await session(t, config), 'hi', {});
+  assert.equal(result.text, 'Done.');
+  assert.equal(bodies.length, 3);
+  const last = bodies[2].messages[bodies[2].messages.length - 1];
+  assert.match(String(last.content), /could not be parsed/);
+  assert.notDeepEqual(bodies[1].messages, bodies[0].messages, 'the second try is not the identical request');
+});
+
 test('an empty reply to a request for changes gets a continue nudge, not an empty finish', async (t) => {
   let requests = 0;
   const bodies = [];
