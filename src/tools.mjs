@@ -1,3 +1,4 @@
+import { installSkillsFromSource, parseSkillSource } from './skill-install.mjs';
 import { securityWarning } from './security-patterns.mjs';
 import { argvSleepSeconds, longSleepError } from './sleep-guard.mjs';
 import { atomicWriteFile } from './atomic-write.mjs';
@@ -163,11 +164,9 @@ export const TOOL_DEFINITIONS = [
   { type: 'function', function: { name: 'read_skill_resource', description: 'Read a text reference or asset shipped with an installed portable Agent Skill. Only integrity-verified files under that skill’s references/ or assets/ folders can be read; scripts are not exposed by this tool.', parameters: { type: 'object', properties: { name: { type: 'string', description: 'Installed skill name returned by list_skills or load_skill' }, path: { type: 'string', description: 'Relative path under references/ or assets/, such as references/checklist.md' } }, required: ['name', 'path'] } } },
   { type: 'function', function: { name: 'run_specialist_review', description: 'Run one bounded specialist review in a separate read-only model session. Available roles: code-review, security-review, architecture, and test-strategy. The reviewer can inspect workspace files and Git diffs, but cannot edit files, run commands, install packages, access MCP tools, or perform external side effects. Up to two reviews are allowed per task; use for an independent second opinion, not for changes.', parameters: { type: 'object', properties: { specialist: { type: 'string', enum: ['code-review', 'security-review', 'architecture', 'test-strategy'], description: 'Focus of the independent review' }, task: { type: 'string', description: 'A bounded review request; include relevant files or the question to investigate' } }, required: ['specialist', 'task'], additionalProperties: false } } },
   { type: 'function', function: { name: 'install_extension', description: 'Inspect and import a public GitHub repository containing Markdown specialist-agent or skill prompts. Import only the selected Markdown prompts; do not execute scripts, install dependencies, or enable MCP servers. Scope self installs into Oasis user configuration, project installs into the current workspace, and both installs to both locations. Always obtain approval before importing an external repository.', parameters: { type: 'object', properties: { url: { type: 'string', description: 'Public GitHub repository URL, for example https://github.com/msitarzewski/agency-agents' }, scope: { type: 'string', enum: ['self', 'project', 'both'], description: 'Install into Oasis itself, the current project, or both' } }, required: ['url', 'scope'] } } },
-  { type: 'function', function: { name: 'setup_omniroute', description: 'Install OmniRoute globally with npm if it is missing, start its local gateway if needed, verify real model tool calling without executing the probe, and switch Oasis to the gateway only after verification succeeds. Use when the user asks to install, set up, or connect OmniRoute. Installation, background startup, and configuration each require approval. Never assume a hosted provider or free quota is guaranteed.', parameters: { type: 'object', properties: {}, additionalProperties: false } } },
-  { type: 'function', function: { name: 'configure_provider', description: 'Connect Oasis to an existing supported provider preset and switch the current chat to it only after an inert tool-call probe succeeds. Presets: openai, anthropic, openrouter, gemini, ollama, omniroute. This tool never accepts API keys; it may use only the matching saved credential or provider-specific environment variable. For OmniRoute that is not running, use setup_omniroute.', parameters: { type: 'object', properties: { provider: { type: 'string', enum: ['openai', 'anthropic', 'openrouter', 'gemini', 'ollama', 'omniroute'] }, model: { type: 'string', maxLength: 200, description: 'Optional exact model ID; Ollama/OpenRouter-compatible models may require an account- or server-specific ID.' } }, required: ['provider'], additionalProperties: false } } },
-  { type: 'function', function: { name: 'install_external_skill', description: 'Install a selected external Agent Skill from a repository using the pinned Vercel Skills CLI. Copies only the universal Agent Skills package; does not activate hooks, run skill scripts, or configure MCP. Requires approval and imports the instructions as untrusted content. Choose one exact skill or set all=true.', parameters: { type: 'object', properties: { source: { type: 'string', maxLength: 600, description: 'Public GitHub shorthand owner/repo, HTTPS source URL, SSH/Git URL, or a local path.' }, skill: { type: 'string', maxLength: 128, description: 'Exact skill name to install; mutually exclusive with all=true.' }, all: { type: 'boolean', description: 'Install all skills from this source into the universal Agent Skills directory.' }, scope: { type: 'string', enum: ['project', 'global'], description: 'Project .agents/skills or user-level universal skills directory.' } }, required: ['source', 'scope'], additionalProperties: false } } },
+  { type: 'function', function: { name: 'configure_provider', description: 'Connect Oasis to an existing supported provider preset and switch the current chat to it only after an inert tool-call probe succeeds. Presets: openai, anthropic, openrouter, gemini, ollama. This tool never accepts API keys; it may use only the matching saved credential or provider-specific environment variable.', parameters: { type: 'object', properties: { provider: { type: 'string', enum: ['openai', 'anthropic', 'openrouter', 'gemini', 'ollama'] }, model: { type: 'string', maxLength: 200, description: 'Optional exact model ID; Ollama/OpenRouter-compatible models may require an account- or server-specific ID.' } }, required: ['provider'], additionalProperties: false } } },
+  { type: 'function', function: { name: 'install_external_skill', description: 'Install a selected Agent Skill (a SKILL.md package) from a GitHub repository, Git URL or local folder. OASIS downloads and copies the files itself; it does not run skill scripts, activate hooks, or configure MCP. Requires approval and imports the instructions as untrusted content. Choose one exact skill or set all=true.', parameters: { type: 'object', properties: { source: { type: 'string', maxLength: 600, description: 'Public GitHub shorthand owner/repo, HTTPS source URL, SSH/Git URL, or a local path.' }, skill: { type: 'string', maxLength: 128, description: 'Exact skill name to install; mutually exclusive with all=true.' }, all: { type: 'boolean', description: 'Install all skills from this source into the universal Agent Skills directory.' }, scope: { type: 'string', enum: ['project', 'global'], description: 'Project .agents/skills or user-level universal skills directory.' } }, required: ['source', 'scope'], additionalProperties: false } } },
   { type: 'function', function: { name: 'configure_mcp_server', description: 'Configure and start a local stdio MCP server, then expose its tools in the current chat session. Requires manual approval even when --yes is active. The command, arguments, and environment-variable names are shown for review; never pass secret values in arguments.', parameters: { type: 'object', properties: { name: { type: 'string', maxLength: 40, description: 'Unique lowercase server name using letters, digits, hyphens, or underscores.' }, command: { type: 'string', maxLength: 500, description: 'Single executable, such as npx or a locally installed executable; no shell syntax.' }, args: { type: 'array', maxItems: 80, items: { type: 'string', maxLength: 5000 }, description: 'Argument vector passed directly without shell expansion.' }, passEnv: { type: 'array', maxItems: 50, items: { type: 'string' }, description: 'Explicit environment variable names to expose to this server; values must be configured locally, never supplied in chat.' } }, required: ['name', 'command'], additionalProperties: false } } },
-  { type: 'function', function: { name: 'delegate_openhands', description: 'Explicitly delegate a bounded coding or review task to an already-running OpenHands Agent Server. Requires a preconfigured OpenHands Agent Profile ID and manual approval. Uses the server profile and its own credentials; never sends Oasis API keys. Starts with AlwaysConfirm and an isolated worktree where supported. Use only when the user asks to use/delegate to OpenHands.', parameters: { type: 'object', properties: { task: { type: 'string', minLength: 1, maxLength: 3000, description: 'Self-contained task or review brief to delegate.' }, maxWaitSeconds: { type: 'integer', minimum: 5, maximum: 300, description: 'Maximum time Oasis should wait for a result before returning the OpenHands conversation ID. Defaults to 60 seconds.' } }, required: ['task'], additionalProperties: false } } },
   { type: 'function', function: { name: 'install_plugin', description: 'Install one reviewed Oasis built-in capability bundle into this workspace. Bundles copy skill instruction files only; external servers, package installs, and credentials are not enabled automatically. Requires user approval unless auto-approval is explicitly enabled.', parameters: { type: 'object', properties: { name: { type: 'string', enum: ['code-quality', 'project-onboarding', 'debugging', 'ship-feature', 'mobile-development', 'web-app-development', 'api-development', 'security-review'], description: 'Name of the built-in plugin bundle from oasis plugins list' } }, required: ['name'] } } }
 ];
 
@@ -669,9 +668,6 @@ async function runInstallPlan(plan, options) {
 
 
 
-const OMNIROUTE_BASE_URL = 'http://127.0.0.1:20128/v1';
-const OMNIROUTE_DASHBOARD_URL = 'http://127.0.0.1:20128/dashboard';
-const VERCEL_SKILLS_PACKAGE = 'skills@1.7.4';
 
 function providerEnvironmentOverridesActive(env) {
   return Boolean(env && (env.OASIS_BASE_URL || env.OASIS_PROTOCOL || env.OASIS_MODEL));
@@ -683,8 +679,7 @@ function getProviderPreset(provider) {
     anthropic: { protocol: 'anthropic', baseURL: DEFAULT_ANTHROPIC_BASE_URL, model: 'claude-sonnet-5' },
     openrouter: { protocol: 'openai-compatible', baseURL: 'https://openrouter.ai/api/v1', model: '' },
     gemini: { protocol: 'openai-compatible', baseURL: 'https://generativelanguage.googleapis.com/v1beta/openai/', model: 'gemini-3.8-flash' },
-    ollama: { protocol: 'openai-compatible', baseURL: 'http://localhost:11434/v1', model: '' },
-    omniroute: { protocol: 'openai-compatible', baseURL: OMNIROUTE_BASE_URL, model: 'auto' }
+    ollama: { protocol: 'openai-compatible', baseURL: 'http://localhost:11434/v1', model: '' }
   };
   return presets[String(provider || '').toLowerCase()] || null;
 }
@@ -695,115 +690,11 @@ function getMatchingProviderKey(provider, env) {
   if (provider === 'openrouter') return env.OPENROUTER_API_KEY || '';
   if (provider === 'gemini') return env.GEMINI_API_KEY || env.GOOGLE_API_KEY || '';
   if (provider === 'ollama') return env.OLLAMA_API_KEY || '';
-  if (provider === 'omniroute') return env.OASIS_LOCAL_API_KEY || '';
   return '';
 }
 
 function commandExists(command, env = process.env) {
   return commandAvailable(command, env);
-}
-
-async function checkOmniRouteEndpoint(apiKey = '', timeoutMs = 1200) {
-  try {
-    const headers = apiKey ? { authorization: 'Bearer ' + apiKey } : {};
-    const response = await fetch(OMNIROUTE_BASE_URL + '/models', {
-      headers,
-      signal: AbortSignal.timeout(timeoutMs)
-    });
-    return { reachable: true, status: response.status };
-  } catch {
-    return { reachable: false, status: null };
-  }
-}
-
-function omniRouteEndpointIssue(endpoint, apiKey = '') {
-  if (!endpoint || !endpoint.reachable) {
-    return {
-      connected: false,
-      provider: 'omniroute',
-      message: 'The local OmniRoute gateway did not answer on 127.0.0.1:20128. Start OmniRoute and retry; OASIS has not changed your provider settings.'
-    };
-  }
-  if (endpoint.status === 401 || endpoint.status === 403) {
-    if (!apiKey) {
-      return {
-        connected: false,
-        needsLocalApiKey: true,
-        provider: 'omniroute',
-        message: 'The local OmniRoute inference endpoint requires an API key (HTTP ' + endpoint.status + '). Enter the key from OmniRoute Dashboard → API Keys only in OASIS’s hidden terminal prompt or local provider form.'
-      };
-    }
-    return {
-      connected: false,
-      provider: 'omniroute',
-      message: 'OmniRoute rejected the local endpoint key (HTTP ' + endpoint.status + '). Check the key in OmniRoute Dashboard → API Keys and enter it only in OASIS’s hidden terminal prompt. No provider settings were changed.'
-    };
-  }
-  if (endpoint.status !== 200) {
-    return {
-      connected: false,
-      provider: 'omniroute',
-      message: 'OmniRoute is already responding on port 20128, but its /v1/models endpoint returned HTTP ' + endpoint.status + '. OASIS did not start a second server. Check the local OmniRoute dashboard and server logs; no provider settings were changed.'
-    };
-  }
-  return null;
-}
-
-async function waitForOmniRoute(apiKey = '', timeoutMs = 20000, signal) {
-  const deadline = Date.now() + timeoutMs;
-  let lastStatus = null;
-  while (Date.now() < deadline) {
-    if (signal && signal.aborted) return { reachable: false, cancelled: true, status: lastStatus };
-    const result = await checkOmniRouteEndpoint(apiKey, 1000);
-    lastStatus = result.status;
-    if (result.reachable) return result;
-    await new Promise((resolve) => setTimeout(resolve, 450));
-  }
-  return { reachable: false, status: lastStatus };
-}
-
-async function startOmniRouteBackground(root, env) {
-  return await new Promise((resolve, reject) => {
-    let child;
-    const gatewayEnv = scrubEnvironment(env);
-    gatewayEnv.OMNIROUTE_SERVER_HOST = '127.0.0.1';
-    try {
-      if (process.platform === 'win32') {
-        // Fixed command only; no user input is interpolated into this command string.
-        child = spawn(process.env.ComSpec || 'cmd.exe', ['/d', '/s', '/c', 'start "" /b omniroute'], {
-          cwd: root, env: gatewayEnv, detached: true, windowsHide: true, shell: false, stdio: 'ignore'
-        });
-      } else {
-        child = spawn('omniroute', [], {
-          cwd: root, env: gatewayEnv, detached: true, windowsHide: true, shell: false, stdio: 'ignore'
-        });
-      }
-    } catch (error) {
-      reject(new Error('Could not start OmniRoute: ' + String(error && error.message || error)));
-      return;
-    }
-    let settled = false;
-    const timer = setTimeout(() => {
-      if (settled) return;
-      settled = true;
-      try { child.kill(); } catch {}
-      reject(new Error('Timed out while launching the OmniRoute process.'));
-    }, 5000);
-    timer.unref?.();
-    child.once('error', (error) => {
-      if (settled) return;
-      settled = true;
-      clearTimeout(timer);
-      reject(new Error('Could not start OmniRoute: ' + String(error && error.message || error)));
-    });
-    child.once('spawn', () => {
-      if (settled) return;
-      settled = true;
-      clearTimeout(timer);
-      child.unref();
-      resolve();
-    });
-  });
 }
 
 async function saveVerifiedProvider(provider, config, context) {
@@ -813,14 +704,6 @@ async function saveVerifiedProvider(provider, config, context) {
     probe = await testProviderConnection(config, { timeoutMs: 30000, signal: context.signal });
   } catch (error) {
     const message = String(error && error.message || error).slice(0, 1000);
-    if (provider === 'omniroute') {
-      return {
-        connected: false,
-        provider,
-        message: 'OmniRoute accepted the local gateway request, but its upstream model route did not pass tool-call verification. This is not a local endpoint-key failure: HTTP 401/403 from an individual model route means that upstream provider rejected its own credentials; HTTP 502 usually means that upstream provider or browser session is unavailable. Open ' +
-          OMNIROUTE_DASHBOARD_URL + ' and check Providers / Routes: re-authorize the affected provider or choose a working route. Your previous OASIS provider configuration was left unchanged. Details: ' + message
-      };
-    }
     return { connected: false, provider, message: 'Provider verification failed; the existing configuration was left unchanged. ' + message };
   }
   if (!context.autoApprove && (!context.approval || !(await context.approval(
@@ -856,18 +739,13 @@ async function configureProviderFromChat(args, context) {
   }
   const provider = String(args.provider || '').trim().toLowerCase();
   const preset = getProviderPreset(provider);
-  if (!preset) throw new Error('Choose one supported provider preset: openai, anthropic, openrouter, gemini, ollama, or omniroute.');
+  if (!preset) throw new Error('Choose one supported provider preset: openai, anthropic, openrouter, gemini, or ollama.');
   const model = String(args.model || preset.model || '').trim();
   if (!model || model.length > 200) throw new Error('This provider needs an exact model ID. Supply the model name from the provider or local server.');
   const baseURL = validateBaseUrl(preset.baseURL);
   const current = await loadConfig({ env }).catch(() => context.config || null);
   const sameTarget = Boolean(current && current.baseURL === baseURL && current.protocol === preset.protocol);
   const apiKey = String((sameTarget && current.apiKey) || getMatchingProviderKey(provider, env) || '');
-  if (provider === 'omniroute') {
-    const endpoint = await checkOmniRouteEndpoint(apiKey);
-    const endpointIssue = omniRouteEndpointIssue(endpoint, apiKey);
-    if (endpointIssue) return endpointIssue;
-  }
   if (!isLoopbackUrl(baseURL) && !apiKey) {
     return {
       connected: false,
@@ -878,65 +756,6 @@ async function configureProviderFromChat(args, context) {
   return await saveVerifiedProvider(provider, {
     protocol: preset.protocol, baseURL, model, apiKey
   }, context);
-}
-
-async function setupOmniRoute(args, context, root) {
-  const env = context.env || process.env;
-  if (providerEnvironmentOverridesActive(env)) {
-    return {
-      connected: false,
-      provider: 'omniroute',
-      message: 'OASIS_BASE_URL, OASIS_PROTOCOL, or OASIS_MODEL is pinned in the environment. Unset or update those host variables first; Oasis will not claim a saved provider change while they override it.'
-    };
-  }
-  const baseURL = OMNIROUTE_BASE_URL;
-  const current = await loadConfig({ env }).catch(() => context.config || null);
-  const apiKey = String(args && args.localApiKey || env.OASIS_LOCAL_API_KEY ||
-    (current && current.baseURL === baseURL && current.protocol === 'openai-compatible' ? current.apiKey : '') || '');
-  let endpoint = await checkOmniRouteEndpoint(apiKey);
-  let installed = false;
-  let started = false;
-
-  if (!endpoint.reachable) {
-    if (!await commandExists('npm', env)) {
-      return { connected: false, provider: 'omniroute', message: 'npm was not found. Install Node.js with npm, then ask Oasis to set up OmniRoute again.' };
-    }
-    if (!await commandExists('omniroute', env)) {
-      const plan = planPackageInstall({ packageName: 'omniroute', ecosystem: 'npm-global', workspaceRoot: root, env });
-      const result = await runInstallPlan(plan, {
-        root, env, signal: context.signal, autoApprove: Boolean(context.autoApprove), approval: context.approval
-      });
-      if (!result || result.approved === false) return { connected: false, approved: false, provider: 'omniroute', message: result?.message || 'OmniRoute installation was not approved; nothing was installed.' };
-      if (result.exitCode !== 0) return { connected: false, provider: 'omniroute', installed: false, message: 'OmniRoute installation did not complete successfully. Exit code: ' + result.exitCode + (result.error ? ': ' + result.error : '') };
-      installed = true;
-    }
-    if (!context.autoApprove && (!context.approval || !(await context.approval(
-      'Start the local OmniRoute gateway as a detached background process on port 20128? It will expose the local API and dashboard on this machine. You can stop it using your operating-system process controls.'
-    )))) {
-      return { connected: false, approved: false, installed, provider: 'omniroute', message: 'OmniRoute was not started because approval was denied. No provider configuration was changed.' };
-    }
-    if (context.signal && context.signal.aborted) return { connected: false, cancelled: true, installed, provider: 'omniroute', message: 'Setup was cancelled before OmniRoute started.' };
-    try {
-      await startOmniRouteBackground(root, env);
-      started = true;
-    } catch (error) {
-      return { connected: false, installed, provider: 'omniroute', message: String(error && error.message || error) };
-    }
-    endpoint = await waitForOmniRoute(apiKey, 20000, context.signal);
-    if (!endpoint.reachable) {
-      return {
-        connected: false, installed, started, provider: 'omniroute',
-        message: 'The OmniRoute process was launched, but its /v1/models endpoint did not become ready. Inspect ' + OMNIROUTE_DASHBOARD_URL + ' or start "omniroute" in a terminal and retry. Your previous provider configuration remains unchanged.'
-      };
-    }
-  }
-
-  const endpointIssue = omniRouteEndpointIssue(endpoint, apiKey);
-  if (endpointIssue) return { ...endpointIssue, installed, started, dashboard: OMNIROUTE_DASHBOARD_URL };
-
-  return await saveVerifiedProvider('omniroute', {
-    protocol: 'openai-compatible', baseURL, model: 'auto', apiKey
-  }, context).then((result) => ({ ...result, installed, started, dashboard: OMNIROUTE_DASHBOARD_URL }));
 }
 
 async function configureMcpServer(args, context, root) {
@@ -1015,396 +834,36 @@ async function configureMcpServer(args, context, root) {
 
 
 
-function openHandsConfiguration(context, root) {
-  const env = context.env || process.env;
-  const rawBase = String(env.OPENHANDS_AGENT_SERVER_URL || 'http://127.0.0.1:8000').trim();
-  let url;
-  try { url = new URL(rawBase); } catch { throw new Error('OPENHANDS_AGENT_SERVER_URL must be a valid URL such as http://127.0.0.1:8000.'); }
-  if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password || url.search || url.hash) {
-    throw new Error('OpenHands server URL must use HTTP(S) without embedded credentials, query parameters, or fragments.');
-  }
-  if (url.protocol === 'http:' && !isLoopbackUrl(url.origin)) {
-    throw new Error('OpenHands remote servers must use HTTPS. Plain HTTP is allowed only for a loopback server on this machine.');
-  }
-  url.pathname = url.pathname.replace(/\/+$/, '');
-  const baseURL = url.toString().replace(/\/+$/, '');
-  const profileId = String(env.OPENHANDS_AGENT_PROFILE_ID || '').trim();
-  if (!profileId || profileId.length > 200 || /[\r\n\0]/.test(profileId)) {
-    return {
-      configured: false,
-      baseURL,
-      message: 'OpenHands delegation needs OPENHANDS_AGENT_PROFILE_ID in the Oasis host environment. Create/review an Agent Profile in the OpenHands server, set this variable locally, then retry; do not put profile credentials or API keys in chat.'
-    };
-  }
-  const apiKey = String(env.OPENHANDS_SESSION_API_KEY || '');
-  if (apiKey.length > 4096 || /[\r\n\0]/.test(apiKey)) {
-    throw new Error('OPENHANDS_SESSION_API_KEY is invalid or too long.');
-  }
-  const isLoopback = isLoopbackUrl(url.origin);
-  const configuredWorkspace = String(env.OPENHANDS_WORKSPACE_PATH || '').trim();
-  const workspace = isLoopback
-    ? (configuredWorkspace || path.resolve(root))
-    : configuredWorkspace;
-  if (!workspace) {
-    return {
-      configured: false,
-      baseURL,
-      message: 'This OpenHands server is remote. Set OPENHANDS_WORKSPACE_PATH to the absolute path as seen by the server; Oasis will not send its local workspace path to a remote host by default.'
-    };
-  }
-  if (workspace.length > 2000 || /[\r\n\0]/.test(workspace)) {
-    throw new Error('OPENHANDS_WORKSPACE_PATH is invalid or too long.');
-  }
-  if (!isLoopback && !workspace.startsWith('/') && !/^[A-Za-z]:[\\/]/.test(workspace)) {
-    throw new Error('OPENHANDS_WORKSPACE_PATH must be an absolute path as seen by the OpenHands server.');
-  }
-  return { configured: true, baseURL, profileId, apiKey, workspace, isLoopback };
-}
-
-function combineOpenHandsSignal(signal) {
-  const timeout = AbortSignal.timeout(12000);
-  return signal ? AbortSignal.any([signal, timeout]) : timeout;
-}
-
-async function openHandsJsonRequest(config, route, options = {}) {
-  const headers = { accept: 'application/json' };
-  if (config.apiKey) headers['X-Session-API-Key'] = config.apiKey;
-  let body;
-  if (options.body !== undefined) {
-    headers['content-type'] = 'application/json';
-    body = JSON.stringify(options.body);
-  }
-  const response = await fetch(config.baseURL + route, {
-    method: options.method || 'GET',
-    headers,
-    ...(body !== undefined ? { body } : {}),
-    redirect: 'error',
-    signal: combineOpenHandsSignal(options.signal)
-  });
-  const raw = await response.text();
-  let data = {};
-  if (raw) {
-    try { data = JSON.parse(raw); }
-    catch { data = { detail: raw.slice(0, 1000) }; }
-  }
-  if (!response.ok) {
-    let detail = data && (data.detail || data.message || data.error);
-    if (Array.isArray(detail)) detail = detail.map((item) => item.msg || item.type || '').filter(Boolean).join('; ');
-    if (typeof detail !== 'string') detail = '';
-    if (config.apiKey) detail = detail.split(config.apiKey).join('[redacted]');
-    throw new Error('OpenHands server returned HTTP ' + response.status + (detail ? ': ' + detail.slice(0, 1000) : '.') );
-  }
-  return data;
-}
-
-function waitOpenHandsPoll(milliseconds, signal) {
-  if (signal && signal.aborted) {
-    const error = new Error('OpenHands delegation was cancelled.');
-    error.name = 'AbortError';
-    return Promise.reject(error);
-  }
-  return new Promise((resolve, reject) => {
-    let settled = false;
-    let killTimer = null;
-    const cleanup = () => {
-      clearTimeout(timer);
-      if (killTimer) clearTimeout(killTimer);
-      if (signal) signal.removeEventListener('abort', onAbort);
-    };
-    const finish = () => {
-      if (settled) return;
-      settled = true;
-      cleanup();
-      resolve();
-    };
-    const onAbort = () => {
-      if (settled) return;
-      settled = true;
-      cleanup();
-      const error = new Error('OpenHands delegation was cancelled.');
-      error.name = 'AbortError';
-      reject(error);
-    };
-    const timer = setTimeout(finish, milliseconds);
-    if (signal) signal.addEventListener('abort', onAbort, { once: true });
-  });
-}
-
-async function interruptOpenHands(config, conversationId) {
-  try {
-    await openHandsJsonRequest(config, '/api/conversations/' + encodeURIComponent(conversationId) + '/interrupt', {
-      method: 'POST'
-    });
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-async function delegateOpenHands(args, context, root) {
-  const env = context.env || process.env;
-  const task = String(args.task || '').trim();
-  if (!task || task.length > 3000 || task.includes('\0')) {
-    throw new Error('OpenHands delegation task must be 1–3000 characters and cannot contain NUL.');
-  }
-  const config = openHandsConfiguration(context, root);
-  if (!config.configured) return { delegated: false, ...config };
-
-  const maxWaitSeconds = Math.max(5, Math.min(300, Number.parseInt(args.maxWaitSeconds, 10) || 60));
-  const summary = [
-    'Delegate this task to the OpenHands Agent Server?',
-    'Server: ' + config.baseURL,
-    'OpenHands Agent Profile: ' + config.profileId,
-    'Workspace on server: ' + config.workspace,
-    'Task: ' + task,
-    'Safety: the conversation will use AlwaysConfirm and request a separate OpenHands confirmation before tool actions. Git worktree isolation is requested; non-Git workspaces may fall back to a shared directory, so review the server configuration and workspace first.',
-    'Oasis will not send its model/API keys. The server profile supplies its own model credentials. Review the OpenHands instance and profile before continuing.'
-  ].join('\n');
-  // Delegation must always be explicitly approved and cannot be auto-approved
-  // by the global --yes flag.
-  if (!context.approval || !(await context.approval(summary, true))) {
-    return { delegated: false, approved: false, message: 'OpenHands delegation was denied. No conversation was created.' };
-  }
-  if (context.signal && context.signal.aborted) {
-    return { delegated: false, cancelled: true, message: 'OpenHands delegation was cancelled before creation.' };
-  }
-
-  const createBody = {
-    agent_profile_id: config.profileId,
-    workspace: { kind: 'LocalWorkspace', working_dir: config.workspace },
-    initial_message: { role: 'user', content: [{ type: 'text', text: task }] },
-    confirmation_policy: { kind: 'AlwaysConfirm' },
-    worktree: true,
-    max_iterations: 60,
-    autotitle: true
-  };
-  let created;
-  try {
-    created = await openHandsJsonRequest(config, '/api/conversations', {
-      method: 'POST', body: createBody, signal: context.signal
-    });
-  } catch (error) {
-    if (context.signal && context.signal.aborted) {
-      const cancelled = new Error('OpenHands delegation was cancelled during conversation creation.');
-      cancelled.name = 'AbortError';
-      throw cancelled;
-    }
-    return {
-      delegated: false,
-      provider: 'openhands',
-      server: config.baseURL,
-      message: 'Could not create an OpenHands conversation. Check that the server is running, the Agent Profile ID exists, and the profile has a valid provider configuration. Details: ' +
-        String(error && error.message || error).slice(0, 1000)
-    };
-  }
-
-  const conversationId = String(created.id || created.conversation_id || '');
-  if (!conversationId || conversationId.length > 128 || /[\r\n\0]/.test(conversationId)) {
-    throw new Error('OpenHands accepted the request but returned no valid conversation ID. Inspect its conversation list before retrying to avoid duplicating the task.');
-  }
-  const initialStatus = String(created.execution_status || '').toLowerCase();
-  let status = initialStatus;
-  const terminalStatuses = new Set(['finished', 'error', 'stuck', 'paused', 'waiting_for_confirmation']);
-  const deadline = Date.now() + maxWaitSeconds * 1000;
-  try {
-    while (!terminalStatuses.has(status) && Date.now() < deadline) {
-      await waitOpenHandsPoll(900, context.signal);
-      const info = await openHandsJsonRequest(config, '/api/conversations/' + encodeURIComponent(conversationId), {
-        signal: context.signal
-      });
-      status = String(info.execution_status || info.status || '').toLowerCase();
-    }
-  } catch (error) {
-    if (context.signal && context.signal.aborted) {
-      await interruptOpenHands(config, conversationId);
-      const cancelled = new Error('Oasis cancelled the delegated OpenHands conversation ' + conversationId + ' and sent a best-effort interrupt request.');
-      cancelled.name = 'AbortError';
-      throw cancelled;
-    }
-    return {
-      delegated: true,
-      provider: 'openhands',
-      conversationId,
-      status: status || 'unknown',
-      server: config.baseURL,
-      pending: true,
-      message: 'OpenHands created the task, but polling failed. Do not resubmit blindly; inspect this conversation on the OpenHands server before retrying. Details: ' +
-        String(error && error.message || error).slice(0, 700)
-    };
-  }
-
-  if (status === 'waiting_for_confirmation') {
-    return {
-      delegated: true,
-      provider: 'openhands',
-      conversationId,
-      status,
-      server: config.baseURL,
-      pending: true,
-      approvalRequired: true,
-      message: 'OpenHands is waiting for a separate tool-action confirmation. Review the conversation in the OpenHands interface; Oasis does not approve OpenHands actions automatically.'
-    };
-  }
-  if (!terminalStatuses.has(status)) {
-    return {
-      delegated: true,
-      provider: 'openhands',
-      conversationId,
-      status: status || 'running',
-      server: config.baseURL,
-      pending: true,
-      message: 'OpenHands is still working after ' + maxWaitSeconds + ' seconds. The task was not re-submitted. Inspect the conversation on the OpenHands server and use its own interface to monitor or interrupt it.'
-    };
-  }
-  let finalResponse = '';
-  if (status === 'finished') {
-    try {
-      const result = await openHandsJsonRequest(config, '/api/conversations/' + encodeURIComponent(conversationId) + '/agent_final_response', {
-        signal: context.signal
-      });
-      finalResponse = String(result.response || '').slice(0, 12000);
-    } catch (error) {
-      finalResponse = 'OpenHands finished, but Oasis could not retrieve the final response: ' + String(error && error.message || error).slice(0, 700);
-    }
-  }
-  return {
-    delegated: true,
-    provider: 'openhands',
-    conversationId,
-    status,
-    server: config.baseURL,
-    ...(finalResponse ? { finalResponse } : {}),
-    message: status === 'finished'
-      ? 'OpenHands completed the delegated task. Review its changes in the configured worktree/repository before integrating them.'
-      : 'OpenHands ended the delegated conversation with status "' + status + '". Review the conversation and its workspace before acting on the result.'
-  };
-}
-
-function validExternalSkillSource(raw) {
-  const source = String(raw || '').trim();
-  if (!source || source.length > 600 || /[\r\n\0]/.test(source) || source.startsWith('-')) {
-    throw new Error('Provide a valid skill source (GitHub owner/repo, HTTPS source URL, SSH/Git URL, or local path).');
-  }
-  if (/^[a-z0-9_.-]+\/[a-z0-9_.-]+$/i.test(source)) return source;
-  if (/^(?:\.{1,2}[\\/]|[\\/]|[a-z]:[\\/])/i.test(source)) return source;
-  if (/^(?:git@|ssh:\/\/|git:\/\/)/i.test(source)) return source;
-  if (/^https:\/\//i.test(source)) {
-    let url;
-    try { url = new URL(source); } catch { throw new Error('The skill source URL is invalid.'); }
-    if (url.username || url.password || url.hash) throw new Error('Skill source URLs must not contain credentials or fragments.');
-    return source;
-  }
-  throw new Error('Unsupported skill source. Use owner/repo, an HTTPS URL, an SSH/Git URL, or a local path.');
-}
-
-function quoteSkillsWindowsArgument(raw) {
-  const value = String(raw);
-  if (/[\r\n%!"&|<>^]/.test(value)) throw new Error('This value contains shell metacharacters that cannot safely be passed through the Windows command launcher.');
-  return '"' + value.replace(/"/g, '""') + '"';
-}
-
-function runExternalSkillsCommand(root, cliArgs, env, signal) {
-  const npxArgs = ['--yes', VERCEL_SKILLS_PACKAGE, ...cliArgs];
-  const cleanEnv = { ...scrubEnvironment(env), DISABLE_TELEMETRY: '1', DO_NOT_TRACK: '1' };
-  let command = 'npx';
-  let childArgs = npxArgs;
-  if (process.platform === 'win32') {
-    const commandLine = ['npx.cmd', ...npxArgs].map(quoteSkillsWindowsArgument).join(' ');
-    command = process.env.ComSpec || 'cmd.exe';
-    childArgs = ['/d', '/v:off', '/s', '/c', '"' + commandLine + '"'];
-  }
-  return new Promise((resolve) => {
-    let output = '';
-    let settled = false;
-    let timedOut = false;
-    let terminationRequested = false;
-    let timer;
-    let killTimer = null;
-    let child;
-    const append = (chunk) => {
-      output = (output + chunk.toString('utf8')).slice(-16000);
-    };
-    const cleanup = () => {
-      clearTimeout(timer);
-      if (killTimer && !terminationRequested) clearTimeout(killTimer);
-      if (signal) signal.removeEventListener('abort', onAbort);
-    };
-    const finish = (value) => {
-      if (settled) return;
-      settled = true;
-      cleanup();
-      resolve(value);
-    };
-    const terminateTree = () => {
-      terminationRequested = true;
-      signalProcessTree(child, process.platform === 'win32' ? 'SIGKILL' : 'SIGTERM');
-      if (process.platform === 'win32' || killTimer) return;
-      killTimer = setTimeout(() => signalProcessTree(child, 'SIGKILL'), 1500);
-      killTimer.unref?.();
-    };
-    const onAbort = () => {
-      terminateTree();
-    };
-    try {
-      child = spawn(command, childArgs, { cwd: root, env: cleanEnv, shell: false, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'], ...processTreeSpawnOptions() });
-      child.stdout.on('data', append);
-      child.stderr.on('data', append);
-    } catch (error) {
-      finish({ exitCode: null, error: String(error && error.message || error), output });
-      return;
-    }
-    timer = setTimeout(() => {
-      timedOut = true;
-      terminateTree();
-    }, 8 * 60 * 1000);
-    timer.unref?.();
-    if (signal) {
-      if (signal.aborted) onAbort();
-      else signal.addEventListener('abort', onAbort, { once: true });
-    }
-    child.once('error', (error) => finish({ exitCode: null, error: String(error && error.message || error), output, timedOut }));
-    child.once('close', (code) => finish({ exitCode: code, output, timedOut, cancelled: Boolean(signal && signal.aborted) }));
-  });
-}
 
 async function installExternalSkill(args, context, root) {
   const env = context.env || process.env;
-  const source = validExternalSkillSource(args.source);
+  const source = String(args.source || '').trim();
+  parseSkillSource(source);
   const skill = String(args.skill || '').trim();
   const all = args.all === true;
   const scope = String(args.scope || 'project');
   if (!['project', 'global'].includes(scope)) throw new Error('Choose project or global skill installation scope.');
   if (Boolean(skill) === all) throw new Error('Choose exactly one of skill="EXACT_NAME" or all=true.');
-  if (skill && (skill.length > 128 || /[\r\n\0"]/.test(skill) || /^-/.test(skill))) throw new Error('Skill names must be 1–128 characters and cannot contain quotes, line breaks, NUL, or start with a flag.');
-  const [major, minor] = process.versions.node.split('.').map(Number);
-  if (!(major > 22 || (major === 22 && minor >= 20))) {
-    return { installed: false, message: 'The Vercel Skills CLI requires Node.js 22.20 or newer. Upgrade Node.js before importing external skills.' };
-  }
-  if (!await commandExists('npx', env)) throw new Error('npx was not found; install Node.js with npm and rerun this request.');
-  const selection = all ? ['--skill', '*'] : ['--skill', skill];
-  const cliArgs = ['add', source, ...selection, '--agent', 'universal', '--copy', ...(scope === 'global' ? ['--global'] : []), '--yes'];
+  if (skill && !/^[a-zA-Z][a-zA-Z0-9-]{0,63}$/.test(skill)) throw new Error('Skill names use letters, numbers and hyphens (up to 64 characters).');
+  const targetDir = scope === 'global' ? getUniversalGlobalSkillsDirectory(env) : path.join(root, '.agents', 'skills');
   if (!context.autoApprove && (!context.approval || !(await context.approval(
-    'Install ' + (all ? 'all skills' : 'the skill "' + skill + '"') + ' from "' + source + '" into the ' + scope +
-    ' universal Agent Skills directory using ' + VERCEL_SKILLS_PACKAGE + '? The command downloads external instructions; it does not run their scripts, but imported instructions will be treated as untrusted context by Oasis.'
+    'Install ' + (all ? 'all skills' : 'the skill "' + skill + '"') + ' from "' + source + '" into ' + targetDir +
+    '? OASIS downloads the files and copies them; nothing from the source is run, and the instructions are treated as untrusted context.'
   )))) {
     return { installed: false, approved: false, message: 'External skill installation was denied; no skill source was installed.' };
   }
-  const result = await runExternalSkillsCommand(root, cliArgs, env, context.signal);
-  if (result.cancelled) return { installed: false, cancelled: true, output: result.output, message: 'Skill installation was cancelled. Inspect the output for any partial installation before retrying.' };
-  if (result.error || result.exitCode !== 0 || result.timedOut) {
-    return { installed: false, output: result.output, error: result.error || null, exitCode: result.exitCode, timedOut: Boolean(result.timedOut), message: 'The Vercel Skills CLI did not report a successful install. Review the output; Oasis does not assume the skill was installed.' };
+  let result;
+  try {
+    result = await installSkillsFromSource(source, { skill, all, targetDir, env, signal: context.signal });
+  } catch (error) {
+    return { installed: false, source, error: String(error && error.message || error), message: 'The skill was not installed: ' + String(error && error.message || error) };
   }
-  const skills = await listAvailableSkills(root, { env });
-  const installed = all ? skills.filter((item) => scope === 'global' ? item.source === 'global-portable' : item.source === 'portable-workspace')
-    : skills.filter((item) => item.name.toLowerCase() === skill.toLowerCase());
   return {
-    installed: installed.length > 0,
+    installed: result.installed.length > 0,
     source, scope, skill: all ? '*' : skill,
-    discovered: installed.map((item) => ({ name: item.name, description: item.description, source: item.source })),
-    output: result.output,
-    message: installed.length
-      ? 'The skill installation command succeeded. Oasis can discover the copied universal SKILL.md files; review their instructions as untrusted content before relying on them.'
-      : 'The installer exited successfully, but Oasis did not discover a matching SKILL.md in its standard universal skill directories. Inspect the output and directory layout before assuming the skill is active.'
+    discovered: result.installed.map((item) => ({ name: item.name, description: item.description, path: item.path, files: item.files, skipped: item.skipped })),
+    ...(result.available ? { available: result.available } : {}),
+    message: result.message
   };
 }
 
@@ -1426,7 +885,7 @@ function getClaudeUserSkillsDirectory(env = process.env) {
 const PORTABLE_SKILL_SOURCES = ['portable-workspace', 'global-portable', 'claude-project', 'claude-user'];
 const ABSOLUTE_SKILL_SOURCES = { 'global-portable': getUniversalGlobalSkillsDirectory, 'claude-user': getClaudeUserSkillsDirectory };
 
-function getUniversalGlobalSkillsDirectory(env = process.env) {
+export function getUniversalGlobalSkillsDirectory(env = process.env) {
   const home = env.HOME || env.USERPROFILE || os.homedir();
   const configHome = env.XDG_CONFIG_HOME || path.join(home, '.config');
   return path.join(configHome, 'agents', 'skills');
@@ -1864,16 +1323,12 @@ export async function executeTool(name, args = {}, context = {}) {
       return await loadSkillText(root, args.name, { env: context.env || process.env });
     case 'read_skill_resource':
       return await loadSkillResource(root, args.name, args.path, { env: context.env || process.env });
-    case 'setup_omniroute':
-      return await setupOmniRoute(args, context, root);
     case 'configure_provider':
       return await configureProviderFromChat(args, context);
     case 'install_external_skill':
       return await installExternalSkill(args, context, root);
     case 'configure_mcp_server':
       return await configureMcpServer(args, context, root);
-    case 'delegate_openhands':
-      return await delegateOpenHands(args, context, root);
     case 'install_extension': {
       const url = String(args.url || '').trim();
       const scope = String(args.scope || 'project');

@@ -196,8 +196,7 @@ export const LOCAL_SERVERS = [
   { id: 'lmstudio', name: 'LM Studio', baseURL: 'http://127.0.0.1:1234/v1', probe: 'http://127.0.0.1:1234/v1/models', kind: 'openai' },
   { id: 'llamacpp', name: 'llama.cpp server', baseURL: 'http://127.0.0.1:8080/v1', probe: 'http://127.0.0.1:8080/v1/models', kind: 'openai' },
   { id: 'jan', name: 'Jan', baseURL: 'http://127.0.0.1:1337/v1', probe: 'http://127.0.0.1:1337/v1/models', kind: 'openai' },
-  { id: 'vllm', name: 'vLLM', baseURL: 'http://127.0.0.1:8000/v1', probe: 'http://127.0.0.1:8000/v1/models', kind: 'openai' },
-  { id: 'omniroute', name: 'OmniRoute gateway', baseURL: 'http://127.0.0.1:20128/v1', probe: 'http://127.0.0.1:20128/v1/models', kind: 'openai', gateway: true }
+  { id: 'vllm', name: 'vLLM', baseURL: 'http://127.0.0.1:8000/v1', probe: 'http://127.0.0.1:8000/v1/models', kind: 'openai' }
 ];
 
 // Probe the fixed loopback ports of common model servers in parallel.
@@ -205,7 +204,7 @@ export async function discoverLocalServers({ fetchImpl = fetch, timeoutMs = PROB
   const results = await Promise.all(servers.map(async (server) => {
     try {
       const response = await fetchImpl(server.probe, { method: 'GET', redirect: 'error', cache: 'no-store', headers: { accept: 'application/json' }, signal: AbortSignal.timeout(timeoutMs) });
-      // A gateway that wants a key still counts as running.
+      // A server that wants a key still counts as running.
       if (response.status === 401 || response.status === 403) return { ...server, running: true, models: [], needsKey: true };
       if (!response.ok) return null;
       const payload = await response.json().catch(() => ({}));
@@ -227,7 +226,7 @@ export function recommendSetup(hw, servers = [], { configured = false } = {}) {
   const alternatives = [];
   let primary;
 
-  const withModels = servers.filter((s) => s.running && s.models && s.models.length && !s.gateway);
+  const withModels = servers.filter((s) => s.running && s.models && s.models.length);
   const ranked = withModels
     .map((server) => ({ server, pick: pickInstalledModel(server.models, budgetGB, { loaded: server.id !== 'ollama' }) }))
     .filter((entry) => entry.pick)
@@ -243,10 +242,7 @@ export function recommendSetup(hw, servers = [], { configured = false } = {}) {
       reason: server.name + ' is running with ' + pick.name + ', which fits in this computer\'s ' + budgetGB + ' GB model memory.'
     };
   } else {
-    const gateway = servers.find((s) => s.gateway && s.running);
-    if (gateway) {
-      primary = { route: 'gateway', server: gateway.id, serverName: gateway.name, protocol: 'openai-compatible', baseURL: gateway.baseURL, model: 'auto', reason: 'OmniRoute is running locally and can route to free and paid models.' };
-    } else if (tier && budgetGB >= 5.5) {
+    if (tier && budgetGB >= 5.5) {
       primary = {
         route: 'local-install', server: 'ollama', serverName: 'Ollama', protocol: 'openai-compatible',
         baseURL: 'http://127.0.0.1:11434/v1', model: tier.model, contextWindow: tier.contextWindow,

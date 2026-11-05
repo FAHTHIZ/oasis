@@ -23,7 +23,7 @@ const required = [
   'id="terminalForm"', 'id="terminalOutput"', '/api/terminal/command',
   'id="githubRepoSelect"', 'id="githubCloneBtn"', 'id="githubCheckBtn"', '/api/github/clone',
   'id="exportBtn"', 'id="importFile"', 'localStorage', 'id="providerSetupForm"', 'id="providerProtocol"', 'id="providerBaseUrl"', 'id="providerModel"', 'id="providerApiKey"',
-  'id="firstRunWizard"', 'data-first-run="api"', 'data-first-run="omniroute"', 'data-first-run="ollama"', 'aria-pressed="false"',
+  'id="firstRunWizard"', 'data-first-run="api"', 'data-first-run="ollama"', 'aria-pressed="false"',
   'id="firstRunStatus"', 'id="firstRunOllamaLink"', 'id="providerKeyHelp"', '@media(max-width:390px)',
   'id="agentWorkspaceGrid"', 'id="agentChatTab"', 'id="agentTerminalTab"', 'id="agentTerminalToggle"', 'id="agentSplitDivider"',
   'id="agentTerminalUtilityTab"', 'id="agentChangesUtilityTab"', 'id="agentTasksUtilityTab"',
