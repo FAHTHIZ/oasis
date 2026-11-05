@@ -89,10 +89,14 @@ Same agent, same safety policy, two front ends. `oasis web` opens a local browse
 
 OASIS also runs as an installable app on phones, tablets and computers, with nothing to set up: **[open the app](https://fahthiz.github.io/oasis/app/)** and add it to your home screen. The agent runs entirely on the device and talks straight to the model provider you choose; there is no OASIS server and no account.
 
+**Paste a key and start.** Paste an API key, a model page link (Ollama, Hugging Face, OpenRouter) or a server address into the first screen or straight into the message box. OASIS recognises the provider from the key, ranks the models that key can use, tool-tests the best ones and locks in the first that passes. If that model later runs out of credit or hits a rate limit, the agent switches to the next one mid-task and tells you. You never have to open a provider form.
+
 - Projects from GitHub, a ZIP or a folder; chat, edit with diffs and per-file revert, search, fetch web pages, and run JavaScript and its tests in an isolated, network-free sandbox with a hard time limit.
 - Commit and push to a new branch or open a pull request, always after you approve.
 - Works offline once installed. Skills load only when a task needs them, so it stays fast on low-end phones and small models.
-- Ten provider presets plus any OpenAI-compatible endpoint, including Ollama and llama.cpp on your own machine.
+- Recognises keys from OpenRouter, Anthropic, OpenAI, Gemini, Groq, DeepSeek, Mistral, xAI, Moonshot, Hugging Face, Together, Fireworks, Cerebras and NVIDIA, and works with any OpenAI-compatible server. Ollama, LM Studio and llama.cpp running on the device are found automatically, and an Ollama library link downloads the model.
+- Thirteen built-in plugins (Debugger, Test writer, Code reviewer, Security audit, Web app studio with live preview, GitHub and more). The right one appears above the message box as you type; one tap applies it.
+- A lite mode for old phones and low-end computers: no animation, fewer repaints while a reply streams, and a shorter transcript kept in memory.
 - One app for every device: the same installed app runs on Android, iPhone, iPad, ChromeOS, Windows, macOS and Linux, with no separate download per platform.
 
 It cannot run shell commands; for that, use the CLI or desktop app, or [connect your phone to them](docs/MOBILE.md#browser-workspace-from-your-phone). `oasis app --lan` serves the same app from your computer with a QR code. Details: [OASIS on a phone or tablet](docs/MOBILE.md#universal-app).

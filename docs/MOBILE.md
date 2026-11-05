@@ -20,6 +20,22 @@ Open **[fahthiz.github.io/oasis/app](https://fahthiz.github.io/oasis/app/)** and
 
 After installing, it opens full screen with its own icon and works offline. The whole agent runs on the device: the loop, tools, projects and chat history live in the browser, and model requests go straight from the device to the provider you pick. There is no OASIS server in between.
 
+**Getting started takes one paste.** The first screen asks for one thing: an API key, a model link or a server address. Paste it there, or straight into the message box at any time:
+
+- **An API key.** The provider is recognised from the key's shape (OpenRouter `sk-or-…`, Anthropic `sk-ant-…`, Gemini `AIza…`, Groq `gsk_…`, xAI `xai-…`, Hugging Face `hf_…`, NVIDIA `nvapi-…`, and others; ambiguous `sk-…` keys are tried against OpenAI, DeepSeek and Moonshot in turn). OASIS lists the models the key can use, ranks them, sends the best few a small tool-calling test and locks in the first that passes. The progress shows as it happens.
+- **A model link.** An Ollama library page (`ollama.com/library/qwen3`) pulls the model into your local Ollama; a Hugging Face model page uses Hugging Face's router; an OpenRouter model page selects that model.
+- **A server address.** `http://localhost:11434`, `http://192.168.1.20:8080/v1` or any OpenAI-compatible URL. Ollama, LM Studio and llama.cpp running on the same device are found automatically and offered as one-tap buttons.
+
+Whatever you paste after the key in the same message (for example `sk-or-… fix the failing test`) is sent as your first request once the connection is ready.
+
+**Automatic model fallback.** Every connection keeps a ranked list of working models. When the current one runs out of credit (402), is rate limited (429), overloaded (5xx) or removed (404), the agent moves to the next model, or to another connected provider, in the middle of the task and adds a short note to the chat. Tap the model name at the top to see the order, pick a model yourself, or turn automatic switching off.
+
+**Built-in plugins.** Thirteen plugins ship with the app: Debugger, Test writer, Code reviewer, Security audit, Feature builder, Web app studio, API builder, Mobile apps, Project guide, Planner, Smallest change, Docs writer and GitHub. As you type, the matching plugin appears above the message box; tap it to apply it to this request, or turn it on for the whole project from the plugin sheet. Each plugin adds a short instruction and the skills it needs; none adds new tools or network access.
+
+**Live preview.** When a task writes an HTML page, the app offers **Preview**. The page runs in the same isolated, network-free sandbox as the code runner, with the project's CSS, JavaScript and images loaded in. Errors in the page show up with a **Fix the preview error** suggestion that sends them back to the agent.
+
+**Lite mode.** On devices with little memory, few cores, Data Saver or reduced motion, the app switches to lite mode on its own: no animation or blur, fewer repaints while a reply streams, tool output drawn only when you open it, and a shorter transcript kept in memory. Add `?lite=1` to force it on or `?lite=0` to force it off.
+
 **What it does**
 
 - Chat with an agent that reads, writes, edits, searches and deletes files in a project, with a diff for every change and **Revert** per file.
@@ -30,7 +46,7 @@ After installing, it opens full screen with its own icon and works offline. The 
 - Approval modes: **Ask** (approve every change), **Edits** (file edits allowed, risky actions ask) and **Auto**.
 - Repairs malformed and text-only tool calls from small models, detects loops, and compacts long conversations.
 
-**Providers:** OpenRouter, Anthropic, OpenAI, Google Gemini, Groq, DeepSeek, Mistral, xAI, Ollama, or any OpenAI-compatible endpoint (llama.cpp, LM Studio, vLLM). Keys are stored only in this browser's local storage on this device. For Ollama or llama.cpp on your own computer, allow the app's origin in the server (for Ollama, `OLLAMA_ORIGINS=https://fahthiz.github.io`).
+**Providers:** OpenRouter, Anthropic, OpenAI, Google Gemini, Groq, DeepSeek, Mistral, xAI, Moonshot, Hugging Face, Together, Fireworks, Cerebras, NVIDIA, Ollama, or any OpenAI-compatible endpoint (llama.cpp, LM Studio, vLLM). You can connect several at once; **Settings → Connections** lists them, and **Manual setup** is still there if you want to type a base URL and model by hand. Keys are stored only in this browser's local storage on this device. For Ollama or llama.cpp on your own computer, allow the app's origin in the server (for Ollama, `OLLAMA_ORIGINS=https://fahthiz.github.io`).
 
 **Links:** `…/app/?repo=owner/name` imports a repository on open, and `?q=…` starts a chat with that request.
 

@@ -12,7 +12,15 @@ export const PRESETS = {
   deepseek: { label: 'DeepSeek', protocol: 'openai', baseURL: 'https://api.deepseek.com/v1', model: 'deepseek-chat', keyHint: 'sk-…' },
   mistral: { label: 'Mistral', protocol: 'openai', baseURL: 'https://api.mistral.ai/v1', model: 'devstral-medium-latest', keyHint: '' },
   xai: { label: 'xAI', protocol: 'openai', baseURL: 'https://api.x.ai/v1', model: 'grok-code-fast-1', keyHint: 'xai-…' },
+  huggingface: { label: 'Hugging Face', protocol: 'openai', baseURL: 'https://router.huggingface.co/v1', model: 'Qwen/Qwen3-Coder-480B-A35B-Instruct', keyHint: 'hf_…', note: 'Any chat model served by Hugging Face Inference Providers.' },
+  together: { label: 'Together AI', protocol: 'openai', baseURL: 'https://api.together.xyz/v1', model: '', keyHint: '' },
+  fireworks: { label: 'Fireworks AI', protocol: 'openai', baseURL: 'https://api.fireworks.ai/inference/v1', model: '', keyHint: 'fw_…' },
+  cerebras: { label: 'Cerebras', protocol: 'openai', baseURL: 'https://api.cerebras.ai/v1', model: '', keyHint: 'csk-…' },
+  nvidia: { label: 'NVIDIA NIM', protocol: 'openai', baseURL: 'https://integrate.api.nvidia.com/v1', model: '', keyHint: 'nvapi-…' },
+  moonshot: { label: 'Moonshot (Kimi)', protocol: 'openai', baseURL: 'https://api.moonshot.ai/v1', model: '', keyHint: 'sk-…' },
   ollama: { label: 'Ollama (your computer)', protocol: 'openai', baseURL: 'http://localhost:11434/v1', model: 'qwen3-coder:30b', keyHint: 'not needed', note: 'Start Ollama with OLLAMA_ORIGINS=* so the app may reach it.' },
+  lmstudio: { label: 'LM Studio (your computer)', protocol: 'openai', baseURL: 'http://localhost:1234/v1', model: '', keyHint: 'not needed', note: 'Turn on the local server and CORS in LM Studio.' },
+  llamacpp: { label: 'llama.cpp server', protocol: 'openai', baseURL: 'http://localhost:8080/v1', model: '', keyHint: 'not needed' },
   custom: { label: 'Custom (OpenAI-compatible)', protocol: 'openai', baseURL: '', model: '', keyHint: '' }
 };
 
@@ -211,7 +219,7 @@ export async function chat(config, request) {
       if (error && error.name === 'AbortError') throw error;
       const network = error instanceof TypeError;
       const retryable = network || (error instanceof ProviderError && error.retryable);
-      if (!retryable || attempt >= 3) {
+      if (!retryable || attempt >= (Number.isInteger(config.maxRetries) ? config.maxRetries : 3)) {
         if (network) throw new ProviderError('Could not reach ' + (config.baseURL || 'the provider') + '. Check the connection, or the provider may not allow calls from a browser app (CORS). ' + error.message);
         throw error;
       }
