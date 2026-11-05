@@ -131,6 +131,7 @@ export const BUILTIN_COMMANDS = {
   tips: 'Show a rotating setup and workflow tip (/tips)',
   keybindings: 'Show keyboard shortcuts',
   vim: 'Toggle vim editing for the prompt (/vim on|off)',
+  sounds: 'Sound effects for finished turns, approvals, errors and completed steps (/sounds on|off|test|volume 0-100)',
   voice: 'Voice dictation: /voice on|off|status; Alt+V starts and stops recording',
   diff: 'Show uncommitted changes in the working tree (/diff [PATH], /diff --stat)',
   autocompact: 'Show or set the auto-compaction threshold (/autocompact 70 = compact at 70% of the window, off, reset)',
@@ -1315,6 +1316,45 @@ export async function runBuiltinCommand(name, argument, state) {
       await mkdir(path.dirname(file), { recursive: true });
       await atomicWriteFile(file, JSON.stringify(saved, null, 2) + '\n', 'utf8');
       return { output: 'Theme set to ' + theme.name + (env.OASIS_THEME ? ' (OASIS_THEME is set and wins at the next start)' : '') + '.\n' + themes.themePreview(theme) };
+    }
+    case 'sounds':
+    case 'sound': {
+      const sounds = await import('./sounds.mjs');
+      const { updateUserSettings } = await import('./settings.mjs');
+      const words = argument.trim().toLowerCase().split(/\s+/).filter(Boolean);
+      const status = () => {
+        const reason = sounds.soundsOffReason({ env: env || process.env });
+        return reason ? 'Sounds are off: ' + reason + '.' : 'Sounds are on (volume ' + sounds.soundVolume(env || process.env) + '). They play when a turn of 3 seconds or more finishes, when OASIS needs your approval or an answer, on errors, and as a soft tick when a checklist step is completed.';
+      };
+      const remember = (key, value) => {
+        if (session && session.settings) session.settings[key] = value;
+        return updateUserSettings((saved) => { saved[key] = value; return saved; }, env || process.env).catch(() => {});
+      };
+      if (!words.length) return { output: status() + ' Use /sounds on, /sounds off, /sounds test or /sounds volume 0-100.' };
+      if (words[0] === 'on' || words[0] === 'off') {
+        const on = words[0] === 'on';
+        sounds.configureSounds({ enabled: on });
+        await remember('sounds', on);
+        if (on) sounds.playSound('done', { env: env || process.env });
+        return { output: on ? status() : 'Sounds off. /sounds on turns them back on.' };
+      }
+      if (words[0] === 'volume') {
+        const value = Number(String(words[1] || '').replace(/%$/, ''));
+        if (!Number.isFinite(value) || value < 0 || value > 100) return { output: 'Usage: /sounds volume 0-100 (now ' + sounds.soundVolume(env || process.env) + ').' };
+        sounds.configureSounds({ volume: value });
+        await remember('soundVolume', Math.round(value));
+        sounds.resetRateLimits();
+        sounds.playSound('done', { env: env || process.env });
+        return { output: 'Sound volume set to ' + Math.round(value) + '.' };
+      }
+      if (words[0] === 'test') {
+        const reason = sounds.soundsOffReason({ env: env || process.env });
+        if (reason) return { output: 'Sounds are off: ' + reason + '.' };
+        const order = ['done', 'attention', 'task', 'error'];
+        order.forEach((name, index) => setTimeout(() => { sounds.resetRateLimits(); sounds.playSound(name, { env: env || process.env }); }, index * 900).unref?.());
+        return { output: 'Playing: finished turn, needs you, step completed, error.' };
+      }
+      return { output: 'Usage: /sounds on|off|test|volume 0-100.' };
     }
     case 'vim': {
       // Toggle vim editing for the prompt; saved as "editorMode" in user settings.

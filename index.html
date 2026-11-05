@@ -288,6 +288,7 @@
     <section class="panel panel-pad settings-group">
       <div class="section-head"><div><h2>Appearance and backup</h2><div class="section-sub">Preferences and a copy of your local workspace.</div></div></div>
       <div class="settings-control-row"><span><strong>Theme</strong><small>Choose a comfortable appearance.</small></span><button class="btn btn-secondary" id="themeToggle" type="button">Use light theme</button></div>
+      <div class="settings-control-row"><span><strong>Sound effects</strong><small>Soft chime when a turn finishes, two taps when OASIS needs you, a low tone on errors, a tiny tick per completed step.</small></span><span style="display:flex;gap:8px;align-items:center"><select id="soundsSelect" class="settings-select" aria-label="Sound effects"><option value="on">On</option><option value="off">Off</option></select><input id="soundVolume" type="range" min="0" max="100" step="5" aria-label="Sound volume" style="width:110px"></span></div>
       <div class="settings-control-row"><span><strong>Finished turns</strong><small>Fold a finished turn's tool steps into one "Worked for…" line.</small></span><select id="collapseWorkSelect" class="settings-select" aria-label="Finished turns"><option value="on">Fold tool steps</option><option value="off">Keep every step visible</option></select></div>
       <div class="settings-control-row"><span><strong>Chat width</strong><small>How wide the conversation column is.</small></span><select id="chatWidthSelect" class="settings-select" aria-label="Chat width"><option value="comfortable">Comfortable</option><option value="wide">Wide</option><option value="full">Full width</option></select></div>
       <div class="settings-control-row"><span><strong>Send key</strong><small>Which key sends a message in the composer.</small></span><select id="sendKeySelect" class="settings-select" aria-label="Send key"><option value="enter">Enter sends, Shift+Enter new line</option><option value="mod-enter">Ctrl/⌘+Enter sends, Enter new line</option></select></div>
@@ -2194,6 +2195,61 @@ C.hook('agentProcessEvent',function(prev){return function(jobId,event){
   else if(t==='failed')attentionNotify('OASIS stopped with an error',d.message||'');
   return prev(jobId,event);
 }});
+/* Sound effects: four short tones synthesized with Web Audio (no audio files),
+   matching the terminal's src/sounds.mjs. Rate-limited so a busy turn never
+   chatters; a checklist tick never lands on top of another sound. Saved in
+   localStorage "oasis.sounds" as {on, volume}. */
+(function(){
+  var KEY='oasis.sounds',prefs={on:true,volume:50};
+  try{var saved=JSON.parse(localStorage.getItem(KEY)||'null');if(saved&&typeof saved==='object'){if(typeof saved.on==='boolean')prefs.on=saved.on;if(Number.isFinite(saved.volume))prefs.volume=Math.max(0,Math.min(100,saved.volume))}}catch(e){}
+  var designs={
+    done:[{f:783.99,at:0,len:.42,g:1},{f:1174.66,at:.11,len:.55,g:.9}],
+    attention:[{f:880,at:0,len:.16,g:1},{f:880,at:.2,len:.22,g:.85}],
+    error:[{f:392,at:0,len:.22,g:1},{f:311.13,at:.17,len:.34,g:.95}],
+    task:[{f:1567.98,at:0,len:.09,g:.55}]
+  };
+  var gaps={task:1500,done:400,attention:800,error:400},last={},lastAny=0,ctx=null;
+  function audio(){if(!ctx){var A=window.AudioContext||window.webkitAudioContext;if(!A)return null;try{ctx=new A()}catch(e){return null}}if(ctx.state==='suspended')ctx.resume().catch(function(){});return ctx}
+  function persist(){try{localStorage.setItem(KEY,JSON.stringify(prefs))}catch(e){}}
+  function play(name,force){
+    var notes=designs[name];if(!notes||(!force&&(!prefs.on||prefs.volume<=0)))return false;
+    var now=Date.now();
+    if(!force){if(now-(last[name]||0)<(gaps[name]||300))return false;if(name==='task'&&now-lastAny<400)return false}
+    var c=audio();if(!c||c.state!=='running'&&!force)return false;
+    last[name]=now;lastAny=now;
+    var peak=.7*Math.pow(prefs.volume/100,1.5),t0=c.currentTime+.01,out=c.createGain();out.gain.value=peak;out.connect(c.destination);
+    notes.forEach(function(n){
+      [[1,1],[2,.18]].forEach(function(h){
+        var o=c.createOscillator(),g=c.createGain(),start=t0+n.at,end=start+n.len;
+        o.type='sine';o.frequency.value=n.f*h[0];
+        g.gain.setValueAtTime(0,start);g.gain.linearRampToValueAtTime(n.g*h[1],start+.008);g.gain.exponentialRampToValueAtTime(.0005,end);
+        o.connect(g);g.connect(out);o.start(start);o.stop(end+.02);
+      });
+    });
+    return true;
+  }
+  window.oasisSound=play;
+  window.oasisSoundPrefs=function(){return {on:prefs.on,volume:prefs.volume}};
+  var sel=$('soundsSelect'),vol=$('soundVolume');
+  if(sel){sel.value=prefs.on?'on':'off';sel.addEventListener('change',function(){prefs.on=sel.value==='on';persist();if(prefs.on){last={};play('done')}})}
+  if(vol){vol.value=String(prefs.volume);vol.addEventListener('change',function(){prefs.volume=Number(vol.value)||0;persist();last={};play('done')})}
+  /* Browsers only allow audio after a click or key press; unlock on the first one. */
+  function unlock(){audio();document.removeEventListener('pointerdown',unlock,true);document.removeEventListener('keydown',unlock,true)}
+  document.addEventListener('pointerdown',unlock,true);document.addEventListener('keydown',unlock,true);
+  var turnStart=0,done={};
+  if(form)form.addEventListener('submit',function(){if(!C.busy)turnStart=Date.now()},true);
+  C.hook('agentProcessEvent',function(prev){return function(jobId,event){
+    var t=event&&event.type,d=(event&&event.data)||{};
+    if(t==='approval_required'||t==='question'||t==='elicitation')play('attention');
+    else if(t==='completed'){if(!turnStart||Date.now()-turnStart>=3000)play('done');delete done[jobId]}
+    else if(t==='failed'){play('error');delete done[jobId]}
+    else if(t==='tool_result'&&d.name==='todo_write'&&d.args&&Array.isArray(d.args.todos)&&d.status!=='error'){
+      var n=d.args.todos.filter(function(x){return x&&x.status==='completed'}).length;
+      if(n>(done[jobId]||0))play('task');done[jobId]=n;
+    }
+    return prev(jobId,event);
+  }});
+})();
 /* Images: paste a screenshot, drop files on the composer, or use the attach
    button. Up to 4 PNG, JPEG, GIF or WebP images, 3.75 MB each; the server
    checks type, file signature, size and whether the model accepts images. */
