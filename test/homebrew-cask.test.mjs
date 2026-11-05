@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import { CASK_PATH, dmgChecksums, renderCask } from '../scripts/homebrew-cask.mjs';
+import { CASK_PATH, FORMULA_PATH, dmgChecksums, renderCask, renderFormula } from '../scripts/homebrew-cask.mjs';
 
 const pkg = JSON.parse(fs.readFileSync(new URL('../package.json', import.meta.url), 'utf8'));
 const A = 'a'.repeat(64);
@@ -43,5 +43,23 @@ test('the release workflow refreshes the cask only for stable releases', () => {
   const workflow = fs.readFileSync(new URL('../.github/workflows/desktop-build.yml', import.meta.url), 'utf8');
   const step = workflow.slice(workflow.indexOf('- name: Refresh the Homebrew cask on main'));
   assert.match(step, /outputs\.prerelease == 'false'/);
-  assert.match(step, /node scripts\/homebrew-cask\.mjs --version "\$RELEASE_VERSION" --sums \.\.\/release-assets\/SHA256SUMS/);
+  assert.match(step, /node scripts\/homebrew-cask\.mjs --version "\$RELEASE_VERSION" --sums \.\.\/release-assets\/SHA256SUMS --source-sha "\$source_sha"/);
+  assert.match(step, /archive\/refs\/tags\/\$\{RELEASE_TAG\}\.tar\.gz/);
+  assert.match(step, /git add Casks\/oasis\.rb Formula\/oasis-cli\.rb/);
+});
+
+test('the CLI formula installs the tagged source with npm and matches its generator', () => {
+  const formula = renderFormula('1.2.0', A);
+  assert.match(formula, /class OasisCli < Formula/);
+  assert.match(formula, /archive\/refs\/tags\/v1\.2\.0\.tar\.gz/);
+  assert.match(formula, /depends_on "node"/);
+  assert.match(formula, /std_npm_args/);
+  assert.match(formula, /OASIS #\{version\}/);
+  assert.throws(() => renderFormula('1.2.0', 'nope'), /source-sha/);
+  const committed = fs.readFileSync(FORMULA_PATH, 'utf8');
+  const version = committed.match(/tags\/v(\d+\.\d+\.\d+)\.tar\.gz/)[1];
+  const sha = committed.match(/sha256 "([0-9a-f]{64})"/)[1];
+  assert.equal(committed, renderFormula(version, sha), 'regenerate with node scripts/homebrew-cask.mjs');
+  assert.equal(version, fs.readFileSync(CASK_PATH, 'utf8').match(/version "([^"]+)"/)[1], 'cask and formula track the same release');
+  assert.equal(pkg.bin.oasis, './src/cli.mjs', 'the formula links the oasis binary');
 });
