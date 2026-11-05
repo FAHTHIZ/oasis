@@ -120,7 +120,7 @@ test('runtime engine end to end: app at /, paste to connect, approve a real edit
     const { data } = await page.send('Page.captureScreenshot', { format: 'png' });
     await writeFile(path.join(shotsDir, 'runtime-' + name + '.png'), Buffer.from(data, 'base64'));
   };
-  if (shotsDir) await page.send('Emulation.setDeviceMetricsOverride', { width: Number(process.env.OASIS_SHOTS_WIDTH || 1280), height: Number(process.env.OASIS_SHOTS_HEIGHT || 800), deviceScaleFactor: 1, mobile: Number(process.env.OASIS_SHOTS_WIDTH || 1280) < 600 });
+  if (shotsDir) await page.send('Emulation.setDeviceMetricsOverride', { width: Number(process.env.OASIS_SHOTS_WIDTH || 1280), height: Number(process.env.OASIS_SHOTS_HEIGHT || 800), deviceScaleFactor: 1, mobile: process.env.OASIS_SHOTS_MOBILE === '0' ? false : Number(process.env.OASIS_SHOTS_WIDTH || 1280) < 600 });
 
   // 1. Without the link's token the app asks for it, and the paste box takes the link.
   await page.send('Page.navigate', { url: origin + '/' });
@@ -157,6 +157,7 @@ test('runtime engine end to end: app at /, paste to connect, approve a real edit
   assert.match(await evaluate(page, `[...document.querySelectorAll('.tool')].at(-1).textContent`), /Run.*node -e/);
 
   await shot('4-done');
+  if (process.env.OASIS_DEBUG_OVERFLOW) console.log('OVERFLOW', await evaluate(page, `JSON.stringify({ sw: document.documentElement.scrollWidth, iw: innerWidth, wide: [...document.querySelectorAll('body *')].filter((el) => el.getBoundingClientRect().right > innerWidth + 1 && el.getClientRects().length).slice(0, 12).map((el) => el.tagName + '#' + el.id + '.' + el.className + ':' + Math.round(el.getBoundingClientRect().right)) })`));
   // 4. Files panel lists the real folder (no secrets); Changes comes from git.
   await evaluate(page, `document.getElementById('filesPanel').hidden && document.getElementById('filesButton').click(); true`);
   await waitFor(page, `[...document.querySelectorAll('#fileList .file-row')].some((row) => row.textContent.includes('index.html'))`, { label: 'files panel lists index.html' });
@@ -183,7 +184,23 @@ test('runtime engine end to end: app at /, paste to connect, approve a real edit
   await evaluate(page, `document.getElementById('allowButton').click(); true`);
   await waitFor(page, `!${busy} && /noted: use tabs/.test(document.getElementById('transcript').textContent)`, { label: 'the running task read the note', timeout: 30000 });
 
-  // 7. The desktop menu's "Connect a phone…" opens the app's phone sheet.
+  // 7. New chat starts fresh; the earlier chat is one tap away in Chats.
+  await evaluate(page, `document.getElementById('chatsButton').click(); true`);
+  await waitFor(page, `!document.getElementById('chatsSheet').hidden && document.querySelectorAll('#chatList .project-item').length === 1 && /Build a counter/.test(document.getElementById('chatList').textContent)`, { label: 'chats list shows the current chat' });
+  await evaluate(page, `document.getElementById('newChatButton').click(); true`);
+  await waitFor(page, `document.getElementById('chatsSheet').hidden && !document.querySelector('#transcript .msg') && !document.getElementById('welcome').hidden`, { label: 'new chat is empty' });
+  await evaluate(page, type('Say hi'));
+  await evaluate(page, submit);
+  await waitFor(page, `!${busy} && /Answer from acme\\/coder-pro/.test(document.getElementById('transcript').textContent)`, { label: 'second chat answered' });
+  await evaluate(page, `document.getElementById('chatsButton').click(); true`);
+  await waitFor(page, `document.querySelectorAll('#chatList .project-item').length === 2`, { label: 'two chats listed' });
+  await shot('7-chats');
+  await evaluate(page, `[...document.querySelectorAll('#chatList .project-item .open')].find((b) => /Build a counter/.test(b.textContent)).click(); true`);
+  await waitFor(page, `/Done\\. I built the counter/.test(document.getElementById('transcript').textContent) && !/Say hi/.test(document.getElementById('transcript').textContent)`, { label: 'earlier chat reopened' });
+  await evaluate(page, `location.reload(); true`);
+  await waitFor(page, `document.readyState === 'complete' && document.documentElement.classList.contains('runtime') && /Done\\. I built the counter/.test(document.getElementById('transcript').textContent)`, { label: 'the open chat is remembered across reloads' });
+
+  // 8. The desktop menu's "Connect a phone…" opens the app's phone sheet.
   await evaluate(page, `window.oasisConnectPhone(); true`);
   await waitFor(page, `!document.getElementById('phoneSheet').hidden && /home network|Tailscale|reachable/.test(document.getElementById('phoneHint').textContent) && !document.getElementById('phoneError').textContent`, { label: 'phone sheet shows the network choices' });
   await shot('6-phone');

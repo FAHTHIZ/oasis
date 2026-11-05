@@ -631,20 +631,113 @@ function renderTodos(todos) {
   }
 }
 
+// Chats: each project keeps a list of chats. The first chat uses the
+// original 'chat:<project>' key, so chats saved before the list existed stay.
+let chatId = 'main';
+const chatKey = (projectId, id) => 'chat:' + projectId + (id === 'main' ? '' : ':' + id);
+async function chatIndex(projectId) {
+  const index = await store.getValue('chats:' + projectId).catch(() => null);
+  return index && Array.isArray(index.list) ? index : { current: 'main', list: [] };
+}
+function chatTitle() {
+  const first = display.find((entry) => entry.role === 'user' && entry.content);
+  return first ? String(first.content).replace(/\s+/g, ' ').trim().slice(0, 80) : 'New chat';
+}
+
 async function persistChat() {
   if (!workspace) return;
   const trimmed = display.slice(-200).map((entry) => ({ ...entry, tools: entry.tools && entry.tools.map((t) => ({ ...t, content: (t.content || '').slice(0, 2000) })) }));
-  try { await store.setValue('chat:' + workspace.project.id, { messages: RT ? agent.snapshot() : agent.messages.slice(-300), display: trimmed }); } catch { /* storage full: chat stays in memory */ }
+  try {
+    const projectId = workspace.project.id;
+    await store.setValue(chatKey(projectId, chatId), { messages: RT ? agent.snapshot() : agent.messages.slice(-300), display: trimmed });
+    const index = await chatIndex(projectId);
+    index.current = chatId;
+    index.list = index.list.filter((item) => item.id !== chatId);
+    if (trimmed.length) index.list.unshift({ id: chatId, title: chatTitle(), updatedAt: Date.now() });
+    index.list = index.list.slice(0, 50);
+    await store.setValue('chats:' + projectId, index);
+  } catch { /* storage full: chat stays in memory */ }
 }
 
-async function restoreChat() {
+async function newChat() {
+  if (agent.busy) agent.stop();
+  if (workspace) await persistChat();
+  chatId = Math.random().toString(36).slice(2, 10);
+  if (workspace) { const index = await chatIndex(workspace.project.id); index.current = chatId; await store.setValue('chats:' + workspace.project.id, index); }
+  await restoreChat({ keepChat: true });
+  renderWelcome();
+  $('input').focus();
+}
+
+async function openChat(id) {
+  if (!workspace || id === chatId) return;
+  if (agent.busy) agent.stop();
+  await persistChat();
+  chatId = id;
+  const index = await chatIndex(workspace.project.id);
+  index.current = id;
+  await store.setValue('chats:' + workspace.project.id, index);
+  await restoreChat({ keepChat: true });
+}
+
+async function deleteChats(projectId) {
+  const index = await chatIndex(projectId);
+  for (const item of index.list) await store.setValue(chatKey(projectId, item.id), null);
+  await store.setValue(chatKey(projectId, 'main'), null);
+  await store.setValue('chats:' + projectId, null);
+}
+
+async function openChats() {
+  const list = $('chatList');
+  list.replaceChildren();
+  const index = workspace ? await chatIndex(workspace.project.id) : { list: [] };
+  // A chat saved before the list existed shows up as the first entry.
+  if (workspace && !index.list.some((item) => item.id === 'main')) {
+    const legacy = await store.getValue(chatKey(workspace.project.id, 'main')).catch(() => null);
+    const first = legacy && legacy.display && legacy.display.find((entry) => entry.role === 'user');
+    if (first) index.list.push({ id: 'main', title: String(first.content).slice(0, 80), updatedAt: 0 });
+  }
+  $('chatsListLabel').textContent = workspace ? 'In ' + (workspace.project.name || 'this project') : 'Open a project to keep chats';
+  if (!index.list.length) list.innerHTML = '<li class="empty">No chats yet. Ask OASIS something to start one.</li>';
+  for (const item of index.list) {
+    const li = document.createElement('li');
+    li.className = 'project-item' + (item.id === chatId ? ' current' : '');
+    const open = document.createElement('button');
+    open.className = 'open';
+    open.innerHTML = '<strong></strong><span></span>';
+    open.querySelector('strong').textContent = item.title || 'Chat';
+    open.querySelector('span').textContent = item.id === chatId ? 'Open now' : item.updatedAt ? new Date(item.updatedAt).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' }) : 'Earlier';
+    open.addEventListener('click', async () => { closeSheet('chatsSheet'); await openChat(item.id); });
+    const del = document.createElement('button');
+    del.className = 'icon-btn small';
+    del.setAttribute('aria-label', 'Delete chat ' + (item.title || ''));
+    del.innerHTML = '<svg viewBox="0 0 20 20" aria-hidden="true"><path d="M5 6h10M8 6V4.5h4V6M6.5 6l.7 9.5h5.6l.7-9.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+    del.addEventListener('click', async () => {
+      if (!confirm('Delete this chat? Files are not affected.')) return;
+      const current = await chatIndex(workspace.project.id);
+      current.list = current.list.filter((entry) => entry.id !== item.id);
+      await store.setValue(chatKey(workspace.project.id, item.id), null);
+      if (item.id === chatId) { chatId = current.list[0] ? current.list[0].id : 'main'; current.current = chatId; await store.setValue('chats:' + workspace.project.id, current); await restoreChat({ keepChat: true }); }
+      else await store.setValue('chats:' + workspace.project.id, current);
+      openChats();
+    });
+    li.append(open, del);
+    list.appendChild(li);
+  }
+  if ($('chatsSheet').hidden) openSheet('chatsSheet');
+}
+$('chatsButton').addEventListener('click', () => openChats());
+$('newChatButton').addEventListener('click', async () => { closeSheet('chatsSheet'); await newChat(); });
+
+async function restoreChat({ keepChat = false } = {}) {
   $('transcript').replaceChildren();
   display = [];
   agent.reset();
   renderTodos([]);
   $('usage').textContent = '';
   if (!workspace) { $('welcome').hidden = false; return; }
-  const saved = await store.getValue('chat:' + workspace.project.id);
+  if (!keepChat) chatId = (await chatIndex(workspace.project.id)).current || 'main';
+  const saved = await store.getValue(chatKey(workspace.project.id, chatId));
   if (saved && saved.display && saved.display.length) {
     agent.load(saved.messages);
     display = saved.display;
@@ -1221,8 +1314,9 @@ $('clearChat').addEventListener('click', async () => {
   if (agent.busy) agent.stop();
   agent.reset();
   display = [];
-  if (workspace) await store.setValue('chat:' + workspace.project.id, null);
-  await restoreChat();
+  if (workspace) await store.setValue(chatKey(workspace.project.id, chatId), null);
+  await persistChat();
+  await restoreChat({ keepChat: true });
   renderWelcome();
   closeSheet('settingsSheet');
 });
@@ -1258,7 +1352,7 @@ async function openProjects() {
     del.addEventListener('click', async () => {
       if (!confirm('Delete "' + project.name + '" and its chat from this device?')) return;
       await store.deleteProject(project.id);
-      await store.setValue('chat:' + project.id, null);
+      await deleteChats(project.id);
       if (workspace && workspace.project.id === project.id) { workspace = null; localStorage.removeItem('oasis.project'); await restoreChat(); updateProjectUI(); refreshFiles(); }
       openProjects();
     });

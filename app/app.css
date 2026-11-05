@@ -46,7 +46,7 @@ code,pre,.diff,.editor,.tool .arg,.file-row,.model-chip{font-feature-settings:"c
 svg{width:20px;height:20px;flex:none}
 
 /* Layout */
-.app{height:100dvh;display:grid;grid-template-rows:auto 1fr;padding-left:var(--safe-left);padding-right:var(--safe-right)}
+.app{height:100dvh;display:grid;grid-template-rows:auto 1fr;grid-template-columns:minmax(0,1fr);padding-left:var(--safe-left);padding-right:var(--safe-right)}
 .topbar{display:flex;align-items:center;gap:8px;min-height:calc(var(--topbar) + var(--safe-top));padding:var(--safe-top) 10px 0 8px;border-bottom:1px solid var(--line);background:color-mix(in srgb,var(--bg) 88%,transparent);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);position:relative;z-index:5}
 .brand{display:flex;align-items:center;gap:10px;min-width:0;flex:0 1 auto;overflow:hidden;padding:6px 8px;border-radius:var(--r-md);text-align:left}
 .brand:hover{background:var(--raised)}
