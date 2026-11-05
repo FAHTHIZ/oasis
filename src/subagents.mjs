@@ -34,6 +34,7 @@ export const BUILTIN_AGENTS = {
   'general-purpose': {
     name: 'general-purpose',
     description: 'General agent for research, code search and multi-step work including edits and commands. Use for self-contained work that would fill the main context.',
+    summary: 'Edits, commands and research for self-contained multi-step work.',
     tools: null,
     prompt: 'You are a general-purpose subagent. Complete the delegated task end to end using the available tools. Verify your work where possible.',
     source: 'built-in'
@@ -41,6 +42,7 @@ export const BUILTIN_AGENTS = {
   explore: {
     name: 'explore',
     description: 'Fast read-only agent for exploring a codebase: finding files, searching for symbols, and answering questions about how code works. Cannot edit files or run commands.',
+    summary: 'Read-only code search; returns findings with paths and line numbers.',
     tools: READ_ONLY,
     prompt: 'You are a read-only exploration subagent. Search broadly, read the relevant code, and return precise findings with file paths and line numbers. Do not attempt edits.',
     source: 'built-in'
@@ -48,6 +50,7 @@ export const BUILTIN_AGENTS = {
   plan: {
     name: 'plan',
     description: 'Read-only software architect: investigates the codebase and returns a concrete, step-by-step implementation plan with files to change and risks.',
+    summary: 'Read-only; returns a step-by-step implementation plan with files and risks.',
     tools: READ_ONLY,
     prompt: 'You are a planning subagent. Investigate the code, then return a numbered implementation plan listing the exact files and functions to change, the order of work, tests to add, and risks. Do not edit files.',
     source: 'built-in'
@@ -55,6 +58,7 @@ export const BUILTIN_AGENTS = {
   'code-review': {
     name: 'code-review',
     description: 'Independent read-only reviewer: finds correctness bugs, regressions, edge cases and missing tests in proposed changes.',
+    summary: 'Read-only review of changes for bugs, regressions, edge cases and missing tests.',
     tools: READ_ONLY,
     prompt: 'You are an independent code reviewer. Inspect the actual diff and surrounding implementation. Report only actionable findings, ordered by severity. For every finding include the exact file and line, the failing scenario, why the behavior is incorrect, and a concrete test that would catch it. Distinguish confirmed defects from risks or suggestions. Do not edit files. Do not report style-only preferences as bugs. If you find no actionable defects, say so and list the areas you inspected. Judge the code, not the author’s description of it: do not praise the change, soften a real defect, or agree with a claim you have not checked.',
     source: 'built-in'
@@ -62,6 +66,7 @@ export const BUILTIN_AGENTS = {
   'security-review': {
     name: 'security-review',
     description: 'Independent read-only security reviewer: inspects trust boundaries, permissions, secrets, filesystem and network access.',
+    summary: 'Read-only security review: trust boundaries, permissions, secrets, file and network access.',
     tools: READ_ONLY,
     prompt: 'You are an independent security reviewer. Inspect the relevant changed code and nearby enforcement boundaries. Focus on authorization, path traversal and symlink races, secrets, untrusted input, network destinations, process execution, cancellation and data exposure. Do not attempt exploitation or make changes. Report only evidence-backed findings with file paths and line numbers, realistic impact, preconditions and a specific regression test. Separate confirmed vulnerabilities from hardening suggestions. If you find no actionable issue, state the scope and limits of your review.',
     source: 'built-in'
@@ -164,7 +169,7 @@ export function taskToolDefinition(agents) {
   // Keep the schema lean: projects with dozens of custom agents used to send
   // every 600-char description on every request. Clip each entry and cap the list.
   const clip = (text, max) => { const value = String(text || '').replace(/\s+/g, ' ').trim(); return value.length > max ? value.slice(0, max - 1).trimEnd() + '…' : value; };
-  const entries = Object.values(agents).map((agent) => '- ' + agent.name + ': ' + clip(agent.description, 220) + (agent.tools && agent.source !== 'built-in' ? ' (tools: ' + clip(agent.tools.join(', '), 120) + ')' : ''));
+  const entries = Object.values(agents).map((agent) => '- ' + agent.name + ': ' + clip(agent.summary || agent.description, 220) + (agent.tools && agent.source !== 'built-in' ? ' (tools: ' + clip(agent.tools.join(', '), 120) + ')' : ''));
   const kept = [];
   let used = 0;
   for (const entry of entries) {
@@ -181,11 +186,11 @@ export function taskToolDefinition(agents) {
       description: { type: 'string', description: '3-5 word label' },
       prompt: { type: 'string', description: 'Full instructions, including what to return' },
       subagent_type: { type: 'string', enum: Object.keys(agents), description: 'Default general-purpose' },
-      run_in_background: { type: 'boolean', description: 'Return the id at once and notify you with the report later. It cannot ask for approval, so unallowed actions are denied; prefer read-only agents or worktree isolation.' },
-      isolation: { type: 'string', enum: ['worktree'], description: '"worktree": edit in its own git worktree and branch so parallel agents never clash; the result lists the branch, changed files and merge command.' },
+      run_in_background: { type: 'boolean', description: 'Return the id now; the report arrives later. It cannot ask for approval, so unallowed actions are denied.' },
+      isolation: { type: 'string', enum: ['worktree'], description: 'Edit in its own git worktree and branch; the result lists the branch and merge command.' },
       team_id: { type: 'string', description: 'Team ID from team_create' },
       model: { type: 'string', description: 'Model ID; omit to inherit' },
-      fork_context: { type: 'boolean', description: 'Give the child a bounded copy of this conversation. Only when earlier discussion is needed: it adds context and may expose unrelated details.' }
+      fork_context: { type: 'boolean', description: 'Give it a bounded copy of this conversation (only when it needs earlier discussion).' }
     }, required: ['description', 'prompt'] }
   } };
 }
