@@ -13,6 +13,13 @@ const compose = (...fns) => (args) => fns.reduce((value, fn) => fn(value), args)
 
 const ALIASES = {
   read: [['read_file', rename('file_path', 'path')]],
+  // Read-only names other harnesses use for reading a file.
+  view: [['read_file', compose(rename('file_path', 'path'), rename('filename', 'path'))]],
+  viewfile: [['read_file', compose(rename('file_path', 'path'), rename('filename', 'path'))]],
+  openfile: [['read_file', compose(rename('file_path', 'path'), rename('filename', 'path'))]],
+  cat: [['read_file', compose(rename('file_path', 'path'), rename('filename', 'path'))]],
+  readlines: [['read_file', rename('file_path', 'path')]],
+  readfilelines: [['read_file', rename('file_path', 'path')]],
   write: [['write_file', rename('file_path', 'path')]],
   edit: [['edit_file', rename('file_path', 'path')]],
   multiedit: [['multi_edit', rename('file_path', 'path')]],
@@ -47,6 +54,15 @@ const ALIASES = {
 
 function squash(name) {
   return String(name || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+}
+
+// "readlines_file" should still suggest read_file: every word of the real name
+// (read, file) starts a word of the requested one.
+function sharesEveryWord(requested, name) {
+  const words = (value) => String(value || '').replace(/([a-z])([A-Z])/g, '$1_$2').toLowerCase().split(/[^a-z0-9]+/).filter(Boolean);
+  const asked = words(requested);
+  const real = words(name);
+  return real.length > 1 && real.every((word) => asked.some((part) => part.startsWith(word)));
 }
 
 function distance(a, b) {
@@ -94,9 +110,9 @@ export function resolveToolAlias(requested, args, available) {
   const plural = [...names].filter((name) => squash(name) === key + 's' || squash(name) + 's' === key);
   if (plural.length === 1) return { name: plural[0], args, aliasedFrom: requested };
   const ranked = [...names]
-    .map((name) => ({ name, score: Math.min(distance(key, squash(name)), squash(name).includes(key) || key.includes(squash(name)) ? 1 : Infinity) }))
+    .map((name) => ({ name, score: Math.min(distance(key, squash(name)), squash(name).includes(key) || key.includes(squash(name)) ? 1 : Infinity, sharesEveryWord(requested, name) ? 3 : Infinity) }))
     .sort((a, b) => a.score - b.score || a.name.localeCompare(b.name))
-    .filter((item) => item.score <= Math.max(2, Math.floor(key.length / 3)))
+    .filter((item) => item.score <= Math.max(3, Math.floor(key.length / 3)))
     .slice(0, 3)
     .map((item) => item.name);
   return { error: 'There is no tool named "' + requested + '".' + (ranked.length ? ' Did you mean: ' + ranked.join(', ') + '?' : '') + ' Only call tools from your tool list.' };
