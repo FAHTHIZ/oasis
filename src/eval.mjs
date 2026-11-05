@@ -1478,10 +1478,10 @@ export async function runEvalCommand(args = [], options = {}) {
           ...(agentResult && !agentResult.finished ? { unfinished: unfinishedReason(agentResult) } : {})
         });
         output.write((passed ? '  PASS ' : '  FAIL ') + task.id + ' trial ' + trial +
-          ' · ' + (routed && routed.tier || 'strong') + '/' + model +
+          ' · ' + (config.routeEasyModel ? (routed && routed.tier || 'strong') + '/' : '') + model +
           ' · ' + totalTokens + ' tokens · ' + elapsedMs + ' ms' +
           (costUSD === null ? ' · cost unknown' : ' · $' + costUSD.toFixed(6)) +
-          (routingSavingsUSD === null ? '' : ' · saved vs strong $' + routingSavingsUSD.toFixed(6)) + '\n');
+          (routingSavingsUSD === null || !config.routeEasyModel ? '' : ' · saved vs strong $' + routingSavingsUSD.toFixed(6)) + '\n');
         await rm(tempRoot, { recursive: true, force: true }).catch(() => {});
       }
     }
