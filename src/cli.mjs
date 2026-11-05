@@ -3356,10 +3356,11 @@ async function main() {
   let workspace = process.cwd();
   let worktreeName = null;
   const args = [];
+  let explicitYes = false;
   const headless = { enabled: false, prompt: '', outputFormat: 'text', maxTurns: null, planOnly: false };
   for (let i = 0; i < rawArgs.length; i++) {
     const arg = rawArgs[i];
-    if (arg === '--yes' || arg === '-y' || arg === '--auto') { autoApprove = true; continue; }
+    if (arg === '--yes' || arg === '-y' || arg === '--auto') { autoApprove = true; if (arg !== '--auto') explicitYes = true; continue; }
     if (arg === '--permission-mode') {
       const requestedMode = rawArgs[++i];
       const mode = normalizePermissionMode(requestedMode);
@@ -3715,8 +3716,9 @@ async function main() {
   if (command === 'doctor') return await doctor(rest, workspace);
   if (command === 'memory') return await memoryCommand(rest, workspace);
   if (command === 'diagnostics') return await diagnosticsCommand(rest, workspace, autoApprove);
-  if (command === 'update') return await updateOasis(rest);
-  if (command === 'uninstall') return await uninstallOasis(rest);
+  // The global flag parser takes --yes/-y for autoApprove; hand it back.
+  if (command === 'update') return await updateOasis(explicitYes && !rest.includes('--yes') ? [...rest, '--yes'] : rest);
+  if (command === 'uninstall') return await uninstallOasis(explicitYes && !rest.includes('--yes') ? [...rest, '--yes'] : rest);
   if (command === 'web') return await startWebWorkspace(workspace, rest);
   if (command === 'app') return await startUniversalApp(rest);
   if (command === 'watch') return await watchCommentsCommand(workspace, autoApprove || rest.includes('--yes'), persistence);
