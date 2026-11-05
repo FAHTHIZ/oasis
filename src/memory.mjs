@@ -22,7 +22,7 @@ const MAX_TOTAL = 40000;
 const PER_FILE_LIMIT = 9000;
 // The README is background sent with every request; its opening (what the
 // project is, how to run it) is what helps. The model can read the rest.
-const README_LIMIT = 3500;
+const README_LIMIT = 2500;
 export const OTHER_AGENT_RULES = ['GEMINI.md', path.join('.github', 'copilot-instructions.md'), '.cursorrules', '.windsurfrules', '.clinerules', 'CONVENTIONS.md'];
 
 export function memoryFiles(root, options = {}) {

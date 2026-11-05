@@ -1230,14 +1230,14 @@ export async function loadSkillDescriptions(root, options = {}) {
 }
 
 // One catalogue line per skill: what it does plus its "Use for/when" trigger,
-// at most 200 characters. load_skill returns the full instructions.
+// at most 160 characters. load_skill returns the full instructions.
 export function skillCatalogueLine(description) {
   const text = String(description || '').replace(/\s+/g, ' ').trim();
-  if (text.length <= 200) return text;
+  if (text.length <= 160) return text;
   const sentences = text.split(/(?<=[.!?])\s+/);
   const trigger = sentences.slice(1).find((sentence) => /^use (for|when|on|after)\b/i.test(sentence)) || '';
   let line = sentences[0] + (trigger ? ' ' + trigger : '');
-  if (line.length > 200) line = line.slice(0, 197).replace(/[\s,]+\S*$/, '') + '…';
+  if (line.length > 160) line = line.slice(0, 157).replace(/[\s,]+\S*$/, '') + '…';
   return line;
 }
 
