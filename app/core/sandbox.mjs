@@ -1,7 +1,7 @@
 // Isolated JavaScript runner for the universal app.
 // In the browser, code runs in a Worker started inside a sandboxed iframe
-// (opaque origin, so no access to the app, its storage or keys) whose content
-// security policy blocks every network request. A timeout terminates the
+// (sandbox.html: opaque origin, so no access to the app, its storage or keys)
+// whose content security policy blocks every network request. A timeout terminates the
 // worker, so infinite loops cannot freeze the app. The runtime itself is plain
 // JavaScript so tests can run it in Node.
 
@@ -168,35 +168,12 @@ export function runtimeSource() {
 `;
 }
 
-const FRAME_CSP = "default-src 'none'; script-src 'unsafe-inline' 'unsafe-eval' blob:; worker-src blob:; connect-src 'none'";
-
-function frameDocument(runtime) {
-  // The frame starts a worker per run. If workers are unavailable it runs
-  // inline; a timeout then removes the whole frame.
-  return '<!doctype html><meta http-equiv="Content-Security-Policy" content="' + FRAME_CSP + '"><script>' +
-    'var RUNTIME = ' + JSON.stringify(runtime) + ';' +
-    'window.addEventListener("message", function (event) {' +
-    '  var job = event.data; if (!job || job.type !== "run") return;' +
-    '  var reply = function (result) { parent.postMessage({ type: "result", id: job.id, result: result }, "*"); };' +
-    '  var worker = null;' +
-    '  try { worker = new Worker(URL.createObjectURL(new Blob([RUNTIME + "\\nself.onmessage = async function (e) { self.postMessage(await self.__oasisRun(e.data.code, e.data.files)); };"], { type: "text/javascript" }))); } catch (e) { worker = null; }' +
-    '  if (worker) {' +
-    '    var timer = setTimeout(function () { worker.terminate(); reply({ logs: [], timedOut: true, error: "Timed out" }); }, job.timeoutMs);' +
-    '    worker.onmessage = function (e) { clearTimeout(timer); worker.terminate(); reply(e.data); };' +
-    '    worker.onerror = function (e) { clearTimeout(timer); worker.terminate(); reply({ logs: [], error: String(e.message || e) }); };' +
-    '    worker.postMessage({ code: job.code, files: job.files });' +
-    '  } else {' +
-    '    try { (0, eval)(RUNTIME); self.__oasisRun(job.code, job.files).then(reply, function (e) { reply({ logs: [], error: String(e) }); }); } catch (e) { reply({ logs: [], error: String(e) }); }' +
-    '  }' +
-    '});' +
-    'parent.postMessage({ type: "ready" }, "*");' +
-    '<\/script>';
-}
-
 /** Browser sandbox: a hidden sandboxed iframe that runs jobs in workers. */
 export class FrameSandbox {
-  constructor(doc = globalThis.document) {
+  constructor(doc = globalThis.document, src = 'sandbox.html') {
     this.doc = doc;
+    this.src = src;
+    this.runtime = runtimeSource();
     this.frame = null;
     this.ready = null;
     this.jobs = new Map();
@@ -222,7 +199,7 @@ export class FrameSandbox {
     this.frame.setAttribute('aria-hidden', 'true');
     this.frame.style.cssText = 'position:absolute;width:0;height:0;border:0;visibility:hidden';
     this.ready = new Promise((resolve) => { this.resolveReady = resolve; });
-    this.frame.srcdoc = frameDocument(runtimeSource());
+    this.frame.src = this.src;
     this.doc.body.appendChild(this.frame);
     return this.ready;
   }
@@ -247,7 +224,7 @@ export class FrameSandbox {
         resolve({ logs: [], timedOut: true, error: 'Timed out' });
       }, timeoutMs + 2000);
       this.jobs.set(id, { resolve, guard });
-      this.frame.contentWindow.postMessage({ type: 'run', id, code, files, timeoutMs }, '*');
+      this.frame.contentWindow.postMessage({ type: 'run', id, code, files, timeoutMs, runtime: this.runtime }, '*');
     });
   }
 }

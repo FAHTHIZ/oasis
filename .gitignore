@@ -26,3 +26,7 @@ artifacts/
 site/assets/demo/
 __pycache__/
 *.pyc
+
+# Universal app build output (scripts/build-app.mjs)
+site/app/
+site/src/

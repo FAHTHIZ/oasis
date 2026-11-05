@@ -328,3 +328,53 @@ test('system prompt includes project instructions and skills', async () => {
   assert.match(prompt, /Top level: OASIS.md, src\//);
   assert.match(prompt, /- testing: Write tests\./);
 });
+
+test('markdown renderer escapes HTML and only links http(s)', async () => {
+  const { renderMarkdown } = await import('../app/markdown.mjs');
+  const html = renderMarkdown('<img src=x onerror=alert(1)> **b** [x](javascript:alert(1)) [ok](https://a.b/c?d=1&e=2)\n\n```js\n<b>\n```\n\n| a | b |\n|---|---|\n| 1 | 2 |');
+  assert.ok(!html.includes('<img'));
+  assert.ok(!/href="javascript/i.test(html));
+  assert.match(html, /<strong>b<\/strong>/);
+  assert.match(html, /href="https:\/\/a\.b\/c\?d=1&amp;e=2"/);
+  assert.match(html, /<code data-lang="js">&lt;b&gt;<\/code>/);
+  assert.match(html, /<table>/);
+});
+
+test('app build ships only browser-safe modules and a skills index', async () => {
+  const { execFileSync } = await import('node:child_process');
+  const { mkdtempSync, readFileSync, existsSync } = await import('node:fs');
+  const { tmpdir } = await import('node:os');
+  const { join } = await import('node:path');
+  const dir = mkdtempSync(join(tmpdir(), 'oasis-app-'));
+  execFileSync(process.execPath, ['scripts/build-app.mjs', '--out', join(dir, 'app')], { stdio: 'pipe' });
+  for (const file of ['index.html', 'sandbox.html', 'sandbox-frame.js', 'core/agent.mjs', 'manifest.webmanifest']) assert.ok(existsSync(join(dir, 'app', file)), file);
+  assert.ok(existsSync(join(dir, 'src', 'tool-call-repair.mjs')));
+  const index = JSON.parse(readFileSync(join(dir, 'app', 'skills', 'index.json'), 'utf8'));
+  assert.ok(index.length >= 10 && index.every((s) => s.name && s.description && s.path.endsWith('SKILL.md')));
+  assert.doesNotMatch(readFileSync(join(dir, 'app', 'sw.js'), 'utf8'), /__BUILD__/);
+  const manifest = JSON.parse(readFileSync(join(dir, 'app', 'manifest.webmanifest'), 'utf8'));
+  assert.equal(manifest.display, 'standalone');
+});
+
+test('oasis app server serves only the app, shared modules and skills', async () => {
+  const { resolveAppPath, appSharedModules, startAppServer } = await import('../src/app-server.mjs');
+  const root = new URL('..', import.meta.url).pathname.replace(/\/$/, '');
+  const shared = new Set(await appSharedModules(root));
+  assert.ok([...shared].some((file) => file.endsWith('tool-call-repair.mjs')));
+  assert.deepEqual(resolveAppPath(root, '/', shared), { redirect: '/app/' });
+  assert.equal(resolveAppPath(root, '/app/../package.json', shared), null);
+  assert.equal(resolveAppPath(root, '/app/%2e%2e/package.json', shared), null);
+  assert.equal(resolveAppPath(root, '/src/agent.mjs', shared), null);
+  assert.deepEqual(resolveAppPath(root, '/app/skills/index.json', shared), { index: true });
+  const server = await startAppServer({ root, port: 0 });
+  try {
+    const base = 'http://127.0.0.1:' + server.address().port;
+    const page = await fetch(base + '/app/');
+    assert.equal(page.status, 200);
+    assert.match(await page.text(), /<title>OASIS<\/title>/);
+    const sw = await (await fetch(base + '/app/sw.js')).text();
+    assert.doesNotMatch(sw, /__BUILD__/);
+    assert.equal((await fetch(base + '/package.json')).status, 404);
+    assert.equal((await fetch(base + '/app/skills/index.json', { method: 'POST' })).status, 405);
+  } finally { server.close(); }
+});
