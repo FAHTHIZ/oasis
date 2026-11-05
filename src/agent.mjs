@@ -3110,6 +3110,24 @@ function normalizeUsage(usage = {}) {
   return out;
 }
 
+// Raw Node errors ("ENOENT: no such file or directory, stat '/abs/path'") leak
+// absolute paths and tell the model nothing about what to do next.
+export function friendlyToolError(error, args = {}, root = '') {
+  const message = (error && error.message) || String(error);
+  const code = error && error.code;
+  const shown = (raw) => {
+    const value = String(raw || (args && (args.path || args.file_path)) || '');
+    return root && value.startsWith(String(root).replace(/\/+$/, '') + '/') ? value.slice(String(root).replace(/\/+$/, '').length + 1) : value;
+  };
+  if (code === 'ENOENT' || /^ENOENT\b/.test(message)) {
+    const file = shown(error && error.path || (/'([^']+)'/.exec(message) || [])[1]);
+    return 'No such file or folder' + (file ? ': ' + file : '') + '. Use glob_files or list_files to find the right path.';
+  }
+  if (code === 'EISDIR' || /^EISDIR\b/.test(message)) return (shown(error && error.path) || 'That path') + ' is a folder, not a file. Use list_files to see what is inside.';
+  if (code === 'ENOTDIR' || /^ENOTDIR\b/.test(message)) return 'Part of the path ' + (shown(error && error.path) ? '(' + shown(error && error.path) + ') ' : '') + 'is a file, not a folder.';
+  return message;
+}
+
 const READ_ONLY_TOOLS = new Set(['git_status', 'git_diff', 'list_files', 'glob_files', 'repo_map', 'read_file', 'search_files', 'grep', 'ast_grep', 'fetch_url', 'web_search', 'list_skills', 'load_skill', 'command_output', 'list_background', 'exit_plan_mode', 'ask_user_question', 'lsp', 'git_log', 'worktree_inspect', 'agent_status', 'list_mcp_resources', 'read_mcp_resource', 'memory_search', 'memory_read', 'session_search', 'ide_get_diagnostics', 'ide_open_file', ...SESSION_READ_ONLY_TOOLS]);
 
 const EXIT_PLAN_TOOL_DEFINITION = { type: 'function', function: {
@@ -5120,7 +5138,7 @@ async function executeOneCallRaw(session, call, context, options) {
       }
     }
   } catch (error) {
-    result = { error: error.message || String(error) };
+    result = { error: friendlyToolError(error, attemptedArgs || {}, session.root) };
     if (callContext && callContext.permissionHookDenial && !result.error.includes(callContext.permissionHookDenial)) result.error += ' (' + callContext.permissionHookDenial + ')';
     if (attemptedArgs && error.name !== 'AbortError') {
       result = applyFailureHookResult(result, await runToolFailureHooks(session, name, attemptedArgs, result.error, context).catch(() => ''));
