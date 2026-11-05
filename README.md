@@ -229,7 +229,7 @@ Project proposals stay with one workspace; user-scope proposals are reserved for
 
 | Area | Included |
 |---|---|
-| **Agent runtime** | Multi-step tool loop, planning, codebase map, edits, verification gate, completion reports, fallback model, budget limits, programmatic tool calling (`execute_code`), API key pools that rotate on rate limits. |
+| **Agent runtime** | Multi-step tool loop, planning, codebase map, edits, verification gate, completion reports, a fallback chain that can cross providers when a model runs out of credit or goes down, budget limits, programmatic tool calling (`execute_code`), API key pools that rotate on rate limits. |
 | **Workspace** | File search, read, write and edit; Git tools; snapshots, backups, diffs, checkpoints and rewind; isolated worktrees. |
 | **Safety** | Permission modes and rules, shell-risk analysis, protected paths, secret shield, bounded output, process cleanup, optional OS sandbox on Linux and macOS, a Docker/Podman container sandbox on any OS, or remote execution over SSH. |
 | **Verification** | Project checks, diagnostics and language servers, diff review, weakened-test and placeholder detection, auto-test, claim checks. |

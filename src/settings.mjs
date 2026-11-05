@@ -403,6 +403,7 @@ export async function loadSettings(root, options = {}) {
       if (!result.modelRouting.easyModel) result.modelRouting.enabled = false;
     }
     if (typeof settings.fallbackModel === 'string' && settings.fallbackModel.trim()) result.fallbackModel = settings.fallbackModel.trim();
+    else if (Array.isArray(settings.fallbackModel)) { const list = settings.fallbackModel.filter((item) => typeof item === 'string' && item.trim()).map((item) => item.trim()); if (list.length) result.fallbackModel = list.join(','); }
     // repoMap: true | false | { maxChars } — add a ranked repository outline to the first turn.
     if (typeof settings.repoMap === 'boolean') result.repoMap = settings.repoMap;
     else if (settings.repoMap && typeof settings.repoMap === 'object' && !Array.isArray(settings.repoMap)) result.repoMap = { maxChars: Math.max(1000, Math.min(30000, Number.parseInt(settings.repoMap.maxChars, 10) || 6000)) };
