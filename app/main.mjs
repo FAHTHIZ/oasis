@@ -3,7 +3,7 @@
 // drives the agent on that computer (runtime engine, core/runtime.mjs).
 import { PRESETS, testProvider } from './core/providers.mjs';
 import { IndexedDBStore, Workspace, lineDiff } from './core/workspace.mjs';
-import { Agent } from './core/agent.mjs';
+import { Agent, textOf } from './core/agent.mjs';
 import { FrameSandbox } from './core/sandbox.mjs';
 import { SkillLibrary } from './core/skills.mjs';
 import { GitHub, parseRepo } from './core/github.mjs';
@@ -208,7 +208,7 @@ function setPluginEnabled(id, on) {
 }
 
 async function send(text) {
-  const message = text.trim();
+  const message = text.trim() || (attachments.length ? 'Take a look at the attached image' + (attachments.length === 1 ? '.' : 's.') : '');
   if (!message) return;
   if (RT && RT.needsToken) { $('input').value = ''; autosize(); await connectFromText(message, { surface: 'chat' }); return; }
   if (looksLikeConnection(message)) { $('input').value = ''; autosize(); await connectFromText(message, { surface: 'chat' }); return; }
@@ -225,7 +225,11 @@ async function send(text) {
   turnPlugins = [];
   renderPluginSuggest();
   setBusy(true);
-  try { await agent.send(message, { maxSteps: Number(settings.maxSteps) || 40, plugins }); }
+  const images = attachments.map(({ mediaType, data, name }) => ({ mediaType, data, name }));
+  sentThumbs = attachments.map((item) => item.url);
+  attachments = [];
+  renderAttachments();
+  try { await agent.send(message, { maxSteps: Number(settings.maxSteps) || 40, plugins, images }); }
   catch { /* shown through the error event */ }
   finally { setBusy(false); persistChat(); refreshFiles(); }
 }
@@ -531,11 +535,14 @@ function removeThinking() { const t = document.querySelector('.thinking'); if (t
 
 function handleEvent(event) {
   switch (event.type) {
-    case 'user':
-      display.push({ role: 'user', content: event.content });
-      addMessage('user', event.content);
+    case 'user': {
+      display.push({ role: 'user', content: event.content, ...(event.images ? { images: event.images } : {}) });
+      const el = addMessage('user', event.content);
+      if (event.images) addImageNote(el, event.images, sentThumbs);
+      sentThumbs = [];
       scrollDown(true);
       break;
+    }
     case 'thinking': {
       removeThinking();
       startTurn();
@@ -649,7 +656,7 @@ async function persistChat() {
   const trimmed = display.slice(-200).map((entry) => ({ ...entry, tools: entry.tools && entry.tools.map((t) => ({ ...t, content: (t.content || '').slice(0, 2000) })) }));
   try {
     const projectId = workspace.project.id;
-    await store.setValue(chatKey(projectId, chatId), { messages: RT ? agent.snapshot() : agent.messages.slice(-300), display: trimmed });
+    await store.setValue(chatKey(projectId, chatId), { messages: RT ? agent.snapshot() : agent.messages.slice(-300).map((m) => (Array.isArray(m.content) ? { ...m, content: textOf(m.content) + ' (image not kept in saved chats)' } : m)), display: trimmed });
     const index = await chatIndex(projectId);
     index.current = chatId;
     index.list = index.list.filter((item) => item.id !== chatId);
@@ -743,6 +750,7 @@ async function restoreChat({ keepChat = false } = {}) {
     display = saved.display;
     for (const entry of display) {
       const el = addMessage(entry.role, entry.content);
+      if (entry.role === 'user' && entry.images) addImageNote(el, entry.images, []);
       if (entry.tools && entry.tools.length) {
         const tools = document.createElement('div');
         tools.className = 'tools';
@@ -1764,7 +1772,9 @@ async function boot() {
   }
   renderWelcome();
   renderPluginState();
-  if (localStorage.getItem('oasis.files') === '1' || (localStorage.getItem('oasis.files') === null && innerWidth >= 1024 && workspace)) toggleFiles(true);
+  // The side panel comes back open only where it sits beside the chat; on a
+  // phone it would cover the conversation.
+  if (innerWidth >= 1024 && (localStorage.getItem('oasis.files') === '1' || (localStorage.getItem('oasis.files') === null && workspace))) toggleFiles(true);
   refreshFiles();
   if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => {});
   if ('serviceWorker' in navigator && location.protocol !== 'file:' && !RT) navigator.serviceWorker.register('sw.js').catch(() => {});
@@ -1831,3 +1841,91 @@ $('phoneCopy').addEventListener('click', async () => {
   try { await navigator.clipboard.writeText($('phoneUrl').textContent); $('phoneCopy').textContent = 'Copied'; setTimeout(() => { $('phoneCopy').textContent = 'Copy link'; }, 1500); } catch {}
 });
 window.oasisConnectPhone = openPhone;
+
+// Images: paste, drop or attach (up to 4). Large photos are scaled down on the
+// device first, which keeps uploads small on slow connections and old phones.
+let attachments = [];
+let sentThumbs = [];
+const IMAGE_TYPES = ['image/png', 'image/jpeg', 'image/gif', 'image/webp'];
+const MAX_IMAGE_BYTES = 3_500_000;
+const MAX_IMAGE_SIDE = 1600;
+function base64Of(blob) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result).replace(/^data:[^,]*,/, ''));
+    reader.onerror = () => reject(reader.error);
+    reader.readAsDataURL(blob);
+  });
+}
+async function prepareImage(file) {
+  let blob = file;
+  let mediaType = file.type;
+  try {
+    const bitmap = await createImageBitmap(file);
+    const scale = Math.min(1, MAX_IMAGE_SIDE / Math.max(bitmap.width, bitmap.height));
+    if (scale < 1 || file.size > MAX_IMAGE_BYTES || !IMAGE_TYPES.includes(file.type)) {
+      const canvas = document.createElement('canvas');
+      canvas.width = Math.max(1, Math.round(bitmap.width * scale));
+      canvas.height = Math.max(1, Math.round(bitmap.height * scale));
+      canvas.getContext('2d').drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+      const keepPng = file.type === 'image/png' && file.size <= MAX_IMAGE_BYTES;
+      mediaType = keepPng ? 'image/png' : 'image/jpeg';
+      blob = await new Promise((resolve) => canvas.toBlob(resolve, mediaType, 0.86));
+    }
+    if (bitmap.close) bitmap.close();
+  } catch { /* not decodable here: send as is if the type is allowed */ }
+  if (!blob || !IMAGE_TYPES.includes(mediaType)) throw new Error('Use a PNG, JPEG, GIF or WebP image.');
+  if (blob.size > MAX_IMAGE_BYTES) throw new Error('That image is too large, even after scaling it down.');
+  return { mediaType, data: await base64Of(blob), name: file.name || 'pasted-image', url: URL.createObjectURL(blob) };
+}
+async function addImages(files) {
+  const list = [...files].filter((file) => file && /^image\//.test(file.type));
+  if (!list.length) return false;
+  for (const file of list) {
+    if (attachments.length >= 4) { toast('Attach up to 4 images per message.'); break; }
+    try { attachments.push(await prepareImage(file)); }
+    catch (error) { toast(error.message); }
+  }
+  renderAttachments();
+  $('input').focus();
+  return true;
+}
+function renderAttachments() {
+  const box = $('attachments');
+  box.replaceChildren(...attachments.map((item, index) => {
+    const tile = document.createElement('div');
+    tile.className = 'attachment';
+    const img = document.createElement('img');
+    img.src = item.url; img.alt = item.name;
+    const remove = document.createElement('button');
+    remove.type = 'button'; remove.textContent = '×'; remove.setAttribute('aria-label', 'Remove ' + item.name);
+    remove.addEventListener('click', () => { URL.revokeObjectURL(item.url); attachments.splice(index, 1); renderAttachments(); });
+    tile.append(img, remove);
+    return tile;
+  }));
+  box.hidden = !attachments.length;
+}
+function addImageNote(el, count, urls) {
+  const bubble = el && el.querySelector('.bubble');
+  if (!bubble) return;
+  if (urls && urls.length) {
+    const thumbs = document.createElement('div');
+    thumbs.className = 'thumbs';
+    for (const url of urls) { const img = document.createElement('img'); img.src = url; img.alt = 'Attached image'; thumbs.appendChild(img); }
+    bubble.prepend(thumbs);
+  } else {
+    const note = document.createElement('span');
+    note.className = 'image-note';
+    note.textContent = count + ' image' + (count === 1 ? '' : 's') + ' attached';
+    bubble.prepend(note);
+  }
+}
+$('attachButton').addEventListener('click', () => $('attachInput').click());
+$('attachInput').addEventListener('change', async () => { await addImages($('attachInput').files); $('attachInput').value = ''; });
+$('input').addEventListener('paste', (event) => {
+  const files = event.clipboardData && event.clipboardData.files;
+  if (files && [...files].some((file) => /^image\//.test(file.type))) { event.preventDefault(); addImages(files); }
+});
+for (const type of ['dragenter', 'dragover']) $('composer').addEventListener(type, (event) => { if ([...(event.dataTransfer && event.dataTransfer.items || [])].some((item) => item.kind === 'file')) { event.preventDefault(); $('composer').classList.add('dragging'); } });
+for (const type of ['dragleave', 'drop']) $('composer').addEventListener(type, () => $('composer').classList.remove('dragging'));
+$('composer').addEventListener('drop', (event) => { if (event.dataTransfer && event.dataTransfer.files.length) { event.preventDefault(); addImages(event.dataTransfer.files); } });

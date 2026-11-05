@@ -45,6 +45,11 @@ function mockProvider() {
     const ask = String(user && user.content);
     // The runtime's post-edit verification gate: answer it like a real model.
     if (last.role === 'user' && /verification gate/.test(String(last.content))) return reply(res, 200, text('Done. I built the counter in index.html with style.css and app.js, and checked it with node.'));
+    const lastUser = [...messages].reverse().find((m) => m.role === 'user');
+    if (lastUser && Array.isArray(lastUser.content) && lastUser.content.some((part) => part.type === 'image_url')) {
+      const part = lastUser.content.find((p) => p.type === 'image_url');
+      return reply(res, 200, text('I can see your image (' + String(part.image_url.url).slice(0, 22) + ').'));
+    }
     if (messages.some((m) => m.role === 'user' && /slow check/i.test(String(m.content)))) {
       if (last.role === 'tool') {
         const note = messages.slice(1).find((m) => m.role === 'user' && /tabs/.test(String(m.content)));
@@ -184,7 +189,17 @@ test('runtime engine end to end: app at /, paste to connect, approve a real edit
   await evaluate(page, `document.getElementById('allowButton').click(); true`);
   await waitFor(page, `!${busy} && /noted: use tabs/.test(document.getElementById('transcript').textContent)`, { label: 'the running task read the note', timeout: 30000 });
 
-  // 7. New chat starts fresh; the earlier chat is one tap away in Chats.
+  // 7. A pasted screenshot goes to the model as an image.
+  await evaluate(page, `(() => { const c = document.createElement('canvas'); c.width = 40; c.height = 30; const g = c.getContext('2d'); g.fillStyle = '#c00'; g.fillRect(0, 0, 40, 30); return new Promise((r) => c.toBlob((blob) => { const dt = new DataTransfer(); dt.items.add(new File([blob], 'shot.png', { type: 'image/png' })); const el = document.getElementById('input'); el.dispatchEvent(new ClipboardEvent('paste', { clipboardData: dt, bubbles: true, cancelable: true })); r(true); }, 'image/png')); })()`);
+  await waitFor(page, `document.querySelectorAll('#attachments .attachment').length === 1`, { label: 'pasted image shown above the message box' });
+  await evaluate(page, type('What is in this screenshot?'));
+  await shot('7-image');
+  await evaluate(page, submit);
+  await waitFor(page, `!${busy} && /I can see your image \\(data:image\\/png;base64/.test(document.getElementById('transcript').textContent)`, { label: 'the model received the image', timeout: 30000 });
+  assert.equal(await evaluate(page, `document.querySelectorAll('#attachments .attachment').length + ':' + document.querySelectorAll('.msg.user .thumbs img').length`), '0:1', 'the image moved into the sent message');
+  await shot('7-image-sent');
+
+  // 8. New chat starts fresh; the earlier chat is one tap away in Chats.
   await evaluate(page, `document.getElementById('chatsButton').click(); true`);
   await waitFor(page, `!document.getElementById('chatsSheet').hidden && document.querySelectorAll('#chatList .project-item').length === 1 && /Build a counter/.test(document.getElementById('chatList').textContent)`, { label: 'chats list shows the current chat' });
   await evaluate(page, `document.getElementById('newChatButton').click(); true`);
@@ -200,7 +215,7 @@ test('runtime engine end to end: app at /, paste to connect, approve a real edit
   await evaluate(page, `location.reload(); true`);
   await waitFor(page, `document.readyState === 'complete' && document.documentElement.classList.contains('runtime') && /Done\\. I built the counter/.test(document.getElementById('transcript').textContent)`, { label: 'the open chat is remembered across reloads' });
 
-  // 8. The desktop menu's "Connect a phone…" opens the app's phone sheet.
+  // 9. The desktop menu's "Connect a phone…" opens the app's phone sheet.
   await evaluate(page, `window.oasisConnectPhone(); true`);
   await waitFor(page, `!document.getElementById('phoneSheet').hidden && /home network|Tailscale|reachable/.test(document.getElementById('phoneHint').textContent) && !document.getElementById('phoneError').textContent`, { label: 'phone sheet shows the network choices' });
   await shot('6-phone');
