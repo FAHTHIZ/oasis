@@ -6,6 +6,15 @@ This file records notable user-facing product changes. It does not imply that an
 
 Changes after 1.1.0. Entries include feature work, reliability improvements, and security hardening; benchmark-driven fixes and their regression evidence are documented alongside the relevant changes.
 
+- **Fixes from live head-to-head runs (2026-11-05).** Found by running OASIS, Aider and OpenCode on free gpt-oss-20b and Nemotron 3 Ultra endpoints:
+  - gpt-oss tool names leaking harmony tokens (`edit_file<|channel|>commentary`, `functions.read_file`) are cleaned before dispatch. One such name made the gateway reject the whole request with HTTP 400.
+  - A streamed tool-call fragment that arrives at a new index with no id or name (one gateway sent call 0's closing `}` as index 1) now continues the previous call instead of becoming a broken, nameless one. OpenCode crashed on the same stream with "Expected 'id' to be a string".
+  - `run_command` accepts `args` sent as one string.
+  - The verification gate no longer asks for a separate diff review after a passing check for targeted edits, so a finished turn no longer produces a second, contradictory final answer. Files the agent created are exempt; existing files it rewrote wholesale still need a diff review. When new code has no test change, the gate asks the model to call the new module directly with edge cases.
+  - Waits after the first rate-limit wait in a turn count down in the status line.
+  - Smaller requests: the README in context is clipped to 2.5k characters, skill catalogue lines to 160, and the `task`, `run_command`, `run_shell`, `fetch_url` and `ask_user_question` schemas are shorter (about 1.6k fewer characters per request).
+  - `npm run bench:live` with `--router` writes an OpenCode provider config, and the eval runs external agents with `PWD` set to the task workspace. OpenCode used the inherited `PWD` and edited the wrong folder, which made the first published OpenCode 0/3 invalid.
+  - Windows CI runs `install.ps1` against fake `node`, `npm` and `winget` to check PATH handling and safe failures without touching the machine-wide PATH.
 - **Terminal polish from live runs.** Parallel lookups fold into one line ("Read 2 files, searched 1 pattern" with the targets below), as in Claude Code and Codex; a failed lookup keeps its own line. File errors read "Not found: src/x.mjs" instead of Node's errno text. Code blocks no longer print a language label that looked like part of the command. Edit summaries say "1 addition" instead of "1 addition and 0 removals". Retry notices name server errors with their status, and the "tokens sent" estimate counts tool schemas.
 - **Reasoning stays out of the answer.** Streamed `reasoning_content` (DeepSeek, vLLM), `reasoning` (gateways) and Gemini thought chunks are kept apart from the reply, and DeepSeek and Kimi get their reasoning replayed on later requests, which their APIs require when tools are used (they return 400 otherwise).
 - **Test gate fix.** A test added to a root-level `test.mjs`, `tests.py` or `spec.js` now counts as a test change, so "add a test" requests are no longer reported as unchecked.
