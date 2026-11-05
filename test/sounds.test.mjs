@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { mkdtempSync, writeFileSync, chmodSync, readFileSync, existsSync, mkdirSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { SOUND_NAMES, synthesize, encodeWav, clampVolume, soundFile, detectPlayer, configureSounds, soundsOffReason, playSound, resetSoundState, completedTodoCount, soundVolume } from '../src/sounds.mjs';
+import { windowsPathForWsl, SOUND_NAMES, synthesize, encodeWav, clampVolume, soundFile, detectPlayer, configureSounds, soundsOffReason, playSound, resetSoundState, completedTodoCount, soundVolume } from '../src/sounds.mjs';
 import { notifyAttention } from '../src/attention.mjs';
 
 const tty = { isTTY: true };
@@ -141,4 +141,14 @@ test('/sounds turns sounds off and on, sets the volume and saves both', async ()
   assert.equal(JSON.parse(readFileSync(path.join(e.OASIS_CONFIG_DIR, 'settings.json'), 'utf8')).sounds, true);
   assert.match((await runBuiltinCommand('sounds', 'bogus', state)).output, /Usage/);
   resetSoundState();
+});
+
+test('WSL falls back to Windows PowerShell with a Windows path', () => {
+  const dir = home(); const bin = path.join(dir, 'bin'); mkdirSync(bin);
+  const ps = path.join(bin, 'powershell.exe'); writeFileSync(ps, '#!/bin/sh\n'); chmodSync(ps, 0o755);
+  assert.equal(detectPlayer({ PATH: bin }, 'linux'), null, 'only under WSL');
+  const found = detectPlayer({ PATH: bin, WSL_DISTRO_NAME: 'Ubuntu' }, 'linux');
+  assert.equal(found.command, ps);
+  assert.match(found.args('/home/me/.oasis/cache/sounds/done.wav').at(-1), /wsl\.localhost\\Ubuntu\\home\\me/);
+  assert.equal(windowsPathForWsl('/mnt/d/a/b.wav'), 'D:\\a\\b.wav');
 });
