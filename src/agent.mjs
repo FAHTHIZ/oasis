@@ -717,6 +717,9 @@ export async function createSession({ root, config, restore = null, permissionMo
     costUsd: 0,
     pricing: pricing || loadedSettings.pricing || null,
     messages: [],
+    pendingSteering: Array.isArray(restore && restore.pendingSteering)
+      ? restore.pendingSteering.filter((note) => typeof note === 'string').map((note) => note.trim().slice(0, 20000)).filter(Boolean).slice(-20)
+      : [],
     mcpClients: mcp.clients,
     webAccessApprovals: new Set(),
     mcpHost,
@@ -1931,8 +1934,14 @@ export function steeringMessage(texts) {
 export function carryUndeliveredSteering(session) {
   const texts = takeSteering(session);
   if (!texts.length) return [];
-  if (!Array.isArray(session.messages)) session.messages = [];
-  session.messages.push({ role: 'user', content: steeringMessage(texts) });
+  const existing = Array.isArray(session.pendingSteering) ? session.pendingSteering : [];
+  const combined = [...existing, ...texts]
+    .filter((text) => typeof text === 'string')
+    .map((text) => text.trim().slice(0, 20000))
+    .filter(Boolean);
+  // Keep the most recent instructions without changing or truncating the
+  // existing conversation, which may contain an open tool-call sequence.
+  session.pendingSteering = combined.slice(-STEER_LIMIT);
   return texts;
 }
 function deliverSteering(session, options) {
@@ -4810,6 +4819,10 @@ async function runAgentTurnRaw(session, prompt, options = {}) {
   const compaction = await compactHistoryIfNeeded(session, options);
   if (compaction.tokensUsed && options.onUsage) options.onUsage({ inputTokens: 0, outputTokens: 0, totalTokens: compaction.tokensUsed, step: 0, phase: 'compaction', costUsd: Number(compaction.costUsd) || 0 });
   let userContent = request;
+  const carriedSteering = !options.isSubagent && Array.isArray(session.pendingSteering)
+    ? session.pendingSteering.filter((note) => typeof note === 'string' && note.trim()).slice(-STEER_LIMIT)
+    : [];
+  if (carriedSteering.length) userContent = steeringMessage(carriedSteering) + '\n\n' + userContent;
   session.currentRequest = request;
   if (session.pendingDynamicContext && !options.isSubagent) { userContent = '<session-context>\n' + session.pendingDynamicContext + '\n</session-context>\n\n' + userContent; session.pendingDynamicContext = null; }
   // Opt-in repository map on the first turn (settings.repoMap: true | { maxChars }, or OASIS_REPO_MAP=1).
@@ -4915,6 +4928,9 @@ async function runAgentTurnRaw(session, prompt, options = {}) {
   const userMessage = { role: 'user', content: userContent };
   if (Array.isArray(options.images) && options.images.length) userMessage.images = options.images.slice(0, 4).map(({ mediaType, data }) => ({ mediaType, data }));
   session.messages.push(userMessage);
+  // The pending notes are now part of a recorded user prompt. Clear them only
+  // here, so hooks or failures before prompt insertion cannot discard them.
+  if (carriedSteering.length) session.pendingSteering = [];
   if (!options.isSubagent) beginCheckpoint(session, userMessage, request);
   let stopHookContinuations = 0;
   let outputRecoveries = 0;
