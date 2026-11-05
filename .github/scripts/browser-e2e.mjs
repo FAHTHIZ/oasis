@@ -26,7 +26,7 @@ const token = 'oasis-browser-e2e-token-0123456789';
 const screenshotDir = process.env.OASIS_SCREENSHOT_DIR || path.join(process.cwd(), 'artifacts', 'browser-e2e');
 await mkdir(screenshotDir, { recursive: true });
 
-async function assertAgentContrast(page, label) {
+async function assertAgentContrast(page, label, selector = '#view-agent') {
   // Measure the settled UI, not a frame mid fade-in: wait for finite animations
   // and transitions (infinite pulses are skipped) before sampling colors.
   await page.evaluate(() => Promise.race([
@@ -36,7 +36,7 @@ async function assertAgentContrast(page, label) {
     new Promise((resolve) => setTimeout(resolve, 1500)),
   ]));
   const results = await new AxeBuilder({ page })
-    .include('#view-agent')
+    .include(selector)
     .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'])
     .analyze();
   const contrast = results.violations.filter((violation) => violation.id === 'color-contrast');
@@ -901,8 +901,19 @@ try {
     assert.match(await firstRunPage.locator('#updateBannerTitle').innerText(), /9\.9\.9 is available/);
     assert.equal(await firstRunPage.locator('#updateBannerInstall').innerText(), 'Install and restart');
     await firstRunPage.screenshot({ path: path.join(screenshotDir, 'first-run-recommendation-update-desktop.png'), fullPage: false });
+    await assertAgentContrast(firstRunPage, 'update banner', '#updateBanner');
     await firstRunPage.locator('#updateBannerLater').click();
     assert.equal(await firstRunPage.locator('#updateBanner').isHidden(), true, 'Later must hide the update banner.');
+    // Connect a phone: the dialog opens with both network choices and passes the contrast scan.
+    await firstRunPage.evaluate(() => window.oasisConnectPhone());
+    await firstRunPage.locator('#phoneDialog').waitFor({ state: 'visible', timeout: timeoutMs });
+    await firstRunPage.locator('#phoneTailscaleBtn').waitFor({ state: 'visible', timeout: timeoutMs });
+    await firstRunPage.waitForFunction(() => !/Checking/.test(document.getElementById('phoneDialogHint').textContent), null, { timeout: timeoutMs });
+    assert.match(await firstRunPage.locator('#phoneLanBtn').innerText(), /unencrypted/);
+    await assertAgentContrast(firstRunPage, 'connect a phone dialog', '#phoneDialog');
+    await firstRunPage.screenshot({ path: path.join(screenshotDir, 'connect-a-phone-desktop.png'), fullPage: false });
+    await firstRunPage.locator('#phoneCloseBtn').click();
+    await firstRunPage.locator('#phoneDialog').waitFor({ state: 'hidden', timeout: timeoutMs });
     await assertAgentContrast(firstRunPage, 'First-run setup · desktop');
     await firstRunPage.screenshot({ path: path.join(screenshotDir, 'first-run-desktop.png'), fullPage: true });
 
