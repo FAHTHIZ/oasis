@@ -17,6 +17,13 @@ const OUTPUT_LIMIT = 12000;
 const DEFAULT_TIMEOUT_MS = 120000;
 const SKIP_DIRS = new Set(['.git', 'node_modules', '.next', 'dist', 'build', 'coverage', '.turbo', '.venv', 'venv', 'vendor', 'target', '.oasis', 'eval-results', '.ssh', '.aws', '.gnupg', '.azure', '.kube', '.docker']);
 
+// Why the agent did not report a finished task, so failed trials are explainable.
+function unfinishedReason(result) {
+  const flags = ['verificationIncomplete', 'tokenLimitReached', 'limitReached', 'budgetExceeded', 'stoppedByHook', 'blockedByHook'].filter((key) => result[key] === true);
+  const issues = Array.isArray(result.verificationIssues) ? result.verificationIssues.slice(0, 5).map((item) => String(item && (item.message || item.text || item.kind) || item).slice(0, 300)) : [];
+  return { flags, issues, text: String(result.text || '').slice(-1200) };
+}
+
 function safeId(value) {
   return typeof value === 'string' && /^[a-z0-9][a-z0-9-]{0,63}$/.test(value);
 }
@@ -1443,7 +1450,10 @@ export async function runEvalCommand(args = [], options = {}) {
           : localModel ? 'local model: no per-token API charge (hardware and power not counted)'
           : costUSD === null ? 'unknown: set OASIS_EVAL_*_USD_PER_MILLION_TOKENS'
             : 'uniform benchmark token-rate estimate';
-        const passed = !errorText && Boolean(agentResult && agentResult.finished) && verification.exitCode === 0;
+        // The same rule as every other agent: the hidden verifier passed and the run
+        // ended without an error or timeout. OASIS's own "verification incomplete"
+        // signal is kept in the record (finished / unfinished) but does not change the score.
+        const passed = !errorText && Boolean(agentResult) && verification.exitCode === 0;
         trials.push({
           taskId: task.id, taskFingerprint: task.taskFingerprint, category: task.category, difficulty: task.difficulty, trial,
           status: passed ? 'passed' : 'failed',
@@ -1458,7 +1468,8 @@ export async function runEvalCommand(args = [], options = {}) {
           toolCalls: agentResult ? agentResult.toolCalls : 0,
           verification: { exitCode: verification.exitCode, output: verification.output },
           changes,
-          error: errorText
+          error: errorText,
+          ...(agentResult && !agentResult.finished ? { unfinished: unfinishedReason(agentResult) } : {})
         });
         output.write((passed ? '  PASS ' : '  FAIL ') + task.id + ' trial ' + trial +
           ' · ' + (routed && routed.tier || 'strong') + '/' + model +
