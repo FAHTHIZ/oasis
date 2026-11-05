@@ -4,13 +4,10 @@ This is the canonical navigation hub for OASIS. The root [README](../README.md) 
 
 ## Current product status
 
-OASIS **1.0 is the stable-channel version on `main`.** The [`v1.0.0`](https://github.com/FAHTHIZ/oasis/releases/tag/v1.0.0) GitHub Release was published on November 4, 2026. Work after 1.0 focuses on strengthening existing agents and workflows, reliability, security boundaries, accessibility and platform coverage.
+OASIS is on the **stable channel**. The latest release is [`v1.1.0`](https://github.com/FAHTHIZ/oasis/releases/tag/v1.1.0) (November 5, 2026); [`v1.0.0`](https://github.com/FAHTHIZ/oasis/releases/tag/v1.0.0) shipped on November 4, 2026. `main` also carries the universal app ([open it](https://fahthiz.github.io/oasis/app/)) and the [Android APK](https://github.com/FAHTHIZ/oasis/releases/tag/android-latest), which is rebuilt on every push.
 
-- Version on `main`: `1.0.0` (stable channel, released as `v1.0.0` on November 4, 2026)
-- Published releases: none on GitHub; the only tag is `0.6.7` (no `v` prefix, not used by the installer). The `v0.4.0` Beta documented in [its notes](releases/v0.4.0.md) is no longer present as a tag or release.
-- Installers are unsigned (SHA-256 checksums are published); see the [project plan](PROJECT_PLAN.md) for the 1.0 gates and decisions.
-
-The [project and qualification plan](PROJECT_PLAN.md) is the source of truth for release gates and known limits.
+- Installers are unsigned; SHA-256 checksums are published with every release.
+- The [project and qualification plan](PROJECT_PLAN.md) is the source of truth for release gates, supported platforms and known limits.
 
 ## Start here
 
@@ -18,8 +15,8 @@ The [project and qualification plan](PROJECT_PLAN.md) is the source of truth for
 |---|---|
 | Understand product scope and maturity | [Root README](../README.md) |
 | Check release blockers and supported platforms | [Project and qualification plan](PROJECT_PLAN.md) |
-| Install stable downloads or build the RC from source | [Installation guide](INSTALL.md) |
-| Use OASIS on Android / Termux | [Termux guide](TERMUX.md) |
+| Install stable downloads or build from source | [Installation guide](INSTALL.md) |
+| Use OASIS on a phone or tablet (universal app, Android APK, remote, Termux) | [Phone and tablet guide](MOBILE.md) · [Termux guide](TERMUX.md) |
 | Find a topic in the full manual | [User-guide map](USER_GUIDE_MAP.md) |
 | Learn every command, setting, tool, and integration | [Full user guide](USER_GUIDE.md) |
 
