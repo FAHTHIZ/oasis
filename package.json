@@ -39,7 +39,8 @@
   ],
   "scripts": {
     "test": "node --test test/*.test.mjs",
-    "check": "node scripts/check-site.mjs && node .github/scripts/check-public-site.mjs && node .github/scripts/check-eval-quarantine.mjs && node --test test/*.test.mjs && node bench/harness/run.mjs --check && node src/cli.mjs eval --validate && node src/cli.mjs eval --negative-control",
+    "check:quick": "node scripts/check-site.mjs && node .github/scripts/check-public-site.mjs && node .github/scripts/check-eval-quarantine.mjs && node bench/harness/run.mjs --check",
+  "check": "node scripts/check-site.mjs && node .github/scripts/check-public-site.mjs && node .github/scripts/check-eval-quarantine.mjs && node --test test/*.test.mjs && node bench/harness/run.mjs --check && node src/cli.mjs eval --validate && node src/cli.mjs eval --negative-control",
     "postinstall": "node scripts/vendor-terminal.mjs",
     "prepack": "node scripts/vendor-terminal.mjs",
     "desktop:dev": "electron desktop/main.mjs",

@@ -21,6 +21,8 @@ npm install
 npm run check
 ```
 
+`npm run check:quick` runs only the static gates (site and public-site integrity, eval prompt quarantine and the benchmark harness self-check). It takes a few seconds, so run it before every push; CI fails fast on the same checks.
+
 For the normal test suite, use the repository's explicit test-file pattern:
 
 ```bash
