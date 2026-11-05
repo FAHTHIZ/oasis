@@ -1310,6 +1310,33 @@ export function outputCapFromError(status, body) {
   return parsed >= 1024 ? parsed : 8192;
 }
 
+function isOpenRouterBaseURL(baseURL) {
+  try {
+    const host = new URL(String(baseURL || '')).hostname.toLowerCase();
+    return host === 'openrouter.ai' || host.endsWith('.openrouter.ai');
+  } catch { return false; }
+}
+
+function openRouterCreditInfo(status, body, baseURL) {
+  if (status !== 402 || !isOpenRouterBaseURL(baseURL)) return null;
+  let parsed;
+  try { parsed = JSON.parse(String(body || '').slice(0, 16000)); } catch { return null; }
+  const error = parsed && parsed.error;
+  if (!error || !error.metadata || error.metadata.limit_source !== 'openrouter_credits') return null;
+  const message = String(error.message || '');
+  const availableMatch = message.match(/can only afford\s+([\d,]+)/i);
+  const requestedMatch = message.match(/requested up to\s+([\d,]+)/i);
+  const available = availableMatch ? Number(availableMatch[1].replace(/,/g, '')) : 0;
+  if (!Number.isSafeInteger(available) || available <= 0) return null;
+  return { available, requested: requestedMatch ? Number(requestedMatch[1].replace(/,/g, '')) : 0 };
+}
+
+export function openRouterOutputCapFromError(status, body, config = {}) {
+  const info = openRouterCreditInfo(status, body, config.baseURL);
+  if (!info || info.available < 80) return 0;
+  return Math.floor((info.available * 0.8) / 64) * 64;
+}
+
 const MAX_OUTPUT_RECOVERIES = 3;
 function truncationRecoveryPrompt(limit, droppedCall) {
   return [
@@ -1471,17 +1498,24 @@ export function applyAnthropicCacheBreakpoints(request, tools = []) {
   return request;
 }
 
-function formatApiError(status, body, protocol) {
+function formatApiError(status, body, protocol, baseURL = '') {
   let detail = '';
   try {
     const parsed = JSON.parse(body);
     detail = parsed.error && (parsed.error.message || parsed.error.code || parsed.error.type)
       ? String(parsed.error.message || parsed.error.code || parsed.error.type) : (typeof parsed.message === 'string' ? parsed.message : '');
   } catch { detail = String(body || '').slice(0, 500); }
+  const creditInfo = openRouterCreditInfo(status, body, baseURL);
+  if (creditInfo) {
+    const requested = creditInfo.requested ? ' The request reserved up to ' + creditInfo.requested.toLocaleString() + ' output tokens.' : '';
+    return 'OpenRouter does not have enough remaining credits for this request. Its response says the current balance can cover about ' +
+      creditInfo.available.toLocaleString() + ' output tokens.' + requested +
+      ' This is a credit limit, not an invalid API key. Try a free model or a smaller output limit.';
+  }
   const mode = protocol === 'anthropic' ? 'native Anthropic Messages API' : protocol === 'bedrock' ? 'AWS Bedrock (Claude)' : protocol === 'vertex' ? 'Google Vertex AI (Claude)' : protocol === 'foundry' ? 'Microsoft Foundry (Claude)' :
     protocol === 'openai-responses' ? 'OpenAI Responses API' : 'OpenAI-compatible chat completions';
   return 'Model provider returned HTTP ' + status + (detail ? ': ' + detail : '') +
-    '. Check the configured ' + mode + ' endpoint, model name, credentials, and tool-calling support.';
+    (status === 402 ? '. This is a billing or quota limit, not an API-key authentication failure.' : '. Check the configured ' + mode + ' endpoint, model name, credentials, and tool-calling support.');
 }
 
 function responseText(output) {
@@ -2258,8 +2292,10 @@ async function requestCompletionRaw(session, options = {}) {
     };
   } else {
     endpoint = openAIEndpoint(config.baseURL);
-    // Compatible gateways differ on max_tokens support, so only send it when configured.
-    const explicitChatLimit = session.outputTokenCap || firstPositiveConfiguredInteger(providerEnv.OASIS_MAX_OUTPUT_TOKENS, providerEnv.CLAUDE_CODE_MAX_OUTPUT_TOKENS, config.maxOutputTokens);
+    // Compatible gateways differ on max_tokens support. OpenRouter needs an
+    // explicit ceiling; otherwise it may reserve the model's entire output window.
+    const configuredChatLimit = session.outputTokenCap || firstPositiveConfiguredInteger(providerEnv.OASIS_MAX_OUTPUT_TOKENS, providerEnv.CLAUDE_CODE_MAX_OUTPUT_TOKENS, config.maxOutputTokens);
+    const explicitChatLimit = configuredChatLimit || (isOpenRouterBaseURL(config.baseURL) ? 4096 : 0);
     if (explicitChatLimit) outputLimit = explicitChatLimit;
     bodyObject = {
       model: config.model,
@@ -2357,6 +2393,13 @@ async function requestCompletionRaw(session, options = {}) {
         if (options.signal) options.signal.removeEventListener('abort', abortFromCaller);
         return requestCompletionRaw(session, options);
       }
+      const creditCap = !options.openRouterCreditCapRetried ? openRouterOutputCapFromError(status, errorBody, config) : 0;
+      if (creditCap >= 64 && outputLimit && creditCap < outputLimit) {
+        session.outputTokenCap = creditCap;
+        clearTimeout(timer);
+        if (options.signal) options.signal.removeEventListener('abort', abortFromCaller);
+        return requestCompletionRaw(session, { ...options, openRouterCreditCapRetried: true });
+      }
       const cap = outputLimit && !options.outputCapRetried ? outputCapFromError(status, errorBody) : 0;
       if (cap && cap < outputLimit + Number(session.thinkingBudget || 0)) {
         session.outputTokenCap = cap;
@@ -2365,7 +2408,7 @@ async function requestCompletionRaw(session, options = {}) {
         if (options.signal) options.signal.removeEventListener('abort', abortFromCaller);
         return requestCompletionRaw(session, { ...options, outputCapRetried: true });
       }
-      throw Object.assign(new Error(formatApiError(status, errorBody, config.protocol)), { status });
+      throw Object.assign(new Error(formatApiError(status, errorBody, config.protocol, config.baseURL)), { status });
     }
     if (!response || !response.ok) throw new Error('The model provider did not return a successful response after bounded retries.');
     responseStarted = true;
