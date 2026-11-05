@@ -157,7 +157,7 @@ export function summarize(runs, options, now = new Date()) {
     const tokens = rows.map((row) => row.totalTokens), costs = rows.map((row) => row.costUSD);
     return { agent: run.agent, name: run.name, label: run.summary && run.summary.label || run.name, file: run.file || null,
       requestedModel: modelFor(run.agent, options) || null, reportedModel: provider.model || run.summary && run.summary.model || null,
-      cliVersion: provider.cliVersion || (run.agent === 'oasis' ? oasisVersion() : null), sourceRevision: run.summary && run.summary.sourceRevision || null, runtime: run.summary && run.summary.runtime || null,
+      cliVersion: provider.cliVersion || (run.agent === 'oasis' ? oasisVersion() : null), sourceRevision: run.summary && run.summary.sourceRevision || null, ...(run.summary && run.summary.sourceChangedDuringRun ? { sourceRevisionAtEnd: run.summary.sourceRevisionAtEnd, sourceChangedDuringRun: true } : {}), runtime: run.summary && run.summary.runtime || null,
       passRate: mean(Object.values(perTask)), passedTrials: rows.filter((row) => row.status === 'passed').length, trials: rows.length,
       medianTrialTimeMs: median(rows.map((row) => row.wallTimeMs)),
       totalTokens: rows.length && tokens.every(Number.isFinite) ? tokens.reduce((sum, value) => sum + value, 0) : null,
@@ -198,7 +198,7 @@ export function renderSummary(summary) {
   const skipped = summary.agents.filter((item) => item.skipped);
   if (skipped.length) { lines.push('', '## Agents not run', ''); for (const item of skipped) lines.push('- ' + item.name + ': ' + item.skipped); }
   lines.push('', '## Run provenance', '', '| Agent | CLI version | Source revision | Runtime |', '|---|---|---|---|');
-  for (const item of summary.agents) { if (item.skipped) continue; lines.push('| ' + item.name + ' | ' + (item.cliVersion || 'not reported') + ' | ' + (item.sourceRevision || 'unavailable') + ' | ' + (item.runtime ? [item.runtime.node, item.runtime.platform, item.runtime.arch].filter(Boolean).join(' / ') : 'not reported') + ' |'); }
+  for (const item of summary.agents) { if (item.skipped) continue; lines.push('| ' + item.name + ' | ' + (item.cliVersion || 'not reported') + ' | ' + (item.sourceRevision || 'unavailable') + (item.sourceChangedDuringRun ? ' (HEAD moved to ' + item.sourceRevisionAtEnd + ' during the run; the loaded code is the first revision)' : '') + ' | ' + (item.runtime ? [item.runtime.node, item.runtime.platform, item.runtime.arch].filter(Boolean).join(' / ') : 'not reported') + ' |'); }
   lines.push('', '## Task coverage', '');
   lines.push('Shared task IDs: ' + (summary.sharedTaskIds.length ? summary.sharedTaskIds.join(', ') : 'none') + '.');
   lines.push('Verified matched tasks: ' + (summary.sharedTasks.length ? summary.sharedTasks.join(', ') : 'none') + '.');

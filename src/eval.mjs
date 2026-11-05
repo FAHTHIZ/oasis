@@ -1289,7 +1289,7 @@ async function runClaudeCodeEval(config, options = {}) {
   const modelLabel = config.model || (observedModels.length ? observedModels.join(', ') : 'model not reported by CLI');
   const summary = {
     label: agentName + ' ' + cliVersion + ' (' + modelLabel + ')',
-    sourceRevision: await detectSourceRevision(env),
+    ...(await revisionFields(env)),
     runId: startedAt.replace(/[^a-zA-Z0-9-]/g, '-') + '-' + process.pid,
     startedAt,
     completedAt: new Date().toISOString(),
@@ -1548,7 +1548,7 @@ export async function runEvalCommand(args = [], options = {}) {
     : null;
   const summary = {
     label: 'OASIS ' + oasisVersion() + ' (' + provider.model + ')',
-    sourceRevision: await detectSourceRevision(env),
+    ...(await revisionFields(env)),
     runId: path.basename(startedAt).replace(/[^a-zA-Z0-9-]/g, '-') + '-' + process.pid,
     startedAt, completedAt: new Date().toISOString(),
     taskCount: selectedDirs.length, taskIds: selectedDirs.map((dir) => path.basename(dir)), trialsPerTask: config.trials,
@@ -1572,4 +1572,20 @@ export async function runEvalCommand(args = [], options = {}) {
   output.write('Median time: ' + (summary.medianTimeMs === null ? 'n/a' : summary.medianTimeMs + ' ms') + '\n');
   output.write('Cost per passed trial: ' + (summary.costPerPassedTaskUSD === null ? 'n/a' : '$' + summary.costPerPassedTaskUSD.toFixed(6)) + '\n');
   return { ok: trials.every((item) => item.status === 'passed'), summary, resultsPath: resultPath, results: trials };
+}
+
+// The OASIS code an eval runs is the code loaded when this module was
+// imported. Reading HEAD only at the end mislabelled a long run: commits made
+// while it ran (a fix landed 6 minutes in) were reported as the tested code.
+const LOADED_REVISION = detectSourceRevision(process.env).catch(() => null);
+
+export async function revisionFields(env = process.env) {
+  const loaded = await LOADED_REVISION;
+  const now = await detectSourceRevision(env).catch(() => null);
+  const explicit = /^[a-f0-9]{40}$/i.test(String(env.OASIS_SOURCE_REVISION || env.GITHUB_SHA || '').trim());
+  const revision = explicit ? now : (loaded || now);
+  return {
+    sourceRevision: revision,
+    ...(!explicit && loaded && now && loaded !== now ? { sourceRevisionAtEnd: now, sourceChangedDuringRun: true } : {})
+  };
 }
