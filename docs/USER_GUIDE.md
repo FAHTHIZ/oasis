@@ -257,7 +257,26 @@ oasis add https://mcp.context7.com/mcp              # a remote MCP server (…/s
 oasis add @modelcontextprotocol/server-memory       # an npm MCP package
 oasis add github                                    # search the MCP Registry; the vendor's own server wins
 oasis add commit-commands@claude-code-plugins       # a plugin from a marketplace you already added
+oasis add gemini-cli-extensions/security           # a Gemini CLI extension (uses its release build, like Gemini CLI)
+oasis add openai/plugins#build-web-apps            # one plugin from a Codex marketplace
 ```
+
+Plugins written for Gemini CLI (`gemini-extension.json`), Codex (`.codex-plugin/plugin.json`, `.agents/plugins/marketplace.json`) and the portable Agent Plugins format (`plugin.json` with `mcp.json`) are converted into Claude Code plugins on install, so they run with everything OASIS plugins get. Gemini's TOML commands become `/extension:command` commands (`{{args}}` and `!{…}` keep working), `GEMINI.md` becomes a skill named `<extension>-guide`, its MCP servers and hooks keep their paths, and its settings become plugin options (read from your environment, or set with `oasis plugin config`). When a Gemini extension's GitHub release has a build for your platform (`linux.x64.<name>.tar.gz` and so on), OASIS installs that build, which has the compiled files the source lacks.
+
+Install commands copied from a README work as they are, so you never have to translate them:
+
+```bash
+oasis add npx -y @playwright/mcp@latest
+oasis add claude mcp add -e API_KEY=... airtable -- npx -y airtable-mcp-server
+oasis add claude mcp add --transport http sentry https://mcp.sentry.dev/mcp
+oasis add /plugin install commit-commands@claude-code-plugins
+oasis add npx skills add anthropics/skills --skill pdf
+oasis add gemini extensions install https://github.com/gemini-cli-extensions/security
+oasis add codex plugin marketplace add openai/plugins
+oasis add https://skills.sh/anthropics/skills/pdf    # also npmjs.com, pypi.org, smithery.ai and raw.githubusercontent.com pages
+```
+
+The `-y` inside a pasted `npx -y` belongs to npx, not to OASIS, so it still asks you first; add `--yes` at the end to skip the question. `npx` servers always get `-y` so they never stop at npm's "Ok to proceed?" question. Environment values from `-e KEY=VALUE` go into your MCP config (owner-only file), and the summary names the keys but never shows the values.
 
 In a chat, type `/add LINK`, or just tell the agent "install this: LINK". The agent calls `add_extension`, asks you once (even with `--yes`), and starts any new MCP server in the same chat. Plugins and skills load in the next session, or straight away with `/reload-plugins`.
 

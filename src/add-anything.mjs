@@ -27,8 +27,145 @@ const NAME = /^[a-z0-9][a-z0-9._-]{0,63}$/;
 const slug = (value, fallback = 'addon') => String(value || '').toLowerCase().replace(/[^a-z0-9._-]+/g, '-').replace(/^[-.]+|[-.]+$/g, '').slice(0, 60) || fallback;
 
 // What did the user give us? Pure string work; no network.
+// Split a pasted command line the way a POSIX shell would (quotes, escapes).
+export function splitCommandLine(text) {
+  const out = [];
+  let cur = '';
+  let quote = '';
+  let has = false;
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    if (quote) {
+      if (ch === quote) quote = '';
+      else if (ch === '\\' && quote === '"' && i + 1 < text.length) cur += text[++i];
+      else cur += ch;
+    } else if (ch === '"' || ch === "'") { quote = ch; has = true; }
+    else if (ch === '\\' && i + 1 < text.length) { cur += text[++i]; has = true; }
+    else if (/\s/.test(ch)) { if (has || cur) out.push(cur); cur = ''; has = false; }
+    else { cur += ch; has = true; }
+  }
+  if (quote) throw new Error('That command has an unclosed quote.');
+  if (has || cur) out.push(cur);
+  return out;
+}
+
+const RUNNERS = new Set(['npx', 'uvx', 'bunx', 'pnpx', 'docker', 'pipx', 'pnpm', 'uv', 'node', 'python', 'python3', 'deno', 'bun']);
+
+// Name a stdio server after the package it runs.
+function serverNameFor(command, args) {
+  const words = args.filter((a) => !a.startsWith('-'));
+  let pkg = words[0] || command;
+  if (command === 'docker') pkg = words.filter((a) => a !== 'run').pop() || 'docker';
+  if (['pipx', 'pnpm', 'uv'].includes(command)) pkg = words[1] || words[0] || command;
+  const scopeName = /^@([^/]+)\//.exec(pkg);
+  pkg = pkg.replace(/^@[^/]+\//, '').replace(/(.)@[^@/]*$/, '$1').replace(/:[^/]*$/, '').split('/').pop();
+  const short = pkg.replace(/^(mcp-)?server-|-mcp(-server)?$|^mcp-/g, '');
+  return slug(!short || /^(mcp|server|mcp-server)$/.test(short) ? (scopeName ? scopeName[1] : pkg) : short, 'mcp');
+}
+
+// Turn what people copy out of READMEs into a source: install commands from
+// Claude Code, Codex, Gemini CLI and the skills CLI, bare npx/uvx/docker
+// commands, and package, directory and raw-file pages.
+export function normalizePasted(raw) {
+  const text = String(raw || '').trim().replace(/^`+|`+$/g, '').replace(/^\$\s+/, '').trim();
+  const gemini = /^gemini\s+extensions?\s+install\s+(.+)$/i.exec(text);
+  if (gemini) {
+    const words = splitCommandLine(gemini[1]);
+    const at = words.findIndex((w) => w === '--ref');
+    const ref = at >= 0 ? words[at + 1] || '' : (words.find((w) => w.startsWith('--ref=')) || '').slice(6);
+    const target = words.filter((w, i) => !w.startsWith('-') && words[i - 1] !== '--ref')[0] || '';
+    return { text: target.replace(/^(github\.com\/)/i, 'https://$1') + (ref && /^v?\d|\//.test(ref) ? '#' + ref : '') };
+  }
+  const plugin = /^(?:\/plugin|claude\s+plugins?|oasis\s+plugins?|codex\s+plugins?\s+(?=marketplace))\s*(?:marketplace\s+add|install|add|i)\s+(.+)$/i.exec(text);
+  if (plugin) return { text: splitCommandLine(plugin[1]).filter((w, i, all) => !w.startsWith('-') && !['-s', '--scope'].includes(all[i - 1]))[0] || '' };
+  const skills = /^(?:npx\s+(?:-y\s+)?|bunx\s+|pnpx\s+)?skills(?:@\S+)?\s+(?:add|install|i)\s+(.+)$/i.exec(text);
+  if (skills) {
+    const words = splitCommandLine(skills[1]);
+    let pick = '';
+    const rest = [];
+    for (let i = 0; i < words.length; i++) {
+      if (['--skill', '-s'].includes(words[i])) pick = words[++i] || '';
+      else if (!words[i].startsWith('-')) rest.push(words[i]);
+    }
+    return { text: rest[0] + (pick && !rest[0].includes('#') ? '#' + pick : '') };
+  }
+  const mcpAdd = /^(?:claude|codex|gemini|oasis|qwen|opencode)\s+mcp\s+add\s+(.+)$/i.exec(text);
+  if (mcpAdd) {
+    const words = splitCommandLine(mcpAdd[1]);
+    const env = {};
+    const headers = [];
+    let transport = '';
+    let i = 0;
+    const positional = [];
+    for (; i < words.length; i++) {
+      const w = words[i];
+      if (w === '--') { i++; break; }
+      if (['-t', '--transport'].includes(w)) transport = words[++i] || '';
+      else if (['-s', '--scope'].includes(w)) i++;
+      else if (['-e', '--env'].includes(w)) { const [k, ...v] = String(words[++i] || '').split('='); if (k) env[k] = v.join('='); }
+      else if (['-H', '--header'].includes(w)) headers.push(words[++i] || '');
+      else if (w.startsWith('--transport=')) transport = w.slice(12);
+      else if (w.startsWith('-')) continue;
+      else { positional.push(w); if (positional.length === 2 && !/^https?:\/\//i.test(w)) { i++; break; } }
+    }
+    const name = positional[0];
+    const target = positional[1];
+    if (!name) throw new Error('That mcp add command has no server name.');
+    if (target && /^https?:\/\//i.test(target)) return { text: target, name, transport: transport === 'sse' ? 'sse' : 'http', headers };
+    const command = target ? [target, ...words.slice(i)] : words.slice(i);
+    if (!command.length) throw new Error('That mcp add command has no command to run.');
+    return { stdio: { name: slug(name, 'mcp'), command: command[0], args: command.slice(1), env } };
+  }
+  const words = /^[a-z]/i.test(text) && /\s/.test(text) ? splitCommandLine(text) : [];
+  if (words.length > 1 && RUNNERS.has(words[0].toLowerCase())) {
+    const command = words[0];
+    return { stdio: { name: serverNameFor(command, words.slice(1)), command, args: words.slice(1), env: {} } };
+  }
+  const ssh = /^git@github\.com:([\w.-]+)\/([\w.-]+?)(?:\.git)?(#.*)?$/i.exec(text);
+  if (ssh) return { text: 'https://github.com/' + ssh[1] + '/' + ssh[2] + (ssh[3] || '') };
+  if (/^https?:\/\//i.test(text)) {
+    let url;
+    try { url = new URL(text); } catch { return { text }; }
+    const parts = url.pathname.replace(/^\/+|\/+$/g, '').split('/').map(decodeURIComponent);
+    const host = url.hostname.replace(/^www\./, '').toLowerCase();
+    if (host === 'raw.githubusercontent.com' && parts.length >= 3) {
+      const file = parts.slice(3);
+      const dir = file.length && /\.[a-z0-9]+$/i.test(file[file.length - 1]) ? file.slice(0, -1) : file;
+      return { text: 'https://github.com/' + parts[0] + '/' + parts[1] + '/tree/' + parts[2] + (dir.length ? '/' + dir.join('/') : '') };
+    }
+    if (host === 'skills.sh' && parts.length >= 2) return { text: parts[0] + '/' + parts[1] + (parts[2] ? '#' + parts[2] : '') };
+    if (host === 'npmjs.com' && parts[0] === 'package' && parts[1]) {
+      const pkg = parts[1].startsWith('@') ? parts[1] + '/' + (parts[2] || '') : parts[1];
+      return pkg.startsWith('@') ? { text: pkg } : { stdio: { name: serverNameFor('npx', [pkg]), command: 'npx', args: ['-y', pkg], env: {} } };
+    }
+    if (host === 'pypi.org' && parts[0] === 'project' && parts[1]) return { stdio: { name: serverNameFor('uvx', [parts[1]]), command: 'uvx', args: [parts[1]], env: {} } };
+    if (host === 'smithery.ai' && parts[0] === 'server' && parts[1]) {
+      const id = parts[1].startsWith('@') ? parts[1] + '/' + (parts[2] || '') : parts[1];
+      return { text: id.startsWith('@') ? id : id.split('/').pop() };
+    }
+    if (host === 'modelcontextprotocol.io' || host === 'registry.modelcontextprotocol.io') {
+      const name = url.searchParams.get('q') || url.searchParams.get('name');
+      if (name) return { text: name };
+    }
+  }
+  return { text };
+}
+
 export function classifySource(raw) {
-  const text = String(raw || '').trim().replace(/^<|>$/g, '');
+  const pasted = normalizePasted(raw);
+  if (pasted.stdio) {
+    const { command, args } = pasted.stdio;
+    if (!/^[\w.+-]+$/.test(command)) throw new Error('OASIS could not tell what "' + String(raw).trim() + '" runs.');
+    // npx asks "Ok to proceed?" for packages it has not cached; a server has no one to answer.
+    const fixed = command === 'npx' && !args.some((a) => a === '-y' || a === '--yes') ? ['-y', ...args] : args;
+    return { kind: 'stdio-mcp', ...pasted.stdio, args: fixed, display: String(raw).trim() };
+  }
+  if (pasted.name) {
+    const source = classifySource(pasted.text);
+    if (source.kind === 'remote-mcp') return { ...source, name: slug(pasted.name, source.name), transport: pasted.transport || source.transport, headers: pasted.headers || [] };
+    return source;
+  }
+  const text = String(pasted.text || '').trim().replace(/^<|>$/g, '');
   if (!text) throw new Error('Tell OASIS what to add: a GitHub link, owner/repo, plugin@marketplace, an MCP server URL or an npm package.');
   if (text.length > 800) throw new Error('That source is too long.');
   const [base, fragment = ''] = text.split('#');
@@ -151,6 +288,11 @@ export async function inspectAddonDirectory(dir) {
     if (await exists(path.join(dir, '.mcp.json')) || claudePlugin.mcpServers) parts.push('MCP servers (they run when sessions start)');
     return { type: 'claude-plugin', name: String(claudePlugin.name).toLowerCase(), description: String(claudePlugin.description || '').slice(0, 200), contents: parts };
   }
+  const convert = await import('./plugin-convert.mjs');
+  const foreign = await convert.detectForeignPlugin(dir);
+  if (foreign) return { type: 'foreign-plugin', format: foreign.format, label: foreign.label, name: foreign.name, description: foreign.description.slice(0, 200), contents: await convert.describeForeignPlugin(dir, foreign) };
+  const codexMarket = await convert.detectCodexMarketplace(dir);
+  if (codexMarket && codexMarket.plugins.length) return { type: 'codex-marketplace', name: codexMarket.name, plugins: codexMarket.plugins.map((p) => ({ name: p.name, description: p.description.slice(0, 160), path: p.path })) };
   const native = await readJsonFile(path.join(dir, 'plugin.json'));
   if (native && native.schemaVersion === 1 && native.name) {
     return { type: 'native-plugin', name: String(native.name), description: String(native.description || '').slice(0, 200), permissions: Array.isArray(native.permissions) ? native.permissions.map(String) : [] };
@@ -187,7 +329,6 @@ export async function inspectAddonDirectory(dir) {
   if (prompts.length) return { type: 'prompts', count: prompts.length };
   const hidden = await skillNames(dir, { includeHidden: true });
   if (hidden.length) return { type: 'skills', skills: hidden };
-  if (await exists(path.join(dir, 'gemini-extension.json'))) return { type: 'unsupported', reason: 'a Gemini CLI extension; OASIS can import its skills or prompts when it has them, but this one has neither' };
   return { type: 'unsupported', reason: 'no plugin, marketplace, skills, MCP server or agent prompts' };
 }
 
@@ -198,6 +339,21 @@ function chooseFromMarketplace(info, source) {
   const repoName = String(source.name || '').toLowerCase();
   const match = info.plugins.find((p) => p.name === repoName);
   return match ? [match.name] : [];
+}
+
+// Convert a Gemini, Codex or Agent Plugins plugin into a one-plugin marketplace and install it.
+async function installConverted(dir, foreign, source, { env, root, scope }) {
+  const { convertToClaudePlugin } = await import('./plugin-convert.mjs');
+  const { addMarketplace, installPlugin } = await import('./claude-plugins.mjs');
+  const market = slug('repo-' + (source.owner ? source.owner + '-' + source.name : foreign.name) + (source.pick ? '-' + source.pick : ''));
+  const marketDir = path.join(getConfigDirectory(env), 'plugins', 'single', market);
+  await mkdir(path.join(marketDir, '.claude-plugin'), { recursive: true });
+  const name = await convertToClaudePlugin(dir, path.join(marketDir, 'plugin'), foreign);
+  await writeFile(path.join(marketDir, '.claude-plugin', 'marketplace.json'), JSON.stringify({ name: market, owner: { name: source.owner || 'local' }, plugins: [{ name, source: './plugin' }] }, null, 2) + '\n');
+  await addMarketplace(marketDir, { env, cwd: root });
+  const result = await installPlugin(name + '@' + market, { env, root, scope });
+  const options = foreign.format === 'gemini' && Array.isArray(foreign.manifest.settings) ? foreign.manifest.settings.map((s) => s && s.envVar).filter(Boolean) : [];
+  return { installed: [result.id], message: 'Installed and enabled ' + result.id + ' (converted from a ' + foreign.label + ').' + (options.length ? ' It reads ' + options.join(', ') + ' from your environment, or set them with oasis plugin config ' + result.id + ' KEY=VALUE.' : ''), reload: true };
 }
 
 // Build the plan: what will happen, one summary for the approval, and a run().
@@ -215,7 +371,7 @@ export async function planAddon(raw, options = {}) {
   if (source.kind === 'remote-mcp') {
     const name = slug(options.name || source.name, 'remote');
     return { kind: 'remote-mcp', title: 'Remote MCP server ' + name, summary: 'Add the remote MCP server "' + name + '" (' + source.transport + '): ' + source.url + '. No local code runs; each of its tools asks before it acts unless you allow it.',
-      run: async () => { const { addRemoteMcpServer } = await import('./mcp-remote-add.mjs'); const message = await addRemoteMcpServer(['--transport', source.transport, '--scope', scope, name, source.url], { root, env, approve: async () => true }); return { installed: [name], message, reload: true }; } };
+      run: async () => { const { addRemoteMcpServer } = await import('./mcp-remote-add.mjs'); const message = await addRemoteMcpServer(['--transport', source.transport, '--scope', scope, ...(source.headers || []).flatMap((h) => ['--header', h]), name, source.url], { root, env, approve: async () => true }); return { installed: [name], message, reload: true }; } };
   }
   if (source.kind === 'zip') {
     return { kind: 'zip', title: 'Plugin archive', summary: 'Plugin .zip links load for one session: run oasis --plugin-url ' + source.url + '.', run: async () => ({ installed: [], message: 'Start OASIS with --plugin-url ' + source.url + ' to load this plugin for that session. For a permanent install, link its GitHub repository instead.' }) };
@@ -234,6 +390,13 @@ export async function planAddon(raw, options = {}) {
     const localName = slug(options.name || registry.defaultLocalName(registryName), 'mcp');
     return { kind: 'mcp-registry', title: 'MCP server ' + registryName, summary: 'Add the MCP server ' + registryName + ' from the official MCP Registry as "' + localName + '". It downloads and runs that server when sessions start.',
       run: async () => { const message = await registry.installFromRegistry([registryName, '--name', localName, '--scope', scope], { root, env, approve: async () => true, fetchImpl: options.fetchImpl }); return { installed: [localName], message, reload: true }; } };
+  }
+  if (source.kind === 'stdio-mcp') {
+    const name = slug(options.name || source.name, 'mcp');
+    const keys = Object.keys(source.env || {});
+    const entry = { command: source.command, args: source.args, ...(keys.length ? { env: source.env } : {}) };
+    return { kind: 'stdio-mcp', title: 'MCP server ' + name, summary: 'Add the MCP server "' + name + '": runs ' + [source.command, ...source.args].join(' ') + ' when sessions start' + (keys.length ? ', with ' + keys.join(', ') + ' set' : '') + '.',
+      run: async () => ({ ...(await writeStdioServer(name, entry, { root, env, scope })), reload: true }) };
   }
   if (source.kind === 'npm-mcp' && !options.skipRegistry) {
     const registryName = await findRegistryEntry({ npm: source.pkg }, { env, fetchImpl: options.fetchImpl });
@@ -292,6 +455,35 @@ export async function planAddon(raw, options = {}) {
         const result = await installPlugin(info.name + '@' + market, { env, root, scope });
         return { installed: [result.id], message: 'Installed and enabled ' + result.id + '.', reload: true };
       }) };
+  }
+  if (info.type === 'codex-marketplace') {
+    const wanted = source.pick ? info.plugins.find((p) => p.name === source.pick.toLowerCase()) : (info.plugins.length === 1 ? info.plugins[0] : null);
+    if (!wanted) {
+      await fetched.cleanup();
+      const list = info.plugins.slice(0, 30).map((p) => p.name).join(', ');
+      if (source.pick) throw new Error('The Codex marketplace ' + info.name + ' has no plugin called ' + source.pick + '. Plugins: ' + list + '.');
+      return { kind: 'none', title: 'Codex marketplace ' + info.name, summary: '', run: async () => ({ installed: [], available: info.plugins.map((p) => p.name), message: 'The Codex marketplace ' + info.name + ' has ' + info.plugins.length + ' plugins: ' + list + '. Add one with ' + repoLabel + '#NAME.' }) };
+    }
+    const convert = await import('./plugin-convert.mjs');
+    const foreign = (await convert.detectForeignPlugin(wanted.path)) || { format: 'codex', label: 'Codex plugin', name: wanted.name, description: wanted.description, version: '', manifest: { name: wanted.name } };
+    const contents = await convert.describeForeignPlugin(wanted.path, foreign);
+    return { ...base, kind: 'foreign-plugin', title: foreign.label + ' ' + foreign.name,
+      summary: 'Install and enable the ' + foreign.label + ' "' + foreign.name + '" from ' + repoLabel + (contents.length ? ': ' + contents.join(', ') : '') + '. OASIS runs it as a Claude Code plugin.',
+      run: () => done(() => installConverted(wanted.path, foreign, source, { env, root, scope })) };
+  }
+  if (info.type === 'foreign-plugin') {
+    const convert = await import('./plugin-convert.mjs');
+    let foreign = await convert.detectForeignPlugin(fetched.dir);
+    // Like Gemini CLI, prefer the built archive from the latest GitHub release.
+    const release = foreign.format === 'gemini' && source.owner && /github\.com/i.test(source.url || '') && !source.subdir && !source.local
+      ? await convert.fetchGeminiRelease(source.owner, source.name, { env, fetchImpl: options.fetchImpl, ref: source.ref }) : null;
+    if (release) foreign = (await convert.detectForeignPlugin(release.dir)) || foreign;
+    const from = release ? release.dir : fetched.dir;
+    const contents = release ? await convert.describeForeignPlugin(release.dir, foreign) : info.contents;
+    return { ...base, kind: 'foreign-plugin', title: info.label + ' ' + info.name,
+      cleanup: async () => { await fetched.cleanup(); if (release) await release.cleanup(); },
+      summary: 'Install and enable the ' + info.label + ' "' + info.name + '" from ' + repoLabel + (release ? ' (release ' + release.tag + ', ' + release.asset + ')' : '') + (contents.length ? ': ' + contents.join(', ') : '') + '. OASIS runs it as a Claude Code plugin.',
+      run: () => done(async () => { try { return await installConverted(from, foreign, source, { env, root, scope }); } finally { if (release) await release.cleanup(); } }) };
   }
   if (info.type === 'native-plugin') {
     return { ...base, kind: 'native-plugin', title: 'OASIS plugin ' + info.name,

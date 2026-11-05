@@ -3694,6 +3694,29 @@ async function main() {
   if (command === 'update' || command === 'self-update') return await selfUpdate(autoApprove);
   if (command === 'config' || command === 'status') return printConfig(await loadConfig());
   if (command === 'mcp') return await manageMcp(rest, workspace);
+  // A pasted install command (npx …, uvx …, claude mcp add …, /plugin install …,
+  // npx skills add …) is one source too, quoted or not.
+  const pastedInstall = command === 'add' && /^(npx|uvx|bunx|pnpx|docker|pipx|claude|codex|gemini|qwen|opencode|skills|\/plugin)$/i.test(String(rest[0] || '')) && rest.length > 1;
+  if (pastedInstall) {
+    const { addAnything } = await import('./add-anything.mjs');
+    // Read the command from the raw arguments: its own flags (npx -y, -e KEY=V,
+    // --transport) belong to it, and its -y must not count as OASIS's --yes.
+    const argv = process.argv.slice(2);
+    const at = argv.indexOf('add');
+    const tail = argv.slice(at + 1);
+    const yes = argv.slice(0, at).some((arg) => arg === '--yes' || arg === '-y') || tail[tail.length - 1] === '--yes';
+    const source = (tail[tail.length - 1] === '--yes' ? tail.slice(0, -1) : tail).map((word) => /[\s"'\\]/.test(word) ? "'" + word.replace(/'/g, "'\\''") + "'" : word).join(' ');
+    stdout.write('Looking at ' + source + '…\n');
+    const result = await addAnything(source, { root: workspace, env: process.env, scope: 'user', approve: async (summary) => {
+      stdout.write(summary + '\n');
+      if (yes) return true;
+      if (!stdin.isTTY) { stdout.write('Run again with --yes to install without a prompt.\n'); return false; }
+      return /^y(es)?$/i.test(String(await askLine('Install it? [y/N] ')).trim());
+    } });
+    stdout.write(result.message + '\n');
+    if (result.approved === false) process.exitCode = 1;
+    return result;
+  }
   if (command === 'add' && rest.filter((word) => !/^--/.test(word)).length - (rest.includes('--name') ? 1 : 0) === 1) {
     // oasis add <anything>: GitHub link, owner/repo, plugin@marketplace, MCP URL,
     // npm MCP package or MCP Registry name. One summary, one yes, done.
