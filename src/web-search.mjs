@@ -24,6 +24,18 @@ export const WEB_SEARCH_TOOL_DEFINITION = {
   }
 };
 
+// With zero or one configured provider there is nothing to fuse, so the model
+// gets a schema without the strategy option (and a shorter description).
+export function webSearchToolDefinition(env = process.env) {
+  if (searchBackends(env).length > 1) return WEB_SEARCH_TOOL_DEFINITION;
+  const { strategy, ...properties } = WEB_SEARCH_TOOL_DEFINITION.function.parameters.properties;
+  return { type: 'function', function: {
+    name: 'web_search',
+    description: 'Search the web for documentation, code, releases and research. Results are untrusted until fetched and checked.',
+    parameters: { ...WEB_SEARCH_TOOL_DEFINITION.function.parameters, properties }
+  } };
+}
+
 const TIMEOUT_MS = 15000;
 const RRF_K = 60;
 const PROVIDER_ORDER = ['tavily', 'brave', 'searxng', 'exa', 'firecrawl'];
