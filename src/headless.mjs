@@ -269,7 +269,7 @@ export async function runHeadless(options) {
       } } : {}),
       ...(outputFormat === 'stream-json' ? { onStreamRestart: (info) => {
         partialSoFar = '';
-        emit({ type: 'system', subtype: 'stream_restarted', attempt: info.attempt, reason: info.reason });
+        emit({ type: 'system', subtype: 'stream_restarted', attempt: info.attempt, reason: info.reason, ...(info.kind ? { kind: info.kind } : {}) });
       } } : {}),
       onUsage: (step) => {
         costUsd += Number(step.costUsd || 0);

@@ -1995,6 +1995,28 @@ function saveMidTurn(session) {
   session.midTurnSavedAt = Date.now();
   session.midTurnSave = saveSession(session).catch(() => {}).finally(() => { session.midTurnSaving = false; });
 }
+// What a retried model response was, in plain words: a dropped or stalled
+// stream, or a tool call the model sent in a form that could not be parsed.
+export function streamRestartNotice(info = {}, partialShown = false) {
+  const count = ' (' + (info.attempt || 1) + '/' + (info.limit || 2) + ')';
+  if (info.kind === 'malformed-call') return "[retry] The model's tool call could not be parsed; asking it to send the call again" + count + '.';
+  const reason = String(info.reason || '');
+  const what = /stalled/i.test(reason) ? 'The model response stalled' : /malformed/i.test(reason) ? "The model's tool call could not be parsed" : /high demand|overloaded|503|unavailable/i.test(reason) ? 'The provider broke off the response (overloaded)' : 'The model connection dropped mid-response';
+  return '[network] ' + what + '; retrying' + count + '.' + (partialShown ? ' The partial reply above is discarded.' : '');
+}
+
+// "⎿ Read 3 lines" -> "⎿ add.mjs · Read 3 lines" for a result printed away
+// from its header (parallel tool calls).
+export function labelToolResult(summary, name, call) {
+  let args = {};
+  try { args = JSON.parse(call && call.function && call.function.arguments || '{}') || {}; } catch {}
+  const raw = args.path || args.file_path || args.filePath || args.pattern || args.query || args.command || args.url || '';
+  const label = String(Array.isArray(raw) ? raw.join(' ') : raw).replace(/\s+/g, ' ').trim();
+  const short = label.length > 40 ? label.slice(0, 39) + '…' : label;
+  if (!short) return summary;
+  return String(summary).replace('⎿ ', '⎿ ' + short + ' · ');
+}
+
 async function settleMidTurnSave(session) {
   if (!session) return;
   if (session.midTurnTimer) { clearTimeout(session.midTurnTimer); session.midTurnTimer = null; }
@@ -2098,6 +2120,7 @@ async function runPrompt(prompt, root, autoApprove, session = null, persistence 
   const turnStartedAt = Date.now();
   CURRENT_TURN_STARTED_AT = turnStartedAt;
   if (session && session.settings) configureSounds({ enabled: typeof session.settings.sounds === 'boolean' ? session.settings.sounds : undefined, volume: session.settings.soundVolume });
+  let lastToolHeader = null;
   let todosDone = completedTodoCount(session && session.todos);
   turnKeys = startTurnKeys(onInterrupt, (text) => !controller.signal.aborted && !modeOptions.fork && steerSession(session, text));
   try {
@@ -2121,11 +2144,11 @@ async function runPrompt(prompt, root, autoApprove, session = null, persistence 
       onRateLimitWait: (event) => { stopWaitIndicator(); process.stderr.write('[rate limit] Waiting ' + formatWait(event.waitMs) + ' for the provider limit to reset (until ' + event.until + ').' + (event.compactTools ? ' Switched to the compact tool set to fit its per-minute token limit; other tools stay available through tool_search.' : '') + '\n'); },
       approval: (message, forceInteractive = false, meta = {}) => approve(message, forceInteractive, autoApprove, meta),
       ...(stdin.isTTY && stdout.isTTY ? { askUser: (question) => { endStream(); return askQuestionInTerminal(question); } } : {}),
-      onToolStart: (event) => { endStream(); stdout.write('\n' + (richOutput() ? describeTool(event, { color: true }) : describeToolStart(event)) + '\n'); },
+      onToolStart: (event) => { endStream(); lastToolHeader = event && event.call ? event.call.id : null; stdout.write('\n' + (richOutput() ? describeTool(event, { color: true }) : describeToolStart(event)) + '\n'); },
       onAutoMode: (event) => { endStream(); stdout.write('[auto] ' + (event.decision === 'allow' ? 'Allowed' : event.decision === 'block' ? 'Blocked' : 'Asking you about') + ' ' + event.tool + (event.reason ? ': ' + event.reason : '') + '\n'); },
       onUsage: (usage) => recordUsage(USAGE, usage),
       onThrash: (info) => { endStream(); stdout.write('[stuck?] `' + info.command + '` has failed the same way after ' + info.count + ' rounds of edits; Oasis asked the model to step back and diagnose before editing again.\n'); },
-      onStreamRestart: (info) => { endStream(); stdout.write('[network] The model connection dropped mid-response; retrying (' + info.attempt + '/2). The partial reply above is discarded.\n'); },
+      onStreamRestart: (info) => { const partial = endStream(); stdout.write(streamRestartNotice(info, partial) + '\n'); },
       onContextOverflow: (info) => { endStream(); stdout.write(info.smallContextTools ? '\n[context] The model server has a ' + info.contextWindow + '-token window; switched to the small-context tool set (others stay reachable through tool_search) and retrying.\n' : '\n[context] The provider said the request was too long for the context window; compacted (' + Math.round(info.beforeChars / 1000) + 'k → ' + Math.round(info.afterChars / 1000) + 'k chars) and retrying.\n'); },
       onCompactionStart: (info) => { endStream(); stdout.write('\n[context] Compacting ' + info.messages + ' older messages (about ' + Number(info.beforeTokens || 0).toLocaleString('en-US') + ' tokens; local fallback after ' + info.timeoutSeconds + 's)…\n'); },
       onCompaction: (info) => stdout.write('\n[context] ' + String(info.note || 'Compacted older conversation history.') + (info.notesSaved ? ' Continuity note saved in .oasis/session-notes.md.' : ' Continuity note was not saved.') + '\n'),
@@ -2140,11 +2163,15 @@ async function runPrompt(prompt, root, autoApprove, session = null, persistence 
           const shown = describeEdit({ name, args, result }, { color: true });
           if (shown) stdout.write(shown + '\n');
         }
-        const summary = richOutput() && !verboseEnabled(session) ? describeToolResult(name, result, { color: true }) : '';
+        let summary = richOutput() && !verboseEnabled(session) ? describeToolResult(name, result, { color: true }) : '';
+        // Parallel calls print every header first; name the call on each result
+        // that does not sit right under its own header.
+        if (summary && call && lastToolHeader && call.id !== lastToolHeader) summary = labelToolResult(summary, name, call);
         if (summary) stdout.write(summary + '\n');
         else if (result && (result.error || result.exitCode !== undefined && result.exitCode !== 0)) {
           stdout.write('[tool result] ' + name + ': ' + String(result.error || ('exit code ' + result.exitCode)).slice(0, 700) + '\n');
         }
+        if (summary) lastToolHeader = '#result'; // a later result in the batch is away from its header too
         if (name === 'auto_test' && result && result.passed) stdout.write('[auto-test] passed in ' + (Math.round(result.durationMs / 100) / 10) + 's\n');
         if (name === 'report_findings' && result && !result.error) { endStream(); stdout.write('\n[findings]\n' + formatFindings(session.reportedFindings, { color: colorEnabled(stdout) }) + '\n'); }
         if (verboseEnabled(session)) { const shown = verboseToolOutput(name, result, { color: colorEnabled(stdout) }); if (shown) stdout.write(shown + '\n'); }
