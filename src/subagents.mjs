@@ -33,7 +33,7 @@ const READ_ONLY = ['git_status', 'git_diff', 'git_log', 'lsp', 'list_files', 'gl
 export const BUILTIN_AGENTS = {
   'general-purpose': {
     name: 'general-purpose',
-    description: 'General agent for researching complex questions, searching code, and executing multi-step tasks, including edits and commands. Use when a task is self-contained and would otherwise fill the main context.',
+    description: 'General agent for research, code search and multi-step work including edits and commands. Use for self-contained work that would fill the main context.',
     tools: null,
     prompt: 'You are a general-purpose subagent. Complete the delegated task end to end using the available tools. Verify your work where possible.',
     source: 'built-in'
@@ -176,16 +176,16 @@ export function taskToolDefinition(agents) {
   const list = kept.join('\n');
   return { type: 'function', function: {
     name: 'task',
-    description: 'Launch a subagent to handle a complex, multi-step task autonomously in its own context window. The subagent returns one final report; it cannot see this conversation, so give it a complete, self-contained prompt. Launch several task calls in ONE response to run them in parallel (up to ' + MAX_PARALLEL_SUBAGENTS + ' at once) when the work is independent. Set run_in_background for long jobs you do not need to wait on; every task returns an id that send_message can use to follow up with the same agent later.\nAvailable agent types:\n' + list,
+    description: 'Run a subagent on a multi-step task in its own context; it returns one report. It cannot see this conversation, so give a complete, self-contained prompt. Several task calls in ONE response run in parallel (max ' + MAX_PARALLEL_SUBAGENTS + '). Each returns an id for send_message follow-ups.\nAgent types:\n' + list,
     parameters: { type: 'object', properties: {
-      description: { type: 'string', description: 'Short (3-5 word) label for the task' },
-      prompt: { type: 'string', description: 'Complete instructions for the subagent, including what to return' },
-      subagent_type: { type: 'string', enum: Object.keys(agents), description: 'Which agent to use; default general-purpose' },
-      run_in_background: { type: 'boolean', description: 'Start the agent and return its id immediately, so you can keep working (or launch more agents) while it runs. You are notified with its report when it finishes. In the background it cannot ask for approval: actions not already allowed by permission rules are denied, so prefer read-only agents or worktree isolation.' },
-      isolation: { type: 'string', enum: ['worktree'], description: 'Set to "worktree" to run an editing subagent in its own git worktree and branch, so parallel agents never clash and the user can review or merge each result. The result lists the branch, changed files and merge command.' },
-      team_id: { type: 'string', description: 'Optional team ID from team_create.' },
-      model: { type: 'string', description: 'Optional model ID; omit to inherit.' },
-      fork_context: { type: 'boolean', description: 'Include a bounded copy of the parent conversation in the child context. Off by default; use only when earlier discussion is needed, because it increases context and may disclose unrelated conversation details to the child.' }
+      description: { type: 'string', description: '3-5 word label' },
+      prompt: { type: 'string', description: 'Full instructions, including what to return' },
+      subagent_type: { type: 'string', enum: Object.keys(agents), description: 'Default general-purpose' },
+      run_in_background: { type: 'boolean', description: 'Return the id at once and notify you with the report later. It cannot ask for approval, so unallowed actions are denied; prefer read-only agents or worktree isolation.' },
+      isolation: { type: 'string', enum: ['worktree'], description: '"worktree": edit in its own git worktree and branch so parallel agents never clash; the result lists the branch, changed files and merge command.' },
+      team_id: { type: 'string', description: 'Team ID from team_create' },
+      model: { type: 'string', description: 'Model ID; omit to inherit' },
+      fork_context: { type: 'boolean', description: 'Give the child a bounded copy of this conversation. Only when earlier discussion is needed: it adds context and may expose unrelated details.' }
     }, required: ['description', 'prompt'] }
   } };
 }
