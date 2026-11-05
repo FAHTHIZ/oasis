@@ -305,9 +305,22 @@ export async function chat(config, request) {
 }
 
 /** A tiny inert tool-call probe to check a provider before saving it. */
-export async function testProvider(config, fetchImpl) {
+// `timeoutMs` bounds the whole probe: a busy model can hold a request open for
+// minutes, and setup should move on to the next model instead of waiting.
+export async function testProvider(config, fetchImpl, { timeoutMs = 0 } = {}) {
   const tools = [{ type: 'function', function: { name: 'record_ok', description: 'Record that the connection works.', parameters: { type: 'object', properties: { ok: { type: 'boolean' } }, required: ['ok'] } } }];
-  const result = await chat(config, { messages: [{ role: 'system', content: 'Call record_ok with ok=true. Do not write anything else.' }, { role: 'user', content: 'Check the connection.' }], tools, fetchImpl });
+  const controller = timeoutMs > 0 && typeof AbortController === 'function' ? new AbortController() : null;
+  let timedOut = false;
+  const timer = controller ? setTimeout(() => { timedOut = true; controller.abort(); }, timeoutMs) : null;
+  let result;
+  try {
+    result = await chat(config, { messages: [{ role: 'system', content: 'Call record_ok with ok=true. Do not write anything else.' }, { role: 'user', content: 'Check the connection.' }], tools, fetchImpl, ...(controller ? { signal: controller.signal } : {}) });
+  } catch (error) {
+    if (timedOut) throw Object.assign(new ProviderError(config.model + ' did not answer within ' + Math.round(timeoutMs / 1000) + ' seconds (the model may be busy).', { status: 504 }), { timedOut: true });
+    throw error;
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
   const called = result.tool_calls.some((call) => call.function.name === 'record_ok');
   return { ok: true, toolCalling: called, reply: result.content.slice(0, 200) };
 }

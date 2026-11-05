@@ -154,7 +154,7 @@ export function looksLikeConnection(text) {
 
 /* ---------- Ranking models ---------- */
 
-const NOT_CHAT = /(embed|embedding|tts|whisper|transcri|speech|audio|realtime|dall-?e|\bimage|imagen|moderation|rerank|guard|safety|davinci|babbage|\bada\b|similarity|\bclip\b|diffusion|\bflux\b|sdxl|\bveo|\bsora|lyria|\baqa\b|ocr|\bbge\b|\be5-|nomic|-search-|search-preview|computer-use|deep-research|-native-audio|live-)/i;
+const NOT_CHAT = /(embed|embedding|tts|whisper|transcri|speech|audio|realtime|dall-?e|\bimage|imagen|moderation|rerank|guard|safety|davinci|babbage|\bada\b|similarity|\bclip\b|diffusion|\bflux\b|sdxl|\bveo|\bsora|lyria|\baqa\b|ocr|\bbge\b|\be5-|nomic|-search-|search-preview|computer-use|deep-research|-native-audio|live-|-live\b)/i;
 
 // Rough agentic-coding quality by family. Versions inside a family break ties.
 const FAMILIES = [
@@ -326,26 +326,94 @@ function makeConnection(provider, overrides = {}) {
  * models in order and returns the first that works, so a key without access
  * to the flagship still lands on the best model it can use.
  */
-async function lockIn(connection, ranked, { fetchImpl, onStatus, tries = 4, preferred = [] }) {
+// Providers often name the replacement when they retire a model, for example
+// Google's "no longer available to new users. Please update your code to use
+// models/gemini-3.8-flash". Returns that model ID, or ''.
+export function suggestedModel(message) {
+  const match = /\b(?:use|switch to|migrate to|try)\s+(?:the\s+)?(?:model\s+)?[`'"]?(?:models\/)?([A-Za-z0-9][A-Za-z0-9._:/-]{2,80}?)[`'"]?(?=[\s,;)]|\.(?:\s|$)|$)/i.exec(String(message || ''));
+  // A model ID has a digit or a dash; "try again later" is not a suggestion.
+  return match && /[\d-]/.test(match[1]) ? match[1] : '';
+}
+
+function shortReason(message) {
+  const text = String(message || '').replace(/\s+/g, ' ').trim();
+  const inner = /"message"\s*:\s*"([^"]{1,240})/.exec(text);
+  return (inner ? inner[1] : text).slice(0, 160);
+}
+
+/**
+ * Proves a model can hold a conversation and call a tool. Tries the ranked
+ * models in order and returns the first that works, so a key without access
+ * to the flagship still lands on the best model it can use.
+ *
+ * `tries` bounds the failures that say nothing about the next model (bad
+ * output, odd errors). Retired models (404), models the key has no quota for
+ * and models that are busy right now are cheap to rule out and common on free
+ * tiers (a free Gemini key has no quota for the Pro models, and the older
+ * ones are retired), so they only count against a larger `maxAttempts`.
+ * Those models are returned as `unusable` so they never become fallbacks.
+ */
+async function lockIn(connection, ranked, { fetchImpl, onStatus, tries = 4, preferred = [], maxAttempts = 12, retryDelayMs = 1200, probeTimeoutMs = 25000, budgetMs = 120000 }) {
   const order = [...preferred.filter((id) => !ranked.includes(id)), ...preferred.filter((id) => ranked.includes(id)), ...ranked.filter((id) => !preferred.includes(id))];
   const failures = [];
+  const unusable = [];
+  const tried = new Set();
   let noTools = null;
-  for (const model of order.slice(0, Math.max(tries, preferred.length))) {
+  let hardFailures = 0;
+  let attempts = 0;
+  const limit = Math.max(maxAttempts, tries, preferred.length);
+  // Stop starting new probes after `budgetMs` so setup never hangs for minutes.
+  const deadline = Date.now() + budgetMs;
+  // A tiny output cap keeps the probe cheap, but reasoning models (Gemini 3,
+  // o-series, R1-style) can spend it all on hidden thinking and come back
+  // empty. An empty answer is a truncation, not a "no", so ask once more with
+  // room to think before judging the model.
+  const probe = async (model) => {
+    const first = await testProvider({ ...connection, model, maxRetries: 0, maxTokens: 64 }, fetchImpl, { timeoutMs: probeTimeoutMs });
+    if (first.toolCalling || String(first.reply || '').trim()) return first;
+    return testProvider({ ...connection, model, maxRetries: 0, maxTokens: 2048 }, fetchImpl, { timeoutMs: probeTimeoutMs });
+  };
+  while (order.length && attempts < limit && hardFailures < Math.max(tries, preferred.length) && (attempts === 0 || Date.now() < deadline)) {
+    const model = order.shift();
+    if (tried.has(model)) continue;
+    tried.add(model);
+    attempts += 1;
     onStatus({ step: 'test', text: 'Testing ' + model + '…', model });
     try {
-      const result = await testProvider({ ...connection, model, maxRetries: 0, maxTokens: 64 }, fetchImpl);
-      if (result.toolCalling) return { model, toolCalling: true, failures };
+      let result;
+      try { result = await probe(model); }
+      catch (error) {
+        // One short retry for "busy right now" before moving on.
+        if (classifyFailure(error) !== 'server' || error.timedOut || !retryDelayMs || Date.now() > deadline) throw error;
+        await new Promise((resolve) => setTimeout(resolve, retryDelayMs));
+        result = await probe(model);
+      }
+      if (result.toolCalling) return { model, toolCalling: true, failures, unusable };
       noTools = noTools || model;
+      hardFailures += 1;
       failures.push({ model, reason: 'answered but did not call the test tool' });
     } catch (error) {
       const kind = classifyFailure(error);
       failures.push({ model, reason: error.message, kind });
       if (kind === 'auth' || kind === 'network') throw error;
+      if (kind === 'model' || kind === 'credits') unusable.push(model);
+      if (!['model', 'credits', 'rate', 'server'].includes(kind)) hardFailures += 1;
+      const next = suggestedModel(error.message);
+      if (next && !tried.has(next) && next !== model && (ranked.includes(next) || preferred.includes(next))) {
+        const at = order.indexOf(next);
+        if (at >= 0) order.splice(at, 1);
+        order.unshift(next);
+      }
     }
   }
-  if (noTools) return { model: noTools, toolCalling: false, failures };
-  const first = failures[0];
-  throw new ProviderError(first ? 'No model on this connection answered. ' + first.model + ': ' + first.reason : 'This connection has no chat models.', { status: first && first.kind === 'credits' ? 402 : 0 });
+  if (noTools) return { model: noTools, toolCalling: false, failures, unusable };
+  if (!failures.length) throw new ProviderError('This connection has no chat models.');
+  const allCredits = failures.every((failure) => failure.kind === 'credits');
+  const lines = failures.slice(0, 6).map((failure) => '  ' + failure.model + ': ' + shortReason(failure.reason));
+  const hint = failures.some((failure) => failure.kind === 'server' || failure.kind === 'rate')
+    ? ' Some models were busy or rate limited; try again in a minute.'
+    : allCredits ? ' The key has no credit or quota for these models; add billing or use another key.' : '';
+  throw new ProviderError('No model on this connection answered (' + failures.length + ' tried).' + hint + '\n' + lines.join('\n'), { status: allCredits ? 402 : 0 });
 }
 
 /**
@@ -355,7 +423,7 @@ async function lockIn(connection, ranked, { fetchImpl, onStatus, tries = 4, pref
  *   { connection, model, toolCalling, notes, githubToken }
  * or throws ProviderError with a message written for the user.
  */
-export async function smartConnect(input, { fetchImpl = globalThis.fetch.bind(globalThis), onStatus = () => {}, known = [], test = true, allowPull = true, tries = 4 } = {}) {
+export async function smartConnect(input, { fetchImpl = globalThis.fetch.bind(globalThis), onStatus = () => {}, known = [], test = true, allowPull = true, tries = 4, retryDelayMs } = {}) {
   const parsed = parsePaste(input);
   const notes = [];
   const githubToken = parsed.githubTokens[0] || '';
@@ -364,12 +432,14 @@ export async function smartConnect(input, { fetchImpl = globalThis.fetch.bind(gl
     say('Found ' + connection.models.length + ' model' + (connection.models.length === 1 ? '' : 's') + ' on ' + connection.label + '.', 'models');
     if (!connection.models.length && !preferred.length) throw new ProviderError(connection.label + ' answered but lists no chat models.');
     if (!test) return { connection, model: preferred[0] || connection.models[0], toolCalling: null, notes, githubToken };
-    const locked = await lockIn(connection, connection.models, { fetchImpl, onStatus, tries, preferred });
-    if (!connection.models.includes(locked.model)) connection.models.unshift(locked.model);
-    connection.models = [locked.model, ...connection.models.filter((id) => id !== locked.model)];
+    const locked = await lockIn(connection, connection.models, { fetchImpl, onStatus, tries, preferred, ...(retryDelayMs !== undefined ? { retryDelayMs } : {}) });
+    const unusable = new Set(locked.unusable || []);
+    const rest = connection.models.filter((id) => id !== locked.model);
+    // Models that are retired or have no quota go last, so they never become fallbacks.
+    connection.models = [locked.model, ...rest.filter((id) => !unusable.has(id)), ...rest.filter((id) => unusable.has(id))];
     if (!locked.toolCalling) notes.push(locked.model + ' answered but did not call tools in the test, so it may only chat. Paste another model to use as the agent.');
     say('Ready: ' + locked.model + ' on ' + connection.label + '.', 'ready');
-    return { connection, model: locked.model, toolCalling: locked.toolCalling, notes, githubToken };
+    return { connection, model: locked.model, toolCalling: locked.toolCalling, notes, githubToken, unusable: [...unusable] };
   };
   const keyFor = (provider) => {
     const pasted = parsed.keys.find((key) => key.providers.includes(provider));

@@ -359,3 +359,64 @@ test('OpenRouter 402 explains credits instead of blaming the API key', async () 
     (error) => error.status === 402 && /not an invalid API key/i.test(error.message) && /32 output tokens/i.test(error.message)
   );
 });
+
+// A free-tier Gemini key, as seen live on 2026-11-05: the Pro models have no
+// quota (429, limit 0), the older ones are retired (404 naming a successor),
+// the newest Flash is busy (503), and the working Flash models think before
+// answering, so a 64-token probe comes back empty.
+function freeTierGemini({ hang = '' } = {}) {
+  const calls = [];
+  const fetchImpl = async (url, options = {}) => {
+    const json = (status, body) => new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
+    if (String(url).endsWith('/models')) {
+      return json(200, { data: ['gemini-2.5-pro', 'gemini-3.1-pro-preview', 'gemini-4-pro', 'gemini-3.8-flash', 'gemini-3.8-live', 'gemini-3.6-flash', 'gemini-3.5-flash', 'gemini-2.5-flash'].map((id) => ({ id: 'models/' + id })) });
+    }
+    const body = JSON.parse(options.body);
+    calls.push([body.model, body.max_tokens]);
+    if (body.model === hang) {
+      return new Promise((resolve, reject) => options.signal.addEventListener('abort', () => reject(new DOMException('aborted', 'AbortError'))));
+    }
+    if (/^gemini-2\.5/.test(body.model)) return json(404, [{ error: { code: 404, message: 'This model models/' + body.model + ' is no longer available to new users. Please update your code to use models/gemini-3.6-flash for the latest features and improvements.' } }]);
+    if (/pro/.test(body.model)) return json(429, [{ error: { code: 429, message: 'You exceeded your current quota. Quota exceeded for metric: generate_content_free_tier_requests, limit: 0' } }]);
+    if (body.model === 'gemini-3.8-flash') return json(503, [{ error: { code: 503, message: 'This model is currently experiencing high demand. Please try again later.' } }]);
+    if ((body.max_tokens || 0) < 1000) return json(200, { choices: [{ finish_reason: 'length', message: { role: 'assistant' } }] });
+    return json(200, { choices: [{ finish_reason: 'tool_calls', message: { role: 'assistant', tool_calls: [{ id: 'c1', type: 'function', function: { name: 'record_ok', arguments: '{"ok":true}' } }] } }] });
+  };
+  return { fetchImpl, calls };
+}
+
+test('smartConnect gets past quota-less, retired and busy models on a free Gemini key', async () => {
+  const { fetchImpl, calls } = freeTierGemini();
+  const result = await smartConnect(GEMINI_AUTH_KEY, { fetchImpl, retryDelayMs: 1 });
+  assert.equal(result.model, 'gemini-3.6-flash', 'the retired model named its successor, which is tried next');
+  assert.equal(result.toolCalling, true, 'an empty 64-token answer from a thinking model is retried with room to think');
+  assert.ok(calls.some(([model, limit]) => model === 'gemini-3.6-flash' && limit >= 1000));
+  assert.ok(!calls.some(([model]) => model === 'gemini-3.8-live'), 'live models are not chat models');
+  assert.ok(result.unusable.includes('gemini-2.5-pro') && result.unusable.includes('gemini-4-pro'));
+  const { runtimeConfigFromConnection } = await import('../src/provider-connect.mjs');
+  const config = runtimeConfigFromConnection(result);
+  assert.equal(config.model, 'gemini-3.6-flash');
+  for (const dead of result.unusable) {
+    assert.ok(!config.fallbackModel.split(',').includes(dead), dead + ' has no quota or is retired, so it is not a backup');
+  }
+});
+
+test('a model that never answers is timed out instead of stalling setup', async () => {
+  const { fetchImpl } = freeTierGemini({ hang: 'gemini-3.8-flash' });
+  const { testProvider } = await import('../app/core/providers.mjs');
+  await assert.rejects(testProvider({ protocol: 'openai', baseURL: 'https://x/v1', model: 'gemini-3.8-flash', apiKey: 'k', maxRetries: 0 }, fetchImpl, { timeoutMs: 30 }), (error) => error.status === 504 && error.timedOut === true && classifyFailure(error) === 'server');
+});
+
+test('suggestedModel reads the replacement a provider names, and nothing else', async () => {
+  const { suggestedModel } = await import('../app/core/connect.mjs');
+  assert.equal(suggestedModel('This model models/gemini-2.5-pro is no longer available. Please update your code to use models/gemini-3.1-pro-preview for the latest features'), 'gemini-3.1-pro-preview');
+  assert.equal(suggestedModel('The model was decommissioned; use llama-3.3-70b-versatile instead.'), 'llama-3.3-70b-versatile');
+  assert.equal(suggestedModel('Spikes in demand are usually temporary. Please try again later.'), '');
+});
+
+test('when every model fails, the error lists each one and a next step', async () => {
+  const fetchImpl = async (url) => String(url).endsWith('/models')
+    ? new Response(JSON.stringify({ data: [{ id: 'gemini-4-pro' }, { id: 'gemini-3.1-pro' }] }), { status: 200 })
+    : new Response(JSON.stringify({ error: { message: 'You exceeded your current quota, limit: 0' } }), { status: 429 });
+  await assert.rejects(smartConnect(GEMINI_AUTH_KEY, { fetchImpl, retryDelayMs: 1 }), (error) => /2 tried/.test(error.message) && /gemini-4-pro/.test(error.message) && /gemini-3\.1-pro/.test(error.message) && /quota/.test(error.message) && error.status === 402);
+});
