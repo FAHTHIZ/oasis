@@ -97,6 +97,11 @@ The terminal (`oasis`) is the same agent with the same safety rules, for people 
   <br/><sub>The real CLI in a pseudo-terminal from <code>scripts/demo/record-demo.mjs</code>; the model's replies are scripted so the recording is reproducible.</sub>
 </p>
 
+<p align="center">
+  <a href="assets/demo/oasis-real-model-demo.mp4"><img src="assets/demo/oasis-real-model-demo.gif" alt="OASIS with gpt-oss-20b: it reads add.mjs, fixes a minus sign, adds a negative-number test, runs node test.mjs after approval, is sent back by the verification gate to review both diffs, then finishes Checked" width="100%" /></a>
+  <br/><sub>Not scripted: gpt-oss-20b on a free endpoint (2026-11-05), recorded with <code>OASIS_REDUCED_MOTION=1</code>. The endpoint allows about one request every 47 s, so those waits are shortened; the real turn took 6 m 19 s, 7 tool calls and 50.9k tokens. The model's first answer skipped the diff review, and the gate sent it back. It also appended its new assertion after <code>console.log('tests pass')</code> and said "build and tests are green" in a project with no build: small-model habits, shown as they happened. Raw recording: <a href="assets/demo/oasis-real-model-demo.cast"><code>oasis-real-model-demo.cast</code></a>.</sub>
+</p>
+
 | | Terminal (`oasis`) | App (phone, browser, desktop) | Editor |
 | --- | --- | --- | --- |
 | Connect a model | Paste a key at the first run, or `oasis connect` | Paste a key into the message box | Uses the OASIS config |
