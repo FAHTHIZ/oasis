@@ -94,13 +94,14 @@ jobs:
           vs-version: ${{ matrix.arch == 'arm64' && '[17.0,)' || '[17.0,18.0)' }}
       - name: Install app and packaging dependencies
         env:
-          GYP_MSVS_VERSION: ${{ matrix.command == 'win' && '2022' || '' }}
+          # The Windows ARM image ships only Visual Studio 2026 (version 18).
+          GYP_MSVS_VERSION: ${{ matrix.command == 'win' && (matrix.arch == 'arm64' && '2026' || '2022') || '' }}
         run: npm install --no-audit --no-fund
       - name: Package Windows installer
         if: matrix.command == 'win'
         env:
-          GYP_MSVS_VERSION: '2022'
-          npm_config_msvs_version: '2022'
+          GYP_MSVS_VERSION: ${{ matrix.arch == 'arm64' && '2026' || '2022' }}
+          npm_config_msvs_version: ${{ matrix.arch == 'arm64' && '2026' || '2022' }}
         run: npm run desktop:dist -- --win nsis ${{ matrix.arch && format('--{0}', matrix.arch) || '--x64' }}
       - name: Package macOS disk image
         if: matrix.command == 'mac'
