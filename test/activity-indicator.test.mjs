@@ -103,3 +103,11 @@ test('request timeouts: local default, cloud defaults and explicit values', asyn
   assert.equal(requestTimeoutMs({ timeoutMs: 5000, configuredSeconds: 2400 }), 5000);
   assert.equal(requestTimeoutMs({ timeoutMs: 5000000 }), 900000);
 });
+
+test('a rate-limit wait counts down in the spinner, then falls back to the usual label', async () => {
+  const { describeWait, waitLabel } = await import('../src/activity-indicator.mjs');
+  assert.equal(describeWait({ rateLimitMs: 13000 }, 0), 'Rate limited… · retrying in 13s · esc to stop');
+  assert.equal(describeWait({ rateLimitMs: 13000 }, 4200), 'Rate limited… · retrying in 9s · esc to stop');
+  assert.equal(waitLabel({ rateLimitMs: 13000 }, 14000), 'Thinking');
+  assert.match(describeWait({ rateLimitMs: 13000 }, 14000), /^Thinking… · 14s/);
+});

@@ -1161,6 +1161,17 @@ function onModelWait(event = {}) {
   if (!waitIndicator) waitIndicator = createActivityIndicator({ stream: stdout, env: process.env, color: richOutput() });
   waitIndicator.start(event);
 }
+// The first rate-limit wait in a turn gets a dim line; later ones count down in
+// the spinner instead of stacking "Rate limited" lines. Without a live
+// spinner (pipes, CI, reduced motion) every wait is still printed.
+let rateLimitWaitsThisTurn = 0;
+function onRateLimitWait(event = {}) {
+  stopWaitIndicator();
+  if (!waitIndicator) waitIndicator = createActivityIndicator({ stream: stdout, env: process.env, color: richOutput() });
+  const live = waitIndicator.level !== 'off';
+  if (!live || rateLimitWaitsThisTurn++ === 0 || (event.compactTools && !compactToolsNoticeShown)) process.stderr.write(rateLimitNotice(event, colorEnabled(process.stderr)) + '\n');
+  if (live) waitIndicator.start({ rateLimitMs: Number(event.waitMs) || 0 });
+}
 function stopWaitIndicator() { flushExploration(); if (waitIndicator) waitIndicator.stop(); }
 // Read-only lookups (reads, searches, listings) are held until the batch ends,
 // then shown as one "Read 3 files, searched 1 pattern" line. Failures, and a
@@ -2184,6 +2195,7 @@ async function runPrompt(prompt, root, autoApprove, session = null, persistence 
   if (session && session.settings) configureSounds({ enabled: typeof session.settings.sounds === 'boolean' ? session.settings.sounds : undefined, volume: session.settings.soundVolume });
   let lastToolHeader = null;
   let todosDone = completedTodoCount(session && session.todos);
+  rateLimitWaitsThisTurn = 0;
   turnKeys = startTurnKeys(onInterrupt, (text) => !controller.signal.aborted && !modeOptions.fork && steerSession(session, text));
   try {
     const fork = modeOptions.fork;
@@ -2203,7 +2215,7 @@ async function runPrompt(prompt, root, autoApprove, session = null, persistence 
       onSteer: (info) => { endStream(); stdout.write((colorEnabled(stdout) ? '\x1b[2m' : '') + '  ↳ Oasis read your ' + (info.delivered === 1 ? 'message' : info.delivered + ' messages') + ' and is adjusting' + (colorEnabled(stdout) ? '\x1b[22m' : '') + '\n'); },
       ...(stdout.isTTY ? { onModelWait } : {}),
       onProviderRetry: (event) => { stopWaitIndicator(); const dim = colorEnabled(process.stderr); process.stderr.write((dim ? '\x1b[2m' : '') + '  ⎿ Provider ' + (event.status ? 'error ' + event.status : 'connection failed') + (event.reason && event.status ? ' (' + event.reason + ')' : '') + ' · retrying in ' + formatWait(event.waitMs) + ' (' + event.attempt + '/' + event.limit + ')' + (dim ? '\x1b[22m' : '') + '\n'); },
-      onRateLimitWait: (event) => { stopWaitIndicator(); process.stderr.write(rateLimitNotice(event, colorEnabled(process.stderr)) + '\n'); },
+      onRateLimitWait: (event) => onRateLimitWait(event),
       approval: (message, forceInteractive = false, meta = {}) => approve(message, forceInteractive, autoApprove, meta),
       ...(stdin.isTTY && stdout.isTTY ? { askUser: (question) => { endStream(); return askQuestionInTerminal(question); } } : {}),
       onToolStart: (event) => {
