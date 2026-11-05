@@ -54,10 +54,18 @@ export function agentEnvironment(agent, options, env = process.env) {
   const anthropicBase = openaiBase.replace(/\/v1$/, '');
   if (agent === 'oasis') { next.OASIS_BASE_URL = openaiBase; next.OASIS_PROTOCOL = 'openai-compatible'; if (key) next.OASIS_API_KEY = key; }
   if (agent === 'claude') { next.ANTHROPIC_BASE_URL = anthropicBase; if (key) next.ANTHROPIC_AUTH_TOKEN = key; }
-  if (agent === 'codex' || agent === 'opencode') { next.OPENAI_BASE_URL = openaiBase; if (key) next.OPENAI_API_KEY = key; }
+  if (agent === 'codex') { next.OPENAI_BASE_URL = openaiBase; if (key) next.OPENAI_API_KEY = key; }
+  // OpenCode ignores OPENAI_BASE_URL and needs a provider entry for a custom
+  // gateway; without one it fails before sending a request.
+  if (agent === 'opencode' && !env.OPENCODE_CONFIG) next.OPENCODE_CONFIG_CONTENT = JSON.stringify(openCodeGatewayConfig(openaiBase, options.models.opencode || options.model, key));
   if (agent === 'aider') { next.OPENAI_API_BASE = openaiBase; if (key) next.OPENAI_API_KEY = key; }
   if (agent === 'gemini') { next.GOOGLE_GEMINI_BASE_URL = anthropicBase; if (key) next.GEMINI_API_KEY = key; }
   return next;
+}
+
+export function openCodeGatewayConfig(baseURL, model, key = '') {
+  const id = String(model || '').replace(/^bench\//, '');
+  return { $schema: 'https://opencode.ai/config.json', autoupdate: false, share: 'disabled', provider: { bench: { npm: '@ai-sdk/openai-compatible', name: 'Benchmark gateway', options: { baseURL, apiKey: key || 'gateway' }, models: { [id]: { name: id, tool_call: true } } } } };
 }
 
 function modelFor(agent, options) {
@@ -65,6 +73,7 @@ function modelFor(agent, options) {
   if (!options.model) return '';
   // Aider and OpenCode address OpenAI-compatible gateways with a provider prefix.
   if (options.router && agent === 'aider' && !options.model.startsWith('openai/')) return 'openai/' + options.model;
+  if (options.router && agent === 'opencode' && !process.env.OPENCODE_CONFIG) return 'bench/' + options.model;
   return options.model;
 }
 
