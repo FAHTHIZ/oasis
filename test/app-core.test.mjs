@@ -4,7 +4,7 @@ import { readFile } from 'node:fs/promises';
 import { MemoryStore, Workspace, cleanPath, lineDiff } from '../app/core/workspace.mjs';
 import { executeTool, globToRegExp, needsApproval, TOOL_DEFINITIONS } from '../app/core/tools.mjs';
 import { InlineSandbox } from '../app/core/sandbox.mjs';
-import { Agent, buildSystemPrompt } from '../app/core/agent.mjs';
+import { Agent, buildSystemPrompt, textOf } from '../app/core/agent.mjs';
 import { SkillLibrary, parseSkill } from '../app/core/skills.mjs';
 import { createZip, readZip, crc32 } from '../app/core/zip.mjs';
 import { GitHub, parseRepo } from '../app/core/github.mjs';
@@ -402,4 +402,21 @@ test('agent reads a note typed while it works before its next step, even after a
   assert.ok(seen[2].some((m) => m.role === 'user' && m.content === 'and count the letters'), 'a note during the final answer keeps the turn going');
   assert.ok(events.some((e) => e.type === 'user' && e.steer));
   assert.equal(agent.steer('too late'), false);
+});
+
+test('agent sends attached images as image parts, and Anthropic gets image blocks', async () => {
+  const ws = await project();
+  const { chatImpl, seen } = scripted([{ content: 'A red square.', tool_calls: [] }]);
+  const events = [];
+  const agent = new Agent({ getConfig: () => ({ mode: 'ask' }), getContext: () => ({ workspace: ws }), approve: async () => true, onEvent: (e) => events.push(e), chatImpl });
+  const png = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8DwHwAFBQIAX8jx0gAAAABJRU5ErkJggg==';
+  assert.equal(await agent.send('what is this?', { images: [{ mediaType: 'image/png', data: png, name: 'a.png' }] }), 'A red square.');
+  const user = seen[0].find((m) => m.role === 'user');
+  assert.deepEqual(user.content[0], { type: 'text', text: 'what is this?' });
+  assert.equal(user.content[1].image_url.url, 'data:image/png;base64,' + png);
+  assert.equal(events.find((e) => e.type === 'user').images, 1);
+  assert.equal(textOf(user.content), 'what is this?\n[image]');
+  const { messages } = toAnthropic([user]);
+  assert.deepEqual(messages[0].content.map((b) => b.type), ['text', 'image']);
+  assert.deepEqual(messages[0].content[1].source, { type: 'base64', media_type: 'image/png', data: png });
 });
