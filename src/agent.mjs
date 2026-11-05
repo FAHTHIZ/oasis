@@ -2290,7 +2290,7 @@ async function requestCompletionWithStreamRestarts(session, options = {}) {
       // A malformed tool call tends to repeat on the identical request, so the
       // turn loop retries it with a corrective note instead (see below).
       if (!error || error.code !== 'OASIS_STREAM_INTERRUPTED' || error.malformedCall || restart >= MAX_STREAM_RESTARTS + (overloaded ? 1 : 0) || (options.signal && options.signal.aborted)) throw error;
-      if (typeof options.onStreamRestart === 'function') options.onStreamRestart({ attempt: restart + 1, reason: error.message });
+      if (typeof options.onStreamRestart === 'function') options.onStreamRestart({ attempt: restart + 1, limit: MAX_STREAM_RESTARTS + (overloaded ? 1 : 0), reason: error.message });
       await waitForProviderRetry(providerRetryDelayMs(restart + (overloaded ? 3 : 1)), options.signal || new AbortController().signal);
     }
   }
@@ -5469,7 +5469,7 @@ async function runAgentTurnRaw(session, prompt, options = {}) {
       if (waitHook) { try { waitHook({ phase: 'end', step: step + 1, error: true }); } catch {} }
       if (error && error.malformedCall && malformedCallRecoveries < MAX_MALFORMED_CALL_RECOVERIES && !(options.signal && options.signal.aborted)) {
         malformedCallRecoveries++;
-        if (typeof options.onStreamRestart === 'function') { try { options.onStreamRestart({ attempt: malformedCallRecoveries, reason: error.message }); } catch {} }
+        if (typeof options.onStreamRestart === 'function') { try { options.onStreamRestart({ attempt: malformedCallRecoveries, limit: MAX_MALFORMED_CALL_RECOVERIES, kind: 'malformed-call', reason: error.message }); } catch {} }
         session.messages.push({ role: 'user', content: MALFORMED_CALL_NUDGE });
         step--;
         continue;
