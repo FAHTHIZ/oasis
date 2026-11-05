@@ -1588,6 +1588,10 @@ export function apiErrorAdvice(status, detail = '', mode = 'OpenAI-compatible ch
     const when = wait ? ' (the provider says it resets in ' + wait[1].replace(/m(\d+)$/, 'm') + ')' : '';
     return 'The daily request quota for this model is used up' + when + '. Switch to another model with /model, or use a key with billing enabled.';
   }
+  if (status === 429 && /per ?minute|PerMinute|per_minute/i.test(text)) {
+    const tokens = /token/i.test(text);
+    return 'This is a per-minute ' + (tokens ? 'token' : 'request') + ' limit, which resets within a minute; send the message again shortly.' + (tokens ? ' /compact makes each request smaller.' : '');
+  }
   if (status === 429 && /quota|billing|insufficient/i.test(text)) return 'This is a quota or billing limit, not a wrong key or endpoint. Check the plan for this key, or switch models with /model.';
   if (status === 429) return 'The provider is rate-limiting requests. Wait a little and try again, or lower the request rate.';
   if (status === 401 || status === 403) return 'Check the API key for this provider (oasis setup, or the matching environment variable).';
@@ -2557,7 +2561,10 @@ async function requestCompletionRaw(session, options = {}) {
     // Per-minute limits: with a backup model, wait once and then let the
     // fallback chain move on; with none, waiting beats failing the task.
     let shortWaits = 0;
-    const shortWaitBudget = parseFallbackChain(session && session.fallbackModel).length ? 1 : 3;
+    // Per-minute limits reset within a minute, so waiting is cheap and safe.
+    // Seen live on Gemma's 16k input-tokens/minute free tier: three waits were
+    // not enough, and "retry in 1s" hints kept hitting the same full window.
+    const shortWaitBudget = parseFallbackChain(session && session.fallbackModel).length ? 1 : 6;
     const attemptLimit = Math.max(MAX_PROVIDER_RETRIES, providerRetryLimit(0));
     for (let attempt = 0; attempt <= attemptLimit; attempt++) {
       try {
@@ -2598,7 +2605,10 @@ async function requestCompletionRaw(session, options = {}) {
           continue;
         }
       }
-      const shortWait = status === 429 && shortWaits < shortWaitBudget ? shortRateLimitMs(errorBody) : null;
+      const hintedWait = status === 429 && shortWaits < shortWaitBudget ? shortRateLimitMs(errorBody) : null;
+      // After a failed wait, wait at least 10 s more each time, capped by the
+      // one-minute window the limit is measured over.
+      const shortWait = hintedWait === null ? null : Math.max(hintedWait, Math.min(60000, shortWaits * 10000));
       if (shortWait !== null) {
         clearTimeout(timer);
         // Over a per-minute input-token budget: later steps send the compact profile.

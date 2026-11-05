@@ -262,3 +262,10 @@ test('error advice fits the error: a used-up daily quota is not blamed on the en
   assert.match(apiErrorAdvice(401, 'bad key'), /API key/);
   assert.match(apiErrorAdvice(400, 'bad request'), /tool-calling support/);
 });
+
+test('a per-minute token limit is described as one, not as a billing problem', async () => {
+  const { apiErrorAdvice } = await import('../src/agent.mjs');
+  const advice = apiErrorAdvice(429, 'Quota exceeded for metric: generate_content_free_tier_input_token_count, limit: 16000, description: Generate content input tokens per minute limit exceeded on Free Tier. Please retry in 59.3s');
+  assert.match(advice, /per-minute token limit/);
+  assert.doesNotMatch(advice, /billing/);
+});
