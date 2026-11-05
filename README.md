@@ -89,11 +89,13 @@ Same agent, same safety policy, two front ends. `oasis web` opens a local browse
 **Requirements:** Node.js 22 or newer and Git. Or skip both with the [desktop app](https://github.com/FAHTHIZ/oasis/releases/latest).
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/FAHTHIZ/oasis/v1.0.0/scripts/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/FAHTHIZ/oasis/v1.1.0/scripts/install.sh | sh
 cd ~/your-project && oasis
 ```
 
-The script comes from the immutable `v1.0.0` tag. It installs the latest stable release at its exact commit, asks before changing anything, runs `oasis doctor` and opens provider setup. To check its SHA-256 before running it, or to install on Windows, see the [install guide](docs/INSTALL.md#command-line-installation).
+The script comes from the immutable `v1.1.0` tag. It installs the latest stable release at its exact commit, asks before changing anything, runs `oasis doctor` and opens provider setup. To check its SHA-256 before running it, or to install on Windows, see the [install guide](docs/INSTALL.md#command-line-installation).
+
+On a Mac, the desktop app is also a Homebrew cask: `brew tap fahthiz/oasis https://github.com/FAHTHIZ/oasis && brew install --cask fahthiz/oasis/oasis` ([details](docs/INSTALL.md#homebrew-macos)).
 
 Want the current `main` instead?
 
@@ -106,7 +108,7 @@ Other ways in:
 
 | Option | How |
 | --- | --- |
-| **Pinned stable CLI** | The [checksum-verified installer](docs/INSTALL.md#command-line-installation) resolves the latest stable release (`v1.0.0`) to an immutable commit, runs `oasis doctor` and opens setup. |
+| **Pinned stable CLI** | The [checksum-verified installer](docs/INSTALL.md#command-line-installation) resolves the latest stable release (`v1.1.0`) to an immutable commit, runs `oasis doctor` and opens setup. |
 | **Desktop app** | [Download the latest release](https://github.com/FAHTHIZ/oasis/releases/latest): Windows x64 `.exe`; macOS `.dmg` for Apple silicon and Intel; Linux `.AppImage` or `.deb` for x86_64 and arm64; with `SHA256SUMS`. They are not code-signed, so SmartScreen and Gatekeeper warn on first launch; [verify the checksum](docs/INSTALL.md) first. From v1.1.0 the app tells you when a new stable version is out and installs it after checking its SHA-256 ([updates](docs/INSTALL.md#updates)). |
 | **Local model, no API key** | `llama-server -m qwen3-4b-instruct-q4_k_m.gguf --jinja -c 16384 --port 8080`, then `OASIS_BASE_URL=http://127.0.0.1:8080/v1 OASIS_MODEL=qwen3-4b oasis`. OASIS reads the loaded context window and picks the right profile. Ollama and LM Studio work the same way. |
 | **Coming from another agent** | `oasis import claude`, `codex`, `gemini`, `cursor`, `hermes`, `opencode`, `antigravity`, `windsurf` or `cline` (add `--dry-run` to preview). Existing `CLAUDE.md` / `AGENTS.md` files are picked up as they are. |
