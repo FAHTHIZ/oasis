@@ -69,6 +69,18 @@ export function configItems() {
       apply: async (value, state) => { const on = value === 'true'; await saveSetting('verbose', on, state.env); if (state.sessionOptions) state.sessionOptions.verbose = on; return 'Verbose output ' + (on ? 'on' : 'off') + '.'; }
     },
     {
+      key: 'sounds', label: 'Sound effects', description: 'Soft chime, taps, error tone and step tick (also /sounds)',
+      choices: async () => BOOL,
+      current: async (state, saved) => String(((state.session && state.session.settings && state.session.settings.sounds) ?? saved.sounds) !== false),
+      apply: async (value, state, run) => (await run('sounds', value === 'true' ? 'on' : 'off')).output
+    },
+    {
+      key: 'soundVolume', label: 'Sound volume', description: 'Volume for sound effects, 0-100 (also /sounds volume)',
+      choices: async () => ['25', '50', '75', '100'],
+      current: async (state, saved) => String((state.session && state.session.settings && state.session.settings.soundVolume) ?? saved.soundVolume ?? 50),
+      apply: async (value, state, run) => (await run('sounds', 'volume ' + value)).output
+    },
+    {
       key: 'autoCompactEnabled', label: 'Auto-compact', description: 'Compact the conversation automatically when the context fills up',
       choices: async () => BOOL,
       current: async (state, saved) => String(saved.autoCompactEnabled !== false),

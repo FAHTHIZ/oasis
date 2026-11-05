@@ -348,7 +348,7 @@ The repository uses several levels of verification; each answers a different que
 - Installer checks exercise supported installer scripts on Windows, macOS and Ubuntu.
 - Quality Checks run the test suite, Node/package-integrity matrix, evaluation-manifest validation and other repository gates.
 - Desktop packaging builds platform artifacts in CI. A successful build does not prove clean-machine install, first-run, updates, publisher identity, or security certification.
-- The evaluation harness validates pinned reference tasks and can compare saved reports. The current 50-task suite (including 17 repository-level `taskflow-*` tasks with hidden verifier assertions) is a regression harness, not a representative large-scale coding benchmark.
+- The evaluation harness validates pinned reference tasks and can compare saved reports. The current 52-task suite (including 19 repository-level `taskflow-*` tasks with hidden verifier assertions) is a regression harness, not a representative large-scale coding benchmark.
 
 ### Runtime verification gate
 

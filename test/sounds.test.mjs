@@ -119,3 +119,26 @@ test('settings keep sounds and soundVolume from any scope', async () => {
   assert.equal(settings.sounds, false);
   assert.equal(settings.soundVolume, 100);
 });
+
+test('/sounds turns sounds off and on, sets the volume and saves both', async () => {
+  resetSoundState();
+  const { runBuiltinCommand } = await import('../src/slash.mjs');
+  const root = home(); const e = { HOME: root, OASIS_CONFIG_DIR: path.join(root, 'cfg'), PATH: '' };
+  const session = { settings: {} };
+  const state = { root, session, env: e };
+  let out = (await runBuiltinCommand('sounds', 'off', state)).output;
+  assert.match(out, /Sounds off/);
+  assert.equal(session.settings.sounds, false);
+  assert.match((await runBuiltinCommand('sounds', '', state)).output, /turned off/);
+  out = (await runBuiltinCommand('sounds', 'volume 140', state)).output;
+  assert.match(out, /Usage/);
+  out = (await runBuiltinCommand('sounds', 'volume 30', state)).output;
+  assert.match(out, /set to 30/);
+  const saved = JSON.parse(readFileSync(path.join(e.OASIS_CONFIG_DIR, 'settings.json'), 'utf8'));
+  assert.equal(saved.sounds, false);
+  assert.equal(saved.soundVolume, 30);
+  await runBuiltinCommand('sounds', 'on', state);
+  assert.equal(JSON.parse(readFileSync(path.join(e.OASIS_CONFIG_DIR, 'settings.json'), 'utf8')).sounds, true);
+  assert.match((await runBuiltinCommand('sounds', 'bogus', state)).output, /Usage/);
+  resetSoundState();
+});

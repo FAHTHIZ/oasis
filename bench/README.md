@@ -20,7 +20,8 @@ node bench/harness/run.mjs --check
 | `results/harness-baseline.json` | Historical development-set baseline |
 | `results/harness-heldout-v1.json` | First untuned v1 observation (now tuned) |
 | `results/harness-heldout-v2.json` | First untuned v2 observation (now tuned) |
-| `results/harness-2026-11-01.json` | Archived report from 2026-11-01; **not current HEAD results** |
+| `results/harness-2026-11-01.json` | Archived report from 2026-11-01 (superseded) |
+| `results/harness-2026-11-05.json` | Latest full report: all three sets, context overhead and startup, at source revision `579145b` (Node 22.21, 2-CPU Linux) |
 
 A new local `--json` report measures current code. CI uploads a fresh Node-version-specific report artifact. Once a held-out set has informed a fix, it is no longer unseen; keep its first score as history and add a new untouched set before claiming generalization.
 
