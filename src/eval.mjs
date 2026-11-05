@@ -1012,6 +1012,44 @@ export function parseCodexOutput(rawOutput) {
 }
 
 /** Parse `gemini -p --output-format json`: { response, stats: { models: { name: { tokens } }, tools }, error }. */
+// The most useful error in an agent's output: the last JSON error event
+// (OpenCode's {"type":"error"}, Gemini CLI's {"error":{...}}), or else the last
+// line that names an HTTP or quota problem. Raw JSON tails are unreadable.
+export function agentErrorSummary(output) {
+  const text = String(output || '');
+  const messageOf = (value) => {
+    if (!value || typeof value !== 'object') return '';
+    const error = value.error && typeof value.error === 'object' ? value.error : value.type === 'error' ? value : null;
+    if (!error) return '';
+    const data = error.data && typeof error.data === 'object' ? error.data : {};
+    let message = String(data.message || error.message || error.name || '');
+    try { const inner = JSON.parse(message.replace(/^[^[{]*/, '')); const nested = messageOf(Array.isArray(inner) ? inner[0] : inner); if (nested) message = nested; } catch {}
+    const code = data.statusCode || error.code || error.status;
+    return (code && !String(message).includes(String(code)) ? 'HTTP ' + code + ': ' : '') + message;
+  };
+  let found = '';
+  for (const line of text.split(/\r?\n/)) {
+    const trimmed = line.trim();
+    if (!trimmed.startsWith('{')) continue;
+    try { const message = messageOf(JSON.parse(trimmed)); if (message) found = message; } catch {}
+  }
+  if (!found) {
+    // A pretty-printed object that starts at the beginning of a line.
+    const starts = [...text.matchAll(/(?:^|\n)\{/g)].map((match) => match.index + (match[0].length - 1)).reverse();
+    for (const start of starts) {
+      const end = text.indexOf('\n}', start);
+      if (end < 0) continue;
+      try { found = messageOf(JSON.parse(text.slice(start, end + 2))); } catch {}
+      if (found) break;
+    }
+  }
+  if (!found) {
+    const lines = text.split(/\r?\n/).map((line) => line.trim()).filter((line) => /\b(?:4\d\d|5\d\d)\b|quota|rate limit|exceeded|unavailable|high demand|ECONN|ETIMEDOUT/i.test(line) && line.length < 600);
+    found = lines.length ? lines[lines.length - 1] : '';
+  }
+  return found.replace(/\s+/g, ' ').trim().slice(0, 400);
+}
+
 export function parseGeminiOutput(rawOutput) {
   const raw = String(rawOutput || '');
   const start = raw.indexOf('{'); const end = raw.lastIndexOf('}');
@@ -1183,12 +1221,14 @@ async function runClaudeCodeEval(config, options = {}) {
         try {
           parsed = adapter.parse(cliResult.stdout);
         } catch (error) {
-          errorText = error.message || String(error);
+          const cause = agentErrorSummary(cliResult.output || cliResult.stderr || '');
+          errorText = (error.message || String(error)) + (cause ? ' (' + agentName + ' reported: ' + cause + ')' : '');
         }
         if (!errorText && cliResult.timedOut) errorText = agentName + ' exceeded the ' + config.timeoutSeconds + '-second task timeout.';
         if (!errorText && cliResult.error) errorText = cliResult.error;
         if (!errorText && cliResult.exitCode !== 0) {
-          errorText = agentName + ' exited with code ' + cliResult.exitCode + (cliResult.output ? ': ' + cliResult.output.slice(-2000) : '');
+          const cause = agentErrorSummary(cliResult.output || '');
+          errorText = agentName + ' exited with code ' + cliResult.exitCode + (cause ? ': ' + cause : cliResult.output ? ': ' + cliResult.output.slice(-2000) : '');
         }
         if (!errorText && parsed && parsed.isError) errorText = parsed.result || agentName + ' reported an error.';
         if (!errorText) verification = await runVerifier(task, workspace, env);
