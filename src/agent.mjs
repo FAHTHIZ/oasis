@@ -343,25 +343,38 @@ function adoptReportedContextWindow(session, error, env) {
   if (!session.localContext && LLAMA_OVERFLOW_PATTERN.test(String(error && error.message || '')) && isLoopbackBaseURL(session.config && session.config.baseURL)) {
     session.localContext = { server: 'llama.cpp', contextLength: window, source: 'overflow-error' };
   }
-  if (window <= SMALL_CONTEXT_TOKENS && !/^(?:0|false|off|no)$/i.test(String((env || process.env).OASIS_SMALL_CONTEXT_TOOLS || '')) && Array.isArray(session.toolDefinitions)) {
-    const deferred = applySmallContextProfile(session, TOOL_SEARCH_DEFINITION);
-    if (deferred) {
-      changed = true;
-      const system = (session.messages || []).find((message) => message && message.role === 'system');
-      // Apply to the live system message and to baseSystemPrompt, which
-      // refreshTodoPrompt rebuilds the system message from on later steps.
-      const swap = session.compactPromptSwap;
-      session.compactPromptSwap = null;
-      const shrink = (text) => {
-        let next = swap && text.startsWith(swap.full) ? swap.compact + text.slice(swap.full.length) : text;
-        if (!next.includes('tool_search')) next += '\n\n' + deferredToolsPrompt(session);
-        return next;
-      };
-      if (typeof session.baseSystemPrompt === 'string') session.baseSystemPrompt = shrink(session.baseSystemPrompt);
-      if (system && typeof system.content === 'string') system.content = shrink(system.content);
-    }
-  }
+  if (window <= SMALL_CONTEXT_TOKENS && useCompactToolProfile(session, env)) changed = true;
   return changed;
+}
+
+// Essential tools up front, the rest behind tool_search, and the compact
+// system prompt: about half the tokens per request. Used for small context
+// windows and when a provider caps input tokens per minute (Gemma 4 free
+// tier: 16k/minute against ~7k tokens for the full prompt). Returns true
+// when something was deferred.
+export function useCompactToolProfile(session, env) {
+  if (/^(?:0|false|off|no)$/i.test(String((env || process.env).OASIS_SMALL_CONTEXT_TOOLS || '')) || !Array.isArray(session && session.toolDefinitions)) return false;
+  const deferred = applySmallContextProfile(session, TOOL_SEARCH_DEFINITION);
+  if (!deferred) return false;
+  const system = (session.messages || []).find((message) => message && message.role === 'system');
+  // Apply to the live system message and to baseSystemPrompt, which
+  // refreshTodoPrompt rebuilds the system message from on later steps.
+  const swap = session.compactPromptSwap;
+  session.compactPromptSwap = null;
+  const shrink = (text) => {
+    let next = swap && text.startsWith(swap.full) ? swap.compact + text.slice(swap.full.length) : text;
+    if (!next.includes('tool_search')) next += '\n\n' + deferredToolsPrompt(session);
+    return next;
+  };
+  if (typeof session.baseSystemPrompt === 'string') session.baseSystemPrompt = shrink(session.baseSystemPrompt);
+  if (system && typeof system.content === 'string') system.content = shrink(system.content);
+  return true;
+}
+
+// Gemini: generate_content_free_tier_input_token_count /
+// GenerateContentInputTokensPerModelPerMinute. OpenAI-style: "tokens per min (TPM)".
+export function isInputTokenRateLimit(body) {
+  return /input_token_count|InputTokensPer\w*Minute|tokens per min(?:ute)?\b|\bTPM\b/i.test(String(body || ''));
 }
 
 async function recoverFromContextOverflow(session, requestIndex, options, attempt, error) {
@@ -2467,16 +2480,22 @@ async function requestCompletionRaw(session, options = {}) {
       const shortWait = status === 429 && shortWaits < shortWaitBudget ? shortRateLimitMs(errorBody) : null;
       if (shortWait !== null) {
         clearTimeout(timer);
+        // Over a per-minute input-token budget: later steps send the compact profile.
+        let compactTools = false;
+        if (isInputTokenRateLimit(errorBody) && session && !session.rateLimitCompacted) {
+          session.rateLimitCompacted = true;
+          compactTools = useCompactToolProfile(session, options.env || process.env);
+        }
         if (typeof options.onRateLimitWait === 'function') {
-          try { options.onRateLimitWait({ waitMs: shortWait, until: new Date(Date.now() + shortWait).toISOString(), attempt: shortWaits + 1, perMinute: true }); } catch {}
+          try { options.onRateLimitWait({ waitMs: shortWait, until: new Date(Date.now() + shortWait).toISOString(), attempt: shortWaits + 1, perMinute: true, compactTools }); } catch {}
         }
         shortWaits++;
         await waitForProviderRetry(shortWait, controller.signal);
         timer = setTimeout(() => { timedOut = true; controller.abort(); }, timeoutMs);
-        attempt = MAX_PROVIDER_RETRIES - 1;
+        attempt -= 1; // bounded by shortWaitBudget; leaves 5xx retries intact
         continue;
       }
-      if (attempt < MAX_PROVIDER_RETRIES && RETRYABLE_PROVIDER_STATUSES.has(status) && !isHardQuotaError(errorBody)) {
+      if (attempt < MAX_PROVIDER_RETRIES && RETRYABLE_PROVIDER_STATUSES.has(status) && !isHardQuotaError(errorBody) && !(status === 429 && shortRateLimitMs(errorBody) !== null)) {
         await waitForProviderRetry(providerRetryDelayMs(attempt + 1, response.headers.get('retry-after')), controller.signal);
         continue;
       }

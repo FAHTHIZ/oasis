@@ -259,7 +259,7 @@ export async function runHeadless(options) {
       onText: (text) => emit({ type: 'assistant', text }),
       onAutoMode: ({ tool, decision, reason }) => emit({ type: 'system', subtype: 'auto_mode', tool, decision, reason }),
       // Notice on stderr in every output format, so text results on stdout stay clean.
-      onRateLimitWait: ({ waitMs, until, attempt }) => { process.stderr.write('[rate limit] Waiting ' + formatWait(waitMs) + ' for the provider limit to reset (until ' + until + ').\n'); emit({ type: 'system', subtype: 'rate_limit_wait', wait_ms: waitMs, until, attempt }); },
+      onRateLimitWait: ({ waitMs, until, attempt, compactTools }) => { process.stderr.write('[rate limit] Waiting ' + formatWait(waitMs) + ' for the provider limit to reset (until ' + until + ').' + (compactTools ? ' Switched to the compact tool set to fit its per-minute token limit; other tools stay available through tool_search.' : '') + '\n'); emit({ type: 'system', subtype: 'rate_limit_wait', wait_ms: waitMs, until, attempt, ...(compactTools ? { compact_tools: true } : {}) }); },
       ...(includePartial && outputFormat === 'stream-json' ? { onDelta: (accumulated) => {
         const text = String(accumulated || '');
         const delta = text.startsWith(partialSoFar) ? text.slice(partialSoFar.length) : text;
