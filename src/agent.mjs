@@ -5857,6 +5857,10 @@ async function runAgentTurnRaw(session, prompt, options = {}) {
           content: [
             'Before finalizing, complete the post-edit verification gate. You changed: ' + [...verification.changedPaths].join(', ') + '.',
             'Outstanding items: ' + issues.join('; ') + '.',
+            // Name the command: a model that saw it pass earlier tends to
+            // report that stale run instead of rerunning it.
+            ...(claimState.ran && claimState.editedAfter && claimState.lastCommand && issues.some((issue) => /has passed after the latest code edit/.test(issue))
+              ? ['Rerun `' + claimState.lastCommand + '` now: it ran before your latest edit, so its result no longer counts.'] : []),
             'Use git_diff to review the complete change set when Git metadata is available. In a non-Git workspace, reread every changed file after editing. For changed source/config code, inspect the project scripts and run a relevant test/check/lint/build/type-check command; fix failures and rerun checks after fixes.',
             ...untestedNewCode(verification),
             'Do not claim completion of the gate based on the file-write result. If a check cannot run or permission is denied, state that limitation honestly.'
