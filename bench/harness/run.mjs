@@ -35,6 +35,7 @@ import * as edits from './cases/edits.mjs';
 import * as commands from './cases/commands.mjs';
 import * as guards from './cases/guards.mjs';
 import * as heldoutV2 from './cases/heldout-v2.mjs';
+import * as heldoutV3 from './cases/heldout-v3.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(here, '..', '..');
@@ -88,6 +89,9 @@ function benchToolCalls(list = toolCalls.cases) {
 function oasisEdit(file, oldString, newString) {
   // Same order as edit_file in src/tools.mjs: exact unique match, then
   // relaxed matching only when there is no exact match at all.
+  // edit_file refuses an empty old_string before matching (an empty search
+  // string would also loop forever below).
+  if (!oldString.length || oldString === newString) return null;
   let count = 0;
   for (let at = file.indexOf(oldString); at >= 0; at = file.indexOf(oldString, at + oldString.length)) count++;
   if (count === 1) return file.replace(oldString, () => newString);
@@ -260,7 +264,8 @@ async function benchOverhead() {
 const SETS = {
   development: { toolCalls: toolCalls.cases, edits: edits.cases, commands: commands.cases, elision: guards.elision, tamper: guards.tamper, secrets: guards.secrets },
   heldout: { toolCalls: toolCalls.heldout, edits: edits.heldout, commands: commands.heldout, elision: guards.heldoutElision, tamper: guards.heldoutTamper, secrets: guards.heldoutSecrets },
-  heldoutV2: heldoutV2
+  heldoutV2: heldoutV2,
+  heldoutV3: heldoutV3
 };
 function suite(set) {
   const c = SETS[set];
@@ -276,6 +281,7 @@ function suite(set) {
 const results = await Promise.all(suite('development'));
 const heldout = await Promise.all(suite('heldout'));
 const heldoutV2Results = await Promise.all(suite('heldoutV2'));
+const heldoutV3Results = await Promise.all(suite('heldoutV3'));
 results.push(await benchOverhead());
 
 const report = {
@@ -288,7 +294,8 @@ const report = {
   sourceRevision: process.env.OASIS_SOURCE_REVISION || process.env.GITHUB_SHA || await gitRevision(),
   results,
   heldout,
-  heldoutV2: heldoutV2Results
+  heldoutV2: heldoutV2Results,
+  heldoutV3: heldoutV3Results
 };
 
 async function gitRevision() {
@@ -326,6 +333,7 @@ function print(title, list) {
 print('Development set (cases the runtime was improved against)', results);
 print('Held-out set v1 (untuned score: bench/results/harness-heldout-v1.json; its misses were fixed afterwards)', heldout);
 print('Held-out set v2 (first score: bench/results/harness-heldout-v2.json)', heldoutV2Results);
+print('Held-out set v3 (first score: bench/results/harness-heldout-v3.json)', heldoutV3Results);
 
 if (jsonOut) {
   await writeFile(jsonOut, JSON.stringify(report, null, 2) + '\n');
@@ -334,8 +342,18 @@ if (jsonOut) {
 
 // --check: every case passes except the documented, deliberate misses.
 const KNOWN_MISSES = new Set(['v2-slack']);
+// v3 misses from its first score that are not fixed yet. Each fix removes
+// its id here, so --check then guards it against regression.
+const V3_OPEN = new Set([
+  'v3-text-qwen3-coder-xml', 'v3-text-glm-arg-keys', 'v3-text-mistral-tool-calls', 'v3-text-llama-python-tag', 'v3-text-deepseek', 'v3-text-harmony', 'v3-text-tool-code-python', 'v3-text-function-call-key',
+  'v3-line-number-prefix',
+  'v3-mongo-drop', 'v3-psql-truncate', 'v3-truncate-bashrc', 'v3-kill-all', 'v3-git-hookspath-global',
+  'v3-py-rest-same', 'v3-js-previous-code', 'v3-java-same-as-before',
+  'v3-test-script-or-true', 'v3-swallow-assertion'
+]);
+for (const id of V3_OPEN) KNOWN_MISSES.add(id);
 if (checkMode) {
-  const regressions = [...results, ...heldout, ...heldoutV2Results]
+  const regressions = [...results, ...heldout, ...heldoutV2Results, ...heldoutV3Results]
     .flatMap((r) => (r.failures || []).map((f) => ({ track: r.track, id: String(f).split(' ')[0] })))
     .filter((f) => !KNOWN_MISSES.has(f.id));
   if (regressions.length) {
