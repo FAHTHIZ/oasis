@@ -122,7 +122,19 @@ export function detectPlayer(env = process.env, platform = process.platform) {
     ['ffplay', (file) => ['-nodisp', '-autoexit', '-loglevel', 'quiet', file]]
   ];
   for (const [name, args] of candidates) { const bin = onPath(name, env, platform); if (bin) return { command: bin, args }; }
+  // WSL usually has no Linux audio player, but Windows PowerShell is reachable through interop.
+  if (env.WSL_DISTRO_NAME) {
+    const bin = onPath('powershell.exe', env, platform);
+    if (bin) return { command: bin, args: (file) => ['-NoProfile', '-NonInteractive', '-Command', "(New-Object Media.SoundPlayer '" + windowsPathForWsl(file, env).replace(/'/g, "''") + "').PlaySync()"] };
+  }
   return null;
+}
+
+/** A WSL path as Windows sees it: /mnt/c/x -> C:\x, anything else via \\wsl.localhost\<distro>. */
+export function windowsPathForWsl(file, env = process.env) {
+  const drive = String(file).match(/^\/mnt\/([a-z])(\/.*)?$/i);
+  if (drive) return drive[1].toUpperCase() + ':' + (drive[2] || '\\').replace(/\//g, '\\');
+  return '\\\\wsl.localhost\\' + (env.WSL_DISTRO_NAME || 'Ubuntu') + String(file).replace(/\//g, '\\');
 }
 
 const state = { enabled: null, volume: null, last: new Map(), lastAny: 0, player: undefined };
