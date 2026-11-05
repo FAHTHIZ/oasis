@@ -82,6 +82,16 @@ document.addEventListener('keydown', (event) => {
   }
 });
 
+// The Android app's back button: close the top sheet or menu first, then leave.
+window.oasisBack = () => {
+  if (!$('modeMenu').hidden) { $('modeMenu').hidden = true; return true; }
+  const top = openSheets[openSheets.length - 1];
+  if (top && top !== 'approvalSheet') { closeSheet(top); return true; }
+  if (top) return true;
+  if (!$('filesPanel').hidden && innerWidth < 1024) { toggleFiles(false); return true; }
+  return false;
+};
+
 /* ---------- Agent ---------- */
 const agent = new Agent({
   getConfig: () => ({ ...providerConfig(), maxSteps: settings.maxSteps }),
@@ -797,6 +807,13 @@ $('exportButton').addEventListener('click', async () => {
   for (const path of await workspace.paths()) files.push({ path, content: await workspace.read(path) });
   const blob = new Blob([createZip(files)], { type: 'application/zip' });
   const name = workspace.project.name.replace(/[^\w.-]+/g, '-') + '.zip';
+  if (window.OasisNative && window.OasisNative.saveFile) {
+    const bytes = new Uint8Array(await blob.arrayBuffer());
+    let binary = '';
+    for (let i = 0; i < bytes.length; i += 0x8000) binary += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
+    window.OasisNative.saveFile(name, 'application/zip', btoa(binary));
+    return;
+  }
   const file = new File([blob], name, { type: 'application/zip' });
   if (navigator.canShare && navigator.canShare({ files: [file] }) && matchMedia('(pointer:coarse)').matches) {
     try { await navigator.share({ files: [file], title: name }); return; } catch { /* fall back to download */ }
@@ -841,7 +858,7 @@ $('installButton').addEventListener('click', async () => {
   toast('On iPhone or iPad: tap Share, then Add to Home Screen.');
 });
 const standalone = matchMedia('(display-mode: standalone)').matches || navigator.standalone;
-if (!standalone && /iphone|ipad|ipod/i.test(navigator.userAgent)) $('installButton').hidden = false;
+if (!standalone && !window.OasisNative && /iphone|ipad|ipod/i.test(navigator.userAgent)) $('installButton').hidden = false;
 
 /* ---------- Boot ---------- */
 async function boot() {
@@ -855,7 +872,7 @@ async function boot() {
   if (localStorage.getItem('oasis.files') === '1' || (localStorage.getItem('oasis.files') === null && innerWidth >= 1024 && workspace)) toggleFiles(true);
   refreshFiles();
   if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => {});
-  if ('serviceWorker' in navigator && location.protocol !== 'file:') navigator.serviceWorker.register('sw.js').catch(() => {});
+  if ('serviceWorker' in navigator && location.protocol !== 'file:' && !window.OasisNative) navigator.serviceWorker.register('sw.js').catch(() => {});
   const shared = new URLSearchParams(location.search);
   if (shared.get('repo')) { $('repoInput').value = shared.get('repo'); openProjects(); }
   if (shared.get('q')) { $('input').value = shared.get('q'); autosize(); }
