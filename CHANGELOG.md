@@ -6,6 +6,9 @@ This file records notable user-facing product changes. It does not imply that an
 
 Changes after 1.1.0. Entries include feature work, reliability improvements, and security hardening; benchmark-driven fixes and their regression evidence are documented alongside the relevant changes.
 
+- **Terminal polish from live runs.** Parallel lookups fold into one line ("Read 2 files, searched 1 pattern" with the targets below), as in Claude Code and Codex; a failed lookup keeps its own line. File errors read "Not found: src/x.mjs" instead of Node's errno text. Code blocks no longer print a language label that looked like part of the command. Edit summaries say "1 addition" instead of "1 addition and 0 removals". Retry notices name server errors with their status, and the "tokens sent" estimate counts tool schemas.
+- **Reasoning stays out of the answer.** Streamed `reasoning_content` (DeepSeek, vLLM), `reasoning` (gateways) and Gemini thought chunks are kept apart from the reply, and DeepSeek and Kimi get their reasoning replayed on later requests, which their APIs require when tools are used (they return 400 otherwise).
+- **Test gate fix.** A test added to a root-level `test.mjs`, `tests.py` or `spec.js` now counts as a test change, so "add a test" requests are no longer reported as unchecked.
 - "Add to Cursor" and "Install in VS Code" button links (cursor://, cursor.com/install-mcp, vscode:mcp/install, vscode.dev/redirect/mcp/install) install the MCP server they describe.
 - Whatever you add from a chat works in that chat: MCP servers (also a plugin's bundled ones) start right away, new skills load with `load_skill` at once. Fixed: servers added from a chat were only read from the older `mcp-servers.json`, so they waited for the next session.
 - Add-ons that need a key say which one after installing; paste it in the chat and the agent saves it for that MCP server or plugin (one confirmation, no reinstall, running servers restart).
