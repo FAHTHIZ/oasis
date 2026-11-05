@@ -51,3 +51,28 @@ test('fallback failures name every model and why', () => {
   const single = new Error('x');
   assert.equal(summarizeFallbackFailure(single, []).message, 'x');
 });
+
+test('the browser app keeps Gemini thought signatures across turns', async () => {
+  const { chat } = await import('../app/core/providers.mjs');
+  const { Agent } = await import('../app/core/agent.mjs');
+  const bodies = [];
+  const sse = (events) => new Response(events.map((e) => 'data: ' + JSON.stringify(e) + '\n\n').join('') + 'data: [DONE]\n\n', { status: 200, headers: { 'content-type': 'text/event-stream' } });
+  const fetchImpl = async (url, options) => {
+    const body = JSON.parse(options.body);
+    bodies.push(body);
+    if (bodies.length === 1) {
+      return sse([{ choices: [{ delta: { tool_calls: [{ index: 0, id: 'c1', type: 'function', function: { name: 'list_files', arguments: '{}' }, extra_content: { google: { thought_signature: 'SIG' } } }] } }] }]);
+    }
+    const call = body.messages.find((m) => m.tool_calls).tool_calls[0];
+    if (!call.extra_content) return new Response('[{"error":{"code":400,"message":"Function call is missing a thought_signature"}}]', { status: 400 });
+    return sse([{ choices: [{ delta: { content: 'done' } }] }]);
+  };
+  const config = { protocol: 'openai', baseURL: 'https://generativelanguage.googleapis.com/v1beta/openai', apiKey: 'k', model: 'gemini-3-flash', mode: 'auto' };
+  const { Workspace, MemoryStore } = await import('../app/core/workspace.mjs');
+  const workspace = await Workspace.create(new MemoryStore(), { name: 'p', files: [{ path: 'a.js', content: 'x' }] });
+  const agent = new Agent({ getConfig: () => config, getContext: () => ({ workspace, skills: { promptSection: async () => '' } }), approve: async () => true, chatImpl: (c, o) => chat(c, { ...o, fetchImpl }) });
+  assert.equal(await agent.send('hi'), 'done');
+  for (const body of bodies) for (const tool of body.tools || []) assert.deepEqual(Object.keys(tool.function).filter((k) => !ALLOWED.has(k)), []);
+  const err = await chat({ ...config, maxRetries: 0 }, { messages: [{ role: 'user', content: 'x' }], fetchImpl: async () => new Response('[{"error":{"code":400,"message":"Unknown name required"}}]', { status: 400 }) }).catch((e) => e);
+  assert.match(err.message, /Unknown name required/, 'array-wrapped errors are readable');
+});

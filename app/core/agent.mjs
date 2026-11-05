@@ -253,7 +253,7 @@ export class Agent {
             }
           }
         }
-        calls = calls.map((call, index) => ({ id: call.id || 'call_' + step + '_' + index, type: 'function', function: { name: call.function.name, arguments: call.function.arguments } }));
+        calls = calls.map((call, index) => ({ id: call.id || 'call_' + step + '_' + index, type: 'function', function: { name: call.function.name, arguments: call.function.arguments }, ...(call.extra_content && typeof call.extra_content === 'object' ? { extra_content: call.extra_content } : {}) }));
         const assistant = { role: 'assistant', content: content || '' };
         if (calls.length) assistant.tool_calls = calls;
         this.messages.push(assistant);
