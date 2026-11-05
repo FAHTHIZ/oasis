@@ -1,0 +1,251 @@
+// The OASIS agent loop for the universal app. Same behaviour as the terminal
+// agent where it matters: repairs malformed tool calls from open models,
+// resolves tool-name aliases, asks before risky actions, compacts long
+// conversations and stops cleanly on request.
+
+import { chat } from './providers.mjs';
+import { TOOL_DEFINITIONS, TOOL_NAMES, executeTool, needsApproval } from './tools.mjs';
+import { repairToolArguments, extractTextToolCalls, unknownTextToolCalls } from '../../src/tool-call-repair.mjs';
+import { resolveToolAlias } from '../../src/tool-aliases.mjs';
+
+export const DEFAULT_MAX_STEPS = 40;
+const INSTRUCTION_FILES = ['OASIS.md', 'AGENTS.md', 'CLAUDE.md', '.oasis/instructions.md'];
+
+const SCHEMAS = new Map(TOOL_DEFINITIONS.map((tool) => [tool.function.name, tool.function.parameters]));
+
+function estimateChars(messages) {
+  let total = 0;
+  for (const message of messages) {
+    total += typeof message.content === 'string' ? message.content.length : 0;
+    for (const call of message.tool_calls || []) total += (call.function.arguments || '').length + 40;
+  }
+  return total;
+}
+
+export async function buildSystemPrompt({ workspace, skills, now = new Date() }) {
+  const lines = [
+    'You are OASIS, an independent coding agent running inside the OASIS app on the user\'s own device.',
+    'You work on the project files stored on this device. You have no shell; use the file tools, grep and glob_files to explore, edit_file for precise changes, and run_javascript to execute code and tests in an isolated sandbox.',
+    'Work like a careful senior engineer: read before editing, make the smallest complete change, verify it (run tests or code when you can), and report what you changed and how you checked it.',
+    'Never invent file contents or results. If something cannot be done here (for example native builds or Python execution), say so plainly and give the exact commands the user can run elsewhere.',
+    'For tasks with several steps, keep a todo list with todo_write. Keep replies short and concrete.',
+    'Date: ' + now.toISOString().slice(0, 10) + '.'
+  ];
+  if (workspace) {
+    const paths = await workspace.paths();
+    const source = workspace.project.source;
+    lines.push('', 'Project: ' + workspace.project.name + (source && source.type === 'github' ? ' (GitHub ' + source.owner + '/' + source.repo + ', branch ' + source.branch + ')' : '') + ', ' + paths.length + ' files.');
+    const top = [...new Set(paths.map((p) => (p.includes('/') ? p.split('/')[0] + '/' : p)))].slice(0, 60);
+    if (top.length) lines.push('Top level: ' + top.join(', '));
+    for (const name of INSTRUCTION_FILES) {
+      if (await workspace.exists(name)) {
+        const text = await workspace.read(name);
+        lines.push('', 'Project instructions from ' + name + ':', text.slice(0, 12000));
+        break;
+      }
+    }
+  } else {
+    lines.push('', 'No project is open. You can still create files; they go into a new scratch project.');
+  }
+  if (skills) {
+    const section = await skills.promptSection();
+    if (section) lines.push('', section);
+  }
+  return lines.join('\n');
+}
+
+export class Agent {
+  /**
+   * @param {object} options
+   * @param {() => object} options.getConfig  provider config { protocol, baseURL, apiKey, model, ... }
+   * @param {() => object} options.getContext tool context { workspace, sandbox, skills, github, fetch }
+   * @param {(request) => Promise<boolean>} options.approve
+   * @param {(event) => void} [options.onEvent]
+   */
+  constructor({ getConfig, getContext, approve, onEvent = () => {}, chatImpl = chat }) {
+    this.getConfig = getConfig;
+    this.getContext = getContext;
+    this.approve = approve;
+    this.onEvent = onEvent;
+    this.chatImpl = chatImpl;
+    this.messages = [];
+    this.controller = null;
+    this.running = false;
+    this.usage = { input: 0, output: 0 };
+    this.todos = [];
+  }
+
+  get busy() { return this.running; }
+
+  stop() { if (this.controller) this.controller.abort(); }
+
+  reset() { this.messages = []; this.todos = []; this.usage = { input: 0, output: 0 }; }
+
+  load(messages) { this.messages = Array.isArray(messages) ? messages.filter((m) => m && m.role !== 'system') : []; }
+
+  async compact(config, signal) {
+    const limit = Number(config.contextChars) || 240000;
+    if (estimateChars(this.messages) < limit) return false;
+    // First, shrink old tool results; they are the bulk of long sessions.
+    const keepFrom = Math.max(0, this.messages.length - 12);
+    for (let i = 0; i < keepFrom; i++) {
+      const message = this.messages[i];
+      if (message.role === 'tool' && message.content.length > 600) message.content = message.content.slice(0, 300) + '\n… (older output trimmed to save context)\n' + message.content.slice(-200);
+    }
+    if (estimateChars(this.messages) < limit) { this.onEvent({ type: 'compacted', mode: 'trim' }); return true; }
+    // Then summarise everything except the latest exchange.
+    let cut = Math.max(1, this.messages.length - 8);
+    while (cut < this.messages.length && this.messages[cut].role === 'tool') cut++;
+    const older = this.messages.slice(0, cut);
+    const transcript = older.map((m) => m.role.toUpperCase() + ': ' + (m.content || '') + (m.tool_calls ? ' [called ' + m.tool_calls.map((c) => c.function.name).join(', ') + ']' : '')).join('\n').slice(-120000);
+    const summary = await this.chatImpl(config, {
+      messages: [
+        { role: 'system', content: 'Summarise this coding session for the agent that will continue it. Keep: the user\'s goals and constraints, decisions, files changed and why, current state, open problems and next steps. Be specific and brief.' },
+        { role: 'user', content: transcript }
+      ],
+      tools: [],
+      signal
+    });
+    this.messages = [{ role: 'user', content: '[Summary of the earlier conversation]\n' + summary.content }, { role: 'assistant', content: 'Understood. Continuing from that summary.' }, ...this.messages.slice(cut)];
+    this.onEvent({ type: 'compacted', mode: 'summary' });
+    return true;
+  }
+
+  async send(text, { maxSteps = DEFAULT_MAX_STEPS } = {}) {
+    if (this.running) throw new Error('OASIS is already working. Stop it first.');
+    this.running = true;
+    this.controller = new AbortController();
+    const signal = this.controller.signal;
+    this.messages.push({ role: 'user', content: String(text) });
+    this.onEvent({ type: 'user', content: String(text) });
+    const recent = [];
+    let finalText = '';
+    try {
+      for (let step = 0; step < maxSteps; step++) {
+        const config = this.getConfig();
+        const ctx = { ...this.getContext(), signal, onTodos: (todos) => { this.todos = todos; this.onEvent({ type: 'todos', todos }); } };
+        await this.compact(config, signal);
+        const system = await buildSystemPrompt({ workspace: ctx.workspace, skills: ctx.skills });
+        this.onEvent({ type: 'thinking', step });
+        let streamed = '';
+        const reply = await this.chatImpl(config, {
+          messages: [{ role: 'system', content: system }, ...this.messages],
+          tools: TOOL_DEFINITIONS,
+          signal,
+          fetchImpl: ctx.providerFetch,
+          onText: (delta) => { streamed += delta; this.onEvent({ type: 'delta', delta, step }); },
+          onRetry: (attempt, error) => this.onEvent({ type: 'retry', attempt, message: error.message })
+        });
+        if (reply.usage) {
+          this.usage.input += reply.usage.input || 0;
+          this.usage.output += reply.usage.output || 0;
+          this.onEvent({ type: 'usage', usage: { ...this.usage } });
+        }
+        let content = typeof reply.content === 'string' ? reply.content : streamed;
+        let calls = Array.isArray(reply.tool_calls) ? reply.tool_calls.filter((c) => c && c.function) : [];
+        if (content && /<tool_response>/i.test(content)) content = content.replace(/<tool_response>[\s\S]*?(?:<\/tool_response>|$)/gi, '').trim();
+        if (!calls.length && content) {
+          const extracted = extractTextToolCalls(content, TOOL_NAMES, SCHEMAS);
+          if (extracted && extracted.calls.length) {
+            calls = extracted.calls.map((call, index) => ({ id: 'text_' + step + '_' + index, type: 'function', function: { name: call.name, arguments: JSON.stringify(call.args) } }));
+            content = extracted.text || '';
+            this.onEvent({ type: 'repaired', count: calls.length });
+          } else {
+            const unknown = unknownTextToolCalls(content, TOOL_NAMES);
+            if (unknown && unknown.length) {
+              this.messages.push({ role: 'assistant', content });
+              this.messages.push({ role: 'user', content: 'Those look like tool calls to tools that do not exist (' + unknown.join(', ') + '). Use only these tools: ' + [...TOOL_NAMES].join(', ') + '.' });
+              continue;
+            }
+          }
+        }
+        calls = calls.map((call, index) => ({ id: call.id || 'call_' + step + '_' + index, type: 'function', function: { name: call.function.name, arguments: call.function.arguments } }));
+        const assistant = { role: 'assistant', content: content || '' };
+        if (calls.length) assistant.tool_calls = calls;
+        this.messages.push(assistant);
+        this.onEvent({ type: 'assistant', content: content || '', toolCalls: calls, step });
+        if (!calls.length) { finalText = content || ''; break; }
+
+        for (const call of calls) {
+          if (signal.aborted) throw new DOMException('Stopped', 'AbortError');
+          let name = call.function.name;
+          let args;
+          let result;
+          let ok = true;
+          try {
+            args = repairToolArguments(call.function.arguments).args;
+          } catch (error) {
+            this.messages.push({ role: 'tool', tool_call_id: call.id, content: 'Error: ' + error.message + ' Send the arguments again as a JSON object.' });
+            this.onEvent({ type: 'tool_result', id: call.id, name, ok: false, content: error.message });
+            continue;
+          }
+          const alias = resolveToolAlias(name, args, TOOL_NAMES);
+          if (alias && alias.error) {
+            this.messages.push({ role: 'tool', tool_call_id: call.id, content: 'Error: ' + alias.error });
+            this.onEvent({ type: 'tool_result', id: call.id, name, ok: false, content: alias.error });
+            continue;
+          }
+          if (alias) { name = alias.name; args = alias.args; }
+          this.onEvent({ type: 'tool_start', id: call.id, name, args });
+          const signature = name + ':' + JSON.stringify(args);
+          recent.push(signature);
+          const repeats = recent.filter((item) => item === signature).length;
+          if (repeats >= 3 && !['read_file', 'list_files', 'project_changes'].includes(name)) {
+            result = 'You already made this exact call ' + (repeats - 1) + ' times with the same result. Change approach: re-read the relevant file, try a different fix, or explain what is blocking you.';
+            ok = false;
+          } else {
+            const mode = this.getConfig().mode || 'ask';
+            let allowed = true;
+            if (needsApproval(name, mode)) allowed = await this.approve({ name, args, id: call.id });
+            if (!allowed) {
+              result = 'The user declined this ' + name + ' call. Do not retry it; ask what they would prefer or continue another way.';
+              ok = false;
+            } else {
+              try { result = await executeTool(name, args, ctx); }
+              catch (error) {
+                if (error && error.name === 'AbortError') throw error;
+                result = 'Error: ' + (error && error.message ? error.message : String(error));
+                ok = false;
+              }
+            }
+          }
+          this.messages.push({ role: 'tool', tool_call_id: call.id, content: String(result) });
+          this.onEvent({ type: 'tool_result', id: call.id, name, ok, content: String(result) });
+        }
+        if (step === maxSteps - 1) {
+          finalText = 'Stopped after ' + maxSteps + ' steps. Send "continue" to keep going.';
+          this.messages.push({ role: 'assistant', content: finalText });
+          this.onEvent({ type: 'assistant', content: finalText, toolCalls: [], step });
+        }
+      }
+      this.onEvent({ type: 'done', content: finalText });
+      return finalText;
+    } catch (error) {
+      if (error && error.name === 'AbortError') {
+        this.repairDangling();
+        this.onEvent({ type: 'stopped' });
+        return '';
+      }
+      this.repairDangling();
+      this.onEvent({ type: 'error', message: error && error.message ? error.message : String(error) });
+      throw error;
+    } finally {
+      this.running = false;
+      this.controller = null;
+    }
+  }
+
+  // Providers reject histories where a tool call has no result; fill any gaps.
+  repairDangling() {
+    for (let i = 0; i < this.messages.length; i++) {
+      const message = this.messages[i];
+      if (message.role !== 'assistant' || !message.tool_calls) continue;
+      const answered = new Set();
+      for (let j = i + 1; j < this.messages.length && this.messages[j].role === 'tool'; j++) answered.add(this.messages[j].tool_call_id);
+      let insertAt = i + 1;
+      while (insertAt < this.messages.length && this.messages[insertAt].role === 'tool') insertAt++;
+      const missing = message.tool_calls.filter((call) => !answered.has(call.id)).map((call) => ({ role: 'tool', tool_call_id: call.id, content: 'Stopped by the user before this ran.' }));
+      if (missing.length) this.messages.splice(insertAt, 0, ...missing);
+    }
+  }
+}
