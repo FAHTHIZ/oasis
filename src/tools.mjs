@@ -765,16 +765,27 @@ async function configureProviderFromChat(args, context) {
 
 // Start MCP servers that add_extension just configured, so their tools are
 // usable in this chat without a restart.
-async function activateNewMcpServers(session, names, { root, env }) {
-  const { servers } = await loadMcpServers({ env });
-  const fresh = servers.filter((server) => names.includes(server.name) && server.enabled !== false && !session.mcpClients.has(server.name));
-  if (!fresh.length) return null;
+export async function activateNewMcpServers(session, names, { root, env }) {
+  // Installs write <config>/mcp.json (user) or .mcp.json (project, just
+  // approved); older setups use mcp-servers.json.
+  const { loadUserMcpJson, loadProjectMcpServers } = await import('./mcp-project.mjs');
+  const legacy = (await loadMcpServers({ env }).catch(() => ({ servers: [] }))).servers.map((server) => ({ ...server, source: 'user' }));
+  const user = await loadUserMcpJson({ env }).catch(() => ({ servers: [], failures: [] }));
+  const project = await loadProjectMcpServers(root, { env }).catch(() => ({ servers: [], failures: [] }));
+  const seen = new Set();
+  const fresh = [...legacy, ...user.servers, ...project.servers].filter((server) => {
+    if (!names.includes(server.name) || server.enabled === false || session.mcpClients.has(server.name) || seen.has(server.name)) return false;
+    seen.add(server.name);
+    return true;
+  });
+  const unusable = [...(user.failures || []), ...(project.failures || [])].filter((item) => names.includes(item.name)).map((item) => item.name + ': ' + String(item.error).slice(0, 200));
+  if (!fresh.length) return unusable.length ? { started: [], failed: unusable } : null;
   const { connectMcpServers } = await import('./mcp.mjs');
   const host = session.mcpHost || { session, onToolsChanged: (target) => refreshSessionMcpTools(target) };
-  const { clients, failures } = await connectMcpServers({ root, env, host, skipUser: true, extraServers: fresh.map((server) => ({ ...server, source: 'user' })) });
+  const { clients, failures } = await connectMcpServers({ root, env, host, skipUser: true, skipProject: true, extraServers: fresh.map((server) => ({ ...server, source: server.source || 'user' })) });
   for (const [name, client] of clients) session.mcpClients.set(name, client);
   refreshSessionMcpTools(session);
-  return { started: [...clients.keys()], failed: failures.map((item) => item.name + ': ' + String(item.error).slice(0, 200)) };
+  return { started: [...clients.keys()], failed: [...unusable, ...failures.map((item) => item.name + ': ' + String(item.error).slice(0, 200))] };
 }
 
 async function configureMcpServer(args, context, root) {
