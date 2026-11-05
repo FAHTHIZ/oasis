@@ -111,3 +111,16 @@ test('catching and ignoring assertion failures in a test is flagged', () => {
   assert.ok(found.some((f) => /ignores assertion failures/.test(f.reason)));
   assert.ok(analyzeTestDiff(configDiff('test/a.test.js', ['  await expect(load()).rejects.toThrow();'], ['  await expect(load()).rejects.toThrow().catch(() => {});'])).length);
 });
+
+test('a request for new tests is not finished until a test file changes', async () => {
+  const { asksForNewTests } = await import('../src/agent.mjs');
+  const base = { diffReviewedAll: true, diffReviewedPaths: new Set(), lastVerificationExitCode: 0, testsRequested: true };
+  assert.match(verificationIssues({ ...base, changedPaths: new Set(['src/query.mjs']) }).join('; '), /asked for new tests/);
+  assert.deepEqual(verificationIssues({ ...base, changedPaths: new Set(['src/query.mjs', 'test/query.test.mjs']) }), []);
+  assert.deepEqual(verificationIssues({ ...base, testsRequested: false, changedPaths: new Set(['src/query.mjs']) }), []);
+  assert.equal(asksForNewTests('Keep every existing test passing and add tests for the new behavior.'), true);
+  assert.equal(asksForNewTests('Write unit tests for parse()'), true);
+  assert.equal(asksForNewTests('Add a flag and make sure the tests still pass'), false);
+  assert.equal(asksForNewTests('Add the flag, no tests needed'), false);
+  assert.equal(asksForNewTests('Fix the bug so tests pass'), false);
+});
