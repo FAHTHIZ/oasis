@@ -24,7 +24,7 @@ test('a Gemini CLI extension installs as a working plugin: commands, context, se
   const { src, root, env } = await fixture(t, {
     'gemini-extension.json': { name: 'demo-ext', version: '1.2.0', description: 'Demo tools', contextFileName: 'GEMINI.md',
       mcpServers: { tool: { command: 'node', args: ['${extensionPath}${/}server.js'], cwd: '${extensionPath}' }, remote: { httpUrl: 'https://example.com/mcp' } },
-      settings: [{ name: 'API key', description: 'Your key', envVar: 'DEMO_API_KEY', sensitive: true }] },
+      settings: [{ name: 'API key', description: 'Your key', envVar: 'DEMO_API_KEY', sensitive: true }, { name: 'Region', envVar: 'DEMO_REGION' }] },
     'GEMINI.md': 'Always call the tool before answering.\n',
     'commands/review.toml': 'description = "Review code"\nprompt = """Review {{args}} carefully. !{git diff}"""\n',
     'commands/git/commit.toml': 'prompt = "Write a commit message"\n',
@@ -54,6 +54,13 @@ test('a Gemini CLI extension installs as a working plugin: commands, context, se
   assert.ok('DEMO_API_KEY' in servers.tool.env);
   const hooks = (await pluginHooks(plugins, { env, root })).map((h) => h.hooks);
   assert.deepEqual(Object.keys(Object.assign({}, ...hooks)), ['PreToolUse']);
+  assert.deepEqual(result.needs, { 'demo-ext@repo-demo-ext': ['DEMO_API_KEY', 'DEMO_REGION'] });
+  const saved = await addAnything('demo-ext', { root, env, values: { DEMO_REGION: 'eu' }, approve: async () => true });
+  assert.equal(saved.kind, 'configure');
+  assert.match(saved.message, /Still missing: demo-ext@repo-demo-ext needs DEMO_API_KEY/);
+  const [reloaded] = await loadEnabledPlugins(root, { env });
+  const tool = Object.assign({}, ...(await pluginMcpServers([reloaded], { env, root })).map((m) => m.mcpServers)).tool;
+  assert.equal(tool.env.DEMO_REGION, 'eu');
 });
 
 test('a Codex marketplace lists its plugins and installs the one picked with #name', async (t) => {

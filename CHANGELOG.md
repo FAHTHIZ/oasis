@@ -6,6 +6,7 @@ This file records notable user-facing product changes. It does not imply that an
 
 Changes after 1.1.0. Entries include feature work, reliability improvements, and security hardening; benchmark-driven fixes and their regression evidence are documented alongside the relevant changes.
 
+- Add-ons that need a key say which one after installing; paste it in the chat and the agent saves it for that MCP server or plugin (one confirmation, no reinstall, running servers restart).
 - Gemini CLI extensions, Codex plugins and marketplaces, and Agent Plugins packages install with `oasis add` / `/add` / "install this": they are converted to Claude Code plugins (TOML commands, GEMINI.md, settings, hooks and MCP servers included), and Gemini extensions use their platform release build when one exists. Tested on gemini-cli-extensions/security and openai/plugins.
 - `oasis add`, `/add` and the agent understand install commands copied from READMEs (`npx`/`uvx`/`docker` lines, `claude|codex|gemini mcp add …`, `/plugin install …`, `npx skills add …`) and skills.sh, npm, PyPI, Smithery and raw GitHub links.
 - First start tells people coming from Codex, Cursor, Gemini CLI, Hermes, OpenCode, Windsurf, Cline or Antigravity what `/import` would bring over (shown once per set of items).
