@@ -7,7 +7,7 @@ export const PRESETS = {
   openrouter: { label: 'OpenRouter', protocol: 'openai', baseURL: 'https://openrouter.ai/api/v1', model: 'qwen/qwen3-coder', keyHint: 'sk-or-…', note: 'One key for hundreds of models, including free ones.' },
   anthropic: { label: 'Anthropic', protocol: 'anthropic', baseURL: 'https://api.anthropic.com', model: 'claude-sonnet-5', keyHint: 'sk-ant-…' },
   openai: { label: 'OpenAI', protocol: 'openai', baseURL: 'https://api.openai.com/v1', model: 'gpt-6.1-sol', keyHint: 'sk-…' },
-  gemini: { label: 'Google Gemini', protocol: 'openai', baseURL: 'https://generativelanguage.googleapis.com/v1beta/openai', model: 'gemini-3.8-flash', keyHint: 'AIza…' },
+  gemini: { label: 'Google Gemini', protocol: 'openai', baseURL: 'https://generativelanguage.googleapis.com/v1beta/openai', model: 'gemini-3.8-flash', keyHint: 'AQ.… or AIza…' },
   groq: { label: 'Groq', protocol: 'openai', baseURL: 'https://api.groq.com/openai/v1', model: 'moonshotai/kimi-k2-instruct', keyHint: 'gsk_…' },
   deepseek: { label: 'DeepSeek', protocol: 'openai', baseURL: 'https://api.deepseek.com/v1', model: 'deepseek-chat', keyHint: 'sk-…' },
   mistral: { label: 'Mistral', protocol: 'openai', baseURL: 'https://api.mistral.ai/v1', model: 'devstral-medium-latest', keyHint: '' },
@@ -37,17 +37,51 @@ function trimSlash(url) {
   return String(url || '').replace(/\/+$/, '');
 }
 
-function explain(status, body, config) {
-  const text = String(body || '').slice(0, 600);
-  let detail = text;
+function isOpenRouterEndpoint(baseURL) {
   try {
-    const parsed = JSON.parse(text);
-    detail = (parsed.error && (parsed.error.message || parsed.error)) || parsed.message || text;
-    if (typeof detail !== 'string') detail = JSON.stringify(detail);
-  } catch {}
+    const host = new URL(String(baseURL || '')).hostname.toLowerCase();
+    return host === 'openrouter.ai' || host.endsWith('.openrouter.ai');
+  } catch { return false; }
+}
+
+function openRouterCreditInfo(status, body, config) {
+  if (status !== 402 || !isOpenRouterEndpoint(config && config.baseURL)) return null;
+  let parsed;
+  try { parsed = JSON.parse(String(body || '').slice(0, 16000)); } catch { return null; }
+  const error = parsed && parsed.error;
+  if (!error || !error.metadata || error.metadata.limit_source !== 'openrouter_credits') return null;
+  const message = String(error.message || '');
+  const availableMatch = message.match(/can only afford\s+([\d,]+)/i);
+  const requestedMatch = message.match(/requested up to\s+([\d,]+)/i);
+  const available = availableMatch ? Number(availableMatch[1].replace(/,/g, '')) : 0;
+  if (!Number.isSafeInteger(available) || available <= 0) return null;
+  return { available, requested: requestedMatch ? Number(requestedMatch[1].replace(/,/g, '')) : 0 };
+}
+
+function openRouterCreditRetryCap(info) {
+  if (!info || info.available < 80) return 0;
+  return Math.floor((info.available * 0.8) / 64) * 64;
+}
+
+function explain(status, body, config) {
+  const text = String(body || '').slice(0, 16000);
+  let parsed = null;
+  try { parsed = JSON.parse(text); } catch {}
+  let detail = parsed
+    ? (parsed.error && (parsed.error.message || parsed.error)) || parsed.message || text
+    : text.slice(0, 600);
+  if (typeof detail !== 'string') detail = JSON.stringify(detail);
+  const creditInfo = openRouterCreditInfo(status, text, config);
+  if (creditInfo) {
+    const requested = creditInfo.requested ? ' The request reserved up to ' + creditInfo.requested.toLocaleString() + ' output tokens.' : '';
+    return 'OpenRouter does not have enough remaining credits for this request. Its response says the current balance can cover about ' +
+      creditInfo.available.toLocaleString() + ' output tokens.' + requested +
+      ' This is a credit limit, not an invalid API key. Try a free model or a smaller output limit. See https://openrouter.ai/settings/credits.';
+  }
   if (status === 401 || status === 403) return 'The provider rejected the API key (' + status + '). Check the key in Settings. ' + detail;
   if (status === 404) return 'The provider does not know model "' + config.model + '" or the base URL is wrong (404). ' + detail;
   if (status === 429) return 'The provider is rate limiting this key (429). Wait a moment or switch model. ' + detail;
+  if (status === 402) return 'The provider requires available credits or quota (402). This is not an API-key authentication error. ' + detail;
   return 'The provider returned ' + status + '. ' + detail;
 }
 
@@ -89,13 +123,44 @@ function openAIHeaders(config) {
   return headers;
 }
 
+const openRouterOutputCaps = new Map();
+
+function openRouterCapKey(config) {
+  return [config.connectionId || config.provider || '', trimSlash(config.baseURL), config.model || ''].join('|');
+}
+
 async function chatOpenAI(config, { messages, tools, signal, onText, fetchImpl }) {
   const body = { model: config.model, messages, stream: true };
   if (tools && tools.length) body.tools = tools;
-  if (config.maxTokens) body.max_tokens = config.maxTokens;
+  const openRouter = isOpenRouterEndpoint(config.baseURL);
+  const learnedLimit = openRouter ? openRouterOutputCaps.get(openRouterCapKey(config)) : 0;
+  const requestedLimit = learnedLimit
+    ? Math.min(Number(config.maxTokens) || learnedLimit, learnedLimit)
+    : (Number(config.maxTokens) || (openRouter ? 4096 : 0));
+  if (requestedLimit > 0) body.max_tokens = requestedLimit;
   if (config.temperature !== undefined && config.temperature !== '') body.temperature = Number(config.temperature);
   if (!/localhost|127\.0\.0\.1/.test(config.baseURL)) body.stream_options = { include_usage: true };
-  const response = await fetchImpl(trimSlash(config.baseURL) + '/chat/completions', { method: 'POST', headers: openAIHeaders(config), body: JSON.stringify(body), signal });
+  const url = trimSlash(config.baseURL) + '/chat/completions';
+  const headers = openAIHeaders(config);
+  let response = await fetchImpl(url, { method: 'POST', headers, body: JSON.stringify(body), signal });
+  if (!response.ok) {
+    const errorBody = await response.text().catch(() => '');
+    const creditInfo = openRouterCreditInfo(response.status, errorBody, config);
+    const retryLimit = openRouterCreditRetryCap(creditInfo);
+    if (retryLimit >= 64 && retryLimit < (Number(body.max_tokens) || 65536)) {
+      // OpenRouter reserves against max_tokens, not only the tokens eventually emitted.
+      // Retry once using the affordable range reported by its explicit credit-limit error.
+      body.max_tokens = retryLimit;
+      openRouterOutputCaps.set(openRouterCapKey(config), retryLimit);
+      response = await fetchImpl(url, { method: 'POST', headers, body: JSON.stringify(body), signal });
+      if (!response.ok) {
+        const retryBody = await response.text().catch(() => '');
+        throw new ProviderError(explain(response.status, retryBody, config), { status: response.status, retryable: response.status === 429 || response.status >= 500 });
+      }
+    } else {
+      throw new ProviderError(explain(response.status, errorBody, config), { status: response.status, retryable: response.status === 429 || response.status >= 500 });
+    }
+  }
   if (!response.ok) throw new ProviderError(explain(response.status, await response.text().catch(() => ''), config), { status: response.status, retryable: response.status === 429 || response.status >= 500 });
   const type = response.headers.get('content-type') || '';
   if (!type.includes('event-stream')) {

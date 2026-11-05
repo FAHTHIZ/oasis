@@ -4,7 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { createServer } from 'node:http';
 import { mkdtemp, rm, access } from 'node:fs/promises';
-import { createSession, runAgentTurn, closeSession, maxOutputTokensFor, outputCapFromError } from '../src/agent.mjs';
+import { createSession, runAgentTurn, closeSession, maxOutputTokensFor, outputCapFromError, openRouterOutputCapFromError } from '../src/agent.mjs';
 
 test('output-token defaults are model-aware and overridable like Claude Code', () => {
   assert.equal(maxOutputTokensFor({ model: 'claude-sonnet-4-5' }, {}), 32000);
@@ -17,6 +17,11 @@ test('output-token defaults are model-aware and overridable like Claude Code', (
   assert.equal(outputCapFromError(400, 'max_tokens: 64000 > 32000, which is the maximum allowed number of output tokens'), 32000);
   assert.equal(outputCapFromError(400, 'unrelated validation error'), 0);
   assert.equal(outputCapFromError(500, 'max_tokens'), 0);
+  const creditError = JSON.stringify({ error: { message: 'You requested up to 65536 tokens, but can only afford 675.', metadata: { limit_source: 'openrouter_credits' } } });
+  assert.equal(openRouterOutputCapFromError(402, creditError, { baseURL: 'https://openrouter.ai/api/v1' }), 512);
+  assert.equal(openRouterOutputCapFromError(402, creditError, { baseURL: 'https://api.example.com/v1' }), 0);
+  assert.equal(openRouterOutputCapFromError(401, creditError, { baseURL: 'https://openrouter.ai/api/v1' }), 0);
+  assert.equal(openRouterOutputCapFromError(402, JSON.stringify({ error: { message: 'Payment required', metadata: { limit_source: 'other' } } }), { baseURL: 'https://openrouter.ai/api/v1' }), 0);
 });
 
 async function fakeProvider(t, handler) {

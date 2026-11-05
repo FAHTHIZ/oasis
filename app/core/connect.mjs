@@ -14,6 +14,8 @@ import { PRESETS, ProviderError, testProvider } from './providers.mjs';
 const KEY_RULES = [
   { test: /^sk-ant-[A-Za-z0-9_-]{20,}$/, providers: ['anthropic'] },
   { test: /^sk-or-[A-Za-z0-9_-]{20,}$/, providers: ['openrouter'] },
+  // Google AI Studio now issues AQ. authorization keys as well as legacy AIza keys.
+  { test: /^AQ\.[A-Za-z0-9_-]{20,}$/, providers: ['gemini'] },
   { test: /^AIza[0-9A-Za-z_-]{30,}$/, providers: ['gemini'] },
   { test: /^gsk_[A-Za-z0-9]{20,}$/, providers: ['groq'] },
   { test: /^xai-[A-Za-z0-9]{20,}$/, providers: ['xai'] },
@@ -121,7 +123,9 @@ export function parsePaste(text) {
     if (!token) continue;
     if (isGitHubToken(token)) { result.githubTokens.push(token); continue; }
     const providers = detectKey(token);
-    if (providers.length && /\d/.test(token) && /[a-z]/i.test(token)) { result.keys.push({ value: token, providers }); continue; }
+    // KEY_RULES are anchored format checks; do not reject valid opaque keys
+    // merely because a provider's format contains no numeric character.
+    if (providers.length) { result.keys.push({ value: token, providers }); continue; }
     const url = interpretURL(token);
     if (url) { result.urls.push(url); continue; }
     leftover.push(raw);
@@ -425,7 +429,7 @@ export async function smartConnect(input, { fetchImpl = globalThis.fetch.bind(gl
 
   // 4. An API key.
   const key = parsed.keys[0];
-  if (!key) throw new ProviderError(parsed.githubTokens.length ? 'GITHUB_ONLY' : 'Paste an API key (for example sk-or-…, sk-ant-…, AIza…, hf_…) or a model link from Ollama, Hugging Face or OpenRouter.');
+  if (!key) throw new ProviderError(parsed.githubTokens.length ? 'GITHUB_ONLY' : 'Paste an API key (for example sk-or-…, sk-ant-…, AQ.…/AIza…, hf_…) or a model link from Ollama, Hugging Face or OpenRouter.');
   const errors = [];
   for (const provider of key.providers) {
     const connection = makeConnection(provider, { apiKey: key.value });

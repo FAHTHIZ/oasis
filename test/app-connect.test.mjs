@@ -8,11 +8,12 @@ import {
 } from '../app/core/connect.mjs';
 import { PLUGINS, getPlugin, pluginsFor, suggestPlugins } from '../app/core/plugins.mjs';
 import { Agent, buildSystemPrompt } from '../app/core/agent.mjs';
-import { ProviderError } from '../app/core/providers.mjs';
+import { ProviderError, chat } from '../app/core/providers.mjs';
 
 const OR_KEY = 'sk-or-v1-' + 'a1'.repeat(32);
 const ANT_KEY = 'sk-ant-api03-' + 'b2'.repeat(20);
 const GEMINI_KEY = 'AIzaSy' + 'C3d4'.repeat(8);
+const GEMINI_AUTH_KEY = 'AQ.' + 'AbCdEfGhIjKlMnOpQrStUvWxYz_-'.repeat(2);
 const HF_KEY = 'hf_' + 'Ab1'.repeat(10);
 const GH_TOKEN = 'ghp_' + 'Z9y8'.repeat(9);
 
@@ -20,6 +21,7 @@ test('detectKey recognises each provider by key shape', () => {
   assert.deepEqual(detectKey(OR_KEY), ['openrouter']);
   assert.deepEqual(detectKey(ANT_KEY), ['anthropic']);
   assert.deepEqual(detectKey(GEMINI_KEY), ['gemini']);
+  assert.deepEqual(detectKey(GEMINI_AUTH_KEY), ['gemini']);
   assert.deepEqual(detectKey(HF_KEY), ['huggingface']);
   assert.deepEqual(detectKey('gsk_' + 'x1'.repeat(20)), ['groq']);
   assert.deepEqual(detectKey('xai-' + 'q7'.repeat(20)), ['xai']);
@@ -65,6 +67,8 @@ test('parsePaste splits keys, links, model names and the task', () => {
   assert.equal(parsePaste('use LM Studio').local, true);
   assert.deepEqual(parsePaste(GH_TOKEN).githubTokens, [GH_TOKEN]);
   assert.equal(parsePaste('"' + ANT_KEY + '"').keys[0].value, ANT_KEY, 'quotes around a pasted key are dropped');
+  assert.equal(parsePaste(GEMINI_AUTH_KEY).keys[0].value, GEMINI_AUTH_KEY, 'AQ. keys do not need a numeric character to be parsed');
+  assert.equal(looksLikeConnection(GEMINI_AUTH_KEY), true);
 });
 
 test('looksLikeConnection keeps ordinary tasks as tasks', () => {
@@ -301,4 +305,57 @@ test('plugins load their skills into the system prompt', async () => {
   assert.match(prompt, /BODY OF diagnose/);
   const none = await buildSystemPrompt({ skills, plugins: [] });
   assert.doesNotMatch(none, /Active plugins/);
+});
+
+
+test('smartConnect accepts a Google AQ. authorization key through Gemini OpenAI compatibility', async () => {
+  const { fetchImpl, calls } = fakeFetch([
+    [/generativelanguage\.googleapis\.com\/v1beta\/openai\/models$/, () => ({ data: [{ id: 'gemini-3.8-flash' }] })],
+    [/generativelanguage\.googleapis\.com\/v1beta\/openai\/chat\/completions$/, () => toolReply]
+  ]);
+  const result = await smartConnect(GEMINI_AUTH_KEY, { fetchImpl });
+  assert.equal(result.connection.provider, 'gemini');
+  assert.equal(result.connection.apiKey, GEMINI_AUTH_KEY);
+  assert.ok(calls.length >= 2);
+  assert.ok(calls.every((call) => call.options.headers.authorization === 'Bearer ' + GEMINI_AUTH_KEY));
+});
+
+test('OpenRouter retries an oversized credit reservation with a safe output cap and remembers it', async () => {
+  const requests = [];
+  const fetchImpl = async (_url, options = {}) => {
+    requests.push(JSON.parse(options.body));
+    if (requests.length === 1) {
+      return new Response(JSON.stringify({
+        error: {
+          message: 'This request requires more credits. You requested up to 4096 tokens, but can only afford 675.',
+          metadata: { limit_source: 'openrouter_credits', remedy_hint: 'Lower max_tokens.' }
+        }
+      }), { status: 402, headers: { 'content-type': 'application/json' } });
+    }
+    return new Response(JSON.stringify({ choices: [{ message: { role: 'assistant', content: 'ok' } }] }), {
+      status: 200, headers: { 'content-type': 'application/json' }
+    });
+  };
+  const config = { provider: 'openrouter', protocol: 'openai', baseURL: 'https://openrouter.ai/api/v1', model: 'qwen/qwen3-coder:free', apiKey: 'test', connectionId: 'openrouter-credit-retry-test' };
+  const first = await chat(config, { messages: [{ role: 'user', content: 'hello' }], fetchImpl });
+  assert.equal(first.content, 'ok');
+  assert.equal(requests[0].max_tokens, 4096);
+  assert.equal(requests[1].max_tokens, 512);
+  const second = await chat(config, { messages: [{ role: 'user', content: 'again' }], fetchImpl });
+  assert.equal(second.content, 'ok');
+  assert.equal(requests[2].max_tokens, 512);
+});
+
+test('OpenRouter 402 explains credits instead of blaming the API key', async () => {
+  const fetchImpl = async () => new Response(JSON.stringify({
+    error: {
+      message: 'You requested up to 4096 tokens, but can only afford 32.',
+      metadata: { limit_source: 'openrouter_credits' }
+    }
+  }), { status: 402, headers: { 'content-type': 'application/json' } });
+  await assert.rejects(
+    chat({ provider: 'openrouter', protocol: 'openai', baseURL: 'https://openrouter.ai/api/v1', model: 'qwen/qwen3-coder', apiKey: 'test', connectionId: 'openrouter-credit-too-low-test' },
+      { messages: [{ role: 'user', content: 'hello' }], fetchImpl }),
+    (error) => error.status === 402 && /not an invalid API key/i.test(error.message) && /32 output tokens/i.test(error.message)
+  );
 });
