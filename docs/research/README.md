@@ -4,6 +4,7 @@ This folder contains dated research, prior-art reviews, and future design propos
 
 | Document | Purpose | Status |
 |---|---|---|
+| [Getting started, model choice and plugins vs eight agents](COMPETITIVE_ANALYSIS_2026-11-05.md) | Onboarding, model selection and fallback, devices and plugins compared with Claude Code, Codex, DeepSeek Harness, Codewhale, Qwen Code, Hermes Agent, OpenCode and Gemini CLI. | Dated documentation comparison; not a benchmark. |
 | [Competitive implementation research](COMPETITIVE_ANALYSIS_2026-10-31.md) | A dated source/documentation comparison used to identify capability gaps. | Historical comparison; not a live benchmark or product definition. |
 | [Search-engine research](SEARCH_ENGINE_RESEARCH.md) | Prior-art review and architectural rationale for federated search. | Supporting research; check current code/docs for shipped behavior. |
 | [Future architecture designs](FUTURE_DESIGNS.md) | Remote-runner, phone-pairing, and Tor/onion design proposals. | Design-only; not shipped product capabilities. |

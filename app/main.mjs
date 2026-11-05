@@ -7,14 +7,24 @@ import { SkillLibrary } from './core/skills.mjs';
 import { GitHub, parseRepo } from './core/github.mjs';
 import { createZip, readZip } from './core/zip.mjs';
 import { renderMarkdown } from './markdown.mjs';
+import { smartConnect, looksLikeConnection, parsePaste, scanLocal, buildChain, nextInChain, configFor, classifyFailure, maskSecret, isGitHubToken } from './core/connect.mjs';
+import { PLUGINS, getPlugin, pluginsFor, suggestPlugins } from './core/plugins.mjs';
+import { buildPreview } from './core/preview.mjs';
 
-const APP_VERSION = '1.2.0';
+const APP_VERSION = '1.3.0';
 const $ = (id) => document.getElementById(id);
 const store = new IndexedDBStore();
 const sandbox = new FrameSandbox();
 const skills = new SkillLibrary({ baseURL: new URL('skills/', location.href).href });
 
-const DEFAULTS = { provider: 'openrouter', baseURL: PRESETS.openrouter.baseURL, model: PRESETS.openrouter.model, apiKey: '', protocol: 'openai', mode: 'ask', maxSteps: 40, theme: 'system', githubToken: '' };
+const DEFAULTS = { connections: [], activeConnection: '', activeModel: '', autoSwitch: true, projectPlugins: {}, mode: 'ask', maxSteps: 40, theme: 'system', githubToken: '' };
+// Slow phones and old computers: fewer repaints while a reply streams, no
+// blur or animation, and a shorter transcript kept in the page.
+const LITE_PARAM = new URLSearchParams(location.search).get('lite');
+const LITE = LITE_PARAM === '1' ? true : LITE_PARAM === '0' ? false : Boolean((navigator.deviceMemory && navigator.deviceMemory <= 2) || (navigator.hardwareConcurrency && navigator.hardwareConcurrency <= 2) || (navigator.connection && navigator.connection.saveData) || matchMedia('(prefers-reduced-motion: reduce)').matches);
+document.documentElement.classList.toggle('lite', LITE);
+const failedModels = {};  // connectionId|model -> time it last failed, for the fallback chain
+let turnPlugins = [];      // plugins tapped for the next message only
 let settings = loadSettings();
 let workspace = null;
 let display = [];          // rendered history: [{ role, content, tools: [{id,name,args,ok,content}] }]
@@ -24,13 +34,54 @@ let deferredInstall = null;
 
 /* ---------- Settings ---------- */
 function loadSettings() {
-  try { return { ...DEFAULTS, ...JSON.parse(localStorage.getItem('oasis.settings') || '{}') }; } catch { return { ...DEFAULTS }; }
+  let saved = {};
+  try { saved = JSON.parse(localStorage.getItem('oasis.settings') || '{}') || {}; } catch { saved = {}; }
+  const merged = { ...DEFAULTS, ...saved };
+  if (!Array.isArray(merged.connections)) merged.connections = [];
+  // Settings from 1.2 and earlier held one provider; keep it as a connection.
+  if (!merged.connections.length && saved.model && (saved.apiKey || /localhost|127\.0\.0\.1/.test(saved.baseURL || '') || saved.provider === 'custom')) {
+    const preset = PRESETS[saved.provider] || PRESETS.custom;
+    merged.connections.push({ id: 'legacy', provider: saved.provider || 'custom', label: preset.label, protocol: saved.protocol || preset.protocol, baseURL: saved.baseURL || preset.baseURL, apiKey: saved.apiKey || '', models: [saved.model], local: /localhost|127\.0\.0\.1/.test(saved.baseURL || ''), addedAt: Date.now() });
+    merged.activeConnection = 'legacy';
+    merged.activeModel = saved.model;
+  }
+  for (const key of ['provider', 'baseURL', 'model', 'apiKey', 'protocol']) delete merged[key];
+  return merged;
 }
 function saveSettings() { localStorage.setItem('oasis.settings', JSON.stringify(settings)); }
-function providerConfig() {
-  return { protocol: settings.protocol, baseURL: settings.baseURL, apiKey: settings.apiKey, model: settings.model, mode: allowEditsThisSession && settings.mode === 'ask' ? 'edits' : settings.mode, provider: settings.provider };
+function activeEntry() {
+  const connection = settings.connections.find((c) => c.id === settings.activeConnection) || settings.connections[0];
+  if (!connection) return null;
+  const model = settings.activeModel && (connection.models.includes(settings.activeModel) || connection.id === settings.activeConnection) ? settings.activeModel : connection.models[0];
+  return model ? { connection, model } : null;
 }
-function modelReady() { return Boolean(settings.model && (settings.apiKey || /localhost|127\.0\.0\.1/.test(settings.baseURL) || settings.provider === 'custom' && settings.baseURL)); }
+function currentMode() { return allowEditsThisSession && settings.mode === 'ask' ? 'edits' : settings.mode; }
+function providerConfig() {
+  const entry = activeEntry();
+  if (!entry) return { protocol: 'openai', baseURL: '', apiKey: '', model: '', mode: currentMode(), provider: '' };
+  return configFor(entry, { mode: currentMode() });
+}
+function modelReady() {
+  const entry = activeEntry();
+  return Boolean(entry && entry.model && (entry.connection.apiKey || entry.connection.local || /localhost|127\.0\.0\.1/.test(entry.connection.baseURL) || entry.connection.provider === 'custom'));
+}
+function setActive(connectionId, model) {
+  settings.activeConnection = connectionId;
+  settings.activeModel = model;
+  saveSettings();
+  updateModeUI();
+}
+function upsertConnection(connection) {
+  const same = settings.connections.find((c) => c.provider === connection.provider && c.baseURL === connection.baseURL && (c.apiKey || '') === (connection.apiKey || ''));
+  if (same) {
+    same.models = [...new Set([...connection.models, ...same.models])].slice(0, 80);
+    same.label = connection.label;
+    return same;
+  }
+  connection.models = connection.models.slice(0, 80);
+  settings.connections.push(connection);
+  return connection;
+}
 function applyTheme() {
   const dark = settings.theme === 'dark' || (settings.theme === 'system' && !matchMedia('(prefers-color-scheme: light)').matches);
   document.documentElement.classList.toggle('light', !dark);
@@ -109,8 +160,21 @@ const agent = new Agent({
     onChange: () => refreshFiles()
   }),
   approve: requestApproval,
-  onEvent: handleEvent
+  onEvent: handleEvent,
+  onModelFailure: (error, config) => {
+    if (settings.autoSwitch === false) return null;
+    const connection = settings.connections.find((c) => c.id === config.connectionId);
+    if (!connection) return null;
+    failedModels[connection.id + '|' + config.model] = Date.now();
+    const chain = buildChain({ ...settings, activeConnection: connection.id, activeModel: config.model }, { failed: failedModels });
+    const next = nextInChain(chain, { connection, model: config.model }, error, { failed: failedModels });
+    if (!next) return null;
+    setActive(next.connection.id, next.model);
+    return configFor(next, { mode: currentMode() });
+  }
 });
+
+const SWITCH_REASONS = { credits: 'ran out of credit', rate: 'is rate limited', model: 'is not available', server: 'had a server error', auth: 'rejected the key', network: 'could not be reached', context: 'ran out of context room' };
 
 async function ensureWorkspace() {
   if (workspace) return workspace;
@@ -121,17 +185,146 @@ async function ensureWorkspace() {
   return workspace;
 }
 
+function projectKey() { return workspace ? workspace.project.id : '_'; }
+function enabledPluginIds() { return settings.projectPlugins[projectKey()] || []; }
+function setPluginEnabled(id, on) {
+  const ids = new Set(enabledPluginIds());
+  if (on) ids.add(id); else ids.delete(id);
+  settings.projectPlugins[projectKey()] = [...ids];
+  saveSettings();
+  renderPluginState();
+}
+
 async function send(text) {
   const message = text.trim();
   if (!message) return;
-  if (!modelReady()) { openSettings(); toast('Connect a model first: choose a provider and paste a key.'); return; }
+  if (looksLikeConnection(message)) { $('input').value = ''; autosize(); await connectFromText(message, { surface: 'chat' }); return; }
+  if (!modelReady()) {
+    $('welcome').hidden = false;
+    $('connectInput').focus();
+    showConnectLog('connectLog', [{ step: 'error', text: 'Connect a model first: paste an API key or a model link above (or right into the message box).' }]);
+    return;
+  }
   await ensureWorkspace();
   $('input').value = '';
   autosize();
+  const plugins = pluginsFor([...new Set([...enabledPluginIds(), ...turnPlugins])]);
+  turnPlugins = [];
+  renderPluginSuggest();
   setBusy(true);
-  try { await agent.send(message, { maxSteps: Number(settings.maxSteps) || 40 }); }
+  try { await agent.send(message, { maxSteps: Number(settings.maxSteps) || 40, plugins }); }
   catch { /* shown through the error event */ }
   finally { setBusy(false); persistChat(); refreshFiles(); }
+}
+
+/* ---------- Smart connect ---------- */
+function showConnectLog(id, lines) {
+  const log = $(id);
+  if (!log) return;
+  log.replaceChildren(...lines.map((line) => {
+    const li = document.createElement('li');
+    li.className = line.step || 'info';
+    li.textContent = line.text;
+    return li;
+  }));
+}
+
+let connecting = false;
+async function connectFromText(text, { surface = 'welcome' } = {}) {
+  if (connecting) return false;
+  const parsed = parsePaste(text);
+  connecting = true;
+  const lines = [];
+  let note = null;
+  const logId = surface === 'settings' ? 'settingsConnectLog' : 'connectLog';
+  if (surface === 'chat') {
+    note = addMessage('note', '');
+    note.classList.add('connect-note');
+    note.innerHTML = '<ol class="connect-log"></ol>';
+  }
+  const render = () => {
+    if (note) {
+      const log = note.querySelector('ol');
+      log.replaceChildren(...lines.map((line) => { const li = document.createElement('li'); li.className = line.step || 'info'; li.textContent = line.text; return li; }));
+      scrollDown(true);
+    } else showConnectLog(logId, lines);
+  };
+  const onStatus = (status) => {
+    const last = lines[lines.length - 1];
+    if (last && last.step === status.step && (status.step === 'download' || status.step === 'test')) lines[lines.length - 1] = status;
+    else lines.push(status);
+    render();
+  };
+  for (const token of parsed.githubTokens) {
+    settings.githubToken = token;
+    saveSettings();
+    onStatus({ step: 'ready', text: 'GitHub token ' + maskSecret(token) + ' saved on this device: private repositories and pushing now work.' });
+  }
+  if (!parsed.keys.length && !parsed.urls.length && !parsed.local) {
+    connecting = false;
+    if (parsed.githubTokens.length) { renderWelcome(); return true; }
+    return false;
+  }
+  for (const id of ['connectButton', 'settingsConnectButton']) if ($(id)) $(id).disabled = true;
+  try {
+    const result = await smartConnect(text, { onStatus, known: settings.connections });
+    const connection = upsertConnection(result.connection);
+    connection.models = [result.model, ...connection.models.filter((m) => m !== result.model)];
+    setActive(connection.id, result.model);
+    for (const extra of result.notes) onStatus({ step: 'warn', text: extra });
+    const backups = buildChain(settings).length - 1;
+    onStatus({ step: 'ready', text: 'Locked in ' + result.model + ' on ' + connection.label + (backups > 0 ? '. ' + backups + ' backup model' + (backups === 1 ? '' : 's') + ' ready if it runs out.' : '.') });
+    renderWelcome();
+    renderConnections();
+    if (surface !== 'settings') $('input').focus();
+    if (parsed.rest && surface === 'chat') { connecting = false; await send(parsed.rest); }
+    return true;
+  } catch (error) {
+    onStatus({ step: 'error', text: error.message });
+    return false;
+  } finally {
+    connecting = false;
+    for (const id of ['connectButton', 'settingsConnectButton']) if ($(id)) $(id).disabled = false;
+  }
+}
+
+$('connectForm').addEventListener('submit', (event) => {
+  event.preventDefault();
+  const value = $('connectInput').value.trim();
+  if (!value) { $('connectInput').focus(); return; }
+  connectFromText(value).then((ok) => { if (ok) $('connectInput').value = ''; });
+});
+// Pasting is enough: no need to press Connect or Enter.
+function connectOnPaste(input, surface) {
+  input.addEventListener('paste', (event) => {
+    const text = (event.clipboardData || window.clipboardData).getData('text');
+    if (!text || !looksLikeConnection(text) || input.value.trim()) return;
+    event.preventDefault();
+    input.value = surface === 'chat' ? '' : maskPasted(text);
+    connectFromText(text.trim(), { surface }).then((ok) => { if (ok && surface !== 'chat') input.value = ''; });
+  });
+}
+function maskPasted(text) {
+  return text.split(/\s+/).map((token) => (parsePaste(token).keys.length || isGitHubToken(token) ? maskSecret(token) : token)).join(' ');
+}
+
+async function autoDetectLocal() {
+  if (modelReady()) return;
+  const found = await scanLocal();
+  if (!found.length || modelReady()) return;
+  const box = $('connectFound');
+  box.replaceChildren();
+  for (const connection of found.slice(0, 2)) {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'btn found';
+    button.innerHTML = '<strong></strong><span></span>';
+    button.querySelector('strong').textContent = 'Use ' + connection.label;
+    button.querySelector('span').textContent = connection.models.length + ' model' + (connection.models.length === 1 ? '' : 's') + ' on this device · best: ' + connection.models[0];
+    button.addEventListener('click', () => connectFromText(connection.baseURL));
+    box.appendChild(button);
+  }
+  box.hidden = false;
 }
 
 function setBusy(busy) {
@@ -160,7 +353,10 @@ function toolCard(tool) {
   summary.querySelector('.name').textContent = TOOL_LABELS[tool.name] || tool.name;
   summary.querySelector('.arg').textContent = summarizeArgs(tool.name, tool.args);
   const pre = document.createElement('pre');
-  pre.textContent = tool.content || 'Running…';
+  // Fill the output only when opened: long sessions stay light on slow phones.
+  const fill = () => { pre.textContent = tool.content || 'Running…'; };
+  if (el.open) fill();
+  el.addEventListener('toggle', () => { if (el.open) fill(); });
   el.append(summary, pre);
   return el;
 }
@@ -192,16 +388,28 @@ function scrollDown(force = false) {
 }
 
 let renderQueued = false;
+let lastRender = 0;
 function queueRender() {
   if (renderQueued) return;
   renderQueued = true;
-  requestAnimationFrame(() => {
+  // Re-rendering Markdown is the costliest thing while streaming; space it
+  // out on slow devices and for long replies.
+  const gap = LITE ? 220 : currentTurn && currentTurn.text.length > 12000 ? 160 : 0;
+  const wait = Math.max(0, gap - (performance.now() - lastRender));
+  const run = () => requestAnimationFrame(() => {
     renderQueued = false;
+    lastRender = performance.now();
     if (!currentTurn) return;
     currentTurn.body.innerHTML = renderMarkdown(currentTurn.text);
     currentTurn.body.classList.add('cursor');
     scrollDown();
   });
+  if (wait) setTimeout(run, wait); else run();
+}
+function trimTranscript() {
+  const transcript = $('transcript');
+  const limit = LITE ? 80 : 240;
+  while (transcript.childElementCount > limit) transcript.firstElementChild.remove();
 }
 
 function startTurn() {
@@ -241,6 +449,14 @@ function handleEvent(event) {
     case 'retry':
       toast('Provider busy, retrying (' + event.attempt + ')…');
       break;
+    case 'model_switch': {
+      const kind = classifyFailure({ message: event.reason, status: Number((String(event.reason).match(/\((\d{3})\)/) || [])[1] || 0) });
+      if (currentTurn) { currentTurn.text = ''; currentTurn.body.innerHTML = ''; }
+      const line = event.from + ' ' + (SWITCH_REASONS[kind] || 'failed') + '. Switched to ' + event.to + ' and carried on.';
+      display.push({ role: 'note', content: line });
+      addMessage('note', line);
+      break;
+    }
     case 'assistant': {
       removeThinking();
       if (!currentTurn) startTurn();
@@ -264,6 +480,7 @@ function handleEvent(event) {
       let tool = currentTurn.entry.tools.find((t) => t.id === event.id);
       if (!tool) { tool = { id: event.id, name: event.name, args: {} }; currentTurn.entry.tools.push(tool); currentTurn.tools.appendChild(toolCard(tool)); }
       tool.ok = event.ok;
+      if (event.ok && /^(write_file|edit_file|multi_edit|apply_patch)$/.test(tool.name) && tool.args && tool.args.path) lastWrites.push(tool.args.path);
       tool.content = event.content.length > 6000 ? event.content.slice(0, 6000) + '\n…' : event.content;
       const card = currentTurn.tools.querySelector('[data-id="' + CSS.escape(event.id) + '"]');
       if (card) card.replaceWith(toolCard(tool));
@@ -289,6 +506,8 @@ function handleEvent(event) {
     case 'done':
       removeThinking();
       currentTurn = null;
+      trimTranscript();
+      offerPreview();
       break;
     default: break;
   }
@@ -403,7 +622,21 @@ function autosize() {
   input.style.height = 'auto';
   input.style.height = Math.min(input.scrollHeight, innerHeight * 0.4) + 'px';
 }
-$('input').addEventListener('input', autosize);
+let suggestTimer = 0;
+$('input').addEventListener('input', () => {
+  autosize();
+  clearTimeout(suggestTimer);
+  suggestTimer = setTimeout(renderPluginSuggest, 250);
+});
+connectOnPaste($('input'), 'chat');
+connectOnPaste($('connectInput'), 'welcome');
+connectOnPaste($('settingsConnectInput'), 'settings');
+$('settingsConnectButton').addEventListener('click', async () => {
+  const value = $('settingsConnectInput').value.trim();
+  if (!value) { $('settingsConnectInput').focus(); return; }
+  if (await connectFromText(value, { surface: 'settings' })) $('settingsConnectInput').value = '';
+});
+$('settingsConnectInput').addEventListener('keydown', (event) => { if (event.key === 'Enter') { event.preventDefault(); $('settingsConnectButton').click(); } });
 $('input').addEventListener('keydown', (event) => {
   if (event.key === 'Enter' && !event.shiftKey && !event.isComposing && matchMedia('(pointer:fine)').matches) {
     event.preventDefault();
@@ -421,8 +654,65 @@ function updateModeUI() {
   $('modeChip').dataset.mode = mode;
   $('modeLabel').textContent = mode === 'auto' ? 'Full auto' : mode === 'edits' ? 'Auto edit' : 'Ask first';
   for (const button of $('modeMenu').querySelectorAll('button')) button.setAttribute('aria-checked', String(button.dataset.mode === mode));
-  $('modelChip').textContent = settings.model ? settings.model.split('/').pop() : '';
+  const entry = activeEntry();
+  $('modelChip').textContent = entry ? entry.model.split('/').pop().replace(/:free$/, ' (free)') : 'Connect a model';
+  $('modelChip').classList.toggle('empty', !entry);
+  $('modelChip').title = entry ? entry.connection.label + ' · ' + entry.model : 'Paste an API key or model link to connect';
 }
+
+/* ---------- Model menu ---------- */
+function positionMenu(menu, anchor) {
+  const rect = anchor.getBoundingClientRect();
+  menu.style.left = Math.max(8, Math.min(rect.left, innerWidth - menu.offsetWidth - 8)) + 'px';
+  menu.style.top = Math.max(8, rect.top - menu.offsetHeight - 8) + 'px';
+}
+function renderModelMenu() {
+  const menu = $('modelMenu');
+  menu.replaceChildren();
+  const entry = activeEntry();
+  if (!entry) {
+    const button = document.createElement('button');
+    button.innerHTML = '<strong>Connect a model</strong><span>Paste a key or link in the message box</span>';
+    button.addEventListener('click', () => { menu.hidden = true; $('input').focus(); });
+    menu.appendChild(button);
+    return;
+  }
+  const seen = new Set();
+  const rows = [];
+  for (const item of buildChain(settings, { limit: 10 })) rows.push(item);
+  for (const model of entry.connection.models.slice(0, 12)) rows.push({ connection: entry.connection, model });
+  for (const item of rows) {
+    const key = item.connection.id + '|' + item.model;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    const button = document.createElement('button');
+    button.setAttribute('role', 'menuitemradio');
+    button.setAttribute('aria-checked', String(item.connection.id === entry.connection.id && item.model === entry.model));
+    button.innerHTML = '<strong></strong><span></span>';
+    button.querySelector('strong').textContent = item.model;
+    button.querySelector('span').textContent = item.connection.label + (failedModels[key] ? ' · failed recently' : '');
+    button.addEventListener('click', () => { setActive(item.connection.id, item.model); menu.hidden = true; toast('Using ' + item.model); });
+    menu.appendChild(button);
+    if (seen.size >= 14) break;
+  }
+  const toggle = document.createElement('label');
+  toggle.className = 'menu-toggle';
+  toggle.innerHTML = '<input type="checkbox"> Switch automatically if a model fails';
+  toggle.querySelector('input').checked = settings.autoSwitch !== false;
+  toggle.querySelector('input').addEventListener('change', (event) => { settings.autoSwitch = event.target.checked; saveSettings(); });
+  const manage = document.createElement('button');
+  manage.innerHTML = '<strong>Manage models…</strong>';
+  manage.addEventListener('click', () => { menu.hidden = true; openSettings(); });
+  menu.append(toggle, manage);
+}
+$('modelChip').addEventListener('click', (event) => {
+  event.stopPropagation();
+  const menu = $('modelMenu');
+  if (!menu.hidden) { menu.hidden = true; return; }
+  renderModelMenu();
+  menu.hidden = false;
+  positionMenu(menu, $('modelChip'));
+});
 $('modeChip').addEventListener('click', (event) => {
   event.stopPropagation();
   const menu = $('modeMenu');
@@ -441,7 +731,10 @@ $('modeMenu').addEventListener('click', (event) => {
   updateModeUI();
   $('modeMenu').hidden = true;
 });
-document.addEventListener('click', (event) => { if (!event.target.closest('#modeMenu')) $('modeMenu').hidden = true; });
+document.addEventListener('click', (event) => {
+  if (!event.target.closest('#modeMenu')) $('modeMenu').hidden = true;
+  if (!event.target.closest('#modelMenu')) $('modelMenu').hidden = true;
+});
 
 /* ---------- Welcome ---------- */
 const SUGGESTIONS = [
@@ -451,32 +744,249 @@ const SUGGESTIONS = [
   'Build a small to-do web app in index.html'
 ];
 function renderWelcome() {
+  const ready = modelReady();
+  const entry = activeEntry();
+  $('connectForm').hidden = ready;
+  $('welcomeTitle').textContent = ready ? 'What should we build?' : 'Build from anywhere.';
+  $('welcomeLede').textContent = ready
+    ? 'Connected to ' + entry.model + ' on ' + entry.connection.label + '. Describe a task, tap a plugin, or paste another key at any time to add more models.'
+    : 'Paste an API key or a model link and OASIS sets everything up. It runs right here on this device; your projects and keys only ever go to the model provider.';
+  if (!ready) autoDetectLocal().catch(() => {});
   const steps = $('setupSteps');
   steps.replaceChildren();
   const items = [
-    { done: modelReady(), title: 'Connect a model', sub: modelReady() ? PRESETS[settings.provider]?.label + ' · ' + settings.model : 'Any provider: OpenRouter, Anthropic, OpenAI, Gemini, Ollama and more', action: openSettings },
+    { done: ready, title: 'Connect a model', sub: ready ? entry.connection.label + ' · ' + entry.model : 'Paste a key or link above, or right into the message box', action: () => (ready ? openSettings() : $('connectInput').focus()) },
     { done: Boolean(workspace), title: 'Open a project', sub: workspace ? workspace.project.name : 'From GitHub, a folder, a zip, or start empty', action: () => openProjects() },
-    { done: false, title: 'Ask OASIS', sub: 'It reads, edits and tests the code right on this device', action: () => $('input').focus() }
+    { done: false, title: 'Ask OASIS', sub: 'It reads, edits, runs and tests the code on this device', action: () => $('input').focus() }
   ];
-  items.forEach((item, index) => {
+  // Once a model is connected the lede says so; only the optional project
+  // step is left, so the screen stays short on phones.
+  const shown = ready ? (workspace ? [] : [{ ...items[1], title: 'Open a project (optional)', sub: 'From GitHub, a folder or a zip. Or just ask: OASIS starts a scratch project.' }]) : items;
+  steps.hidden = !shown.length;
+  shown.forEach((item, index) => {
     const button = document.createElement('button');
     button.className = 'step' + (item.done ? ' done' : '');
     button.innerHTML = '<span class="num"></span><span><strong></strong><span class="sub"></span></span>';
-    button.querySelector('.num').textContent = item.done ? '✓' : String(index + 1);
+    button.querySelector('.num').textContent = item.done ? '✓' : ready ? '+' : String(index + 1);
     button.querySelector('strong').textContent = item.title;
     button.querySelector('.sub').textContent = item.sub;
     button.addEventListener('click', item.action);
     steps.appendChild(button);
   });
+  const strip = $('pluginStrip');
+  strip.replaceChildren();
+  strip.hidden = !ready;
+  if (ready) for (const plugin of PLUGINS.slice(0, 8)) strip.appendChild(pluginTile(plugin, { compact: true }));
   const box = $('suggestions');
   box.replaceChildren();
-  if (modelReady()) for (const text of SUGGESTIONS) {
+  if (ready) for (const text of SUGGESTIONS) {
     const chip = document.createElement('button');
     chip.className = 'suggestion';
     chip.textContent = text;
-    chip.addEventListener('click', () => { $('input').value = text; autosize(); $('input').focus(); });
+    chip.addEventListener('click', () => { $('input').value = text; autosize(); renderPluginSuggest(); $('input').focus(); });
     box.appendChild(chip);
   }
+}
+
+/* ---------- Plugins ---------- */
+const ICON_PATHS = {
+  bug: 'M7 6a3 3 0 016 0M5.5 8h9v4.5a4.5 4.5 0 01-9 0zM10 8v9M3 10h2.5M14.5 10H17M3.5 15l2.3-1.2M16.5 15l-2.3-1.2M4 5.5l2 1.5M16 5.5L14 7',
+  check: 'M4 10.5l4 4 8-9',
+  eye: 'M2.5 10s2.8-5 7.5-5 7.5 5 7.5 5-2.8 5-7.5 5-7.5-5-7.5-5zM10 12.3a2.3 2.3 0 100-4.6 2.3 2.3 0 000 4.6z',
+  shield: 'M10 2.5l6 2.3v4.6c0 3.9-2.5 6.6-6 8.1-3.5-1.5-6-4.2-6-8.1V4.8zM7.3 10l2 2 3.5-3.8',
+  spark: 'M10 2.5l1.6 4.9 4.9 1.6-4.9 1.6L10 15.5l-1.6-4.9L3.5 9l4.9-1.6zM15.5 14l.6 1.9 1.9.6-1.9.6-.6 1.9-.6-1.9-1.9-.6 1.9-.6z',
+  globe: 'M10 17.5a7.5 7.5 0 100-15 7.5 7.5 0 000 15zM2.5 10h15M10 2.5c2 2.1 3 4.6 3 7.5s-1 5.4-3 7.5c-2-2.1-3-4.6-3-7.5s1-5.4 3-7.5z',
+  plug: 'M7 2.5v4M13 2.5v4M5 6.5h10v3a5 5 0 01-10 0zM10 14.5v3',
+  phone: 'M6.5 2.5h7a1 1 0 011 1v13a1 1 0 01-1 1h-7a1 1 0 01-1-1v-13a1 1 0 011-1zM9 15h2',
+  book: 'M3.5 4.5c2.5-1 4.7-1 6.5.5 1.8-1.5 4-1.5 6.5-.5v11c-2.5-1-4.7-1-6.5.5-1.8-1.5-4-1.5-6.5-.5zM10 5v11',
+  map: 'M2.5 5l5-2 5 2 5-2v12l-5 2-5-2-5 2zM7.5 3v12M12.5 5v12',
+  feather: 'M16 4c-4.5 0-9 3.5-9 9v3.5M7 13l6-6M4 16.5h6',
+  list: 'M7.5 5.5h9M7.5 10h9M7.5 14.5h9M3.5 5.5h.01M3.5 10h.01M3.5 14.5h.01',
+  branch: 'M6 3.5v13M6 16.5a1.8 1.8 0 100-3.6M14 3.5a1.8 1.8 0 110 3.6 1.8 1.8 0 010-3.6zM14 7.1c0 4-8 3-8 6'
+};
+function pluginIcon(name) {
+  return '<svg viewBox="0 0 20 20" width="18" height="18" aria-hidden="true"><path d="' + (ICON_PATHS[name] || ICON_PATHS.plug) + '" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+}
+function pluginTile(plugin, { compact = false } = {}) {
+  const on = enabledPluginIds().includes(plugin.id);
+  const tile = document.createElement('div');
+  tile.className = 'plugin-tile' + (on ? ' on' : '') + (compact ? ' compact' : '');
+  tile.dataset.plugin = plugin.id;
+  const head = document.createElement('button');
+  head.type = 'button';
+  head.className = 'plugin-head';
+  head.setAttribute('aria-pressed', String(on));
+  head.innerHTML = '<span class="plugin-icon" aria-hidden="true"></span><span class="plugin-text"><strong></strong><span></span></span><span class="plugin-state"></span>';
+  head.querySelector('.plugin-icon').innerHTML = pluginIcon(plugin.icon);
+  head.querySelector('strong').textContent = plugin.name;
+  head.querySelector('.plugin-text span').textContent = plugin.description;
+  head.querySelector('.plugin-state').textContent = on ? 'On' : compact ? 'Use' : 'Off';
+  head.addEventListener('click', () => {
+    if (compact) { runStarter(plugin, plugin.starters[0]); return; }
+    setPluginEnabled(plugin.id, !enabledPluginIds().includes(plugin.id));
+  });
+  tile.appendChild(head);
+  if (!compact) {
+    const starters = document.createElement('div');
+    starters.className = 'plugin-starters';
+    for (const starter of plugin.starters) {
+      const chip = document.createElement('button');
+      chip.type = 'button';
+      chip.className = 'suggestion';
+      chip.textContent = starter;
+      chip.addEventListener('click', () => runStarter(plugin, starter));
+      starters.appendChild(chip);
+    }
+    tile.appendChild(starters);
+  }
+  return tile;
+}
+function runStarter(plugin, starter) {
+  closeSheet('pluginsSheet');
+  if (plugin.actions && plugin.actions.includes('preview') && /^preview/i.test(starter)) { openPreview(); return; }
+  if (plugin.actions && plugin.actions.includes('github') && !settings.githubToken && /push|pull request/i.test(starter)) {
+    toast('Paste a GitHub token (ghp_… or github_pat_…) into the message box first.');
+    $('input').focus();
+    return;
+  }
+  turnPlugins = [plugin.id];
+  if (!modelReady()) { $('input').value = starter; autosize(); renderPluginSuggest(); send(starter); return; }
+  send(starter);
+}
+function renderPluginGrid() {
+  const grid = $('pluginGrid');
+  grid.replaceChildren(...PLUGINS.map((plugin) => pluginTile(plugin)));
+}
+function renderPluginState() {
+  const count = enabledPluginIds().length;
+  $('pluginCount').textContent = count ? String(count) : '';
+  $('pluginCount').hidden = !count;
+  if (!$('pluginsSheet').hidden) renderPluginGrid();
+  renderPluginSuggest();
+}
+function renderPluginSuggest() {
+  const box = $('pluginSuggest');
+  const text = $('input').value;
+  const active = new Set([...enabledPluginIds(), ...turnPlugins]);
+  const picks = text.trim().length >= 6 && !looksLikeConnection(text) ? suggestPlugins(text, { active: [...active], limit: 2 }) : [];
+  const pinned = turnPlugins.map(getPlugin).filter(Boolean);
+  box.replaceChildren();
+  if (pendingFix) {
+    const fix = document.createElement('button');
+    fix.type = 'button';
+    fix.className = 'suggest-chip on';
+    fix.textContent = 'Fix the preview error';
+    fix.title = pendingFix;
+    fix.addEventListener('click', () => {
+      const message = pendingFix;
+      pendingFix = '';
+      closeSheet('previewSheet');
+      turnPlugins = ['debug'];
+      send(message + '. Find the cause and fix it.');
+    });
+    box.appendChild(fix);
+  }
+  for (const plugin of pinned) {
+    const chip = document.createElement('button');
+    chip.type = 'button';
+    chip.className = 'suggest-chip on';
+    chip.textContent = plugin.name + ' ✓';
+    chip.title = 'This plugin is used for your next message. Tap to remove.';
+    chip.addEventListener('click', () => { turnPlugins = turnPlugins.filter((id) => id !== plugin.id); renderPluginSuggest(); });
+    box.appendChild(chip);
+  }
+  for (const plugin of picks) {
+    const chip = document.createElement('button');
+    chip.type = 'button';
+    chip.className = 'suggest-chip';
+    chip.textContent = 'Use ' + plugin.name;
+    chip.title = plugin.description;
+    chip.addEventListener('click', () => { turnPlugins = [...new Set([...turnPlugins, plugin.id])]; renderPluginSuggest(); $('input').focus(); });
+    box.appendChild(chip);
+  }
+  box.hidden = !box.childElementCount;
+}
+$('pluginsButton').addEventListener('click', () => { renderPluginGrid(); openSheet('pluginsSheet'); });
+$('composerPlugins').addEventListener('click', () => { renderPluginGrid(); openSheet('pluginsSheet'); });
+
+/* ---------- Preview ---------- */
+async function htmlFiles() {
+  if (!workspace) return [];
+  return (await workspace.paths()).filter((path) => /\.html?$/i.test(path)).sort((a, b) => (/(^|\/)index\.html?$/i.test(a) ? -1 : 0) - (/(^|\/)index\.html?$/i.test(b) ? -1 : 0) || a.length - b.length);
+}
+let previewErrors = [];
+let previewGeneration = 0;
+let previewListener = null;
+async function openPreview(path) {
+  const pages = await htmlFiles();
+  if (!pages.length) { toast('No HTML page in this project yet. Ask OASIS to build one.'); return; }
+  const select = $('previewSelect');
+  select.replaceChildren(...pages.map((page) => new Option(page, page)));
+  select.value = path && pages.includes(path) ? path : pages[0];
+  openSheet('previewSheet');
+  await loadPreview();
+}
+async function loadPreview() {
+  const entry = $('previewSelect').value;
+  const generation = ++previewGeneration;
+  $('previewTitle').textContent = entry;
+  previewErrors = [];
+  // buildPreview reads synchronously, so load the page's possible assets first.
+  const texts = new Map();
+  for (const file of (await workspace.paths()).filter((p) => /\.(html?|css|m?js|svg|json)$/i.test(p)).slice(0, 400)) {
+    try { texts.set(file, await workspace.read(file)); } catch { /* unreadable: reported as missing */ }
+  }
+  let built;
+  try { built = buildPreview(entry, (p) => (texts.has(p) ? texts.get(p) : null)); }
+  catch (error) { toast(error.message, 'error'); return; }
+  if (generation !== previewGeneration) return;
+  const frame = $('previewFrame');
+  // Only the latest load may answer the frame, so switching pages quickly
+  // never shows the previous page.
+  if (previewListener) removeEventListener('message', previewListener);
+  previewListener = (event) => {
+    if (generation !== previewGeneration || event.source !== frame.contentWindow || !event.data || event.data.oasisPreview !== 'ready' || event.data.load !== String(generation)) return;
+    removeEventListener('message', previewListener);
+    previewListener = null;
+    frame.contentWindow.postMessage({ html: built.html }, '*');
+  };
+  addEventListener('message', previewListener);
+  frame.src = 'preview.html?load=' + generation;
+  if (built.missing.length) toast('Not found in the project: ' + built.missing.slice(0, 3).join(', '));
+}
+addEventListener('message', (event) => {
+  const data = event.data;
+  if (!data || event.source !== $('previewFrame').contentWindow || data.oasisPreview !== 'error') return;
+  previewErrors.push(data.text);
+  if (previewErrors.length === 1) {
+    const message = 'The preview of ' + $('previewSelect').value + ' reported an error: ' + data.text;
+    toast(message, 'error');
+    if (modelReady()) offerFix(message);
+  }
+});
+let pendingFix = '';
+function offerFix(message) {
+  pendingFix = message;
+  renderPluginSuggest();
+}
+$('previewSelect').addEventListener('change', loadPreview);
+$('previewReload').addEventListener('click', loadPreview);
+$('previewButton').addEventListener('click', () => openPreview());
+$('editorPreview').addEventListener('click', () => { const path = $('editorTitle').textContent; closeSheet('editorSheet'); openPreview(path); });
+let lastWrites = [];
+async function offerPreview() {
+  const pages = lastWrites.filter((path) => /\.(html?|css|js)$/i.test(path));
+  lastWrites = [];
+  if (!pages.length) return;
+  const html = pages.find((path) => /\.html?$/i.test(path));
+  const all = await htmlFiles();
+  if (!all.length) return;
+  const note = addMessage('note', '');
+  const button = document.createElement('button');
+  button.className = 'btn small';
+  button.textContent = 'Open preview of ' + (html || all[0]);
+  button.addEventListener('click', () => openPreview(html || all[0]));
+  note.appendChild(button);
 }
 
 /* ---------- Settings sheet ---------- */
@@ -484,13 +994,65 @@ function fillProviderOptions() {
   const select = $('providerSelect');
   select.replaceChildren(...Object.entries(PRESETS).map(([id, preset]) => new Option(preset.label, id)));
 }
+function renderConnections() {
+  const list = $('connectionList');
+  list.replaceChildren();
+  if (!settings.connections.length) {
+    list.innerHTML = '<li class="empty">No models yet. Paste an API key, a model page link or a server address below.</li>';
+    return;
+  }
+  const entry = activeEntry();
+  for (const connection of settings.connections) {
+    const li = document.createElement('li');
+    li.className = 'connection' + (entry && entry.connection.id === connection.id ? ' current' : '');
+    const info = document.createElement('div');
+    info.className = 'connection-info';
+    info.innerHTML = '<strong></strong><span></span>';
+    info.querySelector('strong').textContent = connection.label;
+    info.querySelector('span').textContent = (connection.apiKey ? maskSecret(connection.apiKey) + ' · ' : connection.local ? 'on this network · ' : '') + connection.models.length + ' model' + (connection.models.length === 1 ? '' : 's');
+    const select = document.createElement('select');
+    select.setAttribute('aria-label', 'Model for ' + connection.label);
+    select.append(...connection.models.slice(0, 80).map((model) => new Option(model, model)));
+    select.value = entry && entry.connection.id === connection.id ? entry.model : connection.models[0];
+    select.addEventListener('change', () => { connection.models = [select.value, ...connection.models.filter((m) => m !== select.value)]; setActive(connection.id, select.value); renderConnections(); });
+    const use = document.createElement('button');
+    use.type = 'button';
+    use.className = 'btn small';
+    use.textContent = entry && entry.connection.id === connection.id ? 'In use' : 'Use';
+    use.disabled = Boolean(entry && entry.connection.id === connection.id);
+    use.addEventListener('click', () => { setActive(connection.id, select.value); renderConnections(); renderWelcome(); });
+    const remove = document.createElement('button');
+    remove.type = 'button';
+    remove.className = 'btn small ghost';
+    remove.textContent = 'Remove';
+    remove.addEventListener('click', () => {
+      settings.connections = settings.connections.filter((c) => c !== connection);
+      if (settings.activeConnection === connection.id) { settings.activeConnection = settings.connections[0]?.id || ''; settings.activeModel = settings.connections[0]?.models[0] || ''; }
+      saveSettings();
+      updateModeUI();
+      renderConnections();
+      renderWelcome();
+    });
+    const actions = document.createElement('div');
+    actions.className = 'row';
+    actions.append(select, use, remove);
+    li.append(info, actions);
+    list.appendChild(li);
+  }
+}
 function openSettings() {
-  $('providerSelect').value = settings.provider;
-  $('baseUrlInput').value = settings.baseURL;
-  $('modelInput').value = settings.model;
-  $('keyInput').value = settings.apiKey;
-  $('keyInput').placeholder = PRESETS[settings.provider]?.keyHint || '';
-  $('providerNote').textContent = PRESETS[settings.provider]?.note || '';
+  renderConnections();
+  const entry = activeEntry();
+  const provider = entry ? entry.connection.provider : 'openrouter';
+  $('providerSelect').value = PRESETS[provider] ? provider : 'custom';
+  $('baseUrlInput').value = entry ? entry.connection.baseURL : PRESETS.openrouter.baseURL;
+  $('modelInput').value = entry ? entry.model : PRESETS.openrouter.model;
+  $('keyInput').value = entry ? entry.connection.apiKey : '';
+  $('keyInput').placeholder = PRESETS[provider]?.keyHint || '';
+  $('providerNote').textContent = PRESETS[provider]?.note || '';
+  $('manualSetup').open = false;
+  $('autoSwitch').checked = settings.autoSwitch !== false;
+  $('settingsConnectLog').replaceChildren();
   $('modeSelect').value = settings.mode;
   $('maxStepsInput').value = settings.maxSteps;
   $('themeSelect').value = settings.theme;
@@ -512,15 +1074,14 @@ $('toggleKey').addEventListener('click', () => {
   input.type = input.type === 'password' ? 'text' : 'password';
   $('toggleKey').textContent = input.type === 'password' ? 'Show' : 'Hide';
 });
-function formSettings() {
+function manualDraft() {
   const provider = $('providerSelect').value;
+  return { provider, protocol: PRESETS[provider].protocol, baseURL: $('baseUrlInput').value.trim().replace(/\/+$/, ''), model: $('modelInput').value.trim(), apiKey: $('keyInput').value.trim() };
+}
+function formSettings() {
   return {
     ...settings,
-    provider,
-    protocol: PRESETS[provider].protocol,
-    baseURL: $('baseUrlInput').value.trim(),
-    model: $('modelInput').value.trim(),
-    apiKey: $('keyInput').value.trim(),
+    autoSwitch: $('autoSwitch').checked,
     mode: $('modeSelect').value,
     maxSteps: Math.min(200, Math.max(5, Number($('maxStepsInput').value) || 40)),
     theme: $('themeSelect').value,
@@ -528,7 +1089,7 @@ function formSettings() {
   };
 }
 $('testButton').addEventListener('click', async () => {
-  const draft = formSettings();
+  const draft = manualDraft();
   const out = $('testResult');
   out.className = 'test-result';
   out.textContent = 'Testing…';
@@ -544,6 +1105,17 @@ $('testButton').addEventListener('click', async () => {
 $('settingsForm').addEventListener('submit', (event) => {
   event.preventDefault();
   settings = formSettings();
+  const draft = manualDraft();
+  if ($('manualSetup').open && draft.model && draft.baseURL) {
+    const entry = activeEntry();
+    const unchanged = entry && entry.connection.baseURL === draft.baseURL && entry.connection.apiKey === draft.apiKey && entry.model === draft.model;
+    if (!unchanged) {
+      const connection = upsertConnection({ id: 'c' + Date.now().toString(36), provider: draft.provider, label: PRESETS[draft.provider].label, protocol: draft.protocol, baseURL: draft.baseURL, apiKey: draft.apiKey, models: [draft.model], local: /localhost|127\.0\.0\.1|192\.168\.|\.local\b/.test(draft.baseURL), addedAt: Date.now() });
+      connection.models = [draft.model, ...connection.models.filter((m) => m !== draft.model)];
+      settings.activeConnection = connection.id;
+      settings.activeModel = draft.model;
+    }
+  }
   saveSettings();
   applyTheme();
   updateModeUI();
@@ -616,6 +1188,7 @@ async function switchProject(id) {
   updateProjectUI();
   await restoreChat();
   renderWelcome();
+  renderPluginState();
   refreshFiles();
 }
 
@@ -868,12 +1441,14 @@ async function boot() {
   if (id && (await store.getProject(id))) await switchProject(id);
   else { await restoreChat(); updateProjectUI(); }
   renderWelcome();
+  renderPluginState();
   if (localStorage.getItem('oasis.files') === '1' || (localStorage.getItem('oasis.files') === null && innerWidth >= 1024 && workspace)) toggleFiles(true);
   refreshFiles();
   if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => {});
   if ('serviceWorker' in navigator && location.protocol !== 'file:') navigator.serviceWorker.register('sw.js').catch(() => {});
   const shared = new URLSearchParams(location.search);
   if (shared.get('repo')) { $('repoInput').value = shared.get('repo'); openProjects(); }
-  if (shared.get('q')) { $('input').value = shared.get('q'); autosize(); }
+  if (shared.get('q')) { $('input').value = shared.get('q'); autosize(); renderPluginSuggest(); }
+  if (!modelReady() && !workspace) $('connectInput').focus({ preventScroll: true });
 }
 boot().catch((error) => toast(error.message, 'error'));

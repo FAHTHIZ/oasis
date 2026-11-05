@@ -22,7 +22,7 @@ function estimateChars(messages) {
   return total;
 }
 
-export async function buildSystemPrompt({ workspace, skills, now = new Date() }) {
+export async function buildSystemPrompt({ workspace, skills, plugins = [], now = new Date() }) {
   const lines = [
     'You are OASIS, an independent coding agent running inside the OASIS app on the user\'s own device.',
     'You work on the project files stored on this device. You have no shell; use the file tools, grep and glob_files to explore, edit_file for precise changes, and run_javascript to execute code and tests in an isolated sandbox.',
@@ -51,6 +51,28 @@ export async function buildSystemPrompt({ workspace, skills, now = new Date() })
     const section = await skills.promptSection();
     if (section) lines.push('', section);
   }
+  // Plugins the user switched on: their skills are already loaded, so the
+  // model follows them without spending a step on load_skill.
+  if (skills && plugins.length) {
+    const loaded = [];
+    for (const plugin of plugins.slice(0, 4)) {
+      for (const name of (plugin.skills || []).slice(0, 3)) {
+        if (loaded.some((entry) => entry.name === name)) continue;
+        try { loaded.push({ plugin: plugin.name, ...(await skills.load(name)) }); } catch { /* skill missing offline */ }
+      }
+    }
+    if (loaded.length) {
+      lines.push('', 'Active plugins: ' + plugins.map((plugin) => plugin.name).join(', ') + '. The user turned these on; follow their skills below for this request.');
+      let budget = 18000;
+      for (const skill of loaded) {
+        const body = skill.body.slice(0, Math.min(7000, budget));
+        if (!body) break;
+        budget -= body.length;
+        lines.push('', '## Skill: ' + skill.name + ' (' + skill.plugin + ')', body);
+      }
+    }
+    for (const plugin of plugins) if (plugin.prompt) lines.push('', plugin.name + ': ' + plugin.prompt);
+  }
   return lines.join('\n');
 }
 
@@ -61,8 +83,12 @@ export class Agent {
    * @param {() => object} options.getContext tool context { workspace, sandbox, skills, github, fetch }
    * @param {(request) => Promise<boolean>} options.approve
    * @param {(event) => void} [options.onEvent]
+   * @param {(error, config) => object|null} [options.onModelFailure]
+   *   asked for the next model when a call fails for quota, rate-limit or
+   *   model reasons; return a config to switch to, or null to give up
    */
-  constructor({ getConfig, getContext, approve, onEvent = () => {}, chatImpl = chat }) {
+  constructor({ getConfig, getContext, approve, onEvent = () => {}, chatImpl = chat, onModelFailure = null }) {
+    this.onModelFailure = onModelFailure;
     this.getConfig = getConfig;
     this.getContext = getContext;
     this.approve = approve;
@@ -111,7 +137,31 @@ export class Agent {
     return true;
   }
 
-  async send(text, { maxSteps = DEFAULT_MAX_STEPS } = {}) {
+  /**
+   * One model call. When it fails because the model ran out of quota, is
+   * rate limited, retired, or cannot use tools, ask onModelFailure for the
+   * next model and carry on with the same conversation.
+   */
+  async callModel(config, request, step) {
+    let current = config;
+    const tried = new Set();
+    while (true) {
+      tried.add((current.connectionId || '') + '|' + current.model);
+      try {
+        const options = this.onModelFailure ? { ...current, maxRetries: Number.isInteger(current.maxRetries) ? current.maxRetries : 1 } : current;
+        return { reply: await this.chatImpl(options, request(current)), config: current };
+      } catch (error) {
+        if (error && error.name === 'AbortError') throw error;
+        if (!this.onModelFailure) throw error;
+        const next = await this.onModelFailure(error, current);
+        if (!next || tried.has((next.connectionId || '') + '|' + next.model)) throw error;
+        this.onEvent({ type: 'model_switch', from: current.model, to: next.model, reason: error.message, step });
+        current = next;
+      }
+    }
+  }
+
+  async send(text, { maxSteps = DEFAULT_MAX_STEPS, plugins = [] } = {}) {
     if (this.running) throw new Error('OASIS is already working. Stop it first.');
     this.running = true;
     this.controller = new AbortController();
@@ -120,22 +170,28 @@ export class Agent {
     this.onEvent({ type: 'user', content: String(text) });
     const recent = [];
     let finalText = '';
+    let system = null;
     try {
       for (let step = 0; step < maxSteps; step++) {
         const config = this.getConfig();
         const ctx = { ...this.getContext(), signal, onTodos: (todos) => { this.todos = todos; this.onEvent({ type: 'todos', todos }); } };
         await this.compact(config, signal);
-        const system = await buildSystemPrompt({ workspace: ctx.workspace, skills: ctx.skills });
+        // The prompt lists the project's files, so rebuild it only after the
+        // file set may have changed (keeps slow phones responsive).
+        if (system === null) system = await buildSystemPrompt({ workspace: ctx.workspace, skills: ctx.skills, plugins });
         this.onEvent({ type: 'thinking', step });
         let streamed = '';
-        const reply = await this.chatImpl(config, {
-          messages: [{ role: 'system', content: system }, ...this.messages],
-          tools: TOOL_DEFINITIONS,
-          signal,
-          fetchImpl: ctx.providerFetch,
-          onText: (delta) => { streamed += delta; this.onEvent({ type: 'delta', delta, step }); },
-          onRetry: (attempt, error) => this.onEvent({ type: 'retry', attempt, message: error.message })
-        });
+        const { reply } = await this.callModel(config, () => {
+          streamed = '';
+          return {
+            messages: [{ role: 'system', content: system }, ...this.messages],
+            tools: TOOL_DEFINITIONS,
+            signal,
+            fetchImpl: ctx.providerFetch,
+            onText: (delta) => { streamed += delta; this.onEvent({ type: 'delta', delta, step }); },
+            onRetry: (attempt, error) => this.onEvent({ type: 'retry', attempt, message: error.message })
+          };
+        }, step);
         if (reply.usage) {
           this.usage.input += reply.usage.input || 0;
           this.usage.output += reply.usage.output || 0;
@@ -211,6 +267,7 @@ export class Agent {
           }
           this.messages.push({ role: 'tool', tool_call_id: call.id, content: String(result) });
           this.onEvent({ type: 'tool_result', id: call.id, name, ok, content: String(result) });
+          if (ok && (name === 'write_file' || name === 'delete_file')) system = null;
         }
         if (step === maxSteps - 1) {
           finalText = 'Stopped after ' + maxSteps + ' steps. Send "continue" to keep going.';

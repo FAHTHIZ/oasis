@@ -11,7 +11,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="OASIS">
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; font-src 'self'; connect-src 'self' https: http://localhost:* http://127.0.0.1:*; frame-src 'self' blob: data:; child-src 'self' blob:; worker-src 'self' blob:; manifest-src 'self'; base-uri 'self'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; font-src 'self'; connect-src 'self' https: http:; frame-src 'self' blob: data:; child-src 'self' blob:; worker-src 'self' blob:; manifest-src 'self'; base-uri 'self'; form-action 'none'">
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icons/oasis-mark.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
@@ -32,6 +32,9 @@
       <button class="icon-btn" id="installButton" hidden title="Install OASIS" aria-label="Install OASIS">
         <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M10 3v9m0 0l-3.5-3.5M10 12l3.5-3.5M4 15.5h12" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>
       </button>
+      <button class="icon-btn" id="pluginsButton" title="Plugins" aria-label="Plugins">
+        <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M8 3.5a1.75 1.75 0 013.5 0V5H15v3.5h-1.5a1.75 1.75 0 000 3.5H15V16H11.5v-1.5a1.75 1.75 0 00-3.5 0V16H4.5v-3.5H6a1.75 1.75 0 000-3.5H4.5V5H8z" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg>
+      </button>
       <button class="icon-btn" id="filesButton" title="Files" aria-label="Files">
         <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M3 5.5A1.5 1.5 0 014.5 4h3.3l1.6 1.8h6.1A1.5 1.5 0 0117 7.3v7.2a1.5 1.5 0 01-1.5 1.5h-11A1.5 1.5 0 013 14.5z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg>
         <span class="badge" id="changesBadge" hidden>0</span>
@@ -47,22 +50,32 @@
     <section class="chat" id="chat" aria-live="polite">
       <div class="welcome" id="welcome">
         <img src="icons/oasis-mark.svg" alt="" width="64" height="64" class="welcome-mark">
-        <h1>Build from anywhere.</h1>
-        <p class="lede">OASIS runs right here on this device. Your projects and keys never leave it, except to reach the model provider you choose.</p>
+        <h1 id="welcomeTitle">Build from anywhere.</h1>
+        <p class="lede" id="welcomeLede">OASIS runs right here on this device. Your projects and keys never leave it, except to reach the model provider you choose.</p>
+        <form class="connect-card" id="connectForm" autocomplete="off">
+          <label for="connectInput">Paste an API key or a model link</label>
+          <div class="row"><input id="connectInput" placeholder="sk-or-…  sk-ant-…  AIza…  hf_…  or ollama.com/library/qwen3-coder" autocapitalize="off" spellcheck="false" enterkeyhint="go"><button class="btn primary" type="submit" id="connectButton">Connect</button></div>
+          <ol class="connect-log" id="connectLog" aria-live="polite"></ol>
+          <div class="connect-found" id="connectFound" hidden></div>
+          <p class="hint">OASIS recognises the provider, picks the best model your key can use, tests that it can call tools, and keeps the next-best models ready in case one runs out. Works with OpenRouter, Anthropic, OpenAI, Gemini, Groq, DeepSeek, Mistral, xAI, Moonshot, Hugging Face, Together, Fireworks, Cerebras, NVIDIA, Ollama, LM Studio, llama.cpp and any OpenAI-compatible server. No key yet? <a href="https://openrouter.ai/keys" target="_blank" rel="noopener">Get a free OpenRouter key</a>.</p>
+        </form>
         <div class="setup-steps" id="setupSteps"></div>
+        <div class="plugin-strip" id="pluginStrip"></div>
         <div class="suggestions" id="suggestions"></div>
       </div>
       <div class="transcript" id="transcript"></div>
     </section>
   <footer class="composer-wrap">
     <div class="todos" id="todos" hidden></div>
+    <div class="plugin-suggest" id="pluginSuggest" hidden></div>
     <form class="composer" id="composer" autocomplete="off">
       <textarea id="input" rows="1" placeholder="Ask OASIS to build, fix or explain…" aria-label="Message OASIS" enterkeyhint="send"></textarea>
       <div class="composer-row">
         <button type="button" class="chip" id="modeChip" title="Approval mode" aria-haspopup="menu">
           <span class="dot"></span><span id="modeLabel">Ask first</span>
         </button>
-        <span class="model-chip" id="modelChip" title="Model"></span>
+        <button type="button" class="chip plugin-chip" id="composerPlugins" title="Plugins" aria-label="Plugins"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M8 3.5a1.75 1.75 0 013.5 0V5H15v3.5h-1.5a1.75 1.75 0 000 3.5H15V16H11.5v-1.5a1.75 1.75 0 00-3.5 0V16H4.5v-3.5H6a1.75 1.75 0 000-3.5H4.5V5H8z" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg><span id="pluginCount"></span></button>
+        <button type="button" class="model-chip" id="modelChip" title="Model" aria-haspopup="menu"></button>
         <span class="spacer"></span>
         <span class="usage" id="usage"></span>
         <button type="submit" class="send" id="sendButton" aria-label="Send">
@@ -91,6 +104,7 @@
       <div class="file-list" id="fileList"></div>
       <div class="changes-list" id="changesList" hidden></div>
       <div class="panel-foot" id="panelFoot">
+        <button class="btn ghost small" id="previewButton" hidden>Preview</button>
         <button class="btn ghost small" id="exportButton">Export zip</button>
         <button class="btn primary small" id="pushButton" hidden>Push to GitHub</button>
       </div>
@@ -130,7 +144,16 @@
   <div class="sheet-head"><h2 id="settingsTitle">Settings</h2><button class="icon-btn small" data-close="settingsSheet" aria-label="Close"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M5 5l10 10M15 5L5 15" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg></button></div>
   <form class="sheet-body settings" id="settingsForm">
     <fieldset>
-      <legend>Model</legend>
+      <legend>Models</legend>
+      <ul class="connection-list" id="connectionList"></ul>
+      <label for="settingsConnectInput">Add a key or model link</label>
+      <div class="row"><input id="settingsConnectInput" placeholder="Paste an API key, a model page link or a server address" autocapitalize="off" spellcheck="false"><button class="btn" type="button" id="settingsConnectButton">Connect</button></div>
+      <ol class="connect-log" id="settingsConnectLog" aria-live="polite"></ol>
+      <label class="check"><input type="checkbox" id="autoSwitch" checked> Switch to the next best model automatically when one runs out of credit, is rate limited or fails</label>
+    </fieldset>
+    <details class="manual" id="manualSetup">
+    <summary>Manual setup</summary>
+    <fieldset>
       <label for="providerSelect">Provider</label>
       <select id="providerSelect"></select>
       <p class="hint" id="providerNote"></p>
@@ -142,7 +165,9 @@
       <div class="row"><input id="keyInput" type="password" autocomplete="off" spellcheck="false"><button class="btn" type="button" id="toggleKey">Show</button></div>
       <p class="hint">Stored only on this device and sent only to the provider above.</p>
       <div class="row"><button class="btn" type="button" id="testButton">Test connection</button><span class="test-result" id="testResult" role="status"></span></div>
+      <p class="hint">Saving with Manual setup open adds this as a connection and makes it the active model.</p>
     </fieldset>
+    </details>
     <fieldset>
       <legend>Behaviour</legend>
       <label for="modeSelect">Approvals</label>
@@ -179,6 +204,7 @@
   <div class="sheet-head">
     <h2 id="editorTitle" class="mono"></h2>
     <div class="row">
+      <button class="btn small ghost" id="editorPreview" hidden>Preview</button>
       <button class="btn small ghost" id="diffToggle" hidden>Diff</button>
       <button class="btn small ghost" id="revertButton" hidden>Revert</button>
       <button class="btn small ghost danger" id="deleteFileButton">Delete</button>
@@ -188,6 +214,26 @@
   </div>
   <textarea class="editor" id="editor" spellcheck="false" autocapitalize="off" autocomplete="off" wrap="off"></textarea>
   <div class="diff" id="diffView" hidden></div>
+</section>
+
+<section class="sheet" id="pluginsSheet" role="dialog" aria-modal="true" aria-labelledby="pluginsTitle" hidden>
+  <div class="sheet-head"><h2 id="pluginsTitle">Plugins</h2><button class="icon-btn small" data-close="pluginsSheet" aria-label="Close"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M5 5l10 10M15 5L5 15" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg></button></div>
+  <div class="sheet-body">
+    <p class="hint">Tap a plugin to switch it on for this project; its expert skills are loaded into every request. Tap a starter to run it right away. OASIS also suggests the right plugin above the message box as you type.</p>
+    <div class="plugin-grid" id="pluginGrid"></div>
+  </div>
+</section>
+
+<section class="sheet wide" id="previewSheet" role="dialog" aria-modal="true" aria-labelledby="previewTitle" hidden>
+  <div class="sheet-head">
+    <h2 id="previewTitle" class="mono">Preview</h2>
+    <div class="row">
+      <select id="previewSelect" aria-label="Page to preview"></select>
+      <button class="btn small ghost" id="previewReload">Reload</button>
+      <button class="icon-btn small" data-close="previewSheet" aria-label="Close"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M5 5l10 10M15 5L5 15" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg></button>
+    </div>
+  </div>
+  <iframe class="preview-frame" id="previewFrame" title="Live preview" sandbox="allow-scripts allow-forms allow-modals allow-popups"></iframe>
 </section>
 
 <section class="sheet" id="approvalSheet" role="alertdialog" aria-modal="true" aria-labelledby="approvalTitle" hidden>
@@ -221,6 +267,8 @@
   <button role="menuitemradio" data-mode="edits"><strong>Auto edit</strong><span>Edit files freely, ask for the rest</span></button>
   <button role="menuitemradio" data-mode="auto"><strong>Full auto</strong><span>Never asks except before pushing</span></button>
 </div>
+
+<div class="menu" id="modelMenu" role="menu" hidden></div>
 
 <div class="toasts" id="toasts" aria-live="assertive"></div>
 <script type="module" src="main.mjs"></script>
