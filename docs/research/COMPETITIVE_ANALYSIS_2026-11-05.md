@@ -4,7 +4,7 @@
 
 **Question.** How many steps does a new user need before an agent is working on their code, on any device, and what happens when the model runs out? We compared OASIS with Claude Code, OpenAI Codex, DeepSeek Harness, Codewhale (formerly DeepSeek-TUI), Qwen Code, Hermes Agent, OpenCode and Gemini CLI.
 
-**OASIS snapshot.** The `main` branch on November 5, 2026, after the universal-app 1.3 work (smart connect, automatic model fallback, built-in plugins, lite mode; the live preview was added and then removed as unnecessary). We read the source and ran the app's tests: `test/app-connect.test.mjs` (20 tests) and `test/app-e2e.test.mjs`, which drives the real app in Chromium against a mock provider.
+**OASIS snapshot.** The `main` branch on November 5, 2026, after the universal-app 1.3 work (smart connect, automatic model fallback, built-in plugins, lite mode; the live preview was added and then removed as unnecessary) and the unification work that followed: `oasis web` and the desktop app now serve the same app, the terminal connects from a single paste, and the app gained steering, images and chats. We read the source and ran the tests: `test/app-connect.test.mjs`, `test/app-e2e.test.mjs` (the app on its own, in Chromium against a mock provider), `test/app-runtime-e2e.test.mjs` (the app against a real `oasis web` server) and `test/cli-connect.test.mjs`.
 
 **Method.** We read each competitor's public documentation, changelogs and issue trackers (all linked below). We did not run them side by side. Where a document might be out of date, we say so.
 
@@ -12,7 +12,7 @@
 
 | | First run to a working agent | Picks the model for you | Model runs out mid-task | Runs on a phone | Plugins |
 |---|---|---|---|---|---|
-| **OASIS app** | Paste a key, model link or server address, in the setup box or the message box | Yes: detects the provider from the key, ranks the models it can use, tool-tests them | Switches to the next model automatically, including free and local models on credit errors | Yes, the whole agent runs on the device; installable on any OS; works offline once installed | 13 built-in, suggested while you type, one tap |
+| **OASIS** (app, desktop, terminal) | Paste a key, model link or server address: into the app's message box, or at the terminal's first run (`oasis connect`) | Yes: detects the provider from the key, ranks the models it can use, tool-tests them | Switches to the next model automatically; the chain is built from the same paste | Yes: the same app runs the agent on the phone, or drives your computer's agent over a private link | 9 built-in, suggested while you type, one tap |
 | Claude Code | Sign in or set a key in the terminal | No (Anthropic models; aliases) | Retries; no switch to another provider | Remote: the Code tab in the Claude app drives cloud sessions or your computer | Plugin marketplaces |
 | Codex | Sign in with ChatGPT or a key | No | No built-in failover between providers | Desktop app; CLI | Plugin directory (90+), skills, apps, MCP |
 | DeepSeek Harness | `npx @deepseek-ai/dsh web`, then configure | No | Not documented | Web UI on your computer; Electron app | Everything is a plugin |
@@ -43,7 +43,7 @@ None of the eight documents recognising the provider from a pasted key, or tool-
 
 **Others.** Hermes Agent has the most complete documented fallback: a `fallback_providers` chain in `config.yaml` (or `hermes fallback add`) that moves on 429, 5xx, 401 and 403 and keeps the conversation. Activation is one switch per session, and the chain is set up by hand ([Hermes fallback providers](https://hermes-agent.nousresearch.com/docs/user-guide/features/fallback-providers), [agent loop](https://hermes-agent.nousresearch.com/docs/developer-guide/agent-loop)). Codex CLI has no built-in failover between providers; the documented workarounds are an external gateway or a second profile ([Codex outage resilience guide](https://codex.danielvaughan.com/2026/07/27/codex-cli-api-outage-resilience-multi-provider-failover-gateway-routing-defensive-configuration/), [openai/codex#45839](https://github.com/openai/codex/issues/45839)). We found no documented automatic switch in the others.
 
-**OASIS CLI.** The CLI takes an ordered fallback chain (`--fallback-model gpt-6.1-mini,openrouter:qwen/qwen3-coder,ollama:qwen3:4b`) that can cross providers, switches on credit, rate-limit, overload and model-not-found errors, and returns to the main provider after a cooldown. It also rotates API keys within one provider (`OASIS_API_KEY_POOL`) and routes easy read-only requests to a cheaper model. Unlike the app, it does not yet build the chain by itself from the models your keys can reach; you list the entries.
+**OASIS terminal and desktop.** Pasting a key at the first run, into `oasis connect`, or into the app opened from `oasis web` or the desktop app, saves the best model and the next three as `fallbackModel`, the same chain the app builds. The CLI also takes a hand-written chain that crosses providers (`--fallback-model gpt-6.1-mini,openrouter:qwen/qwen3-coder,ollama:qwen3:4b`), switches on credit, rate-limit, overload and model-not-found errors, returns to the main provider after a cooldown, rotates API keys within one provider (`OASIS_API_KEY_POOL`) and routes easy read-only requests to a cheaper model.
 
 ## Any device, including slow ones
 
@@ -52,6 +52,16 @@ None of the eight documents recognising the provider from a pasted key, or tool-
 **Others.** Claude Code has no separate mobile app; the Code tab in the Claude app runs cloud sessions or controls your computer remotely ([Claude Code on mobile](https://code.claude.com/docs/en/mobile.md), [changelog](https://code.claude.com/docs/en/changelog)). Hermes Agent reaches phones through about 20 messaging platforms, with the agent running on a computer or server ([Hermes integrations](https://hermes-agent.nousresearch.com/docs/integrations), [releases](https://github.com/NousResearch/hermes-agent/releases)). Qwen Code ships desktop, web shell, IDE and chat-bot front ends ([Qwen Code](https://qwen.ai/qwencode)). DeepSeek Harness is web-UI first with an Electron desktop app and no terminal UI ([DeepSeek Harness](https://www.deepseek.com/harness/en/), [wal.sh survey](https://wal.sh/research/2026-q2-cli-coding-agents/)). Codex runs in its desktop app and CLI ([OpenAI](https://openai.com/index/codex-for-almost-everything/)).
 
 What OASIS does not have: hosted cloud sessions that keep running when the device sleeps, and messaging-app front ends. On a phone, the app cannot run shell commands or Python; it says so and gives the commands to run elsewhere.
+
+## One app or several
+
+**OASIS.** One app serves every surface except the terminal. On a phone or the web it runs the agent itself; opened from `oasis web` or the desktop app it drives the full agent on that computer (real files, shell, git, MCP) with the same chat, approvals, Changes tab, plugins, steering, images and chats. The terminal is the same runtime with a text interface. Pairing a phone with your computer is one QR code (**File → Connect a phone…**). The earlier browser workspace is still at `/classic` while its last panels (terminal pane, run monitor, extensions manager) move into the app.
+
+**Others.** Claude Code spreads across a terminal, IDE extensions, a desktop app, the web and the Code tab in the Claude mobile app, which runs cloud sessions or controls your computer ([Claude Code on mobile](https://code.claude.com/docs/en/mobile.md)). Codex has a CLI, IDE extensions, a desktop app and cloud tasks ([OpenAI](https://openai.com/index/codex-for-almost-everything/)). DeepSeek Harness is a web UI with an Electron wrapper ([DeepSeek Harness](https://www.deepseek.com/harness/en/)). These are capable products; the difference is that OASIS does not ask you to learn a second interface when you change device.
+
+## What we removed
+
+Polish here meant cutting as much as adding. Removed or folded in since the 1.3 work: the live preview pane (an extra panel most tasks did not need; the agent still runs the project's own checks), four plugins that duplicated default behaviour (13 to 9), the multi-step welcome screen, the APK build (the installable app covers Android), the per-turn verification breakdown and session ID line in the terminal (one plain line now), and the separate browser workspace as the default page of `oasis web`.
 
 ## Plugins
 
@@ -63,7 +73,7 @@ OASIS's catalog is far smaller than Codex's. The difference is discovery: OASIS 
 
 ## What to do next
 
-1. **Bring model fallback to the CLI and desktop app.** Reuse the app's failure classes and chain order across providers, not only keys.
+1. **Retire `/classic`.** Move its terminal pane, run monitor and extensions manager into the app, then remove the old page.
 2. **Run a same-model head-to-head on task success.** Run OASIS against Claude Code, Codex and OpenCode on the eval set with the same model. This is still the main missing evidence (see the [October 31 report](COMPETITIVE_ANALYSIS_2026-10-31.md)).
 3. **Grow the plugin catalog** with MCP-backed plugins (databases, issue trackers) in the app, behind the same one-tap flow.
 4. **Optional hosted runner** for long tasks on phones, keeping on-device as the default.
