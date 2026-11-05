@@ -60,6 +60,11 @@ export async function workspaceDoctor(root, { env = process.env, session = null 
     const mcp = session.mcpClients ? session.mcpClients.size : 0;
     lines.push('  MCP servers connected: ' + mcp + '; background agents: ' + (session.agentTasks ? [...session.agentTasks.agents.values()].filter((task) => task.status === 'running').length : 0) + ' running');
   }
+  try {
+    const sounds = await import('./sounds.mjs');
+    const off = sounds.soundsOffReason({ env });
+    lines.push('  Sound effects: ' + (off ? 'off (' + off + ')' : 'on, volume ' + sounds.soundVolume(env)));
+  } catch {}
   lines.push(problems.length ? 'Problems:\n' + problems.map((item) => '  - ' + item).join('\n') : 'No problems found.');
   lines.push('For the full report (provider test, MCP config, memory files) run oasis doctor --test-provider in a terminal.');
   return lines.join('\n');
