@@ -126,3 +126,47 @@ test('undelivered runtime steering is preserved as bounded session state', async
   assert.deepEqual(bounded.pendingSteering.slice(0, -1), Array.from({ length: 19 }, (_, i) => 'saved ' + (i + 3)));
   assert.equal(bounded.pendingSteering.at(-1), 'x'.repeat(20_000));
 });
+
+test('!commands are split like a shell, and anything needing a real shell goes through sh -c', async () => {
+  const { shellWords } = await import('../app/core/runtime.mjs');
+  assert.deepEqual(shellWords('npm test -- --grep "adds two"'), ['npm', 'test', '--', '--grep', 'adds two']);
+  assert.deepEqual(shellWords("git log --format='%h %s' -3"), ['git', 'log', '--format=%h %s', '-3']);
+  assert.equal(shellWords('npm test | tail -5'), null);
+  assert.equal(shellWords('echo $(whoami)'), null);
+  assert.equal(shellWords('echo "open'), null);
+});
+
+test('!command runs through the runtime with approval, and its output goes with the next message', async () => {
+  const calls = [];
+  const events = [];
+  let polled = 0;
+  const client = {
+    async api(url, { body } = {}) {
+      calls.push([url, body]);
+      if (url === '/api/terminal/command') return { jobId: 'j1' };
+      if (url.startsWith('/api/jobs/j1?')) {
+        polled++;
+        return polled === 1
+          ? { status: 'running', events: [{ id: 1, type: 'approval_required', data: { approvalId: 'a1', prompt: 'Run npm test?' } }] }
+          : { status: 'completed', events: [{ id: 2, type: 'terminal_output', data: { exitCode: 1, approved: true, output: 'not ok 1 adds\n' } }] };
+      }
+      if (url === '/api/chat') return { jobId: 'j2', sessionId: 's' };
+      if (url.startsWith('/api/jobs/j2?')) return { status: 'completed', events: [{ id: 1, type: 'completed', data: {} }] };
+      return {};
+    }
+  };
+  const asked = [];
+  const agent = new RuntimeAgent({ client, pollMs: 1, onEvent: (e) => events.push(e), approve: async (req) => { asked.push(req.args.prompt); return true; } });
+  await agent.runShell('npm test');
+  assert.deepEqual(calls[0], ['/api/terminal/command', { command: 'npm', args: ['test'] }]);
+  assert.deepEqual(asked, ['Run npm test?']);
+  assert.ok(calls.some(([url, body]) => url === '/api/jobs/j1/approval' && body.approved === true));
+  const result = events.find((e) => e.type === 'tool_result');
+  assert.equal(result.ok, false);
+  assert.match(result.content, /not ok 1 adds\n\[exit 1\]/);
+  assert.equal(events[0].content, '!npm test');
+  await agent.send('fix it');
+  const chat = calls.find(([url]) => url === '/api/chat')[1];
+  assert.match(chat.message, /^Commands I ran in my terminal \(for context\):\n<bash-input>npm test<\/bash-input>\n<bash-output exit-code="1">\nnot ok 1 adds\n<\/bash-output>\n\nfix it$/);
+  assert.deepEqual(agent.pendingShell, []);
+});

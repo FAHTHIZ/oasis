@@ -109,11 +109,12 @@ export class RuntimeAgent {
     this.sessionId = '';
     this.jobId = '';
     this.controller = null;
+    this.pendingShell = [];
   }
 
   emit(type, data = {}) { try { this.onEvent({ type, ...data }); } catch { /* UI errors never stop the agent */ } }
 
-  reset() { this.sessionId = ''; this.messages = []; this.todos = []; this.usage = { input: 0, output: 0 }; }
+  reset() { this.pendingShell = []; this.sessionId = ''; this.messages = []; this.todos = []; this.usage = { input: 0, output: 0 }; }
 
   load(state) {
     if (state && typeof state === 'object' && !Array.isArray(state) && typeof state.sessionId === 'string') this.sessionId = state.sessionId;
@@ -138,6 +139,64 @@ export class RuntimeAgent {
     if (this.controller) this.controller.abort();
   }
 
+  /**
+   * `!npm test` in the message box: run one command on this computer, through
+   * the same approval as the agent's commands, without asking the model. The
+   * output is shared with the next message, as in the terminal.
+   */
+  async runShell(raw) {
+    if (this.busy) throw new Error('OASIS is still working on the last message.');
+    const line = String(raw || '').trim();
+    if (!line) return;
+    this.busy = true;
+    this.controller = new AbortController();
+    const signal = this.controller.signal;
+    const words = shellWords(line);
+    const command = words && words.length ? words[0] : 'sh';
+    const args = words && words.length ? words.slice(1) : ['-c', line];
+    const id = 'shell_' + Date.now();
+    this.emit('user', { content: '!' + line });
+    this.emit('thinking');
+    this.emit('assistant', { content: '', toolCalls: [{ id, name: 'run_command', args: { command: line } }] });
+    this.emit('tool_start', { id, name: 'run_command', args: { command: line }, open: true });
+    let content = '';
+    let ok = false;
+    try {
+      const started = await this.client.api('/api/terminal/command', { method: 'POST', signal, body: { command, args } });
+      this.jobId = started.jobId;
+      let after = 0;
+      for (;;) {
+        const job = await this.client.api('/api/jobs/' + this.jobId + '?after=' + after, { signal });
+        for (const event of job.events || []) {
+          after = Math.max(after, event.id);
+          const data = event.data || {};
+          if (event.type === 'approval_required') {
+            const value = await this.approve({ name: 'run_command', args: { prompt: data.prompt, suggestion: data.suggestion, risky: data.risky }, runtime: true });
+            await this.client.api('/api/jobs/' + this.jobId + '/approval', { method: 'POST', body: { approvalId: data.approvalId, approved: value === 'always' || value === true, always: value === 'always' } }).catch(() => {});
+          } else if (event.type === 'terminal_output') {
+            if (data.approved === false) { content = 'Not run: you declined it.'; break; }
+            const code = data.exitCode === undefined || data.exitCode === null ? 'unknown' : data.exitCode;
+            const output = String(data.output || '').replace(/\s+$/, '');
+            ok = code === 0;
+            content = (output || '(no output)') + (ok ? '' : '\n[exit ' + code + (data.timedOut ? ', timed out' : '') + ']');
+            this.pendingShell.push({ command: line, code, output: output.slice(-12000) });
+            if (this.pendingShell.length > 10) this.pendingShell.shift();
+          } else if (event.type === 'failed') content = 'Could not run it: ' + (data.message || 'unknown error');
+        }
+        if (['completed', 'error', 'cancelled'].includes(job.status)) { if (job.status === 'cancelled' && !content) content = 'Stopped.'; break; }
+        await pause(this.pollMs, signal);
+      }
+    } catch (error) {
+      content = signal.aborted ? 'Stopped.' : 'Could not run it: ' + (error.message || String(error));
+    } finally {
+      this.emit('tool_result', { id, name: 'run_command', ok, content: content.slice(0, 6000) });
+      this.busy = false;
+      this.jobId = '';
+      this.controller = null;
+      this.emit('done');
+    }
+  }
+
   async send(text, { plugins = [], images = [] } = {}) {
     if (this.busy) throw new Error('OASIS is still working on the last message.');
     let message = String(text || '').trim();
@@ -149,6 +208,11 @@ export class RuntimeAgent {
     this.emit('user', { content: message, images: pictures.length });
     const names = plugins.map((plugin) => plugin && plugin.name).filter(Boolean);
     const skills = plugins.flatMap((plugin) => plugin && Array.isArray(plugin.skills) ? plugin.skills : []);
+    if (this.pendingShell.length) {
+      const block = this.pendingShell.map((item) => '<bash-input>' + item.command + '</bash-input>\n<bash-output exit-code="' + item.code + '">\n' + item.output + '\n</bash-output>').join('\n\n');
+      this.pendingShell = [];
+      message = 'Commands I ran in my terminal (for context):\n' + block + '\n\n' + message;
+    }
     if (names.length) message += '\n\n(Use the ' + names.join(', ') + ' plugin' + (names.length > 1 ? 's' : '') + (skills.length ? ': skills ' + skills.join(', ') : '') + '.)';
     if (message.length > 12000) message = message.slice(0, 12000);
     // The app renders one bubble per model step: thinking, streamed text,
@@ -280,6 +344,32 @@ export class RuntimeAgent {
       this.emit('done');
     }
   }
+}
+
+/** Split `npm test -- --watch` into words; null when it needs a real shell (pipes, `;`, `$(…)`). */
+export function shellWords(text) {
+  const out = [];
+  let cur = '';
+  let has = false;
+  let quote = null;
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i];
+    if (quote) {
+      if (c === quote) quote = null;
+      else if (c === '\\' && quote === '"' && i + 1 < text.length) cur += text[++i];
+      else cur += c;
+      continue;
+    }
+    if (c === "'" || c === '"') { quote = c; has = true; continue; }
+    if (c === '\\' && i + 1 < text.length) { cur += text[++i]; has = true; continue; }
+    if (/\s/.test(c)) { if (has || cur) { out.push(cur); cur = ''; has = false; } continue; }
+    if (/[|&;<>`]/.test(c) || (c === '$' && text[i + 1] === '(')) return null;
+    cur += c;
+    has = true;
+  }
+  if (quote) return null;
+  if (has || cur) out.push(cur);
+  return out;
 }
 
 /** Read-only view of the runtime's folder for the Files panel. */
