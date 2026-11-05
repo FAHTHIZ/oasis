@@ -5,7 +5,7 @@
 </p>
 
 <h1 align="center">OASIS</h1>
-<p align="center"><strong>The open-source coding agent whose safety and reliability live in the runtime, not the prompt.</strong><br/>Any model, from a 4B model on your laptop to the frontier.</p>
+<p align="center"><strong>One open-source coding agent for your phone, your browser, your desktop and your terminal.</strong><br/>Paste a key and start. Any model, from a 4B model on your laptop to the frontier. Safety and reliability live in the runtime, not the prompt.</p>
 
 <p align="center">
   <a href="https://github.com/FAHTHIZ/oasis/actions/workflows/quality.yml"><img src="https://github.com/FAHTHIZ/oasis/actions/workflows/quality.yml/badge.svg?branch=main" alt="Quality checks" /></a>
@@ -22,18 +22,38 @@
   <a href="https://fahthiz.github.io/oasis/"><strong>Website</strong></a> ·
   <a href="https://fahthiz.github.io/oasis/app/"><strong>Open the app</strong></a> ·
   <a href="#install"><strong>Install</strong></a> ·
-  <a href="#terminal-or-browser">Web UI</a> ·
+  <a href="#start-in-a-minute">Start</a> ·
   <a href="#measured-not-claimed">Benchmarks</a> ·
-  <a href="#a-one-minute-tour">Tour</a> ·
+  <a href="#terminal">Terminal</a> ·
   <a href="docs/USER_GUIDE_MAP.md">User guide</a> ·
   <a href="docs/INSTALL.md">Install guide</a> ·
   <a href="CHANGELOG.md">Changelog</a>
 </p>
 
+## Start in a minute
+
+| Where | Do this |
+| --- | --- |
+| **Phone, tablet or any browser** | [Open the app](https://fahthiz.github.io/oasis/app/), paste an API key (or a local model address) into the message box, and ask. Add it to your home screen to install it. |
+| **Your computer, in a terminal** | Install (below), run `oasis` in your project and paste a key when it asks. |
+| **Your computer, in a window** | Run `oasis web --open` in your project, or [download the desktop app](https://github.com/FAHTHIZ/oasis/releases/latest). |
+
+That paste is the whole setup. OASIS works out the provider from the key or address, picks the best model for coding, checks that it can call tools, and keeps the next models as backups that take over if the first one runs out of credit or hits a rate limit. It works with OpenAI, Anthropic, OpenRouter, Gemini, Groq, DeepSeek, Mistral, xAI, Hugging Face and others, any OpenAI-compatible server, and Ollama, LM Studio or llama.cpp on your own machine.
+
+## One app on every device
+
 <p align="center">
-  <a href="assets/demo/oasis-terminal-demo.mp4"><img src="assets/demo/oasis-terminal-demo.gif" alt="OASIS in a terminal: it finds a time-zone bug, fixes it with a one-line change, adds a regression test, runs the tests after approval, reviews its diff, then refuses a destructive git clean" width="100%" /></a>
-  <br/><sub>Real OASIS 1.0 runtime, tools, approval prompt and safety policy; the model's replies are scripted so anyone can reproduce it with <a href="scripts/demo/">scripts/demo/</a>. <a href="assets/demo/oasis-terminal-demo.mp4">MP4</a> · <a href="assets/demo/oasis-terminal-demo.cast">asciicast</a></sub>
+  <img src="assets/screens/app-computer-approval.png" alt="The OASIS app on a computer: the agent wrote three files and asks before running a command, showing the exact command and a Risky badge" width="68%" />
+  <img src="assets/screens/app-phone.png" alt="The OASIS app on a phone: a pasted screenshot sent to the agent, with the chat and tool steps above" width="25%" />
+  <br/><sub>The real app and runtime from <code>test/app-runtime-e2e.test.mjs</code>; the model's replies are scripted.</sub>
 </p>
+
+The app is the same on a phone, in a browser and in the desktop app. Where it runs decides what it can touch:
+
+- **Opened from your computer** (`oasis web` or the desktop app), it drives the full agent on that computer: your real files, shell, git and MCP tools, with every command shown before it runs and every edit checkpointed so it can be undone.
+- **Opened on its own** (a phone, or the web link), the agent runs inside the app. It works on projects from GitHub, a ZIP or a folder, edits with diffs, runs JavaScript in a sandbox, and pushes to a branch or opens a pull request after you approve. It cannot run shell commands; for that, [connect your phone to your computer](docs/MOBILE.md#browser-workspace-from-your-phone) (**File → Connect a phone…** in the desktop app).
+
+Everything else is the same everywhere: type while it works to steer it, paste or drop screenshots, keep several chats per project, pick a built-in plugin with one tap (Debugger, Test writer, Code reviewer, Security audit, Web app studio, API builder, Mobile apps, Docs writer, GitHub), and switch to lite mode on old phones and low-end computers. The installed app works offline, has no OASIS account and no OASIS server, and only talks to the model provider you chose.
 
 ## Why OASIS
 
@@ -68,38 +88,23 @@ OASIS fixes each of those in the runtime, so the fix holds whichever model you c
 </tr>
 </table>
 
-## Terminal or browser
+## Terminal
 
-Same agent, same safety policy, two front ends. `oasis web --open` (or the desktop app) opens the same app you use on a phone, now driving the agent on your computer: paste a key to connect, then chat, approve commands in a sheet that shows the exact command, and browse the folder and its git changes. The previous browser workspace, shown below with steering and per-step activity, is still at `/classic` while its remaining features move into the app.
+The terminal (`oasis`) is the same agent with the same safety rules, for people who live in a shell, for SSH and for scripts and CI.
 
 <p align="center">
-  <a href="assets/demo/oasis-web-demo.mp4"><img src="assets/demo/oasis-web-demo.gif" alt="OASIS web workspace: the user asks for a bug fix, sends a steering message while the agent works, approves two edits and a test run, then reviews the diff in the Changes panel" width="100%" /></a>
-  <br/><sub>Real OASIS web server, browser UI and tools; scripted model replies, reproducible with <a href="scripts/demo/record-web-demo.mjs">scripts/demo/record-web-demo.mjs</a>. <a href="assets/demo/oasis-web-demo.mp4">MP4</a></sub>
+  <a href="assets/demo/oasis-terminal-demo.mp4"><img src="assets/demo/oasis-terminal-demo.gif" alt="OASIS in a terminal: it finds a time-zone bug, fixes it with a one-line change, adds a regression test, runs the tests after approval, reviews its diff, then refuses a destructive git clean" width="100%" /></a>
 </p>
 
-| | Terminal (`oasis`) | Browser (`oasis web`) | Editor |
+| | Terminal (`oasis`) | App (phone, browser, desktop) | Editor |
 | --- | --- | --- | --- |
-| Steer while it works | Enter (Tab queues) | Enter (Alt+Enter queues) | VS Code chat panel |
-| Review changes | `/diff`, inline diffs | Changes panel, per-file diffs | Native diff view, accept or reject |
-| Approvals | Inline prompt | Approval card with the exact command or diff | Inline in the panel |
-| Images | Ctrl+V pastes a screenshot, or `@screenshot.png` | Paste, drag and drop, or attach | Attach button or `@screenshot.png` in the chat panel |
-| Low-power devices | Lite or no animation on 2-CPU, SSH, Linux console, CI, screen readers | Respects reduced-motion, works as an offline-capable PWA | Editor theme |
-
-## On any device: the universal app
-
-OASIS also runs as an installable app on phones, tablets and computers, with nothing to set up: **[open the app](https://fahthiz.github.io/oasis/app/)** and add it to your home screen. The agent runs entirely on the device and talks straight to the model provider you choose; there is no OASIS server and no account.
-
-**Paste a key and start.** Paste an API key, a model page link (Ollama, Hugging Face, OpenRouter) or a server address into the first screen or straight into the message box. OASIS recognises the provider from the key, ranks the models that key can use, tool-tests the best ones and locks in the first that passes. If that model later runs out of credit or hits a rate limit, the agent switches to the next one mid-task and tells you. You never have to open a provider form.
-
-- Projects from GitHub, a ZIP or a folder; chat, edit with diffs and per-file revert, search, fetch web pages, and run JavaScript and its tests in an isolated, network-free sandbox with a hard time limit.
-- Commit and push to a new branch or open a pull request, always after you approve.
-- Works offline once installed. Skills load only when a task needs them, so it stays fast on low-end phones and small models.
-- Recognises keys from OpenRouter, Anthropic, OpenAI, Gemini, Groq, DeepSeek, Mistral, xAI, Moonshot, Hugging Face, Together, Fireworks, Cerebras and NVIDIA, and works with any OpenAI-compatible server. Ollama, LM Studio and llama.cpp running on the device are found automatically, and an Ollama library link downloads the model.
-- Nine built-in plugins (Debugger, Test writer, Code reviewer, Security audit, Web app studio, API builder, Mobile apps, Docs writer, GitHub). The right one appears above the message box as you type; one tap applies it.
-- A lite mode for old phones and low-end computers: no animation, fewer repaints while a reply streams, and a shorter transcript kept in memory.
-- One app for every device: the same installed app runs on Android, iPhone, iPad, ChromeOS, Windows, macOS and Linux, with no separate download per platform.
-
-It cannot run shell commands; for that, use the CLI or desktop app, or [connect your phone to them](docs/MOBILE.md#browser-workspace-from-your-phone). `oasis app --lan` serves the same app from your computer with a QR code. Details: [OASIS on a phone or tablet](docs/MOBILE.md#universal-app).
+| Connect a model | Paste a key at the first run, or `oasis connect` | Paste a key into the message box | Uses the OASIS config |
+| Steer while it works | Enter (Tab queues) | Type and send while it works | VS Code chat panel |
+| Review changes | `/diff`, inline diffs | Changes tab with per-file diffs | Native diff view, accept or reject |
+| Approvals | Inline prompt | A sheet with the exact command or diff | Inline in the panel |
+| Images | Ctrl+V pastes a screenshot, or `@screenshot.png` | Paste, drop or attach | Attach button or `@screenshot.png` |
+| Undo | `/undo`, `Esc Esc` to rewind | Per-file revert on the device; `/undo` on a computer | Reject in the diff view |
+| Low-power devices | Lite or no animation on 2-CPU, SSH, Linux console, CI, screen readers | Lite mode, reduced motion, works offline | Editor theme |
 
 ## Install
 
@@ -273,7 +278,7 @@ What 1.0 does not claim: the desktop installers are unsigned (SHA-256 checksums 
 | Surface | Position |
 |---|---|
 | **CLI** | Primary workflow for repositories and automation; Node.js 22+. |
-| **Browser workspace** | Local, authenticated, backed by the shared runtime; not a hosted service. Some browser-side project, task and note state is separate from CLI state. |
+| **App on a computer** (`oasis web`, desktop) | Local and authenticated with a one-time link token, backed by the shared runtime; not a hosted service. The earlier all-in-one browser workspace is still at `/classic` (terminal pane, run monitor, extensions) while those panels move into the app. |
 | **Desktop** | Windows x64; macOS arm64 and Intel; Linux x86_64 and arm64; built and packaged in CI from the release commit. Unsigned, with SHA-256 checksums. |
 | **VS Code-family editors** | Supported integration; not every editor extension ecosystem is covered. |
 | **ACP editors (Zed, JetBrains, Neovim, Emacs)** | `oasis acp` implements the core Agent Client Protocol, inline edit diffs and editor `fs/*` (unsaved buffers are read, open buffers are updated). With `oasis acp --editor-terminal`, approved commands run in the editor's terminal panel (`terminal/*`); by default they run in OASIS's own process and sandbox. |
