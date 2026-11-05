@@ -45,6 +45,10 @@ test('llama.cpp prompt_progress events reach the wait hook', async (t) => {
   const progress = events.filter((event) => event.phase === 'progress');
   assert.equal(progress.length, 2);
   assert.deepEqual(progress[0].promptProgress, { total: 4000, cache: 0, processed: 2048, time_ms: 4000 });
+  // The "tokens sent" estimate counts tool schemas, not just messages.
+  const start = events.find((event) => event.phase === 'start');
+  const bodyTokens = Math.ceil(JSON.stringify(server.bodies[0].tools || []).length / 4);
+  assert.ok(start.inputTokens > bodyTokens, start.inputTokens + ' should exceed tool schema tokens ' + bodyTokens);
 });
 
 test('return_progress is only requested from a server identified as llama.cpp', async (t) => {
