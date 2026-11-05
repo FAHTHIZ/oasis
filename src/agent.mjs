@@ -4673,6 +4673,9 @@ async function executeOneCall(session, call, context, options) {
   if (argumentError) {
     const name = call.function && call.function.name;
     const result = { error: argumentError, tool: name };
+    // Show the rejected call too, so the screen matches what the model sees.
+    if (options.onToolStart) options.onToolStart({ name, call, args: {} });
+    if (options.onToolResult) options.onToolResult({ name, result, call });
     return { role: 'tool', tool_call_id: call.id, name, content: serializableResult(result), result };
   }
   // Map Claude Code style names (Read, Bash, Edit …) onto OASIS tools in place,

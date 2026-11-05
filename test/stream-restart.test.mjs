@@ -99,3 +99,25 @@ test('strayStreamError reads array, object and partial JSON error bodies', async
   assert.equal(strayStreamError(''), null);
   assert.equal(strayStreamError('hello'), null);
 });
+
+test('a tool call with broken JSON arguments is shown, not silently skipped', async (t) => {
+  let requests = 0;
+  const server = createServer(async (req, res) => {
+    for await (const chunk of req) void chunk;
+    requests++;
+    res.writeHead(200, { 'content-type': 'text/event-stream' });
+    if (requests === 1) res.write(sse({ choices: [{ delta: { tool_calls: [{ index: 0, id: 'c1', type: 'function', function: { name: 'read_file', arguments: '{"path":"a"}{"path":"b"}' } }] } }] }));
+    else res.write(sse({ choices: [{ delta: { content: 'Done.' } }] }));
+    res.write(sse({ choices: [{ delta: {}, finish_reason: requests === 1 ? 'tool_calls' : 'stop' }] }));
+    res.end('data: [DONE]\n\n');
+  });
+  await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
+  t.after(() => new Promise((resolve) => server.close(resolve)));
+  const config = { protocol: 'openai-compatible', baseURL: 'http://127.0.0.1:' + server.address().port + '/v1', model: 'fixture', apiKey: '', maxSteps: 4 };
+  const started = [];
+  const results = [];
+  const result = await runAgentTurn(await session(t, config), 'hi', { onDelta: () => {}, onToolStart: (event) => started.push(event.name), onToolResult: (event) => results.push(event.result) });
+  assert.equal(result.text, 'Done.');
+  assert.deepEqual(started, ['read_file']);
+  assert.match(results[0].error, /not valid JSON/);
+});
