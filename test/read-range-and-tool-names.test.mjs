@@ -36,3 +36,18 @@ test('common read-only aliases map to read_file', () => {
     assert.equal(resolved.args.path, 'x.txt');
   }
 });
+
+test('search_files honours a path scope and trims long minified lines', async () => {
+  const { searchWorkspaceFiles } = await import('../src/tools.mjs');
+  const { mkdir } = await import('node:fs/promises');
+  const root = await mkdtemp(path.join(os.tmpdir(), 'oasis-search-'));
+  await mkdir(path.join(root, 'src'));
+  await writeFile(path.join(root, 'index.html'), 'x'.repeat(500) + ' clamp(1px) ' + 'y'.repeat(500));
+  await writeFile(path.join(root, 'src', 'a.mjs'), 'export function clampInteger() {}\n');
+  const scoped = await searchWorkspaceFiles(root, 'clamp', 25, 'src');
+  assert.deepEqual(scoped.matches.map((m) => m.path), ['src/a.mjs']);
+  const all = await searchWorkspaceFiles(root, 'clamp');
+  const html = all.matches.find((m) => m.path === 'index.html');
+  assert.ok(html.text.length <= 202 && html.text.includes('clamp('), html.text);
+  await assert.rejects(() => searchWorkspaceFiles(root, 'clamp', 25, '../'), /outside the workspace/);
+});
