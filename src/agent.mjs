@@ -749,6 +749,7 @@ export async function createSession({ root, config, restore = null, permissionMo
   if (!systemPromptOverride) systemText += mcpInstructionsSection(mcp.clients, { channels: channelEntries, settings: loadedSettings });
   if (appendSystemPrompt) systemText += '\n\n' + String(appendSystemPrompt).slice(0, 20000);
   const session = {
+    createEnv: env,
     channels: channelEntries,
     root,
     additionalDirectories: extraDirs.accepted,
@@ -4740,6 +4741,9 @@ function refreshTodoPrompt(session) {
 }
 
 export async function runAgentTurn(session, prompt, options = {}) {
+  // Tools use the environment the session was created with unless the turn
+  // passes its own (a session made for another config dir stays in it).
+  if (!options.env && session && session.createEnv && session.createEnv !== process.env) options = { ...options, env: session.createEnv };
   const env = options.env || process.env;
   if (session && !options.isSubagent) clearInjectionTurnFlag(session);
   if (session && session.scratchDir && !session.scratchReady && !options.isSubagent) {

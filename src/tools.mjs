@@ -765,15 +765,30 @@ async function configureProviderFromChat(args, context) {
 
 // Start MCP servers that add_extension just configured, so their tools are
 // usable in this chat without a restart.
-export async function activateNewMcpServers(session, names, { root, env }) {
+export async function activateNewMcpServers(session, installed, { root, env }) {
+  let names = [...installed];
   // Installs write <config>/mcp.json (user) or .mcp.json (project, just
   // approved); older setups use mcp-servers.json.
   const { loadUserMcpJson, loadProjectMcpServers } = await import('./mcp-project.mjs');
   const legacy = (await loadMcpServers({ env }).catch(() => ({ servers: [] }))).servers.map((server) => ({ ...server, source: 'user' }));
   const user = await loadUserMcpJson({ env }).catch(() => ({ servers: [], failures: [] }));
   const project = await loadProjectMcpServers(root, { env }).catch(() => ({ servers: [], failures: [] }));
+  // Servers bundled with plugins that were just installed (ids are name@marketplace).
+  const pluginServers = [];
+  const pluginIds = names.filter((name) => name.includes('@'));
+  if (pluginIds.length) {
+    try {
+      const { loadEnabledPlugins, pluginMcpServers } = await import('./claude-plugins.mjs');
+      const { parseMcpServerEntries } = await import('./mcp-project.mjs');
+      const plugins = (await loadEnabledPlugins(root, { env })).filter((plugin) => pluginIds.includes(plugin.id));
+      for (const item of await pluginMcpServers(plugins, { env, root })) {
+        const parsed = parseMcpServerEntries({ mcpServers: item.mcpServers }, { ...env, ...item.env }, 'plugin');
+        for (const server of parsed.servers) { pluginServers.push({ ...server, plugin: item.plugin }); names = [...names, server.name]; }
+      }
+    } catch { /* the next session loads them */ }
+  }
   const seen = new Set();
-  const fresh = [...legacy, ...user.servers, ...project.servers].filter((server) => {
+  const fresh = [...legacy, ...user.servers, ...project.servers, ...pluginServers].filter((server) => {
     if (!names.includes(server.name) || server.enabled === false || session.mcpClients.has(server.name) || seen.has(server.name)) return false;
     seen.add(server.name);
     return true;
@@ -1396,6 +1411,7 @@ export async function executeTool(name, args = {}, context = {}) {
       const env = context.env || process.env;
       // Installing runs third-party code later (hooks, MCP servers), so this
       // always asks, even with --yes, like configure_mcp_server.
+      const skillsBefore = (await listAvailableSkills(root, { env }).catch(() => [])).map((skill) => skill.name);
       const result = await addAnything(String(args.source || ''), {
         root, env, scope: args.scope, name: args.name, values: args.env && typeof args.env === 'object' ? args.env : undefined,
         approve: async (summary) => Boolean(context.approval && await context.approval(summary + (/^Save /.test(summary) ? '' : '\nInstall it now?'), true))
@@ -1412,7 +1428,13 @@ export async function executeTool(name, args = {}, context = {}) {
       if (result.approved && result.installed && result.installed.length && context.session && context.session.mcpClients instanceof Map) {
         result.activated = await activateNewMcpServers(context.session, result.installed, { root, env }).catch((error) => ({ error: error.message }));
       }
-      if (result.approved && result.reload && !result.activated) result.message += ' Plugins and skills load in new sessions, or now with /reload-plugins.';
+      if (result.approved && result.reload) {
+        // Skills are read from disk on every load_skill call, so new ones work now.
+        const skills = (await listAvailableSkills(root, { env }).catch(() => [])).map((skill) => skill.name);
+        const fresh = skills.filter((name) => !skillsBefore.includes(name));
+        if (fresh.length) { result.newSkills = fresh.slice(0, 40); result.message += ' New skills, usable now with load_skill: ' + fresh.slice(0, 40).join(', ') + '.'; }
+        result.message += ' Plugin slash commands and hooks load with /reload-plugins or a new session.';
+      }
       if (result.agentHint) { result.message += ' ' + result.agentHint; delete result.agentHint; }
       return result;
     }
