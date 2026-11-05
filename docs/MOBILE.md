@@ -56,12 +56,12 @@ Whatever you paste after the key in the same message (for example `sk-or-… fix
 
 ### The quick way: Connect a phone
 
-In the desktop app choose **File → Connect a phone…**. In the browser workspace open **Settings → Devices → Connect a phone**. You get two choices:
+In the desktop app choose **File → Connect a phone…**. In the app opened from `oasis web` on the computer, open **Settings → Phone → Use from your phone** (in `/classic` it is **Settings → Devices → Connect a phone**). You get two choices:
 
 - **Share over Tailscale (encrypted).** Recommended. [Tailscale](https://tailscale.com) encrypts traffic between your own devices and also works away from home. Install it on the computer and the phone and sign in to the same account; the button is greyed out until the computer is connected.
 - **Share over Wi-Fi (unencrypted).** For your own home network only. OASIS first shows a warning, and the desktop app uses a native dialog that the page cannot answer by itself. Anyone on the same Wi-Fi could read the traffic, so never use it on public Wi-Fi.
 
-OASIS then shows a QR code and a link. Scan it with the phone camera and add the page to the home screen (below). The phone uses the same chats, runs and approvals as the computer, not a separate copy. **Stop sharing** closes the link and disconnects phones that are already connected. Closing OASIS also closes it.
+OASIS then shows a QR code and a link. Scan it with the phone camera and add the page to the home screen (below). The phone opens the same app, working on the computer's files: the same chats, approvals, Changes tab, images and steering, not a separate copy. **Stop sharing** closes the link and disconnects phones that are already connected. Closing OASIS also closes it.
 
 Behind the scenes OASIS keeps its server on `127.0.0.1` and opens an extra listener only on the chosen private addresses (never on every network interface). The connection token still protects every request, and features that only make sense on the computer itself (provider keys, hardware detection, updates, and phone sharing itself) stay unavailable on the phone.
 
@@ -79,11 +79,11 @@ Behind the scenes OASIS keeps its server on `127.0.0.1` and opens an extra liste
 
    OASIS prints a link for each private network address of the computer and a QR code in the terminal. Set `OASIS_NO_QR=1` to hide the QR code.
 2. Scan the QR code with the phone camera, or type the link. The link includes the connection token, so the phone connects without pasting anything.
-3. Add it to the home screen. **Settings → Devices → Install OASIS as an app** does this in one tap on Android and desktop Chrome or Edge, and shows the steps on iPhone. Or by hand:
+3. Add it to the home screen. The **Install OASIS** button in the top bar does this in one tap on Android and desktop Chrome or Edge. Or by hand:
    - **iPhone/iPad:** Share, then **Add to Home Screen**.
    - **Android (Chrome):** the menu, then **Install app** (or **Add to Home screen**).
 
-Approvals, the file browser, the terminal and the update banner all work from the phone. For safety, model API keys can be entered only on the computer itself (`oasis setup`, or the workspace opened on that computer). They are never typed in on a second device.
+Chats, approvals, images, steering and the file browser all work from the phone. For safety, model API keys can be entered only on the computer itself (`oasis setup`, or the workspace opened on that computer). They are never typed in on a second device.
 
 ### A certificate the phone trusts
 
