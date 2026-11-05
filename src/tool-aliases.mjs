@@ -41,6 +41,7 @@ const ALIASES = {
     }]
   ],
   glob: [['glob_files', (args) => ({ pattern: args.path && args.pattern && !String(args.pattern).startsWith(String(args.path)) ? String(args.path).replace(/\/+$/, '') + '/' + args.pattern : args.pattern })]],
+  search: [['grep', (args) => ({ ...args, pattern: args.pattern || args.query || args.regex })], ['search_files', (args) => ({ query: args.query || args.pattern, ...(args.path ? { path: args.path } : {}) })]],
   grep: [['grep', (args) => args], ['search_files', (args) => ({ query: args.pattern, ...(args.path ? { path: args.path } : {}) })]],
   ls: [['list_files', (args) => ({ path: args.path || '.' })]],
   webfetch: [['fetch_url', (args) => ({ url: args.url })]],
@@ -102,6 +103,14 @@ export function resolveToolAlias(requested, args, available) {
   const key = squash(requested);
   for (const [target, mapArgs] of ALIASES[key] || []) {
     if (names.has(target)) return { name: target, args: mapArgs(args && typeof args === 'object' ? args : {}), aliasedFrom: requested };
+  }
+  // Harmony channel words glued onto the name ("grepl_commentary",
+  // "read_file_analysis"): if the rest is one edit away from exactly one tool, use it.
+  const channel = /^(.+?)[_\-.]?(?:commentary|analysis|final)$/i.exec(requested);
+  if (channel) {
+    const base = squash(channel[1]);
+    const close = [...names].filter((name) => distance(base, squash(name)) <= 1);
+    if (close.length === 1) return { name: close[0], args, aliasedFrom: requested };
   }
   // Same name with different casing or separators: ReadFile, read-file, readFile.
   for (const name of names) if (squash(name) === key) return { name, args, aliasedFrom: requested };

@@ -350,6 +350,29 @@ export async function readWorkspaceFile(root, rawPath, options = {}) {
 }
 
 const MAX_LINE_CHARS = 2000;
+// edit_file arguments in other shapes: old_str/new_str, oldString/newString,
+// search/replace, or a small unified diff in changes/diff/patch ("-old\n+new").
+// The edit still has to match the file exactly, so nothing is guessed.
+export function editFileArgs(args = {}) {
+  if (typeof args.old_string === 'string' && typeof args.new_string === 'string') return args;
+  const next = { ...args };
+  for (const [from, to] of [['old_str', 'old_string'], ['oldString', 'old_string'], ['old_text', 'old_string'], ['search', 'old_string'], ['new_str', 'new_string'], ['newString', 'new_string'], ['new_text', 'new_string'], ['replace', 'new_string']]) {
+    if (typeof next[to] !== 'string' && typeof next[from] === 'string') next[to] = next[from];
+  }
+  const diff = [next.changes, next.diff, next.patch].find((value) => typeof value === 'string');
+  if ((typeof next.old_string !== 'string' || typeof next.new_string !== 'string') && diff) {
+    const lines = diff.replace(/\r\n/g, '\n').replace(/\n$/, '').split('\n').filter((line) => !/^(?:@@.*|--- .*|\+\+\+ .*)$/.test(line));
+    if (lines.some((line) => /^[-+]/.test(line)) && lines.every((line) => /^[-+ ]/.test(line) || line === '')) {
+      next.old_string = lines.filter((line) => !line.startsWith('+')).map((line) => line.slice(1)).join('\n');
+      next.new_string = lines.filter((line) => !line.startsWith('-')).map((line) => line.slice(1)).join('\n');
+    }
+  }
+  if (typeof next.old_string !== 'string' || typeof next.new_string !== 'string') {
+    throw new Error('edit_file needs old_string (exact text copied from read_file) and new_string' + (Object.keys(args).length ? '; got ' + Object.keys(args).join(', ') : '') + '. To rewrite a whole file use write_file.');
+  }
+  return next;
+}
+
 // Models often send line ranges in other shapes (line_start/line_end,
 // start_line/end_line, startLine/endLine). Ignoring them returned the whole
 // file, wasting context; map them onto offset/limit instead.
@@ -1558,6 +1581,7 @@ export async function executeTool(name, args = {}, context = {}) {
       return { installed: true, name, message: 'Installed the bundled workflow instructions. External integrations still require separate setup and approval.' };
     }
     case 'edit_file': {
+      args = editFileArgs(args);
       if (typeof args.old_string !== 'string' || typeof args.new_string !== 'string') throw new Error('old_string and new_string must be strings.');
       if (!args.old_string.length) throw new Error('old_string must not be empty. To create a new file, use write_file.');
       if (args.old_string === args.new_string) throw new Error('old_string and new_string are identical; nothing to change.');

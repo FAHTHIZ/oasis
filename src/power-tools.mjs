@@ -159,7 +159,8 @@ function runRipgrep(cwd, args, signal) {
 }
 
 export async function grepWorkspace(root, args = {}, options = {}) {
-  const pattern = String(args.pattern || '');
+  // Models also send the pattern as regex, query or search.
+  const pattern = String(args.pattern || args.regex || args.query || args.search || '');
   if (!pattern) throw new Error('grep needs a pattern.');
   if (options.signal && options.signal.aborted) {
     const error = new Error('Search was cancelled before it started.');
