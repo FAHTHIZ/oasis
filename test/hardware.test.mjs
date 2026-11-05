@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   describeRecommendation, detectHardware, discoverLocalServers, localModelTier, modelMemoryBudget,
-  modelParamsB, parseNvidiaSmi, pickInstalledModel, recommendSetup
+  modelParamsB, parseNvidiaSmi, parseWindowsDisplayAdapters, pickInstalledModel, readLinuxDrmGpus, recommendSetup
 } from '../src/hardware.mjs';
 
 const GB = 1024 ** 3;
@@ -24,7 +24,7 @@ test('hardware detection: Apple Silicon, NVIDIA, CPU-only and Termux', async () 
   const pc = await detectHardware({ platform: 'win32', arch: 'x64', cpus: cpus(16), totalmem: 64 * GB, freemem: 30 * GB, env: {}, exec: async () => 'NVIDIA GeForce RTX 4070, 12282\n' });
   assert.equal(pc.accelerator, 'cuda');
   assert.equal(pc.gpu.vramGB, 12);
-  const laptop = await detectHardware({ platform: 'linux', arch: 'x64', cpus: cpus(4), totalmem: 8 * GB, freemem: 2 * GB, env: {}, exec: async () => '' });
+  const laptop = await detectHardware({ platform: 'linux', arch: 'x64', cpus: cpus(4), totalmem: 8 * GB, freemem: 2 * GB, env: {}, drm: { readdir: () => [] }, exec: async () => '' });
   assert.equal(laptop.accelerator, 'cpu');
   const phone = await detectHardware({ platform: 'linux', arch: 'arm64', cpus: cpus(8), totalmem: 6 * GB, freemem: 2 * GB, env: { TERMUX_VERSION: '0.118' }, exec: async () => '' });
   assert.equal(phone.os, 'android');
@@ -122,4 +122,68 @@ test('describeHardware never prints undefined for partial profiles', async () =>
   assert.equal(describeHardware({ os: 'linux', arch: 'x64', cores: 8, memoryGB: 32, gpu: { name: 'RTX 4090', vramGB: 24 } }), 'Linux x64 · 8 CPU cores · 32 GB memory · RTX 4090 (24 GB)');
   assert.equal(describeHardware(undefined), 'no supported GPU');
   assert.doesNotMatch(describeHardware({ gpu: {} }), /undefined/);
+});
+
+const NO_DRM = { readdir: () => { throw new Error('no sysfs'); } };
+
+test('Linux AMD GPUs are read from sysfs; integrated graphics are ignored', async () => {
+  const files = {
+    '/sys/class/drm/card0/device/mem_info_vram_total': String(512 * 1024 ** 2),
+    '/sys/class/drm/card0/device/vendor': '0x1002',
+    '/sys/class/drm/card1/device/mem_info_vram_total': String(16 * GB),
+    '/sys/class/drm/card1/device/vendor': '0x1002\n'
+  };
+  const drm = { readdir: () => ['card0', 'card0-DP-1', 'card1', 'renderD128'], readFile: (file) => { if (file in files) return files[file]; throw new Error('ENOENT'); } };
+  assert.deepEqual(readLinuxDrmGpus(drm), [
+    { vendor: 'amd', name: 'AMD Radeon GPU', vramGB: 0.5 },
+    { vendor: 'amd', name: 'AMD Radeon GPU', vramGB: 16 }
+  ]);
+  const hw = await detectHardware({ platform: 'linux', arch: 'x64', cpus: cpus(8), totalmem: 32 * GB, freemem: 16 * GB, env: {}, drm, exec: async () => '' });
+  assert.equal(hw.accelerator, 'rocm');
+  assert.equal(hw.gpu.vramGB, 16);
+  assert.equal(hw.gpuCount, 1);
+  const rec = recommendSetup(hw, []);
+  assert.equal(rec.budgetGB, 14.4);
+  assert.ok(rec.notes.some((note) => /ROCm/.test(note)));
+  assert.equal(readLinuxDrmGpus(NO_DRM).length, 0);
+});
+
+const REG_MEMORY = [
+  '',
+  'HKEY_LOCAL_MACHINE\\SYSTEM\\CurrentControlSet\\Control\\Class\\{4d36e968-e325-11ce-bfc1-08002be10318}\\0000',
+  '    HardwareInformation.qwMemorySize    REG_QWORD    0x400000000',
+  '',
+  'HKEY_LOCAL_MACHINE\\SYSTEM\\CurrentControlSet\\Control\\Class\\{4d36e968-e325-11ce-bfc1-08002be10318}\\0001',
+  '    HardwareInformation.qwMemorySize    REG_QWORD    0x8000000',
+  '',
+  'End of search: 2 match(es) found.'
+].join('\r\n');
+const REG_NAMES = [
+  'HKEY_LOCAL_MACHINE\\SYSTEM\\CurrentControlSet\\Control\\Class\\{4d36e968-e325-11ce-bfc1-08002be10318}\\0000',
+  '    DriverDesc    REG_SZ    AMD Radeon RX 7900 XTX',
+  'HKEY_LOCAL_MACHINE\\SYSTEM\\CurrentControlSet\\Control\\Class\\{4d36e968-e325-11ce-bfc1-08002be10318}\\0001',
+  '    DriverDesc    REG_SZ    Intel(R) UHD Graphics 770',
+  'HKEY_LOCAL_MACHINE\\SYSTEM\\CurrentControlSet\\Control\\Class\\{4d36e968-e325-11ce-bfc1-08002be10318}\\0002',
+  '    DriverDesc    REG_SZ    Microsoft Basic Display Adapter'
+].join('\r\n');
+
+test('Windows display adapters report real VRAM above 4 GB from the registry', async () => {
+  assert.deepEqual(parseWindowsDisplayAdapters(REG_MEMORY, REG_NAMES), [
+    { vendor: 'amd', name: 'AMD Radeon RX 7900 XTX', vramGB: 16 },
+    { vendor: 'intel', name: 'Intel(R) UHD Graphics 770', vramGB: 0.1 }
+  ]);
+  assert.deepEqual(parseWindowsDisplayAdapters('', ''), []);
+  const exec = async (command, args) => command === 'nvidia-smi' ? '' : args.includes('DriverDesc') ? REG_NAMES : REG_MEMORY;
+  const hw = await detectHardware({ platform: 'win32', arch: 'x64', cpus: cpus(16), totalmem: 64 * GB, freemem: 30 * GB, env: {}, exec });
+  assert.equal(hw.accelerator, 'rocm');
+  assert.equal(hw.gpu.name, 'AMD Radeon RX 7900 XTX');
+  assert.equal(hw.gpuCount, 1);
+});
+
+test('NVIDIA cards found by nvidia-smi are not counted twice from the registry', async () => {
+  const names = REG_NAMES.replace('AMD Radeon RX 7900 XTX', 'NVIDIA GeForce RTX 4080');
+  const exec = async (command, args) => command === 'nvidia-smi' ? 'NVIDIA GeForce RTX 4080, 16376\n' : args.includes('DriverDesc') ? names : REG_MEMORY;
+  const hw = await detectHardware({ platform: 'win32', arch: 'x64', cpus: cpus(16), totalmem: 64 * GB, freemem: 30 * GB, env: {}, exec });
+  assert.equal(hw.accelerator, 'cuda');
+  assert.equal(hw.gpuCount, 1);
 });
