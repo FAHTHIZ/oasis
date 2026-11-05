@@ -1816,9 +1816,14 @@ async function startRuntime(found) {
 // never a dialog: the desktop app installs after its own confirmation, and
 // `oasis web` copies the one command to run.
 let updateState = null;
+let updateRetries = 0;
 async function checkForUpdate() {
   if (!RT || !RT.client) return;
   const state = await RT.client.api('/api/app/update').catch(() => null);
+  // A failed check (runtime still starting, a dropped request) is retried
+  // soon instead of waiting for the 30-minute timer.
+  if (!state) { if (updateRetries++ < 3) setTimeout(checkForUpdate, 3000 * updateRetries); return; }
+  updateRetries = 0;
   updateState = state;
   const version = state && state.latest && state.latest.version;
   let later = '';

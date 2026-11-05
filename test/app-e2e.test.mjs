@@ -74,7 +74,7 @@ async function waitFor(page, expression, { timeout = 60000, label = expression }
 const paste = (selector, value) => `(() => { const el = document.querySelector(${JSON.stringify(selector)}); el.focus(); const dt = new DataTransfer(); dt.setData('text/plain', ${JSON.stringify(value)}); el.dispatchEvent(new ClipboardEvent('paste', { clipboardData: dt, bubbles: true, cancelable: true })); return true; })()`;
 const type = (value) => `(() => { const el = document.getElementById('input'); el.value = ${JSON.stringify(value)}; el.dispatchEvent(new Event('input', { bubbles: true })); return true; })()`;
 const submit = `(() => { document.getElementById('composer').requestSubmit(); return true; })()`;
-const busy = `document.getElementById('app').classList.contains('busy')`;
+const busy = `document.body.classList.contains('busy')`; // setBusy() toggles it on <body>
 
 test('universal app end to end: paste to connect, tool-calling task, credit fallback, plugins', { skip: chrome ? false : 'no Chrome/Chromium installed', timeout: 360000 }, async (t) => {
   const provider = await mockProvider();
