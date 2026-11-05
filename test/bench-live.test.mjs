@@ -87,6 +87,9 @@ test('OpenCode and Aider adapters build non-interactive commands and tolerate an
   assert.equal(EXTERNAL_AGENTS.aider.flag, '--aider');
   assert.deepEqual(buildOpenCodeArgs({ model: 'p/m' }, 'fix it'), ['run', '--format', 'json', '-m', 'p/m', 'fix it']);
   assert.ok(buildAiderArgs({}, 'fix it').includes('--yes-always'));
+  assert.ok(!buildAiderArgs({}, 'fix it').includes('--timeout'));
+  const timed = buildAiderArgs({ timeoutSeconds: 2700 }, 'fix it');
+  assert.equal(timed[timed.indexOf('--timeout') + 1], '2700', 'slow local models must not hit litellm\'s 600 s default');
   const open = parseOpenCodeOutput('{"type":"tool_use","part":{"type":"tool"}}\n{"type":"text","part":{"type":"text","text":"done"}}\n{"type":"step_finish","part":{"tokens":{"input":100,"output":20,"reasoning":5},"cost":0.002}}');
   assert.equal(open.totalTokens, 125);
   assert.equal(open.result, 'done');
