@@ -52,7 +52,7 @@ export function agentEnvironment(agent, options, env = process.env) {
   if (!options.router) return next;
   const openaiBase = /\/v1$/.test(options.router) ? options.router : options.router + '/v1';
   const anthropicBase = openaiBase.replace(/\/v1$/, '');
-  if (agent === 'oasis') { next.OASIS_BASE_URL = openaiBase; next.OASIS_PROTOCOL = 'openai'; if (key) next.OASIS_API_KEY = key; }
+  if (agent === 'oasis') { next.OASIS_BASE_URL = openaiBase; next.OASIS_PROTOCOL = 'openai-compatible'; if (key) next.OASIS_API_KEY = key; }
   if (agent === 'claude') { next.ANTHROPIC_BASE_URL = anthropicBase; if (key) next.ANTHROPIC_AUTH_TOKEN = key; }
   if (agent === 'codex' || agent === 'opencode') { next.OPENAI_BASE_URL = openaiBase; if (key) next.OPENAI_API_KEY = key; }
   if (agent === 'aider') { next.OPENAI_API_BASE = openaiBase; if (key) next.OPENAI_API_KEY = key; }
@@ -214,7 +214,7 @@ async function main() {
                        (a self-hosted proxy, OpenRouter);
                        the key is read from OASIS_BENCH_API_KEY
   --trials N           trials per task (default 1; use 3+ for publishable numbers)
-  --task ID            run one task
+  --task ID[,ID...]    run only these tasks
   --timeout-seconds N  per-task timeout (default 600)
   --out DIR            results folder (default bench/results/live-YYYY-MM-DD)
 
