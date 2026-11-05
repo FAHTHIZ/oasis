@@ -45,6 +45,14 @@ function mockProvider() {
     const ask = String(user && user.content);
     // The runtime's post-edit verification gate: answer it like a real model.
     if (last.role === 'user' && /verification gate/.test(String(last.content))) return reply(res, 200, text('Done. I built the counter in index.html with style.css and app.js, and checked it with node.'));
+    if (messages.some((m) => m.role === 'user' && /slow check/i.test(String(m.content)))) {
+      if (last.role === 'tool') {
+        const note = messages.slice(1).find((m) => m.role === 'user' && /tabs/.test(String(m.content)));
+        return reply(res, 200, text(note ? 'Checked, and noted: use tabs.' : 'Checked.'));
+      }
+      if (last.role === 'user' && /tabs/.test(String(last.content))) return reply(res, 200, text('Checked, and noted: use tabs.'));
+      return reply(res, 200, toolCall('run_command', { command: 'node', args: ['-e', 'console.log(1)'] }));
+    }
     if (last.role === 'tool') {
       const wrote = messages.filter((m) => m.role === 'tool').length;
       if (/counter/i.test(ask) && wrote < 3) {
@@ -164,7 +172,18 @@ test('runtime engine end to end: app at /, paste to connect, approve a real edit
   await evaluate(page, `location.reload(); true`);
   await waitFor(page, `document.readyState === 'complete' && document.documentElement.classList.contains('runtime') && /Done\\. I built the counter/.test(document.getElementById('transcript').textContent)`, { label: 'chat restored after reload' });
 
-  // 6. The desktop menu's "Connect a phone…" opens the app's phone sheet.
+  // 6. Typing while OASIS works adds a note to the running task.
+  await evaluate(page, type('Run a slow check'));
+  await evaluate(page, submit);
+  await waitFor(page, `!document.getElementById('approvalSheet').hidden`, { label: 'approval for the slow check', timeout: 30000 });
+  await evaluate(page, type('use tabs please'));
+  assert.equal(await evaluate(page, `document.body.classList.contains('steering') && document.getElementById('sendButton').getAttribute('aria-label')`), 'Send to the running task');
+  await evaluate(page, submit);
+  await waitFor(page, `document.getElementById('input').value === '' && [...document.querySelectorAll('.msg.user')].some((m) => /use tabs please/.test(m.textContent))`, { label: 'note shown in the chat' });
+  await evaluate(page, `document.getElementById('allowButton').click(); true`);
+  await waitFor(page, `!${busy} && /noted: use tabs/.test(document.getElementById('transcript').textContent)`, { label: 'the running task read the note', timeout: 30000 });
+
+  // 7. The desktop menu's "Connect a phone…" opens the app's phone sheet.
   await evaluate(page, `window.oasisConnectPhone(); true`);
   await waitFor(page, `!document.getElementById('phoneSheet').hidden && /home network|Tailscale|reachable/.test(document.getElementById('phoneHint').textContent) && !document.getElementById('phoneError').textContent`, { label: 'phone sheet shows the network choices' });
   await shot('6-phone');

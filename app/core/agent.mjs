@@ -90,6 +90,7 @@ export class Agent {
    */
   constructor({ getConfig, getContext, approve, onEvent = () => {}, chatImpl = chat, onModelFailure = null }) {
     this.onModelFailure = onModelFailure;
+    this.steering = [];
     this.getConfig = getConfig;
     this.getContext = getContext;
     this.approve = approve;
@@ -162,9 +163,19 @@ export class Agent {
     }
   }
 
+  /** Add a note to the running task; it is read before the next step. */
+  steer(text) {
+    const note = String(text || '').trim();
+    if (!this.running || !note) return false;
+    this.steering.push(note);
+    this.onEvent({ type: 'user', content: note, steer: true });
+    return true;
+  }
+
   async send(text, { maxSteps = DEFAULT_MAX_STEPS, plugins = [] } = {}) {
     if (this.running) throw new Error('OASIS is already working. Stop it first.');
     this.running = true;
+    this.steering = [];
     this.controller = new AbortController();
     const signal = this.controller.signal;
     this.messages.push({ role: 'user', content: String(text) });
@@ -176,6 +187,8 @@ export class Agent {
       for (let step = 0; step < maxSteps; step++) {
         const config = this.getConfig();
         const ctx = { ...this.getContext(), signal, onTodos: (todos) => { this.todos = todos; this.onEvent({ type: 'todos', todos }); } };
+        // Notes typed while OASIS works join the conversation before the next model call.
+        while (this.steering.length) this.messages.push({ role: 'user', content: this.steering.shift() });
         await this.compact(config, signal);
         // The prompt lists the project's files, so rebuild it only after the
         // file set may have changed (keeps slow phones responsive).
@@ -221,7 +234,11 @@ export class Agent {
         if (calls.length) assistant.tool_calls = calls;
         this.messages.push(assistant);
         this.onEvent({ type: 'assistant', content: content || '', toolCalls: calls, step });
-        if (!calls.length) { finalText = content || ''; break; }
+        if (!calls.length) {
+          finalText = content || '';
+          if (this.steering.length && step < maxSteps - 1) continue;
+          break;
+        }
 
         for (const call of calls) {
           if (signal.aborted) throw new DOMException('Stopped', 'AbortError');

@@ -378,3 +378,28 @@ test('oasis app server serves only the app, shared modules and skills', async ()
     assert.equal((await fetch(base + '/app/skills/index.json', { method: 'POST' })).status, 405);
   } finally { server.close(); }
 });
+
+test('agent reads a note typed while it works before its next step, even after a final answer', async () => {
+  const ws = await project([{ path: 'a.txt', content: 'hello' }]);
+  let agent;
+  const { chatImpl, seen } = scripted([
+    { content: '', tool_calls: [{ id: '1', function: { name: 'read_file', arguments: '{"path":"a.txt"}' } }] },
+    { content: 'It says hello.', tool_calls: [] },
+    { content: 'Also: it is five letters.', tool_calls: [] }
+  ]);
+  const events = [];
+  agent = new Agent({
+    getConfig: () => ({ mode: 'ask' }), getContext: () => ({ workspace: ws }), approve: async () => true, chatImpl,
+    onEvent: (e) => {
+      events.push(e);
+      if (e.type === 'tool_result') assert.equal(agent.steer('keep it short'), true);
+      if (e.type === 'assistant' && e.content === 'It says hello.') assert.equal(agent.steer('and count the letters'), true);
+    }
+  });
+  assert.equal(await agent.send('read a.txt'), 'Also: it is five letters.');
+  assert.equal(seen.length, 3);
+  assert.ok(seen[1].some((m) => m.role === 'user' && m.content === 'keep it short'), 'a note after a tool reaches the next step');
+  assert.ok(seen[2].some((m) => m.role === 'user' && m.content === 'and count the letters'), 'a note during the final answer keeps the turn going');
+  assert.ok(events.some((e) => e.type === 'user' && e.steer));
+  assert.equal(agent.steer('too late'), false);
+});
