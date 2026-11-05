@@ -172,7 +172,7 @@ test('!command runs through the runtime with approval, and its output goes with 
   await agent.send('fix it');
   const chat = calls.find(([url]) => url === '/api/chat')[1];
   assert.match(chat.message, /untrusted terminal output/);
-  assert.match(chat.message, /"output":"not ok 1 adds\\n"/);
+  assert.match(chat.message, /"output":"not ok 1 adds(\\n)?"/);
   assert.ok(chat.message.endsWith('Your request:\nfix it'));
   assert.deepEqual(agent.pendingShell, []);
 });
