@@ -2510,7 +2510,7 @@ function normalizeAssistantToolCalls(session, assistant, step) {
   }
   if (!native.length && !assistant.truncated && !Array.isArray(assistant.responseItems)
     && !(session.settings && session.settings.textToolCalls === false)) {
-    const extracted = extractTextToolCalls(assistant.content, availableToolNames(session));
+    const extracted = extractTextToolCalls(assistant.content, availableToolNames(session), toolParameterSchemas(session));
     if (extracted && extracted.failed && extracted.failed.length) Object.defineProperty(assistant, 'unreadableToolCalls', { value: extracted.failed, enumerable: false, configurable: true });
     if (extracted && extracted.calls.length) {
       assistant.tool_calls = extracted.calls.map((call, index) => ({
@@ -4311,6 +4311,15 @@ async function detectLocalContextWindow(session, { env = process.env, fetchImpl 
   session.config = { ...config, contextWindow: probe.contextLength };
   if (probe.contextLength < RECOMMENDED_LOCAL_CONTEXT) session.localContextNotices.push(localContextAdvice(config.model, probe.contextLength, probe.server));
   return probe;
+}
+
+function toolParameterSchemas(session) {
+  const schemas = new Map();
+  for (const tool of session.toolDefinitions || []) {
+    const fn = tool && tool.function;
+    if (fn && fn.name && fn.parameters) schemas.set(fn.name, fn.parameters);
+  }
+  return schemas;
 }
 
 function availableToolNames(session) {

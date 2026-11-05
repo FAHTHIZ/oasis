@@ -210,3 +210,51 @@ test('comments inside arguments are dropped and <tools> wrappers are read', () =
   assert.deepEqual(found.calls.map(({ name, args }) => ({ name, args })), [{ name: 'list_files', args: { path: 'src' } }]);
   assert.equal(extractTextToolCalls('<tools>{"name": "nope", "arguments": {}}</tools>', new Set(['list_files'])), null);
 });
+
+test('native text formats of Qwen3-Coder, GLM, Mistral, Llama, DeepSeek, Kimi, gpt-oss and Gemma are recovered', () => {
+  const read = [{ name: 'read_file', args: { path: 'src/a.js' } }];
+  const cases = [
+    '<tool_call>\n<function=read_file>\n<parameter=path>\nsrc/a.js\n</parameter>\n</function>\n</tool_call>',
+    '<function=read_file>\n<parameter=path>\nsrc/a.js\n</parameter>\n</function>',
+    '<tool_call>read_file\n<arg_key>path</arg_key>\n<arg_value>src/a.js</arg_value>\n</tool_call>',
+    '[TOOL_CALLS][{"name": "read_file", "arguments": {"path": "src/a.js"}}]',
+    '[TOOL_CALLS]read_file[ARGS]{"path": "src/a.js"}',
+    '<|python_tag|>{"name": "read_file", "parameters": {"path": "src/a.js"}}<|eom_id|>',
+    '<｜tool▁calls▁begin｜><｜tool▁call▁begin｜>function<｜tool▁sep｜>read_file\n```json\n{"path": "src/a.js"}\n```<｜tool▁call▁end｜><｜tool▁calls▁end｜>',
+    '<｜tool▁calls▁begin｜><｜tool▁call▁begin｜>read_file<｜tool▁sep｜>{"path": "src/a.js"}<｜tool▁call▁end｜><｜tool▁calls▁end｜>',
+    '<|tool_calls_section_begin|><|tool_call_begin|>functions.read_file:0<|tool_call_argument_begin|>{"path": "src/a.js"}<|tool_call_end|><|tool_calls_section_end|>',
+    '<|channel|>commentary to=functions.read_file <|constrain|>json<|message|>{"path": "src/a.js"}<|call|>',
+    '```tool_code\nread_file(path="src/a.js")\n```',
+    '{"function_call": {"name": "read_file", "arguments": "{\\"path\\": \\"src/a.js\\"}"}}'
+  ];
+  for (const raw of cases) {
+    const found = extractTextToolCalls(raw, names);
+    assert.ok(found, raw);
+    assert.deepEqual(found.calls, read, raw);
+    assert.equal(found.text, '', raw);
+  }
+});
+
+test('text-format values take the type the tool schema declares, and stay strings otherwise', () => {
+  const schemas = new Map([['read_file', { type: 'object', properties: { path: { type: 'string' }, limit: { type: 'integer' }, raw: { type: 'boolean' } } }]]);
+  const xml = '<function=read_file>\n<parameter=path>\n42\n</parameter>\n<parameter=limit>\n20\n</parameter>\n<parameter=raw>\ntrue\n</parameter>\n</function>';
+  assert.deepEqual(extractTextToolCalls(xml, names, schemas).calls, [{ name: 'read_file', args: { path: '42', limit: 20, raw: true } }]);
+  assert.deepEqual(extractTextToolCalls(xml, names).calls, [{ name: 'read_file', args: { path: '42', limit: '20', raw: 'true' } }]);
+  const multiline = '<function=edit_file>\n<parameter=path>\na.py\n</parameter>\n<parameter=new_string>\ndef f():\n    return 1\n</parameter>\n</function>';
+  assert.equal(extractTextToolCalls(multiline, names).calls[0].args.new_string, 'def f():\n    return 1');
+});
+
+test('model-specific call formats quoted in a fence, for unknown tools, or in a Python example never run', () => {
+  const negatives = [
+    'The template looks like this:\n```\n<function=read_file>\n<parameter=path>\na.js\n</parameter>\n</function>\n```\nThat is how Qwen3-Coder calls tools.',
+    '<tool_call>\n<function=format_disk>\n<parameter=device>\n/dev/sda\n</parameter>\n</function>\n</tool_call>',
+    '[TOOL_CALLS][{"name": "format_disk", "arguments": {}}]',
+    '<|channel|>commentary to=functions.format_disk <|message|>{}<|call|>',
+    'Here is how the helper works:\n```python\ndef read_file(path):\n    return open(path).read()\n```',
+    'Run this:\n```tool_code\nread_file(path="a.js")\n```\nThen explain the result to me in detail.\nAnd also summarize the risks.'
+  ];
+  for (const raw of negatives) {
+    const found = extractTextToolCalls(raw, names);
+    assert.ok(!found || !found.calls.length, raw);
+  }
+});

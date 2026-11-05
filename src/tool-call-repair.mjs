@@ -190,7 +190,7 @@ function balancedObjects(text) {
 
 function asCall(value, toolNames) {
   if (!isPlainObject(value)) return null;
-  const fn = isPlainObject(value.function) ? value.function : value;
+  const fn = isPlainObject(value.function) ? value.function : isPlainObject(value.function_call) ? value.function_call : value;
   const name = typeof fn.name === 'string' ? fn.name.trim() : typeof value.tool === 'string' ? value.tool.trim() : '';
   if (!name || !toolNames.has(name)) return null;
   const rawArgs = fn.arguments ?? fn.parameters ?? fn.args ?? value.input ?? {};
@@ -199,15 +199,126 @@ function asCall(value, toolNames) {
   return { name, args };
 }
 
+// Formats whose values arrive as plain text (Qwen3-Coder <parameter=…>, GLM
+// <arg_value>, Python-style keyword calls). A value becomes a number, boolean
+// or object only when the tool's own schema declares that type; otherwise it
+// stays a string, so file content such as "42" is never turned into a number.
+function coerceTextValue(value, schema) {
+  const type = schema && schema.type;
+  const types = Array.isArray(type) ? type : type ? [type] : [];
+  if (typeof value !== 'string' || !types.length || types.includes('string')) return value;
+  const text = value.trim();
+  if ((types.includes('integer') || types.includes('number')) && /^-?\d+(?:\.\d+)?(?:e[+-]?\d+)?$/i.test(text)) return Number(text);
+  if (types.includes('boolean') && /^(true|false)$/i.test(text)) return text.toLowerCase() === 'true';
+  if (types.includes('null') && /^(null|none)$/i.test(text)) return null;
+  if (types.includes('object') || types.includes('array')) {
+    try { const parsed = repairToolArguments(text).args; if (parsed) return parsed; } catch {}
+    const parsed = tryParse(text);
+    if (parsed.ok && typeof parsed.value === 'object') return parsed.value;
+  }
+  return value;
+}
+
+function coerceTextArgs(name, args, schemas) {
+  const params = schemas && typeof schemas.get === 'function' ? schemas.get(name) : null;
+  const props = params && isPlainObject(params.properties) ? params.properties : null;
+  if (!props) return args;
+  const out = {};
+  for (const [key, value] of Object.entries(args)) out[key] = coerceTextValue(value, props[key]);
+  return out;
+}
+
+// A parameter value written between tags: one newline right after the opening
+// tag and one before the closing tag belong to the format, not the value.
+const tagValue = (text) => text.replace(/^\r?\n/, '').replace(/\r?\n$/, '');
+
+// <function=name><parameter=key>value</parameter>…</function> (Qwen3-Coder).
+function xmlParameterArgs(body) {
+  if (!/<parameter=/.test(body)) return null;
+  const args = {};
+  for (const m of body.matchAll(/<parameter=([\w.-]+)>([\s\S]*?)(?:<\/parameter>|(?=<parameter=)|(?=<\/function>)|$)/g)) args[m[1]] = tagValue(m[2]);
+  return Object.keys(args).length ? args : null;
+}
+
+// name\n<arg_key>k</arg_key>\n<arg_value>v</arg_value>… (GLM-4.5 / 4.6).
+function argKeyCall(body) {
+  const head = /^\s*([\w.-]+)\s*(?=<arg_key>|$)/.exec(body);
+  if (!head) return null;
+  const args = {};
+  for (const m of body.matchAll(/<arg_key>\s*([\s\S]*?)\s*<\/arg_key>\s*<arg_value>([\s\S]*?)(?:<\/arg_value>|$)/g)) args[m[1]] = tagValue(m[2]);
+  return { name: head[1], args };
+}
+
+// read_file(path="a.js", limit=20): a Python keyword call (Gemma tool_code,
+// some fine-tunes). Only literal strings, numbers, True/False/None.
+function pythonKeywordCall(text) {
+  const head = /^\s*([A-Za-z_][\w.]*)\s*\(/.exec(text);
+  if (!head) return null;
+  let i = head[0].length;
+  const args = {};
+  const skip = () => { while (i < text.length && /\s/.test(text[i])) i++; };
+  for (;;) {
+    skip();
+    if (text[i] === ')') { i++; break; }
+    const key = /^([A-Za-z_]\w*)\s*=\s*/.exec(text.slice(i));
+    if (!key) return null;
+    i += key[0].length;
+    let value;
+    const ch = text[i];
+    if (ch === '"' || ch === "'") {
+      const triple = text.startsWith(ch.repeat(3), i);
+      const quote = triple ? ch.repeat(3) : ch;
+      i += quote.length;
+      let out = '';
+      while (i < text.length && !text.startsWith(quote, i)) {
+        if (text[i] === '\\' && !triple) {
+          const next = text[i + 1];
+          out += next === 'n' ? '\n' : next === 't' ? '\t' : next;
+          i += 2;
+          continue;
+        }
+        out += text[i++];
+      }
+      if (i >= text.length) return null;
+      i += quote.length;
+      value = out;
+    } else {
+      const lit = /^(-?\d+(?:\.\d+)?|True|False|None|true|false|null)\b/.exec(text.slice(i));
+      if (!lit) return null;
+      i += lit[0].length;
+      value = /^(True|true)$/.test(lit[1]) ? true : /^(False|false)$/.test(lit[1]) ? false : /^(None|null)$/.test(lit[1]) ? null : Number(lit[1]);
+    }
+    args[key[1]] = value;
+    skip();
+    if (text[i] === ',') { i++; continue; }
+    if (text[i] === ')') { i++; break; }
+    return null;
+  }
+  if (text.slice(i).trim()) return null;
+  return { name: head[1], args };
+}
+
+const parseObjectArgs = (text) => { try { return repairToolArguments(text && text.trim() ? text : '{}').args; } catch { return null; } };
+
 // Detects tool calls a model wrote as text instead of native tool calls.
 // Recognized forms (only when the name matches an available tool):
 //   <tool_call>{"name": ..., "arguments": {...}}</tool_call>   (Hermes, Qwen)
 //   <function=name>{...}</function>                             (Llama 3.x)
 //   ```json {"name": ..., "arguments": {...}} ```               (fenced JSON)
 //   a reply that is nothing but {"name": ..., "arguments": {...}}
+//   <function=name><parameter=k>v</parameter></function>        (Qwen3-Coder)
+//   <tool_call>name<arg_key>k</arg_key><arg_value>v</arg_value> (GLM-4.5)
+//   [TOOL_CALLS][{...}] and [TOOL_CALLS]name[ARGS]{...}          (Mistral)
+//   <|python_tag|>{"name": ..., "parameters": {...}}             (Llama 3.x)
+//   <｜tool▁call▁begin｜>…<｜tool▁sep｜>name … {json}             (DeepSeek)
+//   <|tool_call_begin|>functions.name:0<|tool_call_argument_begin|>{...} (Kimi K2)
+//   to=functions.name … <|message|>{...}<|call|>                (gpt-oss harmony)
+//   ```tool_code name(key="value") ```                          (Gemma)
+// `schemas` (optional Map of tool name -> JSON Schema parameters) lets values
+// from text-only formats take the declared number/boolean/object type.
 // Returns { calls: [{ name, args }], text } where text is the reply with the
 // recognized calls removed, or null when nothing was recognized.
-export function extractTextToolCalls(content, availableNames) {
+export function extractTextToolCalls(content, availableNames, schemas = null) {
   if (typeof content !== 'string' || !content.trim()) return null;
   const toolNames = availableNames instanceof Set ? availableNames : new Set(availableNames || []);
   if (!toolNames.size) return null;
@@ -219,9 +330,75 @@ export function extractTextToolCalls(content, availableNames) {
   const fences = [];
   for (const fence of content.matchAll(/```[\s\S]*?(?:```|$)/g)) fences.push([fence.index, fence.index + fence[0].length]);
   const quoted = (index) => fences.some(([from, to]) => index > from && index < to);
+  const push = (name, args, from, to) => {
+    if (!toolNames.has(name) || !args || !isPlainObject(args)) return false;
+    calls.push({ name, args: coerceTextArgs(name, args, schemas) });
+    spans.push([from, to]);
+    return true;
+  };
+  // Model-specific special-token formats. These tokens never appear in prose,
+  // but are still ignored inside a code fence (quoted from a file or docs).
+  const special = [
+    // Qwen3-Coder: optional <tool_call> wrapper around <function=…><parameter=…>.
+    [/(?:<tool_call>\s*)?<function=([\w.-]+)>((?:(?!<\/function>)[\s\S])*?<parameter=[\s\S]*?)(?:<\/function>\s*(?:<\/tool_call>)?|$)/g, (m) => [m[1], xmlParameterArgs(m[2])]],
+    // GLM-4.5: <tool_call>name<arg_key>…</arg_key><arg_value>…</arg_value></tool_call>
+    [/<tool_call>\s*([\w.-]+\s*<arg_key>[\s\S]*?)(?:<\/tool_call>|$)/g, (m) => { const c = argKeyCall(m[1]); return c ? [c.name, c.args] : null; }],
+    // Kimi K2
+    [/<\|tool_call_begin\|>\s*(?:functions\.)?([\w.-]+?)(?::\d+)?\s*<\|tool_call_argument_begin\|>([\s\S]*?)(?:<\|tool_call_end\|>|$)/g, (m) => [m[1], parseObjectArgs(m[2])]],
+    // DeepSeek V3/R1 (type<sep>name ```json {…}```) and V3.1 (name<sep>{…}).
+    [/<｜tool▁call▁begin｜>\s*(?:function\s*<｜tool▁sep｜>\s*([\w.-]+)\s*```(?:json)?\s*([\s\S]*?)```|([\w.-]+)\s*<｜tool▁sep｜>([\s\S]*?))\s*(?:<｜tool▁call▁end｜>|$)/g, (m) => m[1] ? [m[1], parseObjectArgs(m[2])] : [m[3], parseObjectArgs(m[4])]],
+    // gpt-oss harmony: recipient in the header, JSON after <|message|>.
+    [/(?:<\|start\|>assistant)?(?:<\|channel\|>\w+)?\s*to=functions\.([\w.-]+)[^<\n]*(?:<\|constrain\|>\s*\w+\s*)?<\|message\|>([\s\S]*?)(?:<\|call\|>|<\|end\|>|$)/g, (m) => [m[1], parseObjectArgs(m[2])]],
+    // Mistral (v11+): [TOOL_CALLS]name[ARGS]{…}
+    [/\[TOOL_CALLS\]\s*([\w.-]+)\s*\[ARGS\]\s*(\{[\s\S]*?\})(?=\s*(?:\[TOOL_CALLS\]|<\/s>|$))/g, (m) => [m[1], parseObjectArgs(m[2])]]
+  ];
+  for (const [pattern, read] of special) {
+    for (const m of content.matchAll(pattern)) {
+      if (quoted(m.index) || spans.some(([from, to]) => m.index >= from && m.index < to)) continue;
+      const found = read(m);
+      if (found) push(found[0], found[1], m.index, m.index + m[0].length);
+    }
+  }
+  // Mistral (v3): [TOOL_CALLS][{"name": …, "arguments": {…}}, …]
+  // Llama 3.x: <|python_tag|>{"name": …, "parameters": {…}}
+  for (const m of content.matchAll(/(\[TOOL_CALLS\]|<\|python_tag\|>)\s*/g)) {
+    if (quoted(m.index) || spans.some(([from, to]) => m.index >= from && m.index < to)) continue;
+    const rest = content.slice(m.index + m[0].length);
+    let values = null;
+    let length = 0;
+    if (rest.startsWith('[')) {
+      const close = (() => { let depth = 0; let inString = false; for (let j = 0; j < rest.length; j++) { const ch = rest[j]; if (inString) { if (ch === '\\') j++; else if (ch === '"') inString = false; continue; } if (ch === '"') inString = true; else if (ch === '[') depth++; else if (ch === ']' && --depth === 0) return j + 1; } return -1; })();
+      const parsed = close > 0 ? tryParse(rest.slice(0, close)) : { ok: false };
+      if (parsed.ok && Array.isArray(parsed.value)) { values = parsed.value; length = close; }
+    } else {
+      const objects = balancedObjects(rest);
+      if (objects.length && objects[0].start === 0) {
+        const parsed = tryParse(objects[0].text);
+        if (parsed.ok) { values = [parsed.value]; length = objects[0].end; }
+      }
+    }
+    if (!values) continue;
+    const found = values.map((value) => asCall(value, toolNames));
+    if (!found.length || !found.every(Boolean)) continue;
+    const tail = /^\s*(?:<\|eom_id\|>|<\|eot_id\|>|<\/s>)?/.exec(rest.slice(length))[0].length;
+    calls.push(...found);
+    spans.push([m.index, m.index + m[0].length + length + tail]);
+  }
+  // Gemma-style ```tool_code fence holding name(key=value, …), only when the
+  // reply is essentially just that fence.
+  for (const m of content.matchAll(/```tool_code\s*\n([\s\S]*?)\n?```/g)) {
+    const around = (content.slice(0, m.index) + content.slice(m.index + m[0].length)).trim();
+    if (around.length > 160 || /\n\s*\S[\s\S]*\n\s*\S/.test(around)) continue;
+    const lines = m[1].split('\n').map((line) => line.trim()).filter(Boolean);
+    const parsed = lines.map((line) => pythonKeywordCall(line.replace(/^print\((.*)\)$/, '$1')));
+    if (!parsed.length || !parsed.every((call) => call && toolNames.has(call.name))) continue;
+    for (const call of parsed) calls.push({ name: call.name, args: coerceTextArgs(call.name, call.args, schemas) });
+    spans.push([m.index, m.index + m[0].length]);
+  }
+  const claimed = (index) => spans.some(([from, to]) => index >= from && index < to);
   const tagged = /<tool_call>\s*([\s\S]*?)\s*(?:<\/tool_call>|$)/g;
   for (let match; (match = tagged.exec(content));) {
-    if (quoted(match.index)) continue;
+    if (quoted(match.index) || claimed(match.index)) continue;
     for (const object of balancedObjects(match[1])) {
       const call = asCall(tryParse(object.text).ok ? JSON.parse(object.text) : (() => { try { return repairToolArguments(object.text).args; } catch { return null; } })(), toolNames);
       if (call) calls.push(call);
@@ -243,7 +420,7 @@ export function extractTextToolCalls(content, availableNames) {
   }
   const llama = /<function=([\w.-]+)>\s*([\s\S]*?)\s*<\/function>/g;
   for (let match; (match = llama.exec(content));) {
-    if (!toolNames.has(match[1]) || quoted(match.index)) continue;
+    if (!toolNames.has(match[1]) || quoted(match.index) || claimed(match.index)) continue;
     let args;
     try { args = repairToolArguments(match[2] || '{}').args; } catch { continue; }
     calls.push({ name: match[1], args });
@@ -261,6 +438,10 @@ export function extractTextToolCalls(content, availableNames) {
   if (calls.length) {
     // Drop now-empty <tools>…</tools> or <tool_calls>…</tool_calls> wrappers.
     for (const wrapper of content.matchAll(/<\/?(?:tools|tool_calls|function_calls)>/g)) spans.push([wrapper.index, wrapper.index + wrapper[0].length]);
+    // …and the outer section tokens of the special-token formats.
+    for (const wrapper of content.matchAll(/<｜tool▁calls▁(?:begin|end)｜>|<\|tool_calls_section_(?:begin|end)\|>|<\|start\|>assistant|<\|(?:eom_id|eot_id|end)\|>/g)) {
+      if (!claimed(wrapper.index)) spans.push([wrapper.index, wrapper.index + wrapper[0].length]);
+    }
   }
   if (!calls.length) {
     const fenced = /```(?:json|tool_call|tool)?\s*\n([\s\S]*?)\n?```/g;
