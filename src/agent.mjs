@@ -1826,9 +1826,12 @@ async function readProviderStream(response, protocol, onDelta, onProgress) {
 // only) three patient ones of about 2, 5 and 12 seconds. A live run on
 // Google's Gemma endpoint saw three 5xx in a row inside a minute; giving up
 // after half a second of backoff failed whole tasks.
-const MAX_PROVIDER_RETRIES = 5;
+// Overloaded providers (Gemini's 503 "high demand" bursts) can stay down for a
+// minute; Gemini CLI and Claude Code retry about ten times. Eight patient
+// retries wait about 100 seconds in total before giving up.
+const MAX_PROVIDER_RETRIES = 8;
 const QUICK_PROVIDER_RETRIES = 2;
-const PATIENT_RETRY_STEPS_MS = [2000, 5000, 12000];
+const PATIENT_RETRY_STEPS_MS = [2000, 5000, 10000, 20000, 30000, 30000];
 const PATIENT_RETRY_STATUSES = new Set([500, 502, 503, 504]);
 const MAX_PROVIDER_RETRY_DELAY_MS = 5000;
 const RETRYABLE_PROVIDER_STATUSES = new Set([408, 425, 429, 500, 502, 503, 504]);
@@ -1919,11 +1922,30 @@ export function rateLimitWaitMs({ status, headers, body = '', maxMinutes = 0, no
 
 // How many retries a failure gets. status 0 = the connection itself failed.
 // OASIS_PROVIDER_RETRIES caps the total (0 disables retries).
+// Tell the UI about retries long enough to notice (quick sub-second retries
+// stay silent), so a provider outage reads as "retrying", not as a hang.
+function notifyProviderRetry(options, event) {
+  if (!options || typeof options.onProviderRetry !== 'function' || event.waitMs < 1500) return;
+  try { options.onProviderRetry(event); } catch {}
+}
+
+function providerErrorSummary(body) {
+  const text = String(body || '');
+  try {
+    const parsed = JSON.parse(text);
+    const error = (Array.isArray(parsed) ? parsed[0] : parsed)?.error;
+    if (error) return String(typeof error === 'string' ? error : error.message || error.status || '').slice(0, 120);
+  } catch {}
+  return text.replace(/\s+/g, ' ').trim().slice(0, 120);
+}
+
 export function providerRetryLimit(status, env = process.env) {
   const base = status === 0 || PATIENT_RETRY_STATUSES.has(status) ? MAX_PROVIDER_RETRIES : QUICK_PROVIDER_RETRIES;
+  // OASIS_PROVIDER_RETRIES sets the retry count for retryable errors (0-20).
   const raw = (env || process.env).OASIS_PROVIDER_RETRIES;
-  const cap = raw === undefined || raw === '' ? Infinity : Number(raw);
-  return Number.isInteger(cap) && cap >= 0 ? Math.min(base, cap) : base;
+  const wanted = raw === undefined || raw === '' ? NaN : Number(raw);
+  if (!Number.isInteger(wanted) || wanted < 0) return base;
+  return Math.min(wanted, 20);
 }
 
 export function providerRetryDelayMs(retryNumber, retryAfter = null, random = Math.random) {
@@ -2512,7 +2534,8 @@ async function requestCompletionRaw(session, options = {}) {
     // fallback chain move on; with none, waiting beats failing the task.
     let shortWaits = 0;
     const shortWaitBudget = parseFallbackChain(session && session.fallbackModel).length ? 1 : 3;
-    for (let attempt = 0; attempt <= MAX_PROVIDER_RETRIES; attempt++) {
+    const attemptLimit = Math.max(MAX_PROVIDER_RETRIES, providerRetryLimit(0));
+    for (let attempt = 0; attempt <= attemptLimit; attempt++) {
       try {
         response = await fetchImpl(endpoint, {
           method: 'POST',
@@ -2521,8 +2544,16 @@ async function requestCompletionRaw(session, options = {}) {
           body: bodyText
         });
       } catch (error) {
-        if (attempt < providerRetryLimit(0, options.env) && error instanceof TypeError && !controller.signal.aborted) {
-          await waitForProviderRetry(providerRetryDelayMs(attempt + 1), controller.signal);
+        // Only transient failures (reset, timeout, dropped socket) get patient
+        // retries. Nothing listening, no such host or an untrusted certificate
+        // won't fix itself in a minute, so those fail fast with the real reason.
+        const code = String((error && error.cause && error.cause.code) || '');
+        const unreachable = Boolean(code) && !/^(?:ECONNRESET|ETIMEDOUT|EPIPE|ECONNABORTED|ENETDOWN|EAI_AGAIN|UND_ERR_(?:SOCKET|CONNECT_TIMEOUT|HEADERS_TIMEOUT|BODY_TIMEOUT|CLOSED))$/.test(code);
+        const networkLimit = unreachable ? Math.min(QUICK_PROVIDER_RETRIES, providerRetryLimit(0, options.env)) : providerRetryLimit(0, options.env);
+        if (attempt < networkLimit && error instanceof TypeError && !controller.signal.aborted) {
+          const delay = providerRetryDelayMs(attempt + 1);
+          notifyProviderRetry(options, { status: 0, attempt: attempt + 1, limit: networkLimit, waitMs: delay, reason: 'connection failed' });
+          await waitForProviderRetry(delay, controller.signal);
           continue;
         }
         throw error;
@@ -2562,7 +2593,9 @@ async function requestCompletionRaw(session, options = {}) {
         continue;
       }
       if (attempt < providerRetryLimit(status, options.env) && RETRYABLE_PROVIDER_STATUSES.has(status) && !isHardQuotaError(errorBody) && !(status === 429 && shortRateLimitMs(errorBody) !== null)) {
-        await waitForProviderRetry(providerRetryDelayMs(attempt + 1, response.headers.get('retry-after')), controller.signal);
+        const delay = providerRetryDelayMs(attempt + 1, response.headers.get('retry-after'));
+        notifyProviderRetry(options, { status, attempt: attempt + 1, limit: providerRetryLimit(status, options.env), waitMs: delay, reason: providerErrorSummary(errorBody) });
+        await waitForProviderRetry(delay, controller.signal);
         continue;
       }
       const limitWait = limitWaits < 3 ? rateLimitWaitMs({ status, headers: response.headers, body: errorBody, maxMinutes: providerEnv.OASIS_WAIT_FOR_RATE_LIMIT_MINUTES }) : null;
@@ -5360,6 +5393,7 @@ async function runAgentTurnRaw(session, prompt, options = {}) {
       assistant = await requestCompletion(session, {
         ...(options.signal ? { signal: options.signal } : {}),
         ...(typeof options.onRateLimitWait === 'function' ? { onRateLimitWait: options.onRateLimitWait } : {}),
+        ...(typeof options.onProviderRetry === 'function' ? { onProviderRetry: options.onProviderRetry } : {}),
         ...(typeof options.fetchImpl === 'function' ? { fetchImpl: options.fetchImpl } : {}),
         ...(typeof options.onDelta === 'function' ? { onDelta: (delta) => {
           streamedText = (streamedText + String(delta || '')).slice(0, MAX_REPLY_CHARS);
