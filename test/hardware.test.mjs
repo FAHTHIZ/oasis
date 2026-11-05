@@ -115,3 +115,11 @@ test('a model already loaded by llama.cpp or LM Studio is trusted to fit', () =>
   const ollamaOnly = recommendSetup(hw, [{ id: 'ollama', name: 'Ollama', baseURL: 'http://127.0.0.1:11434/v1', running: true, models: ['qwen3:14b'] }]);
   assert.equal(ollamaOnly.primary.route, 'cloud', 'an installed-but-too-big Ollama model is not recommended');
 });
+
+test('describeHardware never prints undefined for partial profiles', async () => {
+  const { describeHardware } = await import('../src/hardware.mjs');
+  assert.equal(describeHardware({ platform: 'darwin', arch: 'arm64', cores: 12, appleSilicon: true }), 'macOS arm64 · 12 CPU cores · Apple Silicon GPU (shared memory)');
+  assert.equal(describeHardware({ os: 'linux', arch: 'x64', cores: 8, memoryGB: 32, gpu: { name: 'RTX 4090', vramGB: 24 } }), 'Linux x64 · 8 CPU cores · 32 GB memory · RTX 4090 (24 GB)');
+  assert.equal(describeHardware(undefined), 'no supported GPU');
+  assert.doesNotMatch(describeHardware({ gpu: {} }), /undefined/);
+});

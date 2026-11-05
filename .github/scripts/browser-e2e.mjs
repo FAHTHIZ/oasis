@@ -865,7 +865,19 @@ try {
   for (const name of ['OASIS_API_KEY', 'OPENAI_API_KEY', 'ANTHROPIC_API_KEY', 'OASIS_LOCAL_API_KEY']) delete firstRunEnv[name];
   const firstRunApp = await startOasisWebServer({
     root, host: '127.0.0.1', port: 0, env: firstRunEnv,
-    token: 'oasis-first-run-e2e-token-0123456789'
+    token: 'oasis-first-run-e2e-token-0123456789',
+    // Deterministic stand-ins for the desktop updater and hardware probe, so the
+    // update banner and the "Recommended for this computer" card render in CI.
+    appUpdate: (() => {
+      const state = { phase: 'available', available: true, current: '1.0.0', latest: { version: '9.9.9', url: 'https://github.com/FAHTHIZ/oasis/releases/tag/v9.9.9' }, canInstall: true, checkedAt: Date.now() };
+      return { status: () => state, check: async () => state, skip: async () => ({ skipped: true }), prompt: async () => {} };
+    })(),
+    profileComputer: async () => ({
+      hardware: { os: 'darwin', platform: 'darwin', arch: 'arm64', cores: 12, memoryGB: 36, appleSilicon: true, gpu: null },
+      budgetGB: 24,
+      primary: { route: 'local-install', model: 'qwen3:14b', serverName: 'Ollama', reason: 'With 36 GB of unified memory, Qwen3 14B runs comfortably on this Mac.', install: { command: 'ollama pull qwen3:14b', url: 'https://ollama.com/download' } },
+      alternatives: [], notes: []
+    })
   });
   try {
     const firstRunPage = await context.newPage();
@@ -881,6 +893,16 @@ try {
     await firstRunPage.locator('#agentTokenInput').fill(firstRunApp.token);
     await firstRunPage.locator('#agentConnectBtn').click();
     await firstRunPage.locator('#firstRunWizard').waitFor({ state: 'visible', timeout: timeoutMs });
+    await firstRunPage.locator('#firstRunRecommend').waitFor({ state: 'visible', timeout: timeoutMs });
+    assert.match(await firstRunPage.locator('#firstRunRecommendTitle').innerText(), /qwen3:14b/);
+    assert.equal(await firstRunPage.locator('#firstRunRecommendUse').innerText(), 'Get Ollama');
+    assert.doesNotMatch(await firstRunPage.locator('#firstRunRecommend').innerText(), /undefined|null/);
+    await firstRunPage.locator('#updateBanner').waitFor({ state: 'visible', timeout: timeoutMs });
+    assert.match(await firstRunPage.locator('#updateBannerTitle').innerText(), /9\.9\.9 is available/);
+    assert.equal(await firstRunPage.locator('#updateBannerInstall').innerText(), 'Install and restart');
+    await firstRunPage.screenshot({ path: path.join(screenshotDir, 'first-run-recommendation-update-desktop.png'), fullPage: false });
+    await firstRunPage.locator('#updateBannerLater').click();
+    assert.equal(await firstRunPage.locator('#updateBanner').isHidden(), true, 'Later must hide the update banner.');
     await assertAgentContrast(firstRunPage, 'First-run setup · desktop');
     await firstRunPage.screenshot({ path: path.join(screenshotDir, 'first-run-desktop.png'), fullPage: true });
 

@@ -6,6 +6,7 @@ This file records notable user-facing product changes. It does not imply that an
 
 Changes after 1.1.0. Entries include feature work, reliability improvements, and security hardening; benchmark-driven fixes and their regression evidence are documented alongside the relevant changes.
 
+- The hardware summary on the first-run card and in `oasis doctor` skips fields it cannot detect instead of printing `undefined`. The browser end-to-end test now checks the "Recommended for this computer" card and the update banner (including "Later") on desktop.
 ## 1.1.0 — stable (November 5, 2026)
 
 Release notes: [docs/releases/v1.1.0.md](docs/releases/v1.1.0.md). Changes after 1.0.0. Entries include feature work, reliability improvements, and security hardening; benchmark-driven fixes and their regression evidence are documented alongside the relevant changes.
