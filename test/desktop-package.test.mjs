@@ -21,14 +21,22 @@ test('desktop packaging defines one-click Windows installer and macOS/Linux pack
 });
 
 
-test('stable desktop release requires explicit owner confirmation and stable package channel', () => {
+test('stable desktop releases publish only for a new stable version with curated notes and passing gates', () => {
+  // Manual dispatch still needs both confirmations.
   assert.match(releaseWorkflow, /publish_release:\s*\n\s*description:/);
   assert.match(releaseWorkflow, /confirm_stable_release:\s*\n\s*description:/);
   assert.match(releaseWorkflow, /inputs\.publish_release == true/);
   assert.match(releaseWorkflow, /inputs\.confirm_stable_release == true/);
+  // A push to main publishes only when package.json carries a version that has
+  // not been released yet: the owner's version bump is the release decision.
+  const condition = releaseWorkflow.match(/publish-release:[\s\S]*?needs:/)?.[0] || '';
+  assert.match(condition, /github\.event_name == 'push'/);
+  assert.match(condition, /github\.ref == 'refs\/heads\/main'/);
   assert.match(releaseWorkflow, /oasisRelease\?\.channel/);
   assert.match(releaseWorkflow, /must be stable/);
-  assert.doesNotMatch(releaseWorkflow.match(/publish-release:[\s\S]*?needs:/)?.[0] || '', /github\.event_name == 'push'/);
+  assert.match(releaseWorkflow, /already released from/, 'an existing tag is never overwritten');
+  assert.match(releaseWorkflow, /Missing curated release notes/);
+  assert.match(releaseWorkflow, /quality\.yml pages\.yml installer-checks\.yml/, 'same-commit quality gates must pass first');
 });
 
 test('desktop runtime is loopback-only and keeps renderer Node APIs disabled', () => {

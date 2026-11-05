@@ -135,6 +135,7 @@ function printHelp() {
     '  oasis -p "task" [--output-format text|json|stream-json] [--max-turns N]  Run once without prompts (scripts/CI)',
     '  cat log.txt | oasis -p "explain this error"  Piped input is added to the prompt',
     '  oasis setup                   Configure a model provider',
+    '  oasis setup --auto            Detect this computer (CPU, memory, GPU) and running model servers, then configure the best fit',
     '  oasis doctor [--test-provider] Check the environment; optionally verify live tool calling',
     '  oasis doctor --network        Check that the provider, MCP servers and GitHub are reachable (proxy, DNS, TLS)',
     '  oasis update [--check] [--yes] Check and install the latest stable GitHub release',
@@ -466,6 +467,38 @@ async function configureOmniRoute(root = process.cwd()) {
 }
 
 
+// Hardware-aware setup: detect this computer and its local model servers, then
+// save the best working route. Only a route that answers a real test request is
+// saved; anything else prints the recommendation and the next step.
+async function autoSetup(root, { dryRun = false } = {}) {
+  const { profileThisComputer, describeRecommendation } = await import('./hardware.mjs');
+  stdout.write('\nOASIS automatic setup — checking this computer…\n');
+  let current = null;
+  try { current = await loadConfig(); } catch {}
+  const rec = await profileThisComputer({ configured: Boolean(current && current.configured) });
+  stdout.write(describeRecommendation(rec) + '\n');
+  const primary = rec.primary;
+  if (primary.route !== 'local' && primary.route !== 'gateway') {
+    stdout.write(primary.route === 'local-install'
+      ? '\nInstall Ollama and pull the model above, then run oasis setup --auto again.\n'
+      : '\nRun oasis setup to connect a hosted model with an API key.\n');
+    return rec;
+  }
+  if (dryRun) { stdout.write('\n--dry-run: nothing was saved.\n'); return rec; }
+  const candidate = { protocol: primary.protocol, baseURL: primary.baseURL, model: primary.model, apiKey: '', ...(rec.settings.contextWindow ? { contextWindow: rec.settings.contextWindow } : {}) };
+  stdout.write('\nTesting ' + primary.serverName + ' with ' + primary.model + ' (local models can take a minute to load)…\n');
+  try {
+    await testProviderConnection(candidate, { timeoutMs: 180000 });
+  } catch (error) {
+    stdout.write('The test request failed: ' + (error && error.message || error) + '\nNothing was saved. Check the server, then run oasis setup --auto again, or run oasis setup to choose manually.\n');
+    process.exitCode = 1;
+    return rec;
+  }
+  const configPath = await saveConfig(candidate);
+  stdout.write('Saved: ' + primary.model + ' via ' + primary.serverName + (candidate.contextWindow ? ' (context window ' + candidate.contextWindow + ' tokens)' : '') + ' → ' + configPath + '\nNext: run oasis in a project folder, or oasis web --open.\n');
+  return rec;
+}
+
 async function configureProvider(root = process.cwd(), options = {}) {
   stdout.write('\nOasis setup — choose and verify your model provider\n');
   stdout.write('A successful model response is required before settings are saved or coding tools are used. Presets include OmniRoute, OpenAI, Anthropic, OpenRouter, Gemini, local Ollama, AWS Bedrock, Google Vertex AI, and Microsoft Foundry.\n');
@@ -675,6 +708,13 @@ async function doctor(args = [], root = process.cwd()) {
   detail('Environment details\n');
   detail('  OS / architecture: ' + process.platform + ' / ' + process.arch + '\n');
   detail('  Node.js: ' + process.version + (isNodeVersionSupported() ? ' (supported)' : ' (requires Node.js 22+)') + '\n');
+  try {
+    const { detectHardware, describeHardware, modelMemoryBudget, localModelTier } = await import('./hardware.mjs');
+    const hw = await detectHardware();
+    const tier = localModelTier(modelMemoryBudget(hw));
+    detail('  Hardware: ' + describeHardware(hw) + '\n');
+    detail('  Local model fit: ' + (tier ? 'up to ' + tier.model + ' (about ' + modelMemoryBudget(hw) + ' GB usable); run oasis setup --auto' : 'too little memory for a useful local model; use a hosted model') + '\n');
+  } catch {}
   const probes = ['git', 'npm', 'python3', 'python', 'pipx', 'pkg', 'apt-get', 'dnf', 'pacman', 'brew', 'winget', 'ollama'];
   const nodeOK = isNodeVersionSupported();
   const gitOK = commandAvailable('git');
@@ -2159,7 +2199,7 @@ async function printMode(root, headless, args, autoApprove, persistence) {
   const config = await loadConfig();
   if (SESSION_OPTIONS.model) config.model = SESSION_OPTIONS.model;
   if (SESSION_OPTIONS.effort) Object.assign(config, applyEffort(config, SESSION_OPTIONS.effort));
-  if (!config.configured) throw new Error('No model provider is configured.\n  Pick one:\n    oasis setup          guided setup in this terminal (API key, free gateway, or Ollama)\n    oasis web --open     set it up in the browser workspace instead\n    OASIS_PROTOCOL, OASIS_BASE_URL, OASIS_MODEL + API key variable   for CI and scripts\n  Guide: https://github.com/FAHTHIZ/oasis/blob/main/docs/INSTALL.md');
+  if (!config.configured) throw new Error('No model provider is configured.\n  Pick one:\n    oasis setup          guided setup in this terminal (API key, free gateway, or Ollama)\n    oasis setup --auto   detect this computer and any local model server, then configure the best fit\n    oasis web --open     set it up in the browser workspace instead\n    OASIS_PROTOCOL, OASIS_BASE_URL, OASIS_MODEL + API key variable   for CI and scripts\n  Guide: https://github.com/FAHTHIZ/oasis/blob/main/docs/INSTALL.md');
   if (SESSION_OPTIONS.channels.length || SESSION_OPTIONS.devChannels.length) stderr.write('[channels] Channels need an interactive session; ignored with -p.\n');
   // CI runners and supervisors stop jobs with SIGTERM. Commands run in their own
   // process group, so without this they would outlive Oasis and the job would
@@ -2567,6 +2607,15 @@ async function interactive(root, autoApprove, persistence = {}) {
   }
   if (stdout.isTTY) await showStartupBanner({ root, model: SESSION_OPTIONS.model || (bannerConfig.configured === false ? 'not set up yet · exit and run oasis setup' : bannerConfig.model) || '', provider: bannerConfig.configured === false ? '' : (bannerConfig.protocol || ''), mode: SESSION_OPTIONS.permissionMode || 'default' }).catch(() => {});
   else stdout.write('\nOASIS — coding agent\nWorkspace: ' + root + '\nType your task in plain English. Use /help or /exit. Commands run locally; review permissions carefully.\n');
+  if (stdout.isTTY) {
+    try {
+      const { cliUpdateNotice } = await import('./app-update.mjs');
+      const { getBaseConfigDirectory } = await import('./config.mjs');
+      const { oasisVersion } = await import('./version.mjs');
+      const notice = await cliUpdateNotice({ statePath: path.join(getBaseConfigDirectory(process.env), 'update-state.json'), currentVersion: oasisVersion() });
+      if (notice) stdout.write((colorEnabled(stdout) ? '\x1b[33m' : '') + notice + (colorEnabled(stdout) ? '\x1b[39m' : '') + '\n');
+    } catch {}
+  }
   if (process.env.OASIS_BACKGROUND_NOTICE !== '0') {
     try {
       const bg = await import('./background-sessions.mjs');
@@ -3495,7 +3544,11 @@ async function main() {
     stdout.write('OASIS ' + pkg.version + '\n');
     return;
   }
-  if (command === 'setup') return await configureProvider(workspace);
+  if (command === 'setup') {
+    // `oasis setup --auto` (or `setup auto` / `--detect`): configure from this computer's hardware and running model servers.
+    if (rest[0] === 'auto' || rest.includes('--detect') || process.argv.slice(2).includes('--auto')) return await autoSetup(workspace, { dryRun: rest.includes('--dry-run') });
+    return await configureProvider(workspace);
+  }
   if (command === 'doctor') return await doctor(rest, workspace);
   if (command === 'memory') return await memoryCommand(rest, workspace);
   if (command === 'diagnostics') return await diagnosticsCommand(rest, workspace, autoApprove);

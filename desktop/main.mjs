@@ -1,4 +1,4 @@
-import { app, BrowserWindow, clipboard, dialog, Menu, safeStorage, session, shell } from 'electron';
+import { app, BrowserWindow, clipboard, dialog, Menu, Notification, safeStorage, session, shell } from 'electron';
 import tls from 'node:tls';
 import { readFile, stat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
@@ -10,6 +10,7 @@ import { showErrorWithCopy } from './error-dialog.mjs';
 import { installPermissionPolicy } from './permissions.mjs';
 import { installProxyFromEnv } from '../src/proxy.mjs';
 import { applySystemProxy, useSystemCertificates } from './system-network.mjs';
+import { createDesktopUpdater, defaultUpdateDirectory } from './updater.mjs';
 
 // The agent runs in this process, so its model/MCP requests honour HTTPS_PROXY / NO_PROXY too.
 installProxyFromEnv();
@@ -21,6 +22,7 @@ let shuttingDown = false;
 let startupComplete = false;
 let recoveryScreenActive = false;
 let recoveryReloadPending = false;
+let updater = null;
 const desktopEnv = { ...process.env };
 const inheritedOasisApiKey = process.env.OASIS_API_KEY || '';
 
@@ -193,7 +195,7 @@ async function openWorkspace(root) {
     activeOrigin = null;
     await previous.close();
   }
-  runtime = await startOasisWebServer({ root: resolved, host: '127.0.0.1', port: 0, env: desktopEnv, onProviderConfig: persistDesktopProviderConfig });
+  runtime = await startOasisWebServer({ root: resolved, host: '127.0.0.1', port: 0, env: desktopEnv, onProviderConfig: persistDesktopProviderConfig, appUpdate: updater ? desktopUpdateBridge() : undefined });
   activeOrigin = 'http://127.0.0.1:' + runtime.port;
   await saveWorkspace(resolved);
   const window = createWindow();
@@ -217,6 +219,18 @@ async function chooseAndOpenWorkspace() {
   }
 }
 
+// The browser workspace shows the update banner; these are the only actions it
+// can ask the desktop host to take.
+function desktopUpdateBridge() {
+  return {
+    status: () => updater.status(),
+    check: () => updater.check({ manual: false }),
+    install: () => updater.install(),
+    skip: (version) => updater.skip(version),
+    prompt: () => updater.prompt()
+  };
+}
+
 function installMenu() {
   Menu.setApplicationMenu(Menu.buildFromTemplate([
     { label: 'File', submenu: [
@@ -229,7 +243,10 @@ function installMenu() {
     ]},
     { label: 'Help', submenu: [
       { label: 'OASIS documentation', click: () => { void shell.openExternal('https://github.com/FAHTHIZ/oasis#readme'); } },
-      { label: 'Report a problem', click: () => { void shell.openExternal('https://github.com/FAHTHIZ/oasis/issues'); } }
+      { label: 'Report a problem', click: () => { void shell.openExternal('https://github.com/FAHTHIZ/oasis/issues'); } },
+      { type: 'separator' },
+      { label: 'Check for updates…', click: () => { if (updater) void updater.check({ manual: true }); } },
+      { label: 'About OASIS ' + app.getVersion(), enabled: false }
     ]}
   ]));
 }
@@ -244,6 +261,7 @@ if (!app.requestSingleInstanceLock()) {
     if (shuttingDown || !runtime) return;
     event.preventDefault();
     shuttingDown = true;
+    if (updater) updater.stop();
     const active = runtime;
     runtime = null;
     void active.close().catch(() => {}).finally(() => app.quit());
@@ -259,8 +277,19 @@ if (!app.requestSingleInstanceLock()) {
     // System proxy (incl. PAC) and OS-trusted certificates, unless set or disabled.
     useSystemCertificates(tls);
     await applySystemProxy({ session: session.defaultSession, envs: [process.env, desktopEnv] });
+    updater = createDesktopUpdater({
+      app, dialog, shell, Notification,
+      getWindow: () => mainWindow,
+      currentVersion: app.getVersion(),
+      statePath: path.join(app.getPath('userData'), 'update-state.json'),
+      downloadDirectory: defaultUpdateDirectory(app),
+      env: process.env,
+      channel: process.env.OASIS_UPDATE_CHANNEL === 'beta' ? 'beta' : 'stable',
+      log: (line) => { if (!app.isPackaged) console.log('[oasis update] ' + line); }
+    });
     installMenu();
     await restoreProviderSecret();
+    updater.start();
     const saved = await loadState();
     if (await isDirectory(saved.workspace)) {
       try { await openWorkspace(saved.workspace); startupComplete = true; return; }

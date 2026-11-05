@@ -10,7 +10,9 @@ import { fileURLToPath } from 'node:url';
 import { isIP } from 'node:net';
 import { createSession, runAgentTurn, closeSession, testProviderConnection, steerSession, takeSteering, compactHistoryIfNeeded } from './agent.mjs';
 import { startIdleCompaction, idleCompactMinutes } from './idle-compaction.mjs';
-import { loadConfig, saveConfig, getProviderSummary, validateProtocol, validateBaseUrl, isLoopbackUrl } from './config.mjs';
+import { loadConfig, saveConfig, getProviderSummary, validateProtocol, validateBaseUrl, isLoopbackUrl, getBaseConfigDirectory } from './config.mjs';
+import { cachedUpdateCheck, updateChecksDisabled, readUpdateState, writeUpdateState, RELEASES_PAGE } from './app-update.mjs';
+import { oasisVersion } from './version.mjs';
 import { saveSession, loadSession, listSessions, deleteSession } from './sessions.mjs';
 import { executeTool, resolveWorkspacePath, sensitivePath } from './tools.mjs';
 import { inspectGitHubExtension, inspectGitHubMcpServers, selectReviewedMcpServers, resolveImportedSlashCommand, installGitHubExtension, updateGitHubExtension, rollbackGitHubExtension, listInstalledExtensions, removeGitHubExtension } from './extensions.mjs';
@@ -1526,6 +1528,74 @@ export function createOasisWebServer(options = {}) {
         approvalMode: 'per-action',
         setupHint
       });
+      return;
+    }
+
+    if (pathname === '/api/app/update') {
+      // The desktop app answers from its own updater (which can install); the
+      // CLI-hosted workspace only reports a new release and the command to run.
+      const bridge = options.appUpdate;
+      const statePath = path.join(getBaseConfigDirectory(env), 'update-state.json');
+      if (req.method === 'GET') {
+        try {
+          if (bridge) {
+            const force = parsedUrl.searchParams.get('refresh') === '1';
+            json(res, 200, { host: 'desktop', ...(force || !bridge.status().checkedAt ? await bridge.check() : bridge.status()) });
+            return;
+          }
+          if (updateChecksDisabled(env)) { json(res, 200, { host: 'cli', phase: 'disabled', available: false, current: oasisVersion() }); return; }
+          const result = await cachedUpdateCheck({ statePath, currentVersion: oasisVersion(), kind: 'cli', fetchImpl: options.updateFetchImpl || fetch });
+          json(res, 200, {
+            host: 'cli', phase: result.available ? 'available' : 'current', available: result.available,
+            current: result.current, latest: result.latest, skippedVersion: result.skippedVersion,
+            checkedAt: result.checkedAt, canInstall: false, command: 'oasis update',
+            releasesPage: result.latest ? result.latest.url : RELEASES_PAGE
+          });
+        } catch (error) {
+          json(res, 200, { host: bridge ? 'desktop' : 'cli', phase: 'error', available: false, current: oasisVersion(), error: String(error && error.message || error) });
+        }
+        return;
+      }
+      if (req.method === 'POST') {
+        if (!isLoopbackClient(req)) { json(res, 403, { error: 'Updates can be managed only from the same computer.' }); return; }
+        const body = await readJsonBody(req);
+        const action = String(body && body.action || '');
+        const version = typeof (body && body.version) === 'string' ? body.version.slice(0, 40) : '';
+        if (action === 'skip') {
+          if (bridge) { json(res, 200, { host: 'desktop', ...(await bridge.skip(version || undefined)) }); return; }
+          const state = await readUpdateState(statePath);
+          await writeUpdateState(statePath, { ...state, skippedVersion: version || (state.lastResult && state.lastResult.latest && state.lastResult.latest.version) || '' });
+          json(res, 200, { host: 'cli', skipped: true });
+          return;
+        }
+        if (action === 'install') {
+          if (!bridge) { json(res, 400, { error: 'Run oasis update in a terminal to install the new version.' }); return; }
+          // Respond first: installing can quit the app that serves this request.
+          json(res, 202, { host: 'desktop', accepted: true });
+          setImmediate(() => { void Promise.resolve(bridge.prompt()).catch(() => {}); });
+          return;
+        }
+        json(res, 400, { error: 'Unknown update action.' });
+        return;
+      }
+      json(res, 405, { error: 'Method not allowed.' });
+      return;
+    }
+
+    if (req.method === 'GET' && pathname === '/api/system/profile') {
+      // Hardware and local model servers of the computer running OASIS. Like
+      // local-model discovery it probes only fixed loopback ports, and it is not
+      // shown to second devices on the network.
+      if (!isLoopbackClient(req)) { json(res, 403, { error: 'Hardware detection is available only from the same computer.' }); return; }
+      try {
+        const { profileThisComputer, describeHardware } = await import('./hardware.mjs');
+        let configured = false;
+        try { configured = Boolean((await getConfig()).configured); } catch {}
+        const rec = await (options.profileComputer || profileThisComputer)({ configured, fetchImpl: options.fetchImpl || fetch });
+        json(res, 200, { ...rec, summary: describeHardware(rec.hardware) });
+      } catch (error) {
+        json(res, 500, { error: 'Could not inspect this computer: ' + (error && error.message || error) });
+      }
       return;
     }
 

@@ -58,7 +58,25 @@ jobs:
           - platform: linux-x64
             os: ubuntu-latest
             command: linux
+          # Extra CPU types. They are optional: a failure here never blocks the
+          # release of the main installers, it only leaves that file out.
+          - platform: macos-x64
+            os: macos-latest
+            command: mac
+            arch: x64
+            optional: true
+          - platform: linux-arm64
+            os: ubuntu-24.04-arm
+            command: linux
+            arch: arm64
+            optional: true
+          - platform: windows-arm64
+            os: windows-11-arm
+            command: win
+            arch: arm64
+            optional: true
     runs-on: ${{ matrix.os }}
+    continue-on-error: ${{ matrix.optional == true }}
     steps:
       - name: Check out source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -82,13 +100,18 @@ jobs:
         env:
           GYP_MSVS_VERSION: '2022'
           npm_config_msvs_version: '2022'
-        run: npm run desktop:dist -- --win nsis
+        run: npm run desktop:dist -- --win nsis ${{ matrix.arch && format('--{0}', matrix.arch) || '--x64' }}
       - name: Package macOS disk image
         if: matrix.command == 'mac'
-        run: npm run desktop:dist -- --mac dmg
+        run: npm run desktop:dist -- --mac dmg ${{ matrix.arch && format('--{0}', matrix.arch) || '--arm64' }}
       - name: Package Linux installers
         if: matrix.command == 'linux'
-        run: npm run desktop:dist -- --linux AppImage deb
+        run: npm run desktop:dist -- --linux AppImage deb ${{ matrix.arch && format('--{0}', matrix.arch) || '--x64' }}
+      - name: Drop updater metadata from extra CPU builds
+        # latest*.yml names collide between CPU types; the main build's copy is kept.
+        if: matrix.optional == true
+        shell: bash
+        run: rm -f release/latest*.yml
       - name: Upload platform installer
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
@@ -102,10 +125,11 @@ jobs:
     if: >-
       needs.package.result == 'success' &&
       needs.validate.result == 'success' &&
-      github.event_name == 'workflow_dispatch' &&
-      inputs.publish_release == true &&
-      inputs.confirm_stable_release == true &&
-      github.ref == 'refs/heads/main'
+      github.ref == 'refs/heads/main' &&
+      (github.event_name == 'push' ||
+       (github.event_name == 'workflow_dispatch' &&
+        inputs.publish_release == true &&
+        inputs.confirm_stable_release == true))
     needs: [validate, package]
     runs-on: ubuntu-latest
     permissions:

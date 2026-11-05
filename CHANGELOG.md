@@ -6,6 +6,22 @@ This file records notable user-facing product changes. It does not imply that an
 
 Changes after 1.0.0. Entries include feature work, reliability improvements, and security hardening; benchmark-driven fixes and their regression evidence are documented alongside the relevant changes.
 
+- **Update notifications and installs, on every surface.** A new module, `src/app-update.mjs`, checks the GitHub releases for a newer stable version. Results are cached for six hours and checks never delay startup.
+  - **Desktop app:** a native notification, a Help menu item ("Check for updates…"), and an "Install and restart" option. The installer is downloaded only from GitHub and must match the release `SHA256SUMS` before it runs. Each install type has its own path: a silent one-click NSIS reinstall on Windows, an in-place AppImage swap with relaunch on Linux, and the system installer for macOS `.dmg` and `.deb`.
+  - **Browser workspace:** an update banner with Update, What's new, Later and Skip this version (`/api/app/update`).
+  - **Interactive CLI:** a one-line notice pointing to `oasis update`.
+  - **Opting out:** `OASIS_NO_UPDATE_CHECK=1` turns checks off, and they are off in CI. `OASIS_UPDATE_CHANNEL=beta` opts the desktop app into pre-releases.
+- **Hardware-aware setup.** `src/hardware.mjs` detects the OS, CPU cores, memory and GPU (via NVIDIA `nvidia-smi`, or Apple Silicon unified memory). It also probes the fixed loopback ports of Ollama, LM Studio, llama.cpp, Jan, vLLM and OmniRoute, then recommends the best route for the machine:
+  - a running model that fits;
+  - a local gateway;
+  - an Ollama model sized to the memory budget, with the `ollama pull` command;
+  - or a hosted model when the device is too small.
+  Where to find it:
+  - `oasis setup --auto` tests the recommended route and saves it only if it works.
+  - `oasis doctor` prints the hardware line.
+  - The browser's first-run screen shows a "Recommended for this computer" card (`/api/system/profile`, same computer only).
+- **Releases publish automatically on a version bump.** When a push to main carries a stable `package.json` version with no tag yet, curated notes in `docs/releases/`, and passing same-commit quality, site and installer gates, the desktop workflow publishes the release with checksums. Existing tags are never overwritten, and manual dispatch still works. Installers are now also built for Intel Macs, Linux ARM64 and Windows ARM64. These extra builds are optional, so one failing never blocks the main release.
+- **Download page picks the right installer.** The homepage detects the OS and CPU type (including Apple silicon vs Intel through the WebGL renderer) and links the main Download button straight to the matching file. Android and iPhone visitors get phone instructions.
 - **Eval fairness: four task statements now state what their hidden verifiers check.** `normalize-package-name` says the error must mention "package identifier"; `validate-todo-list` lists the words its error messages must contain ("array", "50", "status", "Only one"); `normalize-token-usage` gives the return shape `{inputTokens, outputTokens, totalTokens}`; and `truncate-tool-output` says the `...[truncated]` marker counts toward the limit and the limit is clamped to at least 16. Before this, a correct solution could fail on wording it was never told about. Fixture fingerprints changed; `eval --validate` passes 52/52.
 - **Eval fix: `clamp-integer` says the value may be a string.** Its hidden verifier only passes strings (`'8'`, `'bad'`), but the task said "return fallback for non-integer input", which a careful reader can take to mean any string. Three Qwen3-4B runs (November 1, 2 and 5) all made that choice and returned the fallback for `'8'`. The task now says to parse strings such as `'8'` as base-10 integers. The fingerprint changed, so older `clamp-integer` results are not comparable.
 - **Eval fix: `bounded-pagination` now names its file.** It was the only focused fixture whose task never said the helper belongs in `src/lib.mjs`, though the hidden verifier imports it from there. A 2026-11-05 Qwen3-4B run wrote correct-looking code to `src/utils/pagination.js` and failed for that reason alone. The task fingerprint changed, so older `bounded-pagination` results are not comparable.

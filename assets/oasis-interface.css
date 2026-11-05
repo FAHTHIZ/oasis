@@ -948,3 +948,20 @@ svg.gi{display:inline-block;width:1em;height:1em;vertical-align:-0.125em;flex:no
 /* Touch screens have no hover: keep task delete visible and drop keyboard-only hints. */
 .delete-task .gi{width:14px;height:14px}
 @media (hover:none){.delete-task{opacity:.75}.msg-actions{opacity:.8}.command-palette-help{display:none}}
+
+/* Update banner: one quiet card, bottom right, above the toast layer. */
+.update-banner{position:fixed;right:20px;bottom:20px;z-index:99;display:flex;align-items:center;gap:12px;flex-wrap:wrap;max-width:min(560px,calc(100vw - 40px));padding:12px 14px;border-radius:var(--r-md);background:var(--raised);border:1px solid var(--line-strong);box-shadow:var(--shadow-lg);font-size:13px}
+.update-banner[hidden]{display:none}
+.update-banner>.gi{width:18px;height:18px;flex:none;stroke:currentColor;fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round;color:var(--accent,currentColor)}
+.update-banner-text{display:grid;gap:2px;flex:1 1 220px;min-width:0}
+.update-banner-text small{color:var(--muted);font-size:12.5px;line-height:1.4}
+.update-banner-actions{display:flex;gap:6px;flex-wrap:wrap}
+@media (max-width:640px){.update-banner{left:12px;right:12px;bottom:12px;max-width:none}}
+
+/* First-run: the hardware-aware recommendation sits above the manual choices. */
+.first-run-recommend{display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin:0 0 12px;padding:14px 16px;border-radius:var(--r-md);border:1px solid var(--accent);background:color-mix(in srgb,var(--accent) 7%,transparent)}
+.first-run-recommend[hidden]{display:none}
+.first-run-recommend-text{display:grid;gap:3px;flex:1 1 260px;min-width:0}
+.first-run-recommend-label{font-size:11.5px;letter-spacing:.04em;text-transform:uppercase;color:var(--accent)}
+.first-run-recommend-text small{color:var(--muted);font-size:12.5px;line-height:1.45}
+.first-run-recommend-hw{font-family:var(--mono);font-size:11.5px}
