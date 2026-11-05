@@ -1,8 +1,8 @@
 # OASIS product and release-qualification plan
 
 **Product lifecycle:** Stable  
-**Package version:** `1.0.0`  
-**Release channel:** stable ([`v1.0.0`](https://github.com/FAHTHIZ/oasis/releases/tag/v1.0.0) published November 4, 2026 from commit `1417117`)  
+**Package version:** `1.1.0`  
+**Release channel:** stable ([`v1.0.0`](https://github.com/FAHTHIZ/oasis/releases/tag/v1.0.0) published November 4, 2026 from commit `1417117`; `v1.1.0` publishes automatically from the first `main` commit at that version that passes every gate)  
 **Release source:** `main`  
 **Previous release:** `v0.4.0` (historical Beta; the tag and GitHub Release are no longer present in the repository)  
 **License:** Apache-2.0
@@ -41,7 +41,7 @@ Work after 1.0 is refinement: stronger agents, better tool selection and task co
 
 - `v0.4.0` was published as Beta; its [release notes](releases/v0.4.0.md) remain in the tree, but the tag and GitHub Release are no longer present in the repository (checked November 4, 2026). The other remaining tag is `0.6.7`.
 - `package.json` is version `1.0.0` with `oasisRelease.channel` set to `stable`. The `v1.0.0` tag and GitHub Release are created by the desktop workflow (manual dispatch with `publish_release` and `confirm_stable_release`) from a verified `main` commit; the stable CLI installer then resolves `v1.0.0`. That run completed on November 4, 2026 (commit `1417117`), with Windows, macOS and Linux installers and `SHA256SUMS`.
-- Never move or retag `v0.4.0` or `v1.0.0`. Fixes after 1.0 ship as new versions (`1.0.1`, `1.1.0`, ...).
+- Never move or retag a published tag. Fixes ship as new versions (`1.1.1`, `1.2.0`, ...). From 1.1.0, a push to `main` whose `package.json` version has no tag yet publishes it automatically, once `docs/releases/vX.Y.Z.md` exists and the same-commit gates pass. Manual dispatch still works.
 
 ## 3. Product scope for 1.0
 
@@ -101,7 +101,7 @@ These are explicit product boundaries. They should not be hidden by maturity wor
 3. **Same-commit CI:** Quality Checks, installer checks, desktop packaging and public-site validation passed together on `76d04f7`, and the publish job re-requires them on the release commit.
 4. **Clean-machine desktop journey — decision:** covered by CI on fresh GitHub-hosted Windows, macOS and Ubuntu runners (installer checks and desktop packaging). Manual first-launch, update and uninstall testing on physical machines was not done for 1.0. This is stated in the README, install guide and release notes.
 5. **Security-boundary review:** refreshed on November 1, 2026 in the [security/reliability audit](SECURITY_RELIABILITY_AUDIT.md), including sandbox `/tmp` mounts, quoted tool-call recovery, unrequested git writes and eval credential isolation.
-6. **Release integrity:** the publish job checks that the package version matches the tag, that `docs/releases/v1.0.0.md` exists, that the tag is new or already points at the same commit, and that `main` has not moved; it then publishes the installers with `SHA256SUMS`.
+6. **Release integrity:** the publish job checks that the package version matches the tag, that `docs/releases/v<version>.md` exists, that the tag is new or already points at the same commit, and that `main` has not moved; it then publishes the installers with `SHA256SUMS`.
 7. **Code signing — decision:** OASIS 1.0 installers are **not code-signed**. There is no Windows Authenticode or Apple Developer ID certificate for the project. Each release ships `SHA256SUMS`; checksums detect corruption and tampering in transit but are not publisher signatures, and Windows SmartScreen and macOS Gatekeeper will warn. Signing is a post-1.0 item.
 8. **Documentation and public identity:** README, site, package metadata, install guide, security policy and release notes describe the same version and lifecycle.
 

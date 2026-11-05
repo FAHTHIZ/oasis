@@ -107,7 +107,7 @@ Other ways in:
 | Option | How |
 | --- | --- |
 | **Pinned stable CLI** | The [checksum-verified installer](docs/INSTALL.md#command-line-installation) resolves the latest stable release (`v1.0.0`) to an immutable commit, runs `oasis doctor` and opens setup. |
-| **Desktop app** | [Download v1.0.0](https://github.com/FAHTHIZ/oasis/releases/latest): Windows x64 `.exe`, macOS arm64 `.dmg`, Linux x86_64 `.AppImage` or `.deb`, with `SHA256SUMS`. They are not code-signed, so SmartScreen and Gatekeeper warn on first launch; [verify the checksum](docs/INSTALL.md) first. From v1.1.0 the app tells you when a new stable version is out and installs it after checking its SHA-256 ([updates](docs/INSTALL.md#updates)). |
+| **Desktop app** | [Download the latest release](https://github.com/FAHTHIZ/oasis/releases/latest): Windows x64 `.exe`, macOS arm64 `.dmg`, Linux x86_64 `.AppImage` or `.deb`, with `SHA256SUMS`. They are not code-signed, so SmartScreen and Gatekeeper warn on first launch; [verify the checksum](docs/INSTALL.md) first. From v1.1.0 the app tells you when a new stable version is out and installs it after checking its SHA-256 ([updates](docs/INSTALL.md#updates)). |
 | **Local model, no API key** | `llama-server -m qwen3-4b-instruct-q4_k_m.gguf --jinja -c 16384 --port 8080`, then `OASIS_BASE_URL=http://127.0.0.1:8080/v1 OASIS_MODEL=qwen3-4b oasis`. OASIS reads the loaded context window and picks the right profile. Ollama and LM Studio work the same way. |
 | **Coming from another agent** | `oasis import claude`, `codex`, `gemini`, `cursor`, `hermes`, `opencode`, `antigravity`, `windsurf` or `cline` (add `--dry-run` to preview). Existing `CLAUDE.md` / `AGENTS.md` files are picked up as they are. |
 | **Phone or tablet** | Run `oasis web --host 0.0.0.0` with a TLS certificate on your computer, scan the QR code it prints, and add the workspace to your home screen. You can also use a Telegram/Discord/Slack bot, or Termux on Android. See [MOBILE.md](docs/MOBILE.md). |
@@ -242,7 +242,7 @@ The model reasons and requests tools. OASIS owns the tool contracts, workspace c
 
 ## Status and boundaries
 
-> **Current lifecycle — OASIS 1.0, stable, released.** [`v1.0.0`](https://github.com/FAHTHIZ/oasis/releases/tag/v1.0.0) was published on November 4, 2026 from a `main` commit that passed every 1.0 gate in the [project plan](docs/PROJECT_PLAN.md) on that same commit: Quality Checks (Node 22/24/26 on Windows, macOS and Linux, browser E2E with accessibility checks), installer checks, desktop packaging and public-site validation. The release carries Windows, macOS and Linux installers with `SHA256SUMS`.
+> **Current lifecycle — OASIS 1.0, stable, released.** [`v1.0.0`](https://github.com/FAHTHIZ/oasis/releases/tag/v1.0.0) was published on November 4, 2026 from a `main` commit that passed every 1.0 gate in the [project plan](docs/PROJECT_PLAN.md) on that same commit: Quality Checks (Node 22/24/26 on Windows, macOS and Linux, browser E2E with accessibility checks), installer checks, desktop packaging and public-site validation. The release carries Windows, macOS and Linux installers with `SHA256SUMS`. **OASIS 1.1.0** adds update notifications with checksum-verified installs, hardware-aware setup, phone links with a QR code, and more installer CPU types. It is published automatically once its commit passes the same gates ([notes](docs/releases/v1.1.0.md)).
 
 What 1.0 does not claim: the desktop installers are unsigned (SHA-256 checksums are provided), clean-machine install, update and uninstall are verified on CI runners rather than by hand on physical machines, and the 50-task evaluator runs on small projects, so it is a regression suite rather than a broad benchmark.
 
@@ -290,7 +290,7 @@ Read [SECURITY.md](SECURITY.md), [Privacy](docs/PRIVACY.md) and the dated [secur
 | How it works inside | [Architecture](docs/ARCHITECTURE.md) · [Source map](src/README.md) · [Test map](test/README.md) |
 | Security and privacy | [Security policy](SECURITY.md) · [Privacy](docs/PRIVACY.md) |
 | Maintaining the repository | [Maintenance guide](docs/REPOSITORY_MAINTENANCE.md) |
-| Release history | [Changelog](CHANGELOG.md) · [1.0.0 release notes](docs/releases/v1.0.0.md) |
+| Release history | [Changelog](CHANGELOG.md) · [1.1.0 release notes](docs/releases/v1.1.0.md) · [1.0.0 release notes](docs/releases/v1.0.0.md) |
 
 ## Contributing
 
