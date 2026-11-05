@@ -8,7 +8,7 @@ import { access, lstat, mkdir, readFile, realpath, rename, rm } from 'node:fs/pr
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { isIP } from 'node:net';
-import { createSession, runAgentTurn, closeSession, testProviderConnection, steerSession, takeSteering, compactHistoryIfNeeded } from './agent.mjs';
+import { createSession, runAgentTurn, closeSession, testProviderConnection, steerSession, carryUndeliveredSteering, compactHistoryIfNeeded } from './agent.mjs';
 import { startIdleCompaction, idleCompactMinutes } from './idle-compaction.mjs';
 import { loadConfig, saveConfig, getProviderSummary, validateProtocol, validateBaseUrl, isLoopbackUrl, getBaseConfigDirectory } from './config.mjs';
 import { cachedUpdateCheck, updateChecksDisabled, readUpdateState, writeUpdateState, RELEASES_PAGE } from './app-update.mjs';
@@ -958,13 +958,15 @@ export function createOasisWebServer(options = {}) {
             emit(job, 'session_state', webSessionState(session, env));
           }
         });
+        // Close the steering window before draining the queue. Notes that
+        // arrived during the last model step are placed in history before save.
+        job.steerTarget = null;
+        const undeliveredSteering = carryUndeliveredSteering(session);
         const saved = await saveSession(session, { env });
         if (saved.id !== activeId) {
           activeSessions.delete(activeId);
           activeSessions.set(saved.id, session);
         }
-        job.steerTarget = null;
-        const undeliveredSteering = takeSteering(session);
         job.result = { ...result, sessionId: saved.id, ...(undeliveredSteering.length ? { undeliveredSteering } : {}) };
         if (session.webUsage) session.webUsage.turns += 1;
         emit(job, 'session_state', webSessionState(session, env));
@@ -995,6 +997,8 @@ export function createOasisWebServer(options = {}) {
         }
       } catch (error) {
         if (job.cancelRequested || error.name === 'AbortError') {
+          job.steerTarget = null;
+          const leftover = carryUndeliveredSteering(session);
           try {
             const saved = await saveSession(session, { env });
             if (saved.id !== activeId) {
@@ -1005,13 +1009,11 @@ export function createOasisWebServer(options = {}) {
           } catch {
             job.result = { cancelled: true, sessionId: activeId, sessionSaved: false };
           }
+          if (leftover.length) job.result.undeliveredSteering = leftover;
           if (taskWorktree) {
             job.result.isolatedWorktree = await finalizeTaskWorktree();
             emit(job, 'worktree_ready', job.result.isolatedWorktree);
           }
-          job.steerTarget = null;
-          const leftover = takeSteering(session);
-          if (leftover.length) job.result.undeliveredSteering = leftover;
           job.status = 'cancelled';
           job.error = null;
           emit(job, 'cancelled', { message: 'Task stopped. Any actions completed before cancellation remain in the workspace.', sessionId: job.result.sessionId, ...(leftover.length ? { undeliveredSteering: leftover } : {}) });
