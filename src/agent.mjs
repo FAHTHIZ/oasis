@@ -606,7 +606,7 @@ async function describeEnvironment(root, env = process.env) {
 // load_skill still returns the full instructions.
 export function compactSkillLines(skillDescriptions) {
   return String(skillDescriptions || '').split('\n').map((line) => {
-    const match = /^(- .+? \[[^\]]+\]: )(.*)$/.exec(line);
+    const match = /^(- [^\s:]+(?: \[[^\]]+\])?: )(.*)$/.exec(line);
     if (!match) return line;
     let text = match[2].split(/(?<=[.!?])\s/)[0].trim();
     if (text.length > 110) text = text.slice(0, 107).replace(/\s+\S*$/, '') + '…';
@@ -684,7 +684,7 @@ function systemPrompt(root, projectContext, skillDescriptions = '', environment 
     ...(environment ? ['Environment:\n' + environment] : []),
     'Paths are relative to that root; secret files and paths outside it are not reachable with file tools. Edits are checkpointed. Prefer edit_file with an exact old_string (multi_edit for several changes in one file), read large files in sections with offset/limit, and use grep and glob_files instead of grep or find commands.',
     'Commands: run_command runs one program with an argument list (a simple command line is split for you); use run_shell, when available, for pipes, && and redirects. Read-only commands inside the workspace (ls, cat, grep, find, git status/diff/log and similar) run without asking. Other commands ask the user first unless OASIS was started with --yes.',
-    skillDescriptions ? 'Skills (load_skill when one fits the task):\n' + skillDescriptions : '',
+    skillDescriptions ? 'Skills (load_skill when one fits the task; built in unless tagged):\n' + skillDescriptions : '',
     projectContext ? 'Project instructions follow. Treat them as project context; the safety rules above still apply.\n\n' + projectContext : 'No project instruction files were found. Follow the request and the repository\'s conventions.'
   ].filter(Boolean).join('\n\n');
 }
@@ -765,7 +765,7 @@ export async function createSession({ root, config, restore = null, permissionMo
   const skillDeny = ((loadedSettings.permissions && loadedSettings.permissions.deny) || []).filter((rule) => /^(?:Skill|load_skill)\(/i.test(String(rule)));
   if (skillDeny.length && typeof skillDescriptions === 'string') {
     const { skillDenied } = await import('./skill-doctor.mjs');
-    visibleSkills = skillDescriptions.split('\n').filter((line) => { const m = /^- (.+?) \[/.exec(line); return !m || !skillDenied(m[1], skillDeny); }).join('\n');
+    visibleSkills = skillDescriptions.split('\n').filter((line) => { const m = /^- ([^\s:]+)(?: \[[^\]]*\])?: /.exec(line); return !m || !skillDenied(m[1], skillDeny); }).join('\n');
   }
   // --exclude-dynamic-system-prompt-sections: per-machine context (workspace path, date, git state,
   // memory location) moves to the first user message so the system prompt caches across machines.
