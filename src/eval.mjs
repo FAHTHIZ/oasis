@@ -7,6 +7,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { loadConfig, getConfigDirectory } from './config.mjs';
 import { createSession, runAgentTurn, closeSession, isLoopbackProvider } from './agent.mjs';
+import { cloudModelBehindGateway, estimateCostUsd } from './pricing.mjs';
 import { renderComparisonHtml, saveComparisonArtifact } from './eval-report.mjs';
 import { oasisVersion } from './version.mjs';
 
@@ -1436,9 +1437,13 @@ export async function runEvalCommand(args = [], options = {}) {
         const rated = config.routeEasyModel
           ? (routedCostKnown ? taskUsage.costUSD : null)
           : costEstimate(usage.inputTokens, usage.outputTokens, inputRate, outputRate);
+        // A cloud model reached through a localhost gateway (LiteLLM and the like)
+        // is billed as that cloud model, not counted as a free local one.
+        const gatewayCloud = !config.routeEasyModel && rated === null && isLoopbackProvider(provider) && cloudModelBehindGateway(model, provider);
+        const gatewayCost = gatewayCloud ? estimateCostUsd(model, usage, { config: provider, env }) : null;
         // A model served on this machine has no per-token API charge (hardware and power are not counted).
-        const localModel = !config.routeEasyModel && rated === null && isLoopbackProvider(provider);
-        const costUSD = localModel ? 0 : rated;
+        const localModel = !config.routeEasyModel && rated === null && !gatewayCloud && isLoopbackProvider(provider);
+        const costUSD = localModel ? 0 : gatewayCloud ? gatewayCost : rated;
         const strongModelCostUSD = taskUsage && typeof taskUsage.strongModelCostUSD === 'number'
           ? taskUsage.strongModelCostUSD
           : null;
@@ -1448,6 +1453,7 @@ export async function runEvalCommand(args = [], options = {}) {
         const costSource = config.routeEasyModel
           ? (routedCostKnown ? 'per-model pricing estimate' : 'unknown: configure pricing for both routed models')
           : localModel ? 'local model: no per-token API charge (hardware and power not counted)'
+          : gatewayCloud ? 'per-model list-price estimate (cloud model behind a localhost gateway; free-tier keys are not billed)'
           : costUSD === null ? 'unknown: set OASIS_EVAL_*_USD_PER_MILLION_TOKENS'
             : 'uniform benchmark token-rate estimate';
         // The same rule as every other agent: the hidden verifier passed and the run
