@@ -53,3 +53,32 @@ test('gateway forces the model, serializes and spaces requests, and logs usage',
   assert.equal(models.data[0].id, 'bench-model');
   assert.equal((await fetch(base + '/other', { method: 'POST' })).status, 404);
 });
+
+test('gateway refuses browser and rebinding requests and redacts keys echoed in upstream errors', async (t) => {
+  // Regression: a web page could POST text/plain to the local gateway (no
+  // preflight) and spend the upstream key; upstream 401 bodies that echo the
+  // key were logged as-is.
+  const dir = await mkdtemp(path.join(os.tmpdir(), 'oasis-gw-'));
+  t.after(() => rm(dir, { recursive: true, force: true }));
+  const log = path.join(dir, 'log.jsonl');
+  let upstreamCalls = 0;
+  const echoed = 'sk-' + 'proj-Qz8Rv2Nm7Kp4Lw9Xc6Bt3Hy1Jd5Fs0Ga8';
+  const fetchImpl = async () => { upstreamCalls++; return new Response(JSON.stringify({ error: { message: 'Invalid key ' + echoed } }), { status: 401, headers: { 'content-type': 'application/json' } }); };
+  const server = createGateway({ host: '127.0.0.1', upstream: 'https://up.example/v1', model: 'm', minIntervalMs: 0, log }, { fetchImpl });
+  await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
+  t.after(() => server.close());
+  const port = server.address().port;
+  const http = await import('node:http');
+  const post = (headers) => new Promise((resolve, reject) => {
+    const req = http.request({ host: '127.0.0.1', port, method: 'POST', path: '/v1/chat/completions', headers: { 'content-type': 'text/plain', ...headers } }, (res) => { res.resume(); res.on('end', () => resolve(res.statusCode)); });
+    req.on('error', reject);
+    req.end(JSON.stringify({ model: 'x', messages: [] }));
+  });
+  assert.equal(await post({ origin: 'https://evil.example' }), 403);
+  assert.equal(await post({ host: 'evil.example:' + port }), 403);
+  assert.equal(upstreamCalls, 0);
+  assert.equal(await post({}), 401, 'local clients still reach the upstream');
+  const text = await readFile(log, 'utf8');
+  assert.match(text, /"status":401/);
+  assert.equal(text.includes(echoed), false, 'the echoed key was logged');
+});

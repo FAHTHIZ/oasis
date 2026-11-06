@@ -19,6 +19,8 @@ Changes after 1.1.0. Entries include feature work, reliability improvements, and
   - Deny/ask rules also match `$'git' push`, `{ git push; }`, `(git push)`, `if`/`while`/`for` bodies, `exec -a`, `env -S` and `find -exec`.
   - `read_mcp_resource` results go through the untrusted-content guard, and one zero-width character inside a word no longer hides an injection phrase.
   - Secret-shield placeholders stay as placeholders in `fetch_url`, `web_search` and `browser` arguments, so an injected page cannot get a real key sent in a URL, and in `task`/teammate prompts, so a subagent no longer sends the real key to the provider; subagents share the parent's vault for their own edits.
+  - Debug logs, trajectory exports, session previews, memories, artifacts, approval text and telemetry tool details now redact every credential format the secret shield knows (Stripe, Groq, Hugging Face, GitLab, npm, xAI, AWS, JWTs, private keys, URL passwords, `.env` assignments); the debug log used to write tool arguments with real values.
+  - `scripts/bench-gateway.mjs` refuses browser (`Origin`) and DNS-rebinding requests and redacts keys echoed in logged upstream errors.
   - `oasis mcp serve --allow-edits` refuses edits to protected config (git hooks and config, Oasis/Claude settings, `.mcp.json`, editor task files); it used to write `.git/hooks/pre-commit` for any client.
   - Read-only git also checks checked-out submodules' own configs for filter, diff and gpg programs; `git status` used to run a submodule's clean filter with no prompt.
   - Google service-account key files (`service-account*.json`) and Terraform state (`terraform.tfstate`, `.backup`) are treated as secret files.
