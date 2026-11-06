@@ -556,6 +556,14 @@ Side-by-side against `src/mermaid-ascii.mjs`, on Node 22 with `paddingY:1, boxBo
 
 Decision: keep the OASIS renderer for flowchart and sequence. Revisit beautiful-mermaid (or its maintained fork zombie-mermaid with a standalone `@zombie-mermaid/ascii-renderer`) for state, class and XY once CJK width is fixed upstream and a lighter ASCII-only entry exists.
 
+## 32. Telemetry: official OpenTelemetry JS SDK replaces the hand-written exporter
+
+- **Before:** `src/telemetry.mjs` built OTLP/HTTP JSON by hand (about 280 lines). Verified gaps: histograms had one bucket with no `explicitBounds`, failed exports were not retried, and `service.version` was hard-coded to `1`.
+- **After:** `@opentelemetry/api` 1.10.0, `resources`, `sdk-metrics`, `sdk-logs` and `sdk-trace` 3.1.0, `otlp-transformer` and `exporter-{metrics,logs,trace}-otlp-http` 0.301.0, all pinned exactly because the experimental 0.x packages track the stable ones. The cost is 12 packages and 19 MB on disk (`semantic-conventions` alone is about 9 MB). Importing takes about 88 ms, so the SDK loads with a lazy `import()` only when telemetry is enabled. Calls made before it has loaded are queued.
+- **What stays OASIS's own:** the public API (`Telemetry`, `getTelemetry`, `currentSpan`, …), an AsyncLocalStorage span wrapper whose `attrs`/`error` callers can change mid-span (applied at end), the opt-in rules for prompt and tool content, the git-branch attribute, and the `console` exporter format (`[otel <signal>] <OTLP JSON>`, produced with the SDK's own `Json*Serializer`).
+- **Verified:** the SDK's retry policy is 5 attempts on 429/502/503/504 (`otlp-exporter-base/dist/retrying-transport.mjs`, `is-export-retryable.mjs`). The tests now run against a real local HTTP collector instead of an injected `fetch`. Negative control: the old module fails the new histogram-bounds assertion. Full suite: 2018 tests, 0 failures. `oasis --help` with telemetry on exits in 0.5 s, so no timers keep the process alive.
+- **Not done:** OTLP protobuf and gRPC would need the `-proto`/`-grpc` exporter packages and are not added until someone needs them.
+
 ## Next
 
 - Decided against Ajv validation in front of built-in tools: they already reject bad input with specific messages ("edit_file needs old_string … got path"), coerce numeric strings, and accept documented argument aliases that a strict schema would refuse.
