@@ -236,12 +236,21 @@ export function containerArgs(command, args, sandbox, cwd, platform = process.pl
   // overlay is used for both files and directories: reads see an empty mount,
   // never the host content, and any temporary writes disappear with the container.
   const masked = new Set();
+  const writableRoots = (sandbox.writable || []).map((dir) => containerPath(dir, platform));
   for (const item of sandbox.maskedPaths || []) {
     if (!item || !['file', 'directory'].includes(item.type) || !item.path) continue;
     const inside = safeContainerValue(containerPath(item.path, platform), 'masked path');
-    if (masked.has(inside)) continue;
+    // Only overlay a path that is below a mounted writable root. Host secrets
+    // outside the workspace are already absent, and masking an ancestor/equal
+    // path would hide the workspace itself.
+    const mountedBelow = writableRoots.some((root) => {
+      const relative = path.posix.relative(root, inside);
+      return relative !== '' && relative !== '..' && !relative.startsWith('../') && !path.posix.isAbsolute(relative);
+    });
+    if (!mountedBelow || masked.has(inside)) continue;
     masked.add(inside);
-    wrapped.push('--tmpfs', inside + ':rw,nosuid,nodev,noexec,size=1m');
+    if (item.type === 'directory') wrapped.push('--tmpfs', inside + ':rw,nosuid,nodev,noexec,size=1m');
+    else wrapped.push('--volume', '/dev/null:' + inside + ':ro');
   }
   wrapped.push('--workdir', containerPath(cwd, platform), image, command, ...args);
   return wrapped;
