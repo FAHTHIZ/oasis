@@ -23,7 +23,8 @@ export const APP_PACKAGES = Object.freeze({
   entities: 'dist/index.js',
   fflate: 'esm/browser.js',
   diff: 'libesm/index.js',
-  marked: 'lib/marked.esm.js'
+  marked: 'lib/marked.esm.js',
+  'eventsource-parser': 'dist/index.js'
 });
 
 /** Shared src modules and npm packages the app imports (transitively); refuses Node-only ones. */

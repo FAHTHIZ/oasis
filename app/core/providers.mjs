@@ -24,6 +24,7 @@ export const PRESETS = {
   custom: { label: 'Custom (OpenAI-compatible)', protocol: 'openai', baseURL: '', model: '', keyHint: '' }
 };
 
+import { createParser } from 'eventsource-parser';
 import { splitThinking, createThinkFilter } from './think-tags.mjs';
 
 export class ProviderError extends Error {
@@ -135,32 +136,29 @@ export function strayStreamError(text) {
   return { message: String(typeof error === 'string' ? error : error.message || error.status || 'the provider sent an error').slice(0, 400), status: Number(error.code) || 0 };
 }
 
+// Server-sent events are parsed by eventsource-parser (WHATWG EventSource
+// rules: CR, LF or CRLF line ends, multi-line data, comments, id/retry).
+// Lines that are not SSE at all (a bare JSON error body, an HTML error page)
+// come back as 'stray' events so the caller can report them.
 async function* sseEvents(response, signal) {
   const reader = response.body.getReader();
   const decoder = new TextDecoder();
-  let buffer = '';
+  const queue = [];
+  const parser = createParser({
+    onEvent: (message) => queue.push({ event: message.event || 'message', data: message.data }),
+    onError: (error) => { if (error.type === 'unknown-field' && error.line && error.line.trim()) queue.push({ event: 'stray', data: error.line }); }
+  });
   try {
     while (true) {
       if (signal && signal.aborted) throw new DOMException('Stopped', 'AbortError');
       const { value, done } = await reader.read();
       if (done) break;
-      buffer += decoder.decode(value, { stream: true });
-      let index;
-      while ((index = buffer.search(/\r?\n\r?\n/)) >= 0) {
-        const raw = buffer.slice(0, index);
-        buffer = buffer.slice(index).replace(/^\r?\n\r?\n/, '');
-        let event = 'message';
-        const data = [];
-        for (const line of raw.split(/\r?\n/)) {
-          if (line.startsWith('event:')) event = line.slice(6).trim();
-          else if (line.startsWith('data:')) data.push(line.slice(5).replace(/^ /, ''));
-        }
-        if (data.length) yield { event, data: data.join('\n') };
-        else if (raw.trim() && !/^(?::|id:|retry:|event:)/.test(raw.trim())) yield { event: 'stray', data: raw };
-      }
+      parser.feed(decoder.decode(value, { stream: true }));
+      while (queue.length) yield queue.shift();
     }
-    buffer += decoder.decode();
-    if (buffer.trim()) yield { event: 'stray', data: buffer };
+    // A final event without its blank line is still delivered, as before.
+    parser.feed(decoder.decode() + '\n\n');
+    while (queue.length) yield queue.shift();
   } finally {
     try { reader.releaseLock(); } catch {}
   }

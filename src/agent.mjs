@@ -1,4 +1,5 @@
 import { briefFailure } from '../app/core/providers.mjs';
+import { createParser as createSseParser } from 'eventsource-parser';
 import { splitThinking, visibleReply } from '../app/core/think-tags.mjs';
 import { atomicWriteFile } from './atomic-write.mjs';
 import { sessionKeyPool, ROTATE_STATUSES } from './key-pool.mjs';
@@ -1700,32 +1701,19 @@ function responseText(output) {
 
 const MAX_PROVIDER_STREAM_BYTES = 8 * 1024 * 1024;
 
+// SSE framing (CR/LF/CRLF, multi-line data, comments, id/retry) comes from
+// eventsource-parser; lines that are not SSE fields go to onStray.
 async function consumeServerSentEvents(response, onEvent, onStray) {
   if (!response.body || typeof response.body.getReader !== 'function') {
     throw new Error('The provider announced streaming but returned no readable event stream.');
   }
   const reader = response.body.getReader();
   const decoder = new TextDecoder();
-  let buffer = '';
-  let eventName = '';
-  let dataLines = [];
   let receivedBytes = 0;
-  const dispatch = () => {
-    if (dataLines.length) onEvent({ event: eventName, data: dataLines.join('\n') });
-    eventName = '';
-    dataLines = [];
-  };
-  const processLine = (rawLine) => {
-    const line = rawLine.endsWith('\r') ? rawLine.slice(0, -1) : rawLine;
-    if (!line) { dispatch(); return; }
-    if (line.startsWith(':')) return;
-    const colon = line.indexOf(':');
-    const field = colon < 0 ? line : line.slice(0, colon);
-    const value = colon < 0 ? '' : line.slice(colon + 1).replace(/^ /, '');
-    if (field === 'event') eventName = value;
-    else if (field === 'data') dataLines.push(value);
-    else if (field !== 'id' && field !== 'retry' && typeof onStray === 'function') onStray(line);
-  };
+  const parser = createSseParser({
+    onEvent: (message) => onEvent({ event: message.event || '', data: message.data }),
+    onError: (error) => { if (error.type === 'unknown-field' && error.line && typeof onStray === 'function') onStray(error.line); }
+  });
   try {
     while (true) {
       const chunk = await reader.read();
@@ -1735,16 +1723,10 @@ async function consumeServerSentEvents(response, onEvent, onStray) {
         await reader.cancel().catch(() => {});
         throw new Error('The model provider stream exceeded Oasis’s 8 MiB response limit.');
       }
-      buffer += decoder.decode(chunk.value, { stream: true });
-      let newline;
-      while ((newline = buffer.indexOf('\n')) >= 0) {
-        processLine(buffer.slice(0, newline));
-        buffer = buffer.slice(newline + 1);
-      }
+      parser.feed(decoder.decode(chunk.value, { stream: true }));
     }
-    buffer += decoder.decode();
-    if (buffer) processLine(buffer);
-    dispatch();
+    // A final event without its blank line is still delivered.
+    parser.feed(decoder.decode() + '\n\n');
   } finally {
     reader.releaseLock();
   }
