@@ -60,8 +60,6 @@ jobs:
       - name: Configure GitHub Pages
         uses: actions/configure-pages@45bfe0192ca1faeb007ade9deae92b16b8254a0d # v6.0.0
         id: configure-pages
-      - name: Copy demo videos into the homepage
-        run: mkdir -p site/assets/demo && cp assets/demo/*.mp4 assets/demo/*-poster.png site/assets/demo/
       - name: Install runtime dependencies (the app's vendored browser packages)
         run: npm install --omit=dev --no-audit --no-fund
       - name: Build the universal app into the homepage

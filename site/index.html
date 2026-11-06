@@ -1,215 +1,28 @@
 <!doctype html>
 <html lang="en">
 <head>
-<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta name="theme-color" content="#0B0F0C"><meta name="robots" content="index, follow">
-<meta name="description" content="OASIS is an open-source, local-first agentic development workspace for coding, automation, and verification.">
-<meta property="og:type" content="website"><meta property="og:site_name" content="OASIS">
-<meta property="og:title" content="OASIS — Code. Automate. Flourish.">
-<meta property="og:description" content="The open-source coding agent whose safety and reliability live in the runtime, not the prompt. Any model, from a 4B model on your laptop to the frontier.">
-<meta property="og:url" content="https://fahthiz.github.io/oasis/"><meta name="twitter:card" content="summary">
-<link rel="canonical" href="https://fahthiz.github.io/oasis/"><link rel="icon" href="assets/oasis-icon.svg" type="image/svg+xml">
-<link rel="preload" href="assets/fonts/bricolage.woff2" as="font" type="font/woff2" crossorigin><link rel="preload" href="assets/fonts/geist.woff2" as="font" type="font/woff2" crossorigin>
-<title>OASIS — Open-source agentic development workspace</title>
-<script type="application/ld+json">{"@context":"https://schema.org","@type":"SoftwareApplication","name":"OASIS","applicationCategory":"DeveloperApplication","operatingSystem":"Windows, macOS, Linux, Android (Termux)","license":"https://www.apache.org/licenses/LICENSE-2.0","url":"https://fahthiz.github.io/oasis/","codeRepository":"https://github.com/FAHTHIZ/oasis","softwareVersion":"1.1.0","offers":{"@type":"Offer","price":"0","priceCurrency":"USD"}}</script>
-<style>
-@font-face{font-family:"Bricolage";src:url(assets/fonts/bricolage.woff2) format("woff2");font-weight:200 800;font-display:swap}
-@font-face{font-family:"Geist";src:url(assets/fonts/geist.woff2) format("woff2");font-weight:100 900;font-display:swap}
-@font-face{font-family:"JetBrains Mono";src:url(assets/fonts/jetbrains-mono.woff2) format("woff2");font-weight:100 800;font-display:swap}
-:root{color-scheme:dark;--bg:#0b0f0c;--bg2:#0e1410;--panel:#121a15;--panel2:#16211a;--line:#24342a;--line2:#33493a;--text:#eef3ea;--muted:#a3b2a5;--dim:#7f9282;--lime:#7cff5e;--lime-ink:#14200f;--amber:#ffc65c;--red:#ff7a6b;--max:1160px;--display:"Bricolage",ui-sans-serif,system-ui,sans-serif;--sans:"Geist",ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;--mono:"JetBrains Mono",ui-monospace,SFMono-Regular,Consolas,monospace;--r:14px}
-*{box-sizing:border-box}html{scroll-behavior:smooth;scroll-padding-top:84px;-webkit-text-size-adjust:100%}
-body{margin:0;background:var(--bg);color:var(--text);font:16px/1.6 var(--sans);text-rendering:optimizeLegibility;-webkit-font-smoothing:antialiased}
-body::before{content:"";position:fixed;inset:0 0 auto 0;height:720px;pointer-events:none;background:radial-gradient(60% 70% at 50% -10%,#23452e 0,#0b0f0c00 70%);z-index:-1}
-::selection{background:#7cff5e;color:#0b0f0c}
-a{color:inherit;text-underline-offset:3px;text-decoration-thickness:1px}a:focus-visible,button:focus-visible,summary:focus-visible,video:focus-visible{outline:2px solid var(--lime);outline-offset:3px;border-radius:6px}
-html{scrollbar-color:#33493a var(--bg)}::-webkit-scrollbar{width:10px;height:10px}::-webkit-scrollbar-thumb{background:#2b3d31;border-radius:10px;border:2px solid var(--bg)}::-webkit-scrollbar-track{background:var(--bg)}
-.wrap{width:min(calc(100% - 40px),var(--max));margin-inline:auto}
-.skip{position:absolute;left:12px;top:-60px;background:var(--lime);color:var(--lime-ink);padding:10px 14px;border-radius:10px;font-weight:700;z-index:50;text-decoration:none}.skip:focus{top:12px}
-header{position:sticky;top:0;z-index:20;background:#0b0f0cd9;backdrop-filter:saturate(1.4) blur(14px);-webkit-backdrop-filter:saturate(1.4) blur(14px);border-bottom:1px solid #ffffff0d}
-.nav{height:68px;display:flex;align-items:center;justify-content:space-between;gap:20px}
-.brand{display:inline-flex;align-items:center;gap:11px;text-decoration:none;font:800 16px/1 var(--display);letter-spacing:.14em}.brand img{width:34px;height:34px}
-.navlinks{display:flex;align-items:center;gap:26px}.navlinks a{font-size:14px;color:var(--muted);text-decoration:none;transition:color .15s}.navlinks a:hover{color:var(--text)}
-.navcta,.button{display:inline-flex;align-items:center;justify-content:center;gap:9px;min-height:44px;padding:11px 18px;border:1px solid var(--line2);border-radius:12px;text-decoration:none;font-size:14px;font-weight:650;transition:transform .2s cubic-bezier(.16,1,.3,1),border-color .15s,background .15s,box-shadow .2s;white-space:nowrap}
-.navcta{min-height:40px;padding:8px 14px;color:var(--text);background:#ffffff06}
-.navcta:hover,.button:hover{transform:translateY(-1px);border-color:#6d995b}
-.button.primary{background:var(--lime);color:var(--lime-ink);border-color:var(--lime);box-shadow:0 8px 28px -10px #7cff5e99}.button.primary:hover{box-shadow:0 12px 34px -10px #7cff5ebb}
-.button.secondary{background:#ffffff06;color:var(--text)}
-.button svg,.navcta svg{width:16px;height:16px;flex:none}i.nw{white-space:nowrap;font-style:normal}svg.ext{width:12px;height:12px;margin-left:5px;vertical-align:-1px;flex:none;opacity:.75}
-.mobile-nav{display:none}
-.hero{padding:76px 0 40px;text-align:center}
-.status{display:inline-flex;align-items:center;gap:9px;padding:6px 12px;border:1px solid #7cff5e33;background:#7cff5e0b;border-radius:999px;color:#c9f7bc;font-size:12.5px;font-weight:550}
-.spark{width:7px;height:7px;background:var(--lime);border-radius:50%;box-shadow:0 0 0 3px #7cff5e26}
-h1,h2,h3{font-family:var(--display);text-wrap:balance}
-h1{margin:22px auto 18px;max-width:980px;font-size:clamp(40px,7.2vw,84px);line-height:.98;letter-spacing:-.035em;font-weight:760}h1 span{color:var(--lime)}
-.lead{max-width:680px;margin:0 auto;color:#bccabd;font-size:clamp(16.5px,2vw,19px);line-height:1.6;text-wrap:pretty}
-.hero-actions{display:flex;justify-content:center;gap:12px;flex-wrap:wrap;margin-top:30px}
-.quick{max-width:620px;margin:22px auto 0;display:flex;align-items:stretch;border:1px solid var(--line);border-radius:12px;background:#080c09;text-align:left;overflow:hidden}
-.quick code{flex:1;min-width:0;padding:13px 16px;font:13px/1.55 var(--mono);color:#dbe7d6;overflow-x:auto;white-space:nowrap;scrollbar-width:none}.quick code::-webkit-scrollbar{display:none}.quick .prompt{color:var(--lime);user-select:none;margin-right:10px}
-.copy{flex:none;display:inline-flex;align-items:center;gap:7px;border:0;border-left:1px solid var(--line);background:#ffffff05;color:var(--muted);padding:0 16px;font:600 13px var(--sans);cursor:pointer;min-width:92px;justify-content:center}.copy:hover{color:var(--text);background:#ffffff0a}.copy svg{width:15px;height:15px}.copy[data-done]{color:var(--lime)}
-.install-choices{max-width:1040px;margin:34px auto 0;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px;text-align:left}
-.install-choice{min-width:0;padding:22px;border:1px solid var(--line);border-radius:var(--r);background:linear-gradient(180deg,#131c16,#0f1611);display:flex;flex-direction:column}
-.install-choice h2{font-size:17px;letter-spacing:-.01em;margin:0 0 8px;line-height:1.25}.install-choice p{margin:0 0 16px;color:var(--muted);font-size:14px;line-height:1.6;flex:1}
-.install-choice a{color:var(--lime);font-weight:650;font-size:14.5px;text-decoration:none;display:inline-flex;align-items:center;gap:6px;min-height:32px}.install-choice a:hover{text-decoration:underline}
-.ico{width:34px;height:34px;display:grid;place-items:center;border-radius:10px;background:#7cff5e10;color:var(--lime);margin-bottom:14px}.ico svg{width:18px;height:18px}
-.hero-note{color:var(--dim);font-size:13px;margin:18px auto 0;max-width:760px;text-wrap:pretty}
-.trust{display:flex;justify-content:center;gap:8px;flex-wrap:wrap;margin-top:20px}.chip{font-size:12px;color:#b7c7b9;padding:5px 11px;border:1px solid #ffffff14;border-radius:999px;background:#ffffff04}
-section{padding:84px 0}.section-head{max-width:720px;margin:0 auto 36px;text-align:center}
-h2{font-size:clamp(30px,4.4vw,48px);line-height:1.05;letter-spacing:-.03em;margin:0 0 14px;font-weight:720}.section-head p{color:var(--muted);margin:0;font-size:16.5px;text-wrap:pretty}
-h3{margin:0 0 6px;font-size:18px;letter-spacing:-.01em;font-weight:680}
-.demos{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}.demo{margin:0;border:1px solid var(--line);border-radius:16px;overflow:hidden;background:#0a0f0b}.demo video{display:block;width:100%;height:auto;aspect-ratio:16/10;object-fit:cover;background:#0a0f0b}.demo figcaption{padding:14px 18px;color:var(--muted);font-size:14px}.demo figcaption strong{color:var(--text);display:block;font-size:15px;margin-bottom:2px}
-.fine{color:var(--dim);font-size:13px;text-align:center;margin-top:14px}
-/* Benchmarks */
-.bench{border:1px solid var(--line);border-radius:18px;background:var(--bg2);overflow:hidden}
-.bench-row{display:grid;grid-template-columns:minmax(0,1.3fr) minmax(0,1fr) minmax(0,1fr);gap:24px;align-items:center;padding:20px 24px;border-top:1px solid var(--line)}.bench-row:first-child{border-top:0}
-.bench-head{padding-block:14px;color:var(--dim);font-size:12.5px;font-weight:600;background:#ffffff03}
-.bench-row p{margin:0;font-size:15px;line-height:1.45}.bench-row p small{display:block;color:var(--dim);font-size:13px;margin-top:3px}
-.meter{display:grid;gap:7px}.meter b{font:600 14px var(--mono);font-variant-numeric:tabular-nums}.meter small{color:var(--dim);font-size:12.5px;margin-top:-4px;order:3}.meter.base b{color:var(--muted);font-weight:500}
-.bar{height:6px;border-radius:6px;background:#ffffff0d;overflow:hidden}.bar i{display:block;height:100%;width:var(--v);border-radius:inherit;background:var(--lime);transform-origin:left;transition:transform 1.1s cubic-bezier(.16,1,.3,1)}.base .bar i{background:#5c6e60}
-.js .bench:not(.in) .bar i{transform:scaleX(0)}
-.bench-foot{display:flex;justify-content:space-between;gap:16px;flex-wrap:wrap;margin-top:16px;color:var(--dim);font-size:13.5px}.bench-foot code{font-family:var(--mono);color:#cfe0ca;font-size:12.5px;background:#ffffff08;padding:2px 7px;border-radius:6px}
-/* Fixes list */
-.fixes{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:0 48px}
-.fix{padding:22px 0;border-top:1px solid var(--line);display:grid;grid-template-columns:28px 1fr;gap:14px}.fix svg{width:20px;height:20px;color:var(--lime);margin-top:3px}
-.fix q{display:block;font:600 17px/1.35 var(--display);quotes:"\201C" "\201D";letter-spacing:-.005em}.fix p{margin:6px 0 0;color:var(--muted);font-size:14.5px;line-height:1.6}
-.more{text-align:center;margin-top:28px}.more a{color:var(--lime);font-weight:600;text-decoration:none}.more a:hover{text-decoration:underline}
-/* Features */
-.grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:1px;background:var(--line);border:1px solid var(--line);border-radius:18px;overflow:hidden}
-.card{background:var(--bg2);padding:26px;min-width:0}.card .ico{margin-bottom:16px}.card p{margin:0;color:var(--muted);font-size:14.5px;line-height:1.65}
-.split{display:grid;grid-template-columns:1fr 1fr;gap:40px;align-items:center}.split-copy p{color:var(--muted);font-size:16px}
-.code-card{border:1px solid var(--line);background:#080c09;border-radius:16px;overflow:hidden;box-shadow:0 30px 60px -30px #000c}
-.code-top{display:flex;align-items:center;gap:7px;padding:12px 16px;border-bottom:1px solid #ffffff10;color:var(--dim);font-size:12px;font-family:var(--mono)}.windowdot{width:9px;height:9px;border-radius:50%;background:#33463a}
-.codebody{font:13px/1.9 var(--mono);color:#d3e2d2;padding:16px 18px 20px;overflow-x:auto}.codebody div{white-space:pre}.comment{color:#71877a}.green{color:var(--lime)}.warn{color:var(--amber)}.bad{color:var(--red)}
-.provider-row{display:flex;gap:8px;flex-wrap:wrap;margin-top:22px}.provider{border:1px solid var(--line);background:#ffffff04;color:#c5d2c6;border-radius:8px;padding:6px 11px;font-size:13px}
-.privacy-note{grid-column:1/-1;margin:0;color:var(--dim);font-size:13.5px;line-height:1.65;border-top:1px solid var(--line);padding-top:20px}.privacy-note strong{color:var(--muted)}
-.limits{border:1px solid #5d6a4a66;border-radius:16px;padding:24px;background:#c9e06e06}.limits h3{margin-top:0}.limits li{color:var(--muted);font-size:14px;margin:10px 0;line-height:1.6}.limits ul{padding-left:20px;margin-bottom:0}
-/* Changes feed */
-.changes{border:1px solid var(--line);border-radius:16px;background:var(--bg2);overflow:hidden}
-.changes ol{list-style:none;margin:0;padding:0}.changes li{display:grid;grid-template-columns:auto 1fr auto;gap:14px;align-items:baseline;padding:14px 20px;border-top:1px solid var(--line)}.changes li:first-child{border-top:0}
-.changes a.sha{font:600 12.5px var(--mono);color:var(--lime);text-decoration:none;background:#7cff5e10;padding:2px 7px;border-radius:6px}.changes a.sha:hover{text-decoration:underline}
-.changes span.msg{font-size:14.5px;line-height:1.5;min-width:0;overflow-wrap:anywhere;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}.changes time{color:var(--dim);font-size:12.5px;white-space:nowrap;font-variant-numeric:tabular-nums}
-.changes .all{display:block;padding:14px 20px;border-top:1px solid var(--line);color:var(--muted);font-size:14px;text-decoration:none;background:#ffffff03}.changes .all:hover{color:var(--text)}
-.docs{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}.doclink{display:block;border:1px solid var(--line);background:#ffffff03;border-radius:12px;padding:18px;text-decoration:none;transition:border-color .15s,background .15s}.doclink strong{display:block;font-size:15px;margin-bottom:3px}.doclink span{color:var(--muted);font-size:13.5px;line-height:1.5}.doclink:hover{border-color:#86bd61;background:#7cff5e06}
-.closing{padding:64px 24px;text-align:center;border:1px solid #7cff5e2a;background:radial-gradient(80% 120% at 50% 0,#1f3a26,#111a14);border-radius:22px}.closing p{color:var(--muted);max-width:560px;margin:0 auto 24px;font-size:16px}.closing-actions{display:flex;justify-content:center;gap:12px;flex-wrap:wrap}
-footer{padding:32px 0 calc(40px + env(safe-area-inset-bottom));color:var(--dim);font-size:13.5px}.foot{display:flex;align-items:center;justify-content:space-between;gap:12px 24px;flex-wrap:wrap;border-top:1px solid #ffffff10;padding-top:22px}.foot a{color:#a8b6aa;text-decoration:none}.foot a:hover{color:var(--lime)}.build{font-family:var(--mono);font-size:12px}
-.reveal{transition:opacity .7s cubic-bezier(.16,1,.3,1),transform .7s cubic-bezier(.16,1,.3,1)}.js .reveal:not(.in){opacity:0;transform:translateY(14px)}
-@media(max-width:850px){.install-choices{grid-template-columns:repeat(2,minmax(0,1fr))}.grid{grid-template-columns:repeat(2,minmax(0,1fr))}.split{grid-template-columns:1fr}.docs{grid-template-columns:repeat(2,minmax(0,1fr))}.hero{padding-top:60px}.demos{grid-template-columns:1fr}.fixes{grid-template-columns:1fr}.bench-row{grid-template-columns:1fr 1fr;gap:12px 20px}.bench-row p{grid-column:1/-1}.bench-head p{display:none}.bench-head{grid-template-columns:1fr 1fr}}
-@media(max-width:720px){.navlinks a:not(.navcta){display:none}.mobile-nav{display:block;border-top:1px solid #ffffff0a}.mobile-nav div{display:flex;gap:6px;overflow-x:auto;padding:8px 0;scrollbar-width:none;-webkit-mask-image:linear-gradient(90deg,#000 88%,transparent)}.mobile-nav div::-webkit-scrollbar{display:none}.mobile-nav a{flex:none;font-size:13.5px;color:var(--muted);text-decoration:none;padding:7px 12px;border-radius:999px;border:1px solid #ffffff10;background:#ffffff04}.mobile-nav a:active{background:#7cff5e14;color:var(--text)}html{scroll-padding-top:120px}}
-@media(max-width:560px){.install-choices{grid-template-columns:1fr}.wrap{width:min(calc(100% - 32px),var(--max))}.nav{height:58px}.brand{font-size:14px;gap:9px}.brand img{width:30px;height:30px}.navcta{padding:7px 12px;font-size:13px;min-height:38px}.hero{padding:44px 0 24px}h1{font-size:clamp(38px,11.5vw,52px)}section{padding:60px 0}.hero-actions{flex-direction:column;align-items:stretch}.hero-actions .button{width:100%}.grid{grid-template-columns:1fr}.docs{grid-template-columns:1fr 1fr}.card{padding:22px}.install-choice{padding:20px}.quick code{font-size:12px}.copy{min-width:76px;padding:0 12px}.bench-row{padding:18px}.changes li{grid-template-columns:auto 1fr;padding:14px 16px}.changes time{grid-column:2}.closing{padding:44px 20px}.closing-actions{flex-direction:column;align-items:stretch}.closing-actions .button{width:100%}.doclink{padding:15px}.codebody{font-size:12px}}
-@media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}*,*::before,*::after{transition:none!important;animation:none!important}.js .reveal:not(.in){opacity:1;transform:none}.js .bench:not(.in) .bar i{transform:none}}
-.hero-os{margin:14px 0 0;font-size:13.5px;color:var(--muted)}.hero-os a{color:var(--lime);text-decoration:none;font-weight:600}.hero-os a:hover{text-decoration:underline}.dl-list{list-style:none;margin:0 0 12px;padding:0;display:grid;gap:6px}.dl-list a{font-size:13.5px;min-height:28px}.dl-list small{color:var(--muted);font-weight:400;font-family:var(--mono);font-size:12px}.dl-list li[data-match] a{text-decoration:underline;text-underline-offset:3px}
-</style>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex,follow">
+  <meta http-equiv="refresh" content="0;url=app/">
+  <link rel="canonical" href="https://fahthiz.github.io/oasis/app/">
+  <title>OASIS</title>
+  <style>
+    :root{color-scheme:dark;background:#0b100c;color:#e8efe9;font:16px system-ui,sans-serif}
+    body{min-height:100vh;display:grid;place-items:center;margin:0}
+    main{max-width:34rem;padding:2rem;text-align:center}
+    a{color:#9bff55}
+    small{display:block;margin-top:1.5rem;color:#9baa9f}
+  </style>
 </head>
 <body>
-<a class="skip" href="#main">Skip to content</a>
-<svg width="0" height="0" style="position:absolute" aria-hidden="true">
-<defs>
-<symbol id="i-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 17 17 7M8 7h9v9"/></symbol>
-<symbol id="i-download" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12m0 0-5-5m5 5 5-5M5 21h14"/></symbol>
-<symbol id="i-copy" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></symbol>
-<symbol id="i-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12.5 4.5 4.5L19 7.5"/></symbol>
-<symbol id="i-desktop" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/></symbol>
-<symbol id="i-phone" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="2.5" width="12" height="19" rx="2.5"/><path d="M11 18.5h2"/></symbol>
-<symbol id="i-term" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="m7 9 3 3-3 3M13 15h4"/></symbol>
-<symbol id="i-loop" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12a8 8 0 0 1 14-5.3L20 9M20 4v5h-5M20 12a8 8 0 0 1-14 5.3L4 15M4 20v-5h5"/></symbol>
-<symbol id="i-switch" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M7 4 3 8l4 4M3 8h14M17 20l4-4-4-4M21 16H7"/></symbol>
-<symbol id="i-plug" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 2v5M15 2v5M6 7h12v4a6 6 0 0 1-12 0V7ZM12 17v5"/></symbol>
-<symbol id="i-panels" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M10 4v16M10 10h11"/></symbol>
-<symbol id="i-undo" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/></symbol>
-<symbol id="i-flow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="6" height="6" rx="1.5"/><rect x="15" y="15" width="6" height="6" rx="1.5"/><path d="M6 9v4a3 3 0 0 0 3 3h6"/></symbol>
-<symbol id="i-shield" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3 4.5 6v5.5c0 4.6 3.2 8.4 7.5 9.5 4.3-1.1 7.5-4.9 7.5-9.5V6L12 3Z"/><path d="m9 12 2 2 4-4"/></symbol>
-</defs>
-</svg>
-<header>
-<nav class="nav wrap" aria-label="Main navigation"><a class="brand" href="./" aria-label="OASIS homepage"><img src="assets/oasis-mark.svg" alt="" width="34" height="34"><span>OASIS</span></a><div class="navlinks"><a href="#benchmarks">Benchmarks</a><a href="#features">Features</a><a href="#providers">Providers</a><a href="#changes">Changelog</a><a href="#docs">Docs</a><a class="navcta" href="https://github.com/FAHTHIZ/oasis">View on GitHub<svg class="ext" aria-hidden="true"><use href="#i-arrow"/></svg></a></div></nav>
-<nav class="mobile-nav" aria-label="Sections"><div class="wrap"><a href="#install">Install</a><a href="#benchmarks">Benchmarks</a><a href="#fixes">What it fixes</a><a href="#features">Features</a><a href="#providers">Providers</a><a href="#safety">Limits</a><a href="#changes">Changelog</a><a href="#docs">Docs</a></div></nav>
-</header>
-<main id="main">
-<section class="hero wrap" aria-labelledby="hero-title" id="install">
-<div class="status"><span class="spark" aria-hidden="true"></span> OASIS 1.0 · Stable · Open source · Apache-2.0</div>
-<h1 id="hero-title">One coding agent for every device. <span>Paste a key and start.</span></h1>
-<p class="lead"><strong>Code. Automate. Flourish.</strong> The same app on your phone, in your browser and on your desktop, plus a terminal for people who live in one. Paste an API key or a local model address: OASIS picks the best model, checks it can use tools and keeps backups ready. Safety lives in the runtime, so it holds with any model, from a 4B model on your laptop to the frontier.</p>
-<div class="hero-actions"><a class="button primary" href="app/"><svg aria-hidden="true"><use href="#i-phone"/></svg>Open the app</a><a class="button secondary" href="https://github.com/FAHTHIZ/oasis/releases/latest"><svg aria-hidden="true"><use href="#i-download"/></svg>Download OASIS 1.0<svg class="ext" aria-hidden="true"><use href="#i-arrow"/></svg></a><a class="button secondary" href="#install-cmd">Install the CLI</a></div><p class="hero-os" id="hero-os" hidden></p>
-<div class="quick" role="group" aria-label="Install the stable CLI on macOS, Linux or Termux"><code id="install-cmd"><span class="prompt" aria-hidden="true">$</span>curl -fsSL https://raw.githubusercontent.com/FAHTHIZ/oasis/v1.1.0/scripts/install.sh | sh</code><button class="copy" type="button" data-copy="install-cmd" aria-label="Copy install command"><svg aria-hidden="true"><use href="#i-copy"/></svg><span>Copy</span></button></div>
-<div class="install-choices" aria-label="Choose how to use OASIS"><article class="install-choice"><div class="ico" aria-hidden="true"><svg><use href="#i-desktop"/></svg></div><h2>Desktop app (no terminal required)</h2><p>Installers for Windows, macOS (Apple silicon and Intel) and Linux (x86_64 and arm64). The packaged app does not require a separate Node.js or Git installation. Installers are unsigned; verify them with the published SHA-256 checksums.</p><!--OASIS:DOWNLOADS--><!--/OASIS:DOWNLOADS--><a href="https://github.com/FAHTHIZ/oasis/releases/latest">Download the latest <i class="nw">release<svg class="ext" aria-hidden="true"><use href="#i-arrow"/></svg></i></a></article><article class="install-choice"><div class="ico" aria-hidden="true"><svg><use href="#i-phone"/></svg></div><h2>Universal app (phone, tablet, any computer)</h2><p>Runs entirely in your browser and installs to the home screen on Android, iPhone, iPad, ChromeOS, Windows, macOS and Linux. Works offline, keeps projects on the device, talks straight to the model provider you choose, and runs code in an isolated sandbox. No account, no server, no terminal. Paste an API key or a model link and it sets itself up.</p><a href="app/">Open the universal <i class="nw">app<svg class="ext" aria-hidden="true"><use href="#i-arrow"/></svg></i></a></article><article class="install-choice"><div class="ico" aria-hidden="true"><svg><use href="#i-term"/></svg></div><h2>Terminal (for developers)</h2><p>For a terminal-first workflow, scripts, and automation. Requires Node.js 22 or newer. Then run <code style="font-family:var(--mono);font-size:13px;color:#dbe7d6">oasis setup</code>, and <code style="font-family:var(--mono);font-size:13px;color:#dbe7d6">oasis web --open</code> for the browser workspace. With Homebrew: <code style="font-family:var(--mono);font-size:13px;color:#dbe7d6">brew install fahthiz/oasis/oasis-cli</code> after tapping the repository.</p><a href="https://github.com/FAHTHIZ/oasis/blob/main/scripts/install.sh">Read the CLI <i class="nw">installer<svg class="ext" aria-hidden="true"><use href="#i-arrow"/></svg></i></a></article></div>
-<div class="hero-note">OASIS 1.0 is stable: every release gate passed on one commit across Windows, macOS and Linux, including browser tests with accessibility checks. Installers are not code-signed; each release publishes SHA-256 checksums.</div>
-<div class="trust" aria-label="Project capabilities"><span class="chip">CLI + browser workspace</span><span class="chip">Multi-provider models</span><span class="chip">MCP integrations</span><span class="chip">Skills + subagents</span><span class="chip">Apache License 2.0</span></div>
-</section>
-
-
-<section id="benchmarks"><div class="wrap"><div class="section-head reveal"><h2>Measured, not claimed.</h2><p>The model-free harness benchmark feeds the runtime outputs that real models actually produce and scores what happens. These are first scores on held-out cases the runtime was never tuned on.</p></div>
-<div class="bench reveal" role="table" aria-label="Harness benchmark results on held-out cases">
-<div class="bench-row bench-head" role="row"><p role="columnheader">What the model sends</p><span role="columnheader">No harness layer</span><span role="columnheader">OASIS</span></div>
-<div class="bench-row" role="row"><p role="cell">Malformed or text-only tool calls<small>Fences, comments, Python literals, Hermes/Qwen tags</small></p><div class="meter base" role="cell"><b>1 of 20 run</b><div class="bar"><i style="--v:5%"></i></div></div><div class="meter" role="cell"><b>18 of 20 run</b><small>0 false runs</small><div class="bar"><i style="--v:90%"></i></div></div></div>
-<div class="bench-row" role="row"><p role="cell">Edits whose old text drifted<small>Indentation, spacing, quotes, CRLF, BOM</small></p><div class="meter base" role="cell"><b>2 of 12 apply</b><div class="bar"><i style="--v:16.7%"></i></div></div><div class="meter" role="cell"><b>11 of 12 apply</b><small>0 wrong writes</small><div class="bar"><i style="--v:91.7%"></i></div></div></div>
-<div class="bench-row" role="row"><p role="cell">Destructive shell commands, approvals off<small>Everyday commands still run</small></p><div class="meter base" role="cell"><b>0 of 31 stopped</b><div class="bar"><i style="--v:0%"></i></div></div><div class="meter" role="cell"><b>22 of 31 stopped</b><div class="bar"><i style="--v:71%"></i></div></div></div>
-<div class="bench-row" role="row"><p role="cell">Placeholder rewrites, weakened tests, leaked secrets<small>0 false alarms</small></p><div class="meter base" role="cell"><b>0 of 23 caught</b><div class="bar"><i style="--v:0%"></i></div></div><div class="meter" role="cell"><b>16 of 23 caught</b><div class="bar"><i style="--v:69.6%"></i></div></div></div>
-</div>
-<div class="bench-foot"><span>Every miss was then fixed and turned into a regression test. Reproduce it in seconds, no model or key: <code>npm run bench:harness</code></span><a href="https://github.com/FAHTHIZ/oasis/tree/main/bench/harness" style="color:var(--lime);text-decoration:none;font-weight:600">Full <i class="nw">methodology<svg class="ext" aria-hidden="true"><use href="#i-arrow"/></svg></i></a></div>
-</div></section>
-
-<section id="fixes"><div class="wrap"><div class="section-head reveal"><h2>Built for the things people hate about coding agents.</h2><p>Most agent failures are harness failures. OASIS fixes each one in the runtime, so the fix holds whichever model you connect.</p></div>
-<div class="fixes reveal">
-<div class="fix"><svg aria-hidden="true"><use href="#i-check"/></svg><div><q>It said it was done, but never ran the tests.</q><p>A verification gate: an answer that comes before a relevant check has passed (or before a rewritten file's diff was reviewed) is sent back, naming the command to rerun. Any later edit resets it, and a turn that still stops short is marked “Not fully checked”.</p></div></div>
-<div class="fix"><svg aria-hidden="true"><use href="#i-check"/></svg><div><q>It ran rm -rf while I wasn't watching.</q><p>Catastrophic commands are refused even with approvals off, including when hidden in <code>bash -c</code>, <code>eval</code> or <code>$(…)</code>. High-risk ones always ask.</p></div></div>
-<div class="fix"><svg aria-hidden="true"><use href="#i-check"/></svg><div><q>It changed the test to match the broken code.</q><p>Weakened-test detection catches skips, <code>.only</code>, deleted tests, removed assertions and exact checks swapped for <code>toBeDefined()</code>.</p></div></div>
-<div class="fix"><svg aria-hidden="true"><use href="#i-check"/></svg><div><q>It replaced my function with “rest unchanged”.</q><p>A change guard blocks placeholder edits and flags large, unexplained deletions.</p></div></div>
-<div class="fix"><svg aria-hidden="true"><use href="#i-check"/></svg><div><q>Ten patches, and the same error every time.</q><p>Fix-thrash detection tells the agent to step back on the third identical failure, and to change approach or ask you on the fifth.</p></div></div>
-<div class="fix"><svg aria-hidden="true"><use href="#i-check"/></svg><div><q>I have to wait for it to finish before I can correct it.</q><p>Type while it works. The agent reads your message at its next step and keeps going. Nothing you send is dropped.</p></div></div>
-</div>
-</div></section>
-
-<section id="features"><div class="wrap"><div class="section-head reveal"><h2>A workspace for more than a single prompt.</h2><p>OASIS combines a terminal-first coding agent with tools and a browser workspace that help you understand, change, and verify software.</p></div>
-<div class="grid reveal">
-<article class="card"><div class="ico" aria-hidden="true"><svg><use href="#i-loop"/></svg></div><h3>Agentic coding loop</h3><p>Inspect files, make a plan, apply focused edits, run approved commands, and summarize what changed across multi-step tasks.</p></article>
-<article class="card"><div class="ico" aria-hidden="true"><svg><use href="#i-switch"/></svg></div><h3>Choose your model</h3><p>Connect supported providers and compatible endpoints instead of being locked to one model vendor. Tool calling must be supported by your chosen model.</p></article>
-<article class="card"><div class="ico" aria-hidden="true"><svg><use href="#i-plug"/></svg></div><h3>Extend with tools</h3><p>Use Model Context Protocol (MCP), portable Agent Skills, hooks, custom commands, layered memory, bounded subagents, and a shared dependency-aware task board.</p></article>
-<article class="card"><div class="ico" aria-hidden="true"><svg><use href="#i-panels"/></svg></div><h3>Terminal + browser</h3><p>Work from the CLI or open the local browser dashboard for projects, tasks, notes, agent chat, visible tool activity, and approval prompts.</p></article>
-<article class="card"><div class="ico" aria-hidden="true"><svg><use href="#i-undo"/></svg></div><h3>Review and recover</h3><p>Use command approvals, file snapshots, checkpoints, rewind, saved sessions, and cost limits to keep multi-step work easier to review.</p></article>
-<article class="card"><div class="ico" aria-hidden="true"><svg><use href="#i-flow"/></svg></div><h3>Build it into workflows</h3><p>Use headless and JSON workflows, CI scripts, the GitHub Action, and the Node.js SDK for repeatable developer automation.</p></article>
-</div></div></section>
-
-<section id="providers"><div class="wrap split"><div class="split-copy reveal"><h2>Flexible model connections.</h2><p>OASIS does not bundle a model or provider subscription. During setup, choose a supported provider that matches your tools, budget, and preferred workflow. Small local models get a compact prompt, a 12-tool profile and tool-call repair.</p>
-<div class="provider-row" aria-label="Examples of supported providers and endpoints"><span class="provider">OpenAI Responses</span><span class="provider">Anthropic Messages</span><span class="provider">OpenRouter</span><span class="provider">Gemini</span><span class="provider">DeepSeek</span><span class="provider">Ollama</span><span class="provider">LM Studio</span><span class="provider">llama.cpp</span><span class="provider">vLLM</span><span class="provider">Bedrock</span><span class="provider">Vertex</span><span class="provider">Azure Foundry</span><span class="provider">Compatible APIs</span></div></div>
-<div class="code-card reveal" aria-label="Example terminal workflow"><div class="code-top"><span class="windowdot"></span><span class="windowdot"></span><span class="windowdot"></span><span style="margin-left:8px">your-project — oasis</span></div><div class="codebody"><div class="comment"># Start in any project</div><div><span class="green">$</span> oasis "fix the failing date tests"</div><div> </div><div class="comment"># Read-only plan, nothing is changed</div><div><span class="green">$</span> oasis plan "add rate limiting"</div><div> </div><div class="comment"># Runtime policy, not a prompt</div><div><span class="green">$</span> git push --force</div><div><span class="bad">✗ refused</span> <span class="comment">force push rewrites shared history</span></div><div> </div><div class="comment"># Verify the provider connection</div><div><span class="green">$</span> oasis doctor --test-provider</div></div></div>
-<p class="privacy-note"><strong>Privacy note:</strong> The keyless search fallback may fetch results from DuckDuckGo. Search requests go to the search provider you use; your prompts and any code/context you include are sent to the model provider you configure. You can configure a supported search provider with your own key. Do not send secrets you do not want those providers to receive.</p></div></section>
-
-<section id="safety"><div class="wrap split"><div class="reveal"><div class="ico" aria-hidden="true"><svg><use href="#i-shield"/></svg></div><h2>Designed to be inspectable.</h2><p style="color:var(--muted);font-size:16px">OASIS includes safeguards, but agent-driven code still needs human review. Understand what is enabled before using it on unfamiliar or important projects.</p></div>
-<aside class="limits reveal"><h3>Current limitations</h3><ul><li>Shell commands normally run with your computer account permissions. The optional OS sandbox is disabled by default, currently targets Linux and macOS, and does not provide Windows isolation.</li><li>OASIS includes a VS Code-family integration and a plugin/marketplace adapter. Third-party compatibility is feature-by-feature, not a promise that every plugin works unchanged.</li><li>The browser dashboard keeps its projects, tasks, and notes separate from CLI workspace metadata. Its GitHub connection uses the GitHub CLI login on the host.</li><li>The browser PTY and process cleanup still need platform-by-platform validation. The universal app is tested in desktop and mobile-emulated Chromium; real-device testing on iOS Safari and older Android browsers is still in progress, and it cannot run shell commands.</li><li>Desktop installers are unsigned. Clean-machine install, update, and uninstall journeys still need further release validation.</li></ul></aside></div></section>
-
-<section id="changes"><div class="wrap"><div class="section-head reveal"><h2>Latest changes.</h2><p>This page rebuilds itself on every commit to <code style="font-family:var(--mono);font-size:14px">main</code>. These are the latest changes, straight from the repository.</p></div>
-<div class="changes reveal"><ol><!--OASIS:CHANGES--><li><a class="sha" href="https://github.com/FAHTHIZ/oasis/commits/main">main</a><span class="msg">See the latest commits on GitHub.</span><time></time></li><!--/OASIS:CHANGES--></ol><a class="all" href="https://github.com/FAHTHIZ/oasis/commits/main">All <i class="nw">commits<svg class="ext" aria-hidden="true"><use href="#i-arrow"/></svg></i></a></div>
-</div></section>
-
-<section id="docs"><div class="wrap"><div class="section-head reveal"><h2>Inspect the code.</h2><p>OASIS is Apache-2.0 licensed. Explore how it works and what it checks.</p></div>
-<div class="docs reveal"><a class="doclink" href="https://github.com/FAHTHIZ/oasis/tree/main/src"><strong><i class="nw">Source<svg class="ext" aria-hidden="true"><use href="#i-arrow"/></svg></i></strong><span>Agent runtime, tools and safety layers</span></a><a class="doclink" href="https://github.com/FAHTHIZ/oasis/tree/main/test"><strong><i class="nw">Tests<svg class="ext" aria-hidden="true"><use href="#i-arrow"/></svg></i></strong><span>Regression tests that gate every commit</span></a><a class="doclink" href="https://github.com/FAHTHIZ/oasis/tree/main/bench/harness"><strong><i class="nw">Benchmarks<svg class="ext" aria-hidden="true"><use href="#i-arrow"/></svg></i></strong><span>Model-free harness cases and scoring</span></a><a class="doclink" href="https://github.com/FAHTHIZ/oasis/blob/main/scripts/install.sh"><strong><i class="nw">Installer<svg class="ext" aria-hidden="true"><use href="#i-arrow"/></svg></i></strong><span>The script the install command runs</span></a><a class="doclink" href="https://github.com/FAHTHIZ/oasis/blob/main/LICENSE"><strong><i class="nw">License<svg class="ext" aria-hidden="true"><use href="#i-arrow"/></svg></i></strong><span>Apache License 2.0</span></a><a class="doclink" href="https://github.com/FAHTHIZ/oasis/releases"><strong><i class="nw">Releases<svg class="ext" aria-hidden="true"><use href="#i-arrow"/></svg></i></strong><span>Installers and checksums, by version</span></a></div></div></section>
-
-<section class="wrap"><div class="closing reveal"><h2>Make the next change count.</h2><p>Download the app and point it at a project, or read the code first. It is free and open source, and it runs with the model you choose.</p><div class="closing-actions"><a class="button primary" href="https://github.com/FAHTHIZ/oasis/releases/latest"><svg aria-hidden="true"><use href="#i-download"/></svg>Download OASIS 1.0<svg class="ext" aria-hidden="true"><use href="#i-arrow"/></svg></a><a class="button secondary" href="https://github.com/FAHTHIZ/oasis">Open OASIS on GitHub<svg class="ext" aria-hidden="true"><use href="#i-arrow"/></svg></a></div></div></section>
-</main>
-<footer><div class="wrap foot"><span>© OASIS · Apache License 2.0</span><span class="build"><!--OASIS:BUILD-->Built from main<!--/OASIS:BUILD--></span><span><a href="https://github.com/FAHTHIZ/oasis">GitHub</a> · <a href="https://github.com/FAHTHIZ/oasis/blob/main/LICENSE">License</a></span></div></footer>
-<script>
-document.documentElement.classList.add('js');
-(function(){
-  var io='IntersectionObserver' in window?new IntersectionObserver(function(es){es.forEach(function(e){if(e.isIntersecting){e.target.classList.add('in');io.unobserve(e.target)}})},{rootMargin:'0px 0px -8% 0px'}):null;
-  document.querySelectorAll('.reveal,.bench').forEach(function(el){io?io.observe(el):el.classList.add('in')});
-  document.querySelectorAll('[data-copy]').forEach(function(btn){btn.addEventListener('click',function(){
-    var el=document.getElementById(btn.dataset.copy),text=el.textContent.replace(/^\$/,'').trim(),label=btn.querySelector('span');
-    var done=function(ok){label.textContent=ok?'Copied':'Select';ok?btn.setAttribute('data-done',''):0;setTimeout(function(){label.textContent='Copy';btn.removeAttribute('data-done')},1800)};
-    if(navigator.clipboard&&window.isSecureContext){navigator.clipboard.writeText(text).then(function(){done(true)},function(){done(false)})}
-    else{var r=document.createRange();r.selectNodeContents(el);var s=getSelection();s.removeAllRanges();s.addRange(r);done(document.execCommand&&document.execCommand('copy'))}
-  })});
-  // Pick the installer for this device: OS from the user agent, CPU from
-  // userAgentData (Chromium) or the WebGL renderer (Apple silicon Macs report "Apple M").
-  (function(){var hint=document.getElementById('hero-os');if(!hint)return;var ua=navigator.userAgent||'',p=((navigator.userAgentData&&navigator.userAgentData.platform)||navigator.platform||'')+' '+ua,os=null;
-    if(/iphone|ipad|ipod/i.test(ua)||(/mac/i.test(p)&&navigator.maxTouchPoints>1))os='ios';else if(/android/i.test(ua))os='android';else if(/win/i.test(p))os='win';else if(/mac/i.test(p))os='mac';else if(/linux|x11|cros/i.test(p))os='linux';
-    if(os==='android'||os==='ios'){hint.innerHTML='On a phone? <a href="app/">Open the universal app</a> and add it to your home screen, or <a href="https://github.com/FAHTHIZ/oasis/blob/main/scripts/install.sh">install the CLI with Termux</a>.';hint.hidden=false;return}
-    function cpu(){var arch=/arm64|aarch64/i.test(ua)?'arm64':'x64';if(os==='mac'){arch='arm64';try{var gl=document.createElement('canvas').getContext('webgl');var ext=gl&&gl.getExtension('WEBGL_debug_renderer_info');var r=ext?gl.getParameter(ext.UNMASKED_RENDERER_WEBGL):'';if(/intel|amd|radeon/i.test(r))arch='x64'}catch(e){}}
-      var data=navigator.userAgentData;if(data&&data.getHighEntropyValues)return data.getHighEntropyValues(['architecture','bitness']).then(function(v){return v&&v.architecture==='arm'?'arm64':(v&&v.architecture==='x86'?'x64':arch)}).catch(function(){return arch});return Promise.resolve(arch)}
-    cpu().then(function(arch){var key=os+'-'+arch;var li=document.querySelector('.dl-list li[data-os="'+key+'"]')||(os==='linux'&&document.querySelector('.dl-list li[data-os="linux-deb-'+arch+'"]'))||document.querySelector('.dl-list li[data-os^="'+os+'-"]');if(!li)return;li.setAttribute('data-match','');var a=li.querySelector('a');
-      var names={'win-x64':'Windows','win-arm64':'Windows on ARM','mac-arm64':'macOS (Apple silicon)','mac-x64':'macOS (Intel)','linux-x64':'Linux','linux-arm64':'Linux on ARM'};var label=names[li.getAttribute('data-os')]||names[key]||'your computer';
-      document.querySelectorAll('a.button.primary[href$="/releases/latest"]').forEach(function(btn){btn.href=a.href;btn.setAttribute('data-auto-download',li.getAttribute('data-os'));var text=Array.prototype.find.call(btn.childNodes,function(n){return n.nodeType===3&&n.textContent.trim()});if(text)text.textContent='Download for '+label})
-      hint.textContent='';hint.append('Detected '+label+': ');var link=a.cloneNode(true);link.textContent=a.dataset.file||a.textContent;hint.append(link);hint.append(' · ');var all=document.createElement('a');all.href='#install';all.textContent='other platforms';hint.append(all);hint.hidden=false})})();
-  document.querySelectorAll('video').forEach(function(v){v.addEventListener('play',function(){document.querySelectorAll('video').forEach(function(o){if(o!==v)o.pause()})})});
-})();
-</script>
+  <main>
+    <h1>OASIS</h1>
+    <p>Opening the OASIS application…</p>
+    <p><a href="app/">Open the application</a></p>
+    <small>Build <span id="build"><!--OASIS:BUILD-->source<!--/OASIS:BUILD--></span></small>
+    <div hidden><!--OASIS:CHANGES--><!--/OASIS:CHANGES--></div>
+  </main>
+  <script>location.replace('app/');</script>
 </body>
 </html>
