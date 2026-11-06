@@ -6,6 +6,7 @@ import { BUILTIN_SERVERS } from './lsp.mjs';
 import { onPathSync } from './clipboard-path.mjs';
 import { estimateTokens, contextWindowSize } from './context.mjs';
 import { workflowRuntimeStatus } from './workflow-sandbox.mjs';
+import { describeRipgrep } from './ripgrep.mjs';
 
 export async function workspaceDoctor(root, { env = process.env, session = null } = {}) {
   const lines = [];
@@ -13,10 +14,11 @@ export async function workspaceDoctor(root, { env = process.env, session = null 
   const major = Number.parseInt(process.versions.node, 10);
   lines.push('Oasis doctor: ' + root);
   lines.push('  Node.js ' + process.version + ' on ' + process.platform + '/' + process.arch + (major >= 22 ? '' : ' (Node 22+ recommended)'));
-  const tools = ['git', 'rg', 'gh'].map((name) => name + (onPathSync(name, env) ? ' yes' : ' no'));
+  const ripgrep = describeRipgrep(env);
+  const tools = ['git', 'rg', 'gh'].map((name) => name + (name === 'rg' ? (ripgrep ? ' ' + ripgrep : ' no') : onPathSync(name, env) ? ' yes' : ' no'));
   lines.push('  Tools: ' + tools.join(', '));
   if (!onPathSync('git', env)) problems.push('git is missing: git tools, /commit, /pr and /review will not work.');
-  if (!onPathSync('rg', env)) problems.push('ripgrep (rg) is missing: search falls back to a slower built-in grep.');
+  if (!ripgrep) problems.push('ripgrep is missing (the bundled @vscode/ripgrep binary was not installed for ' + process.platform + '-' + process.arch + ' and rg is not on PATH): grep falls back to a slower built-in search that ignores .gitignore.');
   if (session && session.config) lines.push('  Model: ' + (session.config.model || '(default)') + ' via ' + (session.config.protocol || 'openai-compatible') + (session.config.baseURL ? ' at ' + session.config.baseURL : ''));
   try {
     const settings = await loadSettings(root, { env });

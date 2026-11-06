@@ -19,7 +19,8 @@ const TYPES = {
 // /vendor/<package>/<entry>; everything under the entry's folder is served.
 export const APP_PACKAGES = Object.freeze({
   yaml: 'browser/index.js',
-  jsonrepair: 'lib/esm/index.js'
+  jsonrepair: 'lib/esm/index.js',
+  entities: 'dist/index.js'
 });
 
 /** Shared src modules and npm packages the app imports (transitively); refuses Node-only ones. */

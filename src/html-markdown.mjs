@@ -1,4 +1,4 @@
-// Dependency-free HTML -> Markdown conversion with Readability-style
+// HTML -> Markdown conversion with Readability-style
 // main-content extraction, used by fetch_url and /web.
 //
 // The approach follows Mozilla Readability and the reference MCP "fetch"
@@ -6,6 +6,8 @@
 // element that holds the article text, then render it as Markdown so headings,
 // links, lists, tables and code blocks survive for the model. The scanner is a
 // linear hand-written tokenizer (no backtracking regexes over untrusted HTML).
+
+import { decodeHTML, decodeHTMLAttribute } from 'entities';
 
 const MAX_DEPTH = 256;
 const VOID = new Set(['area', 'base', 'br', 'col', 'embed', 'hr', 'img', 'input', 'link', 'meta', 'param', 'source', 'track', 'wbr']);
@@ -25,33 +27,20 @@ const MAYBE = /and|article|body|column|content|main|shadow|post|entry|markdown|p
 const POSITIVE = /article|body|content|entry|hentry|h-entry|main|page|post|text|blog|story|markdown|prose|docs?-?content|documentation/i;
 const NEGATIVE = /hidden|^hid$|banner|combx|comment|contact|foot|footer|footnote|masthead|media|meta|outbrain|promo|related|scroll|share|shoutbox|sidebar|skyscraper|sponsor|shopping|tags|tool|widget|nav|menu/i;
 
-const NAMED_ENTITIES = {
-  amp: '&', lt: '<', gt: '>', quot: '"', apos: "'", nbsp: ' ', ensp: ' ', emsp: ' ', thinsp: ' ', shy: '', zwj: '', zwnj: '',
-  copy: '©', reg: '®', trade: '™', hellip: '…', mdash: '—', ndash: '–', minus: '−', times: '×', divide: '÷', deg: '°', plusmn: '±',
-  lsquo: '‘', rsquo: '’', sbquo: '‚', ldquo: '“', rdquo: '”', bdquo: '„', laquo: '«', raquo: '»', lsaquo: '‹', rsaquo: '›',
-  bull: '•', middot: '·', para: '¶', sect: '§', dagger: '†', Dagger: '‡', prime: '′', Prime: '″', larr: '←', rarr: '→', uarr: '↑', darr: '↓', harr: '↔',
-  rArr: '⇒', lArr: '⇐', hArr: '⇔', le: '≤', ge: '≥', ne: '≠', asymp: '≈', equiv: '≡', infin: '∞', sum: '∑', prod: '∏', radic: '√', part: '∂', nabla: '∇',
-  isin: '∈', notin: '∉', cap: '∩', cup: '∪', and: '∧', or: '∨', forall: '∀', exist: '∃', empty: '∅', alpha: 'α', beta: 'β', gamma: 'γ', delta: 'δ',
-  epsilon: 'ε', lambda: 'λ', mu: 'μ', pi: 'π', sigma: 'σ', tau: 'τ', phi: 'φ', omega: 'ω', Delta: 'Δ', Sigma: 'Σ', Omega: 'Ω',
-  euro: '€', pound: '£', yen: '¥', cent: '¢', curren: '¤', iexcl: '¡', iquest: '¿', frac12: '½', frac14: '¼', frac34: '¾', sup2: '²', sup3: '³',
-  check: '✓', starf: '★', hearts: '♥', grave: '`', lbrace: '{', rbrace: '}', lsqb: '[', rsqb: ']', lpar: '(', rpar: ')', colon: ':', comma: ',', period: '.',
-  excl: '!', quest: '?', num: '#', percnt: '%', dollar: '$', ast: '*', plus: '+', equals: '=', sol: '/', bsol: '\\', verbar: '|', vert: '|', lowbar: '_', Hat: '^', tilde: '˜', NewLine: '\n', Tab: '\t',
-  auml: 'ä', ouml: 'ö', uuml: 'ü', Auml: 'Ä', Ouml: 'Ö', Uuml: 'Ü', szlig: 'ß', eacute: 'é', egrave: 'è', ecirc: 'ê', aacute: 'á', agrave: 'à', acirc: 'â',
-  iacute: 'í', oacute: 'ó', uacute: 'ú', ntilde: 'ñ', Ntilde: 'Ñ', ccedil: 'ç', Ccedil: 'Ç', Eacute: 'É', aring: 'å', Aring: 'Å', oslash: 'ø', Oslash: 'Ø', aelig: 'æ', AElig: 'Æ'
-};
+// Character references are decoded by `entities` (the full HTML5 table, with the
+// spec's legacy no-semicolon forms). No-break and fixed-width spaces become plain
+// spaces and soft hyphens vanish, so Markdown wraps and searches as plain text.
+const SPACES = /[\u00a0\u2002\u2003\u2009]/g;
+const tidy = (text) => text.replace(SPACES, ' ').replace(/\u00ad/g, '');
 
 export function decodeEntities(text) {
   const value = String(text || '');
-  if (!value.includes('&')) return value;
-  return value.replace(/&(#[xX][0-9a-fA-F]{1,6}|#[0-9]{1,7}|[A-Za-z][A-Za-z0-9]{1,31});?/g, (match, body) => {
-    if (body[0] === '#') {
-      const code = body[1] === 'x' || body[1] === 'X' ? parseInt(body.slice(2), 16) : parseInt(body.slice(1), 10);
-      if (!Number.isFinite(code) || code <= 0 || code > 0x10ffff || (code >= 0xd800 && code <= 0xdfff)) return '\ufffd';
-      if (code === 0xa0) return ' ';
-      return String.fromCodePoint(code);
-    }
-    return Object.prototype.hasOwnProperty.call(NAMED_ENTITIES, body) ? NAMED_ENTITIES[body] : match;
-  });
+  return value.includes('&') ? tidy(decodeHTML(value)) : value;
+}
+
+function decodeAttribute(text) {
+  const value = String(text || '');
+  return value.includes('&') ? tidy(decodeHTMLAttribute(value)) : value;
 }
 
 function parseAttributes(source) {
@@ -80,7 +69,7 @@ function parseAttributes(source) {
         value = source.slice(vstart, i);
       }
     }
-    if (!(name in attrs)) attrs[name] = decodeEntities(value);
+    if (!(name in attrs)) attrs[name] = decodeAttribute(value);
   }
   return attrs;
 }

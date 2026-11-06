@@ -422,3 +422,33 @@ test('sandbox toolchain mounts never expose socket directories or whole /tmp ent
   await writeFile(path.join(nested, 'tools', 'bin', 'cc'), '');
   assert.deepEqual(tmpToolchainMounts(path.join(nested, 'tools', 'bin', 'cc'), { PATH: '/usr/bin' }), [path.join(nested, 'tools')]);
 });
+
+test('grep runs the bundled ripgrep even when rg is not on PATH, and honours .gitignore', async (t) => {
+  const { bundledRipgrepPath, resolveRipgrep } = await import('../src/ripgrep.mjs');
+  if (!bundledRipgrepPath()) { t.skip('no @vscode/ripgrep binary for ' + process.platform + '-' + process.arch); return; }
+  const root = await mkdtemp(path.join(os.tmpdir(), 'oasis-rg-'));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  await writeFile(path.join(root, '.gitignore'), 'build/\n');
+  await mkdir(path.join(root, 'build'));
+  await mkdir(path.join(root, '.git'));
+  await writeFile(path.join(root, 'build', 'out.js'), 'needle\n');
+  await writeFile(path.join(root, 'src.js'), 'const needle = 1;\n');
+  const env = { PATH: '' };
+  assert.equal(resolveRipgrep(env).source, 'bundled');
+  const found = await grepWorkspace(root, { pattern: 'needle', output_mode: 'files_with_matches' }, { env });
+  assert.equal(found.engine, 'ripgrep');
+  assert.deepEqual(found.results, ['src.js']);
+  assert.equal(resolveRipgrep({ PATH: '', OASIS_RIPGREP_PATH: bundledRipgrepPath() }).source, 'env');
+});
+
+test('agent commands get the bundled rg on PATH only when none is there', async (t) => {
+  const { bundledRipgrepPath } = await import('../src/ripgrep.mjs');
+  const { commandEnvironment } = await import('../src/agent.mjs');
+  if (!bundledRipgrepPath()) { t.skip('no bundled ripgrep for this platform'); return; }
+  const dir = path.dirname(bundledRipgrepPath());
+  const empty = await mkdtemp(path.join(os.tmpdir(), 'oasis-nopath-'));
+  t.after(() => rm(empty, { recursive: true, force: true }));
+  assert.equal(commandEnvironment({ PATH: empty }, {}).PATH, [empty, dir].join(path.delimiter));
+  assert.equal(commandEnvironment({ PATH: dir }, {}).PATH, dir, 'an rg already on PATH is left alone');
+  assert.equal(commandEnvironment({ PATH: empty }, { pluginBinDirs: ['/plugin/bin'] }).PATH, ['/plugin/bin', empty, dir].join(path.delimiter));
+});

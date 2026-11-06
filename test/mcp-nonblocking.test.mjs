@@ -7,7 +7,7 @@ import { createSession, closeSession, runAgentTurn } from '../src/agent.mjs';
 import { setWorkspaceTrust } from '../src/settings.mjs';
 import { scriptedModel, toolCall } from './helpers/scripted-model.mjs';
 
-// An MCP server that takes ~800ms to answer initialize.
+// An MCP server that takes ~3s to answer initialize.
 const SLOW_SERVER = [
   "let buffer = '';",
   "process.stdin.setEncoding('utf8');",
@@ -15,7 +15,7 @@ const SLOW_SERVER = [
   "process.stdin.on('data', (chunk) => { buffer += chunk; let i;",
   "  while ((i = buffer.indexOf('\\n')) >= 0) { const line = buffer.slice(0, i); buffer = buffer.slice(i + 1);",
   "    let m; try { m = JSON.parse(line); } catch { continue; } if (m.id === undefined) continue;",
-  "    if (m.method === 'initialize') { const id = m.id; setTimeout(() => reply(id, { protocolVersion: '2025-03-26', serverInfo: { name: 'test', version: '1' }, capabilities: { tools: {} } }), 800); }",
+  "    if (m.method === 'initialize') { const id = m.id; setTimeout(() => reply(id, { protocolVersion: '2025-03-26', serverInfo: { name: 'test', version: '1' }, capabilities: { tools: {} } }), 3000); }",
   "    else if (m.method === 'tools/list') reply(m.id, { tools: [{ name: 'ping', description: 'Ping', inputSchema: { type: 'object', properties: {} } }] });",
   "    else if (m.method === 'tools/call') reply(m.id, { content: [{ type: 'text', text: 'pong' }] });",
   "    else reply(m.id, {}); } });"
@@ -36,7 +36,9 @@ test('MCP_CONNECTION_NONBLOCKING starts the session before servers connect; wait
   const started = Date.now();
   const session = await createSession({ root, config, env });
   t.after(() => closeSession(session));
-  assert.ok(Date.now() - started < 700, 'session creation did not wait for the server');
+  // The server needs 3s to initialize; returning well before that (with the
+  // connection still pending) shows creation did not wait, even under load.
+  assert.ok(Date.now() - started < 2500, 'session creation did not wait for the server');
   assert.ok(session.mcpConnecting);
   assert.ok(!session.toolDefinitions.some((tool) => tool.function.name === 'mcp_slow_ping'));
   await runAgentTurn(session, 'ping the slow server', { autoApprove: true, approval: async () => true });

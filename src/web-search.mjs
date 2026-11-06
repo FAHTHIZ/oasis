@@ -3,6 +3,7 @@
 // configured engines in parallel and merges independent rankings using RRF.
 // Credentials are read only from the process environment and are never returned.
 import { oasisVersion } from './version.mjs';
+import { decodeHTML } from 'entities';
 
 export const WEB_SEARCH_TOOL_DEFINITION = {
   type: 'function',
@@ -63,12 +64,9 @@ export function searchBackends(env = process.env) {
   });
 }
 
+// Result titles and snippets: tags dropped, character references decoded by `entities`.
 function decodeEntities(text) {
-  return String(text || '')
-    .replace(/<[^>]+>/g, '')
-    .replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"')
-    .replace(/&#x27;|&#39;/g, "'").replace(/&nbsp;/g, ' ').replace(/&#(\d+);/g, (m, n) => String.fromCodePoint(Number(n)))
-    .replace(/\s+/g, ' ').trim();
+  return decodeHTML(String(text || '').replace(/<[^>]+>/g, '')).replace(/\s+/g, ' ').trim();
 }
 
 export function parseDuckDuckGoHtml(html) {
