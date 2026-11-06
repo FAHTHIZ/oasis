@@ -1,0 +1,41 @@
+# Weekly dependency and workflow-action updates, grouped to keep the PR count low.
+# The cooldown holds new releases back for a few days: compromised versions
+# published to npm are usually caught and pulled within that window.
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    cooldown:
+      default-days: 5
+      semver-major-days: 14
+    groups:
+      production:
+        dependency-type: production
+        update-types: [minor, patch]
+      development:
+        dependency-type: development
+        update-types: [minor, patch]
+    ignore:
+      # undici 8 requires Node >= 22.19; OASIS supports every Node 22 release,
+      # and undici 7.x receives the security backports.
+      - dependency-name: undici
+        update-types: [version-update:semver-major]
+    commit-message:
+      prefix: deps
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    cooldown:
+      default-days: 5
+    groups:
+      actions:
+        patterns: ['*']
+    commit-message:
+      prefix: ci
