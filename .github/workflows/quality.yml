@@ -12,6 +12,23 @@ concurrency:
   group: oasis-quality-v15-${{ github.ref }}
   cancel-in-progress: false
 jobs:
+  lint:
+    name: Lint (Oxlint)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Set up Node.js
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+      # Runs the version pinned in package.json without installing Electron.
+      - name: Run Oxlint
+        run: npm exec --yes --package="oxlint@$(node -p "require('./package.json').devDependencies.oxlint")" -- oxlint --deny-warnings
+
   integrity:
     name: Node ${{ matrix.node-version }} runtime and package integrity
     runs-on: ubuntu-latest

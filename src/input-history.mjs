@@ -1,7 +1,7 @@
 import { atomicWriteFile } from './atomic-write.mjs';
 // Persistent prompt history (~/.oasis/history.jsonl), scoped per workspace
 // like Claude Code: Up/Down and Ctrl+R show prompts typed in this project.
-import { appendFile, mkdir, readFile, writeFile, chmod } from 'node:fs/promises';
+import { appendFile, mkdir, readFile, chmod } from 'node:fs/promises';
 import path from 'node:path';
 import { getConfigDirectory } from './config.mjs';
 

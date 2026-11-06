@@ -6,7 +6,7 @@ import { atomicWriteFile } from './atomic-write.mjs';
 // is kept unless --memory is passed.
 //
 //   oasis purge [path] [--dry-run] [-y|--yes] [-i|--interactive] [--all] [--memory]
-import { readdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
+import { readdir, readFile, rm, stat } from 'node:fs/promises';
 import path from 'node:path';
 import { getConfigDirectory } from './config.mjs';
 import { getSessionDirectory } from './sessions.mjs';

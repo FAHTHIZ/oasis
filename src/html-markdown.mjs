@@ -84,7 +84,7 @@ function limitDepth(document) {
   while (stack.length) {
     const [element, depth] = stack.pop();
     if (depth >= MAX_DEPTH) {
-      if (element.firstElementChild) element.textContent = element.textContent;
+      if (element.firstElementChild) element.replaceChildren(element.textContent);
       continue;
     }
     for (let child = element.firstElementChild; child; child = child.nextElementSibling) stack.push([child, depth + 1]);

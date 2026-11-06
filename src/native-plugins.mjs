@@ -1,4 +1,4 @@
-import { createHash, randomUUID } from 'node:crypto';
+import { randomUUID } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
 import { mkdir, lstat, readFile, realpath, rename, rm, unlink, writeFile } from 'node:fs/promises';
@@ -104,7 +104,7 @@ async function validatePackage(source) {
     for(const dir of manifest.skills){
       const rel=safeRelative(dir,'Skill directory');
       if(!rel.startsWith('skills/'))throw new Error('Skill directories must be under skills/.');
-      const file=await addFile(rel+'/SKILL.md','Skill '+rel,['skills/']);
+      await addFile(rel+'/SKILL.md','Skill '+rel,['skills/']);
       components.skills.push(rel);
     }
   }

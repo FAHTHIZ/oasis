@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { claudeThinkingMode, claudeEffortFor, applyEffort, requestCompletion, testProviderConnection } from '../src/agent.mjs';
+import { claudeThinkingMode, claudeEffortFor, applyEffort, requestCompletion } from '../src/agent.mjs';
 
 test('claudeThinkingMode follows the model generation', () => {
   for (const id of ['claude-opus-5-5', 'claude-sonnet-5', 'claude-sonnet-5-5', 'claude-opus-4-7', 'claude-opus-4-8', 'claude-haiku-5-5', 'claude-fable-5-1', 'us.anthropic.claude-opus-5-5', 'claude-opus-5-5@2026-10-01']) assert.equal(claudeThinkingMode(id), 'adaptive-only', id);

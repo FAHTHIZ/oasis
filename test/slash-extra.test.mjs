@@ -8,7 +8,6 @@ import { applyEffort, thinkingBudgetFor, reasoningEffortFor } from '../src/agent
 import { clipboardCandidates, copyToClipboard } from '../src/clipboard.mjs';
 import { loadSession } from '../src/sessions.mjs';
 import { PermissionPolicy } from '../src/permissions.mjs';
-import { killBackgroundEntry } from '../src/power-tools.mjs';
 
 async function setup() {
   const root = await mkdtemp(path.join(os.tmpdir(), 'oasis-slash-'));

@@ -1,7 +1,7 @@
 // Jupyter notebook (.ipynb) support: render cells for read_file and edit them
 // structurally with notebook_edit (Claude Code's NotebookEdit).
 import { atomicWriteFile } from './atomic-write.mjs';
-import { readFile, writeFile, lstat } from 'node:fs/promises';
+import { readFile, lstat } from 'node:fs/promises';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { snapshotFile } from './backups.mjs';

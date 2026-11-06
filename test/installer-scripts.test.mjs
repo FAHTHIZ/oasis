@@ -2,13 +2,11 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { spawnSync } from 'node:child_process';
-import { createHash } from 'node:crypto';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const read = (file) => readFile(path.join(ROOT, file), 'utf8');
-const sha256 = (value) => createHash('sha256').update(value).digest('hex');
 
 test('installer CI pins the exact source commit without changing public stable-release resolution', async () => {
   const [shell, powershell, workflow] = await Promise.all([

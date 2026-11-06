@@ -20,7 +20,7 @@ import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import os from 'node:os';
 import { getConfigDirectory } from './config.mjs';
-import { PERMISSION_MODES, normalizePermissionMode } from './permission-modes.mjs';
+import { normalizePermissionMode } from './permission-modes.mjs';
 export { PERMISSION_MODES, normalizePermissionMode } from './permission-modes.mjs';
 
 const MAX_SETTINGS_BYTES = 256 * 1024;

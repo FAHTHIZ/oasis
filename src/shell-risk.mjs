@@ -24,8 +24,6 @@ import { loadShellParser, parseShellCommands } from './shell-ast.mjs';
 loadShellParser();
 export const shellAnalyzerReady = () => loadShellParser();
 
-const SEPARATORS = new Set([';', '&&', '||', '|', '&', '\n']);
-
 // Splits into simple commands. Each command is { tokens, pipedFrom }, where
 // pipedFrom is the previous command when joined by a single `|`.
 const WINDOWS_PATH_START = /^(?:[A-Za-z]:|%[A-Za-z_]+%|\$env:[A-Za-z_]+|\\\\)/i;

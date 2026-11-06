@@ -6,8 +6,7 @@ import { mkdtemp, mkdir, rm } from 'node:fs/promises';
 import { randomUUID } from 'node:crypto';
 import {
   registerActiveSession, updateActiveSession, unregisterActiveSession,
-  sendSessionMessage, readSessionInbox, listSessionInbox, updateInboxMessage,
-  formatSessionMessage, resolveActiveTarget
+  sendSessionMessage, readSessionInbox, listSessionInbox, formatSessionMessage, resolveActiveTarget
 } from '../src/session-messaging.mjs';
 import { runBuiltinCommand } from '../src/slash.mjs';
 import { createSession, runAgentTurn, closeSession } from '../src/agent.mjs';
