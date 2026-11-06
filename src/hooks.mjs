@@ -22,6 +22,7 @@
 //   other   non-blocking error; shown to the user, execution continues
 // Hooks come from user settings or trusted workspaces only (see settings.mjs).
 import { debugLog, debugEnabled } from './debug-log.mjs';
+import { credentialEnvName } from './credential-env.mjs';
 import { spawn } from 'node:child_process';
 import { processTreeSpawnOptions, signalProcessTree } from './process-tree.mjs';
 
@@ -100,7 +101,7 @@ export function ifAccepts(condition, event, payload) {
 function hookEnvironment(baseEnv, root) {
   const env = {};
   for (const [key, value] of Object.entries(baseEnv || process.env)) {
-    if (/(?:API[_-]?KEY|ACCESS[_-]?KEY|TOKEN|SECRET|PASSWORD|CREDENTIAL|PRIVATE[_-]?KEY|AUTHORIZATION)/i.test(key)) continue;
+    if (credentialEnvName(key)) continue;
     env[key] = value;
   }
   env.OASIS_PROJECT_DIR = root;
