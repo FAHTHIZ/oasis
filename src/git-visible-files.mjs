@@ -39,7 +39,11 @@ function compareSegments(a, b) {
 
 /**
  * @param {string} dir absolute directory to list
- * @param {{ maxFiles?: number, maxDepth?: number, includeHidden?: boolean, skipDirs?: Set<string>, skip?: (rel: string) => boolean, env?: object }} options
+ * `filter` (forward-slash relative path => boolean) runs before `maxFiles` is
+ * applied, so a glob or name filter sees every listed file, not just the first
+ * few thousand. Without it a 40,000-file repository hid most of its files from
+ * glob_files and the search fallback.
+ * @param {{ maxFiles?: number, maxDepth?: number, includeHidden?: boolean, skipDirs?: Set<string>, skip?: (rel: string) => boolean, filter?: (posixRel: string) => boolean, env?: object }} options
  * @returns {Promise<Array<{absolute: string, relative: string}> | null>}
  */
 export async function gitVisibleFiles(dir, options = {}) {
@@ -61,7 +65,7 @@ export async function gitVisibleFiles(dir, options = {}) {
       if (!options.includeHidden && parts[i].startsWith('.')) return false;
       if (i < parts.length - 1 && skipDirs.has(parts[i])) return false;
     }
-    return true;
+    return !options.filter || options.filter(name);
   });
   names.sort(compareSegments);
   const output = [];

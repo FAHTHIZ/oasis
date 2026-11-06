@@ -358,7 +358,9 @@ export async function buildRepoMap(root, options = {}) {
   const maxChars = Math.max(1000, Math.min(60000, Number.parseInt(options.maxChars, 10) || DEFAULT_MAX_CHARS));
   const focusTerms = (Array.isArray(options.focus) ? options.focus : String(options.focus || '').split(/[\s,]+/))
     .map((item) => String(item || '').trim()).filter(Boolean).slice(0, 40);
-  const walked = await walkFiles(base, { maxFiles: Math.min(MAX_FILES, options.maxFiles || MAX_FILES), maxDepth: 12 });
+  // Only source files count toward the cap; a docs- or asset-heavy tree used to
+  // fill it before reaching any code.
+  const walked = await walkFiles(base, { maxFiles: Math.min(MAX_FILES, options.maxFiles || MAX_FILES), maxDepth: 12, filter: (rel) => Boolean(languageForFile(rel)) });
   const files = [];
   const disk = await loadDiskCache(root);
   const seen = [];
