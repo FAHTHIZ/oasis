@@ -36,14 +36,14 @@ test('model memory budgets follow the accelerator', () => {
   assert.equal(modelMemoryBudget({ appleSilicon: true, memoryGB: 32 }), 20.8);
   assert.equal(modelMemoryBudget({ memoryGB: 16 }), 9.6);
   assert.equal(modelMemoryBudget({ memoryGB: 7.8 }), 3.3);
-  assert.equal(localModelTier(modelMemoryBudget({ memoryGB: 7.8 })).model, 'qwen3:4b', 'an 8 GB laptop can run the 4b model');
+  assert.equal(localModelTier(modelMemoryBudget({ memoryGB: 7.8 })).model, 'qwen3:4b-instruct-2507-q4_K_M', 'an 8 GB laptop can run the 4b model');
   assert.equal(localModelTier(modelMemoryBudget({ memoryGB: 16 })).model, 'qwen3:8b');
   assert.equal(modelMemoryBudget({ memoryGB: 4 }), 0);
 });
 
 test('tiers pick the largest model that really fits', () => {
   assert.equal(localModelTier(2), null);
-  assert.equal(localModelTier(3.2).model, 'qwen3:4b');
+  assert.equal(localModelTier(3.2).model, 'qwen3:4b-instruct-2507-q4_K_M');
   assert.equal(localModelTier(6).model, 'qwen3:8b');
   assert.equal(localModelTier(21.6).model, 'qwen3-coder:30b');
   assert.equal(localModelTier(50).model, 'qwen3-coder:30b', '120b needs ~72 GB, so 50 GB stays on the 30b');
@@ -55,6 +55,7 @@ test('parameter counts are read from common model tags', () => {
   assert.equal(modelParamsB('llama3.1:8b-instruct-q4_K_M'), 8);
   assert.equal(modelParamsB('qwen3-coder:30b-a3b'), 30);
   assert.equal(modelParamsB('qwen3:4b'), 4);
+  assert.equal(modelParamsB('qwen3:4b-instruct-2507-q4_K_M'), 4);
   assert.equal(modelParamsB('gemma3:1b'), 1);
   assert.equal(modelParamsB('mistral'), null);
 });
