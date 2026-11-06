@@ -5346,7 +5346,7 @@ async function executeOneCallRaw(session, call, context, options) {
     role: 'tool',
     tool_call_id: call.id,
     name,
-    content: serializableResult(modelFacingResult(name, result)),
+    content: serializableResult(modelFacingResult(name, result, session)),
     result
   };
 }
@@ -5358,7 +5358,35 @@ async function executeOneCallRaw(session, call, context, options) {
 // history as 7,900 characters and was resent on every later request. The
 // model gets stdout once, plus stderr and flags only when they say something;
 // the command only when git failed. The in-process result is unchanged.
-export function modelFacingResult(name, result) {
+const COMMAND_DEFAULT_FLAGS = ['stdoutTruncated', 'stderrTruncated', 'timedOut', 'cancelled'];
+
+export function modelFacingResult(name, result, session = null) {
+  if (!result || typeof result !== 'object' || Array.isArray(result)) return result;
+  let lean = result;
+  // run_command / run_shell: approved:true, signal:null, empty stderr and the
+  // false truncated/timedOut/cancelled flags are the normal case on every
+  // call (about 130 characters each); the model only needs them when set.
+  if ((name === 'run_command' || name === 'run_shell') && typeof result.stdout === 'string' && 'exitCode' in result) {
+    lean = { ...result };
+    if (lean.approved === true) delete lean.approved;
+    if (lean.signal === null || lean.signal === undefined) delete lean.signal;
+    if (lean.stderr === '') delete lean.stderr;
+    for (const key of COMMAND_DEFAULT_FLAGS) if (lean[key] === false) delete lean[key];
+  }
+  // "No language server found, install one with ..." is the same ~250
+  // characters after every write and edit. Say it in full once per session
+  // and server; later results keep only the status.
+  const lsp = lean.lspVerification;
+  if (session && lsp && typeof lsp === 'object' && lsp.status === 'unavailable' && lsp.blocking === false && lsp.reason) {
+    const seen = session.lspUnavailableNoticed instanceof Set ? session.lspUnavailableNoticed : null;
+    const key = String(lsp.server || '') + '\n' + String(lsp.reason);
+    if (seen && seen.has(key)) lean = { ...lean, lspVerification: { status: 'unavailable', blocking: false, ...(lsp.server ? { server: lsp.server } : {}), reason: 'same as before' } };
+    else {
+      if (!seen) Object.defineProperty(session, 'lspUnavailableNoticed', { value: new Set(), enumerable: false, writable: true, configurable: true });
+      session.lspUnavailableNoticed.add(key);
+    }
+  }
+  result = lean;
   if ((name === 'git_status' || name === 'git_diff') && result && typeof result === 'object' && !Array.isArray(result) &&
     typeof result.stdout === 'string' && typeof result.command === 'string' && result.command.startsWith('git ')) {
     const { command, output, signal, timedOut, truncated, stderr, ...rest } = result;
