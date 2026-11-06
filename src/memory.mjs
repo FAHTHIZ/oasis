@@ -16,6 +16,7 @@ import { appendFile, lstat, mkdir, readFile, readdir, realpath } from 'node:fs/p
 import os from 'node:os';
 import path from 'node:path';
 import { getConfigDirectory } from './config.mjs';
+import { parseFrontMatter } from './frontmatter.mjs';
 
 const MAX_MEMORY_FILE = 40 * 1024;
 const MAX_TOTAL = 40000;
@@ -239,36 +240,14 @@ async function loadRules(dir, scope, workspace = null, notices = null, { ext = [
   return out;
 }
 
-function frontMatterFields(block) {
-  const fields = {};
-  const lines = block.split(/\r?\n/);
-  for (let i = 0; i < lines.length; i++) {
-    const m = /^([A-Za-z_][\w-]*)\s*:\s*(.*)$/.exec(lines[i]);
-    if (!m) continue;
-    const key = m[1].toLowerCase();
-    const inline = m[2].trim();
-    const unquote = (value) => value.trim().replace(/^['"]|['"]$/g, '');
-    if (inline.startsWith('[')) fields[key] = inline.replace(/^\[|\]$/g, '').split(',').map(unquote).filter(Boolean);
-    else if (inline) fields[key] = unquote(inline);
-    else {
-      const list = [];
-      for (let j = i + 1; j < lines.length && /^\s*-\s+/.test(lines[j]); j++) list.push(unquote(lines[j].replace(/^\s*-\s+/, '')));
-      fields[key] = list;
-    }
-  }
-  return fields;
-}
-
 const listOf = (value) => (Array.isArray(value) ? value : typeof value === 'string' ? value.split(',') : []).map((item) => String(item).trim()).filter(Boolean);
 
 // Front matter of Claude (paths), Cursor (alwaysApply, globs, description), Windsurf and
 // Antigravity (trigger: always_on | glob | model_decision | manual, globs), Copilot
 // (applyTo) and Kiro (inclusion: always | fileMatch | manual, fileMatchPattern).
 function splitRuleFrontMatter(text) {
-  const match = /^---\r?\n([\s\S]*?)\r?\n---\r?\n?/.exec(text);
-  if (!match) return { paths: [], body: text, mode: 'always', description: '' };
-  const f = frontMatterFields(match[1]);
-  const body = text.slice(match[0].length);
+  const { data: f, body, hasFrontMatter } = parseFrontMatter(text);
+  if (!hasFrontMatter) return { paths: [], body: text, mode: 'always', description: '' };
   const description = typeof f.description === 'string' ? f.description.slice(0, 300) : '';
   let paths = [...listOf(f.paths), ...listOf(f.globs), ...listOf(f.applyto), ...listOf(f.filematchpattern)];
   const trigger = String(f.trigger || f.inclusion || '').toLowerCase().replace(/[\s-]/g, '_');

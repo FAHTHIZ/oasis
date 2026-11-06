@@ -565,7 +565,7 @@ export async function pluginMonitors(plugins, options = {}) {
 
 /** Output styles: [{ name: 'plugin:style', description, prompt, file, plugin }]. */
 export async function pluginOutputStyles(plugins) {
-  const { parseFrontMatter } = await import('./subagents.mjs');
+  const { parseFrontMatter } = await import('./frontmatter.mjs');
   const out = [];
   for (const plugin of plugins) {
     const declared = asList(plugin.manifest.outputStyles);

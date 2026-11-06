@@ -9,7 +9,7 @@ import { spawn } from 'node:child_process';
 import { lstat, mkdir, mkdtemp, readdir, readFile, rm, copyFile, rename } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import { frontMatterValue } from './frontmatter.mjs';
+import { frontMatterValue, splitFrontMatter } from './frontmatter.mjs';
 
 const MAX_DEPTH = 6;
 const MAX_FILES_PER_SKILL = 200;
@@ -76,8 +76,7 @@ async function cloneSource(spec, env, signal) {
 }
 
 function skillMeta(content, fallback) {
-  const front = content.match(/^---\r?\n([\s\S]*?)\r?\n---(?:\r?\n|$)/);
-  const metadata = front ? front[1] : '';
+  const metadata = splitFrontMatter(content).data;
   const name = (frontMatterValue(metadata, 'name') || fallback || '').trim();
   const description = (frontMatterValue(metadata, 'description') || '').trim().replace(/\s+/g, ' ').slice(0, 400);
   return { name, description };

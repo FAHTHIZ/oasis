@@ -6,7 +6,7 @@
 import { createServer } from 'node:http';
 import { readdir, readFile, stat } from 'node:fs/promises';
 import path from 'node:path';
-import { frontMatterValue } from './frontmatter.mjs';
+import { frontMatterValue, splitFrontMatter } from './frontmatter.mjs';
 
 const TYPES = {
   '.html': 'text/html; charset=utf-8', '.mjs': 'text/javascript; charset=utf-8', '.js': 'text/javascript; charset=utf-8',
@@ -14,8 +14,16 @@ const TYPES = {
   '.svg': 'image/svg+xml', '.png': 'image/png', '.woff2': 'font/woff2', '.md': 'text/markdown; charset=utf-8', '.txt': 'text/plain; charset=utf-8'
 };
 
-/** Shared src modules the app imports (transitively); refuses Node-only ones. */
-export async function appSharedModules(root) {
+// npm packages that shared src modules may import in the browser, with the ESM entry
+// each ships. The app's import map (app/index.html) points the bare names at
+// /vendor/<package>/<entry>; everything under the entry's folder is served.
+export const APP_PACKAGES = Object.freeze({
+  yaml: 'browser/index.js',
+  jsonrepair: 'lib/esm/index.js'
+});
+
+/** Shared src modules and npm packages the app imports (transitively); refuses Node-only ones. */
+export async function appModuleGraph(root) {
   const appDir = path.join(root, 'app');
   const srcDir = path.join(root, 'src');
   const queue = [];
@@ -28,12 +36,20 @@ export async function appSharedModules(root) {
   };
   await walk(appDir);
   const needed = new Set();
+  const packages = new Set();
   while (queue.length) {
     const file = queue.shift();
     const text = await readFile(file, 'utf8');
     for (const match of text.matchAll(/(?:import|export)[^'"]*?from\s*['"]([^'"]+)['"]/g)) {
-      if (!match[1].startsWith('.')) continue;
-      const target = path.resolve(path.dirname(file), match[1]);
+      const specifier = match[1];
+      if (!specifier.startsWith('.')) {
+        if (specifier.startsWith('node:')) continue; // caught below for src modules
+        const name = specifier.startsWith('@') ? specifier.split('/').slice(0, 2).join('/') : specifier.split('/')[0];
+        if (!Object.hasOwn(APP_PACKAGES, name) || specifier !== name) throw new Error(path.relative(root, file) + ' imports ' + specifier + ', which has no browser build listed in APP_PACKAGES.');
+        packages.add(name);
+        continue;
+      }
+      const target = path.resolve(path.dirname(file), specifier);
       if (!target.startsWith(srcDir + path.sep) || needed.has(target)) continue;
       const source = await readFile(target, 'utf8');
       if (/from\s*['"]node:|require\(/.test(source)) throw new Error(path.relative(root, target) + ' imports Node modules and cannot ship in the app.');
@@ -41,7 +57,16 @@ export async function appSharedModules(root) {
       queue.push(target);
     }
   }
-  return [...needed].sort();
+  return { modules: [...needed].sort(), packages: [...packages].sort() };
+}
+
+export async function appSharedModules(root) {
+  return (await appModuleGraph(root)).modules;
+}
+
+/** Folder of a browser package that may be served, e.g. node_modules/yaml/browser. */
+export function appPackageDir(root, name) {
+  return path.join(root, 'node_modules', name, path.dirname(APP_PACKAGES[name]));
 }
 
 export async function skillsIndex(root) {
@@ -52,14 +77,14 @@ export async function skillsIndex(root) {
   for (const name of names) {
     let text;
     try { text = await readFile(path.join(dir, name, 'SKILL.md'), 'utf8'); } catch { continue; }
-    const meta = (text.match(/^---\r?\n([\s\S]*?)\r?\n---/) || [null, ''])[1];
+    const meta = splitFrontMatter(text).data;
     index.push({ name: frontMatterValue(meta, 'name') || name, description: frontMatterValue(meta, 'description').replace(/\s+/g, ' ').trim(), path: name + '/SKILL.md' });
   }
   return index;
 }
 
 /** Map a request path to a file on disk, or null. Never leaves the allowed folders. */
-export function resolveAppPath(root, urlPath, shared) {
+export function resolveAppPath(root, urlPath, shared, packages = null) {
   let pathname;
   try { pathname = decodeURIComponent(urlPath.split('?')[0]); } catch { return null; }
   if (pathname.includes('\0') || pathname.split('/').includes('..')) return null;
@@ -79,6 +104,14 @@ export function resolveAppPath(root, urlPath, shared) {
     const rel = pathname.slice('/app/'.length) || 'index.html';
     return { file: inside(path.join(root, 'app'), rel.endsWith('/') ? rel + 'index.html' : rel) };
   }
+  if (pathname.startsWith('/vendor/')) {
+    const [name, ...rest] = pathname.slice('/vendor/'.length).split('/');
+    if (!packages || !packages.has(name)) return null;
+    const entryDir = path.dirname(APP_PACKAGES[name]);
+    const rel = rest.join('/');
+    if (entryDir !== '.' && !(rel === entryDir || rel.startsWith(entryDir + '/'))) return null;
+    return { file: inside(appPackageDir(root, name), path.relative(entryDir, rel)) };
+  }
   if (pathname.startsWith('/src/')) {
     const full = path.join(root, 'src', path.basename(pathname));
     return shared.has(full) ? { file: full } : null;
@@ -87,12 +120,14 @@ export function resolveAppPath(root, urlPath, shared) {
 }
 
 export async function startAppServer({ root, host = '127.0.0.1', port = 3920 } = {}) {
-  const shared = new Set(await appSharedModules(root));
+  const graph = await appModuleGraph(root);
+  const shared = new Set(graph.modules);
+  const packages = new Set(graph.packages);
   let indexCache = null;
   const server = createServer(async (req, res) => {
     const headers = { 'X-Content-Type-Options': 'nosniff', 'Referrer-Policy': 'no-referrer', 'Cache-Control': 'no-cache' };
     if (req.method !== 'GET' && req.method !== 'HEAD') { res.writeHead(405, headers); res.end(); return; }
-    const target = resolveAppPath(root, req.url || '/', shared);
+    const target = resolveAppPath(root, req.url || '/', shared, packages);
     if (!target) { res.writeHead(404, { ...headers, 'Content-Type': 'text/plain' }); res.end('Not found'); return; }
     if (target.redirect) { res.writeHead(302, { ...headers, Location: target.redirect }); res.end(); return; }
     try {

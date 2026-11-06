@@ -175,9 +175,50 @@ stricter than the old client: `initialize` must carry `serverInfo`, and AS
 metadata must list `response_types_supported` (RFC 8414); test fixtures were
 updated to the spec.
 
+### 4. Parsers: yaml, smol-toml, jsonc-parser, Ajv, jsonrepair
+
+Deleted: ~15 regex front-matter parsers (subagents, memory rules, auto-memory,
+importers x4, skills, extensions, app server, tools), `parseYamlSubset`
+(~80 lines), the TOML parser (~105 lines), the JSONC stripper, the JSON Schema
+walker (`src/json-schema.mjs`) and the character-level JSON repair
+(`repairStructure`, `closeBrackets`). `src/` net change: -438/+228 lines.
+
+| Library | Version | Licence | Runtime deps |
+|---|---|---|---|
+| yaml (eemeli) | 2.9.1 | ISC | 0 |
+| smol-toml | 1.9.1 | BSD-3-Clause | 0 |
+| jsonc-parser (Microsoft) | 3.3.1 | MIT | 0 |
+| ajv | 8.20.0 | MIT | 4 (fast-deep-equal, fast-uri, json-schema-traverse, require-from-string) |
+| jsonrepair | 3.15.0 | ISC | 0 |
+
+Bugs the old code had, now covered by `test/oss-parsers.test.mjs`: the JSONC
+trailing-comma regex rewrote `",}"` inside strings; the front-matter parsers
+dropped block scalars, lists and nested maps (agent `hooks:` read as `''`);
+the TOML parser lacked arrays of tables and multi-line strings; the schema
+checker ignored `$ref`, `anyOf` and `oneOf`.
+
+Decisions: front matter uses YAML's failsafe schema so scalars stay strings
+(`version: 1.0` stays `'1.0'`, as before); config files use the core schema.
+When strict YAML fails, top-level plain values are quoted and parsed again,
+because Claude Code-style front matter such as `description: Use when: ...`
+or Cursor's `globs: **/*.ts` is invalid YAML yet common. jsonrepair would
+close a string cut off mid-value; OASIS refuses those calls, as before, so a
+truncated `content` is never written. The old stray-brace retry loop was
+removed: jsonrepair drops a redundant `}` itself, and keeping the loop let
+garbage like `"x" "oops"` through.
+
+The browser app imports two of these modules (`tool-call-repair`,
+`frontmatter`); it now gets `yaml` and `jsonrepair` through an import map
+(hash in the CSP) and a `/vendor/` route limited to `APP_PACKAGES`' browser
+build folders. Both e2e suites (`app-e2e`, `app-runtime-e2e`) caught the
+missing route before it shipped.
+
+Not replaced: `validateElicitationContent` turns typed terminal answers into
+values (enum by index, yes/no); that is interface logic, not schema validation.
+
 ## Next
 
-- Item 5: ajv for tool-argument/MCP schema validation; yaml for front matter.
+- Candidate: validate tool-call arguments against tool schemas with Ajv before execution (Claude Code returns InputValidationError). Needs care: built-in tools accept alias argument names.
 - Item 6: Readability + linkedom + turndown for `fetch_url`.
 - Item 7: `@vscode/ripgrep` for `grep`.
 - Merge the definition and noise queries into one pass, or parse in a worker

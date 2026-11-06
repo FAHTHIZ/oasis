@@ -10,6 +10,8 @@
 // only ever produce a plain JSON object, and text tool calls are accepted only
 // when they name a tool the session actually exposes.
 
+import { jsonrepair } from 'jsonrepair';
+
 export class ToolArgumentsError extends Error {
   constructor(message, raw) {
     super(message);
@@ -29,78 +31,18 @@ function stripFences(text) {
   return fenced ? fenced[1] : text;
 }
 
-// Walks the text once, tracking whether we're inside a JSON string, and fixes
-// what's only fixable with that context: raw control characters inside strings,
-// Python literals and trailing commas outside them.
-function repairStructure(text) {
-  let out = '';
-  let inString = false;
-  let quote = '"';
+// True when the text stops inside a quoted string, e.g. `{"content": "half a fi`.
+// Such calls are refused instead of repaired, so a cut-off file body is never written.
+function endsInsideString(text) {
+  let quote = '';
   for (let i = 0; i < text.length; i++) {
     const ch = text[i];
-    if (inString) {
-      if (ch === '\\') { out += ch + (text[i + 1] ?? ''); i++; continue; }
-      if (ch === quote) { inString = false; out += '"'; continue; }
-      if (quote === "'" && ch === '"') { out += '\\"'; continue; }
-      if (ch === '\n') { out += '\\n'; continue; }
-      if (ch === '\r') { out += '\\r'; continue; }
-      if (ch === '\t') { out += '\\t'; continue; }
-      out += ch;
-      continue;
-    }
-    if (ch === '"' || ch === "'") { inString = true; quote = ch; out += '"'; continue; }
-    // JavaScript-style comments outside strings: // to end of line, /* ... */.
-    if (ch === '/' && text[i + 1] === '/') { while (i < text.length && text[i] !== '\n') i++; out += '\n'; continue; }
-    if (ch === '/' && text[i + 1] === '*') { const close = text.indexOf('*/', i + 2); i = close === -1 ? text.length : close + 1; continue; }
-    if (ch === ',') {
-      let j = i + 1;
-      while (j < text.length && /\s/.test(text[j])) j++;
-      if (text[j] === '}' || text[j] === ']') continue;
-    }
-    // JavaScript-style bare keys: {path: "a"} -> {"path": "a"}.
-    if (/[A-Za-z_$]/.test(ch)) {
-      let k = out.length - 1;
-      while (k >= 0 && /\s/.test(out[k])) k--;
-      if (out[k] === '{' || out[k] === ',') {
-        const key = /^([A-Za-z_$][\w$-]*)\s*:/.exec(text.slice(i));
-        if (key && !/^(True|False|None|true|false|null)$/.test(key[1])) {
-          out += '"' + key[1] + '"';
-          i += key[1].length - 1;
-          continue;
-        }
-      }
-    }
-    const word = /^(True|False|None)\b/.exec(text.slice(i));
-    if (word && !/[\w$]/.test(text[i - 1] || '')) {
-      out += word[1] === 'True' ? 'true' : word[1] === 'False' ? 'false' : 'null';
-      i += word[1].length - 1;
-      continue;
-    }
-    out += ch;
+    if (quote) { if (ch === '\\') i++; else if (ch === quote) quote = ''; continue; }
+    if (ch === '"' || ch === "'") quote = ch;
+    else if (ch === '/' && text[i + 1] === '/') { while (i < text.length && text[i] !== '\n') i++; }
+    else if (ch === '/' && text[i + 1] === '*') { const close = text.indexOf('*/', i + 2); i = close === -1 ? text.length : close + 1; }
   }
-  return { text: out, unterminatedString: inString };
-}
-
-// Closes brackets a model forgot when it stopped early, e.g. `{"path": "a.js"`.
-function closeBrackets(text) {
-  const stack = [];
-  let inString = false;
-  for (let i = 0; i < text.length; i++) {
-    const ch = text[i];
-    if (inString) {
-      if (ch === '\\') i++;
-      else if (ch === '"') inString = false;
-      continue;
-    }
-    if (ch === '"') inString = true;
-    else if (ch === '{') stack.push('}');
-    else if (ch === '[') stack.push(']');
-    else if (ch === '}' || ch === ']') {
-      if (stack.pop() !== ch) return null;
-    }
-  }
-  if (inString) return null;
-  return text + stack.reverse().join('');
+  return Boolean(quote);
 }
 
 // Returns { args, repaired } for usable arguments, or throws ToolArgumentsError
@@ -131,17 +73,14 @@ export function repairToolArguments(raw) {
     if (start !== -1 && end > start) candidate = candidate.slice(start, end + 1);
     else if (start !== -1) candidate = candidate.slice(start);
   }
-  const attempts = [];
-  attempts.push(candidate);
-  const structural = repairStructure(candidate);
-  attempts.push(structural.text);
-  if (!structural.unterminatedString) {
-    const closed = closeBrackets(structural.text);
-    if (closed) attempts.push(closed);
-  }
-  for (const attempt of attempts) {
-    const parsed = tryParse(attempt);
-    if (parsed.ok && isPlainObject(parsed.value)) return { args: parsed.value, repaired: true };
+  const direct = tryParse(candidate);
+  if (direct.ok && isPlainObject(direct.value)) return { args: direct.value, repaired: true };
+  // jsonrepair fixes comments, single quotes, bare keys, Python constants, trailing
+  // commas, raw newlines in strings and missing closing brackets.
+  if (!endsInsideString(candidate)) {
+    let fixed = null;
+    try { fixed = tryParse(jsonrepair(candidate)); } catch {}
+    if (fixed && fixed.ok && isPlainObject(fixed.value)) return { args: fixed.value, repaired: true };
   }
   const reason = (() => { try { JSON.parse(trimmed); return ''; } catch (error) { return error.message; } })();
   throw new ToolArgumentsError('Tool arguments were not valid JSON' + (reason ? ' (' + reason + ')' : '') + '. Resend the call with a single JSON object using double-quoted keys and strings.', raw);
@@ -156,13 +95,8 @@ function lenientParse(text) {
   // Only a lone object: never pull a call out of surrounding text or tags, and
   // leave several objects in a row to the JSON Lines path.
   if (!/^\s*\{/.test(text) || balancedObjects(text).length > 1) return { ok: false };
-  let candidate = text;
-  for (let attempt = 0; attempt < 3; attempt++) {
-    try { return { ok: true, value: repairToolArguments(candidate).args }; } catch {}
-    if (!/\}\s*$/.test(candidate)) break;
-    candidate = candidate.replace(/\}\s*$/, '');
-  }
-  return { ok: false };
+  // jsonrepair drops a stray extra closing brace itself.
+  try { return { ok: true, value: repairToolArguments(text).args }; } catch { return { ok: false }; }
 }
 
 function balancedObjects(text) {

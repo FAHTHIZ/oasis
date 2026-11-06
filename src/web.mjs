@@ -27,7 +27,7 @@ import { PtySessionManager } from './pty-sessions.mjs';
 import { createCloudTaskStore } from './cloud-task-store.mjs';
 import { createWorktree, finishWorktree, removeWorktree, readWorktreeDiff, readWorktreeWorkingDiff, readWorkspaceDiff, inspectWorktree, mergeWorktree, isCommitIntegrated } from './worktrees.mjs';
 import { createPhoneLink } from './phone-link.mjs';
-import { appSharedModules, resolveAppPath, skillsIndex } from './app-server.mjs';
+import { appModuleGraph, resolveAppPath, skillsIndex } from './app-server.mjs';
 import { listWorkspaceFiles } from './workspace-files.mjs';
 import { connectFromPaste } from './provider-connect.mjs';
 
@@ -1316,12 +1316,17 @@ export function createOasisWebServer(options = {}) {
   // The universal app (app/) served from this runtime: same files as
   // `oasis app`, but here it drives this computer's agent through the API.
   let appShared = null;
+  let appPackages = null;
   let appSkillsIndex = null;
   async function serveApp(req, res, pathname) {
     const headers = { 'x-content-type-options': 'nosniff', 'referrer-policy': 'no-referrer', 'cache-control': 'no-cache', 'x-frame-options': 'SAMEORIGIN' };
     try {
-      appShared = appShared || new Set(await appSharedModules(assetRoot));
-      const target = resolveAppPath(assetRoot, pathname, appShared);
+      if (!appShared) {
+        const graph = await appModuleGraph(assetRoot);
+        appShared = new Set(graph.modules);
+        appPackages = new Set(graph.packages);
+      }
+      const target = resolveAppPath(assetRoot, pathname, appShared, appPackages);
       if (!target) throw Object.assign(new Error('missing'), { code: 'ENOENT' });
       if (target.redirect) { res.writeHead(302, { ...headers, location: target.redirect }); res.end(); return; }
       if (target.index) {
@@ -1382,7 +1387,7 @@ export function createOasisWebServer(options = {}) {
       return;
     }
 
-    if ((req.method === 'GET' || req.method === 'HEAD') && (pathname === '/app' || pathname.startsWith('/app/') || pathname.startsWith('/src/'))) {
+    if ((req.method === 'GET' || req.method === 'HEAD') && (pathname === '/app' || pathname.startsWith('/app/') || pathname.startsWith('/src/') || pathname.startsWith('/vendor/'))) {
       await serveApp(req, res, pathname);
       return;
     }

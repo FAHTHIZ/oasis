@@ -15,6 +15,7 @@
 //   <config>/memory/projects/<key>/<category>/<slug>.md  one workspace
 //   each directory also gets MEMORY.md, a generated index of abstracts.
 import { createHash } from 'node:crypto';
+import { splitFrontMatter } from './frontmatter.mjs';
 import { redactSecretText } from './secret-shield.mjs';
 import { mkdir, readFile, readdir, rename, rm, stat, writeFile } from 'node:fs/promises';
 import { existsSync, readFileSync, statSync } from 'node:fs';
@@ -130,18 +131,13 @@ function serialize(memory) {
 }
 
 function parse(source, file, scope) {
-  const match = String(source).match(/^---\n([\s\S]*?)\n---\n?([\s\S]*)$/);
+  const { data, body } = splitFrontMatter(source);
   const meta = {};
-  if (match) {
-    for (const line of match[1].split('\n')) {
-      const kv = line.match(/^([A-Za-z]+):\s*(.*)$/);
-      if (!kv) continue;
-      let value = kv[2].trim();
-      if (value.startsWith('"')) { try { value = JSON.parse(value); } catch {} }
-      meta[kv[1]] = /^\d+$/.test(String(value)) && kv[1] === 'recalls' ? Number(value) : value;
-    }
+  for (const [key, value] of Object.entries(data)) {
+    if (value === null || typeof value === 'object') continue;
+    meta[key] = key === 'recalls' && /^\d+$/.test(String(value)) ? Number(value) : String(value);
   }
-  const content = (match ? match[2] : String(source)).trim();
+  const content = body.trim();
   const category = MEMORY_CATEGORIES.includes(meta.category) ? meta.category : path.basename(path.dirname(file));
   return {
     name: meta.name || path.basename(file, '.md'),

@@ -349,6 +349,8 @@ test('app build ships only browser-safe modules and a skills index', async () =>
   execFileSync(process.execPath, ['scripts/build-app.mjs', '--out', join(dir, 'app')], { stdio: 'pipe' });
   for (const file of ['index.html', 'sandbox.html', 'sandbox-frame.js', 'core/agent.mjs', 'manifest.webmanifest']) assert.ok(existsSync(join(dir, 'app', file)), file);
   assert.ok(existsSync(join(dir, 'src', 'tool-call-repair.mjs')));
+  assert.ok(existsSync(join(dir, 'vendor', 'yaml', 'browser', 'index.js')) && existsSync(join(dir, 'vendor', 'jsonrepair', 'lib', 'esm', 'index.js')));
+  assert.ok(existsSync(join(dir, 'vendor', 'yaml', 'LICENSE')));
   const index = JSON.parse(readFileSync(join(dir, 'app', 'skills', 'index.json'), 'utf8'));
   assert.ok(index.length >= 10 && index.every((s) => s.name && s.description && s.path.endsWith('SKILL.md')));
   assert.doesNotMatch(readFileSync(join(dir, 'app', 'sw.js'), 'utf8'), /__BUILD__/);
@@ -375,6 +377,12 @@ test('oasis app server serves only the app, shared modules and skills', async ()
     const sw = await (await fetch(base + '/app/sw.js')).text();
     assert.doesNotMatch(sw, /__BUILD__/);
     assert.equal((await fetch(base + '/package.json')).status, 404);
+    const vendored = await fetch(base + '/vendor/yaml/browser/index.js');
+    assert.equal(vendored.status, 200);
+    assert.match(vendored.headers.get('content-type') || '', /javascript/);
+    assert.equal((await fetch(base + '/vendor/yaml/package.json')).status, 404, 'only the browser build folder is served');
+    assert.equal((await fetch(base + '/vendor/ajv/dist/ajv.js')).status, 404, 'only listed packages are served');
+    assert.equal((await fetch(base + '/vendor/yaml/browser/../../../package.json')).status, 404);
     assert.equal((await fetch(base + '/app/skills/index.json', { method: 'POST' })).status, 405);
   } finally { server.close(); }
 });
@@ -490,4 +498,17 @@ test('a steering note queued on the last allowed step is carried into the next s
   assert.ok(carriedIndex >= 0, 'the queued note is included in the next model request');
   assert.ok(nextPromptIndex > carriedIndex, 'the carried note stays in chronological order');
   assert.equal(restored.steering.length, 0);
+});
+
+test('the app import map covers every package shared modules import, and the CSP allows it', async () => {
+  const { createHash } = await import('node:crypto');
+  const { appModuleGraph, APP_PACKAGES } = await import('../src/app-server.mjs');
+  const root = new URL('..', import.meta.url).pathname.replace(/\/$/, '');
+  const html = await readFile(new URL('../app/index.html', import.meta.url), 'utf8');
+  const inline = /<script type="importmap">([\s\S]*?)<\/script>/.exec(html);
+  assert.ok(inline, 'app/index.html has an import map');
+  const map = JSON.parse(inline[1]).imports;
+  for (const name of (await appModuleGraph(root)).packages) assert.equal(map[name], '../vendor/' + name + '/' + APP_PACKAGES[name], name);
+  const hash = "'sha256-" + createHash('sha256').update(inline[1]).digest('base64') + "'";
+  assert.ok(html.includes("script-src 'self' " + hash), 'the CSP lists the import map hash ' + hash);
 });
