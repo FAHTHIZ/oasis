@@ -14,6 +14,7 @@ import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { resolveWorkspacePath, sensitivePath } from './tools.mjs';
 import { lineDiff } from './markdown.mjs';
+import { createTwoFilesPatch, FILE_HEADERS_ONLY } from 'diff';
 
 export const AST_GREP_TOOL_DEFINITION = { type: 'function', function: {
   name: 'ast_grep',
@@ -173,16 +174,7 @@ export function editsForChange(before, after) {
 }
 
 function renderPlainDiff(file, before, after, maxLines = 80) {
-  const ops = lineDiff(before, after);
-  const keep = new Set();
-  ops.forEach((op, index) => { if (op.op !== ' ') for (let k = index - 2; k <= index + 2; k++) keep.add(k); });
-  const lines = ['--- a/' + file, '+++ b/' + file];
-  let skipped = false;
-  ops.forEach((op, index) => {
-    if (!keep.has(index)) { if (!skipped) lines.push('@@'); skipped = true; return; }
-    skipped = false;
-    lines.push(op.op + op.line);
-  });
+  const lines = createTwoFilesPatch('a/' + file, 'b/' + file, before, after, '', '', { context: 2, headerOptions: FILE_HEADERS_ONLY }).trimEnd().split('\n');
   if (lines.length > maxLines) return lines.slice(0, maxLines).join('\n') + '\n… ' + (lines.length - maxLines) + ' more diff lines';
   return lines.join('\n');
 }

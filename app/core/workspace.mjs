@@ -1,6 +1,7 @@
 // On-device project storage. Projects and their text files live in IndexedDB,
 // which every modern browser supports (including iOS Safari), so the app works
 // offline and keeps work across restarts. Tests use the in-memory store.
+import { diffArrays } from 'diff';
 
 export const MAX_FILE_BYTES = 2 * 1024 * 1024;
 
@@ -214,36 +215,24 @@ export class Workspace {
   }
 }
 
-/** Minimal line diff (LCS on lines, bounded) for showing changes. */
+/** Line diff for showing changes (jsdiff's Myers diff), with 3 lines of context around the changed span. */
 export function lineDiff(before, after, maxLines = 4000) {
   const a = String(before ?? '').split('\n');
   const b = String(after ?? '').split('\n');
   if (a.length > maxLines || b.length > maxLines) return [{ type: 'note', text: 'File too large to diff in the app (' + a.length + ' → ' + b.length + ' lines).' }];
-  let start = 0;
-  while (start < a.length && start < b.length && a[start] === b[start]) start++;
-  let endA = a.length - 1;
-  let endB = b.length - 1;
-  while (endA >= start && endB >= start && a[endA] === b[endB]) { endA--; endB--; }
-  const midA = a.slice(start, endA + 1);
-  const midB = b.slice(start, endB + 1);
-  const n = midA.length;
-  const m = midB.length;
-  const out = [];
-  for (let i = Math.max(0, start - 3); i < start; i++) out.push({ type: 'same', text: a[i], line: i + 1 });
-  if (n * m > 4_000_000) {
-    for (const text of midA) out.push({ type: 'del', text });
-    for (const text of midB) out.push({ type: 'add', text });
-  } else {
-    const dp = Array.from({ length: n + 1 }, () => new Uint32Array(m + 1));
-    for (let i = n - 1; i >= 0; i--) for (let j = m - 1; j >= 0; j--) dp[i][j] = midA[i] === midB[j] ? dp[i + 1][j + 1] + 1 : Math.max(dp[i + 1][j], dp[i][j + 1]);
-    let i = 0;
-    let j = 0;
-    while (i < n || j < m) {
-      if (i < n && j < m && midA[i] === midB[j]) { out.push({ type: 'same', text: midA[i] }); i++; j++; }
-      else if (j < m && (i >= n || dp[i][j + 1] >= dp[i + 1][j])) { out.push({ type: 'add', text: midB[j] }); j++; }
-      else { out.push({ type: 'del', text: midA[i] }); i++; }
+  const parts = diffArrays(a, b, { maxEditLength: 5000, timeout: 250 }) || [{ removed: true, value: a }, { added: true, value: b }];
+  const ops = [];
+  let oldLine = 1;
+  for (const part of parts) {
+    for (const text of part.value) {
+      if (part.added) ops.push({ type: 'add', text });
+      else if (part.removed) { ops.push({ type: 'del', text }); oldLine++; }
+      else ops.push({ type: 'same', text, line: oldLine++ });
     }
   }
-  for (let i = endA + 1; i < Math.min(a.length, endA + 4); i++) out.push({ type: 'same', text: a[i] });
-  return out;
+  const first = ops.findIndex((op) => op.type !== 'same');
+  if (first < 0) return [];
+  let last = ops.length - 1;
+  while (ops[last].type === 'same') last--;
+  return ops.slice(Math.max(0, first - 3), last + 4).map((op, index) => (op.type === 'same' && index >= 3 ? { type: 'same', text: op.text } : op));
 }

@@ -1,6 +1,7 @@
 // Tools for the universal app. They work on the on-device workspace and never
 // touch the host system. Risky actions (deleting, network, pushing) go through
 // the approval callback according to the chosen mode.
+import { createTwoFilesPatch, FILE_HEADERS_ONLY } from 'diff';
 
 import { relaxedReplace, closestMatchHint } from '../../src/edit-match.mjs';
 import { htmlToMarkdown } from '../../src/html-markdown.mjs';
@@ -62,21 +63,7 @@ function clip(text, limit = MAX_RESULT) {
 }
 
 function unified(path, before, after) {
-  const a = String(before ?? '').split('\n');
-  const b = String(after ?? '').split('\n');
-  const lines = ['--- a/' + path, '+++ b/' + path];
-  let i = 0;
-  while (i < a.length && i < b.length && a[i] === b[i]) i++;
-  let ea = a.length - 1;
-  let eb = b.length - 1;
-  while (ea >= i && eb >= i && a[ea] === b[eb]) { ea--; eb--; }
-  const from = Math.max(0, i - 3);
-  lines.push('@@ -' + (from + 1) + ' +' + (from + 1) + ' @@');
-  for (let k = from; k < i; k++) lines.push(' ' + a[k]);
-  for (let k = i; k <= ea; k++) lines.push('-' + a[k]);
-  for (let k = i; k <= eb; k++) lines.push('+' + b[k]);
-  for (let k = ea + 1; k < Math.min(a.length, ea + 4); k++) lines.push(' ' + a[k]);
-  return lines.join('\n');
+  return createTwoFilesPatch('a/' + path, 'b/' + path, String(before ?? ''), String(after ?? ''), '', '', { context: 3, headerOptions: FILE_HEADERS_ONLY }).trimEnd();
 }
 
 export async function executeTool(name, args, ctx) {
