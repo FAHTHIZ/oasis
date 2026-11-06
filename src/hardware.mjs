@@ -144,7 +144,7 @@ export function modelMemoryBudget(hw) {
   // Unified memory: macOS lets the GPU use roughly two thirds of RAM by default.
   if (hw.appleSilicon) return round1(hw.memoryGB * 0.65);
   // CPU-only: keep ~4.5 GB for the OS, editor and browser, and never plan on
-  // more than 60% of RAM. An 8 GB laptop gets ~3.3 GB (enough for qwen3:4b);
+  // more than 60% of RAM. An 8 GB laptop gets ~3.3 GB (enough for the 4b model);
   // 16 GB gets ~9.6 GB (qwen3:8b with room for its context).
   return round1(Math.max(0, Math.min(hw.memoryGB - 4.5, hw.memoryGB * 0.6)));
 }
@@ -156,7 +156,10 @@ export const LOCAL_MODEL_TIERS = [
   { minGB: 13, model: 'gpt-oss:20b', sizeGB: 14, contextWindow: 32768, label: 'capable all-rounder' },
   { minGB: 9, model: 'qwen3:14b', sizeGB: 9.3, contextWindow: 32768, label: 'mid-size model' },
   { minGB: 5.5, model: 'qwen3:8b', sizeGB: 5.2, contextWindow: 16384, label: 'compact model' },
-  { minGB: 3, model: 'qwen3:4b', sizeGB: 2.5, contextWindow: 16384, label: 'small model' }
+  // The plain qwen3:4b tag is a thinking model: on a 2-CPU machine it spent a
+  // 512-token budget reasoning without calling the connection-test tool (91 s).
+  // The 2507 instruct build answered the same test with a tool call in 17 s cold.
+  { minGB: 3, model: 'qwen3:4b-instruct-2507-q4_K_M', sizeGB: 2.5, contextWindow: 16384, label: 'small model' }
 ];
 
 export function localModelTier(budgetGB) {

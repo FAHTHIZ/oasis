@@ -350,7 +350,12 @@ export function suggestedModel(message) {
  * ones are retired), so they only count against a larger `maxAttempts`.
  * Those models are returned as `unusable` so they never become fallbacks.
  */
-async function lockIn(connection, ranked, { fetchImpl, onStatus, tries = 4, preferred = [], maxAttempts = 12, retryDelayMs = 1200, probeTimeoutMs = 25000, budgetMs = 120000 }) {
+async function lockIn(connection, ranked, { fetchImpl, onStatus, tries = 4, preferred = [], maxAttempts = 12, retryDelayMs = 1200, probeTimeoutMs, budgetMs }) {
+  // A model on this device is slow, not busy: the first request loads it from
+  // disk, and a 4B model on 2 CPUs writes ~6 tokens/s. 25 s failed a real
+  // qwen3:4b on Ollama that a 120 s window passes; cloud keeps the short limit.
+  if (probeTimeoutMs === undefined) probeTimeoutMs = connection.local ? 120000 : 25000;
+  if (budgetMs === undefined) budgetMs = connection.local ? 300000 : 120000;
   const order = [...preferred.filter((id) => !ranked.includes(id)), ...preferred.filter((id) => ranked.includes(id)), ...ranked.filter((id) => !preferred.includes(id))];
   const failures = [];
   const unusable = [];
@@ -377,7 +382,7 @@ async function lockIn(connection, ranked, { fetchImpl, onStatus, tries = 4, pref
     tried.add(model);
     attempts += 1;
     const started = Date.now();
-    onStatus({ step: 'test', text: 'Testing ' + model + '…', model });
+    onStatus({ step: 'test', text: 'Testing ' + model + (connection.local && attempts === 1 ? '… (the first answer from a local model can take a minute while it loads)' : '…'), model });
     try {
       let result;
       try { result = await probe(model); }
