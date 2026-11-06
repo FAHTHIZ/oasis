@@ -258,3 +258,10 @@ test('model-specific call formats quoted in a fence, for unknown tools, or in a 
     assert.ok(!found || !found.calls.length, raw);
   }
 });
+
+test('"null" arguments read as no arguments, and other non-objects are named plainly', () => {
+  assert.deepEqual(repairToolArguments('null'), { args: {}, repaired: true });
+  assert.throws(() => repairToolArguments('42'), /must be a JSON object, not a number/);
+  assert.throws(() => repairToolArguments('true'), /must be a JSON object, not a boolean/);
+  assert.throws(() => repairToolArguments('[1]'), /must be a JSON object, not an array/);
+});

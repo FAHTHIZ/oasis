@@ -114,12 +114,14 @@ export function repairToolArguments(raw) {
   const strict = tryParse(trimmed);
   if (strict.ok) {
     if (isPlainObject(strict.value)) return { args: strict.value, repaired: trimmed !== raw };
+    // Some models send the text "null" for a tool that takes no arguments.
+    if (strict.value === null) return { args: {}, repaired: true };
     // A JSON object serialized twice: "{\"path\":\"a.js\"}".
     if (typeof strict.value === 'string') {
       const inner = tryParse(strict.value.trim());
       if (inner.ok && isPlainObject(inner.value)) return { args: inner.value, repaired: true };
     }
-    throw new ToolArgumentsError('Tool arguments must be a JSON object, not ' + (Array.isArray(strict.value) ? 'an array' : typeof strict.value) + '.', raw);
+    throw new ToolArgumentsError('Tool arguments must be a JSON object, not ' + (Array.isArray(strict.value) ? 'an array' : 'a ' + typeof strict.value) + '.', raw);
   }
   let candidate = stripFences(trimmed).trim();
   // Prose around the object: take the outermost {...}.
