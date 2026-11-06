@@ -62,6 +62,8 @@ jobs:
         id: configure-pages
       - name: Copy demo videos into the homepage
         run: mkdir -p site/assets/demo && cp assets/demo/*.mp4 assets/demo/*-poster.png site/assets/demo/
+      - name: Install runtime dependencies (the app's vendored browser packages)
+        run: npm install --omit=dev --no-audit --no-fund
       - name: Build the universal app into the homepage
         run: node scripts/build-app.mjs
       - name: Stamp the homepage with this commit
