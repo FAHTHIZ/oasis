@@ -116,3 +116,10 @@ test('fetch_url returns Markdown and pages long content with start_index', async
   assert.equal(plain.content, 'just *text*');
   assert.equal(plain.format, undefined);
 });
+
+test('character references use the full HTML5 table, and attributes follow the attribute rules', () => {
+  assert.equal(decodeEntities('&Lambda; &lang;a&rang; &bigstar; &nexist; &cent a&nbsp;b'), 'Λ ⟨a⟩ ★ ∄ ¢ a b');
+  // In an attribute, `&copy=` is not a reference (HTML spec), so query strings survive.
+  const { markdown } = htmlToMarkdown('<p><a href="/s?a=1&copy=2&amp;b=3">x</a></p>', { url: 'https://example.com/', extract: false });
+  assert.equal(markdown, '[x](https://example.com/s?a=1&copy=2&b=3)');
+});

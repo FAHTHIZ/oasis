@@ -216,10 +216,54 @@ missing route before it shipped.
 Not replaced: `validateElicitationContent` turns typed terminal answers into
 values (enum by index, yes/no); that is interface logic, not schema validation.
 
+### 5. fetch_url HTML: entities adopted, Readability + Turndown measured and rejected
+
+Candidates were measured on 10 real pages (MDN Array.map, Wikipedia Rust, Node
+fs docs, GitHub MCP SDK README, Python asyncio docs, Rust blog index, Hacker
+News, Anthropic engineering post, react.dev useState, Effective Go). The
+harness is `/tmp/htmleval/eval.mjs`: OASIS `htmlToMarkdown` against
+`@mozilla/readability` 0.6.0 + `turndown` 7.2.5 + `@joplin/turndown-plugin-gfm`
+1.0.68 on `linkedom` 0.18.15.
+
+| Page | OASIS chars / ms | Readability+Turndown chars / ms |
+|---|---|---|
+| MDN Array.map | 11,664 / 34 | 11,222 / 178 |
+| Wikipedia Rust | 129,580 / 190 | 178,038 / 806 (stops at "In academic research"; drops governance, see also and references; citation links inline) |
+| Node fs | 392,326 / 234 | 397,291 / 1,360 |
+| Hacker News | 13,187 / 6 | 38 / 37 (Readability finds no article) |
+| Anthropic post | 51,425 / 299 | 41,313 / 164 (title and lede lost; links left relative) |
+| Effective Go | 101,826 / 35 | 101,181 / 58 |
+
+Readability+Turndown also rendered a Rust `#[unsafe(no_mangle)]` code line as
+a heading. Domino (Turndown's own DOM) failed with Readability ("nodeList is
+not iterable"). Verdict: the OASIS converter is a Readability port with
+link-index and short-extraction fallbacks, and is better on this set; kept.
+
+What was replaced: the hand-written entity table (about 150 of 2,231 HTML5
+names, plus a semicolon-optional regex that corrupted `&copy=` in URLs) with
+`entities` 9.0.0 (`decodeHTML`, `decodeHTMLAttribute`), and web search's
+five-entity decoder. Output on the 10 pages is byte-identical; timing is
+unchanged (fs docs 184–282 ms old, 192–278 ms new). The browser app gets
+`entities` through the import map.
+
+### 6. Bundled ripgrep
+
+`@vscode/ripgrep` 1.18.0 (MIT): per-platform optional packages
+(`@vscode/ripgrep-<os>-<arch>`, 5.5 MB on linux-x64), no postinstall
+download. The package's own entry point throws on platforms without a
+binary, so `src/ripgrep.mjs` resolves the platform package directly.
+Measured on this repository (1,238 tracked files) with PATH empty, count
+mode: `createSession` 190 ms (ripgrep) against 8,750 ms (built-in), and
+`TODO|FIXME` 76 ms against 8,189 ms. File counts agreed (145/145; 18/17,
+because the built-in search stops at 8,000 files and does not read
+`.gitignore`).
+
 ## Next
 
 - Candidate: validate tool-call arguments against tool schemas with Ajv before execution (Claude Code returns InputValidationError). Needs care: built-in tools accept alias argument names.
-- Item 6: Readability + linkedom + turndown for `fetch_url`.
-- Item 7: `@vscode/ripgrep` for `grep`.
+- Item 8: observation masking (JetBrains, arXiv 2508.21433), measured with bench/tokens.
+- Item 9: `@anthropic-ai/sandbox-runtime` for network filtering.
+- Move `read-only-commands.mjs` from `splitShell` to the tree-sitter shell AST.
+- Replace the hand-written diff, zip and PDF code with `diff` (jsdiff), `fflate` and `unpdf` where measurement supports it.
 - Merge the definition and noise queries into one pass, or parse in a worker
   pool, if first-scan latency matters for large repositories.
