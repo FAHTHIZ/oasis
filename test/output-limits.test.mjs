@@ -97,3 +97,13 @@ test('a provider 400 naming a smaller output cap lowers the limit and retries on
   await runAgentTurn(session, 'again', { autoApprove: true, env, approval: async () => true });
   assert.equal(provider.requests[2].max_tokens, 16000, 'the learned cap persists for the session');
 });
+
+test('output limits follow the models.dev catalog for models the name patterns missed', async () => {
+  const { maxOutputTokensFor } = await import('../src/agent.mjs');
+  // Before: the default model and gpt-oss/GLM/MiniMax fell through to 8,192.
+  for (const model of ['gpt-6.1-sol', 'gpt-oss-120b', 'glm-5', 'minimax-m2']) assert.equal(maxOutputTokensFor({ model }, {}), 32000, model);
+  // Listed limits below the ceiling win; unlisted local models keep the pattern default.
+  assert.equal(maxOutputTokensFor({ model: 'gpt-4o' }, {}), 16384);
+  assert.equal(maxOutputTokensFor({ model: 'llama3.1:8b' }, {}), 8192);
+  assert.equal(maxOutputTokensFor({ model: 'gpt-6.1-sol' }, { OASIS_MAX_OUTPUT_TOKENS: '4096' }), 4096);
+});
