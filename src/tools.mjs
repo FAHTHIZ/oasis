@@ -37,6 +37,7 @@ import { testProviderConnection } from './agent.mjs';
 import { installGitHubExtension, inspectGitHubExtension, listInstalledExtensions } from './extensions.mjs';
 import { analyzeCommand } from './permissions.mjs';
 import { assertSandboxAvailable, launchCommand } from './sandbox.mjs';
+import { fileGlobMatcher } from './glob.mjs';
 import { isNotebookPath, readNotebook } from './notebook.mjs';
 import { imageMediaType, readImageFile } from './images.mjs';
 import { POWER_TOOL_DEFINITIONS, POWER_TOOL_NAMES } from './power-tool-definitions.mjs';
@@ -430,23 +431,6 @@ async function streamFileSlice(target, info, options, implicit) {
   const endLine = startLine + slice.length - 1;
   return { path: relativePath, content: slice.join('\n'), startLine, endLine, ...(more ? {} : { totalLines: lineNumber }), truncated: more || clipped, note: bigFileNote(info.size, startLine, endLine, more ? 0 : lineNumber, clipped) };
 }
-function globToRegExp(pattern) {
-  let source = '';
-  const text = String(pattern).replace(/\\/g, '/').replace(/^\.\//, '');
-  for (let i = 0; i < text.length; i++) {
-    const char = text[i];
-    if (char === '*') {
-      if (text[i + 1] === '*') {
-        i++;
-        if (text[i + 1] === '/') { i++; source += '(?:.*/)?'; }
-        else source += '.*';
-      } else source += '[^/]*';
-    } else if (char === '?') source += '[^/]';
-    else if ('.+^$(){}|[]\\'.includes(char)) source += '\\' + char;
-    else source += char;
-  }
-  return new RegExp('^' + source + '$');
-}
 
 // Models trained on Claude Code send { path: "src", pattern: "*.mjs" }. The
 // folder used to be ignored, so the search ran at the root and found nothing.
@@ -464,12 +448,12 @@ export async function globWorkspaceFiles(root, pattern, limit = 200) {
   if (text.length > 300) throw new Error('Glob pattern is too long.');
   if (text.includes('\0') || path.isAbsolute(text) || text.split(/[\\/]+/).includes('..')) throw new Error('Glob patterns must be relative to the workspace and cannot contain "..".');
   const maxResults = Math.max(1, Math.min(500, Number.parseInt(limit, 10) || 200));
-  const matcher = globToRegExp(text);
+  const matcher = fileGlobMatcher(text);
   const files = await walkFiles(await realpath(root), { includeHidden: true, maxFiles: 5000, maxDepth: 12 });
   const matches = [];
   for (const file of files) {
     const relative = file.relative.split(path.sep).join('/');
-    if (!matcher.test(relative)) continue;
+    if (!matcher(relative)) continue;
     matches.push(relative);
     if (matches.length >= maxResults) return { pattern: text, matches, truncated: true };
   }
@@ -477,8 +461,8 @@ export async function globWorkspaceFiles(root, pattern, limit = 200) {
   // "*.mjs" only covers the project root. Models often mean "anywhere" and
   // then conclude the files do not exist, so say where they are.
   if (!matches.length && !text.includes('/') && !text.startsWith('**')) {
-    const deep = globToRegExp('**/' + text);
-    const nested = files.map((file) => file.relative.split(path.sep).join('/')).filter((relative) => deep.test(relative));
+    const deep = fileGlobMatcher('**/' + text);
+    const nested = files.map((file) => file.relative.split(path.sep).join('/')).filter((relative) => deep(relative));
     if (nested.length) {
       result.hint = 'No file at the project root matches "' + text + '", but ' + nested.length + ' file' + (nested.length === 1 ? '' : 's') + ' in subfolders match "**/' + text + '", for example: ' + nested.slice(0, 5).join(', ') + '.';
     }

@@ -28,6 +28,7 @@ import { commentWarning } from './style-rules.mjs';
 import { snapshotScriptedEdit, noOpEditWarning } from './inplace-edit-check.mjs';
 import { resolveWorkspacePath, walkFiles, sensitivePath, scrubEnvironment, nonInteractiveEnvironment } from './tools.mjs';
 import { assertSandboxAvailable, launchCommand } from './sandbox.mjs';
+import { fileGlobMatcher } from './glob.mjs';
 import { editNotebook } from './notebook.mjs';
 import { processTreeSpawnOptions, signalProcessTree } from './process-tree.mjs';
 import { createBoundedRegexMatcher } from './safe-regex.mjs';
@@ -93,20 +94,7 @@ export function commandLineText(command, args) {
 // ---------------------------------------------------------------- grep
 
 function globMatcher(glob) {
-  if (!glob) return null;
-  let source = '';
-  const text = String(glob).replace(/\\/g, '/');
-  for (let i = 0; i < text.length; i++) {
-    const c = text[i];
-    if (c === '*') {
-      if (text[i + 1] === '*') { i++; if (text[i + 1] === '/') { i++; source += '(?:.*/)?'; } else source += '.*'; }
-      else source += '[^/]*';
-    } else if (c === '?') source += '[^/]';
-    else if (c === '{') { const end = text.indexOf('}', i); if (end > i) { source += '(?:' + text.slice(i + 1, end).split(',').map((p) => p.replace(/[.+^$()|[\]\\]/g, '\\$&')).join('|') + ')'; i = end; } else source += '\\{'; }
-    else source += c.replace(/[.+^$()|[\]\\]/g, '\\$&');
-  }
-  const regex = new RegExp('^' + source + '$');
-  return (relative) => regex.test(relative) || (!text.includes('/') && regex.test(path.posix.basename(relative)));
+  return glob ? fileGlobMatcher(glob, { basename: true }) : null;
 }
 
 function runRipgrep(rgPath, cwd, args, signal) {
