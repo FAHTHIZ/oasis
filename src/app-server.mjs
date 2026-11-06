@@ -22,7 +22,8 @@ export const APP_PACKAGES = Object.freeze({
   jsonrepair: 'lib/esm/index.js',
   entities: 'dist/index.js',
   fflate: 'esm/browser.js',
-  diff: 'libesm/index.js'
+  diff: 'libesm/index.js',
+  marked: 'lib/marked.esm.js'
 });
 
 /** Shared src modules and npm packages the app imports (transitively); refuses Node-only ones. */
