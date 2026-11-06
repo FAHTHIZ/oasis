@@ -83,13 +83,12 @@ jobs:
         shell: bash
         run: |
           if [ -n "$OASIS_REPO_ADMIN_TOKEN" ]; then echo "ready=true" >> "$GITHUB_OUTPUT"; else echo "ready=false" >> "$GITHUB_OUTPUT"; fi
-      - name: Update repository description, homepage, and topics
+      - name: Update repository description and discovery topics
         id: apply-metadata
         if: ${{ steps.launch-auth.outputs.ready == 'true' }}
         env:
           GITHUB_REPOSITORY: ${{ github.repository }}
           OASIS_REPO_ADMIN_TOKEN: ${{ secrets.OASIS_REPO_ADMIN_TOKEN }}
-          OASIS_PUBLIC_URL: ${{ steps.deployment.outputs.page_url }}
         run: node .github/scripts/apply-repository-metadata.mjs
       - name: Write launch status
         if: always()

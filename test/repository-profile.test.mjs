@@ -20,7 +20,8 @@ test('repository identity, package keywords and GitHub topics are aligned', asyn
   }
   assert.ok(!topics.includes('claude-code-alternative'));
   assert.ok(metadata.includes('model-agnostic coding-agent runtime'));
-  assert.ok(metadata.includes("new URL('app/', deploymentUrl).toString()"), 'The repository homepage should point directly to the browser app.');
+  assert.ok(metadata.includes("homepage: ''"), 'The repository About homepage should stay empty; GitHub is the project home.');
+  assert.ok(!metadata.includes('OASIS_PUBLIC_URL'), 'Repository metadata must not depend on a separate website URL.');
   assert.ok(pkg.keywords.length <= 20);
   assert.equal(new Set(pkg.keywords).size, pkg.keywords.length);
   assert.ok(pkg.keywords.includes('ai-coding-agent'));
