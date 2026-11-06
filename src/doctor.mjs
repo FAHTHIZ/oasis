@@ -1,5 +1,6 @@
 // /doctor inside a session: a compact health report for the current workspace.
 import { loadSettings } from './settings.mjs';
+import { isNodeVersionSupported, MIN_NODE_VERSION } from './config.mjs';
 import { detectSandbox, detectContainerRuntime, detectSandboxRuntime, domainList } from './sandbox.mjs';
 import { detectCheckers, findBinary } from './diagnostics.mjs';
 import { BUILTIN_SERVERS } from './lsp.mjs';
@@ -11,9 +12,8 @@ import { describeRipgrep } from './ripgrep.mjs';
 export async function workspaceDoctor(root, { env = process.env, session = null } = {}) {
   const lines = [];
   const problems = [];
-  const major = Number.parseInt(process.versions.node, 10);
   lines.push('Oasis doctor: ' + root);
-  lines.push('  Node.js ' + process.version + ' on ' + process.platform + '/' + process.arch + (major >= 22 ? '' : ' (Node 22+ recommended)'));
+  lines.push('  Node.js ' + process.version + ' on ' + process.platform + '/' + process.arch + (isNodeVersionSupported() ? '' : ' (Node.js ' + MIN_NODE_VERSION + ' or newer required)'));
   const ripgrep = describeRipgrep(env);
   const tools = ['git', 'rg', 'gh'].map((name) => name + (name === 'rg' ? (ripgrep ? ' ' + ripgrep : ' no') : onPathSync(name, env) ? ' yes' : ' no'));
   lines.push('  Tools: ' + tools.join(', '));

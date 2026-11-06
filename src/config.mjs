@@ -47,9 +47,18 @@ export function inferSetupProviderPreset(config) {
   return 'custom';
 }
 
+// The oldest Node.js the runtime dependencies support: OpenTelemetry 3 declares
+// 22.15, and require() of ES modules (lowlight) needs 22.12. Keep in sync with
+// package.json "engines"; test/dependency-engines.test.mjs checks both.
+export const MIN_NODE_VERSION = '22.15.0';
+
 export function isNodeVersionSupported(version = process.versions.node) {
-  const match = String(version).match(/^(\d+)(?:\.|$)/);
-  return Boolean(match && Number(match[1]) >= 22);
+  const match = String(version).match(/^(\d+)(?:\.(\d+)(?:\.(\d+))?)?(?:[-+][0-9A-Za-z.-]+)?$/);
+  if (!match) return false;
+  const have = match.slice(1).map((part) => Number(part || 0));
+  const need = MIN_NODE_VERSION.split('.').map(Number);
+  for (let i = 0; i < 3; i++) if (have[i] !== need[i]) return have[i] > need[i];
+  return true;
 }
 
 export const PROFILE_NAME_PATTERN = /^[A-Za-z0-9][A-Za-z0-9_-]{0,39}$/;
