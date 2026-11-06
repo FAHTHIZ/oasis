@@ -11,8 +11,12 @@ import { createWriteStream } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { redactSecrets } from './auto-memory.mjs';
+import { redactSecretValues } from './secret-shield.mjs';
 
-const clean = (value) => redactSecrets(typeof value === 'string' ? value : value === null || value === undefined ? '' : JSON.stringify(value)).text;
+// Tool-call arguments arrive as JSON text; redact the decoded strings so
+// multi-line values (a .env body) are matched line by line.
+const decoded = (value) => { if (typeof value !== 'string' || !/^\s*[[{]/.test(value)) return value; try { return JSON.parse(value); } catch { return value; } };
+const clean = (value) => { const data = decoded(value); return redactSecrets(typeof data === 'string' ? data : data === null || data === undefined ? '' : JSON.stringify(redactSecretValues(data))).text; };
 
 function contentText(content) {
   if (typeof content === 'string') return content;

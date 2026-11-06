@@ -15,6 +15,7 @@
 //   <config>/memory/projects/<key>/<category>/<slug>.md  one workspace
 //   each directory also gets MEMORY.md, a generated index of abstracts.
 import { createHash } from 'node:crypto';
+import { redactSecretText } from './secret-shield.mjs';
 import { mkdir, readFile, readdir, rename, rm, stat, writeFile } from 'node:fs/promises';
 import { existsSync, readFileSync, statSync } from 'node:fs';
 import path from 'node:path';
@@ -89,6 +90,7 @@ const SECRET_PATTERNS = [
 
 export function redactSecrets(text) {
   let out = String(text || '').replace(/<private>[\s\S]*?<\/private>/gi, '[private]');
+  out = redactSecretText(out);
   let redacted = out !== String(text || '');
   for (const pattern of SECRET_PATTERNS) {
     out = out.replace(pattern, (match, prefix) => {
