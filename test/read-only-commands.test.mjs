@@ -131,4 +131,14 @@ test('read-only git asks when the repository config names diff, filter or gpg pr
   assert.equal(asked, calls.length);
   for (const name of ['external', 'textconv', 'clean', 'smudge']) assert.equal(existsSync(marker(name)), false, name + ' driver ran');
   assert.equal(readOnlyShellLine('git status', { root }), false);
+  // The git_status/git_diff tools run without a prompt too; they switch the filters off.
+  const { executeTool } = await import('../src/tools.mjs');
+  const { rm: remove } = await import('node:fs/promises');
+  for (const name of ['clean', 'smudge']) await remove(marker(name), { force: true });
+  for (const tool of ['git_status', 'git_diff']) {
+    await writeFile(path.join(root, 'b.bin'), tool + '\n');
+    const result = await executeTool(tool, {}, { root, env: process.env, approval });
+    assert.equal(existsSync(marker('clean')), false, tool + ' ran the clean filter');
+    if (tool === 'git_diff') assert.match(JSON.stringify(result), /b\.bin/);
+  }
 });
