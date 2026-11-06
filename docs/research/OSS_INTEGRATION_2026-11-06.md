@@ -341,10 +341,31 @@ which is what matters for small local windows. Not measured here: effect on
 solve rate (the bench is scripted) and runs longer than 18 requests. Default
 stays off until a live A/B (`npm run bench:live`) shows no loss in solve rate.
 
+### 12. Sandbox network allowlists: @anthropic-ai/sandbox-runtime
+
+OASIS's bubblewrap and Seatbelt backends could only turn the network fully on or off. sandbox-runtime
+0.0.81 adds domain filtering through an HTTP and SOCKS proxy that lives in the
+calling process, reached from inside the network namespace over Unix sockets bridged by
+socat. Integrated as a backend (`kind: 'srt'`, `src/sandbox-runtime.mjs`)
+selected by `sandbox.allowedDomains`; the existing bubblewrap, Seatbelt,
+container and SSH backends are unchanged for on/off networking.
+
+Findings while integrating:
+- The proxy runs in the parent's event loop. `spawnSync` deadlocks it (the first
+  attempt timed out); OASIS spawns asynchronously everywhere it wraps commands.
+- `initialize()` keeps the process alive until `reset()`, so the adapter
+  reference-counts holders and resets 200 ms after the last one exits.
+- `wrapWithSandboxArgv` returns `/bin/bash -c '<bwrap …>'`, a single argument
+  that can exceed 5,000 characters; the PTY manager's per-argument cap was
+  raised to 64 KiB.
+- Node's built-in `fetch` ignores `HTTPS_PROXY`, so inside the sandbox it fails
+  closed (EAI_AGAIN). curl, pip, npm and git honour the proxy.
+- A test that ran `curl -o` passed without curl ever starting, because `-o`
+  needs approval as high risk. The test now asserts that the command ran.
+
 ## Next
 
 - Candidate: validate tool-call arguments against tool schemas with Ajv before execution (Claude Code returns InputValidationError). Needs care: built-in tools accept alias argument names.
 - Live A/B of observation masking (solve rate and provider-reported tokens) before considering it as a default for local providers.
-- Item 9: `@anthropic-ai/sandbox-runtime` for network filtering.
 - Merge the definition and noise queries into one pass, or parse in a worker
   pool, if first-scan latency matters for large repositories.

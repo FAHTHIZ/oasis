@@ -318,6 +318,8 @@ export async function loadSettings(root, options = {}) {
     if (settings.sandbox && typeof settings.sandbox === 'object') {
       if (typeof settings.sandbox.enabled === 'boolean') result.sandbox.enabled = settings.sandbox.enabled;
       if (typeof settings.sandbox.network === 'boolean') result.sandbox.network = settings.sandbox.network;
+      if (Array.isArray(settings.sandbox.allowedDomains)) result.sandbox.allowedDomains = settings.sandbox.allowedDomains.filter((item) => typeof item === 'string').slice(0, 500);
+      if (Array.isArray(settings.sandbox.deniedDomains)) result.sandbox.deniedDomains = settings.sandbox.deniedDomains.filter((item) => typeof item === 'string').slice(0, 500);
       if (typeof settings.sandbox.autoAllowCommands === 'boolean') result.sandbox.autoAllowCommands = settings.sandbox.autoAllowCommands;
       if (typeof settings.sandbox.maskSensitivePaths === 'boolean') result.sandbox.maskSensitivePaths = settings.sandbox.maskSensitivePaths;
       if (typeof settings.sandbox.autoAllowShellCommands === 'boolean') result.sandbox.autoAllowShellCommands = settings.sandbox.autoAllowShellCommands;

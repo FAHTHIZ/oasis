@@ -12,6 +12,9 @@
 //   the workspace (and extra directories) bind-mounted, all capabilities
 //   dropped, no-new-privileges, a PID limit, and --network none unless network
 //   is enabled. Nothing else from the host filesystem is visible.
+// Domain filtering (Linux and macOS): "allowedDomains": ["registry.npmjs.org", ...]
+//   runs commands under Anthropic's sandbox-runtime (src/sandbox-runtime.mjs),
+//   whose proxy allows only those hosts; the filesystem policy is the same.
 // Other platforms report the OS sandbox as unavailable; Oasis then falls back to
 // approvals. Enable with settings { "sandbox": { "enabled": true } } or OASIS_SANDBOX=1.
 import { normalizeSshSettings, detectSshRuntime, sshWrap } from './ssh-backend.mjs';
@@ -25,6 +28,14 @@ const SENSITIVE_HOME_PATHS = [
   '.claude', '.codex', '.netrc', '.npmrc', '.git-credentials', '.pgpass',
   path.join('.config', 'gcloud'), path.join('.config', 'gh'), path.join('.config', 'oasis')
 ];
+
+const DOMAIN = /^(\*\.)?[a-z0-9]([a-z0-9-]{0,62}[a-z0-9])?(\.[a-z0-9]([a-z0-9-]{0,62}[a-z0-9])?)*(:\d{1,5})?$/i;
+
+/** Valid domain patterns ("example.com", "*.npmjs.org", "host:8080") from a settings value. */
+export function domainList(value) {
+  if (!Array.isArray(value)) return [];
+  return [...new Set(value.filter((item) => typeof item === 'string').map((item) => item.trim().toLowerCase()).filter((item) => DOMAIN.test(item)))].slice(0, 500);
+}
 
 function pathContains(parent, child) {
   const relative = path.relative(path.resolve(parent), path.resolve(child));
@@ -252,12 +263,37 @@ export function detectSandbox(force = false) {
   return cachedProbe;
 }
 
+function onPath(name) {
+  return spawnSync('sh', ['-c', 'command -v ' + name], { stdio: 'ignore' }).status === 0;
+}
+
+let cachedRuntimeProbe = null;
+/** Host check for the domain-filtering backend (sandbox-runtime). */
+export function detectSandboxRuntime(force = false) {
+  if (cachedRuntimeProbe && !force) return cachedRuntimeProbe;
+  if (process.platform === 'linux') {
+    cachedRuntimeProbe = probeBubblewrap() && onPath('socat')
+      ? { available: true, kind: 'srt' }
+      : { available: false, kind: 'none', reason: 'Domain filtering (sandbox.allowedDomains) needs bubblewrap and socat. Install them with your package manager, e.g. apt install bubblewrap socat.' };
+  } else if (process.platform === 'darwin') {
+    cachedRuntimeProbe = probeSandboxExec()
+      ? { available: true, kind: 'srt' }
+      : { available: false, kind: 'none', reason: 'sandbox-exec is unavailable on this macOS host.' };
+  } else {
+    cachedRuntimeProbe = { available: false, kind: 'none', reason: 'Domain filtering (sandbox.allowedDomains) needs Linux or macOS. Use "network": true or false here.' };
+  }
+  return cachedRuntimeProbe;
+}
+
 export function resolveSandbox(settings = {}, root, force = false) {
   const wanted = settings.sandbox && settings.sandbox.enabled;
   if (!wanted) return { enabled: false, available: false, kind: 'none' };
   const backend = CONTAINER_BACKENDS.includes(settings.sandbox.backend) || settings.sandbox.backend === 'ssh' ? settings.sandbox.backend : 'os';
   const ssh = backend === 'ssh' ? normalizeSshSettings(settings.sandbox.ssh || {}, process.env, root) : null;
-  const probe = backend === 'os' ? detectSandbox(force) : backend === 'ssh' ? detectSshRuntime(ssh, force) : detectContainerRuntime(backend, force);
+  const allowedDomains = domainList(settings.sandbox.allowedDomains);
+  const deniedDomains = domainList(settings.sandbox.deniedDomains);
+  const filtered = backend === 'os' && allowedDomains.length > 0;
+  const probe = filtered ? detectSandboxRuntime(force) : backend === 'os' ? detectSandbox(force) : backend === 'ssh' ? detectSshRuntime(ssh, force) : detectContainerRuntime(backend, force);
   const additionalWritable = ((settings.permissions && settings.permissions.additionalDirectories) || []).map((dir) => path.resolve(root, dir));
   const caches = settings.sandbox.writableCaches === false ? [] : collectCacheDirectories();
   const writable = [root, ...additionalWritable, ...caches.filter((dir) => !pathContains(root, dir))];
@@ -267,6 +303,7 @@ export function resolveSandbox(settings = {}, root, force = false) {
     kind: probe.kind,
     reason: probe.reason,
     network: Boolean(settings.sandbox.network),
+    ...(filtered ? { allowedDomains, deniedDomains } : {}),
     autoAllowCommands: settings.sandbox.autoAllowCommands !== false,
     // Free-form shell strings have a larger attack surface than argv-based commands.
     // Keep them approval-gated unless the user explicitly opts in.
@@ -403,5 +440,15 @@ export function wrapCommand(command, args, sandbox, cwd, options = {}) {
   if (CONTAINER_BACKENDS.includes(sandbox.kind)) {
     return { command: sandbox.kind, args: containerArgs(command, args, sandbox, cwd) };
   }
+  if (sandbox.kind === 'srt') throw new Error('The domain-filtering sandbox needs launchCommand (asynchronous).');
   return { command, args };
+}
+
+/** Like wrapCommand, for every backend including the asynchronous domain-filtering one. */
+export async function launchCommand(command, args, sandbox, cwd, options = {}) {
+  if (sandbox && sandbox.enabled && sandbox.available && sandbox.kind === 'srt') {
+    const { srtLaunch } = await import('./sandbox-runtime.mjs');
+    return srtLaunch(command, args, sandbox, cwd);
+  }
+  return wrapCommand(command, args, sandbox, cwd, options);
 }

@@ -27,7 +27,7 @@ import { assertNoNewElision, shrinkWarning, recordAndDetectCircling, testTamperW
 import { commentWarning } from './style-rules.mjs';
 import { snapshotScriptedEdit, noOpEditWarning } from './inplace-edit-check.mjs';
 import { resolveWorkspacePath, walkFiles, sensitivePath, scrubEnvironment, nonInteractiveEnvironment } from './tools.mjs';
-import { assertSandboxAvailable, wrapCommand } from './sandbox.mjs';
+import { assertSandboxAvailable, launchCommand } from './sandbox.mjs';
 import { editNotebook } from './notebook.mjs';
 import { processTreeSpawnOptions, signalProcessTree } from './process-tree.mjs';
 import { createBoundedRegexMatcher } from './safe-regex.mjs';
@@ -554,7 +554,7 @@ async function runShell(root, args, context, flavor = 'sh') {
     if (!exe) throw new Error('PowerShell was not found. Install PowerShell 7 (pwsh) and put it on PATH.');
     shell = powerShellLaunch(exe, command, context.env || process.env);
   } else shell = process.platform === 'win32' ? { command: process.env.ComSpec || 'cmd.exe', args: ['/d', '/s', '/c', command] } : { command: '/bin/sh', args: ['-c', command] };
-  const launch = wrapCommand(shell.command, shell.args, sandbox, root);
+  const launch = await launchCommand(shell.command, shell.args, sandbox, root);
   const env = nonInteractiveEnvironment(scrubEnvironment(context.env || process.env), context.env || process.env);
   if (args.run_in_background === true) {
     const registry = context.session && (context.session.background ||= new Map());
