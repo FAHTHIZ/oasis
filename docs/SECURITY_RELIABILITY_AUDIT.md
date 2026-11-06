@@ -373,3 +373,11 @@ Free-form shell strings are a different risk class from argv-based commands. The
 **Finding:** the shell check for writes into protected config (`.git/hooks`, `.git/config`, `.oasis`, `.mcp.json`, ...) needed a space before the path. `echo x >.git/hooks/pre-commit`, `cd .git/hooks && echo x > pre-commit`, split quotes (`".g"it/hooks/x`), `sponge`, and interpreter writes (`python -c "open('.git/config','w')"`, `Path(...).write_text`) were not recognised as protected writes.
 
 **Fix:** `src/protected-paths.mjs` accepts redirection and separator characters before the path, strips quotes before matching, treats `cd`/`pushd` into a protected folder followed by a write as a protected write, and recognises `sponge`, `open(` and `.write_text`/`.write_bytes`. **Test:** `test/protected-paths.test.mjs`. **Remaining:** globbed protected paths (`.gi?/hooks`), editors such as `ed`/`vim`, and paths built at run time are not caught; the sandbox's read-only binds are the hard guarantee.
+
+### `oasis mcp serve` wrote protected config (medium)
+
+**Finding:** the protected-config check (`.git/hooks`, `.git/config`, `.oasis/settings.json`, `.mcp.json`, `.vscode/tasks.json`, ...) lives in the agent's authorization step. `oasis mcp serve --allow-edits` calls the tools directly, so any MCP client (and a prompt-injected model behind one that auto-approves edits) could write `.git/hooks/pre-commit` and get code run on the next commit. Secret files and paths outside the workspace were already refused there; `fetch_url` already blocked private addresses.
+
+**Fix:** served edit tools refuse protected config targets (resolved through symlinks with `protectedConfigTarget`) unless `OASIS_ALLOW_CONFIG_EDITS=1`. **Test:** `test/mcp-serve.test.mjs`. **Remaining by design:** `--allow-commands` gives the client a shell; that is code execution the user granted explicitly.
+
+**Held up:** `oasis app` (`src/app-server.mjs`) serves only GET/HEAD for the app, skills and an allow-list of shared modules, and rejects `..` and paths outside those folders. The MCP OAuth callback listens on 127.0.0.1 and ignores requests without the expected `state`.
