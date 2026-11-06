@@ -13,7 +13,8 @@
     "node": ">=22"
   },
   "optionalDependencies": {
-    "node-pty": "1.1.0"
+    "node-pty": "1.1.0",
+    "sharp": "0.35.5"
   },
   "bin": {
     "oasis": "./src/oasis.mjs"
@@ -153,6 +154,10 @@
     },
     "artifactName": "${productName}-${version}-${arch}.${ext}",
     "asar": true,
+    "asarUnpack": [
+      "**/node_modules/sharp/**/*",
+      "**/node_modules/@img/**/*"
+    ],
     "npmRebuild": true,
     "mac": {
       "target": [

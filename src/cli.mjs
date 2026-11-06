@@ -871,11 +871,13 @@ async function doctor(args = [], root = process.cwd()) {
     if (args.includes('--test-provider')) process.exitCode = 1;
   }
   const ptyAvailable = await import('node-pty').then(() => true).catch(() => false);
+  const sharpAvailable = await import('sharp').then(() => true).catch(() => false);
   stdout.write('OASIS check\n');
   stdout.write('  Node.js 22+: ' + statusLabel(nodeOK) + '\n');
   stdout.write('  Git: ' + (gitOK ? 'available (optional)' : 'not found (optional)') + '\n');
   stdout.write('  Model connection: ' + (modelConfigured ? statusLabel(true) : statusLabel(false) + ' — run oasis setup') + '\n');
   stdout.write('  Native terminal panel (PTY): ' + (ptyAvailable ? 'available' : 'not available (optional native component)') + '\n');
+  stdout.write('  Image downscaling (sharp): ' + (sharpAvailable ? 'available' : 'not available (optional; images over 3.75 MB are refused)') + '\n');
   const nextStep = !nodeOK ? 'install Node.js 22 or newer, then run oasis doctor again.'
     : !modelConfigured ? 'run oasis setup to connect a model.'
     : 'run oasis in a project folder, or oasis web --open for the browser workspace.';
