@@ -1,3 +1,5 @@
+import { BUILTIN_PROVIDERS, getProvider } from './provider-registry.mjs';
+
 // Ranked fallback chain for the CLI.
 //
 // `--fallback-model` (or `fallbackModel` in settings) accepts one model or a
@@ -15,25 +17,9 @@
 // (bad input, context overflow) and a bad key on the main provider are not
 // retried elsewhere; they would fail on the next model too or need the user.
 
-export const FALLBACK_PROVIDERS = Object.freeze({
-  openai: { protocol: 'openai-responses', baseURL: 'https://api.openai.com/v1', keyEnv: ['OPENAI_API_KEY'] },
-  anthropic: { protocol: 'anthropic', baseURL: 'https://api.anthropic.com', keyEnv: ['ANTHROPIC_API_KEY'] },
-  openrouter: { protocol: 'openai-compatible', baseURL: 'https://openrouter.ai/api/v1', keyEnv: ['OPENROUTER_API_KEY'] },
-  gemini: { protocol: 'openai-compatible', baseURL: 'https://generativelanguage.googleapis.com/v1beta/openai', keyEnv: ['GEMINI_API_KEY', 'GOOGLE_API_KEY'] },
-  groq: { protocol: 'openai-compatible', baseURL: 'https://api.groq.com/openai/v1', keyEnv: ['GROQ_API_KEY'] },
-  deepseek: { protocol: 'openai-compatible', baseURL: 'https://api.deepseek.com/v1', keyEnv: ['DEEPSEEK_API_KEY'] },
-  mistral: { protocol: 'openai-compatible', baseURL: 'https://api.mistral.ai/v1', keyEnv: ['MISTRAL_API_KEY'] },
-  xai: { protocol: 'openai-compatible', baseURL: 'https://api.x.ai/v1', keyEnv: ['XAI_API_KEY'] },
-  moonshot: { protocol: 'openai-compatible', baseURL: 'https://api.moonshot.ai/v1', keyEnv: ['MOONSHOT_API_KEY'] },
-  huggingface: { protocol: 'openai-compatible', baseURL: 'https://router.huggingface.co/v1', keyEnv: ['HF_TOKEN', 'HUGGINGFACE_API_KEY'] },
-  together: { protocol: 'openai-compatible', baseURL: 'https://api.together.xyz/v1', keyEnv: ['TOGETHER_API_KEY'] },
-  fireworks: { protocol: 'openai-compatible', baseURL: 'https://api.fireworks.ai/inference/v1', keyEnv: ['FIREWORKS_API_KEY'] },
-  cerebras: { protocol: 'openai-compatible', baseURL: 'https://api.cerebras.ai/v1', keyEnv: ['CEREBRAS_API_KEY'] },
-  nvidia: { protocol: 'openai-compatible', baseURL: 'https://integrate.api.nvidia.com/v1', keyEnv: ['NVIDIA_API_KEY'] },
-  ollama: { protocol: 'openai-compatible', baseURL: 'http://127.0.0.1:11434/v1', keyEnv: [] },
-  lmstudio: { protocol: 'openai-compatible', baseURL: 'http://127.0.0.1:1234/v1', keyEnv: [] },
-  llamacpp: { protocol: 'openai-compatible', baseURL: 'http://127.0.0.1:8080/v1', keyEnv: [] }
-});
+// Providers come from provider-registry.mjs (built-ins plus user settings).
+// FALLBACK_PROVIDERS stays exported for callers that list the built-ins.
+export const FALLBACK_PROVIDERS = BUILTIN_PROVIDERS;
 
 // Settings that describe one model or one endpoint, which must not leak into
 // a fallback on a different provider.
@@ -46,8 +32,8 @@ export function parseFallbackChain(spec) {
   for (const raw of items) {
     const text = String(raw || '').trim();
     if (!text) continue;
-    const match = /^([a-z][a-z0-9]*):(.+)$/i.exec(text);
-    const provider = match && Object.hasOwn(FALLBACK_PROVIDERS, match[1].toLowerCase()) ? match[1].toLowerCase() : '';
+    const match = /^([a-z][a-z0-9_-]*):(.+)$/i.exec(text);
+    const provider = match && getProvider(match[1]) ? match[1].toLowerCase() : '';
     const model = (provider ? match[2] : text).trim();
     if (!model) continue;
     const id = (provider ? provider + ':' : '') + model;
@@ -67,13 +53,14 @@ function firstKey(names, env) {
 export function resolveFallbackConfig(entry, baseConfig, env = process.env) {
   if (!entry || !baseConfig) return null;
   if (!entry.provider) return { ...baseConfig, model: entry.model };
-  const preset = FALLBACK_PROVIDERS[entry.provider];
+  const preset = getProvider(entry.provider, { env });
   if (!preset) return null;
   const apiKey = preset.keyEnv.length ? firstKey(preset.keyEnv, env) : '';
-  if (preset.keyEnv.length && !apiKey) return null;
+  // Local servers (Ollama, vLLM) accept an optional key; hosted ones need one.
+  if (preset.keyEnv.length && !apiKey && !preset.local) return null;
   const next = { ...baseConfig };
   for (const key of MODEL_SPECIFIC_KEYS) delete next[key];
-  const baseURL = String(env['OASIS_FALLBACK_' + entry.provider.toUpperCase() + '_BASE_URL'] || preset.baseURL).replace(/\/+$/, '');
+  const baseURL = String(env['OASIS_FALLBACK_' + entry.provider.toUpperCase().replace(/[^A-Z0-9]/g, '_') + '_BASE_URL'] || preset.baseURL).replace(/\/+$/, '');
   return { ...next, protocol: preset.protocol, baseURL, apiKey, model: entry.model, fallbackProvider: entry.provider };
 }
 
@@ -128,7 +115,7 @@ export function remainingFallbacks(chain, { current, baseConfig, failed = new Se
 export function describeFallbackChain(chain, baseConfig, env = process.env) {
   return chain.map((entry) => {
     const usable = Boolean(resolveFallbackConfig(entry, baseConfig, env));
-    const preset = entry.provider ? FALLBACK_PROVIDERS[entry.provider] : null;
+    const preset = entry.provider ? getProvider(entry.provider, { env }) : null;
     return { id: entry.id, model: entry.model, provider: entry.provider || 'current', usable, ...(preset && !usable ? { missing: preset.keyEnv.join(' or ') } : {}) };
   });
 }

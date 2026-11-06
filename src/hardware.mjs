@@ -6,6 +6,7 @@
 // Detection is read-only and bounded: fixed loopback ports only, a short timeout
 // per probe, and GPU tools are run without a shell. Nothing is installed or
 // downloaded here.
+import { BUILTIN_PROVIDERS } from './provider-registry.mjs';
 import os from 'node:os';
 import { execFile } from 'node:child_process';
 import fs from 'node:fs';
@@ -196,13 +197,11 @@ export function pickInstalledModel(models, budgetGB, { loaded = false } = {}) {
   return scored[0] || null;
 }
 
-export const LOCAL_SERVERS = [
-  { id: 'ollama', name: 'Ollama', baseURL: 'http://127.0.0.1:11434/v1', probe: 'http://127.0.0.1:11434/api/tags', kind: 'ollama' },
-  { id: 'lmstudio', name: 'LM Studio', baseURL: 'http://127.0.0.1:1234/v1', probe: 'http://127.0.0.1:1234/v1/models', kind: 'openai' },
-  { id: 'llamacpp', name: 'llama.cpp server', baseURL: 'http://127.0.0.1:8080/v1', probe: 'http://127.0.0.1:8080/v1/models', kind: 'openai' },
-  { id: 'jan', name: 'Jan', baseURL: 'http://127.0.0.1:1337/v1', probe: 'http://127.0.0.1:1337/v1/models', kind: 'openai' },
-  { id: 'vllm', name: 'vLLM', baseURL: 'http://127.0.0.1:8000/v1', probe: 'http://127.0.0.1:8000/v1/models', kind: 'openai' }
-];
+// Local servers to look for, from provider-registry.mjs. Probe paths are
+// relative to the server origin (Ollama's native /api/tags lists its models).
+export const LOCAL_SERVERS = Object.values(BUILTIN_PROVIDERS).filter((entry) => entry.local).map((entry) => ({
+  id: entry.id, name: entry.label, baseURL: entry.baseURL, probe: new URL(entry.baseURL).origin + entry.local.probe, kind: entry.local.kind
+}));
 
 // Probe the fixed loopback ports of common model servers in parallel.
 export async function discoverLocalServers({ fetchImpl = fetch, timeoutMs = PROBE_TIMEOUT_MS, servers = LOCAL_SERVERS } = {}) {
@@ -250,13 +249,13 @@ export function recommendSetup(hw, servers = [], { configured = false } = {}) {
     if (tier && budgetGB >= 5.5) {
       primary = {
         route: 'local-install', server: 'ollama', serverName: 'Ollama', protocol: 'openai-compatible',
-        baseURL: 'http://127.0.0.1:11434/v1', model: tier.model, contextWindow: tier.contextWindow,
+        baseURL: BUILTIN_PROVIDERS.ollama.baseURL, model: tier.model, contextWindow: tier.contextWindow,
         install: { url: 'https://ollama.com/download', command: 'ollama pull ' + tier.model, downloadGB: tier.sizeGB },
         reason: 'This computer can run ' + tier.model + ' (' + tier.label + ', about ' + tier.sizeGB + ' GB) privately. Install Ollama, then pull the model.'
       };
     } else {
       primary = {
-        route: 'cloud', protocol: 'openai-compatible', baseURL: 'https://openrouter.ai/api/v1', model: '',
+        route: 'cloud', protocol: BUILTIN_PROVIDERS.openrouter.protocol, baseURL: BUILTIN_PROVIDERS.openrouter.baseURL, model: '',
         reason: budgetGB < 3
           ? 'This device has about ' + hw.memoryGB + ' GB of memory, which is too little for a useful local model. A hosted model will be much faster and more capable.'
           : 'A hosted model is recommended here; a local model that fits would be slow and weak at multi-step coding.'

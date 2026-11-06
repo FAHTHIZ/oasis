@@ -1,13 +1,14 @@
 import { atomicWriteFile } from './atomic-write.mjs';
+import { BUILTIN_PROVIDERS, providerForEndpoint } from './provider-registry.mjs';
 import { mkdir, readFile, chmod, copyFile } from 'node:fs/promises';
 import { readFileSync } from 'node:fs';
 import { CLOUD_PROTOCOLS, cloudProtocolFromEnv, defaultCloudBaseURL, defaultCloudModel, cloudCredentialsPresent } from './cloud-providers.mjs';
 import path from 'node:path';
 import os from 'node:os';
 
-export const DEFAULT_BASE_URL = 'https://api.openai.com/v1';
-export const DEFAULT_ANTHROPIC_BASE_URL = 'https://api.anthropic.com';
-export const DEFAULT_MODEL = 'gpt-6.1-sol';
+export const DEFAULT_BASE_URL = BUILTIN_PROVIDERS.openai.baseURL;
+export const DEFAULT_ANTHROPIC_BASE_URL = BUILTIN_PROVIDERS.anthropic.baseURL;
+export const DEFAULT_MODEL = BUILTIN_PROVIDERS.openai.model;
 export const DEFAULT_PROTOCOL = 'openai-responses';
 
 const SETUP_PROVIDER_PRESETS = new Set([
@@ -35,15 +36,10 @@ export function inferSetupProviderPreset(config) {
   try { url = new URL(String(config.baseURL || '')); }
   catch { return 'custom'; }
 
-  const host = url.hostname.toLowerCase();
   const protocol = String(config.protocol || '').trim().toLowerCase();
-  if (protocol === 'anthropic' && host === 'api.anthropic.com') return 'anthropic';
-  if (protocol === 'openai-responses' && host === 'api.openai.com') return 'openai';
-  if (protocol === 'openai-compatible') {
-    if (host === 'openrouter.ai') return 'openrouter';
-    if (host === 'generativelanguage.googleapis.com') return 'gemini';
-    if (['localhost', '127.0.0.1', '::1', '[::1]'].includes(host) && url.port === '11434') return 'ollama';
-  }
+  // Setup offers these presets; any other registry provider shows as custom.
+  const id = providerForEndpoint(url.href, protocol);
+  if (['openai', 'anthropic', 'openrouter', 'gemini', 'ollama'].includes(id)) return id;
   return 'custom';
 }
 
