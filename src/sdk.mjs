@@ -79,6 +79,16 @@ export async function* query({ prompt, options = {} }) {
   let finished = false;
   let failure = null;
   const push = (event) => { queue.push(event); if (wake) { wake(); wake = null; } };
+  // Owned by this generator: a consumer that stops iterating (break, return,
+  // throw) stops the agent too, instead of leaving it calling the model and
+  // running tools in the background with nothing reading its events.
+  const controller = new AbortController();
+  const external = options.abortController ? options.abortController.signal : null;
+  const forwardAbort = () => controller.abort(external.reason);
+  if (external) {
+    if (external.aborted) controller.abort(external.reason);
+    else external.addEventListener('abort', forwardAbort, { once: true });
+  }
   const run = runHeadless({
     prompt,
     root,
@@ -99,18 +109,25 @@ export async function* query({ prompt, options = {} }) {
       bare: Boolean(options.bare),
       ...(options.settings ? { settings: options.settings } : {})
     },
-    signal: options.abortController ? options.abortController.signal : null,
+    signal: controller.signal,
     canUseTool: options.canUseTool || null,
     onSession: (session) => { for (const server of servers) attachToolServer(session, server); },
     onEvent: push
   }).catch((error) => { failure = error; }).finally(() => { finished = true; if (wake) { wake(); wake = null; } });
 
-  while (true) {
-    if (queue.length) { yield queue.shift(); continue; }
-    if (finished) break;
-    await new Promise((resolve) => { wake = resolve; });
+  let completed = false;
+  try {
+    while (true) {
+      if (queue.length) { yield queue.shift(); continue; }
+      if (finished) break;
+      await new Promise((resolve) => { wake = resolve; });
+    }
+    completed = true;
+  } finally {
+    if (!completed && !finished) controller.abort();
+    if (external) external.removeEventListener('abort', forwardAbort);
+    await run;
   }
-  await run;
   if (failure) throw failure;
 }
 
