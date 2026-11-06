@@ -4,7 +4,7 @@ class OasisCli < Formula
   desc "Local-first AI coding agent for the terminal and browser"
   homepage "https://fahthiz.github.io/oasis/"
   url "https://github.com/FAHTHIZ/oasis/archive/refs/tags/v1.1.0.tar.gz"
-  sha256 "6a58b3950a8a3e4cba8f8250773e9137cdcc55069c729981ca64721638063ae4"
+  sha256 "12ef39e4d31b969707efba6f3154a7641c03273b4b7fbcbfcd7a51b29bb06bbe"
   license "Apache-2.0"
 
   livecheck do

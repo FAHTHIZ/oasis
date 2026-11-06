@@ -4,8 +4,8 @@ cask "oasis" do
   arch arm: "arm64", intel: "x64"
 
   version "1.1.0"
-  sha256 arm:   "0f460d254f44a641ba0a908b1226d44b2032a78eaa89bc8faa900f7a80979c6b",
-         intel: "46e859057f56291c25362c5d453b69b12f5b4e1593ca8353a4d7f2bab5d1d2e9"
+  sha256 arm:   "0067b0e1a5a9ba488e1fca31e8bef092f2e8f4629e86163dd341be92ea7a9a10",
+         intel: "4f10eef84359363328b7a022f8366fc0c474522767e211aae848e250491fd264"
 
   url "https://github.com/FAHTHIZ/oasis/releases/download/v#{version}/OASIS-#{version}-#{arch}.dmg"
   name "OASIS"
