@@ -1,6 +1,7 @@
 // Terminal markdown rendering for streamed assistant replies, plus colored
 // diffs for file edits. Line-oriented so it works while text streams in: the
 // partial line is shown raw and replaced by its rendered form once complete.
+import { Lexer } from 'marked';
 import { diffArrays } from 'diff';
 import { stringWidth } from './line-editor.mjs';
 import { renderMermaid } from './mermaid-ascii.mjs';
@@ -46,15 +47,32 @@ export function highlightCode(line, lang = '') {
   });
 }
 
+// Inline Markdown (emphasis, code, links, strikethrough, escapes) is parsed
+// by marked's GFM inline lexer and drawn with ANSI styles.
+function inlineTokens(tokens) {
+  let out = '';
+  for (const token of tokens || []) {
+    switch (token.type) {
+      case 'strong': out += C.bold + inlineTokens(token.tokens) + C.noBold; break;
+      case 'em': out += C.italic + inlineTokens(token.tokens) + C.noItalic; break;
+      case 'del': out += '\x1b[9m' + inlineTokens(token.tokens) + '\x1b[29m'; break;
+      case 'codespan': out += C.cyan + token.text + C.fg; break;
+      case 'link':
+        out += /^https?:\/\//i.test(token.href)
+          ? '\x1b]8;;' + token.href + '\x07' + C.underline + C.blue + inlineTokens(token.tokens) + C.fg + C.noUnderline + '\x1b]8;;\x07'
+          : token.raw;
+        break;
+      case 'escape': out += token.text; break;
+      case 'br': out += '\n'; break;
+      default: out += token.tokens ? inlineTokens(token.tokens) : (token.raw ?? token.text ?? '');
+    }
+  }
+  return out;
+}
+
 export function renderInline(text, { color = true } = {}) {
   if (!color) return text;
-  const codes = [];
-  let out = text.replace(/`([^`]+)`/g, (_, code) => { codes.push(C.cyan + code + C.fg); return '\u0000' + (codes.length - 1) + '\u0000'; });
-  out = out.replace(/\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)/g, (_, label, url) => '\x1b]8;;' + url + '\x07' + C.underline + C.blue + label + C.fg + C.noUnderline + '\x1b]8;;\x07');
-  out = out.replace(/\*\*([^*]+)\*\*|__([^_]+)__/g, (_, a, b) => C.bold + (a || b) + C.noBold);
-  out = out.replace(/(^|[^\w*])\*([^*\s][^*]*?)\*(?!\w)/g, (_, pre, body) => pre + C.italic + body + C.noItalic);
-  out = out.replace(/~~([^~]+)~~/g, (_, body) => '\x1b[9m' + body + '\x1b[29m');
-  return out.replace(/\u0000(\d+)\u0000/g, (_, index) => codes[Number(index)]);
+  return inlineTokens(Lexer.lexInline(String(text), { gfm: true }));
 }
 
 // Renders one complete markdown line given fence state; returns null when the
