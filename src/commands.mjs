@@ -27,7 +27,7 @@ import path from 'node:path';
 import { getConfigDirectory } from './config.mjs';
 import { parseFrontMatter } from './frontmatter.mjs';
 import { sensitivePath } from './tools.mjs';
-import { imageMediaType, MAX_IMAGE_BYTES } from './images.mjs';
+import { imageMediaType, MAX_SOURCE_IMAGE_BYTES } from './images.mjs';
 
 const MAX_COMMAND_FILE = 64 * 1024;
 const MAX_MENTION_BYTES = 100 * 1024;
@@ -294,7 +294,7 @@ export async function expandFileMentions(root, text, options = {}) {
     if (!info.isFile()) continue;
     const mediaType = imageMediaType(relative);
     if (mediaType) {
-      if (options.images === false || info.size > MAX_IMAGE_BYTES || images.length >= 4) continue;
+      if (options.images === false || info.size > MAX_SOURCE_IMAGE_BYTES || images.length >= 4) continue;
       const data = await readFile(real).catch(() => null);
       if (!data) continue;
       images.push({ mediaType, data: data.toString('base64'), path: relative });

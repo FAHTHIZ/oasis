@@ -9,6 +9,12 @@ export const IMAGE_TYPES = { '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg':
 export const MAX_IMAGE_BYTES = 3_750_000; // ~5 MB once base64-encoded (Anthropic's per-image limit).
 export const MAX_IMAGES_IN_REQUEST = 4;
 export const IMAGE_TOKEN_ESTIMATE = 1600;
+// Larger sources are accepted and downscaled with sharp (libvips) before upload.
+export const MAX_SOURCE_IMAGE_BYTES = 50 * 1024 * 1024;
+// Long-edge cap applied before upload. Claude Code downscales to 2000 px and
+// Codex to 2048 px; Anthropic rejects images over 2000 px once a request carries
+// many images, and rejects oversized computer/browser-use screenshots outright.
+export const DEFAULT_IMAGE_MAX_EDGE = 2000;
 
 export function imageMediaType(file) {
   return IMAGE_TYPES[path.extname(String(file || '')).toLowerCase()] || null;
@@ -90,6 +96,72 @@ function dimensions(buffer, type) {
   return {};
 }
 
+export function imageMaxEdge(env = process.env) {
+  const value = Number(env.OASIS_IMAGE_MAX_EDGE);
+  return Number.isFinite(value) && value >= 200 ? Math.min(8000, Math.floor(value)) : DEFAULT_IMAGE_MAX_EDGE;
+}
+
+let sharpModule;
+// sharp is an optional native dependency; without it oversized images are refused.
+export function loadSharp() {
+  if (!sharpModule) sharpModule = import('sharp').then((module) => module.default || module).catch(() => null);
+  return sharpModule;
+}
+
+/**
+ * Fits an image within the long-edge cap and the per-image byte limit. Images
+ * already within both pass through without decoding. Returns
+ * { mediaType, data (base64), width, height, resizedFrom? } or { error }.
+ */
+export async function fitImage(image, { env = process.env, sharp } = {}) {
+  const input = Buffer.isBuffer(image.buffer) ? image.buffer : Buffer.from(String(image.data || ''), 'base64');
+  const mediaType = sniffType(input) || image.mediaType;
+  const size = dimensions(input, mediaType);
+  const maxEdge = imageMaxEdge(env);
+  const known = size.width > 0 && size.height > 0;
+  if (known && Math.max(size.width, size.height) <= maxEdge && input.length <= MAX_IMAGE_BYTES) {
+    return { mediaType, data: image.data && !image.buffer ? image.data : input.toString('base64'), ...size };
+  }
+  const lib = sharp === false ? null : sharp || await loadSharp();
+  if (!lib) {
+    if (input.length <= MAX_IMAGE_BYTES) return { mediaType, data: input.toString('base64'), ...size };
+    return { error: 'Image is larger than ' + Math.round(MAX_IMAGE_BYTES / 1e6 * 10) / 10 + ' MB and the optional sharp component that downscales images is not installed.' };
+  }
+  try {
+    const meta = await lib(input, { animated: false }).metadata();
+    const from = { width: meta.autoOrient ? meta.autoOrient.width : meta.width, height: meta.autoOrient ? meta.autoOrient.height : meta.height };
+    const base = () => lib(input, { animated: false }).rotate().resize({ width: maxEdge, height: maxEdge, fit: 'inside', withoutEnlargement: true });
+    const keepJpeg = mediaType === 'image/jpeg';
+    let out = await (keepJpeg ? base().jpeg({ quality: 85, mozjpeg: true }) : mediaType === 'image/webp' ? base().webp({ quality: 85 }) : base().png({ compressionLevel: 9 })).toBuffer({ resolveWithObject: true });
+    let type = keepJpeg ? 'image/jpeg' : mediaType === 'image/webp' ? 'image/webp' : 'image/png';
+    // Screenshots with photos can stay large as PNG; fall back to JPEG.
+    for (const quality of [80, 60]) {
+      if (out.data.length <= MAX_IMAGE_BYTES) break;
+      out = await base().flatten({ background: '#ffffff' }).jpeg({ quality, mozjpeg: true }).toBuffer({ resolveWithObject: true });
+      type = 'image/jpeg';
+    }
+    if (out.data.length > MAX_IMAGE_BYTES) return { error: 'Image is still larger than ' + Math.round(MAX_IMAGE_BYTES / 1e6 * 10) / 10 + ' MB after downscaling.' };
+    const result = { mediaType: type, data: out.data.toString('base64'), width: out.info.width, height: out.info.height };
+    if (from.width && (from.width !== out.info.width || from.height !== out.info.height)) result.resizedFrom = from.width + 'x' + from.height;
+    return result;
+  } catch (error) {
+    if (input.length <= MAX_IMAGE_BYTES) return { mediaType, data: input.toString('base64'), ...size };
+    return { error: 'Image could not be decoded for downscaling: ' + String(error.message || error).slice(0, 160) };
+  }
+}
+
+// Fits a list of message images; failures become notes for the conversation.
+export async function fitImages(images, options = {}) {
+  const fitted = [];
+  const notes = [];
+  for (const image of images || []) {
+    const result = await fitImage(image, options);
+    if (result.error) notes.push((image.path ? image.path + ': ' : '') + result.error);
+    else fitted.push({ mediaType: result.mediaType, data: result.data, ...(result.width ? { width: result.width, height: result.height } : {}) });
+  }
+  return { images: fitted, notes };
+}
+
 // Returns a tool result; the base64 data is attached as a non-enumerable property
 // so it never ends up in the JSON text the model (or logs) see.
 export async function readImageFile(root, rawPath, options = {}) {
@@ -97,7 +169,7 @@ export async function readImageFile(root, rawPath, options = {}) {
   const info = await stat(target.absolute);
   if (!info.isFile()) throw new Error('That path is not a file.');
   const relative = target.relative.split(path.sep).join('/');
-  if (info.size > MAX_IMAGE_BYTES) throw new Error('Image is larger than the ' + Math.round(MAX_IMAGE_BYTES / 1e6 * 10) / 10 + ' MB limit. Resize or compress it first.');
+  if (info.size > MAX_SOURCE_IMAGE_BYTES) throw new Error('Image is larger than the ' + Math.round(MAX_SOURCE_IMAGE_BYTES / 1048576) + ' MB limit. Resize or compress it first.');
   const buffer = await readFile(target.absolute);
   const mediaType = sniffType(buffer);
   if (!mediaType) throw new Error('This file does not contain a PNG, JPEG, GIF, or WebP image.');
@@ -106,8 +178,14 @@ export async function readImageFile(root, rawPath, options = {}) {
     result.note = 'Image input is turned off (OASIS_VISION=off or vision: false in the provider config), so only metadata is available.';
     return result;
   }
+  const fitted = await fitImage({ mediaType, buffer }, { env: options.env, sharp: options.sharp });
+  if (fitted.error) throw new Error(fitted.error);
   result.note = 'The image is attached to this conversation for you to look at.';
-  Object.defineProperty(result, 'imageData', { value: { mediaType, data: buffer.toString('base64') }, enumerable: false });
+  if (fitted.resizedFrom) {
+    Object.assign(result, { width: fitted.width, height: fitted.height, mediaType: fitted.mediaType, bytes: Math.round(fitted.data.length * 0.75), resizedFrom: fitted.resizedFrom });
+    result.note = 'The image is attached, downscaled from ' + fitted.resizedFrom + ' to ' + fitted.width + 'x' + fitted.height + ' to fit model limits.';
+  }
+  Object.defineProperty(result, 'imageData', { value: { mediaType: fitted.mediaType, data: fitted.data, ...(fitted.width ? { width: fitted.width, height: fitted.height } : {}) }, enumerable: false });
   return result;
 }
 
