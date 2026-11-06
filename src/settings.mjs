@@ -20,6 +20,7 @@ import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import os from 'node:os';
 import { getConfigDirectory } from './config.mjs';
+import { useProviderSettings } from './provider-registry.mjs';
 import { normalizePermissionMode } from './permission-modes.mjs';
 export { PERMISSION_MODES, normalizePermissionMode } from './permission-modes.mjs';
 
@@ -271,6 +272,12 @@ export async function loadSettings(root, options = {}) {
       }
       if (scope === 'managed' && (settings.voiceEnabled === false || (settings.voice && settings.voice.enabled === false))) result.voiceDisabledByPolicy = true;
     }
+    // Custom or re-pointed model providers decide where API keys are sent, so
+    // only user settings, --settings and managed policy may define them; a
+    // repository's .oasis/settings.json cannot (see provider-registry.mjs).
+    if ((scope === 'user' || scope === 'flag' || scope === 'managed') && settings.providers && typeof settings.providers === 'object' && !Array.isArray(settings.providers)) {
+      result.providers = { ...(result.providers || {}), ...settings.providers };
+    }
     // Turning auto memory off is allowed even in untrusted workspaces; it never loosens anything.
     if (settings.autoMemory === false) result.autoMemory = false;
     if (settings.autoLearning === false) result.autoLearning = false;
@@ -466,5 +473,8 @@ export async function loadSettings(root, options = {}) {
   if (env.OASIS_SANDBOX === '0') result.sandbox.enabled = false;
   if (['os', 'docker', 'podman', 'ssh'].includes(env.OASIS_SANDBOX_BACKEND)) result.sandbox.backend = env.OASIS_SANDBOX_BACKEND;
   if (env.OASIS_SANDBOX_IMAGE && /^[A-Za-z0-9][A-Za-z0-9._\/:@-]{0,254}$/.test(env.OASIS_SANDBOX_IMAGE)) result.sandbox.image = env.OASIS_SANDBOX_IMAGE;
+  // Fallback chains and configure_provider resolve names without a settings
+  // object in hand, so the registry keeps the last loaded user providers.
+  if (options.applyProviders !== false) useProviderSettings(result.providers || {});
   return result;
 }

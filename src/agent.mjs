@@ -1,4 +1,5 @@
 import { briefFailure } from '../app/core/providers.mjs';
+import { findCatalogModel } from './model-catalog.mjs';
 import { createParser as createSseParser } from 'eventsource-parser';
 import { splitThinking, visibleReply } from '../app/core/think-tags.mjs';
 import { atomicWriteFile } from './atomic-write.mjs';
@@ -1350,6 +1351,7 @@ function toAnthropicRequest(messages, options = {}) {
 // optional environment/configuration override. Older models with
 // smaller caps get a conservative default; a provider 400 that names the real
 // cap lowers it for the rest of the session instead of failing the turn.
+const DEFAULT_OUTPUT_CEILING = 32000;
 const LEGACY_8K_MODELS = /claude-(instant|2)|claude-3-(opus|sonnet|haiku)|claude-3-5-|claude-3\.5|gpt-3\.5|gpt-4(?!o|\.1|-turbo)/i;
 const MODERN_32K_MODELS = /claude|gpt-5|\bo[1-9](-|$)|gpt-4\.1|gemini-(2|3)|deepseek|qwen3|kimi|glm-4\.[5-9]|grok-[3-9]/i;
 function strictConfiguredInteger(value) {
@@ -1386,6 +1388,15 @@ export function maxOutputTokensFor(config = {}, env = process.env) {
   const configured = firstPositiveConfiguredInteger(env.OASIS_MAX_OUTPUT_TOKENS, env.CLAUDE_CODE_MAX_OUTPUT_TOKENS, config.maxOutputTokens);
   if (configured > 0) return Math.max(1024, Math.min(128000, configured));
   const model = String(config.model || '');
+  // models.dev lists each model's real output limit. Use it up to 32,000 (the
+  // per-request ceiling Claude Code also defaults to) and never more than a
+  // quarter of the context window, which some OpenAI-compatible servers count
+  // max_tokens against. The name patterns below cover models it does not list.
+  const listed = findCatalogModel(model, { baseURL: config.baseURL, provider: config.catalogProvider, env });
+  if (listed && listed.output > 0) {
+    const room = listed.context > 0 ? Math.floor(listed.context / 4) : Infinity;
+    return Math.max(1024, Math.min(DEFAULT_OUTPUT_CEILING, listed.output, room));
+  }
   if (LEGACY_8K_MODELS.test(model) && !/claude-3-7|claude-3\.7/i.test(model)) return 8192;
   if (MODERN_32K_MODELS.test(model)) return 32000;
   if (/gpt-4o|gpt-4-turbo/i.test(model)) return 16384;

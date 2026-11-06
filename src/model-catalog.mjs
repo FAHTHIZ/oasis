@@ -10,21 +10,15 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { getConfigDirectory } from './config.mjs';
+import { getProvider, providerForEndpoint } from './provider-registry.mjs';
 
 export const MODEL_CATALOG_URL = 'https://models.dev/api.json';
 const SNAPSHOT = new URL('./data/model-catalog.json', import.meta.url);
 const REFRESH_MS = 24 * 60 * 60 * 1000;
 
-// Providers whose catalog entry has no `api` base URL, keyed by API host.
+// Hosts outside provider-registry.mjs whose catalog entry has no `api` base
+// URL. Registry providers carry their models.dev id in their `catalog` field.
 const HOST_PROVIDERS = {
-  'api.anthropic.com': 'anthropic',
-  'api.openai.com': 'openai',
-  'generativelanguage.googleapis.com': 'google',
-  'api.x.ai': 'xai',
-  'api.groq.com': 'groq',
-  'api.mistral.ai': 'mistral',
-  'api.together.xyz': 'togetherai',
-  'api.cerebras.ai': 'cerebras',
   'api.deepinfra.com': 'deepinfra',
   'api.perplexity.ai': 'perplexity',
   'api.cohere.com': 'cohere',
@@ -156,6 +150,8 @@ function hostOf(url) {
 export function providerForBaseURL(baseURL, env = process.env) {
   const host = hostOf(baseURL);
   if (!host) return null;
+  const registered = getProvider(providerForEndpoint(baseURL, undefined, { env }), { env });
+  if (registered && registered.catalog) return registered.catalog;
   const { hosts } = loadModelCatalog(env);
   if (hosts.has(host)) return hosts.get(host);
   for (const [known, id] of hosts) if (host.endsWith('.' + known)) return id;

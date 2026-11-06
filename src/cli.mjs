@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { FALLBACK_PROVIDERS } from './fallback-chain.mjs';
+import { getProvider, providerApiKey, providerForEndpoint, providerRegistry } from './provider-registry.mjs';
 import { probeLocalContext, isLocalModelEndpoint, localContextAdvice, SMALL_CONTEXT_TOKENS, RECOMMENDED_LOCAL_CONTEXT } from './local-context.mjs';
 import { notifyAttention } from './attention.mjs';
 import { playSound, configureSounds, completedTodoCount, DONE_SOUND_AFTER_MS } from './sounds.mjs';
@@ -519,11 +519,10 @@ async function configureProvider(root = process.cwd(), options = {}) {
   const rl = createInterface({ input: stdin, output: stdout });
   let protocol, baseURL, model, presetName;
   const presets = {
-    openai: { protocol: 'openai-responses', baseURL: DEFAULT_BASE_URL, model: DEFAULT_MODEL },
-    anthropic: { protocol: 'anthropic', baseURL: DEFAULT_ANTHROPIC_BASE_URL, model: 'claude-sonnet-5' },
-    openrouter: { protocol: 'openai-compatible', baseURL: 'https://openrouter.ai/api/v1', model: '' },
-    gemini: { protocol: 'openai-compatible', baseURL: 'https://generativelanguage.googleapis.com/v1beta/openai/', model: 'gemini-3.8-flash' },
-    ollama: { protocol: 'openai-compatible', baseURL: 'http://localhost:11434/v1', model: '' },
+    ...Object.fromEntries(['openai', 'anthropic', 'openrouter', 'gemini', 'ollama'].map((id) => {
+      const entry = getProvider(id);
+      return [id, { protocol: entry.protocol, baseURL: entry.baseURL, model: entry.model }];
+    })),
     bedrock: { protocol: 'bedrock', baseURL: defaultCloudBaseURL('bedrock', process.env), model: process.env.ANTHROPIC_MODEL || '' },
     vertex: { protocol: 'vertex', baseURL: defaultCloudBaseURL('vertex', process.env), model: process.env.ANTHROPIC_MODEL || '' },
     foundry: { protocol: 'foundry', baseURL: (() => { try { return defaultCloudBaseURL('foundry', process.env); } catch { return ''; } })() || 'https://RESOURCE.services.ai.azure.com/anthropic', model: process.env.ANTHROPIC_MODEL || process.env.ANTHROPIC_DEFAULT_SONNET_MODEL || '' }
@@ -642,9 +641,10 @@ async function configureProvider(root = process.cwd(), options = {}) {
       if (!apiKey) apiKey = process.env.OASIS_LOCAL_API_KEY || '';
     } else {
       const host = new URL(baseURL).hostname.toLowerCase();
-      const providerEnvKey = host === 'openrouter.ai' ? process.env.OPENROUTER_API_KEY :
-        (host === 'generativelanguage.googleapis.com' ? (process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY) :
-        (host === 'ollama.com' ? process.env.OLLAMA_API_KEY : ''));
+      // The registry knows each provider's key variables; ollama.com (Ollama's
+      // hosted API) shares OLLAMA_API_KEY with the local server entry.
+      const knownProvider = getProvider(providerForEndpoint(baseURL));
+      const providerEnvKey = knownProvider ? providerApiKey(knownProvider, process.env) : (host === 'ollama.com' ? process.env.OLLAMA_API_KEY : '');
       if (!apiKey) apiKey = process.env.OASIS_API_KEY || providerEnvKey || (protocol === 'anthropic' ? process.env.ANTHROPIC_API_KEY : process.env.OPENAI_API_KEY) || '';
     }
   }
@@ -720,10 +720,11 @@ const CONNECT_USAGE = [
   'GEMINI_API_KEY, OPENROUTER_API_KEY, GROQ_API_KEY or OPENAI_API_KEY.'
 ].join('\n') + '\n';
 
-// Cloud provider keys already exported in the shell, in FALLBACK_PROVIDERS order.
+// Provider keys already exported in the shell, in provider-registry order
+// (built-ins first, then providers from user settings).
 function providerKeysInEnv(env = process.env) {
   const found = [];
-  for (const [provider, entry] of Object.entries(FALLBACK_PROVIDERS)) {
+  for (const [provider, entry] of Object.entries(providerRegistry({ env }))) {
     for (const name of entry.keyEnv || []) {
       const value = String(env[name] || '').trim();
       if (value && !found.some((item) => item.value === value)) { found.push({ provider, name, value }); break; }
@@ -737,8 +738,8 @@ async function connectFromEnvironment(wanted = '') {
   const pick = wanted ? keys.find((item) => item.provider === wanted.toLowerCase() || item.name === wanted.toUpperCase()) : keys[0];
   if (!pick) {
     throw new Error(wanted
-      ? 'No key for ' + wanted + ' in the environment. Known variables: ' + Object.values(FALLBACK_PROVIDERS).flatMap((entry) => entry.keyEnv).join(', ') + '.'
-      : 'No provider API key found in the environment (looked for ' + Object.values(FALLBACK_PROVIDERS).flatMap((entry) => entry.keyEnv).join(', ') + ').');
+      ? 'No key for ' + wanted + ' in the environment. Known variables: ' + Object.values(providerRegistry()).flatMap((entry) => entry.keyEnv).join(', ') + '.'
+      : 'No provider API key found in the environment (looked for ' + Object.values(providerRegistry()).flatMap((entry) => entry.keyEnv).join(', ') + ').');
   }
   if (keys.length > 1 && !wanted) stdout.write('Found keys for ' + keys.map((item) => item.provider).join(', ') + '; using ' + pick.name + ' (pass a provider name to choose).\n');
   else stdout.write('Using ' + pick.name + ' from the environment.\n');
