@@ -19,7 +19,7 @@ import { scopeViolation, editScopeFromEnv } from './scope-lock.mjs';
 import { shellExitTarget } from './pipe-status.mjs';
 import { loadPins, savePins } from './mcp-trust.mjs';
 import { guardExternalContent, clearInjectionTurnFlag, untrustedGuardEnabled } from './untrusted-content.mjs';
-import { maskSecrets, unmaskSecretsForTool, secretShieldEnabled, SECRET_SHIELD_NOTE } from './secret-shield.mjs';
+import { maskSecrets, unmaskSecretsForTool, shareSecretVault, secretShieldEnabled, SECRET_SHIELD_NOTE } from './secret-shield.mjs';
 import { extractFollowups, recordFollowups, followupReminder, followupsEnabled } from './followups.mjs';
 import { dedupedReadHit, recordDedupedRead } from './read-dedup.mjs';
 import { startPluginMonitorsFor } from './monitors.mjs';
@@ -4066,6 +4066,8 @@ async function runSubagent(parent, args, context, options) {
     budgetLedger: parent.budgetLedger ||= { spentUsd: Math.max(0, Number(parent.costUsd) || 0), unknownRequests: 0 },
     agents: {}
   };
+  shareSecretVault(parent, child);
+
   child.stopBackgroundProcesses = () => killAllBackground(child.background);
   const background = args.run_in_background === true || args.run_in_background === 'true';
   if (background && runningBackgroundCount(parent) >= MAX_BACKGROUND_AGENTS) {

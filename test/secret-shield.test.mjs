@@ -148,3 +148,29 @@ test('placeholders are not swapped back into fetch_url or web_search arguments',
   assert.equal(recorded.includes(OPENAI), false, 'the real key reached the fetch_url input');
   assert.ok(recorded.includes(placeholder));
 });
+
+test('a subagent prompt keeps placeholders and the subagent still resolves them in its own tools', async (t) => {
+  // Regression: task arguments were unmasked, so the real key went into the
+  // subagent's first user message and on to the provider.
+  const { scriptedModel, toolCall } = await import('./helpers/scripted-model.mjs');
+  const probe = {};
+  const placeholder = maskSecrets(probe, 'OPENAI_API_KEY=' + OPENAI).text.split('=')[1];
+  const root = await mkdtemp(path.join(os.tmpdir(), 'oasis-shield-task-'));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  await writeFile(path.join(root, 'notes.txt'), 'OPENAI_API_KEY=' + OPENAI + '\n');
+  const isChild = (payload) => String(payload.messages[0].content).includes('SUBAGENT MODE');
+  const childStep = (payload) => payload.messages.some((m) => m.role === 'tool') ? { content: 'child done' } : toolCall('w1', 'write_file', { path: 'out.env.txt', content: 'KEY=' + placeholder + '\n' });
+  let parentSteps = 0;
+  const { config, requests } = await scriptedModel(t, [(payload) => {
+    if (isChild(payload)) return childStep(payload);
+    parentSteps++;
+    if (parentSteps === 1) return toolCall('r1', 'read_file', { path: 'notes.txt' });
+    if (parentSteps === 2) return toolCall('t1', 'task', { description: 'store key', prompt: 'Write KEY=' + placeholder + ' to out.env.txt', subagent_type: 'general-purpose' });
+    return { content: 'parent done' };
+  }]);
+  const session = await createSession({ root, config: { ...config, maxSteps: 8 } });
+  await runAgentTurn(session, 'go', { autoApprove: true, approval: async () => true });
+  assert.ok(requests.some(isChild), 'the subagent ran');
+  assert.equal(JSON.stringify(requests).includes(OPENAI), false, 'the real key reached a model request');
+  assert.equal(await readFile(path.join(root, 'out.env.txt'), 'utf8'), 'KEY=' + OPENAI + '\n', 'the subagent tool call got the real value');
+});

