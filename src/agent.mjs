@@ -5181,9 +5181,31 @@ async function executeOneCallRaw(session, call, context, options) {
     role: 'tool',
     tool_call_id: call.id,
     name,
-    content: serializableResult(result),
+    content: serializableResult(modelFacingResult(name, result)),
     result
   };
+}
+
+// What the model reads from a tool result, when that differs from the result
+// object the runtime keeps. git_status and git_diff results carried the full
+// git command line (for git_diff, 800 characters of secret-path excludes) and
+// `output`, a second copy of stdout: a 3,500-character diff went into the
+// history as 7,900 characters and was resent on every later request. The
+// model gets stdout once, plus stderr and flags only when they say something;
+// the command only when git failed. The in-process result is unchanged.
+export function modelFacingResult(name, result) {
+  if ((name === 'git_status' || name === 'git_diff') && result && typeof result === 'object' && !Array.isArray(result) &&
+    typeof result.stdout === 'string' && typeof result.command === 'string' && result.command.startsWith('git ')) {
+    const { command, output, signal, timedOut, truncated, stderr, ...rest } = result;
+    const lean = { ...rest };
+    if (stderr) lean.stderr = stderr;
+    if (truncated) lean.truncated = true;
+    if (timedOut) lean.timedOut = true;
+    if (signal) lean.signal = signal;
+    if (result.exitCode !== 0) lean.command = command.replace(/ -- :\(exclude\).*$/s, ' -- (secret paths excluded)');
+    return lean;
+  }
+  return result;
 }
 
 // After an interrupted turn (Ctrl+C, cancel, or crash) the history can end with

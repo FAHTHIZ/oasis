@@ -19,7 +19,8 @@
 // Tokens are estimated as characters / 4, the same estimate OASIS uses.
 // "Uncached" counts the characters after the longest prefix shared with the
 // previous request: the part a provider with exact-prefix caching (OpenAI,
-// DeepSeek, Anthropic with breakpoints) has to process again.
+// DeepSeek, Anthropic with breakpoints) has to process again; "cache-weighted"
+// adds the reused prefix at 10%, the usual cached-token price.
 
 import { spawnSync } from 'node:child_process';
 import { cp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
@@ -213,6 +214,9 @@ async function runScenario(scenario) {
     assistantTokens: tok(sum('assistantChars')),
     framingTokens: tok(sum('framingChars')),
     uncachedTokens: tok(sum('uncachedChars')),
+    // Billed-equivalent input on a provider that charges cached prefix
+    // tokens at 10% (OpenAI, DeepSeek and Anthropic cache reads).
+    cacheWeightedTokens: tok(sum('uncachedChars') + 0.1 * sum('reusedPrefixChars')),
     firstRequestTokens: requests.length ? tok(requests[0].totalChars) : 0,
     lastRequestTokens: requests.length ? tok(requests[requests.length - 1].totalChars) : 0
   };
@@ -246,7 +250,7 @@ function printScenario(report) {
   console.log('\n' + report.id + ' (' + report.model + '): ' + (report.passed ? 'PASS' : 'FAIL') + (report.error ? ' - ' + report.error : '') + (report.verifier.exitCode !== 0 ? ' - verifier failed' : ''));
   const failedTools = report.toolCalls.filter((c) => !c.ok);
   if (failedTools.length) console.log('  failed tool calls: ' + failedTools.map((c) => c.name + '#' + c.step).join(', '));
-  console.log('  requests ' + t.requests + ', input ~' + t.inputTokens.toLocaleString('en-US') + ' tok (uncached ~' + t.uncachedTokens.toLocaleString('en-US') + '), first request ~' + t.firstRequestTokens.toLocaleString('en-US') + ', last ~' + t.lastRequestTokens.toLocaleString('en-US'));
+  console.log('  requests ' + t.requests + ', input ~' + t.inputTokens.toLocaleString('en-US') + ' tok (uncached ~' + t.uncachedTokens.toLocaleString('en-US') + ', cache-weighted ~' + t.cacheWeightedTokens.toLocaleString('en-US') + '), first request ~' + t.firstRequestTokens.toLocaleString('en-US') + ', last ~' + t.lastRequestTokens.toLocaleString('en-US'));
   const share = (n) => (100 * n / Math.max(1, t.inputTokens)).toFixed(1) + '%';
   console.log('  system prompt ~' + t.systemTokens.toLocaleString('en-US') + ' (' + share(t.systemTokens) + '), tool schemas ~' + t.toolSchemaTokens.toLocaleString('en-US') + ' (' + share(t.toolSchemaTokens) + '), tool results ~' + t.toolResultTokens.toLocaleString('en-US') + ' (' + share(t.toolResultTokens) + '), user ~' + t.userTokens.toLocaleString('en-US') + ', assistant ~' + t.assistantTokens.toLocaleString('en-US') + ', JSON framing ~' + t.framingTokens.toLocaleString('en-US'));
   console.log('  usage accounting ' + (report.accounting.matches ? 'matches' : 'MISMATCH ' + JSON.stringify(report.accounting)));
