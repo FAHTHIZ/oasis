@@ -5,7 +5,7 @@ import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { deflateSync } from 'node:zlib';
 import { mkdtemp, writeFile, rm } from 'node:fs/promises';
-import { extractPdfTextBuiltin, extractTextFromContentStream, parsePageRange, parseToUnicode } from '../src/pdf.mjs';
+import { extractPdfPages, parsePageRange } from '../src/pdf.mjs';
 import { executeTool } from '../src/tools.mjs';
 
 // Builds a small, valid two-page PDF with Flate-compressed content streams.
@@ -14,15 +14,19 @@ function makePdf(pages) {
   const add = (body) => { objects.push(body); return objects.length; };
   const font = add('<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>');
   const pageIds = [];
-  const parentIndex = objects.length + pages.length * 2 + 1;
-  for (const lines of pages) {
-    const stream = 'BT /F1 12 Tf 72 720 Td ' + lines.map((line, index) => (index ? '0 -16 Td ' : '') + '(' + line.replace(/[()\\]/g, '\\$&') + ') Tj').join(' ') + ' ET';
-    const data = deflateSync(Buffer.from(stream, 'latin1'));
-    const content = add({ dict: '<< /Length ' + data.length + ' /Filter /FlateDecode >>', data });
-    pageIds.push(add('<< /Type /Page /Parent ' + parentIndex + ' 0 R /MediaBox [0 0 612 792] /Contents ' + content + ' 0 R /Resources << /Font << /F1 ' + font + ' 0 R >> >> >>'));
+  const streamCount = pages.reduce((sum, page) => sum + (Array.isArray(page[0]) ? page.length : 1), 0);
+  const parentIndex2 = objects.length + streamCount + pages.length + 1;
+  for (const page of pages) {
+    const streams = Array.isArray(page[0]) ? page : [page];
+    const contents = streams.map((lines, part) => {
+      const stream = 'BT /F1 12 Tf 72 ' + (720 - part * 200) + ' Td ' + lines.map((line, index) => (index ? '0 -16 Td ' : '') + '(' + line.replace(/[()\\]/g, '\\$&') + ') Tj').join(' ') + ' ET';
+      const data = deflateSync(Buffer.from(stream, 'latin1'));
+      return add({ dict: '<< /Length ' + data.length + ' /Filter /FlateDecode >>', data });
+    });
+    pageIds.push(add('<< /Type /Page /Parent ' + parentIndex2 + ' 0 R /MediaBox [0 0 612 792] /Contents [' + contents.map((id) => id + ' 0 R').join(' ') + '] /Resources << /Font << /F1 ' + font + ' 0 R >> >> >>'));
   }
   const pagesId = add('<< /Type /Pages /Kids [' + pageIds.map((id) => id + ' 0 R').join(' ') + '] /Count ' + pageIds.length + ' >>');
-  assert.equal(pagesId, parentIndex);
+  assert.equal(pagesId, parentIndex2);
   const catalog = add('<< /Type /Catalog /Pages ' + pagesId + ' 0 R >>');
   const chunks = [Buffer.from('%PDF-1.4\n', 'latin1')];
   const offsets = [];
@@ -52,13 +56,12 @@ test('page ranges are validated', () => {
   assert.throws(() => parsePageRange('abc'), /pages must/);
 });
 
-test('the built-in extractor reads text operators', () => {
-  assert.equal(extractTextFromContentStream('BT (Hello) Tj 0 -14 Td [(Wor) -50 (ld) -400 (again)] TJ ET').trim(), 'Hello\nWorld again');
-  assert.equal(extractTextFromContentStream('BT <00480069> Tj ET').trim(), 'Hi');
-  const text = extractPdfTextBuiltin(makePdf([['Invoice 42', 'Total: $10 (paid)'], ['Second page']]));
-  assert.match(text, /Invoice 42\nTotal: \$10 \(paid\)/);
-  assert.match(text, /Second page/);
-  assert.throws(() => extractPdfTextBuiltin(Buffer.from('hello')), /does not look like a PDF/);
+test('pdf.js extracts text per page, including pages with several content streams', async () => {
+  const { totalPages, pages } = await extractPdfPages(makePdf([['Invoice 42', 'Total: $10 (paid)'], [['Second page'], ['more text']]]));
+  assert.equal(totalPages, 2);
+  assert.match(pages[0], /Invoice 42\s+Total: \$10 \(paid\)/);
+  assert.match(pages[1], /Second page[\s\S]*more text/);
+  await assert.rejects(extractPdfPages(Buffer.from('hello')), /does not look like a PDF/);
 });
 
 test('read_file returns PDF text with page markers, with or without pdftotext', async (t) => {
@@ -66,7 +69,7 @@ test('read_file returns PDF text with page markers, with or without pdftotext', 
   t.after(() => rm(root, { recursive: true, force: true }));
   await writeFile(path.join(root, 'doc.pdf'), makePdf([['Alpha page one'], ['Beta page two'], ['Gamma page three']]));
   const fallback = await executeTool('read_file', { path: 'doc.pdf' }, { root, env: { ...process.env, OASIS_PDFTOTEXT: path.join(root, 'missing-pdftotext') } });
-  assert.equal(fallback.method, 'built-in');
+  assert.equal(fallback.method, 'pdf.js');
   assert.equal(fallback.totalPages, 3);
   assert.match(fallback.content, /--- page 1 ---\nAlpha page one[\s\S]*--- page 3 ---\nGamma page three/);
   const some = await executeTool('read_file', { path: 'doc.pdf', pages: '2-3' }, { root, env: { ...process.env, OASIS_PDFTOTEXT: path.join(root, 'missing-pdftotext') } });
@@ -78,13 +81,4 @@ test('read_file returns PDF text with page markers, with or without pdftotext', 
     assert.match(poppler.content, /--- page 3 ---\s*Gamma page three/);
     assert.equal(poppler.totalPages, 3);
   }
-});
-
-test('ToUnicode CMaps decode subset fonts (LibreOffice, Word, Chrome)', () => {
-  const cmap = parseToUnicode('1 begincodespacerange <0000> <FFFF> endcodespacerange 2 beginbfchar <0001> <0048> <0002> <0069> endbfchar 1 beginbfrange <0003> <0005> <0061> endbfrange 1 beginbfrange <0006> <0007> [<263A> <00E9>] endbfrange');
-  assert.equal(cmap.bytes, 2);
-  assert.equal(cmap.map.get(4), 'b');
-  assert.equal(cmap.map.get(6), '\u263a');
-  const text = extractTextFromContentStream('BT /F1 12 Tf <000100020003000400050007> Tj ET', { F1: cmap });
-  assert.equal(text.trim(), 'Hiabc\u00e9');
 });

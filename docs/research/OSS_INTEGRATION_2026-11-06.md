@@ -258,12 +258,41 @@ mode: `createSession` 190 ms (ripgrep) against 8,750 ms (built-in), and
 because the built-in search stops at 8,000 files and does not read
 `.gitignore`).
 
+### 7. PDF text: unpdf (pdf.js) replaces the built-in extractor
+
+Harness: `/tmp/unpdfenv/eval.mjs`. Reference is `pdftotext -enc UTF-8`;
+recall counts distinct lowercase words of four or more letters from the reference that
+appear in the candidate.
+
+| PDF | pages | built-in recall / ms | unpdf 2.1.0 recall / ms |
+|---|---|---|---|
+| arXiv 2508.21433 | 31 | 98.4% / 68 | 99.0% / 328 |
+| arXiv 1706.03762 | 15 | 97.1% / 140 | 99.0% / 572 |
+| IRS fw4.pdf | 5 | 90.3% / 57 | 100.0% / 101 |
+| W3C pdf-table example | 1 | 100.0% / 9 (table emitted twice, spurious page breaks) | 100.0% / 124 |
+| pdfobject sample | 1 | 99.2% / 5 | 100.0% / 24 |
+
+pdf.js is slower but correct, and it splits pages by the page tree rather
+than by counting content streams, so page ranges work without poppler.
+`pdftotext` stays first when it is installed. unpdf is 3.2 MB unpacked, has no
+dependencies and is imported lazily.
+
+### 8. Browser app zip: fflate
+
+`app/core/zip.mjs` wrote stored entries with its own CRC table and read
+archives without bounds checks. It is now a wrapper around `fflate` 0.8.3:
+deflate export (checked with `unzip -t`), ZIP64 import, and clear errors for damaged input. fflate does
+not verify CRCs on unzip; neither did the old reader. `src/zip.mjs` (CLI
+plugin archives) is kept: it rejects symlinks using external attributes,
+duplicate and case-colliding paths, and Windows-reserved names, and fflate's
+unzip filter does not expose the external attributes needed for the symlink check.
+
 ## Next
 
 - Candidate: validate tool-call arguments against tool schemas with Ajv before execution (Claude Code returns InputValidationError). Needs care: built-in tools accept alias argument names.
 - Item 8: observation masking (JetBrains, arXiv 2508.21433), measured with bench/tokens.
 - Item 9: `@anthropic-ai/sandbox-runtime` for network filtering.
 - Move `read-only-commands.mjs` from `splitShell` to the tree-sitter shell AST.
-- Replace the hand-written diff, zip and PDF code with `diff` (jsdiff), `fflate` and `unpdf` where measurement supports it.
+- Replace the hand-written diff code with `diff` (jsdiff) where measurement supports it.
 - Merge the definition and noise queries into one pass, or parse in a worker
   pool, if first-scan latency matters for large repositories.

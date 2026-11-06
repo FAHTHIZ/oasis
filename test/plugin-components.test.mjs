@@ -76,7 +76,12 @@ test('plugin bin/ is on PATH for commands the agent runs', async (t) => {
   const { executeTool } = await import('../src/tools.mjs');
   const result = await executeTool('run_command', { command: 'gotool', args: ['hi'] }, { root, env: commandEnv, autoApprove: true });
   assert.match(JSON.stringify(result), /gotool-ran hi/);
-  assert.equal(commandEnvironment(env, { pluginBinDirs: [] }), env);
+  // Without plugin dirs the environment is unchanged, except that hosts with no
+  // rg on PATH get the bundled ripgrep folder appended.
+  const { ripgrepPathAddition } = await import('../src/ripgrep.mjs');
+  const extra = ripgrepPathAddition(env);
+  if (extra) assert.equal(commandEnvironment(env, { pluginBinDirs: [] }).PATH, [env.PATH, extra].filter(Boolean).join(path.delimiter));
+  else assert.equal(commandEnvironment(env, { pluginBinDirs: [] }), env);
 });
 
 test('plugin settings.json agent becomes the main-thread agent; --agent overrides', async (t) => {
