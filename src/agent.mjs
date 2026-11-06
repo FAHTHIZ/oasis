@@ -5714,6 +5714,10 @@ async function runAgentTurnRaw(session, prompt, options = {}) {
   let fencedApplied = false;
   let echoNudges = 0;
   let emptyReplyNudges = 0;
+  let openTodoNudged = false;
+  // Only a checklist this turn worked on: a stale one from an earlier turn
+  // must not drag an unrelated question back into old work.
+  let todosWrittenThisTurn = false;
   let emptyReply = false;
   const failedCommandRuns = new Map();
   // command key -> { signature, count, editEpoch } for failures that persist across edits.
@@ -6030,6 +6034,16 @@ async function runAgentTurnRaw(session, prompt, options = {}) {
           continue;
         }
       }
+      // A final answer while the model's own checklist still has open steps is
+      // the clearest false "done": send it back once to finish those steps or
+      // to update the checklist and say plainly what is unfinished.
+      const openTodos = Array.isArray(session.todos) ? session.todos.filter((item) => item && item.status !== 'completed') : [];
+      if (text && openTodos.length && todosWrittenThisTurn && !openTodoNudged && !options.planOnly && permissionMode(session, options) !== 'plan') {
+        openTodoNudged = true;
+        if (typeof options.onActionNudge === 'function') { try { options.onActionNudge({ kind: 'open-todos' }); } catch {} }
+        session.messages.push({ role: 'user', content: '<system-reminder>Your checklist still has open steps:\n' + openTodos.map((item) => '- [' + item.status + '] ' + item.content).join('\n') + '\nFinish them now, or, if they cannot or should not be done, update the checklist with todo_write and tell the user plainly which steps are unfinished and why. Do not report the task as complete while steps are open.</system-reminder>' });
+        continue;
+      }
       // An empty reply (no text, no tool call) is not an answer: it used to end
       // the turn as "finished" with nothing to show. Ask again, then say so.
       if (!text) {
@@ -6266,6 +6280,7 @@ async function runAgentTurnRaw(session, prompt, options = {}) {
         // (outputs differ by timestamps, so the identical-outcome check misses it).
         const commandText = RETRY_TRACKED_COMMANDS.has(name) ? [args.command].concat(Array.isArray(args.args) ? args.args : []).join(' ') : '';
         if ((FILE_EDITING_TOOL_NAMES.has(name) || (commandText && scriptedEditKind(commandText))) && result && typeof result === 'object' && !result.error && result.approved !== false && result.blocked !== true) { failedCommandRuns.clear(); recentOutcomes.clear(); editEpoch++; }
+        if (name === 'todo_write' && result && typeof result === 'object' && !result.error) todosWrittenThisTurn = true;
         else if (RETRY_TRACKED_COMMANDS.has(name) && result && typeof result === 'object' && !result.background && !result.running) {
           const key = name + ' ' + JSON.stringify({ command: args.command, args: args.args, cwd: args.cwd });
           const failed = (Number.isInteger(result.exitCode) && result.exitCode !== 0) || result.timedOut === true;
