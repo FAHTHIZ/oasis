@@ -58,7 +58,7 @@ import { connectMcpServers, mcpToolDefinitions, callMappedMcpTool, closeMcpClien
 import { resolveMcpPrompt, expandMcpResourceMentions } from './mcp-extras.mjs';
 import { autoMemoryEnabled, memoryIndexPrompt, recallForPrompt, MEMORY_TOOL_DEFINITIONS, listMemories, saveMemory } from './auto-memory.mjs';
 import { learningEnabled, LEARNING_TOOL_DEFINITIONS, assertLearningVerification } from './learning.mjs';
-import { estimateTokens, microcompact, contextWindowSize, modelContextWindow, compactionThresholdChars, mustPreserveContextBlock, appendMustPreserveContext } from './context.mjs';
+import { estimateTokens, microcompact, maskObservations, contextWindowSize, modelContextWindow, compactionThresholdChars, mustPreserveContextBlock, appendMustPreserveContext } from './context.mjs';
 import { validateProtocol, validateBaseUrl } from './config.mjs';
 import { getTelemetry, lineChanges, genAiProviderName } from './telemetry.mjs';
 import { isAnthropicFamily, cloudEndpoint, cloudBody, cloudHeaders, cloudStreams } from './cloud-providers.mjs';
@@ -5859,6 +5859,12 @@ async function runAgentTurnRaw(session, prompt, options = {}) {
     const pruneWindow = contextWindowSize(session.config, options.env || process.env);
     // microcompact's own trigger (half the window): try the lossless pass first.
     if (estimateTokens(session.messages) > pruneWindow * 0.5) supersedeBeforeCompaction(session, options);
+    const maskTurns = Number.parseInt((options.env || process.env).OASIS_OBSERVATION_MASK_TURNS ?? '', 10);
+    if (maskTurns > 0) {
+      const maskBatch = Number.parseInt((options.env || process.env).OASIS_OBSERVATION_MASK_BATCH ?? '', 10);
+      const masked = maskObservations(session.messages, { keepTurns: maskTurns, batch: maskBatch > 0 ? maskBatch : 4 });
+      if (masked.masked) session.messages = masked.messages;
+    }
     const compacted = microcompact(session.messages, {
       windowTokens: pruneWindow
     });
