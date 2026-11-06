@@ -26,3 +26,25 @@ test('a trailing user message without a reply is closed', () => {
   const fresh = { messages: [{ role: 'system', content: 's' }] };
   assert.equal(repairInterruptedHistory(fresh), 0);
 });
+
+test('repair drops tool results that answer no preceding call and sends no extra fields', () => {
+  const session = { messages: [
+    { role: 'system', content: 'sys' },
+    { role: 'user', content: 'read two' },
+    { role: 'assistant', content: null, tool_calls: [
+      { id: 'c1', type: 'function', function: { name: 'read_file', arguments: '{}' } },
+      { id: 'c2', type: 'function', function: { name: 'read_file', arguments: '{}' } }
+    ] },
+    { role: 'tool', tool_call_id: 'c1', name: 'read_file', content: 'A' },
+    { role: 'user', content: 'continue' },
+    // Arrived after the exchange was closed (late result, or a truncated save):
+    // OpenAI, Responses and Anthropic all reject a result with no matching call.
+    { role: 'tool', tool_call_id: 'c2', name: 'read_file', content: 'late' },
+    { role: 'tool', tool_call_id: 'zz', name: 'read_file', content: 'orphan' },
+    { role: 'assistant', content: 'ok' }
+  ] };
+  assert.ok(repairInterruptedHistory(session) >= 3);
+  assert.deepEqual(session.messages.map((m) => m.role + (m.tool_call_id ? ':' + m.tool_call_id : '')), ['system', 'user', 'assistant', 'tool:c1', 'tool:c2', 'user', 'assistant']);
+  for (const message of session.messages) assert.equal('result' in message, false, 'only wire fields go to the provider');
+  assert.equal(repairInterruptedHistory(session), 0);
+});
