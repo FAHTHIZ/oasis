@@ -161,6 +161,35 @@ export function microcompact(messages, options = {}) {
 }
 
 
+/**
+ * Observation masking (Lindenbauer et al., "The Complexity Trap", arXiv
+ * 2508.21433): tool outputs from more than `keepTurns` assistant turns ago are
+ * replaced by re-run stubs, whatever the context size. Masking happens in
+ * batches of `batch` outputs so the cached prompt prefix is invalidated once
+ * per batch instead of on every turn. Never mutates input.
+ */
+export function maskObservations(messages, { keepTurns = 10, batch = 4 } = {}) {
+  if (!Array.isArray(messages) || !(keepTurns > 0)) return { messages, masked: 0 };
+  let turns = 0;
+  let boundary = messages.length;
+  for (let i = messages.length - 1; i >= 1; i--) {
+    if (messages[i] && messages[i].role === 'assistant' && ++turns >= keepTurns) { boundary = i; break; }
+  }
+  if (turns < keepTurns) return { messages, masked: 0 };
+  const candidates = [];
+  for (let i = 1; i < boundary; i++) {
+    const message = messages[i];
+    if (!message || message.role !== 'tool' || typeof message.content !== 'string') continue;
+    if (message.name === 'todo_write' || message.content.length < MIN_PRUNABLE_CHARS ||
+        message.content.startsWith('[Older tool output compacted')) continue;
+    candidates.push(i);
+  }
+  if (candidates.length < Math.max(1, batch)) return { messages, masked: 0 };
+  const output = messages.slice();
+  for (const i of candidates) output[i] = { ...output[i], content: stubFor(output[i]) };
+  return { messages: output, masked: candidates.length };
+}
+
 const MUST_PRESERVE_KINDS = new Set(['rule', 'goal', 'plan', 'path', 'constraint', 'error', 'verification']);
 const MAX_MUST_PRESERVE_ITEMS = 20;
 const MAX_MUST_PRESERVE_TEXT = 600;
