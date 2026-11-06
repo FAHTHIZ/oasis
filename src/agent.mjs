@@ -5325,12 +5325,26 @@ export function repairInterruptedHistory(session) {
       role: 'tool',
       tool_call_id: call.id,
       name: call.function && call.function.name || 'tool',
-      content: JSON.stringify({ error: 'Interrupted by the user before this tool finished.' }),
-      result: { error: 'Interrupted by the user before this tool finished.' }
+      content: JSON.stringify({ error: 'Interrupted by the user before this tool finished.' })
     }));
     messages.splice(end, 0, ...fillers);
     repaired += fillers.length;
     i = end + fillers.length - 1;
+  }
+  // A tool result must directly follow the assistant message that made the
+  // call. One that does not (a late result, a duplicate, or the remains of a
+  // trimmed exchange) makes every provider reject the whole request.
+  let open = new Set();
+  for (let i = 0; i < messages.length; i++) {
+    const message = messages[i];
+    if (message.role === 'tool') {
+      if (open.has(message.tool_call_id)) { open.delete(message.tool_call_id); continue; }
+      messages.splice(i, 1);
+      i--;
+      repaired++;
+      continue;
+    }
+    open = message.role === 'assistant' && Array.isArray(message.tool_calls) ? new Set(message.tool_calls.map((call) => call && call.id).filter(Boolean)) : new Set();
   }
   const last = messages[messages.length - 1];
   if (last && (last.role === 'user' || last.role === 'tool') && messages.length > 1) {
