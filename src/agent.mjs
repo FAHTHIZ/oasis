@@ -22,6 +22,7 @@ import { guardExternalContent, clearInjectionTurnFlag, untrustedGuardEnabled } f
 import { maskSecrets, unmaskSecretsForTool, shareSecretVault, secretShieldEnabled, SECRET_SHIELD_NOTE } from './secret-shield.mjs';
 import { extractFollowups, recordFollowups, followupReminder, followupsEnabled } from './followups.mjs';
 import { dedupedReadHit, recordDedupedRead } from './read-dedup.mjs';
+import { supersedeHistory } from './superseded-results.mjs';
 import { startPluginMonitorsFor } from './monitors.mjs';
 import { parseChannelEntries, mcpInstructionsSection, flushPendingChannels } from './channels.mjs';
 import { SESSION_TOOL_DEFINITIONS, SESSION_TOOL_NAMES, SESSION_READ_ONLY_TOOLS, deferMcpTools, deferRareBuiltinTools, loadDeferredTool, deferredToolsPrompt, toolGuidanceFor, runSessionTool, stopCron, TOOL_SEARCH_DEFINITION } from './session-tools.mjs';
@@ -213,12 +214,28 @@ export function usableCompactionSummary(text) {
   return summary;
 }
 
+// Before anything lossy (a model summary, pruning old tool output), drop the
+// tool results that a newer result already covers: older reads of a file that
+// was read again, earlier runs of a command that ran again. Returns how many
+// results were replaced.
+function supersedeBeforeCompaction(session, options = {}) {
+  const lossless = supersedeHistory(session.messages || [], { root: session.root, env: options.env || process.env, config: session.config || {} });
+  if (!lossless.replaced) return 0;
+  session.messages = lossless.messages;
+  session.supersededResultChars = (session.supersededResultChars || 0) + lossless.saved;
+  return lossless.replaced;
+}
+
 export async function compactHistoryIfNeeded(session, options = {}) {
-  const messages = session.messages || [];
+  let messages = session.messages || [];
   const thresholdChars = Number.isFinite(options.thresholdChars) && options.thresholdChars > 0 ? options.thresholdChars : compactionThresholdChars(session.config || {}, options.env || process.env);
   const messageLimit = thresholdChars > HISTORY_COMPACT_THRESHOLD_CHARS ? 400 : 60;
   if (!options.force && messages.length <= messageLimit && historyTextSize(messages) <= thresholdChars) {
     return { compacted: false, tokensUsed: 0 };
+  }
+  if (!options.force && supersedeBeforeCompaction(session, options)) {
+    messages = session.messages;
+    if (messages.length <= messageLimit && historyTextSize(messages) <= thresholdChars) return { compacted: false, tokensUsed: 0 };
   }
   // A manual /compact summarizes the whole conversation so far.
   const boundary = options.force ? messages.length : findCompactionBoundary(messages);
@@ -395,6 +412,7 @@ async function recoverFromContextOverflow(session, requestIndex, options, attemp
     tokensUsed += Number(midTurn.tokensUsed || 0);
   } catch {}
   const window = contextWindowSize(session.config, options.env || process.env);
+  supersedeBeforeCompaction(session, options);
   const squeezed = microcompact(session.messages, { windowTokens: window, triggerRatio: 0, targetRatio: attempt > 1 ? 0.15 : 0.3, keepRecentTokens: Math.floor(window * (attempt > 1 ? 0.05 : 0.1)) });
   if (squeezed.pruned > 0) session.messages = squeezed.messages;
   // The newest tool output can be the culprit itself (a huge read or log); clip oversized ones.
@@ -409,12 +427,17 @@ async function recoverFromContextOverflow(session, requestIndex, options, attemp
 }
 
 async function compactMidTurnHistoryIfNeeded(session, requestIndex, options = {}) {
-  const messages = session.messages || [];
-  const beforeTokens = estimateTokens(messages);
-  const beforeChars = historyTextSize(messages);
-  if ((!options.force && beforeChars <= compactionThresholdChars(session.config || {}, options.env || process.env)) || messages.length < requestIndex + 5) {
+  let messages = session.messages || [];
+  const threshold = compactionThresholdChars(session.config || {}, options.env || process.env);
+  if ((!options.force && historyTextSize(messages) <= threshold) || messages.length < requestIndex + 5) {
     return { compacted: false, tokensUsed: 0 };
   }
+  if (!options.force && supersedeBeforeCompaction(session, options)) {
+    messages = session.messages;
+    if (historyTextSize(messages) <= threshold) return { compacted: false, tokensUsed: 0 };
+  }
+  const beforeTokens = estimateTokens(messages);
+  const beforeChars = historyTextSize(messages);
 
   // Preserve the newest tool-call batch and its outputs. Starting at requestIndex + 2
   // deliberately skips the first batch: there must be completed in-task history to fold.
@@ -5636,8 +5659,11 @@ async function runAgentTurnRaw(session, prompt, options = {}) {
       options.onUsage({ inputTokens: 0, outputTokens: 0, totalTokens: midTurnCompaction.tokensUsed, step: step + 1, phase: 'mid-turn-compaction', costUsd: Number(midTurnCompaction.costUsd) || 0 });
     }
     throwIfCancelled(options.signal);
+    const pruneWindow = contextWindowSize(session.config, options.env || process.env);
+    // microcompact's own trigger (half the window): try the lossless pass first.
+    if (estimateTokens(session.messages) > pruneWindow * 0.5) supersedeBeforeCompaction(session, options);
     const compacted = microcompact(session.messages, {
-      windowTokens: contextWindowSize(session.config, options.env || process.env)
+      windowTokens: pruneWindow
     });
     if (compacted.pruned > 0) {
       session.messages = compacted.messages;

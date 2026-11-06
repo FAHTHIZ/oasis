@@ -110,6 +110,8 @@ Reductions, each measured with the benchmark right after it landed (input tokens
 | --- | --- | --- |
 | Baseline | ~180,897 | ~286,700 |
 | `git_status` and `git_diff` results without the command line and the duplicate `output` copy of stdout | ~179,776 (−0.6%) | ~285,296 (−0.5%) |
+| Superseded-result elision on every step (measured, not shipped): raw input down, but each rewrite of an old message breaks the cached prefix | ~179,026 raw, cache-weighted ~34,184 (+12% vs ~30,463) | ~284,405 raw, cache-weighted ~48,874 (+0.8%) |
+| Superseded-result elision only when compaction or pruning is about to run (shipped) | unchanged (no context pressure in this run) | unchanged |
 
 What it shows: the scripted total (~181K) is close to what the live run's gateway logged (188,606 for 18 requests), and two thirds of it is the fixed part, the system prompt and 22 tool schemas resent on every request. The prefix is stable from request to request (only ~8% is new each time), so on a provider with prefix caching most of it is billed at the cached rate; on free endpoints without caching, every byte counts. The benchmark also checks that the per-request usage OASIS reports adds up to what the provider returned.
 

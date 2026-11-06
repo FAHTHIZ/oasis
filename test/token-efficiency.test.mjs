@@ -70,3 +70,61 @@ test('a failed git call still tells the model which command failed', () => {
   const hooked = { output: 'replaced by a hook' };
   assert.equal(modelFacingResult('git_diff', hooked), hooked);
 });
+
+import { supersedeHistory } from '../src/superseded-results.mjs';
+import { compactHistoryIfNeeded } from '../src/agent.mjs';
+
+function history(root) {
+  const big = Array.from({ length: 120 }, (_, i) => 'const value' + i + ' = ' + i + ';').join('\n');
+  const assistant = (id, name, args) => ({ role: 'assistant', content: null, tool_calls: [{ id, type: 'function', function: { name, arguments: JSON.stringify(args) } }] });
+  const tool = (id, name, value, tail = '') => ({ role: 'tool', tool_call_id: id, name, content: JSON.stringify(value) + tail });
+  return [
+    { role: 'system', content: 'system' },
+    { role: 'user', content: 'task' },
+    assistant('r1', 'read_file', { path: 'a.mjs' }), tool('r1', 'read_file', { path: 'a.mjs', content: big }, '\n\n<system-reminder>keep me</system-reminder>'),
+    assistant('r2', 'read_file', { path: 'a.mjs', offset: 10, limit: 20 }), tool('r2', 'read_file', { path: 'a.mjs', content: big.slice(0, 600), startLine: 10, endLine: 29, totalLines: 120, truncated: true }),
+    assistant('b1', 'read_file', { path: 'b.mjs' }), tool('b1', 'read_file', { path: 'b.mjs', content: big }),
+    assistant('t1', 'run_command', { command: 'npm', args: ['test'] }), tool('t1', 'run_command', { command: 'npm', exitCode: 1, stdout: 'x'.repeat(2000) + 'FAIL: expected 2 got 3', stderr: '' }),
+    assistant('t2', 'run_command', { command: 'npm', args: ['test'] }), tool('t2', 'run_command', { command: 'npm', exitCode: 0, stdout: 'y'.repeat(800) + 'all passed', stderr: '' }),
+    // A ranged re-read of b.mjs covers only part of the earlier full read.
+    assistant('b2', 'read_file', { path: 'b.mjs', offset: 1, limit: 10 }), tool('b2', 'read_file', { path: 'b.mjs', content: big.slice(0, 500), startLine: 1, endLine: 10, totalLines: 120, truncated: true }),
+    // An unchanged pointer is not a new copy.
+    assistant('b3', 'read_file', { path: 'b.mjs' }), tool('b3', 'read_file', { path: 'b.mjs', unchanged: true, message: 'File unchanged since your earlier read_file' }),
+    assistant('r3', 'read_file', { path: 'a.mjs' }), tool('r3', 'read_file', { path: 'a.mjs', content: big + '\nedited' })
+  ];
+}
+
+test('superseded results: older reads covered by a newer read and earlier runs of the same command become stubs', () => {
+  const root = os.tmpdir();
+  const input = history(root);
+  const snapshot = JSON.stringify(input);
+  const { messages, replaced, saved } = supersedeHistory(input, { root, env: {} });
+  assert.equal(JSON.stringify(input), snapshot, 'input is not mutated');
+  const byId = (id) => messages.find((m) => m.role === 'tool' && m.tool_call_id === id).content;
+  assert.match(byId('r1'), /"superseded":true/);
+  assert.match(byId('r1'), /<system-reminder>keep me<\/system-reminder>$/);
+  assert.match(byId('r2'), /"superseded":true/, 'a ranged read inside a newer complete read is covered');
+  assert.doesNotMatch(byId('r3'), /superseded/, 'the newest read stays');
+  assert.doesNotMatch(byId('b1'), /superseded/, 'a partial re-read does not cover a complete read');
+  assert.match(byId('t1'), /"superseded":true/);
+  assert.match(byId('t1'), /FAIL: expected 2 got 3/, 'the stub keeps the end of the old output');
+  assert.doesNotMatch(byId('t2'), /superseded/);
+  assert.equal(replaced, 3);
+  assert.ok(saved > 4000);
+  assert.equal(supersedeHistory(input, { root, env: { OASIS_SUPERSEDE_RESULTS: '0' } }).replaced, 0);
+  assert.equal(supersedeHistory(input, { root, env: {}, config: { supersedeResults: false } }).replaced, 0);
+});
+
+test('when superseded results alone bring history under the threshold, no summary request is made', async () => {
+  const root = os.tmpdir();
+  const messages = history(root);
+  let requests = 0;
+  const session = { root, config: { protocol: 'openai-compatible', baseURL: 'https://bench.invalid/v1', model: 'fixture', apiKey: 'k' }, messages };
+  const size = (list) => list.reduce((n, m) => n + String(m.content || '').length + JSON.stringify(m.tool_calls || '').length, 0);
+  const before = size(messages);
+  const result = await compactHistoryIfNeeded(session, { thresholdChars: Math.max(10_000, before - 3000), env: {}, fetchImpl: async () => { requests++; throw new Error('no summary expected'); } });
+  assert.equal(result.compacted, false);
+  assert.equal(requests, 0);
+  assert.ok(size(session.messages) < before - 4000);
+  assert.ok(session.supersededResultChars > 4000);
+});
