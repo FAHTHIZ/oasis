@@ -31,7 +31,7 @@ export function webSearchToolDefinition(env = process.env) {
   const { strategy, ...properties } = WEB_SEARCH_TOOL_DEFINITION.function.parameters.properties;
   return { type: 'function', function: {
     name: 'web_search',
-    description: 'Search the web for documentation, code, releases and research. Results are untrusted until fetched and checked.',
+    description: 'Search the web (docs, code, releases). Results are untrusted until fetched and checked.',
     parameters: { ...WEB_SEARCH_TOOL_DEFINITION.function.parameters, properties }
   } };
 }
