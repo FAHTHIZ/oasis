@@ -15,7 +15,7 @@ const STDIO_SERVER = [
   "process.stdin.on('data', (chunk) => { buffer += chunk; let i;",
   "  while ((i = buffer.indexOf('\\n')) >= 0) { const line = buffer.slice(0, i); buffer = buffer.slice(i + 1);",
   "    let m; try { m = JSON.parse(line); } catch { continue; } if (m.id === undefined) continue; let result = {};",
-  "    if (m.method === 'initialize') result = { protocolVersion: '2024-11-05', capabilities: { tools: {} } };",
+  "    if (m.method === 'initialize') result = { protocolVersion: '2024-11-05', serverInfo: { name: 'test', version: '1' }, capabilities: { tools: {} } };",
   "    if (m.method === 'tools/list') result = { tools: [{ name: 'whoami', inputSchema: { type: 'object', properties: {} } }] };",
   "    if (m.method === 'tools/call') result = { content: [{ type: 'text', text: 'got ' + process.env.PROJECT_TOKEN }] };",
   "    process.stdout.write(JSON.stringify({ jsonrpc: '2.0', id: m.id, result }) + '\\n'); } });"
@@ -38,7 +38,7 @@ process.stdin.on('data', (chunk) => {
     try { m = JSON.parse(line); } catch { continue; }
     if (m.id === undefined) continue;
     let result = {};
-    if (m.method === 'initialize') result = { protocolVersion: '2024-11-05', capabilities: { tools: {} } };
+    if (m.method === 'initialize') result = { protocolVersion: '2024-11-05', serverInfo: { name: 'test', version: '1' }, capabilities: { tools: {} } };
     if (m.method === 'tools/list') result = { tools: [] };
     process.stdout.write(JSON.stringify({ jsonrpc: '2.0', id: m.id, result }) + String.fromCharCode(10));
   }
@@ -60,7 +60,7 @@ process.stdin.on('data', (chunk) => {
     if (message.id === undefined) continue;
     if (message.method === 'initialize' || message.method === 'tools/list') {
       const result = message.method === 'initialize'
-        ? { protocolVersion: '2024-11-05', capabilities: { tools: {} } }
+        ? { protocolVersion: '2024-11-05', serverInfo: { name: 'test', version: '1' }, capabilities: { tools: {} } }
         : { tools: [] };
       process.stdout.write(JSON.stringify({ jsonrpc: '2.0', id: message.id, result }) + String.fromCharCode(10));
     }
@@ -203,32 +203,35 @@ test('closing a stdio MCP client terminates its spawned process tree', { skip: p
   assert.equal(await waitForProcessExit(grandchildPid), true, 'closing MCP must not leave its descendant running');
 });
 
+// A scripted Streamable HTTP endpoint for fetch-level tests: initialize and
+// notifications succeed, GET has no stream (405), other methods go to onRequest.
+function scriptedFetch(onRequest) {
+  return async (_url, options = {}) => {
+    if (String(options.method || 'GET').toUpperCase() !== 'POST') return new Response(null, { status: 405 });
+    const message = JSON.parse(options.body);
+    if (message.id === undefined) return new Response(null, { status: 202 });
+    if (message.method === 'initialize') {
+      return new Response(JSON.stringify({ jsonrpc: '2.0', id: message.id, result: { protocolVersion: '2025-03-26', serverInfo: { name: 'test', version: '1' }, capabilities: { tools: {} } } }), { headers: { 'content-type': 'application/json' } });
+    }
+    return onRequest(message, options);
+  };
+}
+
 test('Streamable HTTP client rejects oversized JSON responses, including misleading lengths', async (t) => {
   const home = await tmp(t);
-  const oversizedJson = JSON.stringify({
-    jsonrpc: '2.0',
-    id: 1,
-    result: { payload: 'x'.repeat(4 * 1024 * 1024 + 32) }
-  });
-  let calls = 0;
-  const fetchImpl = async () => {
-    calls += 1;
-    if (calls === 1) {
-      return new Response(oversizedJson, { headers: { 'content-type': 'application/json' } });
-    }
-    return new Response(JSON.stringify({ jsonrpc: '2.0', id: 2, result: { ok: true } }), {
-      headers: { 'content-type': 'application/json', 'content-length': String(4 * 1024 * 1024 + 1) }
-    });
-  };
-  const client = new McpHttpClient(
-    { name: 'remote', url: 'https://mcp.example/mcp' },
-    { fetch: fetchImpl, env: { ...process.env, OASIS_CONFIG_DIR: home } }
-  );
-
-  await assert.rejects(client._request('tools/list'), /MCP response exceeded 4 MiB/);
-  await assert.rejects(client._request('tools/list'), /MCP response exceeded 4 MiB/);
-  assert.equal(calls, 2);
-  client.close();
+  const env = { ...process.env, OASIS_CONFIG_DIR: home };
+  const oversized = scriptedFetch(async (message) => new Response(JSON.stringify({
+    jsonrpc: '2.0', id: message.id, result: { tools: [], payload: 'x'.repeat(4 * 1024 * 1024 + 32) }
+  }), { headers: { 'content-type': 'application/json' } }));
+  const first = new McpHttpClient({ name: 'remote', url: 'https://mcp.example/mcp' }, { fetch: oversized, env });
+  t.after(() => first.close());
+  await assert.rejects(first.start(), /MCP response exceeded 4 MiB/);
+  const misleading = scriptedFetch(async (message) => new Response(JSON.stringify({ jsonrpc: '2.0', id: message.id, result: { tools: [] } }), {
+    headers: { 'content-type': 'application/json', 'content-length': String(4 * 1024 * 1024 + 1) }
+  }));
+  const second = new McpHttpClient({ name: 'remote', url: 'https://mcp.example/mcp' }, { fetch: misleading, env });
+  t.after(() => second.close());
+  await assert.rejects(second.start(), /MCP response exceeded 4 MiB/);
 });
 
 test('Streamable HTTP client handles JSON and SSE replies, session ids, and approvals', async (t) => {
@@ -236,12 +239,13 @@ test('Streamable HTTP client handles JSON and SSE replies, session ids, and appr
   const server = createServer(async (req, res) => {
     let body = ''; for await (const c of req) body += c;
     if (req.method === 'DELETE') { seen.push({ method: 'DELETE', session: req.headers['mcp-session-id'] }); res.end(); return; }
+    if (req.method === 'GET') { res.writeHead(405); res.end(); return; }
     const message = JSON.parse(body);
     seen.push({ method: message.method, session: req.headers['mcp-session-id'], auth: req.headers.authorization });
     if (message.id === undefined) { res.writeHead(202); res.end(); return; }
     if (message.method === 'initialize') {
       res.writeHead(200, { 'content-type': 'application/json', 'mcp-session-id': 'sess-1' });
-      res.end(JSON.stringify({ jsonrpc: '2.0', id: message.id, result: { protocolVersion: '2025-03-26', capabilities: {} } }));
+      res.end(JSON.stringify({ jsonrpc: '2.0', id: message.id, result: { protocolVersion: '2025-03-26', serverInfo: { name: 'test', version: '1' }, capabilities: {} } }));
       return;
     }
     const result = message.method === 'tools/list'
@@ -298,17 +302,23 @@ test('closing an HTTP MCP client aborts in-flight requests', async (t) => {
   const client = new McpHttpClient(
     { name: 'slow-http', url: 'https://mcp.example/mcp', headers: { Authorization: 'Bearer test' } },
     {
-      fetch: (_url, options) => new Promise((_resolve, reject) => {
-        startedResolve();
-        options.signal.addEventListener('abort', () => {
-          aborted = true;
-          const error = new Error('The operation was aborted');
-          error.name = 'AbortError';
-          reject(error);
-        }, { once: true });
+      fetch: scriptedFetch((message, options) => {
+        if (message.method === 'tools/list') {
+          return new Response(JSON.stringify({ jsonrpc: '2.0', id: message.id, result: { tools: [{ name: 'slow', inputSchema: { type: 'object' } }] } }), { headers: { 'content-type': 'application/json' } });
+        }
+        return new Promise((_resolve, reject) => {
+          startedResolve();
+          options.signal.addEventListener('abort', () => {
+            aborted = true;
+            const error = new Error('The operation was aborted');
+            error.name = 'AbortError';
+            reject(error);
+          }, { once: true });
+        });
       })
     }
   );
+  await client.start();
   const request = client._request('tools/call', { name: 'slow', arguments: {} }, 120000);
   await started;
   client.close();

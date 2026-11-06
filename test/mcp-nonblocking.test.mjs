@@ -15,7 +15,7 @@ const SLOW_SERVER = [
   "process.stdin.on('data', (chunk) => { buffer += chunk; let i;",
   "  while ((i = buffer.indexOf('\\n')) >= 0) { const line = buffer.slice(0, i); buffer = buffer.slice(i + 1);",
   "    let m; try { m = JSON.parse(line); } catch { continue; } if (m.id === undefined) continue;",
-  "    if (m.method === 'initialize') { const id = m.id; setTimeout(() => reply(id, { protocolVersion: '2025-03-26', capabilities: { tools: {} } }), 800); }",
+  "    if (m.method === 'initialize') { const id = m.id; setTimeout(() => reply(id, { protocolVersion: '2025-03-26', serverInfo: { name: 'test', version: '1' }, capabilities: { tools: {} } }), 800); }",
   "    else if (m.method === 'tools/list') reply(m.id, { tools: [{ name: 'ping', description: 'Ping', inputSchema: { type: 'object', properties: {} } }] });",
   "    else if (m.method === 'tools/call') reply(m.id, { content: [{ type: 'text', text: 'pong' }] });",
   "    else reply(m.id, {}); } });"

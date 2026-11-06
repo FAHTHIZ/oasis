@@ -143,8 +143,42 @@ for OASIS). Warm in-process maps are ~0.2 s either way.
 
 Full suite after this change: 1988 tests, 1979 pass, 0 fail, 9 skipped.
 
+### 3. MCP client on the official SDK
+
+Deleted: the hand-written stdio JSON-RPC client (`src/mcp.mjs`), the
+Streamable HTTP and SSE parsers (`src/mcp-project.mjs`), and OAuth discovery,
+registration, PKCE, exchange and refresh (`src/mcp-oauth.mjs`). Replaced with
+`@modelcontextprotocol/client` 2.4.0 (Apache-2.0; deps zod 4, jose,
+cross-spawn, eventsource, pkce-challenge). OASIS keeps: the token store,
+HTTPS-only/DNS-pinned OAuth fetch (`createOAuthFetch`), the 4 MiB response
+cap, process-group stdio spawning with a filtered environment, tool pinning,
+roots/elicitation/channels handlers.
+
+Measured with the official conformance suite
+(github.com/modelcontextprotocol/conformance, 21 client scenarios, spec
+2025-11-25), `scripts/mcp-conformance/run.sh`:
+
+| Client | Non-auth (4) | Auth (17) | Warnings |
+|---|---|---|---|
+| Old hand-written | 2 (failed elicitation defaults, SSE retry) | ~0 as shipped (localhost AS refused); with the loopback rule relaxed, 6 hard failures + 3 warnings | - |
+| SDK-backed OASIS | 4 | 17 | 0 |
+
+Failures the old client had with the loopback rule relaxed: resource
+identifier normalisation, path-based AS discovery, scope step-up,
+`client_secret_basic` (2 scenarios), scope from `WWW-Authenticate`, CIMD.
+
+Costs: the SDK import is ~110 ms, paid only when a server connects. It first
+landed inside `createSession` in non-blocking mode (session start 108 ms ->
+~240 ms, which failed `mcp-nonblocking` under load); background connection
+now starts after `createSession` returns (back to ~108 ms). The SDK is
+stricter than the old client: `initialize` must carry `serverInfo`, and AS
+metadata must list `response_types_supported` (RFC 8414); test fixtures were
+updated to the spec.
+
 ## Next
 
-- Item 3/4 in the queue: official MCP SDK client transports.
+- Item 5: ajv for tool-argument/MCP schema validation; yaml for front matter.
+- Item 6: Readability + linkedom + turndown for `fetch_url`.
+- Item 7: `@vscode/ripgrep` for `grep`.
 - Merge the definition and noise queries into one pass, or parse in a worker
   pool, if first-scan latency matters for large repositories.
