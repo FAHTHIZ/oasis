@@ -1,13 +1,12 @@
-// Minimal Chrome DevTools Protocol client with no dependencies: finds and launches
-// Chrome/Chromium/Edge with --remote-debugging-port, and speaks CDP over a small
-// RFC 6455 WebSocket client (Node 20 has no global WebSocket without a flag).
+// Minimal Chrome DevTools Protocol client: finds and launches Chrome/Chromium/
+// Edge with --remote-debugging-port, and speaks CDP over the WHATWG WebSocket
+// built into Node 22+ (undici).
 import { spawn } from 'node:child_process';
 import { existsSync, readdirSync } from 'node:fs';
 import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import http from 'node:http';
 import os from 'node:os';
 import path from 'node:path';
-import crypto from 'node:crypto';
 import { processTreeSpawnOptions, signalProcessTree } from './process-tree.mjs';
 
 export function findChrome(env = process.env, platform = process.platform) {
@@ -58,68 +57,28 @@ async function readDevToolsPort(profile) {
   } catch { return 0; }
 }
 
-// --- WebSocket (client side, text frames only, masked as the RFC requires) ---
-class WsClient {
-  constructor(socket) {
-    this.socket = socket;
-    this.buffer = Buffer.alloc(0);
-    this.fragments = [];
-    this.onmessage = null;
-    this.onclose = null;
-    socket.on('data', (chunk) => this.feed(chunk));
-    socket.on('close', () => { if (this.onclose) this.onclose(); });
-    socket.on('error', () => {});
-  }
-  static connect(url) {
-    const target = new URL(url);
-    return new Promise((resolve, reject) => {
-      const key = crypto.randomBytes(16).toString('base64');
-      const req = http.request({ host: target.hostname, port: target.port, path: target.pathname + target.search, headers: { Connection: 'Upgrade', Upgrade: 'websocket', 'Sec-WebSocket-Version': '13', 'Sec-WebSocket-Key': key } });
-      req.on('upgrade', (res, socket, head) => {
-        const expected = crypto.createHash('sha1').update(key + '258EAFA5-E914-47DA-95CA-C5AB0DC85B11').digest('base64');
-        if (res.headers['sec-websocket-accept'] !== expected) { socket.destroy(); reject(new Error('Bad WebSocket handshake')); return; }
-        const client = new WsClient(socket);
-        if (head && head.length) client.feed(head);
-        resolve(client);
-      });
-      req.on('response', (res) => reject(new Error('WebSocket upgrade refused: HTTP ' + res.statusCode)));
-      req.on('error', reject);
-      req.end();
+// --- WebSocket: the WHATWG client built into Node 22+ (undici) ---
+// A small adapter keeps CdpPage's onmessage(text)/onclose() shape.
+function connectWebSocket(url, WebSocketImpl = globalThis.WebSocket) {
+  if (typeof WebSocketImpl !== 'function') return Promise.reject(new Error('This Node.js has no WebSocket; use Node 22 or later.'));
+  return new Promise((resolve, reject) => {
+    let opened = false;
+    const socket = new WebSocketImpl(url);
+    socket.binaryType = 'arraybuffer';
+    const client = {
+      onmessage: null,
+      onclose: null,
+      send: (text) => socket.send(text),
+      close: () => { try { socket.close(); } catch {} }
+    };
+    socket.addEventListener('open', () => { opened = true; resolve(client); });
+    socket.addEventListener('message', (event) => {
+      const text = typeof event.data === 'string' ? event.data : Buffer.from(event.data).toString('utf8');
+      if (client.onmessage) client.onmessage(text);
     });
-  }
-  send(text) {
-    const payload = Buffer.from(text, 'utf8');
-    const len = payload.length;
-    const header = len < 126 ? Buffer.from([0x81, 0x80 | len]) : len < 65536 ? Buffer.from([0x81, 0x80 | 126, len >> 8, len & 255]) : Buffer.concat([Buffer.from([0x81, 0x80 | 127]), (() => { const b = Buffer.alloc(8); b.writeBigUInt64BE(BigInt(len)); return b; })()]);
-    const mask = crypto.randomBytes(4);
-    for (let i = 0; i < len; i++) payload[i] ^= mask[i & 3];
-    this.socket.write(Buffer.concat([header, mask, payload]));
-  }
-  feed(chunk) {
-    this.buffer = Buffer.concat([this.buffer, chunk]);
-    for (;;) {
-      if (this.buffer.length < 2) return;
-      const fin = (this.buffer[0] & 0x80) !== 0;
-      const opcode = this.buffer[0] & 0x0f;
-      const masked = (this.buffer[1] & 0x80) !== 0;
-      let len = this.buffer[1] & 0x7f;
-      let offset = 2;
-      if (len === 126) { if (this.buffer.length < 4) return; len = this.buffer.readUInt16BE(2); offset = 4; }
-      else if (len === 127) { if (this.buffer.length < 10) return; len = Number(this.buffer.readBigUInt64BE(2)); offset = 10; }
-      const maskBytes = masked ? 4 : 0;
-      if (this.buffer.length < offset + maskBytes + len) return;
-      let payload = this.buffer.subarray(offset + maskBytes, offset + maskBytes + len);
-      if (masked) { const mask = this.buffer.subarray(offset, offset + 4); payload = Buffer.from(payload.map((byte, i) => byte ^ mask[i & 3])); }
-      this.buffer = this.buffer.subarray(offset + maskBytes + len);
-      if (opcode === 0x8) { this.close(); return; }
-      if (opcode === 0x9) { this.socket.write(Buffer.from([0x8a, 0x80, 0, 0, 0, 0])); continue; }
-      if (opcode === 0x1 || opcode === 0x2 || opcode === 0x0) {
-        this.fragments.push(Buffer.from(payload));
-        if (fin) { const text = Buffer.concat(this.fragments).toString('utf8'); this.fragments = []; if (this.onmessage) this.onmessage(text); }
-      }
-    }
-  }
-  close() { try { this.socket.end(Buffer.from([0x88, 0x80, 0, 0, 0, 0])); } catch {} try { this.socket.destroy(); } catch {} }
+    socket.addEventListener('error', (event) => { if (!opened) reject(new Error('WebSocket connection failed: ' + (event.message || (event.error && event.error.message) || url))); });
+    socket.addEventListener('close', () => { if (!opened) reject(new Error('WebSocket closed before opening: ' + url)); else if (client.onclose) client.onclose(); });
+  });
 }
 
 /** One CDP connection to a page target. */
@@ -230,7 +189,7 @@ export class Browser {
     catch { target = await getJson(this.port, '/json/new?' + encodeURIComponent(url)); }
     return this.connect(target);
   }
-  async connect(target) { return new CdpPage(await WsClient.connect(target.webSocketDebuggerUrl), target); }
+  async connect(target) { return new CdpPage(await connectWebSocket(target.webSocketDebuggerUrl), target); }
   async closePage(id) { try { await getJson(this.port, '/json/close/' + id); } catch {} }
   async close() {
     const child = this.child;
