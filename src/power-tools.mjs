@@ -1,4 +1,5 @@
 import { readOnlyShellLine, readOnlyCommandsEnabled, readOnlyGitEnv } from './read-only-commands.mjs';
+import { readTextFile, encodeText } from './text-encoding.mjs';
 import { securityWarning } from './security-patterns.mjs';
 // Additional OASIS tools for deeper repository work and interactive process control:
 //   grep           regex search (bundled ripgrep, JS fallback) with globs, context, and modes
@@ -301,7 +302,7 @@ export async function multiEditFile(root, args = {}, context = {}) {
   if (clientFs && typeof clientFs.readTextFile === 'function') {
     try { const text = await clientFs.readTextFile(target.absolute); if (typeof text === 'string') bufferText = text; } catch {}
   }
-  const original = bufferText !== null ? bufferText : await readFile(target.absolute, 'utf8');
+  const { text: original, encoding: fileEncoding } = bufferText !== null ? { text: bufferText, encoding: 'utf8' } : await readTextFile(target.absolute);
   if (original.includes('\0')) throw new Error('This looks like a binary file.');
   let next = original;
   let replacements = 0;
@@ -332,7 +333,7 @@ export async function multiEditFile(root, args = {}, context = {}) {
   const relative = target.relative.split(path.sep).join('/');
   if (next === original) return { path: relative, changed: false };
   await snapshotFile(target.root, target.absolute, 'before-agent-multi-edit');
-  await atomicWriteFile(target.absolute, next, 'utf8');
+  await atomicWriteFile(target.absolute, encodeText(next, fileEncoding), 'utf8');
   if (clientFs && typeof clientFs.writeTextFile === 'function') { try { await clientFs.writeTextFile(target.absolute, next); } catch {} }
   await recordFileState(context, target.absolute);
   const warning = combineWarnings(commentWarning(original, next, relative, context.session && context.session.commentMode), shrinkWarning(original, next, relative), testTamperWarning(original, next, relative), securityWarning(original, next, relative), recordAndDetectCircling(context.session || context, target.absolute, original, next, relative));
