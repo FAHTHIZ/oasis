@@ -1,5 +1,5 @@
-// Cross-session recall: rank saved conversations for a query (BM25 over
-// user and assistant text) and return short, redacted excerpts. Read-only.
+// Cross-session recall: rank saved conversations for a query (MiniSearch
+// BM25+ with prefix matching over user and assistant text) and return short, redacted excerpts. Read-only.
 // Searches this workspace by default; scope "all" covers every workspace's
 // saved sessions under the OASIS config directory.
 import { readdir } from 'node:fs/promises';
@@ -8,6 +8,7 @@ import { getConfigDirectory } from './config.mjs';
 import { getSessionDirectory } from './sessions.mjs';
 import { readBoundedRegularFile } from './safe-storage.mjs';
 import { redactSecrets } from './auto-memory.mjs';
+import MiniSearch from 'minisearch';
 
 const MAX_SESSION_BYTES = 3 * 1024 * 1024;
 const MAX_FILES = 2000;
@@ -90,32 +91,22 @@ export async function searchSessions(root, query, options = {}) {
       if (role !== 'any' && message.role !== role) return;
       const text = cleanText(message.content);
       if (!text) return;
-      const tokens = tokenize(text);
-      if (!tokens.length) return;
-      const tf = new Map();
-      for (const token of tokens) tf.set(token, (tf.get(token) || 0) + 1);
-      docs.push({ sessionId: data.id, updatedAt: String(data.updatedAt || ''), title, workspace: String(data.workspaceRoot || ''), role: message.role, index, text, length: tokens.length, tf });
+      if (!tokenize(text).length) return;
+      docs.push({ id: docs.length, sessionId: data.id, updatedAt: String(data.updatedAt || ''), title, workspace: String(data.workspaceRoot || ''), role: message.role, index, text });
     });
   }
   if (!docs.length) return { results: [], searched: files.length };
-  const avg = docs.reduce((sum, doc) => sum + doc.length, 0) / docs.length;
-  const df = new Map(terms.map((term) => [term, docs.filter((doc) => doc.tf.has(term)).length]));
-  const k1 = 1.2, b = 0.75;
-  const scored = [];
-  for (const doc of docs) {
-    let score = 0, matched = 0;
-    for (const term of terms) {
-      const f = doc.tf.get(term) || 0;
-      if (!f) continue;
-      matched++;
-      const idf = Math.log(1 + (docs.length - df.get(term) + 0.5) / (df.get(term) + 0.5));
-      score += idf * (f * (k1 + 1)) / (f + k1 * (1 - b + b * doc.length / avg));
-    }
-    if (!matched) continue;
-    if (doc.text.toLowerCase().includes(String(query).toLowerCase().trim())) score *= 1.5;
-    score *= 0.5 + 0.5 * matched / terms.length;
-    scored.push({ doc, score });
-  }
+  const index = new MiniSearch({ fields: ['text'], tokenize, processTerm: (term) => term });
+  index.addAll(docs);
+  const phrase = String(query).toLowerCase().trim();
+  const scored = index.search(terms.join(' '), { tokenize: (text) => text.split(' '), prefix: (term) => term.length >= 4, combineWith: 'OR' }).map((hit) => {
+    const doc = docs[hit.id];
+    let score = hit.score;
+    // Reward the exact phrase and covering more of the query's distinct terms.
+    if (doc.text.toLowerCase().includes(phrase)) score *= 1.5;
+    score *= 0.5 + 0.5 * Math.min(1, hit.queryTerms.length / terms.length);
+    return { doc, score };
+  });
   scored.sort((x, y) => y.score - x.score || y.doc.updatedAt.localeCompare(x.doc.updatedAt));
   // At most two excerpts per session so one long conversation cannot crowd out the rest.
   const perSession = new Map();
