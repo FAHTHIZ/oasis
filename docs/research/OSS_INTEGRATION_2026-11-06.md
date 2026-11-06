@@ -512,6 +512,36 @@ Equivalence: the full serialized result (title, description, markdown, flags) wa
 
 Also evaluated and deferred: replacing the ~270-line flag loop in `src/cli.mjs` with commander or yargs. That loop encodes exact Claude Code, Codex, Gemini CLI and Aider compatibility: optional values (`-p [prompt]`, `-r [id]`, `-w [name]`, `--debug [cats]`), variadic `--betas`, and unknown arguments falling through to subcommands. A wholesale swap carries high regression risk for no user-visible gain. Revisit with a declarative flag table plus `util.parseArgs` if the flag set keeps growing.
 
+## 27. CDP WebSocket: Node's built-in WebSocket (undici)
+
+Replaced: the `WsClient` class in `src/cdp.mjs`, a hand-written RFC 6455 client (handshake, SHA-1 accept check, masking, 7/16/64-bit lengths, fragments, ping/pong). It was justified by "Node 20 has no global WebSocket", but `engines` is now `>=22` and Node 22 ships the WHATWG WebSocket (undici). The Discord and Slack gateways and WebSocket monitors already used it.
+
+Verified with headless Chromium 1217 through `Browser.launch()`: `Runtime.evaluate` with Unicode, a 2× PNG screenshot, a 5,000,000-character result, `Page.loadEventFired` events, and the Chrome-driven e2e tests (`browser-navigation-e2e`, `browser-tool`, `app-e2e`, `app-runtime-e2e`). Chrome accepts the connection; undici sends no `Origin`, so `--remote-allow-origins` is not needed.
+
+## 28. QR encoder: uqr
+
+Replaced: about 230 lines of Nayuki-derived encoding in `src/qr.mjs` (Reed–Solomon, masks, penalty scoring, version info).
+
+Chosen: `uqr` 0.1.3 (unjs, MIT, zero dependencies; itself a Nayuki port, with `boostEcc:false` to keep the requested level). It reproduces both python-qrcode reference fingerprints in `test/qr.test.mjs` exactly (v5 with mask 2, and v13 with version-info blocks). Rejected: `qrcode` 1.5.4, which depends on yargs 15, pngjs and dijkstrajs. The OASIS half-block terminal renderer stays, since it is presentation policy.
+
+## 29. Outbound proxy: undici ProxyAgent
+
+Replaced: `createProxyFetch`'s hand-made transport in `src/proxy.mjs`: per-request CONNECT plus `https.request`, absolute-URI `http.request`, a manual 20-hop redirect loop with credential stripping, and URLSearchParams and Uint8Array body conversion.
+
+Chosen: `undici` 7.30.2 (MIT, the Node.js project's HTTP client). It uses `fetch` with a `ProxyAgent` dispatcher, one per proxy URL. undici 8 was not chosen because it requires Node ≥ 22.19, while OASIS supports ≥ 22.0. It is imported lazily on the first proxied request, since it costs ~80 ms (`proxy.mjs` import stays 28 ms).
+
+Kept as OASIS policy: proxy selection per scheme, NO_PROXY (host, .domain, *.domain, host:port, IP, CIDR, *), loopback always direct, OASIS_PROXY=0, the `Proxy-Authorization` built from URL credentials (passed as `token`, which also covers username-only credentials), and `proxyTunnel:false` so plain `http://` is forwarded rather than CONNECT-ed. `openTunnel` stays for `public-fetch`, which must tunnel to the exact IP that passed the private-network check.
+
+Fixed: `Request` objects and ReadableStream or FormData bodies used to fall through to direct connections, silently bypassing a corporate proxy. The new test "Request objects and streamed bodies also go through the proxy" fails on the old code.
+
+Behaviour changes (tests updated):
+- `redirect:'error'` now rejects like Node's fetch (`TypeError('fetch failed')` with `cause: unexpected redirect`).
+- A proxy 407 on plain `http://` is now an error with the credentials hint instead of a 407 response, matching CONNECT.
+
+## 30. Zip reader: kept (yauzl and fflate evaluated)
+
+`src/zip.mjs` stays. fflate's `unzipSync` exposes no external attributes, so it cannot detect symlinks or keep executable bits. yauzl 3 "ignores the content of the Local File Header" apart from its signature (README). OASIS rejects archives whose local and central names disagree, which defends against parser-confusion archives in plugin installs. Neither library checks more than OASIS already does, so swapping would weaken the installer.
+
 ## Next
 
 - Decided against Ajv validation in front of built-in tools: they already reject bad input with specific messages ("edit_file needs old_string … got path"), coerce numeric strings, and accept documented argument aliases that a strict schema would refuse.

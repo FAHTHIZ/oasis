@@ -82,10 +82,35 @@ test('http:// requests go through the proxy with credentials; redirects drop Aut
   assert.equal(end.method, 'GET', '302 after POST becomes GET');
   assert.equal(end.body, '');
   assert.equal(end.auth, null, 'credentials are not sent to another origin');
-  await assert.rejects(proxiedFetch('http://api.test:' + port + '/start', { redirect: 'error' }), /redirect/);
+  // Like Node's own fetch, the reason is on error.cause ("unexpected redirect").
+  await assert.rejects(proxiedFetch('http://api.test:' + port + '/start', { redirect: 'error' }), (error) => /redirect/.test(String(error.cause && error.cause.message || error.message)));
 
   const wrong = createProxyFetch({ env: { HTTP_PROXY: proxy.url }, direct: () => { throw new Error('direct'); } });
-  assert.equal((await wrong('http://api.test:' + port + '/v1')).status, 407);
+  // A proxy 407 is an error for http:// and https:// alike, with a hint about credentials.
+  await assert.rejects(wrong('http://api.test:' + port + '/v1'), /proxy authentication required/);
+});
+
+test('Request objects and streamed bodies also go through the proxy', async (t) => {
+  const proxy = await startProxy({});
+  t.after(() => proxy.server.close());
+  const hits = [];
+  const target = http.createServer(async (req, res) => {
+    let body = '';
+    for await (const chunk of req) body += chunk;
+    hits.push({ method: req.method, body, auth: req.headers.authorization || null });
+    res.writeHead(200, { 'content-type': 'text/plain' });
+    res.end('ok');
+  });
+  await new Promise((resolve) => target.listen(0, '127.0.0.1', resolve));
+  t.after(() => target.close());
+  const port = target.address().port;
+  const proxiedFetch = createProxyFetch({ env: { HTTP_PROXY: proxy.url }, direct: () => { throw new Error('should not connect directly'); } });
+  const request = new Request('http://api.test:' + port + '/req', { method: 'POST', body: 'from-request', headers: { authorization: 'Bearer R' } });
+  assert.equal(await (await proxiedFetch(request)).text(), 'ok');
+  const stream = new ReadableStream({ start(controller) { controller.enqueue(new TextEncoder().encode('streamed')); controller.close(); } });
+  assert.equal(await (await proxiedFetch('http://api.test:' + port + '/stream', { method: 'POST', body: stream, duplex: 'half' })).text(), 'ok');
+  assert.deepEqual(hits, [{ method: 'POST', body: 'from-request', auth: 'Bearer R' }, { method: 'POST', body: 'streamed', auth: null }]);
+  assert.equal(proxy.seen.length, 2);
 });
 
 test('https:// requests tunnel with CONNECT, so the proxy never sees the request or key', async (t) => {
