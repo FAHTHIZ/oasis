@@ -27,11 +27,12 @@ test('the interactive terminal compacts a long conversation while you are idle',
   t.after(() => server.close());
   const big = (letter) => 'note ' + letter.repeat(16000);
   const command = [process.execPath, cli, big('a')].map((part) => JSON.stringify(part)).join(' ');
-  const child = spawn('script', ['-qfec', command, '/dev/null'], { cwd: home, env: { ...process.env, OASIS_SIMPLE_INPUT: '1', OASIS_NO_STREAM: '1', OASIS_DISABLE_THEME_RELOAD: '1', HOME: home, OASIS_CONFIG_DIR: path.join(home, '.oasis'), OASIS_PROTOCOL: 'openai-compatible', OASIS_BASE_URL: 'http://127.0.0.1:' + server.address().port + '/v1', OASIS_MODEL: 'fixture', OASIS_API_KEY: '', OASIS_IDLE_COMPACT_MINUTES: '0.03', OASIS_COMPACT_THRESHOLD_CHARS: '90000', OASIS_SOUNDS: 'off', OASIS_NOTIFY: 'off', OASIS_BACKGROUND_NOTICE: '0' } });
+  const child = spawn('script', ['-qfec', command, '/dev/null'], { cwd: home, env: { ...process.env, OASIS_NO_STREAM: '1', OASIS_DISABLE_THEME_RELOAD: '1', HOME: home, OASIS_CONFIG_DIR: path.join(home, '.oasis'), OASIS_PROTOCOL: 'openai-compatible', OASIS_BASE_URL: 'http://127.0.0.1:' + server.address().port + '/v1', OASIS_MODEL: 'fixture', OASIS_API_KEY: '', OASIS_IDLE_COMPACT_MINUTES: '0.03', OASIS_COMPACT_THRESHOLD_CHARS: '90000', OASIS_SOUNDS: 'off', OASIS_NOTIFY: 'off', OASIS_BACKGROUND_NOTICE: '0' } });
   let out = '';
   child.stdout.on('data', (d) => { out += d; });
   child.stderr.on('data', (d) => { out += d; });
-  const timer = setTimeout(() => child.kill(), 60000);
+  // The default line editor, typed through a pseudo-terminal: Enter is \r.
+  const timer = setTimeout(() => child.kill(), 90000);
   const steps = [['reply 1', big('b')], ['reply 2', big('c')], ['reply 3', null], ['IDLE-WAIT', 'after the break'], ['reply 4', '/exit']];
   let step = 0; let idleSince = 0;
   await new Promise((resolve) => {
@@ -39,10 +40,10 @@ test('the interactive terminal compacts a long conversation while you are idle',
       if (step >= steps.length) { clearInterval(iv); resolve(); return; }
       const [marker, input] = steps[step];
       if (marker === 'IDLE-WAIT') {
-        if (idleSince && requests.some((r) => r.summary && r.at >= idleSince) && Date.now() - idleSince > 500) { child.stdin.write(input + '\n'); step++; }
+        if (idleSince && requests.some((r) => r.summary && r.at >= idleSince) && Date.now() - idleSince > 500) { child.stdin.write(input + '\r'); step++; }
         return;
       }
-      if (out.includes(marker)) { if (input) child.stdin.write(input + '\n'); else idleSince = Date.now(); step++; }
+      if (out.includes(marker)) { if (input) child.stdin.write(input + '\r'); else idleSince = Date.now(); step++; }
     }, 50);
     child.on('exit', () => { clearInterval(iv); resolve(); });
   });

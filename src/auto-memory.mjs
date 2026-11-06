@@ -207,10 +207,16 @@ async function writeIndex(root, scope, env) {
 // ---------- search (MiniSearch BM25+, Porter2 stemming) ----------
 const STOP = new Set('a an and are as at be by for from has have i in is it its of on or that the this to was we were will with you your our not do does use using'.split(' '));
 
+// The Porter2 stemmer's suffix regexes backtrack quadratically on long input
+// (16,000 letters take over a second), and a pasted blob or minified line is
+// one "word". The longest dictionary words have 45 letters, so longer tokens
+// are kept verbatim; they still match themselves exactly.
+const MAX_STEM_LENGTH = 48;
+
 export function tokenize(text) {
   return (String(text || '').toLowerCase().match(/[\p{L}\p{N}_]+/gu) || [])
     .filter((word) => word.length > 1 && !STOP.has(word))
-    .map((word) => /^[a-z]+$/.test(word) ? stemmer(word) : word);
+    .map((word) => word.length <= MAX_STEM_LENGTH && /^[a-z]+$/.test(word) ? stemmer(word) : word);
 }
 
 export function rankMemories(memories, query, { limit = 5 } = {}) {
