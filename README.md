@@ -2,7 +2,7 @@
 
 OASIS is an open-source coding-agent runtime and development workspace. It connects a model you choose to a project, gives the model bounded tools to inspect and change that project, and coordinates execution, permissions, recovery and verification around those tools.
 
-OASIS is the harness and application layer, not a model provider. The model's reasoning and code quality still matter; OASIS cannot guarantee that every model will solve every task.
+OASIS is the harness and application layer, not a model provider. The model's reasoning and code quality still matter; OASIS does not guarantee that every model will solve every task.
 
 ## What is in this repository
 
