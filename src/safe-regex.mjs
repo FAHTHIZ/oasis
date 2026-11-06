@@ -61,16 +61,29 @@ export function createBoundedRegexMatcher(pattern, flags = '', options = {}) {
     pending.delete(message.id);
     cleanupEntry(entry);
     if (message.error) entry.reject(new Error(String(message.error)));
-    else entry.resolve(Boolean(message.matched));
+    else entry.resolve(message);
   });
   worker.on('error', (error) => { void terminate(error); });
   worker.on('exit', (code) => {
     if (state !== 'closed') void terminate(new Error('Regex worker exited unexpectedly with code ' + code + '.'));
   });
 
-  return {
+  const matcher = {
     ready,
-    async test(value, { signal } = {}) {
+    async test(value, options) { return Boolean((await run(value, options)).matched); },
+    /** Index of the first match in value, or -1. */
+    async search(value, options) {
+      const message = await run(value, options);
+      return message.matched && Number.isSafeInteger(message.index) ? message.index : -1;
+    },
+    async close() {
+      if (state !== 'closed') await terminate(new Error('Regex worker closed.'));
+      else if (termination) await termination;
+    }
+  };
+  return matcher;
+
+  async function run(value, { signal } = {}) {
       await ready;
       if (state !== 'ready') throw failure || new Error('Regex worker is unavailable.');
       if (signal && signal.aborted) {
@@ -96,10 +109,5 @@ export function createBoundedRegexMatcher(pattern, flags = '', options = {}) {
           void terminate(error);
         }
       });
-    },
-    async close() {
-      if (state !== 'closed') await terminate(new Error('Regex worker closed.'));
-      else if (termination) await termination;
-    }
-  };
+  }
 }
