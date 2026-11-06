@@ -58,3 +58,18 @@ test('tool() validates its arguments', () => {
   assert.throws(() => tool('bad name!', 'x', {}, async () => {}), /Tool names/);
   assert.throws(() => tool('ok', 'x', {}, null), /run\(input\)/);
 });
+
+test('breaking out of query() early stops the agent instead of leaving it running', async (t) => {
+  const root = await tmp(t);
+  const calls = [];
+  const slow = tool('slow', 'Waits a moment', { type: 'object', properties: { n: { type: 'number' } } }, async ({ n }) => { calls.push(n); await new Promise((resolve) => setTimeout(resolve, 50)); return { ok: n }; });
+  const script = Array.from({ length: 40 }, (_, i) => toolCall('c' + i, 'mcp_sdk_slow', { n: i }));
+  const { config, requests } = await scriptedModel(t, script);
+  for await (const event of query({ prompt: 'loop', options: { cwd: root, provider: config, tools: [slow], settings, autoApprove: true, env: env(await tmp(t)) } })) {
+    if (event.type === 'tool_result') break;
+  }
+  const seen = requests.length;
+  await new Promise((resolve) => setTimeout(resolve, 600));
+  assert.ok(requests.length <= seen + 1, 'the agent kept calling the model after the consumer stopped: ' + seen + ' -> ' + requests.length);
+  assert.ok(calls.length <= 2, 'the agent kept running tools: ' + calls.length);
+});
