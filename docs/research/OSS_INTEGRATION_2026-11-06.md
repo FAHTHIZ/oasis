@@ -400,6 +400,14 @@ fetch_url feeds this parser untrusted pages, so worst-case cost decides. Raw par
 
 Both libraries are quadratic in open-element depth (scope checks walk the stack); the OASIS parser caps depth at 256 and stays linear. A 1 MB hostile page would stall fetch_url for minutes with parse5. Kept; libraries rejected on denial-of-service grounds. (Separately, the full conversion of 200k nested divs takes 9.3 s in extraction/rendering, not parsing. Recorded as a follow-up.)
 
+## 17. ACP server: @agentclientprotocol/sdk
+
+Replaced: newline JSON-RPC framing, id/pending bookkeeping, dispatch and error replies in `src/acp.mjs` (`send`/`request`/`receive`, readline loop).
+Adopted: `@agentclientprotocol/sdk` 2.4.0 (Zed Industries, Apache-2.0; the reference SDK, the successor to `@zed-industries/agent-client-protocol`, which is deprecated). Adds 9 MB; its peer `zod` 4 was already installed via the MCP client.
+Kept: all OASIS session logic (openSession, prompt streaming, permission mapping, client fs, editor terminals, diffs) behind `handle(method, params)`.
+Behaviour changes, all spec-aligned: requests before `initialize` → -32600; invalid params → -32602 with zod field errors (previously reached handlers); 32 MiB message cap (none before).
+Verification: 6/6 `test/acp.test.mjs` (4 drive the real `oasis acp` process); the updated test fails on the old implementation; the SDK's `client()` connected to `oasis acp` over stdio gets initialize and a -32000 "no provider" error, and the process exits 0 on stdin EOF.
+
 ## Next
 
 - Decided against Ajv validation in front of built-in tools: they already reject bad input with specific messages ("edit_file needs old_string … got path"), coerce numeric strings, and accept documented argument aliases that a strict schema would refuse.
