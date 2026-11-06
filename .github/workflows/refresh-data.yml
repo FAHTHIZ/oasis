@@ -32,18 +32,24 @@ jobs:
           node scripts/update-model-catalog.mjs
           node scripts/update-secret-rules.mjs
           node scripts/update-popular-packages.mjs
-      - name: Drop timestamp-only changes
+      # Live download rankings swap neighbours with near-equal counts from one
+      # request to the next; only changes in content (not fetchedAt or the
+      # order of string lists) are worth proposing.
+      - name: Drop timestamp and reorder-only changes
         run: |
           node --input-type=module -e "
           import { execFileSync } from 'node:child_process';
           import { readFileSync } from 'node:fs';
           const files = execFileSync('git', ['diff', '--name-only', '--', 'src/data'], { encoding: 'utf8' }).split('\n').filter((f) => f.endsWith('.json'));
-          const strip = (text) => { const o = JSON.parse(text); delete o.fetchedAt; return JSON.stringify(o); };
+          const canon = (value) => Array.isArray(value)
+            ? (value.every((v) => typeof v === 'string') ? [...value].sort() : value.map(canon))
+            : value && typeof value === 'object' ? Object.fromEntries(Object.entries(value).map(([k, v]) => [k, canon(v)])) : value;
+          const strip = (text) => { const o = JSON.parse(text); delete o.fetchedAt; return JSON.stringify(canon(o)); };
           for (const file of files) {
             const before = execFileSync('git', ['show', 'HEAD:' + file], { encoding: 'utf8', maxBuffer: 64 << 20 });
             if (strip(before) === strip(readFileSync(file, 'utf8'))) {
               execFileSync('git', ['checkout', '--', file]);
-              console.log('unchanged apart from fetchedAt:', file);
+              console.log('no content change (timestamp or order only):', file);
             }
           }"
       - name: Test the snapshots
