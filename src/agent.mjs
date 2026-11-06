@@ -52,6 +52,7 @@ import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 const execFileAsync = promisify(execFile);
 import { TOOL_DEFINITIONS, executeTool, loadProjectInstructions, loadSkillDescriptions, setAdditionalDirectories } from './tools.mjs';
+import { patchFromToolCall, patchFilesNeeded, planPatch } from './apply-patch.mjs';
 import { resolveTeammateMode, openTeammatePane, mirrorToPane, closeTeammatePanes } from './teammate-panes.mjs';
 import { connectMcpServers, mcpToolDefinitions, callMappedMcpTool, closeMcpClients, refreshSessionMcpTools } from './mcp.mjs';
 import { resolveMcpPrompt, expandMcpResourceMentions } from './mcp-extras.mjs';
@@ -3017,7 +3018,12 @@ function normalizeAssistantToolCalls(session, assistant, step) {
   }
   for (const call of Array.isArray(assistant.tool_calls) ? assistant.tool_calls : []) {
     if (!call || !call.function) continue;
-    const raw = call.function.arguments;
+    let raw = call.function.arguments;
+    // A freeform apply_patch sends the raw patch, not JSON: keep it as { patch }.
+    if (typeof raw === 'string' && /^\s*\*\*\* Begin Patch/.test(raw)) {
+      const patchText = patchFromToolCall(call.function.name, raw, {});
+      if (patchText) { raw = JSON.stringify({ patch: patchText }); call.function.arguments = raw; }
+    }
     try {
       const { args, repaired } = repairToolArguments(raw);
       if (repaired || typeof raw !== 'string') {
@@ -4958,7 +4964,73 @@ function availableToolNames(session) {
   return names;
 }
 
+// apply_patch (OpenAI V4A) is not advertised, but GPT-5.x / Codex models emit it
+// by habit: as an apply_patch call (JSON or freeform text) or as a shell call
+// running `apply_patch <<'EOF'`. The patch is checked against the current files
+// first, then applied as ordinary write_file / delete_file calls through
+// executeOneCallRaw, so plan mode, permission rules, hooks, approvals,
+// protected paths, snapshots and per-file locks all apply to every file.
+const APPLY_PATCH_DEFINITION = Object.freeze({ type: 'function', function: { name: 'apply_patch', description: 'Apply a patch in the "*** Begin Patch" … "*** End Patch" format (Add File / Update File / Delete File / Move to sections). Every file change runs as write_file or delete_file with the same approvals. Prefer edit_file for small edits.', parameters: { type: 'object', properties: { patch: { type: 'string', description: 'The complete patch text, from *** Begin Patch to *** End Patch' } }, required: ['patch'] } } });
+
+async function executePatchCall(session, call, patchText, context, options) {
+  const asApplyPatch = String(call.function.name || '').toLowerCase().replace(/[^a-z0-9]/g, '').startsWith('applypatch');
+  if (asApplyPatch) {
+    // Keep history well-formed for every protocol: a named, declared tool with JSON input.
+    call.function.name = 'apply_patch';
+    call.function.arguments = JSON.stringify({ patch: patchText });
+    if (!(session.toolDefinitions || []).some((tool) => tool && tool.function && tool.function.name === 'apply_patch')) session.toolDefinitions.push(APPLY_PATCH_DEFINITION);
+  }
+  const name = call.function.name;
+  if (options.onToolStart) options.onToolStart({ name, call, args: safeToolArguments(call.function.arguments) });
+  const finish = (result) => {
+    if (options.onToolResult) options.onToolResult({ name, result, call });
+    return { role: 'tool', tool_call_id: call.id, name, content: serializableResult(result), result };
+  };
+  const available = availableToolNames(session);
+  if (!available.has('write_file')) return finish({ error: 'File editing is not available to this agent, so the patch was not applied.' });
+  const files = {};
+  for (const target of patchFilesNeeded(patchText)) {
+    try {
+      const read = await executeTool('read_file', { path: target }, context);
+      if (read && (read.startLine !== undefined || read.truncated)) return finish({ error: target + ' is too large to patch in one piece; use edit_file for it. Nothing was changed.' });
+      files[target] = read && typeof read.content === 'string' ? read.content : '';
+    } catch (error) {
+      if (error && error.code === 'ENOENT') continue;
+      return finish({ error: 'Could not read ' + target + ' for the patch: ' + (error && error.message || error) + ' Nothing was changed.' });
+    }
+  }
+  let plan;
+  try { plan = planPatch(patchText, files); } catch (error) {
+    return finish({ error: 'Patch not applied (nothing was changed): ' + (error && error.message || error) });
+  }
+  const sub = { ...options, onToolStart: null, onToolResult: null };
+  const applied = [];
+  let step = 0;
+  for (const operation of plan.operations) {
+    const calls = operation.type === 'delete'
+      ? [['delete_file', { path: operation.path }]]
+      : operation.moveTo
+        ? [['write_file', { path: operation.moveTo, content: operation.content }], ['delete_file', { path: operation.path }]]
+        : [['write_file', { path: operation.path, content: operation.content }]];
+    for (const [toolName, toolArgs] of calls) {
+      const message = await executeOneCallRaw(session, { id: String(call.id || 'apply_patch') + '_part' + (++step), type: 'function', function: { name: toolName, arguments: JSON.stringify(toolArgs) } }, context, sub);
+      const result = message && message.result;
+      if (!result || (typeof result === 'object' && result.error)) {
+        const remaining = plan.operations.slice(plan.operations.indexOf(operation)).map((item) => item.path);
+        return finish({ error: 'Patch stopped at ' + (toolArgs.path || operation.path) + ': ' + (result && result.error || 'the change was not applied') + (applied.length ? ' Already applied: ' + applied.map((item) => item.path).join(', ') + '.' : ' Nothing was changed.'), applied, notApplied: remaining });
+      }
+    }
+    applied.push({ path: operation.moveTo || operation.path, action: operation.type === 'add' ? 'added' : operation.type === 'delete' ? 'deleted' : operation.moveTo ? 'moved from ' + operation.path : 'updated' });
+  }
+  const letter = { added: 'A', deleted: 'D', updated: 'M' };
+  return finish({ result: 'Success. Updated the following files:\n' + applied.map((item) => (letter[item.action] || 'M') + ' ' + item.path).join('\n'), files: applied, ...(plan.fuzz ? { note: 'Some patch context matched only after ignoring whitespace; check the result.' } : {}) });
+}
+
 async function executeOneCall(session, call, context, options) {
+  if (call && call.function && call.function.name) {
+    const patchText = patchFromToolCall(call.function.name, call.function.arguments, safeToolArguments(call.function.arguments));
+    if (patchText) return executePatchCall(session, call, patchText, context, options);
+  }
   const argumentError = call && toolArgumentErrors.get(call);
   if (argumentError) {
     const name = call.function && call.function.name;
