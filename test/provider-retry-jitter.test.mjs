@@ -72,3 +72,31 @@ test('a Retry-After longer than the retry cap is not retried early', () => {
   assert.equal(providerRetryDelayMs(1, '30', () => 0), 30000, 'honoured up to a minute');
   assert.equal(providerRetryDelayMs(1, '600', () => 0), null, 'too long to wait inline: give up on retrying');
 });
+
+test('cancelling during a long Retry-After wait stops the request at once', async (t) => {
+  const { createServer } = await import('node:http');
+  const { mkdtemp, rm } = await import('node:fs/promises');
+  const os = await import('node:os');
+  const path = await import('node:path');
+  const { createSession, requestCompletion, closeSession } = await import('../src/agent.mjs');
+  let requests = 0;
+  const server = createServer(async (req, res) => {
+    for await (const _ of req) { /* drain */ }
+    requests++;
+    res.writeHead(503, { 'content-type': 'application/json', 'retry-after': '45' });
+    res.end(JSON.stringify({ error: { message: 'overloaded' } }));
+  });
+  await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
+  const root = await mkdtemp(path.join(os.tmpdir(), 'oasis-retry-abort-'));
+  const session = await createSession({ root, config: { protocol: 'openai-compatible', baseURL: 'http://127.0.0.1:' + server.address().port + '/v1', model: 'm', apiKey: 'k' }, permissionMode: 'bypassPermissions' });
+  t.after(async () => { closeSession(session); server.close(); await rm(root, { recursive: true, force: true }); });
+  session.messages.push({ role: 'user', content: 'hi' });
+  const controller = new AbortController();
+  const waits = [];
+  setTimeout(() => controller.abort(), 300);
+  const started = Date.now();
+  await assert.rejects(requestCompletion(session, { env: {}, signal: controller.signal, onProviderRetry: (event) => waits.push(event.waitMs) }), (error) => error.name === 'AbortError');
+  assert.ok(Date.now() - started < 3000, 'took ' + (Date.now() - started) + ' ms');
+  assert.deepEqual(waits, [45000], 'the advertised wait was honoured');
+  assert.equal(requests, 1);
+});

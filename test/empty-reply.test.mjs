@@ -30,3 +30,19 @@ test('a model that keeps replying empty ends with a clear notice, not a blank an
   assert.match(result.text, /empty response/);
   assert.equal(result.emptyReply, true);
 });
+
+test('empty-reply re-asks are billed like any other request', async (t) => {
+  const { session, requests } = await fixture(t, [toolCall('c1', 'read_file', { path: 'a.txt' }), { content: '' }, { content: 'The file says A.' }]);
+  const usage = [];
+  await runAgentTurn(session, 'What does a.txt say?', { onUsage: (event) => usage.push(event) });
+  assert.equal(requests.length, 3);
+  assert.equal(usage.filter((event) => event.step !== undefined || event.inputTokens !== undefined).length, 3, JSON.stringify(usage));
+});
+
+test('an empty reply stopped by the provider (content filter) is reported, not re-asked', async (t) => {
+  const { session, requests } = await fixture(t, [toolCall('c1', 'read_file', { path: 'a.txt' }), (payload) => ({ content: '', finish_reason: 'content_filter' })]);
+  const result = await runAgentTurn(session, 'What does a.txt say?', {});
+  assert.equal(requests.length, 2);
+  assert.match(result.text, /content_filter/);
+  assert.equal(result.emptyReply, true);
+});
