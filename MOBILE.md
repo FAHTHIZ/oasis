@@ -1,6 +1,6 @@
 # Mobile and tablet setup
 
-OASIS does not currently publish a native Android APK or an App Store package. There are three ways to use it from a phone or tablet.
+There is no native Android APK or App Store package in the current releases. OASIS offers three practical ways to use it from a phone or tablet.
 
 ## 1. Install the browser app
 

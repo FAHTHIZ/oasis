@@ -10,7 +10,7 @@ test('repository identity, package keywords and GitHub topics are aligned', asyn
     read('../package.json')
   ]);
   const pkg = JSON.parse(packageText);
-  const topicMatch = metadata.match(/const topics = (\\[[\\s\\S]*?\\]);/);
+  const topicMatch = metadata.match(/const topics = (\[[\s\S]*?\]);/);
   assert.ok(topicMatch, 'repository topic list must be declared in the metadata workflow');
   const topics = JSON.parse(topicMatch[1]);
   assert.equal(topics.length, 20, 'GitHub topics should use the supported limit without duplicates');
