@@ -12,7 +12,8 @@ parentPort.on('message', (message) => {
   if (!expression || !message || !Number.isSafeInteger(message.id)) return;
   try {
     expression.lastIndex = 0;
-    parentPort.postMessage({ id: message.id, matched: expression.test(String(message.value)) });
+    const found = expression.exec(String(message.value));
+    parentPort.postMessage({ id: message.id, matched: Boolean(found), index: found ? found.index : -1 });
   } catch (error) {
     parentPort.postMessage({ id: message.id, error: error.message || String(error) });
   }

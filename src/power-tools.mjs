@@ -16,7 +16,7 @@ import { protectedShellWrite, protectedEditsAllowed } from './protected-paths.mj
 import * as gitSafety from './git-safety.mjs';
 import { assertFileFresh, recordFileState } from './file-state.mjs';
 import { spawn } from 'node:child_process';
-import { readFile, lstat, stat } from 'node:fs/promises';
+import { readFile, lstat, stat, open } from 'node:fs/promises';
 import path from 'node:path';
 import { existsSync } from 'node:fs';
 import { randomUUID } from 'node:crypto';
@@ -149,6 +149,71 @@ const FALLBACK_FILE_TYPES = {
   yaml: ['.yaml', '.yml'], toml: ['.toml'], html: ['.html', '.htm'], css: ['.css', '.scss', '.less'], sql: ['.sql']
 };
 
+// ripgrep shows the first 400 columns of a long line, so a match deep inside a
+// minified bundle came back as 400 columns of unrelated code. For those lines a
+// second, match-only pass (-o -b --column) finds where the first match starts,
+// and the result shows a window around it instead.
+const LONG_LINE_PREVIEW = / \[\.\.\. (?:omitted end of long line|\d+ more matches?)\]$|:\[Omitted long (?:matching|context) line\]$/;
+const PREVIEW_COLUMNS = 400;
+const WINDOW_BEFORE = 120;
+const WINDOW_AFTER = 240;
+const MAX_WINDOWED_FILES = 50;
+
+async function windowLongMatches(rgPath, cwd, long, results, { pattern, ignoreCase, fixedStrings, signal }) {
+  const files = [...new Set(long.map((item) => item.file))].slice(0, MAX_WINDOWED_FILES);
+  const args = ['--no-heading', '--with-filename', '--color', 'never', '-n', '-o', '-b', '--column', '--hidden', '--no-ignore', ...(ignoreCase ? ['-i'] : []), ...(fixedStrings ? ['-F'] : []), '-e', pattern, '--', ...files];
+  const out = await runRipgrep(rgPath, cwd, args, signal);
+  if (out.error || out.cancelled || out.timedOut) return;
+  const first = new Map();
+  for (const raw of out.out.split('\n')) {
+    const found = /^(.*):(\d+):(\d+):(\d+):(.*)$/.exec(raw);
+    if (!found) continue;
+    const file = found[1].startsWith('./') ? found[1].slice(2) : found[1];
+    const key = file + ':' + found[2];
+    if (!first.has(key)) first.set(key, { column: Number(found[3]), offset: Number(found[4]), length: Buffer.byteLength(found[5]) });
+  }
+  for (const item of long) {
+    const hit = first.get(item.file + ':' + item.line);
+    if (!hit || hit.column <= PREVIEW_COLUMNS - WINDOW_AFTER) continue; // the preview already shows it
+    const text = await readWindow(path.join(cwd, item.file), hit).catch(() => null);
+    if (text === null) continue;
+    results[item.index] = item.file + ':' + item.line + ':' + text + ' [match at column ' + hit.column + ' of a long line]';
+  }
+}
+
+async function readWindow(file, { offset, length }) {
+  const start = Math.max(0, offset - WINDOW_BEFORE * 2);
+  const size = WINDOW_BEFORE * 2 + length + WINDOW_AFTER * 2;
+  const handle = await open(file, 'r');
+  try {
+    const buffer = Buffer.alloc(size);
+    const { bytesRead } = await handle.read(buffer, 0, size, start);
+    const bytes = buffer.subarray(0, bytesRead);
+    const at = offset - start;
+    // Stay on the matching line and on whole UTF-8 characters.
+    let from = bytes.lastIndexOf(0x0a, at - 1) + 1;
+    let to = bytes.indexOf(0x0a, at + length);
+    if (to < 0) to = bytes.length;
+    const before = bytes.subarray(from, at).toString('utf8').replace(/^\uFFFD+/, '');
+    const match = bytes.subarray(at, Math.min(to, at + length)).toString('utf8');
+    const after = bytes.subarray(Math.min(to, at + length), to).toString('utf8').replace(/\uFFFD+$/, '');
+    const head = before.length > WINDOW_BEFORE ? before.slice(-WINDOW_BEFORE) : before;
+    const tail = after.length > WINDOW_AFTER ? after.slice(0, WINDOW_AFTER) : after;
+    const cutBefore = head.length < before.length || (from === 0 && start > 0);
+    const cutAfter = tail.length < after.length || (to === bytes.length && bytesRead === size);
+    return (cutBefore ? '…' : '') + head + match + tail + (cutAfter ? '…' : '');
+  } finally {
+    await handle.close();
+  }
+}
+
+/** A line of at most `max` characters that keeps the match at `index` visible. */
+function windowLine(line, index, max = PREVIEW_COLUMNS) {
+  if (line.length <= max) return line;
+  if (index < 0 || index < max - WINDOW_AFTER) return line.slice(0, max) + '…';
+  return '…' + line.slice(index - WINDOW_BEFORE, index + WINDOW_AFTER) + '… [match at column ' + (index + 1) + ' of a long line]';
+}
+
 export async function grepWorkspace(root, args = {}, options = {}) {
   // Models also send the pattern as regex, query or search.
   const pattern = String(args.pattern || args.regex || args.query || args.search || '');
@@ -207,6 +272,7 @@ export async function grepWorkspace(root, args = {}, options = {}) {
     if (out.error) throw new Error('grep could not start ripgrep: ' + out.error);
     if (out.code === 2 && !out.out) throw new Error('grep failed: ' + out.err.trim() + (/unrecognized file type/i.test(out.err) ? ' Use a ripgrep type name (rg --type-list), or a glob such as *.ts.' : ''));
     let skipped = 0;
+    const long = [];
     for (const raw of out.out.split('\n')) {
       if (!raw) continue;
       if (raw === '--') continue;
@@ -216,8 +282,13 @@ export async function grepWorkspace(root, args = {}, options = {}) {
       if (sensitivePath(file)) continue;
       if (skipped < offset) { skipped++; continue; }
       if (results.length >= limit) { truncated = true; break; }
+      if (mode === 'content' && !options.fullLines && !args.multiline && LONG_LINE_PREVIEW.test(line)) {
+        const head = /^(.*?):(\d+):/.exec(line);
+        if (head) long.push({ index: results.length, file: head[1], line: Number(head[2]) });
+      }
       results.push(line.length > 500 && !options.fullLines ? line.slice(0, 500) + '…' : line);
     }
+    if (long.length) await windowLongMatches(ripgrep.path, rootReal, long, results, { pattern, ignoreCase, fixedStrings: options.fixedStrings, signal: options.signal });
     return { pattern, mode, engine: 'ripgrep', results, count: results.length, truncated, ...(offset ? { offset } : {}) };
   }
 
@@ -263,13 +334,14 @@ export async function grepWorkspace(root, args = {}, options = {}) {
       let hits = 0;
       const emitted = new Set();
       for (let i = 0; i < lines.length; i++) {
-        if (!await matcher.test(lines[i], { signal: options.signal })) continue;
+        const at = await matcher.search(lines[i], { signal: options.signal });
+        if (at < 0) continue;
         hits++;
         if (mode !== 'content') continue;
         for (let j = Math.max(0, i - before); j <= Math.min(lines.length - 1, i + after); j++) {
           if (emitted.has(j)) continue;
           emitted.add(j);
-          if (!emit(relative + (j === i ? ':' : '-') + (j + 1) + (j === i ? ':' : '-') + lines[j].slice(0, 400))) break;
+          if (!emit(relative + (j === i ? ':' : '-') + (j + 1) + (j === i ? ':' : '-') + (j === i ? windowLine(lines[j], at) : windowLine(lines[j], -1)))) break;
         }
         if (truncated) break;
       }
