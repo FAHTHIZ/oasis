@@ -466,6 +466,17 @@ Verified:
 
 Not replaced: the conservative shell splitter in `src/permissions.mjs`. It is a deliberate fail-closed allow-rule check that is already paired with the tree-sitter-bash AST for deny/ask matching (reviewed earlier).
 
+## 24. Version comparison: semver
+
+Replaced: `parseVersion`/`compareVersions` (`src/app-update.mjs`) and `validVersion`/`parseVersion`/`comparePrereleaseIdentifier`/`compareVersion` (`src/native-plugins.mjs`). These were two independent SemVer implementations.
+
+Chosen: `semver` 7.8.6 (ISC, npm's own implementation, zero dependencies, already in the tree through electron-builder).
+
+Verified:
+- 15 probe versions (`v` prefix, padding, rc.2 vs rc.10, alpha vs beta, build metadata, `-0`) give 225 ordered pairs, and old and new comparisons agree on every one.
+- Native plugins stay strict through `semver.valid(v) === v`, which rejects a `v` prefix, build metadata, and leading zeros in core or numeric prerelease identifiers.
+- Deliberate change: the old BigInt comparator accepted `999999999999999999999.0.0`. semver rejects components above `Number.MAX_SAFE_INTEGER`, as the npm registry does, so such a manifest now fails validation (fail closed). The test now asserts this, and that `9007199254740991.0.0` still installs.
+
 ## Next
 
 - Decided against Ajv validation in front of built-in tools: they already reject bad input with specific messages ("edit_file needs old_string … got path"), coerce numeric strings, and accept documented argument aliases that a strict schema would refuse.

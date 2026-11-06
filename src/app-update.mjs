@@ -12,6 +12,7 @@ import path from 'node:path';
 import { Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 import { fetchLatestRelease, githubApiHeaders } from './github-release.mjs';
+import semver from 'semver';
 
 export const UPDATE_REPOSITORY = 'FAHTHIZ/oasis';
 export const RELEASES_PAGE = 'https://github.com/' + UPDATE_REPOSITORY + '/releases/latest';
@@ -19,42 +20,19 @@ export const UPDATE_CHECK_INTERVAL_MS = 6 * 60 * 60 * 1000;
 const MAX_ASSET_BYTES = 1024 * 1024 * 1024;
 const MAX_SUMS_BYTES = 256 * 1024;
 
-// Semantic version parsing that tolerates a leading "v". Returns null when the
-// value is not a version, so a malformed tag can never look "newer".
+// Semantic version parsing (npm's semver, SemVer 2.0) that tolerates a leading
+// "v" and build metadata. Returns null when the value is not a version, so a
+// malformed tag can never look "newer".
 export function parseVersion(value) {
-  const match = String(value || '').trim().match(/^v?(\d+)\.(\d+)\.(\d+)(?:-([0-9A-Za-z.-]+))?(?:\+[0-9A-Za-z.-]+)?$/);
-  if (!match) return null;
-  return {
-    major: Number(match[1]), minor: Number(match[2]), patch: Number(match[3]),
-    prerelease: match[4] ? match[4].split('.') : []
-  };
+  const parsed = semver.parse(String(value || '').trim());
+  return parsed ? { major: parsed.major, minor: parsed.minor, patch: parsed.patch, prerelease: parsed.prerelease.map(String) } : null;
 }
 
 export function compareVersions(a, b) {
-  const left = parseVersion(a);
-  const right = parseVersion(b);
+  const left = semver.parse(String(a || '').trim());
+  const right = semver.parse(String(b || '').trim());
   if (!left || !right) throw new Error('Cannot compare versions ' + JSON.stringify(a) + ' and ' + JSON.stringify(b) + '.');
-  for (const key of ['major', 'minor', 'patch']) {
-    if (left[key] !== right[key]) return left[key] > right[key] ? 1 : -1;
-  }
-  // A release outranks any of its pre-releases (1.1.0 > 1.1.0-rc.1).
-  if (!left.prerelease.length || !right.prerelease.length) {
-    if (left.prerelease.length === right.prerelease.length) return 0;
-    return left.prerelease.length ? -1 : 1;
-  }
-  const length = Math.max(left.prerelease.length, right.prerelease.length);
-  for (let index = 0; index < length; index += 1) {
-    const x = left.prerelease[index];
-    const y = right.prerelease[index];
-    if (x === undefined) return -1;
-    if (y === undefined) return 1;
-    const xn = /^\d+$/.test(x);
-    const yn = /^\d+$/.test(y);
-    if (xn && yn) { if (Number(x) !== Number(y)) return Number(x) > Number(y) ? 1 : -1; continue; }
-    if (xn !== yn) return xn ? -1 : 1;
-    if (x !== y) return x > y ? 1 : -1;
-  }
-  return 0;
+  return semver.compare(left, right);
 }
 
 // How this copy of OASIS was installed decides which release file can replace it.
