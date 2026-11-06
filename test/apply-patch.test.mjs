@@ -135,3 +135,27 @@ test('apply_patch cannot reach secret files or leave the workspace', async (t) =
   assert.match(first.content, /error/i);
   assert.match(second.content, /error/i);
 });
+
+test('Delete File and Move work end to end with approval, even though delete_file is not sent up front', async (t) => {
+  const body = patch('*** Delete File: old.txt\n*** Update File: m.js\n*** Move to: lib/m.js\n@@\n-one\n+uno');
+  const { root, session, requests } = await fixture(t, [toolCall('p1', 'apply_patch', { patch: body }), { content: 'Done.' }], { files: { 'old.txt': 'bye\n', 'm.js': 'one\n' } });
+  const asked = [];
+  await runAgentTurn(session, 'clean up', { approval: async (prompt) => { asked.push(prompt); return true; } });
+  const [message] = toolResults(requests);
+  assert.match(message.content, /D old\.txt\\nM lib\/m\.js/, message.content);
+  assert.ok(asked.some((prompt) => /Delete the workspace file old\.txt/.test(prompt)), 'each deletion still asks');
+  await assert.rejects(access(path.join(root, 'old.txt')));
+  await assert.rejects(access(path.join(root, 'm.js')));
+  assert.equal(await readFile(path.join(root, 'lib/m.js'), 'utf8'), 'uno\n');
+});
+
+test('a declined deletion stops the patch and is reported, not claimed as success', async (t) => {
+  const body = patch('*** Update File: a.txt\n@@\n-a\n+A\n*** Delete File: old.txt\n*** Add File: z.txt\n+z');
+  const { root, session, requests } = await fixture(t, [toolCall('p1', 'apply_patch', { patch: body }), { content: 'Done.' }], { files: { 'old.txt': 'bye\n', 'a.txt': 'a\n' } });
+  await runAgentTurn(session, 'clean up', { approval: async () => false });
+  const [message] = toolResults(requests);
+  assert.match(message.content, /Patch stopped at old\.txt: Deletion was not approved.*Already applied: a\.txt/s, message.content);
+  assert.doesNotMatch(message.content, /Success/);
+  assert.equal(await readFile(path.join(root, 'old.txt'), 'utf8'), 'bye\n');
+  await assert.rejects(access(path.join(root, 'z.txt')), 'sections after the refusal are not applied');
+});

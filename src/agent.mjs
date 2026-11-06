@@ -5015,9 +5015,11 @@ async function executePatchCall(session, call, patchText, context, options) {
     for (const [toolName, toolArgs] of calls) {
       const message = await executeOneCallRaw(session, { id: String(call.id || 'apply_patch') + '_part' + (++step), type: 'function', function: { name: toolName, arguments: JSON.stringify(toolArgs) } }, context, sub);
       const result = message && message.result;
-      if (!result || (typeof result === 'object' && result.error)) {
+      // Declined approvals and blocks come back as { approved: false } / { blocked: true }, not errors.
+      const refused = result && typeof result === 'object' && (result.approved === false || result.blocked === true);
+      if (!result || (typeof result === 'object' && result.error) || refused) {
         const remaining = plan.operations.slice(plan.operations.indexOf(operation)).map((item) => item.path);
-        return finish({ error: 'Patch stopped at ' + (toolArgs.path || operation.path) + ': ' + (result && result.error || 'the change was not applied') + (applied.length ? ' Already applied: ' + applied.map((item) => item.path).join(', ') + '.' : ' Nothing was changed.'), applied, notApplied: remaining });
+        return finish({ error: 'Patch stopped at ' + (toolArgs.path || operation.path) + ': ' + (result && (result.error || result.message) || 'the change was not applied') + (applied.length ? ' Already applied: ' + applied.map((item) => item.path).join(', ') + '.' : ' Nothing was changed.'), applied, notApplied: remaining });
       }
     }
     applied.push({ path: operation.moveTo || operation.path, action: operation.type === 'add' ? 'added' : operation.type === 'delete' ? 'deleted' : operation.moveTo ? 'moved from ' + operation.path : 'updated' });
