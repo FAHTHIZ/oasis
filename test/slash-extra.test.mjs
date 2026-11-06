@@ -76,7 +76,7 @@ test('/keys opens the shortcut cheat sheet and /tips gives practical next steps'
 test('/context separates startup tools and warns when setup is token-heavy', async () => {
   const { state, session } = await setup();
   session.toolDefinitions = [
-    { type: 'function', function: { name: 'local_fixture', description: 'x'.repeat(65000) } },
+    { type: 'function', function: { name: 'local_fixture', description: 'The tool reads each file and records every match it finds. '.repeat(1600) } },
     { type: 'function', function: { name: 'remote_fixture', description: 'remote tool description' } }
   ];
   session.mcpToolMap = new Map([['remote_fixture', {}]]);

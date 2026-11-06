@@ -4,7 +4,8 @@ import { atomicWriteFile } from './atomic-write.mjs';
 // { resetSession: true } when the caller should drop the current session.
 import { describeHook, runHooks, hasHooks } from './hooks.mjs';
 import { compactHistoryIfNeeded, hookOptions, undoCompaction } from './agent.mjs';
-import { estimateTokens, contextWindowSize, addMustPreserve, createCompactionPreview, compactionPreviewIsCurrent } from './context.mjs';
+import { countTextTokens, countJsonTokens } from './tokens.mjs';
+import { estimateTokens, contextWindowSize, contextTokens, addMustPreserve, createCompactionPreview, compactionPreviewIsCurrent } from './context.mjs';
 import { loadCustomCommands } from './commands.mjs';
 import { loadSettings, PERMISSION_MODES, normalizePermissionMode, normalizeLanguage } from './settings.mjs';
 import { applyReplyLanguage } from './reply-language.mjs';
@@ -598,12 +599,14 @@ export async function runBuiltinCommand(name, argument, state) {
       const mcpNames = session.mcpToolMap instanceof Map ? new Set(session.mcpToolMap.keys()) : new Set();
       const mcpDefinitions = definitions.filter((item) => item && item.function && mcpNames.has(item.function.name));
       const localDefinitions = definitions.filter((item) => !item || !item.function || !mcpNames.has(item.function.name));
-      const localTools = localDefinitions.length ? Math.round(JSON.stringify(localDefinitions).length / 4) : 0;
-      const mcpTools = mcpDefinitions.length ? Math.round(JSON.stringify(mcpDefinitions).length / 4) : 0;
+      const localTools = localDefinitions.length ? countJsonTokens(localDefinitions) : 0;
+      const mcpTools = mcpDefinitions.length ? countJsonTokens(mcpDefinitions) : 0;
       const startup = system + localTools + mcpTools;
       // Tool schemas are sent with requests but are not represented in session.messages.
       // Include them in the displayed context estimate so a tool-heavy setup is visible.
-      const used = conversationTokens + localTools + mcpTools;
+      // The provider's own count (system prompt and tool schemas included) wins when it has reported one.
+      const reported = contextTokens(session);
+      const used = reported.reported ? reported.tokens : conversationTokens + localTools + mcpTools;
       const percent = windowSize ? Math.round(used / windowSize * 100) : 0;
       const bar = '#'.repeat(Math.min(30, Math.round(percent * 0.3))).padEnd(30, '.');
       if (String(argument || '').trim().toLowerCase() === 'all') {
@@ -619,8 +622,8 @@ export async function runBuiltinCommand(name, argument, state) {
         for (const item of directMemory.filter((item) => item.exists)) {
           try {
             const contents = await readFile(item.path, 'utf8');
-            if (item.label === 'user') { userMemoryTokens += Math.ceil(contents.length / 4); userMemoryNames.push(item.path.replace(env.HOME || '', '~')); }
-            else { projectMemoryTokens += Math.ceil(contents.length / 4); projectMemoryNames.push(item.path.replace(root, '.')); }
+            if (item.label === 'user') { userMemoryTokens += countTextTokens(contents); userMemoryNames.push(item.path.replace(env.HOME || '', '~')); }
+            else { projectMemoryTokens += countTextTokens(contents); projectMemoryNames.push(item.path.replace(root, '.')); }
           } catch { /* A source may disappear while context is inspected. */ }
         }
         const byServer = new Map();
@@ -628,9 +631,9 @@ export async function runBuiltinCommand(name, argument, state) {
           const name = String(definition.function.name || 'mcp tool');
           const entry = session.mcpToolMap instanceof Map ? session.mcpToolMap.get(name) : null;
           const serverName = String(entry && (entry.serverName || entry.server && entry.server.name) || (name.includes('__') ? name.split('__')[0] : name.split('_').slice(0, 2).join('_')));
-          const current = byServer.get(serverName) || { count: 0, chars: 0 };
+          const current = byServer.get(serverName) || { count: 0, tokens: 0 };
           current.count++;
-          current.chars += JSON.stringify(definition).length;
+          current.tokens += countJsonTokens(definition);
           byServer.set(serverName, current);
         }
         const largest = (session.messages || []).map((message, index) => {
@@ -642,8 +645,8 @@ export async function runBuiltinCommand(name, argument, state) {
           return { index: index + 1, role: message.role || 'unknown', name: message.name || (message.function && message.function.name) || '', tokens: estimateTokens([message]), preview: body };
         }).sort((a, b) => b.tokens - a.tokens).slice(0, 8);
         const conversationTokens = estimateTokens(session.messages);
-        const localTools = localDefinitions.length ? Math.round(JSON.stringify(localDefinitions).length / 4) : 0;
-        const mcpTools = mcpDefinitions.length ? Math.round(JSON.stringify(mcpDefinitions).length / 4) : 0;
+        const localTools = localDefinitions.length ? countJsonTokens(localDefinitions) : 0;
+        const mcpTools = mcpDefinitions.length ? countJsonTokens(mcpDefinitions) : 0;
         const used = conversationTokens + localTools + mcpTools;
         return { output: [
           'Detailed estimated context — categories below can overlap; tool results and loaded memory are subsets of history/system prompt, not additive totals.',
@@ -654,17 +657,17 @@ export async function runBuiltinCommand(name, argument, state) {
           'Active skill resources already returned into history: ~' + formatNumber(tokensFor(skillMessages)) + ' tokens across ' + skillMessages.length + ' tool results.',
           'Built-in/local tool schemas: ~' + formatNumber(localTools) + ' tokens across ' + localDefinitions.length + ' tools.',
           'MCP tool schemas: ~' + formatNumber(mcpTools) + ' tokens across ' + mcpDefinitions.length + ' tools.',
-          ...[...byServer.entries()].sort((a,b)=>b[1].chars-a[1].chars).map(([name, info]) => '  MCP ' + name + ': ' + info.count + ' tools, ~' + formatNumber(Math.ceil(info.chars / 4)) + ' tokens.'),
+          ...[...byServer.entries()].sort((a,b)=>b[1].tokens-a[1].tokens).map(([name, info]) => '  MCP ' + name + ': ' + info.count + ' tools, ~' + formatNumber(info.tokens) + ' tokens.'),
           'Conversation history excluding system prompt: ~' + formatNumber(Math.max(0, conversationTokens - system)) + ' tokens across ' + history.length + ' messages.',
           'File-content/IDE diagnostic results (subset of history): ~' + formatNumber(tokensFor(fileMessages)) + ' tokens across ' + fileMessages.length + ' tool results.',
           'Command/build/test output (subset of history): ~' + formatNumber(tokensFor(commandMessages)) + ' tokens across ' + commandMessages.length + ' tool results.',
           'Largest individual messages/tool results:',
           ...largest.map((item) => '  #' + item.index + ' ' + item.role + (item.name ? '/' + item.name : '') + ' ~' + formatNumber(item.tokens) + ' tokens — ' + item.preview),
-          'Token figures are estimates. Provider-specific tokenization and hidden request metadata are unavailable to Oasis.'
+          'Token figures are estimates (o200k BPE counts). Provider-specific tokenization and hidden request metadata are unavailable to Oasis.'
         ].join('\n') };
       }
       return { output: [
-        'Estimated context: [' + bar + '] ' + percent + '% of ' + formatNumber(windowSize) + ' tokens',
+        (reported.reported ? 'Context: [' : 'Estimated context: [') + bar + '] ' + percent + '% of ' + formatNumber(windowSize) + ' tokens' + (reported.reported ? ' (provider-reported for the last request, plus an estimate for newer messages)' : ''),
         '  Startup before chat: ~' + formatNumber(startup) + ' tokens',
         '  System prompt, project instructions and memory: ~' + formatNumber(system),
         '  Built-in tools (' + localDefinitions.length + '): ~' + formatNumber(localTools),

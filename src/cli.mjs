@@ -49,7 +49,7 @@ import { MarkdownStream, colorEnabled, wrapRendered } from './markdown.mjs';
 import { createActivityIndicator } from './activity-indicator.mjs';
 import { formatApprovalMessage, redactApprovalSecrets } from './approval-language.mjs';
 import { formatTurnSummary, showStartupBanner, promptFor, footerFor, nextMode, runShellPassthrough, shellContextBlock, describeTool, describeEdit, describeToolResult, verboseToolOutput, describeExploration, EXPLORE_TOOLS } from './terminal-ui.mjs';
-import { estimateTokens, contextWindowSize } from './context.mjs';
+import { estimateTokens, contextWindowSize, contextTokens } from './context.mjs';
 import { formatUsd, priceFor } from './pricing.mjs';
 import { discoverLocalOllamaModels } from './ollama-discovery.mjs';
 import { commandAvailable } from './command-lookup.mjs';
@@ -2747,7 +2747,7 @@ async function readMainInput(root, session, state) {
     footer: (editor) => {
       const model = session && session.config && session.config.model || '';
       const contextPercent = session && Array.isArray(session.messages)
-        ? estimateTokens(session.messages) / Math.max(1, contextWindowSize(session.config, process.env)) * 100
+        ? contextTokens(session).tokens / Math.max(1, contextWindowSize(session.config, process.env)) * 100
         : null;
       const spentUsd = session && session.budgetLedger ? session.budgetLedger.spentUsd : (session && typeof session.costUsd === 'number' ? session.costUsd : null);
       const budgetUsd = session && Number(session.maxBudgetUsd) > 0 ? Number(session.maxBudgetUsd) : Number(SESSION_OPTIONS.maxBudgetUsd) || 0;

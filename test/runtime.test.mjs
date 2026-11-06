@@ -1422,7 +1422,7 @@ test('microcompact prunes only old bulky tool output and preserves message and t
   assert.match(result.messages[3].content, /^\[Older tool output compacted/);
   assert.equal(result.messages.at(-1).content, messages.at(-1).content, 'most recent tool output stays intact');
   assert.match(messages[3].content, /^file 0 x/, 'the input array must not be mutated');
-  assert.equal(estimateTokens([{ role: 'user', content: 'abcdefgh' }]), 2);
+  assert.equal(estimateTokens([{ role: 'user', content: 'hello world' }]), 2, 'real BPE tokens');
   assert.equal(contextWindowSize({}, { OASIS_CONTEXT_WINDOW: '64000' }), 64000);
   assert.equal(contextWindowSize({ model: 'anthropic/claude-sonnet-4' }, {}), 200000);
   assert.equal(contextWindowSize({ model: 'gpt-4.1-mini' }, {}), 1000000);
