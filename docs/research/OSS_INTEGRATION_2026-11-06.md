@@ -367,6 +367,16 @@ Findings while integrating:
 
 Four hand-written glob-to-regex compilers existed: `src/tools.mjs` (glob_files; no braces, no classes), `src/power-tools.mjs` (grep fallback; braces, no classes), `src/permissions.mjs` (permission rules) and `app/core/tools.mjs` (browser app). The first two now use picomatch through `src/glob.mjs`. A regression test (braces, classes, a literal `[id]` folder) fails on the old code and passes now. Kept: the permission matcher, because changing what a deny rule covers is a security change and its behaviour follows Claude Code's rule syntax; and the browser app's matcher, because picomatch is CommonJS-only and cannot load through the import map (minimatch and zeptomatch are ESM but bring dependency chains that would also need vendoring).
 
+## 14. Terminal display width: string-width + strip-ansi
+
+Replaced: `stringWidth`/`charWidth`/`stripAnsi`/`truncateToWidth` hand-written ranges in `src/line-editor.mjs` (used by markdown wrap, tables, Mermaid ASCII, the line editor).
+Adopted: `string-width` 8.3.0 and `strip-ansi` 7.2.0 (sindresorhus, MIT; used by Ink, which Claude Code and Gemini CLI render with).
+
+Measured (old → new): 🚀 1→2, ✅ 1→2, 👨‍👩‍👧 6→2, 👍🏽 4→2, हिन्दी 6→4; CJK, Bengali, SGR and OSC-8 equal.
+Raw string-width is ~80× slower than the old table, so printable-ASCII strings return `.length`. Markdown render of USER_GUIDE (233 KB): 11 ms before, 14 ms after; mixed-script variant 11 → 8 ms.
+Regression test `test/string-width.test.mjs` fails on the old implementation (negative control) and passes now.
+Remaining limitation: markdown/Mermaid still iterate code points when hard-breaking single over-long words.
+
 ## Next
 
 - Decided against Ajv validation in front of built-in tools: they already reject bad input with specific messages ("edit_file needs old_string … got path"), coerce numeric strings, and accept documented argument aliases that a strict schema would refuse.
