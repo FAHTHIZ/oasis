@@ -1,7 +1,9 @@
 // Within-turn context protection for coding sessions.
 import { createHash } from 'node:crypto';
-// Estimates are deliberately cheap and deterministic; model-specific tokenizer counts are not available
-// for every provider routed through Oasis. Set OASIS_CONTEXT_WINDOW to the selected model's real limit.
+import { countTextTokens } from './tokens.mjs';
+// Token estimates use a real BPE vocabulary (src/tokens.mjs); exact counts for a
+// specific model are only known once its provider reports usage. Set
+// OASIS_CONTEXT_WINDOW to the selected model's real limit.
 const DEFAULT_CONTEXT_WINDOW = 32_768;
 const MAX_CONTEXT_WINDOW = 2_000_000;
 const MIN_PRUNABLE_CHARS = 600;
@@ -11,30 +13,68 @@ function validWindow(value) {
   return Number.isInteger(parsed) && parsed >= 4_000 && parsed <= MAX_CONTEXT_WINDOW ? parsed : null;
 }
 
-export function estimateTokens(messages) {
-  let chars = 0;
-  for (const message of Array.isArray(messages) ? messages : []) {
-    if (!message || typeof message !== 'object') continue;
-    // Responses API output items may contain reasoning/tool metadata not represented in content.
-    if (Array.isArray(message.responseItems)) {
-      try { chars += JSON.stringify(message.responseItems).length; }
-      catch { chars += String(message.content || '').length; }
-      continue;
-    }
-    if (Array.isArray(message.images)) chars += message.images.length * 1600 * 4;
-    if (typeof message.content === 'string') chars += message.content.length;
+const IMAGE_TOKENS = 1600;
+// Counting a message is cached on the message object. Messages are replaced, not
+// edited, when their content changes, and the cache also checks the fields it
+// counted, so long histories are not re-tokenized on every step.
+const messageTokenCache = new WeakMap();
+
+function messageTokens(message) {
+  const cached = messageTokenCache.get(message);
+  if (cached && cached.content === message.content && cached.toolCalls === message.tool_calls && cached.responseItems === message.responseItems && cached.images === message.images) return cached.tokens;
+  let tokens = 0;
+  // Responses API output items may contain reasoning/tool metadata not represented in content.
+  if (Array.isArray(message.responseItems)) {
+    try { tokens = countTextTokens(JSON.stringify(message.responseItems)); }
+    catch { tokens = countTextTokens(String(message.content || '')); }
+  } else {
+    if (Array.isArray(message.images)) tokens += message.images.length * IMAGE_TOKENS;
+    if (typeof message.content === 'string') tokens += countTextTokens(message.content);
     else if (Array.isArray(message.content)) {
-      try { chars += JSON.stringify(message.content).length; }
+      try { tokens += countTextTokens(JSON.stringify(message.content)); }
       catch { /* Ignore content that cannot be represented safely. */ }
     }
     if (Array.isArray(message.tool_calls)) {
       for (const call of message.tool_calls) {
-        chars += String(call && call.function && call.function.name || '').length;
-        chars += String(call && call.function && call.function.arguments || '').length;
+        tokens += countTextTokens(String(call && call.function && call.function.name || ''));
+        tokens += countTextTokens(String(call && call.function && call.function.arguments || ''));
       }
     }
   }
-  return Math.ceil(chars / 4);
+  messageTokenCache.set(message, { content: message.content, toolCalls: message.tool_calls, responseItems: message.responseItems, images: message.images, tokens });
+  return tokens;
+}
+
+export function estimateTokens(messages) {
+  let tokens = 0;
+  for (const message of Array.isArray(messages) ? messages : []) {
+    if (!message || typeof message !== 'object') continue;
+    tokens += messageTokens(message);
+  }
+  return tokens;
+}
+
+// Remember the provider's own input-token count for the prompt that was just
+// sent: the first sentLength messages (plus system prompt and tool schemas).
+// Estimated usage (providers that report none) is never recorded.
+export function recordContextAnchor(session, usage, sentLength, sentLast) {
+  if (!session || !usage || usage.estimated) return;
+  const inputTokens = Number(usage.inputTokens) || 0;
+  if (inputTokens <= 0 || !Number.isInteger(sentLength) || sentLength < 1) return;
+  session.contextAnchor = { inputTokens, length: sentLength, last: sentLast };
+}
+
+// Tokens the conversation occupies in the model's window. When the provider has
+// reported usage for a prefix of the current history, that exact count is used and
+// only the messages added since are estimated; otherwise the whole history is
+// estimated. Compaction or rewinds that replace the prefix invalidate the anchor.
+export function contextTokens(session) {
+  const messages = session && Array.isArray(session.messages) ? session.messages : [];
+  const anchor = session && session.contextAnchor;
+  if (anchor && anchor.length <= messages.length && messages[anchor.length - 1] === anchor.last) {
+    return { tokens: anchor.inputTokens + estimateTokens(messages.slice(anchor.length)), reported: true };
+  }
+  return { tokens: estimateTokens(messages), reported: false };
 }
 
 // Known context windows by model-name pattern (first match wins). Names are matched
@@ -153,7 +193,7 @@ export function microcompact(messages, options = {}) {
     if (message.name === 'todo_write' || message.content.length < MIN_PRUNABLE_CHARS ||
         message.content.startsWith('[Older tool output compacted')) continue;
     const stub = stubFor(message);
-    current -= Math.max(0, Math.ceil((message.content.length - stub.length) / 4));
+    current -= Math.max(0, countTextTokens(message.content) - countTextTokens(stub));
     output[i] = { ...message, content: stub };
     pruned++;
   }
