@@ -14,11 +14,15 @@ export const POWER_TOOL_DEFINITIONS = [
     pattern: { type: 'string', description: 'Regex' },
     path: { type: 'string', description: 'File or directory; default .' },
     glob: { type: 'string', description: 'Only files matching, e.g. *.ts' },
+    type: { type: 'string', description: 'ripgrep file type, e.g. js, py, rust' },
     ignore_case: { type: 'boolean' },
     context: { type: 'integer', description: 'Context lines (content mode), 0-10' },
+    before: { type: 'integer', description: 'Lines before each match, 0-10' },
+    after: { type: 'integer', description: 'Lines after each match, 0-10' },
     output_mode: { type: 'string', enum: ['content', 'files_with_matches', 'count'] },
     multiline: { type: 'boolean', description: 'Patterns may span lines' },
-    limit: { type: 'integer', description: 'Max result lines, 1-500; default 200' }
+    limit: { type: 'integer', description: 'Max result lines, 1-500; default 200' },
+    offset: { type: 'integer', description: 'Skip this many result lines (paging after truncated)' }
   }, required: ['pattern'] } } },
   { type: 'function', function: { name: 'multi_edit', description: 'Apply several exact-string replacements to ONE file, in order, all or none. Each old_string must be unique unless replace_all. Checkpointed first.', parameters: { type: 'object', properties: {
     path: { type: 'string', description: 'Workspace-relative path' },

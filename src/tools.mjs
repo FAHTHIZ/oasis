@@ -40,7 +40,8 @@ import { fileGlobMatcher } from './glob.mjs';
 import { isNotebookPath, readNotebook } from './notebook.mjs';
 import { imageMediaType, readImageFile } from './images.mjs';
 import { POWER_TOOL_DEFINITIONS, POWER_TOOL_NAMES } from './power-tool-definitions.mjs';
-import { executePowerTool, startBackgroundProcess, commandLineText, timeoutToBackground } from './power-tools.mjs';
+import { executePowerTool, startBackgroundProcess, commandLineText, timeoutToBackground, grepWorkspace } from './power-tools.mjs';
+import { resolveRipgrep } from './ripgrep.mjs';
 import { DIAGNOSTICS_TOOL_DEFINITION, runDiagnostics } from './diagnostics.mjs';
 import { SECURITY_SCAN_TOOL_DEFINITION } from './security-scan.mjs';
 import { MONITOR_TOOL_DEFINITION } from './monitor-definition.mjs';
@@ -146,6 +147,7 @@ function createBoundedOutput(maxChars = MAX_TOOL_OUTPUT) {
 
 const BUNDLED_SKILLS_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', 'skills');
 const SKIP_DIRS = new Set(['.git', 'node_modules', '.next', 'dist', 'build', 'coverage', '.turbo', '.venv', 'venv', 'vendor', 'target']);
+const SKIP_DIRS_RE = new RegExp('(^|/)(' + [...SKIP_DIRS].map((d) => d.replace(/[.]/g, '\\.')).join('|') + ')/');
 
 export const TOOL_DEFINITIONS = [
   { type: 'function', function: { name: 'git_status', description: 'Show the Git branch and working-tree status (read-only).', parameters: { type: 'object', properties: {}, required: [] } } },
@@ -276,28 +278,34 @@ function shouldSkip(entry, includeHidden) {
   return false;
 }
 
+// maxFiles caps the files returned. options.filter (forward-slash relative
+// path => boolean) is applied before that cap, so callers looking for specific
+// files see the whole tree; the plain walk still stops after maxScan entries.
 export async function walkFiles(root, options = {}) {
   const includeHidden = Boolean(options.includeHidden);
   const maxFiles = options.maxFiles || 1200;
   const maxDepth = options.maxDepth || 9;
+  const maxScan = options.maxScan || 250000;
+  const filter = typeof options.filter === 'function' ? options.filter : null;
   if (options.respectGitignore !== false) {
-    const visible = await gitVisibleFiles(root, { maxFiles, maxDepth, includeHidden, skipDirs: SKIP_DIRS, skip: (rel) => sensitivePath(rel), env: options.env }).catch(() => null);
+    const visible = await gitVisibleFiles(root, { maxFiles, maxDepth, includeHidden, skipDirs: SKIP_DIRS, skip: (rel) => sensitivePath(rel), filter, env: options.env }).catch(() => null);
     if (visible) return visible;
   }
   const output = [];
+  let scanned = 0;
   async function walk(dir, depth) {
-    if (depth > maxDepth || output.length >= maxFiles) return;
+    if (depth > maxDepth || output.length >= maxFiles || scanned >= maxScan) return;
     let entries;
     try { entries = await readdir(dir, { withFileTypes: true }); } catch { return; }
     entries.sort((a, b) => a.name.localeCompare(b.name));
     for (const entry of entries) {
-      if (output.length >= maxFiles) break;
+      if (output.length >= maxFiles || ++scanned > maxScan) break;
       if (shouldSkip(entry, includeHidden)) continue;
       const full = path.join(dir, entry.name);
       const rel = path.relative(root, full);
       if (sensitivePath(rel)) continue;
       if (entry.isDirectory()) await walk(full, depth + 1);
-      else if (entry.isFile()) output.push({ absolute: full, relative: rel });
+      else if (entry.isFile() && (!filter || filter(rel.split(path.sep).join('/')))) output.push({ absolute: full, relative: rel });
     }
   }
   await walk(root, 0);
@@ -448,22 +456,18 @@ export async function globWorkspaceFiles(root, pattern, limit = 200) {
   if (text.includes('\0') || path.isAbsolute(text) || text.split(/[\\/]+/).includes('..')) throw new Error('Glob patterns must be relative to the workspace and cannot contain "..".');
   const maxResults = Math.max(1, Math.min(500, Number.parseInt(limit, 10) || 200));
   const matcher = fileGlobMatcher(text);
-  const files = await walkFiles(await realpath(root), { includeHidden: true, maxFiles: 5000, maxDepth: 12 });
-  const matches = [];
-  for (const file of files) {
-    const relative = file.relative.split(path.sep).join('/');
-    if (!matcher(relative)) continue;
-    matches.push(relative);
-    if (matches.length >= maxResults) return { pattern: text, matches, truncated: true };
-  }
-  const result = { pattern: text, matches, truncated: files.length >= 5000 };
+  const base = await realpath(root);
+  // The matcher runs while listing, so the cap counts matches, not files seen.
+  const files = await walkFiles(base, { includeHidden: true, maxFiles: maxResults + 1, maxDepth: 24, filter: matcher });
+  const matches = files.slice(0, maxResults).map((file) => file.relative.split(path.sep).join('/'));
+  const result = { pattern: text, matches, truncated: files.length > maxResults };
   // "*.mjs" only covers the project root. Models often mean "anywhere" and
   // then conclude the files do not exist, so say where they are.
   if (!matches.length && !text.includes('/') && !text.startsWith('**')) {
-    const deep = fileGlobMatcher('**/' + text);
-    const nested = files.map((file) => file.relative.split(path.sep).join('/')).filter((relative) => deep(relative));
+    const nested = (await walkFiles(base, { includeHidden: true, maxFiles: 6, maxDepth: 24, filter: fileGlobMatcher('**/' + text) }))
+      .map((file) => file.relative.split(path.sep).join('/'));
     if (nested.length) {
-      result.hint = 'No file at the project root matches "' + text + '", but ' + nested.length + ' file' + (nested.length === 1 ? '' : 's') + ' in subfolders match "**/' + text + '", for example: ' + nested.slice(0, 5).join(', ') + '.';
+      result.hint = 'No file at the project root matches "' + text + '", but ' + (nested.length > 5 ? 'more than 5 files' : nested.length + ' file' + (nested.length === 1 ? '' : 's')) + ' in subfolders match "**/' + text + '", for example: ' + nested.slice(0, 5).join(', ') + '.';
     }
   }
   return result;
@@ -488,12 +492,20 @@ export async function searchWorkspaceFiles(root, query, limit = 25, scope) {
     prefix = target.relative.split(path.sep).join('/');
   }
   const lowerNeedle = needle.toLowerCase();
-  const files = (await walkFiles(await realpath(root), { includeHidden: true, maxFiles: 1800, maxDepth: 10 }))
-    .filter((file) => {
-      if (!prefix || prefix === '.') return true;
-      const rel = file.relative.split(path.sep).join('/');
-      return rel === prefix || rel.startsWith(prefix + '/');
-    });
+  // ripgrep searches the whole tree (honouring .gitignore) in parallel; the
+  // JavaScript scan below is the fallback when no rg binary is available.
+  if (resolveRipgrep(process.env)) {
+    const found = await grepWorkspace(root, { pattern: needle, ignore_case: true, path: prefix || '.', limit: maxResults }, { fixedStrings: true, maxFilesize: '256K', fullLines: true });
+    const matches = [];
+    for (const line of found.results) {
+      const m = line.match(/^(.*?):(\d+):(.*)$/s);
+      if (!m || SKIP_DIRS_RE.test(m[1])) continue;
+      matches.push({ path: m[1], line: Number(m[2]), text: matchSnippet(m[3], lowerNeedle) });
+    }
+    return { query: needle, matches, truncated: found.truncated };
+  }
+  const inScope = (rel) => !prefix || prefix === '.' || rel === prefix || rel.startsWith(prefix + '/');
+  const files = await walkFiles(await realpath(root), { includeHidden: true, maxFiles: 20000, maxDepth: 24, filter: inScope });
   const matches = [];
   for (const file of files) {
     let info;
