@@ -261,7 +261,7 @@ try {
     if (message.type() === 'error' && !/Failed to load resource: .*401/.test(message.text())) consoleErrors.push(message.text());
   });
 
-  await page.goto('http://127.0.0.1:' + app.port + '/', { waitUntil: 'domcontentloaded', timeout: timeoutMs });
+  await page.goto('http://127.0.0.1:' + app.port + '/classic', { waitUntil: 'domcontentloaded', timeout: timeoutMs });
   await page.waitForFunction(() => document.querySelector('#agentWorkspaceGrid')?.dataset.terminalVisible === 'false',
     null, { timeout: timeoutMs });
   assert.equal(await page.locator('#view-agent').evaluate((node) => node.classList.contains('active')), true,
@@ -888,7 +888,7 @@ try {
       if (message.type() === 'error') firstRunConsoleErrors.push(message.text());
     });
     await firstRunPage.setViewportSize({ width: 1280, height: 900 });
-    await firstRunPage.goto('http://127.0.0.1:' + firstRunApp.port + '/', { waitUntil: 'domcontentloaded', timeout: timeoutMs });
+    await firstRunPage.goto('http://127.0.0.1:' + firstRunApp.port + '/classic', { waitUntil: 'domcontentloaded', timeout: timeoutMs });
     await firstRunPage.locator('#sidebarNewChatBtn').click();
     await firstRunPage.locator('#agentTokenInput').fill(firstRunApp.token);
     await firstRunPage.locator('#agentConnectBtn').click();
