@@ -16,9 +16,10 @@
 //   node bench/tokens/run.mjs --check         # exit 1 if a scenario fails or
 //                                             # input grows past the baseline
 //
-// Tokens are estimated as characters / 4, the same estimate OASIS uses.
-// "Uncached" counts the characters after the longest prefix shared with the
-// previous request: the part a provider with exact-prefix caching (OpenAI,
+// Tokens are counted with the o200k_base BPE vocabulary (gpt-tokenizer), the
+// same counter OASIS uses for context budgeting (src/tokens.mjs); characters
+// are reported alongside. "Uncached" counts the tokens after the longest prefix
+// shared with the previous request: the part a provider with exact-prefix caching (OpenAI,
 // DeepSeek, Anthropic with breakpoints) has to process again; "cache-weighted"
 // adds the reused prefix at 10%, the usual cached-token price.
 
@@ -43,8 +44,8 @@ const BASELINE = baselineArg || path.join(repoRoot, 'bench', 'results', 'tokens-
 // a few characters between runs. --check allows this much growth.
 const CHECK_TOLERANCE = 0.02;
 const MAX_REQUESTS = 40;
+const TOKEN_COUNTER = 'o200k_base BPE (gpt-tokenizer)';
 
-const tok = (chars) => Math.ceil(chars / 4);
 
 // Fixed paths keep path-dependent tool output the same length on every run.
 const benchRoot = path.join(os.tmpdir(), 'oasis-token-bench');
@@ -62,6 +63,7 @@ globalThis.fetch = async (url) => { throw new Error('token bench: unexpected net
 
 const { createSession, runAgentTurn, closeSession } = await import('../../src/agent.mjs');
 const { evalAgentEnvironment } = await import('../../src/eval.mjs');
+const { countTextTokens } = await import('../../src/tokens.mjs');
 
 function sourceRevision() {
   const result = spawnSync('git', ['rev-parse', 'HEAD'], { cwd: repoRoot, encoding: 'utf8' });
@@ -95,32 +97,35 @@ function commonPrefix(a, b) {
 // Splits one chat-completions request body into its parts.
 function measureRequest(body, bodyText) {
   const messages = Array.isArray(body.messages) ? body.messages : [];
-  const text = (value) => typeof value === 'string' ? value.length : value == null ? 0 : JSON.stringify(value).length;
-  let system = 0, toolResults = 0, user = 0, assistant = 0;
+  const str = (value) => typeof value === 'string' ? value : value == null ? '' : JSON.stringify(value);
+  const parts = { system: [], toolResult: [], user: [], assistant: [] };
   for (const message of messages) {
-    if (message.role === 'system') system += text(message.content);
-    else if (message.role === 'tool') toolResults += text(message.content);
-    else if (message.role === 'user') user += text(message.content);
+    if (message.role === 'system') parts.system.push(str(message.content));
+    else if (message.role === 'tool') parts.toolResult.push(str(message.content));
+    else if (message.role === 'user') parts.user.push(str(message.content));
     else if (message.role === 'assistant') {
-      assistant += text(message.content);
-      for (const c of message.tool_calls || []) assistant += String(c.function && c.function.name || '').length + String(c.function && c.function.arguments || '').length;
+      parts.assistant.push(str(message.content));
+      for (const c of message.tool_calls || []) parts.assistant.push(String(c.function && c.function.name || ''), String(c.function && c.function.arguments || ''));
     }
   }
-  const toolSchemas = body.tools ? JSON.stringify(body.tools).length : 0;
-  // What a prefix cache sees: tools first, then the conversation in order.
-  const prompt = JSON.stringify(body.tools || []) + JSON.stringify(messages);
-  return {
+  const chars = (list) => list.reduce((n, t) => n + t.length, 0);
+  const tokens = (list) => list.reduce((n, t) => n + countTextTokens(t), 0);
+  const schemaText = body.tools ? JSON.stringify(body.tools) : '';
+  const row = {
     totalChars: bodyText.length,
-    systemChars: system,
-    toolSchemaChars: toolSchemas,
+    totalTokens: countTextTokens(bodyText),
     toolCount: Array.isArray(body.tools) ? body.tools.length : 0,
-    toolResultChars: toolResults,
-    userChars: user,
-    assistantChars: assistant,
-    framingChars: Math.max(0, bodyText.length - system - toolSchemas - toolResults - user - assistant),
-    messages: messages.length,
-    prompt
+    messages: messages.length
   };
+  for (const [key, list] of Object.entries({ system: parts.system, toolSchema: [schemaText], toolResult: parts.toolResult, user: parts.user, assistant: parts.assistant })) {
+    row[key + 'Chars'] = chars(list);
+    row[key + 'Tokens'] = tokens(list);
+  }
+  row.framingChars = Math.max(0, row.totalChars - row.systemChars - row.toolSchemaChars - row.toolResultChars - row.userChars - row.assistantChars);
+  row.framingTokens = Math.max(0, row.totalTokens - row.systemTokens - row.toolSchemaTokens - row.toolResultTokens - row.userTokens - row.assistantTokens);
+  // What a prefix cache sees: tools first, then the conversation in order.
+  row.prompt = JSON.stringify(body.tools || []) + JSON.stringify(messages);
+  return row;
 }
 
 function scriptedProvider(scenario) {
@@ -139,6 +144,8 @@ function scriptedProvider(scenario) {
     const { prompt, ...row } = measured;
     row.reusedPrefixChars = reused;
     row.uncachedChars = prompt.length - reused;
+    row.reusedPrefixTokens = countTextTokens(prompt.slice(0, reused));
+    row.uncachedTokens = countTextTokens(prompt.slice(reused));
     requests.push(row);
     if (requests.length > MAX_REQUESTS) throw new Error('token bench: more than ' + MAX_REQUESTS + ' requests; the loop did not finish');
     const step = scenario.steps[index++];
@@ -158,8 +165,8 @@ function scriptedProvider(scenario) {
       message = { role: 'assistant', content: scenario.final };
     }
     row.reply = step ? step.calls.map((c) => c.name).join(',') : 'final';
-    const completion = JSON.stringify(message).length;
-    const usage = { prompt_tokens: tok(bodyText.length), completion_tokens: tok(completion), total_tokens: tok(bodyText.length) + tok(completion) };
+    const completion = countTextTokens(JSON.stringify(message));
+    const usage = { prompt_tokens: row.totalTokens, completion_tokens: completion, total_tokens: row.totalTokens + completion };
     return new Response(JSON.stringify({ id: 'bench-' + requests.length, object: 'chat.completion', model: body.model, choices: [{ index: 0, message, finish_reason: step ? 'tool_calls' : 'stop' }], usage }), { status: 200, headers: { 'content-type': 'application/json' } });
   };
   return { fetchImpl, requests, toolCalls, lastBody: () => lastBody };
@@ -206,25 +213,25 @@ async function runScenario(scenario) {
   const totals = {
     requests: requests.length,
     inputChars: sum('totalChars'),
-    inputTokens: tok(sum('totalChars')),
-    systemTokens: tok(sum('systemChars')),
-    toolSchemaTokens: tok(sum('toolSchemaChars')),
-    toolResultTokens: tok(sum('toolResultChars')),
-    userTokens: tok(sum('userChars')),
-    assistantTokens: tok(sum('assistantChars')),
-    framingTokens: tok(sum('framingChars')),
-    uncachedTokens: tok(sum('uncachedChars')),
+    inputTokens: sum('totalTokens'),
+    systemTokens: sum('systemTokens'),
+    toolSchemaTokens: sum('toolSchemaTokens'),
+    toolResultTokens: sum('toolResultTokens'),
+    userTokens: sum('userTokens'),
+    assistantTokens: sum('assistantTokens'),
+    framingTokens: sum('framingTokens'),
+    uncachedTokens: sum('uncachedTokens'),
     // Billed-equivalent input on a provider that charges cached prefix
     // tokens at 10% (OpenAI, DeepSeek and Anthropic cache reads).
-    cacheWeightedTokens: tok(sum('uncachedChars') + 0.1 * sum('reusedPrefixChars')),
-    firstRequestTokens: requests.length ? tok(requests[0].totalChars) : 0,
-    lastRequestTokens: requests.length ? tok(requests[requests.length - 1].totalChars) : 0
+    cacheWeightedTokens: Math.round(sum('uncachedTokens') + 0.1 * sum('reusedPrefixTokens')),
+    firstRequestTokens: requests.length ? requests[0].totalTokens : 0,
+    lastRequestTokens: requests.length ? requests[requests.length - 1].totalTokens : 0
   };
   const reported = usageEvents.filter((entry) => entry.phase === undefined);
   const accounting = {
     usageEvents: reported.length,
     reportedInputTokens: reported.reduce((total, entry) => total + Number(entry.inputTokens || 0), 0),
-    expectedInputTokens: requests.reduce((total, row) => total + tok(row.totalChars), 0),
+    expectedInputTokens: sum('totalTokens'),
     taskUsageInputTokens: result && result.taskUsage ? result.taskUsage.inputTokens : null,
     taskUsageRequests: result && result.taskUsage ? result.taskUsage.requests : null
   };
@@ -256,7 +263,7 @@ function printScenario(report) {
   console.log('  usage accounting ' + (report.accounting.matches ? 'matches' : 'MISMATCH ' + JSON.stringify(report.accounting)));
   if (verbose) {
     console.log('  #   reply                 total  system  tools  results  msgs  uncached');
-    report.requests.forEach((r, i) => console.log('  ' + String(i + 1).padStart(2) + '  ' + r.reply.padEnd(20).slice(0, 20) + ' ' + String(tok(r.totalChars)).padStart(6) + ' ' + String(tok(r.systemChars)).padStart(7) + ' ' + String(tok(r.toolSchemaChars)).padStart(6) + ' ' + String(tok(r.toolResultChars)).padStart(8) + ' ' + String(r.messages).padStart(5) + ' ' + String(tok(r.uncachedChars)).padStart(9)));
+    report.requests.forEach((r, i) => console.log('  ' + String(i + 1).padStart(2) + '  ' + r.reply.padEnd(20).slice(0, 20) + ' ' + String(r.totalTokens).padStart(6) + ' ' + String(r.systemTokens).padStart(7) + ' ' + String(r.toolSchemaTokens).padStart(6) + ' ' + String(r.toolResultTokens).padStart(8) + ' ' + String(r.messages).padStart(5) + ' ' + String(r.uncachedTokens).padStart(9)));
   }
 }
 
@@ -267,11 +274,11 @@ for (const report of reports) printScenario(report);
 
 const output = {
   benchmark: 'oasis-token-efficiency',
-  version: 1,
+  version: 2,
   generatedAt: new Date().toISOString(),
   sourceRevision: sourceRevision(),
   node: process.version,
-  tokenEstimate: 'characters / 4',
+  tokenCounter: TOKEN_COUNTER,
   scenarios: reports
 };
 if (jsonOut) {
@@ -285,7 +292,11 @@ if (checkMode) {
     console.log('\nNo baseline at ' + path.relative(repoRoot, BASELINE) + '; nothing to compare.');
   } else {
     const baseline = JSON.parse(await readFile(BASELINE, 'utf8'));
-    for (const report of reports) {
+    if (baseline.tokenCounter !== TOKEN_COUNTER) {
+      console.log('\nBaseline ' + path.relative(repoRoot, BASELINE) + ' was counted with ' + (baseline.tokenCounter || baseline.tokenEstimate || 'an unknown counter') + ', not ' + TOKEN_COUNTER + '; regenerate it with --json.');
+      failed = true;
+    }
+    else for (const report of reports) {
       const before = (baseline.scenarios || []).find((s) => s.id === report.id);
       if (!before) continue;
       const limit = Math.ceil(before.totals.inputTokens * (1 + CHECK_TOLERANCE));
