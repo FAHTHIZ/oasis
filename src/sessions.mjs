@@ -1,4 +1,5 @@
 import { createHash, randomUUID } from 'node:crypto';
+import { normalizeAgentUsage } from './agent-tasks.mjs';
 import { mkdir, readdir, rename, writeFile, chmod, unlink, rm } from 'node:fs/promises';
 import path from 'node:path';
 import { readBoundedRegularFile } from './safe-storage.mjs';
@@ -113,6 +114,7 @@ export function sanitizeAgentHistory(agentTasks) {
       runs: Math.max(1, Math.min(1000, Number.parseInt(record.runs, 10) || 1)),
       toolCalls: Math.max(0, Math.min(100000, Number.parseInt(record.toolCalls, 10) || 0)),
       tokensUsed: Math.max(0, Math.min(1000000000, Number(record.tokensUsed) || 0)),
+      ...(record.usage && record.usage.requests ? { usage: normalizeAgentUsage(record.usage) } : {}),
       recentTools,
       report: safePersistedText(record.report || '', 8000),
       error: safePersistedText(record.error || '', 1500),

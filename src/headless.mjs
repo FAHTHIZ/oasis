@@ -281,6 +281,8 @@ export async function runHeadless(options) {
         if (step.phase === undefined) requests += 1;
       }
     };
+    // Background agents report here, also after the turn that started them.
+    session.onBackgroundUsage = turnOptions.onUsage;
     let partialSoFar = '';
     let currentTurn = null;
     if (inputStream && typeof inputStream.onInterrupt === 'function') inputStream.onInterrupt(() => { if (currentTurn) currentTurn.abort(); });

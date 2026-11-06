@@ -84,6 +84,7 @@ export function restoreAgentHistory(session, snapshots = []) {
       runs: Math.max(1, Math.min(1000, Number.parseInt(snapshot.runs, 10) || 1)),
       toolCalls: Math.max(0, Math.min(100000, Number.parseInt(snapshot.toolCalls, 10) || 0)),
       tokensUsed: Math.max(0, Math.min(1000000000, Number(snapshot.tokensUsed) || 0)),
+      ...(snapshot.usage ? { usage: normalizeAgentUsage(snapshot.usage) } : {}),
       recentTools: Array.isArray(snapshot.recentTools) ? snapshot.recentTools.slice(-10) : [],
       report: String(snapshot.report || '').slice(0, 8000),
       error: wasRunning ? 'Runtime restarted; the live worker process and its private execution environment were not restored.' : String(snapshot.error || '').slice(0, 1500),
@@ -320,6 +321,40 @@ function elapsed(record) {
   return seconds < 90 ? seconds + 's' : Math.round(seconds / 60) + 'm';
 }
 
+// Per-agent provider usage, summed over every request the agent (and any
+// agent it ran in the foreground) made, including failed or cancelled runs.
+export function emptyAgentUsage() {
+  return { requests: 0, inputTokens: 0, outputTokens: 0, totalTokens: 0, cacheReadTokens: 0, costUsd: 0, costKnown: true };
+}
+
+export function normalizeAgentUsage(value) {
+  const out = emptyAgentUsage();
+  if (!value || typeof value !== 'object') return out;
+  const count = (raw, max) => Math.max(0, Math.min(max, Number(raw) || 0));
+  out.requests = Math.floor(count(value.requests, 1000000));
+  out.inputTokens = Math.floor(count(value.inputTokens, 1e12));
+  out.outputTokens = Math.floor(count(value.outputTokens, 1e12));
+  out.totalTokens = Math.floor(count(value.totalTokens, 1e12));
+  out.cacheReadTokens = Math.floor(count(value.cacheReadTokens, 1e12));
+  out.costUsd = count(value.costUsd, 1e9);
+  out.costKnown = value.costKnown !== false;
+  return out;
+}
+
+export function addAgentUsage(record, usage) {
+  if (!record || !usage) return;
+  const total = record.usage && typeof record.usage === 'object' ? record.usage : (record.usage = emptyAgentUsage());
+  total.inputTokens += Math.max(0, Number(usage.inputTokens) || 0);
+  total.outputTokens += Math.max(0, Number(usage.outputTokens) || 0);
+  total.totalTokens += Math.max(0, Number(usage.totalTokens) || 0);
+  total.cacheReadTokens += Math.max(0, Number(usage.cacheReadTokens) || 0);
+  total.costUsd += Math.max(0, Number(usage.costUsd) || 0);
+  if (usage.phase === undefined) {
+    total.requests += 1;
+    if (usage.costKnown === false) total.costKnown = false;
+  }
+}
+
 export function summarizeAgent(record, { full = false } = {}) {
   const child = record.child || {};
   const backgroundProcesses = child.background && Number.isSafeInteger(child.background.size) ? child.background.size : 0;
@@ -337,6 +372,7 @@ export function summarizeAgent(record, { full = false } = {}) {
     elapsed: elapsed(record),
     runs: record.runs,
     toolCalls: record.toolCalls,
+    ...(record.usage && record.usage.requests ? { usage: { ...record.usage, costUsd: Number(Number(record.usage.costUsd || 0).toFixed(6)) } } : {}),
     workspaceIsolation: record.worktreeInfo || record.worktree ? 'worktree' : 'shared',
     access: record.readOnly ? 'read-only' : 'write-capable',
     backgroundProcesses,
