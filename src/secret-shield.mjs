@@ -9,7 +9,12 @@
 // Disable with secretShield:false in settings or OASIS_SECRET_SHIELD=0.
 
 import { createHash } from 'node:crypto';
+import { findRuleSecrets } from './secret-rules.mjs';
 
+// Detection has two tiers: Gitleaks' maintained rule set (220 provider-specific
+// rules with keyword prefilters, entropy thresholds and allowlists; see
+// src/secret-rules.mjs) and the prefix-anchored patterns below, which also
+// catch formats Gitleaks pins to exact lengths or markers.
 const TOKEN_PATTERNS = [
   /\bsk-ant-[A-Za-z0-9_-]{20,}/g,
   /\bsk-proj-[A-Za-z0-9_-]{20,}/g,
@@ -50,6 +55,30 @@ const TOKEN_PATTERNS = [
   /-----BEGIN (?:[A-Z]+ )?PRIVATE KEY-----[\s\S]+?-----END (?:[A-Z]+ )?PRIVATE KEY-----/g
 ];
 
+// Secret spans from both tiers, sorted and merged.
+function tokenSpans(text) {
+  const spans = findRuleSecrets(text).map((hit) => ({ start: hit.start, end: hit.end, rule: hit.rule }));
+  for (const pattern of TOKEN_PATTERNS) {
+    for (const match of text.matchAll(pattern)) spans.push({ start: match.index, end: match.index + match[0].length, rule: '' });
+  }
+  spans.sort((a, b) => a.start - b.start || b.end - a.end);
+  const merged = [];
+  for (const span of spans) {
+    const last = merged[merged.length - 1];
+    if (last && span.start < last.end) { if (span.end > last.end) last.end = span.end; if (!last.rule) last.rule = span.rule; continue; }
+    merged.push({ ...span });
+  }
+  return merged;
+}
+
+function replaceSpans(text, spans, replace) {
+  if (!spans.length) return text;
+  let out = '';
+  let at = 0;
+  for (const span of spans) { out += text.slice(at, span.start) + replace(text.slice(span.start, span.end)); at = span.end; }
+  return out + text.slice(at);
+}
+
 // KEY=value lines (dotenv, shell exports, ini, yaml) whose key names a secret.
 const ASSIGNMENT = /^(\s*(?:export\s+)?["']?(?:[A-Za-z][A-Za-z0-9_.-]*)?(?:SECRET|TOKEN|PASSWORD|PASSWD|PWD|API_?KEY|ACCESS_?KEY|PRIVATE_?KEY|CLIENT_?SECRET|AUTH|CREDENTIALS?|DSN|DATABASE_URL|CONNECTION_STRING)[A-Za-z0-9_.-]*["']?[ \t]*[:=][ \t]*["']?)([^"'\s#][^"'\s]{7,})(["']?[ \t]*(?:#.*)?)$/gim;
 // URLs with embedded credentials: scheme://user:password@host
@@ -80,8 +109,7 @@ export function maskSecrets(session, text) {
   if (typeof text !== 'string' || !text) return { text, count: 0 };
   let count = 0;
   const swap = (secret) => { count++; return placeholderFor(session, secret); };
-  let output = text;
-  for (const pattern of TOKEN_PATTERNS) output = output.replace(pattern, (match) => swap(match));
+  let output = replaceSpans(text, tokenSpans(text), swap);
   output = output.replace(ASSIGNMENT, (whole, head, value, tail) => (NON_SECRET_VALUE.test(value) || /^[\d.]+$/.test(value) ? whole : head + swap(value) + tail));
   output = output.replace(URL_CREDENTIAL, (whole, head, password, at) => (NON_SECRET_VALUE.test(password) ? whole : head + swap(password) + at));
   return { text: output, count };
@@ -95,8 +123,7 @@ export function maskSecrets(session, text) {
  */
 export function redactSecretText(text, { token = '[redacted]' } = {}) {
   if (typeof text !== 'string' || !text) return text;
-  let output = text;
-  for (const pattern of TOKEN_PATTERNS) output = output.replace(pattern, token);
+  let output = replaceSpans(text, tokenSpans(text), () => token);
   output = output.replace(ASSIGNMENT, (whole, head, value, tail) => (NON_SECRET_VALUE.test(value) || /^[\d.]+$/.test(value) ? whole : head + '[redacted]' + tail));
   output = output.replace(URL_CREDENTIAL, (whole, head, password, at) => (NON_SECRET_VALUE.test(password) ? whole : head + '[redacted]' + at));
   return output;
@@ -153,11 +180,11 @@ const maskPreview = (value) => { const text = String(value); return text.length 
 export function findSecretsInText(text) {
   const found = [];
   const value = String(text || '');
-  for (const pattern of TOKEN_PATTERNS) {
-    for (const match of value.matchAll(new RegExp(pattern.source, pattern.flags))) {
-      if (SAMPLE_VALUE.test(match[0])) continue;
-      found.push({ kind: /PRIVATE KEY/.test(match[0]) ? 'private key' : 'token', preview: maskPreview(match[0].split('\n')[0]) });
-    }
+  for (const span of tokenSpans(value)) {
+    const secret = value.slice(span.start, span.end);
+    if (SAMPLE_VALUE.test(secret)) continue;
+    const privateKey = /PRIVATE KEY/.test(secret) || /private-key/.test(span.rule);
+    found.push({ kind: privateKey ? 'private key' : 'token', ...(span.rule ? { rule: span.rule } : {}), preview: maskPreview(secret.split('\n')[0]) });
   }
   for (const match of value.matchAll(new RegExp(ASSIGNMENT.source, ASSIGNMENT.flags))) {
     const secret = match[2];
