@@ -163,3 +163,36 @@ test('Anthropic cache breakpoints also mark where the previous request ended, so
   // A first request with only the user's prompt gets one message breakpoint.
   assert.equal(marked(build([{ role: 'system', content: 'sys' }, { role: 'user', content: 'hi' }]).request).length, 1);
 });
+
+test('command results drop default flags for the model, and a missing language server is explained once per session', () => {
+  const run = { command: 'node', approved: true, exitCode: 0, signal: null, stdout: 'ok\n', stderr: '', stdoutTruncated: false, stderrTruncated: false, timedOut: false, cancelled: false };
+  assert.deepEqual(modelFacingResult('run_command', run), { command: 'node', exitCode: 0, stdout: 'ok\n' });
+  const odd = { ...run, exitCode: null, signal: 'SIGTERM', stderr: 'boom', timedOut: true, stdoutTruncated: true, approved: false };
+  assert.deepEqual(modelFacingResult('run_command', odd), { command: 'node', approved: false, exitCode: null, signal: 'SIGTERM', stdout: 'ok\n', stderr: 'boom', stdoutTruncated: true, timedOut: true }, 'anything unusual is kept');
+  assert.equal(run.approved, true, 'the runtime result object is not changed');
+  const session = {};
+  const lsp = { status: 'unavailable', blocking: false, path: 'a.js', server: 'typescript', reason: 'No typescript language server found. Install one with: npm install -g typescript-language-server typescript.' };
+  const first = modelFacingResult('write_file', { path: 'a.js', lspVerification: lsp }, session);
+  assert.equal(first.lspVerification.reason, lsp.reason);
+  const second = modelFacingResult('edit_file', { path: 'b.js', lspVerification: { ...lsp, path: 'b.js' } }, session);
+  assert.deepEqual(second.lspVerification, { status: 'unavailable', blocking: false, server: 'typescript', reason: 'same as before' });
+  assert.equal(Object.keys(session).length, 0, 'the notice set is not saved with the session');
+  const blocking = { ...lsp, blocking: true };
+  assert.equal(modelFacingResult('edit_file', { path: 'c.js', lspVerification: blocking }, session).lspVerification, blocking);
+});
+
+test('a timed-out or cancelled run still shows timedOut/cancelled to the model; the runtime result keeps every flag', () => {
+  const timedOut = { command: 'npm', approved: true, exitCode: null, signal: 'SIGTERM', stdout: '', stderr: '', stdoutTruncated: false, stderrTruncated: false, timedOut: true, cancelled: false };
+  const lean = modelFacingResult('run_command', timedOut);
+  assert.equal(lean.timedOut, true);
+  assert.equal(lean.exitCode, null);
+  assert.equal(lean.signal, 'SIGTERM');
+  assert.equal(JSON.parse(JSON.stringify(lean)).timedOut, true);
+  const cancelled = modelFacingResult('run_shell', { ...timedOut, timedOut: false, cancelled: true });
+  assert.equal(cancelled.cancelled, true);
+  assert.equal('timedOut' in cancelled, false);
+  // What claim-check, the verification gate and traces read is untouched.
+  assert.deepEqual(Object.keys(timedOut), ['command', 'approved', 'exitCode', 'signal', 'stdout', 'stderr', 'stdoutTruncated', 'stderrTruncated', 'timedOut', 'cancelled']);
+  assert.equal(timedOut.approved, true);
+  assert.equal(timedOut.cancelled, false);
+});
