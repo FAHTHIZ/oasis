@@ -471,3 +471,14 @@ export async function runHeadless(options) {
   if (suggestion) emit({ type: 'prompt_suggestion', suggestion, session_id: sessionId });
   return { exitCode: isError ? 1 : 0, summary };
 }
+
+// Errors raised before the headless run starts (no provider, bad usage, unreadable
+// stdin) must still honor --output-format: scripts that parse JSON get one
+// result object on stdout, and the human message goes to stderr, not stdout.
+export function headlessSetupErrorOutput(error, outputFormat) {
+  const message = String(error && error.message || error);
+  const stderrText = 'OASIS error: ' + message + '\n';
+  if (outputFormat !== 'json' && outputFormat !== 'stream-json') return { stdout: '', stderr: stderrText };
+  const result = { type: 'result', subtype: 'error_during_execution', is_error: true, result: message, session_id: null, num_turns: 0, duration_ms: 0, tool_calls: 0, total_cost_usd: 0, permission_denials: [] };
+  return { stdout: JSON.stringify(result) + '\n', stderr: stderrText };
+}
