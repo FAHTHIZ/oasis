@@ -6,13 +6,13 @@ import path from 'node:path';
 import { getConfigDirectory } from './config.mjs';
 import { pluginHome, readInstalledPlugins } from './claude-plugins.mjs';
 import { userSettingsPath } from './settings.mjs';
+import semver from 'semver';
 
 const CAPABILITIES = new Set(['commands','skills','agents','subagents','hooks','mcp']);
 const MAX_MANIFEST_BYTES = 1024 * 1024;
 const MAX_COMPONENT_BYTES = 256 * 1024;
 const PLUGIN_NAME = /^[a-z0-9][a-z0-9-]{0,62}$/;
 const COMMAND_NAME = /^[a-z0-9][a-z0-9_-]{0,63}$/;
-const VERSION = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-([0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?$/;
 
 function safeRelative(input, label) {
   if (typeof input !== 'string' || !input || input.includes('\\') || path.posix.isAbsolute(input)) throw new Error(label + ' must be a relative POSIX path.');
@@ -145,50 +145,9 @@ async function validatePackage(source) {
   for(const [capability,used] of Object.entries(declared))if(used&&!manifest.permissions.includes(capability)&&!(capability==='agents'&&manifest.permissions.includes('subagents')))throw new Error('plugin.json uses '+(capability==='agents'?'agents/subagents':capability)+' but does not request that permission.');
   return {root,manifest,files,components,declared};
 }
-function validVersion(version) {
-  const match = VERSION.exec(version);
-  if (!match) return false;
-  const prerelease = match[4];
-  return !prerelease || prerelease.split('.').every((identifier) =>
-    !/^\d+$/.test(identifier) || identifier === '0' || !identifier.startsWith('0')
-  );
-}
-function parseVersion(version) {
-  const text = String(version);
-  const separator = text.indexOf('-');
-  const core = separator === -1 ? text : text.slice(0, separator);
-  const prerelease = separator === -1 ? null : text.slice(separator + 1);
-  return {
-    core: core.split('.').map(BigInt),
-    prerelease: prerelease === null ? null : prerelease.split('.')
-  };
-}
-function comparePrereleaseIdentifier(a, b) {
-  if (a === b) return 0;
-  const aNumeric = /^\d+$/.test(a), bNumeric = /^\d+$/.test(b);
-  if (aNumeric && bNumeric) {
-    const left = BigInt(a), right = BigInt(b);
-    return left < right ? -1 : left > right ? 1 : 0;
-  }
-  if (aNumeric !== bNumeric) return aNumeric ? -1 : 1;
-  return a < b ? -1 : 1;
-}
-function compareVersion(a, b) {
-  const left = parseVersion(a), right = parseVersion(b);
-  for (let i = 0; i < 3; i++) {
-    if (left.core[i] > right.core[i]) return 1;
-    if (left.core[i] < right.core[i]) return -1;
-  }
-  if (left.prerelease === null && right.prerelease === null) return 0;
-  if (left.prerelease === null) return 1;
-  if (right.prerelease === null) return -1;
-  const count = Math.min(left.prerelease.length, right.prerelease.length);
-  for (let i = 0; i < count; i++) {
-    const compared = comparePrereleaseIdentifier(left.prerelease[i], right.prerelease[i]);
-    if (compared !== 0) return compared;
-  }
-  return left.prerelease.length < right.prerelease.length ? -1 : left.prerelease.length > right.prerelease.length ? 1 : 0;
-}
+// Strict SemVer 2.0 without a "v" prefix or build metadata, via npm's semver.
+function validVersion(version) { return typeof version === 'string' && semver.valid(version) === version; }
+function compareVersion(a, b) { return semver.compare(a, b); }
 function registryPath(env){return path.join(pluginHome(env),'installed_plugins.json');}
 function nativeRoot(env){return path.join(getConfigDirectory(env),'native-plugins');}
 async function readRegistry(env){const plugins=await readInstalledPlugins(env);return {...plugins};}
