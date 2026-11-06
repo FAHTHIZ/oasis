@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { mkdtemp, writeFile, rm } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import { vetPackage, nearMiss, bareName } from '../src/package-vetting.mjs';
+import { vetPackage, nearMiss, bareName, pinnedVersion } from '../src/package-vetting.mjs';
 import { executeTool } from '../src/tools.mjs';
 
 const NOW = Date.parse('2026-10-31T00:00:00Z');
@@ -90,4 +90,41 @@ test('shell and run_command installs are vetted too', async (t) => {
   assert.equal(viaShell.blocked, true);
   assert.match(viaShell.message, /does not exist on PyPI/);
   assert.equal(viaShell.stdout, undefined, 'nothing ran');
+});
+
+test('OSV.dev advisories: malicious packages force a prompt, known vulnerabilities are noted', async () => {
+  const queries = [];
+  const fetchImpl = async (url, init = {}) => {
+    if (url === 'https://api.osv.dev/v1/query') {
+      const body = JSON.parse(init.body);
+      queries.push(body);
+      if (body.package.name === 'evil-helper') return json(200, { vulns: [{ id: 'MAL-2026-1234', summary: 'Malicious code in evil-helper (npm)' }] });
+      if (body.package.name === 'old-lib' && body.version === '1.2.3') return json(200, { vulns: [{ id: 'GHSA-aaaa-bbbb-cccc', summary: 'old-lib leaks credentials via malicious URLs' }, { id: 'CVE-2026-0001', aliases: [] }] });
+      return json(200, {});
+    }
+    if (url === 'https://registry.npmjs.org/evil-helper' || url === 'https://registry.npmjs.org/old-lib') return json(200, { time: { created: '2015-01-01T00:00:00Z' }, 'dist-tags': { latest: '9.9.9' } });
+    if (url.startsWith('https://api.npmjs.org/downloads/')) return json(200, { downloads: 100000 });
+    if (url === 'https://pypi.org/pypi/requests/json') return json(200, { info: { version: '2.32.3' }, releases: { '2.32.3': [{ upload_time_iso_8601: '2014-01-01T00:00:00Z' }] } });
+    return json(404, {});
+  };
+  const evil = await vetPackage({ ecosystem: 'npm', packageName: 'evil-helper' }, { fetchImpl, now: NOW });
+  assert.equal(evil.risky, true);
+  assert.match(evil.warnings.join(' '), /evil-helper@9\.9\.9" is reported as malicious in OSV \(MAL-2026-1234\)/);
+  assert.equal(queries[0].version, '9.9.9', 'without a pin, the latest version is checked');
+  assert.deepEqual(queries[0].package, { name: 'evil-helper', ecosystem: 'npm' });
+  const old = await vetPackage({ ecosystem: 'npm', packageName: 'old-lib@1.2.3' }, { fetchImpl, now: NOW });
+  assert.equal(old.risky, false, 'vulnerabilities alone (even ones that mention "malicious" input) do not force a prompt');
+  assert.match(old.warnings.join(' '), /old-lib@1\.2\.3" has 2 known vulnerabilities in OSV \(GHSA-aaaa-bbbb-cccc, CVE-2026-0001\)/);
+  await vetPackage({ ecosystem: 'pip', packageName: 'requests' }, { fetchImpl, now: NOW });
+  assert.deepEqual(queries.at(-1), { package: { name: 'requests', ecosystem: 'PyPI' }, version: '2.32.3' });
+  const unreachable = await vetPackage({ ecosystem: 'npm', packageName: 'old-lib' }, { fetchImpl: async (url, init) => (url.includes('osv.dev') ? json(503, {}) : fetchImpl(url, init)), now: NOW });
+  assert.equal(unreachable.checked, true);
+  assert.deepEqual(unreachable.warnings, [], 'OSV being down never adds warnings or blocks');
+  assert.equal(pinnedVersion('npm', 'lodash@4.17.21'), '4.17.21');
+  assert.equal(pinnedVersion('npm', '@scope/pkg@1.0.0-beta.1'), '1.0.0-beta.1');
+  assert.equal(pinnedVersion('npm', 'lodash@4'), '');
+  assert.equal(pinnedVersion('npm', 'lodash@^4.17.0'), '');
+  assert.equal(pinnedVersion('pip', 'requests==2.31.0'), '2.31.0');
+  assert.equal(pinnedVersion('pip', 'requests>=2'), '');
+  assert.equal(pinnedVersion('cargo', 'serde@1.0.200'), '1.0.200');
 });
