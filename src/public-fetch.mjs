@@ -157,10 +157,12 @@ export async function fetchPublicUrl(raw, options = {}) {
     let content = text;
     let title;
     let extracted;
+    let degraded;
     if (/text\/html|application\/xhtml\+xml/i.test(type) && !options.raw) {
-      const converted = htmlToMarkdown(text, { url: url.toString(), extract: options.extract !== false });
+      const converted = await htmlToMarkdown(text, { url: url.toString(), extract: options.extract !== false });
       title = converted.title || undefined;
       extracted = converted.extracted;
+      degraded = converted.degraded;
       content = (title && !converted.titleInBody ? '# ' + title + '\n\n' : '') + converted.markdown;
     }
     const limit = Math.max(500, Math.min(MAX_TOOL_OUTPUT, Number(options.maxLength) || MAX_TOOL_OUTPUT));
@@ -176,7 +178,8 @@ export async function fetchPublicUrl(raw, options = {}) {
     }
     const result = { url: url.toString(), status: responseStatus, contentType: type };
     if (title) result.title = title;
-    if (extracted !== undefined) result.format = extracted ? 'markdown (main content)' : 'markdown';
+    if (extracted !== undefined) result.format = degraded ? 'text' : extracted ? 'markdown (main content)' : 'markdown';
+    if (degraded) result.note = 'HTML ' + degraded + '.';
     result.content = content.slice(start, end);
     result.truncated = end < content.length;
     if (start > 0) result.startIndex = start;

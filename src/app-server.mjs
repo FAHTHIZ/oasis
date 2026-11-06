@@ -24,7 +24,9 @@ export const APP_PACKAGES = Object.freeze({
   fflate: 'esm/browser.js',
   diff: 'libesm/index.js',
   marked: 'lib/marked.esm.js',
-  'eventsource-parser': 'dist/index.js'
+  'eventsource-parser': 'dist/index.js',
+  turndown: 'lib/turndown.browser.es.js',
+  'turndown-plugin-gfm': 'lib/turndown-plugin-gfm.browser.es.js'
 });
 
 /** Shared src modules and npm packages the app imports (transitively); refuses Node-only ones. */
