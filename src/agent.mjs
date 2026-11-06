@@ -3580,6 +3580,12 @@ async function assistedVerificationCalls(root, verification) {
 const RETRY_WARN_AT = 3;
 const RETRY_HALT_AT = 5;
 // Edit -> same failure -> edit -> same failure: the fixes are not reaching the
+// A tool call with the same inputs and the same result, seen in this many of
+// the last CYCLE_WINDOW_STEPS model steps with no file edit in between, is a
+// no-progress cycle: nudge at the first count, stop at the second.
+const CYCLE_WINDOW_STEPS = 8;
+const CYCLE_WARN_AT = 3;
+const CYCLE_HALT_AT = 4;
 // cause. Nudge at 3 identical failures across edits, escalate at 5.
 const THRASH_WARN_AT = 3;
 const THRASH_ESCALATE_AT = 5;
@@ -5527,6 +5533,10 @@ async function runAgentTurnRaw(session, prompt, options = {}) {
   let totalToolCalls = 0;
   let tokensUsed = Number(compaction.tokensUsed || 0);
   let lastToolOutcome = null;
+  // outcome signature -> model steps that produced it since the last file
+  // edit. Catches cycles the consecutive check misses: alternating between two
+  // reads, or re-issuing the same batch of calls every step.
+  const recentOutcomes = new Map();
   let loopBreakMessage = '';
   const verification = { changedPaths: new Set(), diffReviewedPaths: new Set(), diffReviewedAll: false, lastVerificationExitCode: null, lastVerificationKind: null, lspVerificationByPath: new Map(), nudgeUsed: false };
   // "...and add tests": finishing with no test file touched is a miss that
@@ -6065,10 +6075,19 @@ async function runAgentTurnRaw(session, prompt, options = {}) {
           loopBreakMessage = 'I’m stuck: the same ' + lastToolOutcome.name +
             ' tool call with the same inputs produced the same result 3 times. I stopped instead of repeating it again. I need to try a different approach or get your guidance.';
         }
+        const seenAt = (recentOutcomes.get(outcome) || []).filter((seenStep) => seenStep > step - CYCLE_WINDOW_STEPS);
+        if (seenAt[seenAt.length - 1] !== step) seenAt.push(step);
+        recentOutcomes.set(outcome, seenAt);
+        if (seenAt.length >= CYCLE_HALT_AT && !loopBreakMessage) {
+          loopBreakMessage = 'I’m stuck: I kept repeating the same ' + name + ' call with the same inputs and getting the same result (' + seenAt.length + ' times in the last ' + CYCLE_WINDOW_STEPS + ' steps, with no file changes in between). I stopped instead of going round in circles. I need to try a different approach or get your guidance.';
+        } else if (seenAt.length === CYCLE_WARN_AT && seenAt[seenAt.length - 1] === step && typeof item.content === 'string' && !item.cycleWarned) {
+          item.cycleWarned = true;
+          item.content += '\n\n<system-reminder>You have now made this exact ' + name + ' call ' + seenAt.length + ' times in the last few steps and got the same result each time, with no file changes in between. Repeating it will not tell you anything new. Use what you already have: make the change, try a different approach, or give your answer.</system-reminder>';
+        }
         // Same failing command again and again with nothing changed in between
         // (outputs differ by timestamps, so the identical-outcome check misses it).
         const commandText = RETRY_TRACKED_COMMANDS.has(name) ? [args.command].concat(Array.isArray(args.args) ? args.args : []).join(' ') : '';
-        if ((FILE_EDITING_TOOL_NAMES.has(name) || (commandText && scriptedEditKind(commandText))) && result && typeof result === 'object' && !result.error && result.approved !== false && result.blocked !== true) { failedCommandRuns.clear(); editEpoch++; }
+        if ((FILE_EDITING_TOOL_NAMES.has(name) || (commandText && scriptedEditKind(commandText))) && result && typeof result === 'object' && !result.error && result.approved !== false && result.blocked !== true) { failedCommandRuns.clear(); recentOutcomes.clear(); editEpoch++; }
         else if (RETRY_TRACKED_COMMANDS.has(name) && result && typeof result === 'object' && !result.background && !result.running) {
           const key = name + ' ' + JSON.stringify({ command: args.command, args: args.args, cwd: args.cwd });
           const failed = (Number.isInteger(result.exitCode) && result.exitCode !== 0) || result.timedOut === true;
