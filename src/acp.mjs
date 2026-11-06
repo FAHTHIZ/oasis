@@ -2,6 +2,8 @@
 // JSON-RPC 2.0 on stdin/stdout so editors that implement ACP (Zed, JetBrains
 // AI Assistant, Neovim's CodeCompanion/avante, Emacs agent-shell, marimo, ...)
 // can run OASIS as their coding agent. Spec: https://agentclientprotocol.com
+// Framing, request ids, schema validation of incoming params and error replies
+// come from the official SDK (@agentclientprotocol/sdk, Zed Industries).
 //
 // Agent methods: initialize, authenticate, session/new, session/load,
 // session/prompt, session/set_mode, session/cancel (notification).
@@ -11,7 +13,8 @@
 import path from 'node:path';
 import { stat } from 'node:fs/promises';
 import { readFileSync, statSync } from 'node:fs';
-import { createInterface } from 'node:readline';
+import { Readable, Writable } from 'node:stream';
+import { agent as acpAgent, methods, ndJsonStream, RequestError } from '@agentclientprotocol/sdk';
 
 export const ACP_PROTOCOL_VERSION = 1;
 
@@ -89,10 +92,7 @@ export function promptFromBlocks(blocks = [], root = process.cwd()) {
 }
 
 function rpcError(code, message, data) {
-  const error = new Error(message);
-  error.code = code;
-  if (data !== undefined) error.data = data;
-  return error;
+  return new RequestError(code, message, data);
 }
 
 export function createAcpServer(options = {}) {
@@ -101,18 +101,15 @@ export function createAcpServer(options = {}) {
   const log = options.log || ((text) => process.stderr.write('[oasis acp] ' + text + '\n'));
   const deps = options.deps || {};
   const sessions = new Map();
-  const pending = new Map();
-  let nextId = 1;
   let clientCapabilities = {};
+  let connection = null;
 
-  const send = (message) => write(JSON.stringify({ jsonrpc: '2.0', ...message }) + '\n');
-  const notify = (method, params) => send({ method, params });
-  const request = (method, params) => new Promise((resolve, reject) => {
-    const id = 'oasis-' + nextId++;
-    pending.set(id, { resolve, reject });
-    send({ id, method, params });
-  });
-  const update = (sessionId, payload) => notify('session/update', { sessionId, update: payload });
+  // Calls to the editor go through the SDK connection once it is open.
+  const request = (method, params) => connection ? connection.client.request(method, params) : Promise.reject(new Error('connection closed'));
+  const update = (sessionId, payload) => {
+    if (!connection) return;
+    connection.client.notify('session/update', { sessionId, update: payload }).catch((error) => log('session/update failed: ' + error.message));
+  };
 
   async function load(name) {
     if (deps[name]) return deps[name];
@@ -387,47 +384,63 @@ export function createAcpServer(options = {}) {
     }
   }
 
+  const app = acpAgent({ name: 'oasis' });
+  const requests = [
+    [methods.agent.initialize, 'initialize'], [methods.agent.authenticate, 'authenticate'],
+    [methods.agent.session.new, 'session/new'], [methods.agent.session.load, 'session/load'],
+    [methods.agent.session.prompt, 'session/prompt'], [methods.agent.session.setMode, 'session/set_mode']
+  ];
+  for (const [method, name] of requests) app.onRequest(method, async ({ params }) => { const result = await handle(name, params || {}); return result === undefined ? null : result; });
+  app.onNotification(methods.agent.session.cancel, async ({ params }) => { await handle('session/cancel', params || {}); });
+
+  function connect(stream) {
+    connection = app.connect(stream);
+    connection.closed.then(() => close(), () => close());
+    return connection;
+  }
+
+  // In-process transport for embedding and tests: receive(line) feeds one
+  // ndjson line, replies go to options.write.
+  let feed = null;
+  function ensureLineTransport() {
+    if (feed) return;
+    const encoder = new TextEncoder();
+    const input = new ReadableStream({ start(controller) { feed = controller; } });
+    const output = new WritableStream({ write(chunk) { const text = new TextDecoder().decode(chunk); for (const line of text.split('\n')) if (line.trim()) write(line + '\n'); } });
+    connect(ndJsonStream(output, input));
+    feed.encoder = encoder;
+  }
   async function receive(line) {
-    const trimmed = String(line || '').trim();
-    if (!trimmed) return;
-    let message;
-    try { message = JSON.parse(trimmed); } catch { send({ id: null, error: { code: -32700, message: 'Parse error' } }); return; }
-    if (message && message.id !== undefined && !message.method && pending.has(message.id)) {
-      const waiter = pending.get(message.id); pending.delete(message.id);
-      if (message.error) waiter.reject(new Error(message.error.message || 'client error')); else waiter.resolve(message.result);
-      return;
-    }
-    if (!message || typeof message.method !== 'string') { if (message && message.id !== undefined) send({ id: message.id, error: { code: -32600, message: 'Invalid request' } }); return; }
-    const isNotification = message.id === undefined || message.id === null;
-    try {
-      const result = await handle(message.method, message.params || {});
-      if (!isNotification) send({ id: message.id, result: result === undefined ? null : result });
-    } catch (error) {
-      if (!isNotification) send({ id: message.id, error: { code: Number.isInteger(error.code) ? error.code : -32603, message: String(error.message || error), ...(error.data !== undefined ? { data: error.data } : {}) } });
-      else log(message.method + ' failed: ' + error.message);
-    }
+    ensureLineTransport();
+    feed.enqueue(feed.encoder.encode(String(line || '') + '\n'));
+    // Let the SDK parse, dispatch and reply before returning.
+    await new Promise((resolve) => setImmediate(resolve));
   }
 
-  async function close() {
-    for (const entry of sessions.values()) {
-      if (entry.controller) entry.controller.abort();
-      try { const { closeSession } = await load('agent'); if (closeSession) await closeSession(entry.session); } catch {}
-    }
-    sessions.clear();
-    for (const waiter of pending.values()) waiter.reject(new Error('connection closed'));
-    pending.clear();
+  let closing = null;
+  function close() {
+    if (closing) return closing;
+    closing = (async () => {
+      for (const entry of sessions.values()) {
+        if (entry.controller) entry.controller.abort();
+        try { const { closeSession } = await load('agent'); if (closeSession) await closeSession(entry.session); } catch {}
+      }
+      sessions.clear();
+      try { connection && connection.close(); } catch {}
+    })();
+    return closing;
   }
 
-  return { receive, close, sessions, get clientCapabilities() { return clientCapabilities; } };
+  return { connect, receive, close, sessions, get clientCapabilities() { return clientCapabilities; } };
 }
 
 export async function serveAcp(options = {}) {
   const input = options.input || process.stdin;
+  const output = options.output || process.stdout;
   const server = createAcpServer(options);
-  const reader = createInterface({ input, crlfDelay: Infinity });
-  // Requests are handled concurrently so a long session/prompt does not block
-  // the permission replies and cancel notifications that arrive meanwhile.
-  reader.on('line', (line) => { server.receive(line).catch((error) => process.stderr.write('[oasis acp] ' + error.message + '\n')); });
-  await new Promise((resolve) => reader.once('close', resolve));
+  // Requests are handled concurrently by the SDK, so a long session/prompt does
+  // not block the permission replies and cancel notifications that arrive meanwhile.
+  const connection = server.connect(ndJsonStream(Writable.toWeb(output), Readable.toWeb(input)));
+  await connection.closed.catch((error) => process.stderr.write('[oasis acp] ' + error.message + '\n'));
   await server.close();
 }

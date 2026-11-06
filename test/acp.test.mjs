@@ -122,9 +122,20 @@ test('the server answers parse errors and ignores notifications for unknown sess
   assert.equal(out[0].error.code, -32700);
   await server.receive(JSON.stringify({ jsonrpc: '2.0', method: 'session/cancel', params: { sessionId: 'x' } }));
   assert.equal(out.length, 1);
+  // Requests before initialize are refused, as the protocol requires.
+  await server.receive(JSON.stringify({ jsonrpc: '2.0', id: 6, method: 'session/prompt', params: { sessionId: 'missing', prompt: [] } }));
+  assert.equal(out[1].id, 6);
+  assert.equal(out[1].error.code, -32600);
+  await server.receive(JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'initialize', params: { protocolVersion: 1, clientCapabilities: {} } }));
+  assert.equal(out[2].result.protocolVersion, 1);
   await server.receive(JSON.stringify({ jsonrpc: '2.0', id: 7, method: 'session/prompt', params: { sessionId: 'missing', prompt: [] } }));
-  assert.equal(out[1].id, 7);
-  assert.equal(out[1].error.code, -32002);
+  assert.equal(out[3].id, 7);
+  assert.equal(out[3].error.code, -32002);
+  // Malformed params are rejected by the SDK's schema validation before OASIS sees them.
+  await server.receive(JSON.stringify({ jsonrpc: '2.0', id: 8, method: 'session/new', params: { cwd: 42 } }));
+  assert.equal(out[4].id, 8);
+  assert.equal(out[4].error.code, -32602);
+  await server.close();
 });
 
 test('ACP clients with fs capabilities serve unsaved buffers, receive writes and get inline diffs', async (t) => {
