@@ -1473,6 +1473,9 @@ export async function runEvalCommand(args = [], options = {}) {
             env: evalAgentEnvironment(process.env),
             maxSteps: provider.maxSteps,
             signal: timeoutController.signal,
+            // Streamed like interactive and headless runs, so a stalled provider
+            // hits the header timeout and idle watchdog (OASIS_NO_STREAM=1 opts out).
+            ...(process.env.OASIS_NO_STREAM !== '1' ? { onDelta: () => {} } : {}),
             ...(config.routeEasyModel ? { routingHint: task.difficulty } : {}),
             onUsage: (entry) => {
               usage.inputTokens += Number(entry.inputTokens || 0);

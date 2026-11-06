@@ -261,12 +261,14 @@ export async function runHeadless(options) {
       // Notice on stderr in every output format, so text results on stdout stay clean.
       onProviderRetry: ({ status, attempt, limit, waitMs, reason }) => { process.stderr.write('[retry] Provider ' + (status ? 'error ' + status : 'connection failed') + (reason && status ? ' (' + reason + ')' : '') + '; retrying in ' + formatWait(waitMs) + ' (' + attempt + '/' + limit + ').\n'); emit({ type: 'system', subtype: 'api_retry', attempt, max_retries: limit, retry_delay_ms: waitMs, error_status: status || null }); },
       onRateLimitWait: ({ waitMs, until, attempt, compactTools }) => { process.stderr.write('[rate limit] Waiting ' + formatWait(waitMs) + ' for the provider limit to reset (until ' + until + ').' + (compactTools ? ' Switched to the compact tool set to fit its per-minute token limit; other tools stay available through tool_search.' : '') + '\n'); emit({ type: 'system', subtype: 'rate_limit_wait', wait_ms: waitMs, until, attempt, ...(compactTools ? { compact_tools: true } : {}) }); },
+      // Stream even when nothing is shown, so a stalled provider hits the 120 s
+      // header timeout and the idle watchdog instead of the 600 s request timeout.
       ...(includePartial && outputFormat === 'stream-json' ? { onDelta: (accumulated) => {
         const text = String(accumulated || '');
         const delta = text.startsWith(partialSoFar) ? text.slice(partialSoFar.length) : text;
         partialSoFar = text;
         if (delta) emit({ type: 'stream_event', event: { type: 'content_block_delta', delta: { type: 'text_delta', text: delta } } });
-      } } : {}),
+      } } : env.OASIS_NO_STREAM !== '1' ? { onDelta: () => {} } : {}),
       ...(outputFormat === 'stream-json' ? { onStreamRestart: (info) => {
         partialSoFar = '';
         emit({ type: 'system', subtype: 'stream_restarted', attempt: info.attempt, reason: info.reason, ...(info.kind ? { kind: info.kind } : {}) });
