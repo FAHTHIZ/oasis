@@ -377,6 +377,15 @@ Raw string-width is ~80× slower than the old table, so printable-ASCII strings 
 Regression test `test/string-width.test.mjs` fails on the old implementation (negative control) and passes now.
 Remaining limitation: markdown/Mermaid still iterate code points when hard-breaking single over-long words.
 
+## 15. LSP JSON-RPC transport: vscode-jsonrpc
+
+Replaced: `onData`/`onMessage`/`send` and the manual id/pending map in `LspClient` (`src/lsp.mjs`).
+Adopted: `vscode-jsonrpc` 8.2.1 (Microsoft, MIT, 0 dependencies, 352 KB), the transport under vscode-languageclient.
+Kept: process lifecycle (process groups, graceful shutdown → SIGTERM → SIGKILL), timeouts and error text, the document sync and diagnostics waiters.
+Gains: `$/cancelRequest` on timeout via CancellationTokenSource (verified on the wire: the old transport never sent it), spec-conformant header parsing, and error replies as ResponseError.
+Lost: the 64 MiB frame cap (vscode-jsonrpc has no size limit). Language servers are local binaries the user approves, so this is accepted.
+Real-server check with typescript-language-server: hover/references/diagnostics/document_symbols outputs are identical to the old transport; first hover takes 309 ms vs 282 ms (server startup), later calls 2–4 ms both.
+
 ## Next
 
 - Decided against Ajv validation in front of built-in tools: they already reject bad input with specific messages ("edit_file needs old_string … got path"), coerce numeric strings, and accept documented argument aliases that a strict schema would refuse.
