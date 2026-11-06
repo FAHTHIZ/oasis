@@ -158,7 +158,9 @@ test('explains a missing native dependency without breaking normal module import
 
 const require = createRequire(import.meta.url);
 let nativePtyPresent = false;
-try { require.resolve('node-pty'); nativePtyPresent = true; } catch {}
+// Resolving is not enough: node-pty ships no Linux prebuilds, so a checkout
+// installed with --ignore-scripts has the package but no loadable pty.node.
+try { require('node-pty'); nativePtyPresent = true; } catch {}
 
 test('native PTY launches a real process and captures its output', { skip: !nativePtyPresent }, async () => {
   const manager = new PtySessionManager();
