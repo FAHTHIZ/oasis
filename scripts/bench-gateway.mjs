@@ -12,6 +12,7 @@
 // The upstream key, if any, comes from OASIS_GATEWAY_UPSTREAM_KEY and is never logged.
 import http from 'node:http';
 import { appendFile } from 'node:fs/promises';
+import { redactSecretText } from '../src/secret-shield.mjs';
 import { fileURLToPath } from 'node:url';
 
 export function parseGatewayArgs(argv) {
@@ -57,6 +58,8 @@ export function usageFrom(text) {
   return usage;
 }
 
+const LOOPBACK_HOST = /^(?:localhost|127(?:\.\d{1,3}){3}|\[::1\])(?::\d+)?$/i;
+
 export function createGateway(options, { fetchImpl = fetch, now = Date.now, wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms)) } = {}) {
   let chain = Promise.resolve();
   let lastStart = 0;
@@ -75,6 +78,14 @@ export function createGateway(options, { fetchImpl = fetch, now = Date.now, wait
   };
   return http.createServer(async (req, res) => {
     const url = new URL(req.url, 'http://gateway');
+    // The gateway spends the upstream key for whoever reaches it. Browsers send
+    // Origin on cross-site POSTs (a text/plain POST needs no preflight), and a
+    // DNS-rebinding page arrives with its own Host, so refuse both.
+    if (req.headers.origin || (LOOPBACK_HOST.test(options.host || '127.0.0.1') && !LOOPBACK_HOST.test(String(req.headers.host || '')))) {
+      res.writeHead(403, { 'content-type': 'application/json' });
+      res.end(JSON.stringify({ error: { message: 'Browser and non-local requests are refused.' } }));
+      return;
+    }
     if (req.method === 'GET' && /\/models$/.test(url.pathname)) {
       res.writeHead(200, { 'content-type': 'application/json' });
       res.end(JSON.stringify({ object: 'list', data: [{ id: 'bench-model', object: 'model', owned_by: 'gateway' }] }));
@@ -108,11 +119,11 @@ export function createGateway(options, { fetchImpl = fetch, now = Date.now, wait
       if (upstream.body) for await (const chunk of upstream.body) { text += decoder.decode(chunk, { stream: true }); res.write(chunk); }
       res.end();
       const usage = usageFrom(text);
-      await log({ id, at: new Date(started).toISOString(), ms: now() - started, status: upstream.status, requestedModel, stream: Boolean(body.stream), messages: Array.isArray(body.messages) ? body.messages.length : null, tools: Array.isArray(body.tools) ? body.tools.length : 0, promptTokens: usage && usage.prompt_tokens != null ? usage.prompt_tokens : null, completionTokens: usage && usage.completion_tokens != null ? usage.completion_tokens : null, error: upstream.status >= 400 ? text.slice(0, 300) : undefined });
+      await log({ id, at: new Date(started).toISOString(), ms: now() - started, status: upstream.status, requestedModel, stream: Boolean(body.stream), messages: Array.isArray(body.messages) ? body.messages.length : null, tools: Array.isArray(body.tools) ? body.tools.length : 0, promptTokens: usage && usage.prompt_tokens != null ? usage.prompt_tokens : null, completionTokens: usage && usage.completion_tokens != null ? usage.completion_tokens : null, error: upstream.status >= 400 ? redactSecretText(text.slice(0, 2000)).slice(0, 300) : undefined });
     } catch (error) {
       if (!res.headersSent) res.writeHead(502, { 'content-type': 'application/json' });
       res.end(JSON.stringify({ error: { message: 'Gateway could not reach the upstream: ' + error.message } }));
-      await log({ id, at: new Date(started).toISOString(), ms: now() - started, status: 502, requestedModel, error: error.message });
+      await log({ id, at: new Date(started).toISOString(), ms: now() - started, status: 502, requestedModel, error: redactSecretText(String(error.message)) });
     }
   });
 }
