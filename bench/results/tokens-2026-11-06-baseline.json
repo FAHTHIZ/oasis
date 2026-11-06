@@ -1,0 +1,422 @@
+{
+  "benchmark": "oasis-token-efficiency",
+  "version": 1,
+  "generatedAt": "2026-11-06T01:50:08.993Z",
+  "sourceRevision": {
+    "sha": "cf469f61b5bddf830bd1b9f64140d617d7c5ef34",
+    "srcDirty": false
+  },
+  "node": "v22.21.0",
+  "tokenEstimate": "characters / 4",
+  "scenarios": [
+    {
+      "id": "taskflow-search",
+      "task": "taskflow-search",
+      "model": "gpt-oss-20b",
+      "passed": true,
+      "error": null,
+      "finished": true,
+      "verifier": {
+        "exitCode": 0,
+        "output": ""
+      },
+      "toolCalls": [
+        {
+          "id": "call_1_0",
+          "name": "list_files",
+          "step": 1,
+          "ok": true,
+          "chars": 341
+        },
+        {
+          "id": "call_2_0",
+          "name": "read_file",
+          "step": 2,
+          "ok": true,
+          "chars": 896
+        },
+        {
+          "id": "call_3_0",
+          "name": "read_file",
+          "step": 3,
+          "ok": true,
+          "chars": 376
+        },
+        {
+          "id": "call_4_0",
+          "name": "grep",
+          "step": 4,
+          "ok": true,
+          "chars": 1065
+        },
+        {
+          "id": "call_5_0",
+          "name": "read_file",
+          "step": 5,
+          "ok": true,
+          "chars": 1633
+        },
+        {
+          "id": "call_6_0",
+          "name": "read_file",
+          "step": 6,
+          "ok": true,
+          "chars": 4008
+        },
+        {
+          "id": "call_7_0",
+          "name": "read_file",
+          "step": 7,
+          "ok": true,
+          "chars": 1679
+        },
+        {
+          "id": "call_8_0",
+          "name": "read_file",
+          "step": 8,
+          "ok": true,
+          "chars": 1805
+        },
+        {
+          "id": "call_9_0",
+          "name": "read_file",
+          "step": 9,
+          "ok": true,
+          "chars": 572
+        },
+        {
+          "id": "call_10_0",
+          "name": "edit_file",
+          "step": 10,
+          "ok": true,
+          "chars": 114
+        },
+        {
+          "id": "call_11_0",
+          "name": "edit_file",
+          "step": 11,
+          "ok": true,
+          "chars": 114
+        },
+        {
+          "id": "call_12_0",
+          "name": "edit_file",
+          "step": 12,
+          "ok": true,
+          "chars": 112
+        },
+        {
+          "id": "call_13_0",
+          "name": "edit_file",
+          "step": 13,
+          "ok": true,
+          "chars": 112
+        },
+        {
+          "id": "call_14_0",
+          "name": "edit_file",
+          "step": 14,
+          "ok": true,
+          "chars": 120
+        },
+        {
+          "id": "call_15_0",
+          "name": "run_command",
+          "step": 15,
+          "ok": true,
+          "chars": 3544
+        },
+        {
+          "id": "call_16_0",
+          "name": "read_file",
+          "step": 16,
+          "ok": true,
+          "chars": 1814
+        },
+        {
+          "id": "call_17_0",
+          "name": "git_diff",
+          "step": 17,
+          "ok": true,
+          "chars": 7927
+        }
+      ],
+      "totals": {
+        "requests": 18,
+        "inputChars": 723591,
+        "inputTokens": 180898,
+        "systemTokens": 51737,
+        "toolSchemaTokens": 68211,
+        "toolResultTokens": 44321,
+        "userTokens": 1845,
+        "assistantTokens": 3776,
+        "framingTokens": 11009,
+        "uncachedTokens": 15041,
+        "firstRequestTokens": 6839,
+        "lastRequestTokens": 15060
+      },
+      "accounting": {
+        "usageEvents": 18,
+        "reportedInputTokens": 180903,
+        "expectedInputTokens": 180903,
+        "taskUsageInputTokens": 180903,
+        "taskUsageRequests": 18,
+        "matches": true
+      },
+      "requests": [
+        {
+          "totalChars": 27356,
+          "systemChars": 11497,
+          "toolSchemaChars": 15158,
+          "toolCount": 22,
+          "toolResultChars": 0,
+          "userChars": 410,
+          "assistantChars": 0,
+          "framingChars": 291,
+          "messages": 2,
+          "reusedPrefixChars": 0,
+          "uncachedChars": 27264,
+          "reply": "list_files"
+        },
+        {
+          "totalChars": 28003,
+          "systemChars": 11497,
+          "toolSchemaChars": 15158,
+          "toolCount": 22,
+          "toolResultChars": 341,
+          "userChars": 410,
+          "assistantChars": 62,
+          "framingChars": 535,
+          "messages": 4,
+          "reusedPrefixChars": 27263,
+          "uncachedChars": 648,
+          "reply": "read_file"
+        },
+        {
+          "totalChars": 29167,
+          "systemChars": 11497,
+          "toolSchemaChars": 15158,
+          "toolCount": 22,
+          "toolResultChars": 1237,
+          "userChars": 410,
+          "assistantChars": 91,
+          "framingChars": 774,
+          "messages": 6,
+          "reusedPrefixChars": 27910,
+          "uncachedChars": 1165,
+          "reply": "read_file"
+        },
+        {
+          "totalChars": 29868,
+          "systemChars": 11497,
+          "toolSchemaChars": 15158,
+          "toolCount": 22,
+          "toolResultChars": 1613,
+          "userChars": 410,
+          "assistantChars": 123,
+          "framingChars": 1067,
+          "messages": 8,
+          "reusedPrefixChars": 29074,
+          "uncachedChars": 702,
+          "reply": "grep"
+        },
+        {
+          "totalChars": 31209,
+          "systemChars": 11497,
+          "toolSchemaChars": 15158,
+          "toolCount": 22,
+          "toolResultChars": 2678,
+          "userChars": 410,
+          "assistantChars": 163,
+          "framingChars": 1303,
+          "messages": 10,
+          "reusedPrefixChars": 29775,
+          "uncachedChars": 1342,
+          "reply": "read_file"
+        },
+        {
+          "totalChars": 33121,
+          "systemChars": 11497,
+          "toolSchemaChars": 15158,
+          "toolCount": 22,
+          "toolResultChars": 4311,
+          "userChars": 410,
+          "assistantChars": 196,
+          "framingChars": 1549,
+          "messages": 12,
+          "reusedPrefixChars": 31116,
+          "uncachedChars": 1913,
+          "reply": "read_file"
+        },
+        {
+          "totalChars": 37480,
+          "systemChars": 11497,
+          "toolSchemaChars": 15158,
+          "toolCount": 22,
+          "toolResultChars": 8319,
+          "userChars": 410,
+          "assistantChars": 227,
+          "framingChars": 1869,
+          "messages": 14,
+          "reusedPrefixChars": 33028,
+          "uncachedChars": 4360,
+          "reply": "read_file"
+        },
+        {
+          "totalChars": 39440,
+          "systemChars": 11497,
+          "toolSchemaChars": 15158,
+          "toolCount": 22,
+          "toolResultChars": 9998,
+          "userChars": 410,
+          "assistantChars": 266,
+          "framingChars": 2111,
+          "messages": 16,
+          "reusedPrefixChars": 37387,
+          "uncachedChars": 1961,
+          "reply": "read_file"
+        },
+        {
+          "totalChars": 41534,
+          "systemChars": 11497,
+          "toolSchemaChars": 15158,
+          "toolCount": 22,
+          "toolResultChars": 11803,
+          "userChars": 410,
+          "assistantChars": 303,
+          "framingChars": 2363,
+          "messages": 18,
+          "reusedPrefixChars": 39347,
+          "uncachedChars": 2095,
+          "reply": "read_file"
+        },
+        {
+          "totalChars": 42369,
+          "systemChars": 11497,
+          "toolSchemaChars": 15158,
+          "toolCount": 22,
+          "toolResultChars": 12375,
+          "userChars": 410,
+          "assistantChars": 339,
+          "framingChars": 2590,
+          "messages": 20,
+          "reusedPrefixChars": 41441,
+          "uncachedChars": 836,
+          "reply": "edit_file"
+        },
+        {
+          "totalChars": 43183,
+          "systemChars": 11497,
+          "toolSchemaChars": 15158,
+          "toolCount": 22,
+          "toolResultChars": 12489,
+          "userChars": 410,
+          "assistantChars": 811,
+          "framingChars": 2818,
+          "messages": 22,
+          "reusedPrefixChars": 42276,
+          "uncachedChars": 815,
+          "reply": "edit_file"
+        },
+        {
+          "totalChars": 43844,
+          "systemChars": 11497,
+          "toolSchemaChars": 15158,
+          "toolCount": 22,
+          "toolResultChars": 12603,
+          "userChars": 410,
+          "assistantChars": 1126,
+          "framingChars": 3050,
+          "messages": 24,
+          "reusedPrefixChars": 43090,
+          "uncachedChars": 662,
+          "reply": "edit_file"
+        },
+        {
+          "totalChars": 44308,
+          "systemChars": 11497,
+          "toolSchemaChars": 15158,
+          "toolCount": 22,
+          "toolResultChars": 12715,
+          "userChars": 410,
+          "assistantChars": 1251,
+          "framingChars": 3277,
+          "messages": 26,
+          "reusedPrefixChars": 43751,
+          "uncachedChars": 465,
+          "reply": "edit_file"
+        },
+        {
+          "totalChars": 44808,
+          "systemChars": 11497,
+          "toolSchemaChars": 15158,
+          "toolCount": 22,
+          "toolResultChars": 12827,
+          "userChars": 410,
+          "assistantChars": 1412,
+          "framingChars": 3504,
+          "messages": 28,
+          "reusedPrefixChars": 44215,
+          "uncachedChars": 501,
+          "reply": "edit_file"
+        },
+        {
+          "totalChars": 45879,
+          "systemChars": 11497,
+          "toolSchemaChars": 15158,
+          "toolCount": 22,
+          "toolResultChars": 12947,
+          "userChars": 410,
+          "assistantChars": 2131,
+          "framingChars": 3736,
+          "messages": 30,
+          "reusedPrefixChars": 44715,
+          "uncachedChars": 1072,
+          "reply": "run_command"
+        },
+        {
+          "totalChars": 49843,
+          "systemChars": 11497,
+          "toolSchemaChars": 15158,
+          "toolCount": 22,
+          "toolResultChars": 16491,
+          "userChars": 410,
+          "assistantChars": 2175,
+          "framingChars": 4112,
+          "messages": 32,
+          "reusedPrefixChars": 45786,
+          "uncachedChars": 3965,
+          "reply": "read_file"
+        },
+        {
+          "totalChars": 51942,
+          "systemChars": 11497,
+          "toolSchemaChars": 15158,
+          "toolCount": 22,
+          "toolResultChars": 18305,
+          "userChars": 410,
+          "assistantChars": 2208,
+          "framingChars": 4364,
+          "messages": 34,
+          "reusedPrefixChars": 49750,
+          "uncachedChars": 2100,
+          "reply": "git_diff"
+        },
+        {
+          "totalChars": 60237,
+          "systemChars": 11497,
+          "toolSchemaChars": 15158,
+          "toolCount": 22,
+          "toolResultChars": 26232,
+          "userChars": 410,
+          "assistantChars": 2218,
+          "framingChars": 4722,
+          "messages": 36,
+          "reusedPrefixChars": 51849,
+          "uncachedChars": 8296,
+          "reply": "final"
+        }
+      ]
+    }
+  ]
+}
