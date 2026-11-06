@@ -138,3 +138,8 @@ Sources: `src/tools.mjs`, `src/power-tools.mjs`, `src/git-visible-files.mjs`.
   `after`, `multiline`, `limit` and `offset`. It also accepts ripgrep-style names
   that models trained on other harnesses send: `-i`, `-C`, `-A`, `-B`,
   `head_limit`.
+- Content results show at most about 400 columns per line. When the first match
+  on a line starts beyond that (minified bundles, generated JSON), `grep` shows
+  a window of roughly 120 characters before and 240 after the match, marked
+  `[match at column N of a long line]`. With ripgrep this uses a second,
+  match-only pass (`-o -b --column`) over the affected files (up to 50).
