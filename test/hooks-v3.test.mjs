@@ -12,7 +12,7 @@ import { scriptedModel } from './helpers/scripted-model.mjs';
 
 async function tmp(t) {
   const dir = await mkdtemp(path.join(os.tmpdir(), 'oasis-hooks-v3-'));
-  t.after(() => rm(dir, { recursive: true, force: true }));
+  t.after(() => rm(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 }));
   return dir;
 }
 const settingsWith = (hooks) => ({ permissions: { allow: [], ask: [], deny: [], defaultMode: 'default' }, hooks, sandbox: { enabled: false }, shell: { enabled: false } });
