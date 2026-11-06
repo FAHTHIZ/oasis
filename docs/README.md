@@ -10,6 +10,10 @@ This directory contains maintained technical documentation for the current OASIS
 | [Interfaces and deployment](INTERFACES.md) | CLI, desktop, connected browser workspace, PWA, editor, ACP, SDK and integrations. |
 | [Benchmark methodology](BENCHMARKS.md) | What the model-free benchmarks measure, what they do not measure and how to interpret live evaluations. |
 
+## Project identity
+
+- [Brand guidelines](../BRAND.md) — official name, portal mark, wordmark, colors, visual usage and motion direction.
+
 ## Project policies
 
 - [Security policy](../SECURITY.md)

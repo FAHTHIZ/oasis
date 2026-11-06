@@ -1,0 +1,64 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="675" viewBox="0 0 1200 675" role="img" aria-labelledby="title desc">
+  <title id="title">OASIS portal on a reflective floor</title>
+  <desc id="desc">A luminous layered green portal stands at the horizon of a dark, reflective floor. Fine perspective lines and a soft reflection ground the symbol.</desc>
+  <defs>
+    <linearGradient id="background" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#070A08"/><stop offset="0.62" stop-color="#0B100C"/><stop offset="1" stop-color="#050806"/>
+    </linearGradient>
+    <linearGradient id="portal" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#B6FF83"/><stop offset="0.48" stop-color="#7CFF5E"/><stop offset="1" stop-color="#0ED168"/>
+    </linearGradient>
+    <linearGradient id="strata" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#A7FF72"/><stop offset="1" stop-color="#20D878"/>
+    </linearGradient>
+    <radialGradient id="aura">
+      <stop offset="0" stop-color="#39F17C" stop-opacity=".38"/><stop offset=".52" stop-color="#20C968" stop-opacity=".12"/><stop offset="1" stop-color="#20C968" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="reflection" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#A7FF72" stop-opacity=".58"/><stop offset=".45" stop-color="#32E07A" stop-opacity=".25"/><stop offset="1" stop-color="#32E07A" stop-opacity="0"/>
+    </linearGradient>
+    <linearGradient id="reflectionFade" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#FFFFFF" stop-opacity=".85"/><stop offset=".58" stop-color="#FFFFFF" stop-opacity=".34"/><stop offset="1" stop-color="#FFFFFF" stop-opacity="0"/>
+    </linearGradient>
+    <filter id="softGlow" x="-80%" y="-80%" width="260%" height="260%"><feGaussianBlur stdDeviation="19"/></filter>
+    <filter id="smallGlow" x="-60%" y="-60%" width="220%" height="220%"><feGaussianBlur stdDeviation="6"/></filter>
+    <mask id="reflectionMask"><rect x="0" y="444" width="1200" height="231" fill="url(#reflectionFade)"/></mask>
+  </defs>
+  <rect width="1200" height="675" fill="url(#background)"/>
+  <ellipse cx="600" cy="405" rx="395" ry="260" fill="url(#aura)"/>
+  <g fill="#A6FF83" opacity=".52">
+    <circle cx="236" cy="266" r="1.2"/><circle cx="340" cy="340" r=".9"/><circle cx="880" cy="240" r="1.1"/>
+    <circle cx="966" cy="327" r=".9"/><circle cx="418" cy="194" r=".8"/><circle cx="775" cy="171" r=".8"/>
+    <circle cx="1012" cy="385" r=".7"/><circle cx="190" cy="388" r=".7"/>
+  </g>
+  <ellipse cx="600" cy="444" rx="275" ry="23" fill="#34ED78" opacity=".52" filter="url(#softGlow)"/>
+  <ellipse cx="600" cy="444" rx="190" ry="8" fill="#A8FF75" opacity=".65" filter="url(#smallGlow)"/>
+  <path d="M0 444H1200" stroke="#43E879" stroke-opacity=".24" stroke-width="1"/>
+  <path d="M0 675L600 444L1200 675" fill="none" stroke="#32E07A" stroke-opacity=".16"/>
+  <g fill="none" stroke="#32E07A" stroke-opacity=".15" stroke-width="1">
+    <path d="M0 478H1200"/><path d="M0 512H1200"/><path d="M0 554H1200"/><path d="M0 607H1200"/><path d="M0 666H1200"/>
+    <path d="M80 675L600 444L1120 675"/><path d="M250 675L600 444L950 675"/><path d="M410 675L600 444L790 675"/>
+    <path d="M-190 675L600 444L1390 675"/>
+  </g>
+  <path d="M0 444H1200V675H0Z" fill="url(#aura)" opacity=".4"/>
+  <g fill="url(#reflection)" mask="url(#reflectionMask)" opacity=".9">
+    <path d="M584 447H616V453H584Z M568 455H632V462H568Z"/>
+    <path d="M546 465H654V472H546Z M522 477H678V484H522Z"/>
+    <path d="M497 490H703V497H497Z M474 504H726V511H474Z"/>
+    <path d="M453 520H747V527H453Z M435 538H765V545H435Z"/>
+    <path d="M420 557H780V564H420Z M410 578H790V585H410Z"/>
+  </g>
+  <path d="M430 445C440 510 500 554 600 574C700 554 760 510 770 445" fill="none" stroke="#46E77A" stroke-width="18" stroke-opacity=".16" filter="url(#softGlow)"/>
+  <path d="M468 447C486 492 530 515 600 528C670 515 714 492 732 447" fill="none" stroke="#8CFF67" stroke-width="4" stroke-opacity=".16" filter="url(#smallGlow)"/>
+  <g transform="translate(402 60) scale(1.4)">
+    <path d="M18 151C18 76 76 13 150 13C224 13 282 76 282 151L224 151C224 101 194 63 150 63C106 63 76 101 76 151Z" fill="url(#portal)"/>
+    <path d="M76 150C76 99 107 61 150 61C193 61 224 99 224 150" fill="none" stroke="#C0FF91" stroke-width="4.5" stroke-linecap="round" opacity=".8"/>
+    <g fill="url(#strata)">
+      <path d="M18 151H98V160H18Z M202 151H282V160H202Z"/><path d="M21 168H92V176H21Z M208 168H279V176H208Z"/>
+      <path d="M27 185H99V193H27Z M201 185H273V193H201Z"/><path d="M36 202H113V210H36Z M187 202H264V210H187Z"/>
+      <path d="M46 219H124V227H46Z M176 219H254V227H176Z"/><path d="M58 236H132V244H58Z M168 236H242V244H168Z"/>
+      <path d="M73 253H133V260H73Z M167 253H227V260H167Z"/><path d="M91 269H132V275H91Z M168 269H209V275H168Z"/>
+    </g>
+  </g>
+  <text x="600" y="650" text-anchor="middle" font-family="Inter, DejaVu Sans, Arial, sans-serif" font-size="13" letter-spacing="5" fill="#E6F5EA" opacity=".78">CODE. AUTOMATE. <tspan fill="#7CFF5E" font-weight="700">FLOURISH.</tspan></text>
+</svg>
