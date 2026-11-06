@@ -71,6 +71,35 @@ async function getJson(url, fetchImpl, timeoutMs) {
 
 const DAY = 24 * 60 * 60 * 1000;
 
+// The exact version a spec pins ("lodash@4.17.21", "requests==2.31.0", "serde@1.0.200"), or ''.
+export function pinnedVersion(ecosystem, spec) {
+  const value = String(spec || '').trim();
+  const match = ecosystem.startsWith('pip') ? value.match(/===?\s*([^\s,;]+)\s*$/) : value.match(/.@=?(\d+\.\d+\.\d+(?:[-+][\w.+-]*)?)$/);
+  return match && !/[*]/.test(match[1]) ? match[1] : '';
+}
+
+const OSV_ECOSYSTEM = { npm: 'npm', pypi: 'PyPI', crates: 'crates.io' };
+
+// Advisories from OSV.dev (the open vulnerability database that aggregates the
+// GitHub Advisory Database, PyPA, RustSec and OpenSSF's malicious-packages feed)
+// for one package version. Returns null when OSV could not be reached.
+export async function osvAdvisories(registry, name, version, { fetchImpl = globalThis.fetch, timeoutMs = 5000 } = {}) {
+  try {
+    const response = await fetchImpl('https://api.osv.dev/v1/query', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', accept: 'application/json', 'user-agent': 'oasis-package-vetting' },
+      body: JSON.stringify({ package: { name, ecosystem: OSV_ECOSYSTEM[registry] }, ...(version ? { version } : {}) }),
+      signal: AbortSignal.timeout(timeoutMs)
+    });
+    if (!response.ok) return null;
+    const vulns = ((await response.json()) || {}).vulns || [];
+    const malicious = vulns.filter((v) => /^MAL-/.test(v.id) || (v.aliases || []).some((a) => /^MAL-/.test(a)) || /^malicious (package|code|version)/i.test(v.summary || ''));
+    return { malicious: malicious.map((v) => v.id), vulnerabilities: vulns.filter((v) => !malicious.includes(v)).map((v) => v.id) };
+  } catch {
+    return null;
+  }
+}
+
 export async function vetPackage(plan, { fetchImpl = globalThis.fetch, env = process.env, now = Date.now(), timeoutMs = 5000 } = {}) {
   const registry = registryFor(plan && plan.ecosystem);
   if (!registry || /^(0|off|false)$/i.test(String(env.OASIS_PACKAGE_VETTING ?? '')) || typeof fetchImpl !== 'function') return { checked: false, risky: false, warnings: [] };
@@ -80,34 +109,54 @@ export async function vetPackage(plan, { fetchImpl = globalThis.fetch, env = pro
   if (similar) warnings.push('"' + name + '" is one typo away from the popular package "' + similar + '" — a common typosquatting pattern.');
   let created = null;
   let downloads = null;
+  let latest = '';
+  const pinned = pinnedVersion(plan.ecosystem, plan.packageName);
+  // Started now so it overlaps the registry lookups; it needs the version, which may come from the registry.
+  let resolveVersion;
+  const versionKnown = new Promise((resolve) => { resolveVersion = resolve; });
+  const osv = versionKnown.then((version) => osvAdvisories(registry, name, version, { fetchImpl, timeoutMs }));
+  if (pinned) resolveVersion(pinned);
   try {
     if (registry === 'npm') {
       const encoded = name.startsWith('@') ? '@' + encodeURIComponent(name.slice(1)) : encodeURIComponent(name);
       const meta = await getJson('https://registry.npmjs.org/' + encoded, fetchImpl, timeoutMs);
-      if (meta.missing) return { checked: true, missing: true, risky: true, name, registry, warnings: ['"' + name + '" does not exist on the npm registry.'] };
+      if (meta.missing) { resolveVersion(''); return { checked: true, missing: true, risky: true, name, registry, warnings: ['"' + name + '" does not exist on the npm registry.'] }; }
       created = meta.data && meta.data.time && meta.data.time.created ? Date.parse(meta.data.time.created) : null;
+      latest = (meta.data && meta.data['dist-tags'] && meta.data['dist-tags'].latest) || '';
+      resolveVersion(pinned || latest);
       try {
         const stats = await getJson('https://api.npmjs.org/downloads/point/last-week/' + encoded, fetchImpl, timeoutMs);
         if (stats.data && Number.isFinite(stats.data.downloads)) downloads = stats.data.downloads;
       } catch { /* download stats are optional */ }
     } else if (registry === 'pypi') {
       const meta = await getJson('https://pypi.org/pypi/' + encodeURIComponent(name) + '/json', fetchImpl, timeoutMs);
-      if (meta.missing) return { checked: true, missing: true, risky: true, name, registry, warnings: ['"' + name + '" does not exist on PyPI.'] };
+      if (meta.missing) { resolveVersion(''); return { checked: true, missing: true, risky: true, name, registry, warnings: ['"' + name + '" does not exist on PyPI.'] }; }
       const times = Object.values((meta.data && meta.data.releases) || {}).flat().map((file) => Date.parse(file && (file.upload_time_iso_8601 || file.upload_time))).filter(Number.isFinite);
       created = times.length ? Math.min(...times) : null;
+      latest = (meta.data && meta.data.info && meta.data.info.version) || '';
     } else if (registry === 'crates') {
       const meta = await getJson('https://crates.io/api/v1/crates/' + encodeURIComponent(name), fetchImpl, timeoutMs);
-      if (meta.missing) return { checked: true, missing: true, risky: true, name, registry, warnings: ['"' + name + '" does not exist on crates.io.'] };
+      if (meta.missing) { resolveVersion(''); return { checked: true, missing: true, risky: true, name, registry, warnings: ['"' + name + '" does not exist on crates.io.'] }; }
       const crate = meta.data && meta.data.crate;
       created = crate && crate.created_at ? Date.parse(crate.created_at) : null;
       if (crate && Number.isFinite(crate.recent_downloads)) downloads = Math.round(crate.recent_downloads / 13); // ~90 days -> per week
+      latest = (crate && (crate.max_stable_version || crate.newest_version)) || '';
     }
+    resolveVersion(pinned || latest);
   } catch (error) {
+    resolveVersion('');
     return { checked: false, risky: Boolean(similar), name, registry, warnings: [...warnings, 'Could not verify "' + name + '" on the registry (' + (error && error.message || error) + ').'] };
   }
   if (created && now - created < 30 * DAY) warnings.push('"' + name + '" was first published ' + Math.max(0, Math.round((now - created) / DAY)) + ' day(s) ago.');
   if (downloads !== null && downloads < 50) warnings.push('"' + name + '" has only ' + downloads + ' download(s) in the last week.');
-  return { checked: true, missing: false, risky: warnings.length > 0, name, registry, created, downloads, warnings };
+  const version = pinned || latest;
+  const advisories = await osv;
+  const label = '"' + name + (version ? '@' + version : '') + '"';
+  if (advisories && advisories.malicious.length) warnings.push(label + ' is reported as malicious in OSV (' + advisories.malicious.slice(0, 3).join(', ') + ').');
+  const risky = warnings.length > 0;
+  // Known vulnerabilities are worth seeing at approval time, but on their own do not force a prompt.
+  if (advisories && advisories.vulnerabilities.length) warnings.push(label + ' has ' + advisories.vulnerabilities.length + ' known vulnerabilit' + (advisories.vulnerabilities.length === 1 ? 'y' : 'ies') + ' in OSV (' + advisories.vulnerabilities.slice(0, 3).join(', ') + (advisories.vulnerabilities.length > 3 ? ', …' : '') + ').');
+  return { checked: true, missing: false, risky, name, registry, created, downloads, version, advisories, warnings };
 }
 
 // ---- Shell / run_command installs --------------------------------------------
