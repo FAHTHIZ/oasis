@@ -1,0 +1,71 @@
+name: Refresh data snapshots
+# Regenerates the bundled data in src/data (models.dev catalog, Gitleaks secret
+# rules, popular-package lists) and proposes the changes on a branch. The tests
+# that read the snapshots run first, so a broken upstream change never lands.
+on:
+  schedule:
+    - cron: '17 3 1 * *'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: refresh-data
+  cancel-in-progress: false
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Set up Node.js
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+      - name: Regenerate snapshots
+        run: |
+          node scripts/update-model-catalog.mjs
+          node scripts/update-secret-rules.mjs
+          node scripts/update-popular-packages.mjs
+      - name: Drop timestamp-only changes
+        run: |
+          node --input-type=module -e "
+          import { execFileSync } from 'node:child_process';
+          import { readFileSync } from 'node:fs';
+          const files = execFileSync('git', ['diff', '--name-only', '--', 'src/data'], { encoding: 'utf8' }).split('\n').filter((f) => f.endsWith('.json'));
+          const strip = (text) => { const o = JSON.parse(text); delete o.fetchedAt; return JSON.stringify(o); };
+          for (const file of files) {
+            const before = execFileSync('git', ['show', 'HEAD:' + file], { encoding: 'utf8', maxBuffer: 64 << 20 });
+            if (strip(before) === strip(readFileSync(file, 'utf8'))) {
+              execFileSync('git', ['checkout', '--', file]);
+              console.log('unchanged apart from fetchedAt:', file);
+            }
+          }"
+      - name: Test the snapshots
+        run: node --test test/model-catalog.test.mjs test/secret-rules.test.mjs test/secret-shield.test.mjs test/popular-packages.test.mjs test/pricing-table.test.mjs test/context-windows-claude.test.mjs
+      - name: Propose changes
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if git diff --quiet -- src/data; then
+            echo "Snapshots are current." >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          branch=automation/refresh-data
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git switch -c "$branch"
+          git add src/data
+          git commit -m "Refresh data snapshots ($(date -u +%Y-%m-%d))" -m "$(git diff --cached --stat)"
+          git push --force origin "$branch"
+          compare="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/compare/main...${branch}?expand=1"
+          if gh pr view "$branch" >/dev/null 2>&1 || gh pr create --base main --head "$branch" --title "Refresh data snapshots" --body "Regenerated src/data by the Refresh data snapshots workflow; the snapshot tests passed. $compare"; then
+            echo "Pull request opened or updated for $branch." >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "Pushed $branch. This repository does not let workflows open pull requests; open one here: $compare" >> "$GITHUB_STEP_SUMMARY"
+          fi
