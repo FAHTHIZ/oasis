@@ -1,7 +1,7 @@
 {
   "name": "oasis-oss",
   "version": "1.1.0",
-  "description": "Open-source coding-agent runtime and development workspace with CLI, browser, desktop and editor interfaces, model providers, tools, permissions, integrations and verification.",
+  "description": "Open-source, model-agnostic coding-agent runtime with CLI, browser, desktop and VS Code interfaces.",
   "type": "module",
   "main": "./src/sdk.mjs",
   "exports": {
@@ -56,9 +56,9 @@
   "keywords": [
     "ai-coding-agent",
     "coding-agent",
+    "agent-runtime",
     "ai-agents",
     "developer-tools",
-    "developer-workspace",
     "cli",
     "terminal-agent",
     "llm",
@@ -67,13 +67,13 @@
     "agent-skills",
     "agentic-workflows",
     "local-first",
-    "open-source",
-    "javascript",
-    "nodejs",
-    "automation",
-    "subagents",
+    "multi-agent",
+    "multi-provider",
     "ollama",
-    "multi-provider"
+    "electron",
+    "vscode",
+    "nodejs",
+    "open-source"
   ],
   "dependencies": {
     "@agentclientprotocol/sdk": "^2.4.0",
@@ -189,5 +189,6 @@
     "channel": "stable",
     "stableTag": "v1.1.0",
     "published": true
-  }
+  },
+  "homepage": "https://github.com/FAHTHIZ/oasis#readme"
 }

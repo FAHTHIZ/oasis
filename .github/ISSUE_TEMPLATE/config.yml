@@ -5,10 +5,10 @@ contact_links:
     about: Report vulnerabilities privately. Please do not open a public issue for them.
   - name: Ask the community
     url: https://github.com/FAHTHIZ/oasis/discussions
-    about: Questions, ideas and show-and-tell in GitHub Discussions.
-  - name: Read the user guide
-    url: https://github.com/FAHTHIZ/oasis/blob/main/docs/USER_GUIDE.md
-    about: Commands, settings, providers and troubleshooting (try `oasis doctor` first).
-  - name: OASIS website
-    url: https://fahthiz.github.io/oasis/
-    about: Install options, demos and benchmark results.
+    about: Questions, ideas and support in GitHub Discussions.
+  - name: Download OASIS
+    url: https://github.com/FAHTHIZ/oasis/releases/latest
+    about: Stable desktop installers and SHA256SUMS checksums.
+  - name: Install the browser app
+    url: https://fahthiz.github.io/oasis/app/
+    about: Open the installable browser app on desktop, phone or tablet.
