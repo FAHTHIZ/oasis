@@ -84,7 +84,7 @@ test('globs, recursive searches and git object paths cannot reach secret files w
   await writeFile(path.join(root, 'docs', 'a.md'), 'x\n');
   for (const line of ['cat .en?', 'cat .env*', 'head .[e]nv', 'tail .??v', 'wc -c .e*', 'grep -r SECRET .', 'grep -rn SECRET', 'grep --recursive SECRET .',
     'egrep -d recurse SECRET .', 'rg --hidden SECRET', 'rg -uu SECRET .', 'rg PRIVATE', 'rg PRIVATE keys', 'diff -r . docs', 'git show HEAD:.env', 'git cat-file -p HEAD:keys/deploy.pem',
-    'git grep --untracked SECRET', 'git grep --no-index SECRET', 'ls src/*.js'])
+    'git grep --untracked SECRET', 'git grep --no-index SECRET', 'cat *.pem keys/*', 'cat keys/*', 'ls ../*', 'cat [k]eys/*.pem', '* --version', 'cat /etc/*'])
     assert.equal(readOnlyShellLine(line, { root }), false, line);
   for (const line of ['grep -rn export src', 'grep -rn -A 3 export src', 'rg export src', "grep -rn 'a.*b' src", 'rg -n "x?" docs', 'git grep export', 'git show HEAD:src/a.js', 'find . -name "*.js"'])
     assert.equal(readOnlyShellLine(line, { root }), true, line);
@@ -154,4 +154,28 @@ test('direnv, PostgreSQL, MySQL, htpasswd and legacy Docker credential files are
     assert.equal(readOnlyShellLine('cat ' + name, { root }), false, name);
   }
   assert.equal(sensitivePath('src/envrc.js'), false);
+});
+
+test('benign globs are expanded and checked like typed paths', { skip: process.platform === 'win32' }, async (t) => {
+  // Globs used to make every line ask, which denied ls src/*.js in headless runs.
+  const root = await workspace(t);
+  await mkdir(path.join(root, 'test'));
+  await writeFile(path.join(root, 'test', 'a.test.mjs'), 'x\n');
+  await writeFile(path.join(root, 'test', 'b.test.mjs'), 'y\n');
+  await writeFile(path.join(root, 'package.json'), '{}\n');
+  for (const line of ['ls src/*.js', 'wc -l test/*.mjs', 'cat *.json', 'ls */', 'ls *', 'head -n 3 test/[ab].test.mjs', 'ls nothing-*.txt', "grep -n 'x' test/*.mjs", 'ls src/?.js', 'cd src && ls *.js'])
+    assert.equal(readOnlyShellLine(line, { root }), true, line);
+  for (const line of ['cat .en?', 'head .[e]nv', 'wc -c .e*', 'cat .*', 'ls .e*'])
+    assert.equal(readOnlyShellLine(line, { root }), false, line);
+  // A symlinked folder pointing outside the workspace is not expanded.
+  const outside = await mkdtemp(path.join(os.tmpdir(), 'oasis-glob-out-'));
+  t.after(() => rm(outside, { recursive: true, force: true }));
+  await writeFile(path.join(outside, 'x.txt'), 'outside\n');
+  await symlink(outside, path.join(root, 'out'));
+  assert.equal(readOnlyShellLine('cat out/*.txt', { root }), false);
+  assert.equal(readOnlyShellLine('cat */x.txt', { root }), false);
+  // Quoted and escaped wildcards are literal text, not globs.
+  assert.equal(readOnlyShellLine("grep -rn 'a.*b' src", { root }), true);
+  assert.equal(readOnlyShellLine('ls src/\\*.js', { root }), true);
+  assert.equal(readOnlyShellLine('ls src/[z-a].js', { root }), false, 'an invalid class asks instead of throwing');
 });

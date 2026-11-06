@@ -243,16 +243,108 @@ export function readOnlyGitEnv(env = process.env) {
 
 const HARMLESS_REDIRECTS = /\s(?:2>&1|[12]?>\s*\/dev\/null)(?=\s|$|;|&&|\|)/g;
 
-function unquotedGlob(text) {
+// Shell words of a line in the small grammar readOnlyShellLine accepts (no
+// $, ~, braces, parentheses or redirects), split into simple commands on
+// && || ; |. Each word records the glob the shell would expand: unquoted
+// * ? [ stay wildcards, quoted or escaped ones are literal characters.
+function globWords(text) {
+  const commands = [];
+  let words = [];
+  let value = '';
+  let pattern = '';
+  let glob = false;
+  let has = false;
   let quote = '';
+  const push = () => { if (has) words.push({ value, pattern: glob ? pattern : null }); value = ''; pattern = ''; glob = false; has = false; };
+  const literal = (ch) => { value += ch; pattern += /[*?[\]\\]/.test(ch) ? '\\' + ch : ch; has = true; };
   for (let i = 0; i < text.length; i++) {
     const ch = text[i];
-    if (quote) { if (ch === quote) quote = ''; else if (ch === '\\' && quote === '"') i++; continue; }
-    if (ch === '"' || ch === "'") { quote = ch; continue; }
-    if (ch === '\\') { i++; continue; }
-    if (ch === '*' || ch === '?' || ch === '[') return true;
+    if (quote) {
+      if (ch === quote) { quote = ''; continue; }
+      if (ch === '\\' && quote === '"' && i + 1 < text.length) { literal(text[++i]); continue; }
+      literal(ch);
+      continue;
+    }
+    if (ch === '"' || ch === "'") { quote = ch; has = true; continue; }
+    if (ch === '\\' && i + 1 < text.length) { literal(text[++i]); continue; }
+    if (ch === '&' || ch === '|' || ch === ';') { push(); if (text[i + 1] === ch) i++; if (words.length) commands.push(words); words = []; continue; }
+    if (/\s/.test(ch)) { push(); continue; }
+    if (ch === '*' || ch === '?' || ch === '[') { value += ch; pattern += ch; glob = true; has = true; continue; }
+    value += ch; pattern += ch; has = true;
   }
-  return false;
+  push();
+  if (words.length) commands.push(words);
+  return commands;
+}
+
+// One path segment of a glob as a RegExp (bash defaults: no dotglob, so a
+// leading * or ? does not match a leading dot; [!x] and [^x] negate).
+function segmentRegExp(segment) {
+  let source = '';
+  for (let i = 0; i < segment.length; i++) {
+    const ch = segment[i];
+    if (ch === '\\' && i + 1 < segment.length) { source += segment[++i].replace(/[.*+?^${}()|[\]\\/]/g, '\\$&'); continue; }
+    if (ch === '*') { source += '[^/]*'; continue; }
+    if (ch === '?') { source += '[^/]'; continue; }
+    if (ch === '[') {
+      const close = segment.indexOf(']', i + 2);
+      if (close !== -1) {
+        let body = segment.slice(i + 1, close);
+        const negate = body[0] === '!' || body[0] === '^';
+        if (negate) body = body.slice(1);
+        source += '[' + (negate ? '^' : '') + body.replace(/\\/g, '\\\\').replace(/^\]/, '\\]') + ']';
+        i = close;
+        continue;
+      }
+      source += '\\[';
+      continue;
+    }
+    source += ch.replace(/[.*+?^${}()|[\]\\/]/g, '\\$&');
+  }
+  return new RegExp('^' + source + '$');
+}
+
+const hasWildcard = (segment) => /(^|[^\\])[*?[]/.test(segment);
+const unescapeGlob = (segment) => segment.replace(/\\(.)/g, '$1');
+
+// Expands one glob the way the shell would, relative to cwd, without leaving
+// the workspace. Returns the matches (sorted, as bash does), [] when nothing
+// matches, or null when the glob cannot be checked (absolute, too large, a
+// symlinked folder outside the workspace, unreadable).
+function expandGlob(pattern, cwd, root) {
+  if (pattern.startsWith('/')) return null;
+  const segments = pattern.split('/').filter((segment, index, all) => segment || index === all.length - 1);
+  let current = [''];
+  let examined = 0;
+  for (let index = 0; index < segments.length; index++) {
+    const segment = segments[index];
+    const last = index === segments.length - 1;
+    const next = [];
+    for (const prefix of current) {
+      const dir = path.resolve(cwd, prefix || '.');
+      if (!hasWildcard(segment)) {
+        const name = unescapeGlob(segment);
+        next.push(prefix + name + (last ? '' : '/'));
+        continue;
+      }
+      if (prefix && !insideWorkspace(dir, cwd, root)) return null;
+      let entries;
+      try { entries = readdirSync(dir, { withFileTypes: true }); } catch (error) { if (error.code === 'ENOENT' || error.code === 'ENOTDIR') continue; return null; }
+      let matcher;
+      try { matcher = segmentRegExp(segment); } catch { return null; }
+      const dotOk = unescapeGlob(segment).startsWith('.');
+      for (const entry of entries) {
+        if (++examined > WALK_LIMIT) return null;
+        if (entry.name.startsWith('.') && !dotOk) continue;
+        if (!matcher.test(entry.name)) continue;
+        if (!last && !entry.isDirectory() && !entry.isSymbolicLink()) continue;
+        next.push(prefix + entry.name + (last ? '' : '/'));
+      }
+    }
+    current = next.sort();
+    if (!current.length) return [];
+  }
+  return current.map((item) => item.replace(/\/$/, ''));
 }
 
 /** True when every command in a shell line only reads, inside the workspace. */
@@ -260,15 +352,33 @@ export function readOnlyShellLine(line, { root } = {}) {
   if (!root) return false;
   const text = String(line || '').replace(HARMLESS_REDIRECTS, ' ');
   if (!text.trim() || /[`$<>~]|\(|\)|\{|\}|\n/.test(text)) return false;
-  // An unquoted glob is expanded by the shell after these checks, so `cat .en?`
-  // would read .env. Quoted patterns (grep -rn 'a.*b' src) are fine.
-  if (unquotedGlob(text)) return false;
   // `a & b` would leave a background process running.
   if (/(^|[^&])&([^&]|$)/.test(text)) return false;
   let cwd = path.resolve(root);
   const commands = splitShell(text);
   if (!commands.length) return false;
-  for (const { tokens } of commands) {
+  // The shell expands unquoted globs after this check, so `cat .en?` would read
+  // .env. Each glob is expanded here the same way and the matches are checked
+  // like typed paths; a glob that cannot be expanded safely asks.
+  const words = globWords(text);
+  if (words.length !== commands.length || words.some((list, index) => list.length !== commands[index].tokens.length)) {
+    if (words.some((list) => list.some((word) => word.pattern))) return false;
+  }
+  for (let index = 0; index < commands.length; index++) {
+    let tokens = commands[index].tokens;
+    const typed = words[index] || [];
+    if (typed.some((word) => word.pattern)) {
+      if (typed[0].pattern || tokens[0] === 'cd') return false;
+      const expanded = [];
+      for (const word of typed) {
+        if (!word.pattern) { expanded.push(word.value); continue; }
+        const matches = expandGlob(word.pattern, cwd, root);
+        if (matches === null) return false;
+        if (matches.length) expanded.push(...matches);
+        else expanded.push(word.value);
+      }
+      tokens = expanded;
+    }
     if (!tokens.length || /^[A-Za-z_][A-Za-z0-9_]*=/.test(tokens[0])) return false;
     const [command, ...args] = tokens;
     if (command === 'cd') {
