@@ -30,7 +30,7 @@ import { SESSION_TOOL_DEFINITIONS, SESSION_TOOL_NAMES, SESSION_READ_ONLY_TOOLS, 
 import { loadOutputStyles, systemPromptWithStyle, BUILTIN_STYLES } from './output-styles.mjs';
 import { priceFor, estimateCostUsd, BudgetExceededError, recordBudgetSpend, formatUsd, cloudModelBehindGateway } from './pricing.mjs';
 import { isTestPath } from './test-tamper.mjs';
-import { recentImageSet, hasImages, toChatMessagesWithImages, anthropicImageBlocks, responsesImageItems } from './images.mjs';
+import { recentImageSet, hasImages, toChatMessagesWithImages, anthropicImageBlocks, responsesImageItems, fitImages } from './images.mjs';
 import { beginCheckpoint, captureBeforeChange, checkpointPersistenceEnabled, FILE_CHANGING_TOOLS, loadCheckpoints } from './checkpoints.mjs';
 import { nestedMemoryFor } from './memory.mjs';
 import { resolveModelAlias, isModelAlias, modelAllowed, modelRestrictionMessage, fastModeRequest } from './model-aliases.mjs';
@@ -5758,7 +5758,11 @@ async function runAgentTurnRaw(session, prompt, options = {}) {
   if (session.reasoningEffort && typeof options.onReasoningEffort === 'function') options.onReasoningEffort(session.reasoningEffort);
   const activeRequestIndex = session.messages.length;
   const userMessage = { role: 'user', content: userContent };
-  if (Array.isArray(options.images) && options.images.length) userMessage.images = options.images.slice(0, 4).map(({ mediaType, data }) => ({ mediaType, data }));
+  if (Array.isArray(options.images) && options.images.length) {
+    const fitted = await fitImages(options.images.slice(0, 4), { env: options.env || process.env });
+    if (fitted.images.length) userMessage.images = fitted.images;
+    if (fitted.notes.length) userMessage.content = String(userMessage.content || '') + '\n\n[Images not attached: ' + fitted.notes.join('; ') + ']';
+  }
   session.messages.push(userMessage);
   // The pending notes are now part of a recorded user prompt. Clear them only
   // here, so hooks or failures before prompt insertion cannot discard them.
@@ -6484,12 +6488,18 @@ async function runAgentTurnRaw(session, prompt, options = {}) {
       }
       if (typeof item.content === 'string' && untrustedGuardEnabled(session, options.env || process.env)) item.content = guardExternalContent(session, item.name || name, item.content);
       if (typeof item.content === 'string') item.content = fitToolResultToWindow(session, leanToolContent(session, item.content, options.env || process.env), options.env || process.env);
+      let toolImages = null;
+      if (item.result && item.result.imageData) {
+        const fitted = await fitImages([item.result.imageData], { env: options.env || process.env });
+        if (fitted.images.length) toolImages = fitted.images;
+        if (fitted.notes.length && typeof item.content === 'string') item.content += '\n[Image not attached: ' + fitted.notes.join('; ') + ']';
+      }
       session.messages.push({
         role: 'tool',
         tool_call_id: item.tool_call_id,
         name: item.name,
         content: item.content,
-        ...(item.result && item.result.imageData ? { images: [item.result.imageData] } : {})
+        ...(toolImages ? { images: toolImages } : {})
       });
       if (name === 'read_file' && item.result && !item.result.error) {
         await recordDedupedRead(session, safeToolArguments(call.function && call.function.arguments), item.tool_call_id, item, options.env || process.env).catch(() => {});

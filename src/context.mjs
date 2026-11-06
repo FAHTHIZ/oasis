@@ -15,6 +15,17 @@ function validWindow(value) {
 }
 
 const IMAGE_TOKENS = 1600;
+
+// Estimated input tokens for one image: Anthropic's documented 28x28-pixel patch
+// count, capped at the standard tier's ~1600. Provider-reported usage replaces
+// this estimate once a response arrives.
+export function imageTokenEstimate(image) {
+  const width = Number(image && image.width);
+  const height = Number(image && image.height);
+  if (!(width > 0 && height > 0)) return IMAGE_TOKENS;
+  return Math.max(1, Math.min(IMAGE_TOKENS, Math.ceil(width / 28) * Math.ceil(height / 28)));
+}
+
 // Counting a message is cached on the message object. Messages are replaced, not
 // edited, when their content changes, and the cache also checks the fields it
 // counted, so long histories are not re-tokenized on every step.
@@ -29,7 +40,7 @@ function messageTokens(message) {
     try { tokens = countTextTokens(JSON.stringify(message.responseItems)); }
     catch { tokens = countTextTokens(String(message.content || '')); }
   } else {
-    if (Array.isArray(message.images)) tokens += message.images.length * IMAGE_TOKENS;
+    if (Array.isArray(message.images)) for (const image of message.images) tokens += imageTokenEstimate(image);
     if (typeof message.content === 'string') tokens += countTextTokens(message.content);
     else if (Array.isArray(message.content)) {
       try { tokens += countTextTokens(JSON.stringify(message.content)); }
