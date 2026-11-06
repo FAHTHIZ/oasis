@@ -542,6 +542,20 @@ Behaviour changes (tests updated):
 
 `src/zip.mjs` stays. fflate's `unzipSync` exposes no external attributes, so it cannot detect symlinks or keep executable bits. yauzl 3 "ignores the content of the Local File Header" apart from its signature (README). OASIS rejects archives whose local and central names disagree, which defends against parser-confusion archives in plugin installs. Neither library checks more than OASIS already does, so swapping would weaken the installer.
 
+## 31. Terminal Mermaid: beautiful-mermaid evaluated, not adopted
+
+Candidate: `beautiful-mermaid` 1.1.3 (lukilabs/Craft, MIT; ASCII engine ported from Go mermaid-ascii). It covers flowchart, sequence, state, class, ER and XY charts.
+
+Side-by-side against `src/mermaid-ascii.mjs`, on Node 22 with `paddingY:1, boxBorderPadding:0`:
+- Flowchart: draws back edges, which OASIS lists as `↺ A → B`. However, `flowchart LR … d -- fail --> c` was drawn forwards as `Edit ─fail─► Test`, and subgraph membership was wrong (`C` placed outside `Group`).
+- Sequence: a `loop` block rendered as `┌loop [t┐` with the self-message outside its lifeline. OASIS renders it correctly.
+- CJK labels: box widths use UTF-16 length, so `前端` overflows its box (a known upstream gap; beautiful-mermaid-cli vendors a patch).
+- ER: garbled cardinality glyphs.
+- State, class and XY chart: good output. OASIS shows the source for these.
+- Cost: 3.3 MB, plus elkjs at 7.7 MB. ESM-only with no `require` condition, so the synchronous streaming renderer could only use it after an async preload (115 ms import).
+
+Decision: keep the OASIS renderer for flowchart and sequence. Revisit beautiful-mermaid (or its maintained fork zombie-mermaid with a standalone `@zombie-mermaid/ascii-renderer`) for state, class and XY once CJK width is fixed upstream and a lighter ASCII-only entry exists.
+
 ## Next
 
 - Decided against Ajv validation in front of built-in tools: they already reject bad input with specific messages ("edit_file needs old_string … got path"), coerce numeric strings, and accept documented argument aliases that a strict schema would refuse.
