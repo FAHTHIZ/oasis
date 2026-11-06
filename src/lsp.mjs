@@ -23,6 +23,7 @@
 // Starting a language server runs a local program, so it needs approval once per
 // server per session unless commands are auto-approved or a rule allows `lsp`.
 import { spawn } from 'node:child_process';
+import { createMessageConnection, StreamMessageReader, StreamMessageWriter, CancellationTokenSource, ResponseError } from 'vscode-jsonrpc/node.js';
 import { processTreeSpawnOptions, signalProcessTree } from './process-tree.mjs';
 import { readFile, stat, realpath, access } from 'node:fs/promises';
 import path from 'node:path';
@@ -35,7 +36,6 @@ export const LSP_OPERATIONS = ['definition', 'references', 'hover', 'implementat
 const REQUEST_TIMEOUT = 30000;
 const INIT_TIMEOUT = 60000;
 const MAX_RESULTS = 100;
-const MAX_FRAME = 64 * 1024 * 1024;
 
 export const LSP_TOOL_DEFINITION = { type: 'function', function: { name: 'lsp', description: 'Code intelligence from a language server (TypeScript/JavaScript, Python, Go, Rust, C/C++, Java, Ruby, PHP, Lua, C#, Kotlin, Swift). Operations: definition, references, hover (type and docs), implementation, type_definition, document_symbols (outline of a file), workspace_symbols (find a class/function by name; give any file of that language as path), incoming_calls / outgoing_calls (call hierarchy), diagnostics (type errors for one file). Point at a symbol with line and column (1-based), or give symbol to use its first occurrence (on line, when given). Much more precise than grep for navigating code.', parameters: { type: 'object', properties: {
   operation: { type: 'string', enum: LSP_OPERATIONS },
@@ -82,7 +82,6 @@ export class LspClient {
     this.env = env;
     this.nextId = 1;
     this.pending = new Map();
-    this.buffer = Buffer.alloc(0);
     this.documents = new Map();
     this.diagnostics = new Map();
     this.staleDiagnostics = new Set();
@@ -98,13 +97,26 @@ export class LspClient {
     this.exitPromise = new Promise((resolve) => {
       this.child.once('close', (code, signal) => resolve({ code, signal }));
     });
-    this.child.stdout.on('data', (chunk) => this.onData(chunk));
     this.child.stderr.on('data', (chunk) => { this.stderr = (this.stderr + chunk).slice(-4000); });
     this.child.stdin.on('error', () => {});
+    // JSON-RPC framing, ids and cancellation come from vscode-jsonrpc.
+    const connection = createMessageConnection(new StreamMessageReader(this.child.stdout), new StreamMessageWriter(this.child.stdin));
+    this.connection = connection;
+    connection.onNotification('textDocument/publishDiagnostics', (params) => this.onDiagnostics(params));
+    connection.onNotification(() => {});
+    connection.onRequest((method, params) => {
+      // Answer the common server-to-client requests so servers do not stall.
+      if (method === 'workspace/configuration') return (params && params.items || []).map(() => null);
+      if (method === 'workspace/workspaceFolders') return [{ uri: pathToFileURL(this.cwd).href, name: path.basename(this.cwd) }];
+      return null;
+    });
+    connection.onError(() => {});
+    connection.listen();
     const fail = (message) => {
       this.closed = true;
       for (const { reject, timer } of this.pending.values()) { clearTimeout(timer); reject(new Error(message)); }
       this.pending.clear();
+      try { connection.dispose(); } catch {}
     };
     this.child.on('error', (error) => fail('Language server ' + this.name + ' failed to start: ' + error.message));
     this.child.on('exit', (code, signal) => {
@@ -117,70 +129,39 @@ export class LspClient {
     });
   }
 
-  onData(chunk) {
-    this.buffer = Buffer.concat([this.buffer, chunk]);
-    for (;;) {
-      const headerEnd = this.buffer.indexOf('\r\n\r\n');
-      if (headerEnd < 0) return;
-      const header = this.buffer.slice(0, headerEnd).toString('ascii');
-      const match = header.match(/content-length:\s*(\d+)/i);
-      if (!match) { this.buffer = this.buffer.slice(headerEnd + 4); continue; }
-      const length = Number(match[1]);
-      if (length > MAX_FRAME) { this.stop(); return; }
-      if (this.buffer.length < headerEnd + 4 + length) return;
-      const body = this.buffer.slice(headerEnd + 4, headerEnd + 4 + length).toString('utf8');
-      this.buffer = this.buffer.slice(headerEnd + 4 + length);
-      let message;
-      try { message = JSON.parse(body); } catch { continue; }
-      this.onMessage(message);
-    }
-  }
-
-  onMessage(message) {
-    if (message.id !== undefined && message.method === undefined) {
-      const pending = this.pending.get(message.id);
-      if (!pending) return;
-      this.pending.delete(message.id);
-      clearTimeout(pending.timer);
-      if (message.error) pending.reject(new Error(this.name + ': ' + (message.error.message || 'request failed')));
-      else pending.resolve(message.result);
-      return;
-    }
-    if (message.method === 'textDocument/publishDiagnostics' && message.params) {
-      this.diagnostics.set(message.params.uri, message.params.diagnostics || []);
-      this.staleDiagnostics.delete(message.params.uri);
-      const waiters = this.diagnosticWaiters.get(message.params.uri);
-      if (waiters) { this.diagnosticWaiters.delete(message.params.uri); for (const resolve of waiters) resolve(); }
-      return;
-    }
-    if (message.id !== undefined && message.method) {
-      // Server-to-client requests: answer the common ones so servers do not stall.
-      let result = null;
-      if (message.method === 'workspace/configuration') result = (message.params && message.params.items || []).map(() => null);
-      else if (message.method === 'workspace/workspaceFolders') result = [{ uri: pathToFileURL(this.cwd).href, name: path.basename(this.cwd) }];
-      this.send({ jsonrpc: '2.0', id: message.id, result });
-    }
-  }
-
-  send(message) {
-    if (this.closed || !this.child || !this.child.stdin.writable) return;
-    const body = Buffer.from(JSON.stringify(message), 'utf8');
-    this.child.stdin.write('Content-Length: ' + body.length + '\r\n\r\n');
-    this.child.stdin.write(body);
+  onDiagnostics(params) {
+    if (!params) return;
+    this.diagnostics.set(params.uri, params.diagnostics || []);
+    this.staleDiagnostics.delete(params.uri);
+    const waiters = this.diagnosticWaiters.get(params.uri);
+    if (waiters) { this.diagnosticWaiters.delete(params.uri); for (const resolve of waiters) resolve(); }
   }
 
   request(method, params, timeout = REQUEST_TIMEOUT) {
-    if (this.closed) return Promise.reject(new Error('Language server ' + this.name + ' is not running.'));
+    if (this.closed || !this.connection) return Promise.reject(new Error('Language server ' + this.name + ' is not running.'));
     const id = this.nextId++;
+    const cancel = new CancellationTokenSource();
     return new Promise((resolve, reject) => {
-      const timer = setTimeout(() => { this.pending.delete(id); reject(new Error(this.name + ' did not answer ' + method + ' within ' + Math.round(timeout / 1000) + 's.')); }, timeout);
+      const done = () => { clearTimeout(timer); this.pending.delete(id); cancel.dispose(); };
+      // On timeout the library sends $/cancelRequest so the server can drop the work.
+      const timer = setTimeout(() => { cancel.cancel(); done(); reject(new Error(this.name + ' did not answer ' + method + ' within ' + Math.round(timeout / 1000) + 's.')); }, timeout);
       timer.unref?.();
-      this.pending.set(id, { resolve, reject, timer });
-      this.send({ jsonrpc: '2.0', id, method, params });
+      this.pending.set(id, { reject, timer });
+      this.connection.sendRequest(method, params === null ? undefined : params, cancel.token).then(
+        (result) => { if (!this.pending.has(id)) return; done(); resolve(result); },
+        (error) => {
+          if (!this.pending.has(id)) return;
+          done();
+          reject(new Error(this.name + ': ' + (error instanceof ResponseError || error?.message ? error.message || 'request failed' : 'request failed')));
+        }
+      );
     });
   }
 
-  notify(method, params) { this.send({ jsonrpc: '2.0', method, params }); }
+  notify(method, params) {
+    if (this.closed || !this.connection || !this.child?.stdin.writable) return;
+    this.connection.sendNotification(method, params === null ? undefined : params).catch(() => {});
+  }
 
   async initialize() {
     const rootUri = pathToFileURL(this.cwd).href;
