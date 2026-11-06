@@ -9,7 +9,7 @@ import { fileURLToPath } from 'node:url';
 
 const cli = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'src', 'cli.mjs');
 
-test('the interactive terminal compacts a long conversation while you are idle', { skip: process.platform !== 'linux' }, async (t) => {
+test('the interactive terminal compacts a long conversation while you are idle', { skip: process.platform !== 'linux', timeout: 180000 }, async (t) => {
   const home = await mkdtemp(path.join(os.tmpdir(), 'oasis-idle-cli-'));
   t.after(() => rm(home, { recursive: true, force: true }));
   const requests = [];
@@ -32,20 +32,28 @@ test('the interactive terminal compacts a long conversation while you are idle',
   child.stdout.on('data', (d) => { out += d; });
   child.stderr.on('data', (d) => { out += d; });
   // The default line editor, typed through a pseudo-terminal: Enter is \r.
-  const timer = setTimeout(() => child.kill(), 90000);
+  const timer = setTimeout(() => child.kill(), 150000);
   const steps = [['reply 1', big('b')], ['reply 2', big('c')], ['reply 3', null], ['IDLE-WAIT', 'after the break'], ['reply 4', '/exit']];
-  let step = 0; let idleSince = 0;
+  let step = 0; let idleSince = 0; let pending = null;
   await new Promise((resolve) => {
     const iv = setInterval(() => {
       if (step >= steps.length) { clearInterval(iv); resolve(); return; }
       const [marker, input] = steps[step];
       if (marker === 'IDLE-WAIT') {
-        if (idleSince && requests.some((r) => r.summary && r.at >= idleSince) && Date.now() - idleSince > 500) { child.stdin.write(input + '\r'); step++; }
+        if (idleSince && requests.some((r) => r.summary && r.at >= idleSince) && Date.now() - idleSince > 500) { child.stdin.write(input); pending = setTimeout(() => child.stdin.write('\r'), 400); step++; }
         return;
       }
-      if (out.includes(marker)) { if (input) child.stdin.write(input + '\r'); else idleSince = Date.now(); step++; }
+      // Type only once the turn has finished ("Done ·" for every reply so far).
+      // A 16,000-character line followed by Enter in one write reads as a paste
+      // under load, so the Enter became part of the paste and the line was
+      // never sent; press Enter separately, as a person would after pasting.
+      const done = out.split('Done ·').length - 1;
+      if (out.includes(marker) && done >= Number(marker.split(' ')[1])) {
+        if (input) { const text = input; child.stdin.write(text); pending = setTimeout(() => child.stdin.write('\r'), 400); } else idleSince = Date.now();
+        step++;
+      }
     }, 50);
-    child.on('exit', () => { clearInterval(iv); resolve(); });
+    child.on('exit', () => { clearInterval(iv); clearTimeout(pending); resolve(); });
   });
   await new Promise((resolve) => child.exitCode !== null ? resolve() : child.on('exit', resolve));
   clearTimeout(timer);
