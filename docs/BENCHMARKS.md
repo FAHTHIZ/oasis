@@ -16,6 +16,7 @@ This page separates what is implemented, what has actually been measured, and wh
 | `scripts/bench-web-search.mjs` | Expected-domain retrieval, reciprocal rank, result counts, provider errors, and sequential latency on 10 fixed queries | Diagnostic utility; supports repeated counterbalanced trials | Factual correctness, completeness, source credibility, or research-answer quality |
 | `scripts/measure-startup.mjs` | Repeated launch time for the locally installed `oasis --version` command | Local diagnostic; reports samples and median | Model-request latency, interactive responsiveness, or controlled cold-start performance |
 | `test/app-connect.test.mjs`, `test/app-e2e.test.mjs` | Universal app: key and URL detection for 14 providers plus Ollama, Hugging Face and OpenRouter links, model ranking, tool-probe selection, failure classification and the fallback chain (20 unit tests); one headless-Chromium run of the real UI against a mock OpenAI-compatible provider covering paste-to-connect, a three-tool task, a 402 credit failure that switches models mid-task, and plugin suggestion and toggle | Passing at `4615318` on 2026-11-05; the end-to-end run takes about 3 s on the sandbox. Built app (`site/app/`, with 24 bundled skills): 680 KB on disk | Detection accuracy on keys from the wild, behaviour against real provider outages, or speed on real low-end phones (lite mode is exercised only in emulation) |
+| `bench/tokens/` | Bytes the real agent loop sends per request (system prompt, tool schemas, history, tool results) for a fixed scripted tool-call sequence on an eval fixture, with no model | Baseline 2026-11-06 at `cf469f6`: 18 requests, ~180,898 input tokens on `taskflow-search` (`bench/results/tokens-2026-11-06-baseline.json`); `--check` runs in `npm run check` | How many steps a real model takes, output tokens, or task success |
 | Five-track protocol below | Proposed context durability, token efficiency, task-list fidelity, ambiguity safety, and long-horizon completion measurements | Design only; no frozen five-track task sets, scorers, controls, or results are published | Any measured OASIS score against the proposed targets |
 
 A green fixture validator means the fixture/reference-patch/verifier contract is internally consistent. A passing synthetic harness case means the specific hand-authored input received the expected runtime outcome. Neither is a real agent benchmark. Keep raw reports, revisions, model identities, configuration, and failures alongside every public comparison.
@@ -79,6 +80,30 @@ Why it matters: a same-model comparison by [Tensorlake](https://www.tensorlake.a
 ### What this benchmark does not show
 
 It does not measure task success with a real model, and it does not compare OASIS with Claude Code, Codex CLI or any other product. It shows that, for the same model output, the OASIS runtime recovers more calls, applies more edits correctly and stops more damage than a harness without these layers. Task success needs the agent suite below, run with the same model in each harness.
+
+## Token-efficiency benchmark (2026-11-06)
+
+`bench/tokens/` measures what the OASIS loop sends to a model over a whole task, with no model and no network. A scripted provider answers the real `runAgentTurn` loop (the same `createSession` + `runAgentTurn` path `oasis eval` uses) with a fixed sequence of 17 tool calls on the `taskflow-search` fixture: list files, read the README, `package.json` and five source and test files, grep, five targeted edits, `npm test`, one re-read of an edited file, `git diff`, then the final answer. The shape follows the live gpt-oss-20b run that passed this task (16 tool calls, 18 requests, 188,606 tokens, in [the second live comparison](research/LIVE_COMPARISON_2026-11-05b.md)). Every request body is recorded and split into system prompt, tool schemas, tool results, user and assistant messages. The task's own verifier then runs on the result, so a saving that broke the edits or the test run fails the benchmark.
+
+```bash
+node bench/tokens/run.mjs             # summary
+node bench/tokens/run.mjs --verbose   # one row per request
+node bench/tokens/run.mjs --json out.json
+node bench/tokens/run.mjs --check     # in npm run check: fails if a scenario fails,
+                                      # usage accounting disagrees, or input grows >2% over bench/results/tokens-baseline.json
+```
+
+Tokens are characters / 4. "Uncached" is what follows the longest prefix shared with the previous request (tools, then messages), the part an exact-prefix cache has to process again. The run takes about 2 s and repeats to within a dozen characters (test timings in the `npm test` output vary).
+
+Baseline at `cf469f6` (`bench/results/tokens-2026-11-06-baseline.json`):
+
+| Scenario | Requests | Input tokens | Uncached | System prompt | Tool schemas | Tool results | First request | Last request |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| taskflow-search, gpt-oss-20b (32K default window) | 18 | ~180,898 | ~15,041 | ~51,737 (28.6%) | ~68,211 (37.7%) | ~44,321 (24.5%) | ~6,839 | ~15,060 |
+
+What it shows: the scripted total (~181K) is close to what the live run's gateway logged (188,606 for 18 requests), and two thirds of it is the fixed part, the system prompt and 22 tool schemas resent on every request. The prefix is stable from request to request (only ~8% is new each time), so on a provider with prefix caching most of it is billed at the cached rate; on free endpoints without caching, every byte counts. The benchmark also checks that the per-request usage OASIS reports adds up to what the provider returned.
+
+What it does not show: how many steps a real model needs, output tokens, or task success with a model. The scripted calls are fixed, so a change that would make a model take more steps (for example, by hiding something it needs) does not show up here; such changes need a live run as well.
 
 ## What the current 52-task fixture suite proves (and does not prove)
 

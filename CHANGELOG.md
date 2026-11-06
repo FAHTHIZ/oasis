@@ -6,6 +6,7 @@ This file records notable user-facing product changes. It does not imply that an
 
 Changes after 1.1.0. Entries include feature work, reliability improvements, and security hardening; benchmark-driven fixes and their regression evidence are documented alongside the relevant changes.
 
+- **Token-efficiency benchmark.** `node bench/tokens/run.mjs` drives the real agent loop with a scripted provider through a fixed 17-call sequence on `taskflow-search` and records what each request carries (system prompt, tool schemas, tool results, history), how much of it a prefix cache could reuse, and whether reported usage adds up. Baseline at `cf469f6`: 18 requests, ~180,898 input tokens, two thirds of it the system prompt and tool schemas resent every step. `--check` runs in `npm run check`.
 - **Fixes from live head-to-head runs (2026-11-05).** Found by running OASIS, Aider and OpenCode on free gpt-oss-20b and Nemotron 3 Ultra endpoints:
   - gpt-oss tool names leaking harmony tokens (`edit_file<|channel|>commentary`, `functions.read_file`) are cleaned before dispatch. One such name made the gateway reject the whole request with HTTP 400.
   - A streamed tool-call fragment that arrives at a new index with no id or name (one gateway sent call 0's closing `}` as index 1) now continues the previous call instead of becoming a broken, nameless one. OpenCode crashed on the same stream with "Expected 'id' to be a string".

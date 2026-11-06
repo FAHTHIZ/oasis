@@ -25,6 +25,22 @@ node bench/harness/run.mjs --check
 
 A new local `--json` report measures current code. CI uploads a fresh Node-version-specific report artifact. Once a held-out set has informed a fix, it is no longer unseen; keep its first score as history and add a new untouched set before claiming generalization.
 
+## Token-efficiency benchmark
+
+`bench/tokens/` drives the real agent loop with a scripted provider (no model, no network) through a fixed sequence of tool calls on an eval fixture and records every request OASIS sends, split into system prompt, tool schemas, tool results and history. See [OASIS benchmarks](../docs/BENCHMARKS.md#token-efficiency-benchmark-2026-11-06).
+
+```bash
+npm run bench:tokens
+node bench/tokens/run.mjs --verbose
+node bench/tokens/run.mjs --check   # fails on >2% growth over results/tokens-baseline.json
+```
+
+| Path | Contents |
+| --- | --- |
+| `tokens/scenarios.mjs` | Scripted tool-call sequences |
+| `results/tokens-2026-11-06-baseline.json` | First measurement, before any token work (source `cf469f6`) |
+| `results/tokens-baseline.json` | Reference for `--check`; updated when a reduction lands |
+
 ## Agent task fixtures and live comparisons
 
 The deterministic agent fixtures are under `evals/tasks/`. `node src/cli.mjs eval --validate` checks evaluator integrity (untouched snapshot fails; reference patch passes). It does not call a model and does not establish an agent pass rate.
