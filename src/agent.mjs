@@ -6478,17 +6478,23 @@ async function runAgentTurnRaw(session, prompt, options = {}) {
   try {
     final = await requestCompletion(session, {
       noTools: true,
+      // Without the turn's signal, cancelling here left the summary request
+      // running until the provider timeout.
+      ...(options.signal ? { signal: options.signal } : {}),
+      ...(typeof options.onRateLimitWait === 'function' ? { onRateLimitWait: options.onRateLimitWait } : {}),
+      ...(typeof options.onProviderRetry === 'function' ? { onProviderRetry: options.onProviderRetry } : {}),
       ...(typeof options.fetchImpl === 'function' ? { fetchImpl: options.fetchImpl } : {})
     });
     tokensUsed += Number(final.usage && final.usage.totalTokens || 0);
     const finalCost = chargeAuxiliaryUsage(session, final.usage, { env: options.env });
     if (options.onUsage && final.usage) options.onUsage({ ...final.usage, costUsd: finalCost, step: maxSteps + 1 });
   } catch (error) {
+    if (options.signal && options.signal.aborted) throw error;
     const text = 'Oasis reached its tool-step limit and could not get a final provider summary: ' + error.message;
     pruneHistory(session);
     return { text, toolCalls: totalToolCalls, tokensUsed, tokenBudget, finished: false, limitReached: true, verification: verificationSummary(verification) };
   }
-  const baseFinalText = typeof final.content === 'string' ? final.content.trim() : 'Oasis reached its tool-step limit without a final text summary.';
+  const baseFinalText = typeof final.content === 'string' && final.content.trim() ? final.content.trim() : 'Oasis reached its tool-step limit without a final text summary.';
   const finalIssues = verificationIssues(verification);
   const finalText = finalIssues.length ? baseFinalText + '\n\nVerification incomplete: ' + finalIssues.join('; ') + '.' : baseFinalText;
   const finalMessage = { role: 'assistant', content: finalText };
