@@ -415,6 +415,14 @@ Adopted: `@modelcontextprotocol/server` 2.4.0 (MIT): low-level `Server` with `to
 Gains: version negotiation over SUPPORTED_PROTOCOL_VERSIONS (a 2025-11-25 client got 2025-06-18 before, now gets 2025-11-25; a 2024-11-05 client gets 2024-11-05), `ping`, initialize validation, and the SDK's own spec maintenance.
 Verification: 4/4 `test/mcp-serve.test.mjs` (including the stdio test with the SDK client and the git-hook refusal); the negotiation assertion fails on the old server. The official conformance suite's server mode needs an HTTP URL; `oasis mcp serve` is stdio-only, so it was not run.
 
+## 19. Browser Markdown: marked
+
+Replaced: the line/regex Markdown renderer in `app/markdown.mjs` (99 lines).
+Adopted: `marked` 18.1.3 (MIT, 0 dependencies, 558 KB unpacked; the ESM build is vendored through `APP_PACKAGES`, the import map with an updated CSP hash, and the service-worker precache).
+Safety is enforced in renderer overrides: `html` tokens are escaped, `link`/`image` hrefs must match `^(https?:|mailto:)`, images render as links, and code is escaped with `data-lang` restricted to `[\w+#.-]`. Probes (`<img onerror>`, `<script>`, `javascript:` in links/images in any case, entity-encoded `&#106;avascript:`, `data:` URLs, title-attribute injection) all render inert.
+Measured differences vs old: nested lists were flattened into one list before; `[wiki](…Foo_(bar))` lost `)` before; tables with alignment now carry `align`. The new app-core assertions fail on the old renderer. The Chrome end-to-end app test passes with the vendored module.
+Not chosen: DOMPurify as a second layer, since it needs a DOM and the renderer is also used where there is none; markdown-it is heavier and similar in quality.
+
 ## Next
 
 - Decided against Ajv validation in front of built-in tools: they already reject bad input with specific messages ("edit_file needs old_string … got path"), coerce numeric strings, and accept documented argument aliases that a strict schema would refuse.

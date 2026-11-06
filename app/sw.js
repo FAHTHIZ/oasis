@@ -5,7 +5,7 @@ const SHELL = [
   './', 'index.html', 'app.css', 'main.mjs', 'markdown.mjs', 'manifest.webmanifest', 'sandbox.html', 'sandbox-frame.js',
   'core/agent.mjs', 'core/providers.mjs', 'core/tools.mjs', 'core/workspace.mjs', 'core/sandbox.mjs', 'core/skills.mjs', 'core/github.mjs', 'core/zip.mjs', 'core/connect.mjs', 'core/plugins.mjs', 'core/think-tags.mjs',
   '../src/edit-match.mjs', '../src/html-markdown.mjs', '../src/tool-call-repair.mjs', '../src/tool-aliases.mjs', '../src/frontmatter.mjs',
-  '../vendor/yaml/browser/index.js', '../vendor/jsonrepair/lib/esm/index.js', '../vendor/entities/dist/index.js', '../vendor/fflate/esm/browser.js', '../vendor/diff/libesm/index.js',
+  '../vendor/yaml/browser/index.js', '../vendor/jsonrepair/lib/esm/index.js', '../vendor/entities/dist/index.js', '../vendor/fflate/esm/browser.js', '../vendor/diff/libesm/index.js', '../vendor/marked/lib/marked.esm.js',
   'icons/oasis-mark.svg', 'icons/oasis-192.png', 'icons/oasis-512.png', 'skills/index.json'
 ];
 
