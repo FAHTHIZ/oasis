@@ -4,7 +4,7 @@ import { detectSandbox, detectContainerRuntime, detectSandboxRuntime, domainList
 import { detectCheckers, findBinary } from './diagnostics.mjs';
 import { BUILTIN_SERVERS } from './lsp.mjs';
 import { onPathSync } from './clipboard-path.mjs';
-import { estimateTokens, contextWindowSize } from './context.mjs';
+import { contextWindowSize, contextTokens } from './context.mjs';
 import { workflowRuntimeStatus } from './workflow-sandbox.mjs';
 import { describeRipgrep } from './ripgrep.mjs';
 
@@ -56,9 +56,10 @@ export async function workspaceDoctor(root, { env = process.env, session = null 
   }
   lines.push('  Language servers: ' + (servers.length ? servers.join(', ') : 'none found (the lsp tool needs one; e.g. npm install -g typescript-language-server typescript)'));
   if (session) {
-    const used = estimateTokens(session.messages);
+    const context = contextTokens(session);
+    const used = context.tokens;
     const windowSize = contextWindowSize(session.config || {});
-    lines.push('  Context: about ' + used.toLocaleString('en-US') + ' of ' + windowSize.toLocaleString('en-US') + ' tokens (' + Math.round(used / windowSize * 100) + '%)');
+    lines.push('  Context: ' + (context.reported ? '' : 'about ') + used.toLocaleString('en-US') + ' of ' + windowSize.toLocaleString('en-US') + ' tokens (' + Math.round(used / windowSize * 100) + '%)');
     if (used / windowSize > 0.8) problems.push('Context is over 80% full; run /compact.');
     if (session.localContext && session.localContext.contextLength) lines.push('  Local model window: ' + session.localContext.contextLength.toLocaleString('en-US') + ' tokens (' + session.localContext.source + ' in ' + (session.localContext.server || 'ollama') + ')');
     for (const note of session.localContextNotices || []) problems.push(note);

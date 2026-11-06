@@ -1,12 +1,13 @@
 // /skill-doctor (Claude Code): each skill's context cost and how often it was used, so you
 // can turn off the ones that cost context without earning it. "Off" means a
 // Skill(name) deny rule, which also drops the skill from the system prompt listing.
+import { countTextTokens } from './tokens.mjs';
 import { readFile, readdir } from 'node:fs/promises';
 import path from 'node:path';
 import { getConfigDirectory } from './config.mjs';
 import { listAvailableSkills, loadSkillText } from './tools.mjs';
 
-const tokens = (text) => Math.ceil(String(text || '').length / 4);
+const tokens = (text) => countTextTokens(text);
 const EXTERNAL = ['global-extension', 'project-extension', 'portable-workspace', 'global-portable'];
 
 // Names matched by Skill(...) deny rules; "*" globs are supported.

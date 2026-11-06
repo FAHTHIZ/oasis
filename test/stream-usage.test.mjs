@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { countTextTokens } from '../src/tokens.mjs';
 import os from 'node:os';
 import path from 'node:path';
 import { createServer } from 'node:http';
@@ -98,8 +99,8 @@ test('usageOrEstimate keeps reported usage and estimates only when none was sent
   assert.deepEqual(usageOrEstimate({ prompt_tokens: 5, completion_tokens: 1 }, 'x'.repeat(400), { content: 'hi' }), { inputTokens: 5, outputTokens: 1, totalTokens: 6 });
   const estimated = usageOrEstimate({}, 'x'.repeat(400), { content: 'y'.repeat(40), tool_calls: [{ function: { name: 'read_file', arguments: '{"path":"a"}' } }] });
   assert.equal(estimated.estimated, true);
-  assert.equal(estimated.inputTokens, 100);
-  assert.equal(estimated.outputTokens, Math.ceil((40 + 12 + 9) / 4));
+  assert.equal(estimated.inputTokens, countTextTokens('x'.repeat(400)));
+  assert.equal(estimated.outputTokens, countTextTokens('y'.repeat(40)) + countTextTokens('{"path":"a"}') + countTextTokens('read_file'));
 });
 
 test('advisor calls count their normalized tokens and cost against the budget ledger', async () => {

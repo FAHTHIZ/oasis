@@ -59,6 +59,8 @@ import { connectMcpServers, mcpToolDefinitions, callMappedMcpTool, closeMcpClien
 import { resolveMcpPrompt, expandMcpResourceMentions } from './mcp-extras.mjs';
 import { autoMemoryEnabled, memoryIndexPrompt, recallForPrompt, MEMORY_TOOL_DEFINITIONS, listMemories, saveMemory } from './auto-memory.mjs';
 import { learningEnabled, LEARNING_TOOL_DEFINITIONS, assertLearningVerification } from './learning.mjs';
+import { countTextTokens, countJsonTokens } from './tokens.mjs';
+import { recordContextAnchor } from './context.mjs';
 import { estimateTokens, microcompact, maskObservations, contextWindowSize, modelContextWindow, compactionThresholdChars, mustPreserveContextBlock, appendMustPreserveContext } from './context.mjs';
 import { validateProtocol, validateBaseUrl } from './config.mjs';
 import { getTelemetry, lineChanges, genAiProviderName } from './telemetry.mjs';
@@ -96,6 +98,14 @@ const HISTORY_COMPACT_INPUT_LIMIT = 32000;
 
 function historyTextSize(messages) {
   return messages.reduce((total, message) => total + String(message && message.content || '').length, 0);
+}
+
+// Size compared against the character-based compaction thresholds: the larger of
+// the raw characters and the BPE token count at the nominal 4 characters per
+// token. Dense JSON, logs and non-Latin scripts carry more tokens per character
+// than English, so counting characters alone let them overflow the window.
+function historyBudgetSize(messages) {
+  return Math.max(historyTextSize(messages), estimateTokens(messages) * 4);
 }
 
 function safeHistoryLine(message) {
@@ -234,12 +244,12 @@ export async function compactHistoryIfNeeded(session, options = {}) {
   let messages = session.messages || [];
   const thresholdChars = Number.isFinite(options.thresholdChars) && options.thresholdChars > 0 ? options.thresholdChars : compactionThresholdChars(session.config || {}, options.env || process.env);
   const messageLimit = thresholdChars > HISTORY_COMPACT_THRESHOLD_CHARS ? 400 : 60;
-  if (!options.force && messages.length <= messageLimit && historyTextSize(messages) <= thresholdChars) {
+  if (!options.force && messages.length <= messageLimit && historyBudgetSize(messages) <= thresholdChars) {
     return { compacted: false, tokensUsed: 0 };
   }
   if (!options.force && supersedeBeforeCompaction(session, options)) {
     messages = session.messages;
-    if (messages.length <= messageLimit && historyTextSize(messages) <= thresholdChars) return { compacted: false, tokensUsed: 0 };
+    if (messages.length <= messageLimit && historyBudgetSize(messages) <= thresholdChars) return { compacted: false, tokensUsed: 0 };
   }
   // A manual /compact summarizes the whole conversation so far.
   const boundary = options.force ? messages.length : findCompactionBoundary(messages);
@@ -433,12 +443,12 @@ async function recoverFromContextOverflow(session, requestIndex, options, attemp
 async function compactMidTurnHistoryIfNeeded(session, requestIndex, options = {}) {
   let messages = session.messages || [];
   const threshold = compactionThresholdChars(session.config || {}, options.env || process.env);
-  if ((!options.force && historyTextSize(messages) <= threshold) || messages.length < requestIndex + 5) {
+  if ((!options.force && historyBudgetSize(messages) <= threshold) || messages.length < requestIndex + 5) {
     return { compacted: false, tokensUsed: 0 };
   }
   if (!options.force && supersedeBeforeCompaction(session, options)) {
     messages = session.messages;
-    if (historyTextSize(messages) <= threshold) return { compacted: false, tokensUsed: 0 };
+    if (historyBudgetSize(messages) <= threshold) return { compacted: false, tokensUsed: 0 };
   }
   const beforeTokens = estimateTokens(messages);
   const beforeChars = historyTextSize(messages);
@@ -529,8 +539,8 @@ async function compactMidTurnHistoryIfNeeded(session, requestIndex, options = {}
     options.onContextPruned({
       midTurn: true,
       pruned: removedToolResults,
-      before: Math.ceil(beforeChars / 4),
-      after: Math.ceil(afterChars / 4)
+      before: beforeTokens,
+      after: estimateTokens(session.messages)
     });
   }
   return { compacted: true, tokensUsed, costUsd };
@@ -2457,6 +2467,15 @@ export function summarizeFallbackFailure(error, attempts) {
 }
 
 async function requestCompletionTraced(session, options = {}) {
+  const sent = Array.isArray(session.messages) ? session.messages : [];
+  const sentLength = sent.length;
+  const sentLast = sent[sentLength - 1];
+  const reply = await requestCompletionTracedAuth(session, options);
+  recordContextAnchor(session, reply && reply.usage, sentLength, sentLast);
+  return reply;
+}
+
+async function requestCompletionTracedAuth(session, options = {}) {
   if (!session.config || !session.config.apiKeyHelper || options.refreshApiKey) return requestCompletionTracedOnce(session, options);
   try { return await requestCompletionTracedOnce(session, options); } catch (error) {
     if (stopFailureType(error) !== 'authentication_failed') throw error;
@@ -3166,10 +3185,9 @@ export function usageOrEstimate(rawUsage, requestText, message = {}) {
   // A usage object with any token field is the provider's own report, even if zero.
   const reported = rawUsage && typeof rawUsage === 'object' && ['prompt_tokens', 'completion_tokens', 'total_tokens', 'input_tokens', 'output_tokens'].some((key) => rawUsage[key] !== undefined && rawUsage[key] !== null);
   if (reported || usage.totalTokens > 0) return usage;
-  let replyChars = typeof message.content === 'string' ? message.content.length : 0;
-  for (const call of Array.isArray(message.tool_calls) ? message.tool_calls : []) replyChars += String(call && call.function && call.function.arguments || '').length + String(call && call.function && call.function.name || '').length;
-  const inputTokens = Math.ceil(String(requestText || '').length / 4);
-  const outputTokens = Math.ceil(replyChars / 4);
+  let outputTokens = typeof message.content === 'string' ? countTextTokens(message.content) : 0;
+  for (const call of Array.isArray(message.tool_calls) ? message.tool_calls : []) outputTokens += countTextTokens(String(call && call.function && call.function.arguments || '')) + countTextTokens(String(call && call.function && call.function.name || ''));
+  const inputTokens = countTextTokens(String(requestText || ''));
   if (!inputTokens && !outputTokens) return usage;
   return { inputTokens, outputTokens, totalTokens: inputTokens + outputTokens, estimated: true };
 }
@@ -5865,7 +5883,7 @@ async function runAgentTurnRaw(session, prompt, options = {}) {
     let assistant;
     const waitHook = typeof options.onModelWait === 'function' ? options.onModelWait : null;
     if (waitHook) {
-      try { waitHook({ phase: 'start', step: step + 1, inputTokens: estimateTokens(session.messages || []) + Math.ceil(JSON.stringify(session.toolDefinitions || TOOL_DEFINITIONS).length / 4), model: session.config && session.config.model, local: isLoopbackProvider(session.config) && !cloudModelBehindGateway(session.config && session.config.model, session.config) }); } catch {}
+      try { waitHook({ phase: 'start', step: step + 1, inputTokens: estimateTokens(session.messages || []) + countJsonTokens(session.toolDefinitions || TOOL_DEFINITIONS), model: session.config && session.config.model, local: isLoopbackProvider(session.config) && !cloudModelBehindGateway(session.config && session.config.model, session.config) }); } catch {}
     }
     try {
       assistant = await requestCompletion(session, {
@@ -6701,3 +6719,4 @@ export async function evaluateGoal(session, condition, options = {}) {
   const first = answer.split('\n')[0].trim().toUpperCase();
   return { met: first.startsWith('MET'), reason: answer.split('\n').slice(1).join(' ').trim() || answer };
 }
+export { historyBudgetSize as historyBudgetSizeForTest };

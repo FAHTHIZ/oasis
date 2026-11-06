@@ -22,7 +22,7 @@ import { expandFileMentions, resolveCustomCommand, resolveSkillCommand, loadCust
 import { visionEnabled, imageInputCapability, MAX_IMAGE_BYTES } from './images.mjs';
 import { loadSettings } from './settings.mjs';
 import { resolveSandbox } from './sandbox.mjs';
-import { estimateTokens, contextWindowSize } from './context.mjs';
+import { estimateTokens, contextWindowSize, contextTokens as contextTokensFor } from './context.mjs';
 import { PtySessionManager } from './pty-sessions.mjs';
 import { createCloudTaskStore } from './cloud-task-store.mjs';
 import { createWorktree, finishWorktree, removeWorktree, readWorktreeDiff, readWorktreeWorkingDiff, readWorkspaceDiff, inspectWorktree, mergeWorktree, isCommitIntegrated } from './worktrees.mjs';
@@ -39,7 +39,7 @@ const WEB_TERMINAL_ONLY_COMMANDS = new Set(['copy', 'sandbox', 'loop', 'cd', 'te
 // Compact session status for the browser: permission mode, context use, token totals.
 export function webSessionState(session, env = process.env) {
   const windowSize = contextWindowSize(session.config, env);
-  const contextTokens = estimateTokens(session.messages || []);
+  const contextTokens = contextTokensFor(session).tokens;
   const usage = session.webUsage || {};
   return {
     mode: session.permissions ? session.permissions.mode : 'default',
