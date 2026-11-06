@@ -9,31 +9,29 @@
 import { applyVimKey, createVimState, trackInsert, vimModeLabel } from './vim-mode.mjs';
 import { loadKeybindings, resolveBinding, actionEffect, CHORD_TIMEOUT_MS, DEFAULT_BINDINGS } from './keybindings.mjs';
 import { spawnSync } from 'node:child_process';
+import stringWidthText from 'string-width';
+import stripAnsiText from 'strip-ansi';
 import { mkdtempSync, readFileSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join as joinPath } from 'node:path';
 
-const ANSI_PATTERN = /\x1b\[[0-9;?]*[ -/]*[@-~]|\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)/g;
+// Display width follows string-width (graphemes, East Asian Width, RGI emoji);
+// plain printable ASCII, the common case, skips it.
+const PRINTABLE_ASCII = /^[\x20-\x7e]*$/;
+const graphemes = new Intl.Segmenter(undefined, { granularity: 'grapheme' });
 
 export function stripAnsi(text) {
-  return String(text || '').replace(ANSI_PATTERN, '');
-}
-
-export function charWidth(codePoint) {
-  const cp = codePoint;
-  if (cp < 32 || (cp >= 0x7f && cp < 0xa0)) return 0;
-  if ((cp >= 0x300 && cp <= 0x36f) || cp === 0x200b || cp === 0x200d || (cp >= 0xfe00 && cp <= 0xfe0f)) return 0;
-  if ((cp >= 0x1100 && cp <= 0x115f) || (cp >= 0x2e80 && cp <= 0xa4cf) || (cp >= 0xac00 && cp <= 0xd7a3) ||
-    (cp >= 0xf900 && cp <= 0xfaff) || (cp >= 0xfe30 && cp <= 0xfe4f) || (cp >= 0xff00 && cp <= 0xff60) ||
-    (cp >= 0xffe0 && cp <= 0xffe6) || (cp >= 0x1f300 && cp <= 0x1f64f) || (cp >= 0x1f900 && cp <= 0x1f9ff) ||
-    (cp >= 0x20000 && cp <= 0x3fffd)) return 2;
-  return 1;
+  return stripAnsiText(String(text || ''));
 }
 
 export function stringWidth(text) {
-  let width = 0;
-  for (const char of stripAnsi(text)) width += charWidth(char.codePointAt(0));
-  return width;
+  const value = String(text || '');
+  if (PRINTABLE_ASCII.test(value)) return value.length;
+  return stringWidthText(value);
+}
+
+export function charWidth(codePoint) {
+  return stringWidth(String.fromCodePoint(codePoint));
 }
 
 export function truncateToWidth(text, max) {
@@ -41,10 +39,10 @@ export function truncateToWidth(text, max) {
   if (stringWidth(plain) <= max) return text;
   let out = '';
   let width = 0;
-  for (const char of plain) {
-    const w = charWidth(char.codePointAt(0));
+  for (const { segment } of graphemes.segment(plain)) {
+    const w = stringWidth(segment);
     if (width + w > max - 1) break;
-    out += char;
+    out += segment;
     width += w;
   }
   return out + '…';
