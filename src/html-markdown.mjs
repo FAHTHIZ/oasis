@@ -17,9 +17,22 @@
 // as plain text.
 
 import { Worker } from 'node:worker_threads';
-import { parseHTML } from 'linkedom';
-import { Defuddle } from 'defuddle/node';
 import { decodeHTML } from 'entities';
+
+// linkedom and Defuddle cost ~200 ms to import, so they load on the first
+// conversion rather than with every OASIS start.
+let parseHTML;
+let Defuddle;
+let loading;
+function loadDom() {
+  if (!loading) {
+    loading = Promise.all([import('linkedom'), import('defuddle/node')]).then(([dom, defuddle]) => {
+      parseHTML = dom.parseHTML;
+      Defuddle = defuddle.Defuddle;
+    });
+  }
+  return loading;
+}
 
 const UNSAFE_URL = /^\s*(?:javascript|vbscript|data|file):/i;
 const URL_ATTRIBUTES = ['href', 'src', 'srcset', 'action', 'formaction', 'poster', 'xlink:href'];
@@ -83,6 +96,7 @@ async function convert(html, url, extract) {
   // real lists (steps, options, platforms) from documentation pages.
   const options = { markdown: true, useAsync: false, fetch: refuseFetch, includeReplies: 'extractors', removeContentPatterns: false };
   if (!extract) Object.assign(options, { contentSelector: 'body', removeLowScoring: false, removeExactSelectors: false, removePartialSelectors: false, removeContentPatterns: false });
+  await loadDom();
   const document = parse(html);
   let result;
   try {
@@ -120,7 +134,8 @@ export async function convertHtmlInProcess(html, options = {}) {
 const BLOCK = /^(?:address|article|aside|blockquote|br|dd|div|dl|dt|figcaption|figure|footer|form|h[1-6]|header|hr|li|main|nav|ol|p|pre|section|table|tr|ul)$/i;
 
 // Linear plain-text rendering used when full conversion runs out of time.
-export function htmlToPlainText(html) {
+export async function htmlToPlainText(html) {
+  await loadDom();
   const document = parse(html);
   for (const element of document.querySelectorAll('script, style, noscript, template, svg, [hidden]')) element.remove();
   const parts = [];
@@ -167,9 +182,10 @@ function timeoutFor(options) {
   return Number.isFinite(value) && value > 0 ? value : 15_000;
 }
 
-function fallback(html, reason) {
+async function fallback(html, reason) {
+  await loadDom();
   const document = parse(html);
-  return { title: decodeEntities(document.title || '').replace(/\s+/g, ' ').trim(), description: '', markdown: htmlToPlainText(html), extracted: false, titleInBody: false, degraded: reason };
+  return { title: decodeEntities(document.title || '').replace(/\s+/g, ' ').trim(), description: '', markdown: await htmlToPlainText(html), extracted: false, titleInBody: false, degraded: reason };
 }
 
 export async function htmlToMarkdown(html, options = {}) {

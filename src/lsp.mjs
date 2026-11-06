@@ -23,7 +23,9 @@
 // Starting a language server runs a local program, so it needs approval once per
 // server per session unless commands are auto-approved or a rule allows `lsp`.
 import { spawn } from 'node:child_process';
-import { createMessageConnection, StreamMessageReader, StreamMessageWriter, CancellationTokenSource, ResponseError } from 'vscode-jsonrpc/node';
+// vscode-jsonrpc loads when the first language server starts, not with OASIS.
+let rpc;
+const loadRpc = async () => (rpc ||= await import('vscode-jsonrpc/node'));
 import { processTreeSpawnOptions, signalProcessTree } from './process-tree.mjs';
 import { readFile, stat, realpath, access } from 'node:fs/promises';
 import path from 'node:path';
@@ -92,7 +94,8 @@ export class LspClient {
     this.stopPromise = null;
   }
 
-  start() {
+  async start() {
+    const { createMessageConnection, StreamMessageReader, StreamMessageWriter } = await loadRpc();
     this.child = spawn(this.command, this.args, { cwd: this.cwd, env: this.env, shell: false, stdio: ['pipe', 'pipe', 'pipe'], windowsHide: true, ...processTreeSpawnOptions() });
     this.exitPromise = new Promise((resolve) => {
       this.child.once('close', (code, signal) => resolve({ code, signal }));
@@ -140,7 +143,7 @@ export class LspClient {
   request(method, params, timeout = REQUEST_TIMEOUT) {
     if (this.closed || !this.connection) return Promise.reject(new Error('Language server ' + this.name + ' is not running.'));
     const id = this.nextId++;
-    const cancel = new CancellationTokenSource();
+    const cancel = new rpc.CancellationTokenSource();
     return new Promise((resolve, reject) => {
       const done = () => { clearTimeout(timer); this.pending.delete(id); cancel.dispose(); };
       // On timeout the library sends $/cancelRequest so the server can drop the work.
@@ -152,7 +155,7 @@ export class LspClient {
         (error) => {
           if (!this.pending.has(id)) return;
           done();
-          reject(new Error(this.name + ': ' + (error instanceof ResponseError || error?.message ? error.message || 'request failed' : 'request failed')));
+          reject(new Error(this.name + ': ' + (error instanceof rpc.ResponseError || error?.message ? error.message || 'request failed' : 'request failed')));
         }
       );
     });
@@ -370,7 +373,7 @@ async function clientFor(root, server, options) {
     approved.add(key);
     const { scrubEnvironment } = await workspaceTools();
     const client = new LspClient({ name: server.name, command: resolved.command, args: resolved.args, initializationOptions: resolved.initializationOptions || {}, cwd: root, env: scrubEnvironment({ ...(options.env || process.env), ...(server.env || {}) }) });
-    client.start();
+    await client.start();
     await client.initialize();
     if (resolved.settings) client.notify('workspace/didChangeConfiguration', { settings: resolved.settings });
     return client;
