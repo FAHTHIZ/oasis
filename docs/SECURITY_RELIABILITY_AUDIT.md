@@ -283,6 +283,41 @@ The high-impact runner guard and package-publishing block initially examined onl
 
 
  
+## Attack-tested enforcement review (November 6, 2026)
+
+Each item below was reproduced with an attack test before the fix; the same test now fails on the old code and passes on main.
+
+### Protected-path guard was lexical only (medium)
+
+**Finding:** the forced warning for `.oasis/`, `.claude/`, `.git/` hooks/config and similar files compared the path the model typed, not the path the file system writes. A workspace symlink `cfg -> .oasis` let `write_file cfg/settings.json` replace project settings, and the canonical absolute path of a workspace opened through a symlinked folder (`/real/ws/.oasis/settings.local.json` when the session root is `/alias/ws`) did the same. Under `--yes`, `acceptEdits` or an allow rule for `write_file`, both writes happened with no prompt.
+
+**Fix:** `protectedConfigTarget()` checks the lexical path, then canonicalizes the deepest existing ancestor and compares it with the real workspace root. `generate_image` and `text_to_speech`, which also write model-chosen paths, get the same check, and `delete_file` warns using the resolved target. **Test:** `test/protected-paths.test.mjs` ("protected edits are recognized through symlinked folders...").
+
+### Read-only shell commands could print secret files without asking (medium)
+
+**Finding:** the no-prompt read-only path checked each argument against the secret-file list, but the shell expands globs after that check, so `cat .en?`, `head .[e]nv` or `wc -c .e*` read `.env` with no prompt. Recursive searches (`grep -r KEY .`, `rg --hidden`, `rg -uu`, `diff -r`, `git grep --untracked`/`--no-index`) read every file in the folder, and `git show HEAD:.env` read a committed secret.
+
+**Fix:** unquoted glob characters make a line ask. A recursive search runs without asking only when a bounded walk (5,000 entries; `node_modules` and `.git` skipped) of its folders finds no secret file and, for symlink-following forms (`grep -R`, `rg -L`, `diff -r`), no symlink. `rg`/`ag` without hidden-file flags ignore hidden secrets, as those tools do. `.ssh`, `.aws`, `.gnupg`, `.azure`, `.kube` and `.docker` folders count as secret. Quoted patterns (`grep -rn 'a.*b' src`) still run without asking. **Test:** `test/read-only-commands.test.mjs` (glob/recursive cases plus an end-to-end `run_shell cat .en?` approval check).
+
+### Read-only git ran repository-defined programs (medium)
+
+**Finding:** `git diff`, `status`, `log -p`, `show`, `blame` and `cat-file --filters` ran without a prompt, and Git runs `diff.external`, `diff.<driver>.textconv` and `filter.<driver>.clean/smudge` programs from the repository's `.git/config`. A cloned-with-metadata or unpacked repository could run arbitrary programs on the first `git diff`. The `git_diff` tool disabled external diff and textconv but still ran clean filters.
+
+**Fix:** a read-only git command asks when local or worktree config defines a diff, filter or gpg program (user/system settings such as git-lfs keep working). `git_status`/`git_diff` override local filter drivers to empty. **Test:** `test/read-only-commands.test.mjs` ("read-only git asks when the repository config names...").
+
+**Remaining:** submodule configs are not inspected; `git status` in a repository with submodules can still run their filters.
+
+### Deny rules missed several shell spellings (medium)
+
+**Finding:** documented as matching every spelling, deny/ask rules missed ANSI-C quoting (`$'git' push`), command groups and compound bodies (`{ git push; }`, `(git push)`, `if ...; then git push; fi`, `while ...; do rm ...; done`), `exec -a name git push`, `exec -c git push`, `env -S 'git push'` and `find -exec rm {} \;`. With a broad allow rule or `bypassPermissions`, those commands ran past the deny rule.
+
+**Fix:** `commandSpellings()` decodes `$'...'`/`$"..."`, strips grouping words and keywords, unwraps `exec`/`env -S`, and adds the command of `find -exec/-execdir/-ok/-okdir`. **Test:** `test/permission-deny-spellings.test.mjs`. **Remaining by design:** arguments from stdin (`echo push | xargs git`) and interpreter code (`python -c`) cannot be matched; use the sandbox for hard guarantees.
+
+### Areas tested that held up
+
+- Local web runtime (`src/web.mjs`): every `/api` route requires the bearer token (timing-safe compare); Host must be loopback or a configured LAN host, so DNS rebinding fails; browser Origin must match the request host; static `/app/` and `/src/` routes reject `..` and check containment. The VS Code bridge (`ide/vscode/src/server.js`) binds `127.0.0.1`, requires a token and rejects any browser Origin.
+- Allow rules stay literal and require a safe parse of every command (substitutions, redirects and groups never match an allow rule).
+
 ## Additional component research and authorization decisions
 
 **Research reviewed:** October 29, 2026. These are design references and OASIS-specific decisions, not endorsements of third-party security guarantees.
