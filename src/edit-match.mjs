@@ -175,6 +175,27 @@ function keepTypography(replacement, needleLines, actual) {
  * Try relaxed matching when the exact old_string was not found.
  * Returns { next, strategy, line } on a unique relaxed match, otherwise null.
  */
+// A whole-file rewrite should not silently change a file's line endings or drop its
+// byte-order mark: models emit LF and no BOM, so rewriting a CRLF (Windows) file
+// would otherwise turn every line into a diff. Only consistent conventions are
+// carried over; mixed files and content that already chose CRLF are left alone.
+export function preserveFileConventions(previous, next) {
+  if (typeof previous !== 'string' || typeof next !== 'string') return { content: next, kept: [] };
+  let content = next;
+  const kept = [];
+  const crlf = (previous.match(/\r\n/g) || []).length;
+  const bareLf = (previous.match(/(?<!\r)\n/g) || []).length;
+  if (crlf > 0 && bareLf === 0 && !content.includes('\r\n') && content.includes('\n')) {
+    content = content.replace(/(?<!\r)\n/g, '\r\n');
+    kept.push('CRLF line endings');
+  }
+  if (previous.startsWith('\ufeff') && !content.startsWith('\ufeff')) {
+    content = '\ufeff' + content;
+    kept.push('byte-order mark');
+  }
+  return { content, kept };
+}
+
 export function relaxedReplace(current, oldString, newString) {
   if (!oldString.trim()) return null;
   const eol = current.includes('\r\n') ? '\r\n' : '\n';
