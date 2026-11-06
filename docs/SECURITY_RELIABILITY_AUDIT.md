@@ -305,7 +305,7 @@ Each item below was reproduced with an attack test before the fix; the same test
 
 **Fix:** a read-only git command asks when local or worktree config defines a diff, filter or gpg program (user/system settings such as git-lfs keep working). `git_status`/`git_diff` override local filter drivers to empty. **Test:** `test/read-only-commands.test.mjs` ("read-only git asks when the repository config names...").
 
-**Remaining:** submodule configs are not inspected; `git status` in a repository with submodules can still run their filters.
+Checked-out submodules (up to 50, three levels deep) are inspected the same way: `git status` in the outer repository ran a clean filter from the submodule's own `.git/modules/<name>/config` with no prompt; it now asks, and `git_status`/`git_diff` switch those filters off too (the `-c` overrides reach submodule child processes). **Test:** `test/read-only-commands.test.mjs`.
 
 ### Deny rules missed several shell spellings (medium)
 
