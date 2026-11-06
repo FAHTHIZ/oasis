@@ -4,6 +4,8 @@
 import { Lexer } from 'marked';
 import { createRequire } from 'node:module';
 import { diffArrays } from 'diff';
+import wrapAnsi from 'wrap-ansi';
+import stripAnsi from 'strip-ansi';
 import { stringWidth } from './line-editor.mjs';
 import { renderMermaid } from './mermaid-ascii.mjs';
 
@@ -158,56 +160,26 @@ export function renderMarkdown(text, options = {}) {
 }
 
 // Word-wrap a rendered (possibly colored) line so words never split at the
-// terminal edge. `offset` is the width already used on the first row (the
-// reply bullet); continuation rows are indented to line up with the text.
-const ANSI_RE = /\x1b\[[0-9;?]*[A-Za-z]/y;
+// terminal edge, using wrap-ansi (the wrapper behind Ink and many CLIs): it
+// closes and reopens SGR styles and OSC 8 links at each break, so continuation
+// indents never inherit a background color. `offset` is the width already used
+// on the first row (the reply bullet); continuation rows are indented to line
+// up with the text. The first row and the rest have different widths, so the
+// first row is cut at its width and the remainder is wrapped again.
+const TRAILING_SPACE = /[ \t]+((?:\x1b\[[0-9;?]*[A-Za-z])*)$/;
+const LEADING_SPACE = /^((?:\x1b\[[0-9;?]*[A-Za-z])*)[ \t]+/;
 export function wrapRendered(text, columns, { offset = 0, indent = null } = {}) {
   const width = Math.max(20, Number(columns) || 80) - 1;
-  const plain = text.replace(/\x1b\[[0-9;?]*[A-Za-z]/g, '');
+  const plain = stripAnsi(text);
   if (offset + stringWidth(plain) <= width) return text;
   const lead = /^(\s*(?:[•*+-]\s+|\d+[.)]\s+|>\s*)?)/.exec(plain)[1];
-  const pad = ' '.repeat(indent === null ? Math.min(Math.floor(width / 2), offset + stringWidth(lead)) : indent);
-  const tokens = [];
-  for (let i = 0; i < text.length;) {
-    ANSI_RE.lastIndex = i;
-    const esc = ANSI_RE.exec(text);
-    if (esc) { tokens.push({ esc: esc[0] }); i += esc[0].length; continue; }
-    const ch = text[i];
-    const space = ch === ' ';
-    const last = tokens[tokens.length - 1];
-    if (last && !last.esc && last.space === space) last.text += ch;
-    else tokens.push({ text: ch, space });
-    i += 1;
-  }
-  let out = '';
-  let col = offset;
-  let pendingSpace = '';
-  for (const token of tokens) {
-    if (token.esc) { out += token.esc; continue; }
-    if (token.space) { pendingSpace += token.text; continue; }
-    let word = token.text;
-    const wordWidth = stringWidth(word);
-    if (col > stringWidth(pad) && col + stringWidth(pendingSpace) + wordWidth > width) {
-      out += '\n' + pad;
-      col = stringWidth(pad);
-      pendingSpace = '';
-    }
-    out += pendingSpace;
-    col += stringWidth(pendingSpace);
-    pendingSpace = '';
-    // A single word longer than the row (a URL, a path) is split as a last resort.
-    while (col + stringWidth(word) > width && word.length > 1) {
-      let take = 0, used = 0;
-      for (const c of word) { const w = stringWidth(c); if (col + used + w > width) break; used += w; take += c.length; }
-      if (!take) { out += '\n' + pad; col = stringWidth(pad); continue; }
-      out += word.slice(0, take) + '\n' + pad;
-      word = word.slice(take);
-      col = stringWidth(pad);
-    }
-    out += word;
-    col += stringWidth(word);
-  }
-  return out;
+  const padWidth = indent === null ? Math.min(Math.floor(width / 2), offset + stringWidth(lead)) : indent;
+  const options = { hard: true, trim: false };
+  const firstPass = wrapAnsi(text, Math.max(1, width - offset), options).split('\n');
+  const rest = firstPass.slice(1).join('').replace(LEADING_SPACE, '$1');
+  const rows = [firstPass[0], ...(stripAnsi(rest) ? wrapAnsi(rest, Math.max(1, width - padWidth), options).split('\n') : [])];
+  const pad = ' '.repeat(padWidth);
+  return rows.map((row, index) => (index ? pad : '') + row.replace(TRAILING_SPACE, '$1')).join('\n');
 }
 
 // Streaming renderer. push() receives new text; end() flushes.

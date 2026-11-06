@@ -453,6 +453,19 @@ Verified behaviour (negative-controlled: both tests fail against the old code):
 
 Browser app: vendored through `APP_PACKAGES` (`dist/index.js`), with an importmap entry, a recomputed CSP hash, and a service-worker precache entry.
 
+## 23. Terminal word wrap: wrap-ansi
+
+Replaced: the custom ANSI tokenizer and greedy wrapper in `wrapRendered` (`src/markdown.mjs`).
+
+Chosen: `wrap-ansi` 10.0.2 (MIT, sindresorhus; used by Ink, cliui and many CLIs). It adds only `ansi-styles` and dedupes onto the string-width 8.3 already in use.
+
+Verified:
+- The old code carried an open background colour across the break (`\x1b[44m...six\n  seven...`), so the indent was painted. wrap-ansi closes the colour before the break and reopens it after the indent. The new test in `test/markdown.test.mjs` fails on the old code.
+- Plain-text output matches the old wrapper on bullets, numbered CJK text, indented tips and coloured prose (4 of 5 probe cases). The one difference is an overlong URL, which wrap-ansi hard-splits at its starting position.
+- wrap-ansi has a single width, but a hanging indent needs two (first row versus continuation rows). The first row is cut with `trim:false`, which round-trips the text exactly, and the remainder is wrapped at the continuation width.
+
+Not replaced: the conservative shell splitter in `src/permissions.mjs`. It is a deliberate fail-closed allow-rule check that is already paired with the tree-sitter-bash AST for deny/ask matching (reviewed earlier).
+
 ## Next
 
 - Decided against Ajv validation in front of built-in tools: they already reject bad input with specific messages ("edit_file needs old_string … got path"), coerce numeric strings, and accept documented argument aliases that a strict schema would refuse.
