@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import { credentialEnvName } from './credential-env.mjs';
 import { spawn } from 'node:child_process';
 import { processTreeSpawnOptions, signalProcessTree } from './process-tree.mjs';
 import { chmod, copyFile, lstat, mkdir, mkdtemp, readdir, readFile, rm, writeFile } from 'node:fs/promises';
@@ -39,7 +40,7 @@ function isSensitiveName(name) {
 function scrubEnvironment(env = process.env) {
   const safe = {};
   for (const [key, value] of Object.entries(env || {})) {
-    if (/(?:API[_-]?KEY|TOKEN|SECRET|PASSWORD|CREDENTIAL|PRIVATE[_-]?KEY|AUTHORIZATION|GITHUB_TOKEN|GH_TOKEN)/i.test(key)) continue;
+    if (credentialEnvName(key)) continue;
     safe[key] = value;
   }
   return safe;
