@@ -82,3 +82,20 @@ test('gateway refuses browser and rebinding requests and redacts keys echoed in 
   assert.match(text, /"status":401/);
   assert.equal(text.includes(echoed), false, 'the echoed key was logged');
 });
+
+test('gateway spacing counts from the end of the previous reply, not its start', async (t) => {
+  let clock = 1000;
+  const waits = [];
+  const fetchImpl = async () => {
+    clock += 3000; // the reply takes 3 s
+    return new Response(JSON.stringify({ choices: [], usage: { prompt_tokens: 1, completion_tokens: 1 } }), { status: 200, headers: { 'content-type': 'application/json' } });
+  };
+  const server = createGateway({ upstream: 'https://up.example/v1', model: 'forced', minIntervalMs: 5000 }, { fetchImpl, now: () => clock, wait: async (ms) => { waits.push(ms); clock += ms; } });
+  await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
+  t.after(() => server.close());
+  const base = 'http://127.0.0.1:' + server.address().port + '/v1';
+  const send = () => fetch(base + '/chat/completions', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ messages: [] }) });
+  const responses = await Promise.all([send(), send(), send()]);
+  for (const response of responses) assert.equal(response.status, 200);
+  assert.deepEqual(waits, [5000, 5000], 'a full interval after each 3 s reply, not 2 s');
+});
