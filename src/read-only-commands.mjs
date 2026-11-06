@@ -163,14 +163,30 @@ function argsStayInside(args, cwd, root) {
 // scope counts; user and system settings (git-lfs filters) are the user's own.
 const REPO_COMMAND_KEY = /^(?:diff\.external|diff\..+\.(?:textconv|command)|filter\..+\.(?:clean|smudge|process)|gpg\.(?:.+\.)?program)$/i;
 
-export function repoConfigRunsCommands(cwd, env = process.env) {
+function repoCommandKeys(cwd, env) {
   const result = spawnSync('git', ['config', '--show-scope', '--get-regexp', '^(diff|filter|gpg)\\.'], { cwd, env, encoding: 'utf8', timeout: 5000, windowsHide: true, maxBuffer: 1024 * 1024 });
-  if (result.error || (result.status !== 0 && result.status !== 1)) return true;
-  return String(result.stdout || '').split('\n').some((line) => {
+  if (result.error || (result.status !== 0 && result.status !== 1)) return null;
+  const keys = [];
+  for (const line of String(result.stdout || '').split('\n')) {
     const [scope, rest = ''] = line.split('\t');
-    if (scope !== 'local' && scope !== 'worktree') return false;
-    return REPO_COMMAND_KEY.test(rest.split(' ')[0]);
-  });
+    const key = rest.split(' ')[0];
+    if ((scope === 'local' || scope === 'worktree') && REPO_COMMAND_KEY.test(key)) keys.push(key);
+  }
+  return keys;
+}
+
+export function repoConfigRunsCommands(cwd, env = process.env) {
+  const keys = repoCommandKeys(cwd, env);
+  return !keys || keys.length > 0;
+}
+
+/**
+ * `-c key=` arguments that switch off the clean/smudge filter programs a
+ * repository's own config defines, for git reads that must not run them.
+ */
+export function repoFilterOverrides(cwd, env = process.env) {
+  const keys = repoCommandKeys(cwd, env) || [];
+  return keys.filter((key) => /^filter\./i.test(key)).flatMap((key) => ['-c', key + '=']);
 }
 
 function readOnlyGit(args) {

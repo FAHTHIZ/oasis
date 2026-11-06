@@ -1,4 +1,4 @@
-import { readOnlyArgv, readOnlyCommandsEnabled, readOnlyGitEnv } from './read-only-commands.mjs';
+import { readOnlyArgv, readOnlyCommandsEnabled, readOnlyGitEnv, repoFilterOverrides } from './read-only-commands.mjs';
 import { installSkillsFromSource, parseSkillSource } from './skill-install.mjs';
 import { securityWarning } from './security-patterns.mjs';
 import { argvSleepSeconds, longSleepError } from './sleep-guard.mjs';
@@ -1334,7 +1334,9 @@ async function runReadOnlyGit(root, args) {
       PAGER: 'cat',
       GIT_CONFIG_NOSYSTEM: '1'
     };
-    const safeArgs = ['--no-pager', '-c', 'core.fsmonitor=false', '-c', 'diff.external=', '-c', 'core.pager=cat', ...args];
+    // Clean/smudge filters named in the repository's own config would run on
+    // worktree files during status and diff; switch them off here.
+    const safeArgs = ['--no-pager', '-c', 'core.fsmonitor=false', '-c', 'diff.external=', '-c', 'core.pager=cat', ...repoFilterOverrides(root, env), ...args];
     let child;
     const append = (target, chunk) => {
       const current = target === 'stdout' ? stdout : stderr;
