@@ -128,3 +128,38 @@ test('when superseded results alone bring history under the threshold, no summar
   assert.ok(size(session.messages) < before - 4000);
   assert.ok(session.supersededResultChars > 4000);
 });
+
+test('Anthropic cache breakpoints also mark where the previous request ended, so a wide parallel step still hits the cache', async () => {
+  const { toAnthropicRequest, applyAnthropicCacheBreakpoints } = await import('../src/agent.mjs');
+  const history = [
+    { role: 'system', content: 'sys' },
+    { role: 'user', content: 'fix the bug' },
+    { role: 'assistant', content: null, tool_calls: [{ id: 'r0', type: 'function', function: { name: 'read_file', arguments: '{"path":"a.js"}' } }] },
+    { role: 'tool', tool_call_id: 'r0', name: 'read_file', content: 'aaa' }
+  ];
+  const build = (messages) => {
+    const tools = [{ name: 'read_file', input_schema: {} }, { name: 'grep', input_schema: {} }];
+    const request = applyAnthropicCacheBreakpoints(toAnthropicRequest(messages), tools);
+    return { request, tools };
+  };
+  const first = build(history);
+  const calls = Array.from({ length: 12 }, (_, i) => ({ id: 'p' + i, type: 'function', function: { name: 'read_file', arguments: JSON.stringify({ path: 'f' + i + '.js' }) } }));
+  const next = [...history, { role: 'assistant', content: 'Reading all of them.', tool_calls: calls }, ...calls.map((c) => ({ role: 'tool', tool_call_id: c.id, name: 'read_file', content: 'x' }))];
+  const second = build(next);
+  const marked = (request) => request.messages.flatMap((m, mi) => Array.isArray(m.content) ? m.content.map((b, bi) => b.cache_control ? mi + ':' + bi : null).filter(Boolean) : []);
+  const blocks = (m) => Array.isArray(m.content) ? m.content.length : 1;
+  const prevEnd = first.request.messages.length - 1;
+  // The step added more than 20 blocks after the previous breakpoint...
+  const added = second.request.messages.slice(prevEnd + 1).reduce((sum, m) => sum + blocks(m), 0);
+  assert.ok(added > 20, String(added));
+  // ...so the previous request's breakpoint is repeated at the same place, with the same bytes.
+  assert.ok(marked(second.request).includes(prevEnd + ':' + (blocks(second.request.messages[prevEnd]) - 1)), marked(second.request).join(','));
+  // Same content up to there (cache_control and string-vs-text-block form are not part of the cached prefix).
+  const plain = (messages) => JSON.stringify(messages.map((m) => ({ role: m.role, content: (typeof m.content === 'string' ? [{ type: 'text', text: m.content }] : m.content).map(({ cache_control, ...block }) => block) })));
+  assert.equal(plain(second.request.messages.slice(0, prevEnd + 1)), plain(first.request.messages));
+  // Never more than Anthropic's four breakpoints.
+  const total = marked(second.request).length + second.tools.filter((t) => t.cache_control).length + (second.request.system || []).filter((b) => b.cache_control).length;
+  assert.equal(total, 4);
+  // A first request with only the user's prompt gets one message breakpoint.
+  assert.equal(marked(build([{ role: 'system', content: 'sys' }, { role: 'user', content: 'hi' }]).request).length, 1);
+});

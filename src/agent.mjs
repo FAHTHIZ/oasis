@@ -1560,13 +1560,26 @@ export function applyAnthropicCacheBreakpoints(request, tools = []) {
   const mark = { type: 'ephemeral' };
   if (request.system) request.system = [{ type: 'text', text: request.system, cache_control: mark }];
   if (tools.length) tools[tools.length - 1] = { ...tools[tools.length - 1], cache_control: mark };
-  const last = request.messages[request.messages.length - 1];
-  if (last) {
-    if (typeof last.content === 'string') last.content = last.content ? [{ type: 'text', text: last.content, cache_control: mark }] : last.content;
-    else if (Array.isArray(last.content) && last.content.length) {
-      const block = last.content[last.content.length - 1];
-      last.content[last.content.length - 1] = { ...block, cache_control: mark };
+  const markMessage = (message) => {
+    if (!message) return;
+    if (typeof message.content === 'string') message.content = message.content ? [{ type: 'text', text: message.content, cache_control: mark }] : message.content;
+    else if (Array.isArray(message.content) && message.content.length) {
+      const block = message.content[message.content.length - 1];
+      message.content[message.content.length - 1] = { ...block, cache_control: mark };
     }
+  };
+  const messages = request.messages || [];
+  markMessage(messages[messages.length - 1]);
+  // Also mark where the previous request ended (the user message before the
+  // latest assistant reply). Anthropic looks back only 20 content blocks from a
+  // breakpoint for a cached prefix, and one step with ten parallel tool calls
+  // adds more than that (tool_use + tool_result blocks), so with the last
+  // message marked alone such a step re-sent the whole history uncached.
+  // system + last tool + these two = the four breakpoints Anthropic allows.
+  for (let index = messages.length - 2; index > 0; index--) {
+    if (messages[index].role !== 'assistant') continue;
+    if (messages[index - 1].role === 'user') markMessage(messages[index - 1]);
+    break;
   }
   return request;
 }
@@ -2625,6 +2638,9 @@ async function requestCompletionRaw(session, options = {}) {
       ...(session.reasoningEffort && !options.forceTool ? { reasoning_effort: session.reasoningEffort } : {}),
       ...(availableTools.length ? { tools: availableTools.map(chatCompletionTool), tool_choice: options.forceTool ? { type: 'function', function: { name: options.forceTool } } : 'auto', parallel_tool_calls: parallelToolCalls(config, providerEnv) } : {}),
       ...(typeof options.onDelta === 'function' ? { stream: true } : {}),
+      // Chat Completions accepts prompt_cache_key too (same rules as Responses:
+      // api.openai.com by default, OASIS_PROMPT_CACHE_KEY=1 for other gateways).
+      ...promptCacheKeyField(session, config, providerEnv),
       // Without include_usage, OpenAI-compatible streams report no token counts,
       // so cost, /cost and --max-budget-usd silently read zero.
       ...(typeof options.onDelta === 'function' && !session.streamUsageUnsupported && providerEnv.OASIS_STREAM_USAGE !== '0' ? { stream_options: { include_usage: true } } : {}),
