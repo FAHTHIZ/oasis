@@ -5,7 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import {
   findCatalogModel, catalogContextWindow, catalogPrice, providerForBaseURL, refreshModelCatalog,
-  catalogRefreshDisabled, catalogCachePath, catalogImageInput, loadModelCatalog, trimCatalog, resetModelCatalogForTest
+  catalogRefreshDisabled, catalogCachePath, catalogImageInput, catalogReasoningReplay, loadModelCatalog, trimCatalog, resetModelCatalogForTest
 } from '../src/model-catalog.mjs';
 import { contextWindowSize } from '../src/context.mjs';
 import { priceFor } from '../src/pricing.mjs';
@@ -16,7 +16,10 @@ const RAW = {
     'acme-1': { limit: { context: 300000, output: 8000 }, cost: { input: 1, output: 2, cache_read: 0.1, tiers: [{ input: 2, output: 4, cache_read: 0.2, tier: { type: 'context', size: 128000 } }] } },
     'acme-flat': { limit: { context: 64000, input: 50000 }, cost: { input: 0.5, output: 1 } },
     'acme-eye': { limit: { context: 64000 }, modalities: { input: ['text', 'image'], output: ['text'] } },
-    'acme-text': { limit: { context: 64000 }, modalities: { input: ['text'], output: ['text'] } }
+    'acme-text': { limit: { context: 64000 }, modalities: { input: ['text'], output: ['text'] } },
+    'acme-think': { limit: { context: 64000 }, reasoning: true, interleaved: { field: 'reasoning_content' } },
+    'acme-think-bool': { limit: { context: 64000 }, reasoning: true, interleaved: true },
+    'acme-details': { limit: { context: 64000 }, reasoning: true, interleaved: { field: 'reasoning_details' } }
   } },
   router: { id: 'router', api: 'https://router.test/api', models: { 'acme/acme-1': { limit: { context: 200000 }, cost: { input: 1.2, output: 2.4 } } } },
   b: { models: {} }, c: { models: {} }, d: { models: {} }
@@ -112,4 +115,19 @@ test('catalog refresh honors opt-outs', () => {
   assert.equal(catalogRefreshDisabled({ NODE_TEST_CONTEXT: 'child-v8' }), true);
   assert.equal(catalogRefreshDisabled({ CI: 'true' }), true);
   assert.equal(catalogRefreshDisabled({ CI: 'false' }), false);
+});
+
+test('the catalog says which models expect their reasoning replayed', async (t) => {
+  const { env } = await customCatalog(t);
+  const trimmed = trimCatalog(RAW, ['acme']);
+  assert.equal(trimmed.acme.models['acme-think'].replay, 'reasoning_content');
+  assert.equal(trimmed.acme.models['acme-think-bool'].replay, 'reasoning_content');
+  assert.equal(trimmed.acme.models['acme-details'].replay, 'reasoning_details');
+  assert.equal(trimmed.acme.models['acme-1'].replay, undefined);
+  assert.equal(catalogReasoningReplay('acme-think', { env }), 'reasoning_content');
+  assert.equal(catalogReasoningReplay('acme-1', { env }), null);
+  assert.equal(catalogReasoningReplay('not-listed', { env }), null);
+  // The bundled snapshot carries the field for GLM and MiMo, which name patterns missed.
+  assert.equal(catalogReasoningReplay('glm-5', { baseURL: 'https://api.z.ai/api/paas/v4' }), 'reasoning_content');
+  assert.equal(catalogReasoningReplay('gpt-5.5', { baseURL: 'https://api.openai.com/v1' }), null);
 });
