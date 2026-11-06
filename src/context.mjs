@@ -1,4 +1,5 @@
 // Within-turn context protection for coding sessions.
+import { catalogContextWindow } from './model-catalog.mjs';
 import { createHash } from 'node:crypto';
 import { countTextTokens } from './tokens.mjs';
 // Token estimates use a real BPE vocabulary (src/tokens.mjs); exact counts for a
@@ -77,61 +78,19 @@ export function contextTokens(session) {
   return { tokens: estimateTokens(messages), reported: false };
 }
 
-// Known context windows by model-name pattern (first match wins). Names are matched
-// anywhere in the id, so router ids such as "anthropic/claude-sonnet-4" work too.
-// Unknown and local models keep the conservative 32K default; set contextWindow in
-// the provider config or OASIS_CONTEXT_WINDOW to override.
-const MODEL_WINDOWS = [
-  // Claude: 1M at standard pricing for Fable, Mythos, Opus/Sonnet 4.6+ and 5+
-  // (docs.anthropic.com context windows, Nov 2026). Haiku 5.5 also serves 1M,
-  // but prompts over 100K bill at a higher rate, so it keeps a 200K working
-  // window (override with contextWindow). Older Claude models are 200K.
-  [/claude-(?:fable|mythos)/, 1_000_000],
-  [/claude-(?:opus|sonnet)-(?:4[.-][6-9]|[5-9])(?![0-9])/, 1_000_000],
-  [/claude/, 200_000],
-  [/gpt-4\.1/, 1_000_000],
-  // GPT-5.5+ and GPT-6 serve 1.05M, but prompts over 272K bill at 2x input and
-  // 1.5x output, so they keep the 400K working window (override with contextWindow).
-  [/gpt-5|gpt-6/, 400_000],
-  [/(^|[^a-z])o[134](-|$)|o[34]-mini/, 200_000],
-  [/gpt-4o|gpt-4-turbo|chatgpt-4o/, 128_000],
-  [/gemini/, 1_000_000],
-  // Grok 4.7+ and Grok 5 serve 500K (docs.x.ai); earlier Grok 3/4 were 256K.
-  [/grok-(?:4\.[7-9]|[5-9])/, 500_000],
-  [/grok-[34]/, 256_000],
-  [/grok/, 128_000],
-  [/qwen3-coder|qwen3-max/, 256_000],
-  [/qwen3/, 128_000],
-  [/codestral|devstral/, 128_000],
-  [/mistral-(large|medium)/, 128_000],
-  // DeepSeek V4 (deepseek-v4-pro, deepseek-flash) serves 1M by default; V3.x was 128K.
-  [/deepseek-(?:v4|flash)/, 1_048_576],
-  [/deepseek/, 128_000],
-  // Kimi K3 series: 1,048,576 with flat pricing; K2 series: 262,144 (platform.kimi.ai).
-  [/kimi-k[3-9]/, 1_048_576],
-  [/kimi-k2/, 262_144],
-  [/kimi|moonshot/, 128_000],
-  // GLM-5.3 (and Flash) serve 1M; GLM-4.6 through GLM-5.2 serve 200K (docs.z.ai).
-  [/glm-5\.[3-9]|glm-[6-9]/, 1_000_000],
-  [/glm-4\.[6-9]|glm-5/, 200_000],
-  [/glm-4\.5/, 128_000],
-  // MiniMax M3 guarantees 512K (up to 1M, but input over 512K bills at 2x); M2.x 196K.
-  [/minimax-m[3-9]/, 512_000],
-  [/minimax-m2|minimax/, 196_608],
-  [/llama-?3\.[1-3]|llama-?4/, 128_000]
-];
-
-export function modelContextWindow(model) {
-  const id = String(model || '').toLowerCase();
-  if (!id) return null;
-  for (const [pattern, size] of MODEL_WINDOWS) if (pattern.test(id)) return size;
-  return null;
+// Context windows come from the models.dev catalog (src/model-catalog.mjs), matched
+// by provider (from baseURL) and model id, router prefixes and date suffixes
+// included. Unknown and local models keep the conservative 32K default; set
+// contextWindow in the provider config or OASIS_CONTEXT_WINDOW to override.
+export function modelContextWindow(model, config = {}, env = process.env) {
+  if (!model) return null;
+  return catalogContextWindow(model, { baseURL: config && config.baseURL, provider: config && config.catalogProvider, env });
 }
 
 export function contextWindowSize(config = {}, env = process.env) {
   return validWindow(config.contextWindow) ||
     validWindow(env && env.OASIS_CONTEXT_WINDOW) ||
-    modelContextWindow(config.model) ||
+    modelContextWindow(config.model, config, env) ||
     DEFAULT_CONTEXT_WINDOW;
 }
 
