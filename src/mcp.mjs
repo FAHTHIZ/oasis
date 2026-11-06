@@ -1,4 +1,5 @@
 import { atomicWriteFile } from './atomic-write.mjs';
+import { credentialEnvName } from './credential-env.mjs';
 import { inspectMcpTool, toolFingerprint, checkPin, repin, heldToolReason } from './mcp-trust.mjs';
 import { spawn } from 'node:child_process';
 import { oasisVersion } from './version.mjs';
@@ -113,10 +114,11 @@ export async function saveMcpServers(servers, options = {}) {
   return configPath;
 }
 
-function safeEnvironment(server, source = process.env, extra = {}) {
+export function safeEnvironment(server, source = process.env, extra = {}) {
   const env = {};
   for (const [key, value] of Object.entries(source)) {
-    if (/(?:API[_-]?KEY|ACCESS[_-]?KEY|TOKEN|SECRET|PASSWORD|CREDENTIAL|PRIVATE[_-]?KEY|AUTHORIZATION|GITHUB_TOKEN|GH_TOKEN)/i.test(key)) continue;
+    // Same credential list as commands and hooks; a server that needs one names it in passEnv or env.
+    if (credentialEnvName(key)) continue;
     if (key === 'OASIS_COMMAND_ENV_ALLOWLIST') continue;
     env[key] = value;
   }

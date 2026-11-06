@@ -18,3 +18,15 @@ test('child-process environments drop every common credential name', () => {
   for (const key of ordinary) assert.equal(scrubbed[key], 'value', key);
   assert.equal(scrubEnvironment({ ...env, OASIS_COMMAND_ENV_ALLOWLIST: 'DATABASE_URL' }).DATABASE_URL, 'value');
 });
+
+test('stdio MCP servers get the same filtered environment, plus what passEnv and env name', async () => {
+  // Regression: src/mcp.mjs kept an older list, so DATABASE_URL and friends reached every MCP server.
+  const { safeEnvironment } = await import('../src/mcp.mjs');
+  const source = { PATH: '/bin', DATABASE_URL: 'postgres://u:p@h/db', MYSQL_PWD: 'pw', SENTRY_DSN: 'x', GITHUB_TOKEN: 't', SSH_AUTH_SOCK: '/s' };
+  const env = safeEnvironment({ passEnv: ['DATABASE_URL'] }, source, { EXPLICIT_TOKEN: 'e' });
+  assert.equal(env.PATH, '/bin');
+  assert.equal(env.SSH_AUTH_SOCK, '/s');
+  assert.equal(env.DATABASE_URL, 'postgres://u:p@h/db', 'passEnv still passes a named credential');
+  assert.equal(env.EXPLICIT_TOKEN, 'e');
+  for (const key of ['MYSQL_PWD', 'SENTRY_DSN', 'GITHUB_TOKEN']) assert.equal(key in env, false, key);
+});
