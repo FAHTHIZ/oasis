@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import os from 'node:os';
 import path from 'node:path';
 import { mkdtemp, mkdir, writeFile, rm } from 'node:fs/promises';
-import { loadOutputStyles, systemPromptWithStyle, applyOutputStyle } from '../src/output-styles.mjs';
+import { loadOutputStyles, systemPromptWithStyle } from '../src/output-styles.mjs';
 import { runBuiltinCommand } from '../src/slash.mjs';
 import { createSession, closeSession } from '../src/agent.mjs';
 

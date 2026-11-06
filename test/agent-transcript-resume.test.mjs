@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import os from 'node:os';
 import path from 'node:path';
-import { mkdtemp, readFile, writeFile } from 'node:fs/promises';
+import { mkdtemp, writeFile } from 'node:fs/promises';
 import { scriptedModel } from './helpers/scripted-model.mjs';
 import { createSession, runAgentTurn } from '../src/agent.mjs';
 import { saveSession, loadSession, agentTranscriptPath, loadAgentTranscript } from '../src/sessions.mjs';

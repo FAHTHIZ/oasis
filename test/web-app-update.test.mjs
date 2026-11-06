@@ -14,7 +14,7 @@ function bump(version) {
 async function withServer(t, options) {
   const root = await mkdtemp(path.join(os.tmpdir(), 'oasis-web-update-'));
   const env = { OASIS_CONFIG_DIR: path.join(root, 'config'), ...(options.env || {}) };
-  const app = await startOasisWebServer({ root, host: '127.0.0.1', port: 0, env, token: 'test-runtime-token-0123456789', ...options, env });
+  const app = await startOasisWebServer({ root, host: '127.0.0.1', port: 0, token: 'test-runtime-token-0123456789', ...options, env });
   t.after(async () => { await app.close(); await rm(root, { recursive: true, force: true }); });
   const base = 'http://127.0.0.1:' + app.port;
   const auth = { authorization: 'Bearer ' + app.token, 'content-type': 'application/json' };

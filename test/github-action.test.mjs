@@ -4,7 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { mkdtemp, mkdir, writeFile, readFile, rm } from 'node:fs/promises';
+import { mkdtemp, mkdir, writeFile, rm } from 'node:fs/promises';
 import { readTrigger, buildPrompt, runAction, actionStatus, formatVerificationReport, verificationIsComplete } from '../src/github-action.mjs';
 import { scriptedModel, toolCall } from './helpers/scripted-model.mjs';
 

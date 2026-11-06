@@ -142,7 +142,7 @@ export function createTelegramGateway(options = {}) {
       await say(chatId, controller.signal.aborted ? 'Stopped.' : 'Error: ' + String(error && error.message || error).slice(0, 1000));
     } finally {
       state.controller = null;
-      for (const [id, waiter] of approvals) if (waiter.chatId === chatId) waiter.resolve(false);
+      for (const waiter of approvals.values()) if (waiter.chatId === chatId) waiter.resolve(false);
     }
   }
 

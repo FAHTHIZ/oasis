@@ -1,7 +1,7 @@
 import { atomicWriteFile } from './atomic-write.mjs';
 // `oasis auth status|login|logout` (Claude Code's `claude auth`), `oasis setup-token`,
 // and `oasis agents --json`. Credentials are never printed.
-import { readFile, writeFile } from 'node:fs/promises';
+import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { loadConfig, getConfigDirectory, getConfigPath, getProviderSummary } from './config.mjs';
 

@@ -65,7 +65,7 @@ test('oasis mcp serve works with an MCP client over stdio', async (t) => {
 test('mcp serve refuses edits to protected config such as git hooks', async (t) => {
   // Regression: --allow-edits wrote .git/hooks/pre-commit with no check; the
   // agent itself always asks before that write.
-  const { mkdtemp, rm, writeFile: write } = await import('node:fs/promises');
+  const { mkdtemp, rm } = await import('node:fs/promises');
   const { existsSync } = await import('node:fs');
   const os = await import('node:os');
   const pathMod = await import('node:path');

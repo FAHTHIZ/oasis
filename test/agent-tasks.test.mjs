@@ -520,7 +520,7 @@ test('dispatch_ready_tasks launches dependency-ready work in isolated waves and 
   git('commit', '-qm', 'fixture baseline');
 
   let dispatchCalls = 0;
-  const { config, parentRequests, childRequests } = await modelServer(t, {
+  const { config, childRequests } = await modelServer(t, {
     parent: (payload) => {
       const last = payload.messages[payload.messages.length - 1];
       if (last.role === 'user' && /Create the shared dependency tasks/.test(last.content)) {

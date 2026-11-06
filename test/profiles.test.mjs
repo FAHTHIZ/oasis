@@ -64,7 +64,7 @@ test('create copies config but not sessions; use makes it sticky; delete needs -
 });
 
 test('the CLI accepts --profile anywhere and runs profile commands', async (t) => {
-  const { home, env } = await setup(t);
+  const { env } = await setup(t);
   const childEnv = { ...process.env, ...env, OASIS_CONFIG_DIR: '', OASIS_PROFILE: '' };
   delete childEnv.OASIS_CONFIG_DIR;
   delete childEnv.OASIS_PROFILE;

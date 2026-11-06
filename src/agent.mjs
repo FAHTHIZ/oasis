@@ -28,7 +28,7 @@ import { startPluginMonitorsFor } from './monitors.mjs';
 import { parseChannelEntries, mcpInstructionsSection, flushPendingChannels } from './channels.mjs';
 import { SESSION_TOOL_DEFINITIONS, SESSION_TOOL_NAMES, SESSION_READ_ONLY_TOOLS, deferMcpTools, deferRareBuiltinTools, loadDeferredTool, deferredToolsPrompt, toolGuidanceFor, runSessionTool, stopCron, TOOL_SEARCH_DEFINITION } from './session-tools.mjs';
 import { loadOutputStyles, systemPromptWithStyle, BUILTIN_STYLES } from './output-styles.mjs';
-import { priceFor, estimateCostUsd, BudgetExceededError, recordBudgetSpend, formatUsd, cloudModelBehindGateway } from './pricing.mjs';
+import { priceFor, estimateCostUsd, recordBudgetSpend, formatUsd, cloudModelBehindGateway } from './pricing.mjs';
 import { isTestPath } from './test-tamper.mjs';
 import { recentImageSet, hasImages, toChatMessagesWithImages, anthropicImageBlocks, responsesImageItems, fitImages } from './images.mjs';
 import { beginCheckpoint, captureBeforeChange, checkpointPersistenceEnabled, FILE_CHANGING_TOOLS, loadCheckpoints } from './checkpoints.mjs';
@@ -68,7 +68,7 @@ import { isAnthropicFamily, cloudEndpoint, cloudBody, cloudHeaders, cloudStreams
 import { loadSettings, normalizeLanguage } from './settings.mjs';
 import { withReplyLanguage } from './reply-language.mjs';
 import { effectivePhrases, normalizeCommentMode, withWritingRules } from './style-rules.mjs';
-import { PermissionPolicy, suggestRule, EDIT_TOOLS } from './permissions.mjs';
+import { PermissionPolicy, suggestRule } from './permissions.mjs';
 import { loadShellParser } from './shell-ast.mjs';
 import { classifyAction, newAutoModeState } from './auto-mode.mjs';
 import { runHooks, hasHooks, CLAUDE_TOOL_NAMES } from './hooks.mjs';
@@ -6199,7 +6199,7 @@ async function runAgentTurnRaw(session, prompt, options = {}) {
         // A streamed reply is already on screen; say why work continues.
         if (typeof options.onVerificationGate === 'function') {
           const stale = claimState.ran && claimState.editedAfter && claimState.lastCommand ? claimState.lastCommand : '';
-          const steps = issues.map((issue) => /diff has not been reviewed/.test(issue) ? 'review the diff of ' + (/\(([^)]*)\)/.exec(issue) || [, 'the changes'])[1]
+          const steps = issues.map((issue) => /diff has not been reviewed/.test(issue) ? 'review the diff of ' + (/\(([^)]*)\)/.exec(issue) || [null, 'the changes'])[1]
             : /has passed after the latest code edit/.test(issue) ? (stale ? 'rerun ' + stale : 'run a check')
             : /asked for new tests/.test(issue) ? 'add a test'
             : /tests were weakened/.test(issue) ? 'restore weakened tests'

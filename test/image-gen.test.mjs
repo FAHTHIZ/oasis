@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import os from 'node:os';
 import path from 'node:path';
 import http from 'node:http';
-import { mkdtemp, rm, readFile, writeFile } from 'node:fs/promises';
+import { mkdtemp, rm, readFile } from 'node:fs/promises';
 import { generateImage, imageGenerationConfig } from '../src/image-gen.mjs';
 import { createSession, runAgentTurn } from '../src/agent.mjs';
 import { scriptedModel, toolCall } from './helpers/scripted-model.mjs';

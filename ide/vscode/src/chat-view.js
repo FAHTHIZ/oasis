@@ -3,7 +3,7 @@
 'use strict';
 const vscode = require('vscode');
 const crypto = require('node:crypto');
-const { OasisChatProcess, friendlyExitError, isPotentiallyDestructiveAction } = require('./chat-process.js');
+const { OasisChatProcess, friendlyExitError } = require('./chat-process.js');
 
 class ChatController {
   constructor({ getCommand, getCwd, getEnv }) {

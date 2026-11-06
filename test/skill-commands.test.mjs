@@ -155,7 +155,7 @@ test('file deletion and command execution respect explicit approval denial', asy
 });
 
 test('/rollback preview makes no changes; confirmation backs up current files before restoring', async () => {
-  const { root, configDir, env, session, state } = await fixture();
+  const { root, configDir, session, state } = await fixture();
   const existing = path.join(root, 'src.js');
   const created = path.join(root, 'generated.txt');
   await writeFile(existing, 'new contents\n', 'utf8');

@@ -29,7 +29,7 @@ import { atomicWriteFile } from './atomic-write.mjs';
 // with your permissions, exactly as in Claude Code: install only plugins you trust.
 import { spawn, spawnSync } from 'node:child_process';
 import { processTreeSpawnOptions, signalProcessTree } from './process-tree.mjs';
-import { cp, mkdir, readFile, readdir, realpath, rm, stat, writeFile } from 'node:fs/promises';
+import { cp, mkdir, readFile, readdir, realpath, rm, stat } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { getConfigDirectory } from './config.mjs';

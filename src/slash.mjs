@@ -2,8 +2,7 @@ import { atomicWriteFile } from './atomic-write.mjs';
 // Built-in interactive slash commands (Claude Code style). Each handler returns
 // { output } text, and optionally { prompt } to send to the agent, or
 // { resetSession: true } when the caller should drop the current session.
-import { describeHook, runHooks, hasHooks } from './hooks.mjs';
-import { compactHistoryIfNeeded, hookOptions, undoCompaction } from './agent.mjs';
+import { compactHistoryIfNeeded, undoCompaction } from './agent.mjs';
 import { countTextTokens, countJsonTokens } from './tokens.mjs';
 import { estimateTokens, contextWindowSize, contextTokens, addMustPreserve, createCompactionPreview, compactionPreviewIsCurrent } from './context.mjs';
 import { loadCustomCommands } from './commands.mjs';
@@ -11,7 +10,7 @@ import { loadSettings, PERMISSION_MODES, normalizePermissionMode, normalizeLangu
 import { applyReplyLanguage } from './reply-language.mjs';
 import { applyWritingRules, effectivePhrases, normalizePhrases, normalizeCommentMode, DEFAULT_AVOID_PHRASES } from './style-rules.mjs';
 import { modelAllowed, modelRestrictionMessage } from './model-aliases.mjs';
-import { BUILTIN_AGENTS, loadAgentDefinitions } from './subagents.mjs';
+import { loadAgentDefinitions } from './subagents.mjs';
 import { memoryFiles } from './memory.mjs';
 import { listCheckpoints, rewind } from './checkpoints.mjs';
 import { snapshotFile } from './backups.mjs';
@@ -1300,7 +1299,7 @@ export async function runBuiltinCommand(name, argument, state) {
       // Claude Code-compatible themes; the choice is saved as "theme" in user settings.
       const themes = await import('./themes.mjs');
       const { userSettingsPath } = await import('./settings.mjs');
-      const { readFile, writeFile, mkdir } = await import('node:fs/promises');
+      const { readFile, mkdir } = await import('node:fs/promises');
       const settings = (session && session.settings) || state.settings || null;
       const plugins = (settings && settings.pluginThemeSources) || [];
       const wanted = String(argument || '').trim();
@@ -1364,7 +1363,7 @@ export async function runBuiltinCommand(name, argument, state) {
     case 'vim': {
       // Toggle vim editing for the prompt; saved as "editorMode" in user settings.
       const { userSettingsPath } = await import('./settings.mjs');
-      const { readFile, writeFile, mkdir } = await import('node:fs/promises');
+      const { readFile, mkdir } = await import('node:fs/promises');
       const current = sessionOptions.editorMode || (session && session.settings && session.settings.editorMode) || 'normal';
       const wanted = /^(on|vim)$/i.test(argument) ? 'vim' : /^(off|normal|emacs)$/i.test(argument) ? 'normal' : current === 'vim' ? 'normal' : 'vim';
       sessionOptions.editorMode = wanted;

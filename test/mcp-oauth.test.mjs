@@ -188,10 +188,9 @@ test('OAuth discovery refuses redirects and bounds metadata bodies', async () =>
   const oversizedFetch = async (url) => {
     if (url === origin + '/large') {
       const body = new ReadableStream({
-        start(controller) {
-          controller.enqueue(new TextEncoder().encode('{"metadata":"' + 'x'.repeat(270 * 1024) + '"}'));
-          controller.close();
-        },
+        // Endless: only a reader that stops at its byte limit gets past this.
+        start(controller) { controller.enqueue(new TextEncoder().encode('{"metadata":"')); },
+        pull(controller) { controller.enqueue(new TextEncoder().encode('x'.repeat(64 * 1024))); },
         cancel() { largeBodyRead = true; }
       });
       return new Response(body, { headers: { 'content-type': 'application/json' } });
@@ -204,6 +203,7 @@ test('OAuth discovery refuses redirects and bounds metadata bodies', async () =>
   const large = await discoverOAuth(origin + '/mcp', { fetch: oversizedFetch, resourceMetadataUrl: origin + '/large', lookupImpl: publicLookup });
   assert.equal(large.tokenEndpoint, origin + '/token');
   assert.equal(large.scopes, null, 'oversized resource metadata is ignored');
+  assert.equal(largeBodyRead, true, 'the oversized body is cancelled, not buffered');
 });
 
 test('OAuth discovery bounds time spent waiting for stalled metadata endpoints', async () => {

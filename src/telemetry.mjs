@@ -131,7 +131,7 @@ export class Telemetry {
   }
 
   start(modules) {
-    const { api, resources, metrics, logs, trace, transformer, metricExporter, logExporter, traceExporter } = modules;
+    const { resources, metrics, logs, trace, transformer, metricExporter, logExporter, traceExporter } = modules;
     const resource = resources.resourceFromAttributes(this.resourceAttributes);
     const exporterOptions = (signal) => ({
       url: endpointFor(this.env, signal),

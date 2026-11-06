@@ -227,19 +227,6 @@ export async function runWorkflow({ source, args, runAgent, onEvent = () => {}, 
       }
     });
   };
-  const guardList = (list, what) => {
-    if (!Array.isArray(list)) throw new Error(what + '() needs an array.');
-    if (list.length > MAX_ITEMS_PER_CALL) throw new Error(what + '() accepts at most ' + MAX_ITEMS_PER_CALL + ' items.');
-  };
-  const pipeline = (items, fn) => {
-    guardList(items, 'pipeline');
-    if (typeof fn !== 'function') throw new Error('pipeline() needs a function as its second argument.');
-    return Promise.all(items.map((item, i) => { try { return Promise.resolve(fn(item, i)).catch(() => null); } catch { return Promise.resolve(null); } }));
-  };
-  const parallel = (tasks) => {
-    guardList(tasks, 'parallel');
-    return Promise.all(tasks.map((task) => { try { return Promise.resolve(typeof task === 'function' ? task() : task).catch(() => null); } catch { return Promise.resolve(null); } }));
-  };
   const phase = (title) => { currentPhase = String(title || '').slice(0, 120) || null; if (currentPhase) ensurePhase(currentPhase); emit({ type: 'phase', title: currentPhase }); };
   const log = (...parts) => { const message = parts.map((part) => typeof part === 'string' ? part : JSON.stringify(part)).join(' ').slice(0, 2000); state.logs.push(message); emit({ type: 'log', message }); };
 

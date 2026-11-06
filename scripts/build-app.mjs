@@ -3,7 +3,7 @@
 // Copies the app, the shared browser-safe src modules it imports, the bundled
 // skills with a name/description index, and fonts; stamps the offline cache.
 import { createHash } from 'node:crypto';
-import { cp, mkdir, readdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
+import { cp, mkdir, readdir, readFile, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { APP_PACKAGES, appModuleGraph, appPackageDir, skillsIndex } from '../src/app-server.mjs';

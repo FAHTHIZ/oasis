@@ -15,7 +15,7 @@ import { protectedShellWrite, protectedEditsAllowed } from './protected-paths.mj
 import * as gitSafety from './git-safety.mjs';
 import { assertFileFresh, recordFileState } from './file-state.mjs';
 import { spawn } from 'node:child_process';
-import { readFile, writeFile, lstat, stat, realpath } from 'node:fs/promises';
+import { readFile, lstat, stat } from 'node:fs/promises';
 import path from 'node:path';
 import { existsSync } from 'node:fs';
 import { randomUUID } from 'node:crypto';
@@ -43,7 +43,6 @@ const MAX_BACKGROUND_PROCESSES = 8;
 const MAX_BACKGROUND_HISTORY = 24;
 
 export { NOTEBOOK_EDIT_DEFINITION, POWER_TOOL_DEFINITIONS, SHELL_TOOL_DEFINITION, POWERSHELL_TOOL_DEFINITION, POWER_TOOL_NAMES } from './power-tool-definitions.mjs';
-import { POWER_TOOL_NAMES } from './power-tool-definitions.mjs';
 import { resolveRipgrep } from './ripgrep.mjs';
 
 // PowerShell is enabled by default on Windows (CLAUDE_CODE_USE_POWERSHELL_TOOL=0 turns it off),
