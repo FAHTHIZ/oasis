@@ -423,6 +423,14 @@ Safety is enforced in renderer overrides: `html` tokens are escaped, `link`/`ima
 Measured differences vs old: nested lists were flattened into one list before; `[wiki](…Foo_(bar))` lost `)` before; tables with alignment now carry `align`. The new app-core assertions fail on the old renderer. The Chrome end-to-end app test passes with the vendored module.
 Not chosen: DOMPurify as a second layer, since it needs a DOM and the renderer is also used where there is none; markdown-it is heavier and similar in quality.
 
+## 20. Terminal inline Markdown: marked Lexer.lexInline
+
+Replaced: the five-regex inline pass in `renderInline` (`src/markdown.mjs`).
+Adopted: `Lexer.lexInline(text, { gfm: true })` from the same `marked` package, with tokens drawn as ANSI (strong/em/del/codespan/OSC-8 links for http(s); other links and HTML stay literal).
+Kept: the line-oriented block handling, because replies stream line by line and a block parser would need the full text.
+Differences vs old (all CommonMark-conformant): nested emphasis renders, `\*x\*` shows `*x*` (it showed backslashes), `[w](…a_(b))` keeps the `)`, bare `https://` URLs become links, and intraword `2*3*4` italicises `3` per the spec.
+Cost: USER_GUIDE (1,560 lines) 8 → 25 ms. The new test fails on the old function.
+
 ## Next
 
 - Decided against Ajv validation in front of built-in tools: they already reject bad input with specific messages ("edit_file needs old_string … got path"), coerce numeric strings, and accept documented argument aliases that a strict schema would refuse.
