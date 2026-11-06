@@ -4,7 +4,7 @@
 import { createTwoFilesPatch, FILE_HEADERS_ONLY } from 'diff';
 
 import { relaxedReplace, closestMatchHint } from '../../src/edit-match.mjs';
-import { htmlToMarkdown } from '../../src/html-markdown.mjs';
+import { htmlToMarkdown } from './html-markdown.mjs';
 
 const MAX_RESULT = 24000;
 
