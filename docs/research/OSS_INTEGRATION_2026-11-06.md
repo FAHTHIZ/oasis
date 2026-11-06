@@ -439,6 +439,20 @@ The hast tree is painted with one ANSI colour per scope; nested spans re-emit th
 Cost: 60 µs per line vs 4 µs (2,000 JS lines 119 ms vs 8 ms). Eager import added 74 ms to `src/markdown.mjs` import (61 → 135 ms) because lowlight's single entry imports every grammar; it is now loaded with `createRequire` (require(esm), Node ≥ 22.12) on first use, so import stays 61 ms and the first highlighted line takes ~89 ms. On older Node 22 builds the require fails and code stays plain.
 Trade-off: unlabelled fences are no longer guessed at (the old generic regex coloured them); auto-detection per streamed line is unreliable.
 
+## 22. SSE parsing: eventsource-parser
+
+Replaced: `consumeServerSentEvents` (CLI) and `sseEvents` (browser app), two separate hand-written line splitters.
+
+Chosen: `eventsource-parser` 4.1.3 (MIT, zero dependencies; the MCP SDK already pulls in 3.x as a transitive dependency, and it is widely used by the Vercel AI SDK). It implements the WHATWG EventSource parsing algorithm.
+
+Verified behaviour (negative-controlled: both tests fail against the old code):
+- CR-only line endings, and a CRLF split across two network reads.
+- `:` comment lines ignored; several `data:` lines joined with `\n`.
+- The library drops a final event with no blank line after it; OASIS feeds `"\n\n"` at EOF so that event is still delivered (as the old CLI parser did).
+- Kept: 8 MiB `MAX_PROVIDER_STREAM_BYTES` cap, `onStray` reporting (through the `unknown-field` error), and event name `''` as the default.
+
+Browser app: vendored through `APP_PACKAGES` (`dist/index.js`), with an importmap entry, a recomputed CSP hash, and a service-worker precache entry.
+
 ## Next
 
 - Decided against Ajv validation in front of built-in tools: they already reject bad input with specific messages ("edit_file needs old_string … got path"), coerce numeric strings, and accept documented argument aliases that a strict schema would refuse.

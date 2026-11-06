@@ -38,3 +38,20 @@ test('the app asks again when Gemini ends with MALFORMED_FUNCTION_CALL and no ou
   assert.equal(reply.content, 'Fixed.');
   assert.equal(calls, 2);
 });
+
+// Chunks are delivered exactly as given, so frame boundaries can fall anywhere.
+const chunkedResponse = (chunks) => new Response(new ReadableStream({ start(c) { for (const chunk of chunks) c.enqueue(new TextEncoder().encode(chunk)); c.close(); } }), { status: 200, headers: { 'content-type': 'text/event-stream' } });
+
+test('SSE parsing follows the EventSource rules: CR-only lines, split CRLF, comments, multi-line data', async () => {
+  const delta = (text) => JSON.stringify({ choices: [{ delta: { content: text } }] });
+  const chunks = [
+    ': keep-alive\r\r',                                 // comment, CR-only line ends
+    'data: ' + delta('one ') + '\r', '\n\r', '\n',       // CRLF split across chunks
+    'event: message\ndata: ' + delta('two ') + '\r\r',  // CR-only event end
+    'data: {"choices":[{"delta":\ndata: {"content":"three"}}]}\n\n', // data split over two lines
+    'data: [DONE]\n\n'
+  ];
+  const seen = [];
+  const reply = await chat({ protocol: 'openai-compatible', baseURL: 'https://example.test/v1', model: 'm', apiKey: 'k' }, { messages: [{ role: 'user', content: 'hi' }], fetchImpl: async () => chunkedResponse(chunks), onText: (text) => seen.push(text) });
+  assert.equal(reply.content, 'one two three');
+});
