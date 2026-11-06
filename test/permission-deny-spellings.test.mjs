@@ -70,3 +70,17 @@ test('Read and Edit deny rules apply to shell commands touching those files', as
   assert.equal(p.evaluate('run_command', { command: 'cat', args: ['.env'] }).decision, 'deny');
   assert.deepEqual(shellFileTargets('cat a b > c 2>&1').writes, ['c']);
 });
+
+test('deny rules catch ANSI-C quoting, compound commands, exec -a, env -S and find -exec', () => {
+  // Regression: these spellings ran past a matching deny rule.
+  const p = policy();
+  const evasions = [
+    "$'git' push", "git $'push'", "$'\\x67it' push", "$'\\147it' push", '$"git" push',
+    '{ git push; }', '(git push)', '( git push )', 'if true; then git push; fi', 'for i in 1; do git push; done',
+    'while true; do rm -rf x; done', '! git push', 'exec -a name git push', 'exec -c git push',
+    "env -S 'git push'", "env --split-string='rm -rf x'", 'find . -exec rm {} \\;', 'find . -execdir rm -f {} +', 'find . -ok git push \\;'
+  ];
+  for (const command of evasions) assert.equal(p.evaluate('run_shell', { command }).decision, 'deny', command);
+  for (const command of ["echo '(git push)'", "echo $'git push'", 'find . -name rm', 'if-config push', '{ git status; }', 'env -S "ls -la"'])
+    assert.notEqual(p.evaluate('run_shell', { command }).decision, 'deny', command);
+});
