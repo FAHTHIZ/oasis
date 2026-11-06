@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="assets/oasis-icon.svg" alt="OASIS" width="88">
+  <img src="assets/oasis-icon.svg" alt="OASIS portal mark" width="88">
 </p>
 
 <h1 align="center">OASIS</h1>
@@ -10,18 +10,23 @@
 </p>
 
 <p align="center">
+  <img src="assets/oasis-readme-hero.svg" alt="The layered OASIS portal grounded on a dark, reflective floor." width="100%">
+</p>
+
+<p align="center">
   <a href="https://github.com/FAHTHIZ/oasis/actions/workflows/quality.yml"><img alt="Quality checks" src="https://github.com/FAHTHIZ/oasis/actions/workflows/quality.yml/badge.svg?branch=main"></a>
   <a href="https://github.com/FAHTHIZ/oasis/releases/latest"><img alt="Latest release" src="https://img.shields.io/github/v/release/FAHTHIZ/oasis?style=flat-square"></a>
   <a href="LICENSE"><img alt="Apache 2.0 license" src="https://img.shields.io/github/license/FAHTHIZ/oasis?style=flat-square"></a>
-  <img alt="Node.js 22+" src="https://img.shields.io/badge/Node.js-22%2B-339933?logo=nodedotjs&logoColor=white&style=flat-square">
 </p>
 
 <p align="center">
   <a href="https://github.com/FAHTHIZ/oasis/releases/latest">Download</a> ·
-  <a href="#install-the-cli">Install the CLI</a> ·
+  <a href="#install-the-cli">CLI quick start</a> ·
+  <a href="https://fahthiz.github.io/oasis/app/">Browser app</a> ·
   <a href="docs/README.md">Documentation</a> ·
-  <a href="SECURITY.md">Security</a> ·
-  <a href="CONTRIBUTING.md">Contributing</a>
+  <a href="BRAND.md">Brand guidelines</a> ·
+  <a href="CONTRIBUTING.md">Contributing</a> ·
+  <a href="SECURITY.md">Security</a>
 </p>
 
 ---
@@ -96,7 +101,7 @@ OASIS has several interfaces over a shared runtime. They do not all have the sam
 | **Desktop application** | [Download a release](https://github.com/FAHTHIZ/oasis/releases/latest) | Electron host for the local runtime and workspace. |
 | **Editor integration** | `oasis ide install` | VS Code-family extension with editor context, diagnostics and diff review. |
 | **Agent Client Protocol** | `oasis acp` | Connects OASIS to compatible ACP clients. |
-| **Node.js SDK** | `oasis-oss` package entry point: `src/sdk.mjs` | Embeds OASIS sessions, tools and agent workflows in Node.js applications. |
+| **Node.js SDK** | `src/sdk.mjs` | Embeds OASIS sessions, tools and agent workflows in Node.js applications. |
 | **GitHub Action and messaging gateways** | `action.yml` and `src/gateway-*.mjs` | Runs configured repository tasks and messaging integrations. |
 
 For the differences between these interfaces, see [Interfaces and deployment](docs/INTERFACES.md).
@@ -150,6 +155,7 @@ A passing test suite is evidence for the cases it exercises. It is not proof tha
 ## Documentation
 
 - [Documentation index](docs/README.md)
+- [Brand guidelines](BRAND.md)
 - [Architecture and runtime boundaries](docs/ARCHITECTURE.md)
 - [Interfaces and deployment](docs/INTERFACES.md)
 - [Benchmark methodology](docs/BENCHMARKS.md)
