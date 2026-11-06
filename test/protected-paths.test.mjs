@@ -183,3 +183,13 @@ test('protected edits are recognized through symlinked folders and canonical abs
   await assert.rejects(readFile(path.join(real, '.oasis', 'settings.local.json')), /ENOENT/);
   await assert.rejects(readFile(path.join(real, '.git', 'hooks', 'pre-commit')), /ENOENT/);
 });
+
+test('shell writes to protected files are recognized without spaces, after cd, through split quotes and from interpreters', () => {
+  // Regression: these forms skipped the forced protected-config prompt.
+  for (const command of ['echo x >.git/hooks/pre-commit', 'echo x>.oasis/settings.json', 'cd .git/hooks && echo x > pre-commit', 'cd .oasis; cat > settings.json',
+    'echo x > .git//hooks/pre-commit', 'echo x > .gi""t/hooks/pre-commit', "echo x > .g'i't/hooks/pre-commit", 'echo x | sponge .mcp.json',
+    'python3 -c "open(\'.git/hooks/pre-commit\',\'w\').write(\'x\')"', "pushd .claude && tee settings.json < x"])
+    assert.ok(protectedShellWrite(command), command);
+  for (const command of ['echo .git >> .gitignore', 'echo ".oasis" >> .gitignore', 'cat .git/config', 'ls .git/hooks', 'cd src && echo x > a.txt', 'git log > out.txt', 'cp .env.example .env'])
+    assert.equal(protectedShellWrite(command), null, command);
+});
