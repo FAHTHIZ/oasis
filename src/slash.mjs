@@ -1224,8 +1224,9 @@ export async function runBuiltinCommand(name, argument, state) {
       if (sub === 'delete' || sub === 'cancel') return { output: tools.deleteCronJob(session, rest[0]).deleted ? 'Deleted ' + rest[0] + '.' : 'No job ' + rest[0] + '.' };
       const quoted = argument.match(/^["']([^"']+)["']\s+([\s\S]+)$/);
       const parts = argument.split(/\s+/);
-      const cron = quoted ? quoted[1] : parts.slice(0, 5).join(' ');
-      const prompt = quoted ? quoted[2] : parts.slice(5).join(' ');
+      const fieldCount = parts[0].startsWith('@') ? 1 : 5; // @daily and friends are one token
+      const cron = quoted ? quoted[1] : parts.slice(0, fieldCount).join(' ');
+      const prompt = quoted ? quoted[2] : parts.slice(fieldCount).join(' ');
       try {
         const job = tools.createCronJob(session, { cron, prompt });
         return { output: 'Scheduled ' + job.id + ' (' + job.cron + '), next run ' + job.next_run + '. It runs while this session stays open.' };

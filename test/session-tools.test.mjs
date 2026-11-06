@@ -5,12 +5,26 @@ import { parseCron, nextCronRun, createCronJob, listCronJobs, deleteCronJob, tic
 const def = (name, description = '') => ({ type: 'function', function: { name, description, parameters: { type: 'object', properties: {} } } });
 
 test('parseCron handles steps, ranges and lists', () => {
-  const [minute, hour, , , weekday] = parseCron('*/15 9-17 * * 1,3,7');
-  assert.deepEqual([...minute], [0, 15, 30, 45]);
-  assert.equal(hour.size, 9);
-  assert.deepEqual([...weekday].sort(), [0, 1, 3]);
+  const from = new Date(2026, 0, 1, 10, 29, 40); // a Thursday
+  const runs = (expression, count) => { const out = []; let at = from; for (let i = 0; i < count; i += 1) out.push(at = nextCronRun(parseCron(expression), at)); return out; };
+  assert.deepEqual(runs('*/15 9-17 * * 1,3,7', 2).map((d) => [d.getDay(), d.getHours(), d.getMinutes()]), [[0, 9, 0], [0, 9, 15]], '7 is Sunday');
   assert.throws(() => parseCron('* * *'), /5 fields/);
-  assert.throws(() => parseCron('61 * * * *'), /out of range/);
+  assert.throws(() => parseCron('0 0 * * * *'), /5 fields/, 'no seconds field');
+  assert.throws(() => parseCron('61 * * * *'), /Invalid cron expression/);
+});
+
+test('cron follows standard semantics: names, macros, and day-of-month OR day-of-week', () => {
+  const from = new Date(2026, 0, 1, 10, 29, 40); // Thursday 1 January 2026
+  const next = (expression) => nextCronRun(parseCron(expression), from);
+  // Both day fields restricted: the 1st of the month OR any Monday (Vixie cron), not only Mondays that fall on the 1st.
+  assert.deepEqual([next('0 0 1 * 1').getDate(), next('0 0 1 * 1').getDay()], [5, 1]);
+  assert.equal(next('0 9 * * MON-FRI').getDate(), 2);
+  assert.equal(next('0 12 1 FEB *').getMonth(), 1);
+  assert.deepEqual([next('@daily').getDate(), next('@daily').getHours()], [2, 0]);
+  assert.equal(next('@hourly').getHours(), 11);
+  const started = Date.now();
+  assert.equal(next('0 0 30 2 *'), null, 'a date that never exists has no next run');
+  assert.ok(Date.now() - started < 1000);
 });
 
 test('nextCronRun finds the next matching minute', () => {
@@ -157,4 +171,16 @@ test('slash commands: goal, rename, keybindings, simplify and verify', async (t)
   assert.match((await runBuiltinCommand('verify', 'the login page', { root, session, env })).prompt, /the login page/);
   assert.match((await runBuiltinCommand('batch', 'rename foo', { root, session, env })).prompt, /isolation "worktree"/);
   assert.match((await runBuiltinCommand('schedule', '"* *" do it', { root, session, env })).output, /5 fields/);
+});
+
+test('/schedule accepts @daily-style macros as a single token', async () => {
+  const { runBuiltinCommand } = await import('../src/slash.mjs');
+  const session = {};
+  const result = await runBuiltinCommand('schedule', '@hourly check the build', { root: process.cwd(), session });
+  assert.match(result.output, /^Scheduled cron_1 \(@hourly\)/);
+  assert.equal(listCronJobs(session).jobs[0].prompt, 'check the build');
+  const five = await runBuiltinCommand('schedule', '0 9 * * MON-FRI summarize open PRs', { root: process.cwd(), session });
+  assert.match(five.output, /\(0 9 \* \* MON-FRI\)/);
+  assert.equal(listCronJobs(session).jobs[1].prompt, 'summarize open PRs');
+  stopCron(session);
 });
