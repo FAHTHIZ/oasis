@@ -186,7 +186,8 @@ export function sensitivePath(relative) {
     const name = part.toLowerCase();
     if (['.ssh', '.aws', '.gnupg', '.azure', '.kube', '.docker'].includes(name)) return true;
     if (/^\.env(?:$|\.)/.test(name) && !/^\.env\.(?:example|sample|template)$/.test(name)) return true;
-    if (['.npmrc', '.pypirc', '.netrc', '.git-credentials', 'credentials.json', 'secrets.json', 'secrets.yaml', 'secrets.yml'].includes(name)) return true;
+    // .envrc (direnv exports), .pgpass, .my.cnf, .htpasswd and .dockercfg hold passwords or tokens too.
+    if (['.npmrc', '.pypirc', '.netrc', '.git-credentials', 'credentials.json', 'secrets.json', 'secrets.yaml', 'secrets.yml', '.envrc', '.pgpass', '.my.cnf', '.htpasswd', '.dockercfg'].includes(name)) return true;
     if (/^(?:id_rsa|id_ed25519|id_ecdsa|known_hosts|authorized_keys)$/i.test(name)) return true;
     if (/\.(?:pem|key|p12|pfx|keystore)$/i.test(name)) return true;
   }
