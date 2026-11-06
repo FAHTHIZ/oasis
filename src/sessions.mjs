@@ -230,12 +230,34 @@ export function completeExchanges(messages) {
   return list;
 }
 
+/**
+ * Keep the system context and the newest messages within MAX_MESSAGES. The
+ * kept tail never opens with a tool result whose call was cut off, and when it
+ * does not start at a user message, the user message it belongs to is kept
+ * ahead of it. A plain slice dropped the system message once one long turn
+ * passed the cap, so every later (mid-turn and final) save was rejected.
+ */
+function boundedHistory(messages) {
+  if (messages.length <= MAX_MESSAGES || !messages[0] || messages[0].role !== 'system') return messages.slice(-MAX_MESSAGES);
+  const rest = messages.slice(1);
+  let start = rest.length - (MAX_MESSAGES - 2);
+  while (start < rest.length && rest[start].role === 'tool') start++;
+  const tail = rest.slice(start);
+  let anchor = [];
+  if (!tail.length || tail[0].role !== 'user') {
+    for (let i = start - 1; i >= 0; i--) {
+      if (rest[i].role === 'user') { anchor = [rest[i]]; break; }
+    }
+  }
+  return [messages[0], ...anchor, ...tail];
+}
+
 export async function saveSession(session, options = {}) {
   if (!session || !Array.isArray(session.messages)) throw new Error('There is no active session to save.');
   const env = options.env || process.env;
   const id = session.sessionId && validateId(session.sessionId) || randomUUID();
   // Image attachments are not saved; the text note in the tool result remains.
-  const messages = validateMessages(completeExchanges(session.messages).slice(-MAX_MESSAGES).map((message) => message && message.images ? (({ images, ...rest }) => rest)(message) : message));
+  const messages = validateMessages(boundedHistory(completeExchanges(session.messages)).map((message) => message && message.images ? (({ images, ...rest }) => rest)(message) : message));
   await saveAgentTranscripts(session, id, env);
   const payload = {
     schemaVersion: 1,

@@ -91,3 +91,23 @@ test('session save/load preserves bounded agent reports without persisting child
   assert.equal(restored.agents[1].status, 'completed');
   assert.equal(Object.hasOwn(restored.agents[0], 'child'), false);
 });
+
+test('a turn longer than the saved-message cap still saves a resumable transcript', async (t) => {
+  const { root, env } = await fixture(t);
+  // One 60-step turn yields well over 120 messages with no user message in its tail.
+  const messages = [{ role: 'system', content: 'system' }, { role: 'user', content: 'earlier task' }, { role: 'assistant', content: 'done' }, { role: 'user', content: 'refactor everything' }];
+  for (let i = 0; i < 70; i++) {
+    messages.push({ role: 'assistant', content: null, tool_calls: [{ id: 'call_' + i, type: 'function', function: { name: 'read_file', arguments: '{}' } }] });
+    messages.push({ role: 'tool', tool_call_id: 'call_' + i, name: 'read_file', content: 'ok ' + i });
+  }
+  const saved = await saveSession({ root, messages, config: {} }, { env });
+  const loaded = await loadSession(root, saved.id, { env });
+  assert.ok(loaded.messages.length <= 120);
+  assert.equal(loaded.messages[0].role, 'system');
+  assert.deepEqual(loaded.messages[1], { role: 'user', content: 'refactor everything' }, 'the task that the kept tail belongs to is kept');
+  assert.equal(loaded.messages[2].role, 'assistant');
+  assert.deepEqual(loaded.messages.at(-1), messages.at(-1));
+  // Every kept tool result answers a kept tool call, so providers accept the resume.
+  const calls = new Set(loaded.messages.flatMap((m) => (m.tool_calls || []).map((c) => c.id)));
+  for (const m of loaded.messages.filter((item) => item.role === 'tool')) assert.ok(calls.has(m.tool_call_id), m.tool_call_id);
+});
