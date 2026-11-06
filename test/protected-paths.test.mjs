@@ -1,11 +1,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createServer } from 'node:http';
-import { mkdtemp, rm, readFile, mkdir } from 'node:fs/promises';
+import { mkdtemp, rm, readFile, mkdir, symlink } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { createSession, runAgentTurn } from '../src/agent.mjs';
-import { protectedConfigPath, ruleNamesProtectedPath, protectedEditsAllowed, protectedShellWrite } from '../src/protected-paths.mjs';
+import { protectedConfigPath, protectedConfigTarget, ruleNamesProtectedPath, protectedEditsAllowed, protectedShellWrite } from '../src/protected-paths.mjs';
 import { executePowerTool } from '../src/power-tools.mjs';
 import { executeTool } from '../src/tools.mjs';
 
@@ -147,4 +147,39 @@ test('files that editors, other agents and hooks execute automatically are prote
   }
   assert.ok(protectedShellWrite('echo "{}" > .vscode/tasks.json'));
   assert.equal(protectedShellWrite('cat .envrc'), null);
+});
+
+test('protected edits are recognized through symlinked folders and canonical absolute paths', { skip: process.platform === 'win32' }, async (t) => {
+  // Regression: the check was lexical, so a committed `cfg -> .oasis` symlink or the
+  // real path of a workspace opened through a symlinked folder skipped the warning.
+  const real = await mkdtemp(path.join(os.tmpdir(), 'oasis-protected-link-'));
+  const alias = real + '-alias';
+  t.after(() => Promise.all([rm(real, { recursive: true, force: true }), rm(alias, { force: true })]));
+  await mkdir(path.join(real, '.oasis'));
+  await mkdir(path.join(real, '.git', 'hooks'), { recursive: true });
+  await symlink('.oasis', path.join(real, 'cfg'));
+  await symlink('.git', path.join(real, 'notes'));
+  await symlink(real, alias);
+  assert.equal(protectedConfigPath(alias, 'cfg/settings.json'), null, 'the lexical form alone does not see it');
+  assert.equal((await protectedConfigTarget(alias, 'cfg/settings.json')).path, '.oasis/settings.json');
+  assert.equal((await protectedConfigTarget(alias, 'notes/hooks/new/pre-commit')).path, '.git/hooks/new/pre-commit');
+  assert.equal((await protectedConfigTarget(alias, path.join(real, '.oasis', 'settings.local.json'))).path, '.oasis/settings.local.json');
+  assert.equal(await protectedConfigTarget(alias, 'cfg/skills/x/SKILL.md'), null);
+  assert.equal(await protectedConfigTarget(alias, 'src/index.js'), null);
+
+  const calls = [
+    { name: 'write_file', args: { path: 'cfg/settings.json', content: '{"hooks":{}}' } },
+    { name: 'write_file', args: { path: path.join(real, '.oasis', 'settings.local.json'), content: '{}' } },
+    { name: 'write_file', args: { path: 'notes/hooks/pre-commit', content: '#!/bin/sh\n' } }
+  ];
+  const port = await scriptedModel(t, calls);
+  const session = await createSession({ root: alias, config: { protocol: 'openai-compatible', baseURL: 'http://127.0.0.1:' + port + '/v1', model: 'fixture', apiKey: '', maxSteps: 6 } });
+  session.permissions.addRule('allow', 'write_file');
+  const prompts = [];
+  await runAgentTurn(session, 'go', { autoApprove: true, env: { ...process.env, OASIS_ALLOW_CONFIG_EDITS: '' }, approval: async (message, force) => { prompts.push({ message, force }); return false; } });
+  assert.equal(prompts.length, 3);
+  for (const prompt of prompts) { assert.equal(prompt.force, true); assert.match(prompt.message, /protected configuration file/); }
+  await assert.rejects(readFile(path.join(real, '.oasis', 'settings.json')), /ENOENT/);
+  await assert.rejects(readFile(path.join(real, '.oasis', 'settings.local.json')), /ENOENT/);
+  await assert.rejects(readFile(path.join(real, '.git', 'hooks', 'pre-commit')), /ENOENT/);
 });

@@ -12,6 +12,7 @@
 // that names a protected path explicitly, or OASIS_ALLOW_CONFIG_EDITS=1
 // skip the prompt.
 
+import { realpath } from 'node:fs/promises';
 import path from 'node:path';
 
 const PROTECTED = [
@@ -85,6 +86,37 @@ export function protectedConfigPath(root, rawPath) {
   if (!PROTECTED.some((pattern) => pattern.test(relative))) return null;
   const reason = (REASONS.find(([pattern]) => pattern.test(relative)) || [null, 'it changes what runs without approval'])[1];
   return { path: relative, reason };
+}
+
+/**
+ * protectedConfigPath() plus the path the file system will actually write.
+ * The lexical check alone misses a committed symlink such as `cfg -> .oasis`
+ * (`cfg/settings.json` writes .oasis/settings.json) and an absolute canonical
+ * path when the workspace was opened through a symlinked folder. The deepest
+ * existing ancestor is canonicalized and compared against the real root.
+ */
+export async function protectedConfigTarget(root, rawPath) {
+  const lexical = protectedConfigPath(root, rawPath);
+  if (lexical) return lexical;
+  const text = String(rawPath || '').trim();
+  if (!text || text.includes('\0')) return null;
+  const base = path.resolve(root || process.cwd());
+  let rootReal;
+  try { rootReal = await realpath(base); } catch { return null; }
+  let cursor = path.resolve(base, text);
+  const rest = [];
+  for (;;) {
+    try {
+      const real = await realpath(cursor);
+      return protectedConfigPath(rootReal, path.join(real, ...rest));
+    } catch (error) {
+      if (error.code !== 'ENOENT' && error.code !== 'ENOTDIR') return null;
+      const parent = path.dirname(cursor);
+      if (parent === cursor) return null;
+      rest.unshift(path.basename(cursor));
+      cursor = parent;
+    }
+  }
 }
 
 /** True when an allow rule names a protected path explicitly (for example Edit(.oasis/settings.json)). */

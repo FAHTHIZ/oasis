@@ -1681,7 +1681,7 @@ async function executeToolUnlocked(name, args = {}, context = {}) {
       const target = await resolveWorkspacePath(root, args.path, { rejectSymlinks: true });
       const info = await lstat(target.absolute);
       if (!info.isFile() || info.isSymbolicLink()) throw new Error('Only regular files can be deleted with this tool.');
-      const protectedHit = protectedEditsAllowed(context.env || process.env) || (context.autoApprove && context.permissionMode === 'bypassPermissions') ? null : protectedConfigPath(target.root, target.absolute);
+      const protectedHit = protectedEditsAllowed(context.env || process.env) || (context.autoApprove && context.permissionMode === 'bypassPermissions') ? null : protectedConfigPath(target.root, target.real);
       const deletePrompt = (protectedHit ? 'Warning: ' + target.relative + ' is a protected configuration file — ' + protectedHit.reason + '. Deleting it can remove deny rules or safety hooks.\n' : '') +
         'Delete the workspace file ' + target.relative + '? Its current contents will be backed up first.';
       if (!context.approval || !(await context.approval(deletePrompt, Boolean(protectedHit)))) {
