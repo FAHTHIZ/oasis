@@ -3469,6 +3469,9 @@ export function claimsUnmadeChange(text) {
 
 const FALSE_CLAIM_NUDGE = '<system-reminder>Your reply says you made a change, but no file has been changed in this turn: no write_file or edit_file call succeeded. Do not report work that did not happen. Make the change now with write_file or edit_file, then check it.</system-reminder>';
 
+const MAX_EMPTY_REPLY_NUDGES = 2;
+const EMPTY_REPLY_NUDGE = '<system-reminder>Your last reply was empty: no text and no tool call. Continue the task: call a tool, or give your final answer to the user in plain text.</system-reminder>';
+const EMPTY_REPLY_NOTICE = 'The model ended its turn without a reply (it returned an empty response ' + (MAX_EMPTY_REPLY_NUDGES + 1) + ' times). Nothing was summarized; ask again or try another model.';
 const CONTINUE_NUDGE = '<system-reminder>You said what you will do next but ended your turn without doing it, and nothing has changed yet. Do that step now with a tool call. If a tool failed, read its error and fix the call (for example, use write_file to create a file that does not exist yet).</system-reminder>';
 
 const ACTION_NUDGE = '<system-reminder>You described the work instead of doing it. The user asked you to make this change, and you have tools to do it. Do it now: read what you need, then use write_file or edit_file to make the change and run_command to check it. Do not explain the steps again or ask the user to do them.</system-reminder>';
@@ -5553,6 +5556,8 @@ async function runAgentTurnRaw(session, prompt, options = {}) {
   let unknownToolNudges = 0;
   let fencedApplied = false;
   let echoNudges = 0;
+  let emptyReplyNudges = 0;
+  let emptyReply = false;
   const failedCommandRuns = new Map();
   // command key -> { signature, count, editEpoch } for failures that persist across edits.
   const persistentFailures = new Map();
@@ -5865,6 +5870,18 @@ async function runAgentTurnRaw(session, prompt, options = {}) {
           continue;
         }
       }
+      // An empty reply (no text, no tool call) is not an answer: it used to end
+      // the turn as "finished" with nothing to show. Ask again, then say so.
+      if (!text) {
+        if (emptyReplyNudges < MAX_EMPTY_REPLY_NUDGES) {
+          emptyReplyNudges++;
+          if (session.messages[session.messages.length - 1] === assistantMessage) session.messages.pop();
+          if (typeof options.onActionNudge === 'function') { try { options.onActionNudge({ kind: 'empty' }); } catch {} }
+          session.messages.push({ role: 'user', content: EMPTY_REPLY_NUDGE });
+          continue;
+        }
+        emptyReply = true;
+      }
       const issues = verificationIssues(verification);
       const blockedText = verification.nudgeUsed ? formatLspVerificationBlocker(issues) : null;
       if (blockedText) {
@@ -5962,7 +5979,7 @@ async function runAgentTurnRaw(session, prompt, options = {}) {
           continue;
         }
       }
-      const finalText = issues.length ? text : appendLspUnavailableNotice(text, verification);
+      const finalText = emptyReply ? EMPTY_REPLY_NOTICE : issues.length ? text : appendLspUnavailableNotice(text, verification);
       assistantMessage.content = finalText;
       let followupsAdded = [];
       if (!options.isSubagent && !options.planOnly && followupsEnabled(session, options.env || process.env)) {
@@ -5980,6 +5997,7 @@ async function runAgentTurnRaw(session, prompt, options = {}) {
         verificationIssues: issues,
         verification: verificationSummary(verification),
         budgetExceeded: tokensUsed > tokenBudget,
+        ...(emptyReply ? { emptyReply: true } : {}),
         ...(followupsAdded.length ? { followupsAdded: followupsAdded.map((item) => ({ id: item.id, text: item.text })) } : {})
       };
     }
