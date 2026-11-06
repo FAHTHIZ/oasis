@@ -87,6 +87,29 @@ export function maskSecrets(session, text) {
   return { text: output, count };
 }
 
+/**
+ * Replace the credentials the shield recognises with "[redacted]" (no vault).
+ * Used for everything written to disk or shared (debug logs, trajectories,
+ * session previews, memories, artifacts, approval text) so those redactors
+ * do not fall behind the shield's list.
+ */
+export function redactSecretText(text, { token = '[redacted]' } = {}) {
+  if (typeof text !== 'string' || !text) return text;
+  let output = text;
+  for (const pattern of TOKEN_PATTERNS) output = output.replace(pattern, token);
+  output = output.replace(ASSIGNMENT, (whole, head, value, tail) => (NON_SECRET_VALUE.test(value) || /^[\d.]+$/.test(value) ? whole : head + '[redacted]' + tail));
+  output = output.replace(URL_CREDENTIAL, (whole, head, password, at) => (NON_SECRET_VALUE.test(password) ? whole : head + '[redacted]' + at));
+  return output;
+}
+
+/** redactSecretText() on every string inside a value (before it is serialized). */
+export function redactSecretValues(value, depth = 0) {
+  if (typeof value === 'string') return redactSecretText(value);
+  if (depth > 20 || !value || typeof value !== 'object') return value;
+  if (Array.isArray(value)) return value.map((item) => redactSecretValues(item, depth + 1));
+  return Object.fromEntries(Object.entries(value).map(([key, entry]) => [key, redactSecretValues(entry, depth + 1)]));
+}
+
 /** Swap placeholders back to real values inside tool arguments (deep). */
 export function unmaskSecrets(session, value) {
   const vault = session && session.secretVault instanceof Map ? session.secretVault : null;

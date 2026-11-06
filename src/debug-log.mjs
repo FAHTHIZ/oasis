@@ -5,6 +5,7 @@
 import { appendFileSync, mkdirSync } from 'node:fs';
 import path from 'node:path';
 import { getConfigDirectory } from './config.mjs';
+import { redactSecretText, redactSecretValues } from './secret-shield.mjs';
 
 export const DEBUG_CATEGORIES = ['api', 'tools', 'hooks', 'mcp', 'permissions', 'session'];
 let state = { enabled: false, include: null, exclude: new Set(), file: null };
@@ -36,7 +37,8 @@ export function debugFile() { return state.file; }
 
 // Masks likely secrets so the log is safe to share in bug reports.
 function redact(text) {
-  return String(text)
+  return redactSecretText(String(text))
+    .replace(/\b(Bearer|Basic)\s+[A-Za-z0-9._~+\/-]{8,}=*/gi, '$1 [redacted]')
     .replace(/(authorization|x-api-key|api[-_]?key|token|secret|password)("?\s*[:=]\s*"?)([^"\s,}]{4,})/gi, (_, k, sep) => k + sep + '[redacted]')
     .replace(/\b(sk-[A-Za-z0-9_-]{8,}|ghp_[A-Za-z0-9]{8,}|xox[bp]-[A-Za-z0-9-]{8,}|AIza[0-9A-Za-z_-]{20,})/g, '[redacted]');
 }
@@ -44,6 +46,6 @@ function redact(text) {
 export function debugLog(category, message, data = undefined) {
   if (!debugEnabled(category)) return;
   let line = new Date().toISOString() + ' [' + category.toUpperCase() + '] ' + message;
-  if (data !== undefined) { let text; try { text = typeof data === 'string' ? data : JSON.stringify(data); } catch { text = String(data); } line += ' ' + (text.length > 2000 ? text.slice(0, 2000) + '…' : text); }
+  if (data !== undefined) { let text; try { text = typeof data === 'string' ? redactSecretText(data) : JSON.stringify(redactSecretValues(data)); } catch { text = String(data); } line += ' ' + (text.length > 2000 ? text.slice(0, 2000) + '…' : text); }
   try { appendFileSync(state.file, redact(line) + '\n'); } catch {}
 }

@@ -1,4 +1,5 @@
 import { createHash, randomUUID } from 'node:crypto';
+import { redactSecretText } from './secret-shield.mjs';
 import { mkdir, lstat, readdir, readFile, rename, unlink, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -19,7 +20,7 @@ const SECRET_PATTERNS = [
 ];
 
 export function redactArtifactText(value) {
-  let text = String(value ?? '').slice(0, MAX_TEXT * 4);
+  let text = redactSecretText(String(value ?? '').slice(0, MAX_TEXT * 4));
   for (const [pattern, replacement] of SECRET_PATTERNS) text = text.replace(pattern, replacement);
   return text.slice(0, MAX_TEXT);
 }
