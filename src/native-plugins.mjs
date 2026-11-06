@@ -6,7 +6,10 @@ import path from 'node:path';
 import { getConfigDirectory } from './config.mjs';
 import { pluginHome, readInstalledPlugins } from './claude-plugins.mjs';
 import { userSettingsPath } from './settings.mjs';
-import semver from 'semver';
+// Only the functions used: the semver index loads all 47 of its modules.
+import semverValid from 'semver/functions/valid.js';
+import semverCompare from 'semver/functions/compare.js';
+const semver = { valid: semverValid, compare: semverCompare };
 
 const CAPABILITIES = new Set(['commands','skills','agents','subagents','hooks','mcp']);
 const MAX_MANIFEST_BYTES = 1024 * 1024;
