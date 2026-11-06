@@ -97,6 +97,9 @@ export function fallbackReason(error, { onFallbackProvider = false } = {}) {
   if (status === 429 || /rate.?limit/i.test(text)) return 'rate';
   if (status === 404 || MODEL_GONE.test(text)) return 'model';
   if (status >= 500 || NETWORK_OR_STALL.test(text)) return 'server';
+  // A stream that kept dropping after its restarts. A malformed tool call is
+  // retried by the turn loop with a corrective note instead.
+  if (error.code === 'OASIS_STREAM_INTERRUPTED' && !error.malformedCall) return 'server';
   return '';
 }
 
