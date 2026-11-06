@@ -83,6 +83,7 @@
     "@agentclientprotocol/sdk": "^2.4.0",
     "@anthropic-ai/sandbox-runtime": "^0.0.81",
     "@modelcontextprotocol/client": "2.4.0",
+    "@modelcontextprotocol/server": "^2.4.0",
     "@vscode/ripgrep": "1.18.0",
     "@vscode/tree-sitter-wasm": "0.3.1",
     "@xterm/addon-fit": "0.11.0",

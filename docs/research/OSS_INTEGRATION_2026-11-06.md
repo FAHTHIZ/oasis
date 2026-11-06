@@ -408,6 +408,13 @@ Kept: all OASIS session logic (openSession, prompt streaming, permission mapping
 Behaviour changes, all spec-aligned: requests before `initialize` → -32600; invalid params → -32602 with zod field errors (previously reached handlers); 32 MiB message cap (none before).
 Verification: 6/6 `test/acp.test.mjs` (4 drive the real `oasis acp` process); the updated test fails on the old implementation; the SDK's `client()` connected to `oasis acp` over stdio gets initialize and a -32000 "no provider" error, and the process exits 0 on stdin EOF.
 
+## 18. MCP server: @modelcontextprotocol/server
+
+Replaced: the readline JSON-RPC loop, fixed `PROTOCOL_VERSION = '2025-06-18'`, and the hand-built initialize/tools/list/tools/call/error replies in `src/mcp-serve.mjs`.
+Adopted: `@modelcontextprotocol/server` 2.4.0 (MIT): low-level `Server` with `tools/list` and `tools/call` handlers, `StdioServerTransport`, and `InMemoryTransport` for the in-process `createMcpServeHandler`.
+Gains: version negotiation over SUPPORTED_PROTOCOL_VERSIONS (a 2025-11-25 client got 2025-06-18 before, now gets 2025-11-25; a 2024-11-05 client gets 2024-11-05), `ping`, initialize validation, and the SDK's own spec maintenance.
+Verification: 4/4 `test/mcp-serve.test.mjs` (including the stdio test with the SDK client and the git-hook refusal); the negotiation assertion fails on the old server. The official conformance suite's server mode needs an HTTP URL; `oasis mcp serve` is stdio-only, so it was not run.
+
 ## Next
 
 - Decided against Ajv validation in front of built-in tools: they already reject bad input with specific messages ("edit_file needs old_string … got path"), coerce numeric strings, and accept documented argument aliases that a strict schema would refuse.

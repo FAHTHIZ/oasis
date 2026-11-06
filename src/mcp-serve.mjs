@@ -3,7 +3,10 @@
 // of approvals, as with any MCP server, so only a curated set is exposed:
 // read-only tools by default, edits with --allow-edits, commands with
 // --allow-commands. Secret files and paths outside the workspace stay blocked.
-import { createInterface } from 'node:readline';
+// The protocol (version negotiation, framing, ping, errors) is the official
+// MCP TypeScript SDK server; OASIS only supplies tools/list and tools/call.
+import { Server, InMemoryTransport, ProtocolError, ProtocolErrorCode } from '@modelcontextprotocol/server';
+import { StdioServerTransport } from '@modelcontextprotocol/server/stdio';
 import { oasisVersion } from './version.mjs';
 import path from 'node:path';
 import { TOOL_DEFINITIONS, executeTool } from './tools.mjs';
@@ -14,7 +17,6 @@ import { protectedConfigTarget, protectedEditsAllowed } from './protected-paths.
 export const SERVE_READ_ONLY = ['read_file', 'list_files', 'glob_files', 'repo_map', 'grep', 'ast_grep', 'search_files', 'git_status', 'git_diff', 'git_log', 'lsp', 'diagnostics', 'fetch_url', 'web_search'];
 export const SERVE_EDITS = ['edit_file', 'multi_edit', 'write_file', 'notebook_edit'];
 export const SERVE_COMMANDS = ['run_command', 'command_output', 'kill_command', 'list_background'];
-const PROTOCOL_VERSION = '2025-06-18';
 
 export function servedTools({ allowEdits = false, allowCommands = false, env = process.env } = {}) {
   const names = new Set([...SERVE_READ_ONLY, ...(allowEdits ? SERVE_EDITS : []), ...(allowCommands ? SERVE_COMMANDS : [])]);
@@ -27,64 +29,62 @@ export function servedTools({ allowEdits = false, allowCommands = false, env = p
   }));
 }
 
-export function createMcpServeHandler({ root, allowEdits = false, allowCommands = false, env = process.env, version = oasisVersion() } = {}) {
+export function createMcpServer({ root, allowEdits = false, allowCommands = false, env = process.env, version = oasisVersion() } = {}) {
   const tools = servedTools({ allowEdits, allowCommands, env });
   const allowed = new Set(tools.map((tool) => tool.name));
   const session = { root, background: new Map(), settings: {} };
-  const handle = async (message) => {
-    if (!message || message.jsonrpc !== '2.0' || typeof message.method !== 'string') return message && message.id !== undefined ? { jsonrpc: '2.0', id: message.id, error: { code: -32600, message: 'Invalid request' } } : null;
-    if (message.id === undefined) return null; // notifications
-    const reply = (result) => ({ jsonrpc: '2.0', id: message.id, result });
-    switch (message.method) {
-      case 'initialize':
-        return reply({ protocolVersion: PROTOCOL_VERSION, capabilities: { tools: { listChanged: false } }, serverInfo: { name: 'oasis', version }, instructions: 'Oasis workspace tools for ' + root + '. Paths are relative to that folder.' });
-      case 'ping':
-        return reply({});
-      case 'tools/list':
-        return reply({ tools });
-      case 'tools/call': {
-        const name = message.params && message.params.name;
-        const args = message.params && message.params.arguments || {};
-        if (!allowed.has(name)) return { jsonrpc: '2.0', id: message.id, error: { code: -32602, message: 'Unknown or disabled tool: ' + name } };
-        // Oasis's own agent always asks before these edits; there is no one to ask
-        // here, and MCP clients often auto-approve edits, so refuse them.
-        if (SERVE_EDITS.includes(name) && !protectedEditsAllowed(env)) {
-          const hit = await protectedConfigTarget(root, args.path || args.notebook_path || args.file_path).catch(() => null);
-          if (hit) return reply({ content: [{ type: 'text', text: 'Error: ' + hit.path + ' is a protected configuration file (' + hit.reason + '). oasis mcp serve does not change it; ask the user to edit it or set OASIS_ALLOW_CONFIG_EDITS=1.' }], isError: true });
-        }
-        try {
-          const result = await executeTool(name, args, { root, env, session, autoApprove: true, ruleAllowed: true, approval: async () => true });
-          const text = typeof result === 'string' ? result : JSON.stringify(result, null, 2);
-          const isError = Boolean(result && typeof result === 'object' && (result.error || result.ok === false));
-          return reply({ content: [{ type: 'text', text: text.slice(0, 200000) }], isError });
-        } catch (error) {
-          return reply({ content: [{ type: 'text', text: 'Error: ' + (error.message || String(error)) }], isError: true });
-        }
-      }
-      default:
-        return { jsonrpc: '2.0', id: message.id, error: { code: -32601, message: 'Method not found: ' + message.method } };
+  const server = new Server({ name: 'oasis', version }, { capabilities: { tools: { listChanged: false } }, instructions: 'Oasis workspace tools for ' + root + '. Paths are relative to that folder.' });
+  const text = (value, isError) => ({ content: [{ type: 'text', text: value }], isError });
+  server.setRequestHandler('tools/list', async () => ({ tools }));
+  server.setRequestHandler('tools/call', async (request) => {
+    const name = request.params && request.params.name;
+    const args = request.params && request.params.arguments || {};
+    if (!allowed.has(name)) throw new ProtocolError(ProtocolErrorCode.InvalidParams, 'Unknown or disabled tool: ' + name);
+    // Oasis's own agent always asks before these edits; there is no one to ask
+    // here, and MCP clients often auto-approve edits, so refuse them.
+    if (SERVE_EDITS.includes(name) && !protectedEditsAllowed(env)) {
+      const hit = await protectedConfigTarget(root, args.path || args.notebook_path || args.file_path).catch(() => null);
+      if (hit) return text('Error: ' + hit.path + ' is a protected configuration file (' + hit.reason + '). oasis mcp serve does not change it; ask the user to edit it or set OASIS_ALLOW_CONFIG_EDITS=1.', true);
     }
+    try {
+      const result = await executeTool(name, args, { root, env, session, autoApprove: true, ruleAllowed: true, approval: async () => true });
+      const body = typeof result === 'string' ? result : JSON.stringify(result, null, 2);
+      return text(body.slice(0, 200000), Boolean(result && typeof result === 'object' && (result.error || result.ok === false)));
+    } catch (error) {
+      return text('Error: ' + (error.message || String(error)), true);
+    }
+  });
+  const close = async () => { await stopLspClients(session).catch(() => {}); await server.close().catch(() => {}); };
+  return { server, close };
+}
+
+// In-process handler: one JSON-RPC message in, its reply (or null for a
+// notification) out, through the same SDK server over an in-memory transport.
+export function createMcpServeHandler(options = {}) {
+  const { server, close } = createMcpServer(options);
+  const [local, remote] = InMemoryTransport.createLinkedPair();
+  const waiting = new Map();
+  local.onmessage = (message) => { const done = waiting.get(message.id); if (done) { waiting.delete(message.id); done(message); } };
+  const ready = Promise.all([server.connect(remote), local.start()]);
+  const handle = async (message) => {
+    await ready;
+    if (!message || message.id === undefined) { await local.send(message); return null; }
+    const reply = new Promise((resolve) => waiting.set(message.id, resolve));
+    await local.send(message);
+    return reply;
   };
-  handle.close = async () => { await stopLspClients(session).catch(() => {}); };
+  handle.close = async () => { await close(); await local.close().catch(() => {}); };
   return handle;
 }
 
 export async function serveMcp({ root, args = [], env = process.env, input = process.stdin, output = process.stdout, log = process.stderr } = {}) {
   const allowEdits = args.includes('--allow-edits') || args.includes('--allow-all');
   const allowCommands = args.includes('--allow-commands') || args.includes('--allow-all');
-  const handle = createMcpServeHandler({ root: path.resolve(root), allowEdits, allowCommands, env });
+  const { server, close } = createMcpServer({ root: path.resolve(root), allowEdits, allowCommands, env });
   log.write('Oasis MCP server on stdio for ' + path.resolve(root) + ' (' + ['read-only tools', allowEdits && 'edits', allowCommands && 'commands'].filter(Boolean).join(', ') + ')\n');
-  const lines = createInterface({ input, crlfDelay: Infinity });
-  const pending = new Set();
-  for await (const line of lines) {
-    if (!line.trim()) continue;
-    let message;
-    try { message = JSON.parse(line); } catch { output.write(JSON.stringify({ jsonrpc: '2.0', id: null, error: { code: -32700, message: 'Parse error' } }) + '\n'); continue; }
-    const job = (Array.isArray(message) ? Promise.all(message.map(handle)).then((items) => items.filter(Boolean)) : handle(message))
-      .then((response) => { if (response && (!Array.isArray(response) || response.length)) output.write(JSON.stringify(response) + '\n'); })
-      .finally(() => pending.delete(job));
-    pending.add(job);
-  }
-  await Promise.all(pending);
-  await handle.close();
+  const transport = new StdioServerTransport(input, output);
+  const closed = new Promise((resolve) => { transport.onclose = resolve; input.once('end', resolve); input.once('close', resolve); });
+  await server.connect(transport);
+  await closed;
+  await close();
 }

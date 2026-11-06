@@ -30,7 +30,12 @@ test('the handler answers MCP requests and keeps workspace safety rules', async 
   await writeFile(path.join(root, '.env'), 'SECRET=1\n');
   const handle = createMcpServeHandler({ root, env: {} });
   t.after(() => handle.close());
-  assert.equal((await handle({ jsonrpc: '2.0', id: 1, method: 'initialize', params: {} })).result.serverInfo.name, 'oasis');
+  const hello = (id, protocolVersion) => handle({ jsonrpc: '2.0', id, method: 'initialize', params: { protocolVersion, capabilities: {}, clientInfo: { name: 'test', version: '1' } } });
+  const init = await hello(1, '2025-11-25');
+  assert.equal(init.result.serverInfo.name, 'oasis');
+  // The SDK negotiates: the newest version is accepted, not pinned to one.
+  assert.equal(init.result.protocolVersion, '2025-11-25');
+  assert.equal((await handle({ jsonrpc: '2.0', id: 11, method: 'ping' })).result && true, true);
   assert.equal(await handle({ jsonrpc: '2.0', method: 'notifications/initialized' }), null);
   const read = await handle({ jsonrpc: '2.0', id: 2, method: 'tools/call', params: { name: 'read_file', arguments: { path: 'a.txt' } } });
   assert.match(read.result.content[0].text, /hello/);
@@ -39,6 +44,9 @@ test('the handler answers MCP requests and keeps workspace safety rules', async 
   const blocked = await handle({ jsonrpc: '2.0', id: 4, method: 'tools/call', params: { name: 'write_file', arguments: { path: 'b.txt', content: 'x' } } });
   assert.match(blocked.error.message, /disabled tool/);
   assert.equal((await handle({ jsonrpc: '2.0', id: 5, method: 'nope' })).error.code, -32601);
+  const older = createMcpServeHandler({ root, env: {} });
+  t.after(() => older.close());
+  assert.equal((await older({ jsonrpc: '2.0', id: 1, method: 'initialize', params: { protocolVersion: '2024-11-05', capabilities: {}, clientInfo: { name: 'old', version: '1' } } })).result.protocolVersion, '2024-11-05');
 });
 
 test('oasis mcp serve works with an MCP client over stdio', async (t) => {
