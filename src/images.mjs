@@ -3,6 +3,7 @@
 import { readFile, stat } from 'node:fs/promises';
 import path from 'node:path';
 import { resolveWorkspacePath } from './tools.mjs';
+import { catalogImageInput } from './model-catalog.mjs';
 
 export const IMAGE_TYPES = { '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.gif': 'image/gif', '.webp': 'image/webp' };
 export const MAX_IMAGE_BYTES = 3_750_000; // ~5 MB once base64-encoded (Anthropic's per-image limit).
@@ -38,6 +39,10 @@ export function imageInputCapability(config = {}, env = process.env) {
 
   const model = String(config.model || env.OASIS_MODEL || '').trim().toLowerCase();
   if (!model) return { status: 'unknown', reason: 'No active model ID is available to assess image support.' };
+  const listed = catalogImageInput(model, { baseURL: config.baseURL, provider: config.catalogProvider, env });
+  if (listed === true) return { status: 'supported', reason: 'The models.dev catalog lists image input for this model; an API rejection overrides this.' };
+  if (listed === false) return { status: 'unsupported', reason: 'The models.dev catalog lists this model as text-only. Set OASIS_MODEL_VISION=1 if your deployment accepts images.' };
+  // Fallback for models the catalog does not list (local and self-hosted models).
   const knownVision = [
     /(?:^|[/:_-])gpt-(?:4o(?:-mini)?|4\.1(?:-mini|-nano)?|4\.5|5(?:\.\d+)?|4-turbo|4-vision)(?:$|[/:_-])/,
     /(?:^|[/:_-])o[134](?:-mini|-pro)?(?:$|[/:_-])/,
