@@ -45,9 +45,9 @@ test('container credential masks overlay only paths inside writable roots', () =
     '/home/example/.ssh:rw,nosuid,nodev,noexec,size=1m'
   ], 'directory masks inside the workspace use an ephemeral tmpfs');
   assert.ok(!a.some((value) => String(value).includes('home/example-outside')), 'secrets outside mounted roots are already absent');
-  const lastHostMount = Math.max(...volumes.map((item) => item.index));
-  assert.ok(tmpfs.every((item) => item.index > lastHostMount), 'directory masks must overlay host mounts');
-  assert.ok(volumes.find((item) => item.value.startsWith('/dev/null:')).index > lastHostMount, 'file masks must overlay host mounts');
+  const lastWorkspaceMount = Math.max(...volumes.filter((item) => !item.value.startsWith('/dev/null:')).map((item) => item.index));
+  assert.ok(tmpfs.every((item) => item.index > lastWorkspaceMount), 'directory masks must overlay workspace and protected-path mounts');
+  assert.ok(volumes.find((item) => item.value.startsWith('/dev/null:')).index > lastWorkspaceMount, 'file masks must overlay workspace and protected-path mounts');
   assert.equal(a[a.indexOf('--workdir') + 1], '/home/example');
 });
 test('container network, limits and podman user namespace options', () => {
