@@ -1,12 +1,19 @@
 // Repository map: a compact, ranked outline of the files and top-level symbols in
 // a workspace, so a model can orient itself without reading many whole files.
-// Inspired by Aider's repo map, but dependency-free: definitions are found with
-// per-language line patterns (no tree-sitter) and files are ranked with
-// personalized PageRank over the "uses a symbol defined in" graph, so central
-// modules come first and, with a focus, the files around it rise with it.
-import { readFile, stat } from 'node:fs/promises';
+// Like Aider's repo map: definitions come from tree-sitter grammars
+// (src/code-ast.mjs) for JavaScript, TypeScript, Python, Go, Rust, Java, C#,
+// C/C++, Ruby, PHP and shell, with per-language line patterns as the fallback
+// for other languages, and files are ranked with personalized PageRank over
+// the "uses a symbol defined in" graph, so central modules come first and,
+// with a focus, the files around it rise with it. With a grammar, symbol uses
+// are counted outside comments and string literals only.
+import { mkdir, readFile, rename, stat, writeFile } from 'node:fs/promises';
+import { createHash } from 'node:crypto';
+import { createRequire } from 'node:module';
 import path from 'node:path';
 import { walkFiles } from './tools.mjs';
+import { analyzeCode, grammarForFile, loadCodeGrammar } from './code-ast.mjs';
+import { getBaseConfigDirectory } from './config.mjs';
 
 const MAX_FILES = 4000;
 const MAX_FILE_BYTES = 1536 * 1024;
@@ -114,19 +121,77 @@ function identifierCounts(text) {
   return counts;
 }
 
-async function scanFile(file) {
+// Parsing is the slow part of a cold map (WebAssembly tree-sitter reads a few
+// MB per second), so scans persist across sessions like Aider's tags cache:
+// one JSON file per workspace under <config>/cache/repo-map, keyed per file
+// by mtime and size, and invalidated when the grammar package or this
+// extractor changes. OASIS_REPO_MAP_CACHE=0 disables it.
+const SCAN_VERSION = 'ast-1';
+function grammarVersion() {
+  try { return createRequire(import.meta.url)('@vscode/tree-sitter-wasm/package.json').version; } catch { return 'none'; }
+}
+const diskCaches = new Map();
+function diskCacheFile(root, env = process.env) {
+  if (/^(0|false|off|no)$/i.test(String(env.OASIS_REPO_MAP_CACHE || ''))) return null;
+  const id = createHash('sha256').update(path.resolve(root)).digest('hex').slice(0, 24);
+  return path.join(getBaseConfigDirectory(env), 'cache', 'repo-map', id + '.json');
+}
+const encodeScan = (value) => ({ ...value, identifiers: [...value.identifiers], refs: [...value.refs] });
+const decodeScan = (value) => ({ ...value, identifiers: new Map(value.identifiers), refs: new Map(value.refs) });
+async function loadDiskCache(root) {
+  const file = diskCacheFile(root);
+  if (!file) return null;
+  if (diskCaches.has(file)) return diskCaches.get(file);
+  const state = { file, version: SCAN_VERSION + ':' + grammarVersion() + ':' + (process.env.OASIS_REPO_MAP_PARSER || ''), entries: {}, dirty: false };
+  try {
+    const saved = JSON.parse(await readFile(file, 'utf8'));
+    if (saved && saved.version === state.version && saved.entries && typeof saved.entries === 'object') state.entries = saved.entries;
+  } catch {}
+  diskCaches.set(file, state);
+  return state;
+}
+async function saveDiskCache(state, keep) {
+  if (!state || !state.dirty) return;
+  const entries = {};
+  for (const absolute of keep) if (state.entries[absolute]) entries[absolute] = state.entries[absolute];
+  state.entries = entries;
+  state.dirty = false;
+  try {
+    await mkdir(path.dirname(state.file), { recursive: true });
+    const tmp = state.file + '.' + process.pid + '.tmp';
+    await writeFile(tmp, JSON.stringify({ version: state.version, entries }));
+    await rename(tmp, state.file);
+  } catch {}
+}
+
+async function scanFile(file, disk = null) {
   const info = await stat(file.absolute).catch(() => null);
   if (!info || !info.isFile() || info.size > MAX_FILE_BYTES) return null;
   const key = file.absolute + ':' + info.mtimeMs + ':' + info.size;
   const cached = cache.get(file.absolute);
-  if (cached && cached.key === key) return cached.value;
+  if (cached && cached.key === key) {
+    if (disk && (!disk.entries[file.absolute] || disk.entries[file.absolute].key !== key)) { disk.entries[file.absolute] = { key, value: encodeScan(cached.value) }; disk.dirty = true; }
+    return cached.value;
+  }
+  const saved = disk && disk.entries[file.absolute];
+  if (saved && saved.key === key) {
+    try {
+      const value = decodeScan(saved.value);
+      cache.set(file.absolute, { key, value });
+      return value;
+    } catch {}
+  }
   let text;
   try { text = await readFile(file.absolute, 'utf8'); } catch { return null; }
   if (text.includes('\0')) return null;
   const language = languageForFile(file.relative);
-  const value = { defs: extractDefinitions(text, language), identifiers: identifierCounts(text), refs: bareIdentifierCounts(text), imports: importSpecifiers(text, language), commonjs: language === 'js' && /\bmodule\.exports\b|\bexports\.[A-Za-z_$][\w$]*\s*=/.test(text), lines: text.split('\n').length };
+  const grammar = await loadCodeGrammar(grammarForFile(file.relative));
+  const ast = grammar ? analyzeCode(grammar, text, { maxDefs: MAX_DEFS_PER_FILE }) : null;
+  const counted = ast && ast.masked !== null ? ast.masked : text;
+  const value = { defs: ast ? ast.defs : extractDefinitions(text, language), identifiers: identifierCounts(counted), refs: bareIdentifierCounts(counted), imports: importSpecifiers(text, language), commonjs: language === 'js' && /\bmodule\.exports\b|\bexports\.[A-Za-z_$][\w$]*\s*=/.test(text), lines: text.split('\n').length };
   cache.set(file.absolute, { key, value });
   if (cache.size > 20000) cache.delete(cache.keys().next().value);
+  if (disk) { disk.entries[file.absolute] = { key, value: encodeScan(value) }; disk.dirty = true; }
   return value;
 }
 
@@ -295,12 +360,16 @@ export async function buildRepoMap(root, options = {}) {
     .map((item) => String(item || '').trim()).filter(Boolean).slice(0, 40);
   const walked = await walkFiles(base, { maxFiles: Math.min(MAX_FILES, options.maxFiles || MAX_FILES), maxDepth: 12 });
   const files = [];
+  const disk = await loadDiskCache(root);
+  const seen = [];
   for (const item of walked) {
     const relative = path.relative(path.resolve(root), item.absolute).split(path.sep).join('/');
     if (!languageForFile(relative)) continue;
-    const scanned = await scanFile(item);
-    if (scanned) files.push({ path: relative, ...scanned });
+    const scanned = await scanFile(item, disk);
+    if (scanned) { files.push({ path: relative, ...scanned }); seen.push(item.absolute); }
   }
+  // A sub-path map only rewrites the entries it saw, keeping the others.
+  if (disk) await saveDiskCache(disk, options.path && options.path !== '.' ? [...new Set([...Object.keys(disk.entries)])] : seen);
   // Where each symbol is defined, and how many *other* files mention it.
   const definedIn = new Map();
   for (const file of files) for (const def of file.defs) {

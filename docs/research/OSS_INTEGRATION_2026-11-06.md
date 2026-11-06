@@ -111,3 +111,40 @@ Verification: full suite on Node 22.23.4 — 1983 tests, 1974 pass, 0 fail
 permission and hook tests pass after it; `npm run check:quick`,
 `eval --validate` (52/52) and `eval --negative-control` pass; token budgets
 unchanged (`bench/tokens --check`).
+
+### 2. Repo map on tree-sitter
+
+`src/code-ast.mjs` runs definition queries (written per grammar, capturing
+`@name`/`@def`) for JavaScript, TypeScript/TSX, Python, Go, Rust, Java, C#,
+C/C++ (C++ grammar), Ruby, PHP and bash, skips definitions nested inside
+functions, and blanks comments and string literals (one native query per
+grammar) before identifier counting. Other languages keep the regex patterns.
+`src/tree-sitter.mjs` owns the single runtime: a first version initialised
+the runtime separately in the shell and code modules, and in 2 of 3 runs all
+Python grammar loads failed because two `Parser.init` calls raced; one
+single-flight loader fixed it (5/5 clean runs).
+
+Quality, measured against compiler ground truth (`/tmp/eval` scripts:
+Python `ast` for requests, flask, httpx; TypeScript compiler API for ky and
+zod), definitions matched by name and line:
+
+| Corpus | Extractor | Precision | Recall | F1 |
+|---|---|---|---|---|
+| Python, 180 files, 2,793 defs | regex | 80.7% | 94.4% | 87.0 |
+| | tree-sitter | 100.0% | 100.0% | 100.0 |
+| TypeScript, 363 files, 3,082 defs | regex | 84.7% | 88.1% | 86.4 |
+| | tree-sitter | 95.6% | 97.9% | 96.7 |
+
+Latency, full `buildRepoMap` on OASIS (836 files, 7.9 MB JS): regex 757 ms
+cold per process; tree-sitter 3.9 s on the very first scan (parsing ~1.8 s,
+queries ~1.1 s), 0.30 s in any later process thanks to the new on-disk scan
+cache (mtime+size keyed, versioned by grammar package and extractor; 2.9 MB
+for OASIS). Warm in-process maps are ~0.2 s either way.
+
+Full suite after this change: 1988 tests, 1979 pass, 0 fail, 9 skipped.
+
+## Next
+
+- Item 3/4 in the queue: official MCP SDK client transports.
+- Merge the definition and noise queries into one pass, or parse in a worker
+  pool, if first-scan latency matters for large repositories.

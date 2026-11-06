@@ -13,8 +13,7 @@
 // the legacy splitter, so nothing regresses where the grammar is unavailable.
 // Set OASIS_SHELL_PARSER=legacy to force the old splitter.
 
-import { createRequire } from 'node:module';
-import { dirname, join } from 'node:path';
+import { loadTreeSitter, loadTreeSitterLanguage } from './tree-sitter.mjs';
 
 let parser = null;
 let loading = null;
@@ -28,14 +27,13 @@ export function loadShellParser(env = process.env) {
   if (!loading) {
     loading = (async () => {
       try {
-        const require = createRequire(import.meta.url);
-        const dir = join(dirname(require.resolve('@vscode/tree-sitter-wasm/package.json')), 'wasm');
-        const { Parser, Language } = require(join(dir, 'tree-sitter.js'));
-        await Parser.init({ locateFile: (file) => join(dir, file) });
-        const bash = await Language.load(join(dir, 'tree-sitter-bash.wasm'));
-        const instance = new Parser();
-        instance.setLanguage(bash);
-        parser = instance;
+        const rt = await loadTreeSitter();
+        const bash = await loadTreeSitterLanguage('tree-sitter-bash.wasm');
+        if (rt && bash) {
+          const instance = new rt.Parser();
+          instance.setLanguage(bash);
+          parser = instance;
+        }
       } catch {
         parser = null;
       }
