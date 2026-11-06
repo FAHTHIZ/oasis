@@ -1,5 +1,6 @@
 // Session-level tools: deferred MCP tool search, background process monitoring,
 // entering plan mode, desktop notifications, and in-session scheduled prompts.
+import { Cron } from 'croner';
 import { spawn } from 'node:child_process';
 import { SHARED_TASK_TOOL_DEFINITIONS, SHARED_TASK_TOOL_NAMES, SHARED_TASK_READ_ONLY_TOOL_NAMES, runSharedTaskTool } from './shared-tasks.mjs';
 
@@ -27,7 +28,7 @@ export const SESSION_TOOL_DEFINITIONS = [
     { reason: { type: 'string' } }),
   fn('notify', 'Send the user a desktop or terminal notification, for example when a long task finishes or needs attention.',
     { message: { type: 'string' }, title: { type: 'string' } }, ['message']),
-  fn('cron_create', 'Schedule a prompt to run in this session on a 5-field cron schedule (minute hour day-of-month month day-of-week, local time). Jobs end when the session ends.',
+  fn('cron_create', 'Schedule a prompt to run in this session on a standard 5-field cron schedule (minute hour day-of-month month day-of-week, local time; names like MON and @daily also work). Jobs end when the session ends.',
     { cron: { type: 'string' }, prompt: { type: 'string' }, recurring: { type: 'boolean', description: 'Default true. false runs once at the next match.' } }, ['cron', 'prompt']),
   fn('cron_list', 'List scheduled prompts in this session.', {}),
   fn('cron_delete', 'Cancel a scheduled prompt by id.', { id: { type: 'string' } }, ['id']),
@@ -160,40 +161,29 @@ function spawnQuiet(command, args) {
   try { const child = spawn(command, args, { stdio: 'ignore', detached: true }); child.on('error', () => {}); child.unref(); } catch {}
 }
 
-// Minimal 5-field cron: *, */n, a-b, a-b/n, lists, and names are not supported.
+// Standard 5-field cron (minute hour day-of-month month day-of-week, local time)
+// through croner: steps, ranges, lists, JAN-DEC and SUN-SAT names, L/W/# modifiers
+// and @hourly/@daily/@weekly/@monthly/@yearly. As in Vixie cron, when both
+// day-of-month and day-of-week are restricted a day matching either one runs.
 export function parseCron(expression) {
-  const fields = String(expression || '').trim().split(/\s+/);
-  if (fields.length !== 5) throw new Error('Cron needs 5 fields: minute hour day-of-month month day-of-week.');
-  const ranges = [[0, 59], [0, 23], [1, 31], [1, 12], [0, 7]];
-  return fields.map((field, index) => {
-    const [min, max] = ranges[index];
-    const values = new Set();
-    for (const part of field.split(',')) {
-      const match = part.match(/^(\*|\d+(?:-\d+)?)(?:\/(\d+))?$/);
-      if (!match) throw new Error('Invalid cron field "' + field + '".');
-      let [lo, hi] = match[1] === '*' ? [min, max] : match[1].split('-').map(Number);
-      if (hi === undefined) hi = match[2] ? max : lo;
-      const step = match[2] ? Number(match[2]) : 1;
-      if (lo < min || hi > max || lo > hi || step < 1) throw new Error('Cron field "' + field + '" is out of range.');
-      for (let value = lo; value <= hi; value += step) values.add(index === 4 && value === 7 ? 0 : value);
-    }
-    return values;
-  });
-}
-
-export function cronMatches(fields, date) {
-  return fields[0].has(date.getMinutes()) && fields[1].has(date.getHours()) && fields[2].has(date.getDate()) && fields[3].has(date.getMonth() + 1) && fields[4].has(date.getDay());
-}
-
-export function nextCronRun(fields, from = new Date()) {
-  const date = new Date(from.getTime());
-  date.setSeconds(0, 0);
-  date.setMinutes(date.getMinutes() + 1);
-  for (let i = 0; i < 366 * 24 * 60; i += 1) {
-    if (cronMatches(fields, date)) return date;
-    date.setMinutes(date.getMinutes() + 1);
+  const text = String(expression || '').trim();
+  if (!text.startsWith('@') && text.split(/\s+/).length !== 5) throw new Error('Cron needs 5 fields: minute hour day-of-month month day-of-week.');
+  try {
+    return new Cron(text, { paused: true, mode: '5-part' });
+  } catch (error) {
+    throw new Error('Invalid cron expression "' + text + '": ' + String(error.message || error).replace(/^CronPattern: /, ''));
   }
-  return null;
+}
+
+export function cronMatches(cron, date) {
+  const minute = new Date(date.getTime());
+  minute.setSeconds(0, 0);
+  return cron.match(minute);
+}
+
+// The next matching minute strictly after from (seconds ignored), or null if the pattern never fires again.
+export function nextCronRun(cron, from = new Date()) {
+  return cron.nextRun(from);
 }
 
 const MAX_CRON_JOBS = 20;
