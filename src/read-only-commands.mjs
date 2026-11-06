@@ -18,7 +18,7 @@
 // PreToolUse hooks run before this and still win. Turn it off with
 // OASIS_READ_ONLY_COMMANDS=0 or "permissions": { "readOnlyCommands": false }.
 
-import { readdirSync } from 'node:fs';
+import { existsSync, readdirSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import path from 'node:path';
 import { splitShell } from './shell-risk.mjs';
@@ -163,7 +163,7 @@ function argsStayInside(args, cwd, root) {
 // scope counts; user and system settings (git-lfs filters) are the user's own.
 const REPO_COMMAND_KEY = /^(?:diff\.external|diff\..+\.(?:textconv|command)|filter\..+\.(?:clean|smudge|process)|gpg\.(?:.+\.)?program)$/i;
 
-function repoCommandKeys(cwd, env) {
+function localCommandKeys(cwd, env) {
   const result = spawnSync('git', ['config', '--show-scope', '--get-regexp', '^(diff|filter|gpg)\\.'], { cwd, env, encoding: 'utf8', timeout: 5000, windowsHide: true, maxBuffer: 1024 * 1024 });
   if (result.error || (result.status !== 0 && result.status !== 1)) return null;
   const keys = [];
@@ -173,6 +173,31 @@ function repoCommandKeys(cwd, env) {
     if ((scope === 'local' || scope === 'worktree') && REPO_COMMAND_KEY.test(key)) keys.push(key);
   }
   return keys;
+}
+
+// git status/diff look inside checked-out submodules, and each submodule's
+// own config (.git/modules/<name>/config) can name filters too.
+function submodulePaths(cwd, env) {
+  const result = spawnSync('git', ['ls-files', '--stage', '-z'], { cwd, env, encoding: 'utf8', timeout: 5000, windowsHide: true, maxBuffer: 64 * 1024 * 1024 });
+  if (result.error) return null;
+  if (result.status !== 0) return [];
+  return String(result.stdout || '').split('\0').filter((entry) => entry.startsWith('160000 ')).map((entry) => entry.split('\t')[1]).filter(Boolean);
+}
+
+function repoCommandKeys(cwd, env, depth = 0) {
+  const keys = localCommandKeys(cwd, env);
+  if (!keys) return null;
+  const subs = submodulePaths(cwd, env);
+  if (!subs) return null;
+  if (subs.length > 50 || (subs.length && depth >= 3)) return null;
+  for (const sub of subs) {
+    const dir = path.join(cwd, sub);
+    if (!existsSync(path.join(dir, '.git'))) continue;
+    const inner = repoCommandKeys(dir, env, depth + 1);
+    if (!inner) return null;
+    keys.push(...inner);
+  }
+  return [...new Set(keys)];
 }
 
 export function repoConfigRunsCommands(cwd, env = process.env) {

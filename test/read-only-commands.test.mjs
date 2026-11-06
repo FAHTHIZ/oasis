@@ -193,3 +193,29 @@ test('benign globs are expanded and checked like typed paths', { skip: process.p
   assert.equal(readOnlyShellLine('ls src/\\*.js', { root }), true);
   assert.equal(readOnlyShellLine('ls src/[z-a].js', { root }), false, 'an invalid class asks instead of throwing');
 });
+
+test('read-only git asks when a checked-out submodule config names a filter', { skip: process.platform === 'win32' }, async (t) => {
+  // Regression: git status in the outer repository ran the clean filter from
+  // the submodule's own .git/modules/<name>/config with no prompt.
+  const { execFileSync } = await import('node:child_process');
+  const { existsSync } = await import('node:fs');
+  const base = await workspace(t);
+  const inner = path.join(base, 'inner');
+  const root = path.join(base, 'outer');
+  await mkdir(inner); await mkdir(root);
+  const env = { ...process.env, GIT_AUTHOR_NAME: 'a', GIT_AUTHOR_EMAIL: 'a@example.com', GIT_COMMITTER_NAME: 'a', GIT_COMMITTER_EMAIL: 'a@example.com' };
+  const git = (cwd, ...args) => execFileSync('git', args, { cwd, env, stdio: 'ignore' });
+  await writeFile(path.join(inner, '.gitattributes'), '*.txt filter=evil\n');
+  await writeFile(path.join(inner, 'a.txt'), '1\n');
+  git(inner, 'init', '-q'); git(inner, 'add', '.'); git(inner, 'commit', '-qm', 'i');
+  git(root, 'init', '-q'); git(root, '-c', 'protocol.file.allow=always', 'submodule', 'add', '-q', inner, 'sub'); git(root, 'commit', '-qm', 's');
+  assert.equal(readOnlyArgv('git', ['status'], { root }), true, 'a plain submodule still runs without asking');
+  const marker = path.join(base, 'ran-clean');
+  git(path.join(root, 'sub'), 'config', 'filter.evil.clean', 'sh -c "touch ' + marker + '; cat"');
+  await writeFile(path.join(root, 'sub', 'a.txt'), '2\n');
+  assert.equal(readOnlyArgv('git', ['status'], { root }), false);
+  assert.equal(readOnlyShellLine('git diff', { root }), false);
+  const { executeTool } = await import('../src/tools.mjs');
+  await executeTool('git_status', {}, { root, env, approval: async () => false });
+  assert.equal(existsSync(marker), false, 'git_status ran the submodule filter');
+});
