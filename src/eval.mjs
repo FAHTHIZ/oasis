@@ -11,6 +11,30 @@ import { createSession, runAgentTurn, closeSession, isLoopbackProvider } from '.
 import { cloudModelBehindGateway, estimateCostUsd } from './pricing.mjs';
 import { renderComparisonHtml, saveComparisonArtifact } from './eval-report.mjs';
 import { oasisVersion } from './version.mjs';
+import { redactArtifactText } from './artifacts.mjs';
+
+// A compact, redacted record of what the agent did in a trial: tool, the
+// argument that identifies the step (path, command, pattern), result size and
+// whether it failed. Enough to see where a run's tokens and turns went
+// without storing file contents.
+const TRACE_LIMIT = 200;
+const TRACE_ARG_KEYS = ['path', 'command', 'pattern', 'query', 'url', 'name', 'old_path'];
+export function traceStep(event) {
+  const call = event && event.call;
+  let args = {};
+  try { args = call && call.function && typeof call.function.arguments === 'string' ? JSON.parse(call.function.arguments || '{}') : (call && call.function && call.function.arguments) || {}; } catch {}
+  if (!args || typeof args !== 'object') args = {};
+  const key = TRACE_ARG_KEYS.find((item) => typeof args[item] === 'string' && args[item]);
+  let detail = key ? args[key] : '';
+  if (!detail && Array.isArray(args.args)) detail = args.args.join(' ');
+  if (key === 'command' && Array.isArray(args.args)) detail += ' ' + args.args.join(' ');
+  const result = event && event.result;
+  let chars = 0;
+  try { chars = typeof result === 'string' ? result.length : JSON.stringify(result ?? null).length; } catch {}
+  const failed = Boolean(result && typeof result === 'object' && (result.error || result.approved === false || result.blocked === true || (typeof result.exitCode === 'number' && result.exitCode !== 0)));
+  return { tool: String(event && event.name || '?'), ...(detail ? { arg: redactArtifactText(detail).slice(0, 120) } : {}), resultChars: chars, ...(failed ? { failed: true } : {}) };
+}
+function recordTraceStep(trace, event) { if (trace.length < TRACE_LIMIT) trace.push(traceStep(event)); }
 
 const APP_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const DEFAULT_TASKS_DIR = path.join(APP_ROOT, 'evals', 'tasks');
@@ -1411,6 +1435,8 @@ export async function runEvalCommand(args = [], options = {}) {
         let session = null;
         let usage = { inputTokens: 0, outputTokens: 0 };
         let agentResult = null;
+        const trace = [];
+        const requestTokens = [];
         let errorText = null;
         let verification = { exitCode: 1, output: 'Agent did not complete.' };
         let timeoutController = null;
@@ -1443,6 +1469,7 @@ export async function runEvalCommand(args = [], options = {}) {
           const agentRunner = options.agentRunner || runAgentTurn;
           agentResult = await agentRunner(session, task.taskText, {
             autoApprove: true,
+            onToolResult: (event) => recordTraceStep(trace, event),
             env: evalAgentEnvironment(process.env),
             maxSteps: provider.maxSteps,
             signal: timeoutController.signal,
@@ -1450,6 +1477,7 @@ export async function runEvalCommand(args = [], options = {}) {
             onUsage: (entry) => {
               usage.inputTokens += Number(entry.inputTokens || 0);
               usage.outputTokens += Number(entry.outputTokens || 0);
+              if (requestTokens.length < TRACE_LIMIT) requestTokens.push([Number(entry.inputTokens || 0), Number(entry.outputTokens || 0)]);
             }
           });
           if (timeoutController.signal.aborted) errorText = timeoutMessage;
@@ -1516,6 +1544,7 @@ export async function runEvalCommand(args = [], options = {}) {
           costUSD, strongModelCostUSD, routingSavingsUSD, costSource,
           wallTimeMs: elapsedMs, finished: Boolean(agentResult && agentResult.finished),
           toolCalls: agentResult ? agentResult.toolCalls : 0,
+          trace, requestTokens,
           verification: { exitCode: verification.exitCode, output: verification.output },
           changes,
           error: errorText,

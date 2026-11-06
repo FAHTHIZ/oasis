@@ -1089,3 +1089,34 @@ for (const [flag, protocol, versionText, expectArg, stdout] of [
 test('only one external agent can be chosen', async () => {
   await assert.rejects(runEvalCommand(['--codex', '--gemini-cli'], { autoApprove: true, env: { ...process.env } }), /Choose one external agent/);
 });
+
+test('OASIS eval records a compact, redacted tool trace and per-request tokens for each trial', async (t) => {
+  const tmp = await temporaryDirectory('oasis-eval-trace-test-');
+  t.after(() => rm(tmp, { recursive: true, force: true }));
+  const configDir = path.join(tmp, 'user-config');
+  const tasksDir = path.join(tmp, 'tasks');
+  await mkdir(tasksDir);
+  await createFixtureTask(tasksDir);
+  const env = { ...process.env, OASIS_CONFIG_DIR: configDir };
+  await saveConfig({ protocol: 'openai-compatible', baseURL: 'http://127.0.0.1:1/v1', model: 'fixture-model', apiKey: '', maxSteps: 4 }, { env });
+  const output = { text: '', write(value) { this.text += String(value); } };
+  const call = (name, args) => ({ id: name, type: 'function', function: { name, arguments: JSON.stringify(args) } });
+  const result = await runEvalCommand(['--task', 'fixture-task', '--trials', '1'], {
+    autoApprove: true, env, tasksDir, resultsDir: path.join(tmp, 'eval-results'), output,
+    agentRunner: async (_session, _prompt, options) => {
+      options.onUsage({ inputTokens: 100, outputTokens: 5 });
+      options.onToolResult({ name: 'read_file', call: call('read_file', { path: 'src/a.mjs' }), result: { content: 'x'.repeat(50) } });
+      options.onUsage({ inputTokens: 160, outputTokens: 9 });
+      options.onToolResult({ name: 'run_command', call: call('run_command', { command: 'node', args: ['--test', 'token=sk-abcdefghijklmnopqrstuvwx'] }), result: { exitCode: 1, stdout: '' } });
+      return { finished: true, toolCalls: 2 };
+    }
+  });
+  const [trial] = result.results;
+  assert.deepEqual(trial.requestTokens, [[100, 5], [160, 9]]);
+  assert.equal(trial.trace.length, 2);
+  assert.deepEqual(trial.trace[0], { tool: 'read_file', arg: 'src/a.mjs', resultChars: JSON.stringify({ content: 'x'.repeat(50) }).length });
+  assert.equal(trial.trace[1].tool, 'run_command');
+  assert.equal(trial.trace[1].failed, true);
+  assert.doesNotMatch(trial.trace[1].arg, /sk-abcdef/);
+  assert.match(trial.trace[1].arg, /^node --test token=\[REDACTED/);
+});
