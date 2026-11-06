@@ -76,7 +76,7 @@ import { access, lstat, mkdir, readFile, realpath, stat, writeFile } from 'node:
 async function pathExists(file) { try { await access(file); return true; } catch { return false; } }
 import { SHELL_TOOL_DEFINITION, POWERSHELL_TOOL_DEFINITION, findPowerShell, killAllBackground } from './power-tools.mjs';
 import { runLsp, serverForFile, verifyEditedFileWithLsp, stopLspClients } from './lsp.mjs';
-import { AGENT_TOOL_DEFINITIONS, AGENT_TOOL_NAMES, MAX_BACKGROUND_AGENTS, agentRegistry, registerAgent, restoreAgentHistory, runningBackgroundCount, notifyParent, drainInbox, agentStatus, agentEvents, recordAgentEvent, sendTeamMessage, stopAgent, stopAllAgents, getAgent, getAgentTeam, createAgentTeam, agentTeamStatus, shutdownAgentTeam } from './agent-tasks.mjs';
+import { AGENT_TOOL_DEFINITIONS, AGENT_TOOL_NAMES, MAX_BACKGROUND_AGENTS, agentRegistry, registerAgent, addAgentUsage, restoreAgentHistory, runningBackgroundCount, notifyParent, drainInbox, agentStatus, agentEvents, recordAgentEvent, sendTeamMessage, stopAgent, stopAllAgents, getAgent, getAgentTeam, createAgentTeam, agentTeamStatus, shutdownAgentTeam } from './agent-tasks.mjs';
 import { loadAgentDefinitions, taskToolDefinition, BUILTIN_AGENTS, MAX_PARALLEL_SUBAGENTS, runPool, parseFrontMatter, mapToolNames } from './subagents.mjs';
 import { createSharedTaskStore, SHARED_TASK_TOOL_NAMES, runSharedTaskTool } from './shared-tasks.mjs';
 import { saveSessionNotes } from './session-notes.mjs';
@@ -4109,6 +4109,8 @@ async function runSubagent(parent, args, context, options) {
     budgetLedger: parent.budgetLedger ||= { spentUsd: Math.max(0, Number(parent.costUsd) || 0), unknownRequests: 0 },
     agents: {}
   };
+  // Not enumerable: keeps session saves and copies from walking the parent.
+  Object.defineProperty(child, 'parentSessionRef', { value: parent, enumerable: false, writable: true, configurable: true });
   shareSecretVault(parent, child);
 
   child.stopBackgroundProcesses = () => killAllBackground(child.background);
@@ -4176,6 +4178,7 @@ async function runChildTurn(parent, record, prompt, options, { foreground }) {
   const { child, type, description } = record;
   const worktree = record.worktreeInfo;
   const tag = (event) => ({ ...event, subagent: description, agentType: type, agentId: record.id });
+  let runTokens = 0;
   const track = (event) => {
     record.toolCalls++;
     if (event && event.name) { record.recentTools.push(event.name); if (record.recentTools.length > 20) record.recentTools.shift(); }
@@ -4185,14 +4188,22 @@ async function runChildTurn(parent, record, prompt, options, { foreground }) {
     signal: options.signal,
     onToolStart: (event) => { track(event); if (options.onToolStart) options.onToolStart(tag(event)); },
     onToolResult: options.onToolResult ? (event) => options.onToolResult(tag(event)) : undefined,
-    onUsage: options.onUsage ? (usage) => options.onUsage({ ...usage, subagent: description }) : undefined,
+    onUsage: (usage) => { runTokens += Math.max(0, Number(usage && usage.totalTokens) || 0); addAgentUsage(record, usage); if (options.onUsage) options.onUsage({ subagent: description, agentId: record.id, agentType: type, ...usage }); },
     // --forward-subagent-text: the subagent's own messages, tagged with the spawning tool call.
     onText: options.onSubagentText ? (text) => { try { options.onSubagentText({ text, subagent: description, agentId: record.id, agentType: type, parentToolUseId: options.parentToolUseId || null }); } catch {} } : undefined
   } : {
     // Nobody can answer a prompt while the agent works in the background.
     approval: async () => false,
     signal: record.controller.signal,
-    onToolStart: track
+    onToolStart: track,
+    // The parent turn may be over, so usage goes to the session's background
+    // sink (set by the CLI, headless and web front ends) instead.
+    onUsage: (usage) => {
+      runTokens += Math.max(0, Number(usage && usage.totalTokens) || 0);
+      addAgentUsage(record, usage);
+      const sink = backgroundUsageSink(parent);
+      if (sink) { try { sink({ subagent: description, agentId: record.id, agentType: type, background: true, ...usage }); } catch {} }
+    }
   };
   // --teammate-mode tmux (or auto inside tmux): mirror team members into their own panes.
   if (record.teamId && !record.pane && resolveTeammateMode(parent.teammateMode, options.env || process.env) === 'tmux') {
@@ -4222,6 +4233,8 @@ async function runChildTurn(parent, record, prompt, options, { foreground }) {
     if (record.sharedTaskId) {
       try { runSharedTaskTool(child, 'task_release', { task_id: record.sharedTaskId }); } catch {}
     }
+    // Requests made before the failure were billed: keep them in the count.
+    record.tokensUsed += runTokens;
     record.finishedAt = Date.now();
     record.status = record.cancelRequested || error.name === 'AbortError' ? 'cancelled' : 'failed';
     record.error = error.message;
@@ -4255,8 +4268,18 @@ async function runChildTurn(parent, record, prompt, options, { foreground }) {
     finished: outcome.finished === true,
     report: record.report,
     toolCalls: Math.max(0, Number(outcome.toolCalls) || 0),
-    tokensUsed: Math.max(0, Number(outcome.tokensUsed) || 0)
+    tokensUsed: Math.max(0, Number(outcome.tokensUsed) || 0),
+    ...(record.usage && record.usage.requests ? { usage: { requests: record.usage.requests, inputTokens: record.usage.inputTokens, outputTokens: record.usage.outputTokens, costUsd: Number(Number(record.usage.costUsd || 0).toFixed(6)) } } : {})
   };
+}
+
+// Usage from background agents: the nearest session up the chain with an
+// onBackgroundUsage function (child sessions point back at their parent).
+function backgroundUsageSink(session) {
+  for (let current = session, depth = 0; current && depth < 20; current = current.parentSessionRef, depth++) {
+    if (typeof current.onBackgroundUsage === 'function') return current.onBackgroundUsage;
+  }
+  return null;
 }
 
 function recordSharedTaskWorktree(parent, record, worktreeResult) {
