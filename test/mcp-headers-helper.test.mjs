@@ -22,10 +22,11 @@ test('headersHelper headers are sent and refreshed after a 401', async (t) => {
   const json = (body) => new Response(JSON.stringify(body), { status: 200, headers: { 'content-type': 'application/json' } });
   const fakeFetch = async (_url, init) => {
     if (init.method === 'DELETE') return new Response(null, { status: 204 });
+    if (init.method === 'GET') return new Response(null, { status: 405 });
     seen.push({ ...init.headers });
     if (init.headers.Authorization === 'Bearer token-1' && seen.length > 2) return new Response('expired', { status: 401 });
     const message = JSON.parse(init.body);
-    if (message.method === 'initialize') return json({ jsonrpc: '2.0', id: message.id, result: { protocolVersion: '2025-06-18', capabilities: { tools: {} } } });
+    if (message.method === 'initialize') return json({ jsonrpc: '2.0', id: message.id, result: { protocolVersion: '2025-06-18', serverInfo: { name: 'test', version: '1' }, capabilities: { tools: {} } } });
     if (message.method === 'tools/list') return json({ jsonrpc: '2.0', id: message.id, result: { tools: [{ name: 'echo', inputSchema: { type: 'object' } }] } });
     if (message.method === 'tools/call') return json({ jsonrpc: '2.0', id: message.id, result: { content: [{ type: 'text', text: 'hi' }] } });
     return new Response(null, { status: 202 });

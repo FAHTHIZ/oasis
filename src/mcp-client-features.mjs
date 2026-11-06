@@ -12,10 +12,8 @@
 import { pathToFileURL } from 'node:url';
 import { runHooks, hasHooks } from './hooks.mjs';
 
-export const MCP_CLIENT_PROTOCOL_VERSION = '2025-06-18';
-
 export function clientCapabilities() {
-  return { roots: { listChanged: true }, elicitation: {} };
+  return { roots: { listChanged: true }, elicitation: { form: {}, url: {} } };
 }
 
 export function sessionRoots(session) {
@@ -76,17 +74,6 @@ export async function handleServerNotification(client, message) {
   }
 }
 
-/** Routes a message from a server: requests get a response, notifications are handled. */
-export async function routeServerMessage(client, message, send) {
-  if (!message || typeof message.method !== 'string') return false;
-  if (message.id !== undefined && message.id !== null) {
-    const response = await handleServerRequest(client, message);
-    try { await send(response); } catch {}
-  } else {
-    await handleServerNotification(client, message);
-  }
-  return true;
-}
 
 // ---------- Elicitation ----------
 

@@ -20,7 +20,7 @@ process.stdin.on('data', async (chunk) => { buffer += chunk; let i;
     let m; try { m = JSON.parse(line); } catch { continue; }
     if (m.id !== undefined && !m.method && waiting.has(m.id)) { const r = waiting.get(m.id); waiting.delete(m.id); r(m.result || { error: m.error }); continue; }
     if (m.id === undefined) continue;
-    if (m.method === 'initialize') reply(m.id, { protocolVersion: '2025-06-18', capabilities: { tools: {} } });
+    if (m.method === 'initialize') reply(m.id, { protocolVersion: '2025-06-18', serverInfo: { name: 'test', version: '1' }, capabilities: { tools: {} } });
     else if (m.method === 'tools/list') reply(m.id, { tools: [{ name: 'signup', inputSchema: { type: 'object' } }] });
     else if (m.method === 'tools/call') { const answer = await ask('elicitation/create', { message: 'Create your account', requestedSchema: schema }); reply(m.id, { content: [{ type: 'text', text: 'ANSWER ' + JSON.stringify(answer) }] }); }
     else reply(m.id, {}); } });
