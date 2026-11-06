@@ -18,11 +18,20 @@ test('README describes the actual interfaces and keeps their execution boundarie
     'Agent Client Protocol',
     'Node.js SDK',
     'GitHub Action and messaging gateways',
-    'does not guarantee that every model will solve every task'
+    'does not guarantee that every model will solve every task',
+    'Download and install',
+    'SHA256SUMS',
+    'There is no native Android APK',
+    'GitHub Action and messaging gateways',
+    'Contributing guide',
+    'Support'
   ]) assert.ok(readme.includes(phrase), phrase);
   assert.ok(readme.includes('does not provide a host shell'));
   assert.ok(readme.includes('Approval prompts are not a replacement for operating-system isolation'));
   assert.ok(readme.includes('Apache License 2.0'));
+  assert.ok(readme.includes('https://github.com/FAHTHIZ/oasis/releases/latest'));
+  assert.ok(readme.includes('https://fahthiz.github.io/oasis/app/'));
+  assert.ok(!/youtube\\.com|\\.mp4|demo[- ]video/i.test(readme), 'The README must not reference demo videos that have not been supplied.');
 });
 
 test('README relative links resolve to tracked repository files', async () => {

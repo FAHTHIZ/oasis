@@ -2,7 +2,7 @@
   "id": "./",
   "name": "OASIS — Coding Agent Workspace",
   "short_name": "OASIS",
-  "description": "OASIS is an open-source coding agent and local-first developer workspace for multi-step software tasks.",
+  "description": "An installable browser workspace for the OASIS coding-agent runtime.",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",
@@ -10,8 +10,8 @@
   "background_color": "#0B100C",
   "theme_color": "#0B100C",
   "categories": [
-    "productivity",
-    "developer-tools"
+    "developer-tools",
+    "productivity"
   ],
   "icons": [
     {

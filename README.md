@@ -1,84 +1,146 @@
-# OASIS
+<p align="center">
+  <img src="assets/oasis-icon.svg" alt="OASIS logo" width="112">
+</p>
 
-OASIS is an open-source coding-agent runtime and development workspace. It connects a model you choose to a project, gives the model bounded tools to inspect and change that project, and coordinates execution, permissions, recovery and verification around those tools.
+<h1 align="center">OASIS</h1>
 
-OASIS is the harness and application layer, not a model provider. The model's reasoning and code quality still matter; OASIS does not guarantee that every model will solve every task.
+<p align="center">
+  <strong>An open-source coding-agent runtime and developer workspace.</strong>
+  <br>
+  Bring your own model. Work from the terminal, browser, desktop, or editor.
+</p>
 
-## What is in this repository
+<p align="center">
+  <a href="https://github.com/FAHTHIZ/oasis/actions/workflows/quality.yml"><img alt="Quality checks" src="https://github.com/FAHTHIZ/oasis/actions/workflows/quality.yml/badge.svg?branch=main"></a>
+  <a href="https://github.com/FAHTHIZ/oasis/releases/latest"><img alt="Latest release" src="https://img.shields.io/github/v/release/FAHTHIZ/oasis?style=flat-square"></a>
+  <a href="https://github.com/FAHTHIZ/oasis/blob/main/LICENSE"><img alt="Apache 2.0 license" src="https://img.shields.io/github/license/FAHTHIZ/oasis?style=flat-square"></a>
+  <img alt="Node.js 22 or newer" src="https://img.shields.io/badge/Node.js-22%2B-339933?logo=nodedotjs&logoColor=white&style=flat-square">
+</p>
 
-OASIS has several interfaces around related runtime capabilities:
+<p align="center">
+  <a href="https://github.com/FAHTHIZ/oasis/releases/latest">Download desktop app</a> ·
+  <a href="https://fahthiz.github.io/oasis/app/">Open browser app</a> ·
+  <a href="MOBILE.md">Mobile setup</a> ·
+  <a href="action.yml">GitHub Action</a>
+</p>
 
-- **CLI and headless runner** — interactive terminal sessions, one-shot tasks and automation.
-- **Connected browser workspace** — the oasis web command serves the browser UI while the agent runtime and project access remain on the computer running OASIS.
-- **Universal browser app** — an installable browser application that can work with a project in browser storage or a connected GitHub repository. When used on its own, it does not provide a host shell.
-- **Desktop application** — an Electron host for the connected local workspace.
-- **Editor integration** — a VS Code-family extension with chat, selection context, editor diagnostics and native diff review.
-- **Agent Client Protocol** — an ACP server for compatible editors.
-- **Node.js SDK** — embed OASIS in a Node.js process.
-- **GitHub Action and messaging gateways** — run repository tasks in GitHub Actions or through configured chat platforms.
+---
 
-These interfaces are not identical. In particular, the stand-alone browser app, connected browser workspace and local CLI have different execution boundaries.
+OASIS is an open-source coding-agent runtime and development workspace. It connects a model provider to a project and supplies the runtime around it: workspace tools, command execution, permissions, agent coordination, recovery and verification.
 
-## Runtime capabilities
+OASIS is the harness and application layer, not a model provider. The model still determines much of the reasoning and code quality; OASIS does not guarantee that every model will solve every task.
 
-The source includes the following systems. Their exact availability depends on the interface, operating system, provider and configuration:
+## Download and install
 
-- A multi-step model/tool loop with provider adapters, streaming, model configuration and fallback handling.
-- Workspace operations for reading, searching, creating, editing and reviewing files.
-- Command execution, process lifecycle management and Git operations, including checkpoints and worktree-based isolation.
-- Permission modes, approval requests, command-risk analysis, protected paths and secret scanning.
-- Optional operating-system or container sandbox backends. These are configuration-dependent and are not a universal security boundary.
-- Sessions, project instructions, memory, context management, compaction, task lists and recovery.
-- Subagents, specialist reviews, shared tasks, background sessions and workflow execution.
-- MCP servers, hooks, Agent Skills, plugins, extension imports and provider integrations.
-- Code intelligence and verification helpers, including diagnostics, language-server integration, tests and diff checks.
-- Web retrieval, browser-related tools, image/PDF handling, voice-related features and telemetry.
+### Desktop
 
-The implementation is spread across src/, app/, desktop/, ide/, plugins/, skills/ and action.yml. Tests live in test/; frozen agent-evaluation fixtures live in evals/; deterministic runtime benchmarks live in bench/.
+Download the current stable release from [GitHub Releases](https://github.com/FAHTHIZ/oasis/releases/latest). Published release builds include:
 
-## Getting started
+| Platform | Available packages |
+|---|---|
+| Windows | x64 and ARM64 `.exe` installers |
+| macOS | Apple silicon and Intel `.dmg` installers |
+| Linux | x86_64 and ARM64 `.AppImage` and `.deb` packages |
 
-**Requirements:** Node.js 22 or newer and Git. Some optional dependencies and capabilities have additional platform requirements.
+Release assets include `SHA256SUMS`. Verify the checksum before installing a downloaded package. The desktop app checks update assets against the published checksum before installing them.
+
+### Phone and tablet
+
+OASIS has an installable browser app and a connected mobile workspace. Open the [browser app](https://fahthiz.github.io/oasis/app/) and use your browser menu to install it or add it to your home screen. For access to a project running on another computer, follow the [mobile setup guide](MOBILE.md).
+
+There is no native Android APK in the current release. The browser app is a PWA, not a native Android package, and its standalone browser execution model does not provide a host shell.
+
+### CLI
+
+**Requirements:** Node.js 22 or newer and Git.
 
 From a checkout of this repository:
 
 ```sh
+git clone https://github.com/FAHTHIZ/oasis.git
+cd oasis
 npm install
-npm install -g .
+npm install --global .
 cd /path/to/your/project
 oasis connect
 oasis
 ```
 
-The oasis connect command configures a model endpoint. OASIS does not bundle a model or provide a hosted inference account. You are responsible for the provider, its costs and its data-handling terms.
-
-### Other entry points
-
-- **Browser app:** [Open OASIS](https://fahthiz.github.io/oasis/app/). This runs in the browser; it does not give the model access to your computer's shell.
-- **Connected browser workspace:** from a project, run oasis web and open the local URL it prints. This runs the agent on that computer.
-- **Desktop development build:** run npm install and then npm run desktop:dist. Build output is written to release/.
-- **VS Code-family extension:** run oasis ide install after installing the CLI.
-- **GitHub Action:** see action.yml for the action interface and inputs.
-
-## Development and checks
+`oasis connect` configures a model endpoint. To check the environment or update the CLI:
 
 ```sh
+oasis doctor
+oasis update
+```
+
+OASIS does not bundle a model or a hosted inference account. You choose the provider, credentials, model and applicable data-handling terms.
+
+## Interfaces
+
+| Interface | How to open it | What it does |
+|---|---|---|
+| **CLI and headless runner** | `oasis` or `oasis exec "..."` | Runs the agent in the current project; supports interactive and non-interactive tasks. |
+| **Connected browser workspace** | `oasis web --open` | Opens a browser UI while the agent runtime and project access remain on the computer running OASIS. |
+| **Universal browser app** | [Open the browser app](https://fahthiz.github.io/oasis/app/) or run `oasis app --open` | Installable PWA for browser storage or a connected GitHub project; it does not provide a host shell. |
+| **Desktop application** | [Download a release](https://github.com/FAHTHIZ/oasis/releases/latest) | Electron host for the local runtime and workspace. |
+| **Editor integration** | `oasis ide install` | VS Code-family extension with editor context, diagnostics and diff review. |
+| **Agent Client Protocol** | `oasis acp` | Connects OASIS to compatible ACP clients. |
+| **Node.js SDK** | `src/sdk.mjs` | Embeds OASIS sessions and tools in a Node.js application. |
+| **GitHub Action and messaging gateways** | See `action.yml` and `src/` | Runs repository tasks in GitHub Actions and configured chat platforms. |
+
+These interfaces share runtime systems but do not have identical permissions or capabilities. Choose the connected workspace when the agent needs access to a computer's project; use the universal browser app when browser-only access is sufficient.
+
+## Runtime capabilities
+
+- **Model runtime:** provider adapters, streaming, model configuration, retry and fallback handling, and usage tracking.
+- **Workspace tools:** file reading, search, editing, patching, command execution, process management and Git operations.
+- **Safety controls:** permission modes, approval requests, command-risk analysis, protected paths, secret scanning and optional OS/container sandboxes.
+- **Agent coordination:** subagents, specialist reviews, tasks, background sessions, MCP servers, hooks, Agent Skills and plugins.
+- **Verification and recovery:** diagnostics, language-server integration, test execution, diff review, session history, checkpoints and worktree-based isolation.
+- **Additional tools:** web retrieval, browser-related features, PDF/image handling and voice-related workflows.
+
+Feature availability depends on the interface, operating system, provider and configuration. The optional sandbox is not enabled in every setup and is not a universal security boundary.
+
+## Security and execution boundaries
+
+- Approval prompts are not a replacement for operating-system isolation. Shell commands may run with the permissions of the OASIS process.
+- Do not assume a sandbox is active unless OASIS reports that it is available and enabled. Isolation strength varies by platform and backend.
+- MCP servers, hooks, plugins and imported extensions can execute third-party code. Review their source and permissions before enabling them.
+- Hosted providers and external services may receive prompts, project context or tool output. Review provider data-handling terms before using private repositories.
+- Keep important work under version control and maintain backups. Review diffs and command approvals before accepting changes.
+
+See the [security policy](SECURITY.md) for vulnerability reporting.
+
+## Development
+
+```sh
+npm install
 npm test
 npm run check
 ```
 
-npm test runs the repository's explicit Node.js test-file pattern. npm run check runs the broader integrity, test, benchmark-regression and evaluation-fixture checks. Some additional workflows exercise platform-specific behaviour, a real container backend, a native PTY and browser end-to-end paths.
+Useful deterministic harness checks:
 
-Passing tests are evidence for the cases they cover; they are not proof of defect-free operation, full platform qualification, security certification or model-level coding quality. The benchmark suites measure different things and should not be collapsed into a single score. No claim of parity with another coding agent follows from the existence of these tests.
+```sh
+npm run bench:harness
+npm run bench:tokens
+```
 
-## Important safety and reliability boundaries
+`npm test` runs the repository test suite. `npm run check` also runs integrity checks, benchmark-regression checks and evaluation-fixture validation. CI adds platform-specific security regressions, a live Docker sandbox test, native PTY coverage and browser end-to-end checks.
 
-- Review tool approvals and diffs. Approval prompts are not a replacement for operating-system isolation.
-- Shell commands and integrations may run with the permissions of the OASIS process. The optional sandbox is not enabled in every setup and does not provide identical isolation on every platform.
-- MCP servers, hooks, plugins, imported extensions and workflow code can execute third-party code. Review what you install and the permissions it receives.
-- When using a hosted model or external service, relevant prompts, project context and tool output may be sent to that service. Check the provider's terms before using private or sensitive repositories.
-- Keep important work under version control and maintain backups. Do not run an unfamiliar agent configuration against a sensitive working directory.
+A passing test suite is evidence only for the cases it exercises. It is not proof that the software is defect-free, fully qualified on every platform, security-certified or equivalent to another coding agent.
+
+## Project resources
+
+- [Mobile and tablet setup](MOBILE.md)
+- [Contributing guide](CONTRIBUTING.md)
+- [Support](SUPPORT.md)
+- [Security policy](SECURITY.md)
+- [Changelog](CHANGELOG.md)
+- [Issues](https://github.com/FAHTHIZ/oasis/issues)
+- [Discussions](https://github.com/FAHTHIZ/oasis/discussions)
+- [Latest release](https://github.com/FAHTHIZ/oasis/releases/latest)
 
 ## License
 
-Apache License 2.0. See LICENSE.
+OASIS is distributed under the [Apache License 2.0](LICENSE).
