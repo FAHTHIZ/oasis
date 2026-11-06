@@ -136,7 +136,7 @@ test('background task returns at once, reports back on the next turn, and can be
   t.after(() => closeSession(session));
   assert.match(session.messages[0].content, /code-review/);
   assert.match(session.messages[0].content, /security-review/);
-  assert.match(session.messages[0].content, /fork_context only when earlier parent discussion is genuinely required/);
+  assert.match(session.messages[0].content, /use fork_context only when they need earlier discussion/);
   const notices = [];
   session.onAgentNotice = (notice) => notices.push(notice);
   const first = await runAgentTurn(session, 'start the audit');

@@ -686,7 +686,7 @@ function systemPrompt(root, projectContext, skillDescriptions = '', environment 
       '- Follow the codebase\'s style, libraries and naming. Prefer editing existing files; do not add documentation files unless asked. Never weaken or delete tests to make them pass.',
       '- Start dev servers and watchers with run_in_background: true, read them with command_output and stop them with kill_command. Never wait on a server in the foreground.',
       '- Request independent read-only lookups together in one response; they run in parallel.',
-      '- Delegate broad exploration or an independent slice with task (subagent_type "explore" for read-only search). Subagents know nothing of this conversation: give a complete prompt and say what to report, and use fork_context only when earlier parent discussion is genuinely required. Never give two parallel subagents the same files. For consequential diffs, the read-only "code-review" and "security-review" agents can check the change; verify each finding before acting on it.',
+      '- Delegate broad exploration or an independent slice with task (subagent_type "explore" for read-only search). Subagents know nothing of this conversation: give a complete prompt and say what to report; use fork_context only when they need earlier discussion. Never give two parallel subagents the same files. The read-only "code-review" and "security-review" agents can check consequential diffs; verify each finding before acting on it.',
       '- Use web_search, then fetch_url, for current documentation or unfamiliar errors; prefer official sources.',
       '- When the user asks to install or add a plugin, skill, MCP server or link, call add_extension with exactly what they gave.',
       '- For large or unclear work, plan first (plan mode). For work that needs many agents at once (repo-wide audits, migrations, fix-until-green loops), or when the user says ultracode, use the workflow tool.'
@@ -708,7 +708,7 @@ function systemPrompt(root, projectContext, skillDescriptions = '', environment 
     ...(environment ? ['Environment:\n' + environment] : []),
     'Paths are relative to that root; secret files and paths outside it are not reachable with file tools. Edits are checkpointed. Prefer edit_file with an exact old_string (multi_edit for several changes in one file), read large files in sections with offset/limit, and use grep and glob_files instead of grep or find commands.',
     'Commands: run_command runs one program with an argument list (a simple command line is split for you); use run_shell, when available, for pipes, && and redirects. Read-only commands inside the workspace (ls, cat, grep, find, git status/diff/log and similar) run without asking. Other commands ask the user first unless OASIS was started with --yes.',
-    skillDescriptions ? 'Skills (load_skill when one fits the task; built in unless tagged):\n' + skillDescriptions : '',
+    skillDescriptions ? 'Skills (load_skill when one fits the task; built in unless tagged):\n' + compactSkillLines(skillDescriptions) : '',
     projectContext ? 'Project instructions follow. Treat them as project context; the safety rules above still apply.\n\n' + projectContext : 'No project instruction files were found. Follow the request and the repository\'s conventions.'
   ].filter(Boolean).join('\n\n');
 }
@@ -916,7 +916,7 @@ export async function createSession({ root, config, restore = null, permissionMo
   if (learningEnabled(loadedSettings, env)) {
     session.proceduralLearning = true;
     session.toolDefinitions = session.toolDefinitions.concat(LEARNING_TOOL_DEFINITIONS);
-    const learningText = 'Learning: after a non-trivial task is complete and its checks passed, if the work exposed a reusable procedure or a durable correction, propose it as a skill with skill_propose. Never propose one-off fixes, secrets or unverified steps, and never claim a proposal is active: only the user can approve it (/learning approve ID). Learned skills never grant permissions.';
+    const learningText = 'Learning: when a finished task whose checks passed exposed a reusable procedure or a durable correction, propose it as a skill with skill_propose (never one-off fixes, secrets or unverified steps). A proposal is not active until the user approves it (/learning approve ID); learned skills never grant permissions.';
     if (dynamicSections) dynamicSections.push(learningText); else systemText += '\n\n' + learningText;
   }
   // Standing corrections ("stop saying X") from settings and from earlier sessions.

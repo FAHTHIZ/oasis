@@ -6,8 +6,8 @@ import { SHARED_TASK_TOOL_DEFINITIONS, SHARED_TASK_TOOL_NAMES, SHARED_TASK_READ_
 const fn = (name, description, properties, required = []) => ({ type: 'function', function: { name, description, parameters: { type: 'object', properties, required, additionalProperties: false } } });
 
 export const TOOL_SEARCH_DEFINITION = fn('tool_search',
-  'Find and load deferred TOOLS (usually MCP tools) by keyword. It does not search code or files: use grep or glob_files for that. Use "select:name1,name2" to load exact tools. Loaded tools become callable on your next step.',
-  { query: { type: 'string', description: 'Keywords, or select:<comma-separated tool names>.' }, max_results: { type: 'integer', minimum: 1, maximum: 20 } }, ['query']);
+  'Find and load deferred TOOLS by keyword, or exact ones with "select:name1,name2". Not for code or files (use grep or glob_files).',
+  { query: { type: 'string', description: 'Keywords or select:<names>' }, max_results: { type: 'integer', minimum: 1, maximum: 20 } }, ['query']);
 
 export const SESSION_TOOL_DEFINITIONS = [
   fn('terminal_read', 'Read new output from a real PTY terminal session. Use wait_seconds to wait briefly for more data. Keep the returned nextOffset and pass it as offset to avoid repeating old output.',
@@ -453,20 +453,21 @@ export const RARE_BUILTIN_TOOLS = Object.freeze([
 // OASIS_LEAN_TOOLS=0 or "leanTools": false sends every tool up front.
 export const CORE_TOOL_NAMES = Object.freeze([
   'read_file', 'list_files', 'glob_files', 'grep', 'edit_file', 'multi_edit', 'write_file',
-  'run_command', 'run_shell', 'powershell', 'command_output', 'kill_command',
+  'run_command', 'run_shell', 'powershell',
   'todo_write', 'task', 'web_search', 'fetch_url', 'ask_user_question',
-  'git_status', 'git_diff', 'memory_save', 'memory_search', 'load_skill', 'exit_plan_mode', 'tool_search'
+  'git_status', 'git_diff', 'load_skill', 'exit_plan_mode', 'tool_search'
 ]);
 
 // Built-in tools that wait until they are needed, grouped for the prompt.
 export const DEFERRED_TOOL_GROUPS = Object.freeze({
   'Git and GitHub': ['git_commit', 'git_branch', 'git_log', 'git_push', 'create_pull_request', 'enter_worktree', 'exit_worktree', 'worktree_inspect', 'worktree_merge'],
   'Code intelligence': ['repo_map', 'lsp', 'diagnostics', 'search_files', 'notebook_edit', 'execute_code', 'security_scan', 'report_findings', 'run_specialist_review'],
-  'Background work': ['agent_status', 'agent_events', 'agent_stop', 'send_message', 'list_background', 'monitor', 'monitor_command', 'notify',
+  'Files': ['delete_file'],
+  'Background work': ['command_output', 'kill_command', 'agent_status', 'agent_events', 'agent_stop', 'send_message', 'list_background', 'monitor', 'monitor_command', 'notify',
     'terminal_read', 'terminal_list', 'terminal_input', 'terminal_resize', 'terminal_interrupt', 'terminal_stop', 'cron_create', 'cron_list', 'cron_delete'],
   'Task board and teams': ['task_create', 'task_list', 'task_get', 'task_update', 'task_claim', 'task_release', 'task_renew', 'task_checkpoint', 'dispatch_ready_tasks',
     'team_create', 'team_send_message', 'team_status', 'team_shutdown', 'workflow'],
-  'Memory, skills and sessions': ['memory_read', 'memory_verify', 'memory_delete', 'list_skills', 'read_skill_resource', 'skill_propose', 'session_search', 'enter_plan_mode'],
+  'Memory, skills and sessions': ['memory_save', 'memory_search', 'memory_read', 'memory_verify', 'memory_delete', 'list_skills', 'read_skill_resource', 'skill_propose', 'session_search', 'enter_plan_mode'],
   'Setup': ['add_extension', 'install_package', 'install_extension', 'install_plugin', 'install_external_skill', 'configure_provider', 'configure_mcp_server']
 });
 const DEFERRED_BUILTIN_TOOLS = new Set(Object.values(DEFERRED_TOOL_GROUPS).flat());

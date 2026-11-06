@@ -132,7 +132,8 @@ test('sessions see the index, recall memories per prompt, and save through tools
   const session = await createSession({ root, config, env });
   t.after(() => closeSession(session));
   assert.match(session.messages[0].content, /Use pnpm, not npm/);
-  assert.ok(session.toolDefinitions.some((tool) => tool.function.name === 'memory_save'));
+  // memory_save is deferred (named in the prompt, schema sent on first use); a direct call still saves.
+  assert.ok(session.toolDefinitions.some((tool) => tool.function.name === 'memory_save') || session.deferredTools.has('memory_save'));
   await runAgentTurn(session, 'install the lodash package for me', { env, autoApprove: false, approval: async () => false });
   assert.match(requests[0].messages.at(-1).content, /<recalled-memories[\s\S]*pnpm workspaces/);
   assert.ok((await listMemories(root, { env })).some((m) => m.name === 'Release day'));

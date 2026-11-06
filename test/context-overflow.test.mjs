@@ -5,6 +5,7 @@ import { mkdtemp, writeFile, rm } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { createSession, runAgentTurn, isContextOverflowError, stopFailureType } from '../src/agent.mjs';
+import { SMALL_CONTEXT_TOOLS } from '../src/local-context.mjs';
 
 test('recognizes provider context-overflow errors', () => {
   for (const message of ['prompt is too long: 210000 tokens > 200000 maximum', "This model's maximum context length is 128000 tokens", 'context_length_exceeded', 'Input is too long for requested model', 'Request too large']) {
@@ -61,7 +62,7 @@ test('a first request that overflows a small local window drops to the small-con
     for await (const chunk of req) body += chunk.toString();
     const tools = (JSON.parse(body).tools || []).length;
     toolCounts.push(tools);
-    if (tools > 20) {
+    if (tools > SMALL_CONTEXT_TOOLS.length) {
       res.writeHead(400, { 'content-type': 'application/json' });
       res.end(JSON.stringify({ error: { code: 400, type: 'exceed_context_size_error', message: 'request (16695 tokens) exceeds the available context size (16384 tokens), try increasing it' } }));
       return;
@@ -79,7 +80,7 @@ test('a first request that overflows a small local window drops to the small-con
   // The full system prompt is swapped for the compact one as well as the tools.
   assert.ok(session.messages[0].content.length < fullSystemLength, session.messages[0].content.length + ' vs ' + fullSystemLength);
   assert.match(session.messages[0].content, /^You are OASIS, a coding agent running in the user’s workspace\./);
-  assert.ok(toolCounts[0] > 20 && toolCounts.at(-1) <= 20, toolCounts.join(','));
+  assert.ok(toolCounts[0] > SMALL_CONTEXT_TOOLS.length && toolCounts.at(-1) <= SMALL_CONTEXT_TOOLS.length, toolCounts.join(','));
   assert.equal(session.config.contextWindow, 16384);
   assert.equal(events[0].smallContextTools, true);
   assert.ok(session.toolDefinitions.some((tool) => tool.function.name === 'tool_search'));
@@ -94,7 +95,7 @@ test('a llama-server overflow on an unprobed port identifies the server for prom
     for await (const chunk of req) body += chunk.toString();
     const parsed = body ? JSON.parse(body) : {};
     bodies.push(parsed);
-    if ((parsed.tools || []).length > 20) {
+    if ((parsed.tools || []).length > SMALL_CONTEXT_TOOLS.length) {
       res.writeHead(400, { 'content-type': 'application/json' });
       res.end(JSON.stringify({ error: { code: 400, type: 'exceed_context_size_error', message: 'request (16695 tokens) exceeds the available context size (16384 tokens), try increasing it' } }));
       return;

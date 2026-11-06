@@ -181,16 +181,16 @@ export function taskToolDefinition(agents) {
   const list = kept.join('\n');
   return { type: 'function', function: {
     name: 'task',
-    description: 'Run a subagent on a multi-step task in its own context; it returns one report. It cannot see this conversation, so give a complete, self-contained prompt. Several task calls in ONE response run in parallel (max ' + MAX_PARALLEL_SUBAGENTS + '). Each returns an id for send_message follow-ups.\nAgent types:\n' + list,
+    description: 'Run a subagent with its own context; it returns one report. It cannot see this conversation: give a complete, self-contained prompt. Task calls in ONE response run in parallel (max ' + MAX_PARALLEL_SUBAGENTS + '); each returns an id for send_message.\nAgent types:\n' + list,
     parameters: { type: 'object', properties: {
       description: { type: 'string', description: '3-5 word label' },
       prompt: { type: 'string', description: 'Full instructions, including what to return' },
       subagent_type: { type: 'string', enum: Object.keys(agents), description: 'Default general-purpose' },
-      run_in_background: { type: 'boolean', description: 'Return the id now; the report arrives later. It cannot ask for approval, so unallowed actions are denied.' },
-      isolation: { type: 'string', enum: ['worktree'], description: 'Edit in its own git worktree and branch; the result lists the branch and merge command.' },
+      run_in_background: { type: 'boolean', description: 'Return the id now, report later. It cannot ask for approval; unallowed actions are denied.' },
+      isolation: { type: 'string', enum: ['worktree'], description: 'Work in its own git worktree and branch' },
       team_id: { type: 'string', description: 'Team ID from team_create' },
       model: { type: 'string', description: 'Model ID; omit to inherit' },
-      fork_context: { type: 'boolean', description: 'Give it a bounded copy of this conversation (only when it needs earlier discussion).' }
+      fork_context: { type: 'boolean', description: 'Give it a bounded copy of this conversation, only if it needs earlier discussion' }
     }, required: ['description', 'prompt'] }
   } };
 }
