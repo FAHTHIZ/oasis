@@ -365,6 +365,12 @@ test('markdown renderer escapes HTML and only links http(s)', async () => {
   assert.match(html, /href="https:\/\/a\.b\/c\?d=1&amp;e=2"/);
   assert.match(html, /<code data-lang="js">&lt;b&gt;<\/code>/);
   assert.match(html, /<table>/);
+  // CommonMark/GFM structure from marked: nesting, links with parentheses, images never load.
+  const rich = renderMarkdown('- a\n  - b\n\n[wiki](https://en.wikipedia.org/wiki/Foo_(bar)) ![p](https://t.example/x.png) ![q](javascript:alert(1)) <a href="javascript:1">a</a>');
+  assert.match(rich, /<li>a<ul>\s*<li>b<\/li>/);
+  assert.match(rich, /href="https:\/\/en\.wikipedia\.org\/wiki\/Foo_\(bar\)"/);
+  assert.ok(!rich.includes('<img') && !/href="javascript/i.test(rich) && !rich.includes('<a href="javascript'));
+  assert.match(rich, /&lt;a href=&quot;javascript:1&quot;&gt;/);
 });
 
 test('app build ships only browser-safe modules and a skills index', async () => {
