@@ -363,9 +363,13 @@ Findings while integrating:
 - A test that ran `curl -o` passed without curl ever starting, because `-o`
   needs approval as high risk. The test now asserts that the command ran.
 
+### 13. File globs: picomatch
+
+Four hand-written glob-to-regex compilers existed: `src/tools.mjs` (glob_files; no braces, no classes), `src/power-tools.mjs` (grep fallback; braces, no classes), `src/permissions.mjs` (permission rules) and `app/core/tools.mjs` (browser app). The first two now use picomatch through `src/glob.mjs`. A regression test (braces, classes, a literal `[id]` folder) fails on the old code and passes now. Kept: the permission matcher, because changing what a deny rule covers is a security change and its behaviour follows Claude Code's rule syntax; and the browser app's matcher, because picomatch is CommonJS-only and cannot load through the import map (minimatch and zeptomatch are ESM but bring dependency chains that would also need vendoring).
+
 ## Next
 
-- Candidate: validate tool-call arguments against tool schemas with Ajv before execution (Claude Code returns InputValidationError). Needs care: built-in tools accept alias argument names.
+- Decided against Ajv validation in front of built-in tools: they already reject bad input with specific messages ("edit_file needs old_string … got path"), coerce numeric strings, and accept documented argument aliases that a strict schema would refuse.
 - Live A/B of observation masking (solve rate and provider-reported tokens) before considering it as a default for local providers.
 - Merge the definition and noise queries into one pass, or parse in a worker
   pool, if first-scan latency matters for large repositories.
