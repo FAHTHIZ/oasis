@@ -53,3 +53,29 @@ test('oasis mcp serve works with an MCP client over stdio', async (t) => {
   assert.equal(result.isError, false);
   assert.equal(await readFile(path.join(root, 'notes.md'), 'utf8'), 'line one\nline 2\n');
 });
+
+test('mcp serve refuses edits to protected config such as git hooks', async (t) => {
+  // Regression: --allow-edits wrote .git/hooks/pre-commit with no check; the
+  // agent itself always asks before that write.
+  const { mkdtemp, rm, writeFile: write } = await import('node:fs/promises');
+  const { existsSync } = await import('node:fs');
+  const os = await import('node:os');
+  const pathMod = await import('node:path');
+  const root = await mkdtemp(pathMod.join(os.tmpdir(), 'oasis-serve-protected-'));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const handle = createMcpServeHandler({ root, allowEdits: true, env: {} });
+  t.after(() => handle.close());
+  const call = (id, name, args) => handle({ jsonrpc: '2.0', id, method: 'tools/call', params: { name, arguments: args } });
+  for (const [i, file] of ['.git/hooks/pre-commit', '.oasis/settings.json', '.mcp.json', '.vscode/tasks.json'].entries()) {
+    const reply = await call(i + 1, 'write_file', { path: file, content: 'x' });
+    assert.equal(reply.result.isError, true, file);
+    assert.match(reply.result.content[0].text, /protected configuration/);
+    assert.equal(existsSync(pathMod.join(root, file)), false, file);
+  }
+  const ok = await call(9, 'write_file', { path: 'notes.txt', content: 'x' });
+  assert.equal(ok.result.isError, false);
+  const allowed = createMcpServeHandler({ root, allowEdits: true, env: { OASIS_ALLOW_CONFIG_EDITS: '1' } });
+  t.after(() => allowed.close());
+  const opted = await allowed({ jsonrpc: '2.0', id: 10, method: 'tools/call', params: { name: 'write_file', arguments: { path: '.mcp.json', content: '{}' } } });
+  assert.equal(opted.result.isError, false, 'OASIS_ALLOW_CONFIG_EDITS opts in');
+});
