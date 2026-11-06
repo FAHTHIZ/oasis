@@ -114,7 +114,9 @@ test('runtime engine end to end: app at /, paste to connect, approve a real edit
   } catch { git = false; }
   const env = { ...process.env, OASIS_CONFIG_DIR: configDir, OASIS_API_KEY: '', OPENAI_API_KEY: '', ANTHROPIC_API_KEY: '', OPENROUTER_API_KEY: '' };
   delete env.OASIS_NO_UPDATE_CHECK;
-  delete env.OASIS_UPDATE_CHECK;
+  // CI runners set CI=true, which turns update checks off unless
+  // OASIS_UPDATE_CHECK opts back in; this test needs the check on.
+  env.OASIS_UPDATE_CHECK = '1';
   const updateFetchImpl = async () => ({ ok: true, status: 200, json: async () => ({ tag_name: 'v99.0.0', name: 'OASIS v99.0.0', html_url: 'https://github.com/FAHTHIZ/oasis/releases/tag/v99.0.0', assets: [] }) });
   const app = await startOasisWebServer({ root, host: '127.0.0.1', port: 0, env, token: 'test-runtime-token-0123456789abcdef', updateFetchImpl });
   const browser = await Browser.launch({ env: { ...process.env, OASIS_CHROME_HEADLESS: '1' }, executable: chrome });
