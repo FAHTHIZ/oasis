@@ -14,11 +14,9 @@
 //   OASIS_PROXY=0               ignore all of the above
 //
 // Custom CA bundles: Node reads NODE_EXTRA_CA_CERTS itself at startup.
-import http from 'node:http';
-import https from 'node:https';
 import net from 'node:net';
 import tls from 'node:tls';
-import { nodeFetch, OASIS_FETCH } from './loopback-fetch.mjs';
+import { OASIS_FETCH } from './loopback-fetch.mjs';
 
 function first(env, ...names) {
   for (const name of names) {
@@ -153,88 +151,62 @@ export async function openTunnel(proxy, host, port, { signal } = {}) {
   });
 }
 
+// Proxied requests use undici's fetch with a ProxyAgent dispatcher (undici is
+// the library behind Node's own fetch). It handles every body and Request
+// type, redirects (dropping credentials across origins, per the Fetch spec),
+// CONNECT tunnels for https:// (TLS stays end to end; the proxy never sees the
+// request or the API key), and absolute-URI forwarding for http:// targets.
+// OASIS keeps the policy: which proxy, NO_PROXY (with CIDR), loopback direct.
+// undici is imported on the first proxied request (~80 ms), not at startup.
+let undiciModule = null;
+const loadUndici = () => (undiciModule ??= import('undici'));
+const agents = new Map();
+function agentFor(proxy, ProxyAgent) {
+  const key = proxy.href;
+  if (!agents.has(key)) {
+    const uri = new URL(proxy.href);
+    uri.username = ''; uri.password = '';
+    agents.set(key, new ProxyAgent({
+      uri: uri.href,
+      token: proxyAuthorization(proxy) || undefined,
+      // Plain http:// targets are forwarded, not tunnelled: many proxies only
+      // allow CONNECT to port 443.
+      proxyTunnel: false,
+      // Model streams can stay quiet for minutes; callers set their own timeouts.
+      headersTimeout: 0,
+      bodyTimeout: 0
+    }));
+  }
+  return agents.get(key);
+}
+
+function refusalHint(error) {
+  const text = String(error && (error.cause && error.cause.message || error.message) || '');
+  return /\b407\b/.test(text) ? ' (proxy authentication required: put credentials in the proxy URL, e.g. http://user:pass@proxy:8080)' : '';
+}
+
 /** fetch() that routes through the env-configured proxy, falling back to `direct` for bypassed targets. */
 export function createProxyFetch({ env = process.env, direct = globalThis.fetch } = {}) {
-  return function proxyFetch(input, init = {}) {
+  return async function proxyFetch(input, init = {}) {
+    const isRequest = input && typeof input === 'object' && !(input instanceof URL) && typeof input.url === 'string';
     let url;
-    try { url = new URL(typeof input === 'string' || input instanceof URL ? String(input) : input.url); } catch { return direct(input, init); }
+    try { url = new URL(isRequest ? input.url : String(input)); } catch { return direct(input, init); }
     const proxy = proxyForUrl(url, env);
-    // Request objects carry their own body/headers; only plain (url, init) calls are proxied.
-    if (!proxy || (typeof input === 'object' && !(input instanceof URL))) return direct(input, init);
-    if (init && init.body != null && typeof init.body !== 'string' && !(init.body instanceof Uint8Array) && !(init.body instanceof ArrayBuffer)) {
-      if (typeof URLSearchParams !== 'undefined' && init.body instanceof URLSearchParams) {
-        init = { ...init, body: init.body.toString(), headers: withDefaultHeader(init.headers, 'content-type', 'application/x-www-form-urlencoded;charset=UTF-8') };
-      } else return direct(input, init);
+    if (!proxy) return direct(input, init);
+    // A Request from Node's bundled fetch is a different class than undici's,
+    // so pass its parts explicitly.
+    const request = isRequest
+      ? { method: input.method, headers: input.headers, body: input.body, duplex: input.body ? 'half' : undefined, redirect: input.redirect, signal: input.signal, ...init }
+      : init;
+    try {
+      const { fetch: undiciFetch, ProxyAgent } = await loadUndici();
+      return await undiciFetch(url, { ...request, dispatcher: agentFor(proxy, ProxyAgent) });
+    } catch (error) {
+      const hint = refusalHint(error);
+      if (hint && error instanceof Error) error.message += hint;
+      throw error;
     }
-    return followRedirects(url, init, (target, request) => nodeFetch(target, request, (target, options, onResponse) => {
-      if (target.protocol === 'https:') {
-        const host = target.hostname.replace(/^\[|\]$/g, '');
-        return openTunnel(proxy, host, Number(target.port) || 443, { signal: init.signal }).then((socket) => {
-          // A one-request agent whose only connection is TLS over the tunnel; the
-          // certificate is verified against the real host name as usual.
-          const agent = new https.Agent({ keepAlive: false });
-          agent.createConnection = () => tls.connect({ socket, servername: net.isIP(host) ? undefined : host, ALPNProtocols: ['http/1.1'] });
-          return https.request(target, { ...options, agent }, onResponse);
-        });
-      }
-      const auth = proxyAuthorization(proxy);
-      const transport = proxy.protocol === 'https:' ? https : http;
-      return Promise.resolve(transport.request({
-        protocol: proxy.protocol,
-        hostname: proxy.hostname.replace(/^\[|\]$/g, ''),
-        port: Number(proxy.port) || (proxy.protocol === 'https:' ? 443 : 80),
-        method: options.method,
-        path: target.href,
-        headers: { ...options.headers, host: target.host, ...(auth ? { 'proxy-authorization': auth } : {}) },
-        timeout: 0,
-        agent: false
-      }, onResponse));
-    }));
   };
-}
-
-// fetch()'s redirect modes: 'follow' (default, up to 20 hops), 'error', 'manual'.
-// Like browsers, 303 (and 301/302 after POST) become GET without a body, and
-// credentials are dropped when a redirect leaves the original origin.
-async function followRedirects(url, init, send) {
-  const mode = init.redirect || 'follow';
-  let target = url;
-  let request = init;
-  for (let hop = 0; ; hop++) {
-    const response = await send(target, request);
-    if (![301, 302, 303, 307, 308].includes(response.status) || mode === 'manual') return withUrl(response, target);
-    const location = response.headers.get('location');
-    if (!location) return withUrl(response, target);
-    if (mode === 'error') { await response.body?.cancel().catch(() => {}); throw new TypeError('fetch failed: redirect mode is set to error'); }
-    if (hop >= 20) { await response.body?.cancel().catch(() => {}); throw new TypeError('fetch failed: too many redirects'); }
-    await response.body?.cancel().catch(() => {});
-    const next = new URL(location, target);
-    if (next.protocol !== 'http:' && next.protocol !== 'https:') throw new TypeError('fetch failed: unsupported redirect scheme');
-    const method = String(request.method || 'GET').toUpperCase();
-    const toGet = response.status === 303 ? method !== 'HEAD' : (response.status === 301 || response.status === 302) && method === 'POST';
-    const headers = {};
-    const source = request.headers || {};
-    if (typeof source.forEach === 'function' && !Array.isArray(source)) source.forEach((v, k) => { headers[k.toLowerCase()] = v; });
-    else for (const [k, v] of Object.entries(source)) headers[k.toLowerCase()] = v;
-    if (next.origin !== target.origin) { delete headers.authorization; delete headers.cookie; delete headers['proxy-authorization']; }
-    if (toGet) { delete headers['content-type']; delete headers['content-length']; }
-    delete headers.host;
-    request = { ...request, headers, ...(toGet ? { method: 'GET', body: undefined } : {}) };
-    target = next;
-  }
-}
-
-function withUrl(response, url) {
-  try { Object.defineProperty(response, 'url', { value: url.href }); } catch {}
-  return response;
-}
-
-function withDefaultHeader(headers, name, value) {
-  const out = {};
-  if (headers && typeof headers.forEach === 'function' && !Array.isArray(headers)) headers.forEach((v, k) => { out[k] = v; });
-  else Object.assign(out, headers || {});
-  if (!Object.keys(out).some((k) => k.toLowerCase() === name)) out[name] = value;
-  return out;
 }
 
 let installed = false;
