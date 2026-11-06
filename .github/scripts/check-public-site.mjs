@@ -1,16 +1,14 @@
 import { readFile } from 'node:fs/promises';
-import { readFileSync } from 'node:fs';
+import { existsSync } from 'node:fs';
 import { strict as assert } from 'node:assert';
 
 const read = (path) => readFile(new URL(path, import.meta.url), 'utf8');
-const [html, robots, sitemap, icon, socialPreview, packageText, readme, licenseText] = await Promise.all([
+const [html, robots, sitemap, icon, packageText, licenseText] = await Promise.all([
   read('../../site/index.html'),
   read('../../site/robots.txt'),
   read('../../site/sitemap.xml'),
   read('../../site/assets/oasis-icon.svg'),
-  read('../../site/assets/oasis-social-preview.svg'),
   read('../../package.json'),
-  read('../../README.md'),
   read('../../LICENSE')
 ]);
 
@@ -21,11 +19,11 @@ const required = [
   '<!doctype html>', '<html lang="en">', '<meta name="description"',
   'property="og:title"', 'rel="canonical"', 'id="hero-title"',
   'id="features"', 'id="providers"', 'id="safety"', 'id="docs"',
-  'https://github.com/FAHTHIZ/oasis/releases', 'https://github.com/FAHTHIZ/oasis/blob/main/docs/TERMUX.md', 'no terminal required',
+  'https://github.com/FAHTHIZ/oasis/releases', 'no terminal required',
   'Download OASIS 1.0', 'Install the CLI', 'https://github.com/FAHTHIZ/oasis/releases/latest', 'Download the latest release',
-  'https://github.com/FAHTHIZ/oasis', 'docs/USER_GUIDE.md', 'MCP', 'Ollama', 'Apache-2.0',
+  'https://github.com/FAHTHIZ/oasis', 'MCP', 'Ollama', 'Apache-2.0',
   'Desktop app (no terminal required)', 'Universal app (phone, tablet, any computer)', 'Open the app', 'href="app/"', 'Terminal (for developers)', 'Privacy note',
-  'property="og:image"', 'summary_large_image', 'OASIS 1.0 · Stable · Open source · Apache-2.0', 'docs/PROJECT_PLAN.md'
+  'OASIS 1.0 · Stable · Open source · Apache-2.0'
 ];
 // Visible text can contain inline icons (for example a link arrow), so text markers also match the tag-free copy.
 const visibleText = html.replace(/<[^>]+>/g, '');
@@ -39,24 +37,26 @@ assert.ok(
   'The primary homepage action must lead to the latest published release.'
 );
 assert.ok(
-  heroActions.includes('href="https://github.com/FAHTHIZ/oasis/blob/main/docs/INSTALL.md"') &&
+  heroActions.includes('href="#install-cmd"') && html.includes('id="install-cmd"') &&
   heroActions.includes('Install the CLI'),
-  'The secondary action must lead to the install guide.'
+  'The secondary action must lead to the install command.'
 );
 assert.ok(!/release candidate|\bRC1\b|1\.0 RC/i.test(html), 'Homepage must not describe 1.0 as a release candidate.');
 assert.ok(html.includes(expectedUrl), 'Canonical and social URL should match the Pages URL.');
 assert.ok(html.includes('content="' + expectedDescription + '"'), 'Homepage meta description must match the approved concise description.');
-assert.ok(html.includes('property="og:image" content="' + expectedUrl + 'assets/oasis-social-preview.png"') && html.includes('name="twitter:image" content="' + expectedUrl + 'assets/oasis-social-preview.png"'), 'Open Graph and Twitter must use the PNG social preview: most link previews do not render SVG.');
-{
-  const png = readFileSync(new URL('../../site/assets/oasis-social-preview.png', import.meta.url));
-  assert.ok(png.subarray(1, 4).toString() === 'PNG' && png.readUInt32BE(16) === 1200 && png.readUInt32BE(20) === 630, 'Social preview PNG must be 1200x630.');
+// Every repository file and site asset the page links to must exist, so deleting a file cannot leave a dead link.
+for (const [, url] of html.matchAll(/(?:href|src|poster|content)="([^"]+)"/g)) {
+  const repoPath = (url.match(/^https:\/\/github\.com\/FAHTHIZ\/oasis\/(?:blob|tree)\/main\/([^#?]+)/) || [])[1];
+  const sitePath = (url.match(/^(?:https:\/\/fahthiz\.github\.io\/oasis\/)?(assets\/[^#?"]+)$/) || [])[1];
+  const target = repoPath ? '../../' + repoPath : sitePath ? '../../site/' + sitePath : '';
+  if (target) assert.ok(existsSync(new URL(target, import.meta.url)), 'Homepage links to a missing file: ' + url);
 }
-assert.ok(socialPreview.includes('width="1200" height="630"') && socialPreview.includes('<svg'), 'Social preview must be a 1200x630 SVG image.');
-assert.ok(socialPreview.includes('OASIS') && !socialPreview.includes('OASIS OSS') && socialPreview.includes('CODE. AUTOMATE.') && socialPreview.includes('local-first workspace'), 'Social preview must use the current OASIS-only product identity and descriptor.');
+for (const [, anchor] of html.matchAll(/href="#([^"]+)"/g)) {
+  if (!anchor.startsWith('i-')) assert.ok(html.includes('id="' + anchor + '"'), 'Homepage links to a missing section: #' + anchor);
+}
 assert.ok(html.includes('OASIS 1.0 · Stable · Open source · Apache-2.0'), 'Public homepage must show the stable 1.0 lifecycle.');
 assert.ok(!/\bMIT\b/i.test(html), 'Homepage must not describe the Apache-licensed project as MIT-licensed.');
 assert.ok(!html.includes('There are no native IDE extensions'), 'Homepage limitations must acknowledge the existing VS Code integration.');
-assert.ok(html.includes('docs/INSTALL.md') && html.includes('docs/USER_GUIDE.md'), 'Homepage must link directly to Install and the detailed User Guide.');
 assert.ok(html.includes('unsigned') && html.includes('SHA-256 checksums'), 'Homepage must state that installers are unsigned and checksum-verified.');
 assert.ok(/The packaged app does not require a separate Node\.js or Git installation/i.test(html), 'Homepage must explain that the packaged desktop app includes its own runtime.');
 assert.ok(html.includes('grid-template-columns:repeat(3,minmax(0,1fr))') && html.includes('@media(max-width:850px){.install-choices{grid-template-columns:repeat(2,minmax(0,1fr))}') && html.includes('@media(max-width:560px){.install-choices{grid-template-columns:1fr}'), 'Platform choices must fit desktop, tablet, and mobile layouts.');
@@ -71,9 +71,6 @@ const pkg = JSON.parse(packageText);
 assert.equal(pkg.license, 'Apache-2.0', 'package.json must declare Apache-2.0 as the project license.');
 assert.equal(pkg.repository?.url, expectedRepoUrl, 'package.json must point to the canonical FAHTHIZ/oasis repository.');
 assert.ok(pkg.keywords.includes('ai-coding-agent') && pkg.keywords.includes('agent-skills') && pkg.keywords.includes('ollama'));
-assert.ok(!readme.includes('gtxnrg-ship-it/oasis'), 'README must not contain links to the old gtxnrg-ship-it/oasis repository.');
-assert.ok(readme.includes('https://github.com/FAHTHIZ/oasis') && readme.includes('license-Apache--2.0-blue.svg'), 'README must link to the canonical repository and show the Apache-2.0 badge.');
-assert.ok(readme.includes('Apache License 2.0 — see [LICENSE](LICENSE).'), 'README must explain where to find the Apache-2.0 license.');
 assert.ok(
   licenseText.startsWith('                                 Apache License\n                           Version 2.0, January 2004') &&
   licenseText.includes('TERMS AND CONDITIONS FOR USE, REPRODUCTION, AND DISTRIBUTION') &&
@@ -88,5 +85,4 @@ assert.match(pkg.version, /^1\.\d+\.\d+$/, 'The desktop package must retain nume
 assert.equal(pkg.oasisRelease?.channel, 'stable', 'The package must carry the stable channel.');
 assert.equal(pkg.oasisRelease?.candidate, undefined, 'A stable package must not carry a candidate number.');
 assert.equal(pkg.oasisRelease?.stableTag, 'v' + pkg.version, 'The package must identify the intended stable tag.');
-assert.ok(readme.includes('1.0.0') && readme.includes('stable') && !/Release Candidate 1|\bRC1\b/.test(readme), 'README must describe the stable 1.0 lifecycle.');
 console.log('OASIS public-site checks passed: metadata, links, stable 1.0 branding, canonical repo, and Apache-2.0 license consistency.');

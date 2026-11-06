@@ -321,7 +321,6 @@ const STATIC_FILES = new Map([
   ['/assets/activity-artifacts.css', ['assets/activity-artifacts.css', 'text/css; charset=utf-8']],
   ['/assets/oasis-mark.svg', ['assets/oasis-mark.svg', 'image/svg+xml']],
   ['/assets/oasis-logo.svg', ['assets/oasis-logo.svg', 'image/svg+xml']],
-  ['/assets/oasis-readme-banner.svg', ['assets/oasis-readme-banner.svg', 'image/svg+xml']],
   ['/assets/vendor/xterm.js', ['assets/vendor/xterm.js', 'text/javascript; charset=utf-8']],
   ['/assets/vendor/xterm.css', ['assets/vendor/xterm.css', 'text/css; charset=utf-8']],
   ['/assets/vendor/xterm-addon-fit.js', ['assets/vendor/xterm-addon-fit.js', 'text/javascript; charset=utf-8']]
