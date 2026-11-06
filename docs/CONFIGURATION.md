@@ -143,3 +143,25 @@ Sources: `src/tools.mjs`, `src/power-tools.mjs`, `src/git-visible-files.mjs`.
   a window of roughly 120 characters before and 240 after the match, marked
   `[match at column N of a long line]`. With ripgrep this uses a second,
   match-only pass (`-o -b --column`) over the affected files (up to 50).
+
+## Command output
+
+Sources: `src/output-condense.mjs`, `runWorkspaceCommand` in `src/tools.mjs`,
+`runShell` in `src/power-tools.mjs`.
+
+`run_command` and `run_shell` pass command output through a streaming filter
+before the model sees it. It removes only:
+
+- node --test / TAP: the `# Subtest: X` line directly before `ok N - X`, and the
+  YAML block after a passing test when it holds only `duration_ms` and `type`.
+  Failing tests (`not ok`) and blocks with any other key keep every line.
+- npm's "New major version of npm available" banner. Other `npm notice` lines
+  stay.
+- go test -v: `=== RUN   X` directly followed by `--- PASS: X`.
+- Progress redraws: a line rewritten with carriage returns keeps its final frame.
+
+When lines were removed, the result has an `outputCondensed` note. `run_command`
+also keeps the raw output in `.oasis/command-logs/` (the same place truncated
+output goes) and names the file; `run_shell` keeps no raw log. That directory
+contains a `.gitignore` with `*`, so logs do not appear in `git status`,
+`git_diff` or `git add -A`. Set `OASIS_CONDENSE_OUTPUT=0` to turn the filter off.

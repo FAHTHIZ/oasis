@@ -33,6 +33,7 @@ import { fileGlobMatcher } from './glob.mjs';
 import { editNotebook } from './notebook.mjs';
 import { processTreeSpawnOptions, signalProcessTree } from './process-tree.mjs';
 import { createBoundedRegexMatcher } from './safe-regex.mjs';
+import { condenseOutputEnabled, createOutputCondenser } from './output-condense.mjs';
 
 const MAX_TEXT_FILE = 256 * 1024;
 // Exact-string edits only rewrite the matched span, so they can safely handle files far
@@ -664,9 +665,18 @@ async function runShell(root, args, context, flavor = 'sh') {
     return safetySnapshot && started && typeof started === 'object' ? { ...started, safetySnapshot: gitSafety.snapshotNote(safetySnapshot) } : started;
   }
   const timeoutSeconds = Math.max(5, Math.min(600, Number.parseInt(args.timeoutSeconds, 10) || 120));
+  const condensers = condenseOutputEnabled(context.env || process.env) ? { stdout: createOutputCondenser(), stderr: createOutputCondenser() } : null;
   return await new Promise((resolve) => {
     let stdout = '';
     let stderr = '';
+    // run_shell keeps no raw log, so the note says how to see everything.
+    const flushCondensers = () => {
+      if (!condensers) return {};
+      stdout = (stdout + condensers.stdout.end()).slice(-MAX_OUTPUT);
+      stderr = (stderr + condensers.stderr.end()).slice(-MAX_OUTPUT);
+      const lines = condensers.stdout.removed + condensers.stderr.removed;
+      return lines ? { outputCondensed: 'Left out ' + lines + ' line' + (lines === 1 ? '' : 's') + ' of passing-test timing, repeated test headers or npm update notices (OASIS_CONDENSE_OUTPUT=0 keeps them).' } : {};
+    };
     let timedOut = false;
     let cancelled = false;
     let settled = false;
@@ -698,6 +708,7 @@ async function runShell(root, args, context, flavor = 'sh') {
         child.stderr.removeAllListeners('data');
         child.removeAllListeners('close');
         child.removeAllListeners('error');
+        flushCondensers();
         import('./monitors.mjs').then(({ backgroundExitNotifier, backgroundStuckNotifier }) => {
           const started = startBackgroundProcess(registry, null, { adopt: { child, output: stdout + (stderr ? (stdout ? '\n' : '') + stderr : ''), startedAt }, env: context.env || process.env, display: command, sandboxed: sandbox ? sandbox.kind : null, onExit: backgroundExitNotifier(context.session), onStuck: backgroundStuckNotifier(context.session) });
           resolve({ approved: true, command, exitCode: null, stdout, stderr, timedOut: true, movedToBackground: true, background: true, id: started.id, pid: child.pid, message: 'Still running after ' + timeoutSeconds + ' seconds, so it was moved to the background instead of being stopped. Output so far is above; read more with command_output (id ' + started.id + '), stop it with kill_command, or wait for the exit notice.', ...(sandbox ? { sandboxed: sandbox.kind } : {}), ...(safetySnapshot ? { safetySnapshot: gitSafety.snapshotNote(safetySnapshot) } : {}) });
@@ -710,19 +721,21 @@ async function runShell(root, args, context, flavor = 'sh') {
       if (context.signal.aborted) onAbort();
       else context.signal.addEventListener('abort', onAbort, { once: true });
     }
-    child.stdout.on('data', (chunk) => { stdout = (stdout + chunk).slice(-MAX_OUTPUT); });
-    child.stderr.on('data', (chunk) => { stderr = (stderr + chunk).slice(-MAX_OUTPUT); });
+    child.stdout.on('data', (chunk) => { stdout = (stdout + (condensers ? condensers.stdout.push(chunk) : chunk)).slice(-MAX_OUTPUT); });
+    child.stderr.on('data', (chunk) => { stderr = (stderr + (condensers ? condensers.stderr.push(chunk) : chunk)).slice(-MAX_OUTPUT); });
     child.on('error', (error) => {
       if (settled) return;
       settled = true;
       cleanup();
-      resolve({ approved: true, command, exitCode: null, stdout, stderr, error: error.message, timedOut, cancelled, ...(safetySnapshot ? { safetySnapshot: gitSafety.snapshotNote(safetySnapshot) } : {}) });
+      const condensed = flushCondensers();
+      resolve({ approved: true, command, exitCode: null, stdout, stderr, error: error.message, timedOut, cancelled, ...condensed, ...(safetySnapshot ? { safetySnapshot: gitSafety.snapshotNote(safetySnapshot) } : {}) });
     });
     child.on('close', (code, signal) => {
       if (settled) return;
       settled = true;
       cleanup();
-      resolve({ approved: true, command, exitCode: code, stdout, stderr: flavor === 'powershell' ? stderr.replace(/\x1b\[[0-9;]*[A-Za-z]/g, '') : stderr, timedOut, cancelled: cancelled || Boolean(context.signal && context.signal.aborted), ...(sandbox ? { sandboxed: sandbox.kind } : {}), signal, ...(safetySnapshot ? { safetySnapshot: gitSafety.snapshotNote(safetySnapshot) } : {}) });
+      const condensed = flushCondensers();
+      resolve({ approved: true, command, exitCode: code, stdout, ...condensed, stderr: flavor === 'powershell' ? stderr.replace(/\x1b\[[0-9;]*[A-Za-z]/g, '') : stderr, timedOut, cancelled: cancelled || Boolean(context.signal && context.signal.aborted), ...(sandbox ? { sandboxed: sandbox.kind } : {}), signal, ...(safetySnapshot ? { safetySnapshot: gitSafety.snapshotNote(safetySnapshot) } : {}) });
     });
   });
 }
