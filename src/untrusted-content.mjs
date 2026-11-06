@@ -38,7 +38,8 @@ const SIGNALS = [
   [/\b(do not|don't|never)\b[^.\n]{0,30}\b(tell|inform|mention|reveal|show)\b[^.\n]{0,30}\b(the )?(user|human|developer|operator)\b/i, 'asks the agent to hide something from the user']
 ];
 
-const EXTERNAL_TOOLS = new Set(['fetch_url', 'web_search', 'browser']);
+// read_mcp_resource returns MCP server content just like mcp_* tool calls.
+const EXTERNAL_TOOLS = new Set(['fetch_url', 'web_search', 'browser', 'read_mcp_resource']);
 
 export function isExternalContentTool(name) {
   const n = String(name || '');
@@ -55,7 +56,10 @@ export function stripInvisible(text) {
 
 export function detectInjection(text) {
   if (typeof text !== 'string' || !text) return [];
-  const sample = text.length > 400000 ? text.slice(0, 200000) + text.slice(-200000) : text;
+  // A single zero-width or soft-hyphen character inside a word (ig\u200Bnore)
+  // is invisible to a reader but hid the phrase from the patterns.
+  const visible = text.replace(/[\u00AD\u200B-\u200D\u2060\uFEFF]/g, '');
+  const sample = visible.length > 400000 ? visible.slice(0, 200000) + visible.slice(-200000) : visible;
   const found = [];
   for (const [pattern, reason] of SIGNALS) if (pattern.test(sample)) found.push(reason);
   return found;
