@@ -168,7 +168,7 @@ test('native plugin exposes granted agent definitions to the loader only when gr
   assert.equal((await pluginSkills([plugin])).length,0);
 });
 
-test('native plugin updates compare prerelease identifiers and large core values semantically',async t=>{
+test('native plugin updates compare prerelease identifiers and the largest safe core values semantically',async t=>{
   const {pkg,env}=await setup(t);
   await writePackage(pkg,{version:'1.0.0-beta.2',permissions:['commands']});
   await installNativePlugin(pkg,{env,grantedPermissions:['commands']});
@@ -178,11 +178,13 @@ test('native plugin updates compare prerelease identifiers and large core values
     assert.equal(update.installed,true,version);
     assert.equal(update.version,version);
   }
-  const huge='999999999999999999999.0.0';
-  await writePackage(pkg,{version:huge,permissions:['commands']});
+  // npm's semver (like the npm registry) rejects components above
+  // Number.MAX_SAFE_INTEGER, so such a version fails validation instead of comparing.
+  await writePackage(pkg,{version:'999999999999999999999.0.0',permissions:['commands']});
+  await assert.rejects(validateNativePluginPackage(pkg), /semantic MAJOR/);
+  await writePackage(pkg,{version:'9007199254740991.0.0',permissions:['commands']});
   const largeCore=await installNativePlugin(pkg,{env,update:true,grantedPermissions:['commands']});
   assert.equal(largeCore.installed,true);
-  assert.equal(largeCore.version,huge);
   await writePackage(pkg,{version:'1.0.0-beta.99',permissions:['commands']});
   await assert.rejects(installNativePlugin(pkg,{env,update:true,grantedPermissions:['commands']}),/must increase the plugin version/);
   await writePackage(pkg,{version:'1.0.0-01',permissions:['commands']});
