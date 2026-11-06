@@ -1,6 +1,6 @@
 // /doctor inside a session: a compact health report for the current workspace.
 import { loadSettings } from './settings.mjs';
-import { detectSandbox, detectContainerRuntime } from './sandbox.mjs';
+import { detectSandbox, detectContainerRuntime, detectSandboxRuntime, domainList } from './sandbox.mjs';
 import { detectCheckers, findBinary } from './diagnostics.mjs';
 import { BUILTIN_SERVERS } from './lsp.mjs';
 import { onPathSync } from './clipboard-path.mjs';
@@ -29,6 +29,9 @@ export async function workspaceDoctor(root, { env = process.env, session = null 
     if (backend === 'ssh') {
       const { normalizeSshSettings, detectSshRuntime } = await import('./ssh-backend.mjs');
       sandbox = detectSshRuntime(normalizeSshSettings(settings.sandbox.ssh || {}, env, root));
+    } else if (backend === 'os' && domainList(settings.sandbox.allowedDomains).length) {
+      sandbox = detectSandboxRuntime();
+      lines.push('  Network: only ' + domainList(settings.sandbox.allowedDomains).join(', ') + ' (sandbox-runtime proxy)');
     } else sandbox = backend === 'os' ? detectSandbox() : detectContainerRuntime(backend);
     lines.push('  Sandbox: ' + (settings.sandbox.enabled ? 'enabled' : 'off') + ' (' + (sandbox.available ? sandbox.kind + ' available' : 'unavailable: ' + sandbox.reason) + ')');
     lines.push('  Command isolation: ' + (settings.sandbox.enabled && sandbox.available

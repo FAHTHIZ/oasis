@@ -1311,6 +1311,14 @@ On Linux this uses bubblewrap (`apt install bubblewrap`): the host filesystem is
 
 Even inside the writable workspace, files that could run code later or change OASIS itself stay read-only for sandboxed commands: `.git/hooks` and `.git/config`, `.mcp.json`, `.oasis/settings*.json` and `.claude/settings*.json`, the `commands`, `agents`, `skills` and `hooks` folders under `.claude`/`.oasis`, and `.vscode`/`.idea`. This blocks a prompt-injected command from planting a git hook or an MCP server that would run outside the sandbox. File tools (with their own approvals) can still edit them. Set `"protectProjectConfig": false` in `sandbox` in your user settings (not project settings) to turn this off.
 
+### Allow only some domains
+
+~~~json
+{ "sandbox": { "enabled": true, "allowedDomains": ["registry.npmjs.org", "*.pypi.org", "files.pythonhosted.org", "github.com"], "deniedDomains": [] } }
+~~~
+
+With `allowedDomains`, commands run under Anthropic's [sandbox-runtime](https://github.com/anthropics/sandbox-runtime), the sandbox Claude Code uses (bubblewrap and seccomp on Linux, Seatbelt on macOS). Its proxy lets commands reach only the listed hosts (`*.` matches subdomains, and `deniedDomains` wins over `allowedDomains`). The filesystem rules are the same as above: workspace and caches writable, credential paths hidden, project config read-only. On Linux it needs `bubblewrap` and `socat` (`apt install bubblewrap socat`). If they are missing, commands are refused rather than run unfiltered. Programs that ignore `HTTP_PROXY`/`HTTPS_PROXY` (Node's built-in `fetch`, for example) cannot reach the network at all. `oasis doctor` shows the list in effect.
+
 ### Container backend (Docker or Podman, any OS)
 
 ~~~json

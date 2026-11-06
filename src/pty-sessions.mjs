@@ -100,7 +100,7 @@ export class PtySessionManager {
     if (typeof command !== 'string' || !command.trim() || command.length > 1000 || command.includes(nul)) {
       throw new Error('A terminal session needs one valid executable name or path.');
     }
-    if (!Array.isArray(args) || args.length > 80 || args.some((arg) => typeof arg !== 'string' || arg.length > 5000 || arg.includes(nul))) {
+    if (!Array.isArray(args) || args.length > 400 || args.some((arg) => typeof arg !== 'string' || arg.length > 65536 || arg.includes(nul))) {
       throw new Error('Terminal arguments must be an array of short strings.');
     }
     if (!options.cwd || typeof options.cwd !== 'string') throw new Error('A workspace path is required to start a terminal session.');
@@ -166,6 +166,7 @@ export class PtySessionManager {
         notify();
       });
       record.exitDisposable = child.onExit((event = {}) => {
+        if (typeof options.release === 'function') { try { options.release(); } catch {} }
         record.state = 'exited';
         record.exitCode = Number.isFinite(event.exitCode) ? event.exitCode : 0;
         record.signal = Number.isFinite(event.signal) && event.signal !== 0 ? event.signal : null;
