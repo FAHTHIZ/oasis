@@ -28,7 +28,7 @@ test('LSP transport frames UTF-8, cancels timed-out requests and answers server 
   await writeFile(file, SERVER);
   const client = new LspClient({ command: process.execPath, args: [file], cwd: dir, env: process.env, name: 'mini' });
   try {
-    client.start();
+    await client.start();
     assert.deepEqual(await client.initialize(), { hoverProvider: true });
     assert.deepEqual(await client.request('echo', { text: 'হ্যালো' }), { text: 'হ্যালো — ওয়েসিস 🚀' });
     await assert.rejects(client.request('fail', {}), /mini: no such method/);
