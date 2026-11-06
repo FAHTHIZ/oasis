@@ -73,3 +73,35 @@ test('run_command runs a read-only command without calling approval, and still a
   assert.equal(asked, 2);
   assert.equal(off.approved, false);
 });
+
+test('globs, recursive searches and git object paths cannot reach secret files without asking', async (t) => {
+  // Regression: `cat .en?` and `grep -r KEY .` printed .env with no prompt, because
+  // the shell expands globs after the check and recursive searches read every file.
+  const root = await workspace(t);
+  await mkdir(path.join(root, 'keys'));
+  await writeFile(path.join(root, 'keys', 'deploy.pem'), 'PRIVATE\n');
+  await mkdir(path.join(root, 'docs'));
+  await writeFile(path.join(root, 'docs', 'a.md'), 'x\n');
+  for (const line of ['cat .en?', 'cat .env*', 'head .[e]nv', 'tail .??v', 'wc -c .e*', 'grep -r SECRET .', 'grep -rn SECRET', 'grep --recursive SECRET .',
+    'egrep -d recurse SECRET .', 'rg --hidden SECRET', 'rg -uu SECRET .', 'rg PRIVATE', 'rg PRIVATE keys', 'diff -r . docs', 'git show HEAD:.env', 'git cat-file -p HEAD:keys/deploy.pem',
+    'git grep --untracked SECRET', 'git grep --no-index SECRET', 'ls src/*.js'])
+    assert.equal(readOnlyShellLine(line, { root }), false, line);
+  for (const line of ['grep -rn export src', 'grep -rn -A 3 export src', 'rg export src', "grep -rn 'a.*b' src", 'rg -n "x?" docs', 'git grep export', 'git show HEAD:src/a.js', 'find . -name "*.js"'])
+    assert.equal(readOnlyShellLine(line, { root }), true, line);
+  await rm(path.join(root, 'keys'), { recursive: true });
+  assert.equal(readOnlyShellLine('rg SECRET', { root }), true, 'rg skips the hidden .env by default');
+  assert.equal(readOnlyArgv('grep', ['-r', 'SECRET', '.'], { root }), false, 'run_command argv path too');
+  await symlink(os.homedir(), path.join(root, 'docs', 'home-link')).catch(() => {});
+  assert.equal(readOnlyShellLine('grep -R x docs', { root }), false, 'followed symlinks can leave the workspace');
+  assert.equal(readOnlyShellLine('grep -r x docs', { root }), true, 'grep -r does not follow symlinks');
+});
+
+test('run_shell asks before a glob that expands to .env', { skip: process.platform === 'win32' }, async (t) => {
+  const root = await workspace(t);
+  const { executePowerTool } = await import('../src/power-tools.mjs');
+  const prompts = [];
+  const result = await executePowerTool('run_shell', { command: 'cat .en?' }, { root, approval: async (message) => { prompts.push(message); return false; }, env: process.env }, root);
+  assert.equal(prompts.length, 1);
+  assert.equal(result.approved, false);
+  assert.doesNotMatch(JSON.stringify(result), /SECRET=1/);
+});
