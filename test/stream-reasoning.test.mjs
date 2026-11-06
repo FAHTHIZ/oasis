@@ -64,7 +64,14 @@ test('Gemini thought chunks are not shown as the answer, and are not replayed', 
   assert.equal('reasoning_content' in replayed, false);
 });
 
-test('only DeepSeek and Kimi chat endpoints get reasoning replayed', () => {
+test('reasoning is replayed where the catalog or the model family expects it', () => {
+  // models.dev marks GLM and MiMo as interleaved-thinking models.
+  assert.equal(replaysReasoning({ protocol: 'openai-compatible', baseURL: 'https://api.z.ai/api/paas/v4', model: 'glm-5' }), true);
+  assert.equal(replaysReasoning({ protocol: 'openai-compatible', baseURL: 'https://api.xiaomimimo.com/v1', model: 'mimo-v2.5-pro' }), true);
+  // An explicit setting wins over both the catalog and the name.
+  assert.equal(replaysReasoning({ protocol: 'openai-compatible', baseURL: 'https://api.z.ai/api/paas/v4', model: 'glm-5', replayReasoning: false }), false);
+  assert.equal(replaysReasoning({ protocol: 'openai-compatible', baseURL: 'http://localhost:8000/v1', model: 'my-finetune', replayReasoning: true }), true);
+  assert.equal(replaysReasoning({ protocol: 'openai-compatible', baseURL: 'http://localhost:8000/v1', model: 'my-finetune' }), false);
   assert.equal(replaysReasoning({ protocol: 'openai-compatible', baseURL: 'https://api.deepseek.com', model: 'deepseek-chat' }), true);
   assert.equal(replaysReasoning({ protocol: 'openai-compatible', baseURL: 'https://api.moonshot.ai/v1', model: 'kimi-k2-thinking' }), true);
   assert.equal(replaysReasoning({ protocol: 'openai-compatible', baseURL: 'https://api.openai.com/v1', model: 'gpt-5' }), false);

@@ -1,5 +1,5 @@
 import { briefFailure } from '../app/core/providers.mjs';
-import { findCatalogModel } from './model-catalog.mjs';
+import { findCatalogModel, catalogReasoningReplay } from './model-catalog.mjs';
 import { createParser as createSseParser } from 'eventsource-parser';
 import { splitThinking, visibleReply } from '../app/core/think-tags.mjs';
 import { atomicWriteFile } from './atomic-write.mjs';
@@ -1630,8 +1630,17 @@ export function isGoogleGenerativeBaseURL(baseURL) {
 // Tool calls keep Google's extra_content (the Gemini 3 thought signature) so
 // the next turn can echo it back, which Gemini requires. Requests to other
 // models drop the field, so a session that falls back elsewhere stays valid.
-export function replaysReasoning(config) {
+//
+// Reasoning models with interleaved thinking (DeepSeek, Kimi, GLM, MiMo, many
+// hosted Qwen/MiniMax builds) expect their reasoning_content back on the next
+// request, or they lose the thread between tool calls. Order: an explicit
+// `replayReasoning` config value, then the models.dev catalog's `interleaved`
+// field, then a name pattern for models the catalog does not list.
+export function replaysReasoning(config, env = process.env) {
   if (!config || config.protocol !== 'openai-compatible') return false;
+  if (typeof config.replayReasoning === 'boolean') return config.replayReasoning;
+  const field = catalogReasoningReplay(String(config.model || ''), { baseURL: config.baseURL, provider: config.catalogProvider, env });
+  if (field === 'reasoning_content') return true;
   return /deepseek|moonshot|kimi/i.test(String(config.baseURL || '') + ' ' + String(config.model || ''));
 }
 

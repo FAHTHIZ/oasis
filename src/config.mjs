@@ -215,7 +215,7 @@ const PROVIDER_IDENTITY_KEYS = new Set(['protocol', 'baseURL', 'model', 'apiKey'
 // Computed by loadConfig or taken from the environment; never written back.
 const RUNTIME_CONFIG_KEYS = new Set(['configPath', 'configured', 'apiKeyHelper']);
 const ENDPOINT_CONFIG_KEYS = new Set(['customHeaders', 'customHeadersHelper', 'betas', 'fallbackModel']);
-const MODEL_CONFIG_KEYS = new Set(['contextWindow', 'maxOutputTokens', 'thinkingBudget', 'vision', 'visionCapability']);
+const MODEL_CONFIG_KEYS = new Set(['contextWindow', 'maxOutputTokens', 'thinkingBudget', 'vision', 'visionCapability', 'replayReasoning']);
 // saveConfig validates these itself and drops invalid values rather than copying them.
 const VALIDATED_CONFIG_KEYS = new Set(['maxSteps', 'maxToolCalls', 'maxTokens', 'maxCommandSeconds', 'contextWindow', 'vision', 'promptCache', 'readDedup', 'maxQuestionsPerTurn', 'leanTools', 'followups', 'secretShield', 'parallelToolCalls', 'thinkingBudget', 'requireReadBeforeEdit', 'maxOutputTokens', 'reasoningEffort']);
 
