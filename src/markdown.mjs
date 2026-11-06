@@ -1,6 +1,7 @@
 // Terminal markdown rendering for streamed assistant replies, plus colored
 // diffs for file edits. Line-oriented so it works while text streams in: the
 // partial line is shown raw and replaced by its rendered form once complete.
+import { diffArrays } from 'diff';
 import { stringWidth } from './line-editor.mjs';
 import { renderMermaid } from './mermaid-ascii.mjs';
 
@@ -260,22 +261,18 @@ export class MarkdownStream {
 // ---------------------------------------------------------------------------
 // Diffs
 
-// Minimal line diff (LCS) for edit previews. Bounded to keep it cheap.
+// Line diff for edit previews: jsdiff's Myers O(ND) diff, bounded by edit
+// distance and time; past either bound the change is shown as a replacement.
 export function lineDiff(before, after) {
   const a = String(before || '').split('\n');
   const b = String(after || '').split('\n');
-  if (a.length * b.length > 250000) return [...a.map((line) => ({ op: '-', line })), ...b.map((line) => ({ op: '+', line }))];
-  const dp = Array.from({ length: a.length + 1 }, () => new Uint32Array(b.length + 1));
-  for (let i = a.length - 1; i >= 0; i -= 1) for (let j = b.length - 1; j >= 0; j -= 1) dp[i][j] = a[i] === b[j] ? dp[i + 1][j + 1] + 1 : Math.max(dp[i + 1][j], dp[i][j + 1]);
+  const parts = diffArrays(a, b, { maxEditLength: 5000, timeout: 250 });
+  if (!parts) return [...a.map((line) => ({ op: '-', line })), ...b.map((line) => ({ op: '+', line }))];
   const out = [];
-  let i = 0; let j = 0;
-  while (i < a.length && j < b.length) {
-    if (a[i] === b[j]) { out.push({ op: ' ', line: a[i] }); i += 1; j += 1; }
-    else if (dp[i + 1][j] >= dp[i][j + 1]) { out.push({ op: '-', line: a[i] }); i += 1; }
-    else { out.push({ op: '+', line: b[j] }); j += 1; }
+  for (const part of parts) {
+    const op = part.added ? '+' : part.removed ? '-' : ' ';
+    for (const line of part.value) out.push({ op, line });
   }
-  while (i < a.length) out.push({ op: '-', line: a[i++] });
-  while (j < b.length) out.push({ op: '+', line: b[j++] });
   return out;
 }
 
