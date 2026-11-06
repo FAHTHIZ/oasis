@@ -431,6 +431,14 @@ Kept: the line-oriented block handling, because replies stream line by line and 
 Differences vs old (all CommonMark-conformant): nested emphasis renders, `\*x\*` shows `*x*` (it showed backslashes), `[w](…a_(b))` keeps the `)`, bare `https://` URLs become links, and intraword `2*3*4` italicises `3` per the spec.
 Cost: USER_GUIDE (1,560 lines) 8 → 25 ms. The new test fails on the old function.
 
+## 21. Terminal syntax highlighting: lowlight + highlight.js
+
+Replaced: `highlightCode` keyword set, the hash-comment language list and the comment/string/number regex (`src/markdown.mjs`).
+Adopted: `lowlight` 3.3.0 (wooorm, MIT) with `highlight.js` 11.11 (BSD-3-Clause), `common` grammar set (37 languages) and a `patch` alias for `diff`. Verified usage elsewhere: `google-gemini/gemini-cli` packages/cli depends on lowlight 3.3.0 and highlight.js 11.11.1; Codex's TUI uses syntect, the Rust counterpart.
+The hast tree is painted with one ANSI colour per scope; nested spans re-emit the parent colour on exit (the old highlighter reset to the default colour).
+Cost: 60 µs per line vs 4 µs (2,000 JS lines 119 ms vs 8 ms). Eager import added 74 ms to `src/markdown.mjs` import (61 → 135 ms) because lowlight's single entry imports every grammar; it is now loaded with `createRequire` (require(esm), Node ≥ 22.12) on first use, so import stays 61 ms and the first highlighted line takes ~89 ms. On older Node 22 builds the require fails and code stays plain.
+Trade-off: unlabelled fences are no longer guessed at (the old generic regex coloured them); auto-detection per streamed line is unreliable.
+
 ## Next
 
 - Decided against Ajv validation in front of built-in tools: they already reject bad input with specific messages ("edit_file needs old_string … got path"), coerce numeric strings, and accept documented argument aliases that a strict schema would refuse.
