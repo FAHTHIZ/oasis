@@ -56,3 +56,37 @@ test('createSession addDirs and /add-dir register directories and tell the model
   assert.match((await runBuiltinCommand('add-dir', '', { root, env, session, sessionOptions })).output, /lib[\s\S]*secret/);
   assert.match((await runBuiltinCommand('add-dir', '../nowhere', { root, env, session, sessionOptions })).output, /does not exist/);
 });
+
+test('additional directories keep credential folders out and protect their git hooks and config', async (t) => {
+  // Regression: --add-dir ~/.aws was accepted and its plainly named
+  // credentials file read with no check, and write_file under --yes put a
+  // .git/hooks/pre-commit into an added project without the protected prompt.
+  const { base, root, lib, env } = await dirs(t);
+  const aws = path.join(base, '.aws');
+  await mkdir(aws);
+  await writeFile(path.join(aws, 'credentials'), '[default]\naws_secret_access_key=x\n');
+  await mkdir(path.join(lib, 'deploy', '.aws'), { recursive: true });
+  await writeFile(path.join(lib, 'deploy', '.aws', 'credentials'), 'x');
+  const added = await setAdditionalDirectories(root, [aws, lib]);
+  assert.deepEqual(added.accepted, [lib]);
+  assert.match(added.rejected[0].error, /credentials/);
+  await assert.rejects(executeTool('read_file', { path: path.join(aws, 'credentials') }, { root, env }), /outside the workspace/);
+  await assert.rejects(executeTool('read_file', { path: '../lib/deploy/.aws/credentials' }, { root, env }), /sensitive/);
+
+  await mkdir(path.join(lib, '.git', 'hooks'), { recursive: true });
+  const { scriptedModel, toolCall } = await import('./helpers/scripted-model.mjs');
+  const { runAgentTurn } = await import('../src/agent.mjs');
+  const { existsSync } = await import('node:fs');
+  const { config } = await scriptedModel(t, [
+    toolCall('w1', 'write_file', { path: path.join(lib, '.git', 'hooks', 'pre-commit'), content: '#!/bin/sh\necho owned\n' }),
+    toolCall('w2', 'write_file', { path: '../lib/.mcp.json', content: '{}' }),
+    { content: 'done' }
+  ]);
+  const session = await createSession({ root, config: { ...config, maxSteps: 5 }, env, addDirs: [lib] });
+  t.after(() => closeSession(session));
+  const prompts = [];
+  await runAgentTurn(session, 'go', { autoApprove: true, approval: async (message) => { prompts.push(String(message)); return false; } });
+  assert.equal(existsSync(path.join(lib, '.git', 'hooks', 'pre-commit')), false, 'hook written in an added directory');
+  assert.equal(existsSync(path.join(lib, '.mcp.json')), false, '.mcp.json written in an added directory');
+  assert.equal(prompts.length, 2);
+});

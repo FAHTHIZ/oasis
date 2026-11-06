@@ -95,7 +95,7 @@ export function protectedConfigPath(root, rawPath) {
  * path when the workspace was opened through a symlinked folder. The deepest
  * existing ancestor is canonicalized and compared against the real root.
  */
-export async function protectedConfigTarget(root, rawPath) {
+export async function protectedConfigTarget(root, rawPath, extraRoots = []) {
   const lexical = protectedConfigPath(root, rawPath);
   if (lexical) return lexical;
   const text = String(rawPath || '').trim();
@@ -107,8 +107,16 @@ export async function protectedConfigTarget(root, rawPath) {
   const rest = [];
   for (;;) {
     try {
-      const real = await realpath(cursor);
-      return protectedConfigPath(rootReal, path.join(real, ...rest));
+      const real = path.join(await realpath(cursor), ...rest);
+      const hit = protectedConfigPath(rootReal, real);
+      if (hit) return hit;
+      // --add-dir folders are other projects: their .git/hooks, settings and
+      // MCP files run code just the same.
+      for (const extra of extraRoots || []) {
+        const extraHit = protectedConfigPath(extra, real);
+        if (extraHit) return { ...extraHit, path: path.relative(rootReal, real).split(path.sep).join('/') };
+      }
+      return null;
     } catch (error) {
       if (error.code !== 'ENOENT' && error.code !== 'ENOTDIR') return null;
       const parent = path.dirname(cursor);

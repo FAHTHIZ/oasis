@@ -212,6 +212,8 @@ export async function setAdditionalDirectories(root, dirs = []) {
       const info = await lstat(real);
       if (!info.isDirectory()) throw new Error('not a directory');
       if (real === path.parse(real).root || real === os.homedir()) throw new Error('too broad; choose a project folder');
+      // ~/.aws, ~/.ssh and the like: files inside have plain names (credentials, config).
+      if (sensitivePath(real)) throw new Error('holds credentials; Oasis will not open it');
       if (inside(rootReal, real) || accepted.includes(real)) continue;
       accepted.push(real);
     } catch (error) {
@@ -241,7 +243,9 @@ export async function resolveWorkspacePath(root, rawPath, options = {}) {
   // Paths in extra directories are reported relative to the workspace (../other/file).
   const relative = path.relative(rootReal, target);
   const baseRelative = path.relative(base, target);
-  if (!options.allowSensitive && sensitivePath(baseRelative)) throw new Error('That file path looks sensitive. Oasis will not read, overwrite, or delete it.');
+  // In an extra directory the folder names above it count too (a grant of ~/work/.aws).
+  const checkedRelative = base === rootReal ? baseRelative : target;
+  if (!options.allowSensitive && sensitivePath(checkedRelative)) throw new Error('That file path looks sensitive. Oasis will not read, overwrite, or delete it.');
   let cursor = target;
   while (true) {
     try {
@@ -249,7 +253,7 @@ export async function resolveWorkspacePath(root, rawPath, options = {}) {
       if (cursor === target && options.rejectSymlinks && linkInfo.isSymbolicLink()) throw new Error('Oasis will not write to or delete a symbolic link.');
       const resolved = await realpath(cursor);
       if (!inside(base, resolved)) throw new Error('That path resolves outside the workspace through a symbolic link.');
-      const resolvedRelative = path.relative(base, resolved);
+      const resolvedRelative = base === rootReal ? path.relative(base, resolved) : resolved;
       if (!options.allowSensitive && sensitivePath(resolvedRelative)) throw new Error('That symbolic link resolves to a sensitive file. Oasis will not access it.');
       if (cursor === target) return { absolute: target, real: resolved, relative: relative || '.', root: base, external: base !== rootReal };
       break;

@@ -395,3 +395,9 @@ Free-form shell strings are a different risk class from argv-based commands. The
 **Fix:** requests carrying `Origin` or a non-loopback `Host` get 403; logged errors pass through `redactSecretText`. **Test:** `test/bench-gateway.test.mjs`.
 
 **Held up:** `apply_patch` (JSON, freeform and `apply_patch <<EOF` shell forms) under `--yes`: adding `.git/hooks/pre-commit` or `.oasis/settings.json`, updating `.mcp.json`, updating a symlink to `.git/config`, moving a file into `.git/hooks`, deleting `.mcp.json`, and adding `.env` were all asked or refused, because every patch operation runs as `write_file`/`delete_file` through the normal authorization step. No change was needed.
+
+### Additional directories: credential folders and protected config (medium)
+
+**Finding:** `--add-dir ~/.aws` (or `/add-dir`, or trusted `permissions.additionalDirectories`) was accepted, and the secret check only looked at the path below the added folder, so `credentials` and `config` (plain names) were read with no prompt. Separately, the protected-config check only looked at the workspace, so under `--yes` `write_file` put `.git/hooks/pre-commit` or `.mcp.json` into an added project with no prompt, and that hook runs on the next commit there.
+
+**Fix:** `setAdditionalDirectories` refuses folders that `sensitivePath` flags (credential folders). File access in an added folder checks the whole real path. `protectedConfigTarget` also matches protected paths relative to each added folder. **Test:** `test/add-dir.test.mjs` (both parts fail before the fix). **Remaining:** the shell-text protected-write check (`protectedShellWrite`) still only knows workspace-relative spellings; the OS sandbox's read-only binds cover the workspace's protected paths, not those of added folders.
