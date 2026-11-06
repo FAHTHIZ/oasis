@@ -55,7 +55,7 @@ const GIT_BRANCH_FLAGS = new Set(['-a', '--all', '-r', '--remotes', '-v', '-vv',
 
 const NPM_READ = new Set(['ls', 'list', 'll', 'la', 'view', 'info', 'show', 'outdated', 'root', 'prefix', 'why', 'explain']);
 
-const SECRET_FILE = /(^|\/)(\.env(\.[^/]*)?|\.npmrc|\.netrc|\.pypirc|\.git-credentials|id_(rsa|dsa|ecdsa|ed25519)(\.pub)?|[^/]*\.(pem|key|p12|pfx|keystore|jks)|credentials(\.json)?|secrets?\.(json|ya?ml|toml))$/i;
+const SECRET_FILE = /(^|\/)(\.env(\.[^/]*)?|\.envrc|\.pgpass|\.my\.cnf|\.htpasswd|\.dockercfg|\.npmrc|\.netrc|\.pypirc|\.git-credentials|id_(rsa|dsa|ecdsa|ed25519)(\.pub)?|[^/]*\.(pem|key|p12|pfx|keystore|jks)|credentials(\.json)?|secrets?\.(json|ya?ml|toml))$/i;
 
 const SECRET_DIR = /(^|\/)\.(ssh|aws|gnupg|azure|kube|docker)(\/|$)/i;
 const secretRelative = (rel) => SECRET_FILE.test(rel) || SECRET_DIR.test(rel);

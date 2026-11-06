@@ -142,3 +142,16 @@ test('read-only git asks when the repository config names diff, filter or gpg pr
     if (tool === 'git_diff') assert.match(JSON.stringify(result), /b\.bin/);
   }
 });
+
+test('direnv, PostgreSQL, MySQL, htpasswd and legacy Docker credential files are secret', async (t) => {
+  // Regression: read_file and the read-only shell path returned these with no prompt.
+  const { sensitivePath } = await import('../src/tools.mjs');
+  const root = await workspace(t);
+  for (const name of ['.envrc', '.pgpass', '.my.cnf', '.htpasswd', '.dockercfg']) {
+    await writeFile(path.join(root, name), 'pw\n');
+    assert.equal(sensitivePath(name), true, name);
+    assert.equal(sensitivePath('sub/' + name.toUpperCase()), true, name);
+    assert.equal(readOnlyShellLine('cat ' + name, { root }), false, name);
+  }
+  assert.equal(sensitivePath('src/envrc.js'), false);
+});
