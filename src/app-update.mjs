@@ -12,7 +12,10 @@ import path from 'node:path';
 import { Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 import { fetchLatestRelease, githubApiHeaders } from './github-release.mjs';
-import semver from 'semver';
+// Only the functions used: the semver index loads all 47 of its modules.
+import semverParse from 'semver/functions/parse.js';
+import semverCompare from 'semver/functions/compare.js';
+const semver = { parse: semverParse, compare: semverCompare };
 
 export const UPDATE_REPOSITORY = 'FAHTHIZ/oasis';
 export const RELEASES_PAGE = 'https://github.com/' + UPDATE_REPOSITORY + '/releases/latest';

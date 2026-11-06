@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url';
 
 // Packages that are only needed for specific tools load on first use, so every
 // OASIS start (CLI, headless, web) does not pay for them.
-const DEFERRED = ['linkedom', 'defuddle', 'turndown', 'vscode-jsonrpc', 'gpt-tokenizer', 'sharp', 'lowlight', '@opentelemetry/sdk-trace-base'];
+const DEFERRED = ['linkedom', 'defuddle', 'turndown', 'vscode-jsonrpc', 'gpt-tokenizer', 'sharp', 'lowlight', '@opentelemetry/sdk-trace-base', 'ajv'];
 
 test('loading the CLI module graph does not import tool-specific heavy packages', () => {
   const cli = fileURLToPath(new URL('../src/cli.mjs', import.meta.url));

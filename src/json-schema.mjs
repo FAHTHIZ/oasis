@@ -1,13 +1,20 @@
 // JSON Schema validation for headless --json-schema output, workflow steps and the SDK,
 // by Ajv (draft 2020-12 by default; draft-07 when the schema's $schema names it).
 // Returns readable errors such as `$.bugs[0].file: expected string, got number`.
-import Ajv2020 from 'ajv/dist/2020.js';
-import AjvDraft7 from 'ajv';
+import { createRequire } from 'node:module';
+
+// Ajv (86 modules) loads on the first validation, not with every OASIS start.
+const require = createRequire(import.meta.url);
+const ajvClass = (module) => module.default || module;
 
 const OPTIONS = { allErrors: true, strict: false, validateFormats: false, allowUnionTypes: true };
 let engines = null;
 function engine(schema) {
-  if (!engines) engines = { modern: new Ajv2020(OPTIONS), draft7: new AjvDraft7(OPTIONS) };
+  if (!engines) {
+    const Ajv2020 = ajvClass(require('ajv/dist/2020.js'));
+    const AjvDraft7 = ajvClass(require('ajv'));
+    engines = { modern: new Ajv2020(OPTIONS), draft7: new AjvDraft7(OPTIONS) };
+  }
   return /draft-0[4-7]/.test(String(schema && schema.$schema || '')) ? engines.draft7 : engines.modern;
 }
 
