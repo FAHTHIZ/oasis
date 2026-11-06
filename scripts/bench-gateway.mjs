@@ -64,7 +64,9 @@ export function createGateway(options, { fetchImpl = fetch, now = Date.now, wait
   let chain = Promise.resolve();
   let lastEnd = 0;
   let count = 0;
-  const log = async (entry) => { if (options.log) await appendFile(options.log, JSON.stringify(entry) + '\n'); };
+  // Logging never fails a request; it is awaited before the reply ends so a
+  // client that has its reply can read the matching log line.
+  const log = async (entry) => { if (options.log) await appendFile(options.log, JSON.stringify(entry) + '\n').catch(() => {}); };
   // One request at a time, and at least minIntervalMs from the end of the
   // previous reply to the next request: Pollinations counts its "1 reply every
   // 45 seconds" window from the reply, so spacing request starts was not
@@ -120,13 +122,13 @@ export function createGateway(options, { fetchImpl = fetch, now = Date.now, wait
       let text = '';
       const decoder = new TextDecoder();
       if (upstream.body) for await (const chunk of upstream.body) { text += decoder.decode(chunk, { stream: true }); res.write(chunk); }
-      res.end();
       const usage = usageFrom(text);
       await log({ id, at: new Date(started).toISOString(), ms: now() - started, status: upstream.status, requestedModel, stream: Boolean(body.stream), messages: Array.isArray(body.messages) ? body.messages.length : null, tools: Array.isArray(body.tools) ? body.tools.length : 0, promptTokens: usage && usage.prompt_tokens != null ? usage.prompt_tokens : null, completionTokens: usage && usage.completion_tokens != null ? usage.completion_tokens : null, error: upstream.status >= 400 ? redactSecretText(text.slice(0, 2000)).slice(0, 300) : undefined });
+      res.end();
     } catch (error) {
       if (!res.headersSent) res.writeHead(502, { 'content-type': 'application/json' });
-      res.end(JSON.stringify({ error: { message: 'Gateway could not reach the upstream: ' + error.message } }));
       await log({ id, at: new Date(started).toISOString(), ms: now() - started, status: 502, requestedModel, error: redactSecretText(String(error.message)) });
+      res.end(JSON.stringify({ error: { message: 'Gateway could not reach the upstream: ' + error.message } }));
     } finally {
       release();
     }
