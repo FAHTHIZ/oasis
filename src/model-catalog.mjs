@@ -34,7 +34,8 @@ const HOST_PROVIDERS = {
 // Without a provider hint, a bare id resolves at the model maker first.
 const FIRST_PARTY = ['anthropic', 'openai', 'google', 'xai', 'deepseek', 'moonshotai', 'zai', 'minimax', 'mistral', 'alibaba', 'cohere', 'perplexity', 'xiaomi', 'stepfun', 'openrouter'];
 
-// Keep only the fields Oasis reads: context/input/output limits and prices.
+// Keep only the fields Oasis reads: context/input/output limits, prices, and
+// whether the model accepts image input.
 export function trimCatalog(raw, providers) {
   const out = {};
   for (const [id, provider] of Object.entries(raw || {})) {
@@ -48,6 +49,8 @@ export function trimCatalog(raw, providers) {
       if (positive(limit.context)) entry.context = limit.context;
       if (positive(limit.input)) entry.input = limit.input;
       if (positive(limit.output)) entry.output = limit.output;
+      const inputs = model && model.modalities && model.modalities.input;
+      if (Array.isArray(inputs)) entry.image = inputs.includes('image');
       const price = pickPrices(cost);
       if (price) {
         const tiers = (Array.isArray(cost.tiers) ? cost.tiers : [])
@@ -219,6 +222,13 @@ export function catalogContextWindow(model, options = {}) {
     }
   }
   return window > 0 ? window : null;
+}
+
+// Whether the catalog lists image input for the model: true, false, or null when
+// the model or its modalities are not in the catalog.
+export function catalogImageInput(model, options = {}) {
+  const entry = findCatalogModel(model, options);
+  return entry && typeof entry.image === 'boolean' ? entry.image : null;
 }
 
 // USD per million tokens in Oasis's pricing shape, with the first context tier as
