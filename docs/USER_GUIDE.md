@@ -344,7 +344,7 @@ The bridge listens only on 127.0.0.1, requires a random bearer token stored in a
 
 ## Zed, JetBrains, Neovim and other ACP editors
 
-`oasis acp` runs OASIS as an [Agent Client Protocol](https://agentclientprotocol.com) agent: newline-delimited JSON-RPC on stdin/stdout, the same protocol Zed and JetBrains use for external agents. The editor starts the process; OASIS uses your normal provider setup (run `oasis setup` once in a terminal first), settings, skills, memory and hooks.
+`oasis acp` runs OASIS as an [Agent Client Protocol](https://agentclientprotocol.com) agent: newline-delimited JSON-RPC on stdin/stdout, the same protocol Zed and JetBrains use for external agents. The protocol layer is the official [ACP TypeScript SDK](https://github.com/agentclientprotocol/typescript-sdk), so requests are schema-checked and errors use the standard codes. The editor starts the process; OASIS uses your normal provider setup (run `oasis setup` once in a terminal first), settings, skills, memory and hooks.
 
 Zed (`settings.json`):
 
