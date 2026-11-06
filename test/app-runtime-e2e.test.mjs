@@ -189,7 +189,8 @@ test('runtime engine end to end: app at /, paste to connect, approve a real edit
   assert.equal(await evaluate(page, `document.getElementById('exportButton').hidden && document.getElementById('newFileButton').hidden`), true, 'device-only actions are hidden');
   if (git) await waitFor(page, `document.getElementById('changesCount').textContent === '3'`, { label: 'three changed files counted from git (OASIS internals excluded)' });
   assert.equal(await evaluate(page, `[...document.querySelectorAll('#fileList .file-row')].some((row) => row.textContent.includes('.oasis'))`), false, 'OASIS internals are not listed');
-  await evaluate(page, `[...document.querySelectorAll('#fileList .file-row')].find((row) => row.textContent.includes('README.md')).click(); true`);
+  // The list re-renders (e.g. when the git change count arrives), so find and click the row in one step.
+  await waitFor(page, `(() => { const row = [...document.querySelectorAll('#fileList .file-row')].find((item) => item.textContent.includes('README.md')); if (!row) return false; row.click(); return true; })()`, { label: 'README.md row in the files panel' });
   await waitFor(page, `!document.getElementById('editorSheet').hidden && document.getElementById('editor').value.includes('# Demo') && document.getElementById('editor').readOnly`, { label: 'read-only viewer' });
 
   await shot('5-files');
@@ -230,7 +231,7 @@ test('runtime engine end to end: app at /, paste to connect, approve a real edit
   await evaluate(page, `document.getElementById('chatsButton').click(); true`);
   await waitFor(page, `document.querySelectorAll('#chatList .project-item').length === 2`, { label: 'two chats listed' });
   await shot('7-chats');
-  await evaluate(page, `[...document.querySelectorAll('#chatList .project-item .open')].find((b) => /Build a counter/.test(b.textContent)).click(); true`);
+  await waitFor(page, `(() => { const open = [...document.querySelectorAll('#chatList .project-item .open')].find((b) => /Build a counter/.test(b.textContent)); if (!open) return false; open.click(); return true; })()`, { label: 'earlier chat listed and opened' });
   await waitFor(page, `/Done\\. I built the counter/.test(document.getElementById('transcript').textContent) && !/Say hi/.test(document.getElementById('transcript').textContent)`, { label: 'earlier chat reopened' });
   await evaluate(page, `window.__stale = true; location.reload(); true`);
   await waitFor(page, `document.readyState === 'complete' && !window.__stale && document.documentElement.dataset.ready === '1' && document.documentElement.classList.contains('runtime') && /Done\\. I built the counter/.test(document.getElementById('transcript').textContent)`, { label: 'the open chat is remembered across reloads' });
