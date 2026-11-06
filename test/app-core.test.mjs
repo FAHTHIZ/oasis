@@ -6,7 +6,7 @@ import { executeTool, globToRegExp, needsApproval, TOOL_DEFINITIONS } from '../a
 import { InlineSandbox } from '../app/core/sandbox.mjs';
 import { Agent, buildSystemPrompt, textOf } from '../app/core/agent.mjs';
 import { SkillLibrary, parseSkill } from '../app/core/skills.mjs';
-import { createZip, readZip, crc32 } from '../app/core/zip.mjs';
+import { createZip, readZip } from '../app/core/zip.mjs';
 import { GitHub, parseRepo } from '../app/core/github.mjs';
 import { chat, toAnthropic, PRESETS } from '../app/core/providers.mjs';
 
@@ -123,11 +123,22 @@ test('skills list only names and load bodies on demand', async () => {
   assert.equal(parseSkill('no front matter', 'x').name, 'x');
 });
 
-test('zip round trip with CRC', async () => {
-  assert.equal(crc32(new TextEncoder().encode('hello')), 0x3610a686);
-  const zip = createZip([{ path: 'a.txt', content: 'hello' }, { path: 'dir/b.txt', content: 'wörld' }]);
+test('zip round trip compresses and is readable by unzip', async () => {
+  const big = 'const x = 1;\n'.repeat(2000);
+  const zip = createZip([{ path: 'a.txt', content: 'hello' }, { path: 'dir/b.txt', content: 'wörld' }, { path: 'big.js', content: big }]);
+  assert.ok(zip.length < big.length / 10, 'export is deflate-compressed');
   const files = await readZip(zip);
-  assert.deepEqual(files.map((f) => [f.path, new TextDecoder().decode(f.bytes)]), [['a.txt', 'hello'], ['dir/b.txt', 'wörld']]);
+  assert.deepEqual(files.map((f) => [f.path, new TextDecoder().decode(f.bytes)]), [['a.txt', 'hello'], ['dir/b.txt', 'wörld'], ['big.js', big]]);
+  await assert.rejects(readZip(new TextEncoder().encode('not a zip')), /Not a zip file/);
+  const { execFileSync } = await import('node:child_process');
+  const { mkdtempSync, writeFileSync } = await import('node:fs');
+  const { tmpdir } = await import('node:os');
+  const { join } = await import('node:path');
+  const dir = mkdtempSync(join(tmpdir(), 'oasis-zipout-'));
+  writeFileSync(join(dir, 'out.zip'), zip);
+  let listing;
+  try { listing = execFileSync('unzip', ['-t', 'out.zip'], { cwd: dir, encoding: 'utf8' }); } catch (error) { if (error.code === 'ENOENT') return; throw error; }
+  assert.match(listing, /No errors detected/);
 });
 
 test('zip import reads deflate archives and strips the top folder', async () => {
