@@ -57,3 +57,12 @@ test('agent claiming success after a failing test run is asked to reconcile', as
   assert.match(nudge.content, /says the checks pass, but the latest check \(`npm test`\) exited with code 3/);
   assert.match(result.text, /test fails/);
 });
+
+test('a check that timed out or was stopped does not support a success claim', () => {
+  const state = newClaimState();
+  recordCheck(state, { command: 'npm test', exitCode: 0 });
+  assert.equal(claimIssue(state, 'All tests pass.'), '');
+  // Re-run without edits, but this time it hangs and is killed: no exit code.
+  recordCheck(state, { command: 'npm test', exitCode: null });
+  assert.match(claimIssue(state, 'All tests pass.'), /did not finish/);
+});

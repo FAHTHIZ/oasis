@@ -6299,12 +6299,12 @@ async function runAgentTurnRaw(session, prompt, options = {}) {
           verification.lastVerificationKind = verificationCommandKind(args.command, args.args);
         }
       }
-      if (name === 'run_shell' && result && result.approved !== false && typeof result.exitCode === 'number') {
+      if (name === 'run_shell' && result && result.approved !== false && (typeof result.exitCode === 'number' || result.timedOut || result.cancelled)) {
         const shellCommand = safeToolArguments(call.function && call.function.arguments).command;
         const target = shellExitTarget(shellCommand);
         if (target && isVerificationCommand(target.command, target.args)) recordClaimCheck(claimState, { command: shellCommand, exitCode: result.exitCode, masked: Boolean(target.piped || result.exitCodeWarning) });
         // A check whose status is masked by a pipe (npm test | tail) proves nothing.
-        if (target && !target.piped && !result.exitCodeWarning && isVerificationCommand(target.command, target.args)) {
+        if (target && typeof result.exitCode === 'number' && !target.piped && !result.exitCodeWarning && isVerificationCommand(target.command, target.args)) {
           verification.lastVerificationExitCode = result.exitCode;
           verification.lastVerificationKind = verificationCommandKind(target.command, target.args);
         }
