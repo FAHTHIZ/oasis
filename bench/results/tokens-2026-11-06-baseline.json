@@ -1,9 +1,9 @@
 {
   "benchmark": "oasis-token-efficiency",
   "version": 1,
-  "generatedAt": "2026-11-06T01:50:08.993Z",
+  "generatedAt": "2026-11-06T02:11:25.206Z",
   "sourceRevision": {
-    "sha": "cf469f61b5bddf830bd1b9f64140d617d7c5ef34",
+    "sha": "4ba1c835f89b1ef80800f218d894fef916f619db",
     "srcDirty": false
   },
   "node": "v22.21.0",
@@ -124,7 +124,7 @@
           "name": "run_command",
           "step": 15,
           "ok": true,
-          "chars": 3544
+          "chars": 3543
         },
         {
           "id": "call_16_0",
@@ -143,8 +143,8 @@
       ],
       "totals": {
         "requests": 18,
-        "inputChars": 723591,
-        "inputTokens": 180898,
+        "inputChars": 723588,
+        "inputTokens": 180897,
         "systemTokens": 51737,
         "toolSchemaTokens": 68211,
         "toolResultTokens": 44321,
@@ -152,14 +152,15 @@
         "assistantTokens": 3776,
         "framingTokens": 11009,
         "uncachedTokens": 15041,
+        "cacheWeightedTokens": 31585,
         "firstRequestTokens": 6839,
-        "lastRequestTokens": 15060
+        "lastRequestTokens": 15059
       },
       "accounting": {
         "usageEvents": 18,
-        "reportedInputTokens": 180903,
-        "expectedInputTokens": 180903,
-        "taskUsageInputTokens": 180903,
+        "reportedInputTokens": 180902,
+        "expectedInputTokens": 180902,
+        "taskUsageInputTokens": 180902,
         "taskUsageRequests": 18,
         "matches": true
       },
@@ -375,45 +376,455 @@
           "reply": "run_command"
         },
         {
-          "totalChars": 49843,
+          "totalChars": 49842,
           "systemChars": 11497,
           "toolSchemaChars": 15158,
           "toolCount": 22,
-          "toolResultChars": 16491,
+          "toolResultChars": 16490,
           "userChars": 410,
           "assistantChars": 2175,
           "framingChars": 4112,
           "messages": 32,
           "reusedPrefixChars": 45786,
-          "uncachedChars": 3965,
+          "uncachedChars": 3964,
           "reply": "read_file"
         },
         {
-          "totalChars": 51942,
+          "totalChars": 51941,
           "systemChars": 11497,
           "toolSchemaChars": 15158,
           "toolCount": 22,
-          "toolResultChars": 18305,
+          "toolResultChars": 18304,
           "userChars": 410,
           "assistantChars": 2208,
           "framingChars": 4364,
           "messages": 34,
-          "reusedPrefixChars": 49750,
+          "reusedPrefixChars": 49749,
           "uncachedChars": 2100,
           "reply": "git_diff"
         },
         {
-          "totalChars": 60237,
+          "totalChars": 60236,
           "systemChars": 11497,
           "toolSchemaChars": 15158,
           "toolCount": 22,
-          "toolResultChars": 26232,
+          "toolResultChars": 26231,
           "userChars": 410,
           "assistantChars": 2218,
           "framingChars": 4722,
           "messages": 36,
-          "reusedPrefixChars": 51849,
+          "reusedPrefixChars": 51848,
           "uncachedChars": 8296,
+          "reply": "final"
+        }
+      ]
+    },
+    {
+      "id": "normalize-token-usage",
+      "task": "normalize-token-usage",
+      "model": "gpt-4o",
+      "passed": true,
+      "error": null,
+      "finished": true,
+      "verifier": {
+        "exitCode": 0,
+        "output": ""
+      },
+      "toolCalls": [
+        {
+          "id": "call_1_0",
+          "name": "git_status",
+          "step": 1,
+          "ok": true,
+          "chars": 200
+        },
+        {
+          "id": "call_2_0",
+          "name": "list_files",
+          "step": 2,
+          "ok": true,
+          "chars": 552
+        },
+        {
+          "id": "call_3_0",
+          "name": "read_file",
+          "step": 3,
+          "ok": true,
+          "chars": 9090
+        },
+        {
+          "id": "call_4_0",
+          "name": "read_file",
+          "step": 4,
+          "ok": true,
+          "chars": 879
+        },
+        {
+          "id": "call_5_0",
+          "name": "grep",
+          "step": 5,
+          "ok": true,
+          "chars": 666
+        },
+        {
+          "id": "call_6_0",
+          "name": "read_file",
+          "step": 6,
+          "ok": true,
+          "chars": 24025
+        },
+        {
+          "id": "call_7_0",
+          "name": "read_file",
+          "step": 7,
+          "ok": true,
+          "chars": 1312
+        },
+        {
+          "id": "call_8_0",
+          "name": "glob_files",
+          "step": 8,
+          "ok": true,
+          "chars": 81
+        },
+        {
+          "id": "call_9_0",
+          "name": "read_file",
+          "step": 9,
+          "ok": true,
+          "chars": 4425
+        },
+        {
+          "id": "call_10_0",
+          "name": "write_file",
+          "step": 10,
+          "ok": true,
+          "chars": 338
+        },
+        {
+          "id": "call_11_0",
+          "name": "write_file",
+          "step": 11,
+          "ok": true,
+          "chars": 350
+        },
+        {
+          "id": "call_12_0",
+          "name": "run_command",
+          "step": 12,
+          "ok": true,
+          "chars": 1655
+        },
+        {
+          "id": "call_13_0",
+          "name": "read_file",
+          "step": 13,
+          "ok": true,
+          "chars": 482
+        },
+        {
+          "id": "call_14_0",
+          "name": "edit_file",
+          "step": 14,
+          "ok": true,
+          "chars": 378
+        },
+        {
+          "id": "call_15_0",
+          "name": "run_command",
+          "step": 15,
+          "ok": true,
+          "chars": 697
+        },
+        {
+          "id": "call_16_0",
+          "name": "run_command",
+          "step": 16,
+          "ok": true,
+          "chars": 5504
+        },
+        {
+          "id": "call_17_0",
+          "name": "git_diff",
+          "step": 17,
+          "ok": true,
+          "chars": 4015
+        }
+      ],
+      "totals": {
+        "requests": 18,
+        "inputChars": 1146798,
+        "inputTokens": 286700,
+        "systemTokens": 60692,
+        "toolSchemaTokens": 68211,
+        "toolResultTokens": 137259,
+        "userTokens": 2592,
+        "assistantTokens": 4031,
+        "framingTokens": 13917,
+        "uncachedTokens": 22885,
+        "cacheWeightedTokens": 49227,
+        "firstRequestTokens": 7388,
+        "lastRequestTokens": 22902
+      },
+      "accounting": {
+        "usageEvents": 18,
+        "reportedInputTokens": 286705,
+        "expectedInputTokens": 286705,
+        "taskUsageInputTokens": 286705,
+        "taskUsageRequests": 18,
+        "matches": true
+      },
+      "requests": [
+        {
+          "totalChars": 29549,
+          "systemChars": 13487,
+          "toolSchemaChars": 15158,
+          "toolCount": 22,
+          "toolResultChars": 0,
+          "userChars": 576,
+          "assistantChars": 0,
+          "framingChars": 328,
+          "messages": 2,
+          "reusedPrefixChars": 0,
+          "uncachedChars": 29462,
+          "reply": "git_status"
+        },
+        {
+          "totalChars": 30021,
+          "systemChars": 13487,
+          "toolSchemaChars": 15158,
+          "toolCount": 22,
+          "toolResultChars": 200,
+          "userChars": 576,
+          "assistantChars": 48,
+          "framingChars": 552,
+          "messages": 4,
+          "reusedPrefixChars": 29461,
+          "uncachedChars": 473,
+          "reply": "list_files"
+        },
+        {
+          "totalChars": 30859,
+          "systemChars": 13487,
+          "toolSchemaChars": 15158,
+          "toolCount": 22,
+          "toolResultChars": 752,
+          "userChars": 576,
+          "assistantChars": 70,
+          "framingChars": 816,
+          "messages": 6,
+          "reusedPrefixChars": 29933,
+          "uncachedChars": 839,
+          "reply": "read_file"
+        },
+        {
+          "totalChars": 40468,
+          "systemChars": 13487,
+          "toolSchemaChars": 15158,
+          "toolCount": 22,
+          "toolResultChars": 9842,
+          "userChars": 576,
+          "assistantChars": 99,
+          "framingChars": 1306,
+          "messages": 8,
+          "reusedPrefixChars": 30771,
+          "uncachedChars": 9610,
+          "reply": "read_file"
+        },
+        {
+          "totalChars": 41792,
+          "systemChars": 13487,
+          "toolSchemaChars": 15158,
+          "toolCount": 22,
+          "toolResultChars": 10721,
+          "userChars": 576,
+          "assistantChars": 131,
+          "framingChars": 1719,
+          "messages": 10,
+          "reusedPrefixChars": 40380,
+          "uncachedChars": 1325,
+          "reply": "grep"
+        },
+        {
+          "totalChars": 42747,
+          "systemChars": 13487,
+          "toolSchemaChars": 15158,
+          "toolCount": 22,
+          "toolResultChars": 11387,
+          "userChars": 576,
+          "assistantChars": 190,
+          "framingChars": 1949,
+          "messages": 12,
+          "reusedPrefixChars": 41704,
+          "uncachedChars": 956,
+          "reply": "read_file"
+        },
+        {
+          "totalChars": 67538,
+          "systemChars": 13487,
+          "toolSchemaChars": 15158,
+          "toolCount": 22,
+          "toolResultChars": 35412,
+          "userChars": 576,
+          "assistantChars": 223,
+          "framingChars": 2682,
+          "messages": 14,
+          "reusedPrefixChars": 42659,
+          "uncachedChars": 24792,
+          "reply": "read_file"
+        },
+        {
+          "totalChars": 69156,
+          "systemChars": 13487,
+          "toolSchemaChars": 15158,
+          "toolCount": 22,
+          "toolResultChars": 36724,
+          "userChars": 576,
+          "assistantChars": 280,
+          "framingChars": 2931,
+          "messages": 16,
+          "reusedPrefixChars": 67450,
+          "uncachedChars": 1619,
+          "reply": "glob_files"
+        },
+        {
+          "totalChars": 69488,
+          "systemChars": 13487,
+          "toolSchemaChars": 15158,
+          "toolCount": 22,
+          "toolResultChars": 36805,
+          "userChars": 576,
+          "assistantChars": 317,
+          "framingChars": 3145,
+          "messages": 18,
+          "reusedPrefixChars": 69068,
+          "uncachedChars": 333,
+          "reply": "read_file"
+        },
+        {
+          "totalChars": 74260,
+          "systemChars": 13487,
+          "toolSchemaChars": 15158,
+          "toolCount": 22,
+          "toolResultChars": 41230,
+          "userChars": 576,
+          "assistantChars": 380,
+          "framingChars": 3429,
+          "messages": 20,
+          "reusedPrefixChars": 69400,
+          "uncachedChars": 4773,
+          "reply": "write_file"
+        },
+        {
+          "totalChars": 75363,
+          "systemChars": 13487,
+          "toolSchemaChars": 15158,
+          "toolCount": 22,
+          "toolResultChars": 41568,
+          "userChars": 576,
+          "assistantChars": 902,
+          "framingChars": 3672,
+          "messages": 22,
+          "reusedPrefixChars": 74172,
+          "uncachedChars": 1104,
+          "reply": "write_file"
+        },
+        {
+          "totalChars": 76728,
+          "systemChars": 13487,
+          "toolSchemaChars": 15158,
+          "toolCount": 22,
+          "toolResultChars": 41918,
+          "userChars": 576,
+          "assistantChars": 1667,
+          "framingChars": 3922,
+          "messages": 24,
+          "reusedPrefixChars": 75275,
+          "uncachedChars": 1366,
+          "reply": "run_command"
+        },
+        {
+          "totalChars": 78742,
+          "systemChars": 13487,
+          "toolSchemaChars": 15158,
+          "toolCount": 22,
+          "toolResultChars": 43573,
+          "userChars": 576,
+          "assistantChars": 1734,
+          "framingChars": 4214,
+          "messages": 26,
+          "reusedPrefixChars": 76640,
+          "uncachedChars": 2015,
+          "reply": "read_file"
+        },
+        {
+          "totalChars": 79505,
+          "systemChars": 13487,
+          "toolSchemaChars": 15158,
+          "toolCount": 22,
+          "toolResultChars": 44055,
+          "userChars": 576,
+          "assistantChars": 1797,
+          "framingChars": 4432,
+          "messages": 28,
+          "reusedPrefixChars": 78654,
+          "uncachedChars": 764,
+          "reply": "edit_file"
+        },
+        {
+          "totalChars": 80329,
+          "systemChars": 13487,
+          "toolSchemaChars": 15158,
+          "toolCount": 22,
+          "toolResultChars": 44433,
+          "userChars": 576,
+          "assistantChars": 1996,
+          "framingChars": 4679,
+          "messages": 30,
+          "reusedPrefixChars": 79417,
+          "uncachedChars": 825,
+          "reply": "run_command"
+        },
+        {
+          "totalChars": 81354,
+          "systemChars": 13487,
+          "toolSchemaChars": 15158,
+          "toolCount": 22,
+          "toolResultChars": 45130,
+          "userChars": 576,
+          "assistantChars": 2063,
+          "framingChars": 4940,
+          "messages": 32,
+          "reusedPrefixChars": 80241,
+          "uncachedChars": 1026,
+          "reply": "run_command"
+        },
+        {
+          "totalChars": 87291,
+          "systemChars": 13487,
+          "toolSchemaChars": 15158,
+          "toolCount": 22,
+          "toolResultChars": 50634,
+          "userChars": 576,
+          "assistantChars": 2107,
+          "framingChars": 5329,
+          "messages": 34,
+          "reusedPrefixChars": 81266,
+          "uncachedChars": 5938,
+          "reply": "git_diff"
+        },
+        {
+          "totalChars": 91608,
+          "systemChars": 13487,
+          "toolSchemaChars": 15158,
+          "toolCount": 22,
+          "toolResultChars": 54649,
+          "userChars": 576,
+          "assistantChars": 2117,
+          "framingChars": 5621,
+          "messages": 36,
+          "reusedPrefixChars": 87203,
+          "uncachedChars": 4318,
           "reply": "final"
         }
       ]
