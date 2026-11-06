@@ -1761,6 +1761,7 @@ async function readProviderStream(response, protocol, onDelta, onProgress) {
     let messageId;
     let model;
     let stopReason;
+    let sawStop = false;
     await consumeServerSentEvents(response, ({ data }) => {
       if (data === '[DONE]') return;
       const event = parseProviderEvent(data);
@@ -1792,12 +1793,16 @@ async function readProviderStream(response, protocol, onDelta, onProgress) {
         } else if (delta.type === 'signature_delta' && typeof delta.signature === 'string') {
           block.signature = String(block.signature || '') + delta.signature;
         }
+      } else if (type === 'message_stop') {
+        sawStop = true;
       } else if (type === 'message_delta') {
         if (event.delta) stopReason = event.delta.stop_reason || stopReason;
         // message_delta usage is cumulative; newer APIs also repeat input and cache counts here.
         if (event.usage) mergeAnthropicUsage(usage, event.usage);
       }
     });
+    // Cut off before message_delta/message_stop: the text is partial.
+    if (!stopReason && !sawStop) throw Object.assign(new Error('The model stream was interrupted: the connection closed before the reply finished.'), { code: 'OASIS_STREAM_INTERRUPTED' });
     const content = [...blocks.entries()].sort((a, b) => a[0] - b[0]).map(([, block]) => {
       const normalized = { ...block };
       delete normalized.partialJson;
@@ -1840,9 +1845,10 @@ async function readProviderStream(response, protocol, onDelta, onProgress) {
   const calls = new Map();
   let usage = {};
   let finishReason = null;
+  let sawDone = false;
   let stray = '';
   await consumeServerSentEvents(response, ({ data }) => {
-    if (data === '[DONE]') return;
+    if (data === '[DONE]') { sawDone = true; return; }
     const event = parseProviderEvent(data);
     if (event.error) throw new Error(String(event.error.message || 'The chat-completions stream failed.'));
     if (event.prompt_progress && typeof onProgress === 'function') { try { onProgress(event.prompt_progress); } catch {} }
@@ -1880,6 +1886,9 @@ async function readProviderStream(response, protocol, onDelta, onProgress) {
   // [DONE]. That is a broken reply, not a short answer: restart it.
   const streamError = finishReason ? null : strayStreamError(stray);
   if (streamError) throw Object.assign(new Error('The model stream was interrupted: ' + streamError.message), { code: 'OASIS_STREAM_INTERRUPTED', status: streamError.status });
+  // A connection that closes with neither a finish_reason nor [DONE] was cut
+  // off mid-reply. Its partial text used to be taken as the whole answer.
+  if (!finishReason && !sawDone) throw Object.assign(new Error('The model stream was interrupted: the connection closed before the reply finished.'), { code: 'OASIS_STREAM_INTERRUPTED' });
   const toolCalls = [...calls.entries()].sort((a, b) => a[0] - b[0]).map(([, call]) => call);
   return { choices: [{ message: { role: 'assistant', content: content || null, ...(reasoning ? { reasoning_content: reasoning } : {}), ...(toolCalls.length ? { tool_calls: toolCalls } : {}) }, finish_reason: finishReason }], usage };
 }
