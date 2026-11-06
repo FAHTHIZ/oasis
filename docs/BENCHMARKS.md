@@ -223,6 +223,15 @@ npm run bench:live -- --router https://openrouter.ai/api/v1 --model qwen/qwen3-c
 
 `--router` sets each agent's own base-URL variable (`OASIS_BASE_URL`, `ANTHROPIC_BASE_URL`, `OPENAI_BASE_URL`, `OPENAI_API_BASE`, `GOOGLE_GEMINI_BASE_URL`) and key. Use `--agents oasis,claude` to choose agents, `--model-for claude=opus` for a per-agent model ID, and `--task ID` for a quick check. Only tasks every agent ran with identical fingerprints are scored.
 
+To force one model for every agent and keep an independent record of what was sent, put the logging gateway in front of the upstream. It rewrites every request's model, serializes requests at a minimum spacing (for rate-limited free endpoints) and appends one JSON line per request with status, message and tool counts, and the provider's prompt/completion tokens. It does not log request or response content, apart from the first 300 characters of an upstream error body; the upstream key, if needed, comes from `OASIS_GATEWAY_UPSTREAM_KEY`.
+
+```sh
+# Pollinations' keyless endpoint allows one reply per 45 s per IP
+node scripts/bench-gateway.mjs --upstream https://text.pollinations.ai/openai --model openai \
+  --min-interval-ms 47000 --log /tmp/gateway.jsonl &
+OASIS_BENCH_API_KEY=gateway npm run bench:live -- --router http://127.0.0.1:8788/v1 --model bench-model --yes
+```
+
 ## Run OASIS and compare reports
 
 In a separate run, configure OASIS to use the model/provider configuration you want to compare:
@@ -292,7 +301,7 @@ No authenticated live Claude Code head-to-head result is published. Do not claim
 
 ## Result status
 
-No live head-to-head results are published yet. The runners for Claude Code, Codex CLI, Gemini CLI, OpenCode and Aider, and `npm run bench:live`, are covered by tests with fake CLIs. A live run needs working model access from the machine running the benchmark (the 2026-11-04 attempt from a cloud sandbox could not reach the maintainer's local gateway, so no numbers were recorded). The live summarizer now requires identical valid SHA-256 task fingerprints, classification metadata, and the requested number of trials across completed agents. Before making a same-model harness claim, verify the actual served model/version in gateway logs, disclose differences in agent permission/sandbox behavior, publish every trial and failure, and retain complete machine-readable reports.
+Only small live smoke runs are published (one trial, at most three tasks: [2026-11-05](research/LIVE_COMPARISON_2026-11-05b.md)); no live result here supports a ranking. The runners for Claude Code, Codex CLI, Gemini CLI, OpenCode and Aider, and `npm run bench:live`, are covered by tests with fake CLIs. A live run needs working model access from the machine running the benchmark (the 2026-11-04 attempt from a cloud sandbox could not reach the maintainer's local gateway, so no numbers were recorded). The live summarizer now requires identical valid SHA-256 task fingerprints, classification metadata, and the requested number of trials across completed agents. Before making a same-model harness claim, verify the actual served model/version in gateway logs, disclose differences in agent permission/sandbox behavior, publish every trial and failure, and retain complete machine-readable reports.
 
 ## Small local model field runs (2026-11-01)
 
