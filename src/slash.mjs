@@ -1724,7 +1724,7 @@ export async function runBuiltinCommand(name, argument, state) {
       }
       if (session && words[0] && session.agentTasks && session.agentTasks.agents.has(words[0])) {
         const info = summarizeAgent(getAgent(session, words[0]), { full: true });
-        return { output: [info.id + '  ' + info.status + '  ' + info.agent + '  ' + info.description + '  (' + info.elapsed + ', ' + info.toolCalls + ' tool calls)', info.error ? 'Error: ' + info.error : '', info.report || (info.recentTools ? 'Recent tools: ' + info.recentTools.join(', ') : '')].filter(Boolean).join('\n') };
+        return { output: [info.id + '  ' + info.status + '  ' + info.agent + '  ' + info.description + '  (' + info.elapsed + ', ' + info.toolCalls + ' tool calls' + (info.usage ? ', ' + info.usage.requests + ' requests, ' + info.usage.inputTokens.toLocaleString('en-US') + ' in / ' + info.usage.outputTokens.toLocaleString('en-US') + ' out tokens' + (info.usage.costUsd > 0 ? ', $' + info.usage.costUsd.toFixed(4) : '') : '') + ')', info.error ? 'Error: ' + info.error : '', info.report || (info.recentTools ? 'Recent tools: ' + info.recentTools.join(', ') : '')].filter(Boolean).join('\n') };
       }
       const agents = session ? listAgents(session) : [];
       const procs = session && session.background ? [...session.background.values()] : [];

@@ -809,6 +809,7 @@ export function createOasisWebServer(options = {}) {
         const withAttached = (list) => [...attachedImages, ...(list || [])].slice(0, MAX_WEB_IMAGES);
         if (attachedImages.length) emit(job, 'context_files', { files: attachedImages.map((image) => image.path) });
         session.webUsage = session.webUsage || createUsageTracker();
+        session.onBackgroundUsage = (usage) => { if (session.webUsage) recordUsage(session.webUsage, usage); };
         const slash = message.match(/^\/([a-z0-9][a-z0-9:_-]*)(?:\s+([\s\S]*))?$/i);
         if (!importedCommand && !expandedCommand && slash && Object.hasOwn(BUILTIN_COMMANDS, slash[1].toLowerCase()) && !WEB_UNSUPPORTED_COMMANDS.has(slash[1].toLowerCase())) {
           session.webOptions = session.webOptions || {};

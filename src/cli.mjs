@@ -2151,6 +2151,8 @@ async function runPrompt(prompt, root, autoApprove, session = null, persistence 
     persistence.watchPaths = null;
   }
   session.config = carryLearnedContextWindow(session.config, config);
+  // Background agents can finish after this turn; their requests still count in /cost.
+  session.onBackgroundUsage = (usage) => recordUsage(USAGE, usage);
   // Auto-connect to the IDE when launched from a VS Code (or fork) integrated terminal.
   if (!session.ideChecked) {
     session.ideChecked = true;
