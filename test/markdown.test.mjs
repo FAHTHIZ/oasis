@@ -80,3 +80,13 @@ test('code blocks are highlighted by lowlight grammars with nested colours resto
   assert.match(highlightCode('<div class="x">', 'html'), /\x1b\[34mdiv/);
   assert.equal(highlightCode('plain text', 'not-a-language'), 'plain text');
 });
+
+test('wrapped rows close and reopen styles so the continuation indent is never colored', async () => {
+  const { wrapRendered } = await import('../src/markdown.mjs');
+  const wrapped = wrapRendered('\x1b[44mone two three four five six seven eight nine ten eleven\x1b[49m', 30, { offset: 2 });
+  const rows = wrapped.split('\n');
+  assert.ok(rows.length >= 2);
+  assert.ok(rows[0].endsWith('\x1b[49m'), JSON.stringify(rows[0]));
+  for (const row of rows.slice(1)) assert.match(row, /^ {2}\x1b\[44m/, JSON.stringify(row));
+  assert.equal(wrapped.replace(/\x1b\[[0-9;]*m/g, '').replace(/\n +/g, ' '), 'one two three four five six seven eight nine ten eleven');
+});
