@@ -42,15 +42,25 @@ test('live docker sandbox: workspace writable, host untouched, no network, no ca
   await mkdir(hostCredentialDir);
   const hostCredential = path.join(hostCredentialDir, 'id_ed25519');
   await writeFile(hostCredential, 'host-private-key-fixture');
+  const hostCredentialFile = path.join(root, '.netrc');
+  await writeFile(hostCredentialFile, 'machine private.example login fixture password host-file-secret');
   const maskedSandbox = {
     ...sandbox,
-    maskedPaths: [{ path: hostCredentialDir, type: 'directory' }]
+    maskedPaths: [
+      { path: hostCredentialDir, type: 'directory' },
+      { path: hostCredentialFile, type: 'file' }
+    ]
   };
-  const masked = run(maskedSandbox, root, 'if test -r .ssh/id_ed25519; then cat .ssh/id_ed25519; else echo MASKED; fi');
+  const masked = run(maskedSandbox, root, [
+    'if test -r .ssh/id_ed25519; then cat .ssh/id_ed25519; else echo DIRECTORY_MASKED; fi',
+    'if test -s .netrc; then cat .netrc; else echo FILE_MASKED; fi'
+  ].join('; '));
   assert.equal(masked.status, 0, masked.stderr);
-  assert.match(masked.stdout, /MASKED/);
-  assert.doesNotMatch(masked.stdout, /host-private-key-fixture/);
-  assert.equal((await readFile(hostCredential, 'utf8')), 'host-private-key-fixture', 'masking must not alter the host secret');
+  assert.match(masked.stdout, /DIRECTORY_MASKED/);
+  assert.match(masked.stdout, /FILE_MASKED/);
+  assert.doesNotMatch(masked.stdout, /host-private-key-fixture|host-file-secret/);
+  assert.equal((await readFile(hostCredential, 'utf8')), 'host-private-key-fixture', 'directory masking must not alter the host secret');
+  assert.equal((await readFile(hostCredentialFile, 'utf8')), 'machine private.example login fixture password host-file-secret', 'file masking must not alter the host secret');
 
   // 1. The workspace is mounted read-write at its host path and files keep the host user's ownership.
   const write = run(sandbox, root, 'echo from-container > made-inside.txt && pwd');
