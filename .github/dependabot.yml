@@ -20,9 +20,12 @@ updates:
         dependency-type: development
         update-types: [minor, patch]
     ignore:
-      # undici 8 requires Node >= 22.19; OASIS supports every Node 22 release,
-      # and undici 7.x receives the security backports.
+      # Majors that raise the Node.js floor above OASIS's (22.15, see
+      # MIN_NODE_VERSION in src/config.mjs): undici 8 needs 22.19 and unpdf 2
+      # needs 24. Both 7.x / 1.x lines receive fixes.
       - dependency-name: undici
+        update-types: [version-update:semver-major]
+      - dependency-name: unpdf
         update-types: [version-update:semver-major]
     commit-message:
       prefix: deps

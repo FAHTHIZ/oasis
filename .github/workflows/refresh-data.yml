@@ -26,7 +26,7 @@ jobs:
         with:
           node-version: 22
       - name: Install dependencies
-        run: npm install --no-audit --no-fund
+        run: npm install --omit=dev --no-audit --no-fund
       - name: Regenerate snapshots
         run: |
           node scripts/update-model-catalog.mjs

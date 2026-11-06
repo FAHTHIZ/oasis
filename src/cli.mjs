@@ -14,7 +14,7 @@ import path from 'node:path';
 import { isIP } from 'node:net';
 import { fileURLToPath } from 'node:url';
 import { defaultCloudBaseURL } from './cloud-providers.mjs';
-import { loadConfig, saveConfig, getProviderSummary, DEFAULT_BASE_URL, DEFAULT_ANTHROPIC_BASE_URL, DEFAULT_MODEL, validateBaseUrl, validateProtocol, isLoopbackUrl, isNodeVersionSupported, resolveSetupProviderPreset, inferSetupProviderPreset, shouldPromptForProviderBaseURL, carryLearnedContextWindow } from './config.mjs';
+import { loadConfig, saveConfig, getProviderSummary, DEFAULT_BASE_URL, DEFAULT_ANTHROPIC_BASE_URL, DEFAULT_MODEL, validateBaseUrl, validateProtocol, isLoopbackUrl, isNodeVersionSupported, MIN_NODE_VERSION, resolveSetupProviderPreset, inferSetupProviderPreset, shouldPromptForProviderBaseURL, carryLearnedContextWindow } from './config.mjs';
 import { startIdleCompaction, idleCompactMinutes, idleCompactionNote } from './idle-compaction.mjs';
 import { compactHistoryIfNeeded } from './agent.mjs';
 import { applyEffort, createSession, runAgentTurn, runAgentPlan, runForkedTurn, closeSession, testProviderConnection, repairInterruptedHistory, resolveQuestionAnswer, stopFailureType, formatWait, steerSession, takeSteering } from './agent.mjs';
@@ -821,7 +821,7 @@ async function doctor(args = [], root = process.cwd()) {
   const detail = (line) => { details.push(line); };
   detail('Environment details\n');
   detail('  OS / architecture: ' + process.platform + ' / ' + process.arch + '\n');
-  detail('  Node.js: ' + process.version + (isNodeVersionSupported() ? ' (supported)' : ' (requires Node.js 22+)') + '\n');
+  detail('  Node.js: ' + process.version + (isNodeVersionSupported() ? ' (supported)' : ' (requires Node.js ' + MIN_NODE_VERSION + ' or newer)') + '\n');
   try {
     const { detectHardware, describeHardware, modelMemoryBudget, localModelTier } = await import('./hardware.mjs');
     const hw = await detectHardware();
