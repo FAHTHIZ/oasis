@@ -36,7 +36,7 @@ import { getConfigDirectory, loadConfig, saveConfig, DEFAULT_BASE_URL, DEFAULT_A
 import { testProviderConnection } from './agent.mjs';
 import { installGitHubExtension, inspectGitHubExtension, listInstalledExtensions } from './extensions.mjs';
 import { analyzeCommand } from './permissions.mjs';
-import { assertSandboxAvailable, wrapCommand } from './sandbox.mjs';
+import { assertSandboxAvailable, launchCommand } from './sandbox.mjs';
 import { isNotebookPath, readNotebook } from './notebook.mjs';
 import { imageMediaType, readImageFile } from './images.mjs';
 import { POWER_TOOL_DEFINITIONS, POWER_TOOL_NAMES } from './power-tool-definitions.mjs';
@@ -606,16 +606,21 @@ export async function runWorkspaceCommand(root, command, args = [], options = {}
   if (options.interactive) {
     if (options.background) throw new Error('Choose either interactive=true or run_in_background=true, not both.');
     if (!options.ptyManager) throw new Error('Interactive terminal sessions are not available in this context.');
-    const launch = wrapCommand(command, args, sandbox, root, { tty: true });
-    return await options.ptyManager.start(launch.command, launch.args, {
-      cwd: root, env, cols: options.cols, rows: options.rows,
-      display: String(command).split(/[\\/]/).pop(),
-      sandboxed: sandbox && sandbox.available ? sandbox.kind : null
-    });
+    const launch = await launchCommand(command, args, sandbox, root, { tty: true });
+    try {
+      return await options.ptyManager.start(launch.command, launch.args, {
+        cwd: root, env, cols: options.cols, rows: options.rows, release: launch.release,
+        display: String(command).split(/[\\/]/).pop(),
+        sandboxed: sandbox && sandbox.available ? sandbox.kind : null
+      });
+    } catch (error) {
+      if (typeof launch.release === 'function') launch.release();
+      throw error;
+    }
   }
   if (options.background) {
     if (!options.backgroundRegistry) throw new Error('Background commands are not available in this session.');
-    const launch = wrapCommand(command, args, sandbox, root);
+    const launch = await launchCommand(command, args, sandbox, root);
     return startBackgroundProcess(options.backgroundRegistry, launch, { cwd: root, env, display: commandLineText(command, args), sandboxed: sandbox && sandbox.available ? sandbox.kind : null, onLine: options.onLine, onExit: options.onExit, onStuck: options.onStuck, maxSeconds: options.maxSeconds, monitor: options.monitor });
   }
   // ACP editors with terminal support (opt-in): the command runs in the editor's own
@@ -636,6 +641,7 @@ export async function runWorkspaceCommand(root, command, args = [], options = {}
   if (options.persistOutputLogs !== false) {
     try { outputLog = await createCommandOutputLog(root); } catch { outputLog = null; }
   }
+  const launch = await launchCommand(command, args, sandbox, root);
   return await new Promise((resolve) => {
     const stdoutBuffer = createBoundedOutput();
     const stderrBuffer = createBoundedOutput();
@@ -644,7 +650,6 @@ export async function runWorkspaceCommand(root, command, args = [], options = {}
     let settled = false;
     let killTimer = null;
     let terminationRequested = false;
-    const launch = wrapCommand(command, args, sandbox, root);
     const child = spawn(launch.command, launch.args, { cwd: root, env, shell: false, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'], ...processTreeSpawnOptions() });
     if (typeof launch.release === 'function') { child.once('close', launch.release); child.once('error', launch.release); }
     const append = (target, chunk) => {

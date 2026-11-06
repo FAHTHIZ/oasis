@@ -1033,8 +1033,11 @@ async function doctorWorkspaceReport(root, status = {}) {
     stdout.write('  Settings: invalid (' + error.message + ')\n');
     problems.push('Fix the settings file: ' + error.message);
   }
-  const sandbox = detectSandbox();
   const sandboxOn = Boolean(settings && settings.sandbox && settings.sandbox.enabled);
+  const { domainList, detectSandboxRuntime } = await import('./sandbox.mjs');
+  const domains = settings && settings.sandbox && (!settings.sandbox.backend || settings.sandbox.backend === 'os') ? domainList(settings.sandbox.allowedDomains) : [];
+  const sandbox = domains.length ? detectSandboxRuntime() : detectSandbox();
+  if (domains.length) stdout.write('  Sandbox network: only ' + domains.join(', ') + ' (sandbox-runtime proxy)\n');
   stdout.write('  OS sandbox: ' + (sandbox.available ? sandbox.kind + ' available' : 'unavailable — ' + sandbox.reason) + '; ' + (sandboxOn ? 'enabled' : 'off (enable with "sandbox": {"enabled": true} or OASIS_SANDBOX=1)') + '\n');
   if (sandboxOn && !sandbox.available) problems.push('The sandbox is enabled but unavailable: ' + sandbox.reason);
   stdout.write('  User MCP config: ' + getMcpConfigPath() + '\n');
