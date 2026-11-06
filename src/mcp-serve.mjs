@@ -9,6 +9,7 @@ import path from 'node:path';
 import { TOOL_DEFINITIONS, executeTool } from './tools.mjs';
 import { stopLspClients } from './lsp.mjs';
 import { webSearchEnabled } from './web-search.mjs';
+import { protectedConfigTarget, protectedEditsAllowed } from './protected-paths.mjs';
 
 export const SERVE_READ_ONLY = ['read_file', 'list_files', 'glob_files', 'repo_map', 'grep', 'ast_grep', 'search_files', 'git_status', 'git_diff', 'git_log', 'lsp', 'diagnostics', 'fetch_url', 'web_search'];
 export const SERVE_EDITS = ['edit_file', 'multi_edit', 'write_file', 'notebook_edit'];
@@ -45,6 +46,12 @@ export function createMcpServeHandler({ root, allowEdits = false, allowCommands 
         const name = message.params && message.params.name;
         const args = message.params && message.params.arguments || {};
         if (!allowed.has(name)) return { jsonrpc: '2.0', id: message.id, error: { code: -32602, message: 'Unknown or disabled tool: ' + name } };
+        // Oasis's own agent always asks before these edits; there is no one to ask
+        // here, and MCP clients often auto-approve edits, so refuse them.
+        if (SERVE_EDITS.includes(name) && !protectedEditsAllowed(env)) {
+          const hit = await protectedConfigTarget(root, args.path || args.notebook_path || args.file_path).catch(() => null);
+          if (hit) return reply({ content: [{ type: 'text', text: 'Error: ' + hit.path + ' is a protected configuration file (' + hit.reason + '). oasis mcp serve does not change it; ask the user to edit it or set OASIS_ALLOW_CONFIG_EDITS=1.' }], isError: true });
+        }
         try {
           const result = await executeTool(name, args, { root, env, session, autoApprove: true, ruleAllowed: true, approval: async () => true });
           const text = typeof result === 'string' ? result : JSON.stringify(result, null, 2);
