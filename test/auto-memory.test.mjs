@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import os from 'node:os';
 import path from 'node:path';
 import { mkdtemp, readFile, rm } from 'node:fs/promises';
-import { saveMemory, listMemories, rankMemories, redactSecrets, memoryIndexPrompt, recallForPrompt, deleteMemory, memoryRoots, runMemoryTool, memoryFreshness, findMemory, verifyMemory } from '../src/auto-memory.mjs';
+import { saveMemory, listMemories, rankMemories, tokenize, redactSecrets, memoryIndexPrompt, recallForPrompt, deleteMemory, memoryRoots, runMemoryTool, memoryFreshness, findMemory, verifyMemory } from '../src/auto-memory.mjs';
 import { createSession, closeSession, runAgentTurn } from '../src/agent.mjs';
 import { runBuiltinCommand } from '../src/slash.mjs';
 import { scriptedModel, toolCall } from './helpers/scripted-model.mjs';
@@ -191,4 +191,14 @@ test('memory ranking stems words and matches prefixes', () => {
   ];
   assert.equal(rankMemories(memories, 'deployments')[0]?.memory.name, 'release');
   assert.equal(rankMemories(memories, 'config')[0]?.memory.name, 'release');
+});
+
+test('memory recall stems words but not pasted blobs', () => {
+  assert.deepEqual(tokenize('Running deployments'), ['run', 'deploy']);
+  const blob = 'x'.repeat(64000);
+  const started = performance.now();
+  const terms = tokenize('note ' + blob + ' testing');
+  const elapsed = performance.now() - started;
+  assert.deepEqual(terms, ['note', blob, 'test']);
+  assert.ok(elapsed < 250, 'a 64,000-letter token is not stemmed (took ' + Math.round(elapsed) + ' ms)');
 });
