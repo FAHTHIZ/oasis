@@ -7,7 +7,9 @@ const near = (a, b) => assert.ok(Math.abs(a - b) < 1e-9, a + ' != ' + b);
 
 test('current Claude list prices (platform.claude.com pricing, 2026-11)', () => {
   assert.deepEqual([priceFor('claude-opus-5-5', { env }).input, priceFor('claude-opus-5-5', { env }).output, priceFor('claude-opus-5-5', { env }).cacheRead], [4, 20, 0.2]);
-  assert.equal(priceFor('us.anthropic.claude-opus-5-5', { env }).input, 4);
+  // Bedrock regional inference profiles carry a 10% premium over the global profile.
+  assert.equal(priceFor('us.anthropic.claude-opus-5-5', { env }).input, 4.4);
+  assert.equal(priceFor('global.anthropic.claude-opus-5-5', { env }).input, 4);
   assert.equal(priceFor('claude-opus-5', { env }).input, 5);
   assert.equal(priceFor('claude-sonnet-5', { env }).input, 2);
   assert.equal(priceFor('claude-sonnet-5-5', { env }).cacheRead, 0.1);
@@ -45,8 +47,8 @@ test('Gemini 3, DeepSeek V4, Kimi K3, GLM-5, MiniMax M3 and Grok 4.7 use publish
   near(per('gemini-3-flash-preview', 1e6), 0.5);
   near(per('gemini-3.1-flash-lite', 1e6), 0.25);
   near(per('gemini-2.5-flash-lite', 1e6), 0.1);
-  near(per('deepseek-v4-pro', 1e6), 1.32);
-  near(per('deepseek-flash', 0, 1e6), 1.2);
+  near(per('deepseek-v4-pro', 1e6), 0.66);
+  near(per('deepseek-flash', 0, 1e6), 0.6);
   near(per('kimi-k3', 1e6, 1e6), 18);
   near(per('z-ai/glm-5', 1e6), 1);
   near(per('MiniMax-M3', 600_000), 0.36);

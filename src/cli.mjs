@@ -2860,6 +2860,8 @@ async function applyThemeFromSettings(settings) {
 
 async function interactive(root, autoApprove, persistence = {}) {
   let session = null;
+  // Keep model windows and prices current (models.dev, at most daily, in the background).
+  import('./model-catalog.mjs').then(({ refreshModelCatalog }) => refreshModelCatalog()).catch(() => {});
   await ensureModelProviderSetup(root);
   const bannerConfig = await loadConfig().catch(() => ({}));
   const startupSettings = await loadSettings(root).catch(() => null);

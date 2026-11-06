@@ -2510,6 +2510,7 @@ export async function startOasisWebServer(options = {}) {
     app.server.once('listening', onListening);
     app.server.listen(port, host);
   });
+  if (options.refreshModelCatalog !== false) import('./model-catalog.mjs').then(({ refreshModelCatalog }) => refreshModelCatalog()).catch(() => {});
   const address = app.server.address();
   return { ...app, host, port: address && typeof address === 'object' ? address.port : port };
 }
