@@ -153,3 +153,34 @@ test('line-number prefixes copied from read output are removed only when every l
   assert.equal(relaxedReplace(file, '     9\tconst z = 2;', 'y'), null);
   assert.equal(relaxedReplace('x\n1: a\n', '1: b', 'c'), null);
 });
+
+test('preserveFileConventions keeps consistent CRLF endings and a BOM on whole-file rewrites', async () => {
+  const { preserveFileConventions } = await import('../src/edit-match.mjs');
+  assert.deepEqual(preserveFileConventions('a\r\nb\r\n', 'a\nb\nc\n'), { content: 'a\r\nb\r\nc\r\n', kept: ['CRLF line endings'] });
+  assert.deepEqual(preserveFileConventions('\ufeffx\n', 'y\n'), { content: '\ufeffy\n', kept: ['byte-order mark'] });
+  assert.equal(preserveFileConventions('\ufeffa\r\n', 'b\n').content, '\ufeffb\r\n');
+  // Mixed endings, LF files, new files and content that already uses CRLF are untouched.
+  assert.equal(preserveFileConventions('a\r\nb\n', 'x\ny\n').content, 'x\ny\n');
+  assert.equal(preserveFileConventions('a\nb\n', 'x\ny\n').content, 'x\ny\n');
+  assert.equal(preserveFileConventions(null, 'x\ny\n').content, 'x\ny\n');
+  assert.equal(preserveFileConventions('a\r\n', 'x\r\ny\n').content, 'x\r\ny\n');
+  assert.equal(preserveFileConventions('a\r\n', 'single line').content, 'single line');
+});
+
+test('write_file over a CRLF file with a BOM keeps both instead of rewriting every line', async () => {
+  const { executeTool } = await import('../src/tools.mjs');
+  const { mkdtemp, writeFile, readFile, rm } = await import('node:fs/promises');
+  const os = await import('node:os');
+  const path = await import('node:path');
+  const root = await mkdtemp(path.join(os.tmpdir(), 'oasis-crlf-write-'));
+  try {
+    await writeFile(path.join(root, 'win.txt'), '\ufeffone\r\ntwo\r\n');
+    const result = await executeTool('write_file', { path: 'win.txt', content: 'one\ntwo\nthree\n' }, { root, autoApprove: true });
+    assert.deepEqual(result.kept, ['CRLF line endings', 'byte-order mark']);
+    assert.equal(await readFile(path.join(root, 'win.txt'), 'utf8'), '\ufeffone\r\ntwo\r\nthree\r\n');
+    await writeFile(path.join(root, 'unix.txt'), 'one\n');
+    const plain = await executeTool('write_file', { path: 'unix.txt', content: 'two\n' }, { root, autoApprove: true });
+    assert.equal(plain.kept, undefined);
+    assert.equal(await readFile(path.join(root, 'unix.txt'), 'utf8'), 'two\n');
+  } finally { await rm(root, { recursive: true, force: true }); }
+});
