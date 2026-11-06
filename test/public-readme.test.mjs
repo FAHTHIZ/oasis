@@ -34,6 +34,21 @@ test('README describes the actual interfaces and keeps their execution boundarie
   assert.ok(!/youtube\\.com|\\.mp4|demo[- ]video/i.test(readme), 'The README must not reference demo videos that have not been supplied.');
 });
 
+test('OASIS has one consistent public name and a floor-grounded visual identity', async () => {
+  const [readme, brand, hero, icon, logo] = await Promise.all([
+    read('README.md'), read('BRAND.md'), read('assets/oasis-readme-hero.svg'),
+    read('assets/oasis-icon.svg'), read('assets/oasis-logo.svg')
+  ]);
+  assert.ok(readme.includes('assets/oasis-readme-hero.svg'));
+  assert.ok(readme.includes('Brand guidelines'));
+  assert.ok(!/\bOASIS\s+OSS\b/i.test(readme), 'The public product name must remain OASIS.');
+  assert.ok(brand.includes('The public-facing product name is OASIS.'));
+  assert.ok(brand.includes('Code. Automate. Flourish.'));
+  assert.ok(hero.includes('reflective floor') && hero.includes('M0 675L600 444L1200 675'));
+  assert.ok(icon.includes('OASIS app icon'));
+  assert.ok(logo.includes('OASIS'));
+});
+
 test('README relative links resolve to tracked repository files', async () => {
   const readme = await read('README.md');
   const links = [...readme.matchAll(/\[[^\]]+\]\(([^)]+)\)/g)].map((match) => match[1]);
