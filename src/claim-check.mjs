@@ -21,7 +21,7 @@ export function claimsPassing(text) {
 }
 
 export function newClaimState() {
-  return { ran: 0, lastExit: null, lastCommand: '', editedAfter: false, masked: false, nudged: false };
+  return { ran: 0, lastExit: null, lastCommand: '', editedAfter: false, masked: false, unfinished: false, nudged: false };
 }
 
 export function recordCheck(state, { command, exitCode, masked = false }) {
@@ -30,6 +30,8 @@ export function recordCheck(state, { command, exitCode, masked = false }) {
   state.lastCommand = String(command || '').slice(0, 200);
   state.masked = Boolean(masked);
   state.lastExit = masked ? null : (Number.isInteger(exitCode) ? exitCode : null);
+  // No exit code: it timed out, was stopped, or moved to the background.
+  state.unfinished = !masked && !Number.isInteger(exitCode);
   state.editedAfter = false;
 }
 
@@ -42,6 +44,7 @@ export function claimIssue(state, text) {
   if (!state || state.nudged || !state.ran || !claimsPassing(text)) return '';
   let problem = '';
   if (state.masked) problem = 'the latest check (`' + state.lastCommand + '`) had its exit status hidden by a pipe, so it proves nothing';
+  else if (state.unfinished) problem = 'the latest check (`' + state.lastCommand + '`) did not finish (it timed out, was stopped or is still running), so it proves nothing';
   else if (Number.isInteger(state.lastExit) && state.lastExit !== 0) problem = 'the latest check (`' + state.lastCommand + '`) exited with code ' + state.lastExit;
   else if (state.editedAfter) problem = 'files were edited after the latest check (`' + state.lastCommand + '`), so its result is stale';
   if (!problem) return '';
