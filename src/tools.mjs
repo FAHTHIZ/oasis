@@ -11,7 +11,7 @@ import { commandFlagWarning } from './command-hints.mjs';
 import { isScratchPath } from './scratch.mjs';
 import { protectedShellWrite, protectedEditsAllowed, protectedConfigPath } from './protected-paths.mjs';
 import { assertFileFresh, recordFileState, forgetFileState } from './file-state.mjs';
-import { relaxedReplace, closestMatchHint, typographyWarning } from './edit-match.mjs';
+import { relaxedReplace, closestMatchHint, typographyWarning, preserveFileConventions } from './edit-match.mjs';
 import { assertNoNewElision, shrinkWarning, recordAndDetectCircling, testTamperWarning, combineWarnings } from './change-guard.mjs';
 import { commentWarning } from './style-rules.mjs';
 import { loadMemory } from './memory.mjs';
@@ -1671,15 +1671,17 @@ async function executeToolUnlocked(name, args = {}, context = {}) {
         await snapshotFile(target.root, target.absolute, 'before-agent-write');
         backedUpExistingFile = true;
       } catch (error) { if (error.code !== 'ENOENT') throw error; }
+      const conventions = preserveFileConventions(previousContent, args.content);
+      const content = conventions.content;
       await mkdir(path.dirname(target.absolute), { recursive: true });
       // New project files get normal permissions (umask applies) so web servers, containers and
       // teammates can read them; only secret-looking files are created owner-only.
-      await atomicWriteFile(target.absolute, args.content, { encoding: 'utf8', mode: sensitivePath(target.relative) ? 0o600 : 0o666 });
-      await clientMirrorWrite(context, target.absolute, args.content);
+      await atomicWriteFile(target.absolute, content, { encoding: 'utf8', mode: sensitivePath(target.relative) ? 0o600 : 0o666 });
+      await clientMirrorWrite(context, target.absolute, content);
       await recordFileState(context, target.absolute);
       const docWarning = backedUpExistingFile ? '' : unrequestedDocWarning(writeDisplayPath, context.session && context.session.currentRequest);
       const writeWarning = previousContent === null ? combineWarnings(docWarning, commentWarning('', args.content, writeDisplayPath, context.session && context.session.commentMode), securityWarning('', args.content, writeDisplayPath)) : combineWarnings(commentWarning(previousContent, args.content, writeDisplayPath, context.session && context.session.commentMode), shrinkWarning(previousContent, args.content, writeDisplayPath), testTamperWarning(previousContent, args.content, writeDisplayPath), typographyWarning(previousContent, args.content, writeDisplayPath), securityWarning(previousContent, args.content, writeDisplayPath), recordAndDetectCircling(context.session || context, target.absolute, previousContent, args.content, writeDisplayPath));
-      return { path: writeDisplayPath, writtenBytes: Buffer.byteLength(args.content, 'utf8'), backedUpExistingFile, ...(writeWarning ? { warning: writeWarning } : {}) };
+      return { path: writeDisplayPath, writtenBytes: Buffer.byteLength(content, 'utf8'), backedUpExistingFile, ...(conventions.kept.length ? { kept: conventions.kept } : {}), ...(writeWarning ? { warning: writeWarning } : {}) };
     }
     case 'delete_file': {
       const target = await resolveWorkspacePath(root, args.path, { rejectSymlinks: true });
