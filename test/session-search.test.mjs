@@ -50,3 +50,15 @@ test('session search tool schema is strict and tokenizer drops stop words', () =
   assert.equal(SESSION_SEARCH_TOOL_DEFINITION.function.parameters.additionalProperties, false);
   assert.deepEqual(tokenize('The Websocket and the API'), ['websocket', 'api']);
 });
+
+test('session search matches word prefixes, so a short query finds longer words', async () => {
+  const base = await mkdtemp(path.join(os.tmpdir(), 'oasis-recall-prefix-'));
+  const root = path.join(base, 'proj'); await mkdir(root);
+  const env = { OASIS_CONFIG_DIR: path.join(base, 'config') };
+  try {
+    const a = await saveSession(chat(root, 'Set up the authentication middleware', 'Added configuration for the OAuth provider.'), { env });
+    await saveSession(chat(root, 'Add dark mode', 'Added a theme toggle in settings.'), { env });
+    const found = await searchSessions(root, 'auth config', { env });
+    assert.equal(found.results[0] && found.results[0].sessionId, a.id);
+  } finally { await rm(base, { recursive: true, force: true }); }
+});

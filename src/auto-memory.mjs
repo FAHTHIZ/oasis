@@ -21,6 +21,8 @@ import { mkdir, readFile, readdir, rename, rm, stat, writeFile } from 'node:fs/p
 import { existsSync, readFileSync, statSync } from 'node:fs';
 import path from 'node:path';
 import { getConfigDirectory } from './config.mjs';
+import MiniSearch from 'minisearch';
+import stemmer from 'wink-porter2-stemmer';
 
 export const MEMORY_CATEGORIES = ['preferences', 'project', 'decisions', 'lessons', 'people', 'reference'];
 const MAX_MEMORIES = 500;
@@ -202,46 +204,29 @@ async function writeIndex(root, scope, env) {
   await atomicWrite(path.join(dir, 'MEMORY.md'), lines.join('\n'));
 }
 
-// ---------- search (BM25) ----------
+// ---------- search (MiniSearch BM25+, Porter2 stemming) ----------
 const STOP = new Set('a an and are as at be by for from has have i in is it its of on or that the this to was we were will with you your our not do does use using'.split(' '));
 
 export function tokenize(text) {
   return (String(text || '').toLowerCase().match(/[\p{L}\p{N}_]+/gu) || [])
     .filter((word) => word.length > 1 && !STOP.has(word))
-    .map((word) => word.length > 4 ? word.replace(/(ing|ed|es|s)$/, '') : word);
+    .map((word) => /^[a-z]+$/.test(word) ? stemmer(word) : word);
 }
 
 export function rankMemories(memories, query, { limit = 5 } = {}) {
   const queryTerms = [...new Set(tokenize(query))];
   if (!queryTerms.length || !memories.length) return [];
-  const docs = memories.map((memory) => {
-    // Name and abstract count twice: they are the curated summary.
-    const terms = tokenize(memory.name + ' ' + memory.description + ' ' + memory.name + ' ' + memory.description + ' ' + memory.content);
-    const tf = new Map();
-    for (const term of terms) tf.set(term, (tf.get(term) || 0) + 1);
-    return { memory, tf, length: terms.length };
-  });
-  const avg = docs.reduce((sum, doc) => sum + doc.length, 0) / docs.length || 1;
-  const df = new Map(queryTerms.map((term) => [term, docs.filter((doc) => doc.tf.has(term)).length]));
-  const k1 = 1.2;
-  const b = 0.75;
+  // Name and abstract weigh double: they are the curated summary.
+  const index = new MiniSearch({ fields: ['name', 'description', 'content'], tokenize, processTerm: (term) => term });
+  index.addAll(memories.map((memory, id) => ({ id, name: memory.name || '', description: memory.description || '', content: memory.content || '' })));
   const now = Date.now();
-  const scored = docs.map((doc) => {
-    let score = 0;
-    for (const term of queryTerms) {
-      const freq = doc.tf.get(term) || 0;
-      if (!freq) continue;
-      const idf = Math.log(1 + (docs.length - df.get(term) + 0.5) / (df.get(term) + 0.5));
-      score += idf * (freq * (k1 + 1)) / (freq + k1 * (1 - b + b * doc.length / avg));
-    }
-    if (!score) return { memory: doc.memory, score: 0 };
+  return index.search(queryTerms.join(' '), { tokenize: (text) => text.split(' '), boost: { name: 2, description: 2 }, prefix: (term) => term.length >= 4, combineWith: 'OR' }).map((hit) => {
+    const memory = memories[hit.id];
     // Gentle boosts: recently updated and frequently recalled memories rank higher.
-    const updated = Date.parse(doc.memory.updated || '') || 0;
+    const updated = Date.parse(memory.updated || '') || 0;
     const ageDays = updated ? (now - updated) / 86400000 : 365;
-    score *= 1 + 0.2 * Math.exp(-ageDays / 30) + Math.min(0.2, 0.02 * (doc.memory.recalls || 0));
-    return { memory: doc.memory, score };
-  });
-  return scored.filter((item) => item.score > 0).sort((a, b2) => b2.score - a.score).slice(0, limit);
+    return { memory, score: hit.score * (1 + 0.2 * Math.exp(-ageDays / 30) + Math.min(0.2, 0.02 * (memory.recalls || 0))) };
+  }).filter((item) => item.score > 0).sort((a, b2) => b2.score - a.score).slice(0, limit);
 }
 
 function similarity(a, b) {

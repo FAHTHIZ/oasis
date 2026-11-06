@@ -183,3 +183,12 @@ test('project memory is shared by every subfolder and worktree of a repository',
   await mk(plain);
   assert.equal(memoryProjectRoot(plain), plain);
 });
+
+test('memory ranking stems words and matches prefixes', () => {
+  const memories = [
+    { name: 'release', description: 'How releases are deployed', content: 'We deployed with the release workflow and configuration in ci.yml.', updated: '2026-11-01' },
+    { name: 'style', description: 'Code style', content: 'Prefer early returns.', updated: '2026-11-01' }
+  ];
+  assert.equal(rankMemories(memories, 'deployments')[0]?.memory.name, 'release');
+  assert.equal(rankMemories(memories, 'config')[0]?.memory.name, 'release');
+});

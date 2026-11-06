@@ -477,6 +477,22 @@ Verified:
 - Native plugins stay strict through `semver.valid(v) === v`, which rejects a `v` prefix, build metadata, and leading zeros in core or numeric prerelease identifiers.
 - Deliberate change: the old BigInt comparator accepted `999999999999999999999.0.0`. semver rejects components above `Number.MAX_SAFE_INTEGER`, as the npm registry does, so such a manifest now fails validation (fail closed). The test now asserts this, and that `9007199254740991.0.0` still installs.
 
+## 25. Recall ranking: MiniSearch + Porter2
+
+Replaced: two copies of hand-written BM25 (k1 1.2, b 0.75), one in session search and one in auto-memory `rankMemories`, plus auto-memory's suffix stripper.
+
+Chosen:
+- `minisearch` 7.2.0 (MIT, zero dependencies; BM25+, field boosts, prefix and fuzzy search; widely used for in-process search).
+- `wink-porter2-stemmer` 2.0.1 (MIT, zero dependencies; Snowball English / Porter2).
+
+Rejected: wooorm `stemmer` 2.0.1, which implements the original Porter algorithm. It stems `deploy`, `deployed` and `deploying` to `deploi` but `deployments` to `deploy`, so the query "deployments" missed a memory about "deployed". Porter2 maps all four to `deploy`.
+
+Verified:
+- 8 probe queries over 5 memories give identical top results before and after.
+- New tests fail on the old code: "auth config" now finds an "authentication … configuration" session, and "deployments" and "config" find the matching memory.
+- Unchanged: stopwords, NFKC tokenizing for sessions, name/description weighed double (now field boosts), the phrase ×1.5 and query-coverage factors, recency and recall boosts, and the two-excerpts-per-session cap.
+- Queries are passed to MiniSearch already tokenized (plain split), so stemmed terms are not stemmed twice.
+
 ## Next
 
 - Decided against Ajv validation in front of built-in tools: they already reject bad input with specific messages ("edit_file needs old_string … got path"), coerce numeric strings, and accept documented argument aliases that a strict schema would refuse.
