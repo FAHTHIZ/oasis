@@ -52,6 +52,9 @@ test('desktop packaging does not depend on removed documentation files', () => {
   assert.ok(!packageJson.files.includes('CONTRIBUTING.md'));
   assert.ok(!packageJson.build.files.includes('docs/**/*'));
 });
+const webRuntime = await readFile(new URL('../src/web.mjs', import.meta.url), 'utf8');
+const desktopSecrets = await readFile(new URL('../desktop/secure-secrets.mjs', import.meta.url), 'utf8');
+
 test('desktop stores API keys through Electron OS-backed encryption rather than config plaintext', () => {
   assert.match(desktopMain, /safeStorage/);
   assert.match(desktopMain, /isEncryptionAvailable/);
