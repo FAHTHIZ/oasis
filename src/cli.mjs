@@ -39,7 +39,7 @@ import { loadOutputStyles } from './output-styles.mjs';
 import { renderStatusLine, statusLinePayload } from './status-line.mjs';
 import { BUILTIN_COMMANDS, COMMAND_ALIASES, runBuiltinCommand, createUsageTracker, recordUsage, formatInterval } from './slash.mjs';
 import { appendMemoryNote, memoryFiles } from './memory.mjs';
-import { runHeadless, OUTPUT_FORMATS } from './headless.mjs';
+import { runHeadless, OUTPUT_FORMATS, headlessSetupErrorOutput } from './headless.mjs';
 import { fstatSync, readFileSync, rmSync } from 'node:fs';
 import { runDiagnostics, formatDiagnostics, CHECKERS } from './diagnostics.mjs';
 import { readInput, KeyDecoder } from './line-editor.mjs';
@@ -2415,6 +2415,19 @@ async function readPipedStdin(options = {}) {
 }
 
 async function printMode(root, headless, args, autoApprove, persistence) {
+  const state = { started: false };
+  try {
+    return await printModeRun(root, headless, args, autoApprove, persistence, state);
+  } catch (error) {
+    if (state.started) throw error;
+    const out = headlessSetupErrorOutput(error, headless.outputFormat);
+    if (out.stdout) stdout.write(out.stdout);
+    stderr.write(out.stderr);
+    process.exitCode = 1;
+  }
+}
+
+async function printModeRun(root, headless, args, autoApprove, persistence, state) {
   let prompt = [headless.prompt, ...args].filter(Boolean).join(' ').trim();
   const streamInput = headless.inputFormat === 'stream-json';
   const stdinWait = Number(process.env.OASIS_STDIN_WAIT_SECONDS);
@@ -2461,6 +2474,7 @@ async function printMode(root, headless, args, autoApprove, persistence) {
   let exitCode;
   try {
   let summary;
+  state.started = true;
   ({ exitCode, summary } = await runHeadless({
     signal: stopController.signal,
     prompt, root, config, autoApprove,
@@ -4043,6 +4057,6 @@ async function main() {
 }
 
 main().catch((error) => {
-  stdout.write('OASIS error: ' + (error.message || String(error)) + '\n');
+  stderr.write('OASIS error: ' + (error.message || String(error)) + '\n');
   process.exitCode = 1;
 });
