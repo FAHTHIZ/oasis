@@ -1466,7 +1466,37 @@ export function updateTodos(store, rawTodos) {
   return { todos: cleaned.map((item) => ({ ...item })), remaining: cleaned.filter((item) => item.status !== 'completed').length };
 }
 
+// Read-modify-write tools on one file run one at a time per path. Parallel
+// subagents share the workspace, and two concurrent edit_file calls on the
+// same file both read the original, so the later write silently dropped the
+// earlier edit while both reported success.
+const PATH_LOCKED_TOOLS = new Set(['edit_file', 'write_file', 'multi_edit', 'notebook_edit', 'delete_file']);
+const pathLocks = new Map();
+
+async function withPathLock(key, fn) {
+  const previous = pathLocks.get(key) || Promise.resolve();
+  let release;
+  const mine = new Promise((resolve) => { release = resolve; });
+  const tail = previous.then(() => mine);
+  pathLocks.set(key, tail);
+  await previous;
+  try {
+    return await fn();
+  } finally {
+    release();
+    if (pathLocks.get(key) === tail) pathLocks.delete(key);
+  }
+}
+
 export async function executeTool(name, args = {}, context = {}) {
+  if (PATH_LOCKED_TOOLS.has(name) && args && typeof args.path === 'string' && args.path) {
+    const key = path.resolve(path.resolve(context.root || process.cwd()), args.path);
+    return withPathLock(key, () => executeToolUnlocked(name, args, context));
+  }
+  return executeToolUnlocked(name, args, context);
+}
+
+async function executeToolUnlocked(name, args = {}, context = {}) {
   const root = path.resolve(context.root || process.cwd());
   switch (name) {
     case 'todo_write':
