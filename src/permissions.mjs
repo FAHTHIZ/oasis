@@ -12,6 +12,9 @@ import { discardReason } from './git-safety.mjs';
 import path from 'node:path';
 import fs from 'node:fs';
 import { normalizePermissionMode } from './permission-modes.mjs';
+import { loadShellParser, parseShellCommands } from './shell-ast.mjs';
+
+loadShellParser();
 
 const TOOL_ALIASES = {
   bash: ['run_command', 'run_shell', 'monitor'],
@@ -393,6 +396,36 @@ export function commandSpellings(piece, depth = 0) {
   return out;
 }
 
+const AST_SHELLS = new Set(['sh', 'bash', 'zsh', 'dash', 'ksh', 'ash', 'mksh']);
+const AST_ASSIGNMENT = /^([A-Za-z_][A-Za-z0-9_]*)=(.*)$/s;
+
+// Every simple command the bash grammar finds, re-quoted as a piece: bodies
+// of functions, case arms and loops, scripts fed to a shell by a here-string
+// or heredoc, and programs named through a variable set earlier on the line.
+// Deny and ask rules match these in addition to the legacy pieces, so they
+// only get broader. Empty when the grammar is unavailable.
+function astCommandPieces(line, depth = 0) {
+  if (depth > 4) return [];
+  const parsed = parseShellCommands(line);
+  if (!parsed) return [];
+  const vars = new Map();
+  const out = [];
+  for (const cmd of parsed.commands) {
+    let tokens = cmd.tokens.filter((token, i, all) => !/^(\d*[<>]+[&|]?|&>>?|<<<)$/.test(token) && !/^(\d*[<>]+[&|]?|&>>?|<<<)$/.test(all[i - 1] || ''));
+    if (tokens.length && tokens.every((token) => AST_ASSIGNMENT.test(token))) {
+      for (const token of tokens) { const [, name, value] = token.match(AST_ASSIGNMENT); vars.set(name, value); }
+      continue;
+    }
+    tokens = tokens.map((token) => token.replace(/\$\{([A-Za-z_][A-Za-z0-9_]*)\}|\$([A-Za-z_][A-Za-z0-9_]*)/g, (all, a, b) => (vars.has(a || b) ? vars.get(a || b) : all)));
+    if (tokens[0] && /\s/.test(tokens[0]) && /^\$/.test(cmd.tokens[0])) tokens = [...tokens[0].split(/\s+/).filter(Boolean), ...tokens.slice(1)];
+    while (tokens.length > 1 && AST_ASSIGNMENT.test(tokens[0])) tokens = tokens.slice(1);
+    if (!tokens.length) continue;
+    out.push(tokens.map(quoteWord).join(' '));
+    if (cmd.stdinScript && AST_SHELLS.has(executableBase(tokens[0]))) out.push(...astCommandPieces(cmd.stdinScript, depth + 1));
+  }
+  return out;
+}
+
 function matchCommandSpecifier(specifier, line, options = {}) {
   const parsed = splitShellCommands(line);
   if (!parsed.commands.length) return false;
@@ -402,7 +435,8 @@ function matchCommandSpecifier(specifier, line, options = {}) {
   // a safe parse and a literal match for every simple command (including
   // commands found in substitutions).
   if (options.requireEveryCommand === false) {
-    return parsed.commands.some((piece) => [...commandSpellings(piece)].some((spelling) => matchSingleCommandSpecifier(specifier, spelling)));
+    const pieces = [...parsed.commands, ...astCommandPieces(line)];
+    return pieces.some((piece) => [...commandSpellings(piece)].some((spelling) => matchSingleCommandSpecifier(specifier, spelling)));
   }
   if (!parsed.safe) return false;
   return parsed.commands.every((piece) => matchSingleCommandSpecifier(specifier, piece));

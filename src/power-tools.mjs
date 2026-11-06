@@ -21,7 +21,7 @@ import { existsSync } from 'node:fs';
 import { randomUUID } from 'node:crypto';
 import { snapshotFile } from './backups.mjs';
 import { relaxedReplace, closestMatchHint } from './edit-match.mjs';
-import { analyzeShellLine } from './shell-risk.mjs';
+import { analyzeShellLine, shellAnalyzerReady } from './shell-risk.mjs';
 import { maskedPipelineWarning } from './pipe-status.mjs';
 import { assertNoNewElision, shrinkWarning, recordAndDetectCircling, testTamperWarning, combineWarnings } from './change-guard.mjs';
 import { commentWarning } from './style-rules.mjs';
@@ -506,6 +506,7 @@ async function runShell(root, args, context, flavor = 'sh') {
   const command = String(args.command || '').trim();
   if (!command) throw new Error('Provide a shell command.');
   if (command.length > 8000 || command.includes('\0')) throw new Error('Shell command is too long or invalid.');
+  await shellAnalyzerReady();
   const blocked = shellCommandBlocked(command);
   if (blocked) throw new Error(blocked);
   if (args.run_in_background !== true) {
