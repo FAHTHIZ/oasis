@@ -12,7 +12,7 @@ test('GitHub Pages serves the installable browser app on every main push', async
   assert.ok(workflow.includes('node .github/scripts/stamp-site.mjs'));
   assert.ok(workflow.includes('fetch-depth: 20'), 'The publish checkout needs history for the changes feed.');
   // Deployment must not be gated on the optional admin secret; only metadata is.
-  const deploy = workflow.slice(workflow.indexOf('- name: Deploy public landing page'));
+  const deploy = workflow.slice(workflow.indexOf('- name: Deploy installable browser app'));
   assert.ok(!deploy.split('- name:')[1].includes('launch-auth'), 'Deploy must not depend on OASIS_REPO_ADMIN_TOKEN.');
   assert.ok(workflow.includes("if: ${{ steps.launch-auth.outputs.ready == 'true' }}"), 'Metadata updates stay gated on the admin secret.');
 });
