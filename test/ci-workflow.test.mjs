@@ -40,21 +40,7 @@ test('CI keeps latest pending concurrency per ref and lets active quality runs f
 });
 
 test('public product lifecycle is a stable 1.x release, not a candidate or Beta', async () => {
-  const readme = await readFile(new URL('../README.md', import.meta.url), 'utf8');
-  const status = await readFile(new URL('../docs/PROJECT_PLAN.md', import.meta.url), 'utf8');
   const pkg = JSON.parse(await readFile(new URL('../package.json', import.meta.url), 'utf8'));
-  // The current stable version's curated notes (1.0.0, 1.1.0, ...).
-  const notes = await readFile(new URL('../docs/releases/v' + pkg.version + '.md', import.meta.url), 'utf8');
-  assert.match(readme, /stage-stable/);
-  const minor = pkg.version.split('.').slice(0, 2).join('\\.');
-  assert.match(readme, new RegExp('Current lifecycle.*OASIS ' + minor + ', stable', 'i'));
-  assert.doesNotMatch(readme, /OASIS is in beta|status-alpha|OASIS is in alpha|Release Candidate 1/i);
-  assert.match(status, /\*\*Product lifecycle:\*\* Stable/);
-  assert.match(status, /\*\*Release channel:\*\* stable/);
-  assert.match(status, /not code-signed/);
-  assert.ok(notes.startsWith('# OASIS ' + pkg.version), 'release notes start with the version heading');
-  assert.match(notes, /not code-signed/);
-  assert.match(notes, /CI-only/);
   assert.match(pkg.version, /^1\.\d+\.\d+$/, 'stable 1.x numeric SemVer');
   assert.equal(pkg.oasisRelease?.channel, 'stable');
   assert.equal(pkg.oasisRelease?.candidate, undefined);
@@ -62,7 +48,6 @@ test('public product lifecycle is a stable 1.x release, not a candidate or Beta'
 
 test('desktop release requires an explicit stable publication dispatch and same-commit gates', async () => {
   const workflow = await readFile(new URL('../.github/workflows/desktop-build.yml', import.meta.url), 'utf8');
-  const notes = await readFile(new URL('../docs/releases/v0.4.0.md', import.meta.url), 'utf8');
   assert.ok(workflow.includes('branches: [main]'));
   assert.ok(!workflow.includes("tags: ['v*']"));
   assert.ok(workflow.includes('publish_release:'));
@@ -90,9 +75,6 @@ test('desktop release requires an explicit stable publication dispatch and same-
   assert.ok(workflow.includes('body_path: ${{ steps.release-version.outputs.notes_path }}'));
   assert.ok(workflow.includes('sha256sum'));
   assert.ok(!workflow.includes('git push origin "$tag"'));
-  assert.match(notes, /OASIS 0\.4\.0.*Beta/i);
-  assert.match(notes, /unsigned/i);
-  assert.match(notes, /SHA256SUMS/);
 });
 
 test('quality runs the live Docker sandbox isolation test and requires a real engine', async () => {

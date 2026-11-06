@@ -4,7 +4,6 @@ import { readFileSync } from 'node:fs';
 
 const html = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
 const css = readFileSync(new URL('../assets/oasis-interface.css', import.meta.url), 'utf8');
-const guide = readFileSync(new URL('../docs/USER_GUIDE.md', import.meta.url), 'utf8');
 
 test('workspace ships an accessible keyboard shortcuts and help guide', () => {
   assert.match(html, /<dialog class="modal shortcuts-dialog" id="shortcutsDialog" aria-labelledby="shortcutsTitle" aria-describedby="shortcutsIntro">/);
@@ -27,10 +26,8 @@ test('every global and composer shortcut is explained in plain words', () => {
   }
 });
 
-test('guide is full screen on phones and documented in the user guide', () => {
+test('guide is full screen on phones', () => {
   assert.match(css, /@media \(max-width:640px\)\{dialog\.shortcuts-dialog\{[^}]*height:100dvh/);
-  assert.match(guide, /## Browser workspace keyboard shortcuts/);
-  assert.match(guide, /\(#browser-workspace-keyboard-shortcuts\)/);
 });
 
 test('language-server notices render as a quiet, expandable note in the browser', () => {

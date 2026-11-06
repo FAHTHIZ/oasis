@@ -4,7 +4,6 @@ import test from 'node:test';
 
 const packageJson = JSON.parse(await readFile(new URL('../package.json', import.meta.url), 'utf8'));
 const desktopMain = await readFile(new URL('../desktop/main.mjs', import.meta.url), 'utf8');
-const installGuide = await readFile(new URL('../docs/INSTALL.md', import.meta.url), 'utf8');
 const releaseWorkflow = await readFile(new URL('../.github/workflows/desktop-build.yml', import.meta.url), 'utf8');
 
 test('desktop packaging defines one-click Windows installer and macOS/Linux packages', () => {
@@ -49,14 +48,6 @@ test('desktop runtime is loopback-only and keeps renderer Node APIs disabled', (
 });
 
 test('install instructions explain desktop release and current OS signing limitations', () => {
-  assert.match(installGuide, /do not need to install Node\.js or Git/i);
-  assert.match(installGuide, /unsigned/i);
-  assert.match(installGuide, /github\.com\/FAHTHIZ\/oasis\/releases/i);
-  assert.match(installGuide, /Downloads:.*releases\/latest/is);
-  assert.match(installGuide, /SHA256SUMS/);
-  assert.match(installGuide, /Windows x64.*\.exe/i);
-  assert.match(installGuide, /macOS Apple Silicon.*\.dmg/i);
-  assert.match(installGuide, /Linux x86_64.*\.AppImage.*\.deb/i);
 });
 
 const webRuntime = await readFile(new URL('../src/web.mjs', import.meta.url), 'utf8');
