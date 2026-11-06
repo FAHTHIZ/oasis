@@ -6,7 +6,7 @@ import { argvSleepSeconds, longSleepError } from './sleep-guard.mjs';
 import { atomicWriteFile } from './atomic-write.mjs';
 import { injectionHoldReason } from './untrusted-content.mjs';
 import * as gitSafety from './git-safety.mjs';
-import { frontMatterValue } from './frontmatter.mjs';
+import { frontMatterValue, splitFrontMatter } from './frontmatter.mjs';
 import { commandFlagWarning } from './command-hints.mjs';
 import { isScratchPath } from './scratch.mjs';
 import { protectedShellWrite, protectedEditsAllowed, protectedConfigPath } from './protected-paths.mjs';
@@ -1043,8 +1043,7 @@ async function installExternalSkill(args, context, root) {
 }
 
 function parseSkillMetadata(content, fallbackName) {
-  const front = content.match(/^---\r?\n([\s\S]*?)\r?\n---(?:\r?\n|$)/);
-  const metadata = front ? front[1] : '';
+  const metadata = splitFrontMatter(content).data;
   const read = (key) => frontMatterValue(metadata, key);
   const rawName = read('name') || fallbackName;
   const name = /^[a-z][a-z0-9-]{0,63}$/i.test(rawName) ? rawName : fallbackName;
@@ -1088,7 +1087,7 @@ export async function listAvailableSkills(root, options = {}) {
           description: meta.description,
           // Claude Code's disable-model-invocation: the user can still run it
           // as /name, but it stays out of the model's skill catalogue.
-          modelInvocable: !/^disable-model-invocation:\s*true\s*$/m.test((/^---\r?\n([\s\S]*?)\r?\n---/.exec(content) || [])[1] || ''),
+          modelInvocable: frontMatterValue(splitFrontMatter(content).data, 'disable-model-invocation').toLowerCase() !== 'true',
           source,
           directoryName: entry.name,
           relativePath: localSource ? path.posix.join(relativePrefix, entry.name, 'SKILL.md') : entry.name,

@@ -36,210 +36,43 @@ import { randomUUID } from 'node:crypto';
 import os from 'node:os';
 import path from 'node:path';
 import { getConfigDirectory } from './config.mjs';
+import { parse as parseTomlText } from 'smol-toml';
+import { parse as parseYamlText } from 'yaml';
+import { parse as parseJsoncText, printParseErrorCode } from 'jsonc-parser';
+import { parseYamlMapping, splitFrontMatter } from './frontmatter.mjs';
 
 export const IMPORT_SOURCES = ['codex', 'gemini', 'cursor', 'claude', 'hermes', 'opencode', 'antigravity', 'windsurf', 'cline'];
 const MAX_SKILL_BYTES = 4 * 1024 * 1024;
 const MAX_FILE = 256 * 1024;
 
-// ---- minimal TOML (tables, dotted keys, strings, arrays, inline tables, numbers, booleans) ----
+// TOML (Codex config, Gemini commands), JSONC (OpenCode) and YAML (Hermes config, rule and
+// agent front matter) are parsed by smol-toml, Microsoft's jsonc-parser and yaml.
+/** TOML 1.0. Throws an Error whose message starts with "TOML:". */
 export function parseToml(text) {
-  const root = {};
-  let current = root;
-  let i = 0;
-  const src = String(text).replace(/\r\n/g, '\n');
-  const ws = () => { while (i < src.length && (src[i] === ' ' || src[i] === '\t')) i++; };
-  const wsnl = () => { for (;;) { ws(); if (src[i] === '\n') { i++; continue; } if (src[i] === '#') { while (i < src.length && src[i] !== '\n') i++; continue; } break; } };
-  const key = () => {
-    ws();
-    if (src[i] === '"' || src[i] === "'") return string();
-    const start = i;
-    while (i < src.length && /[A-Za-z0-9_-]/.test(src[i])) i++;
-    if (start === i) throw new Error('TOML: expected a key at offset ' + i);
-    return src.slice(start, i);
-  };
-  const dotted = () => { const parts = [key()]; ws(); while (src[i] === '.') { i++; parts.push(key()); ws(); } return parts; };
-  const string = () => {
-    const quote = src[i];
-    if (src.startsWith(quote.repeat(3), i)) {
-      i += 3;
-      if (src[i] === '\n') i++;
-      const end = src.indexOf(quote.repeat(3), i);
-      if (end < 0) throw new Error('TOML: unterminated multi-line string');
-      let raw = src.slice(i, end);
-      i = end + 3;
-      while (src[i] === quote) { raw += quote; i++; }
-      return quote === '"' ? unescape(raw.replace(/\\\n\s*/g, '')) : raw;
-    }
-    i++;
-    let out = '';
-    while (i < src.length && src[i] !== quote) {
-      if (src[i] === '\n') throw new Error('TOML: newline in string');
-      if (quote === '"' && src[i] === '\\') { out += src[i] + src[i + 1]; i += 2; continue; }
-      out += src[i++];
-    }
-    if (i >= src.length) throw new Error('TOML: unterminated string at offset ' + i);
-    i++;
-    return quote === '"' ? unescape(out) : out;
-  };
-  const unescape = (s) => s.replace(/\\(u[0-9a-fA-F]{4}|U[0-9a-fA-F]{8}|.)/g, (m, c) => {
-    if (c[0] === 'u' || c[0] === 'U') return String.fromCodePoint(parseInt(c.slice(1), 16));
-    return { n: '\n', t: '\t', r: '\r', '"': '"', '\\': '\\', b: '\b', f: '\f' }[c] ?? c;
-  });
-  const value = () => {
-    ws();
-    const ch = src[i];
-    if (ch === '"' || ch === "'") return string();
-    if (ch === '[') {
-      i++;
-      const arr = [];
-      for (;;) {
-        wsnl();
-        if (i >= src.length) throw new Error('TOML: unterminated array at offset ' + i);
-        if (src[i] === ']') { i++; return arr; }
-        const before = i;
-        arr.push(value());
-        if (i <= before) throw new Error('TOML: expected an array value at offset ' + i);
-        wsnl();
-        if (src[i] === ',') { i++; continue; }
-        if (src[i] === ']') { i++; return arr; }
-        throw new Error('TOML: expected , or ] at offset ' + i);
-      }
-    }
-    if (ch === '{') {
-      i++;
-      const obj = {};
-      for (;;) { ws(); if (src[i] === '}') { i++; return obj; } const parts = dotted(); ws(); if (src[i] !== '=') throw new Error('TOML: expected ='); i++; assign(obj, parts, value()); ws(); if (src[i] === ',') i++; }
-    }
-    const start = i;
-    while (i < src.length && !/[,\]}\n#]/.test(src[i])) i++;
-    const raw = src.slice(start, i).trim();
-    if (!raw) throw new Error('TOML: expected a value at offset ' + start);
-    if (raw === 'true') return true;
-    if (raw === 'false') return false;
-    const num = Number(raw.replace(/_/g, ''));
-    return Number.isFinite(num) ? num : raw;
-  };
-  const assign = (obj, parts, v) => {
-    let target = obj;
-    for (const part of parts.slice(0, -1)) target = (target[part] && typeof target[part] === 'object') ? target[part] : (target[part] = {});
-    target[parts[parts.length - 1]] = v;
-  };
-  while (i < src.length) {
-    wsnl();
-    if (i >= src.length) break;
-    if (src[i] === '[') {
-      const array = src[i + 1] === '[';
-      i += array ? 2 : 1;
-      const parts = dotted();
-      i += array ? 2 : 1;
-      let target = root;
-      for (const part of parts.slice(0, -1)) target = (target[part] && typeof target[part] === 'object') ? (Array.isArray(target[part]) ? target[part][target[part].length - 1] : target[part]) : (target[part] = {});
-      const last = parts[parts.length - 1];
-      if (array) { (target[last] ||= []).push({}); current = target[last][target[last].length - 1]; }
-      else current = (target[last] && typeof target[last] === 'object') ? target[last] : (target[last] = {});
-      continue;
-    }
-    const parts = dotted();
-    ws();
-    if (src[i] !== '=') throw new Error('TOML: expected = after ' + parts.join('.'));
-    i++;
-    assign(current, parts, value());
-  }
-  return root;
+  // smol-toml builds null-prototype objects; callers get ordinary ones.
+  const plain = (value) => Array.isArray(value) ? value.map(plain)
+    : value && typeof value === 'object' && !(value instanceof Date) ? Object.fromEntries(Object.entries(value).map(([key, item]) => [key, plain(item)])) : value;
+  try { return plain(parseTomlText(String(text))); } catch (error) { throw new Error('TOML: ' + String(error && error.message || error).split('\n')[0]); }
 }
 
-// ---- minimal block YAML (maps, lists, scalars, inline [..] and {..}) for Hermes config.yaml ----
+/** A YAML config file (Hermes config.yaml) as a mapping with typed scalars. Throws on a syntax error. */
 export function parseYamlSubset(text) {
-  const lines = String(text).replace(/\r\n/g, '\n').split('\n')
-    .map((raw) => ({ indent: raw.match(/^ */)[0].length, text: stripYamlComment(raw).trimEnd().trim() }))
-    .filter((line) => line.text && line.text !== '---');
-  let i = 0;
-  const scalar = (raw) => {
-    const v = raw.trim();
-    if (v === '' || v === '~' || v === 'null') return null;
-    if (v === 'true') return true;
-    if (v === 'false') return false;
-    if (/^-?\d+(\.\d+)?$/.test(v)) return Number(v);
-    if ((v.startsWith('"') && v.endsWith('"'))) { try { return JSON.parse(v); } catch { return v.slice(1, -1); } }
-    if (v.startsWith("'") && v.endsWith("'")) return v.slice(1, -1).replace(/''/g, "'");
-    if (v.startsWith('[') && v.endsWith(']')) return splitFlow(v.slice(1, -1)).map(scalar);
-    if (v.startsWith('{') && v.endsWith('}')) return Object.fromEntries(splitFlow(v.slice(1, -1)).map((pair) => { const at = pair.indexOf(':'); return [pair.slice(0, at).trim().replace(/^["']|["']$/g, ''), scalar(pair.slice(at + 1))]; }));
-    return v;
-  };
-  const block = (indent) => {
-    if (i >= lines.length) return null;
-    if (lines[i].text.startsWith('- ') || lines[i].text === '-') {
-      const list = [];
-      while (i < lines.length && lines[i].indent === indent && (lines[i].text.startsWith('- ') || lines[i].text === '-')) {
-        const rest = lines[i].text.slice(1).trim();
-        i++;
-        if (!rest) list.push(i < lines.length && lines[i].indent > indent ? block(lines[i].indent) : null);
-        else if (/^[^"'\[{][^:]*:(\s|$)/.test(rest)) {
-          // "- key: value" starts an inline map item
-          const fake = { indent: indent + 2, text: rest };
-          lines.splice(i, 0, fake);
-          list.push(block(indent + 2));
-        } else list.push(scalar(rest));
-      }
-      return list;
-    }
-    const map = {};
-    while (i < lines.length && lines[i].indent === indent) {
-      const line = lines[i].text;
-      const match = /^("[^"]*"|'[^']*'|[^:]+?)\s*:(?:\s+(.*))?$/.exec(line);
-      if (!match) { i++; continue; }
-      const key = match[1].replace(/^["']|["']$/g, '');
-      const value = match[2];
-      i++;
-      if (value !== undefined && value !== '' && value !== '|' && value !== '>') map[key] = scalar(value);
-      else if (value === '|' || value === '>') {
-        const parts = [];
-        while (i < lines.length && lines[i].indent > indent) parts.push(lines[i++].text);
-        map[key] = parts.join(value === '|' ? '\n' : ' ');
-      } else map[key] = i < lines.length && lines[i].indent > indent ? block(lines[i].indent) : null;
-    }
-    return map;
-  };
-  return lines.length ? block(lines[0].indent) : {};
-}
-function stripYamlComment(raw) {
-  let quote = null;
-  for (let i = 0; i < raw.length; i++) {
-    const ch = raw[i];
-    if (quote) { if (ch === quote) quote = null; continue; }
-    if (ch === '"' || ch === "'") quote = ch;
-    else if (ch === '#' && (i === 0 || /\s/.test(raw[i - 1]))) return raw.slice(0, i);
-  }
-  return raw;
-}
-function splitFlow(text) {
-  const parts = [];
-  let depth = 0, quote = null, start = 0;
-  for (let i = 0; i < text.length; i++) {
-    const ch = text[i];
-    if (quote) { if (ch === quote) quote = null; continue; }
-    if (ch === '"' || ch === "'") quote = ch;
-    else if (ch === '[' || ch === '{') depth++;
-    else if (ch === ']' || ch === '}') depth--;
-    else if (ch === ',' && depth === 0) { parts.push(text.slice(start, i)); start = i + 1; }
-  }
-  if (text.slice(start).trim()) parts.push(text.slice(start));
-  return parts.map((part) => part.trim()).filter(Boolean);
+  const value = parseYamlText(String(text), { schema: 'core', maxAliasCount: 100, prettyErrors: false });
+  return value && typeof value === 'object' && !Array.isArray(value) ? value : {};
 }
 
-/** JSON with comments and trailing commas (opencode.jsonc). */
+/** Typed front matter (core schema) and the body after it. */
+function typedFrontMatter(text) {
+  const { metadata, body, hasFrontMatter } = splitFrontMatter(String(text).replace(/\r\n/g, '\n'));
+  return { meta: hasFrontMatter ? parseYamlMapping(metadata, { schema: 'core' }) : {}, body, hasFrontMatter };
+}
+
+/** JSON with comments and trailing commas (opencode.jsonc). Throws on a syntax error. */
 export function parseJsonc(text) {
-  let out = '', quote = false;
-  const src = String(text);
-  for (let i = 0; i < src.length; i++) {
-    const ch = src[i];
-    if (quote) { out += ch; if (ch === '\\') { out += src[++i] || ''; } else if (ch === '"') quote = false; continue; }
-    if (ch === '"') { quote = true; out += ch; continue; }
-    if (ch === '/' && src[i + 1] === '/') { while (i < src.length && src[i] !== '\n') i++; out += '\n'; continue; }
-    if (ch === '/' && src[i + 1] === '*') { i = src.indexOf('*/', i + 2); if (i < 0) break; i++; continue; }
-    out += ch;
-  }
-  return JSON.parse(out.replace(/,(\s*[}\]])/g, '$1'));
+  const errors = [];
+  const value = parseJsoncText(String(text), errors, { allowTrailingComma: true, disallowComments: false });
+  if (errors.length) throw new SyntaxError('JSONC: ' + printParseErrorCode(errors[0].error) + ' at offset ' + errors[0].offset);
+  return value;
 }
 
 // ---- helpers ----
@@ -313,14 +146,13 @@ export function geminiCommandToMarkdown(toml) {
 }
 
 function cursorRuleToMarkdown(text, name) {
-  const match = /^---\n([\s\S]*?)\n---\n?/.exec(text.replace(/\r\n/g, '\n'));
-  const body = (match ? text.replace(/\r\n/g, '\n').slice(match[0].length) : text).trim();
-  const meta = {};
-  if (match) for (const line of match[1].split('\n')) { const m = /^(\w+):\s*(.*)$/.exec(line); if (m) meta[m[1]] = m[2].trim(); }
+  const { meta, body: rest } = typedFrontMatter(text);
+  const body = rest.trim();
   const lines = ['---'];
-  if (meta.description) lines.push('description: ' + JSON.stringify(meta.description.replace(/^["']|["']$/g, '')));
-  let globs = meta.globs ? meta.globs.replace(/^\[|\]$/g, '').split(',').map((g) => g.trim().replace(/^["']|["']$/g, '')).filter(Boolean) : [];
-  if (meta.alwaysApply === 'true') globs = [];
+  if (meta.description) lines.push('description: ' + JSON.stringify(String(meta.description)));
+  // Cursor writes `globs: src/**/*.ts, test/**` unquoted as well as YAML lists.
+  let globs = (Array.isArray(meta.globs) ? meta.globs : String(meta.globs || '').split(',')).map((g) => String(g).trim()).filter(Boolean);
+  if (meta.alwaysApply === true || String(meta.alwaysApply) === 'true') globs = [];
   if (globs.length) { lines.push('paths:'); for (const g of globs) lines.push('  - ' + JSON.stringify(g)); }
   lines.push('---', '', '<!-- imported from Cursor rule ' + name + ' -->', body, '');
   return (lines.length > 3 ? lines.join('\n') : lines.slice(2).join('\n'));
@@ -328,10 +160,8 @@ function cursorRuleToMarkdown(text, name) {
 
 /** Antigravity / Windsurf rule frontmatter (trigger: always_on | glob | model_decision | manual). */
 function triggerRuleToMarkdown(text, origin) {
-  const src = text.replace(/\r\n/g, '\n');
-  const match = /^---\n([\s\S]*?)\n---\n?/.exec(src);
-  const body = (match ? src.slice(match[0].length) : src).trim();
-  const meta = match ? parseYamlSubset(match[1]) || {} : {};
+  const { meta, body: rest } = typedFrontMatter(text);
+  const body = rest.trim();
   if (String(meta.trigger || '').replace(/-/g, '_') === 'manual') return null;
   const lines = ['---'];
   if (meta.description) lines.push('description: ' + JSON.stringify(String(meta.description)));
@@ -343,10 +173,8 @@ function triggerRuleToMarkdown(text, origin) {
 
 /** OpenCode agent markdown -> Claude-style subagent markdown. */
 function opencodeAgentToMarkdown(text, name) {
-  const src = text.replace(/\r\n/g, '\n');
-  const match = /^---\n([\s\S]*?)\n---\n?/.exec(src);
-  const meta = match ? parseYamlSubset(match[1]) || {} : {};
-  const body = (match ? src.slice(match[0].length) : src).trim();
+  const { meta, body: rest } = typedFrontMatter(text);
+  const body = rest.trim();
   const lines = ['---', 'name: ' + name, 'description: ' + JSON.stringify(String(meta.description || 'Imported from OpenCode agent ' + name))];
   if (meta.tools && typeof meta.tools === 'object' && !Array.isArray(meta.tools)) {
     const map = { bash: 'Bash', read: 'Read', edit: 'Edit', write: 'Write', grep: 'Grep', glob: 'Glob', webfetch: 'WebFetch', list: 'LS' };
@@ -559,9 +387,7 @@ export async function planImport(root, options = {}) {
         if (/^MEMORY$/i.test(parts[0])) continue;
         const text = await readText(file);
         if (!text) continue;
-        const match = /^---\n([\s\S]*?)\n---\n?/.exec(text.replace(/\r\n/g, '\n'));
-        const meta = match ? parseYamlSubset(match[1]) || {} : {};
-        const body = match ? text.replace(/\r\n/g, '\n').slice(match[0].length) : text;
+        const { meta, body } = typedFrontMatter(text);
         const type = String(meta.type || '').toLowerCase();
         const category = type === 'user' || type === 'feedback' ? 'preferences' : type === 'reference' ? 'reference' : 'project';
         addMemory('claude', file, 'project', String(meta.name || parts[0].replace(/[-_]+/g, ' ')), (meta.description ? meta.description + '\n\n' : '') + body, category);

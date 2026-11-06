@@ -6,7 +6,7 @@ import { readdir, readFile, lstat } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { getConfigDirectory } from './config.mjs';
-import { parseFrontMatter } from './subagents.mjs';
+import { parseFrontMatter } from './frontmatter.mjs';
 
 const MAX_STYLE_FILE = 32 * 1024;
 

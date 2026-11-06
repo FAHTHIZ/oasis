@@ -25,7 +25,7 @@ import { processTreeSpawnOptions, signalProcessTree } from './process-tree.mjs';
 import os from 'node:os';
 import path from 'node:path';
 import { getConfigDirectory } from './config.mjs';
-import { parseFrontMatter } from './subagents.mjs';
+import { parseFrontMatter } from './frontmatter.mjs';
 import { sensitivePath } from './tools.mjs';
 import { imageMediaType, MAX_IMAGE_BYTES } from './images.mjs';
 
@@ -341,7 +341,7 @@ export async function resolveSkillCommand(root, text, context = {}) {
   const match = String(text).trim().match(/^\/([a-zA-Z][a-zA-Z0-9-]{0,63})(?:\s+([\s\S]*))?$/);
   if (!match) return null;
   const { loadSkillText } = await import('./tools.mjs');
-  const { parseFrontMatter } = await import('./subagents.mjs');
+  const { parseFrontMatter } = await import('./frontmatter.mjs');
   let skill;
   try { skill = await loadSkillText(root, match[1], { env: context.env || process.env }); } catch { return null; }
   const { data, body } = parseFrontMatter(skill.content);
