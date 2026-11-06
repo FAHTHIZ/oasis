@@ -55,3 +55,10 @@ test('mobile and contributor policies exist outside the installable npm package'
   assert.ok(!pkg.files.includes('CONTRIBUTING.md'));
   assert.ok(!pkg.files.includes('SECURITY.md'));
 });
+
+test('CLI help and onboarding messages do not link to removed documentation', async () => {
+  const cli = await read('../src/cli.mjs');
+  assert.ok(cli.includes('Docs: https://github.com/FAHTHIZ/oasis#readme'));
+  assert.ok(cli.includes('Guide: https://github.com/FAHTHIZ/oasis#download-and-install'));
+  assert.doesNotMatch(cli, /\\/docs\\//);
+});

@@ -124,7 +124,7 @@ function printQuickHelp() {
       ['oasis --version', 'Print the version']
     ]),
     '',
-    'Docs: https://github.com/FAHTHIZ/oasis/blob/main/docs/USER_GUIDE.md',
+    'Docs: https://github.com/FAHTHIZ/oasis#readme',
     ''
   ].join('\n'));
 }
@@ -2460,7 +2460,7 @@ async function printModeRun(root, headless, args, autoApprove, persistence, stat
     const envKeys = providerKeysInEnv();
     if (envKeys.length) throw new Error('No model provider is configured, but ' + envKeys.map((item) => item.name).join(', ') + (envKeys.length > 1 ? ' are' : ' is') + ' set.\n  Run: oasis connect --from-env' + (envKeys.length > 1 ? ' [' + envKeys.map((item) => item.provider).join('|') + ']' : '') + '\n  It finds a model that works with that key and saves it.');
   }
-  if (!config.configured) throw new Error('No model provider is configured.\n  Pick one:\n    oasis connect        paste an API key, model link or local server address\n    oasis setup          guided setup in this terminal (API key, free gateway, or Ollama)\n    oasis setup --auto   detect this computer and any local model server, then configure the best fit\n    oasis web --open     set it up in the browser workspace instead\n    OASIS_PROTOCOL, OASIS_BASE_URL, OASIS_MODEL + API key variable   for CI and scripts\n  Guide: https://github.com/FAHTHIZ/oasis/blob/main/docs/INSTALL.md');
+  if (!config.configured) throw new Error('No model provider is configured.\n  Pick one:\n    oasis connect        paste an API key, model link or local server address\n    oasis setup          guided setup in this terminal (API key, free gateway, or Ollama)\n    oasis setup --auto   detect this computer and any local model server, then configure the best fit\n    oasis web --open     set it up in the browser workspace instead\n    OASIS_PROTOCOL, OASIS_BASE_URL, OASIS_MODEL + API key variable   for CI and scripts\n  Guide: https://github.com/FAHTHIZ/oasis#download-and-install');
   if (SESSION_OPTIONS.channels.length || SESSION_OPTIONS.devChannels.length) stderr.write('[channels] Channels need an interactive session; ignored with -p.\n');
   // CI runners and supervisors stop jobs with SIGTERM. Commands run in their own
   // process group, so without this they would outlive Oasis and the job would
