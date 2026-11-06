@@ -227,6 +227,43 @@ function matchSingleCommandSpecifier(specifier, line) {
   return line === specifier;
 }
 
+const ANSI_C_ESCAPES = { n: '\n', t: '\t', r: '\r', a: '\x07', b: '\b', e: '\x1b', E: '\x1b', f: '\f', v: '\v', '\\': '\\', "'": "'", '"': '"', '?': '?' };
+
+// Decodes the body of $'...' starting at `start`; returns { text, end } with end
+// on the closing quote, or null when the quote never closes.
+function ansiCQuoted(source, start) {
+  let text = '';
+  for (let i = start; i < source.length; i++) {
+    const char = source[i];
+    if (char === "'") return { text, end: i };
+    if (char !== '\\') { text += char; continue; }
+    const next = source[++i];
+    if (next === undefined) return null;
+    if (Object.hasOwn(ANSI_C_ESCAPES, next)) { text += ANSI_C_ESCAPES[next]; continue; }
+    let match;
+    if ((match = /^x([0-9a-fA-F]{1,2})/.exec(source.slice(i)))) { text += String.fromCharCode(parseInt(match[1], 16)); i += match[0].length - 1; continue; }
+    if ((match = /^u([0-9a-fA-F]{1,4})/.exec(source.slice(i))) || (match = /^U([0-9a-fA-F]{1,8})/.exec(source.slice(i)))) { const code = parseInt(match[1], 16); text += code <= 0x10ffff ? String.fromCodePoint(code) : ''; i += match[0].length - 1; continue; }
+    if ((match = /^[0-7]{1,3}/.exec(source.slice(i)))) { text += String.fromCharCode(parseInt(match[0], 8) & 0xff); i += match[0].length - 1; continue; }
+    text += '\\' + next;
+  }
+  return null;
+}
+
+// Shell grammar around a simple command: `{ git push; }`, `(git push)`,
+// `if x; then git push; fi`, `! git push`. Removed so rules see the command.
+const COMPOUND_WORDS = new Set(['{', '}', '!', 'if', 'then', 'else', 'elif', 'do', 'while', 'until', 'fi', 'done']);
+function stripCompound(words) {
+  let out = [...words];
+  for (let guard = 0; guard < 16 && out.length; guard++) {
+    if (COMPOUND_WORDS.has(out[0])) { out = out.slice(1); continue; }
+    if (out[0].startsWith('(')) { const rest = out[0].replace(/^\(+/, ''); out = rest ? [rest, ...out.slice(1)] : out.slice(1); continue; }
+    break;
+  }
+  while (out.length && (out[out.length - 1] === '}' || /^\)+$/.test(out[out.length - 1]))) out = out.slice(0, -1);
+  if (out.length && out[out.length - 1].endsWith(')')) out[out.length - 1] = out[out.length - 1].replace(/\)+$/, '');
+  return out.filter((word, index) => word || index > 0);
+}
+
 // Splits one simple command into shell words: quotes and backslash escapes are
 // removed, runs of spaces/tabs and line continuations collapse. Returns null for
 // text this small parser does not understand (unbalanced quotes).
@@ -246,6 +283,13 @@ function shellWords(text) {
       continue;
     }
     if (char === '\\') { i++; if (i < source.length && source[i] !== '\n') { current += source[i]; has = true; } continue; }
+    // Bash ANSI-C ($'git') and locale ($"git") quoting spell the same word.
+    if (char === '$' && source[i + 1] === "'") {
+      const decoded = ansiCQuoted(source, i + 2);
+      if (!decoded) return null;
+      current += decoded.text; has = true; i = decoded.end; continue;
+    }
+    if (char === '$' && source[i + 1] === '"') { quote = '"'; has = true; i++; continue; }
     if (char === "'" || char === '"') { quote = char; has = true; continue; }
     if (char === ' ' || char === '\t' || char === '\n' || char === '\r') { if (has) words.push(current); current = ''; has = false; continue; }
     current += char;
@@ -276,15 +320,37 @@ function stripGitGlobals(words) {
 // of `bash -c` and friends, and `git` without global options (-C, -c, --no-pager).
 // Without this, `Bash(git push:*)` missed `git  push`, `"git" push`, `\git push`,
 // `env git push`, `sudo git push`, `bash -c "git push"` and `git -C . push`.
+const quoteWord = (word) => /^[A-Za-z0-9_./:=@%+,-]+$/.test(word) ? word : "'" + String(word).replace(/'/g, "'\\''") + "'";
+
 export function commandSpellings(piece, depth = 0) {
   const out = new Set([piece]);
   if (depth > 4) return out;
   let words = shellWords(piece);
   if (!words || !words.length) return out;
+  words = stripCompound(words);
   for (let guard = 0; guard < 12 && words.length; guard++) {
     while (words.length && /^[A-Za-z_][A-Za-z0-9_]*=/.test(words[0])) words = words.slice(1);
     if (!words.length) break;
     const base = executableBase(words[0]);
+    if (base === 'find') {
+      // find -exec/-execdir/-ok/-okdir run their own command.
+      const at = words.findIndex((word) => /^-(exec|execdir|ok|okdir)$/.test(word));
+      if (at !== -1 && at + 1 < words.length) {
+        const end = words.findIndex((word, index) => index > at && (word === ';' || word === '+'));
+        const inner = words.slice(at + 1, end === -1 ? undefined : end).filter((word) => word !== '{}');
+        for (const spelling of commandSpellings(inner.map(quoteWord).join(' '), depth + 1)) out.add(spelling);
+      }
+    }
+    if (base === 'env') {
+      // env -S 'git push' / --split-string='git push' runs the split string.
+      const at = words.findIndex((word, index) => index > 0 && (word === '-S' || word === '--split-string' || word.startsWith('--split-string=') || (/^-S./.test(word))));
+      if (at !== -1) {
+        const value = words[at] === '-S' || words[at] === '--split-string' ? words[at + 1] : words[at].replace(/^--split-string=|^-S/, '');
+        const tail = words[at] === '-S' || words[at] === '--split-string' ? words.slice(at + 2) : words.slice(at + 1);
+        const split = shellWords(value || '');
+        if (split && split.length) { words = [...split, ...tail]; continue; }
+      }
+    }
     const named = [base, ...words.slice(1)];
     out.add(words.join(' '));
     out.add(named.join(' '));
@@ -310,6 +376,11 @@ export function commandSpellings(piece, depth = 0) {
       let i = 1;
       const valued = new Set(['-u', '--user', '-g', '--group', '-C', '-D', '--chdir', '-h', '--host', '-p', '--prompt', '-r', '--role', '-t', '--type', '-T', '--command-timeout', '-U', '--other-user']);
       while (i < words.length && words[i].startsWith('-')) { const flag = words[i]; i++; if (flag === '--') break; if (valued.has(flag)) i++; }
+      inner = i < words.length ? [words[i], words.slice(i + 1)] : null;
+    } else if (base === 'exec') {
+      // exec [-cl] [-a name] command
+      let i = 1;
+      while (i < words.length && words[i].startsWith('-')) { const flag = words[i]; i++; if (flag === '--') break; if (flag === '-a' || /^-[cl]*a$/.test(flag)) i++; }
       inner = i < words.length ? [words[i], words.slice(i + 1)] : null;
     } else if (base === 'builtin' || base === 'time' || base === 'nohup' || base === 'setsid' || base === 'unbuffer' || base === 'caffeinate') {
       let i = 1;
