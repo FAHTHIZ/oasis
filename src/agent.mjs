@@ -1896,6 +1896,12 @@ const QUICK_PROVIDER_RETRIES = 2;
 const PATIENT_RETRY_STEPS_MS = [2000, 5000, 10000, 20000, 30000, 30000];
 const PATIENT_RETRY_STATUSES = new Set([500, 502, 503, 504]);
 const MAX_PROVIDER_RETRY_DELAY_MS = 5000;
+// A Retry-After up to this long is waited out exactly (as the OpenAI and
+// Anthropic SDKs do). Longer ones are not retried inline: retrying before the
+// advertised time only burns attempts against a limit that is still closed,
+// so the request falls through to the rate-limit wait, the fallback chain or
+// a clear error instead.
+const MAX_INLINE_RETRY_AFTER_MS = 60000;
 const RETRYABLE_PROVIDER_STATUSES = new Set([408, 425, 429, 500, 502, 503, 504]);
 // A 429 that means "out of quota / billing / account on hold" will not clear by
 // retrying; retrying only burns time (and, on some providers, more quota).
@@ -1929,11 +1935,11 @@ function parseRetryAfterMs(raw) {
   const value = String(raw || '').trim();
   if (!value) return null;
   if (/^\d+(?:\.\d+)?$/.test(value)) {
-    return Math.min(MAX_PROVIDER_RETRY_DELAY_MS, Math.max(0, Number(value) * 1000));
+    return Math.max(0, Number(value) * 1000);
   }
   const timestamp = Date.parse(value);
   if (!Number.isFinite(timestamp)) return null;
-  return Math.min(MAX_PROVIDER_RETRY_DELAY_MS, Math.max(0, timestamp - Date.now()));
+  return Math.max(0, timestamp - Date.now());
 }
 
 // When a provider says how long until its rate limit clears. Retry-After first, then
@@ -2018,7 +2024,7 @@ export function providerRetryLimit(status, env = process.env) {
 
 export function providerRetryDelayMs(retryNumber, retryAfter = null, random = Math.random) {
   const advertised = parseRetryAfterMs(retryAfter);
-  if (advertised !== null) return advertised;
+  if (advertised !== null) return advertised > MAX_INLINE_RETRY_AFTER_MS ? null : advertised;
   // Exponential backoff with jitter (50-100% of the step), so parallel subagents that hit
   // the same rate limit do not all retry in the same instant and collide again.
   const step = retryNumber > QUICK_PROVIDER_RETRIES
@@ -2594,6 +2600,14 @@ async function requestCompletionRaw(session, options = {}) {
   let stalled = false;
   let responseStarted = false;
   let timer = setTimeout(() => { timedOut = true; controller.abort(); }, timeoutMs);
+  // The header timeout bounds one attempt. Retry waits pause it and the next
+  // attempt gets a fresh one, or a few patient 5xx retries would trip it and
+  // report a provider that answered every time as "timed out".
+  const waitBetweenAttempts = async (milliseconds) => {
+    clearTimeout(timer);
+    await waitForProviderRetry(milliseconds, controller.signal);
+    timer = setTimeout(() => { timedOut = true; controller.abort(); }, timeoutMs);
+  };
   const fetchImpl = typeof options.fetchImpl === 'function' ? options.fetchImpl : providerFetch(isLoopbackProvider(config));
   const abortFromCaller = () => controller.abort();
   if (options.signal) {
@@ -2632,7 +2646,7 @@ async function requestCompletionRaw(session, options = {}) {
         if (attempt < networkLimit && error instanceof TypeError && !controller.signal.aborted) {
           const delay = providerRetryDelayMs(attempt + 1);
           notifyProviderRetry(options, { status: 0, attempt: attempt + 1, limit: networkLimit, waitMs: delay, reason: 'connection failed' });
-          await waitForProviderRetry(delay, controller.signal);
+          await waitBetweenAttempts(delay);
           continue;
         }
         throw error;
@@ -2674,10 +2688,10 @@ async function requestCompletionRaw(session, options = {}) {
         attempt -= 1; // bounded by shortWaitBudget; leaves 5xx retries intact
         continue;
       }
-      if (attempt < providerRetryLimit(status, options.env) && (RETRYABLE_PROVIDER_STATUSES.has(status) || isMalformedGenerationError(status, errorBody)) && !isHardQuotaError(errorBody) && !(status === 429 && shortRateLimitMs(errorBody) !== null)) {
-        const delay = providerRetryDelayMs(attempt + 1, response.headers.get('retry-after'));
-        notifyProviderRetry(options, { status, attempt: attempt + 1, limit: providerRetryLimit(status, options.env), waitMs: delay, reason: providerErrorSummary(errorBody) });
-        await waitForProviderRetry(delay, controller.signal);
+      const retryDelay = providerRetryDelayMs(attempt + 1, response.headers.get('retry-after'));
+      if (retryDelay !== null && attempt < providerRetryLimit(status, options.env) && (RETRYABLE_PROVIDER_STATUSES.has(status) || isMalformedGenerationError(status, errorBody)) && !isHardQuotaError(errorBody) && !(status === 429 && shortRateLimitMs(errorBody) !== null)) {
+        notifyProviderRetry(options, { status, attempt: attempt + 1, limit: providerRetryLimit(status, options.env), waitMs: retryDelay, reason: providerErrorSummary(errorBody) });
+        await waitBetweenAttempts(retryDelay);
         continue;
       }
       const limitWait = limitWaits < 3 ? rateLimitWaitMs({ status, headers: response.headers, body: errorBody, maxMinutes: providerEnv.OASIS_WAIT_FOR_RATE_LIMIT_MINUTES }) : null;

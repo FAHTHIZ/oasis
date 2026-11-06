@@ -37,3 +37,38 @@ test('a refused connection fails fast instead of waiting out the patient retries
   await assert.rejects(runAgentTurn(session, 'hi', {}));
   assert.ok(Date.now() - started < 10000, 'took ' + (Date.now() - started) + ' ms');
 });
+
+test('the response-header timeout covers each attempt, not the whole retry sequence', async (t) => {
+  const { createServer } = await import('node:http');
+  const { mkdtemp, rm } = await import('node:fs/promises');
+  const os = await import('node:os');
+  const path = await import('node:path');
+  const { createSession, requestCompletion, closeSession } = await import('../src/agent.mjs');
+  let requests = 0;
+  const server = createServer(async (req, res) => {
+    for await (const _ of req) { /* drain */ }
+    requests++;
+    if (requests <= 3) {
+      res.writeHead(503, { 'content-type': 'application/json', 'retry-after': '0.8' });
+      res.end(JSON.stringify({ error: { message: 'overloaded' } }));
+      return;
+    }
+    res.writeHead(200, { 'content-type': 'application/json' });
+    res.end(JSON.stringify({ choices: [{ message: { role: 'assistant', content: 'recovered' }, finish_reason: 'stop' }] }));
+  });
+  await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
+  const root = await mkdtemp(path.join(os.tmpdir(), 'oasis-retry-timer-'));
+  const session = await createSession({ root, config: { protocol: 'openai-compatible', baseURL: 'http://127.0.0.1:' + server.address().port + '/v1', model: 'm', apiKey: 'k' }, permissionMode: 'bypassPermissions' });
+  t.after(async () => { closeSession(session); server.close(); await rm(root, { recursive: true, force: true }); });
+  session.messages.push({ role: 'user', content: 'hi' });
+  // Three 0.8 s Retry-After waits (2.4 s) outlast a 1.5 s header timeout, but
+  // every attempt answers immediately, so the request must not time out.
+  const message = await requestCompletion(session, { timeoutMs: 1500, env: {} });
+  assert.equal(message.content, 'recovered');
+  assert.equal(requests, 4);
+});
+
+test('a Retry-After longer than the retry cap is not retried early', () => {
+  assert.equal(providerRetryDelayMs(1, '30', () => 0), 30000, 'honoured up to a minute');
+  assert.equal(providerRetryDelayMs(1, '600', () => 0), null, 'too long to wait inline: give up on retrying');
+});
