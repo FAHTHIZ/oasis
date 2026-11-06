@@ -31,7 +31,7 @@ import { PtySessionManager } from './pty-sessions.mjs';
 import { snapshotFile } from './backups.mjs';
 import { planPackageInstall, normalizePackageName } from './installer.mjs';
 import { managePlugins } from './plugins.mjs';
-import { getConfigDirectory, loadConfig, saveConfig, DEFAULT_BASE_URL, DEFAULT_ANTHROPIC_BASE_URL, DEFAULT_MODEL, validateBaseUrl, isLoopbackUrl } from './config.mjs';
+import { getConfigDirectory, loadConfig, saveConfig, validateBaseUrl, isLoopbackUrl } from './config.mjs';
 import { testProviderConnection } from './agent.mjs';
 import { installGitHubExtension, inspectGitHubExtension } from './extensions.mjs';
 import { analyzeCommand } from './permissions.mjs';
@@ -42,6 +42,8 @@ import { imageMediaType, readImageFile } from './images.mjs';
 import { POWER_TOOL_DEFINITIONS, POWER_TOOL_NAMES } from './power-tool-definitions.mjs';
 import { executePowerTool, startBackgroundProcess, commandLineText, timeoutToBackground, grepWorkspace } from './power-tools.mjs';
 import { resolveRipgrep } from './ripgrep.mjs';
+import { readTextFile, encodeText, detectTextEncoding } from './text-encoding.mjs';
+import { BUILTIN_PROVIDERS, getProvider, providerApiKey, providerRegistry, sameBaseURL } from './provider-registry.mjs';
 import { DIAGNOSTICS_TOOL_DEFINITION, runDiagnostics } from './diagnostics.mjs';
 import { SECURITY_SCAN_TOOL_DEFINITION } from './security-scan.mjs';
 import { MONITOR_TOOL_DEFINITION } from './monitor-definition.mjs';
@@ -170,7 +172,7 @@ export const TOOL_DEFINITIONS = [
   { type: 'function', function: { name: 'read_skill_resource', description: 'Read a text reference or asset shipped with an installed portable Agent Skill. Only integrity-verified files under that skill’s references/ or assets/ folders can be read; scripts are not exposed by this tool.', parameters: { type: 'object', properties: { name: { type: 'string', description: 'Installed skill name returned by list_skills or load_skill' }, path: { type: 'string', description: 'Relative path under references/ or assets/, such as references/checklist.md' } }, required: ['name', 'path'] } } },
   { type: 'function', function: { name: 'run_specialist_review', description: 'Run one bounded specialist review in a separate read-only model session. Available roles: code-review, security-review, architecture, and test-strategy. The reviewer can inspect workspace files and Git diffs, but cannot edit files, run commands, install packages, access MCP tools, or perform external side effects. Up to two reviews are allowed per task; use for an independent second opinion, not for changes.', parameters: { type: 'object', properties: { specialist: { type: 'string', enum: ['code-review', 'security-review', 'architecture', 'test-strategy'], description: 'Focus of the independent review' }, task: { type: 'string', description: 'A bounded review request; include relevant files or the question to investigate' } }, required: ['specialist', 'task'], additionalProperties: false } } },
   { type: 'function', function: { name: 'install_extension', description: 'Inspect and import a public GitHub repository containing Markdown specialist-agent or skill prompts. Import only the selected Markdown prompts; do not execute scripts, install dependencies, or enable MCP servers. Scope self installs into Oasis user configuration, project installs into the current workspace, and both installs to both locations. Always obtain approval before importing an external repository.', parameters: { type: 'object', properties: { url: { type: 'string', description: 'Public GitHub repository URL, for example https://github.com/msitarzewski/agency-agents' }, scope: { type: 'string', enum: ['self', 'project', 'both'], description: 'Install into Oasis itself, the current project, or both' } }, required: ['url', 'scope'] } } },
-  { type: 'function', function: { name: 'configure_provider', description: 'Connect Oasis to an existing supported provider preset and switch the current chat to it only after an inert tool-call probe succeeds. Presets: openai, anthropic, openrouter, gemini, ollama. This tool never accepts API keys; it may use only the matching saved credential or provider-specific environment variable.', parameters: { type: 'object', properties: { provider: { type: 'string', enum: ['openai', 'anthropic', 'openrouter', 'gemini', 'ollama'] }, model: { type: 'string', maxLength: 200, description: 'Optional exact model ID; Ollama/OpenRouter-compatible models may require an account- or server-specific ID.' } }, required: ['provider'], additionalProperties: false } } },
+  { type: 'function', function: { name: 'configure_provider', description: 'Connect Oasis to a known model provider and switch the current chat to it only after an inert tool-call probe succeeds. Providers: ' + Object.keys(BUILTIN_PROVIDERS).join(', ') + ', plus any defined under "providers" in user settings. This tool never accepts API keys; it may use only the matching saved credential or provider-specific environment variable.', parameters: { type: 'object', properties: { provider: { type: 'string', maxLength: 40, description: 'Provider id, e.g. openai, anthropic, openrouter, gemini, groq, ollama' }, model: { type: 'string', maxLength: 200, description: 'Optional exact model ID; Ollama/OpenRouter-compatible models may require an account- or server-specific ID.' } }, required: ['provider'], additionalProperties: false } } },
   { type: 'function', function: { name: 'install_external_skill', description: 'Install a selected Agent Skill (a SKILL.md package) from a GitHub repository, Git URL or local folder. OASIS downloads and copies the files itself; it does not run skill scripts, activate hooks, or configure MCP. Requires approval and imports the instructions as untrusted content. Choose one exact skill or set all=true.', parameters: { type: 'object', properties: { source: { type: 'string', maxLength: 600, description: 'Public GitHub shorthand owner/repo, HTTPS source URL, SSH/Git URL, or a local path.' }, skill: { type: 'string', maxLength: 128, description: 'Exact skill name to install; mutually exclusive with all=true.' }, all: { type: 'boolean', description: 'Install all skills from this source into the universal Agent Skills directory.' }, scope: { type: 'string', enum: ['project', 'global'], description: 'Project .agents/skills or user-level universal skills directory.' } }, required: ['source', 'scope'], additionalProperties: false } } },
   { type: 'function', function: { name: 'configure_mcp_server', description: 'Configure and start a local stdio MCP server, then expose its tools in the current chat session. Requires manual approval even when --yes is active. The command, arguments, and environment-variable names are shown for review; never pass secret values in arguments.', parameters: { type: 'object', properties: { name: { type: 'string', maxLength: 40, description: 'Unique lowercase server name using letters, digits, hyphens, or underscores.' }, command: { type: 'string', maxLength: 500, description: 'Single executable, such as npx or a locally installed executable; no shell syntax.' }, args: { type: 'array', maxItems: 80, items: { type: 'string', maxLength: 5000 }, description: 'Argument vector passed directly without shell expansion.' }, passEnv: { type: 'array', maxItems: 50, items: { type: 'string' }, description: 'Explicit environment variable names to expose to this server; values must be configured locally, never supplied in chat.' } }, required: ['name', 'command'], additionalProperties: false } } },
   { type: 'function', function: { name: 'add_extension', description: 'Install and set up an add-on from whatever the user gave: a GitHub link or owner/repo (Claude Code, Codex and Gemini CLI plugins and marketplaces, OASIS plugins, Agent Skills, MCP servers, agent prompts), plugin@marketplace, an MCP server URL, an npm/PyPI package page, an MCP Registry name, or an install command copied from a README (npx/uvx/docker, claude|codex|gemini mcp add, /plugin install, npx skills add). OASIS detects the kind, asks the user once and configures it; MCP servers start in this chat. Use #name to pick one plugin, skill or server from a repository.', parameters: { type: 'object', properties: { source: { type: 'string', description: 'Exactly what the user gave, e.g. https://github.com/obra/superpowers, anthropics/skills#pdf, commit-commands@claude-code-plugins, https://mcp.context7.com/mcp, @playwright/mcp or github.' }, name: { type: 'string', description: 'Optional local name for an MCP server.' }, scope: { type: 'string', enum: ['user', 'project'], description: 'user (default, every project) or project.' }, env: { type: 'object', additionalProperties: { type: 'string' }, description: 'Values it needs, such as an API key the user gave you: {"GITHUB_TOKEN": "..."}. With the name of something already installed as source, this only saves the values; for a remote server a token becomes its Authorization header.' } }, required: ['source'], additionalProperties: false } } },
@@ -348,10 +350,13 @@ export async function readWorkspaceFile(root, rawPath, options = {}) {
   if (implicit) ranged = true;
   if (info.size > MAX_RANGED_FILE) return streamFileSlice(target, info, options, implicit);
   const fromClient = options.context ? await clientReadText(options.context, target.absolute) : null;
-  const content = fromClient !== null ? fromClient : await readFile(target.absolute, 'utf8');
+  const decoded = fromClient !== null ? { text: fromClient, encoding: 'utf8' } : await readTextFile(target.absolute);
+  const content = decoded.text;
   if (content.includes('\0')) throw new Error('This looks like a binary file and is not supported by read_file.');
   const relativePath = target.relative.split(path.sep).join('/');
-  if (!ranged) return { path: relativePath, content };
+  // Non-UTF-8 text is reported so the model knows edits keep that encoding.
+  const encodingNote = decoded.encoding === 'utf8' ? {} : { encoding: decoded.encoding };
+  if (!ranged) return { path: relativePath, content, ...encodingNote };
   const lines = content.split('\n');
   const startLine = Math.max(1, Number.parseInt(options.offset, 10) || 1);
   const count = Math.max(1, Math.min(2000, Number.parseInt(options.limit, 10) || 2000));
@@ -414,6 +419,7 @@ async function streamFileSlice(target, info, options, implicit) {
   try {
     const probe = Buffer.alloc(8192);
     const { bytesRead } = await handle.read(probe, 0, probe.length, 0);
+    if (detectTextEncoding(probe.subarray(0, bytesRead)) !== 'utf8') throw new Error('This UTF-16 file is over 4 MiB; read_file reads UTF-16 files up to that size. Use run_command (for example iconv) to inspect it.');
     if (probe.subarray(0, bytesRead).includes(0)) throw new Error('This looks like a binary file and is not supported by read_file.');
   } finally { await handle.close(); }
   const startLine = Math.max(1, Number.parseInt(options.offset, 10) || 1);
@@ -804,24 +810,15 @@ function providerEnvironmentOverridesActive(env) {
   return Boolean(env && (env.OASIS_BASE_URL || env.OASIS_PROTOCOL || env.OASIS_MODEL));
 }
 
+// Every provider in provider-registry.mjs (built-ins and user-defined ones),
+// not just the five setup shows first.
 function getProviderPreset(provider) {
-  const presets = {
-    openai: { protocol: 'openai-responses', baseURL: DEFAULT_BASE_URL, model: DEFAULT_MODEL },
-    anthropic: { protocol: 'anthropic', baseURL: DEFAULT_ANTHROPIC_BASE_URL, model: 'claude-sonnet-5' },
-    openrouter: { protocol: 'openai-compatible', baseURL: 'https://openrouter.ai/api/v1', model: '' },
-    gemini: { protocol: 'openai-compatible', baseURL: 'https://generativelanguage.googleapis.com/v1beta/openai/', model: 'gemini-3.8-flash' },
-    ollama: { protocol: 'openai-compatible', baseURL: 'http://localhost:11434/v1', model: '' }
-  };
-  return presets[String(provider || '').toLowerCase()] || null;
+  const entry = getProvider(provider);
+  return entry ? { protocol: entry.protocol, baseURL: entry.baseURL, model: entry.model } : null;
 }
 
 function getMatchingProviderKey(provider, env) {
-  if (provider === 'openai') return env.OPENAI_API_KEY || '';
-  if (provider === 'anthropic') return env.ANTHROPIC_API_KEY || '';
-  if (provider === 'openrouter') return env.OPENROUTER_API_KEY || '';
-  if (provider === 'gemini') return env.GEMINI_API_KEY || env.GOOGLE_API_KEY || '';
-  if (provider === 'ollama') return env.OLLAMA_API_KEY || '';
-  return '';
+  return providerApiKey(getProvider(provider, { env }), env);
 }
 
 async function saveVerifiedProvider(provider, config, context) {
@@ -866,12 +863,12 @@ async function configureProviderFromChat(args, context) {
   }
   const provider = String(args.provider || '').trim().toLowerCase();
   const preset = getProviderPreset(provider);
-  if (!preset) throw new Error('Choose one supported provider preset: openai, anthropic, openrouter, gemini, or ollama.');
+  if (!preset) throw new Error('Choose a known provider: ' + Object.keys(providerRegistry()).join(', ') + '. Others can be added under "providers" in your user settings.');
   const model = String(args.model || preset.model || '').trim();
   if (!model || model.length > 200) throw new Error('This provider needs an exact model ID. Supply the model name from the provider or local server.');
   const baseURL = validateBaseUrl(preset.baseURL);
   const current = await loadConfig({ env }).catch(() => context.config || null);
-  const sameTarget = Boolean(current && current.baseURL === baseURL && current.protocol === preset.protocol);
+  const sameTarget = Boolean(current && sameBaseURL(current.baseURL, baseURL) && current.protocol === preset.protocol);
   const apiKey = String((sameTarget && current.apiKey) || getMatchingProviderKey(provider, env) || '');
   if (!isLoopbackUrl(baseURL) && !apiKey) {
     return {
@@ -1627,7 +1624,7 @@ async function executeToolUnlocked(name, args = {}, context = {}) {
       if (info.size > MAX_EDIT_FILE) throw new Error('File is larger than the 4 MiB limit for edits.');
       await assertFileFresh(context, target.absolute, target.relative.split(path.sep).join('/'), { exactMatch: true });
       const bufferText = await clientReadText(context, target.absolute);
-      const current = bufferText !== null ? bufferText : await readFile(target.absolute, 'utf8');
+      const { text: current, encoding: fileEncoding } = bufferText !== null ? { text: bufferText, encoding: 'utf8' } : await readTextFile(target.absolute);
       if (current.includes('\0')) throw new Error('This looks like a binary file; edit_file only supports text.');
       let matches = 0, offset = 0;
       while ((offset = current.indexOf(args.old_string, offset)) >= 0) { matches++; offset += args.old_string.length; }
@@ -1644,7 +1641,7 @@ async function executeToolUnlocked(name, args = {}, context = {}) {
       const editDisplayPath = target.relative.split(path.sep).join('/');
       assertNoNewElision(args.old_string, args.new_string, editDisplayPath);
       await snapshotFile(target.root, target.absolute, 'before-agent-edit');
-      await atomicWriteFile(target.absolute, next, { encoding: 'utf8' });
+      await atomicWriteFile(target.absolute, encodeText(next, fileEncoding), { encoding: 'utf8' });
       await clientMirrorWrite(context, target.absolute, next);
       await recordFileState(context, target.absolute);
       const editWarning = combineWarnings(commentWarning(current, next, editDisplayPath, context.session && context.session.commentMode), shrinkWarning(current, next, editDisplayPath), testTamperWarning(current, next, editDisplayPath), securityWarning(current, next, editDisplayPath), recordAndDetectCircling(context.session || context, target.absolute, current, next, editDisplayPath));
@@ -1656,13 +1653,14 @@ async function executeToolUnlocked(name, args = {}, context = {}) {
       const target = await resolveWorkspacePath(root, args.path, { rejectSymlinks: true });
       let backedUpExistingFile = false;
       let previousContent = null;
+      let previousEncoding = 'utf8';
       const writeDisplayPath = target.relative.split(path.sep).join('/');
       try {
         const old = await lstat(target.absolute);
         if (old.isDirectory()) throw new Error('Refusing to replace a directory with a file.');
         await assertFileFresh(context, target.absolute, writeDisplayPath, { fullOverwrite: true });
         if (old.isFile() && old.size <= MAX_TEXT_FILE) {
-          try { previousContent = await readFile(target.absolute, 'utf8'); } catch { previousContent = null; }
+          try { ({ text: previousContent, encoding: previousEncoding } = await readTextFile(target.absolute)); } catch { previousContent = null; }
         }
         assertNoNewElision(previousContent, args.content, writeDisplayPath);
         await snapshotFile(target.root, target.absolute, 'before-agent-write');
@@ -1673,7 +1671,8 @@ async function executeToolUnlocked(name, args = {}, context = {}) {
       await mkdir(path.dirname(target.absolute), { recursive: true });
       // New project files get normal permissions (umask applies) so web servers, containers and
       // teammates can read them; only secret-looking files are created owner-only.
-      await atomicWriteFile(target.absolute, content, { encoding: 'utf8', mode: sensitivePath(target.relative) ? 0o600 : 0o666 });
+      // Overwriting a UTF-16 file keeps it UTF-16; new files are UTF-8.
+      await atomicWriteFile(target.absolute, encodeText(content, previousEncoding), { encoding: 'utf8', mode: sensitivePath(target.relative) ? 0o600 : 0o666 });
       await clientMirrorWrite(context, target.absolute, content);
       await recordFileState(context, target.absolute);
       const docWarning = backedUpExistingFile ? '' : unrequestedDocWarning(writeDisplayPath, context.session && context.session.currentRequest);
