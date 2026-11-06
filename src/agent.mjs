@@ -51,7 +51,7 @@ import os from 'node:os';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 const execFileAsync = promisify(execFile);
-import { TOOL_DEFINITIONS, executeTool, loadProjectInstructions, loadSkillDescriptions, setAdditionalDirectories } from './tools.mjs';
+import { TOOL_DEFINITIONS, executeTool, loadProjectInstructions, loadSkillDescriptions, setAdditionalDirectories, additionalDirectories } from './tools.mjs';
 import { patchFromToolCall, patchFilesNeeded, planPatch } from './apply-patch.mjs';
 import { resolveTeammateMode, openTeammatePane, mirrorToPane, closeTeammatePanes } from './teammate-panes.mjs';
 import { connectMcpServers, mcpToolDefinitions, callMappedMcpTool, closeMcpClients, refreshSessionMcpTools } from './mcp.mjs';
@@ -4866,7 +4866,9 @@ async function authorizeCall(session, name, args, context, options) {
   // Protected config paths (settings, hooks, MCP, .git) always ask: writing them
   // can grant permissions that apply later without approval.
   if (PROTECTED_EDIT_TOOLS.has(name) && mode !== 'bypassPermissions' && !protectedEditsAllowed(context.env || process.env)) {
-    const hit = await protectedConfigTarget(session.root || context.root, args && (args.path || args.notebook_path || args.file_path));
+    const protectRoot = session.root || context.root;
+    const extraRoots = protectRoot ? additionalDirectories(await realpath(protectRoot).catch(() => protectRoot)) : [];
+    const hit = await protectedConfigTarget(protectRoot, args && (args.path || args.notebook_path || args.file_path), extraRoots);
     if (hit && !(decision === 'allow' && ruleNamesProtectedPath(verdict.rule))) {
       const ok = await overlay.approval(protectedEditMessage(name, hit), true);
       if (!ok) return { deniedReason: overlay.permissionHookDenial || 'The user did not approve changing the protected configuration file ' + hit.path + '. Ask the user to make this change themselves.' };
