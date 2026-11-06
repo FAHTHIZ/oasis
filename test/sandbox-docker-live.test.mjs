@@ -35,6 +35,23 @@ test('live docker sandbox: workspace writable, host untouched, no network, no ca
   const pull = spawnSync('docker', ['pull', '-q', sandbox.image], { encoding: 'utf8', timeout: 300000 });
   assert.equal(pull.status, 0, 'image pull failed: ' + pull.stderr);
 
+  // A workspace may itself be the user's home or contain a path that was
+  // explicitly classified as sensitive. A container must overlay that path
+  // after the broad workspace mount instead of exposing its host contents.
+  const hostCredentialDir = path.join(root, '.ssh');
+  await mkdir(hostCredentialDir);
+  const hostCredential = path.join(hostCredentialDir, 'id_ed25519');
+  await writeFile(hostCredential, 'host-private-key-fixture');
+  const maskedSandbox = {
+    ...sandbox,
+    maskedPaths: [{ path: hostCredentialDir, type: 'directory' }]
+  };
+  const masked = run(maskedSandbox, root, 'if test -r .ssh/id_ed25519; then cat .ssh/id_ed25519; else echo MASKED; fi');
+  assert.equal(masked.status, 0, masked.stderr);
+  assert.match(masked.stdout, /MASKED/);
+  assert.doesNotMatch(masked.stdout, /host-private-key-fixture/);
+  assert.equal((await readFile(hostCredential, 'utf8')), 'host-private-key-fixture', 'masking must not alter the host secret');
+
   // 1. The workspace is mounted read-write at its host path and files keep the host user's ownership.
   const write = run(sandbox, root, 'echo from-container > made-inside.txt && pwd');
   assert.equal(write.status, 0, write.stderr);

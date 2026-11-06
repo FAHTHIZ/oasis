@@ -229,6 +229,20 @@ export function containerArgs(command, args, sandbox, cwd, platform = process.pl
   for (const item of protectedWritePaths(sandbox.protectedRoots || []).existing) {
     wrapped.push('--volume', safeContainerValue(item.path, 'path') + ':' + containerPath(item.path, platform) + ':ro');
   }
+  // Workspace bind mounts can include the user's home (or an explicitly added
+  // directory). Overlay known credential roots *after* every host bind mount so
+  // Docker/Podman cannot expose ~/.ssh, cloud credentials, agent config or other
+  // sensitive host paths just because they sit below a writable root. A tmpfs
+  // overlay is used for both files and directories: reads see an empty mount,
+  // never the host content, and any temporary writes disappear with the container.
+  const masked = new Set();
+  for (const item of sandbox.maskedPaths || []) {
+    if (!item || !['file', 'directory'].includes(item.type) || !item.path) continue;
+    const inside = safeContainerValue(containerPath(item.path, platform), 'masked path');
+    if (masked.has(inside)) continue;
+    masked.add(inside);
+    wrapped.push('--tmpfs', inside + ':rw,nosuid,nodev,noexec,size=1m');
+  }
   wrapped.push('--workdir', containerPath(cwd, platform), image, command, ...args);
   return wrapped;
 }
