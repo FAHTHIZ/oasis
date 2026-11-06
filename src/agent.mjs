@@ -19,7 +19,7 @@ import { scopeViolation, editScopeFromEnv } from './scope-lock.mjs';
 import { shellExitTarget } from './pipe-status.mjs';
 import { loadPins, savePins } from './mcp-trust.mjs';
 import { guardExternalContent, clearInjectionTurnFlag, untrustedGuardEnabled } from './untrusted-content.mjs';
-import { maskSecrets, unmaskSecrets, secretShieldEnabled, SECRET_SHIELD_NOTE } from './secret-shield.mjs';
+import { maskSecrets, unmaskSecretsForTool, secretShieldEnabled, SECRET_SHIELD_NOTE } from './secret-shield.mjs';
 import { extractFollowups, recordFollowups, followupReminder, followupsEnabled } from './followups.mjs';
 import { dedupedReadHit, recordDedupedRead } from './read-dedup.mjs';
 import { startPluginMonitorsFor } from './monitors.mjs';
@@ -5022,7 +5022,7 @@ async function executeOneCallRaw(session, call, context, options) {
       cancelled.name = 'AbortError';
       throw cancelled;
     }
-    let args = unmaskSecrets(session, safeToolArguments(call.function && call.function.arguments));
+    let args = unmaskSecretsForTool(session, name, safeToolArguments(call.function && call.function.arguments));
     if (session.allowedToolNames && !session.allowedToolNames.has(name)) {
       throw new Error('The tool ' + name + ' is not available to this agent.');
     }
