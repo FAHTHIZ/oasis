@@ -8,6 +8,7 @@ import { injectionHoldReason } from './untrusted-content.mjs';
 import * as gitSafety from './git-safety.mjs';
 import { frontMatterValue, splitFrontMatter } from './frontmatter.mjs';
 import { commandFlagWarning } from './command-hints.mjs';
+import { condenseOutputEnabled, createOutputCondenser } from './output-condense.mjs';
 import { isScratchPath } from './scratch.mjs';
 import { protectedShellWrite, protectedEditsAllowed, protectedConfigPath } from './protected-paths.mjs';
 import { assertFileFresh, recordFileState, forgetFileState } from './file-state.mjs';
@@ -639,6 +640,8 @@ export async function runWorkspaceCommand(root, command, args = [], options = {}
     try { outputLog = await createCommandOutputLog(root); } catch { outputLog = null; }
   }
   const launch = await launchCommand(command, args, sandbox, root);
+  const condensers = options.condenseOutput !== false && condenseOutputEnabled(options.env || process.env)
+    ? { stdout: createOutputCondenser(), stderr: createOutputCondenser() } : null;
   return await new Promise((resolve) => {
     const stdoutBuffer = createBoundedOutput();
     const stderrBuffer = createBoundedOutput();
@@ -650,12 +653,21 @@ export async function runWorkspaceCommand(root, command, args = [], options = {}
     const child = spawn(launch.command, launch.args, { cwd: root, env, shell: false, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'], ...processTreeSpawnOptions() });
     if (typeof launch.release === 'function') { child.once('close', launch.release); child.once('error', launch.release); }
     const append = (target, chunk) => {
-      (target === 'stdout' ? stdoutBuffer : stderrBuffer).append(chunk);
       if (outputLog) outputLog.append(target, chunk);
+      const text = condensers ? condensers[target].push(chunk) : chunk;
+      if (text.length) (target === 'stdout' ? stdoutBuffer : stderrBuffer).append(text);
     };
-    const finishOutputLog = () => outputLog
-      ? outputLog.finish({ stdout: stdoutBuffer.truncated, stderr: stderrBuffer.truncated })
-      : {};
+    // Condensed output keeps its raw log so nothing is out of reach.
+    const finishOutputLog = () => {
+      if (condensers) for (const target of ['stdout', 'stderr']) {
+        const rest = condensers[target].end();
+        if (rest) (target === 'stdout' ? stdoutBuffer : stderrBuffer).append(rest);
+      }
+      const removed = condensers ? { stdout: condensers.stdout.removed, stderr: condensers.stderr.removed } : { stdout: 0, stderr: 0 };
+      const files = outputLog ? outputLog.finish({ stdout: stdoutBuffer.truncated || removed.stdout > 0, stderr: stderrBuffer.truncated || removed.stderr > 0 }) : {};
+      const note = condensedOutputNote(removed.stdout + removed.stderr, [removed.stdout && files.stdoutLogPath, removed.stderr && files.stderrLogPath].filter(Boolean));
+      return note ? { ...files, outputCondensed: note } : files;
+    };
     const cleanup = () => {
       clearTimeout(timer);
       // Keep a scheduled force-kill alive after the leader exits: descendants may
@@ -744,6 +756,12 @@ export async function runWorkspaceCommand(root, command, args = [], options = {}
       });
     });
   });
+}
+
+function condensedOutputNote(lines, logs) {
+  if (!lines) return '';
+  return 'Left out ' + lines + ' line' + (lines === 1 ? '' : 's') + ' of passing-test timing, repeated test headers or npm update notices' +
+    (logs.length ? '; the full output is in ' + logs.join(' and ') : '') + '.';
 }
 
 async function runInstallPlan(plan, options) {

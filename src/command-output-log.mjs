@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { constants as fsConstants, chmodSync, closeSync, openSync, renameSync, unlinkSync, writeSync } from 'node:fs';
-import { lstat, mkdir, realpath } from 'node:fs/promises';
+import { lstat, mkdir, realpath, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { StringDecoder } from 'node:string_decoder';
 import { redactApprovalSecrets } from './approval-language.mjs';
@@ -34,6 +34,9 @@ export async function createCommandOutputLog(root) {
   const logDirectory = path.join(oasisDirectory, 'command-logs');
   await ensureRealDirectory(oasisDirectory);
   await ensureRealDirectory(logDirectory);
+  // Keep logs out of git status, git diff and `git add -A`. 'wx' never
+  // follows or overwrites an existing entry.
+  await writeFile(path.join(logDirectory, '.gitignore'), '# OASIS command output logs\n*\n', { flag: 'wx', mode: 0o600 }).catch(() => {});
 
   const id = randomUUID();
   const streams = {};
