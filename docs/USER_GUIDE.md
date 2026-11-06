@@ -1114,7 +1114,7 @@ for await (const event of query({ prompt: 'Plan a picnic in Dhaka', options: { t
 
 ## OpenTelemetry
 
-OASIS can export metrics, events and traces over OTLP/HTTP JSON with no extra packages. It is off by default. Turn it on with `OASIS_ENABLE_TELEMETRY=1`; `CLAUDE_CODE_ENABLE_TELEMETRY=1` also works, so an existing Claude Code monitoring setup keeps working.
+OASIS can export metrics, events and traces over OTLP/HTTP JSON using the official OpenTelemetry JS SDK, which is only loaded when telemetry is on. It is off by default. Turn it on with `OASIS_ENABLE_TELEMETRY=1`; `CLAUDE_CODE_ENABLE_TELEMETRY=1` also works, so an existing Claude Code monitoring setup keeps working.
 
 ```bash
 export OASIS_ENABLE_TELEMETRY=1
@@ -1127,7 +1127,7 @@ export OTEL_METRICS_EXPORTER=otlp     # otlp | console | none (same for LOGS and
 - **Events (logs):** `oasis.session_start`, `oasis.user_prompt` (length only, unless `OTEL_LOG_USER_PROMPTS=1`), `oasis.api_request`, `oasis.api_error`, and `oasis.tool_result` (arguments only with `OTEL_LOG_TOOL_DETAILS=1`).
 - Every event includes the workspace's current git branch as `vcs.ref.head.name`. Set `OASIS_OTEL_NO_BRANCH=1` to leave it out.
 - **Traces:** each turn is a trace. Every model request and tool call is a child span, and subagent turns nest under the tool call that started them. Events carry the span they happened in. This is something compatible-format metrics and logs export does not give you. Spans also carry the OpenTelemetry GenAI semantic-convention attributes (`gen_ai.operation.name`, `gen_ai.provider.name`, `gen_ai.request.model`, `gen_ai.usage.input_tokens`/`output_tokens`, `gen_ai.tool.name`, `gen_ai.tool.call.id`, `gen_ai.agent.name`, `gen_ai.conversation.id`, `error.type`), and model calls are CLIENT spans, so LLM-observability tools such as Langfuse, Arize Phoenix and Datadog LLM Observability read them without custom mapping. Prompt and tool content is still not exported unless you opt in.
-- Standard variables are honored: `OTEL_SERVICE_NAME`, `OTEL_RESOURCE_ATTRIBUTES`, `OTEL_METRIC_EXPORT_INTERVAL` (default 60 s), `OTEL_LOGS_EXPORT_INTERVAL` (default 5 s), and per-signal `OTEL_EXPORTER_OTLP_{METRICS,LOGS,TRACES}_ENDPOINT` / `_HEADERS`. Only the HTTP/JSON wire format is supported, not gRPC or protobuf. Data is flushed on exit.
+- Standard variables are honored: `OTEL_SERVICE_NAME`, `OTEL_RESOURCE_ATTRIBUTES`, `OTEL_METRIC_EXPORT_INTERVAL` (default 60 s), `OTEL_LOGS_EXPORT_INTERVAL` (default 5 s), and per-signal `OTEL_EXPORTER_OTLP_{METRICS,LOGS,TRACES}_ENDPOINT` / `_HEADERS`. Histograms use the SDK's default explicit bucket boundaries. Exports that get 429, 502, 503 or 504 are retried with backoff, up to 5 attempts. Only the HTTP/JSON wire format is supported, not gRPC or protobuf. Data is flushed on exit.
 
 ## Checkpoints and /rewind
 

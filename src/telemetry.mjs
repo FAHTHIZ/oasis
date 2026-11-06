@@ -1,4 +1,7 @@
-// OpenTelemetry metrics, events (logs) and traces with no dependencies.
+// OpenTelemetry metrics, events (logs) and traces through the official
+// OpenTelemetry JS SDK (sdk-metrics, sdk-logs, sdk-trace) and its OTLP/HTTP
+// exporters. The SDK loads on first use, so nothing is imported when telemetry
+// is off.
 //
 // Off by default. Turn it on with OASIS_ENABLE_TELEMETRY=1 (Claude Code's
 // CLAUDE_CODE_ENABLE_TELEMETRY=1 works too) and pick exporters with the standard
@@ -10,7 +13,7 @@
 //   OTEL_LOGS_EXPORT_INTERVAL (ms). Payloads are OTLP/HTTP JSON.
 // Prompt text is never exported unless OTEL_LOG_USER_PROMPTS=1; tool arguments only
 // with OTEL_LOG_TOOL_DETAILS=1.
-import { randomBytes, randomUUID } from 'node:crypto';
+import { randomUUID } from 'node:crypto';
 import { AsyncLocalStorage } from 'node:async_hooks';
 import os from 'node:os';
 import { readFileSync, statSync } from 'node:fs';
@@ -37,7 +40,9 @@ export function gitBranchName(root, now = Date.now()) {
   return name;
 }
 
-const VERSION = '1';
+const VERSION = (() => {
+  try { return JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')).version || '0'; } catch { return '0'; }
+})();
 const spanContext = new AsyncLocalStorage();
 let active = null;
 let activeKey = '';
@@ -59,14 +64,8 @@ function parseKeyValues(raw) {
   return out;
 }
 
-function anyValue(value) {
-  if (typeof value === 'boolean') return { boolValue: value };
-  if (typeof value === 'number') return Number.isInteger(value) ? { intValue: String(value) } : { doubleValue: value };
-  return { stringValue: String(value) };
-}
-
-const toAttributes = (attrs = {}) => Object.entries(attrs).filter(([, v]) => v !== undefined && v !== null && v !== '').map(([key, value]) => ({ key, value: anyValue(value) }));
-const nowNanos = () => String(BigInt(Date.now()) * 1000000n);
+// Attribute values the SDK accepts; empty values are dropped as before.
+const cleanAttributes = (attrs = {}) => Object.fromEntries(Object.entries(attrs).filter(([, v]) => v !== undefined && v !== null && v !== ''));
 
 function endpointFor(env, signal) {
   const specific = env['OTEL_EXPORTER_OTLP_' + signal.toUpperCase() + '_ENDPOINT'];
@@ -74,45 +73,88 @@ function endpointFor(env, signal) {
   return String(env.OTEL_EXPORTER_OTLP_ENDPOINT || 'http://localhost:4318').replace(/\/+$/, '') + '/v1/' + signal;
 }
 
+let sdkModules = null;
+function loadSdk() {
+  return (sdkModules ??= Promise.all([
+    import('@opentelemetry/api'),
+    import('@opentelemetry/resources'),
+    import('@opentelemetry/sdk-metrics'),
+    import('@opentelemetry/sdk-logs'),
+    import('@opentelemetry/sdk-trace'),
+    import('@opentelemetry/otlp-transformer'),
+    import('@opentelemetry/exporter-metrics-otlp-http'),
+    import('@opentelemetry/exporter-logs-otlp-http'),
+    import('@opentelemetry/exporter-trace-otlp-http')
+  ]).then(([api, resources, metrics, logs, trace, transformer, metricExporter, logExporter, traceExporter]) => ({ api, resources, metrics, logs, trace, transformer, metricExporter, logExporter, traceExporter })));
+}
+
+// The console exporter prints each batch as its OTLP/JSON request body.
+function consoleExporter(signal, serializer, write, extra = {}) {
+  return {
+    ...extra,
+    export(items, done) {
+      try { write('[otel ' + signal + '] ' + new TextDecoder().decode(serializer.serializeRequest(items))); done({ code: 0 }); }
+      catch (error) { done({ code: 1, error }); }
+    },
+    forceFlush: async () => {},
+    shutdown: async () => {}
+  };
+}
+
 export class Telemetry {
   constructor(env = process.env, options = {}) {
     this.env = env;
-    this.fetch = options.fetch || globalThis.fetch;
     this.write = options.write || ((line) => process.stderr.write(line + '\n'));
     this.exporters = {
       metrics: String(env.OTEL_METRICS_EXPORTER || 'otlp').toLowerCase(),
       logs: String(env.OTEL_LOGS_EXPORTER || 'otlp').toLowerCase(),
       traces: String(env.OTEL_TRACES_EXPORTER || 'otlp').toLowerCase()
     };
-    this.headers = { 'content-type': 'application/json', ...parseKeyValues(env.OTEL_EXPORTER_OTLP_HEADERS) };
     this.sessionId = options.sessionId || randomUUID();
-    this.resource = {
-      attributes: toAttributes({
-        'service.name': env.OTEL_SERVICE_NAME || 'oasis',
-        'service.version': options.version || VERSION,
-        'os.type': process.platform,
-        'host.arch': process.arch,
-        'host.name': truthy(env.OTEL_HOST_NAME) ? os.hostname() : undefined,
-        ...parseKeyValues(env.OTEL_RESOURCE_ATTRIBUTES)
-      })
-    };
+    this.resourceAttributes = cleanAttributes({
+      'service.name': env.OTEL_SERVICE_NAME || 'oasis',
+      'service.version': options.version || VERSION,
+      'os.type': process.platform,
+      'host.arch': process.arch,
+      'host.name': truthy(env.OTEL_HOST_NAME) ? os.hostname() : undefined,
+      ...parseKeyValues(env.OTEL_RESOURCE_ATTRIBUTES)
+    });
     this.logPrompts = truthy(env.OTEL_LOG_USER_PROMPTS);
     this.logToolDetails = truthy(env.OTEL_LOG_TOOL_DETAILS);
-    this.startNanos = nowNanos();
-    this.sums = new Map();
-    this.histograms = new Map();
-    this.logRecords = [];
-    this.spans = [];
-    this.errors = 0;
-    const metricInterval = Math.max(1000, Number(env.OTEL_METRIC_EXPORT_INTERVAL) || 60000);
-    const logInterval = Math.max(500, Number(env.OTEL_LOGS_EXPORT_INTERVAL) || 5000);
-    if (!options.manual) {
-      this.metricTimer = setInterval(() => this.flushMetrics().catch(() => {}), metricInterval);
-      this.logTimer = setInterval(() => { this.flushLogs().catch(() => {}); this.flushTraces().catch(() => {}); }, logInterval);
-      this.metricTimer.unref?.();
-      this.logTimer.unref?.();
-    }
+    this.metricInterval = options.manual ? 2 ** 31 - 1 : Math.max(1000, Number(env.OTEL_METRIC_EXPORT_INTERVAL) || 60000);
+    this.logInterval = options.manual ? 2 ** 31 - 1 : Math.max(500, Number(env.OTEL_LOGS_EXPORT_INTERVAL) || 5000);
+    this.instruments = new Map();
+    this.pending = [];
+    this.sdk = null;
+    this.ready = loadSdk().then((modules) => this.start(modules));
+    this.ready.catch(() => {});
   }
+
+  start(modules) {
+    const { api, resources, metrics, logs, trace, transformer, metricExporter, logExporter, traceExporter } = modules;
+    const resource = resources.resourceFromAttributes(this.resourceAttributes);
+    const exporterOptions = (signal) => ({
+      url: endpointFor(this.env, signal),
+      headers: { ...parseKeyValues(this.env.OTEL_EXPORTER_OTLP_HEADERS), ...parseKeyValues(this.env['OTEL_EXPORTER_OTLP_' + signal.toUpperCase() + '_HEADERS']) },
+      timeoutMillis: 5000
+    });
+    const pick = (signal, otlp, serializer, extra) => this.exporters[signal] === 'otlp' ? otlp() : this.exporters[signal] === 'console' ? consoleExporter(signal, serializer, this.write, extra) : null;
+    const cumulative = { selectAggregationTemporality: () => metrics.AggregationTemporality.CUMULATIVE, selectAggregation: () => ({ type: metrics.AggregationType.DEFAULT }) };
+    const metricOut = pick('metrics', () => new metricExporter.OTLPMetricExporter(exporterOptions('metrics')), transformer.JsonMetricsSerializer, cumulative);
+    const logOut = pick('logs', () => new logExporter.OTLPLogExporter(exporterOptions('logs')), transformer.JsonLogsSerializer);
+    const traceOut = pick('traces', () => new traceExporter.OTLPTraceExporter(exporterOptions('traces')), transformer.JsonTraceSerializer);
+    this.meterProvider = new metrics.MeterProvider({ resource, readers: metricOut ? [new metrics.PeriodicExportingMetricReader({ exporter: metricOut, exportIntervalMillis: this.metricInterval, exportTimeoutMillis: Math.min(30000, this.metricInterval) })] : [] });
+    this.loggerProvider = new logs.LoggerProvider({ resource, processors: logOut ? [new logs.BatchLogRecordProcessor({ exporter: logOut, scheduledDelayMillis: this.logInterval })] : [] });
+    this.tracerProvider = new trace.TracerProvider({ resource, spanProcessors: traceOut ? [new trace.BatchSpanProcessor({ exporter: traceOut, scheduledDelayMillis: this.logInterval })] : [] });
+    this.meter = this.meterProvider.getMeter('oasis', VERSION);
+    this.logger = this.loggerProvider.getLogger('oasis', VERSION);
+    this.tracer = this.tracerProvider.getTracer('oasis', VERSION);
+    this.sdk = modules;
+    for (const call of this.pending.splice(0)) call();
+  }
+
+  // Calls made before the SDK has loaded run as soon as it has.
+  whenReady(call) { if (this.sdk) call(); else this.pending.push(call); }
 
   baseAttributes() { return { 'session.id': this.sessionId }; }
 
@@ -122,106 +164,81 @@ export class Telemetry {
     return { ...this.baseAttributes(), ...(branch ? { 'vcs.ref.head.name': branch } : {}) };
   }
 
+  instrument(kind, name, unit, description) {
+    const key = kind + '\u0000' + name;
+    if (!this.instruments.has(key)) {
+      const options = { unit, description, valueType: this.sdk.api.ValueType.DOUBLE };
+      this.instruments.set(key, kind === 'counter' ? this.meter.createCounter(name, options) : this.meter.createHistogram(name, options));
+    }
+    return this.instruments.get(key);
+  }
+
   // Monotonic cumulative counter.
   add(name, value = 1, attrs = {}, unit = '1', description = '') {
     if (!Number.isFinite(Number(value)) || Number(value) === 0) return;
-    const all = { ...this.baseAttributes(), ...attrs };
-    const key = name + '\u0000' + JSON.stringify(Object.entries(all).sort());
-    const entry = this.sums.get(key) || { name, unit, description, attrs: all, value: 0 };
-    entry.value += Number(value);
-    this.sums.set(key, entry);
+    const all = cleanAttributes({ ...this.baseAttributes(), ...attrs });
+    this.whenReady(() => this.instrument('counter', name, unit, description).add(Number(value), all));
   }
 
+  // Histogram with the SDK's default explicit bucket boundaries.
   record(name, value, attrs = {}, unit = 'ms', description = '') {
     if (!Number.isFinite(Number(value))) return;
-    const all = { ...this.baseAttributes(), ...attrs };
-    const key = name + '\u0000' + JSON.stringify(Object.entries(all).sort());
-    const entry = this.histograms.get(key) || { name, unit, description, attrs: all, count: 0, sum: 0, min: Infinity, max: -Infinity };
-    entry.count += 1; entry.sum += Number(value); entry.min = Math.min(entry.min, value); entry.max = Math.max(entry.max, value);
-    this.histograms.set(key, entry);
+    const all = cleanAttributes({ ...this.baseAttributes(), ...attrs });
+    this.whenReady(() => this.instrument('histogram', name, unit, description).record(Number(value), all));
   }
 
   event(name, attrs = {}) {
-    const span = spanContext.getStore();
-    this.logRecords.push({
-      timeUnixNano: nowNanos(),
-      observedTimeUnixNano: nowNanos(),
-      severityNumber: 9,
-      severityText: 'INFO',
-      body: { stringValue: name },
-      attributes: toAttributes({ 'event.name': name, 'event.timestamp': new Date().toISOString(), ...this.eventAttributes(), ...attrs }),
-      ...(span ? { traceId: span.traceId, spanId: span.spanId } : {})
+    const parent = spanContext.getStore();
+    const attributes = cleanAttributes({ 'event.name': name, 'event.timestamp': new Date().toISOString(), ...this.eventAttributes(), ...attrs });
+    const timestamp = Date.now();
+    this.whenReady(() => {
+      const { api } = this.sdk;
+      this.logger.emit({
+        timestamp,
+        observedTimestamp: timestamp,
+        severityNumber: 9,
+        severityText: 'INFO',
+        body: name,
+        attributes,
+        ...(parent ? { context: api.trace.setSpan(api.ROOT_CONTEXT, parent.otel) } : {})
+      });
     });
-    if (this.logRecords.length >= 512) this.flushLogs().catch(() => {});
   }
 
   // Runs fn inside a span; nested spans and events attach to it automatically.
   // options.kind: OTLP span kind (1 internal, 3 client for calls to a model API).
+  // fn receives { traceId, spanId, attrs, error }; attrs and error set during fn
+  // are applied when the span ends.
   async span(name, attrs, fn, options = {}) {
-    const kind = [1, 2, 3, 4, 5].includes(options.kind) ? options.kind : 1;
+    await this.ready;
+    const { api } = this.sdk;
+    const kind = [1, 2, 3, 4, 5].includes(options.kind) ? options.kind - 1 : api.SpanKind.INTERNAL;
     const parent = spanContext.getStore();
-    const span = { traceId: parent ? parent.traceId : randomBytes(16).toString('hex'), spanId: randomBytes(8).toString('hex'), parentSpanId: parent ? parent.spanId : undefined, name, start: nowNanos(), attrs: { ...this.baseAttributes(), ...attrs } };
-    let status = { code: 1 };
+    const otel = this.tracer.startSpan(name, { kind }, parent ? api.trace.setSpan(api.ROOT_CONTEXT, parent.otel) : api.ROOT_CONTEXT);
+    const { traceId, spanId } = otel.spanContext();
+    const span = { traceId, spanId, otel, attrs: { ...this.baseAttributes(), ...attrs } };
+    let status = { code: api.SpanStatusCode.OK };
     try {
       return await spanContext.run(span, () => fn(span));
     } catch (error) {
-      status = { code: 2, message: String(error && error.message || error).slice(0, 500) };
+      status = { code: api.SpanStatusCode.ERROR, message: String(error && error.message || error).slice(0, 500) };
       throw error;
     } finally {
-      if (span.error) status = { code: 2, message: String(span.error).slice(0, 500) };
-      this.spans.push({ traceId: span.traceId, spanId: span.spanId, ...(span.parentSpanId ? { parentSpanId: span.parentSpanId } : {}), name, kind, startTimeUnixNano: span.start, endTimeUnixNano: nowNanos(), attributes: toAttributes(span.attrs), status });
-      if (this.spans.length >= 512) this.flushTraces().catch(() => {});
+      if (span.error) status = { code: api.SpanStatusCode.ERROR, message: String(span.error).slice(0, 500) };
+      otel.setAttributes(cleanAttributes(span.attrs));
+      otel.setStatus(status);
+      otel.end();
     }
   }
 
-  async send(signal, payload) {
-    const exporter = this.exporters[signal];
-    if (exporter === 'none' || !exporter) return;
-    if (exporter === 'console') { this.write('[otel ' + signal + '] ' + JSON.stringify(payload)); return; }
-    try {
-      const headers = { ...this.headers, ...parseKeyValues(this.env['OTEL_EXPORTER_OTLP_' + signal.toUpperCase() + '_HEADERS']) };
-      const response = await this.fetch(endpointFor(this.env, signal), { method: 'POST', headers, body: JSON.stringify(payload), signal: AbortSignal.timeout(5000) });
-      if (!response.ok) this.errors++;
-    } catch { this.errors++; }
+  async flush() {
+    try { await this.ready; } catch { return; }
+    await Promise.all([this.meterProvider.forceFlush(), this.loggerProvider.forceFlush(), this.tracerProvider.forceFlush()].map((p) => p.catch(() => {})));
   }
-
-  metricsPayload() {
-    const now = nowNanos();
-    const metrics = [];
-    const byName = new Map();
-    for (const entry of this.sums.values()) {
-      if (!byName.has(entry.name)) { const m = { name: entry.name, unit: entry.unit, description: entry.description, sum: { aggregationTemporality: 2, isMonotonic: true, dataPoints: [] } }; byName.set(entry.name, m); metrics.push(m); }
-      byName.get(entry.name).sum.dataPoints.push({ attributes: toAttributes(entry.attrs), startTimeUnixNano: this.startNanos, timeUnixNano: now, asDouble: entry.value });
-    }
-    for (const entry of this.histograms.values()) {
-      if (!byName.has(entry.name)) { const m = { name: entry.name, unit: entry.unit, description: entry.description, histogram: { aggregationTemporality: 2, dataPoints: [] } }; byName.set(entry.name, m); metrics.push(m); }
-      byName.get(entry.name).histogram.dataPoints.push({ attributes: toAttributes(entry.attrs), startTimeUnixNano: this.startNanos, timeUnixNano: now, count: String(entry.count), sum: entry.sum, min: entry.min, max: entry.max, bucketCounts: [String(entry.count)], explicitBounds: [] });
-    }
-    return { resourceMetrics: [{ resource: this.resource, scopeMetrics: [{ scope: { name: 'oasis', version: VERSION }, metrics }] }] };
-  }
-
-  async flushMetrics() {
-    if (!this.sums.size && !this.histograms.size) return;
-    await this.send('metrics', this.metricsPayload());
-  }
-
-  async flushLogs() {
-    if (!this.logRecords.length) return;
-    const logRecords = this.logRecords.splice(0);
-    await this.send('logs', { resourceLogs: [{ resource: this.resource, scopeLogs: [{ scope: { name: 'oasis', version: VERSION }, logRecords }] }] });
-  }
-
-  async flushTraces() {
-    if (!this.spans.length) return;
-    const spans = this.spans.splice(0);
-    await this.send('traces', { resourceSpans: [{ resource: this.resource, scopeSpans: [{ scope: { name: 'oasis', version: VERSION }, spans }] }] });
-  }
-
-  async flush() { await Promise.all([this.flushMetrics(), this.flushLogs(), this.flushTraces()]); }
 
   async shutdown() {
-    clearInterval(this.metricTimer); clearInterval(this.logTimer);
-    await this.flush();
+    try { await this.ready; } catch { return; }
+    await Promise.all([this.tracerProvider.shutdown(), this.loggerProvider.shutdown(), this.meterProvider.shutdown()].map((p) => p.catch(() => {})));
   }
 }
 
