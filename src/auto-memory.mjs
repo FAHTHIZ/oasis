@@ -368,9 +368,9 @@ export async function memoryIndexPrompt(root, { env = process.env, budget = INDE
   const memories = await listMemories(root, { env });
   // Small windows get the one-sentence version of the same policy.
   const intro = compact ? 'Auto memory: save lasting preferences, corrections, decisions and non-obvious project facts with memory_save (never secrets or one-off details); look them up with memory_search, and verify a memory against the code before relying on it.' : [
-    'Auto memory: memory_save keeps notes for later sessions; memory_search finds them.',
-    'Save user preferences and corrections, decisions with their reason, non-obvious project facts (build, test, deploy, where things live, gotchas) and lessons from fixes that took several attempts; scope "user" for preferences that apply to every project.',
-    'Never save secrets, one-off details or what the code already shows; update a memory rather than adding a near-duplicate. Memories can be outdated: check them against the code before relying on them, then record current, outdated or uncertain with memory_verify.'
+    'Auto memory: memory_save (name, content; scope "user" for preferences that apply to every project) keeps notes for later sessions; memory_search finds them.',
+    'Save preferences and corrections, decisions with their reason, non-obvious project facts and lessons from fixes that took several attempts; never secrets, one-off details or what the code already shows.',
+    'Memories can be outdated: check them against the code before relying on them, and record what you found with memory_verify.'
   ].join(' ');
   if (!memories.length) return intro + '\nNo memories saved yet.';
   const sorted = memories.slice().sort((a, b) => (b.scope === 'user') - (a.scope === 'user') || String(b.updated).localeCompare(String(a.updated)));
