@@ -314,10 +314,37 @@ substitutions, heredocs, subshells, functions) are already refused, and a
 would add no safety and adds an asynchronous dependency to an
 approval path; risk analysis (`shell-risk.mjs`) already uses the AST.
 
+### 11. Observation masking (measured; opt-in)
+
+Source: Lindenbauer et al., "The Complexity Trap: Simple Observation Masking
+Is as Efficient as LLM Summarization for Agent Context Management" (JetBrains
+Research, arXiv 2508.21433): keep the last M turns' observations, replace
+older ones with placeholders. OASIS already had threshold masking
+(`microcompact`, triggered at half the context window). This adds a rolling
+window, `maskObservations`, with batching to limit prompt-cache invalidation.
+
+`node bench/tokens/run.mjs` (scripted, so the scenarios pass regardless of
+what the model sees; numbers are estimates, not provider-reported):
+
+| turns / batch | taskflow input · cache-weighted | normalize input · cache-weighted | normalize last request |
+|---|---|---|---|
+| off | 156,848 · 26,998 | 261,673 · 44,816 | 20,782 |
+| 10 / 4 | 153,193 · 29,818 | 244,068 · 46,304 | 11,979 |
+| 6 / 4 | 145,880 · 27,766 | 208,854 · 41,842 | 11,979 |
+| 6 / 1 | 140,492 · 35,883 | 196,476 · 65,017 | 10,578 |
+| 4 / 4 | 142,222 · 27,067 | 191,245 · 39,563 | 11,978 |
+
+Finding: with prompt caching, per-turn masking (batch 1, as in the paper)
+costs more, because every slide changes the cached prefix. Batched masking is
+roughly cost-neutral on these short runs and halves the size of late requests,
+which is what matters for small local windows. Not measured here: effect on
+solve rate (the bench is scripted) and runs longer than 18 requests. Default
+stays off until a live A/B (`npm run bench:live`) shows no loss in solve rate.
+
 ## Next
 
 - Candidate: validate tool-call arguments against tool schemas with Ajv before execution (Claude Code returns InputValidationError). Needs care: built-in tools accept alias argument names.
-- Item 8: observation masking (JetBrains, arXiv 2508.21433), measured with bench/tokens.
+- Live A/B of observation masking (solve rate and provider-reported tokens) before considering it as a default for local providers.
 - Item 9: `@anthropic-ai/sandbox-runtime` for network filtering.
 - Merge the definition and noise queries into one pass, or parse in a worker
   pool, if first-scan latency matters for large repositories.
