@@ -66,6 +66,7 @@ import { loadSettings, normalizeLanguage } from './settings.mjs';
 import { withReplyLanguage } from './reply-language.mjs';
 import { effectivePhrases, normalizeCommentMode, withWritingRules } from './style-rules.mjs';
 import { PermissionPolicy, suggestRule, EDIT_TOOLS } from './permissions.mjs';
+import { loadShellParser } from './shell-ast.mjs';
 import { classifyAction, newAutoModeState } from './auto-mode.mjs';
 import { runHooks, hasHooks, CLAUDE_TOOL_NAMES } from './hooks.mjs';
 import { resolveSandbox } from './sandbox.mjs';
@@ -4782,6 +4783,9 @@ async function authorizeCall(session, name, args, context, options) {
   const policy = session.permissions;
   if (session.restricted && RESTRICTED_TOOL_NAMES.has(name) && !(session.toolDefinitions || []).some((tool) => tool.function.name === name)) return { deniedReason: name + ' is disabled in --restricted mode.' };
   const mode = permissionMode(session, options) === 'bypassPermissions' && session.restricted ? 'default' : permissionMode(session, options);
+  // Rule matching for shell lines uses the bash grammar; never evaluate a
+  // shell call before it has finished loading.
+  if (name === 'run_shell' || name === 'run_command' || name === 'monitor') await loadShellParser();
   const verdict = policy ? policy.evaluate(name, args) : { decision: 'default' };
   if (debugEnabled('permissions')) debugLog('permissions', name + ' -> ' + verdict.decision + (verdict.rule ? ' (rule ' + verdict.rule + ')' : '') + ' mode=' + (session.permissionMode || 'default'));
   if (verdict.decision === 'deny') return { deniedReason: 'Denied by permission rule ' + verdict.rule + '.' };

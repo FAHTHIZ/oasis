@@ -17,6 +17,13 @@
 //
 // Everything else falls through to the normal approval policy.
 
+import { loadShellParser, parseShellCommands } from './shell-ast.mjs';
+
+// Start loading the bash grammar now; analysis uses it once it is ready and
+// the legacy splitter until then. run_shell awaits shellAnalyzerReady().
+loadShellParser();
+export const shellAnalyzerReady = () => loadShellParser();
+
 const SEPARATORS = new Set([';', '&&', '||', '|', '&', '\n']);
 
 // Splits into simple commands. Each command is { tokens, pipedFrom }, where
@@ -590,7 +597,14 @@ const MAX_DEPTH = 6;
 function analyze(line, depth) {
   if (depth > MAX_DEPTH) return { highRisk: 'nests shell commands too deeply to analyze' };
   let highRisk = '';
-  const note = (r) => { if (r && r.highRisk && !highRisk) highRisk = r.highRisk; };
+  // Weak reasons (a program or eval text computed at run time) only apply
+  // when nothing more specific explains the risk.
+  let weakRisk = '';
+  const note = (r) => {
+    if (!r || !r.highRisk) return;
+    if (r.weak) { if (!weakRisk) weakRisk = r.highRisk; } else if (!highRisk) highRisk = r.highRisk;
+  };
+  const verdict = () => (highRisk ? { highRisk } : weakRisk ? { highRisk: weakRisk, weak: true } : {});
   const substitutions = extractSubstitutions(line);
   for (const inner of substitutions) {
     const r = analyze(inner, depth + 1);
@@ -600,7 +614,29 @@ function analyze(line, depth) {
   const ctx = { cwdCritical: '', cwdParent: '' };
   const vars = new Map();
   const aliases = new Map();
-  for (const raw of splitShell(line)) {
+  const parsed = bashDialect(line) ? parseShellCommands(line) : null;
+  if (parsed && (parsed.unparsable || parsed.tooLarge)) {
+    // Fail closed: what the grammar cannot parse, a person reviews. The
+    // legacy splitter still runs so a clear block keeps its reason.
+    const legacy = analyzeCommands(splitShell(line), depth, substitutions, ctx, vars, aliases, note);
+    if (legacy && legacy.blocked) return legacy;
+    return { highRisk: highRisk || (parsed.tooLarge ? 'is too large to analyze reliably' : 'could not be parsed reliably as a shell command') };
+  }
+  const result = analyzeCommands(parsed ? parsed.commands : splitShell(line), depth, substitutions, ctx, vars, aliases, note);
+  if (result && result.blocked) return result;
+  return verdict();
+}
+
+// The tree-sitter grammar is bash; PowerShell and cmd lines (drive-letter
+// paths, $env:, Verb-Noun cmdlets) keep the legacy splitter, which knows
+// their quoting.
+const NON_BASH = /(^|[\s'"=(])[A-Za-z]:\\|\$env:|(^|[\s;|&(])[A-Z][a-z]+-[A-Z][A-Za-z]+\b/;
+function bashDialect(line) {
+  return !NON_BASH.test(line);
+}
+
+function analyzeCommands(commands, depth, substitutions, ctx, vars, aliases, note) {
+  for (const raw of commands) {
     // `x=rm; $x -rf ~` and `alias r=rm; r -rf ~`: substitute names defined
     // earlier on the same line so indirection does not hide the program.
     const cmd = resolveIndirection(raw, vars, aliases);
@@ -628,6 +664,21 @@ function analyze(line, depth) {
         note(r);
       }
     }
+    // `bash <<< 'rm -rf ~'`, `sh <<'EOF' ... EOF`, `python3 <<EOF`: the
+    // here-string or heredoc is the script.
+    if (cmd.stdinScript && !operands(args).some((a) => a !== '<<<' && a !== cmd.stdinScript)) {
+      if (SHELLS.has(name)) {
+        const r = analyze(cmd.stdinScript, depth + 1);
+        if (r.blocked) return { blocked: r.blocked + ' (in a script fed to ' + name + ')' };
+        note(r);
+      } else if (CODE_FLAGS[name.replace(/[0-9.]+$/, '')] || CODE_FLAGS[name]) {
+        const r = analyzeInlineCode(cmd.stdinScript, depth);
+        if (r && r.blocked) return r;
+        note(r);
+      }
+    }
+    if (cmd.computedName) note({ highRisk: 'runs a program whose name is computed by another command at run time', weak: true });
+    if (cmd.ast && name === 'eval' && args.some((a) => /\$\(|`|\$\{?[A-Za-z_]/.test(a))) note({ highRisk: 'evaluates shell text that is only known at run time', weak: true });
     const code = inlineCode(cmd);
     if (code) {
       const r = analyzeInlineCode(code, depth);
@@ -640,10 +691,11 @@ function analyze(line, depth) {
     if (result.blocked) return { blocked: result.blocked };
     note(result);
   }
-  return highRisk ? { highRisk } : {};
+  return null;
 }
 
 // Returns { blocked?: string, highRisk?: string } for the whole shell line.
 export function analyzeShellLine(line) {
-  return analyze(String(line || ''), 0);
+  const result = analyze(String(line || ''), 0);
+  return result.weak ? { highRisk: result.highRisk } : result;
 }
