@@ -219,7 +219,7 @@ test('an MCP server installed from the chat starts in that chat and its tool wor
     "process.stdin.on('data', (chunk) => { buffer += chunk; let i;",
     "  while ((i = buffer.indexOf('\\n')) >= 0) { const line = buffer.slice(0, i); buffer = buffer.slice(i + 1);",
     "    let m; try { m = JSON.parse(line); } catch { continue; } if (m.id === undefined) continue;",
-    "    if (m.method === 'initialize') reply(m.id, { protocolVersion: '2025-03-26', capabilities: { tools: {} } });",
+    "    if (m.method === 'initialize') reply(m.id, { protocolVersion: '2025-03-26', serverInfo: { name: 'test', version: '1' }, capabilities: { tools: {} } });",
     "    else if (m.method === 'tools/list') reply(m.id, { tools: [{ name: 'ping', description: 'Ping', inputSchema: { type: 'object', properties: {} } }] });",
     "    else if (m.method === 'tools/call') reply(m.id, { content: [{ type: 'text', text: 'pong from ' + process.env.PING_NAME }] });",
     "    else reply(m.id, {}); } });"
@@ -248,7 +248,7 @@ test('an MCP server installed from the chat starts in that chat and its tool wor
 });
 
 test('a plugin installed from the chat brings its skills and MCP servers into that same chat', async (t) => {
-  const SERVER = "let b='';process.stdin.setEncoding('utf8');const r=(id,result)=>process.stdout.write(JSON.stringify({jsonrpc:'2.0',id,result})+'\\n');process.stdin.on('data',(c)=>{b+=c;let i;while((i=b.indexOf('\\n'))>=0){const l=b.slice(0,i);b=b.slice(i+1);let m;try{m=JSON.parse(l)}catch{continue}if(m.id===undefined)continue;if(m.method==='initialize')r(m.id,{protocolVersion:'2025-03-26',capabilities:{tools:{}}});else if(m.method==='tools/list')r(m.id,{tools:[{name:'ping',description:'Ping',inputSchema:{type:'object',properties:{}}}]});else if(m.method==='tools/call')r(m.id,{content:[{type:'text',text:'plugin pong'}]});else r(m.id,{})}});";
+  const SERVER = "let b='';process.stdin.setEncoding('utf8');const r=(id,result)=>process.stdout.write(JSON.stringify({jsonrpc:'2.0',id,result})+'\\n');process.stdin.on('data',(c)=>{b+=c;let i;while((i=b.indexOf('\\n'))>=0){const l=b.slice(0,i);b=b.slice(i+1);let m;try{m=JSON.parse(l)}catch{continue}if(m.id===undefined)continue;if(m.method==='initialize')r(m.id,{protocolVersion:'2025-03-26',serverInfo:{name:'test',version:'1'},capabilities:{tools:{}}});else if(m.method==='tools/list')r(m.id,{tools:[{name:'ping',description:'Ping',inputSchema:{type:'object',properties:{}}}]});else if(m.method==='tools/call')r(m.id,{content:[{type:'text',text:'plugin pong'}]});else r(m.id,{})}});";
   const base = await mkdtemp(path.join(os.tmpdir(), 'oasis-add-plugin-live-'));
   t.after(() => rm(base, { recursive: true, force: true }));
   const root = path.join(base, 'proj');

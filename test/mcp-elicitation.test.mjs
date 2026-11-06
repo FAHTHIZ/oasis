@@ -21,7 +21,7 @@ process.stdin.on('data', async (chunk) => { buffer += chunk; let i;
     let m; try { m = JSON.parse(line); } catch { continue; }
     if (m.id !== undefined && !m.method && waiting.has(m.id)) { const r = waiting.get(m.id); waiting.delete(m.id); r(m.result || { error: m.error }); continue; }
     if (m.id === undefined) continue;
-    if (m.method === 'initialize') { initParams = m.params; reply(m.id, { protocolVersion: '2025-06-18', capabilities: { tools: { listChanged: true } } }); }
+    if (m.method === 'initialize') { initParams = m.params; reply(m.id, { protocolVersion: '2025-06-18', serverInfo: { name: 'test', version: '1' }, capabilities: { tools: { listChanged: true } } }); }
     else if (m.method === 'tools/list') reply(m.id, { tools: [{ name: 'signup', inputSchema: { type: 'object' } }, { name: 'roots', inputSchema: { type: 'object' } }, { name: 'grow', inputSchema: { type: 'object' } }, ...(grown ? [{ name: 'extra', inputSchema: { type: 'object' } }] : [])] });
     else if (m.method === 'tools/call' && m.params.name === 'signup') { const answer = await ask('elicitation/create', { message: 'Create your account', requestedSchema: schema }); reply(m.id, { content: [{ type: 'text', text: 'ELICIT ' + JSON.stringify(answer) + ' CAPS ' + JSON.stringify(initParams.capabilities) }] }); }
     else if (m.method === 'tools/call' && m.params.name === 'roots') { const answer = await ask('roots/list', {}); reply(m.id, { content: [{ type: 'text', text: 'ROOTS ' + JSON.stringify(answer) }] }); }
@@ -59,7 +59,7 @@ test('elicitation values are coerced and validated against the schema', () => {
   const schema = { type: 'object', properties: { name: { type: 'string' }, seats: { type: 'integer', default: 2 } }, required: ['name'] };
   assert.deepEqual(validateElicitationContent(schema, { name: 'Ada' }), { ok: true, content: { name: 'Ada', seats: 2 } });
   assert.equal(validateElicitationContent(schema, {}).ok, false);
-  assert.deepEqual(clientCapabilities().elicitation, {});
+  assert.deepEqual(clientCapabilities().elicitation, { form: {}, url: {} });
   assert.match(sessionRoots({ root: '/tmp/x', additionalDirectories: ['/tmp/y'] })[1].uri, /^file:\/\/\/tmp\/y$/);
 });
 
@@ -85,7 +85,7 @@ test('MCP server elicitation reaches the user mid tool call', async (t) => {
   const text = toolText(requests, 1);
   assert.match(text, /"action":"accept"/);
   assert.match(text, /"content":\{"name":"Ada","plan":"pro","seats":1\}/);
-  assert.match(text, /CAPS \{"roots":\{"listChanged":true\},"elicitation":\{\}\}/);
+  assert.match(text, /CAPS \{"roots":\{"listChanged":true\},"elicitation":\{"form":\{\},"url":\{\}\}\}/);
 });
 
 test('without an interactive handler elicitation is declined; hooks can answer or override', async (t) => {
@@ -117,7 +117,7 @@ test('Streamable HTTP servers can elicit over the SSE response stream', async ()
     if (init.method === 'DELETE') return new Response(null, { status: 204 });
     const message = JSON.parse(init.body);
     if (!message.method) { answered(message); return new Response(null, { status: 202 }); }
-    if (message.method === 'initialize') return json({ jsonrpc: '2.0', id: message.id, result: { protocolVersion: '2025-06-18', capabilities: { tools: {} } } });
+    if (message.method === 'initialize') return json({ jsonrpc: '2.0', id: message.id, result: { protocolVersion: '2025-06-18', serverInfo: { name: 'test', version: '1' }, capabilities: { tools: {} } } });
     if (message.method === 'tools/list') return json({ jsonrpc: '2.0', id: message.id, result: { tools: [{ name: 'book', inputSchema: { type: 'object' } }] } });
     if (message.method === 'tools/call') {
       const encoder = new TextEncoder();

@@ -7,7 +7,7 @@ import { createHash } from 'node:crypto';
 import { mkdtemp, writeFile, readFile, stat, rm } from 'node:fs/promises';
 import { connectMcpServers, closeMcpClients } from '../src/mcp.mjs';
 import { loadProjectMcpServers } from '../src/mcp-project.mjs';
-import { getStoredToken, saveStoredToken, parseWwwAuthenticate, discoverOAuth, openInBrowser } from '../src/mcp-oauth.mjs';
+import { getStoredToken, saveStoredToken, parseWwwAuthenticate, discoverOAuth, openInBrowser, createOAuthFetch } from '../src/mcp-oauth.mjs';
 import { mcpLogin, mcpLogout } from '../src/mcp-auth-commands.mjs';
 
 test('OAuth token storage preserves concurrent server updates', async (t) => {
@@ -74,7 +74,7 @@ async function fakeServer(t, { expiresIn = 3600, urlHost = '127.0.0.1', iss, iss
     for await (const chunk of req) body += chunk;
     const json = (status, value, headers = {}) => { res.writeHead(status, { 'content-type': 'application/json', ...headers }); res.end(JSON.stringify(value)); };
     if (url.pathname === '/.well-known/oauth-protected-resource/mcp' || url.pathname === '/.well-known/oauth-protected-resource') return json(200, { resource: base + '/mcp', authorization_servers: [base], scopes_supported: ['tools.read'] });
-    if (url.pathname === '/.well-known/oauth-authorization-server') return json(200, { issuer: base, authorization_endpoint: base + '/authorize', token_endpoint: base + '/token', registration_endpoint: base + '/register', code_challenge_methods_supported: ['S256'], ...(issSupported ? { authorization_response_iss_parameter_supported: true } : {}) });
+    if (url.pathname === '/.well-known/oauth-authorization-server') return json(200, { issuer: base, response_types_supported: ['code'], authorization_endpoint: base + '/authorize', token_endpoint: base + '/token', registration_endpoint: base + '/register', code_challenge_methods_supported: ['S256'], ...(issSupported ? { authorization_response_iss_parameter_supported: true } : {}) });
     if (url.pathname === '/register') { const reg = JSON.parse(body); state.registered.push(reg); return json(201, { client_id: 'client-' + state.registered.length, redirect_uris: reg.redirect_uris }); }
     if (url.pathname === '/authorize') {
       state.authorizeParams = Object.fromEntries(url.searchParams);
@@ -106,9 +106,10 @@ async function fakeServer(t, { expiresIn = 3600, urlHost = '127.0.0.1', iss, iss
     if (url.pathname === '/mcp') {
       const auth = String(req.headers.authorization || '').replace(/^Bearer /, '');
       if (!state.tokens.has(auth) || state.revoked === auth) return json(401, { error: 'unauthorized' }, { 'www-authenticate': 'Bearer resource_metadata="' + base + '/.well-known/oauth-protected-resource/mcp"' });
+      if (req.method !== 'POST') { res.writeHead(405); return res.end(); }
       const message = JSON.parse(body);
       if (message.id === undefined) { res.writeHead(202); return res.end(); }
-      const result = message.method === 'initialize' ? { protocolVersion: '2025-03-26', capabilities: { tools: {} } }
+      const result = message.method === 'initialize' ? { protocolVersion: '2025-03-26', serverInfo: { name: 'test', version: '1' }, capabilities: { tools: {} } }
         : message.method === 'tools/list' ? { tools: [{ name: 'secret_data', inputSchema: { type: 'object' } }] } : {};
       return json(200, { jsonrpc: '2.0', id: message.id, result });
     }
@@ -153,6 +154,7 @@ test('OAuth discovery refuses redirects and bounds metadata bodies', async () =>
   const publicLookup = async () => [{ address: '93.184.216.34', family: 4 }];
   const authorizationMetadata = {
     issuer: origin,
+    response_types_supported: ['code'],
     authorization_endpoint: origin + '/authorize',
     token_endpoint: origin + '/token',
     registration_endpoint: origin + '/register',
@@ -239,6 +241,7 @@ test('OAuth discovery never fetches private-network resource metadata URLs', asy
     if (url === origin + '/.well-known/oauth-authorization-server') {
       return new Response(JSON.stringify({
         issuer: origin,
+        response_types_supported: ['code'],
         authorization_endpoint: origin + '/authorize',
         token_endpoint: origin + '/token'
       }), { headers: { 'content-type': 'application/json' } });
@@ -358,4 +361,22 @@ test('a stray callback with the wrong state or a forged error does not end sign-
   await mcpLogin(root, 'remote', { env, open });
   assert.deepEqual(strays, [400, 400, 400]);
   assert.ok(await getStoredToken(base + '/mcp', env));
+});
+
+test('OAuth metadata on another loopback port needs OASIS_MCP_OAUTH_ALLOW_LOOPBACK=1', async (t) => {
+  const previous = process.env.OASIS_MCP_OAUTH_ALLOW_LOOPBACK;
+  t.after(() => { if (previous === undefined) delete process.env.OASIS_MCP_OAUTH_ALLOW_LOOPBACK; else process.env.OASIS_MCP_OAUTH_ALLOW_LOOPBACK = previous; });
+  const seen = [];
+  const fetchImpl = async (url) => { seen.push(String(url)); return new Response('{}', { headers: { 'content-type': 'application/json' } }); };
+  const metadata = 'http://127.0.0.1:9/.well-known/oauth-authorization-server';
+  delete process.env.OASIS_MCP_OAUTH_ALLOW_LOOPBACK;
+  const blocked = await createOAuthFetch('http://127.0.0.1:8/mcp', { fetch: fetchImpl })(metadata);
+  assert.equal(blocked.status, 404);
+  assert.deepEqual(seen, []);
+  process.env.OASIS_MCP_OAUTH_ALLOW_LOOPBACK = '1';
+  const allowed = await createOAuthFetch('http://127.0.0.1:8/mcp', { fetch: fetchImpl })(metadata);
+  assert.equal(allowed.status, 200);
+  assert.deepEqual(seen, [metadata]);
+  const publicHttp = await createOAuthFetch('http://127.0.0.1:8/mcp', { fetch: fetchImpl })('http://auth.example/token');
+  assert.equal(publicHttp.status, 404, 'the opt-in never allows plain HTTP to non-loopback hosts');
 });

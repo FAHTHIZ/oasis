@@ -780,7 +780,10 @@ export async function createSession({ root, config, restore = null, permissionMo
   // background; their tools appear when ready and wait_for_mcp_servers blocks on them.
   const mcpNonBlocking = !(bare && !flagServers.length) && (/^(1|true|yes)$/i.test(String(env.OASIS_MCP_NONBLOCKING || env.MCP_CONNECTION_NONBLOCKING || '')) || loadedSettings.mcpNonBlocking === true);
   const mcpOptions = { root, env, host: mcpHost, skipUser: Boolean(strictMcpConfig || bare), extraServers: strictMcpConfig || bare ? flagServers : [...flagServers, ...project.servers], extraFailures: strictMcpConfig || bare ? [] : project.failures };
-  const mcpBackground = mcpNonBlocking ? connectMcpServers(mcpOptions).catch((error) => ({ clients: new Map(), failures: [{ name: 'mcp', error: error.message }] })) : null;
+  // Background servers start once createSession has returned (see the end of this function),
+  // so loading and compiling the MCP SDK never delays the session itself.
+  let startMcpBackground = null;
+  const mcpBackground = mcpNonBlocking ? new Promise((resolve) => { startMcpBackground = resolve; }).then(() => connectMcpServers(mcpOptions)).catch((error) => ({ clients: new Map(), failures: [{ name: 'mcp', error: error.message }] })) : null;
   const mcp = bare && !flagServers.length || mcpNonBlocking ? { clients: new Map(), failures: [] }
     : await connectMcpServers({ root, env, host: mcpHost, skipUser: Boolean(strictMcpConfig || bare), extraServers: strictMcpConfig || bare ? flagServers : [...flagServers, ...project.servers], extraFailures: strictMcpConfig || bare ? [] : project.failures });
   const mcpPins = loadPins(env);
@@ -1095,6 +1098,7 @@ export async function createSession({ root, config, restore = null, permissionMo
   if (!bare && needsHookWatchers(session.hooks, liveReload)) {
     try { session.fileWatchers = startHookWatchers(session, { env, liveReload, hookOptions: () => hookOptions(session, env), reload: reloadSessionSettings }); } catch {}
   }
+  if (startMcpBackground) setTimeout(startMcpBackground, 0);
   return session;
 }
 

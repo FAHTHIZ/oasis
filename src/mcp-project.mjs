@@ -1,4 +1,4 @@
-// Claude Code-compatible MCP configuration and the Streamable HTTP transport.
+// Claude Code-compatible MCP configuration and the remote (HTTP/SSE) MCP clients.
 //
 // .mcp.json in the workspace root (loaded only for trusted workspaces):
 //   {
@@ -18,10 +18,9 @@ import { processTreeSpawnOptions, signalProcessTree } from './process-tree.mjs';
 import path from 'node:path';
 import { isLoopbackUrl } from './config.mjs';
 import { loadMcpExtras } from './mcp-extras.mjs';
-import { oauthHeader, refreshStoredToken } from './mcp-oauth.mjs';
+import { authRequiredError, createOAuthFetch, getStoredToken, loadMcpClientSdk, OasisOAuthProvider, refreshExpiringToken, rememberRequiredScope, routeMcpFetch, sameMcpEndpoint } from './mcp-oauth.mjs';
 
-import { clientCapabilities, routeServerMessage, MCP_CLIENT_PROTOCOL_VERSION } from './mcp-client-features.mjs';
-const PROTOCOL_VERSION = MCP_CLIENT_PROTOCOL_VERSION;
+import { clientCapabilities, handleServerNotification, handleServerRequest } from './mcp-client-features.mjs';
 const MAX_RESPONSE = 4 * 1024 * 1024;
 const MAX_CONTENT = 24000;
 const MAX_HEADERS_HELPER_OUTPUT_BYTES = 64 * 1024;
@@ -161,68 +160,51 @@ function compactResult(result) {
   return ((result.isError ? 'MCP tool reported an error:\n' : '') + parts.join('\n\n')).slice(0, MAX_CONTENT);
 }
 
-async function readBoundedResponseText(response) {
+// ---------- Remote transports: the official MCP client SDK ----------
+//
+// Streamable HTTP and legacy HTTP+SSE run on @modelcontextprotocol/client (the
+// SDK that passes the MCP conformance suite): session handling, SSE parsing,
+// resumption and reconnects, protocol negotiation and OAuth. OASIS keeps the
+// parts that are policy rather than protocol: static headers and headersHelper,
+// the OAuth endpoint guard and token store (mcp-oauth.mjs), the 4 MiB response
+// bound, tool-name filtering, approvals, and the server -> client handlers in
+// mcp-client-features.mjs.
+
+const NULL_BODY_STATUS = new Set([101, 204, 205, 304]);
+
+function boundedResponse(response) {
   const declaredLength = Number(response.headers.get('content-length'));
   if (Number.isFinite(declaredLength) && declaredLength > MAX_RESPONSE) {
-    await response.body?.cancel().catch(() => {});
+    response.body?.cancel().catch(() => {});
     throw new Error('MCP response exceeded 4 MiB.');
   }
-  if (!response.body) return '';
-  const reader = response.body.getReader();
-  const chunks = [];
+  if (!response.body || NULL_BODY_STATUS.has(response.status)) return response;
   let total = 0;
-  try {
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      total += value.byteLength;
-      if (total > MAX_RESPONSE) throw new Error('MCP response exceeded 4 MiB.');
-      chunks.push(Buffer.from(value));
+  const limited = response.body.pipeThrough(new TransformStream({
+    transform(chunk, controller) {
+      total += chunk.byteLength;
+      if (total > MAX_RESPONSE) controller.error(new Error('MCP response exceeded 4 MiB.'));
+      else controller.enqueue(chunk);
     }
-  } catch (error) {
-    await reader.cancel().catch(() => {});
-    throw error;
-  }
-  return Buffer.concat(chunks, total).toString('utf8');
+  }));
+  return new Response(limited, { status: response.status, statusText: response.statusText, headers: response.headers });
 }
 
-async function readSseResponse(response, id, onMessage = null) {
-  const declaredLength = Number(response.headers.get('content-length'));
-  if (Number.isFinite(declaredLength) && declaredLength > MAX_RESPONSE) {
-    await response.body?.cancel().catch(() => {});
-    throw new Error('MCP response exceeded 4 MiB.');
-  }
-  if (!response.body) throw new Error('MCP server returned an empty response stream.');
-  const reader = response.body.getReader();
-  const decoder = new TextDecoder();
-  let buffer = '';
-  let total = 0;
-  try {
-    for (;;) {
-      const { value, done } = await reader.read();
-      if (done) break;
-      total += value.length;
-      if (total > MAX_RESPONSE) throw new Error('MCP response exceeded 4 MiB.');
-      buffer += decoder.decode(value, { stream: true });
-      let index;
-      while ((index = buffer.search(/\r?\n\r?\n/)) >= 0) {
-        const event = buffer.slice(0, index);
-        buffer = buffer.slice(index).replace(/^\r?\n\r?\n/, '');
-        const data = event.split(/\r?\n/).filter((line) => line.startsWith('data:')).map((line) => line.slice(5).trimStart()).join('\n');
-        if (!data) continue;
-        let message;
-        try { message = JSON.parse(data); } catch { continue; }
-        if (message && typeof message.method === 'string') { if (onMessage) Promise.resolve(onMessage(message)).catch(() => {}); continue; }
-        if (message && String(message.id) === String(id) && (message.result !== undefined || message.error)) return message;
-      }
-    }
-  } finally {
-    try { await reader.cancel(); } catch {}
-  }
-  throw new Error('MCP server closed the stream without a response.');
+function plainHeaderObject(headers) {
+  if (!headers) return {};
+  if (headers instanceof Headers) return Object.fromEntries(headers.entries());
+  if (Array.isArray(headers)) return Object.fromEntries(headers);
+  return { ...headers };
 }
 
-// Minimal Streamable HTTP MCP client with the same surface as McpServerClient.
+// Non-spec (extension) methods need a result schema; this Standard Schema passes results through.
+const ANY_RESULT = Object.freeze({ '~standard': Object.freeze({ version: 1, vendor: 'oasis', validate: (value) => ({ value }) }) });
+
+function sdkMessage(error) {
+  return String(error && error.message || error).replace(/^MCP error -?\d+:\s*/, '');
+}
+
+// Streamable HTTP MCP client with the same surface as McpServerClient.
 export class McpHttpClient {
   constructor(config, options = {}) {
     this.config = { name: config.name, url: config.url, headers: config.headers || {}, enabled: true, type: config.type === 'sse' ? 'sse' : 'http', ...(config.oauth ? { oauth: config.oauth } : {}), ...(config.headersHelper ? { headersHelper: config.headersHelper, pluginRoot: config.pluginRoot } : {}) };
@@ -231,18 +213,24 @@ export class McpHttpClient {
     this.env = options.env || process.env;
     this.explicitAuth = Object.keys(this.config.headers).some((key) => key.toLowerCase() === 'authorization');
     this.tools = [];
-    this.sessionId = null;
-    this.nextId = 1;
     this.closed = false;
     this.activeRequests = new Set();
     this.activeHelpers = new Set();
     this.host = options.host || null;
+    this.sdk = null;
+    this.transport = null;
+    this.oauthProvider = null;
+    this.lastStatus = 0;
+    this.startPromise = null;
     // Production is capped at 10 seconds; shorter injected timeouts make cleanup tests fast.
     const requestedHelperTimeout = options.headersHelperTimeoutMs;
     this.headersHelperTimeoutMs = Number.isSafeInteger(requestedHelperTimeout)
       ? Math.min(DEFAULT_HEADERS_HELPER_TIMEOUT_MS, Math.max(25, requestedHelperTimeout))
       : DEFAULT_HEADERS_HELPER_TIMEOUT_MS;
   }
+
+  get sessionId() { return this.transport && this.transport.sessionId || null; }
+  get protocolVersion() { return this.client && typeof this.client.getNegotiatedProtocolVersion === 'function' ? this.client.getNegotiatedProtocolVersion() : (this.transport && this.transport._protocolVersion) || null; }
 
   // headersHelper: a shell command printing a JSON object of headers (short-lived tokens).
   // Runs before the first request and again after a 401; its headers override static ones.
@@ -322,76 +310,156 @@ export class McpHttpClient {
     return headers;
   }
 
-  async _post(message, timeoutMs = 30000, retried = false) {
+  // The fetch the SDK uses for MCP endpoint traffic: static headers, then
+  // headersHelper headers (re-run once after a 401), a close-aware abort signal
+  // and the response bound. OAuth endpoint traffic goes to the guarded fetch.
+  async _mcpFetch(input, init = {}) {
+    const method = String(init.method || 'GET').toUpperCase();
+    // close() ends the server-side session with one DELETE (cached headers, short timeout).
+    if (method === 'DELETE') {
+      return await this.fetch(input, { ...init, headers: { ...this.config.headers, ...plainHeaderObject(init.headers), ...(this.helperHeaders || {}) }, signal: AbortSignal.timeout(5000) });
+    }
     if (this.closed) throw new Error('MCP server session closed.');
-    const extra = await this._helperHeaders(false);
-    if (this.closed) throw new Error('MCP server session closed.');
-    const helperAuth = Object.keys(extra).some((key) => key.toLowerCase() === 'authorization');
-    const authorization = this.explicitAuth || helperAuth ? null : await oauthHeader(this.config.url, { env: this.env, fetch: this.fetch }).catch(() => null);
     const controller = new AbortController();
+    const outer = init.signal;
+    if (outer) {
+      if (outer.aborted) controller.abort(outer.reason);
+      else outer.addEventListener('abort', () => controller.abort(outer.reason), { once: true });
+    }
     this.activeRequests.add(controller);
-    const timer = setTimeout(() => controller.abort(), timeoutMs);
     try {
-      const response = await this.fetch(this.config.url, {
-        method: 'POST',
-        redirect: 'error',
-        signal: controller.signal,
-        headers: {
-          ...this.config.headers,
-          ...extra,
-          ...(authorization ? { authorization } : {}),
-          'content-type': 'application/json',
-          accept: 'application/json, text/event-stream',
-          ...(this.sessionId ? { 'mcp-session-id': this.sessionId } : {}),
-          ...(this.protocolVersion ? { 'mcp-protocol-version': this.protocolVersion } : {})
-        },
-        body: JSON.stringify(message)
-      });
-      const session = response.headers.get('mcp-session-id');
-      if (session) this.sessionId = session;
-      if (response.status === 401 && this.config.headersHelper && !retried) {
-        await this._helperHeaders(true);
-        clearTimeout(timer);
-        return await this._post(message, timeoutMs, true);
+      for (let attempt = 0; ; attempt++) {
+        const extra = await this._helperHeaders(attempt > 0);
+        if (this.closed) throw new Error('MCP server session closed.');
+        const headers = { ...this.config.headers, ...plainHeaderObject(init.headers), ...extra };
+        const response = await this.fetch(input, { ...init, headers, signal: controller.signal });
+        this.lastStatus = response.status;
+        if (response.status === 401 && this.config.headersHelper && attempt === 0) {
+          await response.body?.cancel().catch(() => {});
+          continue;
+        }
+        if (method !== 'POST') return response;
+        return boundedResponse(response);
       }
-      if (response.status === 401 && authorization && !retried) {
-        const refreshed = await refreshStoredToken(this.config.url, { env: this.env, fetch: this.fetch }).catch(() => null);
-        if (refreshed) { clearTimeout(timer); return await this._post(message, timeoutMs, true); }
-      }
-      if (response.status === 401 && !this.explicitAuth && !helperAuth) {
-        const error = new Error('MCP server ' + this.config.name + ' needs sign-in. Run oasis mcp login ' + this.config.name + ' (or /mcp login ' + this.config.name + ' in the terminal).');
-        error.code = 'MCP_AUTH_REQUIRED';
-        throw error;
-      }
-      if (response.status === 401 || response.status === 403) throw new Error('MCP server ' + this.config.name + ' rejected the credentials (HTTP ' + response.status + '). Check the headers in .mcp.json.');
-      if (!response.ok && response.status !== 202) throw new Error('MCP server ' + this.config.name + ' returned HTTP ' + response.status + '.');
-      if (message.id === undefined || message.method === undefined || response.status === 202 || response.status === 204) return null;
-      const type = response.headers.get('content-type') || '';
-      const onServerMessage = (incoming) => routeServerMessage(this, incoming, (reply) => this._post(reply, 30000));
-      const reply = type.includes('text/event-stream') ? await readSseResponse(response, message.id, onServerMessage) : JSON.parse(await readBoundedResponseText(response));
-      const matched = Array.isArray(reply) ? reply.find((item) => String(item.id) === String(message.id)) : reply;
-      if (!matched) throw new Error('MCP server sent no matching response.');
-      if (matched.error) throw new Error(matched.error.message || 'MCP request failed.');
-      return matched.result || {};
-    } catch (error) {
-      if (this.closed && controller.signal.aborted) throw new Error('MCP server session closed.');
-      if (error.name === 'AbortError') throw new Error('MCP request to ' + this.config.name + ' timed out.');
-      throw error;
     } finally {
-      clearTimeout(timer);
-      this.activeRequests.delete(controller);
+      if (method !== 'GET') this.activeRequests.delete(controller);
     }
   }
 
-  _request(method, params = {}, timeoutMs) {
-    if (this.closed) return Promise.reject(new Error('MCP server session closed.'));
-    return this._post({ jsonrpc: '2.0', id: this.nextId++, method, params }, timeoutMs);
+  _isMcpUrl(url) { return sameMcpEndpoint(url, this.config.url); }
+
+  _createTransport(sdk, options) {
+    return new sdk.StreamableHTTPClientTransport(new URL(this.config.url), options);
+  }
+
+  _translate(error) {
+    if (this.closed) return new Error('MCP server session closed.');
+    if (error && error.code === 'MCP_AUTH_REQUIRED') return error;
+    if (error && ((this.sdk && this.sdk.InsufficientScopeError && error instanceof this.sdk.InsufficientScopeError) || 'requiredScope' in Object(error))) {
+      const scope = error.requiredScope || '';
+      rememberRequiredScope(this.config, scope, this.env).catch(() => {});
+      const needed = new Error('MCP server ' + this.config.name + ' needs broader access' + (scope ? ' (scope: ' + String(scope).slice(0, 200) + ')' : '') + '. Run oasis mcp login ' + this.config.name + ' (or /mcp login ' + this.config.name + ' in the terminal).');
+      needed.code = 'MCP_AUTH_REQUIRED';
+      needed.requiredScope = scope;
+      return needed;
+    }
+    if (/Endpoint origin does not match/i.test(String(error && error.message))) {
+      return new Error('MCP server ' + this.config.name + ' announced a message endpoint on a different origin; refusing it.');
+    }
+    const status = error && typeof error.status === 'number' ? error.status
+      : /Non-200 status code \((\d{3})\)/.test(String(error && error.message)) ? Number(/Non-200 status code \((\d{3})\)/.exec(String(error.message))[1])
+      : error && error.data && typeof error.data.status === 'number' ? error.data.status
+      : this.sdk && error instanceof this.sdk.UnauthorizedError ? 401 : 0;
+    const helperAuth = Object.keys(this.helperHeaders || {}).some((key) => key.toLowerCase() === 'authorization');
+    if (status === 401 && !this.explicitAuth && !helperAuth) return authRequiredError(this.config);
+    if (status === 401 || status === 403) return new Error('MCP server ' + this.config.name + ' rejected the credentials (HTTP ' + status + '). Check the headers in .mcp.json.');
+    if (status) return new Error('MCP server ' + this.config.name + ' returned HTTP ' + status + '.');
+    if (error && error.code === 'REQUEST_TIMEOUT') return new Error('MCP request to ' + this.config.name + ' timed out.');
+    if (error && error.name === 'AbortError') return new Error('MCP request to ' + this.config.name + ' timed out.');
+    const result = new Error(sdkMessage(error));
+    if (error && typeof error.code === 'number') result.rpcCode = error.code;
+    return result;
+  }
+
+  async _request(method, params = {}, timeoutMs = 30000) {
+    if (this.closed) throw new Error('MCP server session closed.');
+    if (!this.client) throw new Error('MCP server ' + this.config.name + ' is not connected.');
+    try {
+      try {
+        return await this.client.request({ method, params }, { timeout: timeoutMs }) || {};
+      } catch (error) {
+        if (!(error instanceof TypeError) || !/not a spec method/.test(error.message)) throw error;
+        return await this.client.request({ method, params }, ANY_RESULT, { timeout: timeoutMs }) || {};
+      }
+    } catch (error) {
+      throw this._translate(error);
+    }
+  }
+
+  // Transport options for remote servers: headersHelper first (when it supplies
+  // Authorization, OAuth stays out of the way), then saved OAuth credentials.
+  async _transportOptions() {
+    await this._helperHeaders(false);
+    const helperAuth = Object.keys(this.helperHeaders || {}).some((key) => key.toLowerCase() === 'authorization');
+    const useOAuth = !this.explicitAuth && !helperAuth;
+    let storedToken = null;
+    if (useOAuth) {
+      try { storedToken = await getStoredToken(this.config.url, this.env); } catch {}
+      if (storedToken) await refreshExpiringToken(this.config, { env: this.env, fetch: this.fetch }).catch(() => false);
+    }
+    // Without saved credentials there is nothing to refresh: a 401 means "run oasis mcp login".
+    this.oauthProvider = useOAuth && storedToken ? new OasisOAuthProvider(this.config, { env: this.env }) : null;
+    const oauthFetch = createOAuthFetch(this.config.url, { fetch: this.fetch });
+    const transportFetch = routeMcpFetch((url) => this._isMcpUrl(url), (input, init) => this._mcpFetch(input, init), oauthFetch);
+    return { fetch: transportFetch, ...(this.oauthProvider ? { authProvider: this.oauthProvider } : {}), onInsufficientScope: 'throw' };
   }
 
   async start() {
-    const init = await this._request('initialize', { protocolVersion: PROTOCOL_VERSION, capabilities: clientCapabilities(), clientInfo: { name: 'oasis-oss', version: oasisVersion() } }, 15000);
-    this.protocolVersion = init && init.protocolVersion || PROTOCOL_VERSION;
-    await this._post({ jsonrpc: '2.0', method: 'notifications/initialized', params: {} }, 10000).catch(() => {});
+    if (this.startPromise) return await this.startPromise;
+    this.startPromise = this._start();
+    return await this.startPromise;
+  }
+
+  // Fire-and-forget notification (used by channels for permission relay requests).
+  _notify(method, params = {}) {
+    if (!this.client || this.closed) return;
+    Promise.resolve().then(() => this.client.notification({ method, params })).catch((error) => {
+      this.stderrTail = ((this.stderrTail || '') + '\n[notify ' + method + '] ' + sdkMessage(error).slice(0, 200)).slice(-6000);
+    });
+  }
+
+  async _start() {
+    const sdk = this.sdk = await loadMcpClientSdk();
+    if (this.closed) throw new Error('MCP server session closed.');
+    this.transport = this._createTransport(sdk, await this._transportOptions());
+    this.client = new sdk.Client({ name: 'oasis-oss', version: oasisVersion() }, { capabilities: clientCapabilities() });
+    this.client.fallbackRequestHandler = async (request) => {
+      const reply = await handleServerRequest(this, request);
+      if (reply.error) throw new sdk.ProtocolError(reply.error.code, reply.error.message);
+      return reply.result;
+    };
+    this.client.fallbackNotificationHandler = async (notification) => { await handleServerNotification(this, notification); };
+    for (const method of ['roots/list', 'elicitation/create']) {
+      try { this.client.setRequestHandler(method, (request) => this.client.fallbackRequestHandler(request)); } catch {}
+    }
+    for (const method of ['notifications/tools/list_changed', 'notifications/message']) {
+      try { this.client.setNotificationHandler(method, (notification) => handleServerNotification(this, notification)); } catch {}
+    }
+    this.client.onerror = (error) => {
+      const line = '[transport] ' + sdkMessage(error).slice(0, 300);
+      this.stderrTail = ((this.stderrTail || '') + '\n' + line).slice(-6000);
+    };
+    try {
+      await this.client.connect(this.transport, { timeout: 15000 });
+    } catch (error) {
+      throw this._translate(error);
+    }
+    const init = {
+      protocolVersion: this.protocolVersion,
+      capabilities: this.client.getServerCapabilities() || {},
+      instructions: this.client.getInstructions ? this.client.getInstructions() : undefined,
+      serverInfo: this.client.getServerVersion ? this.client.getServerVersion() : undefined
+    };
     await this.refreshTools();
     await loadMcpExtras(this, init);
     return this.tools;
@@ -419,214 +487,62 @@ export class McpHttpClient {
 
   close() {
     if (this.closed) return;
+    const transport = this.transport;
+    const client = this.client;
+    const terminate = transport && transport.sessionId && typeof transport.terminateSession === 'function'
+      ? transport.terminateSession().catch(() => {})
+      : Promise.resolve();
     this.closed = true;
-    for (const controller of this.activeRequests) controller.abort();
-    this.activeRequests.clear();
     for (const child of this.activeHelpers) signalProcessTree(child, 'SIGKILL');
-    if (this.sessionId) {
-      this.fetch(this.config.url, { method: 'DELETE', headers: { ...this.config.headers, 'mcp-session-id': this.sessionId } }).catch(() => {});
-    }
+    terminate.finally(() => {
+      for (const controller of this.activeRequests) controller.abort();
+      this.activeRequests.clear();
+      if (client) client.close().catch(() => {});
+    });
   }
 }
 
-
-// Legacy HTTP+SSE transport (MCP 2024-11-05), still used by many hosted servers:
-// GET the URL for an event stream, wait for an `endpoint` event, POST each
-// JSON-RPC message there, and read the replies from the stream. Auth, headers,
+// Legacy HTTP+SSE transport (MCP 2024-11-05), still used by many hosted servers.
+// The SDK's SSEClientTransport opens the event stream, waits for the endpoint
+// event (refusing one on another origin) and POSTs each message there. Headers,
 // headersHelper and OAuth behave exactly as for Streamable HTTP.
-const SSE_MAX_EVENT = 1024 * 1024;
-
 export class McpSseClient extends McpHttpClient {
   constructor(config, options = {}) {
     super({ ...config, type: 'sse' }, options);
-    this.pending = new Map();
-    this.endpoint = null;
-    this.streamController = null;
   }
 
-  async _authHeaders(refresh = false) {
-    const extra = await this._helperHeaders(refresh);
-    const helperAuth = Object.keys(extra).some((key) => key.toLowerCase() === 'authorization');
-    const authorization = this.explicitAuth || helperAuth ? null : await oauthHeader(this.config.url, { env: this.env, fetch: this.fetch }).catch(() => null);
-    return { ...this.config.headers, ...extra, ...(authorization ? { authorization } : {}) };
+  // The stream URL plus the message endpoint the server announced (same origin, checked by the SDK).
+  _isMcpUrl(url) {
+    const endpoint = this.transport && this.transport._endpoint;
+    return sameMcpEndpoint(url, this.config.url) || Boolean(endpoint && sameMcpEndpoint(url, String(endpoint)));
   }
 
-  _authError(status) {
-    if (status === 401 && !this.explicitAuth && !this.config.headersHelper) {
-      const error = new Error('MCP server ' + this.config.name + ' needs sign-in. Run oasis mcp login ' + this.config.name + ' (or /mcp login ' + this.config.name + ' in the terminal).');
-      error.code = 'MCP_AUTH_REQUIRED';
-      return error;
-    }
-    return new Error('MCP server ' + this.config.name + ' rejected the credentials (HTTP ' + status + '). Check the headers in .mcp.json.');
+  // Some servers answer a POST with the JSON-RPC reply inline instead of on the
+  // stream. That is outside the 2024-11-05 transport, but cheap to accept: hand
+  // the reply to the SDK as if it had arrived on the stream.
+  async _mcpFetch(input, init = {}) {
+    const response = await super._mcpFetch(input, init);
+    const method = String(init.method || 'GET').toUpperCase();
+    if (method !== 'POST' || !response.ok || !/application\/json/i.test(response.headers.get('content-type') || '')) return response;
+    const text = await response.text();
+    let parsed = null;
+    try { parsed = JSON.parse(text); } catch {}
+    const messages = (Array.isArray(parsed) ? parsed : [parsed]).filter((item) => item && item.jsonrpc === '2.0' && (item.id !== undefined || typeof item.method === 'string'));
+    if (messages.length) queueMicrotask(() => { for (const message of messages) this.transport && this.transport.onmessage && this.transport.onmessage(message); });
+    return new Response('Accepted', { status: 202 });
   }
 
-  async _openStream(timeoutMs = 15000) {
-    const controller = new AbortController();
-    this.streamController = controller;
-    this.activeRequests.add(controller);
-    let response;
-    const timer = setTimeout(() => controller.abort(), timeoutMs);
-    try {
-      let headers = await this._authHeaders(false);
-      response = await this.fetch(this.config.url, { method: 'GET', redirect: 'error', signal: controller.signal, headers: { ...headers, accept: 'text/event-stream' } });
-      if (response.status === 401 && this.config.headersHelper) {
-        await response.body?.cancel().catch(() => {});
-        headers = await this._authHeaders(true);
-        response = await this.fetch(this.config.url, { method: 'GET', redirect: 'error', signal: controller.signal, headers: { ...headers, accept: 'text/event-stream' } });
-      }
-      if (response.status === 401 || response.status === 403) throw this._authError(response.status);
-      if (!response.ok) throw new Error('MCP server ' + this.config.name + ' returned HTTP ' + response.status + ' for the SSE stream.');
-      if (!String(response.headers.get('content-type') || '').includes('text/event-stream')) throw new Error('MCP server ' + this.config.name + ' did not answer with an event stream. If it uses Streamable HTTP, set "type": "http".');
-    } catch (error) {
-      clearTimeout(timer);
-      this.activeRequests.delete(controller);
-      if (error.name === 'AbortError') throw new Error(this.closed ? 'MCP server session closed.' : 'MCP server ' + this.config.name + ' did not open its SSE stream in time.');
-      throw error;
-    }
-    let resolveEndpoint;
-    let rejectEndpoint;
-    const endpoint = new Promise((resolve, reject) => { resolveEndpoint = resolve; rejectEndpoint = reject; });
-    this._readStream(response, controller, resolveEndpoint, rejectEndpoint);
-    try {
-      this.endpoint = await endpoint;
-    } finally {
-      clearTimeout(timer);
-    }
-  }
-
-  async _readStream(response, controller, resolveEndpoint, rejectEndpoint) {
-    const reader = response.body.getReader();
-    const decoder = new TextDecoder();
-    let buffer = '';
-    let failure = null;
-    try {
-      for (;;) {
-        const { value, done } = await reader.read();
-        if (done) break;
-        buffer += decoder.decode(value, { stream: true });
-        if (buffer.length > SSE_MAX_EVENT * 4) throw new Error('MCP server ' + this.config.name + ' sent an oversized SSE event.');
-        let index;
-        while ((index = buffer.search(/\r?\n\r?\n/)) >= 0) {
-          const block = buffer.slice(0, index);
-          buffer = buffer.slice(index).replace(/^\r?\n\r?\n/, '');
-          let name = 'message';
-          const data = [];
-          for (const line of block.split(/\r?\n/)) {
-            if (line.startsWith('event:')) name = line.slice(6).trim();
-            else if (line.startsWith('data:')) data.push(line.slice(5).replace(/^ /, ''));
-          }
-          const text = data.join('\n');
-          if (!text || text.length > SSE_MAX_EVENT) continue;
-          if (name === 'endpoint') {
-            let target;
-            try { target = new URL(text.trim(), this.config.url); } catch { rejectEndpoint(new Error('MCP server ' + this.config.name + ' sent an invalid endpoint.')); continue; }
-            // Messages carry credentials, so they may only go back to the same origin.
-            if (target.origin !== new URL(this.config.url).origin) { rejectEndpoint(new Error('MCP server ' + this.config.name + ' asked OASIS to post to a different origin (' + target.origin + '); refused.')); continue; }
-            resolveEndpoint(target.toString());
-            continue;
-          }
-          if (name !== 'message') continue;
-          let message;
-          try { message = JSON.parse(text); } catch { continue; }
-          for (const item of Array.isArray(message) ? message : [message]) this._onMessage(item);
-        }
-      }
-    } catch (error) {
-      failure = error;
-    } finally {
-      try { await reader.cancel(); } catch {}
-      this.activeRequests.delete(controller);
-    }
-    const reason = this.closed ? new Error('MCP server session closed.')
-      : failure && failure.name !== 'AbortError' ? failure
-      : new Error('MCP server ' + this.config.name + (this.endpoint ? ' closed its SSE stream.' : ' did not send its message endpoint in time.'));
-    rejectEndpoint(reason);
-    this.streamClosed = true;
-    this._failAll(reason);
-  }
-
-  _onMessage(message) {
-    if (!message || typeof message !== 'object') return;
-    if (typeof message.method === 'string') {
-      routeServerMessage(this, message, (reply) => this._send(reply)).catch(() => {});
-      return;
-    }
-    const key = String(message.id);
-    const pending = this.pending.get(key);
-    if (!pending) return;
-    this.pending.delete(key);
-    clearTimeout(pending.timer);
-    if (message.error) pending.reject(new Error(message.error.message || 'MCP request failed.'));
-    else pending.resolve(message.result || {});
-  }
-
-  _failAll(error) {
-    for (const entry of this.pending.values()) { clearTimeout(entry.timer); entry.reject(error); }
-    this.pending.clear();
-  }
-
-  async _send(message, retried = false) {
-    if (this.closed) throw new Error('MCP server session closed.');
-    if (!this.endpoint || this.streamClosed) throw new Error('MCP server ' + this.config.name + ' has no open SSE stream.');
-    const controller = new AbortController();
-    this.activeRequests.add(controller);
-    const timer = setTimeout(() => controller.abort(), 30000);
-    try {
-      const headers = await this._authHeaders(retried);
-      const response = await this.fetch(this.endpoint, { method: 'POST', redirect: 'error', signal: controller.signal, headers: { ...headers, 'content-type': 'application/json', accept: 'application/json, text/event-stream' }, body: JSON.stringify(message) });
-      if (response.status === 401 && this.config.headersHelper && !retried) { await response.body?.cancel().catch(() => {}); clearTimeout(timer); return await this._send(message, true); }
-      if (response.status === 401 || response.status === 403) throw this._authError(response.status);
-      if (!response.ok) throw new Error('MCP server ' + this.config.name + ' returned HTTP ' + response.status + '.');
-      // Replies normally arrive on the stream; accept an inline JSON reply too.
-      const type = String(response.headers.get('content-type') || '');
-      if (type.includes('application/json')) {
-        const text = await readBoundedResponseText(response);
-        try { const parsed = JSON.parse(text); for (const item of Array.isArray(parsed) ? parsed : [parsed]) this._onMessage(item); } catch {}
-      } else {
-        await response.body?.cancel().catch(() => {});
-      }
-      return null;
-    } catch (error) {
-      if (error.name === 'AbortError') throw new Error(this.closed ? 'MCP server session closed.' : 'MCP request to ' + this.config.name + ' timed out.');
-      throw error;
-    } finally {
-      clearTimeout(timer);
-      this.activeRequests.delete(controller);
-    }
-  }
-
-  _request(method, params = {}, timeoutMs = 30000) {
-    if (this.closed) return Promise.reject(new Error('MCP server session closed.'));
-    const id = this.nextId++;
-    return new Promise((resolve, reject) => {
-      const timer = setTimeout(() => {
-        if (!this.pending.delete(String(id))) return;
-        if (method !== 'initialize') this._send({ jsonrpc: '2.0', method: 'notifications/cancelled', params: { requestId: id, reason: 'MCP request timed out: ' + method } }).catch(() => {});
-        reject(new Error('MCP request timed out: ' + method));
-      }, timeoutMs);
-      this.pending.set(String(id), { resolve, reject, timer });
-      this._send({ jsonrpc: '2.0', id, method, params }).catch((error) => {
-        if (!this.pending.delete(String(id))) return;
-        clearTimeout(timer);
-        reject(error);
-      });
-    });
-  }
-
-  // The base class sends notifications through _post.
-  async _post(message) {
-    if (message && message.id !== undefined && typeof message.method === 'string') return await this._request(message.method, message.params || {});
-    return await this._send(message);
-  }
-
-  async start() {
-    await this._openStream();
-    return await super.start();
+  _createTransport(sdk, options) {
+    const { onInsufficientScope, ...rest } = options;
+    return new sdk.SSEClientTransport(new URL(this.config.url), rest);
   }
 
   close() {
     if (this.closed) return;
-    super.close();
-    this._failAll(new Error('MCP server session closed.'));
+    this.closed = true;
+    for (const child of this.activeHelpers) signalProcessTree(child, 'SIGKILL');
+    for (const controller of this.activeRequests) controller.abort();
+    this.activeRequests.clear();
+    if (this.client) this.client.close().catch(() => {});
   }
 }

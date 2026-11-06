@@ -16,7 +16,7 @@ const SERVER = [
   "process.stdin.on('data', (chunk) => { buffer += chunk; let i;",
   "  while ((i = buffer.indexOf('\\n')) >= 0) { const line = buffer.slice(0, i); buffer = buffer.slice(i + 1);",
   "    let m; try { m = JSON.parse(line); } catch { continue; } if (m.id === undefined) continue;",
-  "    if (m.method === 'initialize') reply(m.id, { protocolVersion: '2025-03-26', capabilities: { tools: {}, resources: {}, prompts: {} } });",
+  "    if (m.method === 'initialize') reply(m.id, { protocolVersion: '2025-03-26', serverInfo: { name: 'test', version: '1' }, capabilities: { tools: {}, resources: {}, prompts: {} } });",
   "    else if (m.method === 'tools/list') reply(m.id, { tools: [] });",
   "    else if (m.method === 'resources/list') reply(m.id, { resources: [{ uri: 'notes://todo', name: 'todo', mimeType: 'text/plain' }] });",
   "    else if (m.method === 'resources/templates/list') reply(m.id, { resourceTemplates: [{ uriTemplate: 'notes://{name}', name: 'note' }] });",

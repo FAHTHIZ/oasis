@@ -10,11 +10,6 @@ import path from 'node:path';
 import { getConfigDirectory } from './config.mjs';
 import { McpHttpClient, McpSseClient } from './mcp-project.mjs';
 import { loadMcpExtras, RESOURCE_TOOL_DEFINITIONS, runResourceTool } from './mcp-extras.mjs';
-import { clientCapabilities, routeServerMessage, MCP_CLIENT_PROTOCOL_VERSION } from './mcp-client-features.mjs';
-
-const PROTOCOL_VERSION = MCP_CLIENT_PROTOCOL_VERSION;
-const MAX_LINE = 1024 * 1024;
-const MAX_CONTENT = 24000;
 
 export function getMcpConfigPath(env = process.env) {
   return path.join(getConfigDirectory(env), 'mcp-servers.json');
@@ -130,22 +125,6 @@ export function safeEnvironment(server, source = process.env, extra = {}) {
   return env;
 }
 
-function compactText(result) {
-  if (!result || typeof result !== 'object') return String(result);
-  if (Array.isArray(result.content)) {
-    const values = [];
-    for (const block of result.content) {
-      if (block && block.type === 'text' && typeof block.text === 'string') values.push(block.text);
-      else if (block && block.type === 'image') values.push('[MCP image content omitted from the text-only agent runtime]');
-      else if (block && block.type === 'resource') values.push('[MCP resource content omitted; use the server-specific resource workflow]');
-    }
-    let text = values.join('\n\n');
-    if (result.isError) text = 'MCP tool reported an error:\n' + text;
-    return text.slice(0, MAX_CONTENT);
-  }
-  return JSON.stringify(result).slice(0, MAX_CONTENT);
-}
-
 export function filterTools(tools) {
   return (Array.isArray(tools) ? tools : []).filter((tool) =>
     tool && typeof tool.name === 'string' &&
@@ -163,170 +142,111 @@ export function refreshSessionMcpTools(session) {
   if (session.allowedToolNames) for (const definition of dynamic.definitions) session.allowedToolNames.add(definition.function.name);
 }
 
-export class McpServerClient {
-  constructor(config, options = {}) {
-    this.config = validateMcpServerConfig(config);
-    this.extraEnv = config.extraEnv || {};
-    this.root = options.root || process.cwd();
-    this.env = options.env || process.env;
+// The SDK's own stdio transport cannot start the server in its own process
+// group, and OASIS must be able to end a server's whole process tree. So OASIS
+// spawns the process (safe environment, workspace cwd, process group, stderr
+// tail) and the SDK does the rest: its ReadBuffer/serializeMessage framing,
+// its Client for JSON-RPC, timeouts, cancellation and capability negotiation.
+class ProcessStdioTransport {
+  constructor(owner, sdk) {
+    this.owner = owner;
+    this.sdk = sdk;
+    this.readBuffer = new sdk.ReadBuffer();
     this.child = null;
-    this.buffer = '';
-    this.pending = new Map();
-    this.nextId = 1;
-    this.closed = false;
-    this.stderrTail = '';
-    this.tools = [];
-    this.startPromise = null;
-    this.terminationRequested = false;
-    this.killTimer = null;
-    this.host = options.host || null;
   }
 
   async start() {
-    if (this.startPromise) return await this.startPromise;
-    this.startPromise = this._start();
-    return await this.startPromise;
-  }
-
-  async _start() {
-    if (!this.config.enabled) throw new Error('MCP server is disabled: ' + this.config.name);
-    this.child = spawn(this.config.command, this.config.args, {
-      cwd: this.root,
-      env: safeEnvironment(this.config, this.env, this.extraEnv),
+    const owner = this.owner;
+    const child = this.child = owner.child = spawn(owner.config.command, owner.config.args, {
+      cwd: owner.root,
+      env: safeEnvironment(owner.config, owner.env, owner.extraEnv),
       shell: false,
       windowsHide: true,
       stdio: ['pipe', 'pipe', 'pipe'],
       ...processTreeSpawnOptions()
     });
-    this.child.stdout.setEncoding('utf8');
-    this.child.stderr.setEncoding('utf8');
-    this.child.stdout.on('data', (chunk) => this._onData(chunk));
-    this.child.stderr.on('data', (chunk) => {
-      this.stderrTail = (this.stderrTail + chunk).slice(-6000);
+    await new Promise((resolve, reject) => {
+      child.once('spawn', resolve);
+      child.once('error', (error) => reject(new Error('MCP server ' + owner.config.name + ' could not start: ' + error.message)));
     });
-    this.child.on('error', (error) => this._failAll(new Error('MCP server ' + this.config.name + ' could not start: ' + error.message)));
-    this.child.on('close', (code) => {
-      this.closed = true;
-      this._failAll(new Error('MCP server ' + this.config.name + ' exited' + (code === null ? '' : ' with code ' + code) + '.'));
-      // The leader can exit before descendants. Signal the process group even on
-      // an unexpected exit, then retain the force-kill timer for stubborn children.
-      this._terminateProcessTree();
-    });
-
-    const init = await this._request('initialize', {
-      protocolVersion: PROTOCOL_VERSION,
-      capabilities: clientCapabilities(),
-      clientInfo: { name: 'oasis-oss', version: oasisVersion() }
-    }, 15000);
-    this._notify('notifications/initialized', {});
-    await this.refreshTools();
-    await loadMcpExtras(this, init);
-    return this.tools;
-  }
-
-  async refreshTools() {
-    const listed = await this._request('tools/list', {}, 15000);
-    this.tools = filterTools(listed.tools);
-    return this.tools;
-  }
-
-  _onData(chunk) {
-    this.buffer += chunk;
-    if (this.buffer.length > MAX_LINE * 2) {
-      this._failAll(new Error('MCP server output buffer exceeded the protocol limit.'));
-      this.close();
-      return;
-    }
-    let index;
-    while ((index = this.buffer.indexOf('\n')) >= 0) {
-      const line = this.buffer.slice(0, index).trim();
-      this.buffer = this.buffer.slice(index + 1);
-      if (!line) continue;
-      if (line.length > MAX_LINE) {
-        this._failAll(new Error('MCP server sent an oversized protocol message.'));
-        continue;
-      }
-      let message;
-      try { message = JSON.parse(line); } catch {
-        this.stderrTail = (this.stderrTail + '\n[ignored non-JSON stdout from MCP server]').slice(-6000);
-        continue;
-      }
-      // Requests and notifications from the server (elicitation, roots, list_changed, ping).
-      if (message && typeof message.method === 'string') {
-        routeServerMessage(this, message, (response) => this._write(response)).catch(() => {});
-        continue;
-      }
-      if (message.id !== undefined && this.pending.has(String(message.id))) {
-        const pending = this.pending.get(String(message.id));
-        this.pending.delete(String(message.id));
-        clearTimeout(pending.timer);
-        if (message.error) pending.reject(new Error(message.error.message || 'MCP request failed.'));
-        else pending.resolve(message.result || {});
-      }
-    }
-  }
-
-  _request(method, params = {}, timeoutMs = 30000) {
-    if (!this.child || this.closed || !this.child.stdin.writable) return Promise.reject(new Error('MCP server is not running: ' + this.config.name));
-    const id = this.nextId++;
-    return new Promise((resolve, reject) => {
-      const timer = setTimeout(() => {
-        const key = String(id);
-        if (!this.pending.has(key)) return;
-        this.pending.delete(key);
-        // Initialize MUST NOT be cancelled. Other in-flight stdio requests use
-        // MCP's standard cancellation notification when their deadline expires.
-        if (method !== 'initialize' && !this.closed) {
-          try {
-            this._notify('notifications/cancelled', {
-              requestId: id,
-              reason: 'MCP request timed out: ' + method
-            });
-          } catch {}
+    child.on('error', (error) => this.onerror && this.onerror(error));
+    child.stdin.on('error', () => {});
+    child.stdout.on('data', (chunk) => {
+      this.readBuffer.append(chunk);
+      for (;;) {
+        let message;
+        try { message = this.readBuffer.readMessage(); }
+        catch (error) {
+          owner.stderrTail = (owner.stderrTail + '\n[ignored non-JSON stdout from MCP server]').slice(-6000);
+          if (/buffer|exceed|size/i.test(String(error && error.message))) { this.readBuffer.clear(); owner.close(); return; }
+          continue;
         }
-        reject(new Error('MCP request timed out: ' + method));
-      }, timeoutMs);
-      this.pending.set(String(id), { resolve, reject, timer });
-      try {
-        this.child.stdin.write(JSON.stringify({ jsonrpc: '2.0', id, method, params }) + '\n');
-      } catch (error) {
-        clearTimeout(timer);
-        this.pending.delete(String(id));
-        reject(error);
+        if (message === null) break;
+        if (this.onmessage) this.onmessage(message);
       }
+    });
+    child.stderr.setEncoding('utf8');
+    child.stderr.on('data', (chunk) => { owner.stderrTail = (owner.stderrTail + chunk).slice(-6000); });
+    child.on('close', (code) => {
+      owner.exitCode = code;
+      owner.exited = true;
+      // The leader can exit before descendants: signal the process group even on
+      // an unexpected exit, keeping the force-kill timer for stubborn children.
+      owner._terminateProcessTree();
+      if (this.onclose) this.onclose();
     });
   }
 
-  _notify(method, params = {}) {
-    this._write({ jsonrpc: '2.0', method, params });
+  async send(message) {
+    const child = this.child;
+    if (!child || this.owner.exited || !child.stdin.writable) throw new Error('MCP server is not running: ' + this.owner.config.name);
+    await new Promise((resolve, reject) => child.stdin.write(this.sdk.serializeMessage(message), (error) => error ? reject(error) : resolve()));
   }
 
-  _write(message) {
-    if (!this.child || this.closed || !this.child.stdin.writable) return;
-    this.child.stdin.write(JSON.stringify(message) + '\n');
+  async close() {
+    this.owner._terminateProcessTree();
+  }
+}
+
+// stdio MCP server: same surface (and the same SDK Client) as the remote clients.
+export class McpServerClient extends McpHttpClient {
+  constructor(config, options = {}) {
+    const checked = validateMcpServerConfig(config);
+    super({ name: checked.name, url: 'stdio:' + checked.name }, options);
+    this.config = checked;
+    this.extraEnv = config.extraEnv || {};
+    this.root = options.root || process.cwd();
+    this.child = null;
+    this.exited = false;
+    this.exitCode = null;
+    this.stderrTail = '';
+    this.terminationRequested = false;
+    this.killTimer = null;
   }
 
-  async callTool(name, args, options = {}) {
-    const schema = this.tools.find((tool) => tool.name === name);
-    if (!schema) throw new Error('MCP tool is not available: ' + name);
-    if (!options.autoApprove) {
-      const ok = options.approval && await options.approval(
-        'Call MCP server "' + this.config.name + '" tool "' + name + '" with arguments:\n' +
-        JSON.stringify(args, null, 2).slice(0, 5000) +
-        '\nMCP tools can read external data or change systems according to this server’s permissions.'
-      );
-      if (!ok) return { approved: false, message: 'MCP tool call was not approved. No call was made.' };
+  async _transportOptions() { return {}; }
+
+  _createTransport(sdk) {
+    if (!this.config.enabled) throw new Error('MCP server is disabled: ' + this.config.name);
+    return new ProcessStdioTransport(this, sdk);
+  }
+
+  _translate(error) {
+    if (this.exited && !this.terminationRequestedByClose) {
+      return new Error('MCP server ' + this.config.name + ' exited' + (this.exitCode === null ? '' : ' with code ' + this.exitCode) + '.');
     }
-    const result = await this._request('tools/call', { name, arguments: args }, 120000);
-    return { isError: Boolean(result.isError), content: compactText(result), structuredContent: result.structuredContent };
+    if (error && (error.code === 'REQUEST_TIMEOUT' || /timed out/i.test(String(error.message)))) return new Error('MCP request timed out: ' + (error.method || 'request'));
+    if (/could not start|not running/.test(String(error && error.message))) return error;
+    return super._translate(error);
   }
 
-  _failAll(error) {
-    for (const entry of this.pending.values()) {
-      clearTimeout(entry.timer);
-      entry.reject(error);
+  async _request(method, params = {}, timeoutMs = 30000) {
+    if (!this.client || this.exited || this.closed) throw new Error('MCP server is not running: ' + this.config.name);
+    try { return await super._request(method, params, timeoutMs); }
+    catch (error) {
+      if (/^MCP request timed out/.test(error.message)) throw new Error('MCP request timed out: ' + method);
+      throw error;
     }
-    this.pending.clear();
   }
 
   _terminateProcessTree() {
@@ -345,8 +265,10 @@ export class McpServerClient {
   }
 
   close() {
+    if (this.closed) return;
     this.closed = true;
-    this._failAll(new Error('MCP server session closed.'));
+    this.terminationRequestedByClose = true;
+    if (this.client) this.client.close().catch(() => {});
     this._terminateProcessTree();
   }
 }

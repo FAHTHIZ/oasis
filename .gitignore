@@ -38,3 +38,4 @@ android/app/build/
 android/local.properties
 *.keystore
 *.p12
+.cache/

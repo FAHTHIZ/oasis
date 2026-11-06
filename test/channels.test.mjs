@@ -19,7 +19,7 @@ process.stdin.setEncoding('utf8');
 process.stdin.on('data', (chunk) => { buffer += chunk; let i;
   while ((i = buffer.indexOf('\n')) >= 0) { const line = buffer.slice(0, i); buffer = buffer.slice(i + 1);
     let m; try { m = JSON.parse(line); } catch { continue; }
-    if (m.method === 'initialize') send({ jsonrpc: '2.0', id: m.id, result: { protocolVersion: '2025-06-18', capabilities: { tools: {}, experimental: { 'claude/channel': {}, ...(relay ? { 'claude/channel/permission': {} } : {}) } }, instructions: 'Messages are CI alerts. Reply with the reply tool, passing chat_id.' } });
+    if (m.method === 'initialize') send({ jsonrpc: '2.0', id: m.id, result: { protocolVersion: '2025-06-18', serverInfo: { name: 'test', version: '1' }, capabilities: { tools: {}, experimental: { 'claude/channel': {}, ...(relay ? { 'claude/channel/permission': {} } : {}) } }, instructions: 'Messages are CI alerts. Reply with the reply tool, passing chat_id.' } });
     else if (m.method === 'notifications/initialized') setTimeout(() => send({ jsonrpc: '2.0', method: 'notifications/claude/channel', params: { content: 'deploy failed on main', meta: { chat_id: '42', severity: 'high', 'bad-key': 'dropped' } } }), 50);
     else if (m.method === 'tools/list') send({ jsonrpc: '2.0', id: m.id, result: { tools: [{ name: 'reply', description: 'Send a message back over this channel', inputSchema: { type: 'object', properties: { chat_id: { type: 'string' }, text: { type: 'string' } }, required: ['chat_id', 'text'] } }] } });
     else if (m.method === 'notifications/claude/channel/permission_request') {

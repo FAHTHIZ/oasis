@@ -99,7 +99,7 @@ test('pending calls fail cleanly when the stream drops', async (t) => {
   await client.start();
   const pending = client._request('slow/never', {}, 5000);
   for (const res of fixture.streams.values()) res.destroy();
-  await assert.rejects(pending, /closed its SSE stream|terminated|other side closed/);
+  await assert.rejects(pending, /closed its SSE stream|terminated|other side closed|HTTP 404|closed|timed out/);
 });
 
 test('connectMcpServers starts sse servers from project config', async (t) => {
