@@ -381,3 +381,17 @@ Free-form shell strings are a different risk class from argv-based commands. The
 **Fix:** served edit tools refuse protected config targets (resolved through symlinks with `protectedConfigTarget`) unless `OASIS_ALLOW_CONFIG_EDITS=1`. **Test:** `test/mcp-serve.test.mjs`. **Remaining by design:** `--allow-commands` gives the client a shell; that is code execution the user granted explicitly.
 
 **Held up:** `oasis app` (`src/app-server.mjs`) serves only GET/HEAD for the app, skills and an allow-list of shared modules, and rejects `..` and paths outside those folders. The MCP OAuth callback listens on 127.0.0.1 and ignores requests without the expected `state`.
+
+### Persisted text used shorter secret lists than the shield (medium)
+
+**Finding:** the secret shield recognises about 40 credential formats, `KEY=value` lines and URL passwords, but the redactors for what is written to disk each kept their own list. A probe with 18 real-format credentials found these left in clear text: 14 in the debug log (Stripe, Groq, Hugging Face, `gho_`, fine-grained GitHub, GitLab, AWS, URL passwords, Bearer tokens, JWTs, private keys, npm, xAI); 8 by the auto-memory redactor used for trajectories, session previews and memories; 12 in artifacts; and 10 in approval text. The debug log records tool arguments after placeholders are swapped back, so `--debug` with a `.env` edit wrote the real values. Trajectory export redacted JSON-escaped arguments, which hid multi-line `.env` bodies from the line-anchored patterns. Telemetry with `OTEL_LOG_TOOL_DETAILS=1` exported arguments unredacted.
+
+**Fix:** `redactSecretText`/`redactSecretValues` in `src/secret-shield.mjs` apply the shield's own patterns. The debug log, auto-memory `redactSecrets` (trajectories, sessions, memories), artifacts, approval text and telemetry run them in addition to their existing patterns. String values are redacted before JSON serialization. **Test:** `test/secret-redaction.test.mjs`. **Remaining by design:** session files keep the conversation as the model saw it (placeholders, not values), stored with mode 0600; a secret the user types into a prompt is sent and saved as typed.
+
+### Benchmark gateway accepted browser requests (low)
+
+**Finding:** `scripts/bench-gateway.mjs` forwards requests with the upstream key and accepted a cross-site `text/plain` POST (no CORS preflight) or a DNS-rebinding Host, so any web page open while it ran could spend the key. Upstream error bodies were logged without redaction.
+
+**Fix:** requests carrying `Origin` or a non-loopback `Host` get 403; logged errors pass through `redactSecretText`. **Test:** `test/bench-gateway.test.mjs`.
+
+**Held up:** `apply_patch` (JSON, freeform and `apply_patch <<EOF` shell forms) under `--yes`: adding `.git/hooks/pre-commit` or `.oasis/settings.json`, updating `.mcp.json`, updating a symlink to `.git/config`, moving a file into `.git/hooks`, deleting `.mcp.json`, and adding `.env` were all asked or refused, because every patch operation runs as `write_file`/`delete_file` through the normal authorization step. No change was needed.
