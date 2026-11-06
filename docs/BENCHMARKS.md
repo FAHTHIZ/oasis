@@ -95,11 +95,21 @@ node bench/tokens/run.mjs --check     # in npm run check: fails if a scenario fa
 
 Tokens are characters / 4. "Uncached" is what follows the longest prefix shared with the previous request (tools, then messages), the part an exact-prefix cache has to process again. The run takes about 2 s and repeats to within a dozen characters (test timings in the `npm test` output vary).
 
-Baseline at `cf469f6` (`bench/results/tokens-2026-11-06-baseline.json`):
+A second scenario, `normalize-token-usage` on the larger `oasis-main` snapshot with a 128K-window model (gpt-4o), runs 17 calls with big reads (README, a 25 KB `src/agent.mjs`), a failing test, a fix and two more test runs, so old tool results dominate the later requests.
 
-| Scenario | Requests | Input tokens | Uncached | System prompt | Tool schemas | Tool results | First request | Last request |
+Baseline before any token work (`bench/results/tokens-2026-11-06-baseline.json`, source `4ba1c83`, the same `src/` as `cf469f6`). "Cache-weighted" adds the reused prefix at 10%, the usual cached-token price:
+
+| Scenario | Requests | Input tokens | Uncached | Cache-weighted | System prompt | Tool schemas | Tool results | Last request |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| taskflow-search, gpt-oss-20b (32K default window) | 18 | ~180,898 | ~15,041 | ~51,737 (28.6%) | ~68,211 (37.7%) | ~44,321 (24.5%) | ~6,839 | ~15,060 |
+| taskflow-search, gpt-oss-20b (32K default window) | 18 | ~180,897 | ~15,041 | ~31,585 | ~51,737 (28.6%) | ~68,211 (37.7%) | ~44,323 (24.5%) | ~15,059 |
+| normalize-token-usage, gpt-4o (128K) | 18 | ~286,700 | ~22,885 | ~49,227 | ~60,692 (21.2%) | ~68,211 (23.8%) | ~137,259 (47.9%) | ~22,902 |
+
+Reductions, each measured with the benchmark right after it landed (input tokens, taskflow-search / normalize-token-usage):
+
+| Change | taskflow-search | normalize-token-usage |
+| --- | --- | --- |
+| Baseline | ~180,897 | ~286,700 |
+| `git_status` and `git_diff` results without the command line and the duplicate `output` copy of stdout | ~179,776 (−0.6%) | ~285,296 (−0.5%) |
 
 What it shows: the scripted total (~181K) is close to what the live run's gateway logged (188,606 for 18 requests), and two thirds of it is the fixed part, the system prompt and 22 tool schemas resent on every request. The prefix is stable from request to request (only ~8% is new each time), so on a provider with prefix caching most of it is billed at the cached rate; on free endpoints without caching, every byte counts. The benchmark also checks that the per-request usage OASIS reports adds up to what the provider returned.
 
