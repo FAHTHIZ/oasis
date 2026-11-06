@@ -131,7 +131,7 @@ export async function profileCommand(args = [], { env = process.env, home = os.h
   }
   if (action === 'show' || action === 'current' || action === 'path') {
     let current = name;
-    if (!current) { try { current = activeProfile(env, home) || 'default'; } catch (error) { throw error; } }
+    if (!current) current = activeProfile(env, home) || 'default';
     const dir = profileDirectory(current, env, home);
     if (action === 'path') { stdout.write(dir + '\n'); return { name: current, dir }; }
     const size = await dirSize(dir);

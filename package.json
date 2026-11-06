@@ -48,7 +48,8 @@
     "bench:harness": "node bench/harness/run.mjs",
     "bench:tokens": "node bench/tokens/run.mjs",
     "bench:live": "node scripts/bench-live.mjs",
-    "bench:startup": "node scripts/measure-startup.mjs"
+    "bench:startup": "node scripts/measure-startup.mjs",
+    "lint": "oxlint --deny-warnings"
   },
   "repository": {
     "type": "git",
@@ -127,7 +128,8 @@
   },
   "devDependencies": {
     "electron": "45.2.3",
-    "electron-builder": "26.18.0"
+    "electron-builder": "26.18.0",
+    "oxlint": "1.92.0"
   },
   "build": {
     "appId": "org.oasis.oss",

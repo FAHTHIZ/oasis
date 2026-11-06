@@ -19,14 +19,13 @@ import { WEB_SEARCH_TOOL_DEFINITION, webSearch } from './web-search.mjs';
 import { fetchPublicUrl } from './public-fetch.mjs';
 import { gitVisibleFiles } from './git-visible-files.mjs';
 import { createHash } from 'node:crypto';
-import { readdir, readFile, writeFile, mkdir, unlink, lstat, realpath, stat, open as openFile } from 'node:fs/promises';
+import { readdir, readFile, mkdir, unlink, lstat, realpath, stat, open as openFile } from 'node:fs/promises';
 import { createReadStream } from 'node:fs';
 import { createInterface } from 'node:readline';
 import path from 'node:path';
 import os from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { spawn } from 'node:child_process';
-import { commandAvailable } from './command-lookup.mjs';
 import { processTreeSpawnOptions, signalProcessTree } from './process-tree.mjs';
 import { PtySessionManager } from './pty-sessions.mjs';
 import { snapshotFile } from './backups.mjs';
@@ -34,7 +33,7 @@ import { planPackageInstall, normalizePackageName } from './installer.mjs';
 import { managePlugins } from './plugins.mjs';
 import { getConfigDirectory, loadConfig, saveConfig, DEFAULT_BASE_URL, DEFAULT_ANTHROPIC_BASE_URL, DEFAULT_MODEL, validateBaseUrl, isLoopbackUrl } from './config.mjs';
 import { testProviderConnection } from './agent.mjs';
-import { installGitHubExtension, inspectGitHubExtension, listInstalledExtensions } from './extensions.mjs';
+import { installGitHubExtension, inspectGitHubExtension } from './extensions.mjs';
 import { analyzeCommand } from './permissions.mjs';
 import { assertSandboxAvailable, launchCommand } from './sandbox.mjs';
 import { fileGlobMatcher } from './glob.mjs';
@@ -48,7 +47,7 @@ import { MONITOR_TOOL_DEFINITION } from './monitor-definition.mjs';
 import { startCommandMonitor, startWsMonitor, backgroundExitNotifier, backgroundStuckNotifier } from './monitors.mjs';
 import { LSP_TOOL_DEFINITION, runLsp } from './lsp.mjs';
 import { isPdfPath, readPdf } from './pdf.mjs';
-import { GIT_TOOL_DEFINITIONS, GIT_TOOL_NAMES, runGitTool } from './git-tools.mjs';
+import { GIT_TOOL_DEFINITIONS, runGitTool } from './git-tools.mjs';
 import { loadMcpServers, saveMcpServers, validateMcpServerConfig, McpServerClient, refreshSessionMcpTools } from './mcp.mjs';
 import { createCommandOutputLog } from './command-output-log.mjs';
 
@@ -552,10 +551,6 @@ export function unrequestedDocWarning(displayPath, request) {
     'delete this file with delete_file unless the user requested it.';
 }
 
-function commandSafety(command, args) {
-  return analyzeCommand(command, args).blocked || null;
-}
-
 export async function runWorkspaceCommand(root, command, args = [], options = {}) {
   if (!Array.isArray(args) || args.length > 80 || args.some((arg) => typeof arg !== 'string' || arg.length > 5000 || arg.includes('\0'))) {
     throw new Error('Command arguments must be an array of short strings.');
@@ -815,10 +810,6 @@ function getMatchingProviderKey(provider, env) {
   if (provider === 'gemini') return env.GEMINI_API_KEY || env.GOOGLE_API_KEY || '';
   if (provider === 'ollama') return env.OLLAMA_API_KEY || '';
   return '';
-}
-
-function commandExists(command, env = process.env) {
-  return commandAvailable(command, env);
 }
 
 async function saveVerifiedProvider(provider, config, context) {

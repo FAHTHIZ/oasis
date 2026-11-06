@@ -197,7 +197,7 @@ test('OASIS eval records selected routed model, per-task cost and savings', asyn
   const resultsDir = path.join(tmp, 'eval-results');
   const tasksDir = path.join(tmp, 'tasks');
   await mkdir(tasksDir);
-  const taskDir = await createFixtureTask(tasksDir);
+  await createFixtureTask(tasksDir);
   await writeFile(path.join(tasksDir, 'metadata.json'), JSON.stringify({
     schemaVersion: 1,
     categories: { 'utility-logic': 'Read-only fixture category.' },
@@ -489,7 +489,7 @@ test('a local model eval reports $0 API cost instead of unknown', async (t) => {
   const resultsDir = path.join(tmp, 'eval-results');
   const tasksDir = path.join(tmp, 'tasks');
   await mkdir(tasksDir);
-  const taskDir = await createFixtureTask(tasksDir);
+  await createFixtureTask(tasksDir);
   let requests = 0;
   const server = createServer(async (req, res) => {
     let raw = '';

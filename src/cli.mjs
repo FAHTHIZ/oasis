@@ -9,7 +9,7 @@ import { startPluginMonitorsFor } from './monitors.mjs';
 import { createInterface } from 'node:readline/promises';
 import { stdin, stdout, stderr } from 'node:process';
 import { spawn, spawnSync } from 'node:child_process';
-import { access, copyFile, mkdir, readFile, writeFile, readdir } from 'node:fs/promises';
+import { access, copyFile, mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { isIP } from 'node:net';
 import { fileURLToPath } from 'node:url';
@@ -1461,7 +1461,7 @@ async function ultrareviewCommand(root, rest, autoApprove, persistence) {
   } finally { clearTimeout(timer); }
 }
 
-async function backgroundCommand(root, rest) {
+async function backgroundCommand(rest) {
   const bg = await import('./background-sessions.mjs');
   const [sub = 'list', query, ...more] = rest;
   if (sub === 'list' || sub === 'ls') {
@@ -1528,7 +1528,7 @@ async function backgroundCommand(root, rest) {
     const entry = await bg.readEntry(id, process.env);
     if (entry.kind === 'exec') {
       stdout.write('Attaching to ' + id + ' (' + entry.command + '). Ctrl+C detaches; the job keeps running.\n');
-      return await backgroundCommand(root, ['logs', id, '--follow']);
+      return await backgroundCommand(['logs', id, '--follow']);
     }
     if (entry.status === 'running') {
       if (!(await approve(id + ' is still running. Stop it and continue the conversation here?', true, false))) { stdout.write('Left it running. oasis bg logs ' + id + ' --follow shows progress.\n'); return; }
@@ -3854,7 +3854,7 @@ async function main() {
     const { startExecJob } = await import('./background-sessions.mjs');
     const entry = await startExecJob({ root: workspace, command: [SESSION_OPTIONS.exec, ...args].join(' '), env: process.env, name: SESSION_OPTIONS.sessionName || null });
     stdout.write('Started background job ' + entry.id + ': ' + entry.command + '\n  oasis logs ' + entry.id + ' --follow   watch output\n  oasis stop ' + entry.id + '             stop it\n');
-    if (!SESSION_OPTIONS.background && stdout.isTTY) return await backgroundCommand(workspace, ['logs', entry.id, '--follow']);
+    if (!SESSION_OPTIONS.background && stdout.isTTY) return await backgroundCommand(['logs', entry.id, '--follow']);
     return;
   }
   if (SESSION_OPTIONS.background) {
@@ -4027,9 +4027,9 @@ async function main() {
   if (command === 'permissions') return await managePermissions(workspace, rest);
   if (command === 'trust') return await manageTrust(workspace, rest);
   if (command === 'import') return await importCommand(workspace, rest, autoApprove);
-  if (command === 'bg' || command === 'background') return await backgroundCommand(workspace, rest);
+  if (command === 'bg' || command === 'background') return await backgroundCommand(rest);
   // Claude Code's top-level background commands: claude attach|logs|stop|kill|rm|respawn ID.
-  if (['attach', 'logs', 'stop', 'kill', 'rm', 'respawn'].includes(command)) return await backgroundCommand(workspace, [command, ...rest]);
+  if (['attach', 'logs', 'stop', 'kill', 'rm', 'respawn'].includes(command)) return await backgroundCommand([command, ...rest]);
   if (command === 'purge') return await purgeCommand(workspace, rest, autoApprove);
   if (command === 'auto-mode') return await autoModeCommand(workspace, rest, autoApprove);
   if (command === 'auth') return await authCommand(workspace, rest);

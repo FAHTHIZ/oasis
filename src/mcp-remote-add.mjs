@@ -2,7 +2,7 @@ import { atomicWriteFile } from './atomic-write.mjs';
 // oasis mcp add --transport http|sse NAME URL [--header "Name: value"] [--scope user|project]
 // Writes a Claude Code-style entry to ~/.config/oasis/mcp.json (user scope, the
 // default) or ./.mcp.json (project scope), the files OASIS already reads.
-import { mkdir, readFile, writeFile, chmod } from 'node:fs/promises';
+import { mkdir, readFile, chmod } from 'node:fs/promises';
 import path from 'node:path';
 import { getConfigDirectory, isLoopbackUrl } from './config.mjs';
 import { parseMcpServerEntries } from './mcp-project.mjs';

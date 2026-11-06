@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import os from 'node:os';
 import path from 'node:path';
-import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises';
 import { addAnything } from '../src/add-anything.mjs';
 import { pickReleaseAsset } from '../src/plugin-convert.mjs';
 import { loadEnabledPlugins, pluginCommands, pluginSkills, pluginMcpServers, pluginHooks } from '../src/claude-plugins.mjs';

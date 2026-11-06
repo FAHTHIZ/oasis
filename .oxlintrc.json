@@ -1,0 +1,17 @@
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "categories": { "correctness": "error" },
+  "env": { "node": true, "browser": true, "es2024": true },
+  "ignorePatterns": ["node_modules/**", "assets/vendor/**", "app/vendor/**", "evals/**", "site/**", "dist/**", "**/*.min.js"],
+  "rules": {
+    "no-unused-vars": ["error", { "args": "none", "caughtErrors": "none", "ignoreRestSiblings": true, "varsIgnorePattern": "^_" }],
+    "no-control-regex": "off",
+    "no-unused-expressions": "off",
+    "no-useless-escape": "off",
+    "no-new-array": "off",
+    "unicorn/prefer-string-starts-ends-with": "off",
+    "unicorn/no-useless-fallback-in-spread": "off",
+    "unicorn/no-useless-spread": "off",
+    "eslint/no-eval": "off"
+  }
+}

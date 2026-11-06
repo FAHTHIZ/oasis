@@ -1,5 +1,5 @@
 import { atomicWriteFile } from './atomic-write.mjs';
-import { copyFile, mkdir, readdir, realpath, stat, lstat, writeFile } from 'node:fs/promises';
+import { copyFile, mkdir, readdir, realpath, stat, lstat } from 'node:fs/promises';
 import path from 'node:path';
 import { readBoundedRegularFile } from './safe-storage.mjs';
 import { createHash, randomUUID } from 'node:crypto';

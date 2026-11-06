@@ -129,7 +129,6 @@ export async function loadMemory(root, options = {}) {
     else parts.push(block);
   }
   const env = options.env || process.env;
-  const claudeHome = env.CLAUDE_CONFIG_DIR || path.join(options.home || env.HOME || os.homedir(), '.claude');
   const rules = await projectRules(root, { env, notices, home: options.home });
   // Scoped instructions are deliberately excluded from base memory to keep the prompt small.
   const requested = [];
@@ -329,8 +328,6 @@ export async function nestedMemoryFor(root, filePath, loaded = new Set(), option
     }
   }
   // Load path-frontmatter rules only for a specific matching file, never globally.
-  const envHome = options.home || env.HOME || os.homedir();
-  const claudeHome = env.CLAUDE_CONFIG_DIR || path.join(envHome, '.claude');
   const scoped = (await projectRules(workspace, { env, home: options.home }))
     .filter((rule) => rule.mode === 'scoped' && rule.paths.length && rule.paths.some((pattern) => rulePathMatches(pattern, targetRelative)));
   scoped.sort((a, b) => ruleSpecificity(a) - ruleSpecificity(b) || (a.scope === b.scope ? a.name.localeCompare(b.name) : a.scope === 'user' ? -1 : 1));

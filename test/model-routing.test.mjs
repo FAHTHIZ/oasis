@@ -6,7 +6,7 @@ import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises';
 import { classifyTask, selectTaskModel, sanitizeModelRouting } from '../src/model-routing.mjs';
 import { createUsageTracker, recordUsage, runBuiltinCommand } from '../src/slash.mjs';
 import { createSession, closeSession, runAgentTurn } from '../src/agent.mjs';
-import { loadSettings, updateUserSettings } from '../src/settings.mjs';
+import { loadSettings } from '../src/settings.mjs';
 import { scriptedModel } from './helpers/scripted-model.mjs';
 
 async function temporaryDirectory(t) {

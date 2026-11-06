@@ -2,14 +2,13 @@ import { atomicWriteFile } from './atomic-write.mjs';
 import { credentialEnvName } from './credential-env.mjs';
 import { inspectMcpTool, toolFingerprint, checkPin, repin, heldToolReason } from './mcp-trust.mjs';
 import { spawn } from 'node:child_process';
-import { oasisVersion } from './version.mjs';
 import { processTreeSpawnOptions, signalProcessTree } from './process-tree.mjs';
 import { debugLog } from './debug-log.mjs';
-import { mkdir, readFile, writeFile, chmod, stat } from 'node:fs/promises';
+import { mkdir, readFile, chmod, stat } from 'node:fs/promises';
 import path from 'node:path';
 import { getConfigDirectory } from './config.mjs';
 import { McpHttpClient, McpSseClient } from './mcp-project.mjs';
-import { loadMcpExtras, RESOURCE_TOOL_DEFINITIONS, runResourceTool } from './mcp-extras.mjs';
+import { RESOURCE_TOOL_DEFINITIONS, runResourceTool } from './mcp-extras.mjs';
 
 export function getMcpConfigPath(env = process.env) {
   return path.join(getConfigDirectory(env), 'mcp-servers.json');

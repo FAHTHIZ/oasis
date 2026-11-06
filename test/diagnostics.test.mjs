@@ -70,6 +70,7 @@ test('built-in checks report JavaScript and JSON syntax errors without approval'
   assert.equal(result.diagnostics.find((item) => item.file === 'data.json').line, 3);
   assert.ok(result.ran.some((entry) => entry.name === 'typescript' && entry.skipped), 'tsc missing is reported as skipped');
   assert.match(formatDiagnostics(result), /bad\.mjs:1:\d+ error/);
+  assert.equal(asked, 0, 'built-in parsers run without asking');
 });
 
 test('external checkers go through approval and results are filtered by path', async () => {
