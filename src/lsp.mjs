@@ -23,7 +23,7 @@
 // Starting a language server runs a local program, so it needs approval once per
 // server per session unless commands are auto-approved or a rule allows `lsp`.
 import { spawn } from 'node:child_process';
-import { createMessageConnection, StreamMessageReader, StreamMessageWriter, CancellationTokenSource, ResponseError } from 'vscode-jsonrpc/node.js';
+import { createMessageConnection, StreamMessageReader, StreamMessageWriter, CancellationTokenSource, ResponseError } from 'vscode-jsonrpc/node';
 import { processTreeSpawnOptions, signalProcessTree } from './process-tree.mjs';
 import { readFile, stat, realpath, access } from 'node:fs/promises';
 import path from 'node:path';
