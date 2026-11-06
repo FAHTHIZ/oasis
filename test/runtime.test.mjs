@@ -1424,8 +1424,8 @@ test('microcompact prunes only old bulky tool output and preserves message and t
   assert.match(messages[3].content, /^file 0 x/, 'the input array must not be mutated');
   assert.equal(estimateTokens([{ role: 'user', content: 'hello world' }]), 2, 'real BPE tokens');
   assert.equal(contextWindowSize({}, { OASIS_CONTEXT_WINDOW: '64000' }), 64000);
-  assert.equal(contextWindowSize({ model: 'anthropic/claude-sonnet-4' }, {}), 200000);
-  assert.equal(contextWindowSize({ model: 'gpt-4.1-mini' }, {}), 1000000);
+  assert.equal(contextWindowSize({ model: 'anthropic/claude-sonnet-4.5' }, {}), 200000);
+  assert.equal(contextWindowSize({ model: 'gpt-4.1-mini' }, {}), 1047576);
   assert.equal(contextWindowSize({ model: 'o4-mini' }, {}), 200000);
   assert.equal(contextWindowSize({ model: 'my-local-model' }, {}), 32768);
   assert.equal(contextWindowSize({ model: 'claude-sonnet-4', contextWindow: 50000 }, {}), 50000);

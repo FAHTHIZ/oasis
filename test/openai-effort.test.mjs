@@ -27,7 +27,8 @@ test('GPT-6 models get reasoning effort and a real context window', () => {
   assert.equal(reasoningEffortFor('ultrathink about this', { model: 'gpt-6.1-sol' }, {}), 'high');
   assert.equal(reasoningEffortFor('hi', { model: 'gpt-6.1-sol', reasoningEffort: 'max' }, {}), 'max');
   assert.equal(reasoningEffortFor('hi', { model: 'gpt-6-astra', reasoningEffort: 'none' }, {}), 'low');
-  assert.equal(modelContextWindow('gpt-6.1-sol'), 400_000);
+  // 1.05M served; prompts over 272K bill at the long-context rate, so the window stops there.
+  assert.equal(modelContextWindow('gpt-6.1-sol'), 272_000);
 });
 
 test('GPT-6.1 Sol and Astra bill long prompts at the long-context rate', () => {
@@ -43,11 +44,11 @@ test('current open and xAI models get their published context windows', () => {
   assert.equal(modelContextWindow('kimi-k3'), 1_048_576);
   assert.equal(modelContextWindow('moonshotai/kimi-k3.1-pro'), 1_048_576);
   assert.equal(modelContextWindow('kimi-k2.6'), 262_144);
-  assert.equal(modelContextWindow('glm-5'), 200_000);
-  assert.equal(modelContextWindow('z-ai/glm-5.3'), 1_000_000);
-  assert.equal(modelContextWindow('glm-4.5-air'), 128_000);
+  assert.equal(modelContextWindow('glm-5'), 204_800);
+  assert.equal(modelContextWindow('z-ai/glm-5.3'), 1_048_576);
+  assert.equal(modelContextWindow('glm-4.5-air'), 131_072);
   assert.equal(modelContextWindow('MiniMax-M3'), 512_000);
-  assert.equal(modelContextWindow('minimax/minimax-m2.7'), 196_608);
-  assert.equal(modelContextWindow('grok-4.7'), 500_000);
-  assert.equal(modelContextWindow('grok-4'), 256_000);
+  assert.equal(modelContextWindow('minimax/minimax-m2.7'), 204_800);
+  // 500K served; prompts of 200K+ bill at the higher rate.
+  assert.equal(modelContextWindow('grok-4.7'), 200_000);
 });

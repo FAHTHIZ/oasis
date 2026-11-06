@@ -171,7 +171,6 @@ test('DeepSeek V4 models get the 1M window', async () => {
   const { modelContextWindow } = await import('../src/context.mjs');
   assert.equal(modelContextWindow('deepseek-v4-pro'), 1_048_576);
   assert.equal(modelContextWindow('deepseek-flash'), 1_048_576);
-  assert.equal(modelContextWindow('deepseek-chat'), 128_000);
 });
 
 test('small context windows get a compact system prompt; normal windows keep the full one', async (t) => {

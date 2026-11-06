@@ -5012,7 +5012,7 @@ async function detectLocalContextWindow(session, { env = process.env, fetchImpl 
   if (config.contextWindow || (env && env.OASIS_CONTEXT_WINDOW)) return null;
   if (!isLocalModelEndpoint(config, env)) {
     // Unknown hosted or self-hosted model: ask the provider's /models listing.
-    if (modelContextWindow(config.model)) return null;
+    if (modelContextWindow(config.model, config, env)) return null;
     const window = await probeProviderModelWindow(config, { fetchImpl: fetchImpl || globalThis.fetch, env });
     if (window) session.config = { ...config, contextWindow: window };
     return null;
