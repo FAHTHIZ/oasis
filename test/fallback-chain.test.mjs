@@ -123,3 +123,10 @@ test('errors the next model cannot fix are not retried elsewhere', async (t) => 
   assert.notEqual(summary.result, 'backup');
   assert.deepEqual([...new Set(main.seen.map((s) => s.model))], ['main']);
 });
+
+test('a stream that keeps dropping after its restarts moves down the chain, a malformed tool call does not', () => {
+  const dropped = Object.assign(new Error('The model stream was interrupted: the connection closed before the reply finished.'), { code: 'OASIS_STREAM_INTERRUPTED' });
+  assert.equal(fallbackReason(dropped), 'server');
+  const malformed = Object.assign(new Error('The model stream was interrupted: the model produced a malformed tool call (MALFORMED_FUNCTION_CALL).'), { code: 'OASIS_STREAM_INTERRUPTED', malformedCall: true });
+  assert.equal(fallbackReason(malformed), '');
+});
