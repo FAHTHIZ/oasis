@@ -2809,7 +2809,7 @@ async function requestCompletionRaw(session, options = {}) {
       if (thinkingBlocks.length && typeof options.onThinking === 'function') options.onThinking(thinkingBlocks.map((block) => block.thinking || '').join('\n'));
       const truncated = data.stop_reason === 'max_tokens';
       const incompleteIds = data.content.filter((block) => block.type === 'tool_use' && block.incomplete).map((block) => block.id);
-      return { role: 'assistant', content: text, tool_calls: toolCalls, usage: normalizeUsage(data.usage), ...(thinkingBlocks.length ? { thinkingBlocks } : {}), ...(truncated ? { truncated: true, outputLimit, incompleteToolCallIds: incompleteIds } : {}) };
+      return { role: 'assistant', content: text, tool_calls: toolCalls, usage: normalizeUsage(data.usage), ...(data.stop_reason === 'refusal' ? { providerStop: 'refusal' } : {}), ...(thinkingBlocks.length ? { thinkingBlocks } : {}), ...(truncated ? { truncated: true, outputLimit, incompleteToolCallIds: incompleteIds } : {}) };
     }
     if (nativeResponses) {
       if (!Array.isArray(data.output)) throw new Error('The Responses API returned no output items.');
@@ -2839,7 +2839,8 @@ async function requestCompletionRaw(session, options = {}) {
     }
     if (typeof options.onDelta === 'function' && !streamed && typeof message.content === 'string' && message.content) options.onDelta(message.content);
     const chatTruncated = data.choices[0].finish_reason === 'length';
-    return { ...message, usage: usageOrEstimate(data.usage, bodyText, message), ...(chatTruncated ? { truncated: true, outputLimit } : {}) };
+    const chatStop = String(data.choices[0].finish_reason || '');
+    return { ...message, usage: usageOrEstimate(data.usage, bodyText, message), ...(/^(content_filter|error)$/i.test(chatStop) ? { providerStop: chatStop.toLowerCase() } : {}), ...(chatTruncated ? { truncated: true, outputLimit } : {}) };
   } catch (error) {
     if (options.signal && options.signal.aborted) {
       const cancelled = new Error('Agent task cancelled by the user.');
@@ -6047,6 +6048,9 @@ async function runAgentTurnRaw(session, prompt, options = {}) {
       // An empty reply (no text, no tool call) is not an answer: it used to end
       // the turn as "finished" with nothing to show. Ask again, then say so.
       if (!text) {
+        // A provider-side stop (content filter, refusal, error finish) comes back
+        // the same way on a re-ask, so it is reported instead of retried.
+        if (assistant.providerStop) emptyReplyNudges = MAX_EMPTY_REPLY_NUDGES;
         if (emptyReplyNudges < MAX_EMPTY_REPLY_NUDGES) {
           emptyReplyNudges++;
           if (session.messages[session.messages.length - 1] === assistantMessage) session.messages.pop();
@@ -6153,7 +6157,7 @@ async function runAgentTurnRaw(session, prompt, options = {}) {
           continue;
         }
       }
-      const finalText = emptyReply ? EMPTY_REPLY_NOTICE : issues.length ? text : appendLspUnavailableNotice(text, verification);
+      const finalText = emptyReply ? (assistant.providerStop ? 'The provider ended the reply with no text (finish reason: ' + assistant.providerStop + '). Nothing was summarized; rephrase the request or try another model.' : EMPTY_REPLY_NOTICE) : issues.length ? text : appendLspUnavailableNotice(text, verification);
       assistantMessage.content = finalText;
       let followupsAdded = [];
       if (!options.isSubagent && !options.planOnly && followupsEnabled(session, options.env || process.env)) {
