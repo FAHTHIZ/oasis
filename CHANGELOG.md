@@ -16,6 +16,7 @@ Changes after 1.1.0. Entries include feature work, reliability improvements, and
   - Deny/ask rules also match `$'git' push`, `{ git push; }`, `(git push)`, `if`/`while`/`for` bodies, `exec -a`, `env -S` and `find -exec`.
   - `read_mcp_resource` results go through the untrusted-content guard, and one zero-width character inside a word no longer hides an injection phrase.
   - Secret-shield placeholders stay as placeholders in `fetch_url`, `web_search` and `browser` arguments, so an injected page cannot get a real key sent in a URL, and in `task`/teammate prompts, so a subagent no longer sends the real key to the provider; subagents share the parent's vault for their own edits.
+  - Google service-account key files (`service-account*.json`) and Terraform state (`terraform.tfstate`, `.backup`) are treated as secret files.
   - Stdio MCP servers get the same credential-free environment as commands and hooks (`DATABASE_URL`, `MYSQL_PWD` and others used to pass); use `passEnv` or `env` to give a server one.
   - Shell writes into `.git/hooks`, `.git/config` and other protected config are caught without a space after `>`, after `cd .git/hooks`, through split quotes, and from `sponge` or Python `open(...)`.
   - Commands, hooks and eval agents share one credential-name list; `DATABASE_URL`, `*_PWD`, `*_PASSPHRASE`, `*_AUTH`, `*_DSN`, `*_WEBHOOK_URL` and `*_PAT` are removed too.

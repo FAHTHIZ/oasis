@@ -156,6 +156,20 @@ test('direnv, PostgreSQL, MySQL, htpasswd and legacy Docker credential files are
   assert.equal(sensitivePath('src/envrc.js'), false);
 });
 
+test('service-account keys and Terraform state are secret', async (t) => {
+  // Regression: these hold cloud credentials in plain text and were read with no prompt.
+  const { sensitivePath } = await import('../src/tools.mjs');
+  const root = await workspace(t);
+  for (const name of ['service-account.json', 'service_account-prod.json', 'terraform.tfstate', 'terraform.tfstate.backup']) {
+    await writeFile(path.join(root, name), '{}\n');
+    assert.equal(sensitivePath('infra/' + name), true, name);
+    assert.equal(readOnlyShellLine('cat ' + name, { root }), false, name);
+  }
+  assert.equal(readOnlyShellLine('cat terraform.tf*', { root }), false, 'glob reaching tfstate');
+  assert.equal(sensitivePath('src/service-accounts.js'), false);
+  assert.equal(sensitivePath('main.tf'), false);
+});
+
 test('benign globs are expanded and checked like typed paths', { skip: process.platform === 'win32' }, async (t) => {
   // Globs used to make every line ask, which denied ls src/*.js in headless runs.
   const root = await workspace(t);
