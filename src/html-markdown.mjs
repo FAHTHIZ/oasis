@@ -200,10 +200,43 @@ function textOf(node) {
   return out;
 }
 
-function linkTextLength(node) {
-  let total = 0;
-  for (const item of walk(node)) if (item.tag === 'a') total += textOf(item).replace(/\s+/g, ' ').trim().length;
-  return total;
+// Subtree aggregates, memoized per pass. Asking each ancestor to re-walk its
+// subtree (text, links, link text, "holds a pre/h1") made deeply nested pages
+// O(n x depth). A pass only rewrites a node's children after deciding about
+// that node, so values cached during the pass stay valid for it.
+// `length` is the exact length of textOf(node).replace(/\s+/g, ' ').trim(),
+// kept additive: each piece stores its whitespace-collapsed length and whether
+// it starts/ends with a collapsed space, so joining pieces is O(1).
+const EMPTY_RUN = { size: 0, starts: false, ends: false };
+function runOf(text) {
+  const collapsed = text.replace(/\s+/g, ' ');
+  return collapsed ? { size: collapsed.length, starts: collapsed[0] === ' ', ends: collapsed[collapsed.length - 1] === ' ' } : EMPTY_RUN;
+}
+function joinRuns(a, b) {
+  if (!a.size) return b;
+  if (!b.size) return a;
+  return { size: a.size + b.size - (a.ends && b.starts ? 1 : 0), starts: a.starts, ends: b.ends };
+}
+const trimmedSize = (run) => Math.max(0, run.size - (run.starts ? 1 : 0) - (run.ends ? 1 : 0));
+const countCommas = (text) => (text.match(/[,，、]/g) || []).length;
+
+function statsOf(node, memo) {
+  let stats = memo.get(node);
+  if (stats) return stats;
+  let run = EMPTY_RUN, commas = 0, links = node.tag === 'a' ? 1 : 0, linkText = 0;
+  let hasPre = node.tag === 'pre', hasH1 = node.tag === 'h1', hasH13 = /^h[1-3]$/.test(node.tag);
+  for (const child of node.children) {
+    if (typeof child === 'string') { run = joinRuns(run, runOf(child)); commas += countCommas(child); continue; }
+    const inner = statsOf(child, memo);
+    run = joinRuns(run, inner.run); commas += inner.commas;
+    links += inner.links; linkText += inner.linkText;
+    hasPre ||= inner.hasPre; hasH1 ||= inner.hasH1; hasH13 ||= inner.hasH13;
+  }
+  if (DROP.has(node.tag)) { run = EMPTY_RUN; commas = 0; }
+  const length = trimmedSize(run);
+  stats = { run, length, commas, links, linkText: linkText + (node.tag === 'a' ? length : 0), hasPre, hasH1, hasH13 };
+  memo.set(node, stats);
+  return stats;
 }
 
 function isHidden(node) {
@@ -220,7 +253,7 @@ function classAndId(node) {
 
 // Remove nodes that are never content, plus Readability's "unlikely
 // candidates" (navigation, sidebars, cookie banners, share bars).
-function prune(node, inArticle) {
+function prune(node, inArticle, memo = new WeakMap()) {
   const keep = [];
   for (const child of node.children) {
     if (typeof child === 'string') { keep.push(child); continue; }
@@ -229,8 +262,8 @@ function prune(node, inArticle) {
     if (['navigation', 'banner', 'contentinfo', 'complementary', 'search', 'dialog', 'alertdialog', 'menu', 'menubar'].includes(role)) continue;
     if (BOILERPLATE_TAGS.has(child.tag) && !(inArticle && child.tag === 'header')) continue;
     const label = classAndId(child);
-    if (label && !['body', 'main', 'article', 'html', 'a', 'pre', 'code', 'table', 'tbody', 'tr', 'td', 'th'].includes(child.tag) && UNLIKELY.test(label) && !MAYBE.test(label) && !looksLikeProse(child)) continue;
-    prune(child, inArticle || child.tag === 'article' || child.tag === 'main');
+    if (label && !['body', 'main', 'article', 'html', 'a', 'pre', 'code', 'table', 'tbody', 'tr', 'td', 'th'].includes(child.tag) && UNLIKELY.test(label) && !MAYBE.test(label) && !looksLikeProse(child, memo)) continue;
+    prune(child, inArticle || child.tag === 'article' || child.tag === 'main', memo);
     keep.push(child);
   }
   node.children = keep;
@@ -238,30 +271,30 @@ function prune(node, inArticle) {
 
 // A class name like "page__header" can still wrap the page title and intro;
 // keep such blocks when they hold the h1 or real, mostly unlinked prose.
-function looksLikeProse(node) {
-  if (find(node, (n) => n.tag === 'h1')) return true;
-  const length = textOf(node).replace(/\s+/g, ' ').trim().length;
-  return length >= 300 && linkTextLength(node) / length < 0.35;
+function looksLikeProse(node, memo) {
+  const stats = statsOf(node, memo);
+  if (stats.hasH1) return true;
+  const length = stats.length;
+  return length >= 300 && stats.linkText / length < 0.35;
 }
 
 // Readability's conditional cleaning: inside the chosen content, drop blocks
 // that are mostly links (language pickers, file listings, navboxes, tag
 // clouds, "on this page" menus) unless they carry code.
-function cleanConditionally(node) {
+function cleanConditionally(node, memo = new WeakMap()) {
   const keep = [];
   for (const child of node.children) {
     if (typeof child === 'string') { keep.push(child); continue; }
-    if (['ul', 'ol', 'div', 'section', 'table', 'dl', 'p', 'span'].includes(child.tag) && !find(child, (n) => n.tag === 'pre' || /^h[1-3]$/.test(n.tag) && child.tag !== 'ul' && child.tag !== 'ol')) {
-      const text = textOf(child).replace(/\s+/g, ' ').trim();
-      const length = text.length || 1;
-      let links = 0;
-      for (const item of walk(child)) if (item.tag === 'a') links += 1;
-      const density = linkTextLength(child) / length;
-      const commas = (text.match(/[,，、]/g) || []).length;
+    const stats = ['ul', 'ol', 'div', 'section', 'table', 'dl', 'p', 'span'].includes(child.tag) ? statsOf(child, memo) : null;
+    if (stats && !(stats.hasPre || stats.hasH13 && child.tag !== 'ul' && child.tag !== 'ol')) {
+      const length = stats.length || 1;
+      const links = stats.links;
+      const density = stats.linkText / length;
+      const commas = stats.commas;
       const negative = classWeight(child) < 0;
       if (links >= 10 && density > 0.5 && commas < 10 || negative && links >= 3 && density > 0.3) continue;
     }
-    cleanConditionally(child);
+    cleanConditionally(child, memo);
     keep.push(child);
   }
   node.children = keep;
@@ -279,7 +312,7 @@ function classWeight(node) {
 // Readability's scoring: every paragraph-like block awards points to its
 // parent and (half) grandparent based on text length and comma count; the
 // best-scoring container, discounted by link density, is the article.
-function scoreCandidates(body) {
+function scoreCandidates(body, memo) {
   const scores = new Map();
   const init = (node) => {
     if (!scores.has(node)) {
@@ -294,11 +327,11 @@ function scoreCandidates(body) {
   };
   for (const node of walk(body)) {
     if (!['p', 'pre', 'td', 'li', 'blockquote', 'dd'].includes(node.tag) && !(node.tag === 'div' && !node.children.some((c) => typeof c !== 'string' && BLOCK.has(c.tag)))) continue;
-    const text = textOf(node).replace(/\s+/g, ' ').trim();
-    if (text.length < 25) continue;
+    const stats = statsOf(node, memo);
+    if (stats.length < 25) continue;
     let ancestor = node.parent;
     let level = 0;
-    const points = 1 + (text.match(/[,，、]/g) || []).length + Math.min(3, Math.floor(text.length / 100));
+    const points = 1 + stats.commas + Math.min(3, Math.floor(stats.length / 100));
     while (ancestor && ancestor.tag !== '#root' && level < 3) {
       init(ancestor);
       const divider = level === 0 ? 1 : level === 1 ? 2 : level * 3;
@@ -310,8 +343,9 @@ function scoreCandidates(body) {
   let best = null;
   let bestScore = -Infinity;
   for (const [node, score] of scores) {
-    const length = textOf(node).replace(/\s+/g, ' ').trim().length || 1;
-    const adjusted = score * (1 - Math.min(1, linkTextLength(node) / length));
+    const stats = statsOf(node, memo);
+    const length = stats.length || 1;
+    const adjusted = score * (1 - Math.min(1, stats.linkText / length));
     if (adjusted > bestScore) { best = node; bestScore = adjusted; }
   }
   return best;
@@ -319,7 +353,8 @@ function scoreCandidates(body) {
 
 function chooseContent(root) {
   const body = find(root, (n) => n.tag === 'body') || root;
-  const textLength = (n) => textOf(n).replace(/\s+/g, ' ').trim().length;
+  const memo = new WeakMap();
+  const textLength = (n) => statsOf(n, memo).length;
   const bodyLength = textLength(body) || 1;
   // Explicit landmarks win when they hold a meaningful share of the text.
   const landmarks = [...walk(body)].filter((n) => n.tag === 'main' || String(n.attrs.role || '').toLowerCase() === 'main' || n.tag === 'article');
@@ -341,7 +376,7 @@ function chooseContent(root) {
     }
     if (textLength(largest) >= Math.min(200, bodyLength * 0.25)) return largest;
   }
-  const scored = scoreCandidates(body);
+  const scored = scoreCandidates(body, memo);
   if (scored && textLength(scored) >= Math.min(250, bodyLength * 0.2)) {
     // Readability also pulls in siblings that look like continuation content.
     return scored;

@@ -123,3 +123,13 @@ test('character references use the full HTML5 table, and attributes follow the a
   const { markdown } = htmlToMarkdown('<p><a href="/s?a=1&copy=2&amp;b=3">x</a></p>', { url: 'https://example.com/', extract: false });
   assert.equal(markdown, '[x](https://example.com/s?a=1&copy=2&b=3)');
 });
+
+test('extraction stays linear on deeply nested, link-heavy pages', () => {
+  const html = '<html><body>' + '<div><a href="/x">link</a> some, text here'.repeat(40000) + '</div>'.repeat(40000) + '</body></html>';
+  const started = performance.now();
+  const result = htmlToMarkdown(html);
+  const elapsed = performance.now() - started;
+  assert.match(result.markdown, /some, text here/);
+  // Re-walking every subtree for each ancestor took ~8 s here; memoized stats take ~1 s.
+  assert.ok(elapsed < 4000, 'took ' + Math.round(elapsed) + ' ms');
+});
