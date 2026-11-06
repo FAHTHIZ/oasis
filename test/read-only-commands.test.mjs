@@ -105,3 +105,30 @@ test('run_shell asks before a glob that expands to .env', { skip: process.platfo
   assert.equal(result.approved, false);
   assert.doesNotMatch(JSON.stringify(result), /SECRET=1/);
 });
+
+test('read-only git asks when the repository config names diff, filter or gpg programs', { skip: process.platform === 'win32' }, async (t) => {
+  // Regression: git diff/status/log -p/cat-file --filters ran diff.external,
+  // textconv and clean/smudge drivers from .git/config without any prompt.
+  const { execFileSync } = await import('node:child_process');
+  const { existsSync } = await import('node:fs');
+  const root = await workspace(t);
+  const git = (...args) => execFileSync('git', args, { cwd: root, stdio: 'ignore' });
+  git('init', '-q'); git('config', 'user.email', 'a@example.com'); git('config', 'user.name', 'a');
+  await writeFile(path.join(root, '.gitattributes'), '*.bin diff=evil filter=evil\n');
+  await writeFile(path.join(root, 'b.bin'), '1\n');
+  git('add', 'src', 'b.bin', '.gitattributes'); git('commit', '-qm', 'x');
+  await writeFile(path.join(root, 'b.bin'), '2\n');
+  assert.equal(readOnlyArgv('git', ['diff'], { root }), true, 'a plain repository still runs without asking');
+  const marker = (name) => path.join(root, 'ran-' + name);
+  git('config', 'diff.external', 'sh -c "touch ' + marker('external') + '"');
+  git('config', 'diff.evil.textconv', 'sh -c "touch ' + marker('textconv') + '; cat \\"$1\\"" -');
+  git('config', 'filter.evil.clean', 'sh -c "touch ' + marker('clean') + '; cat"');
+  git('config', 'filter.evil.smudge', 'sh -c "touch ' + marker('smudge') + '; cat"');
+  let asked = 0;
+  const approval = async () => { asked++; return false; };
+  const calls = [['status'], ['diff'], ['log', '-p', '-1'], ['show', 'HEAD'], ['cat-file', '--filters', 'HEAD:b.bin'], ['blame', 'b.bin']];
+  for (const args of calls) await runWorkspaceCommand(root, 'git', args, { approval, env: process.env });
+  assert.equal(asked, calls.length);
+  for (const name of ['external', 'textconv', 'clean', 'smudge']) assert.equal(existsSync(marker(name)), false, name + ' driver ran');
+  assert.equal(readOnlyShellLine('git status', { root }), false);
+});
