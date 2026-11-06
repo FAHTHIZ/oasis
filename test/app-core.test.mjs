@@ -406,7 +406,7 @@ test('oasis app server serves only the app, shared modules and skills', async ()
     const base = 'http://127.0.0.1:' + server.address().port;
     const page = await fetch(base + '/app/');
     assert.equal(page.status, 200);
-    assert.match(await page.text(), /<title>OASIS<\/title>/);
+    assert.match(await page.text(), /<title>OASIS — Coding Agent Workspace<\/title>/);
     const sw = await (await fetch(base + '/app/sw.js')).text();
     assert.doesNotMatch(sw, /__BUILD__/);
     assert.equal((await fetch(base + '/package.json')).status, 404);
