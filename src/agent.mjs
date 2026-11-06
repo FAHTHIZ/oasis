@@ -1311,6 +1311,19 @@ function toAnthropicRequest(messages, options = {}) {
       merged.push(message);
     }
   }
+  // Anthropic rejects empty or whitespace-only text ("text content blocks must
+  // contain non-whitespace text") and, since the history is replayed, would
+  // then fail every later request in the session. An empty reply used to be
+  // sent as a single space.
+  for (const message of merged) {
+    const placeholder = message.role === 'assistant' ? '(empty reply)' : '(empty message)';
+    if (typeof message.content === 'string') {
+      if (!message.content.trim()) message.content = placeholder;
+    } else if (Array.isArray(message.content)) {
+      const kept = message.content.filter((block) => !(block && block.type === 'text' && !String(block.text || '').trim()));
+      message.content = kept.length ? kept : [{ type: 'text', text: placeholder }];
+    }
+  }
   return { system: system ? String(system.content || '') : '', messages: merged };
 }
 
