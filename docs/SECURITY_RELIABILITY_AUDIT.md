@@ -325,10 +325,18 @@ Each item below was reproduced with an attack test before the fix; the same test
 
 **Fix:** `fetch_url`, `web_search` and `browser` keep the placeholder text; file edits and commands still receive the real value. **Test:** `test/secret-shield.test.mjs` (end-to-end with a `PreToolUse` hook recording the final input). **Remaining:** commands and MCP tools still receive real values by design (that is how the agent edits `.env` or passes a token); a `task` prompt containing a placeholder gives the subagent the real value, which then reaches the provider.
 
+### Credential coverage gaps in child environments and secret-file names (low)
+
+**Finding:** commands and hooks inherited `DATABASE_URL`, `MYSQL_PWD`, `*_PASSPHRASE`, `NPM_CONFIG__AUTH`, `SENTRY_DSN`, `SLACK_WEBHOOK_URL` and `*_PAT`; eval agents also kept `AWS_ACCESS_KEY_ID` because `src/eval.mjs` had its own copy of the pattern without `ACCESS_KEY`. `read_file` and read-only `cat` returned `.envrc`, `.pgpass`, `.my.cnf`, `.htpasswd` and `.dockercfg` with no prompt.
+
+**Fix:** `src/credential-env.mjs` is the one list for commands, hooks and eval agents (`SSH_AUTH_SOCK` is kept so git over SSH works); the five files count as sensitive. **Tests:** `test/credential-env.test.mjs`, `test/read-only-commands.test.mjs`. **Remaining:** stdio MCP servers keep their own (older) list so servers that rely on inherited variables keep working; `service-account.json` and `terraform.tfstate` are not treated as secret files.
+
 ### Areas tested that held up
 
 - Local web runtime (`src/web.mjs`): every `/api` route requires the bearer token (timing-safe compare); Host must be loopback or a configured LAN host, so DNS rebinding fails; browser Origin must match the request host; static `/app/` and `/src/` routes reject `..` and check containment. The VS Code bridge (`ide/vscode/src/server.js`) binds `127.0.0.1`, requires a token and rejects any browser Origin.
 - Allow rules stay literal and require a safe parse of every command (substitutions, redirects and groups never match an allow rule).
+- `read_file` refuses `.env` variants through `./`, `sub/../`, absolute paths, trailing `/` or `.`, doubled slashes and upper case; image-generation inputs use the same check, so `.env` cannot be uploaded as an "image".
+- Verification for this batch: full `npm test` 1894 tests, 1886 pass, 8 skipped, 0 fail; `node bench/harness/run.mjs` unchanged (100% on every track except the documented held-out v1 secret-scanner miss, 4/5).
 
 ## Additional component research and authorization decisions
 
