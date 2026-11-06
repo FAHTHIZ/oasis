@@ -82,3 +82,21 @@ test('code-only and chat-only rewinds, plus the /rewind command', async (t) => {
   assert.equal(chatOnly.restored.length, 0);
   assert.equal(session.messages.length, 1);
 });
+
+test('parallel agents capturing the same file keep the first snapshot and count its bytes once', async (t) => {
+  const { beginCheckpoint: begin, captureBeforeChange: capture } = await import('../src/checkpoints.mjs');
+  const { mkdtemp: makeTemp, writeFile: write, rm: remove } = await import('node:fs/promises');
+  const dir = await makeTemp(path.join(os.tmpdir(), 'oasis-cp-race-'));
+  t.after(() => remove(dir, { recursive: true, force: true }));
+  await write(path.join(dir, 'f.txt'), 'original\n');
+  const session = { checkpoints: null };
+  begin(session, 'edit f');
+  // Subagents share the parent's checkpoint store; their captures overlap.
+  const first = capture(session, dir, 'write_file', { path: 'f.txt' });
+  const second = capture(session, dir, 'edit_file', { path: 'f.txt' });
+  await first;
+  await write(path.join(dir, 'f.txt'), 'changed by the first agent\n');
+  await second;
+  assert.equal(session.checkpoints.bytes, 'original\n'.length);
+  assert.equal(String(session.checkpoints.turns.at(-1).files.get('f.txt').content), 'original\n');
+});

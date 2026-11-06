@@ -41,12 +41,16 @@ export async function captureBeforeChange(session, root, toolName, args = {}) {
   if (turn.files.has(target.relative)) return;
   let info = null;
   try { info = await lstat(target.absolute); } catch {}
+  // Subagents share this store, so another capture of the same file may have
+  // finished during the awaits; the first snapshot is the one to keep.
+  if (turn.files.has(target.relative)) return;
   if (!info) { turn.files.set(target.relative, { existed: false, content: null }); return; }
   if (!info.isFile() || info.size > MAX_CHECKPOINT_FILE || session.checkpoints.bytes + info.size > MAX_CHECKPOINT_BYTES) {
     turn.files.set(target.relative, { existed: true, content: null, skipped: true });
     return;
   }
   const content = await readFile(target.absolute);
+  if (turn.files.has(target.relative)) return;
   session.checkpoints.bytes += content.length;
   turn.files.set(target.relative, { existed: true, content, mode: info.mode });
 }
