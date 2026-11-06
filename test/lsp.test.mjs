@@ -199,7 +199,7 @@ test('lspServers are only honoured from trusted settings', async () => {
 test('LSP client shutdown waits for the language-server process to exit', async (t) => {
   const helper = fileURLToPath(new URL('./helpers/clean-lsp-server.cjs', import.meta.url));
   const client = new LspClient({ command: process.execPath, args: [helper], cwd: tmpdir(), env: process.env, name: 'clean-shutdown-fixture' });
-  client.start();
+  await client.start();
   t.after(async () => { await client.stop(); });
   await client.initialize();
   await client.stop();
