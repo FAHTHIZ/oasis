@@ -924,7 +924,7 @@ A line like `@docs/style.md` inside a memory file includes that file. Start a me
 
 Press Ctrl+C while a task is running to stop it and return to the prompt (press it again to quit). The conversation stays usable, and `/rewind 1` undoes any file changes the stopped task made.
 
-The terminal streams the model's replies as they arrive. Set `OASIS_NO_STREAM=1` to print each reply only when it is finished.
+The terminal streams the model's replies as they arrive. `oasis -p` and `oasis eval` stream too, without printing the partial text, so a stalled provider hits the 120-second header timeout and the idle watchdog (`OASIS_STREAM_IDLE_SECONDS`) instead of the 600-second whole-reply timeout. Set `OASIS_NO_STREAM=1` to request whole replies everywhere.
 
 ## Auto memory
 
