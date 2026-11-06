@@ -105,6 +105,23 @@ Source: `maxOutputTokensFor` in `src/agent.mjs`.
 If a provider rejects the request as too large, the turn retries with the limit
 parsed from the error.
 
+## Reasoning replay
+
+Source: `replaysReasoning` in `src/agent.mjs`.
+
+Models with interleaved thinking expect the `reasoning_content` from their
+previous reply to be sent back with the next request, so their reasoning
+carries across tool calls. On OpenAI-compatible endpoints OASIS sends it back
+when:
+
+1. the `replayReasoning` config value is `true` (`false` turns replay off;
+   the value applies only to the model it was saved with);
+2. otherwise, the models.dev catalog lists the model's `interleaved` field as
+   `reasoning_content` (for example DeepSeek, Kimi, GLM, MiMo and many hosted
+   Qwen and MiniMax builds);
+3. otherwise, the base URL or model name contains `deepseek`, `moonshot` or
+   `kimi`.
+
 ## Search tools
 
 Sources: `src/tools.mjs`, `src/power-tools.mjs`, `src/git-visible-files.mjs`.

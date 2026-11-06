@@ -45,6 +45,12 @@ export function trimCatalog(raw, providers) {
       if (positive(limit.output)) entry.output = limit.output;
       const inputs = model && model.modalities && model.modalities.input;
       if (Array.isArray(inputs)) entry.image = inputs.includes('image');
+      // Which assistant field carries reasoning the model expects back on the
+      // next request (interleaved thinking across tool calls). `true` in
+      // models.dev means the common reasoning_content field.
+      const interleaved = model && model.interleaved;
+      if (interleaved === true) entry.replay = 'reasoning_content';
+      else if (interleaved && typeof interleaved.field === 'string') entry.replay = interleaved.field;
       const price = pickPrices(cost);
       if (price) {
         const tiers = (Array.isArray(cost.tiers) ? cost.tiers : [])
@@ -225,6 +231,14 @@ export function catalogContextWindow(model, options = {}) {
 export function catalogImageInput(model, options = {}) {
   const entry = findCatalogModel(model, options);
   return entry && typeof entry.image === 'boolean' ? entry.image : null;
+}
+
+// The reasoning field the model expects replayed on later requests
+// ('reasoning_content', 'reasoning_details'), or null when the catalog does not
+// say. Catalog files written before this field existed also give null.
+export function catalogReasoningReplay(model, options = {}) {
+  const entry = findCatalogModel(model, options);
+  return entry && typeof entry.replay === 'string' ? entry.replay : null;
 }
 
 // USD per million tokens in Oasis's pricing shape, with the first context tier as
