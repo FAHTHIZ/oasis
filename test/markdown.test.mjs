@@ -70,3 +70,13 @@ test('terminal inline Markdown follows CommonMark via marked', async () => {
   // Code spans keep their content literal.
   assert.equal(plain(renderInline('`a ** b`')), 'a ** b');
 });
+
+test('code blocks are highlighted by lowlight grammars with nested colours restored', async () => {
+  const { highlightCode } = await import('../src/markdown.mjs');
+  // Rust and Go keywords the old keyword list lacked context for; a JS template substitution nests.
+  assert.match(highlightCode('fn main() { let v = vec![1]; }', 'rust'), /\x1b\[35mfn\x1b\[39m/);
+  const js = highlightCode('const s = `a ${b + 1}`', 'js');
+  assert.match(js, /\x1b\[32m`a \x1b\[39m\$\{b \+ \x1b\[33m1\x1b\[39m\}\x1b\[32m`/);
+  assert.match(highlightCode('<div class="x">', 'html'), /\x1b\[34mdiv/);
+  assert.equal(highlightCode('plain text', 'not-a-language'), 'plain text');
+});

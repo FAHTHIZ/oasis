@@ -2,6 +2,7 @@
 // diffs for file edits. Line-oriented so it works while text streams in: the
 // partial line is shown raw and replaced by its rendered form once complete.
 import { Lexer } from 'marked';
+import { createRequire } from 'node:module';
 import { diffArrays } from 'diff';
 import { stringWidth } from './line-editor.mjs';
 import { renderMermaid } from './mermaid-ascii.mjs';
@@ -19,32 +20,56 @@ export function colorEnabled(stream = process.stdout, env = process.env) {
   return Boolean(stream && stream.isTTY);
 }
 
-const KEYWORDS = new Set(('abstract and as async await break case catch class const continue def del do elif else enum except export extends ' +
-  'false final finally fn for from func function go if impl import in interface is let match mod module mut new nil none not null ' +
-  'or package pass private protected pub public raise return self static struct super switch this throw true try type typeof use var ' +
-  'void while with yield None True False').split(' '));
+// Code blocks are highlighted with lowlight (highlight.js grammars, the same
+// pairing Gemini CLI uses). Each scope maps to one ANSI colour; nested scopes
+// restore their parent's colour when they end. Unknown languages stay plain.
+// lowlight loads every grammar on import (~70 ms), so it is required on the
+// first highlighted line rather than at startup.
+let lowlight;
+function highlighter() {
+  if (lowlight === undefined) {
+    try {
+      const { common, createLowlight } = createRequire(import.meta.url)('lowlight');
+      lowlight = createLowlight(common);
+      lowlight.registerAlias({ diff: ['patch'] });
+    } catch { lowlight = null; }
+  }
+  return lowlight;
+}
+const SCOPE_COLORS = {
+  keyword: C.magenta, built_in: C.cyan, type: C.cyan, literal: C.yellow, number: C.yellow,
+  string: C.green, regexp: C.green, symbol: C.yellow, char: C.green, comment: C.gray, doctag: C.gray, quote: C.gray,
+  meta: C.gray, title: C.blue, section: C.blue, name: C.blue, tag: C.blue, attr: C.yellow, attribute: C.yellow,
+  selector: C.blue, 'selector-tag': C.blue, 'selector-class': C.yellow, 'selector-id': C.yellow,
+  variable: C.cyan, 'template-variable': C.cyan, property: C.cyan, bullet: C.yellow, link: C.blue,
+  addition: C.green, deletion: C.red, subst: C.fg
+};
 
-const HASH_COMMENT_LANGS = new Set(['py', 'python', 'sh', 'bash', 'zsh', 'shell', 'console', 'rb', 'ruby', 'yaml', 'yml', 'toml', 'ini', 'r', 'perl', 'pl', 'makefile', 'make', 'dockerfile', 'ps1', 'powershell']);
+function scopeColor(className) {
+  for (const name of className || []) {
+    const scope = String(name).replace(/^hljs-/, '').replace(/_+$/, '');
+    if (SCOPE_COLORS[scope]) return SCOPE_COLORS[scope];
+  }
+  return null;
+}
+
+function paintTree(nodes, parent) {
+  let out = '';
+  for (const node of nodes) {
+    if (node.type === 'text') { out += node.value; continue; }
+    const color = node.type === 'element' ? scopeColor(node.properties && node.properties.className) : null;
+    if (color) out += color + paintTree(node.children || [], color) + parent;
+    else out += paintTree(node.children || [], parent);
+  }
+  return out;
+}
 
 export function highlightCode(line, lang = '') {
   const language = String(lang || '').toLowerCase();
-  if (language === 'diff' || language === 'patch') {
-    if (line.startsWith('+') && !line.startsWith('+++')) return C.green + line + C.fg;
-    if (line.startsWith('-') && !line.startsWith('---')) return C.red + line + C.fg;
-    if (line.startsWith('@@')) return C.cyan + line + C.fg;
-    return line;
-  }
-  const hashComments = HASH_COMMENT_LANGS.has(language);
-  const pattern = hashComments
-    ? /(#.*$)|("(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'|`(?:[^`\\]|\\.)*`)|(\b\d[\d_.xXa-fA-F]*\b)|([A-Za-z_$][\w$]*)/g
-    : /(\/\/.*$|\/\*.*?\*\/|<!--.*?-->)|("(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'|`(?:[^`\\]|\\.)*`)|(\b\d[\d_.xXa-fA-F]*\b)|([A-Za-z_$][\w$]*)/g;
-  return line.replace(pattern, (match, comment, string, number, word) => {
-    if (comment) return C.gray + comment + C.fg;
-    if (string) return C.green + string + C.fg;
-    if (number) return C.yellow + number + C.fg;
-    if (word && KEYWORDS.has(word)) return C.magenta + word + C.fg;
-    return match;
-  });
+  const engine = language ? highlighter() : null;
+  if (!engine || !engine.registered(language)) return line;
+  try { return paintTree(engine.highlight(language, line).children, C.fg); }
+  catch { return line; }
 }
 
 // Inline Markdown (emphasis, code, links, strikethrough, escapes) is parsed
