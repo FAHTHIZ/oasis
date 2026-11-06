@@ -172,11 +172,6 @@ jobs:
             echo "::error::Release tag $tag does not match package version $expected."
             exit 1
           fi
-          notes_path="docs/releases/${tag}.md"
-          if [ ! -f "$notes_path" ]; then
-            echo "::error::Missing curated release notes: $notes_path."
-            exit 1
-          fi
           refs="$(git ls-remote origin "refs/tags/$tag" "refs/tags/$tag^{}")"
           existing_sha="$(printf '%s\n' "$refs" | awk -v peeled="refs/tags/$tag^{}" -v raw="refs/tags/$tag" '
             $2 == peeled { print $1; found = 1; exit }
@@ -204,7 +199,6 @@ jobs:
           echo "publish=true" >> "$GITHUB_OUTPUT"
           echo "tag=$tag" >> "$GITHUB_OUTPUT"
           echo "target_commitish=$COMMIT_SHA" >> "$GITHUB_OUTPUT"
-          echo "notes_path=$notes_path" >> "$GITHUB_OUTPUT"
       - name: Require same-commit quality, site, and installer gates
         if: steps.release-version.outputs.publish == 'true'
         timeout-minutes: 45
@@ -266,8 +260,7 @@ jobs:
           tag_name: ${{ steps.release-version.outputs.tag }}
           name: ${{ steps.release-version.outputs.release_name }}
           target_commitish: ${{ steps.release-version.outputs.target_commitish }}
-          body_path: ${{ steps.release-version.outputs.notes_path }}
-          generate_release_notes: false
+          generate_release_notes: true
           prerelease: ${{ steps.release-version.outputs.prerelease }}
           make_latest: ${{ steps.release-version.outputs.make_latest }}
           fail_on_unmatched_files: true

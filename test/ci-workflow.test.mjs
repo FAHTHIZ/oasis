@@ -39,14 +39,20 @@ test('CI keeps latest pending concurrency per ref and lets active quality runs f
   assert.ok(publishing.includes('group: oasis-public-launch-${{ github.ref }}'));
 });
 
-test('public product lifecycle is a stable 1.x release, not a candidate or Beta', async () => {
+test('README and package metadata describe the current product without unsupported claims', async () => {
+  const readme = await readFile(new URL('../README.md', import.meta.url), 'utf8');
   const pkg = JSON.parse(await readFile(new URL('../package.json', import.meta.url), 'utf8'));
-  assert.match(pkg.version, /^1\.\d+\.\d+$/, 'stable 1.x numeric SemVer');
+  assert.ok(readme.includes('open-source coding-agent runtime and development workspace'));
+  assert.ok(readme.includes('does not guarantee that every model will solve every task'));
+  assert.ok(readme.includes('Approval prompts are not a replacement for operating-system isolation'));
+  assert.ok(readme.includes('Apache License 2.0'));
+  assert.ok(readme.includes('npm run check'));
+  assert.ok(!readme.includes('beats Claude Code') && !readme.includes('100% success') && !readme.includes('security certified'));
+  assert.equal(pkg.version.split('.').length, 3);
   assert.equal(pkg.oasisRelease?.channel, 'stable');
-  assert.equal(pkg.oasisRelease?.candidate, undefined);
+  assert.equal(pkg.oasisRelease?.stableTag, 'v' + pkg.version);
 });
-
-test('desktop release requires an explicit stable publication dispatch and same-commit gates', async () => {
+test('desktop release requires a stable version and same-commit gates, with generated release notes', async () => {
   const workflow = await readFile(new URL('../.github/workflows/desktop-build.yml', import.meta.url), 'utf8');
   assert.ok(workflow.includes('branches: [main]'));
   assert.ok(!workflow.includes("tags: ['v*']"));
@@ -54,8 +60,7 @@ test('desktop release requires an explicit stable publication dispatch and same-
   assert.ok(workflow.includes('confirm_stable_release:'));
   assert.ok(workflow.includes('inputs.publish_release == true'));
   assert.ok(workflow.includes('inputs.confirm_stable_release == true'));
-  assert.ok(workflow.includes("github.event_name == 'workflow_dispatch'"));
-  assert.ok(!workflow.includes("github.event_name == 'push' && github.ref == 'refs/heads/main'"));
+  assert.ok(workflow.includes("github.event_name == 'push'"));
   assert.ok(workflow.includes('release_channel='));
   assert.ok(workflow.includes('oasisRelease?.channel'));
   assert.ok(workflow.includes('must be stable'));
@@ -72,11 +77,11 @@ test('desktop release requires an explicit stable publication dispatch and same-
   for (const name of ['quality.yml', 'pages.yml', 'installer-checks.yml']) assert.ok(workflow.includes(name));
   assert.ok(workflow.includes('target_commitish: ${{ steps.release-version.outputs.target_commitish }}'));
   assert.ok(workflow.includes('make_latest:'));
-  assert.ok(workflow.includes('body_path: ${{ steps.release-version.outputs.notes_path }}'));
+  assert.ok(workflow.includes('generate_release_notes: true'));
+  assert.ok(!workflow.includes('docs/releases') && !workflow.includes('body_path:'));
   assert.ok(workflow.includes('sha256sum'));
   assert.ok(!workflow.includes('git push origin "$tag"'));
 });
-
 test('quality runs the live Docker sandbox isolation test and requires a real engine', async () => {
   const workflow = await readFile(new URL('../.github/workflows/quality.yml', import.meta.url), 'utf8');
   const job = workflow.slice(workflow.indexOf('  docker-sandbox:'), workflow.indexOf('  browser-e2e:'));

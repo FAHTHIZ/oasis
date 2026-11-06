@@ -1,7 +1,7 @@
 {
   "name": "oasis-oss",
   "version": "1.1.0",
-  "description": "Open-source, local-first agentic development workspace with CLI, browser, desktop and editor interfaces, multi-provider models, integrations, agent coordination, and verification.",
+  "description": "Open-source coding-agent runtime and development workspace with CLI, browser, desktop and editor interfaces, model providers, tools, permissions, integrations and verification.",
   "type": "module",
   "main": "./src/sdk.mjs",
   "exports": {
@@ -25,16 +25,12 @@
     "manifest.webmanifest",
     "sw.js",
     "assets/",
-    "!assets/demo/",
     "scripts/",
     "skills/",
     "plugins/",
     "ide/",
     "README.md",
     "LICENSE",
-    "SECURITY.md",
-    "CONTRIBUTING.md",
-    "docs/",
     "evals/",
     "desktop/"
   ],
@@ -143,11 +139,8 @@
       "skills/**/*",
       "plugins/**/*",
       "ide/**/*",
-      "docs/**/*",
       "package.json",
-      "LICENSE",
-      "SECURITY.md",
-      "CONTRIBUTING.md"
+      "LICENSE"
     ],
     "extraMetadata": {
       "main": "desktop/main.mjs"

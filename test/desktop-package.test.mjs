@@ -20,24 +20,21 @@ test('desktop packaging defines one-click Windows installer and macOS/Linux pack
 });
 
 
-test('stable desktop releases publish only for a new stable version with curated notes and passing gates', () => {
-  // Manual dispatch still needs both confirmations.
-  assert.match(releaseWorkflow, /publish_release:\s*\n\s*description:/);
-  assert.match(releaseWorkflow, /confirm_stable_release:\s*\n\s*description:/);
-  assert.match(releaseWorkflow, /inputs\.publish_release == true/);
-  assert.match(releaseWorkflow, /inputs\.confirm_stable_release == true/);
-  // A push to main publishes only when package.json carries a version that has
-  // not been released yet: the owner's version bump is the release decision.
-  const condition = releaseWorkflow.match(/publish-release:[\s\S]*?needs:/)?.[0] || '';
-  assert.match(condition, /github\.event_name == 'push'/);
-  assert.match(condition, /github\.ref == 'refs\/heads\/main'/);
-  assert.match(releaseWorkflow, /oasisRelease\?\.channel/);
-  assert.match(releaseWorkflow, /must be stable/);
-  assert.match(releaseWorkflow, /already released from/, 'an existing tag is never overwritten');
-  assert.match(releaseWorkflow, /Missing curated release notes/);
-  assert.match(releaseWorkflow, /quality\.yml pages\.yml installer-checks\.yml/, 'same-commit quality gates must pass first');
+test('stable desktop releases require explicit confirmation, channel metadata and same-commit gates', () => {
+  assert.ok(releaseWorkflow.includes('publish_release:'));
+  assert.ok(releaseWorkflow.includes('confirm_stable_release:'));
+  assert.ok(releaseWorkflow.includes('inputs.publish_release == true'));
+  assert.ok(releaseWorkflow.includes('inputs.confirm_stable_release == true'));
+  const condition = releaseWorkflow.slice(releaseWorkflow.indexOf('publish-release:'), releaseWorkflow.indexOf('needs:', releaseWorkflow.indexOf('publish-release:')));
+  assert.ok(condition.includes("github.event_name == 'push'"));
+  assert.ok(condition.includes("github.ref == 'refs/heads/main'"));
+  assert.ok(releaseWorkflow.includes('oasisRelease?.channel'));
+  assert.ok(releaseWorkflow.includes('must be stable'));
+  assert.ok(releaseWorkflow.includes('already released from'), 'an existing tag is never overwritten');
+  assert.ok(releaseWorkflow.includes('generate_release_notes: true'));
+  assert.ok(!releaseWorkflow.includes('docs/releases') && !releaseWorkflow.includes('body_path:'));
+  assert.ok(releaseWorkflow.includes('quality.yml pages.yml installer-checks.yml'), 'same-commit quality gates must pass first');
 });
-
 test('desktop runtime is loopback-only and keeps renderer Node APIs disabled', () => {
   assert.match(desktopMain, /host: '127\.0\.0\.1'/);
   assert.match(desktopMain, /nodeIntegration: false/);
@@ -47,12 +44,14 @@ test('desktop runtime is loopback-only and keeps renderer Node APIs disabled', (
   assert.match(desktopMain, /previous\.close\(\)/);
 });
 
-test('install instructions explain desktop release and current OS signing limitations', () => {
+test('desktop packaging does not depend on removed documentation files', () => {
+  assert.ok(packageJson.files.includes('README.md'));
+  assert.ok(packageJson.files.includes('LICENSE'));
+  assert.ok(!packageJson.files.includes('docs/'));
+  assert.ok(!packageJson.files.includes('SECURITY.md'));
+  assert.ok(!packageJson.files.includes('CONTRIBUTING.md'));
+  assert.ok(!packageJson.build.files.includes('docs/**/*'));
 });
-
-const webRuntime = await readFile(new URL('../src/web.mjs', import.meta.url), 'utf8');
-const desktopSecrets = await readFile(new URL('../desktop/secure-secrets.mjs', import.meta.url), 'utf8');
-
 test('desktop stores API keys through Electron OS-backed encryption rather than config plaintext', () => {
   assert.match(desktopMain, /safeStorage/);
   assert.match(desktopMain, /isEncryptionAvailable/);
