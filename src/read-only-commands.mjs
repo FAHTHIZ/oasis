@@ -19,6 +19,7 @@
 // OASIS_READ_ONLY_COMMANDS=0 or "permissions": { "readOnlyCommands": false }.
 
 import { readdirSync } from 'node:fs';
+import { spawnSync } from 'node:child_process';
 import path from 'node:path';
 import { splitShell } from './shell-risk.mjs';
 import { resolvedRealPath } from './permissions.mjs';
@@ -154,6 +155,24 @@ function argsStayInside(args, cwd, root) {
   return true;
 }
 
+// A repository's own config can name programs that "read-only" commands run:
+// diff.external and textconv drivers (git diff/log -p/show/blame), clean and
+// smudge filters (git status/diff/cat-file --filters) and a custom gpg
+// program (signature display). A cloned or unpacked repository with such a
+// .git/config would otherwise run them without asking. Only local/worktree
+// scope counts; user and system settings (git-lfs filters) are the user's own.
+const REPO_COMMAND_KEY = /^(?:diff\.external|diff\..+\.(?:textconv|command)|filter\..+\.(?:clean|smudge|process)|gpg\.(?:.+\.)?program)$/i;
+
+export function repoConfigRunsCommands(cwd, env = process.env) {
+  const result = spawnSync('git', ['config', '--show-scope', '--get-regexp', '^(diff|filter|gpg)\\.'], { cwd, env, encoding: 'utf8', timeout: 5000, windowsHide: true, maxBuffer: 1024 * 1024 });
+  if (result.error || (result.status !== 0 && result.status !== 1)) return true;
+  return String(result.stdout || '').split('\n').some((line) => {
+    const [scope, rest = ''] = line.split('\t');
+    if (scope !== 'local' && scope !== 'worktree') return false;
+    return REPO_COMMAND_KEY.test(rest.split(' ')[0]);
+  });
+}
+
 function readOnlyGit(args) {
   if (args[0] === '--no-pager') args = args.slice(1);
   const [sub, ...rest] = args;
@@ -183,7 +202,7 @@ export function readOnlyArgv(command, args = [], { root, cwd = root } = {}) {
     if (!readOnlyGit(args) || gitObjectSecret(args)) return false;
     // git grep --untracked/--no-index and git diff --no-index read files Git does not track.
     if (args.some((arg) => arg === '--untracked' || arg === '--no-index')) return false;
-    return argsStayInside(args.filter((arg) => !GIT_READ.has(arg)), cwd, root);
+    return argsStayInside(args.filter((arg) => !GIT_READ.has(arg)), cwd, root) && !repoConfigRunsCommands(cwd);
   }
   if (name === 'npm' || name === 'pnpm' || name === 'yarn') return NPM_READ.has(args[0]) && args.slice(1).every((arg) => !arg.startsWith('--prefix') && !arg.startsWith('-C')) && argsStayInside(args.slice(1), cwd, root);
   if (!SIMPLE.has(name) || name === 'cd') return false;
