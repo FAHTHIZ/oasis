@@ -139,6 +139,15 @@ function runRipgrep(rgPath, cwd, args, signal) {
   });
 }
 
+// Extension sets for the type filter when ripgrep is unavailable; ripgrep
+// itself knows several hundred types.
+const FALLBACK_FILE_TYPES = {
+  js: ['.js', '.mjs', '.cjs', '.jsx'], ts: ['.ts', '.mts', '.cts', '.tsx'], py: ['.py', '.pyi'], go: ['.go'], rust: ['.rs'],
+  java: ['.java'], kotlin: ['.kt', '.kts'], c: ['.c', '.h'], cpp: ['.cpp', '.cc', '.cxx', '.hpp', '.hh', '.h'], cs: ['.cs'],
+  ruby: ['.rb'], php: ['.php'], swift: ['.swift'], sh: ['.sh', '.bash', '.zsh'], md: ['.md', '.markdown'], json: ['.json'],
+  yaml: ['.yaml', '.yml'], toml: ['.toml'], html: ['.html', '.htm'], css: ['.css', '.scss', '.less'], sql: ['.sql']
+};
+
 export async function grepWorkspace(root, args = {}, options = {}) {
   // Models also send the pattern as regex, query or search.
   const pattern = String(args.pattern || args.regex || args.query || args.search || '');
@@ -150,8 +159,18 @@ export async function grepWorkspace(root, args = {}, options = {}) {
   }
   if (pattern.length > 1000) throw new Error('Pattern is too long.');
   const mode = ['content', 'files_with_matches', 'count'].includes(args.output_mode) ? args.output_mode : 'content';
-  const limit = Math.max(1, Math.min(500, Number.parseInt(args.limit, 10) || 200));
-  const contextLines = Math.max(0, Math.min(10, Number.parseInt(args.context, 10) || 0));
+  // Models trained on other harnesses send ripgrep-style flag names ("-i",
+  // "-C", "-A", "-B", head_limit); they were silently ignored before.
+  const pick = (...names) => { for (const name of names) if (args[name] !== undefined && args[name] !== null && args[name] !== '') return args[name]; return undefined; };
+  const ignoreCase = pick('ignore_case', '-i', 'case_insensitive') === true || pick('ignore_case', '-i', 'case_insensitive') === 'true';
+  const limit = Math.max(1, Math.min(500, Number.parseInt(pick('limit', 'head_limit', 'max_results'), 10) || 200));
+  const offset = Math.max(0, Math.min(100000, Number.parseInt(pick('offset', 'skip'), 10) || 0));
+  const clampContext = (value) => Math.max(0, Math.min(10, Number.parseInt(value, 10) || 0));
+  const contextLines = clampContext(pick('context', '-C', 'context_lines'));
+  const before = pick('before', '-B') === undefined ? contextLines : clampContext(pick('before', '-B'));
+  const after = pick('after', '-A') === undefined ? contextLines : clampContext(pick('after', '-A'));
+  const fileType = pick('type', 'file_type');
+  if (fileType !== undefined && !/^[A-Za-z0-9_+-]{1,24}$/.test(String(fileType))) throw new Error('grep type must be a ripgrep file type name such as js, ts, py or rust.');
   const target = await resolveWorkspacePath(root, args.path || '.');
   const rootReal = target.root;
   const relTarget = path.relative(rootReal, target.absolute) || '.';
@@ -160,17 +179,22 @@ export async function grepWorkspace(root, args = {}, options = {}) {
 
   const ripgrep = options.forceFallback ? null : resolveRipgrep(options.env || process.env);
   if (ripgrep) {
-    const rgArgs = ['--no-heading', '--with-filename', '--color', 'never', '--max-columns', '400', '--max-columns-preview', '--hidden', '--glob', '!.git/'];
+    // search_files windows each line around the match itself, so it asks for
+    // whole lines (bounded by maxFilesize) instead of a 400-column preview.
+    const rgArgs = ['--no-heading', '--with-filename', '--color', 'never', ...(options.fullLines ? [] : ['--max-columns', '400', '--max-columns-preview']), '--hidden', '--glob', '!.git/'];
     for (const secret of ['.env', '.env.*', '*.pem', '*.key', '*.p12', '*.pfx', 'id_rsa*', 'id_ed25519*', '.npmrc', '.netrc', '.git-credentials', '.ssh/', '.aws/']) {
       // Exclusion globs only; sensitivePath() below re-checks every returned path.
       rgArgs.push('--glob', '!' + secret);
     }
-    if (args.ignore_case) rgArgs.push('-i');
+    if (ignoreCase) rgArgs.push('-i');
+    if (fileType !== undefined) rgArgs.push('--type', String(fileType));
+    if (options.fixedStrings) rgArgs.push('-F');
+    if (options.maxFilesize) rgArgs.push('--max-filesize', String(options.maxFilesize));
     if (args.multiline) rgArgs.push('-U', '--multiline-dotall');
     if (args.glob) rgArgs.push('--glob', String(args.glob));
     if (mode === 'files_with_matches') rgArgs.push('-l');
     else if (mode === 'count') rgArgs.push('-c');
-    else { rgArgs.push('-n'); if (contextLines) rgArgs.push('-C', String(contextLines)); }
+    else { rgArgs.push('-n'); if (before) rgArgs.push('-B', String(before)); if (after) rgArgs.push('-A', String(after)); }
     rgArgs.push('-e', pattern, '--', relTarget);
     const out = await runRipgrep(ripgrep.path, rootReal, rgArgs, options.signal);
     if (out.cancelled || (options.signal && options.signal.aborted)) {
@@ -180,22 +204,25 @@ export async function grepWorkspace(root, args = {}, options = {}) {
     }
     if (out.timedOut) throw new Error('grep exceeded its 30-second time limit. Narrow the search path or pattern and retry.');
     if (out.error) throw new Error('grep could not start ripgrep: ' + out.error);
-    if (out.code === 2 && !out.out) throw new Error('grep failed: ' + out.err.trim());
+    if (out.code === 2 && !out.out) throw new Error('grep failed: ' + out.err.trim() + (/unrecognized file type/i.test(out.err) ? ' Use a ripgrep type name (rg --type-list), or a glob such as *.ts.' : ''));
+    let skipped = 0;
     for (const raw of out.out.split('\n')) {
       if (!raw) continue;
+      if (raw === '--') continue;
       // Searching '.' makes rg print './a.js'; report 'a.js' like the built-in search.
       const line = raw.startsWith('./') ? raw.slice(2) : raw;
       const file = mode === 'files_with_matches' ? line : line.split(/[:-]\d+[:-]|:(?=\d+$)/)[0];
       if (sensitivePath(file)) continue;
+      if (skipped < offset) { skipped++; continue; }
       if (results.length >= limit) { truncated = true; break; }
-      results.push(line.length > 500 ? line.slice(0, 500) + '…' : line);
+      results.push(line.length > 500 && !options.fullLines ? line.slice(0, 500) + '…' : line);
     }
-    return { pattern, mode, engine: 'ripgrep', results, count: results.length, truncated };
+    return { pattern, mode, engine: 'ripgrep', results, count: results.length, truncated, ...(offset ? { offset } : {}) };
   }
 
   let matcher;
   try {
-    matcher = createBoundedRegexMatcher(pattern, (args.ignore_case ? 'i' : '') + (args.multiline ? 'ms' : ''), {
+    matcher = createBoundedRegexMatcher(options.fixedStrings ? pattern.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') : pattern, (ignoreCase ? 'i' : '') + (args.multiline ? 'ms' : ''), {
       timeoutMs: options.regexTimeoutMs === undefined ? 250 : options.regexTimeoutMs
     });
     await matcher.ready;
@@ -204,12 +231,26 @@ export async function grepWorkspace(root, args = {}, options = {}) {
     throw new Error('Invalid regular expression: ' + error.message);
   }
   const matchGlob = globMatcher(args.glob);
+  let matchType = null;
+  if (fileType !== undefined) {
+    const extensions = FALLBACK_FILE_TYPES[String(fileType).toLowerCase()];
+    if (!extensions) { await matcher.close().catch(() => {}); throw new Error('grep type "' + fileType + '" is not known without ripgrep. Known: ' + Object.keys(FALLBACK_FILE_TYPES).join(', ') + '. Use glob instead.'); }
+    matchType = (rel) => extensions.some((ext) => rel.toLowerCase().endsWith(ext));
+  }
+  let skipped = 0;
+  const emit = (line) => {
+    if (skipped < offset) { skipped++; return true; }
+    if (results.length >= limit) { truncated = true; return false; }
+    results.push(line);
+    return true;
+  };
   try {
     const info = await stat(target.absolute);
     const files = info.isFile() ? [{ absolute: target.absolute, relative: path.basename(target.absolute) }] : await walkFiles(target.absolute, { includeHidden: true, maxFiles: 8000, maxDepth: 14 });
     for (const file of files) {
       const relative = path.relative(rootReal, file.absolute).split(path.sep).join('/');
       if (matchGlob && !matchGlob(relative)) continue;
+      if (matchType && !matchType(relative)) continue;
       let content;
       try {
         const s = await stat(file.absolute);
@@ -224,19 +265,18 @@ export async function grepWorkspace(root, args = {}, options = {}) {
         if (!await matcher.test(lines[i], { signal: options.signal })) continue;
         hits++;
         if (mode !== 'content') continue;
-        for (let j = Math.max(0, i - contextLines); j <= Math.min(lines.length - 1, i + contextLines); j++) {
+        for (let j = Math.max(0, i - before); j <= Math.min(lines.length - 1, i + after); j++) {
           if (emitted.has(j)) continue;
           emitted.add(j);
-          if (results.length >= limit) { truncated = true; break; }
-          results.push(relative + (j === i ? ':' : '-') + (j + 1) + (j === i ? ':' : '-') + lines[j].slice(0, 400));
+          if (!emit(relative + (j === i ? ':' : '-') + (j + 1) + (j === i ? ':' : '-') + lines[j].slice(0, 400))) break;
         }
         if (truncated) break;
       }
-      if (hits && mode === 'files_with_matches') results.push(relative);
-      if (hits && mode === 'count') results.push(relative + ':' + hits);
-      if (truncated || results.length >= limit) { truncated = truncated || results.length >= limit; break; }
+      if (hits && mode === 'files_with_matches') emit(relative);
+      if (hits && mode === 'count') emit(relative + ':' + hits);
+      if (truncated) break;
     }
-    return { pattern, mode, engine: 'builtin', results: results.slice(0, limit), count: Math.min(results.length, limit), truncated };
+    return { pattern, mode, engine: 'builtin', results, count: results.length, truncated, ...(offset ? { offset } : {}) };
   } finally {
     await matcher.close().catch(() => {});
   }
