@@ -329,7 +329,7 @@ Each item below was reproduced with an attack test before the fix; the same test
 
 **Finding:** commands and hooks inherited `DATABASE_URL`, `MYSQL_PWD`, `*_PASSPHRASE`, `NPM_CONFIG__AUTH`, `SENTRY_DSN`, `SLACK_WEBHOOK_URL` and `*_PAT`; eval agents also kept `AWS_ACCESS_KEY_ID` because `src/eval.mjs` had its own copy of the pattern without `ACCESS_KEY`. `read_file` and read-only `cat` returned `.envrc`, `.pgpass`, `.my.cnf`, `.htpasswd` and `.dockercfg` with no prompt.
 
-**Fix:** `src/credential-env.mjs` is the one list for commands, hooks and eval agents (`SSH_AUTH_SOCK` is kept so git over SSH works); the five files count as sensitive. **Tests:** `test/credential-env.test.mjs`, `test/read-only-commands.test.mjs`. Stdio MCP servers now use the same list (`safeEnvironment` in `src/mcp.mjs`); a server that needs a credential names it in `passEnv` or `env`. **Remaining:** `service-account.json` and `terraform.tfstate` are not treated as secret files.
+**Fix:** `src/credential-env.mjs` is the one list for commands, hooks and eval agents (`SSH_AUTH_SOCK` is kept so git over SSH works); the five files count as sensitive. **Tests:** `test/credential-env.test.mjs`, `test/read-only-commands.test.mjs`. Stdio MCP servers now use the same list (`safeEnvironment` in `src/mcp.mjs`); a server that needs a credential names it in `passEnv` or `env`. `service-account*.json`/`service_account*.json` and `terraform.tfstate(.backup)` count as secret files too (`test/read-only-commands.test.mjs`).
 
 ### Areas tested that held up
 
