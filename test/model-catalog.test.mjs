@@ -5,15 +5,18 @@ import os from 'node:os';
 import path from 'node:path';
 import {
   findCatalogModel, catalogContextWindow, catalogPrice, providerForBaseURL, refreshModelCatalog,
-  catalogRefreshDisabled, catalogCachePath, loadModelCatalog, trimCatalog, resetModelCatalogForTest
+  catalogRefreshDisabled, catalogCachePath, catalogImageInput, loadModelCatalog, trimCatalog, resetModelCatalogForTest
 } from '../src/model-catalog.mjs';
 import { contextWindowSize } from '../src/context.mjs';
 import { priceFor } from '../src/pricing.mjs';
+import { imageInputCapability } from '../src/images.mjs';
 
 const RAW = {
   acme: { id: 'acme', api: 'https://api.acme.test/v1', models: {
     'acme-1': { limit: { context: 300000, output: 8000 }, cost: { input: 1, output: 2, cache_read: 0.1, tiers: [{ input: 2, output: 4, cache_read: 0.2, tier: { type: 'context', size: 128000 } }] } },
-    'acme-flat': { limit: { context: 64000, input: 50000 }, cost: { input: 0.5, output: 1 } }
+    'acme-flat': { limit: { context: 64000, input: 50000 }, cost: { input: 0.5, output: 1 } },
+    'acme-eye': { limit: { context: 64000 }, modalities: { input: ['text', 'image'], output: ['text'] } },
+    'acme-text': { limit: { context: 64000 }, modalities: { input: ['text'], output: ['text'] } }
   } },
   router: { id: 'router', api: 'https://router.test/api', models: { 'acme/acme-1': { limit: { context: 200000 }, cost: { input: 1.2, output: 2.4 } } } },
   b: { models: {} }, c: { models: {} }, d: { models: {} }
@@ -57,10 +60,27 @@ test('a custom catalog file drives windows and prices; the baseURL picks the pro
   assert.equal(priceFor('acme-1', { env, config: { protocol: 'ollama', baseURL: 'http://127.0.0.1:11434' } }).local, true);
 });
 
+test('image support comes from the catalog modalities, with overrides and a fallback for unlisted models', async (t) => {
+  const { env } = await customCatalog(t);
+  assert.equal(catalogImageInput('acme-eye', { env }), true);
+  assert.equal(catalogImageInput('acme-text', { env }), false);
+  assert.equal(catalogImageInput('acme-1', { env }), null);
+  assert.equal(imageInputCapability({ model: 'acme-eye' }, env).status, 'supported');
+  assert.equal(imageInputCapability({ model: 'acme-text' }, env).status, 'unsupported');
+  assert.equal(imageInputCapability({ model: 'acme-text' }, { ...env, OASIS_MODEL_VISION: '1' }).status, 'supported');
+  assert.equal(imageInputCapability({ model: 'acme-eye' }, { ...env, OASIS_MODEL_VISION: '0' }).status, 'unsupported');
+  assert.equal(imageInputCapability({ model: 'llava:13b' }, env).status, 'supported');
+  assert.equal(imageInputCapability({ model: 'acme-1' }, env).status, 'unknown');
+  // The bundled snapshot knows text-only models the old name patterns could not classify.
+  assert.equal(imageInputCapability({ model: 'deepseek-chat' }, {}).status, 'unsupported');
+  assert.equal(imageInputCapability({ model: 'claude-opus-4-6' }, {}).status, 'supported');
+});
+
 test('trimCatalog keeps only limits and prices', () => {
   const trimmed = trimCatalog({ ...RAW, acme: { ...RAW.acme, models: { ...RAW.acme.models, junk: { name: 'x' } } } }, ['acme']);
   assert.deepEqual(Object.keys(trimmed), ['acme']);
   assert.equal(trimmed.acme.models.junk, undefined);
+  assert.deepEqual(trimmed.acme.models['acme-eye'], { context: 64000, image: true });
   assert.deepEqual(trimmed.acme.models['acme-1'], { context: 300000, output: 8000, cost: { input: 1, output: 2, cache_read: 0.1, tiers: [{ input: 2, output: 4, cache_read: 0.2, size: 128000 }] } });
 });
 
