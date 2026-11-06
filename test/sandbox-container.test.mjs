@@ -21,27 +21,35 @@ test('docker backend mounts only the workspace, drops capabilities and blocks ne
   assert.deepEqual(a.slice(-3), ['node:22-bookworm', 'npm', 'test']);
 });
 
-test('container credential masks overlay workspace and protected-path mounts', () => {
+test('container credential masks overlay only paths inside writable roots', () => {
   const masks = [
     { path: '/home/example/.ssh', type: 'directory' },
-    { path: '/home/example/.netrc', type: 'file' }
+    { path: '/home/example/.netrc', type: 'file' },
+    { path: '/home/example-outside/.aws', type: 'directory' },
+    { path: '/home/example', type: 'directory' }
   ];
   const a = containerArgs('cat', ['/home/example/.netrc'], box({
     writable: ['/home/example'],
     protectedRoots: ['/home/example'],
     maskedPaths: masks
   }), '/home/example', 'linux');
-  const tmpfsArgs = [];
-  for (let i = 0; i < a.length; i++) if (a[i] === '--tmpfs') tmpfsArgs.push({ index: i, value: a[i + 1] });
-  assert.deepEqual(tmpfsArgs.map((item) => item.value), [
-    '/home/example/.ssh:rw,nosuid,nodev,noexec,size=1m',
-    '/home/example/.netrc:rw,nosuid,nodev,noexec,size=1m'
-  ]);
-  const lastHostMount = Math.max(...a.reduce((indices, value, i) => value === '--volume' ? [...indices, i] : indices, []));
-  assert.ok(tmpfsArgs.every((item) => item.index > lastHostMount), 'tmpfs overlays must be applied after writable and read-only host mounts');
+  const volumes = [];
+  const tmpfs = [];
+  for (let i = 0; i < a.length; i++) {
+    if (a[i] === '--volume') volumes.push({ index: i, value: a[i + 1] });
+    if (a[i] === '--tmpfs') tmpfs.push({ index: i, value: a[i + 1] });
+  }
+  assert.ok(volumes.some((item) => item.value === '/home/example:/home/example:rw'));
+  assert.ok(volumes.some((item) => item.value === '/dev/null:/home/example/.netrc:ro'), 'file masks must use a read-only null-device bind');
+  assert.deepEqual(tmpfs.map((item) => item.value), [
+    '/home/example/.ssh:rw,nosuid,nodev,noexec,size=1m'
+  ], 'directory masks inside the workspace use an ephemeral tmpfs');
+  assert.ok(!a.some((value) => String(value).includes('home/example-outside')), 'secrets outside mounted roots are already absent');
+  const lastHostMount = Math.max(...volumes.map((item) => item.index));
+  assert.ok(tmpfs.every((item) => item.index > lastHostMount), 'directory masks must overlay host mounts');
+  assert.ok(volumes.find((item) => item.value.startsWith('/dev/null:')).index > lastHostMount, 'file masks must overlay host mounts');
   assert.equal(a[a.indexOf('--workdir') + 1], '/home/example');
 });
-
 test('container network, limits and podman user namespace options', () => {
   const a = containerArgs('ls', [], box({ kind: 'podman', network: true, memory: '2g', cpus: '1.5' }), '/work/app', 'linux');
   assert.equal(a[a.indexOf('--network') + 1], 'bridge');
