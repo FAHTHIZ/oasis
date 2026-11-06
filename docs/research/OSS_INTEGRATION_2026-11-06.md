@@ -386,6 +386,20 @@ Gains: `$/cancelRequest` on timeout via CancellationTokenSource (verified on the
 Lost: the 64 MiB frame cap (vscode-jsonrpc has no size limit). Language servers are local binaries the user approves, so this is accepted.
 Real-server check with typescript-language-server: hover/references/diagnostics/document_symbols outputs are identical to the old transport; first hover takes 309 ms vs 282 ms (server startup), later calls 2–4 ms both.
 
+## 16. HTML parser: parse5 and htmlparser2 evaluated, hand parser kept
+
+Tried: replacing `parseHtml` in `src/html-markdown.mjs` with parse5 8.1.0 (WHATWG tree building) converted to the extractor's tree, and htmlparser2 10.
+fetch_url feeds this parser untrusted pages, so worst-case cost decides. Raw parse time for `'<div>'.repeat(n)`:
+
+| n | parse5 | htmlparser2 | OASIS parseHtml |
+|---|---|---|---|
+| 20,000 | 2,552 ms | 94 ms | — |
+| 40,000 | 12,809 ms | 657 ms | 34 ms |
+| 100,000 | — | 3,888 ms | 80 ms |
+| 200,000 | (aborted after > 2 min) | 14,526 ms | 122 ms |
+
+Both libraries are quadratic in open-element depth (scope checks walk the stack); the OASIS parser caps depth at 256 and stays linear. A 1 MB hostile page would stall fetch_url for minutes with parse5. Kept; libraries rejected on denial-of-service grounds. (Separately, the full conversion of 200k nested divs takes 9.3 s in extraction/rendering, not parsing. Recorded as a follow-up.)
+
 ## Next
 
 - Decided against Ajv validation in front of built-in tools: they already reject bad input with specific messages ("edit_file needs old_string … got path"), coerce numeric strings, and accept documented argument aliases that a strict schema would refuse.
