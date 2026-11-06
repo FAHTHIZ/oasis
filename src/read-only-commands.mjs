@@ -18,6 +18,7 @@
 // PreToolUse hooks run before this and still win. Turn it off with
 // OASIS_READ_ONLY_COMMANDS=0 or "permissions": { "readOnlyCommands": false }.
 
+import { readdirSync } from 'node:fs';
 import path from 'node:path';
 import { splitShell } from './shell-risk.mjs';
 import { resolvedRealPath } from './permissions.mjs';
@@ -55,6 +56,70 @@ const NPM_READ = new Set(['ls', 'list', 'll', 'la', 'view', 'info', 'show', 'out
 
 const SECRET_FILE = /(^|\/)(\.env(\.[^/]*)?|\.npmrc|\.netrc|\.pypirc|\.git-credentials|id_(rsa|dsa|ecdsa|ed25519)(\.pub)?|[^/]*\.(pem|key|p12|pfx|keystore|jks)|credentials(\.json)?|secrets?\.(json|ya?ml|toml))$/i;
 
+const SECRET_DIR = /(^|\/)\.(ssh|aws|gnupg|azure|kube|docker)(\/|$)/i;
+const secretRelative = (rel) => SECRET_FILE.test(rel) || SECRET_DIR.test(rel);
+
+// Recursive searches read every file under a folder, so a `grep -r KEY .` would
+// print .env or key files that a direct `cat .env` asks for. Before such a
+// search runs without asking, the folder is walked (bounded) and the command
+// asks if a secret file is there, if a followed symlink could leave the
+// workspace, or if the folder is too big to check.
+const WALK_LIMIT = 5000;
+const WALK_SKIP = new Set(['node_modules', '.git']);
+
+function treeHasSecret(dir, root, { hidden = true, followLinks = false } = {}) {
+  const queue = [dir];
+  let seen = 0;
+  while (queue.length) {
+    const current = queue.shift();
+    let entries;
+    try { entries = readdirSync(current, { withFileTypes: true }); } catch (error) { if (error.code === 'ENOTDIR' || error.code === 'ENOENT') { if (current === dir) return false; } return true; }
+    for (const entry of entries) {
+      if (++seen > WALK_LIMIT) return true;
+      if (!hidden && entry.name.startsWith('.')) continue;
+      const full = path.join(current, entry.name);
+      const rel = path.relative(root, full).split(path.sep).join('/');
+      if (secretRelative(rel)) return true;
+      if (entry.isSymbolicLink()) { if (followLinks) return true; continue; }
+      if (entry.isDirectory() && !WALK_SKIP.has(entry.name)) queue.push(full);
+    }
+  }
+  return false;
+}
+
+const shortFlag = (arg, letters) => /^-[A-Za-z0-9]+$/.test(arg) && [...letters].some((letter) => arg.slice(1).includes(letter));
+
+// Returns null when the command does not search recursively, else what to check.
+function recursiveRead(name, args) {
+  const operands = args.filter((arg) => !arg.startsWith('-'));
+  if (name === 'grep' || name === 'egrep' || name === 'fgrep') {
+    const follow = args.some((arg) => arg === '--dereference-recursive' || shortFlag(arg, 'R'));
+    const recursive = follow || args.some((arg) => arg === '--recursive' || arg === '--directories=recurse' || shortFlag(arg, 'r')) || args.some((arg, i) => arg === '-d' && args[i + 1] === 'recurse');
+    if (!recursive) return null;
+    const explicitPattern = args.some((arg) => arg === '-e' || arg === '-f' || arg.startsWith('--regexp') || arg.startsWith('--file'));
+    return { paths: explicitPattern ? operands : operands.slice(1), hidden: true, followLinks: follow };
+  }
+  if (name === 'rg' || name === 'ag') {
+    const hidden = args.some((arg) => /^--(hidden|no-ignore.*|unrestricted|all-types|skip-vcs-ignores)$/.test(arg) || /^-u+$/.test(arg) || (name === 'ag' && arg === '-a'));
+    const followLinks = args.some((arg) => arg === '--follow' || arg === '-L' || (name === 'ag' && arg === '-f'));
+    const explicitPattern = args.some((arg) => arg === '-e' || arg === '-f' || arg.startsWith('--regexp') || arg.startsWith('--file'));
+    // rg/ag skip hidden files by default, but not every secret is hidden (key.pem).
+    return { paths: explicitPattern ? operands : operands.slice(1), hidden, followLinks };
+  }
+  if (name === 'diff' && args.some((arg) => arg === '--recursive' || shortFlag(arg, 'r'))) return { paths: operands, hidden: true, followLinks: true };
+  return null;
+}
+
+function recursiveReadSafe(name, args, cwd, root) {
+  const plan = recursiveRead(name, args);
+  if (!plan) return true;
+  const targets = plan.paths.length ? plan.paths : ['.'];
+  return !targets.some((target) => treeHasSecret(path.resolve(cwd, target), path.resolve(root), plan));
+}
+
+// `git show HEAD:.env` and `git cat-file -p HEAD:.env` read a committed secret.
+const gitObjectSecret = (args) => args.some((arg) => { const at = arg.indexOf(':'); return at !== -1 && !arg.startsWith('-') && secretRelative(arg.slice(at + 1).replace(/^\.\//, '')); });
+
 export function readOnlyCommandsEnabled(env = process.env, settings = {}) {
   if (/^(0|false|off|no)$/i.test(String(env.OASIS_READ_ONLY_COMMANDS || ''))) return false;
   const permissions = settings && settings.permissions;
@@ -68,12 +133,12 @@ function insideWorkspace(token, cwd, root) {
   const absolute = path.resolve(cwd, value);
   const rel = path.relative(root, absolute);
   if (rel === '..' || rel.startsWith('..' + path.sep) || path.isAbsolute(rel)) return false;
-  if (SECRET_FILE.test(rel.split(path.sep).join('/'))) return false;
+  if (secretRelative(rel.split(path.sep).join('/'))) return false;
   const real = resolvedRealPath(rel || '.', root);
   if (real) {
     const realRel = path.relative(real.root, real.path);
     if (realRel === '..' || realRel.startsWith('..' + path.sep) || path.isAbsolute(realRel)) return false;
-    if (SECRET_FILE.test(realRel.split(path.sep).join('/'))) return false;
+    if (secretRelative(realRel.split(path.sep).join('/'))) return false;
   }
   return true;
 }
@@ -114,13 +179,18 @@ export function readOnlyArgv(command, args = [], { root, cwd = root } = {}) {
   const name = command.replace(/\.exe$/i, '').toLowerCase();
   if (!Array.isArray(args) || args.some((arg) => typeof arg !== 'string')) return false;
   if (args.length === 1 && /^(--version|-v|-V|version)$/.test(args[0]) && VERSION_PROGRAMS.has(name)) return true;
-  if (name === 'git') return readOnlyGit(args) && argsStayInside(args.filter((arg) => !GIT_READ.has(arg)), cwd, root);
+  if (name === 'git') {
+    if (!readOnlyGit(args) || gitObjectSecret(args)) return false;
+    // git grep --untracked/--no-index and git diff --no-index read files Git does not track.
+    if (args.some((arg) => arg === '--untracked' || arg === '--no-index')) return false;
+    return argsStayInside(args.filter((arg) => !GIT_READ.has(arg)), cwd, root);
+  }
   if (name === 'npm' || name === 'pnpm' || name === 'yarn') return NPM_READ.has(args[0]) && args.slice(1).every((arg) => !arg.startsWith('--prefix') && !arg.startsWith('-C')) && argsStayInside(args.slice(1), cwd, root);
   if (!SIMPLE.has(name) || name === 'cd') return false;
   const unsafe = UNSAFE_FLAGS[name];
   if (unsafe && args.some((arg) => unsafe.test(arg))) return false;
   if (name === 'uniq' && args.filter((arg) => !arg.startsWith('-')).length > 1) return false;
-  return argsStayInside(args, cwd, root);
+  return argsStayInside(args, cwd, root) && recursiveReadSafe(name, args, cwd, root);
 }
 
 /**
@@ -138,11 +208,26 @@ export function readOnlyGitEnv(env = process.env) {
 
 const HARMLESS_REDIRECTS = /\s(?:2>&1|[12]?>\s*\/dev\/null)(?=\s|$|;|&&|\|)/g;
 
+function unquotedGlob(text) {
+  let quote = '';
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    if (quote) { if (ch === quote) quote = ''; else if (ch === '\\' && quote === '"') i++; continue; }
+    if (ch === '"' || ch === "'") { quote = ch; continue; }
+    if (ch === '\\') { i++; continue; }
+    if (ch === '*' || ch === '?' || ch === '[') return true;
+  }
+  return false;
+}
+
 /** True when every command in a shell line only reads, inside the workspace. */
 export function readOnlyShellLine(line, { root } = {}) {
   if (!root) return false;
   const text = String(line || '').replace(HARMLESS_REDIRECTS, ' ');
   if (!text.trim() || /[`$<>~]|\(|\)|\{|\}|\n/.test(text)) return false;
+  // An unquoted glob is expanded by the shell after these checks, so `cat .en?`
+  // would read .env. Quoted patterns (grep -rn 'a.*b' src) are fine.
+  if (unquotedGlob(text)) return false;
   // `a & b` would leave a background process running.
   if (/(^|[^&])&([^&]|$)/.test(text)) return false;
   let cwd = path.resolve(root);
