@@ -85,6 +85,7 @@ import { unrequestedGitWrite } from './git-intent.mjs';
 import { parseFallbackChain, remainingFallbacks, fallbackReason, FALLBACK_REASON_TEXT } from './fallback-chain.mjs';
 import { repairToolArguments, extractTextToolCalls, unknownTextToolCalls } from './tool-call-repair.mjs';
 import { isLocalModelEndpoint, probeLocalContext, probeProviderModelWindow, applySmallContextProfile, localContextAdvice, SMALL_CONTEXT_TOKENS, RECOMMENDED_LOCAL_CONTEXT } from './local-context.mjs';
+import { ripgrepPathAddition } from './ripgrep.mjs';
 
 const MAX_REPLY_CHARS = 24000;
 
@@ -714,12 +715,14 @@ function systemPrompt(root, projectContext, skillDescriptions = '', environment 
   ].filter(Boolean).join('\n\n');
 }
 
-// Enabled plugins' bin/ directories are on PATH for commands the agent runs.
+// Enabled plugins' bin/ directories come first on PATH for commands the agent runs;
+// the bundled ripgrep's folder comes last, only when no rg is on PATH.
 export function commandEnvironment(env, settings) {
   const dirs = settings && Array.isArray(settings.pluginBinDirs) ? settings.pluginBinDirs : [];
-  if (!dirs.length) return env;
+  const ripgrepDir = ripgrepPathAddition(env);
+  if (!dirs.length && !ripgrepDir) return env;
   const key = Object.keys(env).find((name) => name.toUpperCase() === 'PATH') || 'PATH';
-  return { ...env, [key]: [...dirs, env[key] || ''].filter(Boolean).join(path.delimiter) };
+  return { ...env, [key]: [...dirs, env[key] || '', ripgrepDir].filter(Boolean).join(path.delimiter) };
 }
 
 export async function createSession({ root, config, restore = null, permissionMode = null, allowedTools = [], disallowedTools = [], settings = null, env = process.env, appendSystemPrompt = '', outputStyle = null, addDirs = [], bare = false, systemPromptOverride = '', tools = null, mcpServers = [], strictMcpConfig = false, agentsInline = null, sessionId = null, sessionName = '', fallbackModel = '', maxBudgetUsd = 0, pricing = null, settingsOverrides = [], settingSources = null, agent = null, watchFiles = false, channels = [], advisor = '', chrome = null, restricted = false, subagentSystemAppend = '', excludeDynamicSections = false, onHookEvent = null, onHookStatus = null, systemPromptSnapshot = null }) {

@@ -54,6 +54,7 @@ import { formatUsd, priceFor } from './pricing.mjs';
 import { discoverLocalOllamaModels } from './ollama-discovery.mjs';
 import { commandAvailable } from './command-lookup.mjs';
 import { installProxyFromEnv, currentProxy } from './proxy.mjs';
+import { describeRipgrep } from './ripgrep.mjs';
 
 // Options that shape every agent session created by this process.
 const SESSION_OPTIONS = { permissionMode: null, allowedTools: [], disallowedTools: [], appendSystemPrompt: '', model: null, effort: null, outputStyle: null, addDirs: [], pendingFiles: [], mcpServers: [], settingsOverrides: [], tools: null, channels: [], devChannels: [] };
@@ -1007,8 +1008,8 @@ async function doctorLocalServer(config, write = (line) => stdout.write(line)) {
 async function doctorWorkspaceReport(root, status = {}) {
   const problems = [];
   stdout.write('\nTools\n');
-  const rg = commandAvailable('rg');
-  stdout.write('  ripgrep (rg): ' + (rg ? 'available (fast grep)' : 'not found (grep uses a slower built-in search)') + '\n');
+  const rg = describeRipgrep(process.env);
+  stdout.write('  ripgrep (rg): ' + (rg ? rg + ' (fast grep)' : 'not found (grep uses a slower built-in search)') + '\n');
   stdout.write('  gh: ' + (commandAvailable('gh') ? 'available (/review can read pull requests)' : 'not found (/review PR-number needs the GitHub CLI)') + '\n');
   const search = process.env.OASIS_WEB_SEARCH === 'off' ? 'off' : searchBackend(process.env);
   stdout.write('  Web search: ' + search + (search === 'duckduckgo' ? ' (no key; set TAVILY_API_KEY or BRAVE_SEARCH_API_KEY for more reliable results)' : '') + '\n');

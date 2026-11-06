@@ -1,7 +1,7 @@
 import { readOnlyShellLine, readOnlyCommandsEnabled, readOnlyGitEnv } from './read-only-commands.mjs';
 import { securityWarning } from './security-patterns.mjs';
 // Additional OASIS tools for deeper repository work and interactive process control:
-//   grep           regex search (ripgrep when available, JS fallback) with globs, context, and modes
+//   grep           regex search (bundled ripgrep, JS fallback) with globs, context, and modes
 //   multi_edit     several exact-string edits to one file, applied atomically
 //   command_output read new output from a background process
 //   kill_command   stop a background process
@@ -14,7 +14,7 @@ import { commandFlagWarning } from './command-hints.mjs';
 import { protectedShellWrite, protectedEditsAllowed } from './protected-paths.mjs';
 import * as gitSafety from './git-safety.mjs';
 import { assertFileFresh, recordFileState } from './file-state.mjs';
-import { spawn, spawnSync } from 'node:child_process';
+import { spawn } from 'node:child_process';
 import { readFile, writeFile, lstat, stat, realpath } from 'node:fs/promises';
 import path from 'node:path';
 import { existsSync } from 'node:fs';
@@ -43,6 +43,7 @@ const MAX_BACKGROUND_HISTORY = 24;
 
 export { NOTEBOOK_EDIT_DEFINITION, POWER_TOOL_DEFINITIONS, SHELL_TOOL_DEFINITION, POWERSHELL_TOOL_DEFINITION, POWER_TOOL_NAMES } from './power-tool-definitions.mjs';
 import { POWER_TOOL_NAMES } from './power-tool-definitions.mjs';
+import { resolveRipgrep } from './ripgrep.mjs';
 
 // PowerShell is enabled by default on Windows (CLAUDE_CODE_USE_POWERSHELL_TOOL=0 turns it off),
 // opt-in elsewhere with CLAUDE_CODE_USE_POWERSHELL_TOOL=1 (or OASIS_POWERSHELL=1) and pwsh on PATH.
@@ -90,13 +91,6 @@ export function commandLineText(command, args) {
 }
 
 // ---------------------------------------------------------------- grep
-let ripgrepAvailable = null;
-function hasRipgrep() {
-  if (ripgrepAvailable === null) {
-    try { ripgrepAvailable = spawnSync('rg', ['--version'], { stdio: 'ignore', timeout: 3000 }).status === 0; } catch { ripgrepAvailable = false; }
-  }
-  return ripgrepAvailable;
-}
 
 function globMatcher(glob) {
   if (!glob) return null;
@@ -115,7 +109,7 @@ function globMatcher(glob) {
   return (relative) => regex.test(relative) || (!text.includes('/') && regex.test(path.posix.basename(relative)));
 }
 
-function runRipgrep(cwd, args, signal) {
+function runRipgrep(rgPath, cwd, args, signal) {
   return new Promise((resolve) => {
     let out = '';
     let err = '';
@@ -126,7 +120,7 @@ function runRipgrep(cwd, args, signal) {
       resolve({ code: null, out, err: 'Search was cancelled before ripgrep started.', cancelled: true });
       return;
     }
-    const child = spawn('rg', args, { cwd, shell: false, stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true });
+    const child = spawn(rgPath, args, { cwd, shell: false, stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true });
     const cleanup = () => {
       clearTimeout(timer);
       if (signal) signal.removeEventListener('abort', abort);
@@ -177,7 +171,8 @@ export async function grepWorkspace(root, args = {}, options = {}) {
   const results = [];
   let truncated = false;
 
-  if (hasRipgrep() && !options.forceFallback) {
+  const ripgrep = options.forceFallback ? null : resolveRipgrep(options.env || process.env);
+  if (ripgrep) {
     const rgArgs = ['--no-heading', '--with-filename', '--color', 'never', '--max-columns', '400', '--max-columns-preview', '--hidden', '--glob', '!.git/'];
     for (const secret of ['.env', '.env.*', '*.pem', '*.key', '*.p12', '*.pfx', 'id_rsa*', 'id_ed25519*', '.npmrc', '.netrc', '.git-credentials', '.ssh/', '.aws/']) {
       // Exclusion globs only; sensitivePath() below re-checks every returned path.
@@ -190,7 +185,7 @@ export async function grepWorkspace(root, args = {}, options = {}) {
     else if (mode === 'count') rgArgs.push('-c');
     else { rgArgs.push('-n'); if (contextLines) rgArgs.push('-C', String(contextLines)); }
     rgArgs.push('-e', pattern, '--', relTarget);
-    const out = await runRipgrep(rootReal, rgArgs, options.signal);
+    const out = await runRipgrep(ripgrep.path, rootReal, rgArgs, options.signal);
     if (out.cancelled || (options.signal && options.signal.aborted)) {
       const error = new Error('Search was cancelled.');
       error.name = 'AbortError';
@@ -199,8 +194,10 @@ export async function grepWorkspace(root, args = {}, options = {}) {
     if (out.timedOut) throw new Error('grep exceeded its 30-second time limit. Narrow the search path or pattern and retry.');
     if (out.error) throw new Error('grep could not start ripgrep: ' + out.error);
     if (out.code === 2 && !out.out) throw new Error('grep failed: ' + out.err.trim());
-    for (const line of out.out.split('\n')) {
-      if (!line) continue;
+    for (const raw of out.out.split('\n')) {
+      if (!raw) continue;
+      // Searching '.' makes rg print './a.js'; report 'a.js' like the built-in search.
+      const line = raw.startsWith('./') ? raw.slice(2) : raw;
       const file = mode === 'files_with_matches' ? line : line.split(/[:-]\d+[:-]|:(?=\d+$)/)[0];
       if (sensitivePath(file)) continue;
       if (results.length >= limit) { truncated = true; break; }
