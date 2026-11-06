@@ -108,7 +108,8 @@ test('Anthropic requests get prompt-cache breakpoints on system, tools, and the 
   assert.deepEqual(request.system, [{ type: 'text', text: 'sys', cache_control: { type: 'ephemeral' } }]);
   assert.equal(tools[0].cache_control, undefined);
   assert.deepEqual(tools[1].cache_control, { type: 'ephemeral' });
-  assert.equal(request.messages[0].content, 'hi');
+  // The user message before the latest assistant reply is where the previous request ended.
+  assert.deepEqual(request.messages[0].content, [{ type: 'text', text: 'hi', cache_control: { type: 'ephemeral' } }]);
   assert.deepEqual(request.messages.at(-1).content.at(-1).cache_control, { type: 'ephemeral' });
   assert.equal(promptCachingEnabled({}, {}), true);
   assert.equal(promptCachingEnabled({}, { OASIS_PROMPT_CACHE: 'off' }), false);

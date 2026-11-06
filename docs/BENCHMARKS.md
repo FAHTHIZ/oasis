@@ -116,6 +116,8 @@ Reductions, each measured with the benchmark right after it landed (input tokens
 
 What it shows: the scripted total (~181K) is close to what the live run's gateway logged (188,606 for 18 requests), and two thirds of it is the fixed part, the system prompt and 22 tool schemas resent on every request. The prefix is stable from request to request (only ~8% is new each time), so on a provider with prefix caching most of it is billed at the cached rate; on free endpoints without caching, every byte counts. The benchmark also checks that the per-request usage OASIS reports adds up to what the provider returned.
 
+Cache placement (not measured by this OpenAI-format benchmark, covered by `test/token-efficiency.test.mjs`): on Anthropic, a step with ten or more parallel tool calls used to push the previous cache breakpoint past Anthropic's 20-block lookback. The next request then paid the uncached price for the whole history. The previous request's end is now marked too. OpenAI Chat Completions requests now send the per-session `prompt_cache_key`, as Responses requests already did. Per-agent usage, including background subagents, is recorded and shown by `agent_status` and `/tasks`.
+
 What it does not show: how many steps a real model needs, output tokens, or task success with a model. The scripted calls are fixed, so a change that would make a model take more steps (for example, by hiding something it needs) does not show up here; such changes need a live run as well.
 
 ## What the current 52-task fixture suite proves (and does not prove)

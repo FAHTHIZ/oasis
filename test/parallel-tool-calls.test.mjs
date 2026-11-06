@@ -45,3 +45,23 @@ test('prompt cache key is stable per session and agent, and only sent to OpenAI 
   const unsaved = {};
   assert.deepEqual(promptCacheKeyField(unsaved, openai, {}), promptCacheKeyField(unsaved, openai, {}));
 });
+
+test('Chat Completions requests to OpenAI carry the session prompt cache key; other gateways do not', async (t) => {
+  const os = (await import('node:os')).default;
+  const path = (await import('node:path')).default;
+  const { mkdtemp } = await import('node:fs/promises');
+  const { createSession, runAgentTurn, promptCacheKeyField } = await import('../src/agent.mjs');
+  const root = await mkdtemp(path.join(os.tmpdir(), 'oasis-cachekey-'));
+  const bodies = [];
+  const fetchImpl = async (url, init) => { bodies.push({ url: String(url), body: JSON.parse(init.body) }); return new Response(JSON.stringify({ choices: [{ message: { role: 'assistant', content: 'ok' } }], usage: { prompt_tokens: 5, completion_tokens: 1, total_tokens: 6 } }), { status: 200, headers: { 'content-type': 'application/json' } }); };
+  const env = { ...process.env, OASIS_PROMPT_CACHE_KEY: '' };
+  const openai = await createSession({ root, config: { protocol: 'openai-compatible', baseURL: 'https://api.openai.com/v1', model: 'gpt-4o', apiKey: 'sk-test' }, env });
+  await runAgentTurn(openai, 'one', { fetchImpl, env });
+  await runAgentTurn(openai, 'two', { fetchImpl, env });
+  assert.match(bodies[0].body.prompt_cache_key, /^oasis-[0-9a-f]{32}$/);
+  assert.equal(bodies[1].body.prompt_cache_key, bodies[0].body.prompt_cache_key, 'same key on every request of the session');
+  assert.deepEqual({ prompt_cache_key: bodies[0].body.prompt_cache_key }, promptCacheKeyField(openai, openai.config, env));
+  const other = await createSession({ root, config: { protocol: 'openai-compatible', baseURL: 'http://127.0.0.1:9/v1', model: 'local', apiKey: '' }, env });
+  await runAgentTurn(other, 'one', { fetchImpl, env });
+  assert.equal(bodies.at(-1).body.prompt_cache_key, undefined);
+});
