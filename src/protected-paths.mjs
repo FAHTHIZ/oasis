@@ -139,13 +139,18 @@ export function protectedEditMessage(toolName, hit) {
 // Shell commands that write protected paths (`echo ... > .git/hooks/pre-commit`,
 // `cp x .oasis/settings.json`) or set git config keys that run commands.
 // Returns a reason string or null. Reading these files (cat, grep) is fine.
-const SHELL_PROTECTED_PATH = /(?:^|[\s'"=:/\\(])\.?(?:\.git[\\/](?:hooks[\\/]|config\b)|\.(?:oasis|claude)[\\/](?:settings(?:\.local)?\.json|hooks[\\/]|plugins[\\/])|\.mcp\.json|\.lsp\.json|\.vscode[\\/](?:settings|tasks|launch|mcp)\.json|\.envrc\b|\.husky[\\/]|\.devcontainer[\\/]|\.(?:cursor|gemini|codex)[\\/](?:mcp\.json|hooks\.json|settings\.json|config\.toml)|\.pre-commit-config\.ya?ml|\.pnpmfile\.c?js|\.yarnrc\.yml)/i;
-const SHELL_WRITE = /(?:>>?|\btee\b|\bcp\b|\bmv\b|\bln\b|\binstall\b|\bsed\s+(?:-[a-z]*i|--in-place)|\bperl\s+-[a-z]*i|\bchmod\b|\btruncate\b|\btouch\b|\bdd\b|\brsync\b|Set-Content|Add-Content|Out-File|Copy-Item|Move-Item|New-Item|WriteAllText|writeFile)/i;
+const SHELL_PROTECTED_PATH = /(?:^|[\s'"=:/\\(<>|;&])\.?(?:\.git[\\/]+(?:hooks(?:[\\/]|\b)|config\b)|\.(?:oasis|claude)[\\/](?:settings(?:\.local)?\.json|hooks[\\/]|plugins[\\/])|\.mcp\.json|\.lsp\.json|\.vscode[\\/](?:settings|tasks|launch|mcp)\.json|\.envrc\b|\.husky[\\/]|\.devcontainer[\\/]|\.(?:cursor|gemini|codex)[\\/](?:mcp\.json|hooks\.json|settings\.json|config\.toml)|\.pre-commit-config\.ya?ml|\.pnpmfile\.c?js|\.yarnrc\.yml)/i;
+const SHELL_WRITE = /(?:>>?|\btee\b|\bcp\b|\bmv\b|\bln\b|\binstall\b|\bsed\s+(?:-[a-z]*i|--in-place)|\bperl\s+-[a-z]*i|\bchmod\b|\btruncate\b|\btouch\b|\bdd\b|\brsync\b|\bsponge\b|\bopen\s*\(|\.write_(?:text|bytes)\b|Set-Content|Add-Content|Out-File|Copy-Item|Move-Item|New-Item|WriteAllText|writeFile)/i;
 const GIT_CONFIG_EXEC = /\bgit\s+(?:-c\s+\S+\s+)*config\b(?![^;&|]*\s--(?:get|list|unset)\b)[^;&|]*\b(?:core\.(?:hookspath|fsmonitor|sshcommand|pager|editor|askpass)|alias\.|filter\.|diff\.\S+\.textconv|credential\.helper|include\.path|includeif\.)/i;
 
+// `cd .git/hooks && echo ... > pre-commit` names the file relative to a folder
+// it changed into first.
+const SHELL_CD_PROTECTED = /\b(?:cd|pushd)\s+(?:\.\/)?\.(?:git|oasis|claude|husky|devcontainer|vscode|cursor|gemini|codex)(?:[\\/]|\s|$|[;&|)])/i;
+
 export function protectedShellWrite(command) {
-  const text = String(command || '');
+  // Empty and split quotes (.gi""t, .g'i't) spell the same path to the shell.
+  const text = String(command || '').replace(/["']/g, '');
   if (GIT_CONFIG_EXEC.test(text)) return 'it sets a git config key that makes git run a command';
-  if (SHELL_PROTECTED_PATH.test(text) && SHELL_WRITE.test(text)) return 'it appears to write a protected configuration file (settings, hooks, plugins, MCP/LSP servers or git hooks/config), which could grant permissions or run commands on the next run';
+  if ((SHELL_PROTECTED_PATH.test(text) || SHELL_CD_PROTECTED.test(text)) && SHELL_WRITE.test(text)) return 'it appears to write a protected configuration file (settings, hooks, plugins, MCP/LSP servers or git hooks/config), which could grant permissions or run commands on the next run';
   return null;
 }
