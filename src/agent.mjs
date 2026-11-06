@@ -1981,8 +1981,19 @@ export function isHardQuotaError(text) {
 // RetryInfo. Those clear in under a minute, so they are worth one wait on the
 // same model instead of a billing error. Returns the wait in ms, or null.
 const SHORT_RATE_LIMIT_MAX_MS = 90000;
+// Also covers free endpoints that state a short wait outright, e.g.
+// Pollinations' HTTP 402 "1 reply every 45 seconds per IP. Retry after 43s"
+// (seen live): an explicit hint of 90 s or less, with no daily, monthly or
+// credit wording, is a rate window, not an exhausted balance.
+const EXPLICIT_SHORT_WAIT = /\bretry (?:after|in) (\d+(?:\.\d+)?) ?s(?:ec(?:ond)?s?)?\b/i;
+const LONG_LIMIT_WORDING = /PerDay|per ?day|daily|per ?month|monthly|credit|balance|insufficient|billing/i;
 export function shortRateLimitMs(body) {
   const text = String(body || '');
+  const explicit = EXPLICIT_SHORT_WAIT.exec(text);
+  if (explicit && !/PerMinute|per ?minute/i.test(text) && !LONG_LIMIT_WORDING.test(text)) {
+    const ms = Number(explicit[1]) * 1000;
+    return Number.isFinite(ms) && ms <= SHORT_RATE_LIMIT_MAX_MS ? Math.ceil(ms) + 500 : null;
+  }
   if (!/PerMinute|per ?minute/i.test(text) || /PerDay|per ?day/i.test(text)) return null;
   const delay = /"retryDelay"\s*:\s*"(\d+(?:\.\d+)?)s"/.exec(text) || /retry in (\d+(?:\.\d+)?)s\b/i.exec(text);
   const ms = delay ? Number(delay[1]) * 1000 : 20000;
@@ -2729,7 +2740,7 @@ async function requestCompletionRaw(session, options = {}) {
           continue;
         }
       }
-      const hintedWait = status === 429 && shortWaits < shortWaitBudget ? shortRateLimitMs(errorBody) : null;
+      const hintedWait = (status === 429 || status === 402) && shortWaits < shortWaitBudget ? shortRateLimitMs(errorBody) : null;
       // After a failed wait, wait at least 10 s more each time, capped by the
       // one-minute window the limit is measured over.
       const shortWait = hintedWait === null ? null : Math.max(hintedWait, Math.min(60000, shortWaits * 10000));

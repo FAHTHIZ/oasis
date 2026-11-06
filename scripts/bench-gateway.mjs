@@ -62,19 +62,22 @@ const LOOPBACK_HOST = /^(?:localhost|127(?:\.\d{1,3}){3}|\[::1\])(?::\d+)?$/i;
 
 export function createGateway(options, { fetchImpl = fetch, now = Date.now, wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms)) } = {}) {
   let chain = Promise.resolve();
-  let lastStart = 0;
+  let lastEnd = 0;
   let count = 0;
   const log = async (entry) => { if (options.log) await appendFile(options.log, JSON.stringify(entry) + '\n'); };
-  // One request at a time, at least minIntervalMs apart, so a client that fires
-  // parallel requests cannot push the shared upstream over its limit.
+  // One request at a time, and at least minIntervalMs from the end of the
+  // previous reply to the next request: Pollinations counts its "1 reply every
+  // 45 seconds" window from the reply, so spacing request starts was not
+  // enough (a 5 s reply plus 47 s spacing got HTTP 402 "Retry after 43s").
   const slot = () => {
+    let release;
+    const finished = new Promise((resolve) => { release = resolve; });
     const turn = chain.then(async () => {
-      const gap = lastStart + options.minIntervalMs - now();
-      if (lastStart && gap > 0) await wait(gap);
-      lastStart = now();
+      const gap = lastEnd + options.minIntervalMs - now();
+      if (lastEnd && gap > 0) await wait(gap);
     });
-    chain = turn.catch(() => {});
-    return turn;
+    chain = turn.then(() => finished).catch(() => {});
+    return turn.then(() => () => { lastEnd = now(); release(); });
   };
   return http.createServer(async (req, res) => {
     const url = new URL(req.url, 'http://gateway');
@@ -107,7 +110,7 @@ export function createGateway(options, { fetchImpl = fetch, now = Date.now, wait
     const id = ++count;
     const requestedModel = body.model;
     body.model = options.model;
-    await slot();
+    const release = await slot();
     const started = now();
     const headers = { 'content-type': 'application/json' };
     if (process.env.OASIS_GATEWAY_UPSTREAM_KEY) headers.authorization = 'Bearer ' + process.env.OASIS_GATEWAY_UPSTREAM_KEY;
@@ -124,6 +127,8 @@ export function createGateway(options, { fetchImpl = fetch, now = Date.now, wait
       if (!res.headersSent) res.writeHead(502, { 'content-type': 'application/json' });
       res.end(JSON.stringify({ error: { message: 'Gateway could not reach the upstream: ' + error.message } }));
       await log({ id, at: new Date(started).toISOString(), ms: now() - started, status: 502, requestedModel, error: redactSecretText(String(error.message)) });
+    } finally {
+      release();
     }
   });
 }
