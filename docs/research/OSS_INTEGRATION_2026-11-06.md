@@ -493,6 +493,25 @@ Verified:
 - Unchanged: stopwords, NFKC tokenizing for sessions, name/description weighed double (now field boosts), the phrase ×1.5 and query-coverage factors, recency and recall boosts, and the two-excerpts-per-session cap.
 - Queries are passed to MiniSearch already tokenized (plain split), so stemmed terms are not stemmed twice.
 
+## 26. HTML extraction complexity fix (follow-up to §16)
+
+§16 rejected parse5 and htmlparser2, which are quadratic on deep nesting, and kept the OASIS parser. That left the extraction passes as the bottleneck. `cleanConditionally`, `looksLikeProse` and `scoreCandidates` called `textOf`, `walk` and `linkTextLength` on each candidate, so every node's subtree was walked once per ancestor.
+
+Fix: `statsOf(node, memo)` caches per-subtree aggregates for each pass: link count, link-text length, has pre / h1 / h1–h3, comma count, and the exact length of `textOf(n).replace(/\s+/g,' ').trim()`. That length is kept additive as a collapsed-run triple (size, starts-with-space, ends-with-space). A pass only rewrites a node's children after deciding about that node, so the cache stays valid within the pass.
+
+Measured on Node 22, sandbox:
+
+| Input | Before | After |
+|---|---|---|
+| 100k nested divs (1.1 MB) | 4490 ms | 518 ms |
+| 20k nested link blocks (1.0 MB) | 4059 ms | 508 ms |
+| 40k nested link blocks | 8606 ms | ~1 s |
+| Real pages (Wikipedia, MDN, GitHub, Node util docs, HN, Python re docs) | 17–153 ms | 6–127 ms |
+
+Equivalence: the full serialized result (title, description, markdown, flags) was compared old against new. It was identical on 4000 seeded random documents (nav/sidebar classes, hidden/role attributes, CJK commas, whitespace runs) and on all six real pages. Regression test: `test/html-markdown.test.mjs` "extraction stays linear…" (bound 4 s; the old code takes 8.6 s).
+
+Also evaluated and deferred: replacing the ~270-line flag loop in `src/cli.mjs` with commander or yargs. That loop encodes exact Claude Code, Codex, Gemini CLI and Aider compatibility: optional values (`-p [prompt]`, `-r [id]`, `-w [name]`, `--debug [cats]`), variadic `--betas`, and unknown arguments falling through to subcommands. A wholesale swap carries high regression risk for no user-visible gain. Revisit with a declarative flag table plus `util.parseArgs` if the flag set keeps growing.
+
 ## Next
 
 - Decided against Ajv validation in front of built-in tools: they already reject bad input with specific messages ("edit_file needs old_string … got path"), coerce numeric strings, and accept documented argument aliases that a strict schema would refuse.
