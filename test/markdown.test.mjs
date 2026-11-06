@@ -56,3 +56,17 @@ test('a notice written mid-stream does not split or repeat the reply', async () 
   assert.equal(screen.match(/word0/g).length, 1, screen);
   assert.match(screen, /↳ sent: note\n● word0 word1 word2 word3/);
 });
+
+test('terminal inline Markdown follows CommonMark via marked', async () => {
+  const { renderInline } = await import('../src/markdown.mjs');
+  const plain = (s) => s.replace(/\x1b\]8;;[^\x07]*\x07/g, '').replace(/\x1b\[\d+m/g, '');
+  // Nested emphasis and escapes.
+  assert.match(renderInline('**b _c_**'), /\x1b\[1mb \x1b\[3mc/);
+  assert.equal(plain(renderInline('\\*not italic\\*')), '*not italic*');
+  // A URL containing parentheses stays one link.
+  const link = renderInline('[w](https://e.com/a_(b))');
+  assert.ok(link.includes('\x1b]8;;https://e.com/a_(b)\x07'));
+  assert.equal(plain(link), 'w');
+  // Code spans keep their content literal.
+  assert.equal(plain(renderInline('`a ** b`')), 'a ** b');
+});
