@@ -192,6 +192,11 @@ test('diffs show additions and removals for edits', () => {
   assert.equal(diff.removed, 1);
   assert.match(diff.text, /- b/);
   assert.match(diff.text, /\+ B/);
+  // A one-line change in a 600-line file is one removal and one addition (the
+  // old O(n*m) table gave up past 250,000 cells and showed the whole file).
+  const file = Array.from({ length: 600 }, (_, i) => 'const v' + i + ' = ' + i + ';').join('\n');
+  const big = renderDiff(file, file.replace('const v300 = 300;', 'const v300 = 3000;'), { color: false });
+  assert.deepEqual([big.added, big.removed], [1, 1]);
   const shown = describeEdit({ name: 'edit_file', args: { path: 'x.js', old_string: 'one', new_string: 'two' }, result: { ok: true } }, { color: false });
   assert.match(shown, /Updated x\.js with 1 addition and 1 removal/);
   assert.equal(describeEdit({ name: 'edit_file', args: {}, result: { error: 'nope' } }), '');

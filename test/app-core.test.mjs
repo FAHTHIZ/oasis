@@ -42,6 +42,22 @@ test('line diff marks additions and deletions', () => {
   const diff = lineDiff('a\nb\nc', 'a\nB\nc');
   assert.ok(diff.some((d) => d.type === 'del' && d.text === 'b'));
   assert.ok(diff.some((d) => d.type === 'add' && d.text === 'B'));
+  // Two far-apart edits in a long file: only the changed span plus context.
+  const long = Array.from({ length: 3000 }, (_, i) => 'line ' + i).join('\n');
+  const changed = long.replace('line 10\n', 'LINE 10\n').replace('line 2990\n', 'LINE 2990\n');
+  const ops = lineDiff(long, changed);
+  assert.equal(ops.filter((d) => d.type === 'del').length, 2);
+  assert.equal(ops[0].line, 8);
+});
+
+test('edit_file returns a valid unified diff that applies to the old file', async () => {
+  const { applyPatch } = await import('diff');
+  const before = Array.from({ length: 40 }, (_, i) => 'row ' + i).join('\n') + '\n';
+  const ws = await project([{ path: 'big.txt', content: before }]);
+  const out = await executeTool('edit_file', { path: 'big.txt', old_string: 'row 20\n', new_string: 'row twenty\n' }, { workspace: ws });
+  const patch = out.slice(out.indexOf('--- a/'));
+  assert.match(patch, /^@@ -18,7 \+18,7 @@$/m);
+  assert.equal(applyPatch(before, patch), await ws.read('big.txt'));
 });
 
 test('glob patterns match like a shell', () => {

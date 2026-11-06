@@ -287,12 +287,37 @@ plugin archives) is kept: it rejects symlinks using external attributes,
 duplicate and case-colliding paths, and Windows-reserved names, and fflate's
 unzip filter does not expose the external attributes needed for the symlink check.
 
+### 9. Diffs: jsdiff
+
+Replaced: `lineDiff` in `src/markdown.mjs` (O(n×m) LCS table, all-or-nothing
+past 250,000 cells), `lineDiff` in `app/core/workspace.mjs` (same algorithm
+after trimming the common prefix and suffix), `unified()` in
+`app/core/tools.mjs` (one hunk, headers without counts) and `renderPlainDiff`
+in `src/ast-grep.mjs` (bare `@@` separators). All now use `diff` 9.0.0:
+`diffArrays` with `maxEditLength: 5000, timeout: 250` for previews, and
+`createTwoFilesPatch` with `FILE_HEADERS_ONLY` for patches. Measured:
+5,000 lines with two edits diffs in 1.4 ms; the worst case (every line
+different, 5,000 lines) stops at the 250 ms bound (measured 256 ms) and falls back to a full replacement.
+A regression test against the old code confirms that the 600-line case failed before
+and passes now. The patch the browser app's edit tool returns is checked with
+`applyPatch`.
+
+### 10. Decision: read-only command classifier stays on the string splitter
+
+`readOnlyShellLine` (auto-approval of read-only shell lines) refuses any line
+containing `$`, backticks, `<`, `>` (beyond the harmless redirects it strips),
+parentheses, braces, newlines or a lone `&` before it splits. What remains is
+words, quotes and the `;`, `&&`, `||` and `|` separators, where the splitter
+and bash agree. The places where they could disagree (ANSI-C quoting,
+substitutions, heredocs, subshells, functions) are already refused, and a
+`#` comment only makes the check stricter. Moving it to the tree-sitter AST
+would add no safety and adds an asynchronous dependency to an
+approval path; risk analysis (`shell-risk.mjs`) already uses the AST.
+
 ## Next
 
 - Candidate: validate tool-call arguments against tool schemas with Ajv before execution (Claude Code returns InputValidationError). Needs care: built-in tools accept alias argument names.
 - Item 8: observation masking (JetBrains, arXiv 2508.21433), measured with bench/tokens.
 - Item 9: `@anthropic-ai/sandbox-runtime` for network filtering.
-- Move `read-only-commands.mjs` from `splitShell` to the tree-sitter shell AST.
-- Replace the hand-written diff code with `diff` (jsdiff) where measurement supports it.
 - Merge the definition and noise queries into one pass, or parse in a worker
   pool, if first-scan latency matters for large repositories.
