@@ -4888,8 +4888,13 @@ async function executeMappedMcpToolWithKernel(session, name, args, context, opti
   const outputSchema = mapped && mapped.outputSchema
     ? {
       type: 'object',
-      if: { required: ['structuredContent'] },
-      then: { properties: { structuredContent: mapped.outputSchema } }
+      anyOf: [
+        {
+          properties: { structuredContent: mapped.outputSchema },
+          required: ['structuredContent']
+        },
+        { not: { required: ['structuredContent'] } }
+      ]
     }
     : {};
 

@@ -56,7 +56,7 @@ function describeErrors(errors) {
   return errors.slice(0, 8).map((error) => {
     const at = error.instancePath || '/';
     if (error.keyword === 'required') return at + ' is missing required property "' + error.params.missingProperty + '"';
-    if (error.keyword === 'additionalProperties') return at + ' contains unsupported property "' + error.params.additionalProperty + '"';
+    if (error.keyword === 'additionalProperties') return at + ' contains unexpected property "' + error.params.additionalProperty + '"';
     if (error.keyword === 'type') return at + ' must be ' + error.params.type + ' (expected ' + error.params.type + ')';
     return at + ' ' + (error.message || 'is invalid');
   });
