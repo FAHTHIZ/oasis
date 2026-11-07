@@ -1,17 +1,26 @@
-export const TOOL_CAPABILITIES = ['read', 'write', 'execute', 'network', 'mcp', 'browser', 'git', 'secret'];
+import { redactSecretText } from './secret-shield.mjs';
+import { validateToolArguments } from './tool-schema-validation.mjs';
+
+export const TOOL_CAPABILITIES = Object.freeze(['read', 'write', 'execute', 'network', 'mcp', 'browser', 'git', 'secret']);
+export const TOOL_RISK_LEVELS = Object.freeze(['low', 'medium', 'high', 'critical']);
 
 export function defineTool(definition) {
   if (!definition || typeof definition !== 'object') throw new TypeError('Tool definition must be an object.');
   const name = String(definition.name || '');
   if (!/^[a-z][a-z0-9_.-]*$/i.test(name)) throw new Error('Invalid tool name: ' + name);
   if (!Array.isArray(definition.capabilities) || definition.capabilities.length === 0) throw new Error('Tool must declare at least one capability.');
+  const capabilities = [...new Set(definition.capabilities.map(String))];
+  const unknownCapabilities = capabilities.filter((capability) => !TOOL_CAPABILITIES.includes(capability));
+  if (unknownCapabilities.length) throw new Error('Unknown tool capability: ' + unknownCapabilities.join(', '));
+  const risk = String(definition.risk || 'medium');
+  if (!TOOL_RISK_LEVELS.includes(risk)) throw new Error('Unknown tool risk level: ' + risk);
   if (typeof definition.run !== 'function') throw new Error('Tool must provide a run function.');
   return Object.freeze({
     name,
     title: String(definition.title || name),
     description: String(definition.description || ''),
-    capabilities: Object.freeze([...definition.capabilities]),
-    risk: definition.risk || 'medium',
+    capabilities: Object.freeze(capabilities),
+    risk,
     inputSchema: definition.inputSchema || {},
     outputSchema: definition.outputSchema || {},
     timeoutMs: Number(definition.timeoutMs) || 120000,
@@ -57,12 +66,28 @@ export function evaluateToolPolicy(tool, input, policy) {
   return result;
 }
 
-export function validateToolInput(tool, input) {
+export async function validateToolInput(tool, input) {
   const value = input && typeof input === 'object' && !Array.isArray(input) ? input : {};
-  const schema = tool.inputSchema || {};
-  const required = Array.isArray(schema.required) ? schema.required : [];
-  const missing = required.filter((name) => !(name in value));
-  if (missing.length) throw new Error('Missing required input for ' + tool.name + ': ' + missing.join(', '));
+  const validation = await validateToolArguments(tool.inputSchema, value);
+  if (!validation.valid) {
+    const detail = validation.schemaError || (validation.errors || []).join('; ');
+    throw new Error('Invalid input for ' + tool.name + ': ' + (detail || 'does not match its JSON Schema.'));
+  }
+  return value;
+}
+
+// Audit records redact fields named like credentials even when their value is
+// a short or synthetic token, then run the shared provider-secret scanner.
+const SENSITIVE_AUDIT_FIELD = /^(?:(?:.*[_-])?(?:api[_-]?key|access[_-]?key|token|secret|password|passwd|credential|credentials|authorization|proxy[_-]?authorization|cookie|private[_-]?key|client[_-]?secret|database[_-]?url|connection[_-]?string|dsn))$/i;
+
+export function redactAuditValue(value, depth = 0, fieldName = '') {
+  if (depth > 6) return '[depth-limit]';
+  if (fieldName && SENSITIVE_AUDIT_FIELD.test(String(fieldName)) && value !== null && value !== undefined) return '[redacted]';
+  if (typeof value === 'string') return redactSecretText(value);
+  if (Array.isArray(value)) return value.map((item) => redactAuditValue(item, depth + 1, fieldName));
+  if (value && typeof value === 'object') {
+    return Object.fromEntries(Object.entries(value).map(([key, item]) => [key, redactAuditValue(item, depth + 1, key)]));
+  }
   return value;
 }
 
@@ -75,21 +100,62 @@ export async function runTool(tool, input, options = {}) {
   if (decision.decision === 'ask') {
     return { ok: false, tool: tool.name, decision, pendingApproval: true, audit: decision.audit ? buildAuditRecord(tool, input, decision, null, options) : null };
   }
-  const normalizedInput = validateToolInput(tool, input);
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(new Error('Tool timed out after ' + tool.timeoutMs + ' ms')), tool.timeoutMs);
-  const signal = options.signal || controller.signal;
+
+  let normalizedInput;
   try {
-    const output = await tool.run(normalizedInput, { signal, policy, sandbox: decision.sandbox, env: options.env || process.env, cwd: options.cwd || process.cwd() });
+    normalizedInput = await validateToolInput(tool, input);
+  } catch (error) {
+    const result = { ok: false, tool: tool.name, decision, error: error && error.message || String(error) };
+    if (decision.audit) result.audit = buildAuditRecord(tool, input, decision, result, options);
+    return result;
+  }
+
+  const controller = new AbortController();
+  let timedOut = false;
+  const externalSignal = options.signal;
+  const forwardAbort = () => {
+    if (!controller.signal.aborted) controller.abort(externalSignal.reason || new Error('Tool was cancelled.'));
+  };
+  if (externalSignal) {
+    if (externalSignal.aborted) forwardAbort();
+    else externalSignal.addEventListener('abort', forwardAbort, { once: true });
+  }
+  const timeout = setTimeout(() => {
+    timedOut = true;
+    if (!controller.signal.aborted) controller.abort(new Error('Tool timed out after ' + tool.timeoutMs + ' ms'));
+  }, tool.timeoutMs);
+  let onAbort;
+  const aborted = new Promise((_, reject) => {
+    onAbort = () => reject(controller.signal.reason instanceof Error ? controller.signal.reason : new Error('Tool was cancelled.'));
+    if (controller.signal.aborted) onAbort();
+    else controller.signal.addEventListener('abort', onAbort, { once: true });
+  });
+  try {
+    const running = Promise.resolve().then(() => tool.run(normalizedInput, {
+      signal: controller.signal,
+      policy,
+      sandbox: decision.sandbox,
+      env: options.env || process.env,
+      cwd: options.cwd || process.cwd()
+    }));
+    const output = await Promise.race([running, aborted]);
     const result = { ok: true, tool: tool.name, decision, output: output === undefined ? null : output };
     if (decision.audit) result.audit = buildAuditRecord(tool, normalizedInput, decision, result, options);
     return result;
   } catch (error) {
-    const result = { ok: false, tool: tool.name, decision, error: error && error.message || String(error) };
+    const result = {
+      ok: false,
+      tool: tool.name,
+      decision,
+      error: error && error.message || String(error),
+      ...(timedOut ? { timedOut: true } : controller.signal.aborted ? { cancelled: true } : {})
+    };
     if (decision.audit) result.audit = buildAuditRecord(tool, normalizedInput, decision, result, options);
     return result;
   } finally {
     clearTimeout(timeout);
+    controller.signal.removeEventListener('abort', onAbort);
+    if (externalSignal) externalSignal.removeEventListener('abort', forwardAbort);
   }
 }
 
@@ -101,19 +167,10 @@ function buildAuditRecord(tool, input, decision, result, options) {
     risk: tool.risk,
     decision: decision.decision,
     sandbox: decision.sandbox,
-    input: redact(input),
-    output: result && result.ok ? redact(result.output) : null,
+    input: redactAuditValue(input),
+    output: result && result.ok ? redactAuditValue(result.output) : null,
     error: result && result.error || null,
     cwd: options.cwd || process.cwd()
   });
 }
 
-const SECRET_PATTERN = /(?:api[_-]?key|token|secret|password|credential)[\s:=]{1,4}([^\s"']{8,})/gi;
-
-function redact(value, depth = 0) {
-  if (depth > 6) return '[depth-limit]';
-  if (typeof value === 'string') return value.replace(SECRET_PATTERN, (match, secret) => match.replace(secret, '[redacted]'));
-  if (Array.isArray(value)) return value.map((item) => redact(item, depth + 1));
-  if (value && typeof value === 'object') return Object.fromEntries(Object.entries(value).map(([key, item]) => [key, redact(item, depth + 1)]));
-  return value;
-}
