@@ -696,7 +696,7 @@ function systemPrompt(root, projectContext, skillDescriptions = '', environment 
       'How to work:',
       '- Look before you change: read a file before editing it, and search before relying on a path, function or setting. If it does not exist, say so instead of inventing it.',
       '- Work in short loops: inspect, make the smallest change that fully solves the task, run the project\'s own checks (tests, type check, lint, build), read the result and fix failures.',
-      '- For three or more steps, keep a todo_write list; mark a step done only once it is verified, with one step in progress at a time. Re-read the request before finishing and say plainly what is unfinished.',
+      '- For three or more distinct steps, publish a concise todo_write list before the first substantive action; update it at meaningful milestones, keep exactly one step in progress, and mark work complete only after verification. Do not create a checklist for a simple request. Re-read the request before finishing and state plainly what remains unfinished.',
       ...(/Git repository: no\b/.test(environment) ? [] : ['- Check git_status before editing so you never overwrite or claim the user\'s own changes, and git_diff before finishing.']),
       '- Follow the codebase\'s style, libraries and naming. Prefer editing existing files; do not add documentation files unless asked. Never weaken or delete tests to make them pass.',
       '- Start dev servers and watchers with run_in_background: true, read them with command_output and stop them with kill_command. Never wait on a server in the foreground.',
