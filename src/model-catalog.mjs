@@ -15,6 +15,7 @@ import { getProvider, providerForEndpoint } from './provider-registry.mjs';
 export const MODEL_CATALOG_URL = 'https://models.dev/api.json';
 const SNAPSHOT = new URL('./data/model-catalog.json', import.meta.url);
 const REFRESH_MS = 24 * 60 * 60 * 1000;
+const CACHE_SCHEMA_VERSION = 2;
 
 // Hosts outside provider-registry.mjs whose catalog entry has no `api` base
 // URL. Registry providers carry their models.dev id in their `catalog` field.
@@ -280,7 +281,9 @@ export async function refreshModelCatalog({ env = process.env, fetchImpl = globa
   let file;
   try { file = catalogCachePath(env); } catch { return false; }
   try {
-    if (!force && now - fs.statSync(file).mtimeMs < REFRESH_MS) return false;
+    const cache = readCatalogFile(file);
+    const age = now - fs.statSync(file).mtimeMs;
+    if (!force && age < REFRESH_MS && cache && cache.schemaVersion >= CACHE_SCHEMA_VERSION) return false;
   } catch {}
   try {
     const response = await fetchImpl(MODEL_CATALOG_URL, { signal: AbortSignal.timeout(15_000), headers: { accept: 'application/json' } });
@@ -289,7 +292,12 @@ export async function refreshModelCatalog({ env = process.env, fetchImpl = globa
     if (Object.keys(providers).length < 5) return false;
     fs.mkdirSync(path.dirname(file), { recursive: true });
     const temp = file + '.' + process.pid + '.tmp';
-    fs.writeFileSync(temp, JSON.stringify({ source: MODEL_CATALOG_URL, fetchedAt: new Date(now).toISOString(), providers }));
+    fs.writeFileSync(temp, JSON.stringify({
+      source: MODEL_CATALOG_URL,
+      schemaVersion: CACHE_SCHEMA_VERSION,
+      fetchedAt: new Date(now).toISOString(),
+      providers
+    }));
     fs.renameSync(temp, file);
     resetModelCatalogForTest();
     return true;
