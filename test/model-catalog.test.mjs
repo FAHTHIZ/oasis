@@ -5,7 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import {
   findCatalogModel, catalogContextWindow, catalogPrice, providerForBaseURL, refreshModelCatalog,
-  catalogRefreshDisabled, catalogCachePath, catalogImageInput, catalogReasoningReplay, loadModelCatalog, trimCatalog, resetModelCatalogForTest
+  catalogRefreshDisabled, catalogCachePath, catalogImageInput, catalogToolCalling, catalogReasoningReplay, loadModelCatalog, trimCatalog, resetModelCatalogForTest
 } from '../src/model-catalog.mjs';
 import { contextWindowSize } from '../src/context.mjs';
 import { priceFor } from '../src/pricing.mjs';
@@ -19,7 +19,10 @@ const RAW = {
     'acme-text': { limit: { context: 64000 }, modalities: { input: ['text'], output: ['text'] } },
     'acme-think': { limit: { context: 64000 }, reasoning: true, interleaved: { field: 'reasoning_content' } },
     'acme-think-bool': { limit: { context: 64000 }, reasoning: true, interleaved: true },
-    'acme-details': { limit: { context: 64000 }, reasoning: true, interleaved: { field: 'reasoning_details' } }
+    'acme-details': { limit: { context: 64000 }, reasoning: true, interleaved: { field: 'reasoning_details' } },
+    'acme-tool': { limit: { context: 64000 }, tool_call: true },
+    'acme-no-tool': { limit: { context: 64000 }, tool_call: false },
+    'acme-tool-unknown': { limit: { context: 64000 } }
   } },
   router: { id: 'router', api: 'https://router.test/api', models: { 'acme/acme-1': { limit: { context: 200000 }, cost: { input: 1.2, output: 2.4 } } } },
   b: { models: {} }, c: { models: {} }, d: { models: {} }
@@ -85,6 +88,17 @@ test('trimCatalog keeps only limits and prices', () => {
   assert.equal(trimmed.acme.models.junk, undefined);
   assert.deepEqual(trimmed.acme.models['acme-eye'], { context: 64000, image: true });
   assert.deepEqual(trimmed.acme.models['acme-1'], { context: 300000, output: 8000, cost: { input: 1, output: 2, cache_read: 0.1, tiers: [{ input: 2, output: 4, cache_read: 0.2, size: 128000 }] } });
+  assert.equal(trimmed.acme.models['acme-tool'].toolCall, true);
+  assert.equal(trimmed.acme.models['acme-no-tool'].toolCall, false);
+  assert.equal(trimmed.acme.models['acme-tool-unknown'].toolCall, undefined);
+});
+
+test('tool-call support remains true, false, or unknown in the catalog adapter', async (t) => {
+  const { env } = await customCatalog(t);
+  assert.equal(catalogToolCalling('acme-tool', { env }), true);
+  assert.equal(catalogToolCalling('acme-no-tool', { env }), false);
+  assert.equal(catalogToolCalling('acme-tool-unknown', { env }), null);
+  assert.equal(catalogToolCalling('not-listed', { env }), null);
 });
 
 test('refresh downloads models.dev into the user cache once a day and the newer cache wins', async (t) => {
