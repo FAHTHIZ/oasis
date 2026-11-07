@@ -42,7 +42,7 @@ export function createToolRunner(handlers = [], options = {}) {
       if (decision.decision === 'ask') {
         return { ok: false, tool: tool.name, decision, pendingApproval: true };
       }
-      const normalizedInput = validateToolInput(tool, input);
+      const normalizedInput = await validateToolInput(tool, input);
       try {
         const output = await tool.run(normalizedInput, {
           signal: context.signal,
