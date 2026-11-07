@@ -30,6 +30,8 @@ The model proposes responses and tool calls. OASIS owns the runtime decisions ar
 | Agent orchestration | `src/agent.mjs` | Creates sessions, coordinates streamed turns, dispatches tool calls, handles retries and context recovery. |
 | Provider request adapters | `src/provider-requests.mjs` | Builds OpenAI Chat Completions, OpenAI Responses and Anthropic request bodies; normalizes endpoints and tool schemas. |
 | Provider streaming | `src/provider-stream.mjs` | Parses provider SSE streams, normalizes streamed events and tool-call deltas, preserves provider usage metadata, and assembles the completed streamed response. |
+| Tool input validation | `src/tool-schema-validation.mjs` | Validates model-supplied arguments against the advertised JSON Schema before permission checks or execution; caches compiled validators. |
+| Tool scheduling | `src/tool-batch-scheduler.mjs` | Groups adjacent read-only, specialist-review and subagent calls without crossing side-effect ordering barriers. |
 | Provider adapters | `src/provider-registry.mjs`, `app/core/providers.mjs`, `src/config.mjs`, `src/fallback-chain.mjs`, `src/model-catalog.mjs` | The native runtime registry supplies built-in and user-configured providers. The connected browser workspace uses a browser-compatible catalogue and adapter surface; protocol and feature parity with the native runtime must not be assumed. |
 | Workspace tools | `src/tools.mjs`, `src/workspace-files.mjs` | File access, search, edits, patches, command execution and workspace-scoped operations. |
 | Permissions | `src/permissions.mjs`, `src/permission-modes.mjs`, `src/settings.mjs` | Tool rules, permission modes, workspace trust and layered settings. |
