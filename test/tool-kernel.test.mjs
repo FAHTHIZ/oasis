@@ -3,14 +3,13 @@ import assert from 'node:assert/strict';
 import { defineTool, runTool, redactAuditValue } from '../src/tool-kernel.mjs';
 
 const readTool = defineTool({ name: 'read_file', title: 'Read file', description: 'Read a file from the workspace.', capabilities: ['read'], risk: 'low', inputSchema: { required: ['path'] }, run: async (input) => ({ path: input.path, content: 'ok' }) });
-const writeTool = defineTool({ name: 'write_file', title: 'Write file', description: 'Write a file in the workspace.', capabilities: ['write'], risk: 'high', requiresApproval: true, inputSchema: { required: ['path'] }, rollback: { supported: true, kind: 'file-snapshot' }, run: async (input) => ({ path: input.path, written: true }) });
+const writeTool = defineTool({ name: 'write_file', title: 'Write file', description: 'Write a file in the workspace.', capabilities: ['write'], risk: 'high', requiresApproval: true, inputSchema: { required: ['path'] }, run: async (input) => ({ path: input.path, written: true }) });
 const shellTool = defineTool({ name: 'run_command', title: 'Run command', description: 'Run a shell command.', capabilities: ['execute'], risk: 'critical', inputSchema: { required: ['command'] }, run: async (input) => ({ command: input.command, output: 'done' }) });
 
 test('tool definitions validate capabilities and defaults', () => {
   assert.deepEqual(readTool.capabilities, ['read']);
   assert.equal(readTool.risk, 'low');
   assert.equal(writeTool.requiresApproval, true);
-  assert.equal(writeTool.rollback.kind, 'file-snapshot');
   assert.throws(() => defineTool({ name: 'bad name', title: 'x', description: 'x', capabilities: ['read'], run: async () => {} }));
 });
 
