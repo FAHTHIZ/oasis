@@ -4,7 +4,7 @@ import {
   inferToolRequirement
 } from '@blockrun/router-core';
 import { countTextTokens } from './tokens.mjs';
-import { catalogToolCalling } from './model-catalog.mjs';
+import { catalogImageInput, catalogToolCalling } from './model-catalog.mjs';
 
 const SCORING = DEFAULT_ROUTING_CONFIG.scoring;
 const MIN_CONFIDENCE = SCORING.confidenceThreshold;
@@ -132,24 +132,39 @@ export function selectTaskModel(prompt, currentModel, routing = {}, options = {}
     };
   }
   const classification = classifyTask(prompt, options.hint);
+  const requiresTools = classification.requiresTools === true;
+  const requiresImages = options.requiresImages === true;
   let requested = classification.tier === 'easy' ? easyModel : strongModel;
   let tier = classification.tier;
   let reason = classification.reason;
-  if (classification.requiresTools && requested) {
+
+  if (requested && (requiresTools || requiresImages)) {
     const catalogOptions = {
       baseURL: options.baseURL,
       provider: options.provider,
       env: options.env || process.env
     };
-    const requestedToolCalling = catalogToolCalling(requested, catalogOptions);
-    const currentToolCalling = catalogToolCalling(baseModel, catalogOptions);
-    // Only an explicit false blocks a route. If the selected model is listed
-    // without tool support, keep the current model unless it is also listed
-    // as unsupported. Unknown metadata never blocks a user's configured model.
-    if (requestedToolCalling === false && currentToolCalling !== false) {
-      requested = baseModel;
-      tier = 'strong';
-      reason += '; kept the current model because the selected model is listed as not supporting tool calls';
+    const missingCapabilities = (model) => {
+      const missing = [];
+      // Explicit negative metadata blocks a candidate. Unknown stays eligible,
+      // because aliases and self-hosted model IDs may be absent from the catalog.
+      if (requiresTools && catalogToolCalling(model, catalogOptions) === false) missing.push('tool calling');
+      if (requiresImages && catalogImageInput(model, catalogOptions) === false) missing.push('image input');
+      return missing;
+    };
+    const candidates = [requested, strongModel, baseModel].filter((model, index, all) => model && all.indexOf(model) === index);
+    const rejected = missingCapabilities(requested);
+    if (rejected.length) {
+      const fallback = candidates.slice(1).find((model) => missingCapabilities(model).length === 0);
+      if (fallback) {
+        requested = fallback;
+        tier = 'strong';
+        reason += '; selected ' + fallback + ' because the requested model is catalogued without required ' + rejected.join(' and ');
+      } else {
+        requested = baseModel;
+        tier = 'strong';
+        reason += '; no configured candidate is catalogued for all required capabilities (' + rejected.join(' and ') + '); retained the configured model';
+      }
     }
   }
   return {
@@ -157,7 +172,8 @@ export function selectTaskModel(prompt, currentModel, routing = {}, options = {}
     tier,
     model: requested || baseModel,
     strongModel,
-    requiresTools: classification.requiresTools,
+    requiresTools,
+    requiresImages,
     reason
   };
 }
