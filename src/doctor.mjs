@@ -48,7 +48,7 @@ export async function workspaceDoctor(root, { env = process.env, session = null 
       permissionMode: (session && session.permissions && session.permissions.mode) || settings.permissions.defaultMode || 'default',
       scanFindings: null
     });
-    lines.push('  ' + formatSecurityReport(securityReport).replace(/\\n/g, '\\n  '));
+    lines.push(...formatSecurityReport(securityReport).split(String.fromCharCode(10)).map((line) => '  ' + line));
   } catch (error) { problems.push('Settings are invalid: ' + error.message); }
   const workflow = await workflowRuntimeStatus();
   lines.push('  Workflow runtime: ' + (workflow.available ? 'available (QuickJS)' : 'unavailable' + (workflow.reason ? ': ' + workflow.reason : '')));
