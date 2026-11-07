@@ -91,3 +91,41 @@ test('desktop automation, container teardown and cluster changes are high risk',
     ['tmux', ['ls']], ['kubectl', ['get', 'pods']]
   ]) assert.equal(analyzeCommand(command, args).highRisk, undefined, command + ' ' + args.join(' '));
 });
+
+
+test('strict Bash allow rules use the typed AST command representation', () => {
+  const policy = policyWithAllow('Bash(npm test:*)');
+  assert.equal(policy.evaluate('run_shell', { command: 'npm test' }).decision, 'allow');
+  assert.equal(policy.evaluate('run_shell', { command: 'FOO=bar npm test' }).decision, 'allow');
+  assert.equal(policy.evaluate('run_shell', { command: 'npm test "a && b"' }).decision, 'allow');
+  assert.notEqual(policy.evaluate('run_shell', { command: 'npm test && echo hi' }).decision, 'allow');
+});
+
+test('broad Bash allow rules never auto-approve dynamic or shell-fed commands', () => {
+  const policy = policyWithAllow('Bash(*)');
+  const commands = [
+    'echo "$HOME"',
+    'npm test $UNTRUSTED_FLAG',
+    'echo *.js',
+    'echo "$(id -u)"',
+    'x=git; $x push',
+    "bash <<< 'git status'",
+    "bash <<'EOF'\\ngit status\\nEOF",
+    'for d in a b; do rm "$d"; done'
+  ];
+  for (const command of commands) {
+    assert.notEqual(policy.evaluate('run_shell', { command }).decision, 'allow', command);
+  }
+});
+
+test('deny rules still inspect nested Bash wrappers after strict allow parsing uses the AST', () => {
+  const policy = new PermissionPolicy({ permissions: { deny: ['Bash(git push:*)'] } });
+  const commands = [
+    "bash --norc -c 'git push'",
+    "bash --rcfile /tmp/custom.bash -c 'git push'",
+    "env FOO=bar bash --norc -lc 'git push'"
+  ];
+  for (const command of commands) {
+    assert.equal(policy.evaluate('run_shell', { command }).decision, 'deny', command);
+  }
+});
