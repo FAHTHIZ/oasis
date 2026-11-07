@@ -53,43 +53,27 @@ export function collectSensitivePaths(env = process.env) {
     try { real = realpathSync(candidate); info = statSync(real); } catch { continue; }
     const type = info.isDirectory() ? 'directory' : info.isFile() ? 'file' : null;
     if (!type) continue;
-    // Credential masking is independent of workspace and additional write grants.
-    // Broadly writable directories must not expose secrets as a side effect; the
-    // explicit, trusted maskSensitivePaths:false setting is the only opt-out.
     if (masked.some((item) => pathContains(item.path, real))) continue;
     masked.push({ path: real, type });
   }
   return masked;
 }
 
-// Paths inside writable folders that a sandboxed command must never change,
-// because something outside the sandbox later executes or trusts them: git hooks
-// and config (run by every unsandboxed git), project settings and .mcp.json
-// (hooks and MCP servers start on the next Oasis launch), editor task folders,
-// shell rc files and Claude/Oasis command, agent and skill folders. This matches
-// the mandatory deny list of Anthropic's sandbox-runtime.
 export const PROTECTED_FILES = ['.bashrc', '.bash_profile', '.zshrc', '.zprofile', '.profile', '.gitconfig', '.gitmodules', '.ripgreprc', '.mcp.json',
   '.claude/settings.json', '.claude/settings.local.json', '.oasis/settings.json', '.oasis/settings.local.json', '.git/config'];
 export const PROTECTED_DIRS = ['.vscode', '.idea', '.git/hooks', '.claude/commands', '.claude/agents', '.claude/skills', '.claude/hooks',
   '.oasis/commands', '.oasis/agents', '.oasis/skills', '.oasis/hooks'];
-// Missing files that only matter once they exist and are worth a placeholder mount.
-// Missing shell rc files and .gitconfig in a project folder are not read by anything.
 const PLACEHOLDER_FILES = new Set(['.mcp.json', '.claude/settings.json', '.claude/settings.local.json', '.oasis/settings.json', '.oasis/settings.local.json', '.git/config']);
 
 function lstatOrNull(target) { try { return lstatSync(target); } catch { return null; } }
 
-// Plans the protection for each writable root: existing paths (bound read-only)
-// and missing ones (covered by a read-only placeholder at the first missing
-// path component, so nothing can be created there).
 export function protectedWritePaths(roots = []) {
   const existing = [];
   const missing = [];
   const seen = new Set();
   for (const root of roots) {
-    // Same spelling as the writable bind mounts, so the read-only binds land on them.
     const base = path.resolve(root);
     if (!lstatOrNull(base)) continue;
-    // In a git worktree or submodule, .git is a file pointing at the real git dir.
     const dotGit = lstatOrNull(path.join(base, '.git'));
     const candidates = [...PROTECTED_FILES.map((rel) => ({ rel, type: 'file' })), ...PROTECTED_DIRS.map((rel) => ({ rel, type: 'directory' }))]
       .filter((item) => !(dotGit && dotGit.isFile() && item.rel.startsWith('.git/')));
@@ -100,7 +84,6 @@ export function protectedWritePaths(roots = []) {
       const info = lstatOrNull(full);
       if (info) { seen.add(full); existing.push({ path: full, type: info.isDirectory() ? 'directory' : 'file' }); continue; }
       if (item.type === 'file' && !PLACEHOLDER_FILES.has(item.rel)) continue;
-      // First missing component: a missing .oasis folder is covered as a whole.
       const parts = item.rel.split('/');
       let first = null;
       for (let i = 1; i <= parts.length; i++) {
@@ -115,8 +98,6 @@ export function protectedWritePaths(roots = []) {
   return { existing, missing };
 }
 
-// Removes placeholder mount points bubblewrap left on the host, but only while
-// they are still empty: anything Oasis itself wrote there meanwhile is kept.
 export function removeSandboxPlaceholders(placeholders = []) {
   for (const item of placeholders) {
     const info = lstatOrNull(item.path);
@@ -142,11 +123,6 @@ function trackPlaceholders(list) {
   };
 }
 
-// Package-manager caches that installs and builds write to. With the home
-// directory read-only, npm/pip/cargo/go fail on their cache instead of on the
-// network, which is the main reason sandboxes get switched off. Only existing
-// directories are opened, never the home directory itself, and credential
-// paths stay masked. "sandbox": { "writableCaches": false } turns this off.
 const CACHE_DIRS = [
   '.npm', '.yarn/berry/cache', '.cache/yarn', '.cache/pnpm', '.local/share/pnpm/store', '.bun/install/cache',
   '.cache/pip', '.cache/uv', '.cache/pypoetry', '.cache/go-build', 'go/pkg/mod', '.cargo/registry', '.cargo/git',
@@ -160,7 +136,6 @@ export function collectCacheDirectories(env = process.env) {
     const candidate = path.join(home, ...relative.split('/'));
     let real;
     try { real = realpathSync(candidate); if (!statSync(real).isDirectory()) continue; } catch { continue; }
-    // A symlinked cache must still point inside home and must not be home itself.
     if (!pathContains(home, real) || path.resolve(real) === home) continue;
     if (!found.includes(real)) found.push(real);
   }
@@ -173,7 +148,6 @@ const containerProbes = new Map();
 export const CONTAINER_BACKENDS = ['docker', 'podman'];
 export const DEFAULT_CONTAINER_IMAGE = 'node:22-bookworm';
 
-// Checks that the container CLI exists and its engine answers.
 export function detectContainerRuntime(backend, force = false, run = spawnSync) {
   if (!CONTAINER_BACKENDS.includes(backend)) return { available: false, kind: 'none', reason: 'Unknown sandbox backend ' + backend + '. Use os, docker or podman.' };
   if (containerProbes.has(backend) && !force) return containerProbes.get(backend);
@@ -190,8 +164,6 @@ export function detectContainerRuntime(backend, force = false, run = spawnSync) 
   return probe;
 }
 
-// Inside the container the workspace keeps its host path on POSIX so absolute
-// paths in arguments still work; Windows drive paths map under /host/<drive>/.
 export function containerPath(hostPath, platform = process.platform) {
   const resolved = platform === 'win32' ? path.win32.resolve(hostPath) : path.posix.resolve(hostPath);
   if (platform !== 'win32') return resolved;
@@ -215,6 +187,10 @@ export function containerArgs(command, args, sandbox, cwd, platform = process.pl
     '--pids-limit', String(sandbox.pidsLimit || 512),
     '--label', 'dev.oasis.sandbox=1',
     '--env', 'HOME=/tmp', '--env', 'CI=1', '--env', 'OASIS_SANDBOXED=1'];
+  if (sandbox.readOnlyRoot) {
+    wrapped.push('--read-only');
+    wrapped.push('--tmpfs', '/tmp:rw,nosuid,nodev,noexec,size=512m');
+  }
   if (sandbox.memory) wrapped.push('--memory', safeContainerValue(sandbox.memory, 'memory'));
   if (sandbox.cpus) wrapped.push('--cpus', safeContainerValue(sandbox.cpus, 'cpus'));
   if (platform !== 'win32' && typeof process.getuid === 'function' && sandbox.kind === 'docker') wrapped.push('--user', process.getuid() + ':' + process.getgid());
@@ -229,20 +205,11 @@ export function containerArgs(command, args, sandbox, cwd, platform = process.pl
   for (const item of protectedWritePaths(sandbox.protectedRoots || []).existing) {
     wrapped.push('--volume', safeContainerValue(item.path, 'path') + ':' + containerPath(item.path, platform) + ':ro');
   }
-  // Workspace bind mounts can include the user's home (or an explicitly added
-  // directory). Overlay known credential roots *after* every host bind mount so
-  // Docker/Podman cannot expose ~/.ssh, cloud credentials, agent config or other
-  // sensitive host paths just because they sit below a writable root. A tmpfs
-  // overlay is used for both files and directories: reads see an empty mount,
-  // never the host content, and any temporary writes disappear with the container.
   const masked = new Set();
   const writableRoots = (sandbox.writable || []).map((dir) => containerPath(dir, platform));
   for (const item of sandbox.maskedPaths || []) {
     if (!item || !['file', 'directory'].includes(item.type) || !item.path) continue;
     const inside = safeContainerValue(containerPath(item.path, platform), 'masked path');
-    // Only overlay a path that is below a mounted writable root. Host secrets
-    // outside the workspace are already absent, and masking an ancestor/equal
-    // path would hide the workspace itself.
     const mountedBelow = writableRoots.some((root) => {
       const relative = path.posix.relative(root, inside);
       return relative !== '' && relative !== '..' && !relative.startsWith('../') && !path.posix.isAbsolute(relative);
@@ -291,7 +258,6 @@ function onPath(name) {
 }
 
 let cachedRuntimeProbe = null;
-/** Host check for the domain-filtering backend (sandbox-runtime). */
 export function detectSandboxRuntime(force = false) {
   if (cachedRuntimeProbe && !force) return cachedRuntimeProbe;
   if (process.platform === 'linux') {
@@ -328,26 +294,20 @@ export function resolveSandbox(settings = {}, root, force = false) {
     network: Boolean(settings.sandbox.network),
     ...(filtered ? { allowedDomains, deniedDomains } : {}),
     autoAllowCommands: settings.sandbox.autoAllowCommands !== false,
-    // Free-form shell strings have a larger attack surface than argv-based commands.
-    // Keep them approval-gated unless the user explicitly opts in.
     autoAllowShellCommands: settings.sandbox.autoAllowShellCommands === true,
     maskSensitivePaths: settings.sandbox.maskSensitivePaths !== false,
     maskedPaths: settings.sandbox.maskSensitivePaths === false ? [] : collectSensitivePaths(),
     writable: backend === 'os' ? writable : [root, ...additionalWritable],
-    // Project folders whose git, settings and editor files stay read-only inside.
     protectedRoots: settings.sandbox.protectProjectConfig === false ? [] : [root, ...additionalWritable],
     writableCaches: backend === 'os' ? caches : [],
     backend,
     ...(backend === 'ssh' ? { ssh, network: true } : {}),
-    ...(backend === 'os' || backend === 'ssh' ? {} : { image: settings.sandbox.image || DEFAULT_CONTAINER_IMAGE, memory: settings.sandbox.memory || '', cpus: settings.sandbox.cpus || '' })
+    ...(backend === 'os' || backend === 'ssh' ? {} : { image: settings.sandbox.image || DEFAULT_CONTAINER_IMAGE, memory: settings.sandbox.memory || '', cpus: settings.sandbox.cpus || '', readOnlyRoot: settings.sandbox.readOnlyRoot === true })
   };
 }
 
 function seatbeltString(value) {
   const text = String(value);
-  // Paths are embedded in SBPL source. Control characters (especially CR/LF)
-  // could terminate a quoted literal and inject additional policy expressions.
-  // Refuse ambiguous paths rather than trying to escape profile-language syntax.
   if (/[\u0000-\u001f\u007f\u2028\u2029]/u.test(text)) {
     throw new Error('Sandbox paths cannot contain control characters.');
   }
@@ -364,7 +324,6 @@ export function assertSandboxAvailable(sandbox) {
 function protectedSeatbeltRules(roots) {
   const rules = [];
   for (const root of roots) {
-    // Seatbelt matches resolved paths (/private/var for /var), so resolve the root.
     let base;
     try { base = realpathSync(root); } catch { base = path.resolve(root); }
     const dotGit = lstatOrNull(path.join(base, '.git'));
@@ -391,17 +350,8 @@ export function macProfile(sandbox) {
   ].join('\n');
 }
 
-// Toolchains installed under /tmp (CI caches, portable Node/Python builds, nvm
-// mirrors) disappear behind the private /tmp tmpfs, which makes every sandboxed
-// command fail with "execvp: No such file or directory". Re-expose only the
-// top-level /tmp entries that hold the executable or a PATH directory, read-only.
-// Per-user agent and session directories under /tmp hold sockets (ssh-agent,
-// X11, tmux, D-Bus, GnuPG, keyrings). A read-only bind still lets a process
-// connect to a socket, so these are never re-exposed.
 const SENSITIVE_TMP_ENTRY = /^(?:ssh-|\.x11-unix$|\.ice-unix$|\.xim-unix$|\.font-unix$|\.test-unix$|tmux-|systemd-private-|gpg|keyring|pulse-|dbus-|\.com\.google\.chrome|krb5cc|vscode-|com\.apple\.launchd)/i;
 
-// The smallest directory that makes a /tmp toolchain usable: the prefix above
-// a bin/ directory (so ../lib is available), else the directory itself.
 function toolchainPrefix(dir) {
   return path.basename(dir) === 'bin' ? path.dirname(dir) : dir;
 }
@@ -418,7 +368,6 @@ export function tmpToolchainMounts(command, env = process.env) {
       if (SENSITIVE_TMP_ENTRY.test(first)) continue;
       let stats;
       try { stats = statSync(value); } catch { continue; }
-      // The command itself must be a regular file; directories come from PATH.
       if (file ? !stats.isFile() : !stats.isDirectory()) continue;
       const dir = toolchainPrefix(file ? path.dirname(value) : value);
       if (path.resolve(dir) === '/tmp') continue;
@@ -427,11 +376,9 @@ export function tmpToolchainMounts(command, env = process.env) {
   };
   consider(command, { file: true });
   for (const entry of String(env.PATH || '').split(path.delimiter)) consider(entry);
-  // Drop mounts already covered by a broader one.
   return [...roots].filter((dir) => ![...roots].some((other) => other !== dir && pathContains(other, dir)));
 }
 
-// Returns { command, args } that runs the requested argv inside the sandbox.
 export function wrapCommand(command, args, sandbox, cwd, options = {}) {
   assertSandboxAvailable(sandbox);
   if (!sandbox || !sandbox.enabled || !sandbox.available) return { command, args };
@@ -439,9 +386,6 @@ export function wrapCommand(command, args, sandbox, cwd, options = {}) {
   if (sandbox.kind === 'bubblewrap') {
     const wrapped = ['--ro-bind', '/', '/', '--dev', '/dev', '--proc', '/proc', '--tmpfs', '/tmp', '--unshare-pid', '--die-with-parent', '--new-session'];
     for (const dir of tmpToolchainMounts(command)) wrapped.push('--ro-bind', dir, dir);
-    // Apply writable workspace mounts first, then overlay credential masks. If the
-    // workspace is the user's home directory, the later masks must remain visible
-    // instead of being hidden underneath the broad writable bind.
     for (const dir of sandbox.writable) wrapped.push('--bind', dir, dir);
     for (const item of sandbox.maskedPaths || []) {
       if (item.type === 'directory') wrapped.push('--tmpfs', item.path);
@@ -467,7 +411,6 @@ export function wrapCommand(command, args, sandbox, cwd, options = {}) {
   return { command, args };
 }
 
-/** Like wrapCommand, for every backend including the asynchronous domain-filtering one. */
 export async function launchCommand(command, args, sandbox, cwd, options = {}) {
   if (sandbox && sandbox.enabled && sandbox.available && sandbox.kind === 'srt') {
     const { srtLaunch } = await import('./sandbox-runtime.mjs');
