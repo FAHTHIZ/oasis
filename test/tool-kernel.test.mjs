@@ -145,5 +145,5 @@ test('audit redaction masks credential-named CLI flags but preserves ordinary ar
   assert.match(serialized, /--region ap-southeast-1/);
   assert.match(serialized, /--limit/);
   assert.match(serialized, /10/);
-  assert.match(serialized, /\\[redacted\\]/);
+  assert.match(serialized, /\[redacted\]/);
 });
