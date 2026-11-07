@@ -34,7 +34,6 @@ let workspace = null;
 let display = [];          // rendered history: [{ role, content, tools: [{id,name,args,ok,content}] }]
 let currentTurn = null;    // DOM refs for the assistant reply being streamed
 let allowEditsThisSession = false;
-let deferredInstall = null;
 // Runtime engine: set at boot when a local OASIS runtime serves this page.
 // { client, status, needsToken, entry } or null for the in-browser engine.
 let RT = null;
@@ -2021,20 +2020,9 @@ $('pushForm').addEventListener('submit', async (event) => {
   finally { button.disabled = false; button.textContent = 'Push'; }
 });
 
-/* ---------- Install ---------- */
-addEventListener('beforeinstallprompt', (event) => { event.preventDefault(); deferredInstall = event; $('installButton').hidden = Boolean(RT); });
-addEventListener('appinstalled', () => { $('installButton').hidden = true; deferredInstall = null; toast('OASIS installed.'); });
-$('installButton').addEventListener('click', async () => {
-  if (deferredInstall) { deferredInstall.prompt(); await deferredInstall.userChoice; deferredInstall = null; $('installButton').hidden = true; return; }
-  toast('On iPhone or iPad: tap Share, then Add to Home Screen.');
-});
-const standalone = matchMedia('(display-mode: standalone)').matches || navigator.standalone;
-if (!standalone && /iphone|ipad|ipod/i.test(navigator.userAgent)) $('installButton').hidden = false;
-
 /* ---------- Boot ---------- */
 async function startRuntime(found) {
   document.documentElement.classList.add('runtime');
-  $('installButton').hidden = true;
   RT = { client: found.client, status: found.status || null, needsToken: Boolean(found.needsToken), entry: null, models: [], label: '' };
   if (RT.needsToken) {
     updateProjectUI();
@@ -2242,7 +2230,6 @@ async function boot() {
   if (innerWidth >= 1024 && (localStorage.getItem('oasis.files') === '1' || (localStorage.getItem('oasis.files') === null && workspace))) toggleFiles(true);
   refreshFiles();
   if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => {});
-  if ('serviceWorker' in navigator && location.protocol !== 'file:' && !RT) navigator.serviceWorker.register('sw.js').catch(() => {});
   const shared = new URLSearchParams(location.search);
   if (shared.get('repo')) { $('repoInput').value = shared.get('repo'); openProjects(); }
   if (shared.get('q')) { $('input').value = shared.get('q'); autosize(); renderPluginSuggest(); }
