@@ -121,3 +121,24 @@ test('SDK tool registries reject duplicate tool names', () => {
   const two = tool('same', 'Second', { type: 'object' }, async () => 'two');
   assert.throws(() => createToolServer('duplicates', [one, two]), /Duplicate SDK tool name/);
 });
+
+test('SDK approval prompts and audit callbacks redact credential values', async () => {
+  const credential = 'sk-secret-token-123456';
+  let approvalMessage = '';
+  let audit = null;
+  const server = createToolServer('secure', [
+    tool('publish', 'Publish a change', {
+      type: 'object',
+      properties: { token: { type: 'string' } },
+      required: ['token']
+    }, async () => 'published', { needsApproval: true })
+  ]);
+  const result = await server.callTool('publish', { token: credential }, {
+    approval: async (message) => { approvalMessage = message; return true; },
+    onAudit: (record) => { audit = record; }
+  });
+  assert.equal(result, 'published');
+  assert.doesNotMatch(approvalMessage, /sk-secret-token-123456/);
+  assert.ok(audit);
+  assert.equal(audit.input.token, '[redacted]');
+});
