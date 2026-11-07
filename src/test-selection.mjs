@@ -7,7 +7,6 @@
 //     test file, that test is selected.
 // Falls back to returning all test files when no mapping is found, so the
 // caller never silently skips coverage.
-import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 
 const TEST_PATTERNS = [
