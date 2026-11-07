@@ -21,6 +21,7 @@
 </p>
 
 <p align="center">
+  <a href="https://fahthiz.github.io/oasis/">Website</a> ·
   <a href="https://github.com/FAHTHIZ/oasis/releases">Releases</a> ·
   <a href="#install-the-cli">CLI quick start</a> ·
   <a href="https://fahthiz.github.io/oasis/app/">Browser app</a> ·
@@ -98,7 +99,7 @@ There is no native Android APK or iOS App Store package. The available options a
 - **Connected workspace:** run `oasis web --host 0.0.0.0` on a computer containing the project, then connect from a phone on the same trusted private network. Keep the computer and OASIS running; do not expose the workspace directly to the public internet.
 - **Advanced Android use:** run the CLI from Termux with Node.js 22.15 or newer and Git. This is a manual, power-user setup—not a one-click Android installer. See [Mobile and tablet setup](MOBILE.md).
 
-The browser app is an optional product interface, not a separate marketing website. The GitHub repository and Releases page are the canonical project home and download location.
+The [OASIS website](https://fahthiz.github.io/oasis/) is the public product overview. The GitHub repository remains the canonical source, and the [Releases page](https://github.com/FAHTHIZ/oasis/releases) is the source of truth for whether desktop installer assets have actually been published.
 
 ## Interfaces
 

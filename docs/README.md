@@ -6,7 +6,9 @@ This directory contains maintained technical documentation for the current OASIS
 
 | Document | Covers |
 |---|---|
+| [First-run guide](FIRST-RUN.md) | Choose an interface, configure a provider, connect a project, review permissions and verify the result. |
 | [Architecture](ARCHITECTURE.md) | Runtime components, request flow, persistence and trust boundaries. |
+| [Engineering scorecard](ENGINEERING-SCORECARD.md) | Evidence-backed readiness areas, open gates, review cadence and measurable exit criteria. |
 | [Configuration reference](CONFIGURATION.md) | Model providers and the provider registry, fallback models, output limits and search-tool options. |
 | [Interfaces and deployment](INTERFACES.md) | CLI, desktop, connected browser workspace, PWA, editor, ACP, SDK and integrations. |
 | [Benchmark methodology](BENCHMARKS.md) | What the model-free benchmarks measure, what they do not measure and how to interpret live evaluations. |

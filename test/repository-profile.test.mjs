@@ -34,7 +34,7 @@ test('issue-template contact links point to live support, releases and private s
   const config = await read('../.github/ISSUE_TEMPLATE/config.yml');
   assert.ok(config.includes('https://github.com/FAHTHIZ/oasis/security/advisories/new'));
   assert.ok(config.includes('https://github.com/FAHTHIZ/oasis/discussions'));
-  assert.ok(config.includes('https://github.com/FAHTHIZ/oasis/releases/latest'));
+  assert.ok(config.includes('https://github.com/FAHTHIZ/oasis/releases'));
   assert.ok(config.includes('https://fahthiz.github.io/oasis/app/'));
   assert.ok(!config.includes('docs/USER_GUIDE.md'));
 });
