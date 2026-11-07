@@ -50,8 +50,8 @@ test('runtime adapter accepts native plan entries and wrapped todo_write results
 
 test('browser displays an accessible, collapsible progress guide and explicit tool states', () => {
   assert.match(html, /id="todos"[^>]*role="region"[^>]*aria-live="polite"/);
-  assert.match(app, /setAttribute\\('role', 'progressbar'\\)/);
-  assert.match(app, /setAttribute\\('aria-current', 'step'\\)/);
+  assert.ok(app.includes("track.setAttribute('role', 'progressbar')"));
+  assert.ok(app.includes("row.setAttribute('aria-current', 'step')"));
   assert.match(app, /All steps completed/);
   assert.match(app, /statusLabel = tool\.ok === undefined \? 'Working' : tool\.ok \? 'Done' : 'Failed'/);
   assert.match(runtime, /case 'plan':\s+case 'todos':/);
