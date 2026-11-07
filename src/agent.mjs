@@ -5013,6 +5013,80 @@ async function executeSessionToolWithKernel(session, name, args, context, option
   return await executeThroughToolKernel(session, tool, args, context, { ...options, authorize });
 }
 
+// Agent orchestration tools share the same policy, validation, timeout and audit
+// boundary as workspace, MCP and session tools. Their specialized implementations
+// remain the handlers, not parallel dispatch authorities.
+async function executeOrchestrationToolWithKernel(session, name, args, context, options = {}) {
+  const definition = (session.toolDefinitions || []).find((item) => item && item.function && item.function.name === name)
+    || TOOL_DEFINITIONS.find((item) => item && item.function && item.function.name === name);
+  if (!definition) throw new Error('Unknown or unavailable orchestration tool: ' + name + '; no registered schema was found.');
+
+  let authorizedContext = context;
+  const authorize = async ({ input }) => {
+    const authorization = await authorizeCall(session, name, input, context, options);
+    if (typeof options.onAuthorized === 'function') options.onAuthorized(authorization);
+    if (authorization.deniedReason) return { decision: 'deny', reason: authorization.deniedReason };
+    authorizedContext = authorization.context || context;
+    return { decision: 'allow', input: authorization.args };
+  };
+  const readOnly = ['agent_status', 'neuron_network', 'agent_events', 'team_status'].includes(name);
+  const capabilities = name === 'advisor' ? ['network'] : readOnly ? ['read'] : ['execute', 'write'];
+  const tool = bridgeToolDefinition(definition, {
+    capabilities,
+    risk: readOnly ? 'low' : name === 'workflow' || name === 'execute_code' ? 'critical' : 'high',
+    requiresApproval: false,
+    timeoutMs: name === 'advisor' ? 120_000 : 900_000,
+    run: async (validatedInput, runtime) => {
+      const executionContext = Object.assign({}, authorizedContext || {}, {
+        root: authorizedContext && authorizedContext.root || session.root,
+        session,
+        env: runtime.env,
+        signal: runtime.signal
+      });
+      if (name === 'run_specialist_review') {
+        const budget = executionContext.specialistBudget || (executionContext.specialistBudget = { used: 0 });
+        if (budget.used >= MAX_SPECIALIST_REVIEWS_PER_TASK) {
+          throw new Error('This task has reached the two-specialist-review limit. Use the existing review result or ask for a focused follow-up task.');
+        }
+        budget.used += 1;
+        return await runSpecialistReview(session, validatedInput, executionContext, options, budget);
+      }
+      if (name === 'task') {
+        return await runSubagent(session, validatedInput, executionContext, { ...options, parentToolUseId: options.parentToolUseId });
+      }
+      if (name === 'execute_code') {
+        const { runExecuteCode } = await import('./code-mode.mjs');
+        let nested = 0;
+        return await runExecuteCode(validatedInput, {
+          signal: runtime.signal,
+          runTool: async (toolName, input) => {
+            const message = await executeOneCall(session, {
+              id: String(options.parentToolUseId || 'code') + '_' + (++nested),
+              type: 'function',
+              function: { name: toolName, arguments: JSON.stringify(input || {}) }
+            }, executionContext, options);
+            return message && message.result !== undefined ? message.result : message && message.content;
+          }
+        });
+      }
+      if (name === 'workflow') {
+        if (options.isSubagent) throw new Error('Subagents cannot start workflows.');
+        return await runWorkflowTool(session, validatedInput, executionContext, options);
+      }
+      if (name === 'exit_plan_mode') return await exitPlanMode(session, validatedInput, executionContext, options);
+      if (name === 'advisor') {
+        return await consultAdvisor(session, validatedInput, {
+          signal: runtime.signal,
+          env: executionContext.env,
+          onUsage: options.onUsage
+        });
+      }
+      return await runAgentTool(session, name, validatedInput, executionContext, options);
+    }
+  });
+  return await executeThroughToolKernel(session, tool, args, context, { ...options, authorize });
+}
+
 async function executeOneCallRaw(session, call, context, options) {
   const name = call.function && call.function.name;
   let result;
@@ -5113,50 +5187,24 @@ async function executeOneCallRaw(session, call, context, options) {
       if (options.onToolResult) options.onToolResult({ name, result, call });
       return { role: 'tool', tool_call_id: call.id, name, content: serializableResult(result), result };
     }
-    if (name === 'advisor' && session.advisorModel) {
-      result = await consultAdvisor(session, args, { signal: options.signal, env: context.env, onUsage: options.onUsage });
-      if (options.onToolResult) options.onToolResult({ name, result, call });
-      return { role: 'tool', tool_call_id: call.id, name, content: serializableResult(result), result };
-    }
-    if (name === 'exit_plan_mode') {
-      result = await exitPlanMode(session, args, context, options);
-      if (options.onToolResult) options.onToolResult({ name, result, call });
-      return { role: 'tool', tool_call_id: call.id, name, content: serializableResult(result), result };
-    }
-    const requiresAgentAuthorization = name === 'run_specialist_review'
+    const requiresKernelOrchestration = name === 'run_specialist_review'
       || name === 'task'
       || name === 'execute_code'
       || name === 'workflow'
-      || AGENT_TOOL_NAMES.has(name);
-    if (requiresAgentAuthorization) {
-      auth = await authorizeCall(session, name, args, context, options);
-      if (auth.deniedReason) throw new Error(auth.deniedReason);
-      args = auth.args;
-      callContext = auth.context;
-      attemptedArgs = args;
-    }
-    if (name === 'run_specialist_review') {
-      const budget = context.specialistBudget || (context.specialistBudget = { used: 0 });
-      if (budget.used >= MAX_SPECIALIST_REVIEWS_PER_TASK) throw new Error('This task has reached the two-specialist-review limit. Use the existing review result or ask for a focused follow-up task.');
-      budget.used += 1;
-      result = await runSpecialistReview(session, args, callContext, options, budget);
-    } else if (name === 'task') {
-      result = await runSubagent(session, args, callContext, { ...options, parentToolUseId: call.id });
-    } else if (name === 'execute_code') {
-      const { runExecuteCode } = await import('./code-mode.mjs');
-      let nested = 0;
-      result = await runExecuteCode(args, {
-        signal: options.signal,
-        runTool: async (toolName, input) => {
-          const message = await executeOneCall(session, { id: String(call.id || 'code') + '_' + (++nested), type: 'function', function: { name: toolName, arguments: JSON.stringify(input || {}) } }, callContext || context, options);
-          return message && message.result !== undefined ? message.result : message && message.content;
+      || name === 'exit_plan_mode'
+      || AGENT_TOOL_NAMES.has(name)
+      || (name === 'advisor' && session.advisorModel);
+    if (requiresKernelOrchestration) {
+      result = await executeOrchestrationToolWithKernel(session, name, args, context, {
+        ...options,
+        parentToolUseId: call.id,
+        onAuthorized: (authorization) => {
+          auth = authorization;
+          args = authorization.args || args;
+          callContext = authorization.context || context;
+          attemptedArgs = args;
         }
       });
-    } else if (name === 'workflow') {
-      if (options.isSubagent) throw new Error('Subagents cannot start workflows.');
-      result = await runWorkflowTool(session, args, callContext, { ...options, parentToolUseId: call.id });
-    } else if (AGENT_TOOL_NAMES.has(name)) {
-      result = await runAgentTool(session, name, args, callContext, options);
     } else if (session.mcpToolMap && session.mcpToolMap.has(name)) {
       result = await executeMappedMcpToolWithKernel(session, name, args, context, {
         ...options,
@@ -5190,8 +5238,12 @@ async function executeOneCallRaw(session, call, context, options) {
         }
       });
       if (AUTO_LSP_EDIT_TOOLS.has(name) && successfulMutation(name, result)) fileMutationResult = result;
-      if (name === 'load_skill' && !options.isSubagent && result && typeof result.content === 'string') result = await maybeForkSkill(session, result, args, callContext, options);
-      if (name === 'load_skill' && session.pluginMonitorsEnabled && result && !result.error) startPluginMonitorsFor(session, String(args.name || ''), { root: session.root, env: callContext && callContext.env || process.env });
+      if (name === 'load_skill' && !options.isSubagent && result && typeof result.content === 'string') {
+        result = await maybeForkSkill(session, result, args, callContext, options);
+      }
+      if (name === 'load_skill' && session.pluginMonitorsEnabled && result && !result.error) {
+        startPluginMonitorsFor(session, String(args.name || ''), { root: session.root, env: callContext && callContext.env || process.env });
+      }
     }
     if (NESTED_MEMORY_TOOLS.has(name) && result && typeof result === 'object' && !result.error) {
       const target = args && (args.path || args.file_path || args.notebook_path);
