@@ -10,5 +10,5 @@ contact_links:
     url: https://github.com/FAHTHIZ/oasis/releases
     about: Check whether a GitHub Release with desktop installers and SHA256SUMS has actually been published.
   - name: Install the browser app
-    url: https://fahthiz.github.io/oasis/app/
+    url: https://fahthiz.github.io/oasis/
     about: Open the installable browser app on desktop, phone or tablet.

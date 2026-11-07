@@ -35,7 +35,8 @@ test('issue-template contact links point to live support, releases and private s
   assert.ok(config.includes('https://github.com/FAHTHIZ/oasis/security/advisories/new'));
   assert.ok(config.includes('https://github.com/FAHTHIZ/oasis/discussions'));
   assert.ok(config.includes('https://github.com/FAHTHIZ/oasis/releases'));
-  assert.ok(config.includes('https://fahthiz.github.io/oasis/app/'));
+  assert.ok(config.includes('https://fahthiz.github.io/oasis/'));
+  assert.ok(!config.includes('https://fahthiz.github.io/oasis/app/'), 'Issue templates must not link to the retired standalone browser app.');
   assert.ok(!config.includes('docs/USER_GUIDE.md'));
 });
 
@@ -48,7 +49,7 @@ test('mobile and contributor policies exist outside the installable npm package'
   assert.ok(mobile.includes('oasis web --host 0.0.0.0'));
   assert.ok(mobile.includes('normal OASIS session'));
   assert.ok(!mobile.includes('oasis app --lan'), 'The retired standalone browser app command must not be documented.');
-  assert.ok(mobile.includes('There is no native Android APK'));
+  assert.ok(mobile.includes('does not ship a standalone browser/PWA product or a native Android/iOS package'));
   assert.ok(contributing.includes('npm run check'));
   assert.ok(security.includes('private vulnerability reporting'));
   assert.ok(support.includes('oasis doctor'));
