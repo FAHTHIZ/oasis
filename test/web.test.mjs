@@ -8,7 +8,6 @@ import { request as httpsRequest } from 'node:https';
 import { createServer } from 'node:http';
 import { readFile } from 'node:fs/promises';
 import { randomUUID } from 'node:crypto';
-import { createCloudTaskStore } from '../src/cloud-task-store.mjs';
 import { createWorktree, finishWorktree } from '../src/worktrees.mjs';
 import { createOasisWebServer, startOasisWebServer, toolDetail, summarizeToolResult, summarizeAgentRun } from '../src/web.mjs';
 import { saveConfig } from '../src/config.mjs';
@@ -17,7 +16,7 @@ async function tempDir() {
   return await mkdtemp(path.join(os.tmpdir(), 'oasis-web-test-'));
 }
 
-async function createSavedWorktreeTask(root, env) {
+async function createLiveWorktreeTask(root, env) {
   const git = (...args) => execFileSync('git', args, { cwd: root, stdio: 'pipe' });
   git('init', '-q', '-b', 'main');
   git('config', 'user.name', 'Oasis Web Test');
@@ -30,16 +29,15 @@ async function createSavedWorktreeTask(root, env) {
   const artifact = await finishWorktree(root, worktree, { env, skipHooks: true, message: 'browser test change' });
   const id = randomUUID();
   const now = new Date().toISOString();
-  const store = createCloudTaskStore(root, { env });
-  await store.save({
+  const job = {
     id, status: 'completed', type: 'agent', title: 'Reviewable isolated change',
     createdAt: now, workspaceName: path.basename(root), workspaceRoot: root, executionRoot: root,
     worktreePath: worktree.relative, worktreeBranch: worktree.branch, worktreeBaseCommit: worktree.base,
     result: { isolatedWorktree: { ...artifact, baseCommit: worktree.base, changed: true, requiresReview: false, error: null } },
     events: [{ id: 1, type: 'completed', at: now, data: { finished: true } }],
     nextEventId: 2, error: null
-  });
-  return { id, worktree, artifact };
+  };
+  return { id, job, worktree, artifact };
 }
 
 test('browser activity details and tool results redact credential values before sending them to the UI', () => {
@@ -1176,7 +1174,7 @@ test('browser chat answers ask_user_question cards and the model sees the answer
 });
 
 
-test('browser job history API lists persisted tasks and requires authentication', async (t) => {
+test('browser job history API lists current-runtime tasks and requires authentication', async (t) => {
   const root = await tempDir();
   const env = { OASIS_CONFIG_DIR: path.join(root, 'config') };
   const app = await startOasisWebServer({ root, host: '127.0.0.1', port: 0, env, token: 'test-runtime-token-0123456789' });
@@ -1194,7 +1192,7 @@ test('browser job history API lists persisted tasks and requires authentication'
 });
 
 
-test('browser task history survives runtime restart and exposes completed runs', async (t) => {
+test('browser task history is runtime-scoped and is discarded after restart', async (t) => {
   const root = await tempDir();
   const env = { OASIS_CONFIG_DIR: path.join(root, 'config') };
   let app = await startOasisWebServer({
@@ -1241,14 +1239,9 @@ test('browser task history survives runtime restart and exposes completed runs',
   const listResponse = await fetch(base + '/api/jobs', { headers: { authorization: 'Bearer ' + app.token } });
   assert.equal(listResponse.status, 200);
   const list = await listResponse.json();
-  const saved = list.jobs.find((task) => task.id === jobId);
-  assert.ok(saved, 'completed job should remain in local task history after restart');
-  assert.equal(saved.status, 'completed');
+  assert.deepEqual(list.jobs, [], 'job history is scoped to the previous runtime process');
   const detailResponse = await fetch(base + '/api/jobs/' + jobId, { headers: { authorization: 'Bearer ' + app.token } });
-  assert.equal(detailResponse.status, 200);
-  const detail = await detailResponse.json();
-  assert.equal(detail.status, 'completed');
-  assert.ok(detail.events.length > 0);
+  assert.equal(detailResponse.status, 404);
 });
 
 test('desktop provider setup stores the API key through the host callback, not config.json', async (t) => {
@@ -1383,63 +1376,13 @@ test('browser task worktree finalization scans secrets and skips repository-cont
   assert.match(finalizer, /skipHooks:\s*true/);
 });
 
-test('browser task history API exposes interrupted task recovery state after runtime restart', async (t) => {
-  const root = await tempDir();
-  const env = { OASIS_CONFIG_DIR: path.join(root, 'config') };
-  const store = createCloudTaskStore(root, { env });
-  const interruptedId = randomUUID();
-  const timestamp = new Date().toISOString();
-  await store.save({
-    id: interruptedId,
-    type: 'agent',
-    title: 'Work interrupted before restart',
-    status: 'running',
-    sessionId: randomUUID(),
-    workspaceName: 'oasis',
-    createdAt: timestamp,
-    events: [{ id: 1, type: 'started', at: timestamp, data: { isolation: 'workspace' } }],
-    nextEventId: 2,
-    result: null,
-    error: null
-  });
-
-  const app = await startOasisWebServer({
-    root, host: '127.0.0.1', port: 0, env,
-    token: 'test-runtime-token-0123456789'
-  });
-  t.after(async () => {
-    await app.close();
-    await rm(root, { recursive: true, force: true });
-  });
-
-  const base = 'http://127.0.0.1:' + app.port;
-  const headers = { authorization: 'Bearer ' + app.token };
-  const denied = await fetch(base + '/api/jobs/' + interruptedId);
-  assert.equal(denied.status, 401);
-
-  const listResponse = await fetch(base + '/api/jobs', { headers });
-  assert.equal(listResponse.status, 200);
-  const list = await listResponse.json();
-  const listed = list.jobs.find((item) => item.id === interruptedId);
-  assert.ok(listed, 'interrupted task should remain in durable task history');
-  assert.equal(listed.status, 'interrupted');
-
-  const detailResponse = await fetch(base + '/api/jobs/' + interruptedId, { headers });
-  assert.equal(detailResponse.status, 200);
-  const detail = await detailResponse.json();
-  assert.equal(detail.status, 'interrupted');
-  assert.equal(detail.events.at(-1).type, 'interrupted');
-  assert.match(detail.error, /runtime restarted/i);
-  assert.match(detail.events.at(-1).data.message, /live processes and pending approvals were not restored/i);
-});
-
 test('browser monitor only merges a committed isolated worktree after an explicit current review', async (t) => {
   const root = await tempDir();
   const home = await tempDir();
   const env = { ...process.env, HOME: home, OASIS_CONFIG_DIR: path.join(home, 'config') };
-  const fixture = await createSavedWorktreeTask(root, env);
+  const fixture = await createLiveWorktreeTask(root, env);
   const app = await startOasisWebServer({
-    root, host: '127.0.0.1', port: 0, env, token: 'test-runtime-token-0123456789'
+    root, host: '127.0.0.1', port: 0, env, jobs: new Map([[fixture.id, fixture.job]]), token: 'test-runtime-token-0123456789'
   });
   t.after(async () => {
     await app.close();
@@ -1475,9 +1418,9 @@ test('browser worktree merge rejects a main-branch change made after diff review
   const root = await tempDir();
   const home = await tempDir();
   const env = { ...process.env, HOME: home, OASIS_CONFIG_DIR: path.join(home, 'config') };
-  const fixture = await createSavedWorktreeTask(root, env);
+  const fixture = await createLiveWorktreeTask(root, env);
   const app = await startOasisWebServer({
-    root, host: '127.0.0.1', port: 0, env, token: 'test-runtime-token-0123456789'
+    root, host: '127.0.0.1', port: 0, env, jobs: new Map([[fixture.id, fixture.job]]), token: 'test-runtime-token-0123456789'
   });
   t.after(async () => {
     await app.close();

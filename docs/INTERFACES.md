@@ -50,7 +50,7 @@ cd /path/to/your/project
 oasis web --open
 \`\`\`
 
-The browser is only the interface. The agent process, project access and command execution remain on the host. The default server is local-only. For phone or another device, follow [Mobile and tablet setup](../MOBILE.md); use a trusted private network and never expose the workspace directly to the public internet.
+The browser is only the interface. The agent process, project access and command execution remain on the host. The default server is local-only. Browser job/event history is held in memory for the lifetime of the runtime and is not restored after a restart; saved chat sessions use their separate session store. For phone or another device, follow [Mobile and tablet setup](../MOBILE.md); use a trusted private network and never expose the workspace directly to the public internet.
 
 ## Desktop application
 
