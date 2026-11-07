@@ -5,7 +5,7 @@ const MAX_NEURON_DEPTH = 32;
 const VALID_STATUSES = new Set(["running", "completed", "failed", "cancelled", "interrupted"]);
 
 function clean(value, max = 160) {
-  return String(value ?? "").replace(/[\\u0000-\\u001f\\u007f]/g, " ").replace(/\\s+/g, " ").trim().slice(0, max);
+  return String(value ?? "").replace(/[\u0000-\u001f\u007f]/g, " ").replace(/\s+/g, " ").trim().slice(0, max);
 }
 
 function safeNumber(value, fallback = 0) {
