@@ -114,7 +114,7 @@ export function maskSecrets(session, text) {
   let output = replaceSpans(text, tokenSpans(text), swap);
   output = output.replace(ASSIGNMENT, (whole, head, value, tail) => (NON_SECRET_VALUE.test(value) || /^[\d.]+$/.test(value) ? whole : head + swap(value) + tail));
   output = output.replace(URL_CREDENTIAL, (whole, head, password, at) => (NON_SECRET_VALUE.test(password) ? whole : head + swap(password) + at));
-  output = output.replace(AUTH_HEADER, (whole, prefix, credential) => prefix + swap(credential));
+  output = output.replace(AUTH_HEADER, (whole, prefix, credential) => credential.includes('«secret:') ? whole : prefix + swap(credential));
   return { text: output, count };
 }
 
