@@ -58,9 +58,13 @@ test('tool-required tasks avoid models explicitly catalogued without tool-call s
       id: 'acme',
       api: 'https://api.acme.test/v1',
       models: {
-        'baseline-model': { tool_call: true },
+        'baseline-model': { tool_call: true, modalities: { input: ['text', 'image'] } },
         'no-tools-model': { tool_call: false },
-        'unknown-tools-model': {}
+        'unknown-tools-model': {},
+        'vision-model': { tool_call: true, modalities: { input: ['text', 'image'] } },
+        'text-only-model': { tool_call: true, modalities: { input: ['text'] } },
+        'vision-no-tools-model': { tool_call: false, modalities: { input: ['text', 'image'] } },
+        'unknown-vision-model': { tool_call: true }
       }
     }
   }));
@@ -80,6 +84,52 @@ test('tool-required tasks avoid models explicitly catalogued without tool-call s
     enabled: true, easyModel: 'unknown-tools-model', strongModel: 'unknown-tools-model'
   }, options);
   assert.equal(unknown.model, 'unknown-tools-model', 'unknown metadata is not treated as a negative capability');
+});
+
+test('image-required tasks avoid models explicitly catalogued as text-only', async (t) => {
+  const root = await temporaryDirectory(t);
+  const catalogPath = path.join(root, 'models.json');
+  await writeFile(catalogPath, JSON.stringify({
+    acme: {
+      id: 'acme',
+      api: 'https://api.acme.test/v1',
+      models: {
+        'vision-model': { tool_call: true, modalities: { input: ['text', 'image'] } },
+        'text-only-model': { tool_call: true, modalities: { input: ['text'] } },
+        'vision-no-tools-model': { tool_call: false, modalities: { input: ['text', 'image'] } },
+        'unknown-vision-model': { tool_call: true }
+      }
+    }
+  }));
+  const env = { ...process.env, OASIS_CONFIG_DIR: path.join(root, 'config'), OASIS_MODEL_CATALOG: catalogPath };
+  t.after(() => resetModelCatalogForTest());
+  const options = { baseURL: 'https://api.acme.test/v1', env, requiresImages: true };
+
+  const imageRoute = selectTaskModel('Summarize the screenshot.', 'vision-model', {
+    enabled: true, easyModel: 'text-only-model', strongModel: 'vision-model'
+  }, options);
+  assert.equal(imageRoute.model, 'vision-model');
+  assert.equal(imageRoute.tier, 'strong');
+  assert.equal(imageRoute.requiresImages, true);
+  assert.match(imageRoute.reason, /image input/);
+
+  const bothRoute = selectTaskModel('Fix the interface shown in the screenshot.', 'vision-model', {
+    enabled: true, easyModel: 'text-only-model', strongModel: 'vision-no-tools-model'
+  }, options);
+  assert.equal(bothRoute.model, 'vision-model', 'fallback must satisfy image and tool requirements together');
+  assert.equal(bothRoute.requiresTools, true);
+  assert.equal(bothRoute.requiresImages, true);
+
+  const unknown = selectTaskModel('Summarize the screenshot.', 'vision-model', {
+    enabled: true, easyModel: 'unknown-vision-model', strongModel: 'vision-model'
+  }, options);
+  assert.equal(unknown.model, 'unknown-vision-model', 'unknown image metadata remains eligible');
+
+  const noKnownCandidate = selectTaskModel('Summarize the screenshot.', 'text-only-model', {
+    enabled: true, easyModel: 'text-only-model', strongModel: 'text-only-model'
+  }, options);
+  assert.equal(noKnownCandidate.model, 'text-only-model', 'the router retains the configured model when no known-capable choice exists');
+  assert.match(noKnownCandidate.reason, /no configured candidate is catalogued/);
 });
 
 test('routing settings are strictly bounded and untrusted project routing is ignored', async (t) => {

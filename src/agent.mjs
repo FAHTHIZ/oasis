@@ -5297,6 +5297,7 @@ export async function runAgentTurn(session, prompt, options = {}) {
       hint: options.routingHint,
       baseURL: originalConfig && originalConfig.baseURL,
       provider: originalConfig && originalConfig.catalogProvider,
+      requiresImages: (Array.isArray(options.images) && options.images.length > 0) || hasImages(session.messages),
       env: session.modelEnv || env
     });
   let selectedModel = route.model || originalModel;
