@@ -12,7 +12,7 @@ import { renderMarkdown } from './markdown.mjs';
 import { smartConnect, looksLikeConnection, parsePaste, scanLocal, buildChain, nextInChain, configFor, classifyFailure, maskSecret, isGitHubToken } from './core/connect.mjs';
 import { PLUGINS, getPlugin, pluginsFor, suggestPlugins } from './core/plugins.mjs';
 import { detectRuntime, RuntimeAgent, RuntimeWorkspace, tokenFromPaste, saveRuntimeToken } from './core/runtime.mjs';
-import { APP_PALETTE_COMMANDS, APP_KEYBOARD_SHORTCUTS, searchAppCommands } from './core/command-palette.mjs';
+import { APP_KEYBOARD_SHORTCUTS, searchAppCommands } from './core/command-palette.mjs';
 
 const APP_VERSION = '1.3.0';
 const $ = (id) => document.getElementById(id);
@@ -634,13 +634,6 @@ function summarizeArgs(name, args = {}) {
   if (args.todos) return args.todos.length + ' items';
   return '';
 }
-const TOOL_LABELS = { list_files: 'List', read_file: 'Read', write_file: 'Write', edit_file: 'Edit', delete_file: 'Delete', grep: 'Search', glob_files: 'Find', run_javascript: 'Run', fetch_url: 'Fetch', load_skill: 'Skill', todo_write: 'Plan', project_changes: 'Changes', github_push: 'Push',
-  // Tools of the agent on this computer (runtime engine).
-  run_command: 'Run', command_output: 'Output', kill_command: 'Stop', list_background: 'Jobs', install_package: 'Install', multi_edit: 'Edit', notebook_edit: 'Edit',
-  search_files: 'Search', repo_map: 'Map', git_status: 'Status', git_diff: 'Diff', git_log: 'History', git_commit: 'Commit', git_branch: 'Branch', git_push: 'Push', create_pull_request: 'Pull request',
-  web_search: 'Search web', list_skills: 'Skills', read_skill_resource: 'Skill', run_specialist_review: 'Review', diagnostics: 'Check', security_scan: 'Security', lsp: 'Code intel', monitor: 'Watch',
-  worktree_inspect: 'Worktree', worktree_merge: 'Merge', configure_provider: 'Model', configure_mcp_server: 'Tools', install_extension: 'Install', install_external_skill: 'Install', install_plugin: 'Install' };
-
 function activityLabel(tool) {
   const name = String(tool.name || '').toLowerCase();
   const args = tool.args || {};
