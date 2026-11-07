@@ -14,6 +14,10 @@ export function defineTool(definition) {
   if (unknownCapabilities.length) throw new Error('Unknown tool capability: ' + unknownCapabilities.join(', '));
   const risk = String(definition.risk || 'medium');
   if (!TOOL_RISK_LEVELS.includes(risk)) throw new Error('Unknown tool risk level: ' + risk);
+  const requestedTimeout = Number(definition.timeoutMs);
+  const timeoutMs = Number.isFinite(requestedTimeout) && requestedTimeout > 0
+    ? Math.min(900_000, Math.max(1, Math.floor(requestedTimeout)))
+    : 120_000;
   if (typeof definition.run !== 'function') throw new Error('Tool must provide a run function.');
   return Object.freeze({
     name,
@@ -23,7 +27,7 @@ export function defineTool(definition) {
     risk,
     inputSchema: definition.inputSchema || {},
     outputSchema: definition.outputSchema || {},
-    timeoutMs: Number(definition.timeoutMs) || 120000,
+    timeoutMs,
     requiresApproval: Boolean(definition.requiresApproval),
     rollback: Object.freeze({ supported: Boolean(definition.rollback && definition.rollback.supported), kind: (definition.rollback && definition.rollback.kind) || 'none' }),
     run: definition.run
@@ -55,7 +59,7 @@ export function evaluateToolPolicy(tool, input, policy) {
   if (!['allow', 'deny', 'ask'].includes(decision)) throw new Error('Invalid tool policy decision: ' + decision);
   const result = {
     decision,
-    reason: String(raw.reason || ''),
+    reason: String(redactAuditValue(String(raw.reason || ''))),
     requiredCapabilities: Array.isArray(raw.requiredCapabilities) ? [...raw.requiredCapabilities] : [...tool.capabilities],
     sandbox: Boolean(raw.sandbox),
     audit: raw.audit !== false
