@@ -14,6 +14,10 @@ test('tool definitions validate capabilities and defaults', () => {
   assert.throws(() => defineTool({ name: 'bad name', title: 'x', description: 'x', capabilities: ['read'], run: async () => {} }));
 });
 
+test('tool definitions reject unknown capabilities and risk levels', () => {
+  assert.throws(() => defineTool({ name: 'bad_capability', capabilities: ['filesystem'], run: async () => null }), /Unknown tool capability/);
+  assert.throws(() => defineTool({ name: 'bad_risk', capabilities: ['read'], risk: 'extreme', run: async () => null }), /Unknown tool risk level/);
+});
 test('registry prevents duplicate tools and supports capability lookup', () => {
   const registry = createToolRegistry([readTool, writeTool, shellTool]);
   assert.equal(registry.has('read_file'), true);
@@ -31,6 +35,22 @@ test('policy deny blocks execution and records an audit event', async () => {
   assert.equal(result.audit.tool, 'read_file');
 });
 
+test('input validation applies JSON Schema types and additional-property rules', async () => {
+  const typed = defineTool({
+    name: 'typed_read',
+    capabilities: ['read'],
+    risk: 'low',
+    inputSchema: { type: 'object', properties: { path: { type: 'string' } }, required: ['path'], additionalProperties: false },
+    run: async (input) => input.path
+  });
+  const policy = { decide: () => ({ decision: 'allow' }) };
+  const wrongType = await runTool(typed, { path: 42 }, { policy });
+  assert.equal(wrongType.ok, false);
+  assert.match(wrongType.error, /expected string/);
+  const extraProperty = await runTool(typed, { path: 'README.md', unexpected: true }, { policy });
+  assert.equal(extraProperty.ok, false);
+  assert.match(extraProperty.error, /unexpected property/);
+});
 test('approval-required tools become pending approvals even if policy allows them', async () => {
   const policy = { decide: () => ({ decision: 'allow' }) };
   const result = await runTool(writeTool, { path: 'src/a.js' }, { policy });
@@ -48,6 +68,33 @@ test('allowed tools execute and redact secrets in audit records', async () => {
   assert.doesNotMatch(result.audit.input.command, /sk-secret-token-123456/);
 });
 
+test('timeout abort still reaches handlers when the caller supplies a signal', async () => {
+  const slow = defineTool({
+    name: 'slow_read', capabilities: ['read'], risk: 'low', timeoutMs: 25, inputSchema: { type: 'object' },
+    run: async (_input, { signal }) => await new Promise((resolve) => signal.addEventListener('abort', () => resolve('handler observed abort'), { once: true }))
+  });
+  const caller = new AbortController();
+  const result = await runTool(slow, {}, { policy: { decide: () => ({ decision: 'allow' }) }, signal: caller.signal });
+  assert.equal(result.ok, false);
+  assert.equal(result.timedOut, true);
+  assert.match(result.error, /Tool timed out/);
+});
+
+test('caller cancellation is forwarded to the tool handler', async () => {
+  const slow = defineTool({
+    name: 'cancellable_read', capabilities: ['read'], risk: 'low', timeoutMs: 2000, inputSchema: { type: 'object' },
+    run: async (_input, { signal }) => await new Promise((resolve) => signal.addEventListener('abort', () => resolve('handler observed abort'), { once: true }))
+  });
+  const caller = new AbortController();
+  const pending = runTool(slow, {}, { policy: { decide: () => ({ decision: 'allow' }) }, signal: caller.signal });
+  await new Promise((resolve) => setTimeout(resolve, 10));
+  caller.abort(new Error('caller cancelled task'));
+  const result = await pending;
+  assert.equal(result.ok, false);
+  assert.equal(result.cancelled, true);
+  assert.equal(result.timedOut, undefined);
+  assert.match(result.error, /caller cancelled task/);
+});
 test('missing required input fails without invoking the tool', async () => {
   const policy = { decide: () => ({ decision: 'allow' }) };
   const result = await runTool(readTool, {}, { policy });
