@@ -50,24 +50,31 @@ export function createToolRegistry(definitions = []) {
   });
 }
 
-export function evaluateToolPolicy(tool, input, policy) {
-  if (!policy || typeof policy.decide !== 'function') {
-    return { decision: 'deny', reason: 'no tool policy is configured', requiredCapabilities: [...tool.capabilities], sandbox: false, audit: true };
-  }
-  const raw = policy.decide({ tool, input }) || {};
-  const decision = String(raw.decision || 'deny');
+function normalizeToolPolicyDecision(tool, raw = {}) {
+  const decision = String(raw && raw.decision || 'deny');
   if (!['allow', 'deny', 'ask'].includes(decision)) throw new Error('Invalid tool policy decision: ' + decision);
   const result = {
     decision,
-    reason: String(redactAuditValue(String(raw.reason || ''))),
-    requiredCapabilities: Array.isArray(raw.requiredCapabilities) ? [...raw.requiredCapabilities] : [...tool.capabilities],
-    sandbox: Boolean(raw.sandbox),
-    audit: raw.audit !== false
+    reason: String(redactAuditValue(String(raw && raw.reason || ''))),
+    requiredCapabilities: Array.isArray(raw && raw.requiredCapabilities) ? [...raw.requiredCapabilities] : [...tool.capabilities],
+    sandbox: Boolean(raw && raw.sandbox),
+    audit: !raw || raw.audit !== false
   };
   if (tool.requiresApproval && decision === 'allow') {
     return { ...result, decision: 'ask', reason: result.reason || 'tool explicitly requires approval' };
   }
   return result;
+}
+
+export function evaluateToolPolicy(tool, input, policy) {
+  if (!policy || typeof policy.decide !== 'function') {
+    return normalizeToolPolicyDecision(tool, {
+      decision: 'deny',
+      reason: 'no tool policy is configured',
+      requiredCapabilities: [...tool.capabilities]
+    });
+  }
+  return normalizeToolPolicyDecision(tool, policy.decide({ tool, input }) || {});
 }
 
 export async function validateToolInput(tool, input) {
@@ -146,7 +153,28 @@ async function validateToolOutput(tool, output) {
 
 export async function runTool(tool, input, options = {}) {
   const policy = options.policy || {};
-  const decision = evaluateToolPolicy(tool, input, policy);
+  let authorizedInput = input;
+  let authorizationContext = null;
+  let decision;
+  if (typeof options.authorize === 'function') {
+    try {
+      const authorization = await options.authorize({ tool, input });
+      if (!authorization || typeof authorization !== 'object' || Array.isArray(authorization)) {
+        decision = normalizeToolPolicyDecision(tool, { decision: 'deny', reason: 'Tool authorization returned no valid decision.' });
+      } else {
+        decision = normalizeToolPolicyDecision(tool, authorization);
+        if (Object.prototype.hasOwnProperty.call(authorization, 'input')) authorizedInput = authorization.input;
+        authorizationContext = authorization.context ?? null;
+      }
+    } catch (error) {
+      decision = normalizeToolPolicyDecision(tool, {
+        decision: 'deny',
+        reason: 'Tool authorization failed closed: ' + String(error && error.message || error)
+      });
+    }
+  } else {
+    decision = evaluateToolPolicy(tool, input, policy);
+  }
   if (decision.decision === 'deny') {
     return { ok: false, tool: tool.name, decision, error: decision.reason || 'tool denied by policy', audit: decision.audit ? buildAuditRecord(tool, input, decision, null, options) : null };
   }
@@ -156,10 +184,10 @@ export async function runTool(tool, input, options = {}) {
 
   let normalizedInput;
   try {
-    normalizedInput = await validateToolInput(tool, input);
+    normalizedInput = await validateToolInput(tool, authorizedInput);
   } catch (error) {
     const result = { ok: false, tool: tool.name, decision, error: error && error.message || String(error) };
-    if (decision.audit) result.audit = buildAuditRecord(tool, input, decision, result, options);
+    if (decision.audit) result.audit = buildAuditRecord(tool, authorizedInput, decision, result, options);
     return result;
   }
 
@@ -203,7 +231,8 @@ export async function runTool(tool, input, options = {}) {
       policy,
       sandbox: decision.sandbox,
       env: options.env || process.env,
-      cwd: options.cwd || process.cwd()
+      cwd: options.cwd || process.cwd(),
+      authorizationContext
     }));
     const rawOutput = await Promise.race([running, aborted]);
     const output = await validateToolOutput(tool, rawOutput);
