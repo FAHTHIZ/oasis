@@ -4846,6 +4846,7 @@ async function executeRegisteredToolWithKernel(session, name, args, context, opt
       if (cached) return cached;
       const executionContext = Object.create(context);
       executionContext.root = context.root || session.root;
+      executionContext.session = session;
       executionContext.env = runtime.env;
       executionContext.signal = runtime.signal;
       return await executeTool(name, validatedInput, executionContext);
