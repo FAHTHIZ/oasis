@@ -115,6 +115,10 @@ export function resolveBlocker(ledger, blockerId, resolution = '') {
   if (!blocker) throw new Error('Unknown blocker: ' + blockerId);
   blocker.resolvedAt = now();
   if (resolution) blocker.resolution = resolution;
+  if (blocker.stepId) {
+    const blockedStep = ledger.steps.find((step) => step.id === blocker.stepId);
+    if (blockedStep && blockedStep.status === 'blocked') blockedStep.status = blockedStep.startedAt ? 'in_progress' : 'pending';
+  }
   if (!ledger.blockers.some((entry) => !entry.resolvedAt)) {
     ledger.status = ledger.steps.some((step) => step.status === 'in_progress') ? 'in_progress' : 'planning';
   }
