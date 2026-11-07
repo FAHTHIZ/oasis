@@ -5057,6 +5057,7 @@ async function executeOrchestrationToolWithKernel(session, name, args, context, 
         env: runtime.env,
         signal: runtime.signal
       });
+      const executionOptions = { ...options, signal: runtime.signal };
       if (name === 'run_specialist_review') {
         const budgetOwner = context && typeof context === 'object' ? context : executionContext;
         const budget = budgetOwner.specialistBudget || (budgetOwner.specialistBudget = { used: 0 });
@@ -5064,10 +5065,10 @@ async function executeOrchestrationToolWithKernel(session, name, args, context, 
           throw new Error('This task has reached the two-specialist-review limit. Use the existing review result or ask for a focused follow-up task.');
         }
         budget.used += 1;
-        return await runSpecialistReview(session, validatedInput, executionContext, options, budget);
+        return await runSpecialistReview(session, validatedInput, executionContext, executionOptions, budget);
       }
       if (name === 'task') {
-        return await runSubagent(session, validatedInput, executionContext, { ...options, parentToolUseId: options.parentToolUseId });
+        return await runSubagent(session, validatedInput, executionContext, { ...executionOptions, parentToolUseId: options.parentToolUseId });
       }
       if (name === 'execute_code') {
         const { runExecuteCode } = await import('./code-mode.mjs');
@@ -5079,16 +5080,16 @@ async function executeOrchestrationToolWithKernel(session, name, args, context, 
               id: String(options.parentToolUseId || 'code') + '_' + (++nested),
               type: 'function',
               function: { name: toolName, arguments: JSON.stringify(input || {}) }
-            }, executionContext, options);
+            }, executionContext, executionOptions);
             return message && message.result !== undefined ? message.result : message && message.content;
           }
         });
       }
       if (name === 'workflow') {
         if (options.isSubagent) throw new Error('Subagents cannot start workflows.');
-        return await runWorkflowTool(session, validatedInput, executionContext, options);
+        return await runWorkflowTool(session, validatedInput, executionContext, executionOptions);
       }
-      if (name === 'exit_plan_mode') return await exitPlanMode(session, validatedInput, executionContext, options);
+      if (name === 'exit_plan_mode') return await exitPlanMode(session, validatedInput, executionContext, executionOptions);
       if (name === 'advisor') {
         return await consultAdvisor(session, validatedInput, {
           signal: runtime.signal,
@@ -5096,7 +5097,7 @@ async function executeOrchestrationToolWithKernel(session, name, args, context, 
           onUsage: options.onUsage
         });
       }
-      return await runAgentTool(session, name, validatedInput, executionContext, options);
+      return await runAgentTool(session, name, validatedInput, executionContext, executionOptions);
     }
   });
   return await executeThroughToolKernel(session, tool, args, context, { ...options, authorize });
