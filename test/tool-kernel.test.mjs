@@ -49,7 +49,7 @@ test('input validation applies JSON Schema types and additional-property rules',
   assert.match(wrongType.error, /expected string/);
   const extraProperty = await runTool(typed, { path: 'README.md', unexpected: true }, { policy });
   assert.equal(extraProperty.ok, false);
-  assert.match(extraProperty.error, /unexpected property/);
+  assert.match(extraProperty.error, /unsupported property/);
 });
 test('approval-required tools become pending approvals even if policy allows them', async () => {
   const policy = { decide: () => ({ decision: 'allow' }) };
