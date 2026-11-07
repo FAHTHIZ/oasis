@@ -2,20 +2,20 @@
 
 **Audit date:** 2026-11-07  
 **Audited branch:** `main`  
-**Audit commit:** [`8945253d6a772e116d1334c5281de62e81434595`](https://github.com/FAHTHIZ/oasis/commit/8945253d6a772e116d1334c5281de62e81434595)  
+**Audit commit:** [`20f44b897f5f9e1ad574df483d94d4a92a52c77b`](https://github.com/FAHTHIZ/oasis/commit/20f44b897f5f9e1ad574df483d94d4a92a52c77b)  
 **Purpose:** compare repository presentation, developer experience and engineering practice—not model intelligence or coding-task success.
 
 ## Executive result
 
-OASIS already has a substantial engineering foundation and a recognizable visual identity. The repository contains 1,202 tracked files: 219 under `src/`, 411 test files, 384 evaluation fixtures, 29 benchmark files, 26 browser-app files, 26 skills, 17 GitHub automation files and 8 maintained technical documents.
+OASIS already has a substantial engineering foundation and a recognizable visual identity. At this audit head, the repository contains 1,206 tracked files: 219 under `src/`, 411 test files, 384 evaluation fixtures, 29 benchmark files, 26 browser-app files, 26 skills, 17 GitHub automation files, 16 brand/demo assets and 9 maintained technical documents.
 
-The strongest gaps are not a lack of features or badges. They are **release/distribution truth, a genuine product walkthrough, documentation discoverability, and controlled external coding-agent evaluations**.
+The strongest gaps are not a lack of features or badges. They are **release/distribution truth, product walkthrough coverage across all interfaces, documentation discoverability, and controlled external coding-agent evaluations**. The README now includes a real CLI model run; browser and desktop walkthroughs remain to be captured.
 
 The headline assessment is:
 
 - **Engineering foundation:** strong for a solo-maintained project, based on visible repository structure and CI configuration.
 - **Repository presentation:** good brand and core README; several avoidable trust and navigation gaps remain.
-- **Product proof:** incomplete until the README shows real interface screenshots and a repeatable user journey.
+- **Product proof:** materially improved by the README's unscripted `gpt-oss-20b` CLI recording, GIF/MP4 and raw terminal cast; still incomplete across the browser app, connected workspace and desktop.
 - **Competitive coding quality:** not established by this audit. Repository quality cannot show that OASIS completes more coding tasks than Codex, Claude Code, OpenCode or other agents.
 
 This is a practical gap analysis, not a universal quality ranking.
@@ -30,11 +30,11 @@ A separate [awesome-coding-agent catalogue](https://github.com/jqueryscript/awes
 
 ### What was actually inspected
 
-- A complete recursive tree inventory of the audited OASIS commit: 1,413 tree entries, 1,202 tracked file blobs.
+- A complete recursive tree inventory of the audited OASIS commit: 1,418 tree entries, 1,206 tracked file blobs.
 - OASIS's README, package metadata, brand guide, contribution/security/support documents, architecture, replacement roadmap, runtime-alternative study, benchmark methodology, CI workflows, update/release implementation and selected routing, shell-policy and provider-stream source/tests.
 - A representative README/product-presentation sample: [OpenCode](https://github.com/anomalyco/opencode), [Codex CLI](https://github.com/openai/codex), [Gemini CLI](https://github.com/google-gemini/gemini-cli), [OpenHands](https://github.com/OpenHands/OpenHands), [Cline](https://github.com/cline/cline), [Goose](https://github.com/aaif-goose/goose), [Pi](https://github.com/earendil-works/pi), [Superpowers](https://github.com/obra/superpowers), [Hermes Agent](https://github.com/NousResearch/hermes-agent), [Dify](https://github.com/langgenius/dify), [Mem0](https://github.com/mem0ai/mem0) and [OpenDesign](https://github.com/nexu-io/open-design).
 
-The full 100-entry index is preserved below so the reference set is auditable. **The 100 repositories were not each line-by-line audited.** The deep README sample is representative, not exhaustive. Index star/fork values are copied as published by that third-party source and were not independently refreshed against GitHub; they are included only to preserve its snapshot, not as verified metrics or quality scores.
+The README's recorded real-model demonstration was added in commit [`20f44b8`](https://github.com/FAHTHIZ/oasis/commit/20f44b897f5f9e1ad574df483d94d4a92a52c77b). The demo metadata reports 6m 19s, seven tool calls and 50.9k tokens; those are details of that single recording, not a repeatable efficiency or performance claim. The full 100-entry index is preserved below so the reference set is auditable. **The 100 repositories were not each line-by-line audited.** The deep README sample is representative, not exhaustive. Index star/fork values are copied as published by that third-party source and were not independently refreshed against GitHub; they are included only to preserve its snapshot, not as verified metrics or quality scores.
 
 ## OASIS quality scorecard
 
@@ -44,7 +44,7 @@ Ratings describe evidence present in the repository at the audit commit. “Stro
 |---|---|---|
 | Brand identity | **Strong** | Dedicated portal mark, logo, hero artwork, icon variants and `BRAND.md`. The design language is coherent and restrained. |
 | First-screen product clarity | **Strong** | Clear statement of the product as a model-agnostic coding-agent runtime, plus a practical interface map. |
-| Real product proof | **Partial** | The README hero is brand artwork, not a product screenshot. Add real screenshots or a short, reproducible product tour; never present concept art as a UI capture. |
+| Real product proof | **Strong (CLI) / Partial (cross-interface)** | The README now embeds a real, unscripted `gpt-oss-20b` CLI run as a GIF with MP4 and raw `.cast` recording. It shows file reading, a bug fix, a new test, approval and a verification send-back. This is qualitative evidence from one recorded run, not a standardized task benchmark. Browser, connected-workspace and desktop captures remain outstanding. |
 | Installation accuracy | **Partial** | CLI and PWA paths are documented. The docs said Node 22+, while `package.json` requires Node `>=22.15`; desktop copy implied downloadable installers existed. |
 | Release/distribution trust | **Gap** | The `v1.1.0` Git tag exists, but the GitHub Releases API returned no published release and `/releases/latest` returned 404. The release workflow is guarded, but users must not be told an installer is available until release assets are actually published. |
 | Documentation navigation | **Partial** | Architecture and configuration guides exist, but the docs index omitted the architecture-alternatives and agent-runtime-alternatives documents. |
@@ -61,7 +61,7 @@ The representative sample shows several repeatable practices worth adopting:
 
 | Pattern | Strong examples | OASIS action |
 |---|---|---|
-| Lead with a real product image or walkthrough | OpenHands, OpenDesign, OpenCode, Hermes | Capture the actual OASIS CLI, connected workspace and PWA. Add a small product-tour section with captions and alt text. Keep hero brand art separate. |
+| Lead with a real product image or walkthrough | OpenHands, OpenDesign, OpenCode, Hermes | The README now shows an actual CLI run, with an MP4 and raw terminal recording. Add separate connected-workspace, PWA and desktop captures; keep hero brand art separate. |
 | Separate install routes by product surface | Cline, Codex, Pi, OpenCode | Keep CLI, desktop, browser and editor paths clearly distinct, with exact prerequisites and truthful availability. |
 | Show the product's boundary, not just its feature count | OpenHands, Goose, Gemini CLI | Explain where the runtime executes, what each interface can access, and which integrations are optional. OASIS already does much of this well. |
 | Make docs and support one click away | OpenCode, Superpowers, Goose, Cline | Keep one authoritative docs index and add all maintained architecture/comparison pages to it. |
@@ -88,8 +88,8 @@ The representative sample shows several repeatable practices worth adopting:
 
 ### P1 — prove the product
 
-1. Capture real screenshots from the CLI, connected browser workspace and standalone PWA, using representative, non-sensitive project content.
-2. Add a short README product tour with meaningful captions, and link a fuller user journey.
+1. Capture separate screenshots from the connected workspace, standalone PWA and desktop app using representative, non-sensitive project content; the real CLI demonstration is now present.
+2. Expand the README demo into a short product tour with meaningful captions, linking the raw terminal cast for inspection.
 3. Add a clean first-run walkthrough: choose provider/model, connect a workspace, inspect permissions, run a task, review a diff, run checks and inspect verification.
 4. Make the README's first screen answer: what it is, who it is for, what runs locally, how to try it and where to get help.
 

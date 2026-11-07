@@ -2,6 +2,12 @@
 
 OASIS contains several kinds of evaluation. They answer different questions and should not be combined into one headline score.
 
+## Product demonstrations are not benchmark results
+
+The README includes an unscripted `gpt-oss-20b` CLI recording, with a GIF, MP4 and raw terminal cast. It demonstrates the user-facing flow and makes mistakes, approvals and verification visible. It is a single qualitative example, not a fixed verifier-backed task set. Do not quote its duration, tool count or token usage as comparative success, speed, cost or safety evidence.
+
+For quantitative comparisons, use the controlled live-evaluation protocol below: pin the model, provider, task set, verifier, configuration and environment; record attempts, verified outcomes, interventions, failures, tokens, elapsed time and cost; and report repetitions and variance.
+
 ## Model-free harness benchmark
 
 Run:

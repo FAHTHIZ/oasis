@@ -2,7 +2,7 @@
 
 **Audit snapshot:** 2026-11-07  
 **Audited branch:** `main`  
-**Audit base:** `8945253d6a772e116d1334c5281de62e81434595`  
+**Audit base:** `20f44b897f5f9e1ad574df483d94d4a92a52c77b`  
 **Status:** architecture inventory and ranked improvement plan; not a security certification.
 
 ## Purpose
@@ -17,11 +17,11 @@ The objective is not to replace every dependency. It is to find the weakest cons
 
 The inventory used the repository tree, current README and architecture/configuration/benchmark/interface documentation, source modules and tests. It then examined selected implementation paths in depth and compared them with upstream source, API definitions, licences, release metadata and design documentation.
 
-This is a broad architecture and prioritisation audit, not a line-by-line review of all 1,202 tracked files and not a penetration test. No live provider benchmark was run as part of this audit. A green test suite would establish only that the tested cases pass; it would not prove general security or superiority over another agent.
+This is a broad architecture and prioritisation audit, not a line-by-line review of all 1,206 tracked files and not a penetration test. No live provider benchmark was run as part of this audit. A green test suite would establish only that the tested cases pass; it would not prove general security or superiority over another agent.
 
 ## Whole-system inventory
 
-The repository tree at the audit base contains **1,413 entries, including 1,202 tracked files**. The following counts are tracked file blobs grouped by top-level directory; this is a structural inventory, not a line-by-line code review:
+The repository tree at the audit base contains **1,418 entries, including 1,206 tracked files**. The following counts are tracked file blobs grouped by top-level directory; this is a structural inventory, not a line-by-line code review:
 
 | Area | Tracked files | Primary responsibility |
 |---|---:|---|
@@ -33,12 +33,12 @@ The repository tree at the audit base contains **1,413 entries, including 1,202 
 | Skills (`skills/`) | 26 | Reusable agent skills and instructions |
 | Scripts (`scripts/`) | 22 | Build, release, data refresh and maintenance automation |
 | GitHub automation (`.github/`) | 17 | CI, installer checks, Pages deployment, issue templates and repository automation |
-| Brand assets (`assets/`) | 13 | Maintained visual identity and platform artwork |
+| Brand and demo assets (`assets/`) | 16 | Maintained visual identity and platform artwork |
 | Website sources (`site/`) | 9 | Public browser-app/site content |
 | Desktop host (`desktop/`) | 7 | Electron entry point, packaging and secure-storage integration |
 | Editor integration (`ide/`) | 6 | VS Code-family editor workflow |
 | Extensions (`plugins/`) | 6 | Optional integrations and capabilities |
-| Documentation (`docs/`) | 8 | Architecture, setup, security, configuration, comparisons and benchmark methodology |
+| Documentation (`docs/`) | 9 | Architecture, setup, security, configuration, comparisons and benchmark methodology |
 
 ### Architecture map
 
@@ -86,6 +86,12 @@ The first component has already been improved on `main`:
 
 Recent `main` changes also make routing hints advisory, check catalogue metadata for tool-call capability before selecting a routed model, correct the reported routing tier when an unsupported candidate is rejected, and refresh legacy model caches. These safeguards improve routing constraints; they do not yet prove higher task success or lower cost. See [the current source](../src/model-routing.mjs) and [its tests](../test/model-routing.test.mjs).
 
+## Real-model product demonstration
+
+The README now embeds a real, unscripted `gpt-oss-20b` CLI recording, linked as a GIF/MP4 with its raw terminal cast. The commit is [`20f44b8`](https://github.com/FAHTHIZ/oasis/commit/20f44b897f5f9e1ad574df483d94d4a92a52c77b). The run shows file reading, a bug fix, a new test, a permission approval and a verification send-back.
+
+This is valuable qualitative product evidence. It is one recorded run with shortened rate-limit waits; its reported duration, tool count and token usage are not a controlled benchmark or a basis for comparing OASIS against another agent. Use the separate evaluation methodology for quantitative claims.
+
 ## Agent runtime extraction: first provider-stream seam
 
 The first small extraction from the central agent module is now on `main`:
@@ -132,13 +138,14 @@ The integration is useful and the existing test/CI results are encouraging, but 
 - Initial Bash AST integration: [\`b7cbff7\`](https://github.com/FAHTHIZ/oasis/commit/b7cbff714ebe1c99f34c1c5e444e91d60673f6fc)
 - Launcher-option handling: [\`893cd0f\`](https://github.com/FAHTHIZ/oasis/commit/893cd0f705d0876ad0d619b0da401747a7326500)
 - Fail-closed unresolved loops: [\`26db445\`](https://github.com/FAHTHIZ/oasis/commit/26db4458fb0d892c4275ca71bd205ee6ee0d3a99)
-- Typed-AST strict allow decisions: [`0f857e5`](https://github.com/FAHTHIZ/oasis/commit/0f857e56449b0342c2f61eb755e43bc96109475a)
+- Typed-AST strict allow decisions: [`0f857e5`](https://github.com/FAHTHIZ/oasis/commit/0f857e56449cbb1c5c5487c829b9feed24790e13)
 - Keep shell redirections behind explicit review: [`f5722ce`](https://github.com/FAHTHIZ/oasis/commit/f5722ce4aa34adfd28d3bb7bde1567086a833290)
 - Prevent routing hints from bypassing action guards: [`1b68cc7`](https://github.com/FAHTHIZ/oasis/commit/1b68cc734d8a46e0ac90502fb39c0bf6fdc8998b)
 - Capability-aware task model routing: [`4ba2e34`](https://github.com/FAHTHIZ/oasis/commit/4ba2e346f6822b4701db75475a439946781c90cc)
 - Refresh legacy model caches: [`0b1a549`](https://github.com/FAHTHIZ/oasis/commit/0b1a549766bd40ea916f7ac0b64b2a0cea460729)
 - Correct routing tier after tool-capability fallback: [`8945253`](https://github.com/FAHTHIZ/oasis/commit/8945253d6a772e116d1334c5281de62e81434595)
 - Extract provider streaming: [`7ba3f0a`](https://github.com/FAHTHIZ/oasis/commit/7ba3f0a3ec839bcbeeb95773057770d3f64a9a21)
+- Restore the real-model README demonstration: [`20f44b8`](https://github.com/FAHTHIZ/oasis/commit/20f44b897f5f9e1ad574df483d94d4a92a52c77b)
 
 ## Components to retain unless evidence says otherwise
 
