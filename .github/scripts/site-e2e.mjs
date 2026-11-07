@@ -25,7 +25,7 @@ const server = createServer(async (req, res) => {
   let pathname;
   try { pathname = decodeURIComponent(new URL(req.url || '/', 'http://127.0.0.1').pathname); }
   catch { res.writeHead(400).end('Bad request'); return; }
-  const relative = pathname === '/' ? 'index.html' : pathname.replace(/^\\/+/, '');
+  const relative = pathname === '/' ? 'index.html' : pathname.slice(1);
   const target = path.resolve(siteRoot, relative);
   if (target !== siteRoot && !target.startsWith(siteRoot + path.sep)) {
     res.writeHead(403).end('Forbidden');
