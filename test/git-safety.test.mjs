@@ -70,7 +70,7 @@ test('run_command git checkout . is recoverable from the safety snapshot', async
   const result = await executeTool('run_command', { command: 'git', args: ['checkout', '.'] }, { root, autoApprove: true, approval: async () => true, env: process.env });
   assert.equal(result.exitCode, 0);
   assert.equal(await readFile(path.join(root, 'a.txt'), 'utf8'), 'committed\n', 'the command really discarded the edit');
-  assert.match(result.safetySnapshot, /Safety snapshot: uncommitted work was saved to refs\/oasis\/safety\//);
+  assert.match(result.safetySnapshot, /Safety snapshot: recovery data was saved to refs\/oasis\/safety\//);
   const restore = result.safetySnapshot.match(/`(git restore [^`]+)`/)[1].split(' ').slice(1);
   git(root, ...restore);
   assert.equal(await readFile(path.join(root, 'a.txt'), 'utf8'), 'precious work\n');
