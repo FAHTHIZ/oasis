@@ -393,3 +393,21 @@ test('main agent routes MCP tools through the kernel and validates structured ou
   assert.equal(audit[3].output.content, 'legacy text-only result');
   assert.equal(Object.hasOwn(audit[3].output, 'structuredContent'), false, 'text-only responses do not fabricate an undefined structuredContent field');
 });
+
+test('invalid tool arguments are rejected before a permission prompt', async (t) => {
+  const root = await tmp('oasis-invalid-tool-');
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const { config, requests } = await scriptedModel(t, [
+    toolCall('invalid-write', 'write_file', { path: 'blocked.txt' }),
+    { content: 'The malformed call was rejected.' }
+  ]);
+  const session = await createSession({ root, config, settings: settingsWith({}), permissionMode: 'ask' });
+  let prompts = 0;
+  await runAgentTurn(session, 'Create blocked.txt.', {
+    approval: async () => { prompts++; return true; }
+  });
+  const toolMessage = requests[1].messages.find((message) => message.role === 'tool');
+  assert.match(toolMessage.content, /Invalid arguments for write_file/);
+  assert.equal(prompts, 0);
+  await assert.rejects(readFile(path.join(root, 'blocked.txt')));
+});
