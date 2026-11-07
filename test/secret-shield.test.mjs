@@ -4,7 +4,7 @@ import { createServer } from 'node:http';
 import { mkdtemp, readFile, writeFile, rm } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import { maskSecrets, unmaskSecrets, findSecretsInText } from '../src/secret-shield.mjs';
+import { maskSecrets, unmaskSecrets, findSecretsInText, redactSecretText } from '../src/secret-shield.mjs';
 import { createSession, runAgentTurn } from '../src/agent.mjs';
 
 const GH = 'ghp_' + 'a1B2c3D4e5F6g7H8i9J0k1L2m3N4o5P6q7R8';
@@ -27,6 +27,15 @@ test('masks token formats, secret assignments, and URL passwords', () => {
   assert.equal(unmaskSecrets(session, text), input, 'round trip restores every value');
 });
 
+test('masks and redacts authorization header credentials', () => {
+  const session = {};
+  const header = 'curl -H "Authorization: Bearer sk-short-synthetic-token-123456"';
+  const masked = maskSecrets(session, header);
+  assert.equal(masked.count, 1);
+  assert.doesNotMatch(masked.text, /sk-short-synthetic-token-123456/);
+  assert.match(masked.text, /Authorization: Bearer «secret:[0-9a-f]{8}»/);
+  assert.doesNotMatch(redactSecretText(header), /sk-short-synthetic-token-123456/);
+});
 test('leaves ordinary code and non-secret values alone', () => {
   const session = {};
   const code = [
