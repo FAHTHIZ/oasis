@@ -159,3 +159,17 @@ test('a declined deletion stops the patch and is reported, not claimed as succes
   assert.equal(await readFile(path.join(root, 'old.txt'), 'utf8'), 'bye\n');
   await assert.rejects(access(path.join(root, 'z.txt')), 'sections after the refusal are not applied');
 });
+
+test('a declined move deletion reports the copied destination and preserves the source', async (t) => {
+  const body = patch('*** Update File: old.txt\\n*** Move to: moved/new.txt\\n@@\\n-original\\n+updated');
+  const { root, session, requests } = await fixture(t, [
+    toolCall('p1', 'apply_patch', { patch: body }),
+    { content: 'Done.' }
+  ], { files: { 'old.txt': 'original\\n' } });
+  await runAgentTurn(session, 'move the file', { approval: async () => false });
+  const [message] = toolResults(requests);
+  assert.match(message.content, /Move incomplete: destination moved\\/new\\.txt was written, but source old\\.txt was not deleted/);
+  assert.match(message.content, /Already applied: moved\\/new\\.txt/);
+  assert.equal(await readFile(path.join(root, 'old.txt'), 'utf8'), 'original\\n');
+  assert.equal(await readFile(path.join(root, 'moved/new.txt'), 'utf8'), 'updated\\n');
+});

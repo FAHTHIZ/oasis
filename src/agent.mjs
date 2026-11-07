@@ -4678,7 +4678,7 @@ function availableToolNames(session) {
 // by habit: as an apply_patch call (JSON or freeform text) or as a shell call
 // running `apply_patch <<'EOF'`. The patch is checked against the current files
 // first, then applied as ordinary write_file / delete_file calls through
-// executeOneCallRaw, so plan mode, permission rules, hooks, approvals,
+// executeOneCall, so plan mode, permission rules, hooks, approvals,
 // protected paths, snapshots and per-file locks all apply to every file.
 const APPLY_PATCH_DEFINITION = Object.freeze({ type: 'function', function: { name: 'apply_patch', description: 'Apply a patch in the "*** Begin Patch" … "*** End Patch" format (Add File / Update File / Delete File / Move to sections). Every file change runs as write_file or delete_file with the same approvals. Prefer edit_file for small edits.', parameters: { type: 'object', properties: { patch: { type: 'string', description: 'The complete patch text, from *** Begin Patch to *** End Patch' } }, required: ['patch'] } } });
 
@@ -4732,6 +4732,7 @@ async function executePatchCall(session, call, patchText, context, options) {
       : operation.moveTo
         ? [['write_file', { path: operation.moveTo, content: operation.content }], ['delete_file', { path: operation.path }]]
         : [['write_file', { path: operation.path, content: operation.content }]];
+    let moveDestinationWritten = false;
     for (const [toolName, toolArgs] of calls) {
       const message = await executeOneCall(session, { id: String(call.id || 'apply_patch') + '_part' + (++step), type: 'function', function: { name: toolName, arguments: JSON.stringify(toolArgs) } }, context, sub);
       const result = message && message.result;
@@ -4739,8 +4740,17 @@ async function executePatchCall(session, call, patchText, context, options) {
       const refused = result && typeof result === 'object' && (result.approved === false || result.blocked === true || result.cancelled === true);
       if (!result || (typeof result === 'object' && result.error) || refused) {
         const remaining = plan.operations.slice(plan.operations.indexOf(operation)).map((item) => item.path);
-        return finish({ error: 'Patch stopped at ' + (toolArgs.path || operation.path) + ': ' + (result && (result.error || result.message) || 'the change was not applied') + (applied.length ? ' Already applied: ' + applied.map((item) => item.path).join(', ') + '.' : ' Nothing was changed.'), applied, notApplied: remaining });
+        const partialMove = Boolean(operation.moveTo && moveDestinationWritten && toolName === 'delete_file');
+        if (partialMove) {
+          applied.push({ path: operation.moveTo, action: 'copied; source remains' });
+        }
+        const reason = result && (result.error || result.message) || 'the change was not applied';
+        const failure = partialMove
+          ? 'Move incomplete: destination ' + operation.moveTo + ' was written, but source ' + operation.path + ' was not deleted (' + reason + ').'
+          : 'Patch stopped at ' + (toolArgs.path || operation.path) + ': ' + reason;
+        return finish({ error: failure + (applied.length ? ' Already applied: ' + applied.map((item) => item.path).join(', ') + '.' : ' Nothing was changed.'), applied, notApplied: remaining });
       }
+      if (operation.moveTo && toolName === 'write_file') moveDestinationWritten = true;
     }
     applied.push({ path: operation.moveTo || operation.path, action: operation.type === 'add' ? 'added' : operation.type === 'delete' ? 'deleted' : operation.moveTo ? 'moved from ' + operation.path : 'updated' });
   }
