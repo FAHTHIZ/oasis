@@ -14,16 +14,26 @@
 // Set OASIS_SHELL_PARSER=legacy to force the old splitter.
 
 import { loadTreeSitter, loadTreeSitterLanguage } from './tree-sitter.mjs';
+import { parseUnbashShellCommands } from './unbash-shell-ast.mjs';
 
 let parser = null;
 let loading = null;
+let parserMode = process.env.OASIS_SHELL_PARSER === 'tree-sitter' ? 'tree-sitter' : (process.env.OASIS_SHELL_PARSER === 'legacy' ? 'legacy' : 'unbash');
 
 export function shellParserLoaded() {
-  return Boolean(parser);
+  return parserMode === 'unbash' || Boolean(parser);
 }
 
 export function loadShellParser(env = process.env) {
-  if (env.OASIS_SHELL_PARSER === 'legacy') return Promise.resolve(null);
+  if (env.OASIS_SHELL_PARSER === 'legacy') {
+    parserMode = 'legacy';
+    return Promise.resolve(null);
+  }
+  if (env.OASIS_SHELL_PARSER !== 'tree-sitter') {
+    parserMode = 'unbash';
+    return Promise.resolve('unbash');
+  }
+  parserMode = 'tree-sitter';
   if (!loading) {
     loading = (async () => {
       try {
@@ -230,7 +240,8 @@ function walk(node, bindings, out, state) {
 // Commands appear in source order and include those inside substitutions,
 // functions, conditionals, loops and case arms.
 export function parseShellCommands(line) {
-  if (!parser) return null;
+  if (parserMode === 'unbash') return parseUnbashShellCommands(line);
+  if (parserMode === 'legacy' || !parser) return null;
   const text = String(line || '');
   if (text.length > 100_000) return { commands: [], unparsable: true, tooLarge: true };
   let tree;
