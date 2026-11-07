@@ -651,6 +651,9 @@ function activityLabel(tool) {
     const testRunner = ['npm', 'pnpm', 'yarn', 'bun'].includes(commandParts[0]) && commandParts.some((part) => ['test', 'check', 'vitest', 'jest', 'playwright', 'mocha'].includes(part));
     const testCommand = testRunner || (commandParts[0] === 'node' && commandParts.includes('--test')) || commandParts[0] === 'pytest' || (commandParts[0] === 'go' && commandParts[1] === 'test') || (commandParts[0] === 'cargo' && commandParts[1] === 'test');
     return testCommand ? 'Ran the tests' : 'Ran commands';
+  }
+  if (name === 'read_file') return path ? 'Read ' + path : 'Read a file';
+  if (name === 'list_files') return 'Listed project files';
   if (name === 'write_file') return path ? 'Wrote ' + path : 'Wrote a file';
   if (['edit_file', 'multi_edit', 'notebook_edit', 'apply_patch'].includes(name)) return path ? 'Edited ' + path : 'Edited files';
   if (name === 'delete_file') return path ? 'Deleted ' + path : 'Deleted a file';
