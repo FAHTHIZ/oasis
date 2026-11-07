@@ -167,7 +167,7 @@ svg{width:20px;height:20px;flex:none}
 .task-progress-step{min-width:0;display:flex;align-items:flex-start;gap:9px;padding:7px 8px;border-radius:var(--r-sm);color:var(--muted);font-size:12px;line-height:1.45}
 .task-progress-step.in_progress{background:var(--accent-soft);color:var(--text)}
 .task-progress-marker{flex:none;width:16px;text-align:center;color:var(--faint);font-weight:700}
-.task-progress-step.completed .task-progress-marker{color:var(--success)}
+.task-progress-step.completed .task-progress-marker{color:var(--accent-2)}
 .task-progress-step.in_progress .task-progress-marker{color:var(--accent-2)}
 .task-progress-label{min-width:0;flex:1;overflow-wrap:anywhere}
 .task-progress-step.completed .task-progress-label{color:var(--faint)}
@@ -175,7 +175,7 @@ svg{width:20px;height:20px;flex:none}
 .task-progress-step.in_progress .task-progress-state{color:var(--accent-2);font-weight:700}
 .tool-status{flex:none;padding:2px 7px;border:1px solid var(--line);border-radius:999px;color:var(--muted);font-size:10px;font-weight:600;line-height:1.4;white-space:nowrap}
 .tool.running .tool-status{border-color:var(--warn);color:var(--warn)}
-.tool.ok .tool-status{border-color:color-mix(in srgb,var(--success) 35%,var(--line));color:var(--success)}
+.tool.ok .tool-status{border-color:color-mix(in srgb,var(--accent-2) 35%,var(--line));color:var(--accent-2)}
 .tool.fail .tool-status{border-color:color-mix(in srgb,var(--danger) 35%,var(--line));color:var(--danger)}
 
 /* Files panel: overlay on phones, column on wide screens */
