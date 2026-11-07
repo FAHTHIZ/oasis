@@ -33,7 +33,24 @@ const CAPABILITY_BY_TOOL = {
   install_external_skill: ['network', 'write'],
   configure_mcp_server: ['mcp', 'execute'],
   add_extension: ['network', 'write'],
-  install_plugin: ['write']
+  install_plugin: ['write'],
+  web_search: ['network'],
+  run_shell: ['execute'],
+  powershell: ['execute'],
+  monitor: ['execute'],
+  browser: ['browser', 'network'],
+  multi_edit: ['write'],
+  notebook_edit: ['write'],
+  memory_save: ['write'],
+  memory_delete: ['write'],
+  memory_search: ['read'],
+  memory_read: ['read'],
+  session_search: ['read'],
+  create_pull_request: ['git', 'network', 'write'],
+  git_push: ['git', 'network', 'write'],
+  git_commit: ['git', 'write'],
+  git_branch: ['git', 'write'],
+  worktree_merge: ['git', 'write']
 };
 
 const RISK_BY_TOOL = {
@@ -64,12 +81,12 @@ export function bridgeToolDefinition(definition, handler = {}) {
     name,
     title: handler.title || name,
     description: definition.function.description || '',
-    capabilities: handler.capabilities || CAPABILITY_BY_TOOL[name] || ['read'],
-    risk: handler.risk || RISK_BY_TOOL[name] || 'medium',
+    capabilities: handler.capabilities || CAPABILITY_BY_TOOL[name] || (name.startsWith('mcp_') ? ['mcp', 'execute'] : ['execute']),
+    risk: handler.risk || RISK_BY_TOOL[name] || (CAPABILITY_BY_TOOL[name] ? 'medium' : 'critical'),
     inputSchema: definition.function.parameters || {},
     outputSchema: handler.outputSchema || {},
     timeoutMs: handler.timeoutMs,
-    requiresApproval: handler.requiresApproval || ['delete_file', 'run_command', 'install_package', 'configure_mcp_server'].includes(name),
+    requiresApproval: handler.requiresApproval ?? (!CAPABILITY_BY_TOOL[name] && !name.startsWith('mcp_') ? true : ['delete_file', 'run_command', 'run_shell', 'powershell', 'monitor', 'install_package', 'configure_mcp_server', 'git_push', 'git_commit', 'create_pull_request'].includes(name)),
     rollback: handler.rollback || { supported: ['write_file', 'edit_file', 'delete_file'].includes(name), kind: ['write_file', 'edit_file', 'delete_file'].includes(name) ? 'file-snapshot' : 'none' },
     run: handler.run || (async () => ({ bridged: true }))
   });
