@@ -38,7 +38,7 @@ import { selectTaskModel } from './model-routing.mjs';
 import { readProviderStream, mergeAnthropicUsage, toolCallSlot, strayStreamError } from './provider-stream.mjs';
 import { planToolBatches } from './tool-batch-scheduler.mjs';
 import { validateToolArguments } from './tool-schema-validation.mjs';
-import { redactAuditValue } from './tool-kernel.mjs';
+import { redactAuditValue, runTool } from './tool-kernel.mjs';
 import { openAIEndpoint, responsesEndpoint, anthropicEndpoint, toResponsesRequest, toAnthropicRequest, chatCompletionTool } from './provider-requests.mjs';
 export { mergeAnthropicUsage, toolCallSlot, strayStreamError };
 
@@ -59,6 +59,7 @@ import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 const execFileAsync = promisify(execFile);
 import { TOOL_DEFINITIONS, executeTool, loadProjectInstructions, loadSkillDescriptions, setAdditionalDirectories, additionalDirectories } from './tools.mjs';
+import { bridgeToolDefinition } from './tool-registry-bridge.mjs';
 import { patchFromToolCall, patchFilesNeeded, planPatch } from './apply-patch.mjs';
 import { resolveTeammateMode, openTeammatePane, mirrorToPane, closeTeammatePanes } from './teammate-panes.mjs';
 import { connectMcpServers, mcpToolDefinitions, callMappedMcpTool, closeMcpClients, refreshSessionMcpTools } from './mcp.mjs';
@@ -4814,6 +4815,61 @@ async function executeOneCallTraced(session, call, context, options) {
   });
 }
 
+function kernelTimeoutForTool(name, args, context) {
+  if (['run_command', 'run_shell', 'powershell', 'monitor'].includes(name)) {
+    const requested = Number(args && (args.timeoutSeconds || args.timeout_seconds) || context.maxCommandSeconds || 120);
+    const seconds = Number.isFinite(requested) && requested > 0 ? requested : 120;
+    return Math.min(600_000, Math.max(5_000, Math.ceil(seconds * 1000) + 10_000));
+  }
+  if (['install_package', 'generate_image', 'text_to_speech'].includes(name)) return 600_000;
+  if (name === 'web_search') return 60_000;
+  if (name === 'fetch_url') return 30_000;
+  return 120_000;
+}
+
+// The agent's existing permission gate runs before this boundary. The kernel
+// then validates the registered schema again and owns cancellation, timeout,
+// and redacted audit handling for the actual workspace tool execution.
+async function executeRegisteredToolWithKernel(session, name, args, context, options = {}) {
+  const definition = (session.toolDefinitions || []).find((item) => item && item.function && item.function.name === name);
+  if (!definition) throw new Error('No registered tool definition for ' + name + '; refusing to execute an unregistered tool.');
+
+  const tool = bridgeToolDefinition(definition, {
+    // authorizeCall already made the user/policy decision; do not show a second prompt.
+    requiresApproval: false,
+    timeoutMs: kernelTimeoutForTool(name, args, context),
+    run: async (validatedInput, runtime) => {
+      const cached = name === 'read_file'
+        ? await dedupedReadHit(session, validatedInput, runtime.env)
+        : null;
+      if (cached) return cached;
+      return await executeTool(name, validatedInput, {
+        ...context,
+        root: context.root || session.root,
+        env: runtime.env,
+        signal: runtime.signal
+      });
+    }
+  });
+  const outcome = await runTool(tool, args, {
+    policy: { decide: () => ({ decision: 'allow' }) },
+    signal: options.signal || context.signal,
+    env: context.env || options.env || process.env,
+    cwd: context.root || session.root || process.cwd()
+  });
+
+  if (outcome.audit && session) {
+    session.toolAuditLog ||= [];
+    session.toolAuditLog.push(outcome.audit);
+    if (session.toolAuditLog.length > 200) session.toolAuditLog.splice(0, session.toolAuditLog.length - 200);
+    if (typeof options.onToolAudit === 'function') {
+      try { options.onToolAudit(outcome.audit); } catch { /* audit observers cannot break tool execution */ }
+    }
+  }
+  if (!outcome.ok) throw new Error(outcome.error || ('Tool ' + name + ' failed.'));
+  return outcome.output;
+}
+
 async function executeOneCallRaw(session, call, context, options) {
   const name = call.function && call.function.name;
   let result;
@@ -4941,7 +4997,7 @@ async function executeOneCallRaw(session, call, context, options) {
         const issues = state ? verificationIssues(state) : ['runtime verification state is unavailable'];
         assertLearningVerification(state, issues);
       }
-      result = (name === 'read_file' ? await dedupedReadHit(session, args, callContext.env || process.env) : null) || await executeTool(name, args, callContext);
+      result = await executeRegisteredToolWithKernel(session, name, args, callContext, options);
       if (AUTO_LSP_EDIT_TOOLS.has(name) && successfulMutation(name, result)) fileMutationResult = result;
       if (name === 'load_skill' && !options.isSubagent && result && typeof result.content === 'string') result = await maybeForkSkill(session, result, args, callContext, options);
       if (name === 'load_skill' && session.pluginMonitorsEnabled && result && !result.error) startPluginMonitorsFor(session, String(args.name || ''), { root: session.root, env: callContext.env || process.env });
