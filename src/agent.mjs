@@ -4953,8 +4953,9 @@ function sessionToolCapabilities(name) {
     if (name === 'terminal_resize') return ['write'];
     return ['execute'];
   }
-  if (name === 'task_get' || name === 'task_list') return ['read'];
+  if (name === 'task_get' || name === 'task_list' || name === 'cron_list' || name === 'tool_search' || name === 'monitor_command') return ['read'];
   if (name.startsWith('task_')) return ['write'];
+  if (['notify', 'enter_plan_mode', 'report_findings', 'schedule_wakeup', 'cron_create', 'cron_delete'].includes(name)) return ['write'];
   return SESSION_READ_ONLY_TOOLS.includes(name) ? ['read'] : ['write'];
 }
 
