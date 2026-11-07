@@ -37,6 +37,7 @@ import { resolveModelAlias, isModelAlias, modelAllowed, modelRestrictionMessage,
 import { selectTaskModel } from './model-routing.mjs';
 import { readProviderStream, mergeAnthropicUsage, toolCallSlot, strayStreamError } from './provider-stream.mjs';
 import { planToolBatches } from './tool-batch-scheduler.mjs';
+import { validateToolArguments } from './tool-schema-validation.mjs';
 import { openAIEndpoint, responsesEndpoint, anthropicEndpoint, toResponsesRequest, toAnthropicRequest, chatCompletionTool } from './provider-requests.mjs';
 export { mergeAnthropicUsage, toolCallSlot, strayStreamError };
 
@@ -4821,6 +4822,14 @@ async function executeOneCallRaw(session, call, context, options) {
     let args = unmaskSecretsForTool(session, name, safeToolArguments(call.function && call.function.arguments));
     if (session.allowedToolNames && !session.allowedToolNames.has(name)) {
       throw new Error('The tool ' + name + ' is not available to this agent.');
+    }
+    const inputSchema = toolParameterSchemas(session).get(name);
+    const validation = validateToolArguments(inputSchema, args);
+    if (!validation.valid) {
+      const detail = validation.schemaError
+        ? 'the registered input schema is invalid: ' + validation.schemaError
+        : validation.errors.join('; ');
+      throw new Error('Invalid arguments for ' + name + ': ' + detail);
     }
     const readOnlyTask = name === 'task' && isReadOnlyAgent(session, args.subagent_type);
     if ((options.planOnly || permissionMode(session, options) === 'plan') && !READ_ONLY_TOOLS.has(name) && !readOnlyTask) {
