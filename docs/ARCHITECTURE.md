@@ -76,3 +76,7 @@ The CLI, desktop application and connected browser workspace can use a local run
 Editor and ACP integrations communicate with the runtime through their respective interfaces. The SDK exposes selected runtime functions for Node.js applications. GitHub Actions and messaging gateways are automation entry points with their own credentials and execution environment.
 
 See [Interfaces and deployment](INTERFACES.md) for the practical differences.
+
+## Continuous improvement and replacement programme
+
+The system-wide inventory, ranked replacement candidates, upstream comparisons and acceptance gates are maintained in the [whole-system replacement roadmap](REPLACEMENT-ROADMAP.md). The roadmap distinguishes components to retain from candidates that need proof before replacement; it is not a claim that every proposed integration is already implemented.
