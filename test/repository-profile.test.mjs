@@ -46,7 +46,8 @@ test('mobile and contributor policies exist outside the installable npm package'
   ]);
   const pkg = JSON.parse(pkgText);
   assert.ok(mobile.includes('oasis web --host 0.0.0.0'));
-  assert.ok(mobile.includes('oasis app --lan'));
+  assert.ok(mobile.includes('normal OASIS session'));
+  assert.ok(!mobile.includes('oasis app --lan'), 'The retired standalone browser app command must not be documented.');
   assert.ok(mobile.includes('There is no native Android APK'));
   assert.ok(contributing.includes('npm run check'));
   assert.ok(security.includes('private vulnerability reporting'));
