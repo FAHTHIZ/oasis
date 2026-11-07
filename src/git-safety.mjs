@@ -164,7 +164,7 @@ export async function dropSnapshot(snapshot) {
 
 export function snapshotNote(snapshot) {
   if (!snapshot) return '';
-  return 'Safety snapshot: uncommitted work was saved to ' + snapshot.ref + (snapshot.stashes && snapshot.stashes.length ? ' (plus ' + snapshot.stashes.length + ' stash entr' + (snapshot.stashes.length === 1 ? 'y' : 'ies') + ')' : '') +
+  return 'Safety snapshot: recovery data was saved to ' + snapshot.ref + (snapshot.stashes && snapshot.stashes.length ? ' (plus ' + snapshot.stashes.length + ' stash entr' + (snapshot.stashes.length === 1 ? 'y' : 'ies') + ')' : '') +
     ' before this command ran. To bring it back: `' + snapshot.restore + '`. List snapshots with `git for-each-ref refs/oasis/safety`.';
 }
 
