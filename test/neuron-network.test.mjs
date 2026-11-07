@@ -28,6 +28,9 @@ test('network inspection exposes a bounded graph and aggregate usage without rep
   const parent = registerAgent(main, { type: 'general-purpose', description: 'Implement feature' });
   const childSession = { agentTasks: main.agentTasks, agentId: parent.id };
   const child = registerAgent(childSession, { type: 'security-review', description: 'Review implementation' });
+  // Deliberately make the child look older: graph order must follow lineage, not clocks.
+  parent.startedAt = Date.now();
+  child.startedAt = parent.startedAt - 1000;
   child.status = 'completed';
   child.finishedAt = Date.now();
   child.report = 'This private report must not appear in the network projection.';

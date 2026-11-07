@@ -125,7 +125,12 @@ export function buildNeuronNetworkSnapshot(registry, args = {}) {
   }];
   const edges = [];
   const includedIds = new Set(included.keys());
-  const projected = [...included.values()].sort((a, b) => safeNumber(a.record.startedAt) - safeNumber(b.record.startedAt));
+  const projected = [...included.values()].sort((a, b) => {
+    const depthDifference = Math.floor(safeNumber(a.record.depth, 1)) - Math.floor(safeNumber(b.record.depth, 1));
+    if (depthDifference) return depthDifference;
+    const startedDifference = safeNumber(a.record.startedAt) - safeNumber(b.record.startedAt);
+    return startedDifference || clean(a.record.id, 100).localeCompare(clean(b.record.id, 100));
+  });
   for (const item of projected) {
     const record = item.record;
     const id = clean(record.id, 100);

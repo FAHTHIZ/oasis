@@ -18,15 +18,15 @@ Each published release includes SHA256SUMS.
 
 On macOS or Linux:
 
-\`\`\`sh
+```sh
 shasum -a 256 -c SHA256SUMS
-\`\`\`
+```
 
 On Windows PowerShell, calculate the downloaded file's hash and compare it with the matching entry in SHA256SUMS:
 
-\`\`\`powershell
+```powershell
 Get-FileHash .\\your-downloaded-installer.exe -Algorithm SHA256
-\`\`\`
+```
 
 Only install assets attached to the GitHub Release. A Git tag, source archive, build log or temporary GitHub Actions artifact is not a published installer.
 
@@ -34,11 +34,11 @@ Only install assets attached to the GitHub Release. A Git tag, source archive, b
 
 The release workflow refreshes the project tap after a stable release:
 
-\`\`\`sh
+```sh
 brew tap fahthiz/oasis https://github.com/FAHTHIZ/oasis
 brew install --cask fahthiz/oasis/oasis
 brew install fahthiz/oasis/oasis-cli
-\`\`\`
+```
 
 The desktop cask installs the macOS application. The formula installs the terminal CLI and requires Homebrew's Node.js dependency.
 
@@ -46,12 +46,12 @@ The desktop cask installs the macOS application. The formula installs the termin
 
 For source-based CLI installation, use Node.js 22.15 or newer and Git:
 
-\`\`\`sh
+```sh
 git clone https://github.com/FAHTHIZ/oasis.git
 cd oasis
 npm install
 npm install --global .
-\`\`\`
+```
 
 Then run oasis in a project directory. See the [user guide](USER-GUIDE.md#terminal-session).
 
