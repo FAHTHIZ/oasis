@@ -165,3 +165,21 @@ test('tool kernel rejects non-object arguments without invoking the tool', async
   }
   assert.equal(invocations, 0);
 });
+
+test('tool definitions clamp invalid and excessive timeouts', () => {
+  const base = { name: 'bounded_timeout', capabilities: ['read'], run: async () => 'ok' };
+  assert.equal(defineTool({ ...base, timeoutMs: -1 }).timeoutMs, 120000);
+  assert.equal(defineTool({ ...base, timeoutMs: Number.NaN }).timeoutMs, 120000);
+  assert.equal(defineTool({ ...base, timeoutMs: 5_000_000 }).timeoutMs, 900000);
+  assert.equal(defineTool({ ...base, timeoutMs: 25 }).timeoutMs, 25);
+});
+
+test('policy reasons are redacted before they are returned to callers', async () => {
+  const result = await runTool(readTool, { path: 'README.md' }, {
+    policy: { decide: () => ({ decision: 'deny', reason: 'Refused: --token plainPolicyCredentialValue' }) }
+  });
+  assert.equal(result.ok, false);
+  assert.doesNotMatch(result.error, /plainPolicyCredentialValue/);
+  assert.match(result.error, /\\[redacted\\]/);
+  assert.doesNotMatch(JSON.stringify(result.audit), /plainPolicyCredentialValue/);
+});
