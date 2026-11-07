@@ -1,7 +1,7 @@
 // Unified security posture report for OASIS.
 //
 // Aggregates secret-scan findings, permission-mode status, sandbox
-// availability/kind, and protected-path coverage into a single structured
+// availability/kind, and sensitive-path masking into a single structured
 // report with a pass/warn/fail summary. Read-only; does not modify any state.
 import { collectSensitivePaths } from './sandbox.mjs';
 import { detectSandbox } from './sandbox.mjs';
@@ -47,12 +47,19 @@ export function buildSecurityReport({ env = process.env, sandboxSettings = {}, s
     checks.push({ name: 'sandbox', severity: 'pass', detail: 'Sandbox is enabled (' + sandbox.kind + ').' });
   }
 
-  // Sensitive-path coverage: masked paths reduce exposure.
-  const masked = collectSensitivePaths(env);
+  // Merely finding sensitive paths does not mean they are protected.
+  // Masking is active only when the selected sandbox is enabled, available,
+  // and configured to hide sensitive host paths.
+  const sensitivePaths = collectSensitivePaths(env);
+  const pathMaskingActive = enabled && sandbox.available && sandboxSettings.maskSensitivePaths !== false;
   checks.push({
     name: 'sensitive-paths',
-    severity: masked.length ? 'pass' : 'warn',
-    detail: masked.length ? masked.length + ' sensitive path(s) masked.' : 'No sensitive paths detected to mask.'
+    severity: !sensitivePaths.length || !pathMaskingActive ? 'warn' : 'pass',
+    detail: !sensitivePaths.length
+      ? 'No sensitive host paths were found to mask.'
+      : pathMaskingActive
+        ? sensitivePaths.length + ' sensitive host path(s) are configured for sandbox read masking.'
+        : sensitivePaths.length + ' sensitive host path(s) were found, but sandbox read masking is not active.'
   });
 
   const summary = rollup(checks);
