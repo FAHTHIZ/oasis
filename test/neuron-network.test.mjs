@@ -49,7 +49,13 @@ test('network inspection exposes a bounded graph and aggregate usage without rep
   assert.equal(snapshot.summary.estimated_cost_usd, 0.004);
   assert.ok(!JSON.stringify(snapshot).includes('private report'));
   assert.equal(neuronNetworkSnapshot(main, { status: 'running' }).summary.visible_agents, 1);
-  assert.equal(neuronNetworkSnapshot(main, { parent_id: parent.id }).summary.visible_agents, 1);
+  const filtered = neuronNetworkSnapshot(main, { parent_id: parent.id });
+  assert.equal(filtered.summary.visible_agents, 1);
+  assert.equal(filtered.summary.context_agents, 1);
+  assert.deepEqual(filtered.nodes.map((node) => node.id), ['main', parent.id, child.id]);
+  assert.equal(filtered.nodes.find((node) => node.id === parent.id).context_only, true);
+  const nodeIds = new Set(filtered.nodes.map((node) => node.id));
+  assert.ok(filtered.edges.every((edge) => nodeIds.has(edge.from) && nodeIds.has(edge.to)), 'filtered graph edges must never reference omitted nodes');
   assert.throws(() => neuronNetworkSnapshot(childSession), /Only the main coordinator/);
   assert.throws(() => neuronNetworkSnapshot(main, { status: 'unknown' }), /status must be/);
   assert.ok(AGENT_TOOL_NAMES.has('neuron_network'));
