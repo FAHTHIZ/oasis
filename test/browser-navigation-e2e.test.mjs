@@ -58,10 +58,23 @@ test('browser guards: same-origin passes, cross-origin link/form/redirect ask, d
     onToolResult: ({ call }) => { if (call && call.id === 'data') approveNext = true; }
   });
   const byId = Object.fromEntries(session.messages.filter((m) => m.role === 'tool').map((m) => [m.tool_call_id, m.content]));
-  if (process.env.NAV_DEBUG) console.error(JSON.stringify({ byId, asked }, null, 1));
   const parse = (id) => { try { return JSON.parse(byId[id]); } catch { return { raw: byId[id] }; } };
+  const sameResult = parse('same');
+  if (process.platform === 'win32' && !/\\/two$/.test(String(sameResult.url || ''))) {
+    console.error('[browser-navigation-e2e] Windows navigation diagnostics ' + JSON.stringify({
+      homeUrl,
+      firstNavigation: parse('n1'),
+      sameOriginClick: sameResult,
+      sameRaw: byId.same,
+      prompts: asked
+    }));
+  }
 
-  assert.match(parse('same').url || '', /\/two$/, 'same-origin link navigates without a prompt');
+  assert.match(String(sameResult.url || ''), /\/two$/, 'same-origin link navigates without a prompt: ' + JSON.stringify({
+    firstNavigation: parse('n1'),
+    sameOriginClick: sameResult,
+    prompts: asked
+  }));
   for (const id of ['cross', 'form', 'redir']) {
     const result = parse(id);
     assert.ok(Array.isArray(result.blockedNavigations) && result.blockedNavigations.length, id + ' should report a blocked navigation: ' + byId[id]);
