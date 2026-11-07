@@ -15,12 +15,13 @@
 
 <p align="center">
   <a href="https://github.com/FAHTHIZ/oasis/actions/workflows/quality.yml"><img alt="Quality checks" src="https://github.com/FAHTHIZ/oasis/actions/workflows/quality.yml/badge.svg?branch=main"></a>
-  <a href="https://github.com/FAHTHIZ/oasis/releases/latest"><img alt="Latest release" src="https://img.shields.io/github/v/release/FAHTHIZ/oasis?style=flat-square"></a>
+  <a href="https://github.com/FAHTHIZ/oasis/actions/workflows/desktop-build.yml"><img alt="Desktop installer builds" src="https://img.shields.io/github/actions/workflow/status/FAHTHIZ/oasis/desktop-build.yml?branch=main&style=flat-square"></a>
+  <img alt="Node.js 22.15 or newer" src="https://img.shields.io/badge/Node.js-22.15%2B-339933?style=flat-square&logo=node.js&logoColor=white>
   <a href="LICENSE"><img alt="Apache 2.0 license" src="https://img.shields.io/github/license/FAHTHIZ/oasis?style=flat-square"></a>
 </p>
 
 <p align="center">
-  <a href="https://github.com/FAHTHIZ/oasis/releases/latest">Download</a> ·
+  <a href="https://github.com/FAHTHIZ/oasis/releases">Releases</a> ·
   <a href="#install-the-cli">CLI quick start</a> ·
   <a href="https://fahthiz.github.io/oasis/app/">Browser app</a> ·
   <a href="docs/README.md">Documentation</a> ·
@@ -39,19 +40,20 @@ OASIS is the harness and application layer, not a model provider. The model stil
 
 ### Desktop application
 
-Download the latest published release from **[GitHub Releases](https://github.com/FAHTHIZ/oasis/releases/latest)**.
+OASIS includes an Electron desktop target, and GitHub Actions builds platform installers. **Public GitHub Release assets are not currently published**: the `v1.1.0` tag exists, but it has no associated GitHub Release as checked on November 7, 2026. The [Releases page](https://github.com/FAHTHIZ/oasis/releases) is the source of truth for future downloads. A source tag or temporary CI artifact is not the same as a published installer.
 
-| Platform | Release packages |
-|---|---|
-| Windows | x64 and ARM64 `.exe` installers |
-| macOS | Apple silicon and Intel `.dmg` installers |
-| Linux | x86_64 and ARM64 `.AppImage` and `.deb` packages |
+To run the desktop application from a source checkout:
 
-Package availability can vary by release. Check the assets on the release page for the exact files published for that version. Releases include `SHA256SUMS`; verify a downloaded package against that file before installing it.
+```sh
+npm install
+npm run desktop:dev
+```
+
+To build a distributable for the current machine, use `npm run desktop:dist`. Platform-specific packaging prerequisites may apply.
 
 ### Install the CLI
 
-**Requirements:** Node.js 22 or newer and Git.
+**Requirements:** Node.js 22.15 or newer and Git.
 
 Install from the source checkout:
 
@@ -81,11 +83,11 @@ OASIS does not bundle a model or a hosted inference account. You choose the prov
 
 ### Phone and tablet
 
-There is no native Android APK or iOS App Store package in the current release. The available options are:
+There is no native Android APK or iOS App Store package. The available options are:
 
 - **Installable browser app (PWA):** [Open OASIS](https://fahthiz.github.io/oasis/app/) and use the browser's install or Add to Home Screen action. It can use browser storage or a connected GitHub project, but it does not provide a host shell or unrestricted access to files on the phone.
 - **Connected workspace:** run `oasis web --host 0.0.0.0` on a computer containing the project, then connect from a phone on the same trusted private network. Keep the computer and OASIS running; do not expose the workspace directly to the public internet.
-- **Advanced Android use:** run the CLI from Termux with Node.js 22 or newer and Git. This is a manual, power-user setup—not a one-click Android installer. See [Mobile and tablet setup](MOBILE.md).
+- **Advanced Android use:** run the CLI from Termux with Node.js 22.15 or newer and Git. This is a manual, power-user setup—not a one-click Android installer. See [Mobile and tablet setup](MOBILE.md).
 
 The browser app is an optional product interface, not a separate marketing website. The GitHub repository and Releases page are the canonical project home and download location.
 
@@ -98,7 +100,7 @@ OASIS has several interfaces over a shared runtime. They do not all have the sam
 | **CLI and headless runner** | `oasis`, `oasis exec` | Runs against a project on the machine hosting the process. Supports interactive and non-interactive workflows. |
 | **Connected browser workspace** | `oasis web --open` | Browser UI connected to a local OASIS runtime. Project access and command execution remain on the host computer. |
 | **Universal browser app** | [Open the PWA](https://fahthiz.github.io/oasis/app/) or `oasis app --open` | Installable browser application using browser storage or a connected GitHub project. It does not provide a host shell. |
-| **Desktop application** | [Download a release](https://github.com/FAHTHIZ/oasis/releases/latest) | Electron host for the local runtime and workspace. |
+| **Desktop application** | `npm run desktop:dev` | Electron host for the local runtime and workspace; public GitHub installers are not yet published. |
 | **Editor integration** | `oasis ide install` | VS Code-family extension with editor context, diagnostics and diff review. |
 | **Agent Client Protocol** | `oasis acp` | Connects OASIS to compatible ACP clients. |
 | **Node.js SDK** | `src/sdk.mjs` | Embeds OASIS sessions, tools and agent workflows in Node.js applications. |
@@ -132,7 +134,7 @@ Read the [security policy](SECURITY.md) before using OASIS with sensitive projec
 
 ## Development and validation
 
-Requirements: Node.js 22 or newer and Git.
+Requirements: Node.js 22.15 or newer and Git.
 
 ```sh
 npm install
@@ -157,6 +159,9 @@ A passing test suite is evidence for the cases it exercises. It is not proof tha
 
 - [Documentation index](docs/README.md)
 - [Whole-system replacement roadmap](docs/REPLACEMENT-ROADMAP.md)
+- [Architecture alternatives](docs/ARCHITECTURE-ALTERNATIVES.md)
+- [Agent runtime alternatives](docs/AGENT-RUNTIME-ALTERNATIVES.md)
+- [Project-quality benchmark](docs/PROJECT-QUALITY-BENCHMARK.md)
 - [Brand guidelines](BRAND.md)
 - [Architecture and runtime boundaries](docs/ARCHITECTURE.md)
 - [Configuration reference](docs/CONFIGURATION.md)
