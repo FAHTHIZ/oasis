@@ -22,7 +22,7 @@ const HARD_SIGNALS = [
 ];
 
 const EASY_SIGNALS = [
-  /^(?:please\s+)?(?:explain|summari[sz]e|describe|list|find|locate|show|identify|where|what|how does|how do)\b/i,
+  /^(?:please\s+)?(?:define|explain|summari[sz]e|describe|list|find|locate|show|identify|where|what|how does|how do)\b/i,
   /\b(?:read.only|quick overview|brief overview|what does .+ do|where is .+ defined)\b/i
 ];
 
@@ -56,7 +56,7 @@ function hasComplexSignals(classification) {
 /**
  * Conservative model routing.
  *
- * The local classifier provides a deterministic task classification. Oasis
+ * The local classifier supplies a deterministic task classification. Oasis
  * retains its own safety, mutation, tool-intent and benchmark-hint overrides;
  * only clearly simple, high-confidence, non-actionable requests can use the
  * configured cheaper model.
@@ -101,9 +101,7 @@ export function classifyTask(prompt, hint = null) {
     && Number(classification.agenticScore || 0) < 0.6;
 
   if (simplePattern || highConfidenceSimple) {
-    const detail = highConfidenceSimple
-      ? 'local classifier: SIMPLE (' + Math.round(classification.confidence * 100) + '% confidence)'
-      : 'short, clearly read-only request';
+    const detail = '15-dimension classifier: SIMPLE (' + Math.round(classification.confidence * 100) + '% confidence)';
     return { tier: 'easy', reason: detail, requiresTools: false };
   }
 
@@ -112,7 +110,7 @@ export function classifyTask(prompt, hint = null) {
     : 'ambiguous classification (' + Math.round(classification.confidence * 100) + '% confidence)';
   return {
     tier: 'strong',
-    reason: 'local classifier kept the request on the strong model: ' + detail,
+    reason: '15-dimension classifier kept the request on the strong model: ' + detail,
     requiresTools: false
   };
 }

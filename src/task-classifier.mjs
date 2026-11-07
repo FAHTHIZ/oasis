@@ -1,9 +1,9 @@
 /**
  * Local replacement for @blockrun/router-core.
  *
- * Provides the small deterministic classification surface used by
- * model-routing.mjs: rule-based task classification, tool-requirement
- * inference, and the default routing scoring configuration.
+ * Provides the deterministic classification surface used by model-routing.mjs:
+ * rule-based task classification, tool-requirement inference, and the default
+ * routing scoring configuration.
  *
  * The classifier is intentionally conservative: ambiguous or potentially
  * action-oriented requests remain on the strong model.
@@ -45,13 +45,14 @@ const AGENTIC_SIGNALS = [
 ];
 
 const READ_ONLY_SIGNALS = [
-  /^(?:please\s+)?(?:explain|summari[sz]e|describe|list|find|locate|show|identify|where|what|how does|how do)\b/i,
+  /^(?:please\s+)?(?:define|explain|summari[sz]e|describe|list|find|locate|show|identify|where|what|how does|how do)\b/i,
   /\b(?:read.only|quick overview|brief overview|what does .+ do|where is .+ defined)\b/i
 ];
 
 const TOOL_SIGNALS = [
   /\b(?:edit|write|change|modify|create|add|remove|delete|fix|repair|implement|build|refactor|rename|move|update|upgrade|migrate|install|commit|push|deploy)\b/i,
   /\b(?:make|turn|convert)\s+.+\s+(?:into|to)\s+/i,
+  /\bsearch the web\b/i,
   /\b(?:find|locate|show|where is|where are|search for|look up|trace)\b.{0,120}\b(?:definition|declaration|implementation|call sites?|references?|usages?|symbol|function|class|method|variable)\b/i,
   /\b(?:in|inside|within|across)\s+(?:this|the|my|our)\s+(?:repo|repository|codebase|workspace|project)\b/i
 ];
