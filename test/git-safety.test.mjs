@@ -43,6 +43,21 @@ test('snapshot keeps tracked edits and untracked files without touching index or
   assert.equal(await snapshotWorkingTree(await repo(t), 'git checkout .'), null, 'clean tree: nothing to save');
 });
 
+test('parallel safety snapshots receive distinct refs even at the same timestamp', async (t) => {
+  const root = await repo(t);
+  await writeFile(path.join(root, 'a.txt'), 'parallel snapshot\\n');
+  const now = 123456789;
+  const [first, second] = await Promise.all([
+    snapshotWorkingTree(root, 'git checkout .', { now }),
+    snapshotWorkingTree(root, 'git restore .', { now })
+  ]);
+  assert.ok(first.ref);
+  assert.ok(second.ref);
+  assert.notEqual(first.ref, second.ref);
+  assert.equal(git(root, 'show', first.ref + ':a.txt'), 'parallel snapshot');
+  assert.equal(git(root, 'show', second.ref + ':a.txt'), 'parallel snapshot');
+});
+
 test('stash clear snapshots every stash entry before it can be removed', async (t) => {
   const root = await repo(t);
   await writeFile(path.join(root, 'a.txt'), 'first stash\n');
