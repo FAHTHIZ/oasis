@@ -71,10 +71,10 @@ function itemHasDynamicExpansion(item) {
       ? (value.elements || []).some(isDynamicWord)
       : isDynamicWord(value);
   }
-  // Here-doc and here-string bodies are programs interpreted by the receiving
-  // command. They remain review-only for strict allow rules, even when quoted.
-  if (item.type === 'HereDoc' || item.type === 'HereString') return true;
-  if (item.type === 'Redirect') return isDynamicWord(item.target);
+  // Redirections and shell-fed scripts can change files or execute content
+  // outside the simple argv contract. Keep all of them review-only for strict
+  // allow rules, even when their target/body is statically quoted.
+  if (item.type === 'HereDoc' || item.type === 'HereString' || item.type === 'Redirect') return true;
   return isDynamicWord(item);
 }
 
@@ -273,8 +273,9 @@ function walk(node, out, state, bindings = new Map(), wrapperDepth = 0) {
   if (node.type === 'Redirected') {
     const before = out.length;
     const result = walk(node.command, out, state, bindings, wrapperDepth);
-    const group = { tokens: [':'], pipedFrom: null, ast: true };
-    for (const redirect of node.redirects || []) group.tokens.push(...addRedirect(redirect, group, bindings));
+    const redirects = node.redirects || [];
+    const group = { tokens: [':'], pipedFrom: null, ast: true, dynamic: redirects.length > 0 };
+    for (const redirect of redirects) group.tokens.push(...addRedirect(redirect, group, bindings));
     if (group.tokens.length > 1 || out.length === before) out.push(group);
     return {
       first: result.first || (group.tokens.length > 1 ? group : null),
