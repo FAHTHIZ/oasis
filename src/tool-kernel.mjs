@@ -29,7 +29,6 @@ export function defineTool(definition) {
     outputSchema: definition.outputSchema || {},
     timeoutMs,
     requiresApproval: Boolean(definition.requiresApproval),
-    rollback: Object.freeze({ supported: Boolean(definition.rollback && definition.rollback.supported), kind: (definition.rollback && definition.rollback.kind) || 'none' }),
     run: definition.run
   });
 }
