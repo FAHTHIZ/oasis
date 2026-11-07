@@ -6,7 +6,7 @@
  * input validation, audit records, and secret redaction.
  */
 
-import { evaluateToolPolicy, validateToolInput, redactAuditValue } from './tool-kernel.mjs';
+import { runTool } from './tool-kernel.mjs';
 import { bridgeToolDefinition } from './tool-registry-bridge.mjs';
 
 export function createToolDispatch(executeTool, options = {}) {
@@ -19,32 +19,20 @@ export function createToolDispatch(executeTool, options = {}) {
       try { input = JSON.parse(input); } catch { input = {}; }
     }
     const definition = options.definition || { type: 'function', function: { name, description: '', parameters: {} } };
+    const policy = optionsOverride.policy || options.policy || {};
     const tool = bridgeToolDefinition(definition, {
       capabilities: options.capabilities,
       risk: options.risk,
       requiresApproval: options.requiresApproval,
       rollback: options.rollback,
-      run: async () => ({})
+      run: async () => await executeTool(call, session, optionsOverride)
     });
-    const policy = optionsOverride.policy || options.policy || {};
-    const decision = evaluateToolPolicy(tool, input, policy);
-    if (decision.decision === 'deny') {
-      return { ok: false, tool: name, decision, error: decision.reason || 'tool denied by policy', audit: buildAudit(tool, input, decision, null, optionsOverride) };
-    }
-    if (decision.decision === 'ask') {
-      return { ok: false, tool: name, decision, pendingApproval: true, audit: buildAudit(tool, input, decision, null, optionsOverride) };
-    }
-    const normalizedInput = await validateToolInput(tool, input);
-    try {
-      const output = await executeTool(call, session, optionsOverride);
-      const result = { ok: true, tool: name, decision, output: output === undefined ? null : output };
-      if (decision.audit) result.audit = buildAudit(tool, normalizedInput, decision, result, optionsOverride);
-      return result;
-    } catch (error) {
-      const result = { ok: false, tool: name, decision, error: error && error.message || String(error) };
-      if (decision.audit) result.audit = buildAudit(tool, normalizedInput, decision, result, optionsOverride);
-      return result;
-    }
+    return await runTool(tool, input, {
+      policy,
+      signal: optionsOverride.signal,
+      env: optionsOverride.env || process.env,
+      cwd: optionsOverride.root || process.cwd()
+    });
   };
 }
 
