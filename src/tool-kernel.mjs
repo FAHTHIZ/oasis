@@ -67,7 +67,10 @@ export function evaluateToolPolicy(tool, input, policy) {
 }
 
 export async function validateToolInput(tool, input) {
-  const value = input && typeof input === 'object' && !Array.isArray(input) ? input : {};
+  if (!input || typeof input !== 'object' || Array.isArray(input)) {
+    throw new Error('Invalid input for ' + tool.name + ': arguments must be a JSON object.');
+  }
+  const value = input;
   const validation = await validateToolArguments(tool.inputSchema, value);
   if (!validation.valid) {
     const errors = validation.errors || [];
