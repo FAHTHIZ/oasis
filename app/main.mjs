@@ -13,6 +13,7 @@ import { smartConnect, looksLikeConnection, parsePaste, scanLocal, buildChain, n
 import { PLUGINS, getPlugin, pluginsFor, suggestPlugins } from './core/plugins.mjs';
 import { detectRuntime, RuntimeAgent, RuntimeWorkspace, tokenFromPaste, saveRuntimeToken } from './core/runtime.mjs';
 import { APP_KEYBOARD_SHORTCUTS, searchAppCommands } from './core/command-palette.mjs';
+import { normalizeTaskProgress } from './core/task-progress.mjs';
 
 const APP_VERSION = '1.3.0';
 const $ = (id) => document.getElementById(id);
@@ -386,6 +387,7 @@ async function send(text) {
     return;
   }
   await ensureWorkspace();
+  renderTodos([]);
   $('input').value = '';
   autosize();
   if (RT && agent.runShell && /^!\s*\S/.test(message) && !attachments.length) {
@@ -653,6 +655,7 @@ function activityLabel(tool) {
   if (['grep', 'search_files', 'glob_files', 'repo_map'].includes(name)) return 'Searched the project';
   if (['web_search', 'fetch_url'].includes(name)) return 'Looked up information online';
   if (['git_diff', 'git_status', 'git_log'].includes(name)) return 'Reviewed project changes';
+  if (name === 'todo_write') return 'Updated the task plan';
   if (name === 'load_skill' || name === 'read_skill_resource' || name === 'list_skills') return 'Used a skill';
   return 'Completed a project step';
 }
@@ -662,10 +665,12 @@ function toolCard(tool) {
   el.className = 'tool ' + (tool.ok === undefined ? 'running' : tool.ok ? 'ok' : 'fail');
   el.dataset.id = tool.id;
   const summary = document.createElement('summary');
-  summary.innerHTML = '<span class="state" aria-hidden="true"></span><span class="name"></span><span class="arg"></span><span class="chevron" aria-hidden="true">›</span>';
+  summary.innerHTML = '<span class="state" aria-hidden="true"></span><span class="name"></span><span class="arg"></span><span class="tool-status"></span><span class="chevron" aria-hidden="true">›</span>';
   const status = tool.ok === undefined ? 'in progress' : tool.ok ? 'completed' : 'failed';
+  const statusLabel = tool.ok === undefined ? 'Working' : tool.ok ? 'Done' : 'Failed';
   summary.querySelector('.name').textContent = activityLabel(tool);
   summary.querySelector('.arg').textContent = summarizeArgs(tool.name, tool.args);
+  summary.querySelector('.tool-status').textContent = statusLabel;
   summary.setAttribute('aria-label', activityLabel(tool) + ', ' + status + '. Expand to view details.');
   const pre = document.createElement('pre');
   // Fill the output only when opened: long sessions stay light on slow phones.
@@ -843,14 +848,72 @@ function formatTokens(n) { return n >= 1e6 ? (n / 1e6).toFixed(1) + 'M' : n >= 1
 
 function renderTodos(todos) {
   const box = $('todos');
-  box.replaceChildren();
-  box.hidden = !todos.length || todos.every((t) => t.status === 'completed');
-  for (const todo of todos) {
-    const row = document.createElement('div');
-    row.className = todo.status;
-    row.textContent = (todo.status === 'completed' ? '✓ ' : todo.status === 'in_progress' ? '› ' : '○ ') + todo.content;
-    box.appendChild(row);
-  }
+  const progress = normalizeTaskProgress(todos);
+  if (!progress.total) { box.replaceChildren(); box.hidden = true; return; }
+
+  const previous = box.querySelector('.task-progress');
+  const wasOpen = previous ? previous.open : !progress.finished;
+  const plan = document.createElement('details');
+  plan.className = 'task-progress';
+  plan.open = wasOpen;
+
+  const summary = document.createElement('summary');
+  summary.className = 'task-progress-summary';
+  const heading = document.createElement('span');
+  heading.className = 'task-progress-heading';
+  const title = document.createElement('strong');
+  title.textContent = 'Task plan';
+  const caption = document.createElement('span');
+  caption.className = 'task-progress-caption';
+  caption.textContent = progress.finished ? 'All steps completed' : progress.activeIndex >= 0
+    ? 'Working on step ' + (progress.activeIndex + 1) + ' of ' + progress.total
+    : progress.completed + ' of ' + progress.total + ' steps complete';
+  heading.append(title, caption);
+
+  const count = document.createElement('span');
+  count.className = 'task-progress-count';
+  count.textContent = progress.completed + '/' + progress.total;
+  const chevron = document.createElement('span');
+  chevron.className = 'task-progress-chevron';
+  chevron.setAttribute('aria-hidden', 'true');
+  chevron.textContent = '›';
+  summary.append(heading, count, chevron);
+
+  const track = document.createElement('div');
+  track.className = 'task-progress-track';
+  track.setAttribute('role', 'progressbar');
+  track.setAttribute('aria-label', 'Task completion');
+  track.setAttribute('aria-valuemin', '0');
+  track.setAttribute('aria-valuemax', String(progress.total));
+  track.setAttribute('aria-valuenow', String(progress.completed));
+  track.setAttribute('aria-valuetext', progress.completed + ' of ' + progress.total + ' steps complete');
+  const fill = document.createElement('span');
+  fill.style.width = progress.percent + '%';
+  track.appendChild(fill);
+
+  const list = document.createElement('ol');
+  list.className = 'task-progress-list';
+  progress.items.forEach((todo, index) => {
+    const row = document.createElement('li');
+    row.className = 'task-progress-step ' + todo.status;
+    if (index === progress.activeIndex) row.setAttribute('aria-current', 'step');
+    const marker = document.createElement('span');
+    marker.className = 'task-progress-marker';
+    marker.setAttribute('aria-hidden', 'true');
+    marker.textContent = todo.status === 'completed' ? '✓' : todo.status === 'in_progress' ? '●' : '○';
+    const label = document.createElement('span');
+    label.className = 'task-progress-label';
+    label.textContent = todo.content;
+    const state = document.createElement('span');
+    state.className = 'task-progress-state';
+    state.textContent = todo.status === 'completed' ? 'Done' : todo.status === 'in_progress' ? 'In progress' : index === progress.nextIndex ? 'Up next' : 'Queued';
+    row.append(marker, label, state);
+    list.appendChild(row);
+  });
+
+  plan.append(summary, track, list);
+  box.replaceChildren(plan);
+  box.hidden = false;
 }
 
 // Chats: each project keeps a list of chats. The first chat uses the

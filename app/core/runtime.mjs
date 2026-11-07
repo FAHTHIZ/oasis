@@ -4,6 +4,8 @@
 // everything else in the app (chat, plugins, approvals, files panel) stays the
 // same, so there is one interface whether OASIS runs in a tab or on a laptop.
 
+import { extractRuntimeTodos } from './task-progress.mjs';
+
 const TOKEN_KEY = 'oasis.web.token';
 const TOKEN_RE = /(?:^#|[#&?])token=([A-Za-z0-9_-]{16,200})/;
 
@@ -314,7 +316,17 @@ export class RuntimeAgent {
             case 'tool_result': {
               const ok = !/^(error|failed|denied|blocked)$/i.test(String(data.status || ''));
               const content = [data.result, data.warning].filter(Boolean).join('\n');
+              if (data.name === 'todo_write') {
+                const todos = extractRuntimeTodos(data.result ?? data.todos ?? data.output ?? data);
+                if (todos !== null) { this.todos = todos; this.emit('todos', { todos }); }
+              }
               this.emit('tool_result', { id: data.callId || '', name: data.name, ok, content: String(content || data.label || '').slice(0, 4000) });
+              break;
+            }
+            case 'plan':
+            case 'todos': {
+              const todos = extractRuntimeTodos(data);
+              if (todos !== null) { this.todos = todos; this.emit('todos', { todos }); }
               break;
             }
             case 'approval_required': {
