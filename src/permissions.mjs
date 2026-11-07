@@ -12,7 +12,7 @@ import { discardReason } from './git-safety.mjs';
 import path from 'node:path';
 import fs from 'node:fs';
 import { normalizePermissionMode } from './permission-modes.mjs';
-import { loadShellParser, parseShellCommands } from './shell-ast.mjs';
+import { loadShellParser, parseShellCommands, shellParserMode } from './shell-ast.mjs';
 
 loadShellParser();
 
@@ -430,14 +430,28 @@ function matchCommandSpecifier(specifier, line, options = {}) {
   const parsed = splitShellCommands(line);
   if (!parsed.commands.length) return false;
 
-  // Deny/ask rules need to catch any matching piece, even when the whole line
-  // is too complex for approval, and in any spelling of it. Allow rules require
-  // a safe parse and a literal match for every simple command (including
-  // commands found in substitutions).
+  // Deny/ask rules inspect both conservative lexical pieces and AST-discovered
+  // nested commands. They must still catch a dangerous command in an otherwise
+  // unparseable line.
   if (options.requireEveryCommand === false) {
     const pieces = [...parsed.commands, ...astCommandPieces(line)];
     return pieces.some((piece) => [...commandSpellings(piece)].some((spelling) => matchSingleCommandSpecifier(specifier, spelling)));
   }
+
+  // For strict Bash auto-approval, use the same typed AST as risk analysis.
+  // Any dynamic word, computed program name, parser error, resource limit or
+  // shell-fed script requires review. This prevents the legacy splitter from
+  // disagreeing with the command structure used by deny/risk analysis.
+  if (shellParserMode() === 'unbash') {
+    const ast = parseShellCommands(line);
+    if (!ast || ast.unparsable || ast.tooLarge || !ast.commands.length) return false;
+    if (ast.commands.some((command) => command.dynamic || command.computedName)) return false;
+    const pieces = astCommandPieces(line);
+    return pieces.length > 0 && pieces.every((piece) => matchSingleCommandSpecifier(specifier, piece));
+  }
+
+  // Explicit legacy/tree-sitter rollback modes retain the old conservative
+  // allow behaviour until their command metadata reaches the same contract.
   if (!parsed.safe) return false;
   return parsed.commands.every((piece) => matchSingleCommandSpecifier(specifier, piece));
 }

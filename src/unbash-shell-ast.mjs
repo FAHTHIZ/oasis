@@ -63,6 +63,21 @@ function isDynamicWord(word) {
   return Boolean(word && hasDynamicParts(word.parts));
 }
 
+function itemHasDynamicExpansion(item) {
+  if (!item) return false;
+  if (item.type === 'Assignment') {
+    const value = item.value;
+    return value?.type === 'ArrayValue'
+      ? (value.elements || []).some(isDynamicWord)
+      : isDynamicWord(value);
+  }
+  // Here-doc and here-string bodies are programs interpreted by the receiving
+  // command. They remain review-only for strict allow rules, even when quoted.
+  if (item.type === 'HereDoc' || item.type === 'HereString') return true;
+  if (item.type === 'Redirect') return isDynamicWord(item.target);
+  return isDynamicWord(item);
+}
+
 function assignmentToken(assignment, bindings) {
   const value = assignment.value;
   let rendered = '';
@@ -110,6 +125,12 @@ function buildCommand(node, bindings) {
       command.tokens.push(wordValue(item, bindings));
     }
   }
+  command.dynamic = Boolean(
+    command.computedName ||
+    (node.prefix || []).some(itemHasDynamicExpansion) ||
+    (node.suffix || []).some(itemHasDynamicExpansion) ||
+    command.stdinScript !== undefined
+  );
   return command;
 }
 
@@ -263,7 +284,12 @@ function walk(node, out, state, bindings = new Map(), wrapperDepth = 0) {
   }
 
   if (node.type === 'Assignment') {
-    const command = { tokens: [assignmentToken(node, bindings)], pipedFrom: null, ast: true };
+    const command = {
+      tokens: [assignmentToken(node, bindings)],
+      pipedFrom: null,
+      ast: true,
+      dynamic: itemHasDynamicExpansion(node)
+    };
     out.push(command);
     visitChildren(node, out, state, bindings, wrapperDepth);
     return { first: command, last: command, primary: command };
