@@ -111,6 +111,8 @@ test('broad Bash allow rules never auto-approve dynamic or shell-fed commands', 
     'x=git; $x push',
     "bash <<< 'git status'",
     "bash <<'EOF'\\ngit status\\nEOF",
+    'npm test > output.log',
+    'echo status 2>&1',
     'for d in a b; do rm "$d"; done'
   ];
   for (const command of commands) {
