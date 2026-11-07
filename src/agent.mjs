@@ -1504,10 +1504,6 @@ export function withProviderExtraContent(messages, baseURL, model = '') {
   });
 }
 
-// Chat-completions tools carry only these fields. OpenAI ignores extras, but
-// stricter servers (Google's Gemini endpoint) reject the whole request with
-// 'Unknown name ... at tools[0].function', so a stray key on one tool, ours or
-// an MCP server's, would break every turn.
 function formatApiError(status, body, protocol, baseURL = '') {
   let detail = '';
   try {
