@@ -52,8 +52,8 @@ test('concurrent edits through a symlinked directory share the same canonical lo
   }
 
   const results = await Promise.all([
-    executeTool('edit_file', { path: 'actual/f.txt', old_string: 'line 2\\n', new_string: 'REAL PATH EDIT\\n' }, agentContext(root)),
-    executeTool('edit_file', { path: 'alias/f.txt', old_string: 'line 17\\n', new_string: 'SYMLINK PATH EDIT\\n' }, agentContext(root))
+    executeTool('edit_file', { path: 'actual/f.txt', old_string: 'line 2\n', new_string: 'REAL PATH EDIT\n' }, agentContext(root)),
+    executeTool('edit_file', { path: 'alias/f.txt', old_string: 'line 17\n', new_string: 'SYMLINK PATH EDIT\n' }, agentContext(root))
   ]);
   assert.ok(results.every((result) => result.changed === true), JSON.stringify(results));
   const contents = await readFile(path.join(actual, 'f.txt'), 'utf8');
