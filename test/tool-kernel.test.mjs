@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createToolRegistry, defineTool, runTool } from '../src/tool-kernel.mjs';
+import { createToolRegistry, defineTool, runTool, redactAuditValue } from '../src/tool-kernel.mjs';
 
 const readTool = defineTool({ name: 'read_file', title: 'Read file', description: 'Read a file from the workspace.', capabilities: ['read'], risk: 'low', inputSchema: { required: ['path'] }, run: async (input) => ({ path: input.path, content: 'ok' }) });
 const writeTool = defineTool({ name: 'write_file', title: 'Write file', description: 'Write a file in the workspace.', capabilities: ['write'], risk: 'high', requiresApproval: true, inputSchema: { required: ['path'] }, rollback: { supported: true, kind: 'file-snapshot' }, run: async (input) => ({ path: input.path, written: true }) });
@@ -133,4 +133,17 @@ test('tool failure audit records redact secrets from error messages', async () =
   assert.equal(result.ok, false);
   assert.doesNotMatch(result.audit.error, /sk-secret-token-123456/);
   assert.match(result.audit.error, /\[redacted\]/);
+});
+
+test('audit redaction masks credential-named CLI flags but preserves ordinary arguments', () => {
+  const value = redactAuditValue({
+    command: 'deploy --token plainSecretValue --region ap-southeast-1 --password="p@ss word"',
+    args: ['--api-key', 'anotherPlainSecret', '--limit', '10', '--access-token=embeddedSecret']
+  });
+  const serialized = JSON.stringify(value);
+  assert.doesNotMatch(serialized, /plainSecretValue|anotherPlainSecret|embeddedSecret|p@ss word/);
+  assert.match(serialized, /--region ap-southeast-1/);
+  assert.match(serialized, /--limit/);
+  assert.match(serialized, /10/);
+  assert.match(serialized, /\\[redacted\\]/);
 });
