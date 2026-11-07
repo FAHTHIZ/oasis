@@ -36,6 +36,7 @@ import { nestedMemoryFor } from './memory.mjs';
 import { resolveModelAlias, isModelAlias, modelAllowed, modelRestrictionMessage, fastModeRequest } from './model-aliases.mjs';
 import { selectTaskModel } from './model-routing.mjs';
 import { readProviderStream, mergeAnthropicUsage, toolCallSlot, strayStreamError } from './provider-stream.mjs';
+import { planToolBatches } from './tool-batch-scheduler.mjs';
 export { mergeAnthropicUsage, toolCallSlot, strayStreamError };
 
 function withResolvedModel(config, env, planMode) {
@@ -6105,24 +6106,16 @@ async function runAgentTurnRaw(session, prompt, options = {}) {
     };
     const isSpecialistReview = (call) => call.function && call.function.name === 'run_specialist_review';
     const isTask = (call) => call.function && call.function.name === 'task';
-    let cursor = 0;
-    while (cursor < eligible.length) {
-      let end = cursor + 1;
-      if (isReadOnly(eligible[cursor])) {
-        while (end < eligible.length && isReadOnly(eligible[end])) end++;
-      } else if (isSpecialistReview(eligible[cursor])) {
-        // Specialist runs are separate, read-only sessions with a hard per-task limit.
-        // Parallelize only consecutive specialist calls; ordinary side-effect ordering is unchanged.
-        while (end < eligible.length && isSpecialistReview(eligible[end])) end++;
-      } else if (isTask(eligible[cursor])) {
-        // Consecutive subagent launches run in parallel, each in its own context.
-        while (end < eligible.length && isTask(eligible[end])) end++;
-      }
-      const group = eligible.slice(cursor, end);
+    const batches = planToolBatches(eligible, {
+      isReadOnly,
+      isSpecialistReview,
+      isTask,
+      maxParallelTasks: MAX_PARALLEL_SUBAGENTS
+    });
+    for (const batch of batches) {
       // Results keep the model's original call order even if calls finish out of order.
-      const results = await runPool(group, isTask(group[0]) ? MAX_PARALLEL_SUBAGENTS : group.length, (call) => executeOneCall(session, call, context, options));
+      const results = await runPool(batch.calls, batch.concurrency, (call) => executeOneCall(session, call, context, options));
       for (const item of results) outputs.set(item.tool_call_id, item);
-      cursor = end;
     }
 
     for (const call of denied) {
