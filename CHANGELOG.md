@@ -4,7 +4,16 @@ User-facing change history grouped by package version. A version heading does no
 
 ## Unreleased
 
-- The public site now presents OASIS as a full product overview, with native desktop downloads and the normal host-connected session as its primary paths; the standalone installable browser app has been retired.
+## [1.1.1] - 2026-11-07
+
+- Rebuilt the README around platform downloads and clearly separated terminal, browser-workspace and desktop entry points.
+- Added a complete user guide and release guide covering Windows, macOS, Linux, Homebrew and checksum verification.
+- Removed the public marketing website and Pages deployment; retained the host-connected browser application.
+- Removed website-only build and QA steps from the main quality and release paths.
+- Made desktop release gates depend on same-commit quality and installer checks rather than a marketing-site deployment.
+- Renamed the browser application integrity checker so it is no longer confused with the retired marketing site.
+
+- Retired the Pages-based marketing website and its site-specific CI/build pipeline while keeping the local browser workspace and PWA application intact.
 - Fixed Server-Sent Events without an explicit event field to use the protocol default event name, message.
 - Added an engineering scorecard, first-run guide and focused pull-request template.
 
