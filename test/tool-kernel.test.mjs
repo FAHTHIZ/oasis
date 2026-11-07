@@ -183,3 +183,38 @@ test('policy reasons are redacted before they are returned to callers', async ()
   assert.match(result.error, /\[redacted\]/);
   assert.doesNotMatch(JSON.stringify(result.audit), /plainPolicyCredentialValue/);
 });
+
+test('tool kernel validates declared output schemas before returning model-visible output', async () => {
+  let invocations = 0;
+  const valid = defineTool({
+    name: 'typed_output',
+    capabilities: ['read'],
+    risk: 'low',
+    inputSchema: { type: 'object' },
+    outputSchema: {
+      type: 'object',
+      properties: { count: { type: 'integer' }, label: { type: 'string' } },
+      required: ['count', 'label'],
+      additionalProperties: false
+    },
+    run: async () => { invocations++; return { count: 3, label: 'ready' }; }
+  });
+  const allowed = await runTool(valid, {}, { policy: { decide: () => ({ decision: 'allow' }) } });
+  assert.equal(allowed.ok, true);
+  assert.deepEqual(allowed.output, { count: 3, label: 'ready' });
+
+  const invalid = defineTool({
+    name: 'invalid_output',
+    capabilities: ['read'],
+    risk: 'low',
+    inputSchema: { type: 'object' },
+    outputSchema: { type: 'object', required: ['status'] },
+    run: async () => ({ message: 'finished' })
+  });
+  const rejected = await runTool(invalid, {}, { policy: { decide: () => ({ decision: 'allow' }) } });
+  assert.equal(rejected.ok, false);
+  assert.match(rejected.error, /Invalid output from invalid_output/);
+  assert.equal(rejected.audit.output, null);
+  assert.match(rejected.audit.error, /missing required property "status"/i);
+  assert.equal(invocations, 1);
+});
