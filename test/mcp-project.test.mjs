@@ -345,3 +345,66 @@ test('remote MCP approval prompt redacts secret fields but sends original argume
   assert.match(result.content, /published/);
   client.close();
 });
+
+test('HTTP MCP calls forward timeout and AbortSignal to the SDK request', async () => {
+  const client = new McpHttpClient({ name: 'signal-http', url: 'https://mcp.example/mcp' });
+  client.tools = [{ name: 'slow' }];
+  let requestOptions = null;
+  let requestCount = 0;
+  let enteredResolve;
+  const entered = new Promise((resolve) => { enteredResolve = resolve; });
+  client.client = {
+    request: async (_request, options) => {
+      requestCount++;
+      requestOptions = options;
+      enteredResolve();
+      return await new Promise((_resolve, reject) => {
+        if (options.signal && options.signal.aborted) return reject(options.signal.reason);
+        options.signal.addEventListener('abort', () => reject(options.signal.reason), { once: true });
+      });
+    },
+    close: async () => {}
+  };
+
+  const controller = new AbortController();
+  const pending = client.callTool('slow', {}, {
+    autoApprove: true,
+    timeoutMs: 4321,
+    signal: controller.signal
+  });
+  await entered;
+  assert.equal(requestOptions.timeout, 4321);
+  assert.equal(requestOptions.signal, controller.signal);
+  controller.abort(new Error('MCP call cancelled by caller'));
+  await assert.rejects(pending, /MCP call cancelled by caller/);
+
+  const alreadyCancelled = new AbortController();
+  alreadyCancelled.abort(new Error('MCP call cancelled before start'));
+  await assert.rejects(client.callTool('slow', {}, {
+    autoApprove: true,
+    signal: alreadyCancelled.signal
+  }), /MCP call cancelled before start/);
+  assert.equal(requestCount, 1, 'an already-aborted call must not be sent to the server');
+  client.close();
+});
+
+test('stdio MCP request forwards caller cancellation to the SDK request', async () => {
+  const client = new McpServerClient({
+    name: 'signal-stdio',
+    command: process.execPath,
+    args: ['-e', 'process.exit(0)'],
+    passEnv: [],
+    enabled: true
+  });
+  let requestOptions = null;
+  client.client = {
+    request: async (_request, options) => { requestOptions = options; return { ok: true }; },
+    close: async () => {}
+  };
+  const controller = new AbortController();
+  const result = await client._request('tools/call', {}, 3210, controller.signal);
+  assert.deepEqual(result, { ok: true });
+  assert.equal(requestOptions.timeout, 3210);
+  assert.equal(requestOptions.signal, controller.signal);
+  client.close();
+});

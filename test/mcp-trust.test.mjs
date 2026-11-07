@@ -6,7 +6,7 @@ import path from 'node:path';
 import { inspectMcpTool, loadPins, savePins } from '../src/mcp-trust.mjs';
 import { mcpToolDefinitions, callMappedMcpTool } from '../src/mcp.mjs';
 
-const fakeClient = (tools) => ({ tools, calls: [], async callTool(name, args) { this.calls.push([name, args]); return { content: 'ok' }; } });
+const fakeClient = (tools) => ({ tools, calls: [], async callTool(name, args, options = {}) { this.calls.push([name, args, options]); return { content: 'ok' }; } });
 
 test('poisoned MCP tool descriptions are withheld and flagged', () => {
   for (const description of [
@@ -88,4 +88,21 @@ test('held MCP approval prompts redact secret values without changing forwarded 
   assert.doesNotMatch(prompt, /plainHeldMcpCredential/);
   assert.equal(client.calls[0][1].token, credential);
   assert.equal(result.content, 'ok');
+});
+
+test('mapped MCP calls forward cancellation and bounded timeout options', async () => {
+  const client = fakeClient([{ name: 'deploy', description: 'Deploys an application.' }]);
+  const clients = new Map([['secure', client]]);
+  const { map } = mcpToolDefinitions(clients);
+  const session = { mcpClients: clients, mcpToolMap: map };
+  const controller = new AbortController();
+  await callMappedMcpTool(session, 'mcp_secure_deploy', { environment: 'staging' }, {
+    signal: controller.signal,
+    timeoutMs: 7654,
+    autoApprove: true
+  });
+  assert.equal(client.calls.length, 1);
+  assert.equal(client.calls[0][1].environment, 'staging');
+  assert.equal(client.calls[0][2].signal, controller.signal);
+  assert.equal(client.calls[0][2].timeoutMs, 7654);
 });
