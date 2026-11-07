@@ -8,6 +8,7 @@ import { sanitizeSharedTaskStore } from './shared-tasks.mjs';
 import { sanitizeMustPreserve } from './context.mjs';
 import { redactSecrets } from './auto-memory.mjs';
 import { atomicWriteFile } from './atomic-write.mjs';
+import { appendEvent } from './event-stream.mjs';
 
 const MAX_SESSION_BYTES = 3 * 1024 * 1024;
 const MAX_MESSAGES = 120;
@@ -93,12 +94,9 @@ export function sanitizeAgentHistory(agentTasks) {
     const status = SESSION_AGENT_STATUSES.has(record.status) ? record.status : 'interrupted';
     const worktree = record.worktree && typeof record.worktree === 'object' ? record.worktree : {};
     const worktreeInfo = record.worktreeInfo && typeof record.worktreeInfo === 'object' ? record.worktreeInfo : {};
-    // Live records keep worktree facts in objects; saved snapshots (re-validated on load) keep them flat.
     const branch = String(worktree.branch || worktreeInfo.branch || record.worktreeBranch || '').slice(0, 160);
-    const relative = safeWorktreePath(worktree.relative || worktreeInfo.relative || worktree.path || record.worktreePath);
+    const relative = safeWorktreePath(worktree.relative || worktreeInfo.relative || record.worktreePath);
     const commitSha = String(worktree.commitSha || record.worktreeCommit || '').toLowerCase();
-    // A worktree worker that has not finished (no commit result yet) keeps its base
-    // commit, so it can be resumed in the same checkout after a restart.
     const openWorktree = resumableWorktree(record);
     const recentTools = Array.isArray(record.recentTools)
       ? record.recentTools.slice(-10).map((name) => String(name || '').replace(/[^a-zA-Z0-9_.:-]/g, '').slice(0, 100)).filter(Boolean)
@@ -133,17 +131,10 @@ export function sanitizeAgentHistory(agentTasks) {
   });
 }
 
-// Subagent transcripts (like Claude Code's subagents/*.jsonl): the conversation of
-// each shared-workspace worker is saved next to the session, so after a restart
-// send_message can resume the worker with its full context instead of starting
-// over. Worktree workers are saved while they are still working in an OASIS-made
-// git worktree (not a hook-made copy, and not yet committed): the checkout is
-// re-verified before such a worker is resumed.
 const MAX_TRANSCRIPT_BYTES = 1536 * 1024;
 
 function resumableWorktree(record) {
   if (!record || typeof record !== 'object') return null;
-  // A snapshot being re-validated on load carries the same facts as flat fields.
   const info = record.worktreeInfo || (record.worktreeBase && !record.worktreeCommit && (record.status === 'running' || record.status === 'interrupted')
     ? { base: record.worktreeBase, relative: record.worktreePath, branch: record.worktreeBranch } : null);
   if (!info || typeof info !== 'object' || info.hook || record.worktree) return null;
@@ -161,7 +152,6 @@ export function agentTranscriptPath(root, sessionId, agentId, env = process.env)
 function transcriptMessages(messages) {
   const usable = (Array.isArray(messages) ? messages : []).filter((m) => m && m.role !== 'system').map((m) => (m.images ? (({ images, ...rest }) => rest)(m) : m));
   let list = usable.slice(-(MAX_MESSAGES - 1));
-  // Start at a user message so a trimmed transcript never opens with an orphan tool result.
   while (list.length && list[0].role !== 'user') list = list.slice(1);
   return list;
 }
@@ -214,12 +204,6 @@ export async function loadAgentTranscript(root, sessionId, agentId, env = proces
   return { type: String(data.type || ''), model: String(data.model || ''), messages: data.messages };
 }
 
-/**
- * Drop a trailing assistant tool-call message whose results have not all
- * arrived (and the partial results after it). Sessions are saved mid-turn, so
- * a crash or closed terminal must still leave a transcript every provider
- * accepts on resume.
- */
 export function completeExchanges(messages) {
   const list = Array.isArray(messages) ? messages : [];
   for (let i = list.length - 1; i >= 0; i--) {
@@ -232,13 +216,6 @@ export function completeExchanges(messages) {
   return list;
 }
 
-/**
- * Keep the system context and the newest messages within MAX_MESSAGES. The
- * kept tail never opens with a tool result whose call was cut off, and when it
- * does not start at a user message, the user message it belongs to is kept
- * ahead of it. A plain slice dropped the system message once one long turn
- * passed the cap, so every later (mid-turn and final) save was rejected.
- */
 function boundedHistory(messages) {
   if (messages.length <= MAX_MESSAGES || !messages[0] || messages[0].role !== 'system') return messages.slice(-MAX_MESSAGES);
   const rest = messages.slice(1);
@@ -258,7 +235,6 @@ export async function saveSession(session, options = {}) {
   if (!session || !Array.isArray(session.messages)) throw new Error('There is no active session to save.');
   const env = options.env || process.env;
   const id = session.sessionId && validateId(session.sessionId) || randomUUID();
-  // Image attachments are not saved; the text note in the tool result remains.
   const messages = validateMessages(boundedHistory(completeExchanges(session.messages)).map((message) => message && message.images ? (({ images, ...rest }) => rest)(message) : message));
   await saveAgentTranscripts(session, id, env);
   const payload = {
@@ -306,6 +282,9 @@ export async function saveSession(session, options = {}) {
     throw error;
   }
   session.sessionId = id;
+  try {
+    await appendEvent(session.root, id, { type: 'session_saved', at: payload.updatedAt }, { env });
+  } catch { /* event log is a convenience; never fail the session save for it */ }
   if (session.checkpoints && options.checkpoints !== false) {
     try {
       const { saveCheckpoints, checkpointPersistenceEnabled } = await import('./checkpoints.mjs');
@@ -374,7 +353,6 @@ export async function deleteSession(root, id, options = {}) {
   return { id: data.id, deleted: true };
 }
 
-/** Saved sessions for this workspace last updated more than `days` days ago (newest first). */
 export async function staleSessions(root, days, options = {}) {
   const limit = Number(days);
   if (!Number.isFinite(limit) || limit < 1) throw new Error('Use a whole number of days (1 or more).');
@@ -385,7 +363,6 @@ export async function staleSessions(root, days, options = {}) {
   });
 }
 
-/** Delete saved sessions older than `days`, skipping `keep` ids (e.g. the one being resumed). */
 export async function pruneSessions(root, days, options = {}) {
   const keep = new Set(options.keep || []);
   const removed = [];
