@@ -48,7 +48,9 @@ function cleanDeep(value, depth = 0) {
 export function inspectMcpTool(tool) {
   const description = String(tool.description || '');
   const schema = tool.inputSchema && typeof tool.inputSchema === 'object' ? tool.inputSchema : null;
-  const texts = [description, ...deepStrings(schema)];
+  const outputSchema = tool.outputSchema && typeof tool.outputSchema === 'object' ? tool.outputSchema : null;
+  // Both schemas are untrusted server metadata; scan their descriptions for injection signals.
+  const texts = [description, ...deepStrings(schema), ...deepStrings(outputSchema)];
   const invisible = texts.reduce((n, t) => n + stripInvisible(t).removed, 0);
   const cleaned = texts.map((t) => stripInvisible(t).text).join('\n');
   const reasons = [...detectInjection(cleaned)];
@@ -57,12 +59,13 @@ export function inspectMcpTool(tool) {
   return {
     reasons: [...new Set(reasons)],
     description: stripInvisible(description).text,
-    inputSchema: schema ? cleanDeep(schema) : schema
+    inputSchema: schema ? cleanDeep(schema) : schema,
+    outputSchema: outputSchema ? cleanDeep(outputSchema) : outputSchema
   };
 }
 
 export function toolFingerprint(tool) {
-  const body = JSON.stringify({ n: tool.name, d: tool.description || '', s: tool.inputSchema || null, a: tool.annotations || null });
+  const body = JSON.stringify({ n: tool.name, d: tool.description || '', s: tool.inputSchema || null, o: tool.outputSchema || null, a: tool.annotations || null });
   return createHash('sha256').update(body).digest('hex').slice(0, 32);
 }
 
