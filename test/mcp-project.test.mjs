@@ -408,3 +408,47 @@ test('stdio MCP request forwards caller cancellation to the SDK request', async 
   assert.equal(requestOptions.signal, controller.signal);
   client.close();
 });
+
+test('remote MCP structured results are validated against outputSchema', async () => {
+  const outputSchema = {
+    type: 'object',
+    properties: { count: { type: 'integer' }, label: { type: 'string' } },
+    required: ['count', 'label'],
+    additionalProperties: false
+  };
+  const client = new McpHttpClient({ name: 'typed-output', url: 'https://mcp.example/mcp' });
+  client.tools = [{ name: 'lookup', outputSchema }];
+
+  client._request = async () => ({
+    content: [{ type: 'text', text: 'valid' }],
+    structuredContent: { count: 3, label: 'ready' }
+  });
+  const valid = await client.callTool('lookup', {}, { autoApprove: true });
+  assert.deepEqual(valid.structuredContent, { count: 3, label: 'ready' });
+
+  client._request = async () => ({
+    content: [{ type: 'text', text: 'invalid' }],
+    structuredContent: { count: 'three', label: 'ready' }
+  });
+  await assert.rejects(
+    () => client.callTool('lookup', {}, { autoApprove: true }),
+    /invalid structured output.*integer/i
+  );
+
+  client._request = async () => ({
+    content: [{ type: 'text', text: 'legacy text-only response' }]
+  });
+  const legacy = await client.callTool('lookup', {}, { autoApprove: true });
+  assert.equal(legacy.content, 'legacy text-only response');
+  assert.equal(legacy.structuredContent, undefined);
+
+  client._request = async () => ({
+    isError: true,
+    content: [{ type: 'text', text: 'remote tool failed' }],
+    structuredContent: { invalid: true }
+  });
+  const failed = await client.callTool('lookup', {}, { autoApprove: true });
+  assert.equal(failed.isError, true);
+  assert.equal(failed.content, 'remote tool failed');
+  client.close();
+});
