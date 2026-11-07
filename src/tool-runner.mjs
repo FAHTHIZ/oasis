@@ -11,19 +11,26 @@ import { defineTool, runTool } from './tool-kernel.mjs';
 export function createToolRunner(handlers = [], options = {}) {
   const tools = new Map();
   for (const handler of handlers) {
+    const capabilities = handler.capabilities ?? ['execute'];
+    const capabilitySet = new Set(capabilities);
+    const readOnly = capabilitySet.size > 0 && [...capabilitySet].every((capability) => capability === 'read');
+    const inferredRisk = !handler.capabilities ? 'critical'
+      : readOnly ? 'low'
+        : capabilitySet.has('execute') || capabilitySet.has('mcp') ? 'critical' : 'high';
     const tool = defineTool({
       name: handler.name,
       title: handler.title || handler.name,
       description: handler.description || '',
-      capabilities: handler.capabilities || ['read'],
-      risk: handler.risk || 'medium',
+      capabilities,
+      risk: handler.risk ?? inferredRisk,
       inputSchema: handler.inputSchema || {},
       outputSchema: handler.outputSchema || {},
       timeoutMs: handler.timeoutMs,
-      requiresApproval: handler.requiresApproval,
+      requiresApproval: handler.requiresApproval ?? !readOnly,
       rollback: handler.rollback,
       run: handler.run
     });
+    if (tools.has(tool.name)) throw new Error('Duplicate tool name: ' + tool.name);
     tools.set(tool.name, tool);
   }
 
