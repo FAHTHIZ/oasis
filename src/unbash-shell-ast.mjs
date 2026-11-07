@@ -113,17 +113,39 @@ function buildCommand(node, bindings) {
   return command;
 }
 
+const SHELL_OPTIONS_WITH_VALUE = new Set(['-o', '-O', '+o', '+O', '--rcfile', '--init-file']);
+const SHELL_OPTIONS_NO_VALUE = new Set([
+  '--login', '--noediting', '--noprofile', '--norc', '--posix', '--restricted',
+  '--verbose', '--version', '--help', '--debugger', '--dump-po-strings', '--dump-strings'
+]);
+
 function commandBody(words, bindings) {
   for (let i = 0; i < words.length; i++) {
     const word = words[i];
     const value = wordValue(word, bindings);
+    if (isDynamicWord(word)) return null;
     if (value === '--') continue;
-    if (!value.startsWith('-') || value === '-') return null;
-    if (!isDynamicWord(word) && value.includes('c')) {
+    if (SHELL_OPTIONS_WITH_VALUE.has(value)) {
+      // An option value is not a command string. Do not mistake it for the
+      // argument to a later -c option (e.g. --rcfile config -c 'git push').
+      if (!words[i + 1] || isDynamicWord(words[i + 1])) return null;
+      i++;
+      continue;
+    }
+    if (value.startsWith('--')) {
+      if (/^--(?:rcfile|init-file)=/.test(value) || SHELL_OPTIONS_NO_VALUE.has(value)) continue;
+      // Unknown long options may consume another word. Stop rather than guess.
+      return null;
+    }
+    if (/^-[a-zA-Z]*c[a-zA-Z]*$/.test(value)) {
       const scriptWord = words[i + 1];
       if (!scriptWord || isDynamicWord(scriptWord)) return null;
       return wordValue(scriptWord, bindings);
     }
+    if (/^[+-][a-zA-Z]+$/.test(value)) continue;
+    // A positional word before -c means the wrapper shape is not one we can
+    // safely interpret as a static shell invocation.
+    return null;
   }
   return null;
 }
