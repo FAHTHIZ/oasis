@@ -15,6 +15,7 @@ import { loadConfig } from './config.mjs';
 import { runHeadless } from './headless.mjs';
 import { attachToolServer } from './mcp.mjs';
 import { applyEffort } from './agent.mjs';
+import { createToolRegistry, defineTool, runTool } from './tool-kernel.mjs';
 
 export { createSession, runAgentTurn, runAgentPlan, runForkedTurn, closeSession, compactHistoryIfNeeded, applyEffort, hookOptions } from './agent.mjs';
 export { runHeadless } from './headless.mjs';
@@ -25,30 +26,89 @@ export { runHooks, HOOK_EVENTS } from './hooks.mjs';
 export { validateJsonSchema } from './json-schema.mjs';
 
 // Defines an in-process tool. `run(input, context)` returns any JSON value (or a string).
-// Set { needsApproval: true } to route calls through permission checks and canUseTool.
+// Set { needsApproval: true } to require approval before the tool is executed.
 export function tool(name, description, inputSchema, run, options = {}) {
   if (!/^[a-zA-Z0-9_-]{1,48}$/.test(String(name))) throw new Error('Tool names must be 1-48 letters, digits, _ or -.');
   if (typeof run !== 'function') throw new Error('tool() needs a run(input) function.');
-  return { name, description: String(description || name), inputSchema: inputSchema && typeof inputSchema === 'object' ? inputSchema : { type: 'object', properties: {} }, run, needsApproval: Boolean(options.needsApproval) };
+  const needsApproval = Boolean(options.needsApproval);
+  return {
+    name,
+    description: String(description || name),
+    inputSchema: inputSchema && typeof inputSchema === 'object' ? inputSchema : { type: 'object', properties: {} },
+    run,
+    needsApproval,
+    capabilities: Array.isArray(options.capabilities) ? options.capabilities : ['execute'],
+    risk: options.risk || (needsApproval ? 'high' : 'medium'),
+    timeoutMs: options.timeoutMs
+  };
 }
 
+const UNDEFINED_TOOL_OUTPUT = Symbol('oasis-sdk-undefined-tool-output');
+
 // Groups tools under one server name. Their model-facing names are mcp_<server>_<tool>.
+// The kernel owns input validation, cancellation, timeout handling and audit redaction;
+// the SDK server retains the existing approval UX before execution.
 export function createToolServer(name, tools = []) {
-  const byName = new Map(tools.map((item) => [item.name, item]));
+  if (!Array.isArray(tools)) throw new TypeError('createToolServer tools must be an array.');
+  const items = new Map();
+  const registry = createToolRegistry(tools.map((item) => {
+    if (!item || typeof item !== 'object') throw new TypeError('Every SDK tool must be a tool() definition.');
+    if (items.has(item.name)) throw new Error('Duplicate SDK tool name: ' + item.name);
+    items.set(item.name, item);
+    return defineTool({
+      name: item.name,
+      title: item.name,
+      description: item.description,
+      capabilities: item.capabilities || ['execute'],
+      risk: item.risk || (item.needsApproval ? 'high' : 'medium'),
+      inputSchema: item.inputSchema,
+      timeoutMs: item.timeoutMs,
+      // Approval is handled below, where the SDK has access to its existing
+      // approval callback. The kernel is responsible for the execution itself.
+      requiresApproval: false,
+      run: async (input, context) => {
+        const value = await item.run(input, {
+          signal: context.signal,
+          env: context.env,
+          cwd: context.cwd
+        });
+        return value === undefined ? UNDEFINED_TOOL_OUTPUT : value;
+      }
+    });
+  }));
+
   return {
     config: { name: String(name), type: 'sdk' },
     source: 'sdk',
     capabilities: {},
-    tools: tools.map((item) => ({ name: item.name, description: item.description, inputSchema: item.inputSchema })),
+    tools: registry.list().map((definition) => ({
+      name: definition.name,
+      description: definition.description,
+      inputSchema: definition.inputSchema
+    })),
     async callTool(toolName, args, options = {}) {
-      const item = byName.get(toolName);
-      if (!item) throw new Error('Unknown tool: ' + toolName);
+      const item = items.get(toolName);
+      const definition = registry.get(toolName);
+      if (!item || !definition) throw new Error('Unknown tool: ' + toolName);
+
       if (item.needsApproval && !options.autoApprove) {
-        const ok = options.approval && await options.approval('Call tool "' + toolName + '" with arguments:\n' + JSON.stringify(args, null, 2).slice(0, 5000));
+        const ok = options.approval && await options.approval(
+          'Call tool "' + toolName + '" with arguments:\\n' + JSON.stringify(args, null, 2).slice(0, 5000)
+        );
         if (!ok) return { approved: false, message: 'The tool call was not approved.' };
       }
-      const value = await item.run(args || {}, { signal: options.signal });
-      return value === undefined ? { ok: true } : value;
+
+      const outcome = await runTool(definition, args, {
+        policy: { decide: () => ({ decision: 'allow' }) },
+        signal: options.signal,
+        env: options.env || process.env,
+        cwd: options.cwd || process.cwd()
+      });
+      if (typeof options.onAudit === 'function' && outcome.audit) {
+        try { options.onAudit(outcome.audit); } catch { /* audit observers cannot break tool execution */ }
+      }
+      if (!outcome.ok) throw new Error(outcome.error || 'SDK tool execution failed.');
+      return outcome.output === UNDEFINED_TOOL_OUTPUT ? { ok: true } : outcome.output;
     },
     close() {}
   };
