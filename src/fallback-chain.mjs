@@ -98,6 +98,17 @@ export const FALLBACK_REASON_TEXT = Object.freeze({
   auth: 'rejected its API key'
 });
 
+// Exponential backoff with jitter for transient errors (429, 5xx, network
+// failures) before giving up on the current model and moving to the next one
+// in the fallback chain. Attempt is 0-based: attempt 0 waits baseMs, attempt 1
+// waits 2*baseMs, etc., capped at maxMs. Jitter adds up to 25% randomness so
+// concurrent sessions do not synchronize their retries.
+export function retryDelayMs(attempt, baseMs = 1000, maxMs = 30000, jitter = true) {
+  const exponential = Math.min(maxMs, baseMs * Math.pow(2, Math.max(0, Number(attempt) || 0)));
+  if (!jitter) return exponential;
+  return Math.min(maxMs, Math.floor(exponential * (0.75 + Math.random() * 0.5)));
+}
+
 // Entries still worth trying after `failed` (a Set of ids), skipping the
 // current model and any entry without a usable config.
 export function remainingFallbacks(chain, { current, baseConfig, failed = new Set(), env = process.env } = {}) {
