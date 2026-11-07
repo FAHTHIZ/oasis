@@ -104,3 +104,18 @@ test('JSON Schema 2020-12 output contracts are validated with the correct dialec
   }, { name: 'OASIS' });
   assert.equal(legacyValidator.valid, true);
 });
+
+test('an explicit schema dialect takes precedence over the caller default', async () => {
+  const draft7 = {
+    $schema: 'http://json-schema.org/draft-07/schema#',
+    type: 'object',
+    properties: { name: { type: 'string' } },
+    required: ['name'],
+    additionalProperties: false
+  };
+  const valid = await validateToolArguments(draft7, { name: 'OASIS' }, { dialect: '2020-12' });
+  assert.equal(valid.valid, true);
+  const invalid = await validateToolArguments(draft7, { name: 'OASIS', extra: true }, { dialect: '2020-12' });
+  assert.equal(invalid.valid, false);
+  assert.ok(invalid.errors.some((error) => error.includes('unsupported property "extra"')));
+});
