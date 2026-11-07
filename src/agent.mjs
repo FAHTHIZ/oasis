@@ -4698,14 +4698,27 @@ async function executePatchCall(session, call, patchText, context, options) {
   };
   const available = availableToolNames(session);
   if (!available.has('write_file')) return finish({ error: 'File editing is not available to this agent, so the patch was not applied.' });
+  const sub = { ...options, onToolStart: null, onToolResult: null };
   const files = {};
+  let readIndex = 0;
   for (const target of patchFilesNeeded(patchText)) {
     try {
-      const read = await executeTool('read_file', { path: target }, context);
-      if (read && (read.startLine !== undefined || read.truncated)) return finish({ error: target + ' is too large to patch in one piece; use edit_file for it. Nothing was changed.' });
-      files[target] = read && typeof read.content === 'string' ? read.content : '';
+      const message = await executeOneCall(session, {
+        id: String(call.id || 'apply_patch') + '_read' + (++readIndex),
+        type: 'function',
+        function: { name: 'read_file', arguments: JSON.stringify({ path: target }) }
+      }, context, sub);
+      const read = message && message.result;
+      if (read && typeof read.error === 'string' && /^No such file or folder\\b/.test(read.error)) {
+        files[target] = '';
+        continue;
+      }
+      if (!read || read.error) throw new Error(read && read.error || 'The read_file tool returned no result.');
+      if (read.startLine !== undefined || read.truncated) {
+        return finish({ error: target + ' is too large to patch in one piece; use edit_file for it. Nothing was changed.' });
+      }
+      files[target] = typeof read.content === 'string' ? read.content : '';
     } catch (error) {
-      if (error && error.code === 'ENOENT') continue;
       return finish({ error: 'Could not read ' + target + ' for the patch: ' + (error && error.message || error) + ' Nothing was changed.' });
     }
   }
@@ -4713,7 +4726,6 @@ async function executePatchCall(session, call, patchText, context, options) {
   try { plan = planPatch(patchText, files); } catch (error) {
     return finish({ error: 'Patch not applied (nothing was changed): ' + (error && error.message || error) });
   }
-  const sub = { ...options, onToolStart: null, onToolResult: null };
   const applied = [];
   let step = 0;
   for (const operation of plan.operations) {
