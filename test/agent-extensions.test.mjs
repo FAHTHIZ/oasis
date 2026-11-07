@@ -270,15 +270,15 @@ test('permission approval UI receives redacted command arguments after secret re
   const placeholder = maskSecrets({}, 'GITHUB_TOKEN=' + credential).text.split('=')[1];
   const { config } = await scriptedModel(t, [
     toolCall('secret-command', 'run_command', {
-      command: process.execPath,
-      args: ['-e', 'console.log("must not run")', '--token', placeholder]
+      command: 'git',
+      args: ['init', '--token', placeholder]
     }),
     { content: 'done' }
   ]);
   const session = await createSession({
     root,
     config,
-    settings: settingsWith({ permissions: { allow: [], ask: ['run_command(*)'], deny: [] } })
+    settings: settingsWith({ permissions: { allow: [], ask: ['run_command(git:*)'], deny: [] } })
   });
   maskSecrets(session, 'GITHUB_TOKEN=' + credential);
   const prompts = [];
