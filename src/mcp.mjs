@@ -9,6 +9,7 @@ import path from 'node:path';
 import { getConfigDirectory } from './config.mjs';
 import { McpHttpClient, McpSseClient } from './mcp-project.mjs';
 import { RESOURCE_TOOL_DEFINITIONS, runResourceTool } from './mcp-extras.mjs';
+import { redactAuditValue } from './tool-kernel.mjs';
 
 export function getMcpConfigPath(env = process.env) {
   return path.join(getConfigDirectory(env), 'mcp-servers.json');
@@ -353,7 +354,7 @@ export async function callMappedMcpTool(session, safeName, args, options = {}) {
   const held = heldToolReason(mapped);
   if (held && !mapped.approvedThisSession) {
     const approval = options.approval;
-    const message = 'MCP tool ' + mapped.toolName + ' from server ' + mapped.serverName + ' needs your approval because ' + held + '.\nArguments: ' + JSON.stringify(args).slice(0, 600) + '\nAuto-approval does not apply.';
+    const message = 'MCP tool ' + mapped.toolName + ' from server ' + mapped.serverName + ' needs your approval because ' + held + '.\nArguments: ' + JSON.stringify(redactAuditValue(args)).slice(0, 600) + '\nAuto-approval does not apply.';
     const ok = typeof approval === 'function' ? await approval(message, true) : false;
     if (!ok) return { approved: false, error: 'Not run: ' + message.split('\n')[0] + ' The user did not approve it.' };
     mapped.approvedThisSession = true;
