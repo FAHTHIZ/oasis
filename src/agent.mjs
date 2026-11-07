@@ -4709,11 +4709,9 @@ async function executePatchCall(session, call, patchText, context, options) {
         function: { name: 'read_file', arguments: JSON.stringify({ path: target }) }
       }, context, sub);
       const read = message && message.result;
-      if (read && typeof read.error === 'string' && /^No such file or folder\\b/.test(read.error)) {
-        files[target] = '';
-        continue;
+      if (!read || read.error) {
+        throw new Error(read && read.error || 'The read_file tool returned no result.');
       }
-      if (!read || read.error) throw new Error(read && read.error || 'The read_file tool returned no result.');
       if (read.startLine !== undefined || read.truncated) {
         return finish({ error: target + ' is too large to patch in one piece; use edit_file for it. Nothing was changed.' });
       }
