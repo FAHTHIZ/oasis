@@ -1,39 +1,29 @@
+**Downloads:** [Windows (.exe)](https://github.com/FAHTHIZ/oasis/releases/latest) · [macOS (.dmg)](https://github.com/FAHTHIZ/oasis/releases/latest) · [Linux (.AppImage / .deb)](https://github.com/FAHTHIZ/oasis/releases/latest) · [All releases](https://github.com/FAHTHIZ/oasis/releases)
+
+<sub>Choose the asset matching your operating system and CPU architecture. Release assets are published only after the same-commit quality, installer and packaging gates pass.</sub>
+
 <p align="center">
-  <img src="assets/oasis-icon.svg" alt="OASIS portal mark" width="88">
+  <img src="assets/oasis-icon.svg" alt="OASIS app icon" width="88">
 </p>
-
 <h1 align="center">OASIS</h1>
-
 <p align="center">
   <strong>An open-source, model-agnostic coding-agent runtime.</strong><br>
   Bring your own model. OASIS provides the tools, permissions, coordination and verification around it.
 </p>
-
-<p align="center">
-  <img src="assets/oasis-readme-hero.svg" alt="The layered OASIS portal grounded on a dark, reflective floor." width="100%">
-</p>
-
+<p align="center"><img src="assets/oasis-readme-hero.svg" alt="The layered OASIS portal grounded on a dark, reflective floor." width="100%"></p>
 <p align="center">
   <a href="https://github.com/FAHTHIZ/oasis/actions/workflows/quality.yml"><img alt="Quality checks" src="https://github.com/FAHTHIZ/oasis/actions/workflows/quality.yml/badge.svg?branch=main"></a>
   <a href="https://github.com/FAHTHIZ/oasis/actions/workflows/desktop-build.yml"><img alt="Desktop installer builds" src="https://img.shields.io/github/actions/workflow/status/FAHTHIZ/oasis/desktop-build.yml?branch=main&style=flat-square"></a>
   <img alt="Node.js 22.15 or newer" src="https://img.shields.io/badge/Node.js-22.15%2B-339933?style=flat-square&logo=node.js&logoColor=white">
   <a href="LICENSE"><img alt="Apache 2.0 license" src="https://img.shields.io/github/license/FAHTHIZ/oasis?style=flat-square"></a>
 </p>
-
 <p align="center">
-  <a href="https://fahthiz.github.io/oasis/">Website</a> ·
-  <a href="https://github.com/FAHTHIZ/oasis/releases">Releases</a> ·
-  <a href="#install-the-cli">CLI quick start</a> ·
-  <a href="https://github.com/FAHTHIZ/oasis/releases">Desktop downloads</a> ·
-  <a href="docs/README.md">Documentation</a> ·
-  <a href="BRAND.md">Brand guidelines</a> ·
-  <a href="CONTRIBUTING.md">Contributing</a> ·
-  <a href="SECURITY.md">Security</a>
+  <a href="#download-and-install-oasis">Downloads</a> · <a href="#terminal-session">Terminal</a> · <a href="#browser-workspace">Browser workspace</a> · <a href="#desktop-application">Desktop app</a> · <a href="docs/USER-GUIDE.md">User guide</a> · <a href="docs/README.md">Documentation</a> · <a href="CONTRIBUTING.md">Contributing</a> · <a href="SECURITY.md">Security</a>
 </p>
 
 ---
 
-OASIS is an open-source coding-agent runtime and development workspace. It connects a model provider to a project and supplies the runtime around it: workspace tools, command execution, permissions, agent coordination, recovery and verification.
+OASIS is an open-source coding-agent runtime and development workspace. It connects a model provider to a project and supplies the execution layer around it: workspace tools, command execution, permissions, agent coordination, recovery and verification.
 
 OASIS is the harness and application layer, not a model provider. The model still determines much of the reasoning and code quality; OASIS does not guarantee that every model will solve every task.
 
@@ -41,81 +31,105 @@ OASIS is the harness and application layer, not a model provider. The model stil
 
 <p align="center">
   <a href="assets/demo/oasis-real-model-demo.mp4"><img src="assets/demo/oasis-real-model-demo.gif" alt="Unscripted OASIS run with gpt-oss-20b: the agent reads a file, fixes a bug, adds a test, runs the test after approval, and is sent back by the verification gate to review its changes." width="100%"></a>
-  <br><sub>Unscripted <code>gpt-oss-20b</code> run recorded on 5 November 2026. Rate-limit waits from the free endpoint were shortened; the model's mistakes and the verification gate's send-back are preserved. The original run took 6m 19s, used 7 tool calls and reported 50.9k tokens. <a href="assets/demo/oasis-real-model-demo.cast">Raw terminal recording</a>.</sub>
+  <br><sub>Unscripted gpt-oss-20b run recorded on 5 November 2026. Rate-limit waits from the free endpoint were shortened; the model's mistakes and the verification gate's send-back are preserved. The original run took 6m 19s, used 7 tool calls and reported 50.9k tokens. <a href="assets/demo/oasis-real-model-demo.cast">Raw terminal recording</a>.</sub>
 </p>
 
-## Download and install
+## Choose your OASIS experience
 
-### Desktop application
+The terminal is a native CLI session; the browser is a UI connected to a runtime on your machine; the desktop app packages that local experience in an Electron window.
 
-OASIS includes an Electron desktop target, and GitHub Actions builds platform installers. **Public GitHub Release assets are not currently published**: the `v1.1.0` tag exists, but it has no associated GitHub Release as checked on November 7, 2026. The [Releases page](https://github.com/FAHTHIZ/oasis/releases) is the source of truth for future downloads. A source tag or temporary CI artifact is not the same as a published installer.
+| Interface | Start it with | Where the agent and project run |
+|---|---|---|
+| **Terminal session** | oasis | In your terminal, on the computer running OASIS. |
+| **Normal browser session / Connected browser workspace** | oasis web --open | In the local OASIS runtime on the host computer; the browser is the interface. |
+| **Desktop application** | Open the installed OASIS app | In the desktop host process, against the folder you choose. |
+| **Editor integration** | oasis ide install | Through the editor host and connected OASIS runtime. |
+| **Agent Client Protocol** | oasis acp | In the OASIS ACP process started by the compatible client. |
+| **Node.js SDK** | src/sdk.mjs | Inside the Node.js application embedding OASIS. |
+| **GitHub Action and messaging gateways** | action.yml / configured gateway | On the configured automation runner or gateway host. |
 
-To run the desktop application from a source checkout:
+## Download and install OASIS
 
-```sh
-npm install
-npm run desktop:dev
-```
+**GitHub Releases is the download source of truth.** Each platform link at the top opens the latest release page. Download only an asset listed under that release, and verify it against the attached SHA256SUMS file.
 
-To build a distributable for the current machine, use `npm run desktop:dist`. Platform-specific packaging prerequisites may apply.
+| Platform | Primary installer | Additional builds |
+|---|---|---|
+| Windows | .exe installer (x64) | ARM64 when its optional CI build succeeds |
+| macOS / MacBook | .dmg disk image (Apple Silicon) | Intel x64 when its optional CI build succeeds |
+| Linux | .AppImage and .deb (x64) | ARM64 when its optional CI build succeeds |
 
-When a future GitHub Release is published, its installer assets will include `SHA256SUMS`. Verify any downloaded package against that file before installing it.
+The release pipeline validates the source, builds the platform packages, generates SHA-256 checksums and publishes installers only after the required same-commit gates pass. A tag or short-lived Actions artifact is not a public release.
 
-### Install the CLI
+For Homebrew:
 
-**Requirements:** Node.js 22.15 or newer and Git.
+\`\`\`sh
+brew tap fahthiz/oasis https://github.com/FAHTHIZ/oasis
+brew install --cask fahthiz/oasis/oasis
+brew install fahthiz/oasis/oasis-cli
+\`\`\`
 
-Install from the source checkout:
+See [Downloads and releases](docs/RELEASES.md) for asset names, checksum verification, architecture notes and mobile availability.
 
-```sh
+## Terminal session
+
+The terminal interface is a separate, first-class OASIS experience. It runs directly in your shell; it is not the browser UI embedded in a terminal panel.
+
+Requirements: Node.js 22.15 or newer and Git.
+
+\`\`\`sh
 git clone https://github.com/FAHTHIZ/oasis.git
 cd oasis
 npm install
 npm install --global .
-```
+\`\`\`
 
-Then open a project and start OASIS:
+Open a project and start the interactive terminal session:
 
-```sh
+\`\`\`sh
 cd /path/to/your/project
 oasis connect
 oasis
-```
+\`\`\`
 
-Useful diagnostics and maintenance commands:
+For non-interactive scripts and automation, use oasis exec. For diagnostics and maintenance:
 
-```sh
+\`\`\`sh
 oasis doctor
 oasis update
-```
+\`\`\`
 
-OASIS does not bundle a model or a hosted inference account. You choose the provider, credentials and model, and are responsible for reviewing the provider's data-handling terms.
+Run oasis --help for the complete command list. See the [Terminal section of the user guide](docs/USER-GUIDE.md#terminal-session).
 
-### Phone and tablet
+## Browser workspace
 
-There is no native Android APK or iOS App Store package. The available options are:
+OASIS includes a browser-based workspace served by the local runtime. It is not a hosted website or remote SaaS service: by default, the browser connects to the OASIS process running on the computer that owns the project.
 
-- **Connected workspace:** run `oasis web --host 0.0.0.0` on a computer containing the project, then connect from a phone on the same trusted private network. Keep the computer and OASIS running; do not expose the workspace directly to the public internet.
-- **Advanced Android use:** run the CLI from Termux with Node.js 22.15 or newer and Git. This is a manual, power-user setup—not a one-click Android installer. See [Mobile and tablet setup](MOBILE.md).
+\`\`\`sh
+cd /path/to/your/project
+oasis web --open
+\`\`\`
 
-The [OASIS website](https://fahthiz.github.io/oasis/) is the public product overview. The GitHub repository remains the canonical source, and the [Releases page](https://github.com/FAHTHIZ/oasis/releases) is the source of truth for whether desktop installer assets have actually been published.
+The browser provides the workspace UI while file access, tool execution and model requests remain in the host runtime. To connect a phone or another device, follow [Mobile and tablet setup](MOBILE.md) and use only a trusted private network. Do not expose the workspace directly to the public internet.
 
-## Interfaces
+There is no native Android APK or iOS App Store package. Advanced Android users can run the CLI manually in Termux; this is not a one-click mobile installer.
 
-OASIS has several interfaces over a shared runtime. They do not all have the same execution environment or permissions.
+## Desktop application
 
-| Interface | Entry point | Purpose and boundary |
-|---|---|---|
-| **CLI and headless runner** | `oasis`, `oasis exec` | Runs against a project on the machine hosting the process. Supports interactive and non-interactive workflows. |
-| **Connected browser workspace** | `oasis web --open` | Browser UI connected to a local OASIS runtime. Project access and command execution remain on the host computer. |
-| **Normal browser session** | `oasis web --open` | Opens the regular workspace UI connected to the local OASIS runtime; project files and commands remain on the host. |
-| **Desktop application** | `npm run desktop:dev` | Electron host for the local runtime and workspace; public GitHub installers are not yet published. |
-| **Editor integration** | `oasis ide install` | VS Code-family extension with editor context, diagnostics and diff review. |
-| **Agent Client Protocol** | `oasis acp` | Connects OASIS to compatible ACP clients. |
-| **Node.js SDK** | `src/sdk.mjs` | Embeds OASIS sessions, tools and agent workflows in Node.js applications. |
-| **GitHub Action and messaging gateways** | `action.yml` and `src/gateway-*.mjs` | Runs configured repository tasks and messaging integrations. |
+The Electron desktop app starts the local OASIS runtime, lets you choose a project folder and opens the same workspace experience in a native window.
 
-For the differences between these interfaces, see [Interfaces and deployment](docs/INTERFACES.md).
+1. Open [the latest GitHub Release](https://github.com/FAHTHIZ/oasis/releases/latest).
+2. Download the installer for your operating system and architecture.
+3. Verify its checksum using the release's SHA256SUMS.
+4. Install and launch OASIS, then choose the project folder.
+
+For developers building from source:
+
+\`\`\`sh
+npm install
+npm run desktop:dev
+\`\`\`
+
+Build a distributable for the current machine with npm run desktop:dist. Platform packaging prerequisites may apply. The current macOS packages are not code-signed; macOS may ask you to confirm the first launch in Privacy & Security.
 
 ## Runtime capabilities
 
@@ -139,43 +153,48 @@ OASIS can read and modify project files, execute commands and send context to co
 - Hosted providers and external services may receive prompts, project context or tool output.
 - Keep important work under version control, maintain backups and review diffs before accepting changes.
 
-Read the [security policy](SECURITY.md) before using OASIS with sensitive projects. The implementation boundaries are described in [Architecture](docs/ARCHITECTURE.md).
+Read the [security policy](SECURITY.md) before using OASIS with sensitive projects. Implementation boundaries are described in [Architecture](docs/ARCHITECTURE.md).
 
 ## Development and validation
 
 Requirements: Node.js 22.15 or newer and Git.
 
-```sh
+\`\`\`sh
 npm install
 npm test
 npm run check
-```
+npm run lint
+\`\`\`
 
 Deterministic harness checks:
 
-```sh
+\`\`\`sh
 npm run bench:harness
 npm run bench:tokens
-```
+\`\`\`
 
-- `npm test` runs the Node.js test suite.
-- `npm run check` runs site and public-surface checks, the test suite, benchmark-regression checks and evaluation-fixture validation.
+- npm test runs the Node.js test suite.
+- npm run check runs browser-app integrity checks, evaluation-fixture validation, the test suite, benchmark-regression checks and evaluation validation.
 - CI adds platform-specific security regressions, a live Docker sandbox test, native PTY coverage and browser end-to-end checks.
 
 A passing test suite is evidence for the cases it exercises. It is not proof that the software is defect-free, security-certified, qualified on every platform or equivalent to another coding agent. See [Benchmark methodology](docs/BENCHMARKS.md) before interpreting benchmark results.
 
 ## Documentation
 
+- [Start here: User guide](docs/USER-GUIDE.md)
+- [Downloads and releases](docs/RELEASES.md)
 - [Documentation index](docs/README.md)
+- [First-run guide](docs/FIRST-RUN.md)
+- [Architecture and runtime boundaries](docs/ARCHITECTURE.md)
+- [Configuration reference](docs/CONFIGURATION.md)
+- [Interfaces and deployment](docs/INTERFACES.md)
+- [Benchmark methodology](docs/BENCHMARKS.md)
+- [Engineering scorecard](docs/ENGINEERING-SCORECARD.md)
 - [Whole-system replacement roadmap](docs/REPLACEMENT-ROADMAP.md)
 - [Architecture alternatives](docs/ARCHITECTURE-ALTERNATIVES.md)
 - [Agent runtime alternatives](docs/AGENT-RUNTIME-ALTERNATIVES.md)
 - [Project-quality benchmark](docs/PROJECT-QUALITY-BENCHMARK.md)
 - [Brand guidelines](BRAND.md)
-- [Architecture and runtime boundaries](docs/ARCHITECTURE.md)
-- [Configuration reference](docs/CONFIGURATION.md)
-- [Interfaces and deployment](docs/INTERFACES.md)
-- [Benchmark methodology](docs/BENCHMARKS.md)
 - [Mobile and tablet setup](MOBILE.md)
 - [Contributing guide](CONTRIBUTING.md)
 - [Support and troubleshooting](SUPPORT.md)

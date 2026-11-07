@@ -1,82 +1,80 @@
 # Interfaces and deployment
 
-OASIS exposes several ways to use the same coding-agent runtime. Select an interface based on where the project lives and which capabilities are required.
+OASIS exposes several interfaces over a shared runtime. Choose the one that matches where the project lives and how you want to interact with it.
 
 ## Interface comparison
 
-| Interface | Where the runtime executes | Project access | Best suited for |
+| Interface | How to start | Where the runtime executes | Project access |
 |---|---|---|---|
-| CLI | The computer running the CLI | Local filesystem and configured additional directories | Direct development, scripts and headless tasks. |
-| Connected browser workspace | The computer running the OASIS web server | The server host's configured workspace | Using a browser as the UI for a project on another computer. |
-| Desktop application | The desktop host process | Local workspace selected by the user | A packaged desktop experience with local runtime integration. |
-| VS Code-family extension | The editor host and connected OASIS runtime | Editor workspace and runtime-approved paths | Editor context, diagnostics and diff review. |
-| Agent Client Protocol | The OASIS ACP process | Workspace passed by the ACP client | Editors and tools that implement ACP. |
-| Node.js SDK | The embedding Node.js process | Paths and tools supplied to the SDK session | Building applications and integrations on the OASIS runtime. |
-| GitHub Action | The GitHub Actions runner | The checked-out repository and permissions granted to the workflow | Repository automation initiated by configured events. |
-| Messaging gateways | The configured gateway process | Whatever workspace and tools the gateway is configured to expose | Chat-based task intake and automation. |
+| **Terminal session** | oasis | In the terminal process on the local computer | Local project and configured additional directories |
+| **Browser workspace** | oasis web --open | In the local OASIS server process | Workspace configured on the host computer |
+| **Desktop application** | Launch the installed OASIS app | In the Electron desktop host | Folder selected by the user |
+| **VS Code-family extension** | oasis ide install | Editor host plus connected OASIS runtime | Editor workspace and runtime-approved paths |
+| **Agent Client Protocol** | oasis acp | In the OASIS ACP process | Workspace passed by the ACP client |
+| **Node.js SDK** | Import src/sdk.mjs | In the embedding Node.js process | Paths and tools supplied to the SDK session |
+| **GitHub Action** | Configure action.yml in a workflow | On the GitHub Actions runner | Checked-out repository and granted workflow permissions |
+| **Messaging gateways** | Configure a gateway | In the configured gateway process | Workspace and tools explicitly exposed to that gateway |
 
-The normal browser session and desktop application use the same host-connected runtime. The browser is only the interface; it does not turn OASIS into a hosted service or a browser-only agent.
+The terminal, browser and desktop are different entry points. The terminal is a native CLI session. The browser is a web UI connected to a local host runtime. The desktop app packages the local runtime and browser workspace in an Electron window.
 
-## Desktop
+## Downloads
 
-Download platform packages from [GitHub Releases](https://github.com/FAHTHIZ/oasis/releases/latest). Check the release assets for the current platform and architecture; package availability can change between releases.
+Download desktop installers from [GitHub Releases](https://github.com/FAHTHIZ/oasis/releases/latest). Supported release targets include Windows x64, macOS Apple Silicon and Linux x64. Windows ARM64, macOS Intel and Linux ARM64 are optional builds and appear only when their CI jobs succeed.
 
-The desktop application is built with Electron and starts the OASIS runtime in the desktop host. Provider credentials are handled through the desktop secure-storage implementation where supported. See `desktop/secure-secrets.mjs` and `desktop/main.mjs` for the implementation.
+See [Downloads and releases](RELEASES.md) for package formats and checksum verification.
 
-## CLI
+## Terminal session
 
-The CLI requires Node.js 22 or newer and Git.
+The CLI runs directly in the shell on the computer that owns the project.
 
-Install from a source checkout:
+Requirements: Node.js 22.15 or newer and Git.
 
-```sh
+\`\`\`sh
 git clone https://github.com/FAHTHIZ/oasis.git
 cd oasis
 npm install
 npm install --global .
-```
-
-Run it in a project:
-
-```sh
 cd /path/to/your/project
 oasis connect
 oasis
-```
+\`\`\`
 
-For non-interactive execution, use `oasis exec`. Use `oasis doctor` to inspect the local environment.
+Use oasis exec for non-interactive automation and oasis doctor to inspect the local environment. The CLI does not require the browser workspace to be open.
 
-## Normal browser session
+## Browser workspace
 
-Start the server on the computer that contains the project:
+Start the server on the computer containing the project:
 
-```sh
+\`\`\`sh
 cd /path/to/your/project
 oasis web --open
-```
+\`\`\`
 
-For a phone or another device on the same trusted private network, use the LAN mode described in [Mobile and tablet setup](../MOBILE.md). Keep the host computer running. Do not expose the connected workspace directly to the public internet.
+The browser is only the interface. The agent process, project access and command execution remain on the host. The default server is local-only. For phone or another device, follow [Mobile and tablet setup](../MOBILE.md); use a trusted private network and never expose the workspace directly to the public internet.
 
-The browser is the user interface; the agent process and project access remain on the host computer.
+## Desktop application
+
+The Electron app starts the local runtime, asks you to select a project folder and opens the workspace in a native window. Provider credentials are handled through the desktop secure-storage implementation where supported.
+
+The macOS packages are not currently code-signed. macOS may require an explicit first-launch confirmation in Privacy & Security.
 
 ## Phone and tablet
 
-There is no native Android APK or iOS App Store package in the current release.
-
+There is no native Android APK or iOS App Store package. Available options are:
 - Connect to a computer's OASIS runtime over a trusted private network when you need that computer's project.
-- Advanced Android users can run the CLI manually in Termux with Node.js 22 or newer and Git. This is not a one-click mobile installer.
+- Advanced Android users can run the CLI manually in Termux with Node.js 22.15 or newer and Git.
 
-Follow [MOBILE.md](../MOBILE.md) for the setup details and network cautions.
+See [MOBILE.md](../MOBILE.md) for setup and network cautions.
 
 ## Editor, ACP and SDK integrations
 
-- **Editor integration:** install the VS Code-family extension with `oasis ide install`. The extension provides editor context and review surfaces while the runtime handles agent execution.
-- **ACP:** start `oasis acp` from a compatible client. OASIS uses newline-delimited JSON-RPC over standard input/output.
-- **SDK:** import the Node.js API from the package entry point or `src/sdk.mjs`. The SDK exposes session, headless, tool and hook APIs; it is not a separate hosted service.
+- **Editor integration:** install the VS Code-family extension with oasis ide install.
+- **ACP:** start oasis acp from a compatible client. OASIS uses newline-delimited JSON-RPC over standard input/output.
+- **SDK:** import the Node.js API from the package entry point or src/sdk.mjs. The SDK exposes session, headless, tool and hook APIs; it is not a hosted service.
 
 ## Automation integrations
 
-- **GitHub Action:** `action.yml` defines the composite action. It can respond to configured repository events and uses the workflow's configured model credentials and GitHub permissions.
-- **Messaging gateways:** gateway modules live in `src/gateway-*.mjs`. They must be configured explicitly; their availability and permissions depend on the selected gateway.
+- **GitHub Action:** action.yml defines the composite action. It uses the workflow's configured model credentials and GitHub permissions.
+- **Messaging gateways:** gateway modules live in src/gateway-*.mjs. They must be configured explicitly; their availability and permissions depend on the selected gateway.
 
 Review credentials, event triggers and permissions before enabling automation in a repository.

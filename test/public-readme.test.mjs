@@ -21,6 +21,14 @@ test('README describes the actual interfaces and keeps their execution boundarie
     'does not guarantee that every model will solve every task',
     'Download and install',
     'SHA256SUMS',
+    'Windows (.exe)',
+    'macOS (.dmg)',
+    'Linux (.AppImage / .deb)',
+    'Terminal session',
+    'Browser workspace',
+    'Desktop application',
+    'docs/USER-GUIDE.md',
+    'docs/RELEASES.md',
     'There is no native Android APK',
     'GitHub Action and messaging gateways',
     'Contributing guide',
@@ -31,6 +39,8 @@ test('README describes the actual interfaces and keeps their execution boundarie
   assert.ok(readme.includes('https://github.com/FAHTHIZ/oasis/releases'));
   assert.ok(readme.includes('oasis web --open'));
   assert.ok(!readme.includes('oasis/app/'));
+  assert.ok(!readme.includes('fahthiz.github.io/oasis'));
+  assert.ok(readme.startsWith('**Downloads:**'), 'Platform downloads must be the first README content.');
   assert.ok(!/youtube\\.com|\\.mp4|demo[- ]video/i.test(readme), 'The README must not reference demo videos that have not been supplied.');
 });
 
@@ -56,6 +66,17 @@ test('README relative links resolve to tracked repository files', async () => {
     const resolved = path.resolve(root, target.split('#')[0]);
     await stat(resolved);
   }
+});
+
+test('the user guide and release guide exist and the browser app integrity check has an explicit name', async () => {
+  const [userGuide, releasesGuide] = await Promise.all([read('docs/USER-GUIDE.md'), read('docs/RELEASES.md')]);
+  assert.ok(userGuide.includes('## 4. Terminal session'));
+  assert.ok(userGuide.includes('## 5. Browser workspace'));
+  assert.ok(releasesGuide.includes('SHA256SUMS'));
+  assert.ok(releasesGuide.includes('Windows'));
+  assert.ok(releasesGuide.includes('macOS'));
+  assert.ok(releasesGuide.includes('Linux'));
+  await stat(path.join(root, 'scripts/check-browser-app.mjs'));
 });
 
 test('package manifests do not include deleted documentation or demonstration folders', async () => {

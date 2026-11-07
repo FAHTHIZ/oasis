@@ -2,7 +2,7 @@
 # Do not edit by hand: the release workflow rewrites this file for each release.
 class OasisCli < Formula
   desc "Local-first AI coding agent for the terminal and browser"
-  homepage "https://fahthiz.github.io/oasis/"
+  homepage "https://github.com/FAHTHIZ/oasis"
   url "https://github.com/FAHTHIZ/oasis/archive/refs/tags/v1.1.0.tar.gz"
   sha256 "12ef39e4d31b969707efba6f3154a7641c03273b4b7fbcbfcd7a51b29bb06bbe"
   license "Apache-2.0"

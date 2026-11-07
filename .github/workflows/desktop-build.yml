@@ -136,8 +136,6 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
-      # write: dispatch the homepage workflow after publishing (below).
-      actions: write
     steps:
       - name: Check out the exact release source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -199,7 +197,7 @@ jobs:
           echo "publish=true" >> "$GITHUB_OUTPUT"
           echo "tag=$tag" >> "$GITHUB_OUTPUT"
           echo "target_commitish=$COMMIT_SHA" >> "$GITHUB_OUTPUT"
-      - name: Require same-commit quality, site, and installer gates
+      - name: Require same-commit quality and installer gates
         if: steps.release-version.outputs.publish == 'true'
         timeout-minutes: 45
         env:
@@ -213,7 +211,7 @@ jobs:
             echo "::error::Release candidate is no longer the current main commit."
             exit 1
           fi
-          for workflow in quality.yml pages.yml installer-checks.yml; do
+          for workflow in quality.yml installer-checks.yml; do
             echo "Waiting for $workflow to pass on $TARGET_SHA..."
             passed=false
             for attempt in $(seq 1 90); do
@@ -266,15 +264,6 @@ jobs:
           fail_on_unmatched_files: true
           draft: false
           files: release-assets/*
-      - name: Refresh the homepage download links
-        # Releases created with the workflow token do not trigger other workflows,
-        # so ask the homepage workflow to restamp its download rows for this release.
-        if: steps.release-version.outputs.publish == 'true'
-        env:
-          GH_TOKEN: ${{ github.token }}
-          GH_REPO: ${{ github.repository }}
-        shell: bash
-        run: gh workflow run pages.yml --ref main || echo "::warning::Could not dispatch the homepage workflow; it will restamp on the next push to main."
       - name: Refresh the Homebrew cask on main
         # Casks/oasis.rb pins each release's dmg checksums and Formula/oasis-cli.rb
         # the tag's source tarball. Pushes made with the

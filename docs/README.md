@@ -1,25 +1,41 @@
 # OASIS documentation
 
-This directory contains maintained technical documentation for the current OASIS codebase. The root [README](../README.md) is the entry point for users; these documents provide the next level of detail.
+Use this index to find the right guide without having to understand the repository first. The root [README](../README.md) is the project overview and download entry point.
 
-## Guides
+## Start here
 
-| Document | Covers |
+| If you need to… | Read |
 |---|---|
-| [First-run guide](FIRST-RUN.md) | Choose an interface, configure a provider, connect a project, review permissions and verify the result. |
-| [Architecture](ARCHITECTURE.md) | Runtime components, request flow, persistence and trust boundaries. |
-| [Engineering scorecard](ENGINEERING-SCORECARD.md) | Evidence-backed readiness areas, open gates, review cadence and measurable exit criteria. |
-| [Configuration reference](CONFIGURATION.md) | Model providers and the provider registry, fallback models, output limits and search-tool options. |
-| [Interfaces and deployment](INTERFACES.md) | CLI, native desktop, normal connected browser session, editor, ACP, SDK and integrations. |
-| [Benchmark methodology](BENCHMARKS.md) | What the model-free benchmarks measure, what they do not measure and how to interpret live evaluations. |
-| [Whole-system replacement roadmap](REPLACEMENT-ROADMAP.md) | Ranked full-system audit, open-source comparisons, retained foundations and replacement acceptance gates. |
-| [Architecture alternatives](ARCHITECTURE-ALTERNATIVES.md) | Component-by-component alternatives, implementation anchors and staged migration recommendations. |
-| [Agent runtime alternatives](AGENT-RUNTIME-ALTERNATIVES.md) | Agent-framework comparisons, OASIS-owned runtime contracts and incremental extraction guidance. |
-| [Project-quality benchmark](PROJECT-QUALITY-BENCHMARK.md) | Repository presentation, onboarding, engineering maturity and release-discipline comparison against a 100-project reference set. |
+| Install OASIS and complete a first task | [User guide](USER-GUIDE.md) |
+| Choose between terminal, browser, desktop and editor interfaces | [Interfaces and deployment](INTERFACES.md) |
+| Download an installer and verify it | [Downloads and releases](RELEASES.md) |
+| Configure providers, models and routing | [Configuration reference](CONFIGURATION.md) |
+| Understand runtime architecture and security boundaries | [Architecture](ARCHITECTURE.md) |
 
-## Project identity
+## User and operator guides
 
-- [Brand guidelines](../BRAND.md) — official name, portal mark, wordmark, colors, visual usage and motion direction.
+- [User guide](USER-GUIDE.md) — install, connect a provider, use each interface and review results.
+- [Downloads and releases](RELEASES.md) — Windows, macOS and Linux packages, Homebrew, checksums and mobile limitations.
+- [First-run guide](FIRST-RUN.md) — provider setup, workspace trust, permissions and verification.
+- [Interfaces and deployment](INTERFACES.md) — terminal, browser workspace, desktop, editor, ACP, SDK and automation.
+- [Configuration reference](CONFIGURATION.md) — provider registry, fallback models, output limits and search options.
+- [Mobile and tablet setup](../MOBILE.md) — connected browser sessions and advanced Termux setup.
+
+## Engineering and architecture
+
+- [Architecture](ARCHITECTURE.md) — runtime components, request flow, persistence and trust boundaries.
+- [Engineering scorecard](ENGINEERING-SCORECARD.md) — evidence-backed readiness areas and exit criteria.
+- [Whole-system replacement roadmap](REPLACEMENT-ROADMAP.md) — ranked improvements and replacement acceptance gates.
+- [Architecture alternatives](ARCHITECTURE-ALTERNATIVES.md) — component alternatives and staged migrations.
+- [Agent runtime alternatives](AGENT-RUNTIME-ALTERNATIVES.md) — framework comparisons and OASIS-owned runtime contracts.
+- [OASIS Neuron Network](OASIS-NEURON-NETWORK.md) — current lineage projection and planned network architecture.
+- [New modules](NEW-MODULES.md) — module boundaries and implementation notes.
+- [Provider transport](architecture/provider-transport.md) — protocol-specific provider request and streaming behaviour.
+
+## Quality and evaluation
+
+- [Benchmark methodology](BENCHMARKS.md) — what model-free checks measure and what live evaluations must report.
+- [Project-quality benchmark](PROJECT-QUALITY-BENCHMARK.md) — historical repository presentation and engineering comparison against a 100-entry discovery index.
 
 ## Project policies
 
@@ -28,7 +44,8 @@ This directory contains maintained technical documentation for the current OASIS
 - [Code of Conduct](../CODE_OF_CONDUCT.md)
 - [Support and troubleshooting](../SUPPORT.md)
 - [Changelog](../CHANGELOG.md)
+- [Brand guidelines](../BRAND.md)
 
 ## Documentation policy
 
-Documentation should describe behaviour that exists in the source code and is covered by tests or a clearly stated implementation boundary. Planned work must be labelled as planned; it must not be presented as an available feature. Release-specific download availability belongs on the GitHub Releases page, not in permanent documentation.
+Documentation must describe behaviour present in the source code and covered by tests or state an explicit limitation. Planned work must be labelled as planned. Release-specific availability belongs on GitHub Releases; never present a tag or temporary CI artifact as a published installer.

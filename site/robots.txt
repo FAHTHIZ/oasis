@@ -1,4 +1,0 @@
-User-agent: *
-Allow: /
-
-Sitemap: https://fahthiz.github.io/oasis/sitemap.xml

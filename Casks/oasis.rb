@@ -10,7 +10,7 @@ cask "oasis" do
   url "https://github.com/FAHTHIZ/oasis/releases/download/v#{version}/OASIS-#{version}-#{arch}.dmg"
   name "OASIS"
   desc "Local-first AI coding agent with CLI, browser and desktop interfaces"
-  homepage "https://fahthiz.github.io/oasis/"
+  homepage "https://github.com/FAHTHIZ/oasis"
 
   livecheck do
     url :url
