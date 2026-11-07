@@ -35,6 +35,7 @@ export function tool(name, description, inputSchema, run, options = {}) {
     name,
     description: String(description || name),
     inputSchema: inputSchema && typeof inputSchema === 'object' ? inputSchema : { type: 'object', properties: {} },
+    outputSchema: options.outputSchema && typeof options.outputSchema === 'object' ? options.outputSchema : {},
     run,
     needsApproval,
     capabilities: Array.isArray(options.capabilities) ? options.capabilities : ['execute'],
@@ -62,6 +63,7 @@ export function createToolServer(name, tools = []) {
       capabilities: item.capabilities || ['execute'],
       risk: item.risk || (item.needsApproval ? 'high' : 'medium'),
       inputSchema: item.inputSchema,
+      outputSchema: item.outputSchema,
       timeoutMs: item.timeoutMs,
       // Approval is handled below, where the SDK has access to its existing
       // approval callback. The kernel is responsible for the execution itself.
@@ -84,7 +86,8 @@ export function createToolServer(name, tools = []) {
     tools: registry.list().map((definition) => ({
       name: definition.name,
       description: definition.description,
-      inputSchema: definition.inputSchema
+      inputSchema: definition.inputSchema,
+      ...(Object.keys(definition.outputSchema || {}).length ? { outputSchema: definition.outputSchema } : {})
     })),
     async callTool(toolName, args, options = {}) {
       const item = items.get(toolName);
