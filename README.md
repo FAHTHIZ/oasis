@@ -36,6 +36,13 @@ OASIS is an open-source coding-agent runtime and development workspace. It conne
 
 OASIS is the harness and application layer, not a model provider. The model still determines much of the reasoning and code quality; OASIS does not guarantee that every model will solve every task.
 
+## See a real model run
+
+<p align="center">
+  <a href="assets/demo/oasis-real-model-demo.mp4"><img src="assets/demo/oasis-real-model-demo.gif" alt="Unscripted OASIS run with gpt-oss-20b: the agent reads a file, fixes a bug, adds a test, runs the test after approval, and is sent back by the verification gate to review its changes." width="100%"></a>
+  <br><sub>Unscripted <code>gpt-oss-20b</code> run recorded on 5 November 2026. Rate-limit waits from the free endpoint were shortened; the model's mistakes and the verification gate's send-back are preserved. The original run took 6m 19s, used 7 tool calls and reported 50.9k tokens. <a href="assets/demo/oasis-real-model-demo.cast">Raw terminal recording</a>.</sub>
+</p>
+
 ## Download and install
 
 ### Desktop application
