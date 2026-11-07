@@ -8,6 +8,7 @@ import { createUsageTracker, recordUsage, runBuiltinCommand } from '../src/slash
 import { createSession, closeSession, runAgentTurn } from '../src/agent.mjs';
 import { loadSettings } from '../src/settings.mjs';
 import { scriptedModel } from './helpers/scripted-model.mjs';
+import { resetModelCatalogForTest } from '../src/model-catalog.mjs';
 
 async function temporaryDirectory(t) {
   const root = await mkdtemp(path.join(os.tmpdir(), 'oasis-model-routing-'));
@@ -19,7 +20,8 @@ test('only short, clearly read-only requests qualify for the cheaper model', () 
   const summary = classifyTask('Summarize the README in three bullets.');
   assert.equal(summary.tier, 'easy');
   assert.match(summary.reason, /15-dimension classifier: SIMPLE \(\d+% confidence\)/);
-  assert.equal(classifyTask('Explain what src/agent.mjs does.').tier, 'easy');
+  assert.equal(classifyTask('Explain what src/agent.mjs does.').tier, 'strong');
+  assert.equal(classifyTask('Explain what src/agent.mjs does.').requiresTools, true);
   assert.equal(classifyTask('Fix the authentication bug and add regression tests.').tier, 'strong');
   assert.equal(classifyTask('Review the permission checks for a security issue.').tier, 'strong');
   assert.equal(classifyTask('Make this application production-ready.').tier, 'strong');
@@ -28,6 +30,8 @@ test('only short, clearly read-only requests qualify for the cheaper model', () 
   assert.equal(classifyTask('Search the web for current documentation.', 'small').tier, 'strong');
   assert.equal(classifyTask('Summarize the README in three bullets.', 'small').tier, 'easy');
   assert.equal(classifyTask('Summarize the authentication and permissions code.', 'small').tier, 'strong');
+  assert.equal(classifyTask('Find the definition of runWorkspaceCommand.', 'small').tier, 'strong');
+  assert.equal(classifyTask(Array(181).fill('word').join(' ')).tier, 'strong');
 });
 
 test('the multi-dimension router expands simple classification without weakening action guardrails', () => {
@@ -40,10 +44,41 @@ test('the multi-dimension router expands simple classification without weakening
 
 test('model selection keeps hard and ambiguous work on the configured strong model', () => {
   const routing = { enabled: true, easyModel: 'cheap-model', strongModel: 'strong-model' };
-  assert.equal(selectTaskModel('Find the definition of runWorkspaceCommand.', 'default-model', routing).model, 'cheap-model');
+  assert.equal(selectTaskModel('Find the definition of runWorkspaceCommand.', 'default-model', routing).model, 'strong-model');
   assert.equal(selectTaskModel('Implement a new provider and write tests.', 'default-model', routing).model, 'strong-model');
   assert.equal(selectTaskModel('Summarize the README.', 'default-model', { ...routing, enabled: false }).model, 'default-model');
   assert.equal(selectTaskModel('Summarize the README.', 'default-model', { enabled: true }).model, 'default-model');
+});
+
+test('tool-required tasks avoid models explicitly catalogued without tool-call support', async (t) => {
+  const root = await temporaryDirectory(t);
+  const catalogPath = path.join(root, 'models.json');
+  await writeFile(catalogPath, JSON.stringify({
+    acme: {
+      id: 'acme',
+      api: 'https://api.acme.test/v1',
+      models: {
+        'baseline-model': { tool_call: true },
+        'no-tools-model': { tool_call: false },
+        'unknown-tools-model': {}
+      }
+    }
+  }));
+  const env = { ...process.env, OASIS_CONFIG_DIR: path.join(root, 'config'), OASIS_MODEL_CATALOG: catalogPath };
+  t.after(() => resetModelCatalogForTest());
+  const options = { baseURL: 'https://api.acme.test/v1', env };
+  const prompt = 'Find the definition of runWorkspaceCommand.';
+  const blocked = selectTaskModel(prompt, 'baseline-model', {
+    enabled: true, easyModel: 'unknown-tools-model', strongModel: 'no-tools-model'
+  }, options);
+  assert.equal(blocked.model, 'baseline-model');
+  assert.match(blocked.reason, /not supporting tool calls/);
+  assert.equal(blocked.requiresTools, true);
+
+  const unknown = selectTaskModel(prompt, 'baseline-model', {
+    enabled: true, easyModel: 'unknown-tools-model', strongModel: 'unknown-tools-model'
+  }, options);
+  assert.equal(unknown.model, 'unknown-tools-model', 'unknown metadata is not treated as a negative capability');
 });
 
 test('routing settings are strictly bounded and untrusted project routing is ignored', async (t) => {

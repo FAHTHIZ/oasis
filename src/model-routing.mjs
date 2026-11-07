@@ -4,6 +4,7 @@ import {
   inferToolRequirement
 } from '@blockrun/router-core';
 import { countTextTokens } from './tokens.mjs';
+import { catalogToolCalling } from './model-catalog.mjs';
 
 const SCORING = DEFAULT_ROUTING_CONFIG.scoring;
 const MIN_CONFIDENCE = SCORING.confidenceThreshold;
@@ -28,6 +29,14 @@ const EASY_SIGNALS = [
 const MUTATION_SIGNALS = [
   /\b(?:edit|write|change|modify|create|add|remove|delete|fix|repair|implement|build|refactor|rename|move|update|upgrade|migrate|install|commit|push|deploy)\b/i,
   /\b(?:make|turn|convert)\s+.+\s+(?:into|to)\s+/i
+];
+
+const REPOSITORY_LOOKUP_SIGNALS = [
+  /\b(?:find|locate|show|where is|where are|search for|look up|trace)\b.{0,120}\b(?:definition|declaration|implementation|call sites?|references?|usages?|symbol|function|class|method|variable)\b/i,
+  /\b(?:definition|declaration|implementation|call sites?|references?|usages?)\b.{0,120}\b[A-Za-z_$][\w$]*[A-Z][\w$]*\b/i,
+  /\b[A-Za-z_$][\w$]*[A-Z][\w$]*\s*\(/,
+  /(?:^|[\s`"'(])(?:[\w.-]+\/)*[\w.-]+\.(?:mjs|cjs|js|jsx|ts|tsx|py|go|rs|java|kt|swift|rb|php|cs|cpp|c|h|hpp|json|ya?ml|html|css)(?:$|[\s`"')\],])/i,
+  /\b(?:in|inside|within|across)\s+(?:this|the|my|our)\s+(?:repo|repository|codebase|workspace|project)\b/i
 ];
 
 const COMPLEX_DIMENSIONS = new Set([
@@ -55,26 +64,27 @@ function hasComplexSignals(classification) {
 export function classifyTask(prompt, hint = null) {
   const text = String(prompt || '').trim();
   const explicit = String(hint || '').toLowerCase();
+  const requiresTools = MUTATION_SIGNALS.some((pattern) => pattern.test(text))
+    || REPOSITORY_LOOKUP_SIGNALS.some((pattern) => pattern.test(text))
+    || inferToolRequirement(text);
 
   const safetySignal = SAFETY_SIGNALS.find((pattern) => pattern.test(text));
-  if (safetySignal) return { tier: 'strong', reason: 'task contains a security-sensitive signal' };
+  if (safetySignal) return { tier: 'strong', reason: 'task contains a security-sensitive signal', requiresTools };
 
   if (['large', 'medium', 'hard'].includes(explicit)) {
-    return { tier: 'strong', reason: 'benchmark task is not marked small' };
+    return { tier: 'strong', reason: 'benchmark task is not marked small', requiresTools };
   }
-  if (!text) return { tier: 'strong', reason: 'empty task defaults to strong model' };
+  if (!text) return { tier: 'strong', reason: 'empty task defaults to strong model', requiresTools: false };
 
   const hardSignal = HARD_SIGNALS.find((pattern) => pattern.test(text));
-  if (hardSignal) return { tier: 'strong', reason: 'task contains a change, complexity, or safety signal' };
+  if (hardSignal) return { tier: 'strong', reason: 'task contains a change, complexity, or safety signal', requiresTools };
 
-  if (text.length > 1200 || text.split(/\\s+/).length > 180) {
-    return { tier: 'strong', reason: 'long or detailed request defaults to strong model' };
+  if (text.length > 1200 || text.split(/\s+/).length > 180) {
+    return { tier: 'strong', reason: 'long or detailed request defaults to strong model', requiresTools };
   }
 
-  const requiresAction = MUTATION_SIGNALS.some((pattern) => pattern.test(text))
-    || inferToolRequirement(text);
-  if (requiresAction) {
-    return { tier: 'strong', reason: 'request appears to require an external tool or state change' };
+  if (requiresTools) {
+    return { tier: 'strong', reason: 'request requires tools, workspace access, or a state change', requiresTools: true };
   }
 
   // Hints are advisory: they cannot bypass the task's safety or action guards.
@@ -94,7 +104,7 @@ export function classifyTask(prompt, hint = null) {
     const detail = highConfidenceSimple
       ? '15-dimension classifier: SIMPLE (' + Math.round(classification.confidence * 100) + '% confidence)'
       : 'short, clearly read-only request';
-    return { tier: 'easy', reason: detail };
+    return { tier: 'easy', reason: detail, requiresTools: false };
   }
 
   const detail = classification.tier
@@ -102,7 +112,8 @@ export function classifyTask(prompt, hint = null) {
     : 'ambiguous classification (' + Math.round(classification.confidence * 100) + '% confidence)';
   return {
     tier: 'strong',
-    reason: '15-dimension classifier kept the request on the strong model: ' + detail
+    reason: '15-dimension classifier kept the request on the strong model: ' + detail,
+    requiresTools: false
   };
 }
 
@@ -121,13 +132,31 @@ export function selectTaskModel(prompt, currentModel, routing = {}, options = {}
     };
   }
   const classification = classifyTask(prompt, options.hint);
-  const requested = classification.tier === 'easy' ? easyModel : strongModel;
+  let requested = classification.tier === 'easy' ? easyModel : strongModel;
+  let reason = classification.reason;
+  if (classification.requiresTools && requested) {
+    const catalogOptions = {
+      baseURL: options.baseURL,
+      provider: options.provider,
+      env: options.env || process.env
+    };
+    const requestedToolCalling = catalogToolCalling(requested, catalogOptions);
+    const currentToolCalling = catalogToolCalling(baseModel, catalogOptions);
+    // Only an explicit false blocks a route. If the selected model is listed
+    // without tool support, keep the current model unless it is also listed
+    // as unsupported. Unknown metadata never blocks a user's configured model.
+    if (requestedToolCalling === false && currentToolCalling !== false) {
+      requested = baseModel;
+      reason += '; kept the current model because the selected model is listed as not supporting tool calls';
+    }
+  }
   return {
     enabled: true,
     tier: classification.tier,
     model: requested || baseModel,
     strongModel,
-    reason: classification.reason
+    requiresTools: classification.requiresTools,
+    reason
   };
 }
 

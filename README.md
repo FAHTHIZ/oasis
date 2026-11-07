@@ -111,6 +111,7 @@ For the differences between these interfaces, see [Interfaces and deployment](do
 - **Model runtime:** provider adapters, streaming, model configuration, retry and fallback handling, context management and usage tracking.
 - **Workspace operations:** file reading, search, editing, patching, command execution, process management and Git operations.
 - **Permissions and safety:** approval modes, command-risk analysis, protected paths, secret scanning and optional OS/container sandbox integrations.
+- **Task-aware routing:** optionally send clearly simple, read-only requests to a lower-cost model while keeping complex or tool-requiring work on the stronger configured model; see the [routing configuration](docs/CONFIGURATION.md#task-aware-model-routing).
 - **Agent coordination:** subagents, specialist reviews, shared tasks, background sessions, MCP servers, hooks, plugins and Agent Skills.
 - **Verification and recovery:** diagnostics, language-server integration, test execution, diff review, session history, checkpoints and worktree-based isolation.
 - **Additional workflows:** web retrieval, browser-related tools, PDF and image handling, voice features and automation integrations.

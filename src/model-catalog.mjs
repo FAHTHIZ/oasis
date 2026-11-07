@@ -28,8 +28,9 @@ const HOST_PROVIDERS = {
 // Without a provider hint, a bare id resolves at the model maker first.
 const FIRST_PARTY = ['anthropic', 'openai', 'google', 'xai', 'deepseek', 'moonshotai', 'zai', 'minimax', 'mistral', 'alibaba', 'cohere', 'perplexity', 'xiaomi', 'stepfun', 'openrouter'];
 
-// Keep only the fields Oasis reads: context/input/output limits, prices, and
-// whether the model accepts image input.
+// Keep the fields Oasis uses for limits, pricing and runtime capability checks.
+// Tool-call support is tri-state: false is meaningful; an omitted upstream
+// value remains unknown rather than being treated as unsupported.
 export function trimCatalog(raw, providers) {
   const out = {};
   for (const [id, provider] of Object.entries(raw || {})) {
@@ -45,6 +46,7 @@ export function trimCatalog(raw, providers) {
       if (positive(limit.output)) entry.output = limit.output;
       const inputs = model && model.modalities && model.modalities.input;
       if (Array.isArray(inputs)) entry.image = inputs.includes('image');
+      if (typeof model.tool_call === 'boolean') entry.toolCall = model.tool_call;
       // Which assistant field carries reasoning the model expects back on the
       // next request (interleaved thinking across tool calls). `true` in
       // models.dev means the common reasoning_content field.
@@ -231,6 +233,13 @@ export function catalogContextWindow(model, options = {}) {
 export function catalogImageInput(model, options = {}) {
   const entry = findCatalogModel(model, options);
   return entry && typeof entry.image === 'boolean' ? entry.image : null;
+}
+
+// Whether the catalog explicitly lists tool-call support: true, false, or null
+// when the model or upstream metadata does not say. Unknown is not unsupported.
+export function catalogToolCalling(model, options = {}) {
+  const entry = findCatalogModel(model, options);
+  return entry && typeof entry.toolCall === 'boolean' ? entry.toolCall : null;
 }
 
 // The reasoning field the model expects replayed on later requests

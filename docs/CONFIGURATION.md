@@ -90,6 +90,34 @@ key is never sent to another provider; a bare model runs on the current
 provider. Hosted providers without a key in the environment are skipped; local
 servers do not need one. Source: `src/fallback-chain.mjs`.
 
+## Task-aware model routing
+
+Source: `src/model-routing.mjs`, integrated by `src/agent.mjs`.
+
+Automatic routing is optional and uses two models on the active provider:
+
+```text
+/routing easy MODEL_ID
+/routing strong MODEL_ID
+/routing on
+/routing status
+```
+
+Clearly simple, read-only requests can use the easy model. Complex, ambiguous,
+security-sensitive, repository-specific or tool-requiring requests stay on the
+strong model. The strong model defaults to the session model unless a different
+one is configured. Use `/routing off` to pause routing or `/routing reset` to
+remove the saved routing configuration. The `/usage` report includes estimated
+savings when model prices are known.
+
+The model catalogue imports the upstream `tool_call` flag when it is present.
+For a task that needs tools, OASIS avoids selecting a model explicitly marked as
+not supporting tool calls and keeps the current model instead, unless the
+current model is also explicitly marked unsupported. Missing metadata remains
+unknown; it is not treated as proof that a model cannot call tools. Provider
+metadata can be incomplete or stale, so this is a conservative routing guard,
+not a live tool-capability probe.
+
 ## Output token limit
 
 Source: `maxOutputTokensFor` in `src/agent.mjs`.
