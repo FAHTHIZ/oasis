@@ -227,7 +227,7 @@ test('async kernel authorization can rewrite input before schema validation and 
     risk: 'low',
     inputSchema: {
       type: 'object',
-      properties: { path: { type: 'string', pattern: '^[a-z.]+,
+      properties: { path: { type: 'string', pattern: '^[a-z.]+$' } },
       required: ['path'],
       additionalProperties: false
     },
