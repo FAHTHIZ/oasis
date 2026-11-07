@@ -24,6 +24,7 @@ import { loadSettings } from './settings.mjs';
 import { resolveSandbox } from './sandbox.mjs';
 import { estimateTokens, contextWindowSize, contextTokens as contextTokensFor } from './context.mjs';
 import { PtySessionManager } from './pty-sessions.mjs';
+import { createTaskHistoryStore } from './task-history-store.mjs';
 import { createWorktree, finishWorktree, removeWorktree, readWorktreeDiff, readWorktreeWorkingDiff, readWorkspaceDiff, inspectWorktree, mergeWorktree, isCommitIntegrated } from './worktrees.mjs';
 import { createPhoneLink } from './phone-link.mjs';
 import { appModuleGraph, resolveAppPath, skillsIndex } from './app-server.mjs';
@@ -499,6 +500,7 @@ export function createOasisWebServer(options = {}) {
   const ptyManager = options.ptyManager || new PtySessionManager();
   const ptySession = { ptyManager, background: new Map() };
   const jobs = options.jobs instanceof Map ? options.jobs : new Map();
+  const taskStore = createTaskHistoryStore(root, { env });
   const busySessions = new Set();
   const startingSessions = new Set();
   const busyWorkspaces = new Set();
@@ -526,6 +528,7 @@ export function createOasisWebServer(options = {}) {
   function emit(job, type, data = {}) {
     job.events.push({ id: job.nextEventId++, type, data, at: new Date().toISOString() });
     if (job.events.length > MAX_EVENTS_PER_JOB) job.events.splice(0, job.events.length - MAX_EVENTS_PER_JOB);
+    taskStore.schedule(job, 250);
   }
 
   // meta (from the agent) can offer "always allow <rule> this session"; that
@@ -2096,7 +2099,8 @@ export function createOasisWebServer(options = {}) {
     }
 
     if (req.method === 'GET' && pathname === '/api/jobs') {
-      const summaries = new Map();
+      const stored = await taskStore.list({ limit: 100 });
+      const summaries = new Map(stored.map((item) => [item.id, item]));
       for (const job of jobs.values()) {
         const lastEvent = job.events.at(-1);
         summaries.set(job.id, {
@@ -2118,7 +2122,8 @@ export function createOasisWebServer(options = {}) {
 
 
     if (req.method === 'GET' && pathname === '/api/agent-monitor') {
-      const summaries = new Map();
+      const stored = await taskStore.list({ limit: 100 });
+      const summaries = new Map(stored.map((item) => [item.id, item]));
       for (const job of jobs.values()) {
         const lastEvent = job.events.at(-1);
         summaries.set(job.id, {
@@ -2136,7 +2141,7 @@ export function createOasisWebServer(options = {}) {
         .sort((a, b) => Date.parse(b.updatedAt || b.createdAt || 0) - Date.parse(a.updatedAt || a.createdAt || 0));
       const recent = allAgentRuns.slice(0, 50);
       const runs = await Promise.all(recent.map(async (summary) => {
-        const task = jobs.get(summary.id);
+        const task = jobs.get(summary.id) || await taskStore.get(summary.id);
         return summarizeAgentRun(task || summary);
       }));
       json(res, 200, { runs: runs.filter(Boolean), total: allAgentRuns.length, updatedAt: new Date().toISOString() });
@@ -2145,7 +2150,8 @@ export function createOasisWebServer(options = {}) {
 
     const diffMatch = pathname.match(/^\/api\/jobs\/([a-f0-9-]{36})\/diff$/i);
     if (req.method === 'GET' && diffMatch) {
-      const task = jobs.get(diffMatch[1]);
+      const liveJob = jobs.get(diffMatch[1]);
+      const task = liveJob ? await taskStore.save(liveJob) : await taskStore.get(diffMatch[1]);
       if (!task) { json(res, 404, { error: 'Task not found or expired.' }); return; }
       const artifact = task.result && task.result.isolatedWorktree;
       const branch = artifact && artifact.branch || task.worktreeBranch;
@@ -2212,7 +2218,7 @@ export function createOasisWebServer(options = {}) {
     const mergeMatch = pathname.match(/^\/api\/jobs\/([a-f0-9-]{36})\/merge$/i);
     if (req.method === 'POST' && mergeMatch) {
       const liveJob = jobs.get(mergeMatch[1]);
-      const task = liveJob;
+      const task = liveJob ? await taskStore.save(liveJob) : await taskStore.get(mergeMatch[1]);
       if (!task) { json(res, 404, { error: 'Task not found or expired.' }); return; }
       if (task.status !== 'completed' || (task.result && task.result.finished === false) || task.error) {
         json(res, 409, { error: 'Only successfully completed isolated tasks can be merged. Review interrupted or incomplete work without merging it.' });
@@ -2282,7 +2288,19 @@ export function createOasisWebServer(options = {}) {
           branch: merged.branch, targetBranch: merged.target_branch,
           commit: merged.commit, files: merged.files.slice(0, 200)
         };
-        emit(liveJob, 'worktree_merged', eventData);
+        try {
+          if (liveJob) {
+            emit(liveJob, 'worktree_merged', eventData);
+            await taskStore.save(liveJob);
+          } else {
+            const nextId = Number.isSafeInteger(task.nextEventId) && task.nextEventId > 0 ? task.nextEventId : task.events.length + 1;
+            task.events.push({ id: nextId, type: 'worktree_merged', at: new Date().toISOString(), data: eventData });
+            task.nextEventId = nextId + 1;
+            await taskStore.save(task);
+          }
+        } catch {
+          // Git integration is durable; optional history persistence must not misreport the merge.
+        }
         json(res, 200, merged);
       } catch (error) {
         json(res, 409, { error: String(error && error.message || 'The isolated worktree could not be merged safely.').slice(0, 1200) });
@@ -2308,7 +2326,21 @@ export function createOasisWebServer(options = {}) {
         });
         return;
       }
-      json(res, 404, { error: 'Job not found or expired.' });
+      const saved = await taskStore.get(jobMatch[1]);
+      if (!saved) { json(res, 404, { error: 'Job not found or expired.' }); return; }
+      json(res, 200, {
+        id: saved.id,
+        status: saved.status,
+        events: saved.events.filter((event) => event.id > after),
+        nextEventId: saved.nextEventId,
+        result: saved.result,
+        title: saved.title || null,
+        type: saved.type || 'agent',
+        worktree: saved.worktreeBranch && saved.worktreePath && saved.worktreeBaseCommit
+          ? { branch: saved.worktreeBranch, path: saved.worktreePath, baseCommit: saved.worktreeBaseCommit }
+          : null,
+        error: saved.error
+      });
       return;
     }
 
@@ -2434,6 +2466,7 @@ export function createOasisWebServer(options = {}) {
         grace.unref?.();
         try { await closed; } finally { clearTimeout(grace); }
       }
+      await taskStore.flush([...jobs.values()]);
     }
   };
 }

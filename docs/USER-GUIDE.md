@@ -73,7 +73,7 @@ cd /path/to/your/project
 oasis web --open
 ```
 
-OASIS opens the local workspace in your browser. The browser displays the interface; the runtime, project files and command execution remain on the host. Browser job/event history exists only for that runtime process and is cleared on restart; saved chat sessions are stored separately.
+OASIS opens the local workspace in your browser. The browser displays the interface; the runtime, project files and command execution remain on the host. Browser job/event history is stored locally under the OASIS config directory. Completed tasks remain reviewable after restart; active tasks are marked interrupted because live processes and pending approvals cannot be restored. Saved chat sessions use their separate session store.
 
 For phone or tablet access, follow [Mobile and tablet setup](../MOBILE.md). Keep access on a trusted private network and do not expose the workspace directly to the public internet.
 
