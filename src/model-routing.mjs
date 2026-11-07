@@ -62,15 +62,12 @@ export function classifyTask(prompt, hint = null) {
   if (['large', 'medium', 'hard'].includes(explicit)) {
     return { tier: 'strong', reason: 'benchmark task is not marked small' };
   }
-  if (['small', 'easy'].includes(explicit)) {
-    return { tier: 'easy', reason: 'benchmark task marked small' };
-  }
   if (!text) return { tier: 'strong', reason: 'empty task defaults to strong model' };
 
   const hardSignal = HARD_SIGNALS.find((pattern) => pattern.test(text));
   if (hardSignal) return { tier: 'strong', reason: 'task contains a change, complexity, or safety signal' };
 
-  if (text.length > 1200 || text.split(/\s+/).length > 180) {
+  if (text.length > 1200 || text.split(/\\s+/).length > 180) {
     return { tier: 'strong', reason: 'long or detailed request defaults to strong model' };
   }
 
@@ -78,6 +75,11 @@ export function classifyTask(prompt, hint = null) {
     || inferToolRequirement(text);
   if (requiresAction) {
     return { tier: 'strong', reason: 'request appears to require an external tool or state change' };
+  }
+
+  // Hints are advisory: they cannot bypass the task's safety or action guards.
+  if (['small', 'easy'].includes(explicit)) {
+    return { tier: 'easy', reason: 'benchmark task marked small and passed read-only guards' };
   }
 
   const classification = classifyByRules(text, undefined, countTextTokens(text), SCORING);
