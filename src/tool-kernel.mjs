@@ -88,7 +88,7 @@ const SENSITIVE_CLI_FLAG_WITH_VALUE = /^((?:--?)(?:api[-_]?key|access[-_]?key|ac
 
 function redactCredentialFlags(text) {
   return String(text).replace(
-    /(^|\\s)(--?(?:api[-_]?key|access[-_]?key|access[-_]?token|token|secret|password|passwd|authorization|cookie))(=|\\s+)(?:"[^"]*"|'[^']*'|[^\\s,;]+)/gi,
+    /(^|\s)(--?(?:api[-_]?key|access[-_]?key|access[-_]?token|token|secret|password|passwd|authorization|cookie))(=|\s+)(?:"[^"]*"|'[^']*'|[^\s,;]+)/gi,
     (_whole, prefix, flag, separator) => prefix + flag + separator + '[redacted]'
   );
 }
