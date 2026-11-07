@@ -1504,9 +1504,38 @@ async function withPathLock(key, fn) {
   }
 }
 
+// Normalize lock keys through the same workspace-path resolver used by the
+// actual write. Existing files resolve to their real path; new files resolve
+// their nearest existing parent so a symlinked directory cannot create a
+// second lock for the same eventual target.
+async function canonicalPathLockKey(root, rawPath) {
+  const target = await resolveWorkspacePath(root, rawPath);
+  try {
+    return path.resolve(await realpath(target.absolute));
+  } catch (error) {
+    if (error.code !== 'ENOENT') throw error;
+  }
+
+  let cursor = path.dirname(target.absolute);
+  const suffix = [path.basename(target.absolute)];
+  while (true) {
+    try {
+      const existing = await realpath(cursor);
+      return path.resolve(existing, ...suffix);
+    } catch (error) {
+      if (error.code !== 'ENOENT') throw error;
+      const parent = path.dirname(cursor);
+      if (parent === cursor) return path.resolve(target.absolute);
+      suffix.unshift(path.basename(cursor));
+      cursor = parent;
+    }
+  }
+}
+
 export async function executeTool(name, args = {}, context = {}) {
   if (PATH_LOCKED_TOOLS.has(name) && args && typeof args.path === 'string' && args.path) {
-    const key = path.resolve(path.resolve(context.root || process.cwd()), args.path);
+    const root = path.resolve(context.root || process.cwd());
+    const key = await canonicalPathLockKey(root, args.path);
     return withPathLock(key, () => executeToolUnlocked(name, args, context));
   }
   return executeToolUnlocked(name, args, context);
