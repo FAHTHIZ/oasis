@@ -155,6 +155,7 @@ A passing test suite is evidence for the cases it exercises. It is not proof tha
 ## Documentation
 
 - [Documentation index](docs/README.md)
+- [Whole-system replacement roadmap](docs/REPLACEMENT-ROADMAP.md)
 - [Brand guidelines](BRAND.md)
 - [Architecture and runtime boundaries](docs/ARCHITECTURE.md)
 - [Configuration reference](docs/CONFIGURATION.md)
