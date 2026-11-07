@@ -37,6 +37,11 @@ test('shell tricks that hid destructive commands from the legacy splitter are no
   ]) assert.ok(analyzeShellLine(line).blocked, line);
 });
 
+test('dynamic and oversized literal loops cannot be treated as fully analysed', () => {
+  assert.ok(analyzeShellLine('for d in $(list); do rm -rf "$d"; done').highRisk);
+  assert.ok(analyzeShellLine('for d in a b c d e f g h i; do rm -rf "$d"; done').highRisk);
+});
+
 test('run-time computed programs and eval text need a person', () => {
   assert.ok(analyzeShellLine("eval \"$(printf 'rm -rf ~')\"").highRisk);
   assert.ok(analyzeShellLine('$(echo rm) -rf build').highRisk);
