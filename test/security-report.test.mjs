@@ -19,6 +19,22 @@ test('bypass permission mode is a warn', () => {
   assert.ok(report.checks.some((check) => check.name === 'permission-mode' && check.severity === 'warn'));
 });
 
+test('bypassPermissions is also reported as a warning', () => {
+  const report = buildSecurityReport({ sandboxSettings: {}, permissionMode: 'bypassPermissions', scanFindings: [] });
+  assert.ok(report.checks.some((check) => check.name === 'permission-mode' && check.severity === 'warn'));
+});
+
+test('missing scan results are not reported as a clean scan', () => {
+  const report = buildSecurityReport({ sandboxSettings: {}, permissionMode: 'default' });
+  assert.ok(report.checks.some((check) => check.name === 'secret-scan' && check.severity === 'warn'));
+  assert.match(report.checks.find((check) => check.name === 'secret-scan').detail, /No secret-scan results/);
+});
+
+test('uses the sandbox backend selected by settings', () => {
+  const report = buildSecurityReport({ sandboxSettings: { enabled: true }, sandboxStatus: { available: true, kind: 'docker' }, permissionMode: 'default', scanFindings: [] });
+  assert.ok(report.checks.some((check) => check.name === 'sandbox' && check.severity === 'pass' && /docker/.test(check.detail)));
+});
+
 test('formatSecurityReport includes all checks', () => {
   const report = buildSecurityReport({ sandboxSettings: {}, permissionMode: 'default', scanFindings: [] });
   const output = formatSecurityReport(report);
