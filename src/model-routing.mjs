@@ -160,7 +160,8 @@ export function selectTaskModel(prompt, currentModel, routing = {}, options = {}
       if (fallback) {
         requested = fallback;
         tier = 'strong';
-        reason += '; selected ' + fallback + ' instead of ' + rejectedModel + ' because it is catalogued without required ' + rejected.join(' and ');
+        const missingLabel = rejected.map((item) => item === 'tool calling' ? 'tool calls' : item).join(' and ');
+        reason += '; selected ' + fallback + ' instead of ' + rejectedModel + ' because it is catalogued as not supporting ' + missingLabel;
       } else {
         requested = baseModel;
         tier = 'strong';
