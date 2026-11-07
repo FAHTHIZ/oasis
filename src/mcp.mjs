@@ -320,9 +320,12 @@ export function mcpToolDefinitions(clients, options = {}) {
       if (!seen.has(tool.name)) seen.set(tool.name, fingerprint);
       const changed = sessionChanged || checkPin(pins, serverName, tool, fingerprint) === 'changed';
       const input = inspected.inputSchema || { type: 'object', properties: {} };
+      const outputSchema = inspected.outputSchema || null;
       let schemaSize = 0;
       try { schemaSize = JSON.stringify(input).length; } catch { continue; }
-      if (schemaSize > 24000) continue;
+      let outputSchemaSize = 0;
+      try { outputSchemaSize = outputSchema ? JSON.stringify(outputSchema).length : 0; } catch { continue; }
+      if (schemaSize > 24000 || outputSchemaSize > 24000) continue;
       definitions.push({
         type: 'function',
         function: {
@@ -333,7 +336,7 @@ export function mcpToolDefinitions(clients, options = {}) {
           parameters: input
         }
       });
-      map.set(safeName, { serverName, toolName: tool.name, fingerprint, ...(inspected.reasons.length ? { poisoned: inspected.reasons } : {}), ...(changed ? { changed: true } : {}) });
+      map.set(safeName, { serverName, toolName: tool.name, fingerprint, ...(outputSchema ? { outputSchema } : {}), ...(inspected.reasons.length ? { poisoned: inspected.reasons } : {}), ...(changed ? { changed: true } : {}) });
     }
   }
   if ([...clients.values()].some((client) => client.capabilities && client.capabilities.resources)) {
