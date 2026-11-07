@@ -41,7 +41,7 @@ The terminal is a native CLI session; the browser is a UI connected to a runtime
 | Interface | Start it with | Where the agent and project run |
 |---|---|---|
 | **Terminal session** | oasis | In your terminal, on the computer running OASIS. |
-| **Normal browser session / Connected browser workspace** | oasis web --open | In the local OASIS runtime on the host computer; the browser is the interface. |
+| **Browser workspace** | `oasis web --open` | In the local OASIS runtime on the host computer; the browser is the interface. |
 | **Desktop application** | Open the installed OASIS app | In the desktop host process, against the folder you choose. |
 | **Editor integration** | oasis ide install | Through the editor host and connected OASIS runtime. |
 | **Agent Client Protocol** | oasis acp | In the OASIS ACP process started by the compatible client. |
