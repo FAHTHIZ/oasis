@@ -4831,8 +4831,9 @@ function kernelTimeoutForTool(name, args, context) {
 // then validates the registered schema again and owns cancellation, timeout,
 // and redacted audit handling for the actual workspace tool execution.
 async function executeRegisteredToolWithKernel(session, name, args, context, options = {}) {
-  const definition = (session.toolDefinitions || []).find((item) => item && item.function && item.function.name === name);
-  if (!definition) throw new Error('No registered tool definition for ' + name + '; refusing to execute an unregistered tool.');
+  const definition = (session.toolDefinitions || []).find((item) => item && item.function && item.function.name === name)
+    || TOOL_DEFINITIONS.find((item) => item && item.function && item.function.name === name);
+  if (!definition) throw new Error('Unknown or unavailable tool: ' + name + '; no registered tool schema was found, so execution was refused.');
 
   const tool = bridgeToolDefinition(definition, {
     // authorizeCall already made the user/policy decision; do not show a second prompt.
