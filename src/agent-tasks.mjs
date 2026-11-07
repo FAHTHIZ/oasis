@@ -1,3 +1,5 @@
+import { attachNeuronLineage, buildNeuronNetworkSnapshot } from './neuron-network.mjs';
+
 // Background subagents, like Claude Code's background agents:
 //   task { run_in_background: true }  starts a subagent and returns its id at once
 //   agent_status { id?, wait_seconds? } lists agents, or reads one (optionally waiting)
@@ -20,6 +22,13 @@ export const AGENT_TOOL_DEFINITIONS = [
   { type: 'function', function: { name: 'agent_status', description: 'List subagents started with task (id, type, status, elapsed time), or read one agent\'s status and final report. Set wait_seconds to block until a running agent finishes (up to 600). Background agents report back automatically when they finish, so only wait when the next step needs their result.', parameters: { type: 'object', properties: {
     id: { type: 'string', description: 'Agent id such as agent_1; omit to list all' },
     wait_seconds: { type: 'integer', description: 'Wait up to this many seconds for the agent to finish' }
+  }, required: [] } } },
+  { type: 'function', function: { name: 'neuron_network', description: 'Inspect the Oasis Neuron Network as a bounded, read-only graph: agent hierarchy, roles, statuses, teams, shared tasks, workspace isolation and aggregate usage. It never exposes worker prompts, transcripts, reports, or tool arguments.', parameters: { type: 'object', properties: {
+    status: { type: 'string', enum: ['running', 'completed', 'failed', 'cancelled', 'interrupted'], description: 'Optional lifecycle filter' },
+    team_id: { type: 'string', description: 'Optional team ID filter' },
+    parent_id: { type: 'string', description: 'Optional direct-parent filter, such as main or agent_2' },
+    include_inactive: { type: 'boolean', description: 'Include finished workers; defaults to true' },
+    limit: { type: 'integer', minimum: 1, maximum: 100, description: 'Maximum visible agents; defaults to 50' }
   }, required: [] } } },
   { type: 'function', function: { name: 'agent_events', description: 'Read the recent agent/team activity timeline for this session: worker starts, finishes, failures, cancellations, team lifecycle, and teammate messages. Filter by agent_id or team_id and limit the number of events.', parameters: { type: 'object', properties: {
     agent_id: { type: 'string', description: 'Optional agent ID such as agent_2' },
@@ -75,6 +84,8 @@ export function restoreAgentHistory(session, snapshots = []) {
     const status = wasRunning ? 'interrupted' : ['completed', 'failed', 'cancelled', 'interrupted'].includes(snapshot.status) ? snapshot.status : 'interrupted';
     const record = {
       id,
+      parentId: typeof snapshot.parentId === 'string' ? snapshot.parentId.slice(0, 100) : 'main',
+      depth: Math.max(1, Math.min(32, Number.parseInt(snapshot.depth, 10) || 1)),
       type: String(snapshot.type || 'general-purpose').slice(0, 80),
       description: String(snapshot.description || '').slice(0, 120),
       status,
@@ -105,6 +116,7 @@ export function restoreAgentHistory(session, snapshots = []) {
         ? { restoredTranscript: true, transcriptSaved: true, resumeWorktree: { branch: String(snapshot.worktreeBranch).slice(0, 160), relative: String(snapshot.worktreePath).slice(0, 240), base: String(snapshot.worktreeBase) } }
         : {})
     };
+    attachNeuronLineage(registry, record, record.parentId);
     registry.agents.set(id, record);
     registry.next = Math.max(Number(registry.next) || 1, Number(match[1]) + 1);
     restored.push(record);
@@ -172,6 +184,11 @@ export function agentEvents(session, args = {}) {
   const filtered = registry.events.filter((event) => (!agentId || event.agent_id === agentId) && (!teamId || event.team_id === teamId));
   const events = filtered.slice(-limit);
   return { events, total: filtered.length, returned: events.length, truncated: filtered.length > events.length };
+}
+
+export function neuronNetworkSnapshot(session, args = {}) {
+  if (!isMainCoordinator(session)) throw new Error('Only the main coordinator can inspect the full Oasis Neuron Network.');
+  return buildNeuronNetworkSnapshot(agentRegistry(session), args);
 }
 
 export function getAgentTeam(session, idValue) {
@@ -268,6 +285,7 @@ export function registerAgent(session, fields) {
   if (team && team.status !== 'active') throw new Error('Cannot add an agent to team ' + team.id + ' because it is ' + team.status + '.');
   const id = 'agent_' + registry.next++;
   const record = { id, status: 'running', startedAt: Date.now(), finishedAt: null, runs: 1, toolCalls: 0, tokensUsed: 0, recentTools: [], report: '', error: null, ...fields, teamId: teamId || null, runId: session.agentRunId || fields.runId || null };
+  attachNeuronLineage(registry, record, session.agentId || 'main');
   registry.agents.set(id, record);
   if (team) team.members.push(id);
   const child = record.child || {};
@@ -365,6 +383,8 @@ export function summarizeAgent(record, { full = false } = {}) {
   } catch {}
   const out = {
     id: record.id,
+    parent_id: record.parentId || 'main',
+    depth: Math.max(1, Math.min(32, Number.parseInt(record.depth, 10) || 1)),
     agent: record.type,
     description: record.description,
     status: record.status,
