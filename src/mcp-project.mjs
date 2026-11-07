@@ -514,7 +514,7 @@ export class McpHttpClient {
         throw new Error('MCP server ' + this.config.name + ' returned invalid structured output for tool ' + name + ': ' + detail);
       }
     }
-    return { isError: Boolean(result.isError), content: compactResult(result), structuredContent: result.structuredContent };
+    return { isError: Boolean(result.isError), content: compactResult(result), ...(result.structuredContent !== undefined ? { structuredContent: result.structuredContent } : {}) };
   }
 
   close() {
