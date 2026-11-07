@@ -4841,9 +4841,11 @@ function kernelTimeoutForTool(name, args, context) {
 // One kernel execution path owns timeout/cancellation, output validation,
 // and redacted audit recording for every kernel-managed tool.
 async function executeThroughToolKernel(session, tool, args, context, options = {}) {
+  if (typeof options.authorize !== 'function') {
+    throw new Error('Tool Kernel execution requires an explicit authorization function.');
+  }
   const outcome = await runTool(tool, args, {
-    policy: { decide: () => ({ decision: 'allow' }) },
-    ...(typeof options.authorize === 'function' ? { authorize: options.authorize } : {}),
+    authorize: options.authorize,
     signal: options.signal || (context && context.signal),
     env: (context && context.env) || options.env || process.env,
     cwd: (context && context.root) || session.root || process.cwd()
