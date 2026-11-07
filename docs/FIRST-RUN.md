@@ -8,7 +8,6 @@ This guide takes you from a fresh checkout to a reviewed, verified coding task. 
 |---|---|---|
 | Run an agent on the same machine as a project | CLI | Uses permissions of the local OASIS process |
 | Control a nearby computer from a browser | Connected browser workspace | Commands and project files stay on the host computer |
-| Open OASIS on a phone without a host runtime | [Browser app](https://fahthiz.github.io/oasis/app/) | Browser storage or connected GitHub project; no arbitrary phone shell |
 | Use a desktop window | Electron desktop app | Local desktop host; installers are published only through GitHub Releases |
 | Integrate with an editor or compatible client | IDE integration or ACP | Depends on the configured host/runtime |
 
@@ -64,9 +63,9 @@ Read [SECURITY.md](../SECURITY.md) before connecting sensitive workspaces.
 
 ## 7. Use a phone or tablet
 
-The installable browser app is the simplest phone workflow, but it is not a native Android APK or iOS app and it does not gain direct access to the phone's shell. To work on a project stored on a computer, use the connected workspace on that computer and connect from a trusted private network.
+To work on a project stored on a computer from another device, start the connected workspace on that computer and connect from a trusted private network. The agent and project access stay on the host.
 
-See [Mobile and tablet setup](../MOBILE.md) for the differences between the PWA, connected workspace and advanced Termux usage.
+See [Mobile and tablet setup](../MOBILE.md) for the connected-session and advanced Termux setup.
 
 ## Troubleshooting
 
