@@ -6,8 +6,13 @@ let ajv2020Promise;
 const validators = new WeakMap();
 
 async function getAjv(options = {}) {
-  const schemaDeclares2020 = typeof options.schemaDialect === 'string' && options.schemaDialect.includes('2020-12');
-  const use2020 = options.dialect === '2020-12' || schemaDeclares2020;
+  // An explicit $schema declaration wins over the caller's preferred dialect.
+  // This matters when an MCP tool publishes a Draft-07 schema but its
+  // structured output is otherwise validated using the 2020-12 default.
+  const explicitDialect = typeof options.schemaDialect === 'string' && options.schemaDialect.trim();
+  const use2020 = explicitDialect
+    ? explicitDialect.includes('2020-12')
+    : options.dialect === '2020-12';
   if (use2020) {
     if (!ajv2020Promise) {
       ajv2020Promise = import('ajv/dist/2020.js').then(({ default: Ajv2020 }) => new Ajv2020({
@@ -38,9 +43,10 @@ async function validatorFor(schema, options = {}) {
     schemaDialect: schema && typeof schema === 'object' ? schema.$schema : ''
   });
   if (!schema || typeof schema !== 'object') return ajv.compile(schema);
-  const cacheKey = options.dialect === '2020-12' || (typeof schema.$schema === 'string' && schema.$schema.includes('2020-12'))
-    ? '2020-12'
-    : 'default';
+  const explicitDialect = typeof schema.$schema === 'string' && schema.$schema.trim();
+  const cacheKey = explicitDialect
+    ? (explicitDialect.includes('2020-12') ? '2020-12' : 'default')
+    : (options.dialect === '2020-12' ? '2020-12' : 'default');
   let cache = validators.get(schema);
   if (!cache) {
     cache = new Map();
