@@ -83,20 +83,32 @@ try {
   const desktopAxe = await new AxeBuilder({ page })
     .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'])
     .analyze();
-  const desktopCritical = desktopAxe.violations.filter((item) => item.impact === 'critical');
+  const desktopBlocking = desktopAxe.violations.filter((item) => item.impact === 'critical' || item.impact === 'serious');
   if (desktopAxe.violations.length) {
     console.warn('[axe] desktop findings: ' + desktopAxe.violations.map((item) =>
       item.id + ' (' + item.impact + '): ' + item.nodes.map((node) => node.target.join(', ')).join(' | ')
     ).join(' || '));
   }
-  assert.deepEqual(desktopCritical.map((item) => item.id), [], 'The public website must not have critical accessibility violations.');
+  assert.deepEqual(desktopBlocking.map((item) => item.id), [], 'The public website must not have serious or critical accessibility violations.');
   await page.screenshot({ path: path.join(screenshotDir, 'public-site-desktop.png'), fullPage: true });
   console.log('[site] desktop: title, primary actions, content sections and critical accessibility checks passed.');
 
+  for (const width of [320, 360, 390, 430]) {
+    await page.setViewportSize({ width, height: 844 });
+    await page.waitForTimeout(50);
+    const overflow = await page.evaluate(() => ({
+      documentWidth: document.documentElement.scrollWidth,
+      offenders: [...document.querySelectorAll('body *')].map((element) => {
+        const rect = element.getBoundingClientRect();
+        return { tag: element.tagName.toLowerCase(), className: typeof element.className === 'string' ? element.className : '',
+          left: Math.round(rect.left), right: Math.round(rect.right), width: Math.round(rect.width) };
+      }).filter((item) => item.width > 0 && (item.left < -1 || item.right > window.innerWidth + 1)).slice(0, 8)
+    }));
+    assert.ok(overflow.documentWidth <= width,
+      'The public website must not overflow horizontally at ' + width + 'px. Offenders: ' + JSON.stringify(overflow.offenders));
+  }
   await page.setViewportSize({ width: 390, height: 844 });
-  await page.waitForTimeout(100);
-  const mobileWidth = await page.evaluate(() => document.documentElement.scrollWidth);
-  assert.ok(mobileWidth <= 390, 'The public website must not overflow horizontally at 390px.');
+  await page.waitForTimeout(50);
   const menu = page.getByRole('button', { name: 'Menu' });
   const nav = page.getByRole('navigation', { name: 'Main navigation' });
   assert.ok(await menu.isVisible(), 'The compact navigation control must be visible on phones.');
@@ -120,13 +132,13 @@ try {
   const mobileAxe = await new AxeBuilder({ page })
     .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'])
     .analyze();
-  const mobileCritical = mobileAxe.violations.filter((item) => item.impact === 'critical');
+  const mobileBlocking = mobileAxe.violations.filter((item) => item.impact === 'critical' || item.impact === 'serious');
   if (mobileAxe.violations.length) {
     console.warn('[axe] mobile findings: ' + mobileAxe.violations.map((item) =>
       item.id + ' (' + item.impact + '): ' + item.nodes.map((node) => node.target.join(', ')).join(' | ')
     ).join(' || '));
   }
-  assert.deepEqual(mobileCritical.map((item) => item.id), [], 'The mobile website must not have critical accessibility violations.');
+  assert.deepEqual(mobileBlocking.map((item) => item.id), [], 'The mobile website must not have serious or critical accessibility violations.');
   await page.screenshot({ path: path.join(screenshotDir, 'public-site-mobile.png'), fullPage: true });
 
   assert.deepEqual(pageErrors, [], 'The public website must not throw browser JavaScript errors.');
