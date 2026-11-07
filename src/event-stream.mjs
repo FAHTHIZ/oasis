@@ -4,7 +4,7 @@
 // outcomes as sequence-numbered JSONL events. Secrets are redacted with the
 // same patterns as auto memory. The log lives next to the session file so a
 // crash or restart never loses the audit trail.
-import { appendFile, readFile, unlink } from 'node:fs/promises';
+import { appendFile, readFile, unlink, mkdir } from 'node:fs/promises';
 import path from 'node:path';
 import { getSessionDirectory } from './sessions.mjs';
 import { redactSecrets } from './auto-memory.mjs';
@@ -65,6 +65,7 @@ export async function appendEvent(root, sessionId, event, options = {}) {
       if (error.code !== 'ENOENT') throw error;
     }
     const record = redactEvent({ ...event, seq, at: new Date().toISOString(), type });
+    await mkdir(path.dirname(file), { recursive: true, mode: 0o700 });
     await appendFile(file, JSON.stringify(record) + '\n', { encoding: 'utf8', mode: 0o600 });
     return record;
   });
