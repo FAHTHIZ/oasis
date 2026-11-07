@@ -51,6 +51,13 @@ test('oasis doctor leads with a plain summary and a next step, details after', a
   assert.ok(out.indexOf('Environment details') < out.indexOf('OS / architecture'), out);
 });
 
+test('the removed standalone app command directs users to a normal session', () => {
+  const result = run('app', '--open');
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /standalone browser app has been removed/);
+  assert.match(result.stderr, /oasis web --open/);
+});
+
 test('oasis web leads with the one-click link and --open is accepted', async () => {
   const { spawn } = await import('node:child_process');
   const os = await import('node:os');

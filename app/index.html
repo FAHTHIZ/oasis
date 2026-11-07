@@ -4,27 +4,11 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content">
 <title>OASIS — Coding Agent Workspace</title>
-<meta name="description" content="OASIS is an installable, browser-based coding-agent workspace. Connect a model provider and work with browser storage or a connected GitHub project.">
+<meta name="description" content="The OASIS connected workspace UI. Start a normal session with the local OASIS runtime on your computer.">
 <meta name="theme-color" content="#0B100C">
 <meta name="color-scheme" content="dark light">
-<meta name="mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="apple-mobile-web-app-title" content="OASIS">
-<link rel="canonical" href="https://fahthiz.github.io/oasis/app/">
-<meta property="og:type" content="website">
-<meta property="og:site_name" content="OASIS">
-<meta property="og:url" content="https://fahthiz.github.io/oasis/app/">
-<meta property="og:title" content="OASIS — Coding Agent Workspace">
-<meta property="og:description" content="An installable browser workspace for the open-source OASIS coding-agent runtime.">
-<meta property="og:image" content="https://fahthiz.github.io/oasis/app/icons/oasis-512.png">
-<meta property="og:image:alt" content="OASIS app icon">
-<meta name="twitter:card" content="summary">
-<meta name="twitter:title" content="OASIS — Coding Agent Workspace">
-<meta name="twitter:description" content="An installable browser workspace for the open-source OASIS coding-agent runtime.">
-<meta name="twitter:image" content="https://fahthiz.github.io/oasis/app/icons/oasis-512.png">
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'sha256-ihAPSEO+niY5+LBRhkPUlrCldUYL4I9QPPYRBxbDM6M='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; font-src 'self'; connect-src 'self' https: http:; frame-src 'self' blob: data:; child-src 'self' blob:; worker-src 'self' blob:; manifest-src 'self'; base-uri 'self'; form-action 'none'">
-<link rel="manifest" href="manifest.webmanifest">
+<meta name="robots" content="noindex,nofollow">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'sha256-ihAPSEO+niY5+LBRhkPUlrCldUYL4I9QPPYRBxbDM6M='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; font-src 'self'; connect-src 'self' https: http:; frame-src 'self' blob: data:; child-src 'self' blob:; worker-src 'self' blob:; base-uri 'self'; form-action 'none'">
 <link rel="icon" href="icons/oasis-mark.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
 <link rel="stylesheet" href="app.css">
@@ -41,9 +25,6 @@
       <svg class="chev" viewBox="0 0 16 16" aria-hidden="true"><path d="M4 6l4 4 4-4" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
     </button>
     <div class="topbar-actions">
-      <button class="icon-btn" id="installButton" hidden title="Install OASIS" aria-label="Install OASIS">
-        <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M10 3v9m0 0l-3.5-3.5M10 12l3.5-3.5M4 15.5h12" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>
-      </button>
       <button class="icon-btn" id="commandPaletteButton" title="Search actions (Ctrl+K or /)" aria-label="Open command palette">
         <svg viewBox="0 0 20 20" aria-hidden="true"><circle cx="8.7" cy="8.7" r="5.5" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="m13 13 4 4" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
       </button>
