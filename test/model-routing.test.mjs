@@ -72,6 +72,7 @@ test('tool-required tasks avoid models explicitly catalogued without tool-call s
     enabled: true, easyModel: 'unknown-tools-model', strongModel: 'no-tools-model'
   }, options);
   assert.equal(blocked.model, 'baseline-model');
+  assert.equal(blocked.tier, 'strong', 'a rejected easy-model route must not count as an easy task');
   assert.match(blocked.reason, /not supporting tool calls/);
   assert.equal(blocked.requiresTools, true);
 

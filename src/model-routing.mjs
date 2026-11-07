@@ -133,6 +133,7 @@ export function selectTaskModel(prompt, currentModel, routing = {}, options = {}
   }
   const classification = classifyTask(prompt, options.hint);
   let requested = classification.tier === 'easy' ? easyModel : strongModel;
+  let tier = classification.tier;
   let reason = classification.reason;
   if (classification.requiresTools && requested) {
     const catalogOptions = {
@@ -147,12 +148,13 @@ export function selectTaskModel(prompt, currentModel, routing = {}, options = {}
     // as unsupported. Unknown metadata never blocks a user's configured model.
     if (requestedToolCalling === false && currentToolCalling !== false) {
       requested = baseModel;
+      tier = 'strong';
       reason += '; kept the current model because the selected model is listed as not supporting tool calls';
     }
   }
   return {
     enabled: true,
-    tier: classification.tier,
+    tier,
     model: requested || baseModel,
     strongModel,
     requiresTools: classification.requiresTools,
