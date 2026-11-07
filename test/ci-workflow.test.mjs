@@ -2,32 +2,35 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 
-test('GitHub Pages publishes the product website and installable browser app on every main push', async () => {
+test('GitHub Pages publishes the full product website, not a standalone browser app, on every main push', async () => {
   const workflow = await readFile(new URL('../.github/workflows/pages.yml', import.meta.url), 'utf8');
   assert.ok(workflow.includes('pages: write') && workflow.includes('id-token: write'));
   assert.ok(workflow.includes('actions/deploy-pages@'));
-  assert.ok(workflow.includes('Build the installable universal browser app'));
-  assert.ok(workflow.includes('Upload public website and installable browser app'));
-  assert.ok(workflow.includes('Deploy installable browser app'));
+  assert.ok(!workflow.includes('Build the installable universal browser app'));
+  assert.ok(!workflow.includes('scripts/build-app.mjs'));
+  assert.ok(workflow.includes('Upload the public OASIS product website'));
+  assert.ok(workflow.includes('Deploy OASIS product website'));
   assert.ok(workflow.includes('node .github/scripts/site-e2e.mjs'), 'Pages publishing must run the real browser check for the public website.');
   assert.ok(workflow.includes('oasis-public-site-browser-qa'), 'Pages validation must preserve its desktop and phone screenshots.');
-  assert.ok(!workflow.includes('assets/demo/') && !workflow.includes('demo video'), 'The browser-app deployment must not depend on demo videos.');
+  assert.ok(!workflow.includes('assets/demo/') && !workflow.includes('demo video'), 'The website deployment must not depend on demo videos.');
   assert.ok(workflow.includes('node .github/scripts/stamp-site.mjs'));
   assert.ok(workflow.includes('fetch-depth: 20'), 'The publish checkout needs history for the changes feed.');
   // Deployment must not be gated on the optional admin secret; only metadata is.
-  const deploy = workflow.slice(workflow.indexOf('- name: Deploy installable browser app'));
+  const deploy = workflow.slice(workflow.indexOf('- name: Deploy OASIS product website'));
   assert.ok(!deploy.split('- name:')[1].includes('launch-auth'), 'Deploy must not depend on OASIS_REPO_ADMIN_TOKEN.');
   assert.ok(workflow.includes("if: ${{ steps.launch-auth.outputs.ready == 'true' }}"), 'Metadata updates stay gated on the admin secret.');
 });
 
-test('the Pages root is the product website, links to the separate app, and keeps build stamps', async () => {
+test('the Pages root is the full product website with desktop and normal-session entry points', async () => {
   const html = await readFile(new URL('../site/index.html', import.meta.url), 'utf8');
   assert.ok(html.includes('<title>OASIS — Open-source coding-agent runtime</title>'));
   assert.ok(html.includes('Bring the model.'));
-  assert.ok(html.includes('href="./app/"'), 'The product website must link to the separate installable app.');
+  assert.ok(html.includes('href="#downloads"'), 'The product website must expose desktop downloads.');
+  assert.ok(html.includes('href="#session"'), 'The product website must expose the normal connected session.');
+  assert.ok(!html.includes('href="./app/"'), 'The public website must not promote the standalone browser app.');
   assert.ok(html.includes('rel="canonical" href="https://fahthiz.github.io/oasis/"'));
   assert.ok(html.includes('./assets/site.css') && html.includes('./assets/site.js'));
-  assert.ok(!html.includes('http-equiv="refresh"') && !html.includes("location.replace('app/')"), 'The website root must not redirect into the browser app.');
+  assert.ok(!html.includes('http-equiv="refresh"') && !html.includes("location.replace('app/')"), 'The website root must not redirect away from the product overview.');
   for (const name of ['CHANGES', 'BUILD']) {
     assert.ok(html.includes('<!--OASIS:' + name + '-->') && html.includes('<!--/OASIS:' + name + '-->'), 'missing OASIS:' + name);
   }

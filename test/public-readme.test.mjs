@@ -12,7 +12,7 @@ test('README describes the actual interfaces and keeps their execution boundarie
   for (const phrase of [
     'CLI and headless runner',
     'Connected browser workspace',
-    'Universal browser app',
+    'Normal browser session',
     'Desktop application',
     'Editor integration',
     'Agent Client Protocol',
@@ -26,11 +26,11 @@ test('README describes the actual interfaces and keeps their execution boundarie
     'Contributing guide',
     'Support'
   ]) assert.ok(readme.includes(phrase), phrase);
-  assert.ok(readme.includes('does not provide a host shell'));
   assert.ok(readme.includes('Approval prompts are not a replacement for operating-system isolation'));
   assert.ok(readme.includes('Apache License 2.0'));
   assert.ok(readme.includes('https://github.com/FAHTHIZ/oasis/releases'));
-  assert.ok(readme.includes('https://fahthiz.github.io/oasis/app/'));
+  assert.ok(readme.includes('oasis web --open'));
+  assert.ok(!readme.includes('oasis/app/'));
   assert.ok(!/youtube\\.com|\\.mp4|demo[- ]video/i.test(readme), 'The README must not reference demo videos that have not been supplied.');
 });
 
