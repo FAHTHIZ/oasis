@@ -2,10 +2,10 @@ import { readFile, stat } from 'node:fs/promises';
 import { strict as assert } from 'node:assert';
 const read = (path) => readFile(new URL(path, import.meta.url), 'utf8');
 const size = async (path) => (await stat(new URL(path, import.meta.url))).size;
-const [html, css, js, robots, sitemap, icon, mark, packageText, readme, licenseText, buildScript, demoGif, demoMp4, demoCast] = await Promise.all([
+const [html, css, js, robots, sitemap, icon, mark, socialCard, packageText, readme, licenseText, buildScript, demoGif, demoMp4, demoCast] = await Promise.all([
  read('../../site/index.html'), read('../../site/assets/site.css'), read('../../site/assets/site.js'),
  read('../../site/robots.txt'), read('../../site/sitemap.xml'), read('../../site/assets/oasis-icon.svg'),
- read('../../site/assets/oasis-mark.svg'), read('../../package.json'), read('../../README.md'),
+ read('../../site/assets/oasis-mark.svg'), read('../../site/assets/social-card.svg'), read('../../package.json'), read('../../README.md'),
  read('../../LICENSE'), read('../../scripts/build-app.mjs'),
  size('../../assets/demo/oasis-real-model-demo.gif'), size('../../assets/demo/oasis-real-model-demo.mp4'),
  size('../../assets/demo/oasis-real-model-demo.cast')
@@ -16,6 +16,7 @@ assert.ok(html.includes('<title>OASIS — Open-source coding-agent runtime</titl
 assert.ok(html.includes('<meta name="robots" content="index,follow">'));
 assert.ok(html.includes('<link rel="canonical" href="'+siteUrl+'">'));
 assert.ok(html.includes('property="og:image"')&&html.includes('assets/social-card.svg'));
+assert.ok(socialCard.startsWith('<svg')&&socialCard.includes('width="1200"')&&socialCard.includes('height="630"'));
 assert.ok(html.includes('name="twitter:card" content="summary_large_image"')&&html.includes('application/ld+json'));
 assert.ok(html.includes('href="./app/"')&&html.includes('https://github.com/FAHTHIZ/oasis'));
 assert.ok(html.includes('id="main"')&&html.includes('class="skip-link"'));
@@ -30,14 +31,14 @@ assert.ok(html.includes('<!--OASIS:CHANGES-->')&&html.includes('<!--/OASIS:CHANG
 assert.ok(!/http-equiv="refresh"|location\.replace/.test(html));
 assert.ok(html.includes('./assets/site.css')&&html.includes('./assets/site.js'));
 assert.ok(css.includes('@font-face')&&css.includes('--accent:#9BFF55')&&css.includes(':focus-visible'));
-assert.ok(css.includes('prefers-reduced-motion')&&css.includes('@media(max-width:520px)')&&css.includes('.site-nav.is-open'));
-assert.ok(js.includes('aria-expanded')&&js.includes('navigator.clipboard')&&js.includes('data-copy'));
+assert.ok(css.includes('prefers-reduced-motion')&&css.includes('@media(max-width:520px)')&&css.includes('html.js .site-nav.is-open')&&css.includes('html:not(.js) .site-nav'));
+assert.ok(js.includes('document.documentElement.classList.add(\'js\')')&&js.includes('aria-expanded')&&js.includes('navigator.clipboard')&&js.includes('data-copy'));
 assert.ok(!/https?:\/\//.test(js));
 assert.ok(icon.startsWith('<svg')&&icon.includes('</svg>')&&mark.startsWith('<svg')&&mark.includes('</svg>'));
 assert.ok(buildScript.includes('oasis-real-model-demo.gif')&&buildScript.includes("site', 'assets', 'demo'"));
 assert.ok(demoGif>10000&&demoMp4>10000&&demoCast>1000);
 assert.ok(robots.includes('User-agent: *')&&robots.includes('Allow: /')&&robots.includes(siteUrl+'sitemap.xml'));
-assert.ok(sitemap.includes('<loc>'+siteUrl+'</loc>'));
+assert.ok(sitemap.includes('<loc>'+siteUrl+'</loc>')&&sitemap.includes('<loc>'+siteUrl+'app/</loc>'));
 const pkg=JSON.parse(packageText);
 assert.equal(pkg.license,'Apache-2.0');
 assert.equal(pkg.repository?.url,'https://github.com/FAHTHIZ/oasis.git');
