@@ -5037,14 +5037,19 @@ async function executeOrchestrationToolWithKernel(session, name, args, context, 
     requiresApproval: false,
     timeoutMs: name === 'advisor' ? 120_000 : 900_000,
     run: async (validatedInput, runtime) => {
-      const executionContext = Object.assign({}, authorizedContext || {}, {
+      const contextChain = [];
+      for (let current = authorizedContext; current && current !== Object.prototype; current = Object.getPrototypeOf(current)) {
+        contextChain.unshift(current);
+      }
+      const executionContext = Object.assign({}, ...contextChain, {
         root: authorizedContext && authorizedContext.root || session.root,
         session,
         env: runtime.env,
         signal: runtime.signal
       });
       if (name === 'run_specialist_review') {
-        const budget = executionContext.specialistBudget || (executionContext.specialistBudget = { used: 0 });
+        const budgetOwner = context && typeof context === 'object' ? context : executionContext;
+        const budget = budgetOwner.specialistBudget || (budgetOwner.specialistBudget = { used: 0 });
         if (budget.used >= MAX_SPECIALIST_REVIEWS_PER_TASK) {
           throw new Error('This task has reached the two-specialist-review limit. Use the existing review result or ask for a focused follow-up task.');
         }
