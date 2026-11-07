@@ -150,10 +150,33 @@ svg{width:20px;height:20px;flex:none}
 .busy.steering .send{background:var(--accent);color:#fff}
 .busy.steering .send .i-send{display:block}
 .busy.steering .send .i-stop{display:none}
-.todos{max-width:var(--chat-w);margin:0 auto 8px;border:1px solid var(--line);border-radius:var(--r-md);background:var(--panel);padding:8px 12px;font-size:13px;max-height:120px;overflow:auto}
-.todos div{display:flex;gap:8px;color:var(--text-2)}
-.todos .completed{color:var(--faint);text-decoration:line-through}
-.todos .in_progress{color:var(--text);font-weight:600}
+.todos{max-width:var(--chat-w);margin:0 auto 9px;border:1px solid var(--line-strong);border-radius:var(--r-md);background:var(--panel);overflow:hidden;box-shadow:0 8px 22px -22px #000c}
+.task-progress{min-width:0}
+.task-progress>summary{display:flex;align-items:center;gap:12px;min-height:54px;padding:9px 12px;cursor:pointer;list-style:none}
+.task-progress>summary::-webkit-details-marker{display:none}
+.task-progress>summary:hover{background:var(--raised)}
+.task-progress-heading{min-width:0;flex:1;display:grid;gap:3px}
+.task-progress-heading strong{font-size:12.5px;font-weight:700;color:var(--text)}
+.task-progress-caption{font-size:11.5px;color:var(--muted);overflow-wrap:anywhere}
+.task-progress-count{flex:none;padding:3px 8px;border:1px solid var(--line);border-radius:999px;background:var(--sunken);font:11px/1.4 var(--mono);color:var(--text-2);font-variant-numeric:tabular-nums}
+.task-progress-chevron{flex:none;color:var(--faint);font-size:20px;line-height:1;transition:transform .16s ease}
+.task-progress[open] .task-progress-chevron{transform:rotate(90deg)}
+.task-progress-track{height:3px;margin:0 12px 8px;border-radius:999px;background:var(--sunken);overflow:hidden}
+.task-progress-track span{display:block;height:100%;border-radius:inherit;background:var(--accent-2);transition:width .2s ease}
+.task-progress-list{display:grid;gap:2px;max-height:min(230px,34dvh);overflow:auto;margin:0;padding:0 8px 8px;list-style:none}
+.task-progress-step{min-width:0;display:flex;align-items:flex-start;gap:9px;padding:7px 8px;border-radius:var(--r-sm);color:var(--muted);font-size:12px;line-height:1.45}
+.task-progress-step.in_progress{background:var(--accent-soft);color:var(--text)}
+.task-progress-marker{flex:none;width:16px;text-align:center;color:var(--faint);font-weight:700}
+.task-progress-step.completed .task-progress-marker{color:var(--success)}
+.task-progress-step.in_progress .task-progress-marker{color:var(--accent-2)}
+.task-progress-label{min-width:0;flex:1;overflow-wrap:anywhere}
+.task-progress-step.completed .task-progress-label{color:var(--faint)}
+.task-progress-state{flex:none;color:var(--faint);font-size:10.5px;white-space:nowrap}
+.task-progress-step.in_progress .task-progress-state{color:var(--accent-2);font-weight:700}
+.tool-status{flex:none;padding:2px 7px;border:1px solid var(--line);border-radius:999px;color:var(--muted);font-size:10px;font-weight:600;line-height:1.4;white-space:nowrap}
+.tool.running .tool-status{border-color:var(--warn);color:var(--warn)}
+.tool.ok .tool-status{border-color:color-mix(in srgb,var(--success) 35%,var(--line));color:var(--success)}
+.tool.fail .tool-status{border-color:color-mix(in srgb,var(--danger) 35%,var(--line));color:var(--danger)}
 
 /* Files panel: overlay on phones, column on wide screens */
 .panel{position:fixed;inset:calc(var(--topbar) + var(--safe-top)) 0 0 auto;width:min(100vw,420px);background:var(--panel);border-left:1px solid var(--line);display:flex;flex-direction:column;z-index:20;box-shadow:var(--shadow);padding-bottom:var(--safe-bottom)}
@@ -319,7 +342,7 @@ details.manual fieldset{margin:0}
 #pluginCount{font-size:11px;font-weight:700;color:var(--accent)}
 #pluginCount[hidden]{display:none}
 .plugin-chip svg{width:16px;height:16px}
-@media (max-width:440px){.composer-row{gap:4px}.plugin-chip{padding:5px 8px}.composer{padding-left:12px}}
+@media (max-width:440px){.composer-row{gap:4px}.plugin-chip{padding:5px 8px}.composer{padding-left:12px}.task-progress>summary{min-height:50px;padding:8px 10px}.task-progress-list{max-height:30dvh}.task-progress-step{gap:7px;padding:7px 5px}.task-progress-state{font-size:10px}.tool-status{font-size:9.5px;padding:2px 6px}}
 #dictateButton.listening{color:var(--accent-ink);background:var(--accent);border-color:var(--accent);animation:listen 1.6s ease-in-out infinite}
 #dictateButton.working{opacity:.6;cursor:progress}
 @keyframes listen{50%{box-shadow:0 0 0 5px var(--accent-soft)}}
@@ -411,4 +434,4 @@ html.lite .topbar{backdrop-filter:none;-webkit-backdrop-filter:none;background:v
   .shortcut-row{align-items:flex-start}
   .shortcut-row kbd{flex:none}
 }
-@media(prefers-reduced-motion:reduce){.tool .chevron{transition:none}}
+@media(prefers-reduced-motion:reduce){.tool .chevron,.task-progress-chevron,.task-progress-track span{transition:none}}
