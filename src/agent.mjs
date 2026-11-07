@@ -1,6 +1,6 @@
-import { briefFailure } from '../app/core/providers.mjs';
+import { briefFailure } from './provider-errors.mjs';
 import { findCatalogModel, catalogReasoningReplay } from './model-catalog.mjs';
-import { splitThinking, visibleReply } from '../app/core/think-tags.mjs';
+import { splitThinking, visibleReply } from './think-tags.mjs';
 import { atomicWriteFile } from './atomic-write.mjs';
 import { sessionKeyPool, ROTATE_STATUSES } from './key-pool.mjs';
 import { explainNetworkError } from './network-doctor.mjs';
