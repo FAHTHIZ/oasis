@@ -4899,9 +4899,22 @@ async function executeRegisteredToolWithKernel(session, name, args, context, opt
 
   const authorization = createKernelAuthorization(session, name, context, options);
   const tool = bridgeToolDefinition(definition, {
+    capabilities: READ_ONLY_TOOLS.has(name) ? ['read'] : undefined,
+    risk: READ_ONLY_TOOLS.has(name) ? 'low' : undefined,
     requiresApproval: false,
     timeoutMs: kernelTimeoutForTool(name, args, context),
     run: async (validatedInput, runtime) => {
+      if (name === 'ask_user_question') {
+        const budget = questionBudget(session, options);
+        session.turnQuestionCount = Number(session.turnQuestionCount || 0) + 1;
+        return budget !== null && session.turnQuestionCount > budget
+          ? { answered: false, questionBudgetExceeded: true, budget, message: 'Question limit for this turn (' + budget + ') is used up, so this question was not shown. Do not stop to ask more: choose the most reasonable option yourself, keep working, and list the assumption in one line in your final reply so the user can correct it.' }
+          : await askUserQuestion(session, validatedInput, options);
+      }
+      if (name === 'ide_get_diagnostics' || name === 'ide_open_file') {
+        const { runIdeTool } = await import('./ide.mjs');
+        return await runIdeTool(session, name, validatedInput);
+      }
       const cached = name === 'read_file'
         ? await dedupedReadHit(session, validatedInput, runtime.env)
         : null;
@@ -5144,21 +5157,6 @@ async function executeOneCallRaw(session, call, context, options) {
     if (outOfScope) throw new Error(outOfScope);
     const gitWrite = unrequestedGitWrite(session.currentRequest, name, args, { settings: session.settings || {}, env: (context && context.env) || options.env || process.env });
     if (gitWrite) throw new Error(gitWrite);
-    if (name === 'ask_user_question') {
-      const budget = questionBudget(session, options);
-      session.turnQuestionCount = Number(session.turnQuestionCount || 0) + 1;
-      result = budget !== null && session.turnQuestionCount > budget
-        ? { answered: false, questionBudgetExceeded: true, budget, message: 'Question limit for this turn (' + budget + ') is used up, so this question was not shown. Do not stop to ask more: choose the most reasonable option yourself, keep working, and list the assumption in one line in your final reply so the user can correct it.' }
-        : await askUserQuestion(session, args, options);
-      if (options.onToolResult) options.onToolResult({ name, result, call });
-      return { role: 'tool', tool_call_id: call.id, name, content: serializableResult(result), result };
-    }
-    if (name === 'ide_get_diagnostics' || name === 'ide_open_file') {
-      const { runIdeTool } = await import('./ide.mjs');
-      result = await runIdeTool(session, name, args);
-      if (options.onToolResult) options.onToolResult({ name, result, call });
-      return { role: 'tool', tool_call_id: call.id, name, content: serializableResult(result), result };
-    }
     if (SESSION_TOOL_NAMES.has(name)) {
       result = await executeSessionToolWithKernel(session, name, args, context, {
         ...options,

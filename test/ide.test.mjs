@@ -147,3 +147,21 @@ test('the VS Code extension activates, starts the bridge, and serves the diff/se
   assert.deepEqual(await client.call('openDiff', { path: path.join(base, 'a.js'), newContent: 'let y;' }), { decision: 'accept' });
   assert.ok(executed.includes('vscode.diff'));
 });
+
+test('IDE tools execute through the shared kernel and produce audit records', async (t) => {
+  const { createSession, runAgentTurn, closeSession } = await import('../src/agent.mjs');
+  const { scriptedModel, toolCall } = await import('./helpers/scripted-model.mjs');
+  const { root, env, calls } = await setup(t);
+  const { config } = await scriptedModel(t, [
+    toolCall('ide-diagnostics', 'ide_get_diagnostics', { path: 'app.js' }),
+    toolCall('ide-open', 'ide_open_file', { path: 'app.js', line: 2 }),
+    { content: 'Checked the IDE.' }
+  ]);
+  const session = await createSession({ root, config, env, permissionMode: 'bypassPermissions', bare: true });
+  t.after(() => closeSession(session));
+  attachIde(session, await discoverIde(root, env));
+  await runAgentTurn(session, 'Check the IDE diagnostics and open the file.', { env });
+  assert.ok(calls.some((call) => call[0] === 'getDiagnostics'));
+  assert.ok(calls.some((call) => call[0] === 'openFile'));
+  assert.deepEqual(new Set((session.toolAuditLog || []).filter((entry) => entry.tool.startsWith('ide_')).map((entry) => entry.tool)), new Set(['ide_get_diagnostics', 'ide_open_file']));
+});
