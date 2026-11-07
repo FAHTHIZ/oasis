@@ -241,6 +241,11 @@ function walk(node, out, state, bindings = new Map(), wrapperDepth = 0) {
       }
       return { first, last, primary: first || last };
     }
+    // A command in a dynamic, globbed or oversized loop may receive a
+    // destructive target through the loop variable. Analyse its visible body
+    // for specific denials, but tell callers this is not a complete parse so
+    // shell-risk keeps the request behind an explicit approval.
+    state.unparsable = true;
     return walk(body, out, state, bindings, wrapperDepth);
   }
 
