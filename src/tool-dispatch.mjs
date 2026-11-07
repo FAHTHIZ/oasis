@@ -19,6 +19,10 @@ export function createToolDispatch(executeTool, options = {}) {
       try { input = JSON.parse(input); } catch { input = {}; }
     }
     const definition = options.definition || { type: 'function', function: { name, description: '', parameters: {} } };
+    const definitionName = definition && definition.function && definition.function.name;
+    if (!name || definitionName !== name) {
+      return { ok: false, tool: name || null, error: 'Tool definition does not match the requested tool name.' };
+    }
     const policy = optionsOverride.policy || options.policy || {};
     const tool = bridgeToolDefinition(definition, {
       capabilities: options.capabilities,
@@ -34,19 +38,5 @@ export function createToolDispatch(executeTool, options = {}) {
       cwd: optionsOverride.root || process.cwd()
     });
   };
-}
-
-function buildAudit(tool, input, decision, result, options) {
-  return Object.freeze({
-    at: new Date().toISOString(),
-    tool: tool.name,
-    capabilities: [...tool.capabilities],
-    risk: tool.risk,
-    decision: decision.decision,
-    sandbox: decision.sandbox,
-    input: redactAuditValue(input),
-    output: result && result.ok ? redactAuditValue(result.output) : null,
-    error: result && result.error || null
-  });
 }
 
