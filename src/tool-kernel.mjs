@@ -34,22 +34,6 @@ export function defineTool(definition) {
   });
 }
 
-export function createToolRegistry(definitions = []) {
-  const tools = new Map();
-  for (const definition of definitions) {
-    const tool = defineTool(definition);
-    if (tools.has(tool.name)) throw new Error('Duplicate tool name: ' + tool.name);
-    tools.set(tool.name, tool);
-  }
-  return Object.freeze({
-    get: (name) => tools.get(String(name || '')) || null,
-    has: (name) => tools.has(String(name || '')),
-    list: () => [...tools.values()],
-    names: () => [...tools.keys()],
-    byCapability: (capability) => [...tools.values()].filter((tool) => tool.capabilities.includes(capability))
-  });
-}
-
 function normalizeToolPolicyDecision(tool, raw = {}) {
   const decision = String(raw && raw.decision || 'deny');
   if (!['allow', 'deny', 'ask'].includes(decision)) throw new Error('Invalid tool policy decision: ' + decision);

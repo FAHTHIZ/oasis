@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createToolRegistry, defineTool, runTool, redactAuditValue } from '../src/tool-kernel.mjs';
+import { defineTool, runTool, redactAuditValue } from '../src/tool-kernel.mjs';
 
 const readTool = defineTool({ name: 'read_file', title: 'Read file', description: 'Read a file from the workspace.', capabilities: ['read'], risk: 'low', inputSchema: { required: ['path'] }, run: async (input) => ({ path: input.path, content: 'ok' }) });
 const writeTool = defineTool({ name: 'write_file', title: 'Write file', description: 'Write a file in the workspace.', capabilities: ['write'], risk: 'high', requiresApproval: true, inputSchema: { required: ['path'] }, rollback: { supported: true, kind: 'file-snapshot' }, run: async (input) => ({ path: input.path, written: true }) });
@@ -18,14 +18,6 @@ test('tool definitions reject unknown capabilities and risk levels', () => {
   assert.throws(() => defineTool({ name: 'bad_capability', capabilities: ['filesystem'], run: async () => null }), /Unknown tool capability/);
   assert.throws(() => defineTool({ name: 'bad_risk', capabilities: ['read'], risk: 'extreme', run: async () => null }), /Unknown tool risk level/);
 });
-test('registry prevents duplicate tools and supports capability lookup', () => {
-  const registry = createToolRegistry([readTool, writeTool, shellTool]);
-  assert.equal(registry.has('read_file'), true);
-  assert.equal(registry.get('missing'), null);
-  assert.deepEqual(registry.byCapability('write').map((tool) => tool.name), ['write_file']);
-  assert.throws(() => createToolRegistry([readTool, readTool]), /Duplicate tool name/);
-});
-
 test('policy deny blocks execution and records an audit event', async () => {
   const policy = { decide: () => ({ decision: 'deny', reason: 'not allowed' }) };
   const result = await runTool(readTool, { path: 'README.md' }, { policy });
