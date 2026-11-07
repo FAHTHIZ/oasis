@@ -1,4 +1,4 @@
-name: Build and publish OASIS website and browser app
+name: Build and publish the OASIS product website
 
 on:
   push:
@@ -17,7 +17,7 @@ concurrency:
 
 jobs:
   validate:
-    name: Validate browser app and distribution
+    name: Validate runtime and distribution
     runs-on: ubuntu-latest
     steps:
       - name: Check out source
@@ -50,7 +50,7 @@ jobs:
           retention-days: 14
 
   publish:
-    name: Publish browser app and repository metadata
+    name: Publish product website and repository metadata
     if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
     needs: validate
     runs-on: ubuntu-latest
@@ -74,20 +74,16 @@ jobs:
       - name: Configure GitHub Pages
         uses: actions/configure-pages@45bfe0192ca1faeb007ade9deae92b16b8254a0d # v6.0.0
         id: configure-pages
-      - name: Install runtime dependencies (the app's vendored browser packages)
-        run: npm install --omit=dev --no-audit --no-fund
-      - name: Build the installable universal browser app
-        run: node scripts/build-app.mjs
       - name: Stamp the homepage with this commit
         env:
           SHA: ${{ github.sha }}
           GITHUB_TOKEN: ${{ github.token }}
         run: node .github/scripts/stamp-site.mjs
-      - name: Upload public website and installable browser app
+      - name: Upload the public OASIS product website
         uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
         with:
           path: site
-      - name: Deploy installable browser app
+      - name: Deploy OASIS product website
         uses: actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346 # v5.0.1
         id: deployment
       - name: Check the optional repository admin secret
@@ -111,7 +107,7 @@ jobs:
           DEPLOYMENT_OUTCOME: ${{ steps.deployment.outcome }}
         run: |
           if [ "$DEPLOYMENT_OUTCOME" = "success" ]; then
-            printf '## OASIS website and browser app deployed\n\n%s (commit %s)\n' "$DEPLOYED_URL" "${GITHUB_SHA::7}" >> "$GITHUB_STEP_SUMMARY"
+            printf '## OASIS product website deployed\n\n%s (commit %s)\n' "$DEPLOYED_URL" "${GITHUB_SHA::7}" >> "$GITHUB_STEP_SUMMARY"
           else
-            printf '## OASIS website and browser app deployment failed\n\nInspect the deploy step logs.\n' >> "$GITHUB_STEP_SUMMARY"
+            printf '## OASIS product website deployment failed\n\nInspect the deploy step logs.\n' >> "$GITHUB_STEP_SUMMARY"
           fi

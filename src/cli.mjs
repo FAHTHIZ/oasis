@@ -86,7 +86,6 @@ function printQuickHelp() {
       ['oasis', 'Chat in the terminal (this folder is the workspace)'],
       ['oasis "fix the failing test"', 'Start with a first message'],
       ['oasis web --open', 'Open the OASIS app in your browser, working on this folder'],
-      ['oasis app --lan', 'Serve the universal app to install on a phone or tablet'],
       ['oasis -p "explain src/"', 'Run once without prompts (scripts and CI)'],
       ['oasis -c  |  oasis -r ID', 'Continue the last chat, or resume a saved one']
     ]),
@@ -147,7 +146,6 @@ function printHelp() {
     '  oasis uninstall [--yes]      Remove the CLI package; keep projects and user data',
     '  oasis completion bash|zsh|fish|powershell  Print a Tab-completion script for your shell',
     '  oasis web [--open] [--host HOST] [--port PORT] [--tls-cert FILE --tls-key FILE]  Start browser workspace (--open opens it in your browser)',
-    '  oasis app [--lan] [--port PORT] [--open]  Serve the universal app (runs fully in the browser that opens it; install it from there)',
     '  oasis exec PROMPT [flags]  Same as oasis -p (non-interactive run)',
     '  oasis watch [--yes]       Act on code comments ending in AI! (change) or AI? (question)',
     '  oasis init                    Create OASIS.md project instructions',
@@ -3166,56 +3164,6 @@ async function watchCommentsCommand(root, autoApprove, persistence = {}) {
   if (session) closeSession(session);
 }
 
-async function startUniversalApp(args) {
-  let host = '127.0.0.1';
-  let port = 3920;
-  let openBrowser = false;
-  for (let i = 0; i < args.length; i++) {
-    const arg = args[i];
-    if (arg === '--lan') host = '0.0.0.0';
-    else if (arg === '--host') host = args[++i];
-    else if (arg.startsWith('--host=')) host = arg.slice(7);
-    else if (arg === '--port') port = Number(args[++i]);
-    else if (arg.startsWith('--port=')) port = Number(arg.slice(7));
-    else if (arg === '--open') openBrowser = true;
-    else throw new Error('Unknown app option: ' + arg + '. Supported options: --lan, --host HOST, --port PORT, --open.');
-  }
-  if (!host || !Number.isInteger(port) || port < 0 || port > 65535) throw new Error('--port must be an integer between 0 and 65535.');
-  const { startAppServer } = await import('./app-server.mjs');
-  const server = await startAppServer({ root: APP_ROOT, host, port });
-  const actualPort = server.address().port;
-  const localUrl = 'http://' + (host === '0.0.0.0' ? '127.0.0.1' : host) + ':' + actualPort + '/app/';
-  stdout.write('\nOASIS universal app: ' + localUrl + '\n');
-  stdout.write('  Everything runs inside the browser that opens it: projects, keys and the agent stay on that device.\n');
-  stdout.write('  This server only hands out the app files. It is also published at https://fahthiz.github.io/oasis/app/\n');
-  if (host === '0.0.0.0') {
-    try {
-      const { lanAddresses } = await import('./lan-addresses.mjs');
-      const addresses = lanAddresses();
-      if (addresses.length) {
-        const url = (address) => 'http://' + address + ':' + actualPort + '/app/';
-        stdout.write('\n  On a phone or tablet on the same network, open:\n');
-        for (const entry of addresses.slice(0, 4)) stdout.write('    ' + url(entry.address) + '\n');
-        if (stdout.isTTY && process.env.OASIS_NO_QR !== '1') {
-          const { renderQrTerminal } = await import('./qr.mjs');
-          stdout.write('\n' + renderQrTerminal(url(addresses[0].address), { color: colorEnabled(stdout) }).split('\n').map((line) => '    ' + line).join('\n') + '\n');
-        }
-        stdout.write('  Plain http on a LAN cannot install or work offline; for that, open the published https link once.\n');
-      }
-    } catch {}
-  }
-  stdout.write('\nPress Ctrl+C to stop.\n');
-  if (openBrowser) {
-    const { openInBrowser } = await import('./mcp-oauth.mjs');
-    if (!openInBrowser(localUrl)) stdout.write('Could not open a browser automatically. Open the link above instead.\n');
-  }
-  await new Promise((resolve) => {
-    const stop = () => { server.close(); resolve(); };
-    process.once('SIGINT', stop);
-    process.once('SIGTERM', stop);
-  });
-}
-
 async function startWebWorkspace(root, args) {
   await ensureModelProviderSetup(root);
   let host = '127.0.0.1';
@@ -3908,7 +3856,7 @@ async function main() {
   if (command === 'update') return await updateOasis(explicitYes && !rest.includes('--yes') ? [...rest, '--yes'] : rest);
   if (command === 'uninstall') return await uninstallOasis(explicitYes && !rest.includes('--yes') ? [...rest, '--yes'] : rest);
   if (command === 'web') return await startWebWorkspace(workspace, rest);
-  if (command === 'app') return await startUniversalApp(rest);
+  if (command === 'app') throw new Error('The standalone browser app has been removed. Use "oasis web --open" for a normal connected session, or install the native desktop app from GitHub Releases.');
   if (command === 'watch') return await watchCommentsCommand(workspace, autoApprove || rest.includes('--yes'), persistence);
   if (command === 'plan') {
     const planPrompt = rest.join(' ').trim();

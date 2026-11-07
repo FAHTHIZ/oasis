@@ -373,25 +373,7 @@ test('markdown renderer escapes HTML and only links http(s)', async () => {
   assert.match(rich, /&lt;a href=&quot;javascript:1&quot;&gt;/);
 });
 
-test('app build ships only browser-safe modules and a skills index', async () => {
-  const { execFileSync } = await import('node:child_process');
-  const { mkdtempSync, readFileSync, existsSync } = await import('node:fs');
-  const { tmpdir } = await import('node:os');
-  const { join } = await import('node:path');
-  const dir = mkdtempSync(join(tmpdir(), 'oasis-app-'));
-  execFileSync(process.execPath, ['scripts/build-app.mjs', '--out', join(dir, 'app')], { stdio: 'pipe' });
-  for (const file of ['index.html', 'sandbox.html', 'sandbox-frame.js', 'core/agent.mjs', 'manifest.webmanifest']) assert.ok(existsSync(join(dir, 'app', file)), file);
-  assert.ok(existsSync(join(dir, 'src', 'tool-call-repair.mjs')));
-  assert.ok(existsSync(join(dir, 'vendor', 'yaml', 'browser', 'index.js')) && existsSync(join(dir, 'vendor', 'jsonrepair', 'lib', 'esm', 'index.js')));
-  assert.ok(existsSync(join(dir, 'vendor', 'yaml', 'LICENSE')));
-  const index = JSON.parse(readFileSync(join(dir, 'app', 'skills', 'index.json'), 'utf8'));
-  assert.ok(index.length >= 10 && index.every((s) => s.name && s.description && s.path.endsWith('SKILL.md')));
-  assert.doesNotMatch(readFileSync(join(dir, 'app', 'sw.js'), 'utf8'), /__BUILD__/);
-  const manifest = JSON.parse(readFileSync(join(dir, 'app', 'manifest.webmanifest'), 'utf8'));
-  assert.equal(manifest.display, 'standalone');
-});
-
-test('oasis app server serves only the app, shared modules and skills', async () => {
+test('test server serves only the connected workspace and shared modules', async () => {
   const { resolveAppPath, appSharedModules, startAppServer } = await import('../src/app-server.mjs');
   const root = new URL('..', import.meta.url).pathname.replace(/\/$/, '');
   const shared = new Set(await appSharedModules(root));
@@ -407,8 +389,8 @@ test('oasis app server serves only the app, shared modules and skills', async ()
     const page = await fetch(base + '/app/');
     assert.equal(page.status, 200);
     assert.match(await page.text(), /<title>OASIS — Coding Agent Workspace<\/title>/);
-    const sw = await (await fetch(base + '/app/sw.js')).text();
-    assert.doesNotMatch(sw, /__BUILD__/);
+    assert.equal((await fetch(base + '/app/sw.js')).status, 404, 'the connected workspace has no PWA service worker');
+    assert.equal((await fetch(base + '/app/manifest.webmanifest')).status, 404, 'the connected workspace has no PWA manifest');
     assert.equal((await fetch(base + '/package.json')).status, 404);
     const vendored = await fetch(base + '/vendor/yaml/browser/index.js');
     assert.equal(vendored.status, 200);
