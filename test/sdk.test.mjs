@@ -73,3 +73,51 @@ test('breaking out of query() early stops the agent instead of leaving it runnin
   assert.ok(requests.length <= seen + 1, 'the agent kept calling the model after the consumer stopped: ' + seen + ' -> ' + requests.length);
   assert.ok(calls.length <= 2, 'the agent kept running tools: ' + calls.length);
 });
+
+test('SDK tools validate JSON Schema before executing', async () => {
+  let calls = 0;
+  const server = createToolServer('validation', [
+    tool('lookup', 'Look up a city', {
+      type: 'object',
+      properties: { city: { type: 'string' } },
+      required: ['city'],
+      additionalProperties: false
+    }, async () => { calls++; return { ok: true }; })
+  ]);
+  await assert.rejects(() => server.callTool('lookup', {}, { autoApprove: true }), /missing required property "city"/i);
+  await assert.rejects(() => server.callTool('lookup', { city: 42 }, { autoApprove: true }), /expected string/i);
+  await assert.rejects(() => server.callTool('lookup', { city: 'Dhaka', extra: true }, { autoApprove: true }), /unexpected property/i);
+  assert.equal(calls, 0);
+});
+
+test('SDK tool execution observes timeout and caller cancellation', async () => {
+  let timeoutObserved = false;
+  const timeoutServer = createToolServer('timeouts', [
+    tool('slow', 'A slow task', { type: 'object' }, async (_input, { signal }) => {
+      await new Promise((resolve) => signal.addEventListener('abort', () => { timeoutObserved = true; resolve(); }, { once: true }));
+      return 'finished';
+    }, { timeoutMs: 20 })
+  ]);
+  await assert.rejects(() => timeoutServer.callTool('slow', {}, { autoApprove: true }), /Tool timed out/);
+  assert.equal(timeoutObserved, true);
+
+  let cancelObserved = false;
+  const cancelServer = createToolServer('cancellation', [
+    tool('wait', 'A cancellable task', { type: 'object' }, async (_input, { signal }) => {
+      await new Promise((resolve) => signal.addEventListener('abort', () => { cancelObserved = true; resolve(); }, { once: true }));
+      return 'finished';
+    }, { timeoutMs: 2000 })
+  ]);
+  const controller = new AbortController();
+  const pending = cancelServer.callTool('wait', {}, { autoApprove: true, signal: controller.signal });
+  await new Promise((resolve) => setTimeout(resolve, 10));
+  controller.abort(new Error('SDK caller cancelled'));
+  await assert.rejects(() => pending, /SDK caller cancelled/);
+  assert.equal(cancelObserved, true);
+});
+
+test('SDK tool registries reject duplicate tool names', () => {
+  const one = tool('same', 'First', { type: 'object' }, async () => 'one');
+  const two = tool('same', 'Second', { type: 'object' }, async () => 'two');
+  assert.throws(() => createToolServer('duplicates', [one, two]), /Duplicate SDK tool name/);
+});
