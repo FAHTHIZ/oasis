@@ -12,6 +12,7 @@ import { renderMarkdown } from './markdown.mjs';
 import { smartConnect, looksLikeConnection, parsePaste, scanLocal, buildChain, nextInChain, configFor, classifyFailure, maskSecret, isGitHubToken } from './core/connect.mjs';
 import { PLUGINS, getPlugin, pluginsFor, suggestPlugins } from './core/plugins.mjs';
 import { detectRuntime, RuntimeAgent, RuntimeWorkspace, tokenFromPaste, saveRuntimeToken } from './core/runtime.mjs';
+import { APP_PALETTE_COMMANDS, APP_KEYBOARD_SHORTCUTS, searchAppCommands } from './core/command-palette.mjs';
 
 const APP_VERSION = '1.3.0';
 const $ = (id) => document.getElementById(id);
@@ -106,6 +107,153 @@ function toast(message, kind = '') {
   setTimeout(() => el.remove(), kind === 'error' ? 6000 : 3200);
 }
 
+/* ---------- Command palette and keyboard guide ---------- */
+const dialogReturnFocus = new Map();
+const isApplePlatform = /Mac|iPhone|iPad|iPod/i.test((navigator.platform || '') + ' ' + (navigator.userAgent || ''));
+const modifierLabel = isApplePlatform ? '⌘' : 'Ctrl';
+let commandPaletteSelected = 0;
+
+function displayShortcut(keys) {
+  return String(keys || '').replaceAll('MOD', modifierLabel).replace(/\\+/g, ' + ');
+}
+
+function openNativeDialog(id) {
+  const dialog = $(id);
+  if (!dialog || dialog.open) return;
+  dialogReturnFocus.set(id, document.activeElement);
+  if (typeof dialog.showModal === 'function') dialog.showModal();
+  else dialog.setAttribute('open', '');
+  if (id === 'commandPaletteDialog') {
+    $('commandPaletteInput').value = '';
+    renderCommandPalette();
+    $('commandPaletteModKey').textContent = displayShortcut('MOD+K');
+    requestAnimationFrame(() => $('commandPaletteInput').focus());
+  } else if (id === 'shortcutsDialog') {
+    $('shortcutsFilter').value = '';
+    renderShortcutGuide();
+    requestAnimationFrame(() => $('shortcutsFilter').focus());
+  }
+}
+
+function closeNativeDialog(id) {
+  const dialog = $(id);
+  if (!dialog) return;
+  if (typeof dialog.close === 'function' && dialog.open) dialog.close();
+  else dialog.removeAttribute('open');
+}
+
+function restoreDialogFocus(id) {
+  const target = dialogReturnFocus.get(id);
+  dialogReturnFocus.delete(id);
+  if (target && target.isConnected && typeof target.focus === 'function') requestAnimationFrame(() => target.focus());
+}
+
+function renderShortcutGuide() {
+  const query = $('shortcutsFilter').value.trim().toLowerCase();
+  const list = $('shortcutsList');
+  list.replaceChildren();
+  const matches = APP_KEYBOARD_SHORTCUTS.filter((item) => (item.label + ' ' + item.detail + ' ' + item.keys).toLowerCase().includes(query));
+  $('shortcutsEmpty').hidden = matches.length > 0;
+  for (const item of matches) {
+    const row = document.createElement('div');
+    row.className = 'shortcut-row';
+    const copy = document.createElement('div');
+    copy.className = 'shortcut-copy';
+    const label = document.createElement('strong');
+    label.textContent = item.label;
+    const detail = document.createElement('span');
+    detail.textContent = item.detail;
+    copy.append(label, detail);
+    const key = document.createElement('kbd');
+    key.textContent = displayShortcut(item.keys);
+    row.append(copy, key);
+    list.appendChild(row);
+  }
+}
+
+function renderCommandPalette() {
+  const results = $('commandPaletteResults');
+  const items = searchAppCommands($('commandPaletteInput').value);
+  results.replaceChildren();
+  commandPaletteSelected = 0;
+  if (!items.length) {
+    const empty = document.createElement('div');
+    empty.className = 'command-empty';
+    empty.textContent = 'No matching actions. Try another search.';
+    results.appendChild(empty);
+    return;
+  }
+  for (const [index, item] of items.entries()) {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'command-result';
+    button.setAttribute('role', 'option');
+    button.setAttribute('aria-selected', String(index === commandPaletteSelected));
+    button.dataset.commandId = item.id;
+    const text = document.createElement('span');
+    text.className = 'command-result-copy';
+    const label = document.createElement('strong');
+    label.textContent = item.label;
+    const description = document.createElement('span');
+    description.textContent = item.description;
+    text.append(label, description);
+    const meta = document.createElement('span');
+    meta.className = 'command-result-meta';
+    const section = document.createElement('small');
+    section.textContent = item.section;
+    meta.appendChild(section);
+    if (item.shortcut) {
+      const key = document.createElement('kbd');
+      key.textContent = displayShortcut(item.shortcut);
+      meta.appendChild(key);
+    }
+    button.append(text, meta);
+    button.addEventListener('click', () => runPaletteCommand(item.id));
+    results.appendChild(button);
+  }
+  updatePaletteSelection();
+}
+
+function updatePaletteSelection() {
+  const buttons = [...$('commandPaletteResults').querySelectorAll('.command-result')];
+  if (!buttons.length) return;
+  commandPaletteSelected = (commandPaletteSelected + buttons.length) % buttons.length;
+  buttons.forEach((button, index) => button.setAttribute('aria-selected', String(index === commandPaletteSelected)));
+  buttons[commandPaletteSelected].scrollIntoView({ block: 'nearest' });
+}
+
+function runPaletteCommand(id) {
+  const actions = {
+    'new-chat': () => newChat(),
+    'open-chats': () => openChats(),
+    'open-files': () => toggleFiles(true),
+    'open-plugins': () => { renderPluginGrid(); openSheet('pluginsSheet'); },
+    'open-settings': () => openSettings(),
+    'approval-mode': () => $('modeChip').click(),
+    'focus-composer': () => $('input').focus(),
+    'keyboard-help': () => requestAnimationFrame(() => openNativeDialog('shortcutsDialog'))
+  };
+  closeNativeDialog('commandPaletteDialog');
+  const action = actions[id];
+  if (action) setTimeout(() => action(), 0);
+}
+
+$('commandPaletteButton').addEventListener('click', () => openNativeDialog('commandPaletteDialog'));
+$('commandPaletteClose').addEventListener('click', () => closeNativeDialog('commandPaletteDialog'));
+$('shortcutsClose').addEventListener('click', () => closeNativeDialog('shortcutsDialog'));
+$('commandPaletteInput').addEventListener('input', renderCommandPalette);
+$('shortcutsFilter').addEventListener('input', renderShortcutGuide);
+$('commandPaletteInput').addEventListener('keydown', (event) => {
+  const buttons = $('commandPaletteResults').querySelectorAll('.command-result');
+  if (event.key === 'ArrowDown' && buttons.length) { event.preventDefault(); commandPaletteSelected = (commandPaletteSelected + 1) % buttons.length; updatePaletteSelection(); }
+  else if (event.key === 'ArrowUp' && buttons.length) { event.preventDefault(); commandPaletteSelected = (commandPaletteSelected - 1 + buttons.length) % buttons.length; updatePaletteSelection(); }
+  else if (event.key === 'Enter' && buttons.length) { event.preventDefault(); buttons[commandPaletteSelected].click(); }
+});
+for (const id of ['commandPaletteDialog', 'shortcutsDialog']) {
+  $(id).addEventListener('click', (event) => { if (event.target === $(id)) closeNativeDialog(id); });
+  $(id).addEventListener('close', () => restoreDialogFocus(id));
+}
+
 /* ---------- Sheets ---------- */
 const openSheets = [];
 function openSheet(id) {
@@ -137,7 +285,25 @@ document.addEventListener('click', (event) => {
 });
 $('backdrop').addEventListener('click', () => { const top = openSheets[openSheets.length - 1]; if (top && top !== 'approvalSheet') closeSheet(top); });
 document.addEventListener('keydown', (event) => {
+  const modifier = event.ctrlKey || event.metaKey;
+  if (modifier && event.key.toLowerCase() === 'k') {
+    event.preventDefault();
+    openNativeDialog('commandPaletteDialog');
+    return;
+  }
+  if (modifier && event.key === '/') {
+    event.preventDefault();
+    if ($('commandPaletteDialog').open) closeNativeDialog('commandPaletteDialog');
+    openNativeDialog('shortcutsDialog');
+    return;
+  }
+  if (event.key === '/' && event.target === $('input') && !$('input').value && !event.altKey && !modifier && !event.isComposing) {
+    event.preventDefault();
+    openNativeDialog('commandPaletteDialog');
+    return;
+  }
   if (event.key === 'Escape') {
+    if ($('commandPaletteDialog').open || $('shortcutsDialog').open) return; // Native dialog handles Escape.
     if (!$('modeMenu').hidden) { $('modeMenu').hidden = true; return; }
     const top = openSheets[openSheets.length - 1];
     if (top) closeSheet(top);
@@ -475,17 +641,39 @@ const TOOL_LABELS = { list_files: 'List', read_file: 'Read', write_file: 'Write'
   web_search: 'Search web', list_skills: 'Skills', read_skill_resource: 'Skill', run_specialist_review: 'Review', diagnostics: 'Check', security_scan: 'Security', lsp: 'Code intel', monitor: 'Watch',
   worktree_inspect: 'Worktree', worktree_merge: 'Merge', configure_provider: 'Model', configure_mcp_server: 'Tools', install_extension: 'Install', install_external_skill: 'Install', install_plugin: 'Install' };
 
+function activityLabel(tool) {
+  const name = String(tool.name || '').toLowerCase();
+  const args = tool.args || {};
+  const path = String(args.path || args.file_path || args.notebook_path || '').replace(/\\\\/g, '/').split('/').filter(Boolean).at(-1) || '';
+  if (['run_command', 'run_shell', 'powershell', 'auto_test'].includes(name)) {
+    const command = [args.command, ...(Array.isArray(args.args) ? args.args : [])].filter(Boolean).join(' ');
+    return /\\b(?:npm|pnpm|yarn|bun)\\s+(?:(?:run|exec)\\s+)?(?:test|check|vitest|jest|playwright|mocha)\\b|\\bnode\\s+--test\\b|\\bpytest\\b|\\bgo\\s+test\\b|\\bcargo\\s+test\\b/i.test(command) ? 'Ran the tests' : 'Ran commands';
+  }
+  if (name === 'read_file') return path ? 'Read ' + path : 'Read a file';
+  if (name === 'list_files') return 'Listed project files';
+  if (name === 'write_file') return path ? 'Wrote ' + path : 'Wrote a file';
+  if (['edit_file', 'multi_edit', 'notebook_edit', 'apply_patch'].includes(name)) return path ? 'Edited ' + path : 'Edited files';
+  if (name === 'delete_file') return path ? 'Deleted ' + path : 'Deleted a file';
+  if (['grep', 'search_files', 'glob_files', 'repo_map'].includes(name)) return 'Searched the project';
+  if (['web_search', 'fetch_url'].includes(name)) return 'Looked up information online';
+  if (['git_diff', 'git_status', 'git_log'].includes(name)) return 'Reviewed project changes';
+  if (name === 'load_skill' || name === 'read_skill_resource' || name === 'list_skills') return 'Used a skill';
+  return 'Completed a project step';
+}
+
 function toolCard(tool) {
   const el = document.createElement('details');
   el.className = 'tool ' + (tool.ok === undefined ? 'running' : tool.ok ? 'ok' : 'fail');
   el.dataset.id = tool.id;
   const summary = document.createElement('summary');
-  summary.innerHTML = '<span class="state"></span><span class="name"></span><span class="arg"></span>';
-  summary.querySelector('.name').textContent = TOOL_LABELS[tool.name] || tool.name;
+  summary.innerHTML = '<span class="state" aria-hidden="true"></span><span class="name"></span><span class="arg"></span><span class="chevron" aria-hidden="true">›</span>';
+  const status = tool.ok === undefined ? 'in progress' : tool.ok ? 'completed' : 'failed';
+  summary.querySelector('.name').textContent = activityLabel(tool);
   summary.querySelector('.arg').textContent = summarizeArgs(tool.name, tool.args);
+  summary.setAttribute('aria-label', activityLabel(tool) + ', ' + status + '. Expand to view details.');
   const pre = document.createElement('pre');
   // Fill the output only when opened: long sessions stay light on slow phones.
-  const fill = () => { pre.textContent = tool.content || 'Running…'; };
+  const fill = () => { pre.textContent = tool.content || (tool.ok === undefined ? 'Running…' : 'No output was returned.'); };
   if (el.open) fill();
   el.addEventListener('toggle', () => { if (el.open) fill(); });
   el.append(summary, pre);
@@ -621,7 +809,12 @@ function handleEvent(event) {
       if (RT && /^(write_file|edit_file|multi_edit|delete_file|notebook_edit|run_command|git_commit)$/.test(event.name || tool.name)) refreshFiles();
       tool.content = event.content.length > 6000 ? event.content.slice(0, 6000) + '\n…' : event.content;
       const card = currentTurn.tools.querySelector('[data-id="' + CSS.escape(event.id) + '"]');
-      if (card) card.replaceWith(toolCard(tool));
+      if (card) {
+        const wasOpen = card.open;
+        const replacement = toolCard(tool);
+        if (wasOpen) replacement.open = true;
+        card.replaceWith(replacement);
+      }
       break;
     }
     case 'todos': renderTodos(event.todos); break;
