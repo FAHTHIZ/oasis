@@ -51,6 +51,8 @@ npm run desktop:dev
 
 To build a distributable for the current machine, use `npm run desktop:dist`. Platform-specific packaging prerequisites may apply.
 
+When a future GitHub Release is published, its installer assets will include `SHA256SUMS`. Verify any downloaded package against that file before installing it.
+
 ### Install the CLI
 
 **Requirements:** Node.js 22.15 or newer and Git.
