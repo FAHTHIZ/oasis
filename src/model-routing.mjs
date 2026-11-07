@@ -43,7 +43,6 @@ const COMPLEX_DIMENSIONS = new Set([
   'codePresence',
   'reasoningMarkers',
   'multiStepPatterns',
-  'questionComplexity'
 ]);
 
 function hasComplexSignals(classification) {
