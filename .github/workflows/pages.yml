@@ -40,6 +40,14 @@ jobs:
         run: npx playwright install --with-deps chromium
       - name: Verify public website at desktop and phone sizes
         run: node .github/scripts/site-e2e.mjs
+      - name: Upload public website browser QA screenshots
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: oasis-public-site-browser-qa
+          path: artifacts/browser-e2e/public-site-*.png
+          if-no-files-found: warn
+          retention-days: 14
 
   publish:
     name: Publish browser app and repository metadata
