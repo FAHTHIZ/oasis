@@ -5,6 +5,8 @@
 
 import { chat } from './providers.mjs';
 import { TOOL_DEFINITIONS, TOOL_NAMES, executeTool, needsApproval } from './tools.mjs';
+import { defineTool, runTool } from '../../src/tool-kernel-core.mjs';
+import { validateAppToolArguments } from './tool-validation.mjs';
 import { repairToolArguments, extractTextToolCalls, unknownTextToolCalls } from '../../src/tool-call-repair.mjs';
 import { resolveToolAlias } from '../../src/tool-aliases.mjs';
 
@@ -21,6 +23,21 @@ const MAX_STEERING_NOTE_CHARS = 12_000;
 const INSTRUCTION_FILES = ['OASIS.md', 'AGENTS.md', 'CLAUDE.md', '.oasis/instructions.md'];
 
 const SCHEMAS = new Map(TOOL_DEFINITIONS.map((tool) => [tool.function.name, tool.function.parameters]));
+
+function browserToolCapabilities(name) {
+  if (['list_files', 'read_file', 'grep', 'glob_files', 'project_changes', 'load_skill'].includes(name)) return ['read'];
+  if (name === 'fetch_url') return ['network'];
+  if (name === 'github_push') return ['git', 'network', 'write'];
+  if (name === 'run_javascript') return ['execute'];
+  return ['write'];
+}
+
+function browserToolRisk(name) {
+  if (['list_files', 'read_file', 'grep', 'glob_files', 'project_changes', 'load_skill'].includes(name)) return 'low';
+  if (name === 'delete_file' || name === 'github_push') return 'critical';
+  if (name === 'run_javascript' || name === 'fetch_url') return 'high';
+  return 'medium';
+}
 
 function estimateChars(messages) {
   let total = 0;
@@ -293,17 +310,44 @@ export class Agent {
             ok = false;
           } else {
             const mode = this.getConfig().mode || 'ask';
-            let allowed = true;
-            if (needsApproval(name, mode)) allowed = await this.approve({ name, args, id: call.id });
-            if (!allowed) {
-              result = 'The user declined this ' + name + ' call. Do not retry it; ask what they would prefer or continue another way.';
+            const definition = TOOL_DEFINITIONS.find((item) => item && item.function && item.function.name === name);
+            if (!definition) {
+              result = 'Error: Unknown tool: ' + name;
               ok = false;
             } else {
-              try { result = await executeTool(name, args, ctx); }
-              catch (error) {
-                if (error && error.name === 'AbortError') throw error;
-                result = 'Error: ' + (error && error.message ? error.message : String(error));
+              const tool = defineTool({
+                name,
+                title: name,
+                description: definition.function.description || '',
+                capabilities: browserToolCapabilities(name),
+                risk: browserToolRisk(name),
+                inputSchema: definition.function.parameters || { type: 'object' },
+                timeoutMs: name === 'run_javascript' ? 70_000 : name === 'fetch_url' ? 45_000 : 120_000,
+                run: async (validatedInput, runtime) => executeTool(name, validatedInput, { ...ctx, signal: runtime.signal })
+              });
+              const outcome = await runTool(tool, args, {
+                signal,
+                env: {},
+                cwd: ctx.workspace && ctx.workspace.project && ctx.workspace.project.name || 'browser-workspace',
+                validateArguments: validateAppToolArguments,
+                authorize: async ({ input }) => {
+                  const validation = await validateAppToolArguments(definition.function.parameters, input);
+                  if (!validation.valid) return { decision: 'deny', reason: 'Invalid arguments for ' + name + ': ' + (validation.errors || []).join('; ') };
+                  if (needsApproval(name, mode)) {
+                    const allowed = await this.approve({ name, args: input, id: call.id });
+                    if (!allowed) return { decision: 'deny', reason: 'The user declined this ' + name + ' call. Do not retry it; ask what they would prefer or continue another way.' };
+                  }
+                  return { decision: 'allow', input };
+                }
+              });
+              if (outcome.cancelled && signal.aborted) throw new DOMException('Stopped', 'AbortError');
+              if (!outcome.ok) {
+                result = outcome.error && outcome.error.startsWith('The user declined this ')
+                  ? outcome.error
+                  : 'Error: ' + (outcome.error || 'Tool execution was denied.');
                 ok = false;
+              } else {
+                result = outcome.output;
               }
             }
           }
