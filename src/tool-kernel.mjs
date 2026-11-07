@@ -130,12 +130,26 @@ export async function runTool(tool, input, options = {}) {
     if (!controller.signal.aborted) controller.abort(new Error('Tool timed out after ' + tool.timeoutMs + ' ms'));
   }, tool.timeoutMs);
   let onAbort;
-  const aborted = new Promise((_, reject) => {
-    onAbort = () => reject(controller.signal.reason instanceof Error ? controller.signal.reason : new Error('Tool was cancelled.'));
-    if (controller.signal.aborted) onAbort();
-    else controller.signal.addEventListener('abort', onAbort, { once: true });
-  });
   try {
+    // Do not invoke a tool whose caller has already cancelled the request.
+    // A rejected abort promise alone is not sufficient: the run microtask could
+    // start a side effect before Promise.race observes that rejection.
+    if (controller.signal.aborted) {
+      const error = controller.signal.reason instanceof Error ? controller.signal.reason : new Error('Tool was cancelled.');
+      const result = {
+        ok: false,
+        tool: tool.name,
+        decision,
+        error: error.message,
+        ...(timedOut ? { timedOut: true } : { cancelled: true })
+      };
+      if (decision.audit) result.audit = buildAuditRecord(tool, normalizedInput, decision, result, options);
+      return result;
+    }
+    const aborted = new Promise((_, reject) => {
+      onAbort = () => reject(controller.signal.reason instanceof Error ? controller.signal.reason : new Error('Tool was cancelled.'));
+      controller.signal.addEventListener('abort', onAbort, { once: true });
+    });
     const running = Promise.resolve().then(() => tool.run(normalizedInput, {
       signal: controller.signal,
       policy,
@@ -159,7 +173,7 @@ export async function runTool(tool, input, options = {}) {
     return result;
   } finally {
     clearTimeout(timeout);
-    controller.signal.removeEventListener('abort', onAbort);
+    if (onAbort) controller.signal.removeEventListener('abort', onAbort);
     if (externalSignal) externalSignal.removeEventListener('abort', forwardAbort);
   }
 }
