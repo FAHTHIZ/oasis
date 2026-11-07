@@ -33,7 +33,6 @@ export async function latestTagFromWeb(repository, { fetchImpl = fetch, timeoutM
   const location = response.headers && typeof response.headers.get === 'function' ? response.headers.get('location') : '';
   const match = /\/releases\/tag\/([^/?#]+)$/.exec(String(location || ''));
   if (!match) {
-    // No releases yet redirects to /releases instead of a tag.
     if (response.status >= 300 && response.status < 400) return null;
     throw new Error('github.com returned HTTP ' + response.status + ' while looking up the latest release.');
   }
@@ -97,7 +96,6 @@ export async function resolveTagCommit(repository, tag, { fetchImpl = fetch, env
   } else if (rateLimited(response)) {
     const feed = await fetchImpl('https://github.com/' + repository + '/commits/' + encodeURIComponent(tag) + '.atom', webRequest(timeoutMs, userAgent));
     if (!feed.ok) throw new Error('github.com returned HTTP ' + feed.status + ' while resolving release ' + tag + '.');
-    // The first entry of a ref's commit feed is the commit the ref points to.
     const match = /Commit\/([0-9a-f]{40})/i.exec(await feed.text());
     sha = match ? match[1].toLowerCase() : '';
   } else {
@@ -105,4 +103,25 @@ export async function resolveTagCommit(repository, tag, { fetchImpl = fetch, env
   }
   if (!/^[0-9a-f]{40}$/.test(sha)) throw new Error('GitHub did not return a valid commit id for release ' + tag + '.');
   return sha;
+}
+
+// Parse a SHA256SUMS file into a { filename: hash } map. Handles the standard
+// "<hash>  <filename>" format (two spaces) and tolerates extra whitespace.
+export function parseChecksums(text) {
+  const map = {};
+  for (const line of String(text || '').split('\n')) {
+    const match = /^([a-fA-F0-9]{64})\s+\*?(.+)$/.exec(line.trim());
+    if (match) map[match[2].trim()] = match[1].toLowerCase();
+  }
+  return map;
+}
+
+// Verify a downloaded artifact's SHA-256 hash against the published checksum.
+// Returns true when they match; throws with a clear message when they do not.
+export function verifyChecksum(fileHash, checksums, filename) {
+  const expected = checksums && checksums[filename];
+  if (!expected) throw new Error('No published checksum for ' + filename + '.');
+  const actual = String(fileHash || '').toLowerCase();
+  if (actual !== expected) throw new Error('Checksum mismatch for ' + filename + ': expected ' + expected + ', got ' + actual + '.');
+  return true;
 }
