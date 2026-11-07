@@ -2,12 +2,12 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { parseChecksums, verifyChecksum } from '../src/github-release.mjs';
 
-const sums = 'abc123def4567890abcdef1234567890abcdef1234567890abcdef1234567890  OASIS-1.1.0-x64.AppImage\n\nfeed567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef12  OASIS-1.1.0-x64.dmg\n';
+const sums = 'abc123def4567890abcdef1234567890abcdef1234567890abcdef1234567890  OASIS-1.1.0-x64.AppImage\n\nfeed567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef  OASIS-1.1.0-x64.dmg\n';
 
 test('parseChecksums extracts name->hash pairs', () => {
   const map = parseChecksums(sums);
   assert.equal(map['OASIS-1.1.0-x64.AppImage'], 'abc123def4567890abcdef1234567890abcdef1234567890abcdef1234567890');
-  assert.equal(map['OASIS-1.1.0-x64.dmg'], 'feed567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef12');
+  assert.equal(map['OASIS-1.1.0-x64.dmg'], 'feed567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef');
 });
 
 test('verifyChecksum passes on match', () => {
