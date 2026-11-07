@@ -1,4 +1,5 @@
 import { BUILTIN_PROVIDERS, getProvider } from './provider-registry.mjs';
+import { isOpen } from './circuit-breaker.mjs';
 
 // Ranked fallback chain for the CLI.
 //
@@ -100,9 +101,7 @@ export const FALLBACK_REASON_TEXT = Object.freeze({
 
 // Exponential backoff with jitter for transient errors (429, 5xx, network
 // failures) before giving up on the current model and moving to the next one
-// in the fallback chain. Attempt is 0-based: attempt 0 waits baseMs, attempt 1
-// waits 2*baseMs, etc., capped at maxMs. Jitter adds up to 25% randomness so
-// concurrent sessions do not synchronize their retries.
+// in the fallback chain.
 export function retryDelayMs(attempt, baseMs = 1000, maxMs = 30000, jitter = true) {
   const exponential = Math.min(maxMs, baseMs * Math.pow(2, Math.max(0, Number(attempt) || 0)));
   if (!jitter) return exponential;
@@ -110,7 +109,8 @@ export function retryDelayMs(attempt, baseMs = 1000, maxMs = 30000, jitter = tru
 }
 
 // Entries still worth trying after `failed` (a Set of ids), skipping the
-// current model and any entry without a usable config.
+// current model, any entry without a usable config, and any provider whose
+// circuit breaker is open (cooling down after repeated failures).
 export function remainingFallbacks(chain, { current, baseConfig, failed = new Set(), env = process.env } = {}) {
   const out = [];
   for (const entry of chain) {
@@ -118,6 +118,8 @@ export function remainingFallbacks(chain, { current, baseConfig, failed = new Se
     const config = resolveFallbackConfig(entry, baseConfig, env);
     if (!config) continue;
     if (current && config.model === current.model && config.baseURL === current.baseURL) continue;
+    // Skip providers whose circuit breaker is open (cooling down).
+    if (isOpen(config.fallbackProvider || 'default')) continue;
     out.push({ entry, config });
   }
   return out;
