@@ -69,7 +69,15 @@ test('PowerShell-style lines keep the legacy splitter', () => {
 test('deny rules catch commands hidden in functions, case arms, here-strings and variables', async () => {
   const { parseRule, ruleMatches } = await import('../src/permissions.mjs');
   const deny = parseRule('Bash(git push:*)');
-  for (const command of ['f(){ git push; }; f', 'case a in a) git push;; esac', "bash <<< 'git push'", 'x=git; $x push', "$'git' push"]) {
+  for (const command of ['f(){ git push; }; f', 'case a in a) git push;; esac', "bash <<< 'git push'", 'x=git; $x push', "
+    assert.equal(ruleMatches(deny, 'run_shell', { command }, { requireEveryCommand: false }), true, command);
+  }
+  // Allow rules stay strict: compound syntax never auto-approves.
+  const allow = parseRule('Bash(git status:*)');
+  assert.equal(ruleMatches(allow, 'run_shell', { command: 'f(){ git push; }; git status' }), false);
+  assert.equal(ruleMatches(allow, 'run_shell', { command: 'git status' }), true);
+});
+git' push", "bash --norc -c 'git push'", "bash --rcfile /tmp/custom.bash -c 'git push'", "env FOO=bar bash --norc -lc 'git push'"]) {
     assert.equal(ruleMatches(deny, 'run_shell', { command }, { requireEveryCommand: false }), true, command);
   }
   // Allow rules stay strict: compound syntax never auto-approves.
