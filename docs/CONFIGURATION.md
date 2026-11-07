@@ -12,7 +12,7 @@ Source: `src/provider-registry.mjs`.
 The runtime knows providers by name from one registry. Setup, the in-chat
 `configure_provider` tool, `--fallback-model provider:model`, `oasis connect
 --from-env`, local-server discovery (`oasis setup --auto`, `oasis doctor`) and
-setup-preset inference all read it. The browser app in `app/core/` keeps its own
+setup-preset inference all read it. The connected browser workspace in `app/core/` keeps its own
 catalogue because it runs without Node.js.
 
 Built-in providers:

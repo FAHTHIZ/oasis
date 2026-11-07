@@ -15,7 +15,7 @@ The headline assessment is:
 
 - **Engineering foundation:** strong for a solo-maintained project, based on visible repository structure and CI configuration.
 - **Repository presentation:** good brand and core README; several avoidable trust and navigation gaps remain.
-- **Product proof:** materially improved by the README's unscripted `gpt-oss-20b` CLI recording, GIF/MP4 and raw terminal cast; still incomplete across the browser app, connected workspace and desktop.
+- **Product proof:** materially improved by the README's unscripted `gpt-oss-20b` CLI recording, GIF/MP4 and raw terminal cast; still incomplete across the connected workspace and desktop.
 - **Competitive coding quality:** not established by this audit. Repository quality cannot show that OASIS completes more coding tasks than Codex, Claude Code, OpenCode or other agents.
 
 This is a practical gap analysis, not a universal quality ranking.
@@ -45,7 +45,7 @@ Ratings describe evidence present in the repository at the audit commit. “Stro
 | Brand identity | **Strong** | Dedicated portal mark, logo, hero artwork, icon variants and `BRAND.md`. The design language is coherent and restrained. |
 | First-screen product clarity | **Strong** | Clear statement of the product as a model-agnostic coding-agent runtime, plus a practical interface map. |
 | Real product proof | **Strong (CLI) / Partial (cross-interface)** | The README now embeds a real, unscripted `gpt-oss-20b` CLI run as a GIF with MP4 and raw `.cast` recording. It shows file reading, a bug fix, a new test, approval and a verification send-back. This is qualitative evidence from one recorded run, not a standardized task benchmark. Browser, connected-workspace and desktop captures remain outstanding. |
-| Installation accuracy | **Partial** | CLI and PWA paths are documented. The docs said Node 22+, while `package.json` requires Node `>=22.15`; desktop copy implied downloadable installers existed. |
+| Installation accuracy | **Partial** | CLI and connected-session paths are documented. The docs said Node 22+, while `package.json` requires Node `>=22.15`; desktop copy implied downloadable installers existed. |
 | Release/distribution trust | **Gap** | The `v1.1.0` Git tag exists, but the GitHub Releases API returned no published release and `/releases/latest` returned 404. The release workflow is guarded, but users must not be told an installer is available until release assets are actually published. |
 | Documentation navigation | **Partial** | Architecture and configuration guides exist, but the docs index omitted the architecture-alternatives and agent-runtime-alternatives documents. |
 | Architecture transparency | **Strong / Partial** | Detailed runtime maps and replacement studies exist. The 437 KB agent module was recently reduced to about 425 KB by extracting provider-stream parsing, but lifecycle and dispatch remain highly concentrated. |
@@ -61,7 +61,7 @@ The representative sample shows several repeatable practices worth adopting:
 
 | Pattern | Strong examples | OASIS action |
 |---|---|---|
-| Lead with a real product image or walkthrough | OpenHands, OpenDesign, OpenCode, Hermes | The README now shows an actual CLI run, with an MP4 and raw terminal recording. Add separate connected-workspace, PWA and desktop captures; keep hero brand art separate. |
+| Lead with a real product image or walkthrough | OpenHands, OpenDesign, OpenCode, Hermes | The README now shows an actual CLI run, with an MP4 and raw terminal recording. Add separate connected-workspace and desktop captures; keep hero brand art separate. |
 | Separate install routes by product surface | Cline, Codex, Pi, OpenCode | Keep CLI, desktop, browser and editor paths clearly distinct, with exact prerequisites and truthful availability. |
 | Show the product's boundary, not just its feature count | OpenHands, Goose, Gemini CLI | Explain where the runtime executes, what each interface can access, and which integrations are optional. OASIS already does much of this well. |
 | Make docs and support one click away | OpenCode, Superpowers, Goose, Cline | Keep one authoritative docs index and add all maintained architecture/comparison pages to it. |
@@ -88,7 +88,7 @@ The representative sample shows several repeatable practices worth adopting:
 
 ### P1 — prove the product
 
-1. Capture separate screenshots from the connected workspace, standalone PWA and desktop app using representative, non-sensitive project content; the real CLI demonstration is now present.
+1. Capture separate screenshots from the connected workspace and desktop app using representative, non-sensitive project content; the real CLI demonstration is now present.
 2. Expand the README demo into a short product tour with meaningful captions, linking the raw terminal cast for inspection.
 3. Add a clean first-run walkthrough: choose provider/model, connect a workspace, inspect permissions, run a task, review a diff, run checks and inspect verification.
 4. Make the README's first screen answer: what it is, who it is for, what runs locally, how to try it and where to get help.

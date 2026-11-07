@@ -2,13 +2,15 @@ import { readFile, stat } from 'node:fs/promises';
 import { strict as assert } from 'node:assert';
 const read = (path) => readFile(new URL(path, import.meta.url), 'utf8');
 const size = async (path) => (await stat(new URL(path, import.meta.url))).size;
-const [html, css, js, robots, sitemap, icon, mark, socialCard, packageText, readme, licenseText, demoGif, demoMp4, demoCast] = await Promise.all([
+const [html, css, js, robots, sitemap, icon, mark, socialCard, packageText, readme, licenseText, demoGif, demoMp4, demoCast, publishedDemoGif, publishedDemoMp4, publishedDemoCast] = await Promise.all([
  read('../../site/index.html'), read('../../site/assets/site.css'), read('../../site/assets/site.js'),
  read('../../site/robots.txt'), read('../../site/sitemap.xml'), read('../../site/assets/oasis-icon.svg'),
  read('../../site/assets/oasis-mark.svg'), read('../../site/assets/social-card.svg'), read('../../package.json'), read('../../README.md'),
  read('../../LICENSE'),
  size('../../assets/demo/oasis-real-model-demo.gif'), size('../../assets/demo/oasis-real-model-demo.mp4'),
- size('../../assets/demo/oasis-real-model-demo.cast')
+ size('../../assets/demo/oasis-real-model-demo.cast'),
+ size('../../site/assets/demo/oasis-real-model-demo.gif'), size('../../site/assets/demo/oasis-real-model-demo.mp4'),
+ size('../../site/assets/demo/oasis-real-model-demo.cast')
 ]);
 const siteUrl='https://fahthiz.github.io/oasis/';
 assert.ok(html.includes('<!doctype html>')&&html.includes('<html lang="en">'));
@@ -37,6 +39,7 @@ assert.ok(js.includes('document.documentElement.classList.add(\'js\')')&&js.incl
 assert.ok(!/https?:\/\//.test(js));
 assert.ok(icon.startsWith('<svg')&&icon.includes('</svg>')&&mark.startsWith('<svg')&&mark.includes('</svg>'));
 assert.ok(demoGif>10000&&demoMp4>10000&&demoCast>1000);
+assert.ok(publishedDemoGif>10000&&publishedDemoMp4>10000&&publishedDemoCast>1000, 'The public website build must stage all three real-run demo assets.');
 assert.ok(robots.includes('User-agent: *')&&robots.includes('Allow: /')&&robots.includes(siteUrl+'sitemap.xml'));
 assert.ok(sitemap.includes('<loc>'+siteUrl+'</loc>')&&!sitemap.includes(siteUrl+'app/'));
 const pkg=JSON.parse(packageText);

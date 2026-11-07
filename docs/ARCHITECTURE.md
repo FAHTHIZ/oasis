@@ -29,7 +29,7 @@ The model proposes responses and tool calls. OASIS owns the runtime decisions ar
 |---|---|---|
 | Agent orchestration | `src/agent.mjs` | Creates sessions, builds provider requests, processes streamed responses, dispatches tool calls, handles retries and context recovery. |
 | Provider streaming | `src/provider-stream.mjs` | Parses provider SSE streams, normalizes streamed events and tool-call deltas, preserves provider usage metadata, and assembles the completed streamed response. |
-| Provider adapters | `src/provider-registry.mjs`, `app/core/providers.mjs`, `src/config.mjs`, `src/fallback-chain.mjs`, `src/model-catalog.mjs` | The native runtime registry supplies built-in and user-configured providers. The standalone browser app has a browser-compatible catalogue and adapter surface; protocol and feature parity between those execution environments must not be assumed. |
+| Provider adapters | `src/provider-registry.mjs`, `app/core/providers.mjs`, `src/config.mjs`, `src/fallback-chain.mjs`, `src/model-catalog.mjs` | The native runtime registry supplies built-in and user-configured providers. The connected browser workspace uses a browser-compatible catalogue and adapter surface; protocol and feature parity with the native runtime must not be assumed. |
 | Workspace tools | `src/tools.mjs`, `src/workspace-files.mjs` | File access, search, edits, patches, command execution and workspace-scoped operations. |
 | Permissions | `src/permissions.mjs`, `src/permission-modes.mjs`, `src/settings.mjs` | Tool rules, permission modes, workspace trust and layered settings. |
 | Command and sandbox controls | `src/shell-risk.mjs`, `src/sandbox.mjs`, `src/sandbox-runtime.mjs` | Command-risk analysis and optional operating-system or container isolation. |
@@ -72,7 +72,7 @@ No single option should be treated as a universal security boundary. See [SECURI
 
 ## Interface boundaries
 
-The CLI, desktop application and connected browser workspace can use a local runtime. The standalone browser app is different: it runs within the browser security model and does not gain arbitrary shell access to the device.
+The CLI, desktop application and connected browser workspace use the host-connected runtime. The browser is an untrusted client: it requests work from the host and does not receive arbitrary shell access to the device.
 
 Editor and ACP integrations communicate with the runtime through their respective interfaces. The SDK exposes selected runtime functions for Node.js applications. GitHub Actions and messaging gateways are automation entry points with their own credentials and execution environment.
 
