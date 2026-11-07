@@ -4844,11 +4844,20 @@ async function executeRegisteredToolWithKernel(session, name, args, context, opt
         ? await dedupedReadHit(session, validatedInput, runtime.env)
         : null;
       if (cached) return cached;
-      const executionContext = Object.create(context);
-      executionContext.root = context.root || session.root;
-      executionContext.session = session;
-      executionContext.env = runtime.env;
-      executionContext.signal = runtime.signal;
+      // Permission overlays inherit the original tool context. Flatten the
+      // full chain here because executeTool's browser adapter forwards context
+      // with object spread, which would otherwise drop inherited approval,
+      // sandbox, and session options.
+      const contextChain = [];
+      for (let current = context; current && current !== Object.prototype; current = Object.getPrototypeOf(current)) {
+        contextChain.unshift(current);
+      }
+      const executionContext = Object.assign({}, ...contextChain, {
+        root: context.root || session.root,
+        session,
+        env: runtime.env,
+        signal: runtime.signal
+      });
       return await executeTool(name, validatedInput, executionContext);
     }
   });
