@@ -60,7 +60,7 @@ test('browser guards: same-origin passes, cross-origin link/form/redirect ask, d
   const byId = Object.fromEntries(session.messages.filter((m) => m.role === 'tool').map((m) => [m.tool_call_id, m.content]));
   const parse = (id) => { try { return JSON.parse(byId[id]); } catch { return { raw: byId[id] }; } };
   const sameResult = parse('same');
-  if (process.platform === 'win32' && !/\\/two$/.test(String(sameResult.url || ''))) {
+  if (process.platform === 'win32' && !String(sameResult.url || '').endsWith('/two')) {
     console.error('[browser-navigation-e2e] Windows navigation diagnostics ' + JSON.stringify({
       homeUrl,
       firstNavigation: parse('n1'),
