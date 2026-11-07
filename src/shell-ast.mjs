@@ -22,6 +22,10 @@ export function shellParserLoaded() {
   return parserMode === 'unbash' || Boolean(parser);
 }
 
+export function shellParserMode() {
+  return parserMode;
+}
+
 export function loadShellParser(env = process.env) {
   if (env.OASIS_SHELL_PARSER === 'legacy') {
     parserMode = 'legacy';
