@@ -5535,7 +5535,12 @@ export async function runAgentTurn(session, prompt, options = {}) {
   const routing = session && session.settings && session.settings.modelRouting || {};
   const route = options.isSubagent || !session
     ? { enabled: false, tier: 'strong', model: originalModel, strongModel: originalModel, reason: 'subagents use their configured model' }
-    : selectTaskModel(prompt, originalModel, routing, { hint: options.routingHint });
+    : selectTaskModel(prompt, originalModel, routing, {
+      hint: options.routingHint,
+      baseURL: originalConfig && originalConfig.baseURL,
+      provider: originalConfig && originalConfig.catalogProvider,
+      env: session.modelEnv || env
+    });
   let selectedModel = route.model || originalModel;
   if (route.enabled && session.availableModels && !modelAllowed(selectedModel, session.availableModels, {
     env: session.modelEnv || env,
