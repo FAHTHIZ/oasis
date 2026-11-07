@@ -18,13 +18,13 @@ This scorecard keeps product presentation, engineering discipline and measured r
 | Area | Status | Evidence at this snapshot | Exit condition |
 |---|---|---|---|
 | Public product identity | Established | Brand guide, maintained marks, repository hero and consistent OASIS naming | Keep site, README, app and release artwork aligned |
-| Public website | Partial | GitHub Pages is enabled; root landing page and PWA are separate targets | Deploy the root page and verify mobile/desktop rendering and links |
-| First-run onboarding | Partial | Provider setup, CLI doctor/connect flow, PWA welcome flow and setup docs | Run repeatable first-run checks on clean desktop, Linux and a phone-sized browser |
+| Public website | Partial | GitHub Pages publishes the product landing page and desktop download entry point | Deploy the root page and verify mobile/desktop rendering, connected-session guidance and release links |
+| First-run onboarding | Partial | Provider setup, CLI doctor/connect flow, desktop onboarding and connected-session docs | Run repeatable first-run checks on clean desktop, Linux and a phone-sized browser |
 | Runtime architecture | Partial | Architecture map, component inventory and provider-stream extraction | Continue staged decomposition with characterization tests for retries, cancellation, metadata and recovery |
 | Security boundaries | Established / Partial | Security policy, permission checks, protected paths and platform regression tests | Keep active-sandbox state explicit; expand independent threat review and platform-specific evidence |
 | Automated test discipline | Established / Partial | Large Node test suite, cross-platform regression jobs, clean-environment tests, Docker sandbox and browser checks | Maintain green same-commit CI and document skipped tests and platform limitations |
 | Release engineering | Open | Desktop packaging workflow, explicit release gates and checksum generation exist; GitHub currently has no published release assets | Publish a reviewed release with platform artifacts, checksums, provenance and install/upgrade verification |
-| Browser distribution | Partial | Pages workflow builds the PWA from source and deploys it separately | Verify deployed commit, PWA install/upgrade, offline behavior and mobile accessibility |
+| Connected workspace delivery | Partial | Browser UI is served by the host runtime; Pages publishes documentation and product entry points only | Verify host connection, session authentication, workspace scope, mobile layout and browser-client isolation |
 | Benchmarks | Partial | Deterministic harness/token checks and live-evaluation tooling exist | Publish repeated, same-model, same-task peer comparisons with raw data and independent verifiers |
 | Contributor experience | Partial | Contribution/security/support policies and issue templates exist | Keep PR checklist concise; validate a first-time contributor path on a clean machine |
 | Observability and operations | Partial | Usage metadata, diagnostics, sessions and command logs exist | Document operational signals, retention, error reporting and support expectations |
@@ -57,7 +57,7 @@ Revisit this scorecard after a meaningful runtime, site, CI or release change. U
 ## Current priority order
 
 1. Restore a fully green same-commit CI baseline.
-2. Deploy and test the public site and PWA as distinct surfaces.
+2. Deploy and test the public product site, desktop downloads and host-connected browser session as distinct surfaces.
 3. Create a verifiable public desktop release, only after the manual release gates pass.
 4. Continue provider and agent lifecycle decomposition without destabilising existing interfaces.
 5. Publish controlled, reproducible same-model harness comparisons.
