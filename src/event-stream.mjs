@@ -11,6 +11,25 @@ import { redactSecrets } from './auto-memory.mjs';
 
 const EVENT_TYPES = new Set(['tool_call', 'tool_result', 'approval', 'recovery', 'verification', 'session_saved']);
 
+const eventQueues = new Map();
+
+// Sequence allocation and append must be one operation. Parallel tool calls
+// used to read the same line count and write duplicate sequence numbers.
+async function withEventLock(file, work) {
+  const previous = eventQueues.get(file) || Promise.resolve();
+  let release;
+  const gate = new Promise((resolve) => { release = resolve; });
+  const tail = previous.then(() => gate);
+  eventQueues.set(file, tail);
+  await previous;
+  try {
+    return await work();
+  } finally {
+    release();
+    if (eventQueues.get(file) === tail) eventQueues.delete(file);
+  }
+}
+
 export function eventLogPath(root, sessionId, env = process.env) {
   if (typeof sessionId !== 'string' || !/^[a-f0-9-]{20,80}$/i.test(sessionId)) throw new Error('Invalid session ID.');
   return path.join(getSessionDirectory(root, env), sessionId + '.events.jsonl');
@@ -32,23 +51,29 @@ export async function appendEvent(root, sessionId, event, options = {}) {
   const type = String(event && event.type || '');
   if (!EVENT_TYPES.has(type)) throw new Error('Unknown event type: ' + type);
   const file = eventLogPath(root, sessionId, env);
-  let seq = 0;
-  try {
-    const existing = await readFile(file, 'utf8');
-    seq = existing.split('\n').filter(Boolean).length;
-  } catch {}
-  const record = redactEvent({ ...event, seq, at: new Date().toISOString(), type });
-  await appendFile(file, JSON.stringify(record) + '\n', { encoding: 'utf8', mode: 0o600 });
-  return record;
+  return await withEventLock(file, async () => {
+    let seq = 0;
+    try {
+      const existing = await readFile(file, 'utf8');
+      seq = existing.split('\n').filter(Boolean).length;
+    } catch (error) {
+      if (error.code !== 'ENOENT') throw error;
+    }
+    const record = redactEvent({ ...event, seq, at: new Date().toISOString(), type });
+    await appendFile(file, JSON.stringify(record) + '\n', { encoding: 'utf8', mode: 0o600 });
+    return record;
+  });
 }
 
 // Read the full event log, oldest first.
 export async function readEvents(root, sessionId, options = {}) {
   const env = options.env || process.env;
   const file = eventLogPath(root, sessionId, env);
-  let text;
-  try { text = await readFile(file, 'utf8'); } catch (error) { if (error.code === 'ENOENT') return []; throw error; }
-  return text.split('\n').filter(Boolean).map((line) => JSON.parse(line));
+  return await withEventLock(file, async () => {
+    let text;
+    try { text = await readFile(file, 'utf8'); } catch (error) { if (error.code === 'ENOENT') return []; throw error; }
+    return text.split('\n').filter(Boolean).map((line) => JSON.parse(line));
+  });
 }
 
 // Remove the event log (used when a session is deleted).
