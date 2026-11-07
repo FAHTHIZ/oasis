@@ -45,3 +45,31 @@ test('bridge converts a list of definitions', () => {
   assert.equal(tools[1].name, 'write_file');
   assert.equal(tools[2].name, 'run_command');
 });
+
+test('bridge classifies unknown and MCP tools as high-risk instead of read-only', () => {
+  const external = bridgeToolDefinition({
+    type: 'function',
+    function: { name: 'mcp_custom_deploy', description: 'External tool.', parameters: { type: 'object' } }
+  });
+  assert.deepEqual(external.capabilities, ['mcp', 'execute']);
+  assert.equal(external.risk, 'critical');
+  assert.equal(external.requiresApproval, true);
+
+  const unknown = bridgeToolDefinition({
+    type: 'function',
+    function: { name: 'custom_process', description: 'Unknown tool.', parameters: { type: 'object' } }
+  });
+  assert.deepEqual(unknown.capabilities, ['execute']);
+  assert.equal(unknown.risk, 'critical');
+  assert.equal(unknown.requiresApproval, true);
+});
+
+test('bridge allows an explicit custom policy override', () => {
+  const external = bridgeToolDefinition({
+    type: 'function',
+    function: { name: 'mcp_custom_read', description: 'Read-only extension.', parameters: { type: 'object' } }
+  }, { capabilities: ['read'], risk: 'low', requiresApproval: false });
+  assert.deepEqual(external.capabilities, ['read']);
+  assert.equal(external.risk, 'low');
+  assert.equal(external.requiresApproval, false);
+});
