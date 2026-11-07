@@ -4843,12 +4843,11 @@ async function executeRegisteredToolWithKernel(session, name, args, context, opt
         ? await dedupedReadHit(session, validatedInput, runtime.env)
         : null;
       if (cached) return cached;
-      return await executeTool(name, validatedInput, {
-        ...context,
-        root: context.root || session.root,
-        env: runtime.env,
-        signal: runtime.signal
-      });
+      const executionContext = Object.create(context);
+      executionContext.root = context.root || session.root;
+      executionContext.env = runtime.env;
+      executionContext.signal = runtime.signal;
+      return await executeTool(name, validatedInput, executionContext);
     }
   });
   const outcome = await runTool(tool, args, {
