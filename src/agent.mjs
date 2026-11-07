@@ -4945,6 +4945,73 @@ async function executeMappedMcpToolWithKernel(session, name, args, context, opti
   return await executeThroughToolKernel(session, tool, args, context, { ...options, authorize });
 }
 
+function sessionToolCapabilities(name) {
+  if (name === 'wait_for_mcp_servers') return ['mcp', 'network'];
+  if (name === 'enter_worktree' || name === 'exit_worktree') return ['git', 'write'];
+  if (name.startsWith('terminal_')) {
+    if (name === 'terminal_read' || name === 'terminal_list') return ['read'];
+    if (name === 'terminal_resize') return ['write'];
+    return ['execute'];
+  }
+  if (name === 'task_get' || name === 'task_list') return ['read'];
+  if (name.startsWith('task_')) return ['write'];
+  return SESSION_READ_ONLY_TOOLS.includes(name) ? ['read'] : ['write'];
+}
+
+function sessionToolTimeout(name, args = {}) {
+  if (name === 'monitor_command') return Math.min(610_000, Math.max(5_000, (Number(args.timeout_seconds) || 60) * 1000 + 5_000));
+  if (name === 'wait_for_mcp_servers') return 125_000;
+  if (name === 'terminal_read') return Math.min(40_000, Math.max(5_000, (Number(args.wait_seconds) || 0) * 1000 + 5_000));
+  return 120_000;
+}
+
+// Session tools use the same kernel as workspace and MCP tools. Their existing
+// handlers retain their domain-specific checks, but schema validation,
+// authorization, cancellation, timeout and audit now share one boundary.
+async function executeSessionToolWithKernel(session, name, args, context, options = {}) {
+  const definition = name === 'tool_search'
+    ? TOOL_SEARCH_DEFINITION
+    : SESSION_TOOL_DEFINITIONS.find((item) => item && item.function && item.function.name === name);
+  if (!definition) throw new Error('Unknown session tool: ' + name + '; no registered schema was found.');
+
+  let authorizedContext = context;
+  const authorize = async ({ input }) => {
+    const authorization = await authorizeCall(session, name, input, context, options);
+    if (typeof options.onAuthorized === 'function') options.onAuthorized(authorization);
+    if (authorization.deniedReason) return { decision: 'deny', reason: authorization.deniedReason };
+    authorizedContext = authorization.context || context;
+    return { decision: 'allow', input: authorization.args };
+  };
+  const tool = bridgeToolDefinition(definition, {
+    capabilities: sessionToolCapabilities(name),
+    risk: name === 'terminal_input' || name === 'terminal_interrupt' || name === 'terminal_stop' || name === 'exit_worktree'
+      ? 'high'
+      : name === 'enter_worktree' || name.startsWith('task_') || name === 'cron_create' || name === 'cron_delete'
+        ? 'medium'
+        : 'low',
+    requiresApproval: false,
+    timeoutMs: sessionToolTimeout(name, args),
+    run: async (validatedInput, runtime) => {
+      const executionContext = Object.assign({}, authorizedContext || {}, {
+        root: authorizedContext && authorizedContext.root || session.root,
+        session,
+        env: runtime.env,
+        signal: runtime.signal
+      });
+      if (typeof options.prepare === 'function') {
+        await options.prepare({ input: validatedInput, context: executionContext });
+      }
+      return await runSessionTool(session, name, validatedInput, {
+        signal: runtime.signal,
+        approval: options.isSubagent ? null : executionContext.approval || options.approval,
+        env: runtime.env,
+        hookOptions: hookOptions(session, runtime.env)
+      });
+    }
+  });
+  return await executeThroughToolKernel(session, tool, args, context, { ...options, authorize });
+}
+
 async function executeOneCallRaw(session, call, context, options) {
   const name = call.function && call.function.name;
   let result;
@@ -4999,20 +5066,40 @@ async function executeOneCallRaw(session, call, context, options) {
       return { role: 'tool', tool_call_id: call.id, name, content: serializableResult(result), result };
     }
     if (SESSION_TOOL_NAMES.has(name)) {
-      // TaskCompleted hooks can refuse a completion (exit 2 / decision "block").
-      if (name === 'task_update' && args.status === 'completed' && hasHooks(session.hooks, 'TaskCompleted')) {
-        const store = session.sharedTasks && Array.isArray(session.sharedTasks.tasks) ? session.sharedTasks.tasks : [];
-        const task = store.find((item) => item.id === args.task_id);
-        const verdict = await runHooks('TaskCompleted', { session_id: session.sessionId || 'unsaved', task_id: args.task_id, task_subject: task ? task.subject : '', task_description: task ? task.description : '', ...(session.agentId ? { teammate_name: session.agentId } : {}) }, hookOptions(session, context.env));
-        session.hookMessages.push(...verdict.messages);
-        if (verdict.blocked) throw new Error('A TaskCompleted hook kept ' + args.task_id + ' open: ' + (verdict.reason || 'no reason given'));
-      }
-      result = await runSessionTool(session, name, args, { signal: options.signal, approval: options.isSubagent ? null : options.approval, env: callContext && callContext.env || options.env, hookOptions: hookOptions(session, options.env) });
-      // Later tool calls this turn resolve paths against the (possibly new) worktree root.
+      result = await executeSessionToolWithKernel(session, name, args, context, {
+        ...options,
+        onAuthorized: (authorization) => {
+          auth = authorization;
+          args = authorization.args || args;
+          callContext = authorization.context || context;
+          attemptedArgs = args;
+        },
+        prepare: async ({ input: sessionArgs, context: sessionContext }) => {
+          // TaskCompleted hooks can refuse a completion (exit 2 / decision "block").
+          if (name === 'task_update' && sessionArgs.status === 'completed' && hasHooks(session.hooks, 'TaskCompleted')) {
+            const store = session.sharedTasks && Array.isArray(session.sharedTasks.tasks) ? session.sharedTasks.tasks : [];
+            const task = store.find((item) => item.id === sessionArgs.task_id);
+            const verdict = await runHooks('TaskCompleted', {
+              session_id: session.sessionId || 'unsaved',
+              task_id: sessionArgs.task_id,
+              task_subject: task ? task.subject : '',
+              task_description: task ? task.description : '',
+              ...(session.agentId ? { teammate_name: session.agentId } : {})
+            }, hookOptions(session, sessionContext.env));
+            session.hookMessages.push(...verdict.messages);
+            if (verdict.blocked) throw new Error('A TaskCompleted hook kept ' + sessionArgs.task_id + ' open: ' + (verdict.reason || 'no reason given'));
+          }
+        }
+      });
       if ((name === 'enter_worktree' || name === 'exit_worktree') && context) context.root = session.root;
-      // TaskCreated hooks run after creation and roll it back on a block.
       if (name === 'task_create' && result && result.task && hasHooks(session.hooks, 'TaskCreated')) {
-        const verdict = await runHooks('TaskCreated', { session_id: session.sessionId || 'unsaved', task_id: result.task.id, task_subject: result.task.subject, task_description: result.task.description || '', ...(session.agentId ? { teammate_name: session.agentId } : {}) }, hookOptions(session, context.env));
+        const verdict = await runHooks('TaskCreated', {
+          session_id: session.sessionId || 'unsaved',
+          task_id: result.task.id,
+          task_subject: result.task.subject,
+          task_description: result.task.description || '',
+          ...(session.agentId ? { teammate_name: session.agentId } : {})
+        }, hookOptions(session, context.env));
         session.hookMessages.push(...verdict.messages);
         if (verdict.blocked) {
           const store = session.sharedTasks;
