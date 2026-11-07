@@ -32,3 +32,10 @@ test('runtime kernel adapter requires an explicit authorization callback', async
   assert.match(adapter, /requires an explicit authorization function/);
   assert.doesNotMatch(adapter, /decision:\s*['"]allow['"]/);
 });
+
+test('all tool families share the single kernel authorization adapter', async () => {
+  const source = await readFile(new URL('../src/agent.mjs', import.meta.url), 'utf8');
+  assert.equal((source.match(/authorizeCall\(session, name, input, context, options\)/g) || []).length, 1);
+  assert.equal((source.match(/createKernelAuthorization\(session, name, context, options\)/g) || []).length, 4);
+  assert.match(source, /context: authorization\.context \|\| context/);
+});
