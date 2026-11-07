@@ -101,3 +101,17 @@ test('missing required input fails without invoking the tool', async () => {
   assert.equal(result.ok, false);
   assert.match(result.error, /Missing required input/);
 });
+
+test('tool failure audit records redact secrets from error messages', async () => {
+  const failing = defineTool({
+    name: 'failing_read',
+    capabilities: ['read'],
+    risk: 'low',
+    inputSchema: { type: 'object' },
+    run: async () => { throw new Error('Request failed: Authorization: Bearer sk-secret-token-123456'); }
+  });
+  const result = await runTool(failing, {}, { policy: { decide: () => ({ decision: 'allow' }) } });
+  assert.equal(result.ok, false);
+  assert.doesNotMatch(result.audit.error, /sk-secret-token-123456/);
+  assert.match(result.audit.error, /\\[redacted\\]/);
+});
