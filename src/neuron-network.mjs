@@ -30,9 +30,40 @@ export function attachNeuronLineage(registry, record, requestedParentId = "main"
   return record;
 }
 
+function projectNode(record, children, contextOnly = false) {
+  const id = clean(record.id, 100);
+  const status = VALID_STATUSES.has(record.status) ? record.status : "interrupted";
+  const usage = record.usage && typeof record.usage === "object" ? record.usage : null;
+  const model = clean(record.child?.config?.model || record.model, 120);
+  return {
+    id,
+    parent_id: clean(record.parentId || "main", 100),
+    depth: Math.max(1, Math.min(MAX_NEURON_DEPTH, Math.floor(safeNumber(record.depth, 1)))),
+    role: clean(record.type || "general-purpose", 80),
+    description: clean(record.description || record.type || id, 160),
+    status,
+    background: Boolean(record.background),
+    team_id: clean(record.teamId, 100) || null,
+    task_id: clean(record.sharedTaskId, 100) || null,
+    workspace: record.worktreeInfo || record.worktree || record.workspaceIsolation === "worktree" ? "worktree" : "shared",
+    access: record.readOnly ? "read-only" : "write-capable",
+    ...(model ? { model } : {}),
+    child_count: children.get(id) || 0,
+    tool_calls: Math.floor(safeNumber(record.toolCalls)),
+    tokens_used: Math.floor(safeNumber(usage?.totalTokens, safeNumber(record.tokensUsed))),
+    estimated_cost_usd: Number(safeNumber(usage?.costUsd).toFixed(6)),
+    elapsed_seconds: Math.floor(Math.max(0, (safeNumber(record.finishedAt) || Date.now()) - safeNumber(record.startedAt)) / 1000),
+    ...(contextOnly ? { context_only: true } : {})
+  };
+}
+
 /**
  * Produce a bounded, read-only network projection. Prompts, transcripts,
  * reports, tool arguments and credentials are deliberately never exposed.
+ *
+ * Filtered views retain the ancestors needed to keep the returned graph
+ * connected. Ancestors added only for graph context are marked context_only
+ * and do not count toward visible_agents or the requested result limit.
  */
 export function buildNeuronNetworkSnapshot(registry, args = {}) {
   const records = registry?.agents instanceof Map ? [...registry.agents.values()] : [];
@@ -48,6 +79,7 @@ export function buildNeuronNetworkSnapshot(registry, args = {}) {
   const ordered = records
     .filter((record) => record && typeof record === "object")
     .sort((a, b) => safeNumber(a.startedAt) - safeNumber(b.startedAt));
+  const byId = new Map(ordered.map((record) => [clean(record.id, 100), record]).filter(([id]) => id));
   const matches = ordered.filter((record) => {
     const status = VALID_STATUSES.has(record.status) ? record.status : "interrupted";
     return (!requestedStatus || status === requestedStatus)
@@ -57,6 +89,22 @@ export function buildNeuronNetworkSnapshot(registry, args = {}) {
   });
   const truncated = matches.length > limit;
   const visible = matches.slice(0, limit);
+  const included = new Map(visible.map((record) => [clean(record.id, 100), { record, contextOnly: false }]));
+
+  // Include every available ancestor so no emitted edge points at a missing node.
+  // The visited set also makes a malformed restored lineage cycle harmless.
+  for (const record of visible) {
+    let cursor = clean(record.parentId || "main", 100);
+    const visited = new Set([clean(record.id, 100)]);
+    while (cursor && cursor !== "main" && !visited.has(cursor)) {
+      visited.add(cursor);
+      const ancestor = byId.get(cursor);
+      if (!ancestor) break;
+      if (!included.has(cursor)) included.set(cursor, { record: ancestor, contextOnly: true });
+      cursor = clean(ancestor.parentId || "main", 100);
+    }
+  }
+
   const children = new Map();
   for (const record of ordered) {
     const id = clean(record.parentId || "main", 100);
@@ -73,31 +121,14 @@ export function buildNeuronNetworkSnapshot(registry, args = {}) {
     child_count: children.get("main") || 0
   }];
   const edges = [];
-  for (const record of visible) {
+  const includedIds = new Set(included.keys());
+  const projected = [...included.values()].sort((a, b) => safeNumber(a.record.startedAt) - safeNumber(b.record.startedAt));
+  for (const item of projected) {
+    const record = item.record;
     const id = clean(record.id, 100);
-    const parent = clean(record.parentId || "main", 100);
-    const status = VALID_STATUSES.has(record.status) ? record.status : "interrupted";
-    const usage = record.usage && typeof record.usage === "object" ? record.usage : null;
-    const model = clean(record.child?.config?.model || record.model, 120);
-    nodes.push({
-      id,
-      parent_id: parent,
-      depth: Math.max(1, Math.min(MAX_NEURON_DEPTH, Math.floor(safeNumber(record.depth, 1)))),
-      role: clean(record.type || "general-purpose", 80),
-      description: clean(record.description || record.type || id, 160),
-      status,
-      background: Boolean(record.background),
-      team_id: clean(record.teamId, 100) || null,
-      task_id: clean(record.sharedTaskId, 100) || null,
-      workspace: record.worktreeInfo || record.worktree || record.workspaceIsolation === "worktree" ? "worktree" : "shared",
-      access: record.readOnly ? "read-only" : "write-capable",
-      ...(model ? { model } : {}),
-      child_count: children.get(id) || 0,
-      tool_calls: Math.floor(safeNumber(record.toolCalls)),
-      tokens_used: Math.floor(safeNumber(usage?.totalTokens, safeNumber(record.tokensUsed))),
-      estimated_cost_usd: Number(safeNumber(usage?.costUsd).toFixed(6)),
-      elapsed_seconds: Math.floor(Math.max(0, (safeNumber(record.finishedAt) || Date.now()) - safeNumber(record.startedAt)) / 1000)
-    });
+    const requestedParent = clean(record.parentId || "main", 100);
+    const parent = includedIds.has(requestedParent) ? requestedParent : "main";
+    nodes.push(projectNode({ ...record, parentId: parent }, children, item.contextOnly));
     edges.push({ from: parent, to: id, relation: "spawned" });
   }
 
@@ -117,6 +148,7 @@ export function buildNeuronNetworkSnapshot(registry, args = {}) {
     summary: {
       total_agents: ordered.length,
       visible_agents: visible.length,
+      context_agents: projected.length - visible.length,
       running_agents: counts.running,
       completed_agents: counts.completed,
       failed_agents: counts.failed,
