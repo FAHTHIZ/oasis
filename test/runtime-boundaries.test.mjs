@@ -39,3 +39,13 @@ test('all tool families share the single kernel authorization adapter', async ()
   assert.equal((source.match(/createKernelAuthorization\(session, name, context, options\)/g) || []).length, 4);
   assert.match(source, /context: authorization\.context \|\| context/);
 });
+
+test('the central dispatcher has no direct ask-user or IDE execution branches', async () => {
+  const source = await readFile(new URL('../src/agent.mjs', import.meta.url), 'utf8');
+  const start = source.indexOf('async function executeOneCallRaw(');
+  const end = source.indexOf('\n}\n', start);
+  assert.notEqual(start, -1);
+  assert.notEqual(end, -1);
+  const dispatcher = source.slice(start, end);
+  assert.doesNotMatch(dispatcher, /name === ['"](?:ask_user_question|ide_get_diagnostics|ide_open_file)['"]/);
+});

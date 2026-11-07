@@ -262,6 +262,7 @@ test('ask_user_question: answer parsing, no-user fallback, and subagents cannot 
   assert.match(JSON.parse(requests[1].messages.at(-1).content).message, /No user is available/);
   const taskDef = session.toolDefinitions.find((d) => d.function.name === 'ask_user_question');
   assert.ok(taskDef);
+  assert.ok((session.toolAuditLog || []).some((record) => record.tool === 'ask_user_question'), 'question calls must pass through the kernel');
 });
 
 test('permission approval UI receives redacted command arguments after secret restoration', async (t) => {
