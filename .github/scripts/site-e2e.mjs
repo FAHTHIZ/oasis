@@ -72,11 +72,14 @@ try {
   assert.equal(await page.locator('h1').count(), 1, 'The landing page must have one primary heading.');
   assert.match(await page.locator('h1').innerText(), /Bring the model/);
   assert.equal(await page.locator('link[rel="canonical"]').getAttribute('href'), 'https://fahthiz.github.io/oasis/');
-  assert.equal(await page.getByRole('link', { name: /Explore the browser app/ }).getAttribute('href'), './app/');
-  assert.ok(await page.getByRole('link', { name: /View source on GitHub/ }).isVisible());
+  assert.equal(await page.getByRole('link', { name: /Get OASIS for desktop/ }).getAttribute('href'), '#downloads');
+  assert.equal(await page.getByRole('link', { name: /Start a normal session/ }).getAttribute('href'), '#session');
   assert.ok(await page.locator('#demo').isVisible());
   assert.ok(await page.locator('#interfaces').isVisible());
+  assert.ok(await page.locator('#session').isVisible());
+  assert.ok(await page.locator('#downloads').isVisible());
   assert.ok(await page.locator('#evidence').isVisible());
+  assert.equal(await page.locator('a[href$="/app/"]').count(), 0, 'The public website must not promote a standalone browser app.');
 
   const desktopWidth = await page.evaluate(() => document.documentElement.scrollWidth);
   assert.ok(desktopWidth <= 1440, 'The desktop landing page must not overflow horizontally.');
