@@ -14,6 +14,15 @@ test('dispatch executes allowed tools and returns normalized output', async () =
   assert.equal(result.audit.tool, 'read_file');
 });
 
+test('dispatch refuses a definition for a different tool name', async () => {
+  let executions = 0;
+  const wrongDefinition = { type: 'function', function: { name: 'read_file', description: 'Read a file.', parameters: {} } };
+  const dispatch = createToolDispatch(async () => { executions++; return 'should not run'; }, { definition: wrongDefinition, policy });
+  const result = await dispatch({ name: 'delete_file', arguments: '{}' }, {});
+  assert.equal(result.ok, false);
+  assert.match(result.error, /does not match/);
+  assert.equal(executions, 0);
+});
 test('dispatch denies when policy denies', async () => {
   const denyPolicy = { decide: () => ({ decision: 'deny', reason: 'not allowed' }) };
   const dispatch = createToolDispatch(executor, { definition, policy: denyPolicy });
