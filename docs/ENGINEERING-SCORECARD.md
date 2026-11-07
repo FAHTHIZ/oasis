@@ -1,7 +1,7 @@
 # OASIS engineering scorecard
 
 **Review snapshot:** 2026-11-07  
-**Baseline commit:** 42195c1532335d174a06aa0479547c396b4ea5b6  
+**Baseline commit:** 84d802b8efa7c3474a10df7677e8d32bd9e59dfc  
 **Scope:** repository and release-readiness evidence; not a security certification or a competitor ranking.
 
 This scorecard keeps product presentation, engineering discipline and measured runtime quality separate. Each rating describes the strength of available evidence at the snapshot; it is not a percentage and does not imply the software is finished.
