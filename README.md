@@ -24,7 +24,7 @@
   <a href="https://fahthiz.github.io/oasis/">Website</a> ·
   <a href="https://github.com/FAHTHIZ/oasis/releases">Releases</a> ·
   <a href="#install-the-cli">CLI quick start</a> ·
-  <a href="https://fahthiz.github.io/oasis/app/">Browser app</a> ·
+  <a href="https://github.com/FAHTHIZ/oasis/releases">Desktop downloads</a> ·
   <a href="docs/README.md">Documentation</a> ·
   <a href="BRAND.md">Brand guidelines</a> ·
   <a href="CONTRIBUTING.md">Contributing</a> ·
@@ -95,7 +95,6 @@ OASIS does not bundle a model or a hosted inference account. You choose the prov
 
 There is no native Android APK or iOS App Store package. The available options are:
 
-- **Installable browser app (PWA):** [Open OASIS](https://fahthiz.github.io/oasis/app/) and use the browser's install or Add to Home Screen action. It can use browser storage or a connected GitHub project, but it does not provide a host shell or unrestricted access to files on the phone.
 - **Connected workspace:** run `oasis web --host 0.0.0.0` on a computer containing the project, then connect from a phone on the same trusted private network. Keep the computer and OASIS running; do not expose the workspace directly to the public internet.
 - **Advanced Android use:** run the CLI from Termux with Node.js 22.15 or newer and Git. This is a manual, power-user setup—not a one-click Android installer. See [Mobile and tablet setup](MOBILE.md).
 
@@ -109,7 +108,7 @@ OASIS has several interfaces over a shared runtime. They do not all have the sam
 |---|---|---|
 | **CLI and headless runner** | `oasis`, `oasis exec` | Runs against a project on the machine hosting the process. Supports interactive and non-interactive workflows. |
 | **Connected browser workspace** | `oasis web --open` | Browser UI connected to a local OASIS runtime. Project access and command execution remain on the host computer. |
-| **Universal browser app** | [Open the PWA](https://fahthiz.github.io/oasis/app/) or `oasis app --open` | Installable browser application using browser storage or a connected GitHub project. It does not provide a host shell. |
+| **Normal browser session** | `oasis web --open` | Opens the regular workspace UI connected to the local OASIS runtime; project files and commands remain on the host. |
 | **Desktop application** | `npm run desktop:dev` | Electron host for the local runtime and workspace; public GitHub installers are not yet published. |
 | **Editor integration** | `oasis ide install` | VS Code-family extension with editor context, diagnostics and diff review. |
 | **Agent Client Protocol** | `oasis acp` | Connects OASIS to compatible ACP clients. |
