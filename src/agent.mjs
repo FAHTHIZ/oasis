@@ -4880,6 +4880,46 @@ async function executeRegisteredToolWithKernel(session, name, args, context, opt
   return outcome.output;
 }
 
+async function executeMappedMcpToolWithKernel(session, name, args, context, options = {}) {
+  const definition = (session.toolDefinitions || []).find((item) => item && item.function && item.function.name === name);
+  if (!definition) throw new Error('Unknown or unavailable MCP tool: ' + name + '; no registered schema was found.');
+
+  const tool = bridgeToolDefinition(definition, {
+    capabilities: ['mcp', 'execute'],
+    risk: 'critical',
+    // The existing permission gate and MCP trust/consent checks remain authoritative.
+    requiresApproval: false,
+    // Human approval can take longer than a network request; the client applies
+    // its own 120-second request timeout after approval has been granted.
+    timeoutMs: 600000,
+    run: async (validatedInput, runtime) => {
+      const mcpOptions = Object.create(context && typeof context === 'object' ? context : null);
+      mcpOptions.signal = runtime.signal;
+      mcpOptions.timeoutMs = 120000;
+      mcpOptions.env = runtime.env;
+      return await callMappedMcpTool(session, name, validatedInput, mcpOptions);
+    }
+  });
+
+  const outcome = await runTool(tool, args, {
+    policy: { decide: () => ({ decision: 'allow' }) },
+    signal: options.signal || (context && context.signal),
+    env: (context && context.env) || options.env || process.env,
+    cwd: (context && context.root) || session.root || process.cwd()
+  });
+
+  if (outcome.audit && session) {
+    session.toolAuditLog ||= [];
+    session.toolAuditLog.push(outcome.audit);
+    if (session.toolAuditLog.length > 200) session.toolAuditLog.splice(0, session.toolAuditLog.length - 200);
+    if (typeof options.onToolAudit === 'function') {
+      try { options.onToolAudit(outcome.audit); } catch { /* audit observers cannot break tool execution */ }
+    }
+  }
+  if (!outcome.ok) throw new Error(outcome.error || ('MCP tool ' + name + ' failed.'));
+  return outcome.output;
+}
+
 async function executeOneCallRaw(session, call, context, options) {
   const name = call.function && call.function.name;
   let result;
@@ -4995,7 +5035,7 @@ async function executeOneCallRaw(session, call, context, options) {
     } else if (AGENT_TOOL_NAMES.has(name)) {
       result = await runAgentTool(session, name, args, callContext, options);
     } else if (session.mcpToolMap && session.mcpToolMap.has(name)) {
-      result = await callMappedMcpTool(session, name, args, callContext);
+      result = await executeMappedMcpToolWithKernel(session, name, args, callContext, options);
     } else {
       if (AUTO_LSP_EDIT_TOOLS.has(name) && typeof args.path === 'string' && serverForFile(args.path, session.settings || {})) {
         lspVerificationPath = args.path;
