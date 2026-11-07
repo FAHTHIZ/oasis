@@ -9,25 +9,25 @@ const SCORING = DEFAULT_ROUTING_CONFIG.scoring;
 const MIN_CONFIDENCE = SCORING.confidenceThreshold;
 
 const SAFETY_SIGNALS = [
-  /\\b(?:security|authentication|authorization|permissions?|secrets?|credentials?|sandbox|threat model|prompt injection)\\b/i,
+  /\b(?:security|authentication|authorization|permissions?|secrets?|credentials?|sandbox|threat model|prompt injection)\b/i,
 ];
 
 const HARD_SIGNALS = [
-  /\\b(?:architect(?:ure)?|refactor|redesign|migration|migrate|upgrade|deployment|production|performance|concurrency|race condition|database|schema)\\b/i,
-  /\\b(?:implement|build|create|add|remove|change|modify|rewrite|debug|fix|repair|test|tests|feature|workflow|integrat(?:e|ion))\\b/i,
-  /\\b(?:multiple files|whole repository|entire repo|end.to.end|full product|across the project|everything about .{0,80}(?:repository|repo|codebase|project))\\b/i,
-  /\\b(?:bug|defect|exception|stack trace|crash|failure)\\b/i,
-  /\\b(?:and then|as well as|in addition|several|multiple)\\b/i
+  /\b(?:architect(?:ure)?|refactor|redesign|migration|migrate|upgrade|deployment|production|performance|concurrency|race condition|database|schema)\b/i,
+  /\b(?:implement|build|create|add|remove|change|modify|rewrite|debug|fix|repair|test|tests|feature|workflow|integrat(?:e|ion))\b/i,
+  /\b(?:multiple files|whole repository|entire repo|end.to.end|full product|across the project|everything about .{0,80}(?:repository|repo|codebase|project))\b/i,
+  /\b(?:bug|defect|exception|stack trace|crash|failure)\b/i,
+  /\b(?:and then|as well as|in addition|several|multiple)\b/i
 ];
 
 const EASY_SIGNALS = [
-  /^(?:please\\s+)?(?:explain|summari[sz]e|describe|list|find|locate|show|identify|where|what|how does|how do)\\b/i,
-  /\\b(?:read.only|quick overview|brief overview|what does .+ do|where is .+ defined)\\b/i
+  /^(?:please\s+)?(?:explain|summari[sz]e|describe|list|find|locate|show|identify|where|what|how does|how do)\b/i,
+  /\b(?:read.only|quick overview|brief overview|what does .+ do|where is .+ defined)\b/i
 ];
 
 const MUTATION_SIGNALS = [
-  /\\b(?:edit|write|change|modify|create|add|remove|delete|fix|repair|implement|build|refactor|rename|move|update|upgrade|migrate|install|commit|push|deploy)\\b/i,
-  /\\b(?:make|turn|convert)\\s+.+\\s+(?:into|to)\\s+/i
+  /\b(?:edit|write|change|modify|create|add|remove|delete|fix|repair|implement|build|refactor|rename|move|update|upgrade|migrate|install|commit|push|deploy)\b/i,
+  /\b(?:make|turn|convert)\s+.+\s+(?:into|to)\s+/i
 ];
 
 const COMPLEX_DIMENSIONS = new Set([
@@ -70,7 +70,7 @@ export function classifyTask(prompt, hint = null) {
   const hardSignal = HARD_SIGNALS.find((pattern) => pattern.test(text));
   if (hardSignal) return { tier: 'strong', reason: 'task contains a change, complexity, or safety signal' };
 
-  if (text.length > 1200 || text.split(/\\s+/).length > 180) {
+  if (text.length > 1200 || text.split(/\s+/).length > 180) {
     return { tier: 'strong', reason: 'long or detailed request defaults to strong model' };
   }
 
@@ -134,7 +134,7 @@ export function sanitizeModelRouting(value) {
     return { enabled: false, easyModel: '', strongModel: '' };
   }
   const normalize = (item) => typeof item === 'string'
-    ? item.trim().replace(/[\\r\\n\\0]/g, '').slice(0, 200)
+    ? item.trim().replace(/[\r\n\0]/g, '').slice(0, 200)
     : '';
   return {
     enabled: value.enabled === true,
