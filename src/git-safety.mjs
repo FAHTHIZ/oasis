@@ -4,6 +4,7 @@
 // command runs, the whole working tree (tracked + untracked, honoring
 // .gitignore) is written to a commit under refs/oasis/safety/ using a
 // temporary index, so the user's index, stash and branch are untouched.
+import { randomUUID } from 'node:crypto';
 import { execFile } from 'node:child_process';
 import { mkdtemp, rm } from 'node:fs/promises';
 import os from 'node:os';
@@ -98,7 +99,7 @@ export async function snapshotWorkingTree(root, reason, { now = Date.now() } = {
   if (!status.stdout && !stashes.length) return null;
 
   const stamp = new Date(now).toISOString().replace(/[:.]/g, '-');
-  const ref = 'refs/oasis/safety/' + stamp;
+  const ref = 'refs/oasis/safety/' + stamp + '-' + randomUUID().slice(0, 8);
   const createdRefs = [];
   let commit = '';
   let dir = null;
