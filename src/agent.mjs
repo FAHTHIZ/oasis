@@ -38,6 +38,7 @@ import { selectTaskModel } from './model-routing.mjs';
 import { readProviderStream, mergeAnthropicUsage, toolCallSlot, strayStreamError } from './provider-stream.mjs';
 import { planToolBatches } from './tool-batch-scheduler.mjs';
 import { validateToolArguments } from './tool-schema-validation.mjs';
+import { redactAuditValue } from './tool-kernel.mjs';
 import { openAIEndpoint, responsesEndpoint, anthropicEndpoint, toResponsesRequest, toAnthropicRequest, chatCompletionTool } from './provider-requests.mjs';
 export { mergeAnthropicUsage, toolCallSlot, strayStreamError };
 
@@ -4459,13 +4460,19 @@ async function authorizeCall(session, name, args, context, options) {
   const baseApproval = context.approval;
   // Approval wrapper: an answer of "always" remembers a reusable rule for this session.
   overlay.approval = async (message, force = false) => {
-    const suggestion = suggestRule(name, args);
+    // Args may already have been unmasked for local execution. Human approval
+    // UI and permission classifiers receive a redacted copy, never credentials.
+    const safeArgs = redactAuditValue(args);
+    const rawArgsText = JSON.stringify(args);
+    const safeArgsText = JSON.stringify(safeArgs);
+    const safeMessage = redactSecretText(String(message || '')).replace(rawArgsText, safeArgsText);
+    const suggestion = suggestRule(name, safeArgs);
     // PermissionRequest hooks answer before the user is asked (this also works for
     // background agents, which cannot show a prompt).
     if (hasHooks(session.hooks, 'PermissionRequest')) {
       const request = await runHooks('PermissionRequest', {
         session_id: session.sessionId || 'unsaved', tool_name: hookToolName(session, name), oasis_tool_name: name, tool_name_oasis: name,
-        tool_input: args, message: String(message || '').slice(0, 4000), permission_suggestions: suggestion ? [suggestion] : []
+        tool_input: safeArgs, message: safeMessage.slice(0, 4000), permission_suggestions: suggestion ? [suggestion] : []
       }, hookOptions(session, context.env));
       session.hookMessages.push(...request.messages);
       const verdict = request.permissionRequest;
@@ -4480,7 +4487,7 @@ async function authorizeCall(session, name, args, context, options) {
     if (mode === 'auto' && !force) {
       session.autoMode ||= newAutoModeState();
       const autoSettings = session.autoModeSettings || {};
-      const verdict = await classifyAction(session.autoMode, { toolName: CLAUDE_TOOL_NAMES[name] || name, args, messages: session.intentMessages || session.messages, root: session.root, rules: autoSettings.rules || [] }, hookOptions(session, context.env).evaluatePrompt, { model: autoSettings.model, config: autoSettings });
+      const verdict = await classifyAction(session.autoMode, { toolName: CLAUDE_TOOL_NAMES[name] || name, args: safeArgs, messages: session.intentMessages || session.messages, root: session.root, rules: autoSettings.rules || [] }, hookOptions(session, context.env).evaluatePrompt, { model: autoSettings.model, config: autoSettings });
       session.autoMode.log.push({ tool: name, decision: verdict.decision, reason: verdict.reason, ...(verdict.rule ? { rule: verdict.rule } : {}), at: Date.now() });
       if (session.autoMode.log.length > 100) session.autoMode.log.shift();
       if (options.onAutoMode) options.onAutoMode({ tool: name, ...verdict });
@@ -4488,7 +4495,7 @@ async function authorizeCall(session, name, args, context, options) {
       if (verdict.decision === 'block') {
         overlay.permissionHookDenial = 'Auto mode blocked this: ' + (verdict.reason || 'it looked risky') + ' Try a safer approach, or ask the user to run it.';
         if (hasHooks(session.hooks, 'PermissionDenied')) {
-          const denied = await runHooks('PermissionDenied', { session_id: session.sessionId || 'unsaved', tool_name: hookToolName(session, name), oasis_tool_name: name, tool_name_oasis: name, tool_input: args, reason: verdict.reason || '' }, hookOptions(session, context.env)).catch(() => null);
+          const denied = await runHooks('PermissionDenied', { session_id: session.sessionId || 'unsaved', tool_name: hookToolName(session, name), oasis_tool_name: name, tool_name_oasis: name, tool_input: safeArgs, reason: verdict.reason || '' }, hookOptions(session, context.env)).catch(() => null);
           if (denied) {
             session.hookMessages.push(...denied.messages);
             if (denied.retry) overlay.permissionHookDenial += ' A PermissionDenied hook says you may retry this call.';
@@ -4504,8 +4511,8 @@ async function authorizeCall(session, name, args, context, options) {
         .then((note) => session.hookMessages.push(...note.messages)).catch(() => {});
     }
     const nearMiss = policy && typeof policy.allowNearMiss === 'function' ? policy.allowNearMiss(name, args) : '';
-    if (nearMiss && !String(message || '').includes('Why this asks:')) message = String(message || '') + '\n' + nearMiss;
-    const answer = await baseApproval(message, force, { tool: name, suggestion, input: args });
+    if (nearMiss && !String(safeMessage || '').includes('Why this asks:')) message = String(safeMessage || '') + '\n' + redactSecretText(nearMiss);
+    const answer = await baseApproval(safeMessage, force, { tool: name, suggestion, input: safeArgs });
     if (answer === 'always' && suggestion && policy) policy.rememberForSession(suggestion);
     return Boolean(answer);
   };
@@ -4539,7 +4546,7 @@ async function authorizeCall(session, name, args, context, options) {
   }
   if (decision === 'ask') {
     if (!siteApprovalHandled) {
-      const ok = await overlay.approval('Permission rule ' + (verdict.rule || 'from a PreToolUse hook') + ' requires approval for ' + name + ':\n  ' + JSON.stringify(args).slice(0, 1500), true);
+      const ok = await overlay.approval('Permission rule ' + (verdict.rule || 'from a PreToolUse hook') + ' requires approval for ' + name + ':\n  ' + JSON.stringify(redactAuditValue(args)).slice(0, 1500), true);
       if (!ok) return { deniedReason: overlay.permissionHookDenial || 'The user did not approve this ' + name + ' call.' };
     }
     overlay.ruleAllowed = true;
