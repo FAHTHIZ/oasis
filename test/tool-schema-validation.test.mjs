@@ -85,3 +85,22 @@ test('an invalid write_file call is rejected before a workspace side effect', as
   assert.match(String(result.text || result.finalText || JSON.stringify(result)), /SCHEMA_VALIDATION_BLOCKED/);
   await assert.rejects(access(target), { code: 'ENOENT' });
 });
+
+test('JSON Schema 2020-12 output contracts are validated with the correct dialect', async () => {
+  const schema = {
+    $schema: 'https://json-schema.org/draft/2020-12/schema',
+    type: 'array',
+    prefixItems: [{ type: 'string' }, { type: 'integer' }],
+    items: false
+  };
+  assert.equal((await validateToolArguments(schema, ['ok', 2])).valid, true);
+  const invalid = await validateToolArguments(schema, ['ok', 'not-an-integer']);
+  assert.equal(invalid.valid, false);
+  assert.ok(invalid.errors.some((error) => error.includes('integer')));
+  const legacyValidator = await validateToolArguments({
+    type: 'object',
+    properties: { name: { type: 'string' } },
+    required: ['name']
+  }, { name: 'OASIS' });
+  assert.equal(legacyValidator.valid, true);
+});
