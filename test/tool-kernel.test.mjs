@@ -227,7 +227,63 @@ test('async kernel authorization can rewrite input before schema validation and 
     risk: 'low',
     inputSchema: {
       type: 'object',
-      properties: { path: { type: 'string', pattern: '^[a-z]+$' } },
+      properties: { path: { type: 'string', pattern: '^[a-z.]+,
+      required: ['path'],
+      additionalProperties: false
+    },
+    run: async (input, runtime) => {
+      received = { input, authorizationContext: runtime.authorizationContext };
+      return input;
+    }
+  });
+  const result = await runTool(tool, { path: 'README.md' }, {
+    authorize: async ({ input }) => {
+      await Promise.resolve();
+      return { decision: 'allow', input: { path: input.path.toLowerCase() }, context: { permissionMode: 'acceptEdits' } };
+    }
+  });
+  assert.equal(result.ok, true);
+  assert.deepEqual(result.output, { path: 'readme.md' });
+  assert.equal(received.authorizationContext.permissionMode, 'acceptEdits');
+  assert.equal(result.audit.input.path, 'readme.md');
+});
+
+test('async kernel authorization denial prevents handler invocation', async () => {
+  let invoked = false;
+  const tool = defineTool({
+    name: 'authorized_denial',
+    capabilities: ['write'],
+    risk: 'high',
+    inputSchema: { type: 'object' },
+    run: async () => { invoked = true; return 'ran'; }
+  });
+  const result = await runTool(tool, {}, {
+    authorize: async () => ({ decision: 'deny', reason: 'denied by runtime policy' })
+  });
+  assert.equal(result.ok, false);
+  assert.equal(result.decision.decision, 'deny');
+  assert.equal(result.error, 'denied by runtime policy');
+  assert.equal(invoked, false);
+});
+
+test('authorization exceptions fail closed and are redacted in audit output', async () => {
+  let invoked = false;
+  const tool = defineTool({
+    name: 'authorization_exception',
+    capabilities: ['write'],
+    risk: 'high',
+    inputSchema: { type: 'object' },
+    run: async () => { invoked = true; return 'ran'; }
+  });
+  const result = await runTool(tool, {}, {
+    authorize: async () => { throw new Error('failed with --token secret-material-987'); }
+  });
+  assert.equal(result.ok, false);
+  assert.match(result.error, /failed closed/);
+  assert.doesNotMatch(JSON.stringify(result.audit), /secret-material-987/);
+  assert.equal(invoked, false);
+});
+ } },
       required: ['path'],
       additionalProperties: false
     },
