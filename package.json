@@ -124,7 +124,8 @@
     "wink-porter2-stemmer": "^2.0.1",
     "wrap-ansi": "^10.0.2",
     "yaml": "2.9.1",
-    "zod": "^4.6.7"
+    "zod": "^4.6.7",
+    "@blockrun/router-core": "https://codeload.github.com/BlockRunAI/router-core/tar.gz/fd6d03d035ff676642ba1683c333d929939f8a00"
   },
   "devDependencies": {
     "electron": "45.2.3",
@@ -208,4 +209,4 @@
       "zod": "$zod"
     }
   }
-}
+}\n

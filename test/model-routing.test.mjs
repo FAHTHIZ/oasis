@@ -29,6 +29,14 @@ test('only short, clearly read-only requests qualify for the cheaper model', () 
   assert.equal(classifyTask('Summarize the authentication and permissions code.', 'small').tier, 'strong');
 });
 
+test('the multi-dimension router expands simple classification without weakening action guardrails', () => {
+  assert.equal(classifyTask('Define entropy in one sentence.').tier, 'easy');
+  assert.equal(classifyTask('Find the bug in this code.').tier, 'strong');
+  assert.equal(classifyTask('Search the web for today\\'s weather in Shanghai.').tier, 'strong');
+  assert.equal(classifyTask('Explain the threat model and permission boundaries.').tier, 'strong');
+  assert.equal(classifyTask('Tell me everything about this 400-file repository.').tier, 'strong');
+});
+
 test('model selection keeps hard and ambiguous work on the configured strong model', () => {
   const routing = { enabled: true, easyModel: 'cheap-model', strongModel: 'strong-model' };
   assert.equal(selectTaskModel('Find the definition of runWorkspaceCommand.', 'default-model', routing).model, 'cheap-model');
