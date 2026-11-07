@@ -83,13 +83,43 @@ export async function validateToolInput(tool, input) {
 // Audit records redact fields named like credentials even when their value is
 // a short or synthetic token, then run the shared provider-secret scanner.
 const SENSITIVE_AUDIT_FIELD = /(?:^|_)(?:api_?key|access_?key|token|secret|password|passwd|credentials?|authorization|proxy_authorization|cookie|private_?key|client_secret|database_url|connection_string|dsn)$/i;
+const SENSITIVE_CLI_FLAG = /^--?(?:api[-_]?key|access[-_]?key|access[-_]?token|token|secret|password|passwd|authorization|cookie)$/i;
+const SENSITIVE_CLI_FLAG_WITH_VALUE = /^((?:--?)(?:api[-_]?key|access[-_]?key|access[-_]?token|token|secret|password|passwd|authorization|cookie))=(.*)$/i;
+
+function redactCredentialFlags(text) {
+  return String(text).replace(
+    /(^|\\s)(--?(?:api[-_]?key|access[-_]?key|access[-_]?token|token|secret|password|passwd|authorization|cookie))(=|\\s+)(?:"[^"]*"|'[^']*'|[^\\s,;]+)/gi,
+    (_whole, prefix, flag, separator) => prefix + flag + separator + '[redacted]'
+  );
+}
+
 
 export function redactAuditValue(value, depth = 0, fieldName = '') {
   if (depth > 6) return '[depth-limit]';
   const normalizedField = String(fieldName || '').replace(/([a-z0-9])([A-Z])/g, '$1_$2').replace(/[-.]/g, '_').toLowerCase();
   if (normalizedField && SENSITIVE_AUDIT_FIELD.test(normalizedField) && value !== null && value !== undefined) return '[redacted]';
-  if (typeof value === 'string') return redactSecretText(value);
-  if (Array.isArray(value)) return value.map((item) => redactAuditValue(item, depth + 1, fieldName));
+  if (typeof value === 'string') return redactCredentialFlags(redactSecretText(value));
+  if (Array.isArray(value)) {
+    const normalizedParent = String(fieldName || '').replace(/([a-z0-9])([A-Z])/g, '$1_$2').replace(/[-.]/g, '_').toLowerCase();
+    if (['args', 'argv', 'command_args'].includes(normalizedParent)) {
+      const out = [];
+      for (let index = 0; index < value.length; index++) {
+        const item = value[index];
+        if (typeof item === 'string') {
+          const combined = SENSITIVE_CLI_FLAG_WITH_VALUE.exec(item);
+          if (combined) { out.push(combined[1] + '=[redacted]'); continue; }
+          if (SENSITIVE_CLI_FLAG.test(item) && index + 1 < value.length) {
+            out.push(item, '[redacted]');
+            index++;
+            continue;
+          }
+        }
+        out.push(redactAuditValue(item, depth + 1, fieldName));
+      }
+      return out;
+    }
+    return value.map((item) => redactAuditValue(item, depth + 1, fieldName));
+  }
   if (value && typeof value === 'object') {
     return Object.fromEntries(Object.entries(value).map(([key, item]) => [key, redactAuditValue(item, depth + 1, key)]));
   }
