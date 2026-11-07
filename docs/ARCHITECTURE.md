@@ -28,7 +28,8 @@ The model proposes responses and tool calls. OASIS owns the runtime decisions ar
 | Area | Main source locations | Responsibility |
 |---|---|---|
 | Agent orchestration | `src/agent.mjs` | Creates sessions, builds provider requests, processes streamed responses, dispatches tool calls, handles retries and context recovery. |
-| Provider adapters | `src/provider-registry.mjs`, `app/core/providers.mjs`, `src/config.mjs`, `src/fallback-chain.mjs`, `src/model-catalog.mjs` | The runtime's single provider table (built-ins plus user settings), protocol adapters, endpoint configuration, model limits from models.dev, model selection and fallback behaviour. |
+| Provider streaming | `src/provider-stream.mjs` | Parses provider SSE streams, normalizes streamed events and tool-call deltas, preserves provider usage metadata, and assembles the completed streamed response. |
+| Provider adapters | `src/provider-registry.mjs`, `app/core/providers.mjs`, `src/config.mjs`, `src/fallback-chain.mjs`, `src/model-catalog.mjs` | The native runtime registry supplies built-in and user-configured providers. The standalone browser app has a browser-compatible catalogue and adapter surface; protocol and feature parity between those execution environments must not be assumed. |
 | Workspace tools | `src/tools.mjs`, `src/workspace-files.mjs` | File access, search, edits, patches, command execution and workspace-scoped operations. |
 | Permissions | `src/permissions.mjs`, `src/permission-modes.mjs`, `src/settings.mjs` | Tool rules, permission modes, workspace trust and layered settings. |
 | Command and sandbox controls | `src/shell-risk.mjs`, `src/sandbox.mjs`, `src/sandbox-runtime.mjs` | Command-risk analysis and optional operating-system or container isolation. |

@@ -11,7 +11,7 @@ Thanks for helping improve OASIS. Bug fixes, focused feature work, documentation
 
 ## Development setup
 
-Requirements: Node.js 22 or newer and Git.
+Requirements: Node.js 22.15 or newer and Git.
 
 ```sh
 git clone https://github.com/FAHTHIZ/oasis.git

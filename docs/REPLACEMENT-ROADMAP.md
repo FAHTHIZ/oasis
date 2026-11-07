@@ -2,7 +2,7 @@
 
 **Audit snapshot:** 2026-11-07  
 **Audited branch:** `main`  
-**Audit base:** `daee264758424fa7db13ee449b56d930b5e12558`  
+**Audit base:** `8945253d6a772e116d1334c5281de62e81434595`  
 **Status:** architecture inventory and ranked improvement plan; not a security certification.
 
 ## Purpose
@@ -17,24 +17,28 @@ The objective is not to replace every dependency. It is to find the weakest cons
 
 The inventory used the repository tree, current README and architecture/configuration/benchmark/interface documentation, source modules and tests. It then examined selected implementation paths in depth and compared them with upstream source, API definitions, licences, release metadata and design documentation.
 
-This is a broad architecture and prioritisation audit, not a line-by-line review of all 1,404 tracked entries and not a penetration test. No live provider benchmark was run as part of this audit. A green test suite would establish only that the tested cases pass; it would not prove general security or superiority over another agent.
+This is a broad architecture and prioritisation audit, not a line-by-line review of all 1,202 tracked files and not a penetration test. No live provider benchmark was run as part of this audit. A green test suite would establish only that the tested cases pass; it would not prove general security or superiority over another agent.
 
 ## Whole-system inventory
 
-The repository tree at the audit base contained approximately **1,404 entries**. The major areas are:
+The repository tree at the audit base contains **1,413 entries, including 1,202 tracked files**. The following counts are tracked file blobs grouped by top-level directory; this is a structural inventory, not a line-by-line code review:
 
-| Area | Tracked entries | Primary responsibility |
+| Area | Tracked files | Primary responsibility |
 |---|---:|---|
 | Runtime and shared services (`src/`) | 219 | Agent orchestration, providers, tools, permissions, sandbox, memory, sessions, workflows, diagnostics and integrations |
-| Tests (`test/`) | 410 | Unit, regression, security, integration and platform behaviour |
-| Evaluations (`evals/`) | 524 | Task fixtures, verifiers and evaluation snapshots |
-| Browser application core (`app/`) | 28 | Browser-side agent/runtime, provider and workspace experience |
-| Benchmarks (`bench/`) | 36 | Harness behaviour, request/token efficiency and performance baselines |
+| Tests (`test/`) | 411 | Unit, regression, security, integration and platform behaviour |
+| Evaluations (`evals/`) | 384 | Task fixtures, verifiers and evaluation snapshots |
+| Browser application (`app/`) | 26 | Browser-side runtime, provider compatibility and workspace experience |
+| Benchmarks (`bench/`) | 29 | Harness behaviour, request/token efficiency and performance baselines |
+| Skills (`skills/`) | 26 | Reusable agent skills and instructions |
+| Scripts (`scripts/`) | 22 | Build, release, data refresh and maintenance automation |
+| GitHub automation (`.github/`) | 17 | CI, installer checks, Pages deployment, issue templates and repository automation |
+| Brand assets (`assets/`) | 13 | Maintained visual identity and platform artwork |
+| Website sources (`site/`) | 9 | Public browser-app/site content |
 | Desktop host (`desktop/`) | 7 | Electron entry point, packaging and secure-storage integration |
-| Editor integration (`ide/`) | 9 | VS Code-family editor workflow |
-| Extensions and skills (`plugins/`, `skills/`) | 61 | Optional capabilities and reusable instruction/tool packages |
-| Build, release and CI (`.github/`, `scripts/`, `Casks/`, `Formula/`) | 46 | Validation, installer, publishing, automation and package distribution |
-| Documentation (`docs/` and root documents) | Maintained guides | Architecture, setup, security, configuration, interfaces and benchmark methodology |
+| Editor integration (`ide/`) | 6 | VS Code-family editor workflow |
+| Extensions (`plugins/`) | 6 | Optional integrations and capabilities |
+| Documentation (`docs/`) | 8 | Architecture, setup, security, configuration, comparisons and benchmark methodology |
 
 ### Architecture map
 
@@ -59,8 +63,8 @@ The order reflects impact, weakness, likelihood of regression and whether a cand
 
 | Rank | Priority | Component | Current weak spot | Open-source comparison | Decision |
 |---:|---|---|---|---|---|
-| 1 | P0 | Shell parsing used by permissions and command-risk analysis | The default Bash path now uses a typed AST, but strict allow matching still relies on the conservative legacy splitter; PowerShell stays separate; malformed/dynamic/oversized loops require review. A full AST-to-AST security corpus and policy parity tests remain necessary. | [unbash](https://github.com/webpro-nl/unbash) 6.0.3 is integrated as the synchronous, zero-runtime-dependency Bash AST. Tree-sitter Bash remains an explicit rollback backend and tree-sitter remains in place for multi-language code intelligence. | **Integrated; acceptance in progress:** compare common Bash syntax to the retained tree-sitter parser, test nested-command deny rules and fail-closed dynamic cases, then publish parity/latency results. Do not remove the legacy allow path or PowerShell parser without evidence. |
-| 2 | P1 | Agent execution core | `src/agent.mjs` is about 437 KB / 6,753 lines and combines lifecycle, provider requests, streaming, tool dispatch, retries, context management, cost accounting and recovery. | [Pi Agent Core](https://github.com/earendil-works/pi/tree/main/packages/agent) offers explicit lifecycle, context-transform, pre/post-tool and queue hooks; [Vercel AI SDK](https://ai-sdk.dev/docs/agents/overview) offers a provider-neutral tool-loop abstraction; [OpenHands SDK](https://docs.openhands.dev/sdk/arch/overview) separates agents, tools, workspace and server layers. | **Do not big-bang replace.** First define an Oasis-owned lifecycle contract, then prototype one replaceable seam behind it. Pi Agent Core currently requires Node 22.19+, above OASIS's declared 22.15 floor, and none of these frameworks automatically preserve Oasis-specific security and recovery behaviour. |
+| 1 | P0 | Shell parsing used by permissions and command-risk analysis | The default `unbash` typed AST now drives both command-risk analysis and strict allow matching. Dynamic/computed commands, parser errors, resource limits, shell-fed scripts and redirections remain review-only for automatic allow. PowerShell stays separate; parser-differential and policy-parity coverage remains unfinished. | [unbash](https://github.com/webpro-nl/unbash) 6.0.3 is integrated as the synchronous, zero-runtime-dependency Bash AST. Tree-sitter Bash remains an explicit rollback backend and tree-sitter remains in place for multi-language code intelligence. | **Integrated; acceptance in progress:** expand parser-differential and adversarial policy tests, then publish parity/latency results. Keep rollback paths until evidence supports removing them. |
+| 2 | P1 | Agent execution core | `src/agent.mjs` was about 437 KB before the first extraction and is about 425 KB at this audit head. It still combines lifecycle, provider requests, tool dispatch, retries, context management, cost accounting and recovery; streamed response parsing is now separated into `src/provider-stream.mjs`. | [Pi Agent Core](https://github.com/earendil-works/pi/tree/main/packages/agent) offers explicit lifecycle, context-transform, pre/post-tool and queue hooks; [Vercel AI SDK](https://ai-sdk.dev/docs/agents/overview) offers a provider-neutral tool-loop abstraction; [OpenHands SDK](https://docs.openhands.dev/sdk/arch/overview) separates agents, tools, workspace and server layers. | **Do not big-bang replace.** First define an Oasis-owned lifecycle contract, then prototype one replaceable seam behind it. Pi Agent Core currently requires Node 22.19+, above OASIS's declared 22.15 floor, and none of these frameworks automatically preserve Oasis-specific security and recovery behaviour. |
 | 3 | P1 | Memory retrieval and knowledge maintenance | OASIS already has local Markdown memories, MiniSearch BM25+ ranking, Porter2 stemming, title/description boosts, prefix matching, recency/recall boosts, secret redaction, duplicate merging, verification/freshness metadata and bounded per-prompt recall. The gap is broad, held-out retrieval measurement and explicit hybrid/semantic evaluation—not the absence of full-text search. | [Mem0](https://github.com/mem0ai/mem0) provides an alternative extraction/retrieval layer; [Letta](https://docs.letta.com/concepts/stateful-agents/) treats memory as persistent agent state with core/recall/archival tiers and versioned memory files. Neither is a drop-in local-first replacement. | **Retain and measure first.** Build a local held-out corpus and report Recall@k/MRR/nDCG, stale/conflicting-note behaviour, provenance, user correction/deletion and prompt-token cost. Test optional embeddings/reranking only if they improve the measured baseline without requiring a cloud service. |
 | 4 | P1 | Real-task agent evaluation | Model-free harness and token benchmarks are useful, but neither alone measures real coding success across models and agents. | [SWE-bench](https://github.com/swe-bench/SWE-bench) supplies repository issue tasks with verifiers; [Terminal-Bench](https://www.tbench.ai/) is a complementary full-terminal task benchmark. | **Extend the evaluation programme.** Add a pinned, budget-bounded external benchmark track. Report exact model/provider, commit, task set, verifier, settings, repetitions, cost and failures. Never mix model capability with harness capability when comparing agents. |
 | 5 | P2 | Session persistence and resumability | Sessions, transcripts, checkpoints and background state are persisted through multiple local files and formats; there is no single documented event-log contract covering every operation. | [OpenCode](https://github.com/anomalyco/opencode) is a useful source-level reference for event-sourced sessions, message parts and replayable state projections. | **Study before replacing.** Design an append-only event contract and crash/replay tests; migrate only where it demonstrably simplifies recovery without sacrificing local-first operation. |
@@ -80,7 +84,17 @@ The first component has already been improved on `main`:
 - New focused tests cover ambiguous, action-oriented and security-sensitive requests.
 - This improves the classifier's input signals; it does **not** prove better task success or savings. That requires held-out routing accuracy and live same-model evaluations.
 
-The routing change and subsequent test assertion fix are in the recent `main` history. See [the current source](../src/model-routing.mjs) and [its tests](../test/model-routing.test.mjs).
+Recent `main` changes also make routing hints advisory, check catalogue metadata for tool-call capability before selecting a routed model, correct the reported routing tier when an unsupported candidate is rejected, and refresh legacy model caches. These safeguards improve routing constraints; they do not yet prove higher task success or lower cost. See [the current source](../src/model-routing.mjs) and [its tests](../test/model-routing.test.mjs).
+
+## Agent runtime extraction: first provider-stream seam
+
+The first small extraction from the central agent module is now on `main`:
+
+- Commit [`7ba3f0a`](https://github.com/FAHTHIZ/oasis/commit/7ba3f0a3ec839bcbeeb95773057770d3f64a9a21) moved SSE framing, provider event decoding, streamed tool-call slot reconstruction, Anthropic usage merging and provider response assembly into `src/provider-stream.mjs`.
+- The new `test/provider-stream.test.mjs` covers split SSE framing, complete response assembly, interrupted streams and nested provider metadata merging.
+- `src/agent.mjs` decreased from 437,701 bytes at the preceding audited tree to 424,839 bytes at this head. It remains a large, high-coupling module; this is a bounded first seam, not a completed transport abstraction or proof of full parity.
+
+Next: add characterization coverage around remaining provider request paths, errors, retries, cancellation and provider-specific metadata before extracting lifecycle or dispatch code. Keep permission enforcement and tool execution outside the provider adapter.
 
 ## Current P0 cycle: Bash parser integration and acceptance
 
@@ -93,6 +107,8 @@ The default Bash parsing path was replaced on \`main\` with \`unbash\` 6.0.3. Th
 - PowerShell and cmd-style command lines remain on their existing path.
 - Static shell wrappers (including common \`-c\` forms, selected launcher options and \`env\` prefixes) are inspected for nested commands.
 - Dynamic or oversized loop expansion, malformed syntax and parser resource limits are treated as incomplete analysis, so the risk layer asks for review instead of assuming the target is safe.
+- Strict allow matching uses the typed AST in the default `unbash` mode. Computed command names, dynamic expansions, parser errors, resource-limit results and shell-fed scripts cannot receive automatic allow decisions.
+- Shell redirections, heredocs and herestrings are review-only for strict allow rules, including output redirection and descriptor duplication; deny/ask analysis remains separately enforced.
 - Tree-sitter remains installed for non-shell language parsing.
 
 ### Upstream comparison and caveats
@@ -116,6 +132,13 @@ The integration is useful and the existing test/CI results are encouraging, but 
 - Initial Bash AST integration: [\`b7cbff7\`](https://github.com/FAHTHIZ/oasis/commit/b7cbff714ebe1c99f34c1c5e444e91d60673f6fc)
 - Launcher-option handling: [\`893cd0f\`](https://github.com/FAHTHIZ/oasis/commit/893cd0f705d0876ad0d619b0da401747a7326500)
 - Fail-closed unresolved loops: [\`26db445\`](https://github.com/FAHTHIZ/oasis/commit/26db4458fb0d892c4275ca71bd205ee6ee0d3a99)
+- Typed-AST strict allow decisions: [`0f857e5`](https://github.com/FAHTHIZ/oasis/commit/0f857e56449b0342c2f61eb755e43bc96109475a)
+- Keep shell redirections behind explicit review: [`f5722ce`](https://github.com/FAHTHIZ/oasis/commit/f5722ce4aa34adfd28d3bb7bde1567086a833290)
+- Prevent routing hints from bypassing action guards: [`1b68cc7`](https://github.com/FAHTHIZ/oasis/commit/1b68cc734d8a46e0ac90502fb39c0bf6fdc8998b)
+- Capability-aware task model routing: [`4ba2e34`](https://github.com/FAHTHIZ/oasis/commit/4ba2e346f6822b4701db75475a439946781c90cc)
+- Refresh legacy model caches: [`0b1a549`](https://github.com/FAHTHIZ/oasis/commit/0b1a549766bd40ea916f7ac0b64b2a0cea460729)
+- Correct routing tier after tool-capability fallback: [`8945253`](https://github.com/FAHTHIZ/oasis/commit/8945253d6a772e116d1334c5281de62e81434595)
+- Extract provider streaming: [`7ba3f0a`](https://github.com/FAHTHIZ/oasis/commit/7ba3f0a3ec839bcbeeb95773057770d3f64a9a21)
 
 ## Components to retain unless evidence says otherwise
 
@@ -140,6 +163,7 @@ The following are measurement and integration gaps to address alongside the comp
 - **Sandbox conformance:** automated filesystem/network/process/resource tests for every supported backend/OS.
 - **Tool/agent trace correlation:** one trace across model request, retries, tool call, subagent, verification and result, without collecting private prompt content by default.
 - **Extension supply chain:** immutable source revisions, permission manifests, install previews, least privilege, revocation and deterministic rollback.
+- **Release publication and version consistency:** the `v1.1.0` Git tag exists at `2da78dd50a708833f97be97f20fb8016c0ab4c1d`, but no GitHub Release is associated with it as checked on 2026-11-07. Keep package version, tag, release object, checksums, README links and updater behaviour aligned; publish only after same-commit quality, site and installer gates pass.
 - **External coding evaluations:** pinned public tasks and verifiers, with cost/latency/quality reported separately.
 
 ## Change policy

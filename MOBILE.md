@@ -1,6 +1,6 @@
 # Mobile and tablet setup
 
-There is no native Android APK or App Store package in the current releases. OASIS offers three practical ways to use it from a phone or tablet.
+There is no native Android APK or iOS App Store package. OASIS offers three practical ways to use it from a phone or tablet.
 
 ## 1. Install the browser app
 
@@ -31,7 +31,7 @@ Open the LAN address on the phone and install the browser app from the browser m
 
 ## Advanced Android use
 
-Power users can run the CLI directly in an Android terminal environment such as Termux after installing Node.js 22 or newer and Git. Clone the OASIS repository, install its dependencies, and install the CLI from that checkout using the [CLI instructions](README.md#cli). This is a manual setup, not a supported one-click Android installer.
+Power users can run the CLI directly in an Android terminal environment such as Termux after installing Node.js 22.15 or newer and Git. Clone the OASIS repository, install its dependencies, and install the CLI from that checkout using the [CLI instructions](README.md#cli). This is a manual setup, not a supported one-click Android installer.
 
 ## Which option should I use?
 
