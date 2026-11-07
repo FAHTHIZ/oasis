@@ -304,7 +304,7 @@ test('main workspace tool execution is audited through the shared kernel', async
   const { config } = await scriptedModel(t, [
     toolCall('write-secret', 'write_file', {
       path: 'deploy.ini',
-      content: 'GITHUB_TOKEN=' + placeholder + '\\nPORT=8080'
+      content: 'GITHUB_TOKEN=' + placeholder + '\nPORT=8080'
     }),
     { content: 'done' }
   ]);
@@ -316,5 +316,5 @@ test('main workspace tool execution is audited through the shared kernel', async
   const audit = (session.toolAuditLog || []).find((record) => record.tool === 'write_file');
   assert.ok(audit, 'the main agent should capture a kernel audit record');
   assert.doesNotMatch(JSON.stringify(audit), /plainWorkspaceCredentialValue/);
-  assert.match(audit.input.content, /\\[redacted\\]/);
+  assert.match(audit.input.content, /\[redacted\]/);
 });
