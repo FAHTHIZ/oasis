@@ -80,6 +80,8 @@ export async function readEvents(root, sessionId, options = {}) {
 export async function clearEvents(root, sessionId, options = {}) {
   const env = options.env || process.env;
   const file = eventLogPath(root, sessionId, env);
-  try { await unlink(file); } catch (error) { if (error.code !== 'ENOENT') throw error; }
-  return { cleared: true };
+  return await withEventLock(file, async () => {
+    try { await unlink(file); } catch (error) { if (error.code !== 'ENOENT') throw error; }
+    return { cleared: true };
+  });
 }
