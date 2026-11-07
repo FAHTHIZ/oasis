@@ -11,7 +11,7 @@ on:
         default: false
         type: boolean
       confirm_stable_release:
-        description: "Confirm all manual release gates are complete and publish v1.0.0 as stable"
+        description: "Confirm all manual release gates are complete and publish the current package version as stable"
         required: true
         default: false
         type: boolean

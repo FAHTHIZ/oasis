@@ -85,9 +85,15 @@ Each extracted module gets a compatibility adapter and can be reverted independe
 - The completion gate uses observed file changes and actual check results, not a framework's final-answer text.
 - Telemetry remains disabled by default; prompt, file and tool payloads are not exported by default.
 
+## Implementation progress
+
+The first provider-stream seam has now been extracted on `main` in commit [`7ba3f0a`](https://github.com/FAHTHIZ/oasis/commit/7ba3f0a3ec839bcbeeb95773057770d3f64a9a21). SSE framing, provider event decoding, streamed tool-call slot handling, Anthropic usage merging and response assembly now live in `src/provider-stream.mjs`, with focused coverage in `test/provider-stream.test.mjs`.
+
+This is a deliberately narrow extraction. It does not yet establish a complete `ProviderTransport` interface, nor does it separate request construction, retries, fallback, cancellation and credential handling. Preserve the existing helper compatibility and characterize those remaining behaviours before moving them.
+
 ## Next implementation decision
 
-The next code change should be a **small provider-transport extraction or a characterization-test tranche**, not installing a large agent framework. Before choosing between LangGraph.js, Mastra or a smaller provider SDK, verify their current upstream TypeScript APIs, licenses, supported providers, release/maintenance activity and persistence behavior directly. This research snapshot is a shortlist, not a claim that all package details were independently verified or that a winner exists.
+The next code change should be a **characterization-test tranche around provider requests, retries, cancellation and protocol metadata**, followed by another narrow extraction behind an OASIS-owned contract. Do not install a large agent framework just to solve module size. Before choosing between LangGraph.js, Mastra or a smaller provider SDK, verify their current upstream TypeScript APIs, licenses, supported providers, release/maintenance activity and persistence behavior directly. This research snapshot is a shortlist, not a claim that all package details were independently verified or that a winner exists.
 
 ## Sources and limits
 

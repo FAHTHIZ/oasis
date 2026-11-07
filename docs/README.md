@@ -11,6 +11,9 @@ This directory contains maintained technical documentation for the current OASIS
 | [Interfaces and deployment](INTERFACES.md) | CLI, desktop, connected browser workspace, PWA, editor, ACP, SDK and integrations. |
 | [Benchmark methodology](BENCHMARKS.md) | What the model-free benchmarks measure, what they do not measure and how to interpret live evaluations. |
 | [Whole-system replacement roadmap](REPLACEMENT-ROADMAP.md) | Ranked full-system audit, open-source comparisons, retained foundations and replacement acceptance gates. |
+| [Architecture alternatives](ARCHITECTURE-ALTERNATIVES.md) | Component-by-component alternatives, implementation anchors and staged migration recommendations. |
+| [Agent runtime alternatives](AGENT-RUNTIME-ALTERNATIVES.md) | Agent-framework comparisons, OASIS-owned runtime contracts and incremental extraction guidance. |
+| [Project-quality benchmark](PROJECT-QUALITY-BENCHMARK.md) | Repository presentation, onboarding, engineering maturity and release-discipline comparison against a 100-project reference set. |
 
 ## Project identity
 
