@@ -24,7 +24,7 @@ export function normalizeTransportConfig(config) {
   if (!config || typeof config !== 'object') throw new TypeError('Provider configuration must be an object.');
   const protocol = String(config.protocol || '').trim();
   if (!protocol) throw new Error('Provider configuration is missing a protocol.');
-  const baseURL = String(config.baseURL || '').trim();
+  const baseURL = String(config.baseURL || '').trim().replace(/\/+$/, '');
   if (!baseURL) throw new Error('Provider configuration is missing a baseURL.');
   return {
     protocol,
