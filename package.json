@@ -1,1 +1,211 @@
-{\n  \"name\": \"oasis-oss\",\n  \"version\": \"1.1.0\",\n  \"description\": \"Open-source, model-agnostic coding-agent runtime for CLI, native desktop, connected browser sessions and editor workflows.\",\n  \"type\": \"module\",\n  \"main\": \"./src/sdk.mjs\",\n  \"exports\": {\n    \".\": \"./src/sdk.mjs\",\n    \"./package.json\": \"./package.json\"\n  },\n  \"license\": \"Apache-2.0\",\n  \"engines\": {\n    \"node\": \">=22.15\"\n  },\n  \"optionalDependencies\": {\n    \"node-pty\": \"1.1.0\",\n    \"sharp\": \"0.35.5\"\n  },\n  \"bin\": {\n    \"oasis\": \"./src/oasis.mjs\"\n  },\n  \"files\": [\n    \"src/\",\n    \"app/\",\n    \"index.html\",\n    \"manifest.webmanifest\",\n    \"sw.js\",\n    \"assets/\",\n    \"scripts/\",\n    \"skills/\",\n    \"plugins/\",\n    \"ide/\",\n    \"README.md\",\n    \"LICENSE\",\n    \"evals/\",\n    \"desktop/\"\n  ],\n  \"scripts\": {\n    \"test\": \"node --test test/*.test.mjs\",\n    \"check:quick\": \"node scripts/build-site.mjs && node scripts/check-site.mjs && node .github/scripts/check-public-site.mjs && node .github/scripts/check-eval-quarantine.mjs && node bench/harness/run.mjs --check && node bench/tokens/run.mjs --check\",\n    \"check\": \"node scripts/build-site.mjs && node scripts/check-site.mjs && node .github/scripts/check-public-site.mjs && node .github/scripts/check-eval-quarantine.mjs && node --test test/*.test.mjs && node bench/harness/run.mjs --check && node bench/tokens/run.mjs --check && node src/cli.mjs eval --validate && node src/cli.mjs eval --negative-control\",\n    \"postinstall\": \"node scripts/vendor-terminal.mjs\",\n    \"prepack\": \"node scripts/vendor-terminal.mjs\",\n    \"desktop:dev\": \"electron desktop/main.mjs\",\n    \"desktop:dir\": \"electron-builder --dir --publish never\",\n    \"desktop:dist\": \"electron-builder --publish never\",\n    \"bench:search\": \"node scripts/bench-web-search.mjs\",\n    \"bench:harness\": \"node bench/harness/run.mjs\",\n    \"bench:tokens\": \"node bench/tokens/run.mjs\",\n    \"bench:live\": \"node scripts/bench-live.mjs\",\n    \"bench:startup\": \"node scripts/measure-startup.mjs\",\n    \"lint\": \"oxlint --deny-warnings\"\n  },\n  \"repository\": {\n    \"type\": \"git\",\n    \"url\": \"https://github.com/FAHTHIZ/oasis.git\"\n  },\n  \"keywords\": [\n    \"ai-coding-agent\",\n    \"coding-agent\",\n    \"agent-runtime\",\n    \"model-agnostic\",\n    \"agentic-workflows\",\n    \"multi-agent\",\n    \"llm\",\n    \"mcp\",\n    \"model-context-protocol\",\n    \"agent-skills\",\n    \"developer-tools\",\n    \"cli\",\n    \"terminal\",\n    \"electron\",\n    \"vscode\",\n    \"vscode-extension\",\n    \"ollama\",\n    \"nodejs\",\n    \"open-source\"\n  ],\n  \"dependencies\": {\n    \"@agentclientprotocol/sdk\": \"^2.4.0\",\n    \"@anthropic-ai/sandbox-runtime\": \"^0.0.81\",\n    \"@modelcontextprotocol/client\": \"2.4.0\",\n    \"@modelcontextprotocol/server\": \"^2.4.0\",\n    \"@opentelemetry/api\": \"1.10.0\",\n    \"@opentelemetry/exporter-logs-otlp-http\": \"0.301.0\",\n    \"@opentelemetry/exporter-metrics-otlp-http\": \"0.301.0\",\n    \"@opentelemetry/exporter-trace-otlp-http\": \"0.301.0\",\n    \"@opentelemetry/otlp-transformer\": \"0.301.0\",\n    \"@opentelemetry/resources\": \"3.1.0\",\n    \"@opentelemetry/sdk-logs\": \"3.1.0\",\n    \"@opentelemetry/sdk-metrics\": \"3.1.0\",\n    \"@opentelemetry/sdk-trace\": \"3.1.0\",\n    \"@vscode/ripgrep\": \"1.18.0\",\n    \"@vscode/tree-sitter-wasm\": \"0.3.1\",\n    \"@xterm/addon-fit\": \"0.11.0\",\n    \"@xterm/xterm\": \"6.0.0\",\n    \"ajv\": \"8.20.0\",\n    \"croner\": \"^11.0.0\",\n    \"defuddle\": \"^0.19.6\",\n    \"diff\": \"^9.0.0\",\n    \"entities\": \"9.0.0\",\n    \"eventsource-parser\": \"^4.1.3\",\n    \"fflate\": \"^0.8.3\",\n    \"gpt-tokenizer\": \"^4.1.0\",\n    \"jsonc-parser\": \"3.3.1\",\n    \"jsonrepair\": \"3.15.0\",\n    \"linkedom\": \"^0.18.15\",\n    \"lowlight\": \"^3.3.0\",\n    \"marked\": \"^18.1.3\",\n    \"minisearch\": \"^7.2.0\",\n    \"picomatch\": \"^4.0.7\",\n    \"quickjs-emscripten\": \"0.32.0\",\n    \"semver\": \"^7.8.6\",\n    \"smol-toml\": \"1.9.1\",\n    \"string-width\": \"^8.3.0\",\n    \"strip-ansi\": \"^7.2.0\",\n    \"turndown\": \"^7.2.5\",\n    \"turndown-plugin-gfm\": \"^7.2.5\",\n    \"undici\": \"^7.30.2\",\n    \"unpdf\": \"^1.9.1\",\n    \"uqr\": \"^0.1.3\",\n    \"vscode-jsonrpc\": \"^10.0.0\",\n    \"wink-porter2-stemmer\": \"^1.0.0\",\n    \"wrap-ansi\": \"^10.0.2\",\n    \"yaml\": \"2.9.1\",\n    \"zod\": \"^4.6.7\",\n    \"unbash\": \"6.0.3\"\n  },\n  \"devDependencies\": {\n    \"electron\": \"45.2.3\",\n    \"electron-builder\": \"26.18.0\",\n    \"oxlint\": \"1.92.0\"\n  },\n  \"build\": {\n    \"appId\": \"org.oasis.oss\",\n    \"productName\": \"OASIS\",\n    \"directories\": {\n      \"output\": \"release\"\n    },\n    \"files\": [\n      \"src/**/*\",\n      \"desktop/**/*\",\n      \"app/**/*\",\n      \"index.html\",\n      \"manifest.webmanifest\",\n      \"sw.js\",\n      \"assets/**/*\",\n      \"skills/**/*\",\n      \"plugins/**/*\",\n      \"ide/**/*\",\n      \"package.json\",\n      \"LICENSE\"\n    ],\n    \"extraMetadata\": {\n      \"main\": \"desktop/main.mjs\"\n    },\n    \"artifactName\": \"${productName}-${version}-${arch}.${ext}\",\n    \"asar\": true,\n    \"asarUnpack\": [\n      \"**/node_modules/sharp/**/*\",\n      \"**/node_modules/@img/**/*\"\n    ],\n    \"npmRebuild\": true,\n    \"mac\": {\n      \"target\": [\n        \"dmg\"\n      ],\n      \"category\": \"public.app-category.developer-tools\",\n      \"extendInfo\": {\n        \"NSMicrophoneUsageDescription\": \"OASIS uses the microphone only while you dictate a prompt.\"\n      }\n    },\n    \"win\": {\n      \"target\": [\n        \"nsis\"\n      ]\n    },\n    \"nsis\": {\n      \"oneClick\": true,\n      \"perMachine\": false,\n      \"allowElevation\": false,\n      \"createDesktopShortcut\": true,\n      \"createStartMenuShortcut\": true,\n      \"shortcutName\": \"OASIS\"\n    },\n    \"linux\": {\n      \"target\": [\n        \"AppImage\",\n        \"deb\"\n      ],\n      \"category\": \"Development\",\n      \"icon\": \"assets/icons/oasis-512.png\"\n    },\n    \"icon\": \"assets/icons/oasis-512.png\"\n  },\n  \"author\": {\n    \"name\": \"OASIS Contributors\",\n    \"email\": \"noreply@github.com\"\n  },\n  \"oasisRelease\": {\n    \"channel\": \"stable\",\n    \"stableTag\": \"v1.1.0\",\n    \"published\": true\n  },\n  \"homepage\": \"https://github.com/FAHTHIZ/oasis#readme\",\n  \"overrides\": {\n    \"@anthropic-ai/sandbox-runtime\": {\n      \"zod\": \"$zod\"\n    }\n  }\n}\n
+{
+  "name": "oasis-oss",
+  "version": "1.1.0",
+  "description": "Open-source, model-agnostic coding-agent runtime for CLI, native desktop, connected browser sessions and editor workflows.",
+  "type": "module",
+  "main": "./src/sdk.mjs",
+  "exports": {
+    ".": "./src/sdk.mjs",
+    "./package.json": "./package.json"
+  },
+  "license": "Apache-2.0",
+  "engines": {
+    "node": ">=22.15"
+  },
+  "optionalDependencies": {
+    "node-pty": "1.1.0",
+    "sharp": "0.35.5"
+  },
+  "bin": {
+    "oasis": "./src/oasis.mjs"
+  },
+  "files": [
+    "src/",
+    "app/",
+    "index.html",
+    "manifest.webmanifest",
+    "sw.js",
+    "assets/",
+    "scripts/",
+    "skills/",
+    "plugins/",
+    "ide/",
+    "README.md",
+    "LICENSE",
+    "evals/",
+    "desktop/"
+  ],
+  "scripts": {
+    "test": "node --test test/*.test.mjs",
+    "check:quick": "node scripts/build-site.mjs && node scripts/check-site.mjs && node .github/scripts/check-public-site.mjs && node .github/scripts/check-eval-quarantine.mjs && node bench/harness/run.mjs --check && node bench/tokens/run.mjs --check",
+    "check": "node scripts/build-site.mjs && node scripts/check-site.mjs && node .github/scripts/check-public-site.mjs && node .github/scripts/check-eval-quarantine.mjs && node --test test/*.test.mjs && node bench/harness/run.mjs --check && node bench/tokens/run.mjs --check && node src/cli.mjs eval --validate && node src/cli.mjs eval --negative-control",
+    "postinstall": "node scripts/vendor-terminal.mjs",
+    "prepack": "node scripts/vendor-terminal.mjs",
+    "desktop:dev": "electron desktop/main.mjs",
+    "desktop:dir": "electron-builder --dir --publish never",
+    "desktop:dist": "electron-builder --publish never",
+    "bench:search": "node scripts/bench-web-search.mjs",
+    "bench:harness": "node bench/harness/run.mjs",
+    "bench:tokens": "node bench/tokens/run.mjs",
+    "bench:live": "node scripts/bench-live.mjs",
+    "bench:startup": "node scripts/measure-startup.mjs",
+    "lint": "oxlint --deny-warnings"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/FAHTHIZ/oasis.git"
+  },
+  "keywords": [
+    "ai-coding-agent",
+    "coding-agent",
+    "agent-runtime",
+    "model-agnostic",
+    "agentic-workflows",
+    "multi-agent",
+    "llm",
+    "mcp",
+    "model-context-protocol",
+    "agent-skills",
+    "developer-tools",
+    "cli",
+    "terminal",
+    "electron",
+    "vscode",
+    "vscode-extension",
+    "ollama",
+    "nodejs",
+    "open-source"
+  ],
+  "dependencies": {
+    "@agentclientprotocol/sdk": "^2.4.0",
+    "@anthropic-ai/sandbox-runtime": "^0.0.81",
+    "@modelcontextprotocol/client": "2.4.0",
+    "@modelcontextprotocol/server": "^2.4.0",
+    "@opentelemetry/api": "1.10.0",
+    "@opentelemetry/exporter-logs-otlp-http": "0.301.0",
+    "@opentelemetry/exporter-metrics-otlp-http": "0.301.0",
+    "@opentelemetry/exporter-trace-otlp-http": "0.301.0",
+    "@opentelemetry/otlp-transformer": "0.301.0",
+    "@opentelemetry/resources": "3.1.0",
+    "@opentelemetry/sdk-logs": "3.1.0",
+    "@opentelemetry/sdk-metrics": "3.1.0",
+    "@opentelemetry/sdk-trace": "3.1.0",
+    "@vscode/ripgrep": "1.18.0",
+    "@vscode/tree-sitter-wasm": "0.3.1",
+    "@xterm/addon-fit": "0.11.0",
+    "@xterm/xterm": "6.0.0",
+    "ajv": "8.20.0",
+    "croner": "^11.0.0",
+    "defuddle": "^0.19.6",
+    "diff": "^9.0.0",
+    "entities": "9.0.0",
+    "eventsource-parser": "^4.1.3",
+    "fflate": "^0.8.3",
+    "gpt-tokenizer": "^4.1.0",
+    "jsonc-parser": "3.3.1",
+    "jsonrepair": "3.15.0",
+    "linkedom": "^0.18.15",
+    "lowlight": "^3.3.0",
+    "marked": "^18.1.3",
+    "minisearch": "^7.2.0",
+    "picomatch": "^4.0.7",
+    "quickjs-emscripten": "0.32.0",
+    "semver": "^7.8.6",
+    "smol-toml": "1.9.1",
+    "string-width": "^8.3.0",
+    "strip-ansi": "^7.2.0",
+    "turndown": "^7.2.5",
+    "turndown-plugin-gfm": "^1.0.2",
+    "undici": "^7.30.2",
+    "unpdf": "^1.9.1",
+    "uqr": "^0.1.3",
+    "vscode-jsonrpc": "^10.0.0",
+    "wink-porter2-stemmer": "^2.0.1",
+    "wrap-ansi": "^10.0.2",
+    "yaml": "2.9.1",
+    "zod": "^4.6.7",
+    "unbash": "6.0.3"
+  },
+  "devDependencies": {
+    "electron": "45.2.3",
+    "electron-builder": "26.18.0",
+    "oxlint": "1.92.0"
+  },
+  "build": {
+    "appId": "org.oasis.oss",
+    "productName": "OASIS",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "src/**/*",
+      "desktop/**/*",
+      "app/**/*",
+      "index.html",
+      "manifest.webmanifest",
+      "sw.js",
+      "assets/**/*",
+      "skills/**/*",
+      "plugins/**/*",
+      "ide/**/*",
+      "package.json",
+      "LICENSE"
+    ],
+    "extraMetadata": {
+      "main": "desktop/main.mjs"
+    },
+    "artifactName": "${productName}-${version}-${arch}.${ext}",
+    "asar": true,
+    "asarUnpack": [
+      "**/node_modules/sharp/**/*",
+      "**/node_modules/@img/**/*"
+    ],
+    "npmRebuild": true,
+    "mac": {
+      "target": [
+        "dmg"
+      ],
+      "category": "public.app-category.developer-tools",
+      "extendInfo": {
+        "NSMicrophoneUsageDescription": "OASIS uses the microphone only while you dictate a prompt."
+      }
+    },
+    "win": {
+      "target": [
+        "nsis"
+      ]
+    },
+    "nsis": {
+      "oneClick": true,
+      "perMachine": false,
+      "allowElevation": false,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "OASIS"
+    },
+    "linux": {
+      "target": [
+        "AppImage",
+        "deb"
+      ],
+      "category": "Development",
+      "icon": "assets/icons/oasis-512.png"
+    },
+    "icon": "assets/icons/oasis-512.png"
+  },
+  "author": {
+    "name": "OASIS Contributors",
+    "email": "noreply@github.com"
+  },
+  "oasisRelease": {
+    "channel": "stable",
+    "stableTag": "v1.1.0",
+    "published": true
+  },
+  "homepage": "https://github.com/FAHTHIZ/oasis#readme",
+  "overrides": {
+    "@anthropic-ai/sandbox-runtime": {
+      "zod": "$zod"
+    }
+  }
+}
