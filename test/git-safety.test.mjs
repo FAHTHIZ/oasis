@@ -43,6 +43,27 @@ test('snapshot keeps tracked edits and untracked files without touching index or
   assert.equal(await snapshotWorkingTree(await repo(t), 'git checkout .'), null, 'clean tree: nothing to save');
 });
 
+test('stash clear snapshots every stash entry before it can be removed', async (t) => {
+  const root = await repo(t);
+  await writeFile(path.join(root, 'a.txt'), 'first stash\\n');
+  git(root, 'stash', 'push', '-m', 'first');
+  await writeFile(path.join(root, 'a.txt'), 'second stash\\n');
+  git(root, 'stash', 'push', '-m', 'second');
+  const stashes = git(root, 'stash', 'list', '--format=%H').split('\\n').filter(Boolean);
+  assert.equal(stashes.length, 2);
+
+  const snapshot = await snapshotWorkingTree(root, 'git stash clear');
+  assert.deepEqual(snapshot.stashes, stashes);
+  for (let index = 0; index < stashes.length; index++) {
+    assert.equal(git(root, 'rev-parse', snapshot.ref + '-stash-' + index), stashes[index]);
+  }
+
+  git(root, 'stash', 'clear');
+  assert.equal(git(root, 'stash', 'list'), '');
+  for (const sha of stashes) assert.equal(git(root, 'cat-file', '-t', sha), 'commit');
+  assert.match(snapshot.restore, new RegExp(stashes[0]));
+});
+
 test('run_command git checkout . is recoverable from the safety snapshot', async (t) => {
   const root = await repo(t);
   await writeFile(path.join(root, 'a.txt'), 'precious work\n');
