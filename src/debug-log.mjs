@@ -5,7 +5,8 @@
 import { appendFileSync, mkdirSync } from 'node:fs';
 import path from 'node:path';
 import { getConfigDirectory } from './config.mjs';
-import { redactSecretText, redactSecretValues } from './secret-shield.mjs';
+import { redactSecretText } from './secret-shield.mjs';
+import { redactAuditValue } from './tool-kernel.mjs';
 
 export const DEBUG_CATEGORIES = ['api', 'tools', 'hooks', 'mcp', 'permissions', 'session'];
 let state = { enabled: false, include: null, exclude: new Set(), file: null };
@@ -46,6 +47,6 @@ function redact(text) {
 export function debugLog(category, message, data = undefined) {
   if (!debugEnabled(category)) return;
   let line = new Date().toISOString() + ' [' + category.toUpperCase() + '] ' + message;
-  if (data !== undefined) { let text; try { text = typeof data === 'string' ? redactSecretText(data) : JSON.stringify(redactSecretValues(data)); } catch { text = String(data); } line += ' ' + (text.length > 2000 ? text.slice(0, 2000) + '…' : text); }
+  if (data !== undefined) { let text; try { text = typeof data === 'string' ? redactAuditValue(data) : JSON.stringify(redactAuditValue(data)); } catch { text = String(data); } line += ' ' + (text.length > 2000 ? text.slice(0, 2000) + '…' : text); }
   try { appendFileSync(state.file, redact(line) + '\n'); } catch {}
 }
