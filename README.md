@@ -16,7 +16,7 @@
 <p align="center">
   <a href="https://github.com/FAHTHIZ/oasis/actions/workflows/quality.yml"><img alt="Quality checks" src="https://github.com/FAHTHIZ/oasis/actions/workflows/quality.yml/badge.svg?branch=main"></a>
   <a href="https://github.com/FAHTHIZ/oasis/actions/workflows/desktop-build.yml"><img alt="Desktop installer builds" src="https://img.shields.io/github/actions/workflow/status/FAHTHIZ/oasis/desktop-build.yml?branch=main&style=flat-square"></a>
-  <img alt="Node.js 22.15 or newer" src="https://img.shields.io/badge/Node.js-22.15%2B-339933?style=flat-square&logo=node.js&logoColor=white>
+  <img alt="Node.js 22.15 or newer" src="https://img.shields.io/badge/Node.js-22.15%2B-339933?style=flat-square&logo=node.js&logoColor=white">
   <a href="LICENSE"><img alt="Apache 2.0 license" src="https://img.shields.io/github/license/FAHTHIZ/oasis?style=flat-square"></a>
 </p>
 
