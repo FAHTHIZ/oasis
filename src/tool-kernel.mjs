@@ -133,6 +133,17 @@ export function redactAuditValue(value, depth = 0, fieldName = '') {
   return value;
 }
 
+async function validateToolOutput(tool, output) {
+  const schema = tool.outputSchema;
+  if (!schema || typeof schema !== 'object' || Object.keys(schema).length === 0) return output;
+  const validation = await validateToolArguments(schema, output);
+  if (!validation.valid) {
+    const detail = validation.schemaError || (validation.errors || []).join('; ');
+    throw new Error('Invalid output from ' + tool.name + ': ' + (detail || 'does not match its output JSON Schema.'));
+  }
+  return output;
+}
+
 export async function runTool(tool, input, options = {}) {
   const policy = options.policy || {};
   const decision = evaluateToolPolicy(tool, input, policy);
@@ -194,7 +205,8 @@ export async function runTool(tool, input, options = {}) {
       env: options.env || process.env,
       cwd: options.cwd || process.cwd()
     }));
-    const output = await Promise.race([running, aborted]);
+    const rawOutput = await Promise.race([running, aborted]);
+    const output = await validateToolOutput(tool, rawOutput);
     const result = { ok: true, tool: tool.name, decision, output: output === undefined ? null : output };
     if (decision.audit) result.audit = buildAuditRecord(tool, normalizedInput, decision, result, options);
     return result;
