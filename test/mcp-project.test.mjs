@@ -325,3 +325,23 @@ test('closing an HTTP MCP client aborts in-flight requests', async (t) => {
   await assert.rejects(request, /timed out|closed|aborted/i);
   assert.equal(aborted, true, 'close should abort the underlying HTTP request');
 });
+
+test('remote MCP approval prompt redacts secret fields but sends original arguments', async () => {
+  const client = new McpHttpClient({ name: 'secure', url: 'https://mcp.example/mcp' });
+  client.tools = [{ name: 'publish' }];
+  const credential = 'plainRemoteCredential';
+  let prompt = '';
+  let sentArguments = null;
+  client._request = async (_method, params) => {
+    sentArguments = params.arguments;
+    return { content: [{ type: 'text', text: 'published' }] };
+  };
+  const result = await client.callTool('publish', { token: credential, destination: 'staging' }, {
+    approval: async (message) => { prompt = message; return true; }
+  });
+  assert.doesNotMatch(prompt, /plainRemoteCredential/);
+  assert.match(prompt, /staging/);
+  assert.deepEqual(sentArguments, { token: credential, destination: 'staging' });
+  assert.match(result.content, /published/);
+  client.close();
+});
