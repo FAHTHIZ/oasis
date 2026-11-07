@@ -21,3 +21,14 @@ test('runtime-owned reasoning parser strips only leading thought blocks', () => 
   assert.equal(visibleReply('<thought>hidden</thought>Answer'), 'Answer');
   assert.equal(splitThinking('The literal <think> tag is documentation.').reasoning, '');
 });
+
+test('runtime kernel adapter requires an explicit authorization callback', async () => {
+  const source = await readFile(new URL('../src/agent.mjs', import.meta.url), 'utf8');
+  const start = source.indexOf('async function executeThroughToolKernel(');
+  const end = source.indexOf('\n}\n', start);
+  assert.notEqual(start, -1);
+  assert.notEqual(end, -1);
+  const adapter = source.slice(start, end);
+  assert.match(adapter, /requires an explicit authorization function/);
+  assert.doesNotMatch(adapter, /decision:\s*['"]allow['"]/);
+});
