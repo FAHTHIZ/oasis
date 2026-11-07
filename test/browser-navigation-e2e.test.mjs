@@ -32,7 +32,7 @@ test('browser guards: same-origin passes, cross-origin link/form/redirect ask, d
   t.after(() => { home.close(); other.close(); });
   const homeUrl = 'http://127.0.0.1:' + home.address().port + '/';
   const root = await mkdtemp(path.join(os.tmpdir(), 'oasis-nav-e2e-'));
-  const env = { ...process.env, HOME: root, OASIS_CHROME_HEADLESS: '1' };
+  const env = { ...process.env, HOME: root, OASIS_CHROME_HEADLESS: '1', OASIS_CHROME_PATH: chrome || '' };
   const settings = { permissions: { allow: [], ask: [], deny: [], defaultMode: 'default' }, hooks: {}, sandbox: { enabled: false }, shell: { enabled: false } };
   const { config } = await scriptedModel(t, [
     toolCall('n1', 'browser', { action: 'navigate', url: homeUrl }),
