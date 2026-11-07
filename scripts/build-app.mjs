@@ -55,6 +55,14 @@ async function main() {
     try { await cp(path.join(fonts, font), path.join(out, 'fonts', font)); } catch { /* fonts are optional; system fonts take over */ }
   }
 
+  // Ship the real product walkthrough with the public site artifact.
+  const demoSource = path.join(root, 'assets', 'demo');
+  const demoTarget = path.join(root, 'site', 'assets', 'demo');
+  await mkdir(demoTarget, { recursive: true });
+  for (const file of ['oasis-real-model-demo.gif', 'oasis-real-model-demo.mp4', 'oasis-real-model-demo.cast']) {
+    await cp(path.join(demoSource, file), path.join(demoTarget, file));
+  }
+
   const hash = createHash('sha256');
   for (const file of (await walk(out)).sort()) hash.update(path.relative(out, file)).update(await readFile(file));
   for (const file of modules) hash.update(await readFile(file));

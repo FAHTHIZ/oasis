@@ -7,8 +7,8 @@ contact_links:
     url: https://github.com/FAHTHIZ/oasis/discussions
     about: Questions, ideas and support in GitHub Discussions.
   - name: Download OASIS
-    url: https://github.com/FAHTHIZ/oasis/releases/latest
-    about: Stable desktop installers and SHA256SUMS checksums.
+    url: https://github.com/FAHTHIZ/oasis/releases
+    about: Check whether a GitHub Release with desktop installers and SHA256SUMS has actually been published.
   - name: Install the browser app
     url: https://fahthiz.github.io/oasis/app/
     about: Open the installable browser app on desktop, phone or tablet.
