@@ -56,6 +56,8 @@ test('browser displays an accessible, collapsible progress guide and explicit to
   assert.match(app, /statusLabel = tool\.ok === undefined \? 'Working' : tool\.ok \? 'Done' : 'Failed'/);
   assert.match(runtime, /case 'plan':\s+case 'todos':/);
   assert.match(runtime, /data\.name === 'todo_write'/);
+  assert.ok(runtime.includes('extractRuntimeTodos(call.args.todos)'));
+  assert.ok(runtime.includes('extractRuntimeTodos(data.args && data.args.todos)'));
   assert.match(css, /\.task-progress-track/);
   assert.match(css, /\.tool-status/);
 });

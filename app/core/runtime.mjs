@@ -309,6 +309,10 @@ export class RuntimeAgent {
             case 'tool_start': {
               const id = data.callId || 'call_' + event.id;
               const call = { id, name: data.name, args: toolArgs(data) };
+              if (data.name === 'todo_write') {
+                const todos = extractRuntimeTodos(call.args.todos);
+                if (todos !== null) { this.todos = todos; this.emit('todos', { todos }); }
+              }
               if (!stepHasTools) { this.emit('assistant', { content: stepText, toolCalls: [call] }); stepHasTools = true; }
               this.emit('tool_start', { id, name: data.name, args: call.args });
               break;
@@ -317,7 +321,11 @@ export class RuntimeAgent {
               const ok = !/^(error|failed|denied|blocked)$/i.test(String(data.status || ''));
               const content = [data.result, data.warning].filter(Boolean).join('\n');
               if (data.name === 'todo_write') {
-                const todos = extractRuntimeTodos(data.result ?? data.todos ?? data.output ?? data);
+                const todos = extractRuntimeTodos(data.args && data.args.todos)
+                  ?? extractRuntimeTodos(data.todos)
+                  ?? extractRuntimeTodos(data.result)
+                  ?? extractRuntimeTodos(data.output)
+                  ?? extractRuntimeTodos(data);
                 if (todos !== null) { this.todos = todos; this.emit('todos', { todos }); }
               }
               this.emit('tool_result', { id: data.callId || '', name: data.name, ok, content: String(content || data.label || '').slice(0, 4000) });
