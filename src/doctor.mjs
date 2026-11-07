@@ -8,6 +8,7 @@ import { onPathSync } from './clipboard-path.mjs';
 import { contextWindowSize, contextTokens } from './context.mjs';
 import { workflowRuntimeStatus } from './workflow-sandbox.mjs';
 import { describeRipgrep } from './ripgrep.mjs';
+import { buildSecurityReport, formatSecurityReport } from './security-report.mjs';
 
 export async function workspaceDoctor(root, { env = process.env, session = null } = {}) {
   const lines = [];
@@ -39,6 +40,9 @@ export async function workspaceDoctor(root, { env = process.env, session = null 
       : 'not active; approval controls are not OS isolation'));
     if (settings.sandbox.enabled && !sandbox.available) problems.push('The sandbox is enabled but unavailable: ' + sandbox.reason);
     else if (!settings.sandbox.enabled && sandbox.available) lines.push('  Tip: commands can run inside the ' + sandbox.kind + ' sandbox (workspace writable, rest of the system read-only, credentials hidden, package caches writable). Try /sandbox on, or add "sandbox": {"enabled": true} to settings.');
+    // Unified security posture (secret scan, permissions, sandbox, sensitive paths).
+    const securityReport = buildSecurityReport({ env, sandboxSettings: settings.sandbox, permissionMode: 'default', scanFindings: [] });
+    lines.push('  Security posture: ' + securityReport.summary + ' (' + securityReport.checks.length + ' checks)');
   } catch (error) { problems.push('Settings are invalid: ' + error.message); }
   const workflow = await workflowRuntimeStatus();
   lines.push('  Workflow runtime: ' + (workflow.available ? 'available (QuickJS)' : 'unavailable' + (workflow.reason ? ': ' + workflow.reason : '')));
