@@ -26,6 +26,14 @@ const MAX_RESPONSE = 4 * 1024 * 1024;
 const MAX_CONTENT = 24000;
 const MAX_HEADERS_HELPER_OUTPUT_BYTES = 64 * 1024;
 const MAX_HEADERS_HELPER_STDERR_BYTES = 4000;
+function mcpAbortReason(signal) {
+  const reason = signal && signal.reason;
+  if (reason instanceof Error) return reason;
+  const error = new Error(typeof reason === 'string' && reason ? reason : 'MCP request was cancelled.');
+  error.name = 'AbortError';
+  return error;
+}
+
 const DEFAULT_HEADERS_HELPER_TIMEOUT_MS = 10000;
 
 export function expandVariables(value, env = process.env) {
@@ -382,17 +390,22 @@ export class McpHttpClient {
     return result;
   }
 
-  async _request(method, params = {}, timeoutMs = 30000) {
+  async _request(method, params = {}, timeoutMs = 30000, signal = undefined) {
     if (this.closed) throw new Error('MCP server session closed.');
     if (!this.client) throw new Error('MCP server ' + this.config.name + ' is not connected.');
+    if (signal && signal.aborted) throw mcpAbortReason(signal);
+    const requestOptions = { timeout: timeoutMs, ...(signal ? { signal } : {}) };
     try {
       try {
-        return await this.client.request({ method, params }, { timeout: timeoutMs }) || {};
+        return await this.client.request({ method, params }, requestOptions) || {};
       } catch (error) {
         if (!(error instanceof TypeError) || !/not a spec method/.test(error.message)) throw error;
-        return await this.client.request({ method, params }, ANY_RESULT, { timeout: timeoutMs }) || {};
+        return await this.client.request({ method, params }, ANY_RESULT, requestOptions) || {};
       }
     } catch (error) {
+      // The SDK may normalize an AbortSignal rejection. Prefer the caller's
+      // reason so the agent can distinguish cancellation from a real timeout.
+      if (signal && signal.aborted) throw mcpAbortReason(signal);
       throw this._translate(error);
     }
   }
@@ -476,13 +489,19 @@ export class McpHttpClient {
 
   async callTool(name, args, options = {}) {
     if (!this.tools.find((tool) => tool.name === name)) throw new Error('MCP tool is not available: ' + name);
+    if (options.signal && options.signal.aborted) throw mcpAbortReason(options.signal);
     if (!options.autoApprove) {
       const ok = options.approval && await options.approval(
         'Call MCP server "' + this.config.name + '" tool "' + name + '" with arguments:\n' + JSON.stringify(redactAuditValue(args), null, 2).slice(0, 5000) +
         '\nMCP tools can read external data or change systems according to this server’s permissions.');
       if (!ok) return { approved: false, message: 'MCP tool call was not approved. No call was made.' };
     }
-    const result = await this._request('tools/call', { name, arguments: args }, 120000);
+    if (options.signal && options.signal.aborted) throw mcpAbortReason(options.signal);
+    const requestedTimeout = Number(options.timeoutMs ?? 120000);
+    const timeoutMs = Number.isFinite(requestedTimeout) && requestedTimeout > 0
+      ? Math.min(900000, Math.max(1, Math.floor(requestedTimeout)))
+      : 120000;
+    const result = await this._request('tools/call', { name, arguments: args }, timeoutMs, options.signal);
     return { isError: Boolean(result.isError), content: compactResult(result), structuredContent: result.structuredContent };
   }
 

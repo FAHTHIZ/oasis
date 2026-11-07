@@ -240,9 +240,9 @@ export class McpServerClient extends McpHttpClient {
     return super._translate(error);
   }
 
-  async _request(method, params = {}, timeoutMs = 30000) {
+  async _request(method, params = {}, timeoutMs = 30000, signal = undefined) {
     if (!this.client || this.exited || this.closed) throw new Error('MCP server is not running: ' + this.config.name);
-    try { return await super._request(method, params, timeoutMs); }
+    try { return await super._request(method, params, timeoutMs, signal); }
     catch (error) {
       if (/^MCP request timed out/.test(error.message)) throw new Error('MCP request timed out: ' + method);
       throw error;
