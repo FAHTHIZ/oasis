@@ -2,9 +2,24 @@
 // is advertised to the provider. Ajv is loaded on first actual validation so
 // ordinary CLI startup does not pay for a tool-specific dependency.
 let ajvPromise;
+let ajv2020Promise;
 const validators = new WeakMap();
 
-async function getAjv() {
+async function getAjv(options = {}) {
+  const schemaDeclares2020 = typeof options.schemaDialect === 'string' && options.schemaDialect.includes('2020-12');
+  const use2020 = options.dialect === '2020-12' || schemaDeclares2020;
+  if (use2020) {
+    if (!ajv2020Promise) {
+      ajv2020Promise = import('ajv/dist/2020.js').then(({ default: Ajv2020 }) => new Ajv2020({
+        allErrors: true,
+        strict: false,
+        allowUnionTypes: true,
+        validateFormats: false,
+        addUsedSchema: false
+      }));
+    }
+    return ajv2020Promise;
+  }
   if (!ajvPromise) {
     ajvPromise = import('ajv').then(({ default: Ajv }) => new Ajv({
       allErrors: true,
@@ -17,13 +32,23 @@ async function getAjv() {
   return ajvPromise;
 }
 
-async function validatorFor(schema) {
-  const ajv = await getAjv();
+async function validatorFor(schema, options = {}) {
+  const ajv = await getAjv({
+    dialect: options.dialect,
+    schemaDialect: schema && typeof schema === 'object' ? schema.$schema : ''
+  });
   if (!schema || typeof schema !== 'object') return ajv.compile(schema);
-  const cached = validators.get(schema);
-  if (cached) return cached;
+  const cacheKey = options.dialect === '2020-12' || (typeof schema.$schema === 'string' && schema.$schema.includes('2020-12'))
+    ? '2020-12'
+    : 'default';
+  let cache = validators.get(schema);
+  if (!cache) {
+    cache = new Map();
+    validators.set(schema, cache);
+  }
+  if (cache.has(cacheKey)) return cache.get(cacheKey);
   const validator = ajv.compile(schema);
-  validators.set(schema, validator);
+  cache.set(cacheKey, validator);
   return validator;
 }
 
@@ -37,11 +62,11 @@ function describeErrors(errors) {
   });
 }
 
-export async function validateToolArguments(schema, args) {
+export async function validateToolArguments(schema, args, options = {}) {
   if (schema === undefined || schema === null) return { valid: true, skipped: true };
   let validate;
   try {
-    validate = await validatorFor(schema);
+    validate = await validatorFor(schema, options);
   } catch (error) {
     return { valid: false, schemaError: String(error && error.message || error) };
   }
