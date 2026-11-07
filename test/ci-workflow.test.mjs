@@ -9,6 +9,8 @@ test('GitHub Pages publishes the product website and installable browser app on 
   assert.ok(workflow.includes('Build the installable universal browser app'));
   assert.ok(workflow.includes('Upload public website and installable browser app'));
   assert.ok(workflow.includes('Deploy installable browser app'));
+  assert.ok(workflow.includes('node .github/scripts/site-e2e.mjs'), 'Pages publishing must run the real browser check for the public website.');
+  assert.ok(workflow.includes('oasis-public-site-browser-qa'), 'Pages validation must preserve its desktop and phone screenshots.');
   assert.ok(!workflow.includes('assets/demo/') && !workflow.includes('demo video'), 'The browser-app deployment must not depend on demo videos.');
   assert.ok(workflow.includes('node .github/scripts/stamp-site.mjs'));
   assert.ok(workflow.includes('fetch-depth: 20'), 'The publish checkout needs history for the changes feed.');

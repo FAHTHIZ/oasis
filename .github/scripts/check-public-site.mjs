@@ -19,6 +19,7 @@ assert.ok(html.includes('property="og:image"')&&html.includes('assets/social-car
 assert.ok(socialCard.startsWith('<svg')&&socialCard.includes('width="1200"')&&socialCard.includes('height="630"'));
 assert.ok(html.includes('name="twitter:card" content="summary_large_image"')&&html.includes('application/ld+json'));
 assert.ok(html.includes('href="./app/"')&&html.includes('https://github.com/FAHTHIZ/oasis'));
+assert.ok(html.includes('https://github.com/FAHTHIZ/oasis/blob/main/docs/FIRST-RUN.md'));
 assert.ok(html.includes('id="main"')&&html.includes('class="skip-link"'));
 assert.ok(html.includes('<nav class="site-nav"')&&html.includes('aria-label="Main navigation"'));
 assert.ok(html.includes('id="runtime"')&&html.includes('id="interfaces"')&&html.includes('id="evidence"'));
