@@ -19,6 +19,7 @@ import path from 'node:path';
 import { isLoopbackUrl } from './config.mjs';
 import { loadMcpExtras } from './mcp-extras.mjs';
 import { redactAuditValue } from './tool-kernel.mjs';
+import { validateToolArguments } from './tool-schema-validation.mjs';
 import { authRequiredError, createOAuthFetch, getStoredToken, loadMcpClientSdk, OasisOAuthProvider, refreshExpiringToken, rememberRequiredScope, routeMcpFetch, sameMcpEndpoint } from './mcp-oauth.mjs';
 
 import { clientCapabilities, handleServerNotification, handleServerRequest } from './mcp-client-features.mjs';
@@ -488,7 +489,8 @@ export class McpHttpClient {
   }
 
   async callTool(name, args, options = {}) {
-    if (!this.tools.find((tool) => tool.name === name)) throw new Error('MCP tool is not available: ' + name);
+    const registeredTool = this.tools.find((tool) => tool.name === name);
+    if (!registeredTool) throw new Error('MCP tool is not available: ' + name);
     if (options.signal && options.signal.aborted) throw mcpAbortReason(options.signal);
     if (!options.autoApprove) {
       const ok = options.approval && await options.approval(
@@ -502,6 +504,16 @@ export class McpHttpClient {
       ? Math.min(900000, Math.max(1, Math.floor(requestedTimeout)))
       : 120000;
     const result = await this._request('tools/call', { name, arguments: args }, timeoutMs, options.signal);
+    // MCP output schemas apply to structuredContent rather than display text.
+    // Validate it when present; preserve text-only legacy responses.
+    const outputSchema = registeredTool.outputSchema || options.outputSchema;
+    if (!result.isError && outputSchema && typeof outputSchema === 'object' && result.structuredContent !== undefined) {
+      const validation = await validateToolArguments(outputSchema, result.structuredContent, { dialect: '2020-12' });
+      if (!validation.valid) {
+        const detail = validation.schemaError || (validation.errors || []).join('; ');
+        throw new Error('MCP server ' + this.config.name + ' returned invalid structured output for tool ' + name + ': ' + detail);
+      }
+    }
     return { isError: Boolean(result.isError), content: compactResult(result), structuredContent: result.structuredContent };
   }
 
