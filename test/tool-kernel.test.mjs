@@ -180,6 +180,6 @@ test('policy reasons are redacted before they are returned to callers', async ()
   });
   assert.equal(result.ok, false);
   assert.doesNotMatch(result.error, /plainPolicyCredentialValue/);
-  assert.match(result.error, /\\[redacted\\]/);
+  assert.match(result.error, /\[redacted\]/);
   assert.doesNotMatch(JSON.stringify(result.audit), /plainPolicyCredentialValue/);
 });
