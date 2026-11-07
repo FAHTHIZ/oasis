@@ -4733,7 +4733,7 @@ async function executePatchCall(session, call, patchText, context, options) {
         ? [['write_file', { path: operation.moveTo, content: operation.content }], ['delete_file', { path: operation.path }]]
         : [['write_file', { path: operation.path, content: operation.content }]];
     for (const [toolName, toolArgs] of calls) {
-      const message = await executeOneCallRaw(session, { id: String(call.id || 'apply_patch') + '_part' + (++step), type: 'function', function: { name: toolName, arguments: JSON.stringify(toolArgs) } }, context, sub);
+      const message = await executeOneCall(session, { id: String(call.id || 'apply_patch') + '_part' + (++step), type: 'function', function: { name: toolName, arguments: JSON.stringify(toolArgs) } }, context, sub);
       const result = message && message.result;
       // Declined approvals and blocks come back as { approved: false } / { blocked: true }, not errors.
       const refused = result && typeof result === 'object' && (result.approved === false || result.blocked === true || result.cancelled === true);
@@ -5058,6 +5058,8 @@ async function executeOrchestrationToolWithKernel(session, name, args, context, 
         signal: runtime.signal
       });
       const executionOptions = { ...options, signal: runtime.signal };
+      // A parent dispatch observer must never receive a nested child's authorization.
+      delete executionOptions.onAuthorized;
       if (name === 'run_specialist_review') {
         const budgetOwner = context && typeof context === 'object' ? context : executionContext;
         const budget = budgetOwner.specialistBudget || (budgetOwner.specialistBudget = { used: 0 });
