@@ -28,6 +28,20 @@ test('append and read events roundtrip', async () => {
   await rm(root, { recursive: true, force: true });
 });
 
+test('concurrent appends allocate unique ordered sequence numbers', async () => {
+  const root = await makeTempRoot();
+  const sessionId = 'abcdef1234567890abcd';
+  await Promise.all(Array.from({ length: 40 }, (_, index) =>
+    appendEvent(root, sessionId, { type: 'tool_result', index }, { env })
+  ));
+  const events = await readEvents(root, sessionId, { env });
+  assert.equal(events.length, 40);
+  assert.deepEqual(events.map((event) => event.seq), Array.from({ length: 40 }, (_, index) => index));
+  assert.deepEqual(events.map((event) => event.index).sort((a, b) => a - b), Array.from({ length: 40 }, (_, index) => index));
+  await clearEvents(root, sessionId, { env });
+  await rm(root, { recursive: true, force: true });
+});
+
 test('secrets are redacted in event payloads', async () => {
   const root = await makeTempRoot();
   const sessionId = 'abcdef1234567890abcd';
