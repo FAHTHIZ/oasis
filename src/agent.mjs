@@ -20,7 +20,7 @@ import { scopeViolation, editScopeFromEnv } from './scope-lock.mjs';
 import { shellExitTarget } from './pipe-status.mjs';
 import { loadPins, savePins } from './mcp-trust.mjs';
 import { guardExternalContent, clearInjectionTurnFlag, untrustedGuardEnabled } from './untrusted-content.mjs';
-import { maskSecrets, unmaskSecretsForTool, shareSecretVault, secretShieldEnabled, redactSecretText, redactSecretValues, SECRET_SHIELD_NOTE } from './secret-shield.mjs';
+import { maskSecrets, unmaskSecretsForTool, shareSecretVault, secretShieldEnabled, redactSecretText, SECRET_SHIELD_NOTE } from './secret-shield.mjs';
 import { extractFollowups, recordFollowups, followupReminder, followupsEnabled } from './followups.mjs';
 import { dedupedReadHit, recordDedupedRead } from './read-dedup.mjs';
 import { supersedeHistory } from './superseded-results.mjs';
@@ -4810,7 +4810,7 @@ async function executeOneCallTraced(session, call, context, options) {
       if (name === 'git_commit') tel.add('oasis.commit.count', 1, {}, '1', 'Commits created');
       if (name === 'create_pull_request') tel.add('oasis.pull_request.count', 1, {}, '1', 'Pull requests created');
     }
-    tel.event('oasis.tool_result', { ...attrs, success: !error, duration_ms: duration, ...(error ? { error: redactSecretText(error).slice(0, 500) } : {}), ...(tel.logToolDetails ? { tool_parameters: JSON.stringify(redactSecretValues(args)).slice(0, 2000) } : {}) });
+    tel.event('oasis.tool_result', { ...attrs, success: !error, duration_ms: duration, ...(error ? { error: redactSecretText(error).slice(0, 500) } : {}), ...(tel.logToolDetails ? { tool_parameters: JSON.stringify(redactAuditValue(args)).slice(0, 2000) } : {}) });
     return message;
   });
 }
