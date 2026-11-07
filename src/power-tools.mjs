@@ -648,7 +648,7 @@ async function runShell(root, args, context, flavor = 'sh') {
     return { approved: false, command, cancelled: true, message: 'Task was cancelled before the shell command started.' };
   }
   const discard = gitSafety.gitSafetyEnabled(context.env || process.env) ? gitSafety.discardingGitCommand(command) : '';
-  const safetySnapshot = discard ? await gitSafety.snapshotWorkingTree(root, discard).catch(() => null) : null;
+  const safetySnapshot = discard ? await gitSafety.snapshotWorkingTree(root, discard) : null;
   let shell;
   if (flavor === 'powershell') {
     const exe = context.powershell || findPowerShell(context.env || process.env);
