@@ -278,7 +278,7 @@ test('permission approval UI receives redacted command arguments after secret re
   const session = await createSession({
     root,
     config,
-    settings: settingsWith({ permissions: { allow: [], ask: ['run_command(git:*)'], deny: [] } })
+    settings: settingsWith({ permissions: { allow: [], ask: ['run_command(git init:*)'], deny: [] } })
   });
   maskSecrets(session, 'GITHUB_TOKEN=' + credential);
   const prompts = [];
