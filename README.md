@@ -72,7 +72,7 @@ See [Downloads and releases](docs/RELEASES.md) for asset names, checksum verific
 
 ## Terminal session
 
-The terminal interface is a separate, first-class OASIS experience. It runs directly in your shell; it is not the browser UI embedded in a terminal panel.
+The terminal interface is a separate, first-class OASIS experience. It runs directly in your shell; it is not the browser UI embedded in a terminal panel. The CLI and headless runner are distinct modes: the interactive `oasis` command is for a human-driven terminal session; `oasis exec` is for scripts and automation.
 
 Requirements: Node.js 22.15 or newer and Git.
 
