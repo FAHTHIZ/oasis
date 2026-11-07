@@ -78,7 +78,10 @@ export function buildNeuronNetworkSnapshot(registry, args = {}) {
 
   const ordered = records
     .filter((record) => record && typeof record === "object")
-    .sort((a, b) => safeNumber(a.startedAt) - safeNumber(b.startedAt));
+    .sort((a, b) => {
+      const depthDifference = Math.floor(safeNumber(a.depth, 1)) - Math.floor(safeNumber(b.depth, 1));
+      return depthDifference || safeNumber(a.startedAt) - safeNumber(b.startedAt);
+    });
   const byId = new Map(ordered.map((record) => [clean(record.id, 100), record]).filter(([id]) => id));
   const matches = ordered.filter((record) => {
     const status = VALID_STATUSES.has(record.status) ? record.status : "interrupted";
