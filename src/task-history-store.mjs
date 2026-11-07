@@ -5,7 +5,7 @@
 // project checkout, and uses restrictive permissions plus atomic replacement.
 import { isWorktreeBranchName } from './branch-names.mjs';
 import { createHash, randomUUID } from 'node:crypto';
-import { chmod, mkdir, readFile, readdir, rename, unlink, writeFile } from 'node:fs/promises';
+import { chmod, mkdir, readFile, readdir, rename, rmdir, unlink, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { getConfigDirectory } from './config.mjs';
 
@@ -105,6 +105,7 @@ export function createTaskHistoryStore(root, options = {}) {
   const maxEvents = Math.max(20, Math.min(500, Number(options.maxEvents) || DEFAULT_MAX_EVENTS));
   const workspaceHash = createHash('sha256').update(path.resolve(root)).digest('hex').slice(0, 24);
   const directory = path.join(getConfigDirectory(env), 'task-history', workspaceHash);
+  const legacyDirectory = path.join(getConfigDirectory(env), 'cloud-tasks', workspaceHash);
   const records = new Map();
   const writeQueues = new Map();
   const timers = new Map();
@@ -155,31 +156,44 @@ export function createTaskHistoryStore(root, options = {}) {
       readyPromise = (async () => {
         await mkdir(directory, { recursive: true, mode: 0o700 });
         try { await chmod(directory, 0o700); } catch {}
-        const names = (await readdir(directory)).filter((name) => /^[0-9a-f-]{36}\.json$/i.test(name)).slice(0, maxTasks * 5);
-        for (const name of names) {
-          const id = name.slice(0, -5);
-          try {
-            const source = await readFile(recordPath(id), 'utf8');
-            if (Buffer.byteLength(source, 'utf8') > MAX_RECORD_BYTES) continue;
-            const record = validateStored(JSON.parse(source), id, maxEvents);
-            if (!record) continue;
-            if (!TERMINAL.has(record.status)) {
-              record.status = 'interrupted';
-              record.error = 'The Oasis runtime restarted before this task finished. Review its saved events and resume from the associated session if appropriate.';
-              record.updatedAt = new Date().toISOString();
-              record.events.push({
-                id: record.nextEventId++,
-                type: 'interrupted',
-                at: record.updatedAt,
-                data: { message: 'Runtime stopped before task completion; live processes and pending approvals were not restored.' }
-              });
-              record.events = record.events.slice(-maxEvents);
-              await writeRecord(record);
+        async function loadDirectory(sourceDirectory, migrate) {
+          const names = await readdir(sourceDirectory).catch(() => []);
+          for (const name of names.filter((item) => /^[0-9a-f-]{36}\.json$/i.test(item)).slice(0, maxTasks * 5)) {
+            const id = name.slice(0, -5);
+            try {
+              const source = await readFile(path.join(sourceDirectory, name), 'utf8');
+              if (Buffer.byteLength(source, 'utf8') > MAX_RECORD_BYTES) continue;
+              const record = validateStored(JSON.parse(source), id, maxEvents);
+              if (!record) continue;
+              if (records.has(id)) {
+                if (migrate) await unlink(path.join(sourceDirectory, name)).catch(() => {});
+                continue;
+              }
+              if (!TERMINAL.has(record.status)) {
+                record.status = 'interrupted';
+                record.error = 'The Oasis runtime restarted before this task finished. Review its saved events and resume from the associated session if appropriate.';
+                record.updatedAt = new Date().toISOString();
+                record.events.push({
+                  id: record.nextEventId++,
+                  type: 'interrupted',
+                  at: record.updatedAt,
+                  data: { message: 'Runtime stopped before task completion; live processes and pending approvals were not restored.' }
+                });
+                record.events = record.events.slice(-maxEvents);
+              }
+              if (migrate) await writeRecord(record);
+              else if (!TERMINAL.has(validateStored(JSON.parse(source), id, maxEvents).status)) await writeRecord(record);
+              records.set(id, record);
+              if (migrate) await unlink(path.join(sourceDirectory, name));
+            } catch {
+              // A corrupt history record must not prevent the runtime from starting.
             }
-            records.set(id, record);
-          } catch {
-            // A corrupt history record must not prevent the runtime from starting.
           }
+        }
+        await loadDirectory(directory, false);
+        if (legacyDirectory !== directory) {
+          await loadDirectory(legacyDirectory, true);
+          await rmdir(legacyDirectory).catch(() => {});
         }
         await prune();
       })().catch((error) => {

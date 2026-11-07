@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import os from 'node:os';
 import path from 'node:path';
-import { mkdtemp, rm, stat, readFile } from 'node:fs/promises';
+import { mkdtemp, mkdir, rm, stat, readFile, rename } from 'node:fs/promises';
 import { randomUUID } from 'node:crypto';
 import { createTaskHistoryStore } from '../src/task-history-store.mjs';
 
@@ -126,4 +126,37 @@ test('special JSON property names stay inert data in task event persistence', as
 
   const persisted = JSON.parse(await readFile(path.join(store.directory, id + '.json'), 'utf8'));
   assert.equal(persisted.events[0].data[specialKey].marker, 'preserved');
+});
+
+test('legacy cloud task records migrate to the renamed task history store', async (t) => {
+  const { root, env, workspace } = await fixture();
+  t.after(() => rm(root, { recursive: true, force: true }));
+
+  const id = randomUUID();
+  const original = createTaskHistoryStore(workspace, { env });
+  await original.save({
+    id,
+    status: 'running',
+    type: 'agent',
+    title: 'Migrate existing history',
+    createdAt: new Date().toISOString(),
+    events: [{ id: 1, type: 'started', at: new Date().toISOString(), data: {} }],
+    nextEventId: 2,
+    result: null,
+    error: null
+  });
+  const legacyDirectory = original.directory.replace(
+    path.sep + 'task-history' + path.sep,
+    path.sep + 'cloud-tasks' + path.sep
+  );
+  await mkdir(legacyDirectory, { recursive: true });
+  const oldPath = path.join(legacyDirectory, id + '.json');
+  await rename(path.join(original.directory, id + '.json'), oldPath);
+
+  const migratedStore = createTaskHistoryStore(workspace, { env });
+  const restored = await migratedStore.get(id);
+  assert.equal(restored.status, 'interrupted');
+  assert.match(restored.error, /runtime restarted/i);
+  assert.equal((await stat(path.join(migratedStore.directory, id + '.json'))).isFile(), true);
+  await assert.rejects(readFile(oldPath));
 });
