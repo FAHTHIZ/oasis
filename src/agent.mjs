@@ -4456,6 +4456,15 @@ async function authorizeCall(session, name, args, context, options) {
     else if (pre.permissionDecision === 'allow' && decision !== 'ask') decision = 'allow';
     hookContext = pre.additionalContext;
   }
+  // Validate the final hook-rewritten arguments before any user approval prompt.
+  // The Tool Kernel validates them again immediately before invoking the handler.
+  const toolDefinition = (session.toolDefinitions || []).find((tool) => tool && tool.function && tool.function.name === name)
+    || TOOL_DEFINITIONS.find((tool) => tool && tool.function && tool.function.name === name);
+  const validation = await validateToolArguments(toolDefinition && toolDefinition.function && toolDefinition.function.parameters, args);
+  if (!validation.valid) {
+    const detail = validation.schemaError || (validation.errors || []).join('; ') || 'arguments do not match the tool schema';
+    return { deniedReason: 'Invalid arguments for ' + name + ': ' + detail };
+  }
   const overlay = Object.create(context);
   overlay.permissionMode = mode;
   if (mode === 'bypassPermissions') overlay.autoApprove = true;
