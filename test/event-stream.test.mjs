@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { appendEvent, readEvents, clearEvents, eventLogPath } from '../src/event-stream.mjs';
+import { appendEvent, readEvents, clearEvents } from '../src/event-stream.mjs';
 import { mkdir, rm } from 'node:fs/promises';
 import os from 'node:os';
 
