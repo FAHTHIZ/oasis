@@ -327,6 +327,8 @@ test('main agent routes MCP tools through the kernel and validates structured ou
   const { config } = await scriptedModel(t, [
     toolCall('mcp-1', toolName, { query: 'first' }),
     toolCall('mcp-2', toolName, { query: 'second' }),
+    toolCall('mcp-3', toolName, { query: 'remote-error' }),
+    toolCall('mcp-4', toolName, { query: 'text-only' }),
     { content: 'finished' }
   ]);
   const session = await createSession({ root, config, settings: settingsWith({}), bare: true });
@@ -354,6 +356,10 @@ test('main agent routes MCP tools through the kernel and validates structured ou
     async callTool(name, args, options) {
       calls++;
       this.calls.push({ name, args, signal: options.signal, timeoutMs: options.timeoutMs });
+      if (calls === 3) {
+        return { isError: true, content: 'remote error', structuredContent: { malformed: true } };
+      }
+      if (calls === 4) return { isError: false, content: 'legacy text-only result' };
       return {
         isError: false,
         content: 'lookup result',
@@ -367,20 +373,22 @@ test('main agent routes MCP tools through the kernel and validates structured ou
   session.mcpToolMap = dynamic.map;
   session.toolDefinitions = session.toolDefinitions.concat(dynamic.definitions);
 
-  await runAgentTurn(session, 'Look up the deployment twice.', {
+  await runAgentTurn(session, 'Look up the deployment and handle legacy/error results.', {
     approval: async () => true
   });
 
-  assert.equal(mcpClient.calls.length, 2);
+  assert.equal(mcpClient.calls.length, 4);
   assert.equal(mcpClient.calls[0].name, 'lookup');
-  assert.equal(mcpClient.calls[0].args.query, 'first');
-  assert.equal(mcpClient.calls[1].args.query, 'second');
+  assert.deepEqual(mcpClient.calls.map(call => call.args.query), ['first', 'second', 'remote-error', 'text-only']);
   assert.ok(mcpClient.calls.every(call => call.signal instanceof AbortSignal));
   assert.ok(mcpClient.calls.every(call => call.timeoutMs === 120000));
 
   const audit = session.toolAuditLog.filter(record => record.tool === toolName);
-  assert.equal(audit.length, 2, 'both MCP calls should have kernel audit records');
+  assert.equal(audit.length, 4, 'all MCP calls should have kernel audit records');
   assert.equal(audit[0].output.structuredContent.status, 'ready');
-  assert.equal(audit[1].output, null, 'invalid structured output must not be recorded as successful output');
+  assert.equal(audit[1].output, null, 'invalid successful structured output must not be recorded as successful output');
   assert.match(audit[1].error, /Invalid output from mcp_fixture_lookup/);
+  assert.equal(audit[2].output.isError, true, 'an explicit remote error may carry diagnostic structured content');
+  assert.equal(audit[3].output.content, 'legacy text-only result');
+  assert.equal(Object.hasOwn(audit[3].output, 'structuredContent'), false, 'text-only responses do not fabricate an undefined structuredContent field');
 });
