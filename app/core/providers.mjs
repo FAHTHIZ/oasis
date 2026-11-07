@@ -25,7 +25,7 @@ export const PRESETS = {
 };
 
 import { createParser } from 'eventsource-parser';
-import { splitThinking, createThinkFilter } from './think-tags.mjs';
+import { splitThinking, createThinkFilter } from '../../src/think-tags.mjs';
 
 export class ProviderError extends Error {
   constructor(message, { status = 0, retryable = false, retryAfterMs = null } = {}) {
