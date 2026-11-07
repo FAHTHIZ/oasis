@@ -18,6 +18,7 @@ import { processTreeSpawnOptions, signalProcessTree } from './process-tree.mjs';
 import path from 'node:path';
 import { isLoopbackUrl } from './config.mjs';
 import { loadMcpExtras } from './mcp-extras.mjs';
+import { redactAuditValue } from './tool-kernel.mjs';
 import { authRequiredError, createOAuthFetch, getStoredToken, loadMcpClientSdk, OasisOAuthProvider, refreshExpiringToken, rememberRequiredScope, routeMcpFetch, sameMcpEndpoint } from './mcp-oauth.mjs';
 
 import { clientCapabilities, handleServerNotification, handleServerRequest } from './mcp-client-features.mjs';
@@ -477,7 +478,7 @@ export class McpHttpClient {
     if (!this.tools.find((tool) => tool.name === name)) throw new Error('MCP tool is not available: ' + name);
     if (!options.autoApprove) {
       const ok = options.approval && await options.approval(
-        'Call MCP server "' + this.config.name + '" tool "' + name + '" with arguments:\n' + JSON.stringify(args, null, 2).slice(0, 5000) +
+        'Call MCP server "' + this.config.name + '" tool "' + name + '" with arguments:\n' + JSON.stringify(redactAuditValue(args), null, 2).slice(0, 5000) +
         '\nMCP tools can read external data or change systems according to this server’s permissions.');
       if (!ok) return { approved: false, message: 'MCP tool call was not approved. No call was made.' };
     }
