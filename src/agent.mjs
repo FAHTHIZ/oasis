@@ -4833,6 +4833,7 @@ function kernelTimeoutForTool(name, args, context) {
 async function executeThroughToolKernel(session, tool, args, context, options = {}) {
   const outcome = await runTool(tool, args, {
     policy: { decide: () => ({ decision: 'allow' }) },
+    ...(typeof options.authorize === 'function' ? { authorize: options.authorize } : {}),
     signal: options.signal || (context && context.signal),
     env: (context && context.env) || options.env || process.env,
     cwd: (context && context.root) || session.root || process.cwd()
@@ -4850,16 +4851,22 @@ async function executeThroughToolKernel(session, tool, args, context, options = 
   return outcome.output;
 }
 
-// The agent's existing permission gate runs before this boundary. The kernel
-// then validates the registered schema again and owns cancellation, timeout,
-// and redacted audit handling for the actual workspace tool execution.
+// Permission and hook authorization runs inside Tool Kernel execution.
+// Hook-rewritten input is validated again before the registered handler starts.
 async function executeRegisteredToolWithKernel(session, name, args, context, options = {}) {
   const definition = (session.toolDefinitions || []).find((item) => item && item.function && item.function.name === name)
     || TOOL_DEFINITIONS.find((item) => item && item.function && item.function.name === name);
   if (!definition) throw new Error('Unknown or unavailable tool: ' + name + '; no registered tool schema was found, so execution was refused.');
 
+  let authorizedContext = context;
+  const authorize = async ({ input }) => {
+    const authorization = await authorizeCall(session, name, input, context, options);
+    if (typeof options.onAuthorized === 'function') options.onAuthorized(authorization);
+    if (authorization.deniedReason) return { decision: 'deny', reason: authorization.deniedReason };
+    authorizedContext = authorization.context || context;
+    return { decision: 'allow', input: authorization.args };
+  };
   const tool = bridgeToolDefinition(definition, {
-    // authorizeCall already made the user/policy decision; do not show a second prompt.
     requiresApproval: false,
     timeoutMs: kernelTimeoutForTool(name, args, context),
     run: async (validatedInput, runtime) => {
@@ -4867,30 +4874,35 @@ async function executeRegisteredToolWithKernel(session, name, args, context, opt
         ? await dedupedReadHit(session, validatedInput, runtime.env)
         : null;
       if (cached) return cached;
-      // Permission overlays inherit the original tool context. Flatten the
-      // full chain here because executeTool's browser adapter forwards context
-      // with object spread, which would otherwise drop inherited approval,
-      // sandbox, and session options.
       const contextChain = [];
-      for (let current = context; current && current !== Object.prototype; current = Object.getPrototypeOf(current)) {
+      for (let current = authorizedContext; current && current !== Object.prototype; current = Object.getPrototypeOf(current)) {
         contextChain.unshift(current);
       }
       const executionContext = Object.assign({}, ...contextChain, {
-        root: context.root || session.root,
+        root: authorizedContext && authorizedContext.root || session.root,
         session,
         env: runtime.env,
         signal: runtime.signal
       });
+      if (typeof options.prepare === 'function') await options.prepare({ input: validatedInput, context: executionContext });
       return await executeTool(name, validatedInput, executionContext);
     }
   });
-  return await executeThroughToolKernel(session, tool, args, context, options);
+  return await executeThroughToolKernel(session, tool, args, context, { ...options, authorize });
 }
 
 async function executeMappedMcpToolWithKernel(session, name, args, context, options = {}) {
   const definition = (session.toolDefinitions || []).find((item) => item && item.function && item.function.name === name);
   if (!definition) throw new Error('Unknown or unavailable MCP tool: ' + name + '; no registered schema was found.');
 
+  let authorizedContext = context;
+  const authorize = async ({ input }) => {
+    const authorization = await authorizeCall(session, name, input, context, options);
+    if (typeof options.onAuthorized === 'function') options.onAuthorized(authorization);
+    if (authorization.deniedReason) return { decision: 'deny', reason: authorization.deniedReason };
+    authorizedContext = authorization.context || context;
+    return { decision: 'allow', input: authorization.args };
+  };
   const mapped = session.mcpToolMap.get(name);
   const outputSchema = mapped && mapped.outputSchema
     ? {
@@ -4922,7 +4934,7 @@ async function executeMappedMcpToolWithKernel(session, name, args, context, opti
     // its own 120-second request timeout after approval has been granted.
     timeoutMs: 600000,
     run: async (validatedInput, runtime) => {
-      const mcpOptions = Object.create(context && typeof context === 'object' ? context : null);
+      const mcpOptions = Object.create(authorizedContext && typeof authorizedContext === 'object' ? authorizedContext : null);
       mcpOptions.signal = runtime.signal;
       mcpOptions.timeoutMs = 120000;
       mcpOptions.env = runtime.env;
@@ -4930,7 +4942,7 @@ async function executeMappedMcpToolWithKernel(session, name, args, context, opti
     }
   });
 
-  return await executeThroughToolKernel(session, tool, args, context, options);
+  return await executeThroughToolKernel(session, tool, args, context, { ...options, authorize });
 }
 
 async function executeOneCallRaw(session, call, context, options) {
@@ -4941,6 +4953,7 @@ async function executeOneCallRaw(session, call, context, options) {
   let fileMutationResult = null;
   let attemptedArgs = null;
   let callContext = null;
+  let auth = null;
   if (options.onToolStart) options.onToolStart({ name, call, args: safeToolArguments(call.function && call.function.arguments) });
   try {
     if (options.signal && options.signal.aborted) {
@@ -5022,11 +5035,18 @@ async function executeOneCallRaw(session, call, context, options) {
       if (options.onToolResult) options.onToolResult({ name, result, call });
       return { role: 'tool', tool_call_id: call.id, name, content: serializableResult(result), result };
     }
-    const auth = await authorizeCall(session, name, args, context, options);
-    if (auth.deniedReason) throw new Error(auth.deniedReason);
-    args = auth.args;
-    callContext = auth.context;
-    attemptedArgs = args;
+    const requiresAgentAuthorization = name === 'run_specialist_review'
+      || name === 'task'
+      || name === 'execute_code'
+      || name === 'workflow'
+      || AGENT_TOOL_NAMES.has(name);
+    if (requiresAgentAuthorization) {
+      auth = await authorizeCall(session, name, args, context, options);
+      if (auth.deniedReason) throw new Error(auth.deniedReason);
+      args = auth.args;
+      callContext = auth.context;
+      attemptedArgs = args;
+    }
     if (name === 'run_specialist_review') {
       const budget = context.specialistBudget || (context.specialistBudget = { used: 0 });
       if (budget.used >= MAX_SPECIALIST_REVIEWS_PER_TASK) throw new Error('This task has reached the two-specialist-review limit. Use the existing review result or ask for a focused follow-up task.');
@@ -5050,22 +5070,40 @@ async function executeOneCallRaw(session, call, context, options) {
     } else if (AGENT_TOOL_NAMES.has(name)) {
       result = await runAgentTool(session, name, args, callContext, options);
     } else if (session.mcpToolMap && session.mcpToolMap.has(name)) {
-      result = await executeMappedMcpToolWithKernel(session, name, args, callContext, options);
+      result = await executeMappedMcpToolWithKernel(session, name, args, context, {
+        ...options,
+        onAuthorized: (authorization) => {
+          auth = authorization;
+          args = authorization.args || args;
+          callContext = authorization.context || context;
+          attemptedArgs = args;
+        }
+      });
     } else {
-      if (AUTO_LSP_EDIT_TOOLS.has(name) && typeof args.path === 'string' && serverForFile(args.path, session.settings || {})) {
-        lspVerificationPath = args.path;
-        lspBaselineDiagnostics = await activeLspBaseline(session, lspVerificationPath, callContext, options);
-      }
-      if (FILE_CHANGING_TOOLS.has(name)) await captureBeforeChange(session, session.root, name, args).catch(() => {});
-      if (name === 'skill_propose') {
-        const state = context && context.verification;
-        const issues = state ? verificationIssues(state) : ['runtime verification state is unavailable'];
-        assertLearningVerification(state, issues);
-      }
-      result = await executeRegisteredToolWithKernel(session, name, args, callContext, options);
+      result = await executeRegisteredToolWithKernel(session, name, args, context, {
+        ...options,
+        onAuthorized: (authorization) => {
+          auth = authorization;
+          args = authorization.args || args;
+          callContext = authorization.context || context;
+          attemptedArgs = args;
+        },
+        prepare: async ({ input: authorizedArgs, context: authorizedContext }) => {
+          if (AUTO_LSP_EDIT_TOOLS.has(name) && typeof authorizedArgs.path === 'string' && serverForFile(authorizedArgs.path, session.settings || {})) {
+            lspVerificationPath = authorizedArgs.path;
+            lspBaselineDiagnostics = await activeLspBaseline(session, lspVerificationPath, authorizedContext, options);
+          }
+          if (FILE_CHANGING_TOOLS.has(name)) await captureBeforeChange(session, session.root, name, authorizedArgs).catch(() => {});
+          if (name === 'skill_propose') {
+            const state = authorizedContext && authorizedContext.verification;
+            const issues = state ? verificationIssues(state) : ['runtime verification state is unavailable'];
+            assertLearningVerification(state, issues);
+          }
+        }
+      });
       if (AUTO_LSP_EDIT_TOOLS.has(name) && successfulMutation(name, result)) fileMutationResult = result;
       if (name === 'load_skill' && !options.isSubagent && result && typeof result.content === 'string') result = await maybeForkSkill(session, result, args, callContext, options);
-      if (name === 'load_skill' && session.pluginMonitorsEnabled && result && !result.error) startPluginMonitorsFor(session, String(args.name || ''), { root: session.root, env: callContext.env || process.env });
+      if (name === 'load_skill' && session.pluginMonitorsEnabled && result && !result.error) startPluginMonitorsFor(session, String(args.name || ''), { root: session.root, env: callContext && callContext.env || process.env });
     }
     if (NESTED_MEMORY_TOOLS.has(name) && result && typeof result === 'object' && !result.error) {
       const target = args && (args.path || args.file_path || args.notebook_path);
@@ -5085,8 +5123,8 @@ async function executeOneCallRaw(session, call, context, options) {
       try { const { recordArtifactToolEvent } = await import('./artifacts.mjs'); await recordArtifactToolEvent(session.root, session.activeArtifact, name, args, result, { env: options.env || process.env }); } catch {}
     }
     if (debugEnabled('tools')) debugLog('tools', name + ' ' + (result && result.error ? 'error: ' + String(result.error).slice(0, 300) : 'ok'), args);
-    if (auth.hookContext && auth.hookContext.length && result && typeof result === 'object') result.hookContext = auth.hookContext.join('\n');
-    if (callContext.permissionHookDenial && result && typeof result === 'object') result.permissionHookDenial = callContext.permissionHookDenial;
+    if (auth && auth.hookContext && auth.hookContext.length && result && typeof result === 'object') result.hookContext = auth.hookContext.join('\n');
+    if (callContext && callContext.permissionHookDenial && result && typeof result === 'object') result.permissionHookDenial = callContext.permissionHookDenial;
     if (result && typeof result === 'object' && typeof result.error === 'string' && result.error) {
       result = applyFailureHookResult(result, await runToolFailureHooks(session, name, args, result.error, context));
     } else if (hasHooks(session.hooks, 'PostToolUse')) {
