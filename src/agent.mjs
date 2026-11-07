@@ -87,7 +87,7 @@ import { access, lstat, mkdir, readFile, realpath, stat, writeFile } from 'node:
 async function pathExists(file) { try { await access(file); return true; } catch { return false; } }
 import { SHELL_TOOL_DEFINITION, POWERSHELL_TOOL_DEFINITION, findPowerShell, killAllBackground } from './power-tools.mjs';
 import { runLsp, serverForFile, verifyEditedFileWithLsp, stopLspClients } from './lsp.mjs';
-import { AGENT_TOOL_DEFINITIONS, AGENT_TOOL_NAMES, MAX_BACKGROUND_AGENTS, agentRegistry, registerAgent, addAgentUsage, restoreAgentHistory, runningBackgroundCount, notifyParent, drainInbox, agentStatus, agentEvents, recordAgentEvent, sendTeamMessage, stopAgent, stopAllAgents, getAgent, getAgentTeam, createAgentTeam, agentTeamStatus, shutdownAgentTeam } from './agent-tasks.mjs';
+import { AGENT_TOOL_DEFINITIONS, AGENT_TOOL_NAMES, MAX_BACKGROUND_AGENTS, agentRegistry, registerAgent, addAgentUsage, restoreAgentHistory, runningBackgroundCount, notifyParent, drainInbox, agentStatus, agentEvents, neuronNetworkSnapshot, recordAgentEvent, sendTeamMessage, stopAgent, stopAllAgents, getAgent, getAgentTeam, createAgentTeam, agentTeamStatus, shutdownAgentTeam } from './agent-tasks.mjs';
 import { loadAgentDefinitions, taskToolDefinition, BUILTIN_AGENTS, MAX_PARALLEL_SUBAGENTS, runPool, parseFrontMatter, mapToolNames } from './subagents.mjs';
 import { createSharedTaskStore, SHARED_TASK_TOOL_NAMES, runSharedTaskTool } from './shared-tasks.mjs';
 import { saveSessionNotes } from './session-notes.mjs';
@@ -4301,6 +4301,7 @@ async function dispatchReadyTasksUnlocked(session, args = {}, context = {}, opti
 async function runAgentTool(session, name, args, context, options) {
   if (name === 'dispatch_ready_tasks') return await dispatchReadyTasks(session, args, context, options);
   if (name === 'agent_status') return await agentStatus(session, args, context.signal);
+  if (name === 'neuron_network') return neuronNetworkSnapshot(session, args);
   if (name === 'agent_events') return agentEvents(session, args);
   if (name === 'team_create') return createAgentTeam(session, args);
   if (name === 'team_status') return agentTeamStatus(session, args);
