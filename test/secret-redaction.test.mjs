@@ -67,3 +67,38 @@ test('trajectory export redacts secrets inside JSON tool-call arguments', () => 
   assertClean('trajectory', JSON.stringify(record));
   assert.equal(JSON.parse(record.messages[0].tool_calls[0].function.arguments).path, '.env');
 });
+
+test('shared audit redaction masks short CLI credentials in persisted and exported data', async (t) => {
+  const token = 'plainDebugCliCredentialValue';
+  const apiKey = 'plainStructuredApiKeyValue';
+  const command = 'deploy --token ' + token + ' --region ap-southeast-1';
+  const args = ['--api-key', apiKey, '--limit', '10'];
+
+  assert.doesNotMatch(redactSecrets(command).text, /plainDebugCliCredentialValue/);
+  assert.doesNotMatch(redactArtifactText(command), /plainDebugCliCredentialValue/);
+
+  const dir = await mkdtemp(path.join(os.tmpdir(), 'oasis-redact-cli-'));
+  t.after(() => rm(dir, { recursive: true, force: true }));
+  const file = path.join(dir, 'debug.txt');
+  enableDebug({ file });
+  try {
+    debugLog('tools', 'run_command', { command, args });
+  } finally {
+    disableDebug();
+  }
+  const log = await readFile(file, 'utf8');
+  assert.doesNotMatch(log, /plainDebugCliCredentialValue|plainStructuredApiKeyValue/);
+  assert.match(log, /ap-southeast-1/);
+  assert.match(log, /--limit/);
+  assert.match(log, /10/);
+
+  const record = toOpenAIRecord({ messages: [
+    { role: 'assistant', content: '', tool_calls: [{
+      id: 'cli-1',
+      type: 'function',
+      function: { name: 'run_command', arguments: JSON.stringify({ command, args }) }
+    }] }
+  ] });
+  assert.doesNotMatch(JSON.stringify(record), /plainDebugCliCredentialValue|plainStructuredApiKeyValue/);
+  assert.match(JSON.stringify(record), /ap-southeast-1/);
+});
