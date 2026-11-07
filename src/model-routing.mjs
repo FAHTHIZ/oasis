@@ -2,7 +2,7 @@ import {
   classifyByRules,
   DEFAULT_ROUTING_CONFIG,
   inferToolRequirement
-} from '@blockrun/router-core';
+} from './task-classifier.mjs';
 import { countTextTokens } from './tokens.mjs';
 import { catalogImageInput, catalogToolCalling } from './model-catalog.mjs';
 
@@ -56,10 +56,10 @@ function hasComplexSignals(classification) {
 /**
  * Conservative model routing.
  *
- * The MIT-licensed router-core supplies a deterministic 15-dimension local
- * classifier. Oasis retains its own safety, mutation, tool-intent and
- * benchmark-hint overrides; only clearly simple, high-confidence,
- * non-actionable requests can use the configured cheaper model.
+ * The local classifier provides a deterministic task classification. Oasis
+ * retains its own safety, mutation, tool-intent and benchmark-hint overrides;
+ * only clearly simple, high-confidence, non-actionable requests can use the
+ * configured cheaper model.
  */
 export function classifyTask(prompt, hint = null) {
   const text = String(prompt || '').trim();
@@ -102,7 +102,7 @@ export function classifyTask(prompt, hint = null) {
 
   if (simplePattern || highConfidenceSimple) {
     const detail = highConfidenceSimple
-      ? '15-dimension classifier: SIMPLE (' + Math.round(classification.confidence * 100) + '% confidence)'
+      ? 'local classifier: SIMPLE (' + Math.round(classification.confidence * 100) + '% confidence)'
       : 'short, clearly read-only request';
     return { tier: 'easy', reason: detail, requiresTools: false };
   }
@@ -112,7 +112,7 @@ export function classifyTask(prompt, hint = null) {
     : 'ambiguous classification (' + Math.round(classification.confidence * 100) + '% confidence)';
   return {
     tier: 'strong',
-    reason: '15-dimension classifier kept the request on the strong model: ' + detail,
+    reason: 'local classifier kept the request on the strong model: ' + detail,
     requiresTools: false
   };
 }
