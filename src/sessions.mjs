@@ -103,7 +103,7 @@ export function sanitizeAgentHistory(agentTasks) {
       : [];
     const snapshot = {
       id,
-      parentId: record.parentId === 'main' || /^agent_[1-9]\\d{0,8}$/.test(String(record.parentId || '')) ? String(record.parentId || 'main') : 'main',
+      parentId: record.parentId === 'main' || /^agent_[1-9]\d{0,8}$/.test(String(record.parentId || '')) ? String(record.parentId || 'main') : 'main',
       depth: Math.max(1, Math.min(32, Number.parseInt(record.depth, 10) || 1)),
       type: safePersistedText(record.type || 'general-purpose', 80),
       description: safePersistedText(record.description || '', 120),
