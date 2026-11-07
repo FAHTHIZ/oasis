@@ -45,7 +45,7 @@ test('snapshot keeps tracked edits and untracked files without touching index or
 
 test('parallel safety snapshots receive distinct refs even at the same timestamp', async (t) => {
   const root = await repo(t);
-  await writeFile(path.join(root, 'a.txt'), 'parallel snapshot\\n');
+  await writeFile(path.join(root, 'a.txt'), 'parallel snapshot\n');
   const now = 123456789;
   const [first, second] = await Promise.all([
     snapshotWorkingTree(root, 'git checkout .', { now }),
