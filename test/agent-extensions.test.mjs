@@ -8,6 +8,7 @@ import { createSession, runAgentTurn, closeSession } from '../src/agent.mjs';
 import { loadSettings, setWorkspaceTrust } from '../src/settings.mjs';
 import { scriptedModel, toolCall } from './helpers/scripted-model.mjs';
 import { maskSecrets } from '../src/secret-shield.mjs';
+import { mcpToolDefinitions } from '../src/mcp.mjs';
 
 async function tmp(prefix = 'oasis-ext-') { return await mkdtemp(path.join(os.tmpdir(), prefix)); }
 
@@ -317,4 +318,69 @@ test('main workspace tool execution is audited through the shared kernel', async
   assert.ok(audit, 'the main agent should capture a kernel audit record');
   assert.doesNotMatch(JSON.stringify(audit), /plainWorkspaceCredentialValue/);
   assert.match(audit.input.content, /\[redacted\]/);
+});
+
+test('main agent routes MCP tools through the kernel and validates structured output', async (t) => {
+  const root = await tmp('oasis-kernel-mcp-');
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const toolName = 'mcp_fixture_lookup';
+  const { config } = await scriptedModel(t, [
+    toolCall('mcp-1', toolName, { query: 'first' }),
+    toolCall('mcp-2', toolName, { query: 'second' }),
+    { content: 'finished' }
+  ]);
+  const session = await createSession({ root, config, settings: settingsWith({}), bare: true });
+
+  let calls = 0;
+  const mcpClient = {
+    tools: [{
+      name: 'lookup',
+      description: 'Looks up a staging deployment.',
+      inputSchema: {
+        type: 'object',
+        properties: { query: { type: 'string' } },
+        required: ['query'],
+        additionalProperties: false
+      },
+      outputSchema: {
+        type: 'object',
+        properties: { status: { type: 'string' } },
+        required: ['status'],
+        additionalProperties: false
+      }
+    }],
+    calls: [],
+    toolFingerprints: new Map(),
+    async callTool(name, args, options) {
+      calls++;
+      this.calls.push({ name, args, signal: options.signal, timeoutMs: options.timeoutMs });
+      return {
+        isError: false,
+        content: 'lookup result',
+        structuredContent: calls === 1 ? { status: 'ready' } : { unexpected: true }
+      };
+    }
+  };
+  const clients = new Map([['fixture', mcpClient]]);
+  const dynamic = mcpToolDefinitions(clients);
+  session.mcpClients = clients;
+  session.mcpToolMap = dynamic.map;
+  session.toolDefinitions = session.toolDefinitions.concat(dynamic.definitions);
+
+  await runAgentTurn(session, 'Look up the deployment twice.', {
+    approval: async () => true
+  });
+
+  assert.equal(mcpClient.calls.length, 2);
+  assert.equal(mcpClient.calls[0].name, 'lookup');
+  assert.equal(mcpClient.calls[0].args.query, 'first');
+  assert.equal(mcpClient.calls[1].args.query, 'second');
+  assert.ok(mcpClient.calls.every(call => call.signal instanceof AbortSignal));
+  assert.ok(mcpClient.calls.every(call => call.timeoutMs === 120000));
+
+  const audit = session.toolAuditLog.filter(record => record.tool === toolName);
+  assert.equal(audit.length, 2, 'both MCP calls should have kernel audit records');
+  assert.equal(audit[0].output.structuredContent.status, 'ready');
+  assert.equal(audit[1].output, null, 'invalid structured output must not be recorded as successful output');
+  assert.match(audit[1].error, /Invalid output from mcp_fixture_lookup/);
 });

@@ -4884,9 +4884,19 @@ async function executeMappedMcpToolWithKernel(session, name, args, context, opti
   const definition = (session.toolDefinitions || []).find((item) => item && item.function && item.function.name === name);
   if (!definition) throw new Error('Unknown or unavailable MCP tool: ' + name + '; no registered schema was found.');
 
+  const mapped = session.mcpToolMap.get(name);
+  const outputSchema = mapped && mapped.outputSchema
+    ? {
+      type: 'object',
+      if: { required: ['structuredContent'] },
+      then: { properties: { structuredContent: mapped.outputSchema } }
+    }
+    : {};
+
   const tool = bridgeToolDefinition(definition, {
     capabilities: ['mcp', 'execute'],
     risk: 'critical',
+    outputSchema,
     // The existing permission gate and MCP trust/consent checks remain authoritative.
     requiresApproval: false,
     // Human approval can take longer than a network request; the client applies
