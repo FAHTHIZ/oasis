@@ -44,6 +44,9 @@
       <button class="icon-btn" id="installButton" hidden title="Install OASIS" aria-label="Install OASIS">
         <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M10 3v9m0 0l-3.5-3.5M10 12l3.5-3.5M4 15.5h12" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>
       </button>
+      <button class="icon-btn" id="commandPaletteButton" title="Search actions (Ctrl+K or /)" aria-label="Open command palette">
+        <svg viewBox="0 0 20 20" aria-hidden="true"><circle cx="8.7" cy="8.7" r="5.5" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="m13 13 4 4" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+      </button>
       <button class="icon-btn" id="chatsButton" title="Chats" aria-label="Chats">
         <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M4 5.5A1.5 1.5 0 015.5 4h9A1.5 1.5 0 0116 5.5v6a1.5 1.5 0 01-1.5 1.5H9l-3.5 3v-3h0A1.5 1.5 0 014 11.5z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg>
       </button>
@@ -135,6 +138,33 @@
   </main>
 
 </div>
+
+<dialog class="native-dialog command-dialog" id="commandPaletteDialog" aria-labelledby="commandPaletteTitle" aria-describedby="commandPaletteHelp">
+  <div class="native-dialog-card command-card">
+    <div class="native-dialog-head">
+      <div><h2 id="commandPaletteTitle">Command palette</h2><p>Search chats, workspace actions, plugins and skills.</p></div>
+      <kbd id="commandPaletteModKey">Ctrl K</kbd>
+    </div>
+    <label class="sr-only" for="commandPaletteInput">Search workspace actions</label>
+    <input id="commandPaletteInput" type="search" placeholder="Search actions and integrations…" autocomplete="off" spellcheck="false">
+    <div class="command-results" id="commandPaletteResults" role="listbox" aria-label="Available commands" aria-live="polite"></div>
+    <p class="dialog-hint" id="commandPaletteHelp">↑ / ↓ to move · Enter to run · Esc to close · Type / in an empty message box to open</p>
+    <div class="native-dialog-actions"><button class="btn ghost" type="button" id="commandPaletteClose">Close</button></div>
+  </div>
+</dialog>
+
+<dialog class="native-dialog shortcuts-dialog" id="shortcutsDialog" aria-labelledby="shortcutsTitle" aria-describedby="shortcutsIntro">
+  <div class="native-dialog-card shortcuts-card">
+    <div class="native-dialog-head">
+      <div><h2 id="shortcutsTitle">Keyboard shortcuts and help</h2><p id="shortcutsIntro">Everything you can do with a key press. Every action also has a button, so shortcuts are always optional.</p></div>
+      <button class="btn ghost" type="button" id="shortcutsClose">Close</button>
+    </div>
+    <label class="sr-only" for="shortcutsFilter">Search keyboard shortcuts</label>
+    <input id="shortcutsFilter" type="search" placeholder="Search: send, palette, stop…" autocomplete="off">
+    <div class="shortcuts-list" id="shortcutsList"></div>
+    <p class="dialog-hint" id="shortcutsEmpty" hidden>No shortcuts match that search. Try a simpler word.</p>
+  </div>
+</dialog>
 
 <div class="sheet-backdrop" id="backdrop" hidden></div>
 
