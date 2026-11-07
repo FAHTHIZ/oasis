@@ -15,7 +15,7 @@ import { loadConfig } from './config.mjs';
 import { runHeadless } from './headless.mjs';
 import { attachToolServer } from './mcp.mjs';
 import { applyEffort } from './agent.mjs';
-import { createToolRegistry, defineTool, runTool } from './tool-kernel.mjs';
+import { createToolRegistry, defineTool, redactAuditValue, runTool } from './tool-kernel.mjs';
 
 export { createSession, runAgentTurn, runAgentPlan, runForkedTurn, closeSession, compactHistoryIfNeeded, applyEffort, hookOptions } from './agent.mjs';
 export { runHeadless } from './headless.mjs';
@@ -93,7 +93,7 @@ export function createToolServer(name, tools = []) {
 
       if (item.needsApproval && !options.autoApprove) {
         const ok = options.approval && await options.approval(
-          'Call tool "' + toolName + '" with arguments:\\n' + JSON.stringify(args, null, 2).slice(0, 5000)
+          'Call tool "' + toolName + '" with arguments:\n' + JSON.stringify(redactAuditValue(args), null, 2).slice(0, 5000)
         );
         if (!ok) return { approved: false, message: 'The tool call was not approved.' };
       }
@@ -102,7 +102,7 @@ export function createToolServer(name, tools = []) {
         policy: { decide: () => ({ decision: 'allow' }) },
         signal: options.signal,
         env: options.env || process.env,
-        cwd: options.cwd || process.cwd()
+        cwd: options.cwd || options.root || process.cwd()
       });
       if (typeof options.onAudit === 'function' && outcome.audit) {
         try { options.onAudit(outcome.audit); } catch { /* audit observers cannot break tool execution */ }
