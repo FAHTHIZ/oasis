@@ -88,37 +88,74 @@ export async function snapshotWorkingTree(root, reason, { now = Date.now() } = {
   if (!top.ok || !top.stdout) return null;
   const cwd = top.stdout;
   const status = await git(cwd, ['status', '--porcelain', '--untracked-files=normal']);
-  const stashes = /stash (drop|clear)/.test(reason) ? (await git(cwd, ['stash', 'list', '--format=%H'])).stdout.split('\n').filter(Boolean) : [];
+  if (!status.ok) throw new Error('Could not inspect the Git working tree before a destructive command: ' + (status.stderr || 'git status failed.'));
+  let stashes = [];
+  if (/stash (drop|clear)/.test(reason)) {
+    const listed = await git(cwd, ['stash', 'list', '--format=%H']);
+    if (!listed.ok) throw new Error('Could not inspect the Git stash before a destructive command: ' + (listed.stderr || 'git stash list failed.'));
+    stashes = listed.stdout.split('\n').filter(Boolean);
+  }
   if (!status.stdout && !stashes.length) return null;
+
   const stamp = new Date(now).toISOString().replace(/[:.]/g, '-');
   const ref = 'refs/oasis/safety/' + stamp;
+  const createdRefs = [];
   let commit = '';
-  if (status.stdout) {
-    const dir = await mkdtemp(path.join(os.tmpdir(), 'oasis-git-safety-'));
-    try {
-      const env = { GIT_INDEX_FILE: path.join(dir, 'index') };
-      const head = await git(cwd, ['rev-parse', '--verify', '-q', 'HEAD']);
-      if (head.ok) await git(cwd, ['read-tree', 'HEAD'], env);
-      const added = await git(cwd, ['add', '-A', '--', '.'], env);
-      if (!added.ok) return null;
-      const tree = await git(cwd, ['write-tree'], env);
-      if (!tree.ok) return null;
-      const message = 'OASIS safety snapshot before: ' + reason;
-      const made = await git(cwd, ['commit-tree', tree.stdout, ...(head.ok ? ['-p', head.stdout] : []), '-m', message], { GIT_AUTHOR_NAME: 'OASIS', GIT_AUTHOR_EMAIL: 'oasis@localhost', GIT_COMMITTER_NAME: 'OASIS', GIT_COMMITTER_EMAIL: 'oasis@localhost' });
-      if (!made.ok) return null;
-      commit = made.stdout;
-      await git(cwd, ['update-ref', '-m', message, ref, commit]);
-    } finally {
-      await rm(dir, { recursive: true, force: true });
+  let dir = null;
+  try {
+    if (status.stdout) {
+      dir = await mkdtemp(path.join(os.tmpdir(), 'oasis-git-safety-'));
+      try {
+        const env = { GIT_INDEX_FILE: path.join(dir, 'index') };
+        const head = await git(cwd, ['rev-parse', '--verify', '-q', 'HEAD']);
+        if (head.ok) {
+          const read = await git(cwd, ['read-tree', 'HEAD'], env);
+          if (!read.ok) throw new Error('Could not prepare the temporary Git index: ' + (read.stderr || 'git read-tree failed.'));
+        }
+        const added = await git(cwd, ['add', '-A', '--', '.'], env);
+        if (!added.ok) throw new Error('Could not stage the working tree into the temporary safety index: ' + (added.stderr || 'git add failed.'));
+        const tree = await git(cwd, ['write-tree'], env);
+        if (!tree.ok) throw new Error('Could not write the safety snapshot tree: ' + (tree.stderr || 'git write-tree failed.'));
+        const message = 'OASIS safety snapshot before: ' + reason;
+        const made = await git(cwd, ['commit-tree', tree.stdout, ...(head.ok ? ['-p', head.stdout] : []), '-m', message], {
+          GIT_AUTHOR_NAME: 'OASIS',
+          GIT_AUTHOR_EMAIL: 'oasis@localhost',
+          GIT_COMMITTER_NAME: 'OASIS',
+          GIT_COMMITTER_EMAIL: 'oasis@localhost'
+        });
+        if (!made.ok || !made.stdout) throw new Error('Could not create the safety snapshot commit: ' + (made.stderr || 'git commit-tree failed.'));
+        commit = made.stdout;
+        const saved = await git(cwd, ['update-ref', '-m', message, ref, commit]);
+        if (!saved.ok) throw new Error('Could not save the safety snapshot reference: ' + (saved.stderr || 'git update-ref failed.'));
+        createdRefs.push(ref);
+      } finally {
+        await rm(dir, { recursive: true, force: true });
+        dir = null;
+      }
     }
+
+    // Await every stash reference. A destructive stash operation must not race
+    // ahead while the recovery refs are still being written.
+    for (let index = 0; index < stashes.length; index++) {
+      const stashRef = ref + '-stash-' + index;
+      const saved = await git(cwd, ['update-ref', stashRef, stashes[index]]);
+      if (!saved.ok) throw new Error('Could not preserve stash entry ' + (index + 1) + ': ' + (saved.stderr || 'git update-ref failed.'));
+      createdRefs.push(stashRef);
+    }
+  } catch (error) {
+    for (const createdRef of createdRefs.reverse()) {
+      await git(cwd, ['update-ref', '-d', createdRef]);
+    }
+    throw new Error('Could not create a complete OASIS safety snapshot; the destructive command was not run. ' + String(error && error.message || error));
+  } finally {
+    if (dir) await rm(dir, { recursive: true, force: true });
   }
-  stashes.forEach((sha, index) => { git(cwd, ['update-ref', ref + '-stash-' + index, sha]); });
+
   const restore = commit
     ? 'git restore --source=' + ref + ' --worktree -- .'
     : 'git stash apply ' + (stashes[0] || '');
   return { ref, commit, stashes, restore, cwd };
 }
-
 export async function dropSnapshot(snapshot) {
   if (!snapshot) return;
   await git(snapshot.cwd, ['update-ref', '-d', snapshot.ref]);
