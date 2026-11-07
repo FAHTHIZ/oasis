@@ -14,6 +14,8 @@
 //    session or since the last run) marks the tool as changed.
 //  - Calls to a marked tool need a person in every mode, including bypass.
 //    Approving a changed tool re-pins its new definition.
+//  - Optional per-server allowedTools list restricts which tools an MCP server
+//    may expose; default (no list) allows all, preserving existing behavior.
 import { createHash } from 'node:crypto';
 import { readFileSync, writeFileSync, mkdirSync, renameSync } from 'node:fs';
 import path from 'node:path';
@@ -112,4 +114,19 @@ export function heldToolReason(mapped) {
   if (mapped.poisoned && mapped.poisoned.length) return 'its description ' + mapped.poisoned.join('; ');
   if (mapped.changed) return 'its definition changed since you first used this server (possible "rug pull")';
   return '';
+}
+
+// Filter an MCP server's tools by an optional per-server allowedTools list.
+// Patterns support a trailing * wildcard (e.g. "search_*"). No list (or an
+// empty one) means every tool is allowed, preserving existing behavior.
+export function toolAllowlist(serverName, tools, settings = {}) {
+  const server = settings && settings.mcp && settings.mcp.servers && settings.mcp.servers[serverName];
+  const allowed = server && Array.isArray(server.allowedTools) ? server.allowedTools : null;
+  if (!allowed || !allowed.length) return tools;
+  const match = (name) => allowed.some((pattern) => {
+    const text = String(pattern || '');
+    if (text.endsWith('*')) return name.startsWith(text.slice(0, -1));
+    return name === text;
+  });
+  return tools.filter((tool) => match(tool.name));
 }
