@@ -86,7 +86,7 @@ export function bridgeToolDefinition(definition, handler = {}) {
     inputSchema: definition.function.parameters || {},
     outputSchema: handler.outputSchema || {},
     timeoutMs: handler.timeoutMs,
-    requiresApproval: handler.requiresApproval ?? (!CAPABILITY_BY_TOOL[name] && !name.startsWith('mcp_') ? true : ['delete_file', 'run_command', 'run_shell', 'powershell', 'monitor', 'install_package', 'configure_mcp_server', 'git_push', 'git_commit', 'create_pull_request'].includes(name)),
+    requiresApproval: handler.requiresApproval ?? (name.startsWith('mcp_') || !CAPABILITY_BY_TOOL[name] ? true : ['delete_file', 'run_command', 'run_shell', 'powershell', 'monitor', 'install_package', 'configure_mcp_server', 'git_push', 'git_commit', 'create_pull_request'].includes(name)),
     rollback: handler.rollback || { supported: ['write_file', 'edit_file', 'delete_file'].includes(name), kind: ['write_file', 'edit_file', 'delete_file'].includes(name) ? 'file-snapshot' : 'none' },
     run: handler.run || (async () => ({ bridged: true }))
   });
