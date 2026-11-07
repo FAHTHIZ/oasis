@@ -153,13 +153,14 @@ export function selectTaskModel(prompt, currentModel, routing = {}, options = {}
       return missing;
     };
     const candidates = [requested, strongModel, baseModel].filter((model, index, all) => model && all.indexOf(model) === index);
-    const rejected = missingCapabilities(requested);
+    const rejectedModel = requested;
+    const rejected = missingCapabilities(rejectedModel);
     if (rejected.length) {
       const fallback = candidates.slice(1).find((model) => missingCapabilities(model).length === 0);
       if (fallback) {
         requested = fallback;
         tier = 'strong';
-        reason += '; selected ' + fallback + ' because the requested model is catalogued without required ' + rejected.join(' and ');
+        reason += '; selected ' + fallback + ' instead of ' + rejectedModel + ' because it is catalogued without required ' + rejected.join(' and ');
       } else {
         requested = baseModel;
         tier = 'strong';
