@@ -114,7 +114,7 @@ export function redactAuditValue(value, depth = 0, fieldName = '', redactText = 
       }
       return out;
     }
-    return value.map((item) => redactAuditValue(item, depth + 1, fieldName));
+    return value.map((item) => redactAuditValue(item, depth + 1, fieldName, redactText));
   }
   if (value && typeof value === 'object') {
     return Object.fromEntries(Object.entries(value).map(([key, item]) => [key, redactAuditValue(item, depth + 1, key, redactText)]));

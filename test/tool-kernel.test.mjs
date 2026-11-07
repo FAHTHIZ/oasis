@@ -290,3 +290,19 @@ test('kernel execution without an explicit policy or authorizer fails closed', a
   assert.match(result.error, /no tool policy is configured/);
   assert.equal(invoked, false);
 });
+
+test('runtime secret redaction is preserved inside nested audit arrays', async () => {
+  const tool = defineTool({
+    name: 'array_secret_audit',
+    capabilities: ['read'],
+    risk: 'low',
+    inputSchema: { type: 'object' },
+    run: async () => 'ok'
+  });
+  const result = await runTool(tool, { metadata: { values: ['nested-secret-value'] } }, {
+    policy: { decide: () => ({ decision: 'allow' }) },
+    redactText: (value) => String(value).replaceAll('nested-secret-value', '[runtime-redacted]')
+  });
+  assert.equal(result.ok, true);
+  assert.equal(result.audit.input.metadata.values[0], '[runtime-redacted]');
+});
