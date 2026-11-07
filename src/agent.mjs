@@ -2874,14 +2874,17 @@ function questionBudget(session, options = {}) {
 
 const ASK_USER_TOOL_DEFINITION = { type: 'function', function: {
   name: 'ask_user_question',
-  description: 'Ask the user a multiple-choice question when a decision really changes the work (which approach, library, scope, or behavior) and you cannot settle it from the code or the request. Offer 2-4 concrete options; the user can also type their own answer. Not for permission (tools ask automatically) or things you can find out yourself. For minor choices pick a default and say so.',
+  description: 'Ask the user a multiple-choice question when a decision really changes the work. Options may be strings or objects with a label and optional description. Not for permission or things you can find out yourself.',
   parameters: { type: 'object', properties: {
     question: { type: 'string', description: 'One clear question ending with a question mark' },
     header: { type: 'string', description: 'Very short label, up to 12 characters' },
-    options: { type: 'array', minItems: 2, maxItems: 4, items: { type: 'object', properties: {
-      label: { type: 'string', description: '1-5 word choice' },
-      description: { type: 'string', description: 'What this choice means or its trade-off' }
-    }, required: ['label'] } },
+    options: { type: 'array', minItems: 2, maxItems: 4, items: { oneOf: [
+      { type: 'string', minLength: 1 },
+      { type: 'object', properties: {
+        label: { type: 'string', minLength: 1, description: '1-5 word choice' },
+        description: { type: 'string', description: 'What this choice means or its trade-off' }
+      }, required: ['label'], additionalProperties: false }
+    ] } },
     multiSelect: { type: 'boolean', description: 'Allow choosing several options' }
   }, required: ['question', 'options'] }
 } };
@@ -4824,7 +4827,7 @@ async function executeOneCallRaw(session, call, context, options) {
       throw new Error('The tool ' + name + ' is not available to this agent.');
     }
     const inputSchema = toolParameterSchemas(session).get(name);
-    const validation = validateToolArguments(inputSchema, args);
+    const validation = await validateToolArguments(inputSchema, args);
     if (!validation.valid) {
       const detail = validation.schemaError
         ? 'the registered input schema is invalid: ' + validation.schemaError

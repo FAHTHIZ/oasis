@@ -1,21 +1,25 @@
 // Validate model-supplied tool arguments against the same JSON Schema that
-// is advertised to the provider. Compilation is cached per schema object and
-// validation never coerces or mutates the caller's arguments.
-import Ajv from 'ajv';
-
-const ajv = new Ajv({
-  allErrors: true,
-  strict: false,
-  allowUnionTypes: true,
-  validateFormats: false,
-  addUsedSchema: false,
-});
+// is advertised to the provider. Ajv is loaded on first actual validation so
+// ordinary CLI startup does not pay for a tool-specific dependency.
+let ajvPromise;
 const validators = new WeakMap();
 
-function validatorFor(schema) {
-  if (!schema || typeof schema !== 'object') {
-    return ajv.compile(schema);
+async function getAjv() {
+  if (!ajvPromise) {
+    ajvPromise = import('ajv').then(({ default: Ajv }) => new Ajv({
+      allErrors: true,
+      strict: false,
+      allowUnionTypes: true,
+      validateFormats: false,
+      addUsedSchema: false
+    }));
   }
+  return ajvPromise;
+}
+
+async function validatorFor(schema) {
+  const ajv = await getAjv();
+  if (!schema || typeof schema !== 'object') return ajv.compile(schema);
   const cached = validators.get(schema);
   if (cached) return cached;
   const validator = ajv.compile(schema);
@@ -32,11 +36,11 @@ function describeErrors(errors) {
   });
 }
 
-export function validateToolArguments(schema, args) {
+export async function validateToolArguments(schema, args) {
   if (schema === undefined || schema === null) return { valid: true, skipped: true };
   let validate;
   try {
-    validate = validatorFor(schema);
+    validate = await validatorFor(schema);
   } catch (error) {
     return { valid: false, schemaError: String(error && error.message || error) };
   }
