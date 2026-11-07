@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, rm, writeFile, readFile, stat, utimes } from 'node:fs/promises';
+import { mkdtemp, mkdir, rm, writeFile, readFile, stat, utimes } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import {
@@ -82,7 +82,7 @@ test('image support comes from the catalog modalities, with overrides and a fall
   assert.equal(imageInputCapability({ model: 'claude-opus-4-6' }, {}).status, 'supported');
 });
 
-test('trimCatalog keeps only limits and prices', () => {
+test('trimCatalog keeps the model metadata required by the runtime', () => {
   const trimmed = trimCatalog({ ...RAW, acme: { ...RAW.acme, models: { ...RAW.acme.models, junk: { name: 'x' } } } }, ['acme']);
   assert.deepEqual(Object.keys(trimmed), ['acme']);
   assert.equal(trimmed.acme.models.junk, undefined);
@@ -119,6 +119,32 @@ test('refresh downloads models.dev into the user cache once a day and the newer 
   assert.equal(await refreshModelCatalog({ env, fetchImpl: async () => new Response('nope', { status: 503 }) }), false);
   assert.equal(await refreshModelCatalog({ env, fetchImpl: async () => { throw new Error('offline'); } }), false);
   assert.ok((await stat(catalogCachePath(env))).size > 0, 'failed refresh keeps the old cache');
+});
+
+test('a fresh legacy cache is upgraded once when the catalog schema advances', async (t) => {
+  const dir = await mkdtemp(path.join(os.tmpdir(), 'oasis-catalog-upgrade-'));
+  t.after(() => { rm(dir, { recursive: true, force: true }); resetModelCatalogForTest(); });
+  const env = { OASIS_CONFIG_DIR: dir };
+  const file = catalogCachePath(env);
+  await mkdir(path.dirname(file), { recursive: true });
+  await writeFile(file, JSON.stringify({
+    source: 'https://models.dev/api.json',
+    fetchedAt: new Date().toISOString(),
+    providers: trimCatalog(RAW)
+  }));
+  let calls = 0;
+  const fetchImpl = async (url) => {
+    calls += 1;
+    assert.equal(url, 'https://models.dev/api.json');
+    return new Response(JSON.stringify(RAW));
+  };
+  assert.equal(await refreshModelCatalog({ env, fetchImpl }), true);
+  const upgraded = JSON.parse(await readFile(file, 'utf8'));
+  assert.equal(upgraded.schemaVersion, 2);
+  assert.equal(upgraded.providers.acme.models['acme-tool'].toolCall, true);
+  assert.equal(upgraded.providers.acme.models['acme-no-tool'].toolCall, false);
+  assert.equal(await refreshModelCatalog({ env, fetchImpl }), false);
+  assert.equal(calls, 1, 'a migrated cache is not fetched again during the same refresh window');
 });
 
 test('catalog refresh honors opt-outs', () => {
