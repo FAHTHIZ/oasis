@@ -63,10 +63,24 @@ test('README and package metadata describe the current product without unsupport
   assert.ok(readme.includes('Apache License 2.0'));
   assert.ok(readme.includes('npm run check'));
   assert.ok(!readme.includes('beats Claude Code') && !readme.includes('100% success') && !readme.includes('security certified'));
+  assert.match(pkg.description, /native desktop, connected browser sessions/);
   assert.equal(pkg.version.split('.').length, 3);
   assert.equal(pkg.oasisRelease?.channel, 'stable');
   assert.equal(pkg.oasisRelease?.stableTag, 'v' + pkg.version);
 });
+test('architecture and readiness docs describe the normal session and native desktop product', async () => {
+  const [architecture, scorecard, index] = await Promise.all([
+    readFile(new URL('../docs/ARCHITECTURE.md', import.meta.url), 'utf8'),
+    readFile(new URL('../docs/ENGINEERING-SCORECARD.md', import.meta.url), 'utf8'),
+    readFile(new URL('../docs/README.md', import.meta.url), 'utf8')
+  ]);
+  for (const doc of [architecture, scorecard, index]) {
+    assert.doesNotMatch(doc, /standalone browser app|PWA install|installable browser app/i);
+  }
+  assert.ok(scorecard.includes('Connected workspace delivery'));
+  assert.ok(index.includes('normal connected browser session'));
+});
+
 test('desktop release requires a stable version and same-commit gates, with generated release notes', async () => {
   const workflow = await readFile(new URL('../.github/workflows/desktop-build.yml', import.meta.url), 'utf8');
   assert.ok(workflow.includes('branches: [main]'));

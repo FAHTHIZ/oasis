@@ -1,7 +1,7 @@
 {
   "name": "oasis-oss",
   "version": "1.1.0",
-  "description": "Open-source, model-agnostic coding-agent runtime for CLI, desktop, browser and editor workflows.",
+  "description": "Open-source, model-agnostic coding-agent runtime for CLI, native desktop, connected browser sessions and editor workflows.",
   "type": "module",
   "main": "./src/sdk.mjs",
   "exports": {

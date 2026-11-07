@@ -1,8 +1,6 @@
-// `oasis app`: serve the universal app from this installation, with no build
-// step and no server-side state. The app itself runs entirely in the browser
-// that opens it (phone, tablet or computer), so the server only hands out
-// static files: the app, the shared browser-safe modules it imports, and the
-// bundled skills with a generated index.
+// Shared browser-safe module graph and path resolver for the host-connected
+// workspace. The static server below remains a test harness; the standalone
+// browser-app CLI command and public PWA deployment have been retired.
 import { createServer } from 'node:http';
 import { readdir, readFile, stat } from 'node:fs/promises';
 import path from 'node:path';

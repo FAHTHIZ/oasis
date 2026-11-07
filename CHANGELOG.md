@@ -4,7 +4,7 @@ User-facing change history grouped by package version. A version heading does no
 
 ## Unreleased
 
-- Added a public OASIS website at the GitHub Pages root while keeping the installable browser app at /app/.
+- The public site now presents OASIS as a full product overview, with native desktop downloads and the normal host-connected session as its primary paths; the standalone installable browser app has been retired.
 - Fixed Server-Sent Events without an explicit event field to use the protocol default event name, message.
 - Added an engineering scorecard, first-run guide and focused pull-request template.
 
