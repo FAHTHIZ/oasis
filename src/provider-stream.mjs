@@ -22,7 +22,7 @@ export async function consumeServerSentEvents(response, onEvent, onStray) {
   const decoder = new TextDecoder();
   let receivedBytes = 0;
   const parser = createSseParser({
-    onEvent: (message) => onEvent({ event: message.event || '', data: message.data }),
+    onEvent: (message) => onEvent({ event: message.event || 'message', data: message.data }),
     onError: (error) => { if (error.type === 'unknown-field' && error.line && typeof onStray === 'function') onStray(error.line); }
   });
   try {

@@ -4,6 +4,10 @@ User-facing change history grouped by package version. A version heading does no
 
 ## Unreleased
 
+- Added a public OASIS website at the GitHub Pages root while keeping the installable browser app at /app/.
+- Fixed Server-Sent Events without an explicit event field to use the protocol default event name, message.
+- Added an engineering scorecard, first-run guide and focused pull-request template.
+
 - Corrected release documentation to distinguish Git tags, CI artifacts and published GitHub Release assets.
 - Updated the repository inventory and architecture notes after the first provider-stream extraction.
 - Added a reproducible, caveated comparison of repository presentation and engineering practices against a 100-project AI-agent reference set.
@@ -20,7 +24,7 @@ User-facing change history grouped by package version. A version heading does no
 - Reasoning replay follows the models.dev `interleaved` field, so GLM, MiMo and other interleaved-thinking models get their `reasoning_content` back between tool calls (previously only names containing deepseek, moonshot or kimi). A `replayReasoning` config value overrides it. The bundled catalog snapshot was refreshed.
 - The token benchmark (`bench/tokens`) counts tokens with the same o200k BPE counter the runtime uses instead of characters / 4; the baseline was regenerated (taskflow-search ~162.7k, normalize-token-usage ~256.2k input tokens).
 
-## 1.1.0
+## [1.1.0]
 
 - Added desktop update notifications and checksum verification before installing release assets.
 - Improved first-run setup with hardware-aware model and provider recommendations.
@@ -28,6 +32,6 @@ User-facing change history grouped by package version. A version heading does no
 - Expanded optional desktop builds for macOS Intel, Linux ARM64 and Windows ARM64 when the corresponding CI jobs succeed.
 - Improved usage and local-model cost reporting, context management and harness evaluation workflows.
 
-## 1.0.0
+## [1.0.0]
 
 - First stable public release of the OASIS coding-agent runtime and desktop application.

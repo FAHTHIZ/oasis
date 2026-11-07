@@ -1,29 +1,89 @@
 <!doctype html>
 <html lang="en">
 <head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="robots" content="noindex,follow">
-  <meta name="description" content="Open the installable OASIS browser app.">
-  <meta http-equiv="refresh" content="0;url=app/">
-  <link rel="canonical" href="https://fahthiz.github.io/oasis/app/">
-  <title>OASIS — Browser App</title>
-  <style>
-    :root{color-scheme:dark;background:#0b100c;color:#e8efe9;font:16px system-ui,sans-serif}
-    body{min-height:100vh;display:grid;place-items:center;margin:0}
-    main{max-width:34rem;padding:2rem;text-align:center}
-    a{color:#9bff55}
-    small{display:block;margin-top:1.5rem;color:#9baa9f}
-  </style>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="color-scheme" content="dark"><meta name="theme-color" content="#0B100C"><meta name="robots" content="index,follow">
+<meta name="description" content="OASIS is an open-source, model-agnostic coding-agent runtime. Bring your model; OASIS coordinates tools, permissions, agents and verification around your project.">
+<link rel="canonical" href="https://fahthiz.github.io/oasis/"><link rel="icon" href="./assets/oasis-icon.svg" type="image/svg+xml">
+<link rel="preload" href="./assets/fonts/geist.woff2" as="font" type="font/woff2" crossorigin><link rel="preload" href="./assets/fonts/bricolage.woff2" as="font" type="font/woff2" crossorigin><link rel="stylesheet" href="./assets/site.css">
+<meta property="og:type" content="website"><meta property="og:site_name" content="OASIS"><meta property="og:url" content="https://fahthiz.github.io/oasis/"><meta property="og:title" content="OASIS — Bring the model. Keep control of the work."><meta property="og:description" content="An open-source, model-agnostic coding-agent runtime for tools, permissions, agent coordination and verification."><meta property="og:image" content="https://fahthiz.github.io/oasis/assets/social-card.svg"><meta property="og:image:alt" content="OASIS — Code. Automate. Flourish.">
+<meta name="twitter:card" content="summary_large_image"><meta name="twitter:title" content="OASIS — Bring the model. Keep control of the work."><meta name="twitter:description" content="An open-source, model-agnostic coding-agent runtime."><meta name="twitter:image" content="https://fahthiz.github.io/oasis/assets/social-card.svg">
+<title>OASIS — Open-source coding-agent runtime</title>
+<script type="application/ld+json">{"@context":"https://schema.org","@type":"SoftwareApplication","name":"OASIS","applicationCategory":"DeveloperApplication","operatingSystem":"Windows, macOS, Linux, Web","softwareVersion":"1.1.0","license":"https://www.apache.org/licenses/LICENSE-2.0","url":"https://fahthiz.github.io/oasis/","codeRepository":"https://github.com/FAHTHIZ/oasis","description":"An open-source, model-agnostic coding-agent runtime and development workspace."}</script>
 </head>
 <body>
-  <main>
-    <h1>OASIS</h1>
-    <p>Opening the OASIS application…</p>
-    <p><a href="app/">Open the application</a></p>
-    <small>Build <span id="build"><!--OASIS:BUILD-->source<!--/OASIS:BUILD--></span></small>
-    <div hidden><!--OASIS:CHANGES--><!--/OASIS:CHANGES--></div>
-  </main>
-  <script>location.replace('app/');</script>
-</body>
-</html>
+<a class="skip-link" href="#main">Skip to content</a>
+<header class="site-header"><div class="shell header-inner">
+<a class="brand" href="./" aria-label="OASIS home"><img src="./assets/oasis-mark.svg" width="34" height="34" alt=""><span>OASIS</span></a>
+<button class="menu-toggle" type="button" aria-expanded="false" aria-controls="site-nav"><span class="menu-icon" aria-hidden="true"></span><span>Menu</span></button>
+<nav class="site-nav" id="site-nav" aria-label="Main navigation"><a href="#runtime">Runtime</a><a href="#interfaces">Interfaces</a><a href="#evidence">Evidence</a><a href="https://github.com/FAHTHIZ/oasis/tree/main/docs">Documentation</a><a class="nav-cta" href="./app/">Open OASIS <span aria-hidden="true">↗</span></a></nav>
+</div></header>
+<main id="main">
+<section class="hero shell">
+<div class="hero-copy"><p class="eyebrow"><span class="eyebrow-dot"></span> OPEN SOURCE <span class="eyebrow-sep">/</span> MODEL AGNOSTIC <span class="eyebrow-sep">/</span> APACHE 2.0</p><h1>Bring the model.<br><em>Keep control</em> of the work.</h1>
+<p class="hero-lede">OASIS is the runtime around your coding model. It connects a model to your project, coordinates tools and agents, applies permission checks, and keeps verification in the loop.</p>
+<div class="hero-actions"><a class="button button-primary" href="./app/">Explore the browser app <span aria-hidden="true">↗</span></a><a class="button button-quiet" href="https://github.com/FAHTHIZ/oasis">View source on GitHub <span aria-hidden="true">↗</span></a></div><p class="hero-footnote">Bring a provider you choose. Keep your project workflow in your hands.</p></div>
+<div class="hero-art" aria-label="OASIS runtime architecture illustration"><div class="art-orbit orbit-one"></div><div class="art-orbit orbit-two"></div><div class="portal-card">
+<div class="portal-topline"><span>OASIS RUNTIME</span><span class="portal-indicator">● READY</span></div><div class="portal-mark-wrap"><img src="./assets/oasis-mark.svg" width="118" height="118" alt="OASIS layered portal mark"></div>
+<div class="portal-title">One runtime.<br><span>Many ways to work.</span></div><div class="portal-stack"><div><span class="stack-index">01</span><span>MODEL</span><small>Reasoning provider</small></div><div><span class="stack-index">02</span><span>TOOLS</span><small>Project capabilities</small></div><div><span class="stack-index">03</span><span>GUARDS</span><small>Permissions & approvals</small></div><div><span class="stack-index">04</span><span>PROOF</span><small>Tests, diffs & review</small></div></div></div><div class="art-caption">CODE. AUTOMATE. FLOURISH.</div></div>
+</section>
+<section class="principle-band"><div class="shell principle-inner"><p>THE IDEA</p><h2>The model thinks.<br><span>The runtime does the work around it.</span></h2><p class="principle-copy">A model is only one part of a coding agent. OASIS supplies the project context, tools, execution boundaries, coordination and checks that turn a response into a workflow.</p></div></section>
+
+<section class="section shell" id="runtime"><div class="section-heading"><div><p class="eyebrow">01 / THE RUNTIME</p><h2>Designed around the work,<br><span>not the model brand.</span></h2></div><p>Use a provider that fits your task, budget and hardware. OASIS owns the surrounding runtime contracts while the chosen model remains responsible for much of the reasoning.</p></div>
+<div class="flow-diagram" aria-label="Model to runtime to guarded tools to verification flow"><div class="flow-node"><span class="flow-num">01</span><strong>Your model</strong><small>Local or hosted</small></div><span class="flow-arrow" aria-hidden="true">→</span><div class="flow-node flow-core"><span class="flow-num">02</span><strong>OASIS runtime</strong><small>Context · routing · sessions</small></div><span class="flow-arrow" aria-hidden="true">→</span><div class="flow-node"><span class="flow-num">03</span><strong>Guarded tools</strong><small>Permissions · approvals</small></div><span class="flow-arrow" aria-hidden="true">→</span><div class="flow-node"><span class="flow-num">04</span><strong>Verification</strong><small>Tests · diffs · review</small></div></div>
+<div class="feature-grid">
+<article class="feature-card"><span class="card-index">A / PROVIDERS</span><h3>Bring your own model</h3><p>Connect supported hosted providers, local model servers and OpenAI-compatible endpoints. Provider choice stays separate from the runtime.</p><a href="https://github.com/FAHTHIZ/oasis/blob/main/docs/CONFIGURATION.md">Provider configuration ↗</a></article>
+<article class="feature-card"><span class="card-index">B / WORKSPACE</span><h3>Work with the project</h3><p>File reading and editing, search, patching, command execution and Git-aware workflows give the agent useful project tools.</p><a href="https://github.com/FAHTHIZ/oasis/blob/main/docs/ARCHITECTURE.md">Runtime architecture ↗</a></article>
+<article class="feature-card"><span class="card-index">C / PERMISSIONS</span><h3>Keep decisions visible</h3><p>Permission rules and approval flows mediate tool actions. Approval prompts are not a substitute for operating-system isolation.</p><a href="https://github.com/FAHTHIZ/oasis/blob/main/SECURITY.md">Security policy ↗</a></article>
+<article class="feature-card"><span class="card-index">D / COORDINATION</span><h3>Delegate focused work</h3><p>Subagents, specialist reviews, shared tasks and worktree-oriented workflows help structure larger jobs.</p><a href="https://github.com/FAHTHIZ/oasis/blob/main/docs/REPLACEMENT-ROADMAP.md">Engineering roadmap ↗</a></article>
+<article class="feature-card"><span class="card-index">E / VERIFICATION</span><h3>Check the result</h3><p>Diagnostics, test execution, diff review, checkpoints and claim checks help separate completed work from unverified claims.</p><a href="https://github.com/FAHTHIZ/oasis/blob/main/docs/BENCHMARKS.md">Benchmark methodology ↗</a></article>
+<article class="feature-card"><span class="card-index">F / EXTENSIBILITY</span><h3>Extend the workflow</h3><p>MCP, plugins, hooks, Agent Skills and integrations extend capabilities. Review third-party code and permissions before enabling it.</p><a href="https://github.com/FAHTHIZ/oasis/tree/main/skills">Browse skills ↗</a></article>
+</div></section>
+
+<section class="demo-section" id="demo"><div class="shell demo-layout"><div class="demo-copy"><p class="eyebrow">02 / A REAL RUN</p><h2>See the agent<br><span>work through a task.</span></h2><p>This is an unscripted OASIS CLI run using gpt-oss-20b. The recording shows a file read, a bug fix, a new test, an approval step and a verification gate asking the agent to review its changes.</p>
+<div class="demo-facts"><div><strong>6m 19s</strong><span>Original run time</span></div><div><strong>7</strong><span>Tool calls</span></div><div><strong>50.9k</strong><span>Reported tokens</span></div></div>
+<p class="fine-print">Recorded 5 November 2026. Waits from the free inference endpoint were shortened in the presentation. This is a qualitative product example, not a controlled benchmark or proof of comparative task success.</p><div class="text-links"><a href="./assets/demo/oasis-real-model-demo.mp4">Watch MP4 ↗</a><a href="./assets/demo/oasis-real-model-demo.cast">Inspect raw terminal recording ↗</a></div></div>
+<a class="demo-frame" href="./assets/demo/oasis-real-model-demo.mp4" aria-label="Open the OASIS real model demonstration video"><img src="./assets/demo/oasis-real-model-demo.gif" loading="lazy" alt="Recorded OASIS terminal session showing a coding agent reading a file, fixing a bug, adding a test, requesting command approval and responding to a verification review."><span class="demo-play" aria-hidden="true">▶</span><span class="demo-frame-label">UNSCRIPTED CLI SESSION <span>OPEN VIDEO ↗</span></span></a></div></section>
+
+<section class="section shell" id="interfaces"><div class="section-heading"><div><p class="eyebrow">03 / INTERFACES</p><h2>One runtime.<br><span>Different environments.</span></h2></div><p>Choose the interface that fits the machine and project. Each surface has different access, so the browser app should not be confused with a host-connected shell.</p></div>
+<div class="interface-grid">
+<article class="interface-card"><div class="interface-icon">⌘</div><h3>CLI & headless</h3><p>Run OASIS against a project on the machine hosting the process. Useful for interactive work, scripts and automation.</p><span class="surface-tag">LOCAL RUNTIME</span></article>
+<article class="interface-card"><div class="interface-icon">▤</div><h3>Connected browser workspace</h3><p>Use a browser to control a local OASIS runtime. Files and commands stay on the computer running that runtime.</p><span class="surface-tag">HOST CONNECTED</span></article>
+<article class="interface-card"><div class="interface-icon">◫</div><h3>Universal browser app</h3><p>Installable PWA with browser storage or a connected GitHub project. It does not provide arbitrary host-shell access.</p><a href="./app/">Open the PWA ↗</a><span class="surface-tag">BROWSER SANDBOX</span></article>
+<article class="interface-card"><div class="interface-icon">▣</div><h3>Desktop application</h3><p>Electron host for the local runtime. CI builds platform installers; check Releases for published packages before expecting a download.</p><a href="https://github.com/FAHTHIZ/oasis/releases">Release availability ↗</a><span class="surface-tag">DESKTOP HOST</span></article>
+<article class="interface-card"><div class="interface-icon">⌁</div><h3>Editor & ACP</h3><p>Editor integration and Agent Client Protocol support connect OASIS to compatible development environments.</p><a href="https://github.com/FAHTHIZ/oasis/tree/main/ide">Editor integration ↗</a><span class="surface-tag">INTEGRATION</span></article>
+<article class="interface-card"><div class="interface-icon">{ }</div><h3>Node.js SDK</h3><p>Embed selected OASIS session and runtime capabilities in a Node.js application.</p><a href="https://github.com/FAHTHIZ/oasis/blob/main/src/sdk.mjs">SDK source ↗</a><span class="surface-tag">DEVELOPER API</span></article>
+</div></section>
+
+<section class="install-section"><div class="shell install-layout"><div><p class="eyebrow">04 / GET STARTED</p><h2>Start with the<br><span>interface you need.</span></h2><p>For the CLI, use Node.js 22.15 or newer and Git. OASIS does not bundle a model or hosted inference account; you choose the provider, credentials and model.</p><div class="install-links"><a href="https://github.com/FAHTHIZ/oasis#download-and-install">Full installation guide ↗</a><a href="https://github.com/FAHTHIZ/oasis/blob/main/MOBILE.md">Phone & tablet guide ↗</a></div></div>
+<div class="code-panel"><div class="code-head"><span>CLI · SOURCE INSTALL</span><button class="copy-button" type="button" data-copy="git clone https://github.com/FAHTHIZ/oasis.git&#10;cd oasis&#10;npm install&#10;npm install --global .&#10;oasis doctor">Copy commands</button></div><pre><code><span class="code-muted"># Clone and install OASIS</span>
+git clone https://github.com/FAHTHIZ/oasis.git
+cd oasis
+npm install
+npm install --global .
+
+<span class="code-muted"># Start in your project</span>
+cd /path/to/your/project
+oasis connect
+oasis</code></pre><p class="code-note">For local model servers, configure the endpoint and model you already have available. Provider setup is documented in the repository.</p></div></div></section>
+
+<section class="section shell release-section" id="downloads"><div class="section-heading"><div><p class="eyebrow">05 / DISTRIBUTION</p><h2>Desktop packages,<br><span>when they are published.</span></h2></div><p>Builds and releases are different things. A CI artifact or Git tag is not a public installer download. This page only shows direct files when a GitHub Release has attached them.</p></div>
+<div class="release-panel"><div class="release-symbol" aria-hidden="true">↓</div><div class="release-copy"><h3>Check the latest published release</h3><p>When installers and SHA256SUMS are attached to a release, this section is updated from those actual assets. No release assets are listed here until that happens.</p><div class="release-downloads" id="release-downloads"><!--OASIS:DOWNLOADS--><p class="release-empty">No published desktop installer assets are currently available. You can build OASIS from source using the instructions above.</p><!--/OASIS:DOWNLOADS--></div></div><a class="button button-outline" href="https://github.com/FAHTHIZ/oasis/releases">Open Releases ↗</a></div><p class="fine-print release-footnote">Always verify downloaded packages against the SHA256SUMS file published with the same release.</p></section>
+
+<section class="security-band"><div class="shell security-layout"><div><p class="eyebrow">06 / SECURITY & TRUST</p><h2>Power needs<br><span>clear boundaries.</span></h2></div><div class="security-copy"><p>OASIS can read and modify project files, run commands and send context to configured providers or external services. Treat it as software operating with the permissions of the process running it.</p><ul><li>Approval prompts do not replace operating-system isolation.</li><li>Optional sandbox backends vary by platform and must be reported as unavailable when not active.</li><li>MCP servers, hooks, plugins and imported extensions can run third-party code.</li><li>Review diffs, keep backups, and check the data-handling terms of every provider you configure.</li></ul><a href="https://github.com/FAHTHIZ/oasis/blob/main/SECURITY.md">Read the security policy ↗</a></div></div></section>
+
+<section class="section shell evidence-section" id="evidence"><div class="section-heading"><div><p class="eyebrow">07 / ENGINEERING</p><h2>Evidence over<br><span>big promises.</span></h2></div><p>OASIS is actively developed. Read the source, inspect the test and evaluation approach, and judge results from the evidence—not feature counts or marketing claims.</p></div>
+<div class="evidence-grid">
+<a href="https://github.com/FAHTHIZ/oasis/blob/main/docs/ARCHITECTURE.md"><span>01 / DESIGN</span><strong>Architecture map</strong><small>Runtime components and trust boundaries ↗</small></a>
+<a href="https://github.com/FAHTHIZ/oasis/blob/main/docs/BENCHMARKS.md"><span>02 / MEASUREMENT</span><strong>Benchmark methodology</strong><small>What is measured and what is not ↗</small></a>
+<a href="https://github.com/FAHTHIZ/oasis/blob/main/docs/PROJECT-QUALITY-BENCHMARK.md"><span>03 / REVIEW</span><strong>Project-quality benchmark</strong><small>Repository review and peer reference set ↗</small></a>
+<a href="https://github.com/FAHTHIZ/oasis/blob/main/docs/ENGINEERING-SCORECARD.md"><span>04 / READINESS</span><strong>Engineering scorecard</strong><small>Open gates and proof requirements ↗</small></a>
+<a href="https://github.com/FAHTHIZ/oasis/blob/main/docs/REPLACEMENT-ROADMAP.md"><span>05 / EVOLUTION</span><strong>Replacement roadmap</strong><small>Priorities and staged improvements ↗</small></a>
+<a href="https://github.com/FAHTHIZ/oasis/blob/main/CONTRIBUTING.md"><span>06 / COMMUNITY</span><strong>Contributing guide</strong><small>Build, test and submit changes ↗</small></a>
+</div></section>
+
+<section class="closing-cta"><div class="shell closing-inner"><img src="./assets/oasis-mark.svg" width="58" height="58" alt=""><p class="eyebrow">YOUR MODEL. YOUR PROJECT. YOUR CALL.</p><h2>Build with the runtime<br><span>around the model.</span></h2><div class="hero-actions"><a class="button button-primary" href="./app/">Open OASIS <span aria-hidden="true">↗</span></a><a class="button button-quiet" href="https://github.com/FAHTHIZ/oasis">Explore the repository <span aria-hidden="true">↗</span></a></div></div></section>
+</main>
+<footer class="site-footer"><div class="shell footer-top"><a class="brand footer-brand" href="./"><img src="./assets/oasis-mark.svg" width="30" height="30" alt=""><span>OASIS</span></a><p>Code. Automate. Flourish.</p><div class="footer-links"><a href="https://github.com/FAHTHIZ/oasis">GitHub</a><a href="https://github.com/FAHTHIZ/oasis/releases">Releases</a><a href="https://github.com/FAHTHIZ/oasis/issues">Issues</a><a href="https://github.com/FAHTHIZ/oasis/discussions">Discussions</a></div></div>
+<div class="shell footer-bottom"><span>Apache License 2.0 · © 2026 OASIS contributors</span><span>Build: <!--OASIS:BUILD-->source checkout<!--/OASIS:BUILD--></span></div>
+<div class="shell footer-changes"><span class="footer-kicker">RECENT PROJECT CHANGES</span><ol><!--OASIS:CHANGES--><li>See the <a href="https://github.com/FAHTHIZ/oasis/commits/main">latest repository commits</a>.</li><!--/OASIS:CHANGES--></ol></div></footer>
+<script src="./assets/site.js" defer></script></body></html>
