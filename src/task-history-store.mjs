@@ -169,7 +169,8 @@ export function createTaskHistoryStore(root, options = {}) {
                 if (migrate) await unlink(path.join(sourceDirectory, name)).catch(() => {});
                 continue;
               }
-              if (!TERMINAL.has(record.status)) {
+              const wasActive = !TERMINAL.has(record.status);
+              if (wasActive) {
                 record.status = 'interrupted';
                 record.error = 'The Oasis runtime restarted before this task finished. Review its saved events and resume from the associated session if appropriate.';
                 record.updatedAt = new Date().toISOString();
@@ -181,8 +182,7 @@ export function createTaskHistoryStore(root, options = {}) {
                 });
                 record.events = record.events.slice(-maxEvents);
               }
-              if (migrate) await writeRecord(record);
-              else if (!TERMINAL.has(validateStored(JSON.parse(source), id, maxEvents).status)) await writeRecord(record);
+              if (migrate || wasActive) await writeRecord(record);
               records.set(id, record);
               if (migrate) await unlink(path.join(sourceDirectory, name));
             } catch {
