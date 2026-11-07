@@ -59,3 +59,23 @@ test('unknown event type is rejected', async () => {
   await assert.rejects(() => appendEvent(root, sessionId, { type: 'bogus' }, { env }), /Unknown event type/);
   await rm(root, { recursive: true, force: true });
 });
+
+test('event logs redact short credentials in named fields and CLI argument pairs', async () => {
+  const root = await makeTempRoot();
+  const sessionId = 'abcdef1234567890abcd';
+  await appendEvent(root, sessionId, {
+    type: 'tool_call',
+    tool: 'run_command',
+    args: {
+      command: 'deploy --token plainEventCommandCredential --region ap-southeast-1',
+      args: ['--api-key', 'plainEventArgCredential', '--limit', '10'],
+      headers: { authorization: 'Bearer plainEventHeaderCredential' }
+    }
+  }, { env });
+  const serialized = JSON.stringify(await readEvents(root, sessionId, { env }));
+  assert.doesNotMatch(serialized, /plainEventCommandCredential|plainEventArgCredential|plainEventHeaderCredential/);
+  assert.match(serialized, /ap-southeast-1/);
+  assert.match(serialized, /--limit/);
+  await clearEvents(root, sessionId, { env });
+  await rm(root, { recursive: true, force: true });
+});
