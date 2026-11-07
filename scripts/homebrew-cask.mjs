@@ -40,7 +40,7 @@ cask "oasis" do
   url "https://github.com/${REPOSITORY}/releases/download/v#{version}/OASIS-#{version}-#{arch}.dmg"
   name "OASIS"
   desc "Local-first AI coding agent with CLI, browser and desktop interfaces"
-  homepage "https://fahthiz.github.io/oasis/"
+  homepage "https://github.com/FAHTHIZ/oasis"
 
   livecheck do
     url :url
@@ -79,7 +79,7 @@ export function renderFormula(version, sourceSha) {
 # Do not edit by hand: the release workflow rewrites this file for each release.
 class OasisCli < Formula
   desc "Local-first AI coding agent for the terminal and browser"
-  homepage "https://fahthiz.github.io/oasis/"
+  homepage "https://github.com/FAHTHIZ/oasis"
   url "https://github.com/${REPOSITORY}/archive/refs/tags/v${version}.tar.gz"
   sha256 "${sourceSha}"
   license "Apache-2.0"
