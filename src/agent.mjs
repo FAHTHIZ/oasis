@@ -4512,7 +4512,7 @@ async function authorizeCall(session, name, args, context, options) {
         .then((note) => session.hookMessages.push(...note.messages)).catch(() => {});
     }
     const nearMiss = policy && typeof policy.allowNearMiss === 'function' ? policy.allowNearMiss(name, args) : '';
-    if (nearMiss && !String(safeMessage || '').includes('Why this asks:')) safeMessage = String(safeMessage || '') + '\n' + redactSecretText(nearMiss);
+    if (nearMiss && !String(safeMessage || '').includes('Why this asks:')) safeMessage = String(safeMessage || '') + '\n' + String(redactAuditValue(nearMiss));
     const answer = await baseApproval(safeMessage, force, { tool: name, suggestion, input: safeArgs });
     if (answer === 'always' && suggestion && policy) policy.rememberForSession(suggestion);
     return Boolean(answer);
