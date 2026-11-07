@@ -41,7 +41,11 @@ test('README describes the actual interfaces and keeps their execution boundarie
   assert.ok(!readme.includes('oasis/app/'));
   assert.ok(!readme.includes('fahthiz.github.io/oasis'));
   assert.ok(readme.startsWith('**Downloads:**'), 'Platform downloads must be the first README content.');
-  assert.ok(!/youtube\\.com|\\.mp4|demo[- ]video/i.test(readme), 'The README must not reference demo videos that have not been supplied.');
+  assert.ok(!/youtube\.com|demo[- ]video/i.test(readme), 'README should use repository-owned demo assets, not external demo-video hosting.');
+  assert.ok(readme.includes('assets/demo/oasis-real-model-demo.mp4'));
+  assert.ok(readme.includes('assets/demo/oasis-real-model-demo.gif'));
+  await stat(path.join(root, 'assets/demo/oasis-real-model-demo.mp4'));
+  await stat(path.join(root, 'assets/demo/oasis-real-model-demo.gif'));
 });
 
 test('OASIS has one consistent public name and a floor-grounded visual identity', async () => {
