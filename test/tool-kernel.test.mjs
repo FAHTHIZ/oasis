@@ -147,3 +147,21 @@ test('audit redaction masks credential-named CLI flags but preserves ordinary ar
   assert.match(serialized, /10/);
   assert.match(serialized, /\[redacted\]/);
 });
+
+test('tool kernel rejects non-object arguments without invoking the tool', async () => {
+  let invocations = 0;
+  const tool = defineTool({
+    name: 'object_only',
+    capabilities: ['read'],
+    risk: 'low',
+    inputSchema: { type: 'object' },
+    run: async () => { invocations++; return 'ran'; }
+  });
+  const policy = { decide: () => ({ decision: 'allow' }) };
+  for (const input of [null, 'not-json-object', [], 42]) {
+    const result = await runTool(tool, input, { policy });
+    assert.equal(result.ok, false);
+    assert.match(result.error, /arguments must be a JSON object/i);
+  }
+  assert.equal(invocations, 0);
+});
