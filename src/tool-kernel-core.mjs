@@ -1,0 +1,259 @@
+import { validateToolArguments } from './tool-schema-validation.mjs';
+
+export const TOOL_CAPABILITIES = Object.freeze(['read', 'write', 'execute', 'network', 'mcp', 'browser', 'git', 'secret']);
+export const TOOL_RISK_LEVELS = Object.freeze(['low', 'medium', 'high', 'critical']);
+
+export function defineTool(definition) {
+  if (!definition || typeof definition !== 'object') throw new TypeError('Tool definition must be an object.');
+  const name = String(definition.name || '');
+  if (!/^[a-z][a-z0-9_.-]*$/i.test(name)) throw new Error('Invalid tool name: ' + name);
+  if (!Array.isArray(definition.capabilities) || definition.capabilities.length === 0) throw new Error('Tool must declare at least one capability.');
+  const capabilities = [...new Set(definition.capabilities.map(String))];
+  const unknownCapabilities = capabilities.filter((capability) => !TOOL_CAPABILITIES.includes(capability));
+  if (unknownCapabilities.length) throw new Error('Unknown tool capability: ' + unknownCapabilities.join(', '));
+  const risk = String(definition.risk || 'medium');
+  if (!TOOL_RISK_LEVELS.includes(risk)) throw new Error('Unknown tool risk level: ' + risk);
+  const requestedTimeout = Number(definition.timeoutMs);
+  const timeoutMs = Number.isFinite(requestedTimeout) && requestedTimeout > 0
+    ? Math.min(900_000, Math.max(1, Math.floor(requestedTimeout)))
+    : 120_000;
+  if (typeof definition.run !== 'function') throw new Error('Tool must provide a run function.');
+  return Object.freeze({
+    name,
+    title: String(definition.title || name),
+    description: String(definition.description || ''),
+    capabilities: Object.freeze(capabilities),
+    risk,
+    inputSchema: definition.inputSchema || {},
+    outputSchema: definition.outputSchema || {},
+    timeoutMs,
+    requiresApproval: Boolean(definition.requiresApproval),
+    run: definition.run
+  });
+}
+
+function normalizeToolPolicyDecision(tool, raw = {}, redactText = (text) => String(text)) {
+  const decision = String(raw && raw.decision || 'deny');
+  if (!['allow', 'deny', 'ask'].includes(decision)) throw new Error('Invalid tool policy decision: ' + decision);
+  const result = {
+    decision,
+    reason: String(redactAuditValue(String(raw && raw.reason || ''), 0, '', redactText)),
+    requiredCapabilities: Array.isArray(raw && raw.requiredCapabilities) ? [...raw.requiredCapabilities] : [...tool.capabilities],
+    sandbox: Boolean(raw && raw.sandbox),
+    audit: !raw || raw.audit !== false
+  };
+  if (tool.requiresApproval && decision === 'allow') {
+    return { ...result, decision: 'ask', reason: result.reason || 'tool explicitly requires approval' };
+  }
+  return result;
+}
+
+export function evaluateToolPolicy(tool, input, policy, redactText = (text) => String(text)) {
+  if (!policy || typeof policy.decide !== 'function') {
+    return normalizeToolPolicyDecision(tool, {
+      decision: 'deny',
+      reason: 'no tool policy is configured',
+      requiredCapabilities: [...tool.capabilities]
+    }, redactText);
+  }
+  return normalizeToolPolicyDecision(tool, policy.decide({ tool, input }) || {}, redactText);
+}
+
+export async function validateToolInput(tool, input, validateArguments = validateToolArguments) {
+  if (!input || typeof input !== 'object' || Array.isArray(input)) {
+    throw new Error('Invalid input for ' + tool.name + ': arguments must be a JSON object.');
+  }
+  const value = input;
+  const validation = await validateArguments(tool.inputSchema, value);
+  if (!validation.valid) {
+    const errors = validation.errors || [];
+    const detail = validation.schemaError || errors.join('; ');
+    if (!validation.schemaError && errors.some((message) => /missing required property/.test(message))) {
+      throw new Error('Missing required input for ' + tool.name + ': ' + detail);
+    }
+    throw new Error('Invalid input for ' + tool.name + ': ' + (detail || 'does not match its JSON Schema.'));
+  }
+  return value;
+}
+
+// Audit records redact fields named like credentials even when their value is
+// a short or synthetic token, then run the shared provider-secret scanner.
+const SENSITIVE_AUDIT_FIELD = /(?:^|_)(?:api_?key|access_?key|token|secret|password|passwd|credentials?|authorization|proxy_authorization|cookie|private_?key|client_secret|database_url|connection_string|dsn)$/i;
+const SENSITIVE_CLI_FLAG = /^--?(?:api[-_]?key|access[-_]?key|access[-_]?token|token|secret|password|passwd|authorization|cookie)$/i;
+const SENSITIVE_CLI_FLAG_WITH_VALUE = /^((?:--?)(?:api[-_]?key|access[-_]?key|access[-_]?token|token|secret|password|passwd|authorization|cookie))=(.*)$/i;
+
+function redactCredentialFlags(text) {
+  return String(text).replace(
+    /(^|\s)(--?(?:api[-_]?key|access[-_]?key|access[-_]?token|token|secret|password|passwd|authorization|cookie))(=|\s+)(?:"[^"]*"|'[^']*'|[^\s,;]+)/gi,
+    (_whole, prefix, flag, separator) => prefix + flag + separator + '[redacted]'
+  );
+}
+
+
+export function redactAuditValue(value, depth = 0, fieldName = '', redactText = (text) => String(text)) {
+  if (depth > 6) return '[depth-limit]';
+  const normalizedField = String(fieldName || '').replace(/([a-z0-9])([A-Z])/g, '$1_$2').replace(/[-.]/g, '_').toLowerCase();
+  if (normalizedField && SENSITIVE_AUDIT_FIELD.test(normalizedField) && value !== null && value !== undefined) return '[redacted]';
+  if (typeof value === 'string') return redactCredentialFlags(redactText(value));
+  if (Array.isArray(value)) {
+    const normalizedParent = String(fieldName || '').replace(/([a-z0-9])([A-Z])/g, '$1_$2').replace(/[-.]/g, '_').toLowerCase();
+    if (['args', 'argv', 'command_args'].includes(normalizedParent)) {
+      const out = [];
+      for (let index = 0; index < value.length; index++) {
+        const item = value[index];
+        if (typeof item === 'string') {
+          const combined = SENSITIVE_CLI_FLAG_WITH_VALUE.exec(item);
+          if (combined) { out.push(combined[1] + '=[redacted]'); continue; }
+          if (SENSITIVE_CLI_FLAG.test(item) && index + 1 < value.length) {
+            out.push(item, '[redacted]');
+            index++;
+            continue;
+          }
+        }
+        out.push(redactAuditValue(item, depth + 1, fieldName, redactText));
+      }
+      return out;
+    }
+    return value.map((item) => redactAuditValue(item, depth + 1, fieldName));
+  }
+  if (value && typeof value === 'object') {
+    return Object.fromEntries(Object.entries(value).map(([key, item]) => [key, redactAuditValue(item, depth + 1, key, redactText)]));
+  }
+  return value;
+}
+
+async function validateToolOutput(tool, output, validateArguments = validateToolArguments) {
+  const schema = tool.outputSchema;
+  if (!schema || typeof schema !== 'object' || Object.keys(schema).length === 0) return output;
+  const validation = await validateArguments(schema, output);
+  if (!validation.valid) {
+    const detail = validation.schemaError || (validation.errors || []).join('; ');
+    throw new Error('Invalid output from ' + tool.name + ': ' + (detail || 'does not match its output JSON Schema.'));
+  }
+  return output;
+}
+
+export async function runTool(tool, input, options = {}) {
+  const policy = options.policy || {};
+  const redactText = typeof options.redactText === 'function' ? options.redactText : (text) => String(text);
+  const validateArguments = typeof options.validateArguments === 'function' ? options.validateArguments : validateToolArguments;
+  let authorizedInput = input;
+  let authorizationContext = null;
+  let decision;
+  if (typeof options.authorize === 'function') {
+    try {
+      const authorization = await options.authorize({ tool, input });
+      if (!authorization || typeof authorization !== 'object' || Array.isArray(authorization)) {
+        decision = normalizeToolPolicyDecision(tool, { decision: 'deny', reason: 'Tool authorization returned no valid decision.' }, redactText);
+      } else {
+        decision = normalizeToolPolicyDecision(tool, authorization, redactText);
+        if (Object.prototype.hasOwnProperty.call(authorization, 'input')) authorizedInput = authorization.input;
+        authorizationContext = authorization.context ?? null;
+      }
+    } catch (error) {
+      decision = normalizeToolPolicyDecision(tool, {
+        decision: 'deny',
+        reason: 'Tool authorization failed closed: ' + String(error && error.message || error)
+      }, redactText);
+    }
+  } else {
+    decision = evaluateToolPolicy(tool, input, policy, redactText);
+  }
+  if (decision.decision === 'deny') {
+    return { ok: false, tool: tool.name, decision, error: decision.reason || 'tool denied by policy', audit: decision.audit ? buildAuditRecord(tool, input, decision, null, options) : null };
+  }
+  if (decision.decision === 'ask') {
+    return { ok: false, tool: tool.name, decision, pendingApproval: true, audit: decision.audit ? buildAuditRecord(tool, input, decision, null, options) : null };
+  }
+
+  let normalizedInput;
+  try {
+    normalizedInput = await validateToolInput(tool, authorizedInput, validateArguments);
+  } catch (error) {
+    const result = { ok: false, tool: tool.name, decision, error: error && error.message || String(error) };
+    if (decision.audit) result.audit = buildAuditRecord(tool, authorizedInput, decision, result, options);
+    return result;
+  }
+
+  const controller = new AbortController();
+  let timedOut = false;
+  const externalSignal = options.signal;
+  const forwardAbort = () => {
+    if (!controller.signal.aborted) controller.abort(externalSignal.reason || new Error('Tool was cancelled.'));
+  };
+  if (externalSignal) {
+    if (externalSignal.aborted) forwardAbort();
+    else externalSignal.addEventListener('abort', forwardAbort, { once: true });
+  }
+  const timeout = setTimeout(() => {
+    timedOut = true;
+    if (!controller.signal.aborted) controller.abort(new Error('Tool timed out after ' + tool.timeoutMs + ' ms'));
+  }, tool.timeoutMs);
+  let onAbort;
+  try {
+    // Do not invoke a tool whose caller has already cancelled the request.
+    // A rejected abort promise alone is not sufficient: the run microtask could
+    // start a side effect before Promise.race observes that rejection.
+    if (controller.signal.aborted) {
+      const error = controller.signal.reason instanceof Error ? controller.signal.reason : new Error('Tool was cancelled.');
+      const result = {
+        ok: false,
+        tool: tool.name,
+        decision,
+        error: error.message,
+        ...(timedOut ? { timedOut: true } : { cancelled: true })
+      };
+      if (decision.audit) result.audit = buildAuditRecord(tool, normalizedInput, decision, result, options);
+      return result;
+    }
+    const aborted = new Promise((_, reject) => {
+      onAbort = () => reject(controller.signal.reason instanceof Error ? controller.signal.reason : new Error('Tool was cancelled.'));
+      controller.signal.addEventListener('abort', onAbort, { once: true });
+    });
+    const running = Promise.resolve().then(() => tool.run(normalizedInput, {
+      signal: controller.signal,
+      policy,
+      sandbox: decision.sandbox,
+      env: options.env || (typeof process !== 'undefined' && process.env) || {},
+      cwd: options.cwd || (typeof process !== 'undefined' && typeof process.cwd === 'function' ? process.cwd() : '.'),
+      authorizationContext
+    }));
+    const rawOutput = await Promise.race([running, aborted]);
+    const output = await validateToolOutput(tool, rawOutput, validateArguments);
+    const result = { ok: true, tool: tool.name, decision, output: output === undefined ? null : output };
+    if (decision.audit) result.audit = buildAuditRecord(tool, normalizedInput, decision, result, options);
+    return result;
+  } catch (error) {
+    const result = {
+      ok: false,
+      tool: tool.name,
+      decision,
+      error: error && error.message || String(error),
+      ...(timedOut ? { timedOut: true } : controller.signal.aborted ? { cancelled: true } : {})
+    };
+    if (decision.audit) result.audit = buildAuditRecord(tool, normalizedInput, decision, result, options);
+    return result;
+  } finally {
+    clearTimeout(timeout);
+    if (onAbort) controller.signal.removeEventListener('abort', onAbort);
+    if (externalSignal) externalSignal.removeEventListener('abort', forwardAbort);
+  }
+}
+
+function buildAuditRecord(tool, input, decision, result, options) {
+  const redactText = typeof options.redactText === 'function' ? options.redactText : (text) => String(text);
+  const cwd = options.cwd || (typeof process !== 'undefined' && typeof process.cwd === 'function' ? process.cwd() : '.');
+  return Object.freeze({
+    at: new Date().toISOString(),
+    tool: tool.name,
+    capabilities: [...tool.capabilities],
+    risk: tool.risk,
+    decision: decision.decision,
+    sandbox: decision.sandbox,
+    input: redactAuditValue(input, 0, '', redactText),
+    output: result && result.ok ? redactAuditValue(result.output, 0, '', redactText) : null,
+    error: result && result.error ? redactAuditValue(result.error, 0, '', redactText) : null,
+    cwd
+  });
+}
+

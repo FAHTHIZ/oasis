@@ -316,6 +316,26 @@ test('agent asks before writing in ask mode and respects a refusal', async () =>
   assert.match(agent.messages.find((m) => m.role === 'tool').content, /declined/);
 });
 
+test('browser agent validates tool calls in the shared kernel before approval', async () => {
+  const ws = await project();
+  const asked = [];
+  const { chatImpl } = scripted([
+    { content: '', tool_calls: [{ id: 'invalid-write', function: { name: 'write_file', arguments: JSON.stringify({ path: 'blocked.txt' }) } }] },
+    { content: 'The invalid call was rejected.', tool_calls: [] }
+  ]);
+  const agent = new Agent({
+    getConfig: () => ({ mode: 'ask' }),
+    getContext: () => ({ workspace: ws }),
+    approve: async (request) => { asked.push(request.name); return true; },
+    chatImpl
+  });
+  await agent.send('Create blocked.txt.');
+  const toolResult = agent.messages.find((message) => message.role === 'tool');
+  assert.match(toolResult.content, /Invalid arguments for write_file/);
+  assert.deepEqual(asked, [], 'invalid tool calls are rejected before requesting permission');
+  assert.deepEqual(await ws.paths(), [], 'invalid calls never reach the workspace handler');
+});
+
 test('agent stops cleanly and keeps a valid history', async () => {
   const ws = await project([{ path: 'a.txt', content: 'a' }]);
   let agent;
