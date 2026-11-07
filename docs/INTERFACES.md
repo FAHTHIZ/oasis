@@ -29,7 +29,7 @@ The CLI runs directly in the shell on the computer that owns the project.
 
 Requirements: Node.js 22.15 or newer and Git.
 
-\`\`\`sh
+```sh
 git clone https://github.com/FAHTHIZ/oasis.git
 cd oasis
 npm install
@@ -37,7 +37,7 @@ npm install --global .
 cd /path/to/your/project
 oasis connect
 oasis
-\`\`\`
+```
 
 Use oasis exec for non-interactive automation and oasis doctor to inspect the local environment. The CLI does not require the browser workspace to be open.
 
@@ -45,10 +45,10 @@ Use oasis exec for non-interactive automation and oasis doctor to inspect the lo
 
 Start the server on the computer containing the project:
 
-\`\`\`sh
+```sh
 cd /path/to/your/project
 oasis web --open
-\`\`\`
+```
 
 The browser is only the interface. The agent process, project access and command execution remain on the host. The default server is local-only. Browser job/event history is held in memory for the lifetime of the runtime and is not restored after a restart; saved chat sessions use their separate session store. For phone or another device, follow [Mobile and tablet setup](../MOBILE.md); use a trusted private network and never expose the workspace directly to the public internet.
 

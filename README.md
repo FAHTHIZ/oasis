@@ -62,11 +62,11 @@ The release pipeline validates the source, builds the platform packages, generat
 
 For Homebrew:
 
-\`\`\`sh
+```sh
 brew tap fahthiz/oasis https://github.com/FAHTHIZ/oasis
 brew install --cask fahthiz/oasis/oasis
 brew install fahthiz/oasis/oasis-cli
-\`\`\`
+```
 
 See [Downloads and releases](docs/RELEASES.md) for asset names, checksum verification, architecture notes and mobile availability.
 
@@ -76,27 +76,27 @@ The terminal interface is a separate, first-class OASIS experience. It runs dire
 
 Requirements: Node.js 22.15 or newer and Git.
 
-\`\`\`sh
+```sh
 git clone https://github.com/FAHTHIZ/oasis.git
 cd oasis
 npm install
 npm install --global .
-\`\`\`
+```
 
 Open a project and start the interactive terminal session:
 
-\`\`\`sh
+```sh
 cd /path/to/your/project
 oasis connect
 oasis
-\`\`\`
+```
 
 For non-interactive scripts and automation, use oasis exec. For diagnostics and maintenance:
 
-\`\`\`sh
+```sh
 oasis doctor
 oasis update
-\`\`\`
+```
 
 Run oasis --help for the complete command list. See the [Terminal section of the user guide](docs/USER-GUIDE.md#terminal-session).
 
@@ -104,10 +104,10 @@ Run oasis --help for the complete command list. See the [Terminal section of the
 
 OASIS includes a browser-based workspace served by the local runtime. It is not a hosted website or remote SaaS service: by default, the browser connects to the OASIS process running on the computer that owns the project.
 
-\`\`\`sh
+```sh
 cd /path/to/your/project
 oasis web --open
-\`\`\`
+```
 
 The browser provides the workspace UI while file access, tool execution and model requests remain in the host runtime. To connect a phone or another device, follow [Mobile and tablet setup](MOBILE.md) and use only a trusted private network. Do not expose the workspace directly to the public internet.
 
@@ -124,10 +124,10 @@ The Electron desktop app starts the local OASIS runtime, lets you choose a proje
 
 For developers building from source:
 
-\`\`\`sh
+```sh
 npm install
 npm run desktop:dev
-\`\`\`
+```
 
 Build a distributable for the current machine with npm run desktop:dist. Platform packaging prerequisites may apply. The current macOS packages are not code-signed; macOS may ask you to confirm the first launch in Privacy & Security.
 
@@ -159,19 +159,19 @@ Read the [security policy](SECURITY.md) before using OASIS with sensitive projec
 
 Requirements: Node.js 22.15 or newer and Git.
 
-\`\`\`sh
+```sh
 npm install
 npm test
 npm run check
 npm run lint
-\`\`\`
+```
 
 Deterministic harness checks:
 
-\`\`\`sh
+```sh
 npm run bench:harness
 npm run bench:tokens
-\`\`\`
+```
 
 - npm test runs the Node.js test suite.
 - npm run check runs browser-app integrity checks, evaluation-fixture validation, the test suite, benchmark-regression checks and evaluation validation.

@@ -29,12 +29,12 @@ The release page lists only assets that were actually published. If a platform a
 
 Requirements: Node.js 22.15 or newer and Git.
 
-\`\`\`sh
+```sh
 git clone https://github.com/FAHTHIZ/oasis.git
 cd oasis
 npm install
 npm install --global .
-\`\`\`
+```
 
 Run oasis --help to see available commands.
 
@@ -54,11 +54,11 @@ See the [configuration reference](CONFIGURATION.md) for provider protocols, fall
 
 The terminal session is OASIS's native command-line interface. It runs in your shell and does not require the browser workspace.
 
-\`\`\`sh
+```sh
 cd /path/to/your/project
 oasis connect
 oasis
-\`\`\`
+```
 
 Use oasis for the interactive session. Use oasis exec for a non-interactive task in scripts or automation. Use oasis doctor to inspect the local environment and oasis update to update a script-installed version.
 
@@ -68,10 +68,10 @@ Keep the terminal open while the session is active. The process has the permissi
 
 Start the browser workspace on the computer that contains the project:
 
-\`\`\`sh
+```sh
 cd /path/to/your/project
 oasis web --open
-\`\`\`
+```
 
 OASIS opens the local workspace in your browser. The browser displays the interface; the runtime, project files and command execution remain on the host. Browser job/event history exists only for that runtime process and is cleared on restart; saved chat sessions are stored separately.
 
