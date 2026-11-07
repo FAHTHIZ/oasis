@@ -41,8 +41,14 @@ export async function workspaceDoctor(root, { env = process.env, session = null 
     if (settings.sandbox.enabled && !sandbox.available) problems.push('The sandbox is enabled but unavailable: ' + sandbox.reason);
     else if (!settings.sandbox.enabled && sandbox.available) lines.push('  Tip: commands can run inside the ' + sandbox.kind + ' sandbox (workspace writable, rest of the system read-only, credentials hidden, package caches writable). Try /sandbox on, or add "sandbox": {"enabled": true} to settings.');
     // Unified security posture (secret scan, permissions, sandbox, sensitive paths).
-    const securityReport = buildSecurityReport({ env, sandboxSettings: settings.sandbox, permissionMode: 'default', scanFindings: [] });
-    lines.push('  Security posture: ' + securityReport.summary + ' (' + securityReport.checks.length + ' checks)');
+    const securityReport = buildSecurityReport({
+      env,
+      sandboxSettings: settings.sandbox,
+      sandboxStatus: sandbox,
+      permissionMode: (session && session.permissions && session.permissions.mode) || settings.permissions.defaultMode || 'default',
+      scanFindings: null
+    });
+    lines.push('  ' + formatSecurityReport(securityReport).replace(/\\n/g, '\\n  '));
   } catch (error) { problems.push('Settings are invalid: ' + error.message); }
   const workflow = await workflowRuntimeStatus();
   lines.push('  Workflow runtime: ' + (workflow.available ? 'available (QuickJS)' : 'unavailable' + (workflow.reason ? ': ' + workflow.reason : '')));
