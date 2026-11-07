@@ -45,11 +45,11 @@ test('snapshot keeps tracked edits and untracked files without touching index or
 
 test('stash clear snapshots every stash entry before it can be removed', async (t) => {
   const root = await repo(t);
-  await writeFile(path.join(root, 'a.txt'), 'first stash\\n');
+  await writeFile(path.join(root, 'a.txt'), 'first stash\n');
   git(root, 'stash', 'push', '-m', 'first');
-  await writeFile(path.join(root, 'a.txt'), 'second stash\\n');
+  await writeFile(path.join(root, 'a.txt'), 'second stash\n');
   git(root, 'stash', 'push', '-m', 'second');
-  const stashes = git(root, 'stash', 'list', '--format=%H').split('\\n').filter(Boolean);
+  const stashes = git(root, 'stash', 'list', '--format=%H').split('\n').filter(Boolean);
   assert.equal(stashes.length, 2);
 
   const snapshot = await snapshotWorkingTree(root, 'git stash clear');
