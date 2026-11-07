@@ -1734,7 +1734,7 @@ async function executeToolUnlocked(name, args = {}, context = {}) {
       const install = await guardInstallCommand(args.command, args.args || [], { env, fetchImpl: context.fetchImpl || globalThis.fetch });
       if (install.blocked) return { command: args.command, ...install.blocked };
       const approval = install.approvalNote && context.approval ? (text, ...rest) => context.approval(install.approvalNote + '\n' + text, ...rest) : context.approval;
-      const snapshot = discard ? await gitSafety.snapshotWorkingTree(root, discard).catch(() => null) : null;
+      const snapshot = discard ? await gitSafety.snapshotWorkingTree(root, discard) : null;
       const { snapshotScriptedEdit, noOpEditWarning } = await import('./inplace-edit-check.mjs');
       const editSnapshot = args.run_in_background === true || args.interactive === true ? null
         : await snapshotScriptedEdit(root, [args.command].concat(Array.isArray(args.args) ? args.args.map((arg) => /\s/.test(arg) ? JSON.stringify(arg) : arg) : []).join(' '), env).catch(() => null);
