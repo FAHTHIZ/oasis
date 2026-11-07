@@ -1,4 +1,6 @@
 (() => {
+  // Keep the mobile navigation visible if this script cannot load or run.
+  document.documentElement.classList.add('js');
   const menuButton=document.querySelector('.menu-toggle');
   const nav=document.getElementById('site-nav');
   if(menuButton&&nav){
