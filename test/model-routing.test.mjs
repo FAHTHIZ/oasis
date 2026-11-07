@@ -32,7 +32,7 @@ test('only short, clearly read-only requests qualify for the cheaper model', () 
 test('the multi-dimension router expands simple classification without weakening action guardrails', () => {
   assert.equal(classifyTask('Define entropy in one sentence.').tier, 'easy');
   assert.equal(classifyTask('Find the bug in this code.').tier, 'strong');
-  assert.equal(classifyTask('Search the web for today\\'s weather in Shanghai.').tier, 'strong');
+  assert.equal(classifyTask('Search the web for weather in Shanghai today.').tier, 'strong');
   assert.equal(classifyTask('Explain the threat model and permission boundaries.').tier, 'strong');
   assert.equal(classifyTask('Tell me everything about this 400-file repository.').tier, 'strong');
 });
