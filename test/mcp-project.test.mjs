@@ -449,6 +449,6 @@ test('remote MCP structured results are validated against outputSchema', async (
   });
   const failed = await client.callTool('lookup', {}, { autoApprove: true });
   assert.equal(failed.isError, true);
-  assert.equal(failed.content, 'MCP tool reported an error:\\nremote tool failed');
+  assert.equal(failed.content, 'MCP tool reported an error:\nremote tool failed');
   client.close();
 });
