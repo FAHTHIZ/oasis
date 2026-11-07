@@ -66,7 +66,7 @@ This is a design direction, not a claim that the animation exists in the current
 ## Repository presentation
 
 - The GitHub repository and Releases page are the canonical project home.
-- The Pages deployment serves the optional installable browser app; it is not a separate marketing-site requirement.
+- The browser workspace is served locally by the OASIS runtime. No public Pages marketing site or hosted browser service is maintained.
 - Keep the README opening screen focused on the OASIS identity, one clear product description, useful badges and direct paths to install or learn more.
 - Use real application screenshots for interface claims. Label conceptual artwork as brand artwork, not as a product screenshot.
 - Keep badges factual and limited to checks, releases and licensing.

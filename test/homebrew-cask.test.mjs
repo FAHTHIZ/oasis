@@ -14,7 +14,7 @@ test('dmg checksums are read for the requested version only', () => {
   assert.deepEqual(dmgChecksums(sums, '9.9.9'), {});
 });
 
-test('the cask pins both architectures and refuses incomplete or prerelease input', () => {
+test('the cask pins available architectures and restricts ARM-only releases to Apple Silicon', () => {
   const cask = renderCask('1.2.0', { arm64: A, x64: B });
   assert.match(cask, /version "1\.2\.0"/);
   assert.match(cask, new RegExp('arm:\\s+"' + A + '"'));
@@ -22,7 +22,12 @@ test('the cask pins both architectures and refuses incomplete or prerelease inpu
   assert.match(cask, /releases\/download\/v#\{version\}\/OASIS-#\{version\}-#\{arch\}\.dmg/);
   assert.match(cask, /auto_updates true/);
   assert.match(cask, /app "OASIS\.app"/);
-  assert.throws(() => renderCask('1.2.0', { arm64: A }), /x64\.dmg/);
+  const armOnly = renderCask('1.2.0', { arm64: A });
+  assert.match(armOnly, /arch arm: "arm64"/);
+  assert.match(armOnly, /depends_on arch: :arm/);
+  assert.match(armOnly, new RegExp('sha256 "' + A + '"'));
+  assert.doesNotMatch(armOnly, /intel/);
+  assert.throws(() => renderCask('1.2.0', {}), /arm64\.dmg/);
   assert.throws(() => renderCask('1.3.0-rc.1', { arm64: A, x64: B }), /stable/);
 });
 
