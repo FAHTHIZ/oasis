@@ -59,9 +59,9 @@ The order reflects impact, weakness, likelihood of regression and whether a cand
 
 | Rank | Priority | Component | Current weak spot | Open-source comparison | Decision |
 |---:|---|---|---|---|---|
-| 1 | P0 | Shell parsing used by permissions and command-risk analysis | Tree-sitter AST commands are flattened back to strings, while `permissions.mjs` and `shell-risk.mjs` also contain separate splitters/tokenizers and wrapper handling. Multiple interpretations of the same shell input create a security-sensitive parser-differential risk. | [unbash](https://github.com/webpro-nl/unbash) provides a synchronous, zero-runtime-dependency typed Bash AST; [mvdan/sh](https://github.com/mvdan/sh) via [sh-syntax](https://github.com/un-ts/sh-syntax) offers broader shell-dialect coverage; tree-sitter provides incremental CST parsing and missing/error nodes. | **Next replacement candidate:** build a differential AST adapter and security corpus around unbash. Keep PowerShell on its existing parser. Do not remove tree-sitter globally until all consumers are mapped and parity is proven. |
+| 1 | P0 | Shell parsing used by permissions and command-risk analysis | The default Bash path now uses a typed AST, but strict allow matching still relies on the conservative legacy splitter; PowerShell stays separate; malformed/dynamic/oversized loops require review. A full AST-to-AST security corpus and policy parity tests remain necessary. | [unbash](https://github.com/webpro-nl/unbash) 6.0.3 is integrated as the synchronous, zero-runtime-dependency Bash AST. Tree-sitter Bash remains an explicit rollback backend and tree-sitter remains in place for multi-language code intelligence. | **Integrated; acceptance in progress:** compare common Bash syntax to the retained tree-sitter parser, test nested-command deny rules and fail-closed dynamic cases, then publish parity/latency results. Do not remove the legacy allow path or PowerShell parser without evidence. |
 | 2 | P1 | Agent execution core | `src/agent.mjs` is about 437 KB / 6,753 lines and combines lifecycle, provider requests, streaming, tool dispatch, retries, context management, cost accounting and recovery. | [Pi Agent Core](https://github.com/earendil-works/pi/tree/main/packages/agent) offers explicit lifecycle, context-transform, pre/post-tool and queue hooks; [Vercel AI SDK](https://ai-sdk.dev/docs/agents/overview) offers a provider-neutral tool-loop abstraction; [OpenHands SDK](https://docs.openhands.dev/sdk/arch/overview) separates agents, tools, workspace and server layers. | **Do not big-bang replace.** First define an Oasis-owned lifecycle contract, then prototype one replaceable seam behind it. Pi Agent Core currently requires Node 22.19+, above OASIS's declared 22.15 floor, and none of these frameworks automatically preserve Oasis-specific security and recovery behaviour. |
-| 3 | P1 | Memory retrieval and knowledge maintenance | OASIS has useful local memory, redaction, categories, verification and approval, but recall ranking is lightweight lexical/token similarity rather than a benchmarked hybrid retrieval pipeline. | [Mem0](https://github.com/mem0ai/mem0) provides an open memory extraction/retrieval layer; [Letta](https://docs.letta.com/concepts/stateful-agents/) treats memory as persistent agent state with core/recall/archival tiers and versioned memory files. | **Improve incrementally.** Establish a private local memory-recall benchmark first; test lexical + SQLite FTS/BM25, optional embeddings and reranking without making cloud services mandatory or losing provenance/approval/forgetting controls. |
+| 3 | P1 | Memory retrieval and knowledge maintenance | OASIS already has local Markdown memories, MiniSearch BM25+ ranking, Porter2 stemming, title/description boosts, prefix matching, recency/recall boosts, secret redaction, duplicate merging, verification/freshness metadata and bounded per-prompt recall. The gap is broad, held-out retrieval measurement and explicit hybrid/semantic evaluation—not the absence of full-text search. | [Mem0](https://github.com/mem0ai/mem0) provides an alternative extraction/retrieval layer; [Letta](https://docs.letta.com/concepts/stateful-agents/) treats memory as persistent agent state with core/recall/archival tiers and versioned memory files. Neither is a drop-in local-first replacement. | **Retain and measure first.** Build a local held-out corpus and report Recall@k/MRR/nDCG, stale/conflicting-note behaviour, provenance, user correction/deletion and prompt-token cost. Test optional embeddings/reranking only if they improve the measured baseline without requiring a cloud service. |
 | 4 | P1 | Real-task agent evaluation | Model-free harness and token benchmarks are useful, but neither alone measures real coding success across models and agents. | [SWE-bench](https://github.com/swe-bench/SWE-bench) supplies repository issue tasks with verifiers; [Terminal-Bench](https://www.tbench.ai/) is a complementary full-terminal task benchmark. | **Extend the evaluation programme.** Add a pinned, budget-bounded external benchmark track. Report exact model/provider, commit, task set, verifier, settings, repetitions, cost and failures. Never mix model capability with harness capability when comparing agents. |
 | 5 | P2 | Session persistence and resumability | Sessions, transcripts, checkpoints and background state are persisted through multiple local files and formats; there is no single documented event-log contract covering every operation. | [OpenCode](https://github.com/anomalyco/opencode) is a useful source-level reference for event-sourced sessions, message parts and replayable state projections. | **Study before replacing.** Design an append-only event contract and crash/replay tests; migrate only where it demonstrably simplifies recovery without sacrificing local-first operation. |
 | 6 | P2 | Long-running workflows and background jobs | Workflows and background sessions have local execution, timeouts and persistence, but there is no distributed durable execution service. | [Temporal TypeScript SDK](https://docs.temporal.io/develop/typescript) provides durable workflow history, retries, timers and worker execution, but requires a Temporal service and deterministic workflow discipline. | **Optional server-mode candidate only.** Keep the local runner simple. Do not add a mandatory external service to the desktop/CLI product. |
@@ -82,28 +82,40 @@ The first component has already been improved on `main`:
 
 The routing change and subsequent test assertion fix are in the recent `main` history. See [the current source](../src/model-routing.mjs) and [its tests](../test/model-routing.test.mjs).
 
-## Immediate next cycle: shell parser replacement proof
+## Current P0 cycle: Bash parser integration and acceptance
 
-The next change will target the Bash parser boundary only.
+The default Bash parsing path was replaced on \`main\` with \`unbash\` 6.0.3. The integration is deliberately narrow: it does not replace tree-sitter for language intelligence or PowerShell parsing, and it does not delegate permission policy to the parser.
 
-### Why it is first
+### What is now integrated
 
-The current implementation uses a tree-sitter Bash grammar, but the runtime still has several layers that independently split, tokenize, flatten or normalize shell strings. These feed both permission matching and risk classification. A disagreement between those layers is more consequential than a style or performance issue.
+- \`src/unbash-shell-ast.mjs\` adapts the typed Bash AST into OASIS command structures.
+- \`src/shell-ast.mjs\` uses unbash by default. Set \`OASIS_SHELL_PARSER=tree-sitter\` to select the retained Bash rollback backend, or \`OASIS_SHELL_PARSER=legacy\` for the older splitter.
+- PowerShell and cmd-style command lines remain on their existing path.
+- Static shell wrappers (including common \`-c\` forms, selected launcher options and \`env\` prefixes) are inspected for nested commands.
+- Dynamic or oversized loop expansion, malformed syntax and parser resource limits are treated as incomplete analysis, so the risk layer asks for review instead of assuming the target is safe.
+- Tree-sitter remains installed for non-shell language parsing.
 
-### Candidate and caveat
+### Upstream comparison and caveats
 
-[unbash](https://github.com/webpro-nl/unbash) is an actively maintained ISC-licensed TypeScript parser. Its current source exposes a typed Bash AST synchronously, with no runtime dependencies, WASM initialization or native addon. It supports GNU Bash, but not PowerShell, fish, zsh or every shell dialect. Its own published benchmark reports materially higher parse throughput than tree-sitter Bash WASM, but those are upstream measurements on the maintainer's machine and must be independently reproduced before being treated as OASIS results.
+[unbash](https://github.com/webpro-nl/unbash) is ISC-licensed and provides a synchronous typed Bash AST with no runtime dependencies. It is a Bash parser, not a universal shell parser: PowerShell, fish and every zsh/ksh dialect are not covered by this replacement. Its upstream benchmark figures are not OASIS measurements. OpenCode's [issue #31485](https://github.com/anomalyco/opencode/issues/31485) and [PR #34772](https://github.com/anomalyco/opencode/pull/34772) are useful evidence of a similar parser-differential problem and an attempted integration, but that PR closed unmerged and is not evidence of production adoption.
 
-OpenCode's [issue #31485](https://github.com/anomalyco/opencode/issues/31485) and [PR #34772](https://github.com/anomalyco/opencode/pull/34772) are a useful real-world comparison: they describe similar permission bypass classes and a proposed unbash integration. That PR was closed without merging; it is evidence of a design experiment, not proof of production adoption. The PR author also disclosed that they maintain unbash. OASIS must independently verify the implementation.
+### Remaining acceptance work
 
-### Acceptance gates before removing the current Bash parser
+1. Compare common static Bash syntax against the retained tree-sitter backend: command tokens, substitutions, functions, case arms, bounded literal loops and pipeline links.
+2. Test OASIS policy behaviour, not just parser output: nested shell wrappers must still trigger deny/ask rules, while strict allow rules must not approve compound or uncertain input.
+3. Grow the adversarial corpus for redirections, heredocs/herestrings, command substitutions, dynamic variables, wrapper nesting and unsupported shell syntax.
+4. Keep unsupported, malformed, dynamic and resource-limited input behind review; never let partial AST output become implicit auto-approval.
+5. Benchmark parse latency and memory on OASIS fixtures before removing any rollback or conservative legacy path.
 
-1. Create a versioned differential corpus from OASIS's current parser tests, real-world shell syntax fixtures and adversarial parser cases.
-2. Compare command names, argv values, command substitutions, function/case/loop bodies, heredoc and herestring contents, redirect targets, static wrappers, assignments and source positions.
-3. Preserve strict allow semantics: malformed, unsupported, dynamic or uncertain input must never become auto-approved merely because the new parser returned a partial AST.
-4. Preserve deny/ask coverage across nested commands and path reads/writes. A parser result is only structure; OASIS's policy decisions remain independently tested.
-5. Keep PowerShell handling unchanged. Confirm which other OASIS modules consume tree-sitter before removing or narrowing any dependency.
-6. Run the full test suite and cross-platform CI, then publish parser parity, latency and dependency-size reports. Only then remove the old Bash runtime path.
+The integration is useful and the existing test/CI results are encouraging, but it is **not a security certification**. Record parser parity and policy coverage before calling this cycle complete.
+
+### Main-branch implementation history
+
+- Routing classifier: [\`daee264\`](https://github.com/FAHTHIZ/oasis/commit/daee264758424fa7db13ee449b56d930b5e12558)
+- Whole-system roadmap: [\`0682258\`](https://github.com/FAHTHIZ/oasis/commit/068225836e68bec7dba8b846257421d313b5fc69)
+- Initial Bash AST integration: [\`b7cbff7\`](https://github.com/FAHTHIZ/oasis/commit/b7cbff714ebe1c99f34c1c5e444e91d60673f6fc)
+- Launcher-option handling: [\`893cd0f\`](https://github.com/FAHTHIZ/oasis/commit/893cd0f705d0876ad0d619b0da401747a7326500)
+- Fail-closed unresolved loops: [\`26db445\`](https://github.com/FAHTHIZ/oasis/commit/26db4458fb0d892c4275ca71bd205ee6ee0d3a99)
 
 ## Components to retain unless evidence says otherwise
 
@@ -123,7 +135,7 @@ The following are measurement and integration gaps to address alongside the comp
 
 - **Parser differential testing:** one corpus, one expected policy result, multiple parser engines.
 - **Routing calibration:** confusion matrix, confidence calibration, false-cheap rate and same-model task-success comparisons.
-- **Memory quality:** recall precision/recall, stale-memory handling, conflict resolution, provenance, user correction and deletion tests.
+- **Memory quality:** measure the existing MiniSearch BM25+/Porter2 baseline on a held-out corpus; add stale/conflict, provenance, user-correction, deletion and prompt-token-cost metrics before considering hybrid semantic retrieval.
 - **Durable recovery:** process kill/restart during model calls, tool execution, checkpoint writes and background approval; verify idempotency and transcript integrity.
 - **Sandbox conformance:** automated filesystem/network/process/resource tests for every supported backend/OS.
 - **Tool/agent trace correlation:** one trace across model request, retries, tool call, subagent, verification and result, without collecting private prompt content by default.

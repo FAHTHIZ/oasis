@@ -1,17 +1,15 @@
-// Shell command structure from a real bash grammar.
+// Shell command structure and parser selection.
 //
-// OASIS used to split shell lines with a hand-written tokenizer. That missed
-// ANSI-C quoting ($'\x72m'), here-strings and heredocs fed to a shell, loop
-// variables, function bodies and case arms, and it mistook comments for
-// commands. Claude Code, Codex, Gemini CLI and OpenCode all parse commands
-// with tree-sitter-bash for the same reason; this module does the same with
-// the MIT-licensed grammar Microsoft ships for VS Code
-// (@vscode/tree-sitter-wasm), so no native build is needed.
+// OASIS uses the typed, synchronous unbash Bash AST by default. Its adapter
+// preserves command structure, nested substitutions, static shell wrappers,
+// redirections and bounded literal loops. Unknown/dynamic or resource-limited
+// cases are reported as incomplete so the risk layer can ask for review.
+// Tree-sitter remains an explicit Bash rollback backend and continues to power
+// non-shell language intelligence elsewhere. PowerShell/cmd command lines
+// remain on their existing parser path.
 //
-// The parser loads asynchronously (WebAssembly). Until it is loaded, or when
-// the package is missing, parseShellCommands returns null and callers keep
-// the legacy splitter, so nothing regresses where the grammar is unavailable.
-// Set OASIS_SHELL_PARSER=legacy to force the old splitter.
+// Set OASIS_SHELL_PARSER=tree-sitter for the retained Bash AST backend, or
+// OASIS_SHELL_PARSER=legacy to force the older conservative splitter.
 
 import { loadTreeSitter, loadTreeSitterLanguage } from './tree-sitter.mjs';
 import { parseUnbashShellCommands } from './unbash-shell-ast.mjs';
