@@ -113,5 +113,5 @@ test('tool failure audit records redact secrets from error messages', async () =
   const result = await runTool(failing, {}, { policy: { decide: () => ({ decision: 'allow' }) } });
   assert.equal(result.ok, false);
   assert.doesNotMatch(result.audit.error, /sk-secret-token-123456/);
-  assert.match(result.audit.error, /\\[redacted\\]/);
+  assert.match(result.audit.error, /\[redacted\]/);
 });
