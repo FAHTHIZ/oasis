@@ -15,15 +15,16 @@ function rollup(items) {
 }
 
 // Build the security posture report from current runtime state.
-export function buildSecurityReport({ env = process.env, sandboxSettings = {}, permissionMode = 'default', scanFindings = [] } = {}) {
+export function buildSecurityReport({ env = process.env, sandboxSettings = {}, sandboxStatus = null, permissionMode = 'default', scanFindings = null } = {}) {
   const checks = [];
 
   // Secret scan findings: each finding is a fail; none is a pass.
-  const findings = Array.isArray(scanFindings) ? scanFindings : [];
+  const scanRan = Array.isArray(scanFindings);
+  const findings = scanRan ? scanFindings : [];
   checks.push({
     name: 'secret-scan',
-    severity: findings.length ? 'fail' : 'pass',
-    detail: findings.length ? findings.length + ' potential secret(s) detected.' : 'No secrets detected in the current scan.',
+    severity: !scanRan ? 'warn' : findings.length ? 'fail' : 'pass',
+    detail: !scanRan ? 'No secret-scan results were supplied; run a workspace secret scan for coverage.' : findings.length ? findings.length + ' potential secret(s) detected.' : 'No secrets detected in the supplied scan.',
     findings
   });
 
@@ -31,12 +32,12 @@ export function buildSecurityReport({ env = process.env, sandboxSettings = {}, p
   const mode = String(permissionMode || 'default');
   checks.push({
     name: 'permission-mode',
-    severity: mode === 'bypass' ? 'warn' : 'pass',
-    detail: mode === 'bypass' ? 'Approval prompts are bypassed; commands run without confirmation.' : 'Permission mode is ' + mode + '; approvals apply where configured.'
+    severity: mode === 'bypass' || mode === 'bypassPermissions' ? 'warn' : 'pass',
+    detail: mode === 'bypass' || mode === 'bypassPermissions' ? 'Approval prompts are bypassed; commands run without confirmation.' : 'Permission mode is ' + mode + '; approvals apply where configured.'
   });
 
   // Sandbox availability: enabled but unavailable is a fail; disabled is a warn.
-  const sandbox = detectSandbox(false);
+  const sandbox = sandboxStatus || detectSandbox(false);
   const enabled = Boolean(sandboxSettings.enabled);
   if (enabled && !sandbox.available) {
     checks.push({ name: 'sandbox', severity: 'fail', detail: 'Sandbox is enabled but unavailable: ' + (sandbox.reason || 'no supported backend.') });
