@@ -174,7 +174,7 @@ function buildAuditRecord(tool, input, decision, result, options) {
     sandbox: decision.sandbox,
     input: redactAuditValue(input),
     output: result && result.ok ? redactAuditValue(result.output) : null,
-    error: result && result.error || null,
+    error: result && result.error ? redactAuditValue(result.error) : null,
     cwd: options.cwd || process.cwd()
   });
 }
