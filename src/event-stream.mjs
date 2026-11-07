@@ -37,7 +37,7 @@ export async function appendEvent(root, sessionId, event, options = {}) {
     const existing = await readFile(file, 'utf8');
     seq = existing.split('\n').filter(Boolean).length;
   } catch {}
-  const record = redactEvent({ seq, at: new Date().toISOString(), type, ...event, type });
+  const record = redactEvent({ ...event, seq, at: new Date().toISOString(), type });
   await appendFile(file, JSON.stringify(record) + '\n', { encoding: 'utf8', mode: 0o600 });
   return record;
 }
