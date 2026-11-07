@@ -98,7 +98,7 @@ export function classifyByRules(text, _unused, tokenCount, scoring = DEFAULT_ROU
   const confidence = clamp01(0.45 + weighted * 0.45 + lengthPressure * 0.1);
 
   const isSimple =
-    dims.every((dimension) => dimension.score === 0) &&
+    dims.filter((dimension) => dimension.name !== 'questionComplexity').every((dimension) => dimension.score === 0) &&
     effectiveTokens <= 120 &&
     READ_ONLY_SIGNALS.some((pattern) => pattern.test(value));
 
