@@ -80,6 +80,25 @@ test('timeout abort still reaches handlers when the caller supplies a signal', a
   assert.match(result.error, /Tool timed out/);
 });
 
+test('a tool does not start when the caller signal is already aborted', async () => {
+  let invocations = 0;
+  const guarded = defineTool({
+    name: 'pre_cancelled_read',
+    capabilities: ['read'],
+    risk: 'low',
+    inputSchema: { type: 'object' },
+    run: async () => { invocations++; return 'should not run'; }
+  });
+  const caller = new AbortController();
+  caller.abort(new Error('cancelled before dispatch'));
+  const result = await runTool(guarded, {}, {
+    policy: { decide: () => ({ decision: 'allow' }) },
+    signal: caller.signal
+  });
+  assert.equal(result.ok, false);
+  assert.equal(result.cancelled, true);
+  assert.equal(invocations, 0);
+});
 test('caller cancellation is forwarded to the tool handler', async () => {
   const slow = defineTool({
     name: 'cancellable_read', capabilities: ['read'], risk: 'low', timeoutMs: 2000, inputSchema: { type: 'object' },
