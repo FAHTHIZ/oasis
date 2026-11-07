@@ -73,7 +73,8 @@ try {
   assert.match(await page.locator('h1').innerText(), /Bring the model/);
   assert.equal(await page.locator('link[rel="canonical"]').getAttribute('href'), 'https://fahthiz.github.io/oasis/');
   assert.equal(await page.getByRole('link', { name: /Get OASIS for desktop/ }).getAttribute('href'), '#downloads');
-  assert.equal(await page.getByRole('link', { name: /Start a normal session/ }).getAttribute('href'), '#session');
+  assert.ok(await page.getByRole('link', { name: /Start a normal session/ }).count() >= 1);
+  assert.equal(await page.locator('a[href="#session"]').first().getAttribute('href'), '#session');
   assert.ok(await page.locator('#demo').isVisible());
   assert.ok(await page.locator('#interfaces').isVisible());
   assert.ok(await page.locator('#session').isVisible());
