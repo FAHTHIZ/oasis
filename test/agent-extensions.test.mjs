@@ -293,5 +293,5 @@ test('permission approval UI receives redacted command arguments after secret re
   assert.ok(prompts.length > 0, 'the command should require approval');
   assert.doesNotMatch(prompts.join('\\n'), /plainAgentCredentialValue/);
   assert.doesNotMatch(JSON.stringify(approvalInput), /plainAgentCredentialValue/);
-  assert.match(JSON.stringify(approvalInput), /\\[redacted\\]/);
+  assert.match(JSON.stringify(approvalInput), /\[redacted\]/);
 });
