@@ -6,7 +6,7 @@
  * and returns a normalized result without changing existing tool behavior.
  */
 
-import { defineTool, evaluateToolPolicy, validateToolInput } from './tool-kernel.mjs';
+import { defineTool, runTool } from './tool-kernel.mjs';
 
 export function createToolRunner(handlers = [], options = {}) {
   const tools = new Map();
@@ -35,26 +35,12 @@ export function createToolRunner(handlers = [], options = {}) {
       const tool = tools.get(String(name || ''));
       if (!tool) return { ok: false, error: 'Unknown tool: ' + name };
       const policy = context.policy || options.policy || {};
-      const decision = evaluateToolPolicy(tool, input, policy);
-      if (decision.decision === 'deny') {
-        return { ok: false, tool: tool.name, decision, error: decision.reason || 'tool denied by policy' };
-      }
-      if (decision.decision === 'ask') {
-        return { ok: false, tool: tool.name, decision, pendingApproval: true };
-      }
-      const normalizedInput = await validateToolInput(tool, input);
-      try {
-        const output = await tool.run(normalizedInput, {
-          signal: context.signal,
-          policy,
-          sandbox: decision.sandbox,
-          env: context.env || process.env,
-          cwd: context.cwd || process.cwd()
-        });
-        return { ok: true, tool: tool.name, decision, output: output === undefined ? null : output };
-      } catch (error) {
-        return { ok: false, tool: tool.name, decision, error: error && error.message || String(error) };
-      }
+      return await runTool(tool, input, {
+        policy,
+        signal: context.signal,
+        env: context.env || process.env,
+        cwd: context.cwd || process.cwd()
+      });
     }
   };
 }
