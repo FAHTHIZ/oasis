@@ -7,6 +7,7 @@ import { createServer } from 'node:http';
 import { createSession, runAgentTurn, closeSession } from '../src/agent.mjs';
 import { loadSettings, setWorkspaceTrust } from '../src/settings.mjs';
 import { scriptedModel, toolCall } from './helpers/scripted-model.mjs';
+import { maskSecrets } from '../src/secret-shield.mjs';
 
 async function tmp(prefix = 'oasis-ext-') { return await mkdtemp(path.join(os.tmpdir(), prefix)); }
 
@@ -260,4 +261,37 @@ test('ask_user_question: answer parsing, no-user fallback, and subagents cannot 
   assert.match(JSON.parse(requests[1].messages.at(-1).content).message, /No user is available/);
   const taskDef = session.toolDefinitions.find((d) => d.function.name === 'ask_user_question');
   assert.ok(taskDef);
+});
+
+test('permission approval UI receives redacted command arguments after secret restoration', async (t) => {
+  const root = await tmp('oasis-approval-secret-');
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const credential = 'plainAgentCredentialValue';
+  const placeholder = maskSecrets({}, 'GITHUB_TOKEN=' + credential).text.split('=')[1];
+  const { config } = await scriptedModel(t, [
+    toolCall('secret-command', 'run_command', {
+      command: process.execPath,
+      args: ['-e', 'console.log("must not run")', '--token', placeholder]
+    }),
+    { content: 'done' }
+  ]);
+  const session = await createSession({
+    root,
+    config,
+    settings: settingsWith({ permissions: { allow: [], ask: ['run_command(*)'], deny: [] } })
+  });
+  maskSecrets(session, 'GITHUB_TOKEN=' + credential);
+  const prompts = [];
+  let approvalInput = null;
+  await runAgentTurn(session, 'Run the requested command.', {
+    approval: async (message, _force, metadata) => {
+      prompts.push(message);
+      approvalInput = metadata && metadata.input;
+      return false;
+    }
+  });
+  assert.ok(prompts.length > 0, 'the command should require approval');
+  assert.doesNotMatch(prompts.join('\\n'), /plainAgentCredentialValue/);
+  assert.doesNotMatch(JSON.stringify(approvalInput), /plainAgentCredentialValue/);
+  assert.match(JSON.stringify(approvalInput), /\\[redacted\\]/);
 });
