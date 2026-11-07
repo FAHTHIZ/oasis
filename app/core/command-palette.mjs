@@ -22,25 +22,36 @@ export const APP_KEYBOARD_SHORTCUTS = Object.freeze([
   { keys: 'Enter', label: 'Run the selected command', detail: 'Available while the command palette is open.' }
 ]);
 
-function termScore(haystack, term) {
-  const exact = haystack.indexOf(term);
-  if (exact >= 0) return exact + (exact === 0 ? 0 : 5);
-  let cursor = 0;
-  let gaps = 0;
-  for (const character of term) {
-    const found = haystack.indexOf(character, cursor);
-    if (found < 0) return Infinity;
-    gaps += found - cursor;
-    cursor = found + 1;
+function termScore(words, term) {
+  let best = Infinity;
+  for (const word of words) {
+    const exact = word.indexOf(term);
+    if (exact >= 0) {
+      best = Math.min(best, exact + (exact === 0 ? 0 : 5));
+      continue;
+    }
+    // Keep short terms literal; fuzzy subsequences are useful for longer typos,
+    // but matching across unrelated words creates noisy command results.
+    if (term.length < 4) continue;
+    let cursor = 0;
+    let gaps = 0;
+    for (const character of term) {
+      const found = word.indexOf(character, cursor);
+      if (found < 0) { cursor = -1; break; }
+      gaps += found - cursor;
+      cursor = found + 1;
+    }
+    if (cursor >= 0) best = Math.min(best, 35 + gaps);
   }
-  return 35 + gaps;
+  return best;
 }
 
 export function searchAppCommands(query, commands = APP_PALETTE_COMMANDS) {
   const terms = String(query || '').trim().toLowerCase().split(/[ \t\r\n]+/).filter(Boolean);
   return commands.map((item, index) => {
-    const haystack = [item.label, item.description, item.section, item.keywords, item.shortcut].filter(Boolean).join(' ').toLowerCase();
-    const scores = terms.map((term) => termScore(haystack, term));
+    const words = [item.label, item.description, item.section, item.keywords, item.shortcut]
+      .filter(Boolean).join(' ').toLowerCase().split(/[^a-z0-9+/-]+/).filter(Boolean);
+    const scores = terms.map((term) => termScore(words, term));
     return { item, index, score: scores.some((score) => !Number.isFinite(score)) ? Infinity : scores.reduce((sum, score) => sum + score, 0) };
   }).filter((entry) => Number.isFinite(entry.score))
     .sort((a, b) => a.score - b.score || a.index - b.index)
