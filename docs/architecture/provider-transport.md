@@ -1,51 +1,58 @@
-# Provider transport architecture
+# Provider protocol boundaries
 
-OASIS separates **model-provider policy** from **provider wire formats**.
+OASIS keeps provider policy separate from provider-specific wire formats.
 
-The agent runtime owns retry policy, fallback ordering, permission checks,
-stream watchdogs, and session state. A provider transport owns only the
-protocol-specific work needed to turn a normalized request into a provider
-response.
+The agent runtime owns model selection, retry policy, fallback ordering,
+credentials, cancellation, stream watchdogs, usage accounting, and session
+state. Protocol adapters own only message conversion and stream decoding.
 
-## Contract
+## Active implementation
 
-`src/model-transport.mjs` defines the initial stable interface:
+The production request/stream seams are:
 
-- `normalizeTransportConfig(config)` validates and normalizes provider input.
-- `transportEndpoint(config)` resolves the protocol-specific endpoint.
-- `transportRequestBody(config)` serializes the message history.
-- `transportReadStream(response, protocol, onDelta, onProgress)` normalizes
-  streamed provider output.
-- `defaultModelTransport` is the current implementation and preserves the
-  existing OpenAI Responses, OpenAI-compatible, and Anthropic behavior.
+- `src/provider-requests.mjs`: endpoint construction and message/tool
+  serialization for OpenAI Chat Completions, OpenAI Responses, and Anthropic
+  Messages.
+- `src/provider-stream.mjs`: server-sent event framing, provider event
+  decoding, tool-call assembly, reasoning metadata, usage merging, and
+  interrupted-stream handling.
+- `src/agent.mjs`: request lifecycle, provider-specific headers and options,
+  retries, fallback, cancellation, and integration with the turn state.
+
+These modules are exercised by the live agent. There is currently **no
+standalone `ModelTransport` interface wired into the runtime**. An earlier
+`src/model-transport.mjs` prototype was removed because it duplicated the
+active serializers without owning the real request lifecycle.
 
 ## Boundaries
 
-A transport must not:
+A protocol adapter must not:
 
-- Retry requests.
-- Choose fallback providers.
-- Mutate files or execute commands.
-- Make permission decisions.
-- Own session state.
+- Retry requests or choose fallback providers.
+- Make permission decisions or execute workspace tools.
+- Own session state or usage/cost accounting.
+- Receive workspace credentials unrelated to its configured provider.
 
-The runtime remains responsible for those concerns. This keeps provider
-adapters small, testable, and replaceable.
+The runtime remains responsible for these concerns. This keeps protocol
+conversion independently testable without introducing an unused second
+transport architecture.
 
-## Current implementation
+## Supported protocol behavior
 
-The default transport wraps the existing, production-tested request
-serializers and stream parser. It preserves support for:
+The active request and stream modules preserve:
 
 - OpenAI Responses API.
-- OpenAI-compatible chat-completions endpoints.
+- OpenAI-compatible Chat Completions endpoints.
 - Anthropic Messages.
-- Anthropic-compatible Bedrock, Vertex AI, and Microsoft Foundry routes.
-- Streaming tool calls, reasoning output, image replay, and interrupted-stream
+- Provider-specific reasoning/tool metadata replay.
+- Image and tool-result replay.
+- Streaming tool-call assembly, usage accounting, and interrupted-stream
   detection.
 
-## Future replacements
+## Next extraction
 
-A future transport can implement the same interface for an SDK-backed provider,
-a local inference runtime, or a sandboxed gateway. The agent runtime should not
-need to change when a transport changes.
+A future `ProviderTransport` contract should be introduced only when the live
+request path can use it end-to-end. That migration must preserve headers,
+model-specific options, reasoning metadata, tool-call IDs, usage, timeout,
+cancellation, retries, and fallback behavior. A serializer-only wrapper is not
+a production transport abstraction.

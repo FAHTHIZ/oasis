@@ -4827,6 +4827,28 @@ function kernelTimeoutForTool(name, args, context) {
   return 120_000;
 }
 
+// One kernel execution path owns timeout/cancellation, output validation,
+// and redacted audit recording for every kernel-managed tool.
+async function executeThroughToolKernel(session, tool, args, context, options = {}) {
+  const outcome = await runTool(tool, args, {
+    policy: { decide: () => ({ decision: 'allow' }) },
+    signal: options.signal || (context && context.signal),
+    env: (context && context.env) || options.env || process.env,
+    cwd: (context && context.root) || session.root || process.cwd()
+  });
+
+  if (outcome.audit && session) {
+    session.toolAuditLog ||= [];
+    session.toolAuditLog.push(outcome.audit);
+    if (session.toolAuditLog.length > 200) session.toolAuditLog.splice(0, session.toolAuditLog.length - 200);
+    if (typeof options.onToolAudit === 'function') {
+      try { options.onToolAudit(outcome.audit); } catch { /* audit observers cannot break tool execution */ }
+    }
+  }
+  if (!outcome.ok) throw new Error(outcome.error || ('Tool ' + tool.name + ' failed.'));
+  return outcome.output;
+}
+
 // The agent's existing permission gate runs before this boundary. The kernel
 // then validates the registered schema again and owns cancellation, timeout,
 // and redacted audit handling for the actual workspace tool execution.
@@ -4861,23 +4883,7 @@ async function executeRegisteredToolWithKernel(session, name, args, context, opt
       return await executeTool(name, validatedInput, executionContext);
     }
   });
-  const outcome = await runTool(tool, args, {
-    policy: { decide: () => ({ decision: 'allow' }) },
-    signal: options.signal || context.signal,
-    env: context.env || options.env || process.env,
-    cwd: context.root || session.root || process.cwd()
-  });
-
-  if (outcome.audit && session) {
-    session.toolAuditLog ||= [];
-    session.toolAuditLog.push(outcome.audit);
-    if (session.toolAuditLog.length > 200) session.toolAuditLog.splice(0, session.toolAuditLog.length - 200);
-    if (typeof options.onToolAudit === 'function') {
-      try { options.onToolAudit(outcome.audit); } catch { /* audit observers cannot break tool execution */ }
-    }
-  }
-  if (!outcome.ok) throw new Error(outcome.error || ('Tool ' + name + ' failed.'));
-  return outcome.output;
+  return await executeThroughToolKernel(session, tool, args, context, options);
 }
 
 async function executeMappedMcpToolWithKernel(session, name, args, context, options = {}) {
@@ -4923,23 +4929,7 @@ async function executeMappedMcpToolWithKernel(session, name, args, context, opti
     }
   });
 
-  const outcome = await runTool(tool, args, {
-    policy: { decide: () => ({ decision: 'allow' }) },
-    signal: options.signal || (context && context.signal),
-    env: (context && context.env) || options.env || process.env,
-    cwd: (context && context.root) || session.root || process.cwd()
-  });
-
-  if (outcome.audit && session) {
-    session.toolAuditLog ||= [];
-    session.toolAuditLog.push(outcome.audit);
-    if (session.toolAuditLog.length > 200) session.toolAuditLog.splice(0, session.toolAuditLog.length - 200);
-    if (typeof options.onToolAudit === 'function') {
-      try { options.onToolAudit(outcome.audit); } catch { /* audit observers cannot break tool execution */ }
-    }
-  }
-  if (!outcome.ok) throw new Error(outcome.error || ('MCP tool ' + name + ' failed.'));
-  return outcome.output;
+  return await executeThroughToolKernel(session, tool, args, context, options);
 }
 
 async function executeOneCallRaw(session, call, context, options) {
@@ -4961,6 +4951,8 @@ async function executeOneCallRaw(session, call, context, options) {
     if (session.allowedToolNames && !session.allowedToolNames.has(name)) {
       throw new Error('The tool ' + name + ' is not available to this agent.');
     }
+    // Validate model input before permission hooks. The Tool Kernel validates
+    // again at execution because PreToolUse may rewrite the final arguments.
     const inputSchema = toolParameterSchemas(session).get(name);
     const validation = await validateToolArguments(inputSchema, args);
     if (!validation.valid) {
