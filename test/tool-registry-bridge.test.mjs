@@ -28,6 +28,16 @@ test('bridge marks command execution as approval-required', () => {
   assert.equal(tool.requiresApproval, true);
 });
 
+test('bridge defaults unknown and MCP tools to approval-required execution', () => {
+  const unknown = bridgeToolDefinition({ type: 'function', function: { name: 'custom_action', description: 'Unknown integration', parameters: { type: 'object' } } });
+  assert.deepEqual(unknown.capabilities, ['execute']);
+  assert.equal(unknown.risk, 'critical');
+  assert.equal(unknown.requiresApproval, true);
+  const mcp = bridgeToolDefinition({ type: 'function', function: { name: 'mcp_remote_deploy', description: 'Remote deployment', parameters: { type: 'object' } } });
+  assert.deepEqual(mcp.capabilities, ['mcp', 'execute']);
+  assert.equal(mcp.risk, 'critical');
+  assert.equal(mcp.requiresApproval, true);
+});
 test('bridge converts a list of definitions', () => {
   const tools = bridgeToolDefinitions([readDefinition, writeDefinition, commandDefinition]);
   assert.equal(tools.length, 3);
