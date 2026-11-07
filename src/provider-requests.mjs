@@ -153,7 +153,7 @@ export function toAnthropicRequest(messages, options = {}) {
 // Chat-completions tools carry only these fields. Stricter compatible endpoints
 // reject unknown properties even when the OpenAI endpoint would ignore them.
 const CHAT_TOOL_FUNCTION_KEYS = ['name', 'description', 'parameters', 'strict'];
-export export function chatCompletionTool(tool) {
+export function chatCompletionTool(tool) {
   if (!tool || tool.type !== 'function' || !tool.function) return tool;
   const fn = {};
   for (const key of CHAT_TOOL_FUNCTION_KEYS) if (tool.function[key] !== undefined) fn[key] = tool.function[key];
