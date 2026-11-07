@@ -63,7 +63,6 @@ The browser is the user interface; the agent process and project access remain o
 
 There is no native Android APK or iOS App Store package in the current release.
 
-- Install the PWA from the browser for a home-screen experience.
 - Connect to a computer's OASIS runtime over a trusted private network when you need that computer's project.
 - Advanced Android users can run the CLI manually in Termux with Node.js 22 or newer and Git. This is not a one-click mobile installer.
 

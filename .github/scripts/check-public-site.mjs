@@ -25,7 +25,7 @@ assert.ok(html.includes('<nav class="site-nav"')&&html.includes('aria-label="Mai
 assert.ok(html.includes('id="runtime"')&&html.includes('id="interfaces"')&&html.includes('id="evidence"')&&html.includes('id="session"'));
 assert.ok(html.includes('oasis-real-model-demo.gif')&&html.includes('oasis-real-model-demo.mp4'));
 assert.ok(html.includes('qualitative product example, not a controlled benchmark'));
-assert.ok(html.includes('No published desktop installer assets are currently available'));
+assert.ok(html.includes('No public desktop installer assets are attached to a GitHub Release yet'));
 assert.ok(html.includes('<!--OASIS:DOWNLOADS-->')&&html.includes('<!--/OASIS:DOWNLOADS-->'));
 assert.ok(html.includes('<!--OASIS:BUILD-->')&&html.includes('<!--/OASIS:BUILD-->'));
 assert.ok(html.includes('<!--OASIS:CHANGES-->')&&html.includes('<!--/OASIS:CHANGES-->'));
