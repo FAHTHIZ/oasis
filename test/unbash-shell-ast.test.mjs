@@ -31,6 +31,20 @@ test('nested substitutions and literal shell wrappers remain visible to policy c
   ]);
 });
 
+test('shell launcher options do not hide static -c scripts', () => {
+  const cases = [
+    "bash --norc -c 'git status'",
+    "bash --rcfile /tmp/custom.bash -c 'git push'",
+    "bash -O extglob -lc 'git diff'",
+    "env FOO=bar bash --norc -lc 'git push'"
+  ];
+  const expected = ['status', 'push', 'diff', 'push'];
+  for (let i = 0; i < cases.length; i++) {
+    const commands = parse(cases[i]).commands;
+    assert.ok(commands.some((command) => command.tokens[0] === 'git' && command.tokens[1] === expected[i]), cases[i]);
+  }
+});
+
 test('pipeline links, here-strings and heredocs preserve their execution context', () => {
   const piped = parse('echo x | sh').commands;
   assert.equal(piped[1].pipedFrom, piped[0]);
