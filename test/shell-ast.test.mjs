@@ -5,7 +5,7 @@ import { analyzeShellLine } from '../src/shell-risk.mjs';
 
 await loadShellParser();
 
-test('the bash grammar loads from the bundled tree-sitter package', () => {
+test('the Bash parser is ready without asynchronous grammar loading', () => {
   assert.equal(shellParserLoaded(), true);
 });
 
