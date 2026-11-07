@@ -142,3 +142,36 @@ test('SDK approval prompts and audit callbacks redact credential values', async 
   assert.ok(audit);
   assert.equal(audit.input.token, '[redacted]');
 });
+
+test('SDK tools validate declared output schemas before returning results', async () => {
+  const server = createToolServer('output-validation', [
+    tool('valid_result', 'Returns a typed result', { type: 'object' }, async () => ({
+      count: 3,
+      label: 'ready'
+    }), {
+      outputSchema: {
+        type: 'object',
+        properties: { count: { type: 'integer' }, label: { type: 'string' } },
+        required: ['count', 'label'],
+        additionalProperties: false
+      }
+    }),
+    tool('invalid_result', 'Returns an invalid result', { type: 'object' }, async () => ({
+      message: 'finished'
+    }), {
+      outputSchema: { type: 'object', required: ['status'] }
+    })
+  ]);
+  assert.deepEqual(await server.callTool('valid_result', {}, { autoApprove: true }), {
+    count: 3,
+    label: 'ready'
+  });
+  await assert.rejects(
+    () => server.callTool('invalid_result', {}, { autoApprove: true }),
+    /Invalid output from invalid_result.*missing required property "status"/i
+  );
+  assert.deepEqual(
+    server.tools.find((item) => item.name === 'valid_result').outputSchema.required,
+    ['count', 'label']
+  );
+});
