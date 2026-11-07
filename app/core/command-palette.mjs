@@ -37,7 +37,7 @@ function termScore(haystack, term) {
 }
 
 export function searchAppCommands(query, commands = APP_PALETTE_COMMANDS) {
-  const terms = String(query || '').trim().toLowerCase().split(/\\s+/).filter(Boolean);
+  const terms = String(query || '').trim().toLowerCase().split(/[ \t\r\n]+/).filter(Boolean);
   return commands.map((item, index) => {
     const haystack = [item.label, item.description, item.section, item.keywords, item.shortcut].filter(Boolean).join(' ').toLowerCase();
     const scores = terms.map((term) => termScore(haystack, term));

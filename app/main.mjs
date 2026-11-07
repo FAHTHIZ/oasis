@@ -114,7 +114,7 @@ const modifierLabel = isApplePlatform ? '⌘' : 'Ctrl';
 let commandPaletteSelected = 0;
 
 function displayShortcut(keys) {
-  return String(keys || '').replaceAll('MOD', modifierLabel).replace(/\\+/g, ' + ');
+  return String(keys || '').replaceAll('MOD', modifierLabel).replace(/[+]/g, ' + ');
 }
 
 function openNativeDialog(id) {
@@ -288,7 +288,7 @@ document.addEventListener('keydown', (event) => {
   const modifier = event.ctrlKey || event.metaKey;
   if (modifier && event.key.toLowerCase() === 'k') {
     event.preventDefault();
-    openNativeDialog('commandPaletteDialog');
+    if (!$('shortcutsDialog').open) openNativeDialog('commandPaletteDialog');
     return;
   }
   if (modifier && event.key === '/') {
@@ -644,13 +644,13 @@ const TOOL_LABELS = { list_files: 'List', read_file: 'Read', write_file: 'Write'
 function activityLabel(tool) {
   const name = String(tool.name || '').toLowerCase();
   const args = tool.args || {};
-  const path = String(args.path || args.file_path || args.notebook_path || '').replace(/\\\\/g, '/').split('/').filter(Boolean).at(-1) || '';
+  const path = String(args.path || args.file_path || args.notebook_path || '').replaceAll(String.fromCharCode(92), '/').split('/').filter(Boolean).at(-1) || '';
   if (['run_command', 'run_shell', 'powershell', 'auto_test'].includes(name)) {
     const command = [args.command, ...(Array.isArray(args.args) ? args.args : [])].filter(Boolean).join(' ');
-    return /\\b(?:npm|pnpm|yarn|bun)\\s+(?:(?:run|exec)\\s+)?(?:test|check|vitest|jest|playwright|mocha)\\b|\\bnode\\s+--test\\b|\\bpytest\\b|\\bgo\\s+test\\b|\\bcargo\\s+test\\b/i.test(command) ? 'Ran the tests' : 'Ran commands';
-  }
-  if (name === 'read_file') return path ? 'Read ' + path : 'Read a file';
-  if (name === 'list_files') return 'Listed project files';
+    const commandParts = command.toLowerCase().split(/[ \t]+/).filter(Boolean);
+    const testRunner = ['npm', 'pnpm', 'yarn', 'bun'].includes(commandParts[0]) && commandParts.some((part) => ['test', 'check', 'vitest', 'jest', 'playwright', 'mocha'].includes(part));
+    const testCommand = testRunner || (commandParts[0] === 'node' && commandParts.includes('--test')) || commandParts[0] === 'pytest' || (commandParts[0] === 'go' && commandParts[1] === 'test') || (commandParts[0] === 'cargo' && commandParts[1] === 'test');
+    return testCommand ? 'Ran the tests' : 'Ran commands';
   if (name === 'write_file') return path ? 'Wrote ' + path : 'Wrote a file';
   if (['edit_file', 'multi_edit', 'notebook_edit', 'apply_patch'].includes(name)) return path ? 'Edited ' + path : 'Edited files';
   if (name === 'delete_file') return path ? 'Deleted ' + path : 'Deleted a file';

@@ -18,17 +18,17 @@ test('browser command panel indexes real workspace actions and integrations', ()
 });
 
 test('browser workspace exposes an accessible native command panel and shortcut guide', () => {
-  assert.match(html, /id="commandPaletteButton"/);
-  assert.match(html, /<dialog[^>]*id="commandPaletteDialog"/);
-  assert.match(html, /id="commandPaletteInput"/);
-  assert.match(html, /id="commandPaletteResults"[^>]*role="listbox"/);
-  assert.match(html, /<dialog[^>]*id="shortcutsDialog"/);
-  assert.match(html, /id="shortcutsFilter"/);
-  assert.match(main, /event\.key\.toLowerCase\(\)==='k'/);
-  assert.match(main, /event\.key==='\/'/);
-  assert.match(main, /searchAppCommands\(/);
-  assert.match(css, /\.native-dialog::backdrop/);
-  assert.match(css, /\.command-result\[aria-selected="true"\]/);
+  assert.ok(html.includes('id="commandPaletteButton"'));
+  assert.ok(html.includes('id="commandPaletteDialog"'));
+  assert.ok(html.includes('id="commandPaletteInput"'));
+  assert.ok(html.includes('id="commandPaletteResults" role="listbox"'));
+  assert.ok(html.includes('id="shortcutsDialog"'));
+  assert.ok(html.includes('id="shortcutsFilter"'));
+  assert.ok(main.includes("event.key.toLowerCase() === 'k'"));
+  assert.ok(main.includes("event.key === '/'"));
+  assert.ok(main.includes('searchAppCommands('));
+  assert.ok(css.includes('.native-dialog::backdrop'));
+  assert.ok(css.includes('.command-result[aria-selected="true"]'));
 });
 
 test('keyboard guide documents only shortcuts wired by the browser workspace', () => {
