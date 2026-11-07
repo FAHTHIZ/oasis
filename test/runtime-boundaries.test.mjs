@@ -7,7 +7,7 @@ import { splitThinking, visibleReply } from '../src/think-tags.mjs';
 
 test('the CLI runtime does not import browser application modules', async () => {
   const source = await readFile(new URL('../src/agent.mjs', import.meta.url), 'utf8');
-  assert.doesNotMatch(source, /from\\s+['"]\\.\\.\\/app\\//);
+  assert.doesNotMatch(source, /from\s+['"]\.\.\/app\///);
 });
 
 test('browser and CLI share the same provider failure formatter', () => {

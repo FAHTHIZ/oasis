@@ -420,10 +420,10 @@ export async function chat(config, request) {
   }
 }
 
-/** A tiny inert tool-call probe to check a provider before saving it. */
 export { briefFailure } from '../../src/provider-errors.mjs';
 
-// `timeoutMs` bounds the whole probe// `timeoutMs` bounds the whole probe: a busy model can hold a request open for
+/** A tiny inert tool-call probe to check a provider before saving it. */
+// `timeoutMs` bounds the whole probe: a busy model can hold a request open for
 // minutes, and setup should move on to the next model instead of waiting.
 export async function testProvider(config, fetchImpl, { timeoutMs = 0 } = {}) {
   const tools = [{ type: 'function', function: { name: 'record_ok', description: 'Record that the connection works.', parameters: { type: 'object', properties: { ok: { type: 'boolean' } }, required: ['ok'] } } }];
