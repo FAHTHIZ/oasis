@@ -7,6 +7,7 @@ User-facing change history grouped by package version. A version heading does no
 - Corrected release documentation to distinguish Git tags, CI artifacts and published GitHub Release assets.
 - Updated the repository inventory and architecture notes after the first provider-stream extraction.
 - Added a reproducible, caveated comparison of repository presentation and engineering practices against a 100-project AI-agent reference set.
+- Added an unscripted `gpt-oss-20b` CLI demonstration to the README, with GIF/MP4 playback and the raw terminal recording; it is a qualitative product example, not a scored benchmark.
 
 - `glob_files` and `search_files` find files anywhere in large repositories; they previously stopped after the first 1,800–5,000 files. `search_files` now uses ripgrep.
 - `grep` accepts ripgrep-style arguments (`-i`, `-A`, `-B`, `-C`, `head_limit`) and adds `type`, `before`, `after` and `offset`.
