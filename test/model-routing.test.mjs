@@ -112,6 +112,7 @@ test('image-required tasks avoid models explicitly catalogued as text-only', asy
   assert.equal(imageRoute.tier, 'strong');
   assert.equal(imageRoute.requiresImages, true);
   assert.match(imageRoute.reason, /image input/);
+  assert.match(imageRoute.reason, /instead of text-only-model/);
 
   const bothRoute = selectTaskModel('Fix the interface shown in the screenshot.', 'vision-model', {
     enabled: true, easyModel: 'text-only-model', strongModel: 'vision-no-tools-model'
