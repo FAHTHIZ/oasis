@@ -8,6 +8,7 @@ import { appendFile, readFile, unlink } from 'node:fs/promises';
 import path from 'node:path';
 import { getSessionDirectory } from './sessions.mjs';
 import { redactSecrets } from './auto-memory.mjs';
+import { redactAuditValue } from './tool-kernel.mjs';
 
 const EVENT_TYPES = new Set(['tool_call', 'tool_result', 'approval', 'recovery', 'verification', 'session_saved']);
 
@@ -36,12 +37,16 @@ export function eventLogPath(root, sessionId, env = process.env) {
 }
 
 function redactEvent(event) {
-  const clone = { ...event };
-  for (const key of Object.keys(clone)) {
-    if (typeof clone[key] === 'string') clone[key] = redactSecrets(clone[key]).text;
-    else if (clone[key] && typeof clone[key] === 'object') clone[key] = JSON.parse(redactSecrets(JSON.stringify(clone[key])).text);
-  }
-  return clone;
+  const auditSafe = redactAuditValue(event);
+  const redactPersisted = (value) => {
+    if (typeof value === 'string') return redactSecrets(value).text;
+    if (Array.isArray(value)) return value.map(redactPersisted);
+    if (value && typeof value === 'object') {
+      return Object.fromEntries(Object.entries(value).map(([key, item]) => [key, redactPersisted(item)]));
+    }
+    return value;
+  };
+  return redactPersisted(auditSafe);
 }
 
 // Append one event. Sequence numbers are derived from the current line count,
