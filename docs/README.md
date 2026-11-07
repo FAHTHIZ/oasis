@@ -10,7 +10,7 @@ This directory contains maintained technical documentation for the current OASIS
 | [Architecture](ARCHITECTURE.md) | Runtime components, request flow, persistence and trust boundaries. |
 | [Engineering scorecard](ENGINEERING-SCORECARD.md) | Evidence-backed readiness areas, open gates, review cadence and measurable exit criteria. |
 | [Configuration reference](CONFIGURATION.md) | Model providers and the provider registry, fallback models, output limits and search-tool options. |
-| [Interfaces and deployment](INTERFACES.md) | CLI, desktop, connected browser workspace, PWA, editor, ACP, SDK and integrations. |
+| [Interfaces and deployment](INTERFACES.md) | CLI, native desktop, connected browser session, editor, ACP, SDK and integrations. |
 | [Benchmark methodology](BENCHMARKS.md) | What the model-free benchmarks measure, what they do not measure and how to interpret live evaluations. |
 | [Whole-system replacement roadmap](REPLACEMENT-ROADMAP.md) | Ranked full-system audit, open-source comparisons, retained foundations and replacement acceptance gates. |
 | [Architecture alternatives](ARCHITECTURE-ALTERNATIVES.md) | Component-by-component alternatives, implementation anchors and staged migration recommendations. |
