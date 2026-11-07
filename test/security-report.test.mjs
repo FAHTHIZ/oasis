@@ -1,5 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { mkdtemp, mkdir, rm } from 'node:fs/promises';
+import os from 'node:os';
+import path from 'node:path';
 import { buildSecurityReport, formatSecurityReport } from '../src/security-report.mjs';
 
 test('empty scan and disabled sandbox yields warn summary', () => {
@@ -33,6 +36,44 @@ test('missing scan results are not reported as a clean scan', () => {
 test('uses the sandbox backend selected by settings', () => {
   const report = buildSecurityReport({ sandboxSettings: { enabled: true }, sandboxStatus: { available: true, kind: 'docker' }, permissionMode: 'default', scanFindings: [] });
   assert.ok(report.checks.some((check) => check.name === 'sandbox' && check.severity === 'pass' && /docker/.test(check.detail)));
+});
+
+test('does not claim sensitive paths are masked when sandbox is disabled', async () => {
+  const home = await mkdtemp(path.join(os.tmpdir(), 'oasis-security-report-'));
+  try {
+    await mkdir(path.join(home, '.ssh'));
+    const report = buildSecurityReport({
+      env: { HOME: home, OASIS_CONFIG_DIR: path.join(home, 'config') },
+      sandboxSettings: { enabled: false, maskSensitivePaths: true },
+      sandboxStatus: { available: true, kind: 'bubblewrap' },
+      permissionMode: 'default',
+      scanFindings: []
+    });
+    const check = report.checks.find((item) => item.name === 'sensitive-paths');
+    assert.equal(check.severity, 'warn');
+    assert.match(check.detail, /masking is not active/);
+  } finally {
+    await rm(home, { recursive: true, force: true });
+  }
+});
+
+test('reports sensitive-path masking only for an enabled available sandbox', async () => {
+  const home = await mkdtemp(path.join(os.tmpdir(), 'oasis-security-report-'));
+  try {
+    await mkdir(path.join(home, '.ssh'));
+    const report = buildSecurityReport({
+      env: { HOME: home, OASIS_CONFIG_DIR: path.join(home, 'config') },
+      sandboxSettings: { enabled: true, maskSensitivePaths: true },
+      sandboxStatus: { available: true, kind: 'docker' },
+      permissionMode: 'default',
+      scanFindings: []
+    });
+    const check = report.checks.find((item) => item.name === 'sensitive-paths');
+    assert.equal(check.severity, 'pass');
+    assert.match(check.detail, /configured for sandbox read masking/);
+  } finally {
+    await rm(home, { recursive: true, force: true });
+  }
 });
 
 test('formatSecurityReport includes all checks', () => {
