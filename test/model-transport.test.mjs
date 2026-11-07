@@ -3,8 +3,7 @@ import assert from 'node:assert/strict';
 import {
   defaultModelTransport,
   normalizeTransportConfig,
-  transportEndpoint,
-  transportRequestBody
+  transportEndpoint
 } from '../src/model-transport.mjs';
 
 test('transport configuration is normalized and validated', () => {
