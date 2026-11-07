@@ -4873,6 +4873,23 @@ async function executeThroughToolKernel(session, tool, args, context, options = 
   return outcome.output;
 }
 
+// Keep all tool families on one authorization contract. The kernel passes the
+// authorized context to the handler only after the rewritten arguments validate.
+function createKernelAuthorization(session, name, context, options = {}) {
+  return {
+    authorize: async ({ input }) => {
+      const authorization = await authorizeCall(session, name, input, context, options);
+      if (typeof options.onAuthorized === 'function') options.onAuthorized(authorization);
+      if (authorization.deniedReason) return { decision: 'deny', reason: authorization.deniedReason };
+      return {
+        decision: 'allow',
+        input: authorization.args,
+        context: authorization.context || context
+      };
+    }
+  };
+}
+
 // Permission and hook authorization runs inside Tool Kernel execution.
 // Hook-rewritten input is validated again before the registered handler starts.
 async function executeRegisteredToolWithKernel(session, name, args, context, options = {}) {
@@ -4880,14 +4897,7 @@ async function executeRegisteredToolWithKernel(session, name, args, context, opt
     || TOOL_DEFINITIONS.find((item) => item && item.function && item.function.name === name);
   if (!definition) throw new Error('Unknown or unavailable tool: ' + name + '; no registered tool schema was found, so execution was refused.');
 
-  let authorizedContext = context;
-  const authorize = async ({ input }) => {
-    const authorization = await authorizeCall(session, name, input, context, options);
-    if (typeof options.onAuthorized === 'function') options.onAuthorized(authorization);
-    if (authorization.deniedReason) return { decision: 'deny', reason: authorization.deniedReason };
-    authorizedContext = authorization.context || context;
-    return { decision: 'allow', input: authorization.args };
-  };
+  const authorization = createKernelAuthorization(session, name, context, options);
   const tool = bridgeToolDefinition(definition, {
     requiresApproval: false,
     timeoutMs: kernelTimeoutForTool(name, args, context),
@@ -4897,11 +4907,11 @@ async function executeRegisteredToolWithKernel(session, name, args, context, opt
         : null;
       if (cached) return cached;
       const contextChain = [];
-      for (let current = authorizedContext; current && current !== Object.prototype; current = Object.getPrototypeOf(current)) {
+      for (let current = runtime.authorizationContext; current && current !== Object.prototype; current = Object.getPrototypeOf(current)) {
         contextChain.unshift(current);
       }
       const executionContext = Object.assign({}, ...contextChain, {
-        root: authorizedContext && authorizedContext.root || session.root,
+        root: runtime.authorizationContext && runtime.authorizationContext.root || session.root,
         session,
         env: runtime.env,
         signal: runtime.signal
@@ -4910,21 +4920,14 @@ async function executeRegisteredToolWithKernel(session, name, args, context, opt
       return await executeTool(name, validatedInput, executionContext);
     }
   });
-  return await executeThroughToolKernel(session, tool, args, context, { ...options, authorize });
+  return await executeThroughToolKernel(session, tool, args, context, { ...options, authorize: authorization.authorize });
 }
 
 async function executeMappedMcpToolWithKernel(session, name, args, context, options = {}) {
   const definition = (session.toolDefinitions || []).find((item) => item && item.function && item.function.name === name);
   if (!definition) throw new Error('Unknown or unavailable MCP tool: ' + name + '; no registered schema was found.');
 
-  let authorizedContext = context;
-  const authorize = async ({ input }) => {
-    const authorization = await authorizeCall(session, name, input, context, options);
-    if (typeof options.onAuthorized === 'function') options.onAuthorized(authorization);
-    if (authorization.deniedReason) return { decision: 'deny', reason: authorization.deniedReason };
-    authorizedContext = authorization.context || context;
-    return { decision: 'allow', input: authorization.args };
-  };
+  const authorization = createKernelAuthorization(session, name, context, options);
   const mapped = session.mcpToolMap.get(name);
   const outputSchema = mapped && mapped.outputSchema
     ? {
@@ -4956,7 +4959,7 @@ async function executeMappedMcpToolWithKernel(session, name, args, context, opti
     // its own 120-second request timeout after approval has been granted.
     timeoutMs: 600000,
     run: async (validatedInput, runtime) => {
-      const mcpOptions = Object.create(authorizedContext && typeof authorizedContext === 'object' ? authorizedContext : null);
+      const mcpOptions = Object.create(runtime.authorizationContext && typeof runtime.authorizationContext === 'object' ? runtime.authorizationContext : null);
       mcpOptions.signal = runtime.signal;
       mcpOptions.timeoutMs = 120000;
       mcpOptions.env = runtime.env;
@@ -4964,7 +4967,7 @@ async function executeMappedMcpToolWithKernel(session, name, args, context, opti
     }
   });
 
-  return await executeThroughToolKernel(session, tool, args, context, { ...options, authorize });
+  return await executeThroughToolKernel(session, tool, args, context, { ...options, authorize: authorization.authorize });
 }
 
 function sessionToolCapabilities(name) {
@@ -4997,14 +5000,7 @@ async function executeSessionToolWithKernel(session, name, args, context, option
     : SESSION_TOOL_DEFINITIONS.find((item) => item && item.function && item.function.name === name);
   if (!definition) throw new Error('Unknown session tool: ' + name + '; no registered schema was found.');
 
-  let authorizedContext = context;
-  const authorize = async ({ input }) => {
-    const authorization = await authorizeCall(session, name, input, context, options);
-    if (typeof options.onAuthorized === 'function') options.onAuthorized(authorization);
-    if (authorization.deniedReason) return { decision: 'deny', reason: authorization.deniedReason };
-    authorizedContext = authorization.context || context;
-    return { decision: 'allow', input: authorization.args };
-  };
+  const authorization = createKernelAuthorization(session, name, context, options);
   const tool = bridgeToolDefinition(definition, {
     capabilities: sessionToolCapabilities(name),
     risk: name === 'terminal_input' || name === 'terminal_interrupt' || name === 'terminal_stop' || name === 'exit_worktree'
@@ -5015,8 +5011,8 @@ async function executeSessionToolWithKernel(session, name, args, context, option
     requiresApproval: false,
     timeoutMs: sessionToolTimeout(name, args),
     run: async (validatedInput, runtime) => {
-      const executionContext = Object.assign({}, authorizedContext || {}, {
-        root: authorizedContext && authorizedContext.root || session.root,
+      const executionContext = Object.assign({}, runtime.authorizationContext || {}, {
+        root: runtime.authorizationContext && runtime.authorizationContext.root || session.root,
         session,
         env: runtime.env,
         signal: runtime.signal
@@ -5032,7 +5028,7 @@ async function executeSessionToolWithKernel(session, name, args, context, option
       });
     }
   });
-  return await executeThroughToolKernel(session, tool, args, context, { ...options, authorize });
+  return await executeThroughToolKernel(session, tool, args, context, { ...options, authorize: authorization.authorize });
 }
 
 // Agent orchestration tools share the same policy, validation, timeout and audit
@@ -5043,14 +5039,7 @@ async function executeOrchestrationToolWithKernel(session, name, args, context, 
     || TOOL_DEFINITIONS.find((item) => item && item.function && item.function.name === name);
   if (!definition) throw new Error('Unknown or unavailable orchestration tool: ' + name + '; no registered schema was found.');
 
-  let authorizedContext = context;
-  const authorize = async ({ input }) => {
-    const authorization = await authorizeCall(session, name, input, context, options);
-    if (typeof options.onAuthorized === 'function') options.onAuthorized(authorization);
-    if (authorization.deniedReason) return { decision: 'deny', reason: authorization.deniedReason };
-    authorizedContext = authorization.context || context;
-    return { decision: 'allow', input: authorization.args };
-  };
+  const authorization = createKernelAuthorization(session, name, context, options);
   const readOnly = ['agent_status', 'neuron_network', 'agent_events', 'team_status'].includes(name);
   const capabilities = name === 'advisor' ? ['network'] : readOnly ? ['read'] : ['execute', 'write'];
   const tool = bridgeToolDefinition(definition, {
@@ -5060,11 +5049,11 @@ async function executeOrchestrationToolWithKernel(session, name, args, context, 
     timeoutMs: name === 'advisor' ? 120_000 : 900_000,
     run: async (validatedInput, runtime) => {
       const contextChain = [];
-      for (let current = authorizedContext; current && current !== Object.prototype; current = Object.getPrototypeOf(current)) {
+      for (let current = runtime.authorizationContext; current && current !== Object.prototype; current = Object.getPrototypeOf(current)) {
         contextChain.unshift(current);
       }
       const executionContext = Object.assign({}, ...contextChain, {
-        root: authorizedContext && authorizedContext.root || session.root,
+        root: runtime.authorizationContext && runtime.authorizationContext.root || session.root,
         session,
         env: runtime.env,
         signal: runtime.signal
@@ -5114,7 +5103,7 @@ async function executeOrchestrationToolWithKernel(session, name, args, context, 
       return await runAgentTool(session, name, validatedInput, executionContext, executionOptions);
     }
   });
-  return await executeThroughToolKernel(session, tool, args, context, { ...options, authorize });
+  return await executeThroughToolKernel(session, tool, args, context, { ...options, authorize: authorization.authorize });
 }
 
 async function executeOneCallRaw(session, call, context, options) {
