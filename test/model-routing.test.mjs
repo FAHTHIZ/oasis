@@ -16,10 +16,9 @@ async function temporaryDirectory(t) {
 }
 
 test('only short, clearly read-only requests qualify for the cheaper model', () => {
-  assert.deepEqual(classifyTask('Summarize the README in three bullets.'), {
-    tier: 'easy',
-    reason: 'short, clearly read-only request'
-  });
+  const summary = classifyTask('Summarize the README in three bullets.');
+  assert.equal(summary.tier, 'easy');
+  assert.match(summary.reason, /15-dimension classifier: SIMPLE \(\d+% confidence\)/);
   assert.equal(classifyTask('Explain what src/agent.mjs does.').tier, 'easy');
   assert.equal(classifyTask('Fix the authentication bug and add regression tests.').tier, 'strong');
   assert.equal(classifyTask('Review the permission checks for a security issue.').tier, 'strong');
