@@ -157,7 +157,14 @@ export async function runTool(tool, input, options = {}) {
       }, redactText);
     }
   } else {
-    decision = evaluateToolPolicy(tool, input, policy, redactText);
+    try {
+      decision = evaluateToolPolicy(tool, input, policy, redactText);
+    } catch (error) {
+      decision = normalizeToolPolicyDecision(tool, {
+        decision: 'deny',
+        reason: 'Tool policy failed closed: ' + String(error && error.message || error)
+      }, redactText);
+    }
   }
   if (decision.decision === 'deny') {
     return { ok: false, tool: tool.name, decision, error: decision.reason || 'tool denied by policy', audit: decision.audit ? buildAuditRecord(tool, input, decision, null, options) : null };

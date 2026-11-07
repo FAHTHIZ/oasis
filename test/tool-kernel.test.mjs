@@ -306,3 +306,22 @@ test('runtime secret redaction is preserved inside nested audit arrays', async (
   assert.equal(result.ok, true);
   assert.equal(result.audit.input.metadata.values[0], '[runtime-redacted]');
 });
+
+test('policy exceptions fail closed and are redacted in audit output', async () => {
+  let invoked = false;
+  const tool = defineTool({
+    name: 'policy_exception',
+    capabilities: ['write'],
+    risk: 'high',
+    inputSchema: { type: 'object' },
+    run: async () => { invoked = true; return 'ran'; }
+  });
+  const result = await runTool(tool, {}, {
+    policy: { decide: () => { throw new Error('policy crashed with --token policy-secret-123456'); } }
+  });
+  assert.equal(result.ok, false);
+  assert.equal(result.decision.decision, 'deny');
+  assert.match(result.error, /policy failed closed/i);
+  assert.doesNotMatch(JSON.stringify(result.audit), /policy-secret-123456/);
+  assert.equal(invoked, false);
+});
