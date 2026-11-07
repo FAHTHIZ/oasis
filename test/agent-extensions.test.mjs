@@ -295,3 +295,26 @@ test('permission approval UI receives redacted command arguments after secret re
   assert.doesNotMatch(JSON.stringify(approvalInput), /plainAgentCredentialValue/);
   assert.match(JSON.stringify(approvalInput), /\[redacted\]/);
 });
+
+test('main workspace tool execution is audited through the shared kernel', async (t) => {
+  const root = await tmp('oasis-kernel-agent-');
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const credential = 'plainWorkspaceCredentialValue';
+  const placeholder = maskSecrets({}, 'GITHUB_TOKEN=' + credential).text.split('=')[1];
+  const { config } = await scriptedModel(t, [
+    toolCall('write-secret', 'write_file', {
+      path: 'deploy.ini',
+      content: 'GITHUB_TOKEN=' + placeholder + '\\nPORT=8080'
+    }),
+    { content: 'done' }
+  ]);
+  const session = await createSession({ root, config, settings: settingsWith({}) });
+  maskSecrets(session, 'GITHUB_TOKEN=' + credential);
+  await runAgentTurn(session, 'Write the provided deployment settings.');
+  const written = await readFile(path.join(root, 'deploy.ini'), 'utf8');
+  assert.ok(written.includes(credential), 'the actual write tool must receive the restored credential');
+  const audit = (session.toolAuditLog || []).find((record) => record.tool === 'write_file');
+  assert.ok(audit, 'the main agent should capture a kernel audit record');
+  assert.doesNotMatch(JSON.stringify(audit), /plainWorkspaceCredentialValue/);
+  assert.match(audit.input.content, /\\[redacted\\]/);
+});
