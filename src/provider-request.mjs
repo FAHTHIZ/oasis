@@ -3,6 +3,8 @@
 // Extracted from agent.mjs, which re-exports the public names.
 import { catalogReasoningReplay } from './model-catalog.mjs';
 
+// Anthropic prompt caching: mark the system prompt, the tool list, and the newest
+// message so each request reuses the previous prefix (cheaper and faster).
 export function promptCachingEnabled(config = {}, env = process.env) {
   if (['0', 'off', 'false', 'no'].includes(String(env.OASIS_PROMPT_CACHE || '').toLowerCase())) return false;
   return config.promptCache !== false;
