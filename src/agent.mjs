@@ -746,7 +746,7 @@ export function commandEnvironment(env, settings) {
   return { ...env, [key]: [...dirs, env[key] || '', ripgrepDir].filter(Boolean).join(path.delimiter) };
 }
 
-export async function createSession({ root, config, restore = null, permissionMode = null, allowedTools = [], disallowedTools = [], settings = null, env = process.env, appendSystemPrompt = '', outputStyle = null, addDirs = [], bare = false, systemPromptOverride = '', tools = null, mcpServers = [], strictMcpConfig = false, agentsInline = null, sessionId = null, sessionName = '', fallbackModel = '', maxBudgetUsd = 0, pricing = null, settingsOverrides = [], settingSources = null, agent = null, watchFiles = false, channels = [], advisor = '', chrome = null, restricted = false, subagentSystemAppend = '', excludeDynamicSections = false, onHookEvent = null, onHookStatus = null, systemPromptSnapshot = null }) {
+export async function createSession({ root, config, restore = null, permissionMode = null, allowedTools = [], disallowedTools = [], settings = null, env = process.env, appendSystemPrompt = '', outputStyle = null, addDirs = [], bare = false, systemPromptOverride = '', tools = null, mcpServers = [], strictMcpConfig = false, agentsInline = null, sessionId = null, sessionName = '', fallbackModel = '', maxBudgetUsd = 0, pricing = null, settingsOverrides = [], settingSources = null, agent = null, watchFiles = false, channels = [], advisor = '', chrome = null, restricted = false, subagentSystemAppend = '', excludeDynamicSections = false, onHookEvent = null, onHookStatus = null, systemPromptSnapshot = null, skipAgentInitialPrompt = false }) {
   // --bare: no project instructions, skills, hooks, MCP servers, or auto memory; just the
   // model, the built-in tools, and your permission rules. Fast and predictable for scripts.
   // --restricted: only managed settings and --settings load; bypassPermissions is refused.
@@ -1017,6 +1017,12 @@ export async function createSession({ root, config, restore = null, permissionMo
       session.mainAgent = definition.name;
       if (definition.prompt) systemText += '\n\n<main-agent name="' + definition.name + '">\nYou are running as the ' + definition.name + ' agent. Follow these instructions for this whole session:\n' + definition.prompt + '\n</main-agent>';
       if (definition.tools && !(Array.isArray(tools) || typeof tools === 'string')) tools = definition.tools;
+      if (Array.isArray(definition.disallowedTools) && definition.disallowedTools.length) {
+        const denied = new Set(definition.disallowedTools);
+        session.toolDefinitions = session.toolDefinitions.filter((tool) => !denied.has(tool.function.name));
+      }
+      // Prepended to the first prompt unless the terminal already submitted it on its own.
+      if (definition.initialPrompt && !restore && !skipAgentInitialPrompt) session.agentInitialPrompt = definition.initialPrompt;
     }
   }
   const allowedToolNames = mapToolNames(tools);
@@ -5522,6 +5528,10 @@ export async function runAgentTurn(session, prompt, options = {}) {
   if (!options.env && session && session.createEnv && session.createEnv !== process.env) options = { ...options, env: session.createEnv };
   const env = options.env || process.env;
   if (session && !options.isSubagent) clearInjectionTurnFlag(session);
+  if (session && !options.isSubagent && session.agentInitialPrompt) {
+    prompt = session.agentInitialPrompt + (String(prompt || '').trim() ? '\n\n' + prompt : '');
+    session.agentInitialPrompt = '';
+  }
   if (session && session.scratchDir && !session.scratchReady && !options.isSubagent) {
     session.scratchReady = true;
     await ensureScratch(session.root, session.scratchDir.slice(SCRATCH_ROOT.length + 1));

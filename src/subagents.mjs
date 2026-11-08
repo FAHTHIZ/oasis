@@ -145,6 +145,8 @@ export function normalizeAgentDefinition(raw, body, { name, source, plugin = fal
     hooks: !plugin && data.hooks && typeof data.hooks === 'object' && !Array.isArray(data.hooks) ? data.hooks : null,
     // Start without CLAUDE.md / OASIS.md project instructions.
     omitClaudeMd: booleanField(data.omitclaudemd),
+    // First user turn when this agent runs as the main session agent (--agent); not for plugin agents.
+    initialPrompt: !plugin && data.initialprompt ? String(data.initialprompt).trim().slice(0, 20000) : '',
     prompt: String(body || '').trim().slice(0, 30000),
     source
   };

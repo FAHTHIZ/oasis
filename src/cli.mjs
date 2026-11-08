@@ -1328,6 +1328,7 @@ function sessionCreateOptions() {
     settingsOverrides: SESSION_OPTIONS.settingsOverrides,
     settingSources: SESSION_OPTIONS.settingSources || null,
     agent: SESSION_OPTIONS.agent || null,
+    skipAgentInitialPrompt: Boolean(SESSION_OPTIONS.agentInitialPromptSent),
     channels: [...SESSION_OPTIONS.channels, ...(SESSION_OPTIONS.devChannelsConfirmed ? SESSION_OPTIONS.devChannels : [])]
   };
 }
@@ -2919,6 +2920,12 @@ async function interactive(root, autoApprove, persistence = {}) {
       stdout.write('[channels] ' + (live.length ? 'Listening on ' + live.join(', ') : 'No connected MCP server declared the claude/channel capability for ' + requested.join(', ')) + '.\n');
       if (session.settings && session.settings.channelsEnabled === false) stdout.write('[channels] channelsEnabled is false in settings, so channel messages are dropped.\n');
     }
+  }
+  // An --agent with initialPrompt starts working right away, as in Claude Code.
+  const mainAgentName = SESSION_OPTIONS.bare || SESSION_OPTIONS.safeMode ? null : SESSION_OPTIONS.agent || (startupSettings && startupSettings.agent) || null;
+  if (mainAgentName && !QUEUED_INPUT.length && !persistence.resumeId && !session) {
+    const definition = (await loadAgentDefinitions(root).catch(() => ({})))[String(mainAgentName).toLowerCase()];
+    if (definition && definition.initialPrompt) { QUEUED_INPUT.push(definition.initialPrompt); SESSION_OPTIONS.agentInitialPromptSent = true; }
   }
   const inputState = { history: await loadHistory(root).catch(() => []), completer: createCompleter({ root, commands: () => interactiveCommandList(root) }) };
   const pendingShell = [];
