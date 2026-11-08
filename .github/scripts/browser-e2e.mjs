@@ -28,6 +28,9 @@ await mkdir(screenshotDir, { recursive: true });
 await mkdir(project, { recursive: true });
 await writeFile(path.join(project, 'math.mjs'), 'export function add(a, b) {\n  return a - b;\n}\n');
 await writeFile(path.join(project, 'package.json'), '{\n  "name": "todo-app",\n  "type": "module",\n  "scripts": { "test": "node --test" }\n}\n');
+// A tool server whose program is missing: the app must say it did not start, and why.
+await mkdir(env.OASIS_CONFIG_DIR, { recursive: true });
+await writeFile(path.join(env.OASIS_CONFIG_DIR, 'mcp-servers.json'), JSON.stringify({ servers: [{ name: 'broken-tools', command: 'oasis-e2e-missing-program', args: [], passEnv: [], enabled: true }] }));
 for (const args of [['init', '-q', '-b', 'main'], ['config', 'user.name', 'OASIS E2E'], ['config', 'user.email', 'e2e@example.test'], ['add', '-A'], ['commit', '-qm', 'start']]) execFileSync('git', args, { cwd: project });
 
 // The scripted agent: fix the bug, add a test, review the diff, run the
@@ -126,6 +129,7 @@ try {
   await page.waitForFunction(() => /1 test passed/.test(document.getElementById('transcript').innerText), null, { timeout: timeoutMs });
   assert.match(await readFile(path.join(project, 'math.mjs'), 'utf8'), /return a \+ b;/);
   assert.match(await readFile(path.join(project, 'math.test.mjs'), 'utf8'), /add\(2, 3\)/);
+  assert.match(await page.locator('.msg.note').allInnerTexts().then((texts) => texts.join('\n')), /A tool server did not start\. broken-tools: the program "oasis-e2e-missing-program" is not installed or not on your PATH\./);
   await page.waitForTimeout(400);
   await contrast(page, 'finished task (dark)');
   await page.screenshot({ path: path.join(screenshotDir, 'task-dark.png') });
