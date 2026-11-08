@@ -153,6 +153,8 @@ svg{width:20px;height:20px;flex:none}
 /* Copy / edit under each message, shown on hover or keyboard focus. */
 .msg-actions{display:flex;gap:2px;margin-top:4px;opacity:0;transition:opacity .15s}
 .msg.user{align-items:center;gap:4px}
+.msg-time{font-size:11.5px;color:var(--faint);align-self:center;padding:0 6px;font-variant-numeric:tabular-nums}
+.msg.user .msg-time{order:-1}
 .msg.user .msg-actions{order:-1;margin-top:0}
 .msg:hover .msg-actions,.msg-actions:focus-within{opacity:1}
 .msg.assistant{display:flex;flex-direction:column}

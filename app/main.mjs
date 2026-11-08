@@ -721,7 +721,7 @@ function toolCard(tool) {
   return el;
 }
 
-function addMessage(role, content) {
+function addMessage(role, content, at = 0) {
   const wrap = document.createElement('div');
   wrap.className = 'msg ' + role;
   if (role === 'user') {
@@ -739,7 +739,7 @@ function addMessage(role, content) {
   }
   if (role === 'user' || role === 'assistant') {
     messageSource.set(wrap, String(content || ''));
-    wrap.appendChild(messageActions(role));
+    wrap.appendChild(messageActions(role, at));
   }
   $('transcript').appendChild(wrap);
   $('welcome').hidden = true;
@@ -750,9 +750,23 @@ function addMessage(role, content) {
 // Markdown source is kept per message so a copy is what was written, not the
 // rendered text.
 const messageSource = new WeakMap();
-function messageActions(role) {
+// Compact time for the hover bar: "14:05" today, "Nov 6, 14:05" earlier.
+function messageTime(at) {
+  const when = new Date(at);
+  const today = new Date().toDateString() === when.toDateString();
+  return today ? when.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : when.toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+}
+function messageActions(role, at = 0) {
   const bar = document.createElement('div');
   bar.className = 'msg-actions';
+  if (at > 0) {
+    const time = document.createElement('time');
+    time.className = 'msg-time';
+    time.dateTime = new Date(at).toISOString();
+    time.title = new Date(at).toLocaleString([], { dateStyle: 'full', timeStyle: 'short' });
+    time.textContent = messageTime(at);
+    bar.appendChild(time);
+  }
   const button = (action, label, path) => {
     const b = document.createElement('button');
     b.type = 'button';
@@ -901,12 +915,13 @@ function trimTranscript() {
 }
 
 function startTurn() {
-  const wrap = addMessage('assistant', '');
+  const at = Date.now();
+  const wrap = addMessage('assistant', '', at);
   const body = wrap.querySelector('.body');
   const tools = document.createElement('div');
   tools.className = 'tools';
   wrap.appendChild(tools);
-  currentTurn = { wrap, body, tools, text: '', entry: { role: 'assistant', content: '', tools: [] } };
+  currentTurn = { wrap, body, tools, text: '', entry: { role: 'assistant', content: '', tools: [], at } };
   display.push(currentTurn.entry);
 }
 
@@ -915,8 +930,9 @@ function removeThinking() { const t = document.querySelector('.thinking'); if (t
 function handleEvent(event) {
   switch (event.type) {
     case 'user': {
-      display.push({ role: 'user', content: event.content, ...(event.images ? { images: event.images } : {}) });
-      const el = addMessage('user', event.content);
+      const at = Date.now();
+      display.push({ role: 'user', content: event.content, at, ...(event.images ? { images: event.images } : {}) });
+      const el = addMessage('user', event.content, at);
       if (event.images) addImageNote(el, event.images, sentThumbs);
       sentThumbs = [];
       scrollDown(true);
@@ -1252,7 +1268,7 @@ async function restoreChat({ keepChat = false } = {}) {
     else agent.load(saved.messages, saved.pendingSteering);
     display = saved.display;
     for (const entry of display) {
-      const el = addMessage(entry.role, entry.content);
+      const el = addMessage(entry.role, entry.content, Number(entry.at) || 0);
       if (entry.role === 'user' && entry.images) addImageNote(el, entry.images, []);
       if (entry.tools && entry.tools.length) {
         const tools = document.createElement('div');
