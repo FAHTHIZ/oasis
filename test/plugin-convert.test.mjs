@@ -150,3 +150,35 @@ test('a local MCP server that dies on a missing dependency says how to fix it', 
   assert.equal(failures.length, 1);
   assert.match(failures[0].error, /exited with code 1\. Its Node\.js dependencies are not installed/);
 });
+
+test('a plugin MCP server that needs an unset option says what to set instead of failing as "Invalid URL"', async (t) => {
+  const { src, root, env } = await fixture(t, {
+    '.claude-plugin/plugin.json': { name: 'flows', version: '1.0.0', userConfig: { base_url: { type: 'string', title: 'Base URL', required: true } },
+      mcpServers: { flows: { type: 'http', url: '${user_config.base_url}/mcp' }, local: { command: 'node', args: ['-v'] } } }
+  });
+  await addAnything(src, { root, env, approve: async () => true });
+  let plugins = await loadEnabledPlugins(root, { env });
+  let [item] = await pluginMcpServers(plugins, { env, root });
+  assert.deepEqual(Object.keys(item.mcpServers), ['local'], 'the server that can start still starts');
+  assert.equal(item.failures.length, 1);
+  assert.equal(item.failures[0].name, 'flows');
+  assert.match(item.failures[0].error, /^needs base_url: run oasis plugin config flows@[\w-]+ base_url=VALUE$/);
+  const { setPluginOption } = await import('../src/claude-plugins.mjs');
+  await setPluginOption(plugins[0], 'base_url', 'https://n8n.example.com', { env });
+  plugins = await loadEnabledPlugins(root, { env });
+  [item] = await pluginMcpServers(plugins, { env, root });
+  assert.equal(item.mcpServers.flows.url, 'https://n8n.example.com/mcp');
+  assert.deepEqual(item.failures, []);
+});
+
+test('an MCP server that cannot start says whether the program or its folder is missing', async (t) => {
+  const dir = await mkdtemp(path.join(os.tmpdir(), 'oasis-mcp-enoent-'));
+  t.after(() => rm(dir, { recursive: true, force: true }));
+  const env = { ...process.env, OASIS_CONFIG_DIR: path.join(dir, 'cfg') };
+  const { failures } = await connectMcpServers({ env, root: dir, skipUser: true, extraServers: [
+    { name: 'noprog', command: 'oasis-test-no-such-program' },
+    { name: 'nodir', command: process.execPath, args: ['-v'], cwd: path.join(dir, 'gone') }] });
+  const byName = Object.fromEntries(failures.map((f) => [f.name, f.error]));
+  assert.equal(byName.noprog, 'MCP server noprog could not start: the program "oasis-test-no-such-program" is not installed or not on your PATH.');
+  assert.equal(byName.nodir, 'MCP server nodir could not start: its folder ' + path.join(dir, 'gone') + ' does not exist.');
+});
