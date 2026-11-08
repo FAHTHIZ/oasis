@@ -1364,7 +1364,11 @@ function subagentEffortConfig(parent, agent, env, config) {
   // subagentAutoCompactPercent; 0 turns it off), separate from the coordinator's.
   const raw = env.OASIS_SUBAGENT_AUTOCOMPACT_PCT !== undefined && env.OASIS_SUBAGENT_AUTOCOMPACT_PCT !== '' ? env.OASIS_SUBAGENT_AUTOCOMPACT_PCT : parent.subagentAutoCompactPercent;
   const pct = raw === undefined || raw === null || raw === '' ? NaN : Number(raw);
-  return Number.isInteger(pct) && pct >= 0 && pct <= 100 ? { ...withEffort, autoCompactPercent: pct } : withEffort;
+  const withCompact = Number.isInteger(pct) && pct >= 0 && pct <= 100 ? { ...withEffort, autoCompactPercent: pct } : withEffort;
+  // autoCompactWindow (Claude Code front matter) only lowers the window compaction is measured against.
+  const window = Number(agent && agent.autoCompactWindow);
+  if (!window || window >= contextWindowSize(withCompact, env)) return withCompact;
+  return { ...withCompact, compactThresholdChars: compactionThresholdChars({ ...withCompact, contextWindow: window }, env) };
 }
 const EFFORT_SETTINGS = { low: ['low', 4000], medium: ['medium', 10000], high: ['high', 32000], max: ['high', 63999] };
 // OpenAI reasoning effort a model accepts. `max` exists on GPT-5.6+ and GPT-6,
