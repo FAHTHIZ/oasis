@@ -492,3 +492,4 @@ html.lite .topbar{backdrop-filter:none;-webkit-backdrop-filter:none;background:v
 .sheet.wide.fit .diff{min-height:0;border-radius:0 0 var(--r-xl) var(--r-xl)}
 /* Touch screens: composer chips reach a 40px tap height (Apple suggests 44pt; WCAG 2.5.8 requires 24px). */
 @media (pointer:coarse){.composer .chip,.composer .model-chip{min-height:40px}.composer .plugin-chip{min-width:40px;justify-content:center}}
+.mcp-server .connection-info span{overflow-wrap:anywhere}
