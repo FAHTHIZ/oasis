@@ -286,6 +286,24 @@
 <section class="sheet" id="pluginsSheet" role="dialog" aria-modal="true" aria-labelledby="pluginsTitle" hidden>
   <div class="sheet-head"><h2 id="pluginsTitle">Plugins</h2><button class="icon-btn small" data-close="pluginsSheet" aria-label="Close"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M5 5l10 10M15 5L5 15" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg></button></div>
   <div class="sheet-body">
+    <section class="cc-plugins" id="ccPlugins" aria-labelledby="ccPluginsTitle" hidden>
+      <h3 id="ccPluginsTitle">Claude Code plugins</h3>
+      <p class="hint">Plugins made for Claude Code work in OASIS as they are: their commands, agents, skills, hooks and MCP servers load in new chats. Hooks and MCP servers run as programs on this computer, so install only plugins you trust.</p>
+      <ul class="connection-list" id="ccInstalled" aria-live="polite"></ul>
+      <div class="cc-market" id="ccMarket">
+        <label for="ccSearch">Find a plugin</label>
+        <input id="ccSearch" type="search" autocapitalize="off" spellcheck="false" placeholder="for example review, playwright, figma">
+        <ul class="connection-list" id="ccResults"></ul>
+      </div>
+      <details class="manual" id="ccAddMarket">
+        <summary>Add a marketplace</summary>
+        <label for="ccMarketInput">GitHub repository, Git URL or folder</label>
+        <input id="ccMarketInput" autocapitalize="off" spellcheck="false" placeholder="anthropics/claude-plugins-official">
+        <div class="row"><button class="btn" type="button" id="ccMarketAdd">Add marketplace</button></div>
+      </details>
+      <p class="test-result" id="ccStatus" role="status"></p>
+    </section>
+    <h3 id="builtinPluginsTitle">Built-in plugins</h3>
     <p class="hint">Tap a plugin to switch it on for this project; its expert skills are loaded into every request. Tap a starter to run it right away. OASIS also suggests the right plugin above the message box as you type.</p>
     <div class="plugin-grid" id="pluginGrid"></div>
   </div>

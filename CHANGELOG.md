@@ -5,6 +5,7 @@ User-facing change history grouped by package version. A version heading does no
 ## Unreleased
 
 ### Browser workspace
+- The Plugins sheet manages Claude Code plugins on the computer running `oasis web`: see installed plugins, turn them on or off, remove them, search a marketplace (popular plugins such as frontend-design, superpowers and code-review first) and install with one click. With no marketplace yet, it offers Anthropic's official one (about 300 plugins). New `GET/POST /api/plugins` endpoint, same code paths as `oasis plugin`.
 - Fixed: when OASIS checked its own edits after a streamed reply, the next reply was drawn in the same bubble with no break ("Provide confirmation.✅ Created…"). The `verification_gate` event now ends the bubble. Found while using the app as a normal user with gpt-oss-20b.
 - The post-edit check note now tells the model it is internal. In a live terminal run, the final answer ended with "The gate is satisfied", which meant nothing to the user.
 - Fixed: connecting a keyless remote endpoint (for example `https://text.pollinations.ai/openai`) said "Locked in" but the app kept asking for a key. Connections proven to work without a key are saved with `keyless: true` and count as configured for that endpoint only.
