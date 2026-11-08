@@ -18,8 +18,18 @@ User-facing change history grouped by package version. A version heading does no
 - `oasis add --help`, `oasis add -h` and a bare `oasis add` print the usage line. Before, they were sent to the agent, which asked for a model provider.
 - `oasis -p` is no longer silent while it works. In text mode it prints one dim line per step on stderr ("· Edited math.mjs", "· Ran the tests: npm test") when stderr is a terminal. The answer on stdout is unchanged, so pipes and scripts see the same output. `OASIS_PROGRESS=1` forces the lines on, `OASIS_PROGRESS=0` turns them off. Found in the normal-user test, where a 10-minute run printed nothing.
 - Fixed: the activity label for `list_files` read "Used list files".
+- `oasis setup --help` prints usage instead of starting the interactive wizard.
+- Terminal progress (OSC 9;4): Windows Terminal, ConEmu, Ghostty 1.2+ and iTerm2 3.6.6+ show a busy indicator in the tab while a turn runs, paused while approval is pending, and error after a failed turn. `OASIS_TERMINAL_PROGRESS=off` disables it.
+- `/export FILE.html` writes the conversation as one standalone page you can open or share. Each tool step is collapsible and shows its input and result. A Content-Security-Policy blocks scripts and remote loads, and credentials are redacted. `/export FILE.md` still writes Markdown.
+- Inline image previews: screenshots and images from tools, and `@image.png` mentions, are drawn in the terminal on Kitty, Ghostty, iTerm2, WezTerm, Warp and VS Code. They are off in tmux, screen, Zellij, CI and pipes. `OASIS_INLINE_IMAGES=0` turns them off; `=kitty` or `=iterm` forces a protocol.
+- `oasis models [filter] [--json] [--refresh]` lists the models the configured provider serves, with context window, price and image support from the models.dev catalog. The current model is marked, and `availableModels` policy is respected.
+- Fixed: `/agents` printed a literal `\n` instead of one agent per line.
+- Edit previews highlight the changed words inside a changed line (theme tokens `diffAddedWord` / `diffRemovedWord`), as in Claude Code and Cursor. Unrelated replacements stay whole-line.
 
 ### Browser workspace
+
+- The web app says when a tool server did not start, and why ("A tool server did not start. n8n-mcp: needs n8n_url: run oasis plugin config …"). Before, plugin and MCP tools that failed to start were simply missing from the chat.
+- Web sessions use the server's environment (`OASIS_CONFIG_DIR` and the rest) rather than the process environment, so a server started with its own config dir now loads that dir's MCP servers.
 - The subagent list sits right under the step that started it, instead of after every later step in the turn.
 - A step waiting on an approval now says "Waiting for you" instead of "Working". Found in the normal-user run, where `npm test` showed "Working" behind the Allow sheet. The browser e2e checks it.
 - Fixed: a streamed reply that was followed by a tool call kept its blinking cursor for the rest of the chat, and steps that ended with nothing to show left empty gaps. Both seen in a real gpt-oss-20b run in the web app.
@@ -37,6 +47,27 @@ User-facing change history grouped by package version. A version heading does no
 - Fixed: connecting a keyless remote endpoint (for example `https://text.pollinations.ai/openai`) said "Locked in" but the app kept asking for a key. Connections proven to work without a key are saved with `keyless: true` and count as configured for that endpoint only.
 - Settings has a **Tools (MCP servers)** section when the workspace is connected to `oasis web`: list, add, turn on or off and remove servers in `mcp-servers.json`. Commands are split with quote support and checked before saving; environment access takes variable names only. Before, this was only in the classic page at `/classic`.
 - With no model connected, the `oasis web` welcome screen shows what fits this computer (hosted model, a local server already running, or an Ollama model to install), from `/api/system/profile`.
+- Found in a hands-on pass. The terminal pane showed a blinking cursor that ignored typing until you found Start terminal. It now shows a hint, and Enter starts the shell (approval still applies). After the shell exits, Enter starts a new one.
+- `?` opens the keyboard shortcuts when you are not typing, as in GitHub and Gmail.
+- On touch screens, the composer buttons are 40px tall instead of 28px.
+- New Terminal tab, connected to OASIS on a computer: an interactive shell beside the chat, rendered with xterm.js and opened with Ctrl+`. It asks before starting and only launches the server's own shell (the request cannot name another program). It is invisible to the agent, does not lock the workspace, strips common secret environment variables, and reattaches after a page reload.
+- The Files panel can be resized: drag its left edge or use the arrow keys on it, and double-click to reset. The width is remembered.
+- The file viewer has a Download button, so single files can be saved from a local project too (Export zip only covers browser projects).
+- Messages show a compact timestamp in their hover bar (the full date is in the tooltip). Saved chats keep the times.
+- Command palette → **Download this chat** saves the conversation as the standalone HTML page from `/export FILE.html` (served by `GET /api/sessions/:id/export`, which requires the session token).
+- After Undo, the reverted turn stays in the transcript, dimmed, with a note that files and conversation went back.
+- The usage chip next to Send shows the estimated spend for the chat (subagents included) beside the context meter, with a `+` when some requests used a model with no known price.
+- Copy buttons under every reply and on your own messages, plus Edit to put a sent message back in the composer. Copies keep the original Markdown.
+- Fixed: the Copy button on code blocks did nothing.
+- The diff viewer sizes itself to the change: a two-line fix opens as a short dialog instead of a full-height sheet, and long diffs still scroll.
+- Fixed: diffs and code blocks drew `=>`, `!=` and similar as ligatures (`⇒`, `≠`), so code could read differently from what is in the file.
+- Activity steps name the subagent that ran ("Ran the explore agent", with its task description), and coordination, question, plan, memory and MCP steps get their own labels instead of "Completed a project step". The server sends the same labels to the browser when OASIS runs on a computer.
+- The composer shows how full the context window is as a ring and percentage (amber past 70%, red past 90%), with token counts on hover.
+- Inline autocomplete in the composer: `/` suggests commands, custom commands and skills, and `@` suggests project files. Arrow keys move, Tab or Enter accepts, Escape closes. Connected to OASIS on a computer, `/` no longer opens the command palette (Ctrl+K still does).
+- After a turn that changed files, the last reply offers Undo, which runs `/undo` to restore the files and rewind the conversation by one turn.
+- While the tab is in the background, the page title shows a badge when a task finishes or needs approval. Optional desktop notifications are under Settings.
+- Plan mode in the browser app's mode menu (when connected to OASIS on a computer), and Shift+Tab in the composer cycles modes as in the terminal.
+- The header shows the current git branch. `/api/status` now reports `branch`.
 
 ### Agents and subagents
 - Custom agents accept the full Claude Code front matter: `disallowedTools`, `maxTurns` (reports are marked `partial` at the limit), `permissionMode: plan`, `skills` (preloaded), `memory` (user, project or local `MEMORY.md`), `background` and `color`. Project, user, plugin and `--agents` definitions share one parser.
@@ -90,40 +121,6 @@ User-facing change history grouped by package version. A version heading does no
 - In `auto` mode, read-only and closed-world MCP tools from your own MCP config run without a classifier call. The server's annotations decide this. Project servers, secret-like tool names and changed tools are excluded. Found in a live run: a free one-request-at-a-time model timed out on the classifier and the tool was wrongly denied. The same run now answers in 49 s.
 - Long-running MCP tools run as MCP Tasks through the official [`@modelcontextprotocol/ext-tasks`](https://github.com/modelcontextprotocol/ext-tasks) requester. When a server declares `tasks.requests.tools.call` and a tool sets `execution.taskSupport` to `required` or `optional`, OASIS creates a task, polls at the server's interval, reads the result and sends `tasks/cancel` when you interrupt. Task calls are not bound by the per-request timeout (2-hour ceiling).
 - A task still running after 5 seconds moves to the background in the interactive terminal and in streaming headless sessions, as in Claude Code. The turn continues, and the result arrives as a notification that wakes an idle session. It passes through the prompt-injection guard. Interrupting the turn after the move does not cancel the task. Set `OASIS_MCP_TASK_BACKGROUND_MS` to change the grace period. `OASIS_MCP_TASK_BACKGROUND=0` (or `CLAUDE_CODE_DISABLE_MCP_TASK_BACKGROUND=1`) always waits. One-shot `-p` runs and the browser always wait.
-
-### Terminal
-- `oasis setup --help` prints usage instead of starting the interactive wizard.
-
-- Terminal progress (OSC 9;4): Windows Terminal, ConEmu, Ghostty 1.2+ and iTerm2 3.6.6+ show a busy indicator in the tab while a turn runs, paused while approval is pending, and error after a failed turn. `OASIS_TERMINAL_PROGRESS=off` disables it.
-- `/export FILE.html` writes the conversation as one standalone page you can open or share. Each tool step is collapsible and shows its input and result. A Content-Security-Policy blocks scripts and remote loads, and credentials are redacted. `/export FILE.md` still writes Markdown.
-- Inline image previews: screenshots and images from tools, and `@image.png` mentions, are drawn in the terminal on Kitty, Ghostty, iTerm2, WezTerm, Warp and VS Code. They are off in tmux, screen, Zellij, CI and pipes. `OASIS_INLINE_IMAGES=0` turns them off; `=kitty` or `=iterm` forces a protocol.
-- `oasis models [filter] [--json] [--refresh]` lists the models the configured provider serves, with context window, price and image support from the models.dev catalog. The current model is marked, and `availableModels` policy is respected.
-- Fixed: `/agents` printed a literal `\n` instead of one agent per line.
-- Edit previews highlight the changed words inside a changed line (theme tokens `diffAddedWord` / `diffRemovedWord`), as in Claude Code and Cursor. Unrelated replacements stay whole-line.
-
-### Browser workspace
-- Found in a hands-on pass. The terminal pane showed a blinking cursor that ignored typing until you found Start terminal. It now shows a hint, and Enter starts the shell (approval still applies). After the shell exits, Enter starts a new one.
-- `?` opens the keyboard shortcuts when you are not typing, as in GitHub and Gmail.
-- On touch screens, the composer buttons are 40px tall instead of 28px.
-
-- New Terminal tab, connected to OASIS on a computer: an interactive shell beside the chat, rendered with xterm.js and opened with Ctrl+`. It asks before starting and only launches the server's own shell (the request cannot name another program). It is invisible to the agent, does not lock the workspace, strips common secret environment variables, and reattaches after a page reload.
-- The Files panel can be resized: drag its left edge or use the arrow keys on it, and double-click to reset. The width is remembered.
-- The file viewer has a Download button, so single files can be saved from a local project too (Export zip only covers browser projects).
-- Messages show a compact timestamp in their hover bar (the full date is in the tooltip). Saved chats keep the times.
-- Command palette → **Download this chat** saves the conversation as the standalone HTML page from `/export FILE.html` (served by `GET /api/sessions/:id/export`, which requires the session token).
-- After Undo, the reverted turn stays in the transcript, dimmed, with a note that files and conversation went back.
-- The usage chip next to Send shows the estimated spend for the chat (subagents included) beside the context meter, with a `+` when some requests used a model with no known price.
-- Copy buttons under every reply and on your own messages, plus Edit to put a sent message back in the composer. Copies keep the original Markdown.
-- Fixed: the Copy button on code blocks did nothing.
-- The diff viewer sizes itself to the change: a two-line fix opens as a short dialog instead of a full-height sheet, and long diffs still scroll.
-- Fixed: diffs and code blocks drew `=>`, `!=` and similar as ligatures (`⇒`, `≠`), so code could read differently from what is in the file.
-- Activity steps name the subagent that ran ("Ran the explore agent", with its task description), and coordination, question, plan, memory and MCP steps get their own labels instead of "Completed a project step". The server sends the same labels to the browser when OASIS runs on a computer.
-- The composer shows how full the context window is as a ring and percentage (amber past 70%, red past 90%), with token counts on hover.
-- Inline autocomplete in the composer: `/` suggests commands, custom commands and skills, and `@` suggests project files. Arrow keys move, Tab or Enter accepts, Escape closes. Connected to OASIS on a computer, `/` no longer opens the command palette (Ctrl+K still does).
-- After a turn that changed files, the last reply offers Undo, which runs `/undo` to restore the files and rewind the conversation by one turn.
-- While the tab is in the background, the page title shows a badge when a task finishes or needs approval. Optional desktop notifications are under Settings.
-- Plan mode in the browser app's mode menu (when connected to OASIS on a computer), and Shift+Tab in the composer cycles modes as in the terminal.
-- The header shows the current git branch. `/api/status` now reports `branch`.
 
 ### Maintenance
 - Removed duplicated chat chunking (Telegram gateway) and generated-media file handling (images and speech).

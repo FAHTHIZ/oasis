@@ -722,11 +722,11 @@ export function createOasisWebServer(options = {}) {
     if (session && path.resolve(session.root) !== taskRoot) session = null;
     if (sessionId && !session) {
       const restore = await loadSession(taskRoot, sessionId, { env });
-      session = await createSession({ root: taskRoot, config, restore });
+      session = await createSession({ root: taskRoot, config, restore, env });
       activeSessions.set(sessionId, session);
     }
     if (!session) {
-      session = await createSession({ root: taskRoot, config });
+      session = await createSession({ root: taskRoot, config, env });
       const temporaryId = randomUUID();
       session.sessionId = temporaryId;
       activeSessions.set(temporaryId, session);
@@ -802,6 +802,18 @@ export function createOasisWebServer(options = {}) {
     const idleCompaction = session.idleCompaction;
     session.idleCompaction = null;
     emit(job, 'started', { sessionId: activeId, isolation, ...(taskWorktree ? { branch: taskWorktree.branch, worktreePath: taskWorktree.relative, baseCommit: taskWorktree.base } : {}) });
+    // Tool servers that did not start (a plugin needing an option, a missing program) are
+    // otherwise invisible in the app: say so once per conversation, with the reason.
+    // Servers still connecting in the background report when they finish, if this task is still running.
+    const reportMcpFailures = () => {
+      const mcpFailures = Array.isArray(session.mcpFailures) ? session.mcpFailures : [];
+      const shown = session.mcpFailuresShown || 0;
+      if (mcpFailures.length <= shown || !['running', 'waiting_approval'].includes(job.status)) return;
+      emit(job, 'mcp_failures', { servers: mcpFailures.slice(shown, shown + 20).map((failure) => ({ name: monitorText(failure.name, 120), error: monitorText(failure.error, 300) })) });
+      session.mcpFailuresShown = mcpFailures.length;
+    };
+    reportMcpFailures();
+    if (session.mcpConnecting && typeof session.mcpConnecting.then === 'function') session.mcpConnecting.then(reportMcpFailures, () => {});
     void (async () => {
       try {
         const idleInfo = idleCompaction ? await idleCompaction.settle().catch(() => null) : null;

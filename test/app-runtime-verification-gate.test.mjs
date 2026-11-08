@@ -30,3 +30,15 @@ test('a verification check after a streamed reply starts a new bubble', async ()
   const texts = bubbles.filter(Boolean);
   assert.deepEqual(texts, ['Provide confirmation.', 'Created index.html.']);
 });
+
+test('tool servers that did not start reach the app with their reasons', async () => {
+  const events = [
+    { id: 1, type: 'mcp_failures', data: { servers: [{ name: 'flows', error: 'needs base_url: run oasis plugin config flows base_url=VALUE' }] } },
+    { id: 2, type: 'mcp_failures', data: { servers: [] } },
+    { id: 3, type: 'completed', data: { text: 'Done.' } }
+  ];
+  const client = { async api(path) { if (path === '/api/chat') return { jobId: 'j1', sessionId: 's1' }; if (path.startsWith('/api/jobs/j1')) return { status: 'completed', events }; return {}; } };
+  const seen = [];
+  await new RuntimeAgent({ client, onEvent: (event) => seen.push(event), pollMs: 1 }).send('hi');
+  assert.deepEqual(seen.filter((event) => event.type === 'mcp_failures').map((event) => event.servers), [[{ name: 'flows', error: 'needs base_url: run oasis plugin config flows base_url=VALUE' }]]);
+});

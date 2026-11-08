@@ -1160,6 +1160,7 @@ function handleEvent(event) {
     case 'usage': usageState.tokens = event.usage.input + event.usage.output; renderUsage(); break;
     case 'context': usageState.context = event; renderUsage(); break;
     case 'cost': usageState.cost = event; renderUsage(); break;
+    case 'mcp_failures': addMessage('note', (event.servers.length === 1 ? 'A tool server did not start. ' : event.servers.length + ' tool servers did not start. ') + event.servers.map((server) => server.name + ': ' + String(server.error).replace(/^MCP server \S+ (?:could not start: )?/, '')).join(' · ')); break;
     case 'compacted': addMessage('note', event.mode === 'summary' ? 'Earlier conversation summarised to save context.' : 'Older tool output trimmed to save context.'); break;
     case 'stopped':
       removeThinking();
