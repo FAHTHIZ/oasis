@@ -29,6 +29,7 @@ import { createWorktree, finishWorktree, removeWorktree, readWorktreeDiff, readW
 import { createPhoneLink } from './phone-link.mjs';
 import { appModuleGraph, resolveAppPath, skillsIndex } from './app-server.mjs';
 import { listWorkspaceFiles } from './workspace-files.mjs';
+import { atomicWriteFile } from './atomic-write.mjs';
 import { connectFromPaste } from './provider-connect.mjs';
 
 // Commands that only make sense in the terminal (the web UI has its own session picker).
@@ -273,6 +274,8 @@ export function toolDetail(name, args = {}) {
 
 const APP_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const MAX_BODY_BYTES = 32 * 1024;
+const MAX_UPLOAD_FILE_BYTES = 10 * 1024 * 1024;
+const MAX_UPLOAD_BODY_BYTES = 30 * 1024 * 1024;
 // Chat requests may carry pasted or dropped images (base64), so they get a
 // larger, still bounded body.
 export const MAX_WEB_IMAGES = 4;
@@ -2005,6 +2008,53 @@ export function createOasisWebServer(options = {}) {
       } catch (error) {
         json(res, 500, { error: 'Could not read workspace changes: ' + String(error && error.message || error).slice(0, 300) });
       }
+      return;
+    }
+
+    // Files the person adds from the browser (Files panel upload) go into the
+    // real project folder. Same boundaries as the agent's own writes: inside
+    // the workspace, no symlinks, no protected paths (.env, .git, keys), no
+    // overwrite unless asked, and not while an agent is working.
+    if (req.method === 'POST' && pathname === '/api/workspace/upload') {
+      if ([...jobs.values()].some((job) => job.status === 'running' || job.status === 'waiting_approval') || busySessions.size) {
+        json(res, 409, { error: 'Wait until the current agent task finishes before adding files.' });
+        return;
+      }
+      const body = await readJsonBody(req, MAX_UPLOAD_BODY_BYTES);
+      const files = Array.isArray(body.files) ? body.files : [];
+      if (!files.length || files.length > 200) {
+        json(res, 400, { error: 'Choose between 1 and 200 files to add.' });
+        return;
+      }
+      const overwrite = body.overwrite === true;
+      const written = [];
+      const existing = [];
+      const refused = [];
+      const planned = [];
+      for (const file of files) {
+        const relative = String(file && file.path || '').replace(/\\/g, '/').replace(/^\/+/, '');
+        const data = typeof (file && file.base64) === 'string' ? Buffer.from(file.base64, 'base64') : typeof (file && file.content) === 'string' ? Buffer.from(file.content, 'utf8') : null;
+        if (!relative || relative.length > 500 || !data || data.length > MAX_UPLOAD_FILE_BYTES) { refused.push({ path: relative || '(unnamed)', reason: data && data.length > MAX_UPLOAD_FILE_BYTES ? 'larger than 10 MB' : 'invalid file' }); continue; }
+        let target;
+        try { target = await resolveWorkspacePath(activeRoot, relative, { rejectSymlinks: true, workspaceOnly: true }); }
+        catch { refused.push({ path: relative, reason: 'outside the project or a link' }); continue; }
+        const rel = target.relative.split(path.sep).join('/');
+        if (sensitivePath(rel) || /^\.git(\/|$)/.test(rel) || /^\.oasis(\/|$)/.test(rel)) { refused.push({ path: rel, reason: 'protected path' }); continue; }
+        const present = await lstat(target.absolute).then((info) => info, () => null);
+        if (present && (!present.isFile() || present.isSymbolicLink() || present.nlink > 1)) { refused.push({ path: rel, reason: 'not a regular file' }); continue; }
+        if (present && !overwrite) { existing.push(rel); continue; }
+        planned.push({ rel, absolute: target.absolute, data });
+      }
+      if (existing.length && !overwrite) {
+        json(res, 409, { error: 'Some files already exist.', existing, refused });
+        return;
+      }
+      for (const item of planned) {
+        await mkdir(path.dirname(item.absolute), { recursive: true });
+        await atomicWriteFile(item.absolute, item.data, { encoding: null });
+        written.push(item.rel);
+      }
+      json(res, 200, { written, refused });
       return;
     }
 

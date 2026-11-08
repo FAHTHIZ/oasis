@@ -458,6 +458,12 @@ export class RuntimeWorkspace {
   }
   async exists(path) { return (this.cache || (await this.paths())).includes(path); }
   async read(path) { const data = await this.client.api('/api/workspace/file?path=' + encodeURIComponent(path)); return String(data.content || ''); }
+  /** Writes picked files (with base64 data) into the real project folder. */
+  async upload(files, { overwrite = false } = {}) {
+    const data = await this.client.api('/api/workspace/upload', { method: 'POST', body: { files, overwrite } });
+    this.cache = null;
+    return data;
+  }
   async diff() {
     this.diffCache = await this.client.api('/api/workspace/diff').catch(() => ({ files: [], diff: '' }));
     return this.diffCache;

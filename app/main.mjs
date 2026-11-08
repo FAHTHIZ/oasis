@@ -2171,11 +2171,42 @@ async function filesFromInput(fileList) {
   }
   return { files, skipped, name };
 }
+// oasis web: picked files (documents, images, PDFs) go into the real project
+// folder on disk, where the agent can read them.
+async function uploadToRuntime(picked) {
+  const files = [];
+  let tooLarge = 0;
+  for (const file of picked.slice(0, 200)) {
+    if (file.size > 10 * 1048576) { tooLarge++; continue; }
+    const bytes = new Uint8Array(await file.arrayBuffer());
+    let binary = '';
+    for (let i = 0; i < bytes.length; i += 0x8000) binary += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+    files.push({ path: file.name, base64: btoa(binary) });
+  }
+  if (!files.length) { toast(tooLarge ? 'Files larger than 10 MB cannot be added here.' : 'No files to add.', 'error'); return; }
+  let result;
+  try { result = await workspace.upload(files); }
+  catch (error) {
+    const existing = error && error.data && Array.isArray(error.data.existing) ? error.data.existing : null;
+    if (!existing || !existing.length) throw error;
+    if (!confirm('Replace ' + existing.length + ' existing file' + (existing.length === 1 ? '' : 's') + ' in "' + workspace.project.name + '"?\n' + existing.slice(0, 8).join('\n'))) return;
+    result = await workspace.upload(files, { overwrite: true });
+  }
+  refreshFiles();
+  closeSheet('projectsSheet');
+  const refused = (result.refused || []).map((item) => item.path + ' (' + item.reason + ')');
+  toast('Added ' + result.written.length + ' file' + (result.written.length === 1 ? '' : 's') + ' to ' + workspace.project.name + (refused.length ? '. Skipped ' + refused.join(', ') : '') + (tooLarge ? '. Skipped ' + tooLarge + ' over 10 MB' : '') + '.', refused.length ? 'error' : undefined);
+}
 for (const id of ['folderInput', 'filesInput']) {
   $(id).addEventListener('change', async (event) => {
     const input = event.target;
     if (!input.files || !input.files.length) return;
     try {
+      if (workspace && typeof workspace.upload === 'function' && id === 'filesInput') {
+        await uploadToRuntime([...input.files]);
+        input.value = '';
+        return;
+      }
       const { files, skipped, name } = await filesFromInput(input.files);
       if (workspace && id === 'filesInput' && !/\.zip$/i.test(input.files[0].name) && confirm('Add these files to "' + workspace.project.name + '"? Cancel creates a new project.')) {
         for (const f of files) await workspace.write(f.path, f.content);
