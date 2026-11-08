@@ -57,6 +57,8 @@ User-facing change history grouped by package version. A version heading does no
 ### Maintenance
 - Removed duplicated chat chunking (Telegram gateway) and generated-media file handling (images and speech).
 - README: quick start, agent system overview and Claude Code compatibility summary.
+- README rebuilt: a one-line installer for macOS and Linux, browser workspace screenshots in light and dark, a feature tour, an architecture diagram and a comparison summary. The comparison page now covers Codex, Gemini CLI, OpenCode, Goose and Pi as well as Claude Code and Hermes.
+- The npm package no longer includes the README demo recording and screenshots (about 1.8 MB).
 
 ## [1.1.1] - 2026-11-07
 
