@@ -8,9 +8,9 @@
 // or false to turn it off; env OASIS_IMAGE_MODEL, OASIS_IMAGE_BASE_URL,
 // OASIS_IMAGE_GENERATION=0. Each call asks first (it sends the prompt to the provider
 // and may cost money) unless a permission rule allows generate_image.
-import { mkdir, readFile, stat } from 'node:fs/promises';
+import { readFile, stat } from 'node:fs/promises';
 import path from 'node:path';
-import { atomicWriteFile } from './atomic-write.mjs';
+import { saveGeneratedMedia } from './media-output.mjs';
 
 const DEFAULT_BASE = 'https://api.openai.com/v1';
 const MAX_INPUT_IMAGE = 20 * 1024 * 1024;
@@ -46,10 +46,6 @@ export function imageGenerationConfig(env = process.env, settings = {}) {
   const local = /^https?:\/\/(localhost|127\.0\.0\.1|\[::1\])(:\d+)?\//.test(baseUrl + '/');
   if (!apiKey && !local) return null;
   return { baseUrl, apiKey, model: String(env.OASIS_IMAGE_MODEL || options.model || 'gpt-image-1'), size: String(options.size || 'auto') };
-}
-
-function slugify(text) {
-  return String(text || 'image').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40) || 'image';
 }
 
 function extensionFor(bytes) {
@@ -122,13 +118,9 @@ export async function generateImage(args = {}, { config, resolvePath, beforeWrit
   const bytes = await decodeResult(item, fetchImpl, signal);
   if (bytes.length < 16) throw new Error('The image API returned an empty image.');
   const ext = extensionFor(bytes);
-  const requested = args.path ? String(args.path) : path.posix.join('images', slugify(prompt) + '-' + Date.now().toString(36) + '.' + ext);
-  const target = await resolvePath(requested);
-  await mkdir(path.dirname(target.absolute), { recursive: true });
-  if (beforeWrite) await beforeWrite(target);
-  await atomicWriteFile(target.absolute, bytes, {});
+  const saved = await saveGeneratedMedia(bytes, { requestedPath: args.path, folder: 'images', label: prompt, fallback: 'image', extension: ext, resolvePath, beforeWrite });
   return {
-    path: target.relative.split(path.sep).join('/'),
+    path: saved,
     bytes: bytes.length,
     format: ext,
     model: config.model,

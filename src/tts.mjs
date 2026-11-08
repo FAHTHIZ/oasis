@@ -8,9 +8,7 @@
 // OASIS_TTS_MODEL, OASIS_TTS_BASE_URL, OASIS_TTS_VOICE, OASIS_TTS=0. Each call asks
 // first (the text is sent to the provider and may cost money) unless a permission
 // rule allows text_to_speech.
-import { mkdir } from 'node:fs/promises';
-import path from 'node:path';
-import { atomicWriteFile } from './atomic-write.mjs';
+import { saveGeneratedMedia } from './media-output.mjs';
 
 const DEFAULT_BASE = 'https://api.openai.com/v1';
 const MAX_INPUT_CHARS = 4096;
@@ -52,10 +50,6 @@ export function textToSpeechConfig(env = process.env, settings = {}) {
     voice: String(env.OASIS_TTS_VOICE || options.voice || 'alloy'),
     format: FORMATS.has(format) ? format : 'mp3'
   };
-}
-
-function slugify(text) {
-  return String(text).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40) || 'speech';
 }
 
 /** One /audio/speech request; returns the audio bytes. Callers validate and approve. */
@@ -129,10 +123,6 @@ export async function textToSpeech(args = {}, { config, resolvePath, beforeWrite
     if (!approval || !(await approval(message))) throw new Error('The user did not approve generating this audio.');
   }
   const bytes = await synthesizeSpeech(config, { text, voice, format, instructions, speed }, { fetchImpl, signal });
-  const requested = args.path ? String(args.path) : path.posix.join('audio', slugify(text) + '-' + Date.now().toString(36) + '.' + format);
-  const target = await resolvePath(requested);
-  await mkdir(path.dirname(target.absolute), { recursive: true });
-  if (beforeWrite) await beforeWrite(target);
-  await atomicWriteFile(target.absolute, bytes, {});
-  return { path: target.relative.split(path.sep).join('/'), bytes: bytes.length, format, voice, model: config.model, characters: text.length };
+  const saved = await saveGeneratedMedia(bytes, { requestedPath: args.path, folder: 'audio', label: text, fallback: 'speech', extension: format, resolvePath, beforeWrite });
+  return { path: saved, bytes: bytes.length, format, voice, model: config.model, characters: text.length };
 }
