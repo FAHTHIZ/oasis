@@ -15,7 +15,7 @@ import { loadConfig } from './config.mjs';
 import { runHeadless } from './headless.mjs';
 import { attachToolServer } from './mcp.mjs';
 import { applyEffort } from './agent.mjs';
-import { createToolRegistry, defineTool, redactAuditValue, runTool } from './tool-kernel.mjs';
+import { defineTool, redactAuditValue, runTool } from './tool-kernel.mjs';
 
 export { createSession, runAgentTurn, runAgentPlan, runForkedTurn, closeSession, compactHistoryIfNeeded, applyEffort, hookOptions } from './agent.mjs';
 export { runHeadless } from './headless.mjs';
@@ -52,7 +52,8 @@ const UNDEFINED_TOOL_OUTPUT = Symbol('oasis-sdk-undefined-tool-output');
 export function createToolServer(name, tools = []) {
   if (!Array.isArray(tools)) throw new TypeError('createToolServer tools must be an array.');
   const items = new Map();
-  const registry = createToolRegistry(tools.map((item) => {
+  const definitions = new Map();
+  for (const definition of tools.map((item) => {
     if (!item || typeof item !== 'object') throw new TypeError('Every SDK tool must be a tool() definition.');
     if (items.has(item.name)) throw new Error('Duplicate SDK tool name: ' + item.name);
     items.set(item.name, item);
@@ -77,13 +78,13 @@ export function createToolServer(name, tools = []) {
         return value === undefined ? UNDEFINED_TOOL_OUTPUT : value;
       }
     });
-  }));
+  })) definitions.set(definition.name, definition);
 
   return {
     config: { name: String(name), type: 'sdk' },
     source: 'sdk',
     capabilities: {},
-    tools: registry.list().map((definition) => ({
+    tools: [...definitions.values()].map((definition) => ({
       name: definition.name,
       description: definition.description,
       inputSchema: definition.inputSchema,
@@ -91,7 +92,7 @@ export function createToolServer(name, tools = []) {
     })),
     async callTool(toolName, args, options = {}) {
       const item = items.get(toolName);
-      const definition = registry.get(toolName);
+      const definition = definitions.get(toolName);
       if (!item || !definition) throw new Error('Unknown tool: ' + toolName);
 
       if (item.needsApproval && !options.autoApprove) {

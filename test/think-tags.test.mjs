@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { splitThinking, createThinkFilter, visibleReply } from '../app/core/think-tags.mjs';
+import { splitThinking, createThinkFilter, visibleReply } from '../src/think-tags.mjs';
 
 test('splitThinking removes a leading reasoning block', () => {
   assert.deepEqual(splitThinking('<thought>plan it</thought>Hello'), { content: 'Hello', reasoning: 'plan it' });
@@ -113,7 +113,7 @@ test('the browser app streams and returns replies without thoughts', async () =>
 });
 
 test('an orphan closing tag left after flagged Gemini thoughts is hidden', async () => {
-  const { splitThinking, visibleReply, createThinkFilter } = await import('../app/core/think-tags.mjs');
+  const { splitThinking, visibleReply, createThinkFilter } = await import('../src/think-tags.mjs');
   // Seen live on gemma-4-31b-it: thought chunks were flagged, the close tag was not.
   assert.equal(splitThinking("</thought>I'll start by listing the files.").content, "I'll start by listing the files.");
   assert.equal(visibleReply('</tho'), '');

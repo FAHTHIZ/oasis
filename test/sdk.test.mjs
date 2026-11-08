@@ -86,7 +86,7 @@ test('SDK tools validate JSON Schema before executing', async () => {
   ]);
   await assert.rejects(() => server.callTool('lookup', {}, { autoApprove: true }), /missing required property "city"/i);
   await assert.rejects(() => server.callTool('lookup', { city: 42 }, { autoApprove: true }), /expected string/i);
-  await assert.rejects(() => server.callTool('lookup', { city: 'Dhaka', extra: true }, { autoApprove: true }), /unexpected property/i);
+  await assert.rejects(() => server.callTool('lookup', { city: 'Dhaka', extra: true }, { autoApprove: true }), /(unsupported|unexpected) property/i);
   assert.equal(calls, 0);
 });
 

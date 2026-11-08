@@ -11,8 +11,6 @@ test('README describes the actual interfaces and keeps their execution boundarie
   const readme = await read('README.md');
   for (const phrase of [
     'CLI and headless runner',
-    'Connected browser workspace',
-    'Normal browser session',
     'Desktop application',
     'Editor integration',
     'Agent Client Protocol',

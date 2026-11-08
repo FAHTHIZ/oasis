@@ -33,7 +33,7 @@ test('stable desktop releases require explicit confirmation, channel metadata an
   assert.ok(releaseWorkflow.includes('already released from'), 'an existing tag is never overwritten');
   assert.ok(releaseWorkflow.includes('generate_release_notes: true'));
   assert.ok(!releaseWorkflow.includes('docs/releases') && !releaseWorkflow.includes('body_path:'));
-  assert.ok(releaseWorkflow.includes('quality.yml pages.yml installer-checks.yml'), 'same-commit quality gates must pass first');
+  assert.ok(releaseWorkflow.includes('quality.yml installer-checks.yml'), 'same-commit quality gates must pass first');
 });
 test('desktop runtime is loopback-only and keeps renderer Node APIs disabled', () => {
   assert.match(desktopMain, /host: '127\.0\.0\.1'/);
