@@ -35,7 +35,7 @@ Sources: the [Claude Code subagent docs](https://code.claude.com/docs/en/sub-age
 | Edits in default mode | Claude Code asks before every edit in `default` mode. OASIS applies edits inside the workspace without asking. Edits are checkpointed and can be rewound, and protected config paths still prompt. | A deliberate choice for speed. Use `plan` mode or `ask` rules for `edit_file` if you want Claude Code's behaviour. |
 | Field maturity | Claude Code is used by a very large population, and its edge cases get found quickly. | OASIS has 2,200+ automated tests and adversarial suites, but far fewer real-world hours. |
 | Code signing | macOS warns on first launch of unsigned apps. | OASIS macOS packages are not code-signed yet. |
-| Monolithic core | `src/agent.mjs` is still about 6,800 lines, which slows review. | Splitting it is planned; shared pieces like the SSRF-guarded HTTP client have been extracted first. |
+| Monolithic core | `src/agent.mjs` is still about 6,800 lines, which slows review. | Splitting it is in progress: the SSRF-guarded HTTP client, generated-media handling and the subagent helpers (`src/subagent-support.mjs`) are already separate modules. |
 
 ## How to check these claims
 
