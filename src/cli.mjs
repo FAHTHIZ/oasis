@@ -3913,6 +3913,18 @@ async function main() {
     return;
   }
   if (command === 'setup') {
+    if (rest.includes('--help') || rest.includes('-h')) {
+      stdout.write([
+        'Usage: oasis setup            Paste a key, model link or server address (Enter opens the step-by-step menu)',
+        '       oasis setup --auto     Detect this computer and running model servers, then configure the best fit',
+        '       oasis setup --auto --dry-run   Show what --auto would choose without saving',
+        '',
+        'Setup saves a provider only after a real test request succeeds. To connect',
+        'without the wizard, use oasis connect KEY|LINK|ADDRESS or oasis connect --from-env.',
+        ''
+      ].join('\n'));
+      return;
+    }
     // `oasis setup --auto` (or `setup auto` / `--detect`): configure from this computer's hardware and running model servers.
     if (rest[0] === 'auto' || rest.includes('--detect') || process.argv.slice(2).includes('--auto')) return await autoSetup(workspace, { dryRun: rest.includes('--dry-run') });
     if (stdin.isTTY && stdout.isTTY && typeof stdin.setRawMode === 'function' && !rest.length) {

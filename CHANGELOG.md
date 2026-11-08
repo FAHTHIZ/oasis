@@ -48,6 +48,7 @@ User-facing change history grouped by package version. A version heading does no
 - A task still running after 5 seconds moves to the background in the interactive terminal and in streaming headless sessions, as in Claude Code. The turn continues, and the result arrives as a notification that wakes an idle session. It passes through the prompt-injection guard. Interrupting the turn after the move does not cancel the task. Set `OASIS_MCP_TASK_BACKGROUND_MS` to change the grace period. `OASIS_MCP_TASK_BACKGROUND=0` (or `CLAUDE_CODE_DISABLE_MCP_TASK_BACKGROUND=1`) always waits. One-shot `-p` runs and the browser always wait.
 
 ### Terminal
+- `oasis setup --help` prints usage instead of starting the interactive wizard.
 
 - Terminal progress (OSC 9;4): Windows Terminal, ConEmu, Ghostty 1.2+ and iTerm2 3.6.6+ show a busy indicator in the tab while a turn runs, paused while approval is pending, and error after a failed turn. `OASIS_TERMINAL_PROGRESS=off` disables it.
 - `/export FILE.html` writes the conversation as one standalone page you can open or share. Each tool step is collapsible and shows its input and result. A Content-Security-Policy blocks scripts and remote loads, and credentials are redacted. `/export FILE.md` still writes Markdown.
