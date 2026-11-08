@@ -890,6 +890,9 @@ function attention(kind, text) {
 function clearAttention() { if (!document.hidden) document.title = BASE_TITLE; }
 document.addEventListener('visibilitychange', clearAttention);
 window.addEventListener('focus', clearAttention);
+// Files can change outside the page (the terminal, an editor): refresh the
+// file list when the user comes back, unless a task is updating it anyway.
+window.addEventListener('focus', () => { if (RT && workspace && !agent.busy) refreshFiles(); });
 
 // Dims the undone turn (the user message, its tool steps and the reply) so the
 // transcript shows what no longer applies, as the conversation does after /undo.
@@ -1324,6 +1327,56 @@ async function openChats() {
     list.appendChild(li);
   }
   if ($('chatsSheet').hidden) openSheet('chatsSheet');
+  void renderRuntimeSessions();
+}
+// Sessions saved by OASIS on this computer (terminal runs included) that this
+// browser has no chat for yet. Opening one continues it with its history.
+async function renderRuntimeSessions() {
+  const list = $('runtimeSessionList');
+  const show = (on) => { for (const id of ['runtimeSessionsLabel', 'runtimeSessionsHint', 'runtimeSessionList']) $(id).hidden = !on; };
+  if (!mcpAvailable() || !workspace) { show(false); return; }
+  let sessions = [];
+  try { sessions = (await RT.client.api('/api/sessions')).sessions || []; } catch { show(false); return; }
+  const linked = new Set([agent.sessionId].filter(Boolean));
+  const index = await chatIndex(workspace.project.id);
+  for (const item of index.list) {
+    const saved = await store.getValue(chatKey(workspace.project.id, item.id)).catch(() => null);
+    if (saved && saved.messages && typeof saved.messages.sessionId === 'string') linked.add(saved.messages.sessionId);
+  }
+  const items = sessions.filter((item) => item && item.id && !linked.has(item.id) && item.messages > 0).slice(0, 12);
+  list.replaceChildren();
+  for (const item of items) {
+    const li = document.createElement('li');
+    li.className = 'project-item';
+    const open = document.createElement('button');
+    open.className = 'open';
+    open.innerHTML = '<strong></strong><span></span>';
+    open.querySelector('strong').textContent = item.title || 'Untitled session';
+    const when = item.updatedAt ? new Date(item.updatedAt).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' }) : '';
+    open.querySelector('span').textContent = [item.running ? 'Running now' : when, item.model].filter(Boolean).join(' · ');
+    open.addEventListener('click', async () => { closeSheet('chatsSheet'); await openRuntimeSession(item); });
+    li.append(open);
+    list.appendChild(li);
+  }
+  show(items.length > 0);
+}
+async function openRuntimeSession(item) {
+  let saved;
+  try { saved = await RT.client.api('/api/sessions/' + item.id); }
+  catch (error) { toast('Could not open that session: ' + error.message, 'error'); return; }
+  await stopTurn();
+  await persistChat();
+  chatId = Math.random().toString(36).slice(2, 10);
+  const projectId = workspace.project.id;
+  const shown = (saved.messages || []).map((entry) => ({ role: entry.role, content: entry.content, at: 0 }));
+  await store.setValue(chatKey(projectId, chatId), { messages: { sessionId: item.id, pendingShell: [] }, display: shown });
+  const index = await chatIndex(projectId);
+  index.current = chatId;
+  index.list = [{ id: chatId, title: item.title || 'Session', updatedAt: Date.now() }, ...index.list].slice(0, 50);
+  await store.setValue('chats:' + projectId, index);
+  await restoreChat({ keepChat: true });
+  refreshFiles();
+  toast('Continuing this session. New messages keep its history.');
 }
 $('chatsButton').addEventListener('click', () => openChats());
 $('newChatButton').addEventListener('click', async () => { closeSheet('chatsSheet'); await newChat(); });
