@@ -16,6 +16,7 @@ import { APP_KEYBOARD_SHORTCUTS, searchAppCommands } from './core/command-palett
 import { normalizeTaskProgress } from './core/task-progress.mjs';
 import { RuntimeTerminal, loadXterm } from './core/terminal.mjs';
 import { suggestToken, rankSuggestions, applySuggestion } from './core/composer-suggest.mjs';
+import { mcpServerFromForm, describeMcpServer } from './core/mcp.mjs';
 // Composer autocomplete state (declared early: refreshFiles clears the file cache).
 const suggest = { token: null, items: [], index: 0, commands: null, files: null, seq: 0 };
 
@@ -1877,6 +1878,93 @@ function renderConnections() {
     list.appendChild(li);
   }
 }
+/* MCP servers live in the runtime's config (~/.oasis/mcp.json), so this
+   section only appears when the page is connected to `oasis web`. */
+let mcpServers = [];
+function mcpAvailable() { return Boolean(RT && RT.client && !RT.needsToken); }
+function mcpSetStatus(text, kind = '') { const node = $('mcpStatus'); node.textContent = text; node.className = 'test-result' + (kind === 'error' ? ' fail' : ''); }
+function renderMcpList(message = '') {
+  const list = $('mcpList');
+  list.replaceChildren();
+  if (message || !mcpServers.length) {
+    const li = document.createElement('li');
+    li.className = 'empty';
+    li.textContent = message || 'No MCP servers yet. Servers in a project .mcp.json also load once you trust the project with oasis trust.';
+    list.appendChild(li);
+    return;
+  }
+  for (const server of mcpServers) {
+    const li = document.createElement('li');
+    li.className = 'connection mcp-server' + (server.enabled ? ' current' : '');
+    const info = document.createElement('div');
+    info.className = 'connection-info';
+    const title = document.createElement('strong');
+    title.textContent = server.name + (server.enabled ? '' : ' (off)');
+    const detail = document.createElement('span');
+    detail.textContent = describeMcpServer(server);
+    info.append(title, detail);
+    if (server.passEnv && server.passEnv.length) {
+      const env = document.createElement('span');
+      env.textContent = 'reads ' + server.passEnv.join(', ');
+      info.append(env);
+    }
+    if (server.origin && server.origin.repository) {
+      const origin = document.createElement('span');
+      origin.textContent = 'from ' + server.origin.repository + (server.origin.commitSha ? ' @ ' + String(server.origin.commitSha).slice(0, 12) : '');
+      info.append(origin);
+    }
+    const toggle = document.createElement('button');
+    toggle.type = 'button';
+    toggle.className = 'btn small';
+    toggle.textContent = server.enabled ? 'Turn off' : 'Turn on';
+    toggle.setAttribute('aria-label', (server.enabled ? 'Turn off ' : 'Turn on ') + server.name);
+    toggle.addEventListener('click', () => {
+      if (!server.enabled && !confirm('Turn on "' + server.name + '"? It runs this program on your computer when a new chat starts:\n\n' + describeMcpServer(server))) return;
+      void saveMcp(mcpServers.map((s) => (s.name === server.name ? { ...s, enabled: !s.enabled } : s)), server.enabled ? server.name + ' turned off.' : server.name + ' turned on.');
+    });
+    const remove = document.createElement('button');
+    remove.type = 'button';
+    remove.className = 'btn small ghost';
+    remove.textContent = 'Remove';
+    remove.setAttribute('aria-label', 'Remove ' + server.name);
+    remove.addEventListener('click', () => {
+      if (!confirm('Remove the MCP server "' + server.name + '"?')) return;
+      void saveMcp(mcpServers.filter((s) => s.name !== server.name), server.name + ' removed.');
+    });
+    const actions = document.createElement('div');
+    actions.className = 'row';
+    actions.append(toggle, remove);
+    li.append(info, actions);
+    list.appendChild(li);
+  }
+}
+async function refreshMcp() {
+  if (!mcpAvailable()) return;
+  try { mcpServers = (await RT.client.api('/api/mcp')).servers || []; renderMcpList(); }
+  catch (error) { mcpServers = []; renderMcpList('Could not load MCP servers: ' + error.message); }
+}
+async function saveMcp(next, done) {
+  try {
+    const result = await RT.client.api('/api/mcp', { method: 'POST', body: { servers: next } });
+    mcpServers = result.servers || [];
+    renderMcpList();
+    toast(done + ' Applies to new chats.');
+    return true;
+  } catch (error) { toast('Could not save MCP servers: ' + error.message, 'error'); return false; }
+}
+$('mcpAddButton').addEventListener('click', async () => {
+  let server;
+  try { server = mcpServerFromForm({ name: $('mcpName').value, command: $('mcpCommand').value, env: $('mcpEnv').value }); }
+  catch (error) { mcpSetStatus(error.message, 'error'); return; }
+  if (mcpServers.some((s) => s.name === server.name)) { mcpSetStatus('A server named ' + server.name + ' already exists.', 'error'); return; }
+  if (!confirm('Add "' + server.name + '"? OASIS will run this program on your computer when a new chat starts:\n\n' + describeMcpServer(server))) return;
+  mcpSetStatus('Saving…');
+  if (await saveMcp([...mcpServers, server], server.name + ' added.')) {
+    for (const id of ['mcpName', 'mcpCommand', 'mcpEnv']) $(id).value = '';
+    mcpSetStatus('');
+    $('mcpAdd').open = false;
+  } else mcpSetStatus('');
+});
 function openSettings() {
   renderConnections();
   const entry = activeEntry();
@@ -1904,6 +1992,8 @@ function openSettings() {
   if (RT && RT.status) $('runtimeInfo').textContent = 'Running on this computer in ' + (RT.status.workspacePath || RT.status.workspaceName) + '. Model keys are saved by OASIS on this computer, and backup models take over automatically.';
   $('wipeAll').hidden = Boolean(RT);
   $('phoneSettings').hidden = !(RT && RT.client && RT.phone);
+  $('mcpSettings').hidden = !mcpAvailable();
+  if (mcpAvailable()) { mcpSetStatus(''); void refreshMcp(); }
   if (navigator.storage && navigator.storage.estimate) navigator.storage.estimate().then(({ usage, quota }) => { $('storageInfo').textContent = 'Using ' + (usage / 1048576).toFixed(1) + ' MB of ' + (quota / 1073741824).toFixed(1) + ' GB available on this device.'; });
   openSheet('settingsSheet');
 }

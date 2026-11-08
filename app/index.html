@@ -232,6 +232,22 @@
       <p class="hint">Keep working on this computer from your phone's browser.</p>
       <button class="btn" type="button" id="phoneButton">Use from your phone</button>
     </fieldset>
+    <fieldset id="mcpSettings" hidden>
+      <legend>Tools (MCP servers)</legend>
+      <p class="hint">MCP servers give OASIS extra tools, such as a database, browser or issue tracker. Each one runs as a program on this computer when a new chat starts, so add only commands you trust.</p>
+      <ul class="connection-list" id="mcpList" aria-live="polite"></ul>
+      <details class="manual" id="mcpAdd">
+        <summary>Add a server</summary>
+        <label for="mcpName">Name</label>
+        <input id="mcpName" autocapitalize="off" spellcheck="false" placeholder="for example github" maxlength="40">
+        <label for="mcpCommand">Command</label>
+        <input id="mcpCommand" autocapitalize="off" spellcheck="false" placeholder="npx -y @modelcontextprotocol/server-github">
+        <label for="mcpEnv">Environment variables it may read (names only)</label>
+        <input id="mcpEnv" autocapitalize="off" spellcheck="false" placeholder="GITHUB_PERSONAL_ACCESS_TOKEN">
+        <p class="hint">Secret values stay in this computer's environment. OASIS saves only the names.</p>
+        <div class="row"><button class="btn" type="button" id="mcpAddButton">Add server</button><span class="test-result" id="mcpStatus" role="status"></span></div>
+      </details>
+    </fieldset>
     <fieldset id="githubSettings">
       <legend>GitHub</legend>
       <label for="githubToken">Personal access token</label>
