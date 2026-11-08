@@ -8,11 +8,18 @@
 //   name: test-runner
 //   description: Use after code changes to run tests and fix failures
 //   tools: Read, Grep, Glob, Bash, Edit        (optional; omit for all tools)
+//   disallowedTools: Write                      (optional; removed after `tools`)
 //   model: inherit                              (optional model id override)
+//   maxTurns: 40                                (optional tool-step cap)
+//   permissionMode: plan                        (optional; `plan` keeps it read-only)
+//   skills: [lint-rules]                        (optional; preloaded into its prompt)
+//   memory: project                             (optional; user | project | local)
+//   background: true                            (optional; run in the background by default)
+//   isolation: worktree, effort: high, color: blue
 //   ---
 //   You are a test specialist...
 // Locations (later wins): ~/.claude/agents, ~/.config/oasis/agents, .claude/agents, .oasis/agents
-import { readdir, readFile } from 'node:fs/promises';
+import { readdir, readFile, stat } from 'node:fs/promises';
 import { parseFrontMatter } from './frontmatter.mjs';
 
 export { parseFrontMatter };
@@ -89,6 +96,78 @@ export function mapToolNames(list) {
   return out.size ? [...out] : null;
 }
 
+const EFFORTS = ['low', 'medium', 'high', 'max'];
+const MEMORY_SCOPES = ['user', 'project', 'local'];
+const MAX_PRELOADED_SKILLS = 32;
+const AGENT_COLORS = ['red', 'blue', 'green', 'yellow', 'purple', 'orange', 'pink', 'cyan'];
+
+function listField(value) {
+  if (value === undefined || value === null || value === '') return [];
+  const items = Array.isArray(value) ? value : String(value).split(',');
+  return items.map((item) => String(item).trim()).filter(Boolean);
+}
+
+function booleanField(value) {
+  return value === true || String(value).toLowerCase() === 'true';
+}
+
+// One normalizer for every agent source, so project, user and plugin agents
+// accept the same Claude Code front matter.
+export function normalizeAgentDefinition(raw, body, { name, source, plugin = false }) {
+  // Keys are matched case-insensitively and with dashes or underscores removed:
+  // maxTurns, max-turns and maxturns are the same field.
+  const data = {};
+  for (const [key, value] of Object.entries(raw || {})) data[key.toLowerCase().replace(/[-_]/g, '')] = value;
+  const lower = (value) => String(value || '').trim().toLowerCase();
+  const maxTurns = Number.parseInt(data.maxturns ?? '', 10);
+  const memory = lower(data.memory);
+  const color = lower(data.color);
+  return {
+    name,
+    description: String(data.description || (plugin ? 'Plugin agent ' : 'Custom agent ') + name).slice(0, 600),
+    tools: mapToolNames(data.tools),
+    disallowedTools: mapToolNames(data.disallowedtools),
+    model: data.model && data.model !== 'inherit' ? String(data.model) : null,
+    isolation: lower(data.isolation) === 'worktree' ? 'worktree' : null,
+    effort: EFFORTS.includes(lower(data.effort)) ? lower(data.effort) : null,
+    maxTurns: Number.isInteger(maxTurns) && maxTurns > 0 ? Math.min(maxTurns, 400) : null,
+    // Plugin agents cannot change their permission mode (matches Claude Code).
+    // Only `plan` is honoured: a definition file may tighten, never loosen, approvals.
+    permissionMode: !plugin && lower(data.permissionmode) === 'plan' ? 'plan' : null,
+    skills: listField(data.skills).filter((skill) => /^[a-zA-Z][a-zA-Z0-9-]{0,63}$/.test(skill)).slice(0, MAX_PRELOADED_SKILLS),
+    memory: MEMORY_SCOPES.includes(memory) ? memory : null,
+    background: booleanField(data.background),
+    color: AGENT_COLORS.includes(color) ? color : null,
+    prompt: String(body || '').trim().slice(0, 30000),
+    source
+  };
+}
+
+const MEMORY_LINES = 200;
+const MEMORY_BYTES = 25 * 1024;
+
+// Persistent per-agent memory, laid out like Claude Code's agent memory.
+export function agentMemoryDirectory(agent, root, env = process.env) {
+  if (!agent || !agent.memory) return null;
+  const name = String(agent.name).replace(/[^a-z0-9_-]/gi, '-');
+  if (agent.memory === 'user') return path.join(env.HOME || env.USERPROFILE || os.homedir(), '.claude', 'agent-memory', name);
+  if (agent.memory === 'local') return path.join(root, '.claude', 'agent-memory-local', name);
+  return path.join(root, '.claude', 'agent-memory', name);
+}
+
+// The first 200 lines (at most 25 KB) of MEMORY.md, or '' when there is none.
+export async function loadAgentMemory(agent, root, env = process.env) {
+  const dir = agentMemoryDirectory(agent, root, env);
+  if (!dir) return '';
+  const file = path.join(dir, 'MEMORY.md');
+  try {
+    const info = await stat(file);
+    if (!info.isFile()) return '';
+    const text = (await readFile(file, 'utf8')).split('\n').slice(0, MEMORY_LINES).join('\n');
+    return Buffer.byteLength(text) > MEMORY_BYTES ? Buffer.from(text).subarray(0, MEMORY_BYTES).toString('utf8') : text;
+  } catch { return ''; }
+}
+
 function agentDirectories(root, env) {
   const home = env.HOME || env.USERPROFILE || os.homedir();
   return [
@@ -113,16 +192,7 @@ export async function loadAgentDefinitions(root, options = {}) {
       const { data, body } = parseFrontMatter(text);
       const name = String(data.name || entry.name.replace(/\.md$/, '')).trim().toLowerCase();
       if (!/^[a-z0-9][a-z0-9_-]{0,63}$/.test(name)) continue;
-      agents[name] = {
-        name,
-        description: String(data.description || 'Custom agent ' + name).slice(0, 600),
-        tools: mapToolNames(data.tools),
-        model: data.model && data.model !== 'inherit' ? String(data.model) : null,
-        isolation: String(data.isolation || '').toLowerCase() === 'worktree' ? 'worktree' : null,
-        effort: ['low', 'medium', 'high', 'max'].includes(String(data.effort || '').toLowerCase()) ? String(data.effort).toLowerCase() : null,
-        prompt: body.trim().slice(0, 30000),
-        source: source + ':' + path.join(dir, entry.name)
-      };
+      agents[name] = normalizeAgentDefinition(data, body, { name, source: source + ':' + path.join(dir, entry.name) });
     }
   }
   // Agents from enabled Claude Code plugins, named plugin-name:agent.
@@ -134,16 +204,7 @@ export async function loadAgentDefinitions(root, options = {}) {
       const pluginName = item.name.split(':')[0];
       const name = data.name ? pluginName + ':' + String(data.name).trim().toLowerCase() : item.name;
       if (!/^[a-z0-9][a-z0-9_.-]{0,63}:[a-z0-9][a-z0-9_-]{0,63}$/.test(name)) continue;
-      agents[name] = {
-        name,
-        description: String(data.description || 'Plugin agent ' + name).slice(0, 600),
-        tools: mapToolNames(data.tools),
-        model: data.model && data.model !== 'inherit' ? String(data.model) : null,
-        isolation: String(data.isolation || '').toLowerCase() === 'worktree' ? 'worktree' : null,
-        effort: ['low', 'medium', 'high', 'max'].includes(String(data.effort || '').toLowerCase()) ? String(data.effort).toLowerCase() : null,
-        prompt: body.trim().slice(0, 30000),
-        source: 'plugin:' + item.plugin
-      };
+      agents[name] = normalizeAgentDefinition(data, body, { name, source: 'plugin:' + item.plugin, plugin: true });
     }
   } catch { /* Plugins are optional. */ }
   return agents;
@@ -176,7 +237,8 @@ export function taskToolDefinition(agents) {
       isolation: { type: 'string', enum: ['worktree'], description: 'Work in its own git worktree and branch' },
       team_id: { type: 'string', description: 'Team ID from team_create' },
       model: { type: 'string', description: 'Model ID; omit to inherit' },
-      fork_context: { type: 'boolean', description: 'Give it a bounded copy of this conversation, only if it needs earlier discussion' }
+      fork_context: { type: 'boolean', description: 'Give it a bounded copy of this conversation, only if it needs earlier discussion' },
+      output_schema: { type: 'object', description: 'JSON Schema its final report must match; it gets one correction turn, then you receive `structured`' }
     }, required: ['description', 'prompt'] }
   } };
 }
