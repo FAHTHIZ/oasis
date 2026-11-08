@@ -225,6 +225,7 @@ A passing test suite is evidence for the cases it exercises. It is not proof tha
 - [Architecture and runtime boundaries](docs/ARCHITECTURE.md)
 - [Configuration reference](docs/CONFIGURATION.md)
 - [Subagents and agent teams](docs/SUBAGENTS.md)
+- [Comparison with Claude Code and Hermes](docs/COMPARISON.md)
 - [Interfaces and deployment](docs/INTERFACES.md)
 - [Benchmark methodology](docs/BENCHMARKS.md)
 - [Engineering scorecard](docs/ENGINEERING-SCORECARD.md)
