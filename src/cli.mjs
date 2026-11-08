@@ -208,6 +208,8 @@ function helpText() {
     '  oasis plugins list             Browse built-in capability bundles',
     '  oasis plugins install NAME    Install a reviewed capability bundle',
     '  oasis plugins remove NAME     Remove a bundle and its owned skills',
+    '  oasis plugin marketplace add OWNER/REPO|GIT-URL|PATH  Add a Claude Code plugin marketplace (list, update, remove)',
+    '  oasis plugin install NAME@MARKETPLACE  Install a Claude Code plugin (uninstall, enable, disable, update, show, validate)',
     '  oasis plugin eval DIR [--runs N] [--no-baseline] [--json]  Score a plugin or skill on its evals/evals.json cases against a no-plugin baseline',
     '  oasis plugin eval init DIR     Draft eval cases for a plugin or skill',
     '  oasis extensions list         List imported GitHub agent/skill collections',

@@ -2904,6 +2904,21 @@ async function runAgentTool(session, name, args, context, options) {
 
 
 
+// Weaker models fill optional fields with null ("model": null). When the call
+// is valid without those keys, drop them instead of spending a turn on a
+// correction (seen live: gpt-oss-20b on the task tool). Returns { validation, args }.
+async function validateRepairingNulls(schema, args) {
+  const validation = await validateToolArguments(schema, args);
+  if (validation.valid || !args || typeof args !== 'object' || Array.isArray(args) || !schema || !schema.properties) return { validation, args };
+  const required = new Set(Array.isArray(schema.required) ? schema.required : []);
+  const nulls = Object.keys(args).filter((key) => args[key] === null && !required.has(key));
+  if (!nulls.length) return { validation, args };
+  const cleaned = { ...args };
+  for (const key of nulls) delete cleaned[key];
+  const retried = await validateToolArguments(schema, cleaned);
+  return retried.valid ? { validation: retried, args: cleaned } : { validation, args };
+}
+
 // Applies permission rules and PreToolUse hooks. Returns { context, deniedReason, args }.
 async function authorizeCall(session, name, args, context, options) {
   const policy = session.permissions;
@@ -2952,7 +2967,9 @@ async function authorizeCall(session, name, args, context, options) {
   // The Tool Kernel validates them again immediately before invoking the handler.
   const toolDefinition = (session.toolDefinitions || []).find((tool) => tool && tool.function && tool.function.name === name)
     || TOOL_DEFINITIONS.find((tool) => tool && tool.function && tool.function.name === name);
-  const validation = await validateToolArguments(toolDefinition && toolDefinition.function && toolDefinition.function.parameters, args);
+  const repaired = await validateRepairingNulls(toolDefinition && toolDefinition.function && toolDefinition.function.parameters, args);
+  const validation = repaired.validation;
+  args = repaired.args;
   if (!validation.valid) {
     const detail = validation.schemaError || (validation.errors || []).join('; ') || 'arguments do not match the tool schema';
     return { deniedReason: 'Invalid arguments for ' + name + ': ' + detail };
@@ -3664,7 +3681,9 @@ async function executeOneCallRaw(session, call, context, options) {
     // Validate model input before permission hooks. The Tool Kernel validates
     // again at execution because PreToolUse may rewrite the final arguments.
     const inputSchema = toolParameterSchemas(session).get(name);
-    const validation = await validateToolArguments(inputSchema, args);
+    const repaired = await validateRepairingNulls(inputSchema, args);
+    const validation = repaired.validation;
+    args = repaired.args;
     if (!validation.valid) {
       const detail = validation.schemaError
         ? 'the registered input schema is invalid: ' + validation.schemaError
@@ -4249,7 +4268,13 @@ async function runAgentTurnRaw(session, prompt, options = {}) {
         ...(typeof options.onDelta === 'function' ? { onDelta: (delta) => {
           streamedText = (streamedText + String(delta || '')).slice(0, MAX_REPLY_CHARS);
           options.onDelta(visibleReply(streamedText));
-        } } : {}),
+        } } : Number(session.subagentDepth) > 0 && (session.providerEnv || process.env).OASIS_SUBAGENT_STREAM !== '0' ? {
+          // Subagents have no display, but streaming still arms the idle
+          // watchdog: a silent provider fails after OASIS_STREAM_IDLE_SECONDS
+          // and is retried, instead of holding the parent for the 600 s
+          // header timeout (seen live: a 300 s hang inside an explore agent).
+          onDelta: () => {}
+        } : {}),
         // Deltas are cumulative, so a restarted stream replaces the partial text
         // instead of appending a second copy.
         ...(waitHook ? { onPromptProgress: (progress) => {
