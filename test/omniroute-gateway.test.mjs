@@ -36,3 +36,11 @@ test('the error advice for an unconfigured gateway route says what to do', async
   assert.match(apiErrorAdvice(503, '[503]: Devin agentic bridge is not configured'), /no working account/);
   assert.match(apiErrorAdvice(503, 'overloaded'), /server-side problem/);
 });
+
+test('a one-request-at-a-time 429 waits briefly instead of failing', async () => {
+  const { shortRateLimitMs } = await import('../src/provider-retry.mjs');
+  assert.equal(shortRateLimitMs('{"error":{"code":"RATE_LIMITED","message":"Your previous request is still running. The Classic API answers 1 request at a time per IP."}}'), 5000);
+  assert.equal(shortRateLimitMs('Too many concurrent requests'), 5000);
+  assert.equal(shortRateLimitMs('Daily token quota exceeded'), null);
+  assert.equal(shortRateLimitMs('concurrency limit reached; add billing credit'), null);
+});

@@ -52,6 +52,7 @@ export const SHORT_RATE_LIMIT_MAX_MS = 90000;
 // credit wording, is a rate window, not an exhausted balance.
 export const EXPLICIT_SHORT_WAIT = /\bretry (?:after|in) (\d+(?:\.\d+)?) ?s(?:ec(?:ond)?s?)?\b/i;
 export const LONG_LIMIT_WORDING = /PerDay|per ?day|daily|per ?month|monthly|credit|balance|insufficient|billing/i;
+export const CONCURRENCY_LIMIT = /\bstill running\b|\b(?:1|one) request at a time\b|\btoo many concurrent\b|\bconcurren(?:t|cy) (?:request )?limit\b/i;
 export function shortRateLimitMs(body) {
   const text = String(body || '');
   const explicit = EXPLICIT_SHORT_WAIT.exec(text);
@@ -59,6 +60,10 @@ export function shortRateLimitMs(body) {
     const ms = Number(explicit[1]) * 1000;
     return Number.isFinite(ms) && ms <= SHORT_RATE_LIMIT_MAX_MS ? Math.ceil(ms) + 500 : null;
   }
+  // A concurrency cap, not a quota: Pollinations' keyless API answers 429
+  // "Your previous request is still running ... 1 request at a time per IP"
+  // (seen live). The slot frees when that request ends, so wait a few seconds.
+  if (CONCURRENCY_LIMIT.test(text) && !LONG_LIMIT_WORDING.test(text)) return 5000;
   if (!/PerMinute|per ?minute/i.test(text) || /PerDay|per ?day/i.test(text)) return null;
   const delay = /"retryDelay"\s*:\s*"(\d+(?:\.\d+)?)s"/.exec(text) || /retry in (\d+(?:\.\d+)?)s\b/i.exec(text);
   const ms = delay ? Number(delay[1]) * 1000 : 20000;
