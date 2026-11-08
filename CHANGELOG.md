@@ -5,7 +5,6 @@ User-facing change history grouped by package version. A version heading does no
 ## Unreleased
 
 ### Agents and subagents
-- Shutting down the browser workspace now waits briefly for cancelled tasks to record their final status, then closes task history, so no write lands after shutdown. This fixes an intermittent cleanup failure on Node 26.
 - Custom agents accept the full Claude Code front matter: `disallowedTools`, `maxTurns` (reports are marked `partial` at the limit), `permissionMode: plan`, `skills` (preloaded), `memory` (user, project or local `MEMORY.md`), `background` and `color`. Project, user, plugin and `--agents` definitions share one parser.
 - `/tasks` lists finished and restart-interrupted subagents under **Earlier in this session**, and `/tasks send ID MESSAGE` steers a running one or resumes a finished one with its saved conversation (Claude Code 2.1.319 parity). Background MCP tasks appear in `/tasks` too.
 - Agent files also accept `hooks` (scoped to the agent; `Stop` runs as `SubagentStop`; project files need a trusted workspace) and `omitClaudeMd`, plus `mcpServers`: inline servers connect only for that agent's turns and close afterwards; and `autoCompactWindow`. With `--agent`, `initialPrompt` starts the session and `disallowedTools` applies to the main agent too.
@@ -16,6 +15,7 @@ User-facing change history grouped by package version. A version heading does no
 - New [Subagents guide](docs/SUBAGENTS.md).
 
 ### Security and reliability
+- Shutting down the browser workspace now waits briefly for cancelled tasks to record their final status, then closes task history, so no write lands after shutdown. This fixes an intermittent cleanup failure on Node 26.
 - New `dontAsk` permission mode and `permissions.denyInsteadOfPrompting` setting (Claude Code parity): calls that would wait on an approval prompt are denied with a readable reason and the turn continues, so CI and unattended runs never hang. See [Permission modes](docs/CONFIGURATION.md#permission-modes).
 - The SSRF address policy is built on `ipaddr.js` with declarative CIDR tables.
 - Plugin downloads, MCP OAuth discovery and public web fetches share one DNS-pinned, size-bounded HTTP client (`src/safe-http.mjs`) instead of three copies.
