@@ -215,6 +215,15 @@ output goes) and names the file; `run_shell` keeps no raw log. That directory
 contains a `.gitignore` with `*`, so logs do not appear in `git status`,
 `git_diff` or `git add -A`. Set `OASIS_CONDENSE_OUTPUT=0` to turn the filter off.
 
+## Terminal progress
+
+While a turn runs, terminals that implement the OSC 9;4 progress sequence show a busy
+indicator in the tab or taskbar. The indicator switches to paused while OASIS waits
+for your approval and to error when a turn fails. Supported terminals: Windows
+Terminal, ConEmu, Ghostty 1.2+ and iTerm2 3.6.6+. Other terminals, multiplexers, CI
+and pipes get nothing, because older terminals show OSC 9 as a notification. Set
+`OASIS_TERMINAL_PROGRESS=off` to disable it, or `on` to force it.
+
 ## Inline images
 
 In terminals that support graphics (Kitty and Ghostty through the Kitty protocol;
