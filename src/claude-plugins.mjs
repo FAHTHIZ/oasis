@@ -931,6 +931,44 @@ async function validatePluginThemes(plugin) {
   return problems;
 }
 
+/**
+ * Installed plugins and known marketplaces as plain data, for the web app's
+ * Plugins sheet. Mirrors `oasis plugin list` and `plugin marketplace list`.
+ */
+export async function pluginOverview(root, options = {}) {
+  const env = options.env || process.env;
+  const { enabled } = await resolveEnabledPlugins(root, env);
+  const registries = { ...(await readClaudeCodeInstalled(env)), ...(await readInstalledPlugins(env)) };
+  const activation = await resolvePluginActivation(registries, enabled);
+  const installed = [];
+  for (const [id, record] of Object.entries(registries)) {
+    const manifest = await readManifest(record.installPath).catch(() => null);
+    installed.push({
+      id, name: id.split('@')[0], marketplace: id.split('@')[1] || '',
+      version: record.version || (manifest && manifest.version) || null,
+      description: String(manifest && manifest.description || '').slice(0, 300),
+      enabled: activation.active.includes(id),
+      fromClaudeCode: record.source === 'claude-code'
+    });
+  }
+  const marketplaces = [];
+  for (const [name, record] of Object.entries(await readMarketplaces(env))) {
+    const manifest = await readMarketplaceManifest(record.installLocation).catch(() => null);
+    marketplaces.push({
+      name,
+      source: (record.source && (record.source.repo || record.source.url || record.source.path)) || '',
+      readable: Boolean(manifest),
+      plugins: (manifest ? manifest.plugins : []).map((entry) => ({
+        name: String(entry.name),
+        description: String(entry.description || '').slice(0, 300),
+        category: typeof entry.category === 'string' ? entry.category : '',
+        installed: Boolean(registries[String(entry.name).toLowerCase() + '@' + name])
+      }))
+    });
+  }
+  return { installed, marketplaces };
+}
+
 /** Validate a plugin or marketplace directory the way `claude plugin validate` does. */
 export async function validatePath(target) {
   const dir = path.resolve(target || '.');
