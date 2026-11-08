@@ -112,6 +112,14 @@ export function resolveToolAlias(requested, args, available) {
     const close = [...names].filter((name) => distance(base, squash(name)) <= 1);
     if (close.length === 1) return { name: close[0], args, aliasedFrom: requested };
   }
+  // Namespaces models were trained with: gpt-oss emits repo_browser.read_file /
+  // repo_browser_read_file, Gemini-style callers emit default_api.read_file.
+  const namespaced = /^(?:repo_browser|default_api|functions?|tools?|api)[._:-]+(.+)$/i.exec(requested);
+  if (namespaced) {
+    if (names.has(namespaced[1])) return { name: namespaced[1], args, aliasedFrom: requested };
+    const inner = resolveToolAlias(namespaced[1], args, names);
+    if (inner && inner.name) return { ...inner, aliasedFrom: requested };
+  }
   // Same name with different casing or separators: ReadFile, read-file, readFile.
   for (const name of names) if (squash(name) === key) return { name, args, aliasedFrom: requested };
   // Singular/plural slips (search_file, read_files) are unambiguous; mapping

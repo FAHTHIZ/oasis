@@ -93,9 +93,10 @@ import { createSharedTaskStore, SHARED_TASK_TOOL_NAMES, runSharedTaskTool } from
 import { unrequestedGitWrite } from './git-intent.mjs';
 import { parseFallbackChain, remainingFallbacks, fallbackReason, FALLBACK_REASON_TEXT } from './fallback-chain.mjs';
 import { repairToolArguments, extractTextToolCalls, unknownTextToolCalls } from './tool-call-repair.mjs';
+import { promptToolCalling, toPromptToolMessages, foldSystemMessages, withSystemInUserTurn } from './prompt-tools.mjs';
 import { isLocalModelEndpoint, probeLocalContext, probeProviderModelWindow, applySmallContextProfile, localContextAdvice, SMALL_CONTEXT_TOKENS, RECOMMENDED_LOCAL_CONTEXT } from './local-context.mjs';
 import { ripgrepPathAddition } from './ripgrep.mjs';
-import { MAX_PROVIDER_RETRIES, QUICK_PROVIDER_RETRIES, RETRYABLE_PROVIDER_STATUSES, isHardQuotaError, isMalformedGenerationError, isUnconfiguredRouteError, notifyProviderRetry, providerErrorSummary, providerRetryDelayMs, providerRetryLimit, rateLimitResetMs, rateLimitWaitMs, shortRateLimitMs, waitForProviderRetry } from './provider-retry.mjs';
+import { MAX_PROVIDER_RETRIES, QUICK_PROVIDER_RETRIES, RETRYABLE_PROVIDER_STATUSES, isHardQuotaError, isMalformedGenerationError, isUnconfiguredRouteError, isPromptTooLargeError, notifyProviderRetry, providerErrorSummary, providerRetryDelayMs, providerRetryLimit, rateLimitResetMs, rateLimitWaitMs, shortRateLimitMs, waitForProviderRetry } from './provider-retry.mjs';
 import { ACTION_NUDGE, AUTO_LSP_EDIT_TOOLS, CONTINUE_NUDGE, CYCLE_HALT_AT, CYCLE_WARN_AT, CYCLE_WINDOW_STEPS, EMPTY_REPLY_NOTICE, EMPTY_REPLY_NUDGE, FALSE_CLAIM_NUDGE, FILE_EDITING_TOOL_NAMES, GIVE_UP_NUDGE, MAX_EMPTY_REPLY_NUDGES, MAX_SESSION_TOOL_CALLS, PROTECTED_EDIT_TOOLS, REFUSAL_NUDGE, RETRY_HALT_AT, RETRY_TRACKED_COMMANDS, RETRY_WARN_AT, THRASH_ESCALATE_AT, THRASH_WARN_AT, UNREADABLE_CALL_NUDGE, activeLspBaseline, announcesNextStep, appendLspUnavailableNotice, asksForAction, asksForNewTests, assistedVerificationCalls, assistedVerificationEnabled, claimsUnmadeChange, failureSignature, fencedFileFromReply, givesUpEarly, isCompleteFileRead, isVerificationCommand, lspCallOptions, normalizeReviewPath, parallelToolCalls, promptCacheKeyField, readsLikeInstructions, refusesSpuriously, samplingTemperature, successfulMutation, targetFileHint, untestedNewCode, verificationIssues, wrongFileNudge } from './turn-guards.mjs';
 import { MAX_OUTPUT_RECOVERIES, applyEffort, claudeEffortFor, claudeThinkingMode, firstPositiveConfiguredInteger, inlineEffortLevel, isOpenRouterBaseURL, maxOutputTokensFor, openRouterOutputCapFromError, outputCapFromError, reasoningEffortFor, resolveTurnLimits, stripInlineEffort, subagentEffortConfig, thinkingBudgetFor, truncationRecoveryPrompt } from './model-budgets.mjs';
 import { HISTORY_COMPACT_INPUT_LIMIT, HISTORY_COMPACT_THRESHOLD_CHARS, announceCompaction, compactionDeadline, compactionError, deterministicHistorySummary, findCompactionBoundary, historyBudgetSize, historyTextSize, reportCompaction, safeHistoryLine, supersedeBeforeCompaction, usableCompactionSummary } from './compaction-history.mjs';
@@ -1004,7 +1005,7 @@ export function isContextOverflowError(error) {
   const status = Number(error.status || error.statusCode);
   const text = String(error.message || '');
   if (/max_tokens|max_output|output tokens/i.test(text) && !/prompt|input|context/i.test(text)) return false;
-  return status === 413 || /prompt is too long|context.?length.?exceeded|maximum context length|context window|input is too long|too many (?:input )?tokens|request (?:entity )?too large|reduce the length of the (?:messages|input|prompt)|input length .*exceed|exceeds? the (?:model'?s )?(?:maximum |available )?context|available context size/i.test(text);
+  return status === 413 || /prompt (?:is )?too long|context.?length.?exceeded|maximum context length|context window|input is too long|too many (?:input )?tokens|request (?:entity )?too large|reduce the length of the (?:messages|input|prompt)|input length .*exceed|exceeds? the (?:model'?s )?(?:maximum |available )?context|available context size/i.test(text);
 }
 
 export function stopFailureType(error) {
@@ -1432,13 +1433,19 @@ async function requestCompletionRaw(session, options = {}) {
     const configuredChatLimit = session.outputTokenCap || firstPositiveConfiguredInteger(providerEnv.OASIS_MAX_OUTPUT_TOKENS, providerEnv.CLAUDE_CODE_MAX_OUTPUT_TOKENS, config.maxOutputTokens);
     const explicitChatLimit = configuredChatLimit || (isOpenRouterBaseURL(config.baseURL) ? 4096 : 0);
     if (explicitChatLimit) outputLimit = explicitChatLimit;
+    // Endpoints that drop `tools` get them described in the prompt instead (see prompt-tools.mjs).
+    const promptTools = availableTools.length > 0 && promptToolCalling(config, providerEnv);
+    const chatMessages = withProviderExtraContent(hasImages(sentMessages) ? toChatMessagesWithImages(sentMessages) : sentMessages, config.baseURL, config.model);
     bodyObject = {
       model: config.model,
       ...(explicitChatLimit ? { max_tokens: explicitChatLimit } : {}),
       ...samplingTemperature(config, providerEnv),
-      messages: withProviderExtraContent(hasImages(sentMessages) ? toChatMessagesWithImages(sentMessages) : sentMessages, config.baseURL, config.model),
+      messages: (() => {
+        const shaped = promptTools ? toPromptToolMessages(chatMessages, availableTools.map(chatCompletionTool), { forceTool: options.forceTool || '' }) : chatMessages;
+        return foldSystemMessages(config, providerEnv) ? withSystemInUserTurn(shaped) : shaped;
+      })(),
       ...(session.reasoningEffort && !options.forceTool ? { reasoning_effort: session.reasoningEffort } : {}),
-      ...(availableTools.length ? { tools: availableTools.map(chatCompletionTool), tool_choice: options.forceTool ? { type: 'function', function: { name: options.forceTool } } : 'auto', parallel_tool_calls: parallelToolCalls(config, providerEnv) } : {}),
+      ...(availableTools.length && !promptTools ? { tools: availableTools.map(chatCompletionTool), tool_choice: options.forceTool ? { type: 'function', function: { name: options.forceTool } } : 'auto', parallel_tool_calls: parallelToolCalls(config, providerEnv) } : {}),
       ...(typeof options.onDelta === 'function' ? { stream: true } : {}),
       // Chat Completions accepts prompt_cache_key too (same rules as Responses:
       // api.openai.com by default, OASIS_PROMPT_CACHE_KEY=1 for other gateways).
@@ -1553,7 +1560,7 @@ async function requestCompletionRaw(session, options = {}) {
         continue;
       }
       const retryDelay = providerRetryDelayMs(attempt + 1, response.headers.get('retry-after'));
-      if (retryDelay !== null && attempt < providerRetryLimit(status, options.env) && (RETRYABLE_PROVIDER_STATUSES.has(status) || isMalformedGenerationError(status, errorBody)) && !isHardQuotaError(errorBody) && !isUnconfiguredRouteError(status, errorBody) && !(status === 429 && shortRateLimitMs(errorBody) !== null)) {
+      if (retryDelay !== null && attempt < providerRetryLimit(status, options.env) && (RETRYABLE_PROVIDER_STATUSES.has(status) || isMalformedGenerationError(status, errorBody)) && !isHardQuotaError(errorBody) && !isUnconfiguredRouteError(status, errorBody) && !isPromptTooLargeError(errorBody) && !(status === 429 && shortRateLimitMs(errorBody) !== null)) {
         notifyProviderRetry(options, { status, attempt: attempt + 1, limit: providerRetryLimit(status, options.env), waitMs: retryDelay, reason: providerErrorSummary(errorBody) });
         await waitBetweenAttempts(retryDelay);
         continue;
