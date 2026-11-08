@@ -39,6 +39,12 @@ function nextStep(messages) {
   const called = new Set(messages.flatMap((m) => (m.tool_calls || []).map((c) => c.function.name + ':' + c.function.arguments)));
   const did = (name, args) => called.has(name + ':' + JSON.stringify(args));
   const call = (name, args) => ({ role: 'assistant', content: null, tool_calls: [{ id: 'call_' + name + '_' + called.size, type: 'function', function: { name, arguments: JSON.stringify(args) } }] });
+  // A subagent's own requests start from its prompt; it answers at once.
+  const firstUser = messages.find((m) => m.role === 'user');
+  const firstText = firstUser ? (typeof firstUser.content === 'string' ? firstUser.content : JSON.stringify(firstUser.content)) : '';
+  if (firstText.includes('E2E-SUBAGENT')) return { role: 'assistant', content: 'math.mjs exports add(), which subtracts.' };
+  const SUB = { description: 'Find the add() function', prompt: 'E2E-SUBAGENT: find where add() is defined.', subagent_type: 'explore' };
+  if (!did('task', SUB)) return call('task', SUB);
   if (!did('read_file', { path: 'math.mjs' })) return call('read_file', { path: 'math.mjs' });
   if (!did('edit_file', FIX)) return call('edit_file', FIX);
   if (!did('write_file', TEST)) return call('write_file', TEST);
@@ -110,6 +116,9 @@ try {
     await page.waitForTimeout(150);
   }
   assert.ok(approvals >= 1, 'the edit asked for approval');
+  // The subagent shows in its own list with its final state.
+  await page.locator('.subagents .subagent').first().waitFor({ timeout: timeoutMs });
+  assert.match(await page.locator('.subagents').innerText(), /Find the add\(\) function[\s\S]*Done/);
   await page.waitForFunction(() => /1 test passed/.test(document.getElementById('transcript').innerText), null, { timeout: timeoutMs });
   assert.match(await readFile(path.join(project, 'math.mjs'), 'utf8'), /return a \+ b;/);
   assert.match(await readFile(path.join(project, 'math.test.mjs'), 'utf8'), /add\(2, 3\)/);

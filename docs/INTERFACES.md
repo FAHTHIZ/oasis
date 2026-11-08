@@ -1,21 +1,30 @@
 # Interfaces and deployment
 
-OASIS exposes several interfaces over a shared runtime. Choose the one that matches where the project lives and how you want to interact with it.
+OASIS has **two interfaces**: the terminal and the web app. Everything else packages one of them or connects OASIS to another tool.
 
-## Interface comparison
+| You want to… | Use | Start it with |
+|---|---|---|
+| Work in the terminal | **Terminal** (interactive TUI, plus `oasis -p` and `oasis exec` for scripts and CI) | `oasis` |
+| Work in a browser, on this computer or a phone on your network | **Web app** | `oasis web --open` |
 
-| Interface | How to start | Where the runtime executes | Project access |
-|---|---|---|---|
-| **Terminal session** | oasis | In the terminal process on the local computer | Local project and configured additional directories |
-| **Browser workspace** | oasis web --open | In the local OASIS server process | Workspace configured on the host computer |
-| **Desktop application** | Launch the installed OASIS app | In the Electron desktop host | Folder selected by the user |
-| **VS Code-family extension** | oasis ide install | Editor host plus connected OASIS runtime | Editor workspace and runtime-approved paths |
-| **Agent Client Protocol** | oasis acp | In the OASIS ACP process | Workspace passed by the ACP client |
-| **Node.js SDK** | Import src/sdk.mjs | In the embedding Node.js process | Paths and tools supplied to the SDK session |
-| **GitHub Action** | Configure action.yml in a workflow | On the GitHub Actions runner | Checked-out repository and granted workflow permissions |
-| **Messaging gateways** | Configure a gateway | In the configured gateway process | Workspace and tools explicitly exposed to that gateway |
+Both drive the same runtime, sessions and settings. A session started in the terminal shows up in the web app under **Chats → Earlier on this computer** and can be continued there.
 
-The terminal, browser and desktop are different entry points. The terminal is a native CLI session. The browser is a web UI connected to a local host runtime. The desktop app packages the local runtime and browser workspace in an Electron window.
+The web app also comes in two wrappers, with the same code and the same screens:
+
+- **Desktop app** (Windows, macOS, Linux): the web app in a native window, with the runtime started for you on the folder you pick.
+- **`oasis app`**: opens the web app in your browser without a separate server window.
+
+Integrations connect OASIS to other tools. They are not separate interfaces:
+
+| Integration | How to start | Where it runs |
+|---|---|---|
+| VS Code, Cursor, Windsurf | `oasis ide install` | Editor plus a connected OASIS runtime |
+| Agent Client Protocol (Zed, JetBrains) | `oasis acp` | The OASIS ACP process |
+| Node.js SDK | Import `src/sdk.mjs` | Your Node.js process |
+| GitHub Action | `action.yml` in a workflow | The Actions runner |
+| Messaging gateways (Telegram, Slack, Discord) | `oasis gateway` | The gateway process |
+
+The older single-page interface (`/classic`) was retired in November 2026. Old bookmarks to `/`, `/classic` or `/index.html` open the web app.
 
 ## Downloads
 
@@ -39,9 +48,9 @@ oasis connect
 oasis
 ```
 
-Use oasis exec for non-interactive automation and oasis doctor to inspect the local environment. The CLI does not require the browser workspace to be open.
+Use `oasis -p` or `oasis exec` for non-interactive runs and `oasis doctor` to check the local environment. In text mode, `oasis -p` prints one dim progress line per step on stderr when stderr is a terminal; stdout carries only the answer. Set `OASIS_PROGRESS=0` to hide the lines or `OASIS_PROGRESS=1` to keep them when stderr is redirected. The terminal does not need the web app to be open.
 
-## Browser workspace
+## Web app
 
 Start the server on the computer containing the project:
 
@@ -52,7 +61,7 @@ oasis web --open
 
 The browser is only the interface. The agent process, project access and command execution remain on the host. The default server is local-only. Browser job/event history is stored locally under the OASIS config directory. Completed tasks remain reviewable after restart; active tasks are marked interrupted because live processes and pending approvals cannot be restored. Saved chat sessions use their separate session store. For phone or another device, follow [Mobile and tablet setup](../MOBILE.md); use a trusted private network and never expose the workspace directly to the public internet.
 
-### Working in the browser workspace
+### Working in the web app
 
 | Action | How |
 | --- | --- |

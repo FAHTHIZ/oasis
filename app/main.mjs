@@ -3,6 +3,7 @@
 // drives the agent on that computer (runtime engine, core/runtime.mjs).
 import { PRESETS, testProvider } from './core/providers.mjs';
 import { alwaysAllowLabel } from './core/approval-rule.mjs';
+import { SUBAGENT_STATUS_TEXT } from './core/subagents.mjs';
 import { IndexedDBStore, Workspace, lineDiff } from './core/workspace.mjs';
 import { Agent, textOf } from './core/agent.mjs';
 import { FrameSandbox } from './core/sandbox.mjs';
@@ -793,6 +794,34 @@ function activityLabel(tool) {
   return fallbackToolLabel(name);
 }
 
+// Subagents started in this turn, with their live status (running, done, failed).
+function renderSubagents(wrap, workers = []) {
+  let box = wrap.querySelector(':scope > .subagents');
+  if (!workers.length) { if (box) box.remove(); return; }
+  if (!box) {
+    box = document.createElement('section');
+    box.className = 'subagents';
+    box.setAttribute('aria-label', 'Subagents');
+    const tools = wrap.querySelector(':scope > .tools');
+    wrap.insertBefore(box, tools ? tools.nextSibling : null);
+  }
+  const running = workers.filter((w) => w.status === 'running' || w.status === 'stopping').length;
+  const head = document.createElement('div');
+  head.className = 'subagents-head';
+  head.textContent = workers.length + (workers.length === 1 ? ' subagent' : ' subagents') + (running ? ' · ' + running + ' working' : '');
+  const list = document.createElement('ul');
+  for (const worker of workers) {
+    const item = document.createElement('li');
+    item.className = 'subagent ' + worker.status;
+    item.innerHTML = '<span class="state" aria-hidden="true"></span><span class="sa-name"></span><span class="sa-status"></span><span class="sa-detail"></span>';
+    item.querySelector('.sa-name').textContent = worker.description || worker.id;
+    item.querySelector('.sa-status').textContent = SUBAGENT_STATUS_TEXT[worker.status] || worker.status;
+    item.querySelector('.sa-detail').textContent = worker.detail || '';
+    list.appendChild(item);
+  }
+  box.replaceChildren(head, list);
+}
+
 function toolCard(tool) {
   const el = document.createElement('details');
   el.className = 'tool ' + (tool.ok === undefined ? 'running' : tool.ok ? 'ok' : 'fail');
@@ -1103,6 +1132,12 @@ function handleEvent(event) {
         if (wasOpen) replacement.open = true;
         card.replaceWith(replacement);
       }
+      break;
+    }
+    case 'subagents': {
+      if (!currentTurn) startTurn();
+      currentTurn.entry.subagents = event.workers;
+      renderSubagents(currentTurn.wrap, event.workers);
       break;
     }
     case 'todos': renderTodos(event.todos); break;
@@ -1430,6 +1465,7 @@ async function restoreChat({ keepChat = false } = {}) {
         el.appendChild(tools);
         if (!entry.content) el.querySelector('.body').hidden = true;
       }
+      if (entry.subagents && entry.subagents.length) renderSubagents(el, entry.subagents);
     }
     scrollDown(true);
   } else $('welcome').hidden = false;
