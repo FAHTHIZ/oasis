@@ -26,6 +26,15 @@ against the code. Settings files are layered as described in
 
 This setting only tightens, so OASIS honors it from any scope, including untrusted project settings. `PermissionDenied` hooks run for each denied call.
 
+In `auto` mode the project's own checks (`npm test`, `npm run lint|build`,
+`node --test`, `node x.test.js`, `pytest`, `cargo test`, `go test`,
+`make test`) are approved without a classifier call, because they are what the
+default "Test and build" allow rule describes. This applies only to plain argv
+commands inside the workspace, and only while that default rule is in force. It
+does not apply when the user's message says not to run them. Everything else
+goes to the classifier, which has 30 seconds to answer. On a slow provider, set
+`autoMode.model` to a faster model. Source: `src/auto-mode.mjs`.
+
 ## Model providers
 
 Source: `src/provider-registry.mjs`.
