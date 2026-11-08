@@ -33,6 +33,7 @@ export function formatApiError(status, body, protocol, baseURL = '') {
 // wrong endpoint, and saying so sends people looking in the wrong place.
 export function apiErrorAdvice(status, detail = '', mode = 'OpenAI-compatible chat completions') {
   const text = String(detail || '');
+  if (isPromptTooLargeError(text)) return 'The request is larger than this model or endpoint accepts, so retrying will not help. Use /compact, or switch to a model with a larger context window with /model.';
   if (status === 402) return 'This is a billing or quota limit, not an API-key authentication failure.';
   if (status === 429 && /per ?day|daily|PerDay/i.test(text)) {
     const wait = /retry in ([0-9hms.]+?)(?:\d*\.\d+)?s\b/i.exec(text) || /retry in ([^.\n]+)/i.exec(text);
@@ -47,7 +48,6 @@ export function apiErrorAdvice(status, detail = '', mode = 'OpenAI-compatible ch
   if (status === 429) return 'The provider is rate-limiting requests. Wait a little and try again, or lower the request rate.';
   if (status === 401 || status === 403) return 'Check the API key for this provider (oasis setup, or the matching environment variable).';
   if (status === 404) return 'Check the model name and the ' + mode + ' endpoint URL.';
-  if (isPromptTooLargeError(text)) return 'The request is larger than this model or endpoint accepts, so retrying will not help. Use /compact, or switch to a model with a larger context window with /model.';
   if (isUnconfiguredRouteError(status, text)) return 'The gateway has no working account for this model\'s provider. Connect that provider in the gateway (for OmniRoute: its dashboard), or pick another model with /model.';
   if (status >= 500) return 'The provider had a server-side problem. Try again shortly.';
   return 'Check the configured ' + mode + ' endpoint, model name, credentials, and tool-calling support.';

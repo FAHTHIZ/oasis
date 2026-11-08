@@ -184,9 +184,12 @@ export async function loadConfig(options = {}) {
 
   const sameSavedTarget = savedBaseURL === baseURL && savedProtocol === protocol;
   const localEndpoint = isLoopbackUrl(baseURL);
-  const explicitKey = cloud ? (protocol === 'bedrock' ? env.AWS_BEARER_TOKEN_BEDROCK || '' : protocol === 'foundry' ? env.ANTHROPIC_FOUNDRY_API_KEY || '' : '') : localEndpoint ? (env.OASIS_LOCAL_API_KEY || '') : (env.OASIS_API_KEY ||
+  const explicitKey = cloud ? (protocol === 'bedrock' ? env.AWS_BEARER_TOKEN_BEDROCK || '' : protocol === 'foundry' ? env.ANTHROPIC_FOUNDRY_API_KEY || '' : '') : localEndpoint ? (env.OASIS_LOCAL_API_KEY || (env.OASIS_BASE_URL && env.OASIS_API_KEY ? env.OASIS_API_KEY : '')) : (env.OASIS_API_KEY ||
     (protocol === 'anthropic' ? env.ANTHROPIC_API_KEY : env.OPENAI_API_KEY) || '');
   // Never send a stored/remote credential to a different endpoint or a loopback server by accident.
+  // A local gateway that needs a key (LiteLLM, OmniRoute with auth) gets OASIS_LOCAL_API_KEY, or
+  // OASIS_API_KEY when OASIS_BASE_URL names the server in the same environment; an ambient
+  // OPENAI_API_KEY / ANTHROPIC_API_KEY is never sent to a local server.
   const apiKey = explicitKey || (sameSavedTarget ? (saved.apiKey || '') : '');
   // apiKeyHelper (settings or OASIS_API_KEY_HELPER) supplies the key at request time when none is set.
   const apiKeyHelper = !apiKey && !cloud && !localEndpoint && env.OASIS_API_KEY_HELPER ? String(env.OASIS_API_KEY_HELPER) : '';
