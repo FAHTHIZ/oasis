@@ -62,7 +62,22 @@ export function labelToolActivity(name, args = {}, result = null) {
   if (tool === 'git_status') return 'Checked project changes';
   if (tool === 'git_diff') return 'Reviewed the diff';
   if (tool === 'git_log') return 'Reviewed recent project history';
-  if (tool === 'task') return 'Asked a helper to investigate';
+  if (tool === 'task') {
+    const type = text(args && args.subagent_type, 40);
+    return (args && args.run_in_background ? 'Started ' : 'Ran ') + (type && type !== 'general-purpose' ? 'the ' + type + ' agent' : 'a subagent');
+  }
+  if (tool === 'agent_status') return 'Checked on subagents';
+  if (tool === 'send_message') return 'Sent a message to a subagent';
+  if (tool === 'agent_stop') return 'Stopped a subagent';
+  if (tool === 'ask_user_question') return 'Asked you a question';
+  if (tool === 'exit_plan_mode') return 'Presented a plan';
+  if (tool === 'todo_write') return 'Updated the task plan';
+  if (tool === 'lsp') return 'Checked code with the language server';
+  if (tool === 'load_skill' || tool === 'list_skills' || tool === 'read_skill_resource') return 'Used a skill';
+  if (tool === 'memory_search' || tool === 'memory_read') return 'Checked saved memory';
+  if (tool === 'memory_save' || tool === 'memory_delete') return 'Updated saved memory';
+  if (tool === 'memory_verify') return 'Checked saved memory';
+  if (tool.startsWith('mcp_')) return 'Used a connected tool (MCP)';
   if (tool === 'diagnostics' || tool === 'ide_get_diagnostics') return 'Checked for code issues';
   if (tool === 'security_scan') return 'Ran the security scanners';
   if (tool === 'install_package') return 'Prepared a package installation';
