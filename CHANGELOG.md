@@ -6,6 +6,8 @@ User-facing change history grouped by package version. A version heading does no
 
 ### Runtime
 
+- `oasis mcp login NAME` and `/mcp login NAME` find HTTP servers that come from plugins. context7's plugin server now requires sign-in, and OASIS told users to run `oasis mcp login context7`, which then said there was no such server.
+
 - Plugin MCP servers that need an option nobody set (the n8n plugin's `${user_config.n8n_url}`) are skipped with "needs n8n_url: run oasis plugin config … n8n_url=VALUE" instead of failing as "Invalid URL". An unset value only in `env` stays empty, as before.
 - Local MCP servers that fail to start say why: a missing program ("not installed or not on your PATH"), a missing folder, missing Node.js or Python dependencies (with the folder to run `npm install` in), or a port in use. Stderr itself is still not shown, because it can contain tokens.
 
