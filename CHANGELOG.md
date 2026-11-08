@@ -34,6 +34,7 @@ User-facing change history grouped by package version. A version heading does no
 
 ### Browser workspace
 
+- New Terminal tab, connected to OASIS on a computer: an interactive shell beside the chat, rendered with xterm.js and opened with Ctrl+`. It asks before starting and only launches the server's own shell (the request cannot name another program). It is invisible to the agent, does not lock the workspace, strips common secret environment variables, and reattaches after a page reload.
 - The Files panel can be resized: drag its left edge or use the arrow keys on it, and double-click to reset. The width is remembered.
 - The file viewer has a Download button, so single files can be saved from a local project too (Export zip only covers browser projects).
 - Messages show a compact timestamp in their hover bar (the full date is in the tooltip). Saved chats keep the times.
