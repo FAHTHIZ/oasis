@@ -108,6 +108,10 @@ try {
   while (Date.now() < deadline) {
     if (await page.locator('#approvalSheet').isVisible()) {
       if (approvals === 0) await page.screenshot({ path: path.join(screenshotDir, 'approval-dark.png') });
+      // The step behind an open approval waits on the user; it must not say "Working".
+      const stuck = await page.locator('.tool.running:not(.waiting)').count();
+      if (stuck) throw new Error('A step behind the approval sheet still says Working');
+      if (approvals === 0) console.log('[approval] waiting steps:', await page.locator('.tool.waiting').count());
       await page.locator('#allowButton').click();
       approvals++;
       continue;
