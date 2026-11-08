@@ -121,6 +121,8 @@ export { STEER_LIMIT, carryUndeliveredSteering, pendingSteering, steerSession, s
 export { modelFacingResult, repairInterruptedHistory } from './tool-results.mjs';
 export { applyAnthropicCacheBreakpoints, isGoogleGenerativeBaseURL, promptCachingEnabled, replaysReasoning, withProviderExtraContent } from './provider-request.mjs';
 export { undoCompaction, usableCompactionSummary } from './compaction-history.mjs';
+export { contextWindowFromError, isInputTokenRateLimit, useCompactToolProfile } from './context-window.mjs';
+import { adoptReportedContextWindow, isInputTokenRateLimit, useCompactToolProfile } from './context-window.mjs';
 export { EFFORT_LEVELS, applyEffort, claudeEffortFor, claudeThinkingMode, inlineEffortLevel, maxOutputTokensFor, openRouterOutputCapFromError, openaiEffortFor, outputCapFromError, reasoningEffortFor, resolveTurnLimits, stripInlineEffort, thinkingBudgetFor } from './model-budgets.mjs';
 export { announcesNextStep, appendLspUnavailableNotice, asksForAction, asksForNewTests, assistedVerificationEnabled, claimsUnmadeChange, detectProjectTestCommand, diffReviewComplete, failureSignature, fencedFileFromReply, givesUpEarly, isVerificationCommand, parallelToolCalls, promptCacheKeyField, readsLikeInstructions, refusesSpuriously, requestedNewFile, samplingTemperature, targetFileHint, unreviewedPaths, untestedNewCode, verificationIssues, wrongFileNudge } from './turn-guards.mjs';
 export { formatWait, isHardQuotaError, isMalformedGenerationError, providerRetryDelayMs, providerRetryLimit, rateLimitResetMs, rateLimitWaitMs, shortRateLimitMs } from './provider-retry.mjs';
@@ -224,79 +226,8 @@ export async function compactHistoryIfNeeded(session, options = {}) {
 }
 
 
-/**
- * Compact old tool rounds while a single long task is still running. We only cut
- * immediately before a complete assistant tool-call batch, so no surviving tool
- * result can be separated from its matching tool-call ID. The active user request
- * remains in place; the summary is informational context, never a replacement task.
- */
 // Reactive compaction after the provider rejected a request as too long: fold earlier
 // turns, then in-turn history, then (second attempt) shrink old tool outputs hard.
-// Window size stated in a provider's overflow error, e.g. llama.cpp "exceeds the
-// available context size (16384 tokens)", OpenAI "maximum context length is 8192
-// tokens", vLLM "maximum model length is 4096".
-export function contextWindowFromError(error) {
-  const text = String(error && error.message || '');
-  const match = text.match(/context size \((\d{3,7}) tokens\)|maximum context length is (\d{3,7})|maximum model length is (\d{3,7})|context (?:window|length) (?:of|is) (\d{3,7}) tokens|n_ctx(?:_slot)?\s*[=:]\s*(\d{3,7})/i);
-  const value = match ? Number(match.slice(1).find(Boolean)) : 0;
-  return value >= 512 ? value : 0;
-}
-
-// The first request itself can overflow a small local window: system prompt and
-// tool schemas alone exceed it, so there is no history to compact. Learn the
-// real window from the error and drop to the small-context tool set (rare tools
-// stay reachable through tool_search).
-const LLAMA_OVERFLOW_PATTERN = /exceed_context_size_error|exceeds the available context size/i;
-function isLoopbackBaseURL(baseURL) {
-  try { return ['localhost', '127.0.0.1', '::1', '[::1]'].includes(new URL(String(baseURL || '')).hostname.toLowerCase()); } catch { return false; }
-}
-
-function adoptReportedContextWindow(session, error, env) {
-  const window = contextWindowFromError(error);
-  if (!window) return false;
-  const current = Number(session.config && session.config.contextWindow) || 0;
-  let changed = false;
-  if (!current || window < current) { session.config = { ...(session.config || {}), contextWindow: window }; changed = true; }
-  // llama-server words its overflow error in its own way. On a port OASIS does not
-  // probe, that error is the first sign of the server, so remember it: prompt
-  // read progress (return_progress) then works for the rest of the session.
-  if (!session.localContext && LLAMA_OVERFLOW_PATTERN.test(String(error && error.message || '')) && isLoopbackBaseURL(session.config && session.config.baseURL)) {
-    session.localContext = { server: 'llama.cpp', contextLength: window, source: 'overflow-error' };
-  }
-  if (window <= SMALL_CONTEXT_TOKENS && useCompactToolProfile(session, env)) changed = true;
-  return changed;
-}
-
-// Essential tools up front, the rest behind tool_search, and the compact
-// system prompt: about half the tokens per request. Used for small context
-// windows and when a provider caps input tokens per minute (Gemma 4 free
-// tier: 16k/minute against ~7k tokens for the full prompt). Returns true
-// when something was deferred.
-export function useCompactToolProfile(session, env) {
-  if (/^(?:0|false|off|no)$/i.test(String((env || process.env).OASIS_SMALL_CONTEXT_TOOLS || '')) || !Array.isArray(session && session.toolDefinitions)) return false;
-  const deferred = applySmallContextProfile(session, TOOL_SEARCH_DEFINITION);
-  if (!deferred) return false;
-  const system = (session.messages || []).find((message) => message && message.role === 'system');
-  // Apply to the live system message and to baseSystemPrompt, which
-  // refreshTodoPrompt rebuilds the system message from on later steps.
-  const swap = session.compactPromptSwap;
-  session.compactPromptSwap = null;
-  const shrink = (text) => {
-    let next = swap && text.startsWith(swap.full) ? swap.compact + text.slice(swap.full.length) : text;
-    if (!next.includes('tool_search')) next += '\n\n' + deferredToolsPrompt(session);
-    return next;
-  };
-  if (typeof session.baseSystemPrompt === 'string') session.baseSystemPrompt = shrink(session.baseSystemPrompt);
-  if (system && typeof system.content === 'string') system.content = shrink(system.content);
-  return true;
-}
-
-// Gemini: generate_content_free_tier_input_token_count /
-// GenerateContentInputTokensPerModelPerMinute. OpenAI-style: "tokens per min (TPM)".
-export function isInputTokenRateLimit(body) {
-  return /input_token_count|InputTokensPer\w*Minute|tokens per min(?:ute)?\b|\bTPM\b/i.test(String(body || ''));
-}
-
 async function recoverFromContextOverflow(session, requestIndex, options, attempt, error) {
   const before = historyTextSize(session.messages || []);
   const toolsBefore = (session.toolDefinitions || []).length;
@@ -328,6 +259,12 @@ async function recoverFromContextOverflow(session, requestIndex, options, attemp
   return { changed: after < before, beforeChars: before, afterChars: after, tokensUsed };
 }
 
+/**
+ * Compact old tool rounds while a single long task is still running. We only cut
+ * immediately before a complete assistant tool-call batch, so no surviving tool
+ * result can be separated from its matching tool-call ID. The active user request
+ * remains in place; the summary is informational context, never a replacement task.
+ */
 async function compactMidTurnHistoryIfNeeded(session, requestIndex, options = {}) {
   let messages = session.messages || [];
   const threshold = compactionThresholdChars(session.config || {}, options.env || process.env);
