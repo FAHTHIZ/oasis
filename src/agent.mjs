@@ -77,7 +77,7 @@ import { loadShellParser } from './shell-ast.mjs';
 import { classifyAction, newAutoModeState } from './auto-mode.mjs';
 import { runHooks, hasHooks, CLAUDE_TOOL_NAMES } from './hooks.mjs';
 import { resolveSandbox } from './sandbox.mjs';
-import { webSearchEnabled, searchBackends, searchBackend, webSearchToolDefinition } from './web-search.mjs';
+import { webSearchEnabled, webSearchToolDefinition } from './web-search.mjs';
 import { loadProjectMcpServers } from './mcp-project.mjs';
 import { access, mkdir, readFile, realpath, stat, writeFile } from 'node:fs/promises';
 
@@ -108,9 +108,11 @@ import { compactSystemPrompt, systemPrompt } from './system-prompt.mjs';
 import { formatLspVerificationBlocker, verificationCommandKind, verificationSummary } from './verification-summary.mjs';
 import { ASK_USER_TOOL_DEFINITION, askUserQuestion, questionBudget } from './ask-user.mjs';
 import { normalizeUsage, usageOrEstimate } from './usage-estimate.mjs';
+import { webAccessSites } from './web-access.mjs';
+import { exitPlanMode, permissionMode } from './plan-mode.mjs';
 export { usageOrEstimate } from './usage-estimate.mjs';
 export { normalizeQuestion, resolveQuestionAnswer } from './ask-user.mjs';
-export { formatLspVerificationBlocker } from './verification-summary.mjs';
+export { formatLspVerificationBlocker, verificationCommandKind as verificationCommandKindForTest } from './verification-summary.mjs';
 export { compactProjectContext, compactSkillLines } from './system-prompt.mjs';
 export { apiErrorAdvice } from './api-error.mjs';
 export { describeProject, fileLayout } from './project-profile.mjs';
@@ -2889,67 +2891,7 @@ async function runAgentTool(session, name, args, context, options) {
   return { id: record.id, status: 'running', delivered: 'resumed', message: 'The agent resumed in the background with its previous context. You will be told when it finishes.' };
 }
 
-// Plan mode hand-off, like Claude Code's ExitPlanMode: show the plan, and on approval
-// leave plan mode so the same turn can start implementing.
-async function exitPlanMode(session, args, context, options) {
-  const plan = String(args.plan || '').trim().slice(0, 20000);
-  if (!plan) return { approved: false, error: 'Provide the plan to present.' };
-  if (options.planOnly) return { approved: false, message: 'This is a plan-only run. Give the plan as your final answer; the user will start implementation separately.' };
-  if (!session.permissions || session.permissions.mode !== 'plan') return { approved: true, message: 'Plan mode is not active; continue with the task.' };
-  const approval = context && context.approval;
-  let answer = false;
-  if (typeof approval === 'function') {
-    answer = await approval('Oasis has a plan and wants to start implementing it:\n\n' + plan + '\n\nLeave plan mode and implement this plan?', true, { tool: 'exit_plan_mode' });
-  }
-  if (answer === true || answer === 'always') {
-    const next = session.prePlanMode && session.prePlanMode !== 'plan' ? session.prePlanMode : 'default';
-    session.permissions.setMode(next);
-    return { approved: true, mode: next, message: 'The user approved the plan and plan mode is off (mode: ' + next + '). Implement it now: track the steps with todo_write, make the changes, and verify them.' };
-  }
-  return { approved: false, message: 'The user did not approve the plan yet. Stay in plan mode: ask what they would like changed, or refine the plan.' };
-}
 
-function permissionMode(session, options) {
-  if (options.planOnly) return 'plan';
-  return (session.permissions && session.permissions.mode) || 'default';
-}
-
-const SEARCH_PROVIDER_HOSTS = {
-  duckduckgo: 'html.duckduckgo.com',
-  tavily: 'api.tavily.com',
-  brave: 'api.search.brave.com',
-  exa: 'api.exa.ai',
-  firecrawl: 'api.firecrawl.dev'
-};
-
-function webSearchHosts(args, env) {
-  const configured = searchBackends(env);
-  const strategy = String(args.strategy || env.OASIS_SEARCH_STRATEGY || 'auto').toLowerCase();
-  let providers;
-  if (strategy === 'single') {
-    const preferred = searchBackend(env);
-    providers = [configured.length ? (configured.includes(preferred) ? preferred : configured[0]) : 'duckduckgo'];
-  } else {
-    providers = configured.length ? [...configured, 'duckduckgo'] : ['duckduckgo'];
-  }
-  return [...new Set(providers.map((provider) => {
-    if (provider === 'searxng') {
-      try { return new URL(String(env.OASIS_SEARXNG_URL)).hostname.toLowerCase(); }
-      catch { return 'configured SearXNG endpoint'; }
-    }
-    return SEARCH_PROVIDER_HOSTS[provider] || provider;
-  }))];
-}
-
-function webAccessSites(name, args, env) {
-  if (name === 'fetch_url') {
-    try {
-      const host = new URL(String(args.url || '')).hostname.toLowerCase();
-      return host ? [host] : [];
-    } catch { return []; }
-  }
-  return name === 'web_search' ? webSearchHosts(args, env) : [];
-}
 
 // Applies permission rules and PreToolUse hooks. Returns { context, deniedReason, args }.
 async function authorizeCall(session, name, args, context, options) {
