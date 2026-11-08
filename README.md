@@ -141,6 +141,17 @@ Plugin commands, agents, skills, hooks, MCP servers and language servers load th
 
 Plugins are not free. With 16 plugins on, each request used to carry 46 tools and 36.5k characters of tool schemas. OASIS now keeps large MCP servers behind `tool_search` until the model asks for them, which cuts that to 21 tools and 16.5k characters (about 5,000 fewer tokens per request). Plugin prompt text and skills still add up, so turn off the ones you don't use.
 
+### Codex and Gemini CLI plugins
+
+`oasis add` also takes Codex plugins (`.codex-plugin/plugin.json`), Agent Plugins and Gemini CLI extensions, and converts them to Claude Code plugins on install:
+
+```sh
+oasis add BuilderIO/skills
+oasis add owner/marketplace#plugin-name
+```
+
+Checked on 9 November 2026: BuilderIO/skills, n8n-io/skills, DataDog/pup and NVIDIA/nvidia-kaggle installed with all 78 of their skills. Bundled MCP servers start from the plugin folder the way Codex starts them. Some Codex plugins still need their own setup first: nexu-io/codex-slides needs `pnpm install` inside the plugin, and Storybloq needs the `storybloq` program on your PATH.
+
 ### MCP servers
 
 ```sh
@@ -202,7 +213,7 @@ Two tasks and one trial cannot rank agents, and OASIS does not guarantee that ev
 | --- | --- | --- | --- | --- | --- | --- |
 | Open source | Yes | No | Yes | Yes | Yes | Yes |
 | Any model | Yes | Anthropic | OpenAI first | Google | Yes | Yes |
-| Runs Claude Code plugins | Yes | Yes | Own plugins | Own extensions | Own plugins | Own skills |
+| Runs Claude Code plugins | Yes, plus Codex plugins and Gemini extensions | Yes | Own plugins | Own extensions | Own plugins | Own skills |
 | Web interface | Local web app | Cloud | Cloud | No | Local web app and desktop | Messaging apps |
 | Subagents | Parallel, background, resumable, teams | Yes | Yes | Yes | Yes | Yes |
 | Checks its work before it says done | Built in | With hooks | Not built in | Not built in | Not built in | Not built in |
