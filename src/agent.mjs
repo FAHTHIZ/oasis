@@ -1,5 +1,4 @@
 import { briefFailure } from './provider-errors.mjs';
-import { catalogReasoningReplay } from './model-catalog.mjs';
 import { splitThinking, visibleReply } from './think-tags.mjs';
 import { atomicWriteFile } from './atomic-write.mjs';
 import { sessionKeyPool, ROTATE_STATUSES } from './key-pool.mjs';
@@ -101,6 +100,8 @@ import { MAX_PROVIDER_RETRIES, QUICK_PROVIDER_RETRIES, RETRYABLE_PROVIDER_STATUS
 import { ACTION_NUDGE, AUTO_LSP_EDIT_TOOLS, CONTINUE_NUDGE, CYCLE_HALT_AT, CYCLE_WARN_AT, CYCLE_WINDOW_STEPS, EMPTY_REPLY_NOTICE, EMPTY_REPLY_NUDGE, FALSE_CLAIM_NUDGE, FILE_EDITING_TOOL_NAMES, GIVE_UP_NUDGE, MAX_EMPTY_REPLY_NUDGES, MAX_SESSION_TOOL_CALLS, NPM_PLACEHOLDER_TEST, PROTECTED_EDIT_TOOLS, REFUSAL_NUDGE, RETRY_HALT_AT, RETRY_TRACKED_COMMANDS, RETRY_WARN_AT, SOURCE_EXTENSIONS, THRASH_ESCALATE_AT, THRASH_WARN_AT, UNREADABLE_CALL_NUDGE, VERIFICATION_RUNNERS, activeLspBaseline, announcesNextStep, appendLspUnavailableNotice, asksForAction, asksForNewTests, assistedVerificationCalls, assistedVerificationEnabled, claimsUnmadeChange, detectProjectTestCommand, diffReviewComplete, executableName, failureSignature, fencedFileFromReply, givesUpEarly, isCompleteFileRead, isVerificationCommand, lspCallOptions, normalizeReviewPath, parallelToolCalls, promptCacheKeyField, readsLikeInstructions, refusesSpuriously, samplingTemperature, successfulMutation, targetFileHint, untestedNewCode, verificationIssues, wrongFileNudge } from './turn-guards.mjs';
 import { MAX_OUTPUT_RECOVERIES, applyEffort, claudeEffortFor, claudeThinkingMode, firstPositiveConfiguredInteger, inlineEffortLevel, isOpenRouterBaseURL, maxOutputTokensFor, openRouterCreditInfo, openRouterOutputCapFromError, outputCapFromError, reasoningEffortFor, resolveTurnLimits, stripInlineEffort, subagentEffortConfig, thinkingBudgetFor, truncationRecoveryPrompt } from './model-budgets.mjs';
 import { HISTORY_COMPACT_INPUT_LIMIT, HISTORY_COMPACT_THRESHOLD_CHARS, announceCompaction, compactionDeadline, compactionError, deterministicHistorySummary, findCompactionBoundary, historyBudgetSize, historyTextSize, reportCompaction, safeHistoryLine, supersedeBeforeCompaction, usableCompactionSummary } from './compaction-history.mjs';
+import { applyAnthropicCacheBreakpoints, promptCachingEnabled, replaysReasoning, withProviderExtraContent } from './provider-request.mjs';
+export { applyAnthropicCacheBreakpoints, isGoogleGenerativeBaseURL, promptCachingEnabled, replaysReasoning, withProviderExtraContent } from './provider-request.mjs';
 export { undoCompaction, usableCompactionSummary } from './compaction-history.mjs';
 export { EFFORT_LEVELS, applyEffort, claudeEffortFor, claudeThinkingMode, inlineEffortLevel, maxOutputTokensFor, openRouterOutputCapFromError, openaiEffortFor, outputCapFromError, reasoningEffortFor, resolveTurnLimits, stripInlineEffort, thinkingBudgetFor } from './model-budgets.mjs';
 export { announcesNextStep, appendLspUnavailableNotice, asksForAction, asksForNewTests, assistedVerificationEnabled, claimsUnmadeChange, detectProjectTestCommand, diffReviewComplete, failureSignature, fencedFileFromReply, givesUpEarly, isVerificationCommand, parallelToolCalls, promptCacheKeyField, readsLikeInstructions, refusesSpuriously, requestedNewFile, samplingTemperature, targetFileHint, unreviewedPaths, untestedNewCode, verificationIssues, wrongFileNudge } from './turn-guards.mjs';
@@ -1078,73 +1079,6 @@ export function closeSession(session) {
 }
 
 
-export function promptCachingEnabled(config = {}, env = process.env) {
-  if (['0', 'off', 'false', 'no'].includes(String(env.OASIS_PROMPT_CACHE || '').toLowerCase())) return false;
-  return config.promptCache !== false;
-}
-
-export function applyAnthropicCacheBreakpoints(request, tools = []) {
-  const mark = { type: 'ephemeral' };
-  if (request.system) request.system = [{ type: 'text', text: request.system, cache_control: mark }];
-  if (tools.length) tools[tools.length - 1] = { ...tools[tools.length - 1], cache_control: mark };
-  const markMessage = (message) => {
-    if (!message) return;
-    if (typeof message.content === 'string') message.content = message.content ? [{ type: 'text', text: message.content, cache_control: mark }] : message.content;
-    else if (Array.isArray(message.content) && message.content.length) {
-      const block = message.content[message.content.length - 1];
-      message.content[message.content.length - 1] = { ...block, cache_control: mark };
-    }
-  };
-  const messages = request.messages || [];
-  markMessage(messages[messages.length - 1]);
-  // Also mark where the previous request ended (the user message before the
-  // latest assistant reply). Anthropic looks back only 20 content blocks from a
-  // breakpoint for a cached prefix, and one step with ten parallel tool calls
-  // adds more than that (tool_use + tool_result blocks), so with the last
-  // message marked alone such a step re-sent the whole history uncached.
-  // system + last tool + these two = the four breakpoints Anthropic allows.
-  for (let index = messages.length - 2; index > 0; index--) {
-    if (messages[index].role !== 'assistant') continue;
-    if (messages[index - 1].role === 'user') markMessage(messages[index - 1]);
-    break;
-  }
-  return request;
-}
-
-export function isGoogleGenerativeBaseURL(baseURL) {
-  try { return new URL(String(baseURL || '')).hostname.toLowerCase() === 'generativelanguage.googleapis.com'; } catch { return false; }
-}
-
-// Tool calls keep Google's extra_content (the Gemini 3 thought signature) so
-// the next turn can echo it back, which Gemini requires. Requests to other
-// models drop the field, so a session that falls back elsewhere stays valid.
-//
-// Reasoning models with interleaved thinking (DeepSeek, Kimi, GLM, MiMo, many
-// hosted Qwen/MiniMax builds) expect their reasoning_content back on the next
-// request, or they lose the thread between tool calls. Order: an explicit
-// `replayReasoning` config value, then the models.dev catalog's `interleaved`
-// field, then a name pattern for models the catalog does not list.
-export function replaysReasoning(config, env = process.env) {
-  if (!config || config.protocol !== 'openai-compatible') return false;
-  if (typeof config.replayReasoning === 'boolean') return config.replayReasoning;
-  const field = catalogReasoningReplay(String(config.model || ''), { baseURL: config.baseURL, provider: config.catalogProvider, env });
-  if (field === 'reasoning_content') return true;
-  return /deepseek|moonshot|kimi/i.test(String(config.baseURL || '') + ' ' + String(config.model || ''));
-}
-
-export function withProviderExtraContent(messages, baseURL, model = '') {
-  // Gemini behind a gateway (LiteLLM, a local proxy) needs the signature too.
-  if (isGoogleGenerativeBaseURL(baseURL) || /gemini/i.test(String(model || ''))) return messages;
-  if (!messages.some((message) => Array.isArray(message && message.tool_calls) && message.tool_calls.some((call) => call && call.extra_content))) return messages;
-  return messages.map((message) => {
-    if (!Array.isArray(message && message.tool_calls) || !message.tool_calls.some((call) => call && call.extra_content)) return message;
-    return { ...message, tool_calls: message.tool_calls.map((call) => {
-      if (!call || !call.extra_content) return call;
-      const { extra_content: _dropped, ...rest } = call;
-      return rest;
-    }) };
-  });
-}
 
 function formatApiError(status, body, protocol, baseURL = '') {
   let detail = '';
