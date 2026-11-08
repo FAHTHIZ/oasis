@@ -18,7 +18,10 @@ export function runtimeConfigFromConnection(result, { fallbackCount = 3 } = {}) 
   const prefix = connection.provider === 'omniroute' && model.includes('/') ? model.slice(0, model.indexOf('/') + 1) : '';
   const ordered = prefix ? [...usable.filter((id) => id.startsWith(prefix)), ...usable.filter((id) => !id.startsWith(prefix))] : usable;
   const fallbacks = ordered.slice(0, fallbackCount);
-  return { protocol, baseURL: connection.baseURL, model, apiKey: connection.apiKey || '', fallbackModel: fallbacks.join(',') };
+  const apiKey = connection.apiKey || '';
+  // Connecting proved the endpoint answers without a key (Pollinations, a
+  // keyless gateway on the network), so remember that it needs none.
+  return { protocol, baseURL: connection.baseURL, model, apiKey, fallbackModel: fallbacks.join(','), ...(apiKey ? {} : { keyless: true }) };
 }
 
 /**
