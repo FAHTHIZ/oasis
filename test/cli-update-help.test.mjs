@@ -19,3 +19,16 @@ test('oasis update rejects unknown options before contacting GitHub', () => {
   assert.equal(result.status, 2);
   assert.match(result.stderr, /Unknown option for oasis update: --force/);
 });
+
+test('oasis setup --help prints usage instead of starting the wizard', () => {
+  const result = spawnSync(process.execPath, [cli, 'setup', '--help'], { env, encoding: 'utf8', timeout: 30000, input: '' });
+  assert.equal(result.status, 0);
+  assert.match(result.stdout, /^Usage: oasis setup/);
+  assert.doesNotMatch(result.stdout, /Choose \[1\/2\/3\]/);
+});
+
+test('oasis plugin --help lists the Claude Code marketplace commands', () => {
+  const result = spawnSync(process.execPath, [cli, 'plugin', '--help'], { env, encoding: 'utf8', timeout: 30000 });
+  assert.match(result.stdout, /oasis plugin marketplace add/);
+  assert.match(result.stdout, /oasis plugin install NAME@MARKETPLACE/);
+});
