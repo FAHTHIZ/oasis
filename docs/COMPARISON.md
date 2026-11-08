@@ -81,7 +81,7 @@ Claude Code is the reference point for agent behaviour, and OASIS reads its conf
 | Edits in default mode | Claude Code asks before every edit in `default` mode. OASIS applies edits inside the workspace without asking (they are checkpointed and can be rewound, and protected config paths still prompt). | A deliberate choice for speed. Use `plan` mode or `ask` rules for `edit_file` to get Claude Code's behaviour. |
 | Code signing | macOS warns on first launch of unsigned apps. | OASIS macOS packages are not code-signed yet. |
 | Plugin cost | Each enabled plugin adds tools and prompt text. With 16 on, tool schemas fell from 36.5k to 16.5k characters once large MCP servers moved behind `tool_search`. | Plugin prompt text (skills, hook output) is still loaded eagerly. |
-| Core size | `src/agent.mjs` is about 5,500 lines, down from 6,800, and the turn loop alone is about 1,000 lines. | Splitting continues. Provider retry, request shaping, model budgets, turn guards, compaction, tool results and steering are already separate modules, and `oasis doctor`/`update`/`uninstall` moved out of `src/cli.mjs` (now about 3,850 lines). |
+| Core size | `src/agent.mjs` is about 5,500 lines, down from 6,800, and the turn loop alone is about 1,000 lines. | Splitting continues. Provider retry, request shaping, model budgets, turn guards, compaction, tool results and steering are already separate modules, and the doctor, update, uninstall, mcp, extensions, sessions and background subcommands moved out of `src/cli.mjs` (now about 3,400 lines, from 4,100). |
 
 ## How to check these claims
 
