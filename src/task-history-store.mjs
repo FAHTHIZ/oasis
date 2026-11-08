@@ -110,6 +110,9 @@ export function createTaskHistoryStore(root, options = {}) {
   const writeQueues = new Map();
   const timers = new Map();
   let readyPromise = null;
+  // Once the owner has closed the store, late saves from jobs that were still
+  // unwinding must not recreate files the owner may already be deleting.
+  let closed = false;
 
   function recordPath(id) {
     if (!TASK_ID.test(String(id || ''))) throw new Error('Invalid task ID.');
@@ -205,6 +208,7 @@ export function createTaskHistoryStore(root, options = {}) {
   }
 
   async function save(job) {
+    if (closed) return null;
     const snapshot = makeSnapshot(job, maxEvents);
     await ensureLoaded();
     const id = snapshot.id;
@@ -225,7 +229,7 @@ export function createTaskHistoryStore(root, options = {}) {
 
   function schedule(job, delayMs) {
     const id = String(job && job.id || '');
-    if (!TASK_ID.test(id)) return;
+    if (closed || !TASK_ID.test(id)) return;
     const previous = timers.get(id);
     if (previous) clearTimeout(previous);
     const delay = TERMINAL.has(job.status) ? 0 : Math.max(0, Math.min(2000, Number(delayMs) || 200));
@@ -281,6 +285,12 @@ export function createTaskHistoryStore(root, options = {}) {
     get,
     list,
     flush,
+    /** Final flush, then refuse further writes. */
+    async close(jobs = []) {
+      await flush(jobs);
+      closed = true;
+      await Promise.all([...writeQueues.values()].map((queue) => queue.catch(() => {})));
+    },
     async ready() { await ensureLoaded(); }
   };
 }

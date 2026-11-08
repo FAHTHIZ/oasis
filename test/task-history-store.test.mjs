@@ -160,3 +160,19 @@ test('legacy cloud task records migrate to the renamed task history store', asyn
   assert.equal((await stat(path.join(migratedStore.directory, id + '.json'))).isFile(), true);
   await assert.rejects(readFile(oldPath));
 });
+
+test('a closed store saves the final state once and ignores late writes', async (t) => {
+  const { root, env, workspace } = await fixture();
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const store = createTaskHistoryStore(workspace, { env });
+  const job = { id: randomUUID(), status: 'running', type: 'agent', title: 'Late writer', events: [], nextEventId: 1, result: null, error: null, createdAt: new Date().toISOString() };
+  await store.close([job]);
+  const file = path.join(store.directory, job.id + '.json');
+  assert.equal(JSON.parse(await readFile(file, 'utf8')).title, 'Late writer');
+  await rm(store.directory, { recursive: true, force: true });
+  job.status = 'cancelled';
+  assert.equal(await store.save(job), null);
+  store.schedule(job, 0);
+  await new Promise((resolve) => setTimeout(resolve, 30));
+  await assert.rejects(stat(store.directory), { code: 'ENOENT' }, 'no write may recreate the deleted directory');
+});

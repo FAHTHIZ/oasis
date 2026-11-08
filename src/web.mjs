@@ -2521,7 +2521,14 @@ export function createOasisWebServer(options = {}) {
         grace.unref?.();
         try { await closed; } finally { clearTimeout(grace); }
       }
-      await taskStore.flush([...jobs.values()]);
+      // Cancelled jobs finish unwinding asynchronously and record their final
+      // status. Give them a bounded moment so that status is saved, then close
+      // the store so nothing writes after close() resolves.
+      const settleBy = Date.now() + 3000;
+      while (Date.now() < settleBy && [...jobs.values()].some((job) => ['running', 'waiting_approval', 'queued', 'starting'].includes(job.status))) {
+        await new Promise((resolve) => setTimeout(resolve, 25));
+      }
+      await taskStore.close([...jobs.values()]);
     }
   };
 }
