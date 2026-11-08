@@ -2190,6 +2190,36 @@ function toggleFiles(force) {
   if (show) refreshFiles();
 }
 $('filesButton').addEventListener('click', () => toggleFiles());
+// Drag (or arrow keys on) the panel's left edge to resize it; the width is remembered.
+const PANEL_MIN = 280;
+function setPanelWidth(px) {
+  const width = Math.round(Math.max(PANEL_MIN, Math.min(px, Math.max(PANEL_MIN, innerWidth * 0.6))));
+  document.documentElement.style.setProperty('--panel-w', width + 'px');
+  return width;
+}
+{
+  const saved = Number(localStorage.getItem('oasis.panelWidth'));
+  if (saved >= PANEL_MIN) setPanelWidth(saved);
+  const handle = $('panelResize');
+  const save = () => localStorage.setItem('oasis.panelWidth', String(Math.round($('filesPanel').getBoundingClientRect().width)));
+  handle.addEventListener('pointerdown', (event) => {
+    event.preventDefault();
+    handle.setPointerCapture(event.pointerId);
+    handle.classList.add('dragging');
+    const move = (e) => setPanelWidth(innerWidth - e.clientX);
+    const up = () => { handle.classList.remove('dragging'); handle.removeEventListener('pointermove', move); handle.removeEventListener('pointerup', up); save(); };
+    handle.addEventListener('pointermove', move);
+    handle.addEventListener('pointerup', up);
+  });
+  handle.addEventListener('keydown', (event) => {
+    if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return;
+    event.preventDefault();
+    const now = $('filesPanel').getBoundingClientRect().width;
+    setPanelWidth(now + (event.key === 'ArrowLeft' ? 24 : -24));
+    save();
+  });
+  handle.addEventListener('dblclick', () => { document.documentElement.style.removeProperty('--panel-w'); localStorage.removeItem('oasis.panelWidth'); });
+}
 for (const tab of document.querySelectorAll('.tab')) {
   tab.addEventListener('click', () => {
     for (const other of document.querySelectorAll('.tab')) { other.classList.toggle('active', other === tab); other.setAttribute('aria-selected', String(other === tab)); }
@@ -2310,6 +2340,19 @@ $('newFileButton').addEventListener('click', async () => {
   if (!path) return;
   try { if (!(await workspace.exists(path))) await workspace.write(path, ''); refreshFiles(); openEditor(path.replace(/^\.?\/+/, ''), 'added'); }
   catch (error) { toast(error.message, 'error'); }
+});
+
+$('downloadFileButton').addEventListener('click', async () => {
+  if (!workspace || !editingPath) return;
+  try {
+    const content = await workspace.read(editingPath);
+    const url = URL.createObjectURL(new Blob([content == null ? '' : content], { type: 'application/octet-stream' }));
+    const a = Object.assign(document.createElement('a'), { href: url, download: editingPath.split('/').pop() || 'file' });
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 2000);
+  } catch (error) { toast(error.message || 'Could not download this file.', 'error'); }
 });
 
 $('exportButton').addEventListener('click', async () => {
