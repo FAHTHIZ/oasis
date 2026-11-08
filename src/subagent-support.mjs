@@ -69,13 +69,16 @@ export function backgroundUsageSink(session) {
   return null;
 }
 
-// Nested delegation (as in Hermes' max_spawn_depth): 1, the default, means only the
-// main agent delegates. 2 or 3 lets writing subagents launch their own; the
-// background-agent cap stays shared across the whole tree.
+// Nested delegation: the number of subagent layers below the main conversation.
+// Like Claude Code, the default is 3; 1 turns nesting off. Read by
+// OASIS_SUBAGENT_MAX_DEPTH, then CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH, then the
+// subagentMaxDepth setting. The background-agent cap is shared across the tree.
+export const DEFAULT_SUBAGENT_MAX_DEPTH = 3;
 export function subagentMaxDepth(session, env = process.env) {
-  const raw = env.OASIS_SUBAGENT_MAX_DEPTH !== undefined && env.OASIS_SUBAGENT_MAX_DEPTH !== '' ? env.OASIS_SUBAGENT_MAX_DEPTH : session && session.subagentMaxDepth;
+  const pick = (value) => value !== undefined && value !== null && value !== '' ? value : undefined;
+  const raw = pick(env.OASIS_SUBAGENT_MAX_DEPTH) ?? pick(env.CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH) ?? (session && session.subagentMaxDepth);
   const value = Number(raw);
-  return Number.isInteger(value) ? Math.min(3, Math.max(1, value)) : 1;
+  return raw !== undefined && Number.isInteger(value) ? Math.min(5, Math.max(1, value)) : DEFAULT_SUBAGENT_MAX_DEPTH;
 }
 
 export function subagentStallLimits(parent, env = process.env) {
