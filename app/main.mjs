@@ -334,6 +334,13 @@ document.addEventListener('keydown', (event) => {
     toggleTerminal();
     return;
   }
+  // ? opens the shortcut list when you are not typing, as in GitHub and Gmail.
+  const typing = event.target instanceof Element && event.target.closest('input, textarea, select, [contenteditable=""], [contenteditable="true"], .xterm');
+  if (event.key === '?' && !modifier && !event.altKey && !typing && !$('commandPaletteDialog').open && !$('shortcutsDialog').open) {
+    event.preventDefault();
+    openNativeDialog('shortcutsDialog');
+    return;
+  }
   if (modifier && event.key === '/') {
     event.preventDefault();
     if ($('commandPaletteDialog').open) closeNativeDialog('commandPaletteDialog');
@@ -2299,7 +2306,12 @@ async function openTerminal() {
     xterm = new globalThis.Terminal({ fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace', fontSize: 13, cursorBlink: true, convertEol: false, scrollback: 5000, theme: termTheme() });
     if (typeof Fit === 'function') { const fit = new Fit(); xterm.loadAddon(fit); fitTerminal = () => { try { fit.fit(); } catch { /* hidden */ } }; }
     xterm.open($('terminalHost'));
-    xterm.onData((data) => { if (terminal) void terminal.write(data); });
+    // Before a shell runs, the pane used to show a blinking cursor that ignored
+    // typing. Enter now starts one (the approval prompt still applies).
+    xterm.onData((data) => {
+      if (terminal && terminal.running) { void terminal.write(data); return; }
+      if (data.includes('\r') && !$('terminalStart').hidden && !$('terminalStart').disabled) $('terminalStart').click();
+    });
     xterm.onResize(({ cols, rows }) => { if (terminal) void terminal.resize(cols, rows); });
     new ResizeObserver(() => { if (!$('terminalView').hidden && fitTerminal) fitTerminal(); }).observe($('terminalHost'));
   }
@@ -2310,6 +2322,13 @@ async function openTerminal() {
     if (await terminal.attach(saved)) { setTerminalRunning(true); $('terminalStatus').textContent = 'Reconnected · running'; void terminal.resize(xterm.cols, xterm.rows); }
     else sessionStorage.removeItem('oasis.terminal');
   }
+  if (!(terminal && terminal.running)) terminalIdleHint();
+}
+let terminalHintShown = false;
+function terminalIdleHint() {
+  if (terminalHintShown || !xterm) return;
+  terminalHintShown = true;
+  xterm.writeln('\x1b[2mPress Enter or select Start terminal to open a shell in this project.\x1b[0m');
 }
 function setTerminalRunning(running) {
   $('terminalStart').hidden = running;
@@ -2347,7 +2366,7 @@ function ensureTerminal() {
         setTerminalRunning(false);
         if (lost) return; // The shell may still be running; reopening the tab reattaches.
         sessionStorage.removeItem('oasis.terminal');
-        xterm.writeln('\r\n\x1b[2m[process exited]\x1b[0m');
+        xterm.writeln('\r\n\x1b[2m[process exited] Press Enter to start a new shell.\x1b[0m');
       }
     });
   }

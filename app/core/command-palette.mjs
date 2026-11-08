@@ -19,6 +19,7 @@ export const APP_KEYBOARD_SHORTCUTS = Object.freeze([
   { keys: '@', label: 'Mention a project file', detail: 'Type @ and part of a name; Tab or Enter inserts the path.' },
   { keys: 'Ctrl+`', label: 'Open or hide the terminal', detail: 'Connected to OASIS on a computer.' },
   { keys: 'MOD+/', label: 'Open keyboard shortcuts and help', detail: 'Works anywhere in the browser workspace.' },
+  { keys: '?', label: 'Open keyboard shortcuts', detail: 'When you are not typing in a box or the terminal.' },
   { keys: 'Enter', label: 'Send your message', detail: 'On a desktop keyboard. On touch devices, use the Send button.' },
   { keys: 'Shift+Enter', label: 'Add a new line', detail: 'Keep writing without sending the message.' },
   { keys: 'Escape', label: 'Close the top dialog or menu', detail: 'The current task keeps running.' },
