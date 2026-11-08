@@ -22,6 +22,8 @@ test('--router points every agent at the same gateway with the shared key', () =
   assert.equal(agentEnvironment('oasis', options, env).OASIS_API_KEY, 'sk-test');
   assert.equal(agentEnvironment('claude', options, env).ANTHROPIC_BASE_URL, 'http://localhost:20128');
   assert.equal(agentEnvironment('claude', options, env).ANTHROPIC_AUTH_TOKEN, 'sk-test');
+  // Without ANTHROPIC_API_KEY current Claude Code stops at "Not logged in" before any request.
+  assert.equal(agentEnvironment('claude', options, env).ANTHROPIC_API_KEY, 'sk-test');
   assert.equal(agentEnvironment('codex', options, env).OPENAI_BASE_URL, 'http://localhost:20128/v1');
   assert.equal(agentEnvironment('aider', options, env).OPENAI_API_BASE, 'http://localhost:20128/v1');
   assert.equal(agentEnvironment('oasis', parseBenchArgs([]), env).OASIS_BASE_URL, undefined);
