@@ -2534,6 +2534,8 @@ const PANEL_MIN = 280;
 function setPanelWidth(px) {
   const width = Math.round(Math.max(PANEL_MIN, Math.min(px, Math.max(PANEL_MIN, innerWidth * 0.6))));
   document.documentElement.style.setProperty('--panel-w', width + 'px');
+  const handle = document.getElementById('panelResize');
+  if (handle) { handle.setAttribute('aria-valuenow', String(width)); handle.setAttribute('aria-valuetext', width + ' pixels'); }
   return width;
 }
 {

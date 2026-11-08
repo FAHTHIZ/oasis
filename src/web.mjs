@@ -312,20 +312,17 @@ const MAX_FILE_PREVIEW_BYTES = 256 * 1024;
 const MAX_JOBS = 20;
 const MAX_EVENTS_PER_JOB = 120;
 const SESSION_ID_PATTERN = /^[a-f0-9-]{20,80}$/i;
-// `/` opens the app (app/). The previous browser workspace stays available
-// at /classic while it is phased out.
+// `/` opens the app (app/). The old single-page workspace was retired in
+// 1.2; its addresses redirect to the app so bookmarks keep working, and sw.js
+// is a worker that removes the old offline cache.
+const RETIRED_PAGES = new Set(['/classic', '/index.html']);
 const STATIC_FILES = new Map([
-  ['/classic', ['index.html', 'text/html; charset=utf-8']],
-  ['/index.html', ['index.html', 'text/html; charset=utf-8']],
-  ['/manifest.webmanifest', ['manifest.webmanifest', 'application/manifest+json; charset=utf-8']],
   ['/sw.js', ['sw.js', 'text/javascript; charset=utf-8']],
   ['/assets/oasis-icon.svg', ['assets/oasis-icon.svg', 'image/svg+xml']],
   ['/assets/icons/oasis-192.png', ['assets/icons/oasis-192.png', 'image/png']],
   ['/assets/icons/oasis-512.png', ['assets/icons/oasis-512.png', 'image/png']],
   ['/assets/icons/oasis-maskable-512.png', ['assets/icons/oasis-maskable-512.png', 'image/png']],
   ['/assets/icons/apple-touch-icon.png', ['assets/icons/apple-touch-icon.png', 'image/png']],
-  ['/assets/oasis-interface.css', ['assets/oasis-interface.css', 'text/css; charset=utf-8']],
-  ['/assets/activity-artifacts.css', ['assets/activity-artifacts.css', 'text/css; charset=utf-8']],
   ['/assets/oasis-mark.svg', ['assets/oasis-mark.svg', 'image/svg+xml']],
   ['/assets/oasis-logo.svg', ['assets/oasis-logo.svg', 'image/svg+xml']],
   ['/assets/vendor/xterm.js', ['assets/vendor/xterm.js', 'text/javascript; charset=utf-8']],
@@ -1380,7 +1377,7 @@ export function createOasisWebServer(options = {}) {
       if (target.file.endsWith(path.sep + 'sw.js')) body = Buffer.from(body.toString('utf8').replace('__BUILD__', 'runtime-' + Date.now().toString(36)));
       const ext = path.extname(target.file);
       const type = APP_TYPES[ext] || 'application/octet-stream';
-      res.writeHead(200, { ...headers, 'content-type': type, ...(ext === '.html' ? { 'content-security-policy': appContentSecurityPolicy(body) } : {}) });
+      res.writeHead(200, { ...headers, 'content-type': type, ...(ext === '.html' ? { 'content-security-policy': appContentSecurityPolicy(body), 'permissions-policy': 'microphone=(self), camera=(), geolocation=(), usb=(), serial=(), hid=(), payment=()' } : {}) });
       res.end(req.method === 'HEAD' ? undefined : body);
     } catch {
       res.writeHead(404, { ...headers, 'content-type': 'text/plain; charset=utf-8' });
@@ -1407,7 +1404,7 @@ export function createOasisWebServer(options = {}) {
       res.writeHead(200, {
         'content-type': contentType,
         'content-length': body.length,
-        'cache-control': usingFallback ? 'no-store' : file === 'index.html' ? 'no-cache' : 'public, max-age=300',
+        'cache-control': usingFallback ? 'no-store' : file === 'sw.js' ? 'no-cache' : 'public, max-age=300',
         'x-content-type-options': 'nosniff',
         'referrer-policy': 'no-referrer',
         'x-frame-options': 'DENY',
@@ -1419,7 +1416,7 @@ export function createOasisWebServer(options = {}) {
       return;
     }
 
-    if ((req.method === 'GET' || req.method === 'HEAD') && pathname === '/') {
+    if ((req.method === 'GET' || req.method === 'HEAD') && (pathname === '/' || RETIRED_PAGES.has(pathname))) {
       res.writeHead(302, { location: '/app/' + (parsedUrl.search || ''), 'cache-control': 'no-store', 'x-content-type-options': 'nosniff', 'referrer-policy': 'no-referrer' });
       res.end();
       return;

@@ -75,7 +75,7 @@
     <form class="composer" id="composer" autocomplete="off">
       <div class="composer-suggest" id="composerSuggest" role="listbox" aria-label="Suggestions" hidden></div>
       <div class="attachments" id="attachments" hidden></div>
-      <textarea id="input" rows="1" placeholder="Ask OASIS to build, fix or explain…" aria-label="Message OASIS" enterkeyhint="send"></textarea>
+      <textarea id="input" rows="1" placeholder="Ask OASIS to build, fix or explain…" aria-label="Message OASIS" role="combobox" aria-autocomplete="list" aria-controls="composerSuggest" aria-expanded="false" enterkeyhint="send"></textarea>
       <div class="composer-row">
         <button type="button" class="chip" id="modeChip" title="Approval mode" aria-haspopup="menu">
           <span class="dot"></span><span id="modeLabel">Ask first</span>
@@ -97,7 +97,7 @@
    </div>
 
     <aside class="panel" id="filesPanel" aria-label="Files" hidden>
-      <div class="panel-resize" id="panelResize" role="separator" aria-orientation="vertical" aria-label="Resize files panel" tabindex="0"></div>
+      <div class="panel-resize" id="panelResize" role="separator" aria-orientation="vertical" aria-label="Resize files panel" aria-valuemin="280" aria-valuenow="360" tabindex="0"></div>
       <div class="panel-head">
         <div class="tabs" role="tablist">
           <button role="tab" class="tab active" data-tab="files" aria-selected="true">Files</button>

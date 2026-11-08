@@ -231,13 +231,13 @@ test('browser runtime serves the app but requires a bearer token for every agent
   assert.equal((await fetch(base + '/app/skills/index.json')).headers.get('content-type').startsWith('application/json'), true);
   assert.equal((await fetch(base + '/app/../package.json')).status, 404);
   assert.equal((await fetch(base + '/src/web.mjs')).status, 404, 'only browser-safe shared modules are served');
-  const home = await fetch(base + '/classic');
-  assert.equal(home.status, 200);
-  const homeHtml = await home.text();
-  assert.match(homeHtml, /id="view-agent"/);
-  assert.match(homeHtml, /id="view-monitor"/, 'the authenticated workspace includes the run monitor view');
-  assert.match(homeHtml, /id="agentMonitorRefreshBtn"/);
-  assert.equal(home.headers.get('x-content-type-options'), 'nosniff');
+  // The retired single-page workspace redirects old bookmarks to the app.
+  for (const old of ['/classic', '/index.html']) {
+    const retired = await fetch(base + old, { redirect: 'manual' });
+    assert.equal(retired.status, 302, old);
+    assert.equal(retired.headers.get('location'), '/app/');
+  }
+  assert.equal(appPage.headers.get('x-content-type-options'), 'nosniff');
 
   const anonymous = await fetch(base + '/api/status');
   assert.equal(anonymous.status, 401);
