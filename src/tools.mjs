@@ -596,7 +596,7 @@ export async function runWorkspaceCommand(root, command, args = [], options = {}
       (highRisk ? '\nHIGH RISK: ' + (configRisk ? configRisk : 'this command ' + highRisk) + '. Auto-approval does not apply.' : '') +
       '\nCommands can change project files or execute project scripts. ' + (typeof options.clientTerminal === 'function' && !(sandbox && sandbox.available) ? 'It will run in the editor\'s terminal, with the editor\'s environment.' : 'Oasis strips common secret environment variables from the child process.') +
       (sandbox && sandbox.available ? (sandbox.kind === 'ssh' ? '\nIt will run on ' + sandbox.ssh.host + ' over SSH.' : '\nIt will run inside the OS sandbox (' + sandbox.kind + ').') : ''), Boolean(highRisk));
-    if (!ok) return { approved: false, command, args, message: 'Command was not approved. No process was started.' };
+    if (!ok) return { approved: false, command, args, message: 'Command was not approved. No process was started. Do not retry it or ask for approval again this turn; finish what you can without it and tell the user the exact command to run.' };
   }
   if (options.signal && options.signal.aborted) return { command, args, approved: false, cancelled: true, message: 'Task was cancelled before the command started.' };
   const baseEnv = scrubEnvironment(options.env || process.env);

@@ -142,16 +142,16 @@ test('an allowed action is not reclassified when the agent repeats it', async ()
   const state = newAutoModeState();
   let calls = 0;
   const evaluate = async () => { calls += 1; return '{"decision":"allow","reason":"the user asked to run the tests"}'; };
-  const messages = [{ role: 'user', content: 'fix it and run npm test' }];
-  const first = await classifyAction(state, { toolName: 'Bash', args: { command: 'npm', args: ['test'] }, messages, root: '/p' }, evaluate);
-  const again = await classifyAction(state, { toolName: 'Bash', args: { args: ['test'], command: 'npm' }, messages, root: '/p' }, evaluate);
+  const messages = [{ role: 'user', content: 'fix it and run npm run e2e' }];
+  const first = await classifyAction(state, { toolName: 'Bash', args: { command: 'npm', args: ['run', 'e2e'] }, messages, root: '/p' }, evaluate);
+  const again = await classifyAction(state, { toolName: 'Bash', args: { args: ['run', 'e2e'], command: 'npm' }, messages, root: '/p' }, evaluate);
   assert.equal(first.decision, 'allow');
   assert.equal(again.decision, 'allow');
   assert.equal(again.cached, true);
   assert.equal(calls, 1, 'key order in the input does not matter');
   await classifyAction(state, { toolName: 'Bash', args: { command: 'npm', args: ['publish'] }, messages, root: '/p' }, evaluate);
   assert.equal(calls, 2, 'a different command is classified');
-  await classifyAction(state, { toolName: 'Bash', args: { command: 'npm', args: ['test'] }, messages: [...messages, { role: 'user', content: 'now deploy' }], root: '/p' }, evaluate);
+  await classifyAction(state, { toolName: 'Bash', args: { command: 'npm', args: ['run', 'e2e'] }, messages: [...messages, { role: 'user', content: 'now deploy' }], root: '/p' }, evaluate);
   assert.equal(calls, 3, 'new user intent is classified again');
   const blocker = async () => { calls += 1; return '{"decision":"block","reason":"no"}'; };
   const blocked = newAutoModeState();
@@ -160,4 +160,33 @@ test('an allowed action is not reclassified when the agent repeats it', async ()
   assert.equal(blocked.blockedTotal, 2, 'blocks are never cached');
   const restored = { ...newAutoModeState(), allowed: {} };
   assert.equal((await classifyAction(restored, { toolName: 'Bash', args: { command: 'ls' }, messages, root: '/p' }, evaluate)).decision, 'allow', 'state restored from JSON still works');
+});
+
+test('auto mode approves the project\'s own checks without a model call', async () => {
+  const { classifyAction, newAutoModeState, obviousProjectCheck } = await import('../src/auto-mode.mjs');
+  const never = async () => { throw new Error('the classifier must not be called'); };
+  const messages = [{ role: 'user', content: 'fix the bug in math.js and run the tests' }];
+  for (const argv of [['node', 'math.test.js'], ['npm', 'test'], ['npm', 'run', 'lint'], ['node', '--test', 'test/a.test.mjs'], ['python', '-m', 'pytest', '-q'], ['cargo', 'test'], ['go', 'test', './...']]) {
+    const verdict = await classifyAction(newAutoModeState(), { toolName: 'Bash', args: { command: argv[0], args: argv.slice(1) }, messages, root: '/w' }, never);
+    assert.equal(verdict.decision, 'allow', argv.join(' '));
+    assert.equal(verdict.fast, true);
+  }
+  for (const argv of [['node', '-e', 'require("fs")'], ['node', 'script.js'], ['node', '../x.test.js'], ['npm', 'install', 'left-pad'], ['npm', 'test', '--script-shell=/bin/evil'], ['make', 'test', 'CC=evil'], ['node', '--test', '/etc/x.js']]) {
+    assert.equal(obviousProjectCheck({ toolName: 'Bash', args: { command: argv[0], args: argv.slice(1) }, messages }), null, argv.join(' '));
+  }
+  assert.equal(obviousProjectCheck({ toolName: 'Bash', args: { command: 'npm', args: ['test'] }, messages: [{ role: 'user', content: 'fix it but do not run the tests' }] }), null, 'the user said not to');
+  let asked = 0;
+  const verdict = await classifyAction(newAutoModeState(), { toolName: 'Bash', args: { command: 'npm', args: ['test'] }, messages, root: '/w' }, async () => { asked++; return '{"decision":"ask","reason":"custom"}'; }, { config: { allow: ['Only docs: editing markdown files.'] } });
+  assert.equal(asked, 1, 'a custom allow list without the default test rule goes to the model');
+  assert.equal(verdict.decision, 'ask');
+});
+
+test('a classifier timeout is reported as a timeout, not a user cancel', async () => {
+  const { classifyAction, newAutoModeState } = await import('../src/auto-mode.mjs');
+  const keepAlive = setTimeout(() => {}, 5000);
+  const slow = ({ signal }) => new Promise((resolve, reject) => signal.addEventListener('abort', () => reject(new Error('Agent task cancelled by the user.'))));
+  const verdict = await classifyAction(newAutoModeState(), { toolName: 'Bash', args: { command: 'curl', args: ['https://example.com'] }, messages: [], root: '/w' }, slow, { timeoutSeconds: 0.05 });
+  assert.equal(verdict.decision, 'ask');
+  clearTimeout(keepAlive);
+  assert.match(verdict.reason, /no answer within 0\.05 s/);
 });

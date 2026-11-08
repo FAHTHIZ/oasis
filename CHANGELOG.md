@@ -22,6 +22,10 @@ User-facing change history grouped by package version. A version heading does no
 - Model ranking ignores digits in a provider prefix (`llm7/…`), so they no longer count as a model version.
 
 ### Security and reliability
+- Auto mode approves the project's own test, lint and build commands (`npm test`, `node --test`, `node x.test.js`, `pytest`, `cargo test`, `go test`, `make test`) without a classifier call, while the default "Test and build" rule is in force. Seen live: on a free model that takes 45 s per reply, every test run had been denied when the 30 s classifier call timed out.
+- A classifier timeout is reported as a timeout, with a hint to set `autoMode.model`, instead of "cancelled by the user".
+- A 429 that means "one request at a time" (Pollinations' keyless API) now waits and retries instead of failing in under a second.
+- A declined command now tells the model not to retry or ask again, but to finish what it can and name the command for the user.
 - Shutting down the browser workspace now waits briefly for cancelled tasks to record their final status, then closes task history, so no write lands after shutdown. This fixes an intermittent cleanup failure on Node 26.
 - New `dontAsk` permission mode and `permissions.denyInsteadOfPrompting` setting (Claude Code parity): calls that would wait on an approval prompt are denied with a readable reason and the turn continues, so CI and unattended runs never hang. See [Permission modes](docs/CONFIGURATION.md#permission-modes).
 - The SSRF address policy is built on `ipaddr.js` with declarative CIDR tables.
