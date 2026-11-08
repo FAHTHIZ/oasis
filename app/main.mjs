@@ -24,7 +24,7 @@ const store = new IndexedDBStore();
 const sandbox = new FrameSandbox();
 const skills = new SkillLibrary({ baseURL: new URL('skills/', location.href).href });
 
-const DEFAULTS = { connections: [], activeConnection: '', activeModel: '', autoSwitch: true, projectPlugins: {}, mode: 'ask', maxSteps: 40, theme: 'system', githubToken: '' };
+const DEFAULTS = { connections: [], activeConnection: '', activeModel: '', autoSwitch: true, projectPlugins: {}, mode: 'ask', maxSteps: 40, theme: 'system', githubToken: '', notify: false };
 // Slow phones and old computers: fewer repaints while a reply streams, no
 // blur or animation, and a shorter transcript kept in the page.
 const LITE_PARAM = new URLSearchParams(location.search).get('lite');
@@ -412,10 +412,11 @@ async function send(text) {
   attachments = [];
   renderAttachments();
   let settle;
+  turnEdited = false;
   turnSettled = new Promise((resolve) => { settle = resolve; });
   try { await agent.send(message, { maxSteps: Number(settings.maxSteps) || 40, plugins, images }); }
   catch { /* shown through the error event */ }
-  finally { setBusy(false); persistChat(); refreshFiles(); settle(); if (RT) refreshRuntimeStatus().then(updateProjectUI).catch(() => {}); }
+  finally { setBusy(false); persistChat(); refreshFiles(); settle(); if (RT) refreshRuntimeStatus().then(updateProjectUI).catch(() => {}); attention('done', message); }
 }
 
 // Switching chats stops the running turn and waits for it to wind down, so
@@ -733,6 +734,43 @@ function messageActions(role) {
   if (role === 'user') button('edit', 'Edit and resend', 'M12.5 4.5l3 3M4 16l1-4 8.5-8.5 3 3L8 15l-4 1z');
   return bar;
 }
+// After a turn that changed files on this computer, the last reply offers
+// Undo, which runs /undo (files and conversation go back one turn).
+let turnEdited = false;
+function offerUndo() {
+  for (const old of document.querySelectorAll('.msg-actions button[data-action="undo"]')) old.remove();
+  if (!RT || RT.needsToken || !turnEdited) return;
+  const replies = document.querySelectorAll('#transcript .msg.assistant');
+  const last = replies[replies.length - 1];
+  const bar = last && last.querySelector('.msg-actions');
+  if (!bar) return;
+  const b = document.createElement('button');
+  b.type = 'button';
+  b.dataset.action = 'undo';
+  b.className = 'labelled';
+  b.title = 'Undo this turn: restore the files and the conversation (/undo)';
+  b.setAttribute('aria-label', b.title);
+  b.innerHTML = '<svg viewBox="0 0 20 20" aria-hidden="true"><path d="M7.5 5L4 8.5 7.5 12M4.5 8.5h7a4.5 4.5 0 010 9H9" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg><span>Undo</span>';
+  bar.appendChild(b);
+}
+
+// Tab title badge and optional desktop notification when a task finishes or
+// needs you while this tab is in the background.
+const BASE_TITLE = document.title;
+function attention(kind, text) {
+  if (!document.hidden && document.hasFocus()) return;
+  document.title = (kind === 'input' ? '(Needs you) ' : '● ') + BASE_TITLE;
+  if (!settings.notify || typeof Notification === 'undefined' || Notification.permission !== 'granted') return;
+  try {
+    const body = kind === 'done' ? 'Finished: ' + String(text || '').replace(/\s+/g, ' ').slice(0, 120) : String(text || '');
+    const note = new Notification(kind === 'done' ? 'OASIS is done' : 'OASIS needs you', { body, tag: 'oasis-' + kind, icon: 'icons/oasis-mark.svg' });
+    note.onclick = () => { window.focus(); note.close(); };
+  } catch { /* some browsers only allow notifications from a service worker */ }
+}
+function clearAttention() { if (!document.hidden) document.title = BASE_TITLE; }
+document.addEventListener('visibilitychange', clearAttention);
+window.addEventListener('focus', clearAttention);
+
 async function copyText(text) {
   try { await navigator.clipboard.writeText(text); return true; }
   catch {
@@ -771,7 +809,11 @@ function onTranscriptClick(event) {
   const wrap = action.closest('.msg');
   const text = messageText(wrap);
   if (action.dataset.action === 'copy') copyText(text).then((ok) => ok ? flashCopied(action) : toast('Could not copy.'));
-  else if (action.dataset.action === 'edit') {
+  else if (action.dataset.action === 'undo') {
+    if (document.body.classList.contains('busy')) { toast('Wait for OASIS to finish, or stop it first.'); return; }
+    action.remove();
+    send('/undo');
+  } else if (action.dataset.action === 'edit') {
     if (document.body.classList.contains('busy')) { toast('Wait for OASIS to finish, or stop it first.'); return; }
     $('input').value = text;
     autosize();
@@ -874,6 +916,7 @@ function handleEvent(event) {
     }
     case 'tool_start': {
       const tool = { id: event.id, name: event.name, args: event.args, ...(event.open ? { open: true } : {}) };
+      if (/write|edit|patch|delete|move|rename|notebook/i.test(String(event.name || ''))) turnEdited = true;
       currentTurn.entry.tools.push(tool);
       currentTurn.tools.appendChild(toolCard(tool));
       scrollDown();
@@ -917,6 +960,7 @@ function handleEvent(event) {
       removeThinking();
       if (currentTurn) messageSource.set(currentTurn.wrap, currentTurn.text);
       currentTurn = null;
+      offerUndo();
       trimTranscript();
       break;
     default: break;
@@ -1170,6 +1214,7 @@ async function restoreChat({ keepChat = false } = {}) {
 let approvalResolve = null;
 let approvalAlways = null;
 async function requestApproval({ name, args, runtime = false }) {
+  attention('input', 'OASIS needs your approval to continue.');
   const summary = $('approvalSummary');
   const detail = $('approvalDetail');
   detail.replaceChildren();
@@ -1256,6 +1301,7 @@ function renderUnifiedDiff(container, text) {
 /* ---------- Questions from the agent (runtime engine) ---------- */
 let questionResolve = null;
 function askQuestion(question) {
+  attention('input', String(question && question.question || 'OASIS has a question.').slice(0, 160));
   $('questionText').textContent = String(question.question || '').slice(0, 600);
   const box = $('questionOptions');
   box.replaceChildren();
@@ -1747,6 +1793,8 @@ function openSettings() {
   $('modeSelect').value = settings.mode;
   $('maxStepsInput').value = settings.maxSteps;
   $('themeSelect').value = settings.theme;
+  $('notifyInput').checked = Boolean(settings.notify) && typeof Notification !== 'undefined' && Notification.permission === 'granted';
+  $('notifyInput').closest('label').hidden = typeof Notification === 'undefined';
   $('githubToken').value = settings.githubToken;
   $('testResult').textContent = '';
   $('versionLabel').textContent = APP_VERSION;
@@ -1782,9 +1830,15 @@ function formSettings() {
     mode: $('modeSelect').value,
     maxSteps: Math.min(200, Math.max(5, Number($('maxStepsInput').value) || 40)),
     theme: $('themeSelect').value,
+    notify: $('notifyInput').checked,
     githubToken: $('githubToken').value.trim()
   };
 }
+$('notifyInput').addEventListener('change', async (event) => {
+  if (!event.target.checked || typeof Notification === 'undefined') return;
+  const permission = Notification.permission === 'default' ? await Notification.requestPermission().catch(() => 'denied') : Notification.permission;
+  if (permission !== 'granted') { event.target.checked = false; toast('Notifications are blocked for this page. Allow them in your browser\'s site settings.'); }
+});
 $('testButton').addEventListener('click', async () => {
   const draft = manualDraft();
   const out = $('testResult');
