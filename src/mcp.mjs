@@ -214,6 +214,16 @@ class ProcessStdioTransport {
 }
 
 // stdio MCP server: same surface (and the same SDK Client) as the remote clients.
+// Name the usual reason a local server dies at startup without echoing its
+// stderr, which can carry tokens.
+export function exitHint(stderr, cwd) {
+  const text = String(stderr || '');
+  if (/ERR_MODULE_NOT_FOUND|Cannot find module|Cannot find package/.test(text)) return ' Its Node.js dependencies are not installed: run npm install (or pnpm install) in ' + cwd + '.';
+  if (/ModuleNotFoundError|No module named/.test(text)) return ' A Python package it needs is not installed.';
+  if (/EADDRINUSE/.test(text)) return ' The port it wants is already in use.';
+  return '';
+}
+
 export class McpServerClient extends McpHttpClient {
   constructor(config, options = {}) {
     const checked = validateMcpServerConfig(config);
@@ -238,7 +248,7 @@ export class McpServerClient extends McpHttpClient {
 
   _translate(error) {
     if (this.exited && !this.terminationRequestedByClose) {
-      return new Error('MCP server ' + this.config.name + ' exited' + (this.exitCode === null ? '' : ' with code ' + this.exitCode) + '.');
+      return new Error('MCP server ' + this.config.name + ' exited' + (this.exitCode === null ? '' : ' with code ' + this.exitCode) + '.' + exitHint(this.stderrTail, this.config.cwd || this.root));
     }
     if (error && (error.code === 'REQUEST_TIMEOUT' || /timed out/i.test(String(error.message)))) return new Error('MCP request timed out: ' + (error.method || 'request'));
     if (/could not start|not running/.test(String(error && error.message))) return error;
