@@ -137,3 +137,16 @@ test('a Codex plugin MCP server with a relative cwd starts from the plugin root'
   const tools = [...clients.values()].flatMap((client) => client.tools.map((tool) => tool.name));
   assert.deepEqual(tools, ['make_deck']);
 });
+
+test('a local MCP server that dies on a missing dependency says how to fix it', async (t) => {
+  const { exitHint } = await import('../src/mcp.mjs');
+  assert.match(exitHint("Error [ERR_MODULE_NOT_FOUND]: Cannot find module '/p/node_modules/x/y.js'", '/p'), /npm install \(or pnpm install\) in \/p\./);
+  assert.match(exitHint("ModuleNotFoundError: No module named 'mcp'", '/p'), /Python package/);
+  assert.equal(exitHint('token=abc123 failed', '/p'), '', 'unknown stderr is not echoed');
+  const dir = await mkdtemp(path.join(os.tmpdir(), 'oasis-mcp-dep-'));
+  t.after(() => rm(dir, { recursive: true, force: true }));
+  await writeFile(path.join(dir, 'start.mjs'), "import 'not-installed-package-for-oasis-test';\n");
+  const { failures } = await connectMcpServers({ env: { ...process.env, OASIS_CONFIG_DIR: path.join(dir, 'cfg') }, root: dir, skipUser: true, extraServers: [{ name: 'dep', command: process.execPath, args: ['start.mjs'], cwd: dir }] });
+  assert.equal(failures.length, 1);
+  assert.match(failures[0].error, /exited with code 1\. Its Node\.js dependencies are not installed/);
+});
