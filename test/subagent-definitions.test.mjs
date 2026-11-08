@@ -163,3 +163,32 @@ test('a Stop hook in an agent definition runs as SubagentStop and sends the agen
   assert.ok(children.length >= 2);
   assert.match(children[1].messages.at(-1).content, /SubagentStop hook asked you to continue/);
 });
+
+test('--agent applies initialPrompt to the first turn and honours disallowedTools', async (t) => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'oasis-mainagent-'));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  await mkdir(path.join(root, '.oasis', 'agents'), { recursive: true });
+  await writeFile(path.join(root, '.oasis', 'agents', 'triage.md'), '---\nname: triage\ndescription: Triage\ndisallowedTools: Bash\ninitialPrompt: Read the open TODO list first.\n---\nYou triage.\n');
+  const payloads = [];
+  const server = createServer(async (req, res) => {
+    let body = '';
+    for await (const chunk of req) body += chunk.toString();
+    payloads.push(JSON.parse(body));
+    res.writeHead(200, { 'content-type': 'application/json' });
+    res.end(JSON.stringify({ choices: [{ message: { role: 'assistant', content: 'ok' } }] }));
+  });
+  await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
+  t.after(() => server.close());
+  const config = { protocol: 'openai-compatible', baseURL: 'http://127.0.0.1:' + server.address().port + '/v1', model: 'fixture', apiKey: '', maxSteps: 2 };
+  const session = await createSession({ root, config, agent: 'triage' });
+  await runAgentTurn(session, 'and then fix bug 12');
+  await runAgentTurn(session, 'second turn');
+  const firstUser = payloads[0].messages.filter((message) => message.role === 'user').map((message) => String(message.content)).join('\n');
+  assert.match(firstUser, /Read the open TODO list first\.\s+and then fix bug 12/);
+  const secondUsers = payloads[1].messages.filter((message) => message.role === 'user').map((message) => String(message.content));
+  assert.equal(secondUsers.filter((text) => /Read the open TODO list first/.test(text)).length, 1, 'only the first turn gets it');
+  const names = (payloads[0].tools || []).map((tool) => tool.function.name);
+  assert.ok(!names.includes('run_command') && !names.includes('run_shell'));
+  const skipped = await createSession({ root, config, agent: 'triage', skipAgentInitialPrompt: true });
+  assert.equal(skipped.agentInitialPrompt, undefined);
+});
