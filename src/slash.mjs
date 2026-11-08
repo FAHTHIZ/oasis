@@ -323,7 +323,7 @@ export async function runBuiltinCommand(name, argument, state) {
         lines.push('  ' + agent.name + ' [' + source + '] ' + agent.description);
       }
       lines.push('Use the task tool with subagent_type to launch one. /tasks lists running agents.');
-      return { output: lines.join('\\n') };
+      return { output: lines.join('\n') };
     }
     case 'permissions': {
       const policy = session && session.permissions;
