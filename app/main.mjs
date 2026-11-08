@@ -737,6 +737,23 @@ function summarizeArgs(name, args = {}) {
   if (args.todos) return args.todos.length + ' items';
   return '';
 }
+const EXTRA_LABELS = {
+  browser: 'Used the browser', command_output: 'Checked a running command', kill_command: 'Stopped a running command',
+  list_background: 'Checked background tasks', git_branch: 'Managed branches', git_commit: 'Made a commit', git_push: 'Pushed the branch',
+  create_pull_request: 'Opened a pull request', worktree_inspect: 'Checked the review copy', worktree_merge: 'Merged the review copy',
+  advisor: 'Asked the advisor model', run_specialist_review: 'Ran a specialist review', install_extension: 'Installed an extension',
+  add_extension: 'Added an extension', install_external_skill: 'Installed a skill', install_plugin: 'Installed a plugin', plugins: 'Checked plugins',
+  configure_mcp_server: 'Set up a tool server', configure_provider: 'Set up a model provider', mcp: 'Checked tool servers',
+  list_directory: 'Listed a folder', read_notebook: 'Read a notebook', notebook_read: 'Read a notebook'
+};
+// Unknown tools still say what ran: 'mcp__context7__resolve-library-id' → 'Used context7: resolve library id'.
+function fallbackToolLabel(name) {
+  const words = (value) => String(value).replace(/[_-]+/g, ' ').trim();
+  const mcp = /^mcp__([^_]+(?:_[^_]+)*?)__(.+)$/.exec(name);
+  if (mcp) return 'Used ' + words(mcp[1]) + ': ' + words(mcp[2]);
+  if (name.startsWith('mcp_')) return 'Used a connected tool: ' + words(name.slice(4));
+  return name ? 'Used ' + words(name) : 'Completed a project step';
+}
 function activityLabel(tool) {
   const name = String(tool.name || '').toLowerCase();
   const args = tool.args || {};
@@ -755,7 +772,9 @@ function activityLabel(tool) {
   if (name === 'delete_file') return path ? 'Deleted ' + path : 'Deleted a file';
   if (['grep', 'search_files', 'glob_files', 'repo_map'].includes(name)) return 'Searched the project';
   if (['web_search', 'fetch_url'].includes(name)) return 'Looked up information online';
-  if (['git_diff', 'git_status', 'git_log'].includes(name)) return 'Reviewed project changes';
+  if (name === 'git_diff') return 'Reviewed the diff';
+  if (name === 'git_status') return 'Checked project changes';
+  if (name === 'git_log') return 'Reviewed recent project history';
   if (name === 'todo_write') return 'Updated the task plan';
   if (name === 'load_skill' || name === 'read_skill_resource' || name === 'list_skills') return 'Used a skill';
   if (name === 'task') {
@@ -768,8 +787,8 @@ function activityLabel(tool) {
   if (name === 'ask_user_question') return 'Asked you a question';
   if (name === 'exit_plan_mode') return 'Presented a plan';
   if (name === 'lsp' || name === 'diagnostics' || name === 'ide_get_diagnostics') return 'Checked for code issues';
-  if (name.startsWith('mcp_')) return 'Used a connected tool (MCP)';
-  return 'Completed a project step';
+  if (EXTRA_LABELS[name]) return EXTRA_LABELS[name];
+  return fallbackToolLabel(name);
 }
 
 function toolCard(tool) {
@@ -781,7 +800,9 @@ function toolCard(tool) {
   const status = tool.ok === undefined ? 'in progress' : tool.ok ? 'completed' : 'failed';
   const statusLabel = tool.ok === undefined ? 'Working' : tool.ok ? 'Done' : 'Failed';
   summary.querySelector('.name').textContent = activityLabel(tool);
-  summary.querySelector('.arg').textContent = summarizeArgs(tool.name, tool.args);
+  const argText = summarizeArgs(tool.name, tool.args);
+  // Skip a hint that only repeats the label ("Reviewed the diff · Reviewed the diff").
+  summary.querySelector('.arg').textContent = argText && activityLabel(tool).toLowerCase().includes(argText.toLowerCase()) ? '' : argText;
   summary.querySelector('.tool-status').textContent = statusLabel;
   summary.setAttribute('aria-label', activityLabel(tool) + ', ' + status + '. Expand to view details.');
   const pre = document.createElement('pre');
@@ -807,6 +828,8 @@ function addMessage(role, content, at = 0) {
     const body = document.createElement('div');
     body.className = 'body';
     body.innerHTML = renderMarkdown(content || '');
+    // Steps that only ran tools have no text; a hidden body keeps them compact.
+    body.hidden = !String(content || '').trim();
     wrap.appendChild(body);
   } else {
     wrap.textContent = content;
@@ -980,6 +1003,7 @@ function queueRender() {
     lastRender = performance.now();
     if (!currentTurn) return;
     currentTurn.body.innerHTML = renderMarkdown(currentTurn.text);
+    currentTurn.body.hidden = !currentTurn.text.trim();
     currentTurn.body.classList.add('cursor');
     scrollDown();
   });
@@ -1051,8 +1075,8 @@ function handleEvent(event) {
       messageSource.set(currentTurn.wrap, currentTurn.text);
       currentTurn.body.classList.remove('cursor');
       currentTurn.body.innerHTML = renderMarkdown(currentTurn.text);
-      currentTurn.body.hidden = !currentTurn.text;
-      if (!currentTurn.text && !event.toolCalls.length) currentTurn.wrap.remove();
+      currentTurn.body.hidden = !currentTurn.text.trim();
+      if (!currentTurn.text.trim() && !event.toolCalls.length) currentTurn.wrap.remove();
       break;
     }
     case 'tool_start': {
