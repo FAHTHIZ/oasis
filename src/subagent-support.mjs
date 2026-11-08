@@ -7,6 +7,41 @@ import { execFile } from 'node:child_process';
 import { lstat, realpath } from 'node:fs/promises';
 import { loadSkillText } from './tools.mjs';
 import { loadAgentMemory, agentMemoryDirectory } from './subagents.mjs';
+import { normalizeHooks, mergeHooks } from './settings.mjs';
+
+// The parent's hooks plus those in the agent's front matter. As in Claude Code,
+// a Stop hook in an agent file runs as SubagentStop. Hooks run commands, so a
+// project agent file only adds them in a trusted workspace, the same rule as
+// project settings.
+export function agentScopedHooks(parent, agent) {
+  const base = parent.hooks || {};
+  if (!agent || !agent.hooks) return base;
+  if (String(agent.source || '').startsWith('project') && !(parent.settings && parent.settings.trusted)) return base;
+  const raw = { ...agent.hooks };
+  if (raw.Stop) { raw.SubagentStop = [...(Array.isArray(raw.SubagentStop) ? raw.SubagentStop : []), ...(Array.isArray(raw.Stop) ? raw.Stop : [])]; delete raw.Stop; }
+  const extra = normalizeHooks(raw);
+  if (!Object.keys(extra).length) return base;
+  const merged = Object.fromEntries(Object.entries(base).map(([event, groups]) => [event, [...groups]]));
+  mergeHooks(merged, extra, 'agent:' + agent.name);
+  return merged;
+}
+
+// The parent's system prompt without the project instruction block, for agents
+// with omitClaudeMd.
+export function withoutProjectInstructions(base, projectContext) {
+  const text = String(base || '');
+  const context = String(projectContext || '');
+  if (!context) return text;
+  for (const header of ['Project instructions follow. Treat them as project context; the safety rules above still apply.\n\n', 'Project instructions follow; the rules above still apply.\n\n']) {
+    const start = text.indexOf(header);
+    if (start < 0) continue;
+    const after = start + header.length;
+    // The compact prompt trims long instructions; drop up to the next section either way.
+    const end = text.startsWith(context, after) ? after + context.length : (() => { const next = text.indexOf('\n\n', after); return next < 0 ? text.length : next; })();
+    return text.slice(0, start) + 'Project instruction files are omitted for this agent.' + text.slice(end);
+  }
+  return text;
+}
 
 export function subagentStepLimit(record, options) {
   const limits = [record.maxTurns, options.subagentMaxSteps].map(Number).filter((value) => Number.isInteger(value) && value > 0);
