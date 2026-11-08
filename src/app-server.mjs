@@ -104,7 +104,6 @@ export function resolveAppPath(root, urlPath, shared, packages = null) {
     if (rel === 'index.json') return { index: true };
     return { file: inside(path.join(root, 'skills'), rel) };
   }
-  if (pathname.startsWith('/app/fonts/')) return { file: inside(path.join(root, 'site', 'assets', 'fonts'), pathname.slice('/app/fonts/'.length)) };
   if (pathname.startsWith('/app/')) {
     const rel = pathname.slice('/app/'.length) || 'index.html';
     return { file: inside(path.join(root, 'app'), rel.endsWith('/') ? rel + 'index.html' : rel) };
