@@ -22,6 +22,7 @@ User-facing change history grouped by package version. A version heading does no
 - `bench:live --router` now gives Claude Code `ANTHROPIC_API_KEY` as well as `ANTHROPIC_AUTH_TOKEN`. Claude Code 2.1.319 stopped at "Not logged in" with only the token set, so every Claude Code trial through a gateway failed before sending a request.
 
 ### Providers
+- `OASIS_BASE_URL` without `OASIS_MODEL` now says which variable is missing and offers `oasis connect <that address>`, instead of only "Run oasis setup".
 - [OmniRoute](https://github.com/cheaper-inference/omniroute) is a built-in gateway provider (`omniroute`, `OMNIROUTE_API_KEY`, `localhost:20128`). See [Configuration](docs/CONFIGURATION.md#omniroute-gateway).
 - Pasting a server address with a key no longer fails with "needs an API key" when the server also guards an Ollama-style `/api/tags` route, and a wrong key is now reported as a wrong key.
 - Model setup on a gateway rules out an unconnected upstream after one failed probe, and keeps its models out of the backups.
