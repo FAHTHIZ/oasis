@@ -9,6 +9,7 @@ User-facing change history grouped by package version. A version heading does no
 - Fixed: the activity label for `list_files` read "Used list files".
 
 ### Browser workspace
+- Fixed: a streamed reply that was followed by a tool call kept its blinking cursor for the rest of the chat, and steps that ended with nothing to show left empty gaps. Both seen in a real gpt-oss-20b run in the web app.
 - Subagents show up in the web app. A turn that starts subagents gets a small list with each one's task, live status (working, done, failed, stopped) and its latest note. It is saved with the chat. This replaces the classic page's run monitor for the common case; background agents that outlive the turn are still only in the terminal's `/tasks`.
 - The approval sheet's "Always allow" button reads in plain words: "Always allow npm test commands" instead of "Always allow run_command(npm test:*)". The exact rule is in the button's tooltip. Activity cards no longer repeat the runtime's label as a grey hint.
 - Activity cards name every tool. Tools without a written label (plugin and MCP tools, `git_commit`, `browser` and others) used to all say "Completed a project step"; they now say what ran, for example "Used context7: resolve library id" or "Made a commit". Same change in the terminal labels. Hints that only repeat the label are hidden.
