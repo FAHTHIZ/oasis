@@ -7,13 +7,12 @@
 // loopback callback, and the token store: tokens are kept per server URL in
 // <config>/mcp-auth.json with 0600 permissions and are never shown to the model.
 import { randomBytes, randomUUID } from 'node:crypto';
-import { createServer, request as httpRequest } from 'node:http';
-import { request as httpsRequest } from 'node:https';
+import { createServer } from 'node:http';
 import { chmod, mkdir, readFile, rename, writeFile, unlink } from 'node:fs/promises';
 import { spawn } from 'node:child_process';
 import { lookup } from 'node:dns/promises';
 import { isIP } from 'node:net';
-import { isNonPublicIpAddress } from './network-safety.mjs';
+import { isBlockedAddress, isLocalHostname, normalizeHostname, pinnedRequest, readBoundedBody, resolvePublicAddresses } from './safe-http.mjs';
 import path from 'node:path';
 import { getConfigDirectory, isLoopbackUrl } from './config.mjs';
 
@@ -103,11 +102,6 @@ export async function deleteStoredToken(serverUrl, env = process.env) {
   });
 }
 
-function privateAddress(address) {
-  const version = isIP(String(address || '').replace(/^\[|\]$/g, ''));
-  return version !== 4 && version !== 6 || isNonPublicIpAddress(address);
-}
-
 function oauthSafetyForServer(serverUrl, lookupImpl = lookup) {
   let localOrigin = null;
   try {
@@ -124,7 +118,7 @@ async function requireSafeEndpoint(url, label, safety = {}) {
   let parsed;
   try { parsed = new URL(url); } catch { throw new Error(label + ' is not a valid URL.'); }
   if (parsed.username || parsed.password) throw new Error(label + ' must not include credentials.');
-  const host = parsed.hostname.toLowerCase().replace(/^\[|\]$/g, '').replace(/\.+$/, '');
+  const host = normalizeHostname(parsed);
   const local = isLoopbackUrl(parsed.toString());
   if (parsed.protocol !== 'https:' && !(parsed.protocol === 'http:' && local && (safety.allowLoopback || safety.localOrigin === parsed.origin))) {
     throw new Error(label + ' must use HTTPS, except for the configured loopback MCP server origin.');
@@ -134,21 +128,15 @@ async function requireSafeEndpoint(url, label, safety = {}) {
     if (host === 'localhost') safety.resolvedAddresses?.set(host, [{ address: '127.0.0.1', family: 4 }]);
     return parsed.toString();
   }
-  if (host === 'localhost' || host.endsWith('.localhost') || host.endsWith('.local') ||
-      host.endsWith('.internal') || host.endsWith('.home.arpa') || host === 'metadata.google.internal') {
-    throw new Error(label + ' cannot target a local or internal hostname.');
-  }
+  if (isLocalHostname(host)) throw new Error(label + ' cannot target a local or internal hostname.');
   if (isIP(host)) {
-    if (privateAddress(host)) throw new Error(label + ' cannot target a private or special-purpose address.');
+    if (isBlockedAddress(host)) throw new Error(label + ' cannot target a private or special-purpose address.');
     return parsed.toString();
   }
-  let records;
-  try { records = await (safety.lookupImpl || lookup)(host, { all: true, verbatim: true }); }
-  catch { throw new Error(label + ' hostname could not be safely resolved.'); }
-  if (!records.length || records.some((record) => privateAddress(record.address))) {
-    throw new Error(label + ' resolves to a private or special-purpose address.');
-  }
-  safety.resolvedAddresses?.set(host, records.map((record) => ({ address: record.address, family: record.family || isIP(record.address) })));
+  const resolved = await resolvePublicAddresses(host, { lookupImpl: safety.lookupImpl || lookup });
+  if (resolved.reason === 'unresolved') throw new Error(label + ' hostname could not be safely resolved.');
+  if (resolved.reason === 'private') throw new Error(label + ' resolves to a private or special-purpose address.');
+  safety.resolvedAddresses?.set(host, resolved.addresses);
   return parsed.toString();
 }
 
@@ -158,10 +146,6 @@ export function parseWwwAuthenticate(header) {
   return out;
 }
 
-function normalizedHostname(url) {
-  return new URL(url).hostname.toLowerCase().replace(/^\[|\]$/g, '').replace(/\.+$/, '');
-}
-
 // The standard fetch implementation resolves hostnames again when it connects.
 // For OAuth endpoints, that would reopen a DNS-rebinding window after the safety
 // check. Resolve once, validate every answer, then pin the actual socket lookup to
@@ -169,82 +153,30 @@ function normalizedHostname(url) {
 // for deterministic tests and embedders.
 async function fetchPinned(url, options = {}, safety = {}, maxBytes = MAX_OAUTH_METADATA_BYTES) {
   const parsed = new URL(url);
-  const hostname = normalizedHostname(url);
+  const hostname = normalizeHostname(parsed);
   let addresses = safety.resolvedAddresses && safety.resolvedAddresses.get(hostname);
   if (!addresses && hostname === 'localhost' && (safety.allowLoopback || safety.localOrigin === parsed.origin)) {
     addresses = [{ address: '127.0.0.1', family: 4 }];
   }
-  const transport = parsed.protocol === 'https:' ? httpsRequest : httpRequest;
-  return await new Promise((resolve, reject) => {
-    let settled = false;
-    let total = 0;
-    const chunks = [];
-    const finish = (error, response) => {
-      if (settled) return;
-      settled = true;
-      if (error) reject(error);
-      else resolve(response);
-    };
-    const requestOptions = {
-      protocol: parsed.protocol,
-      hostname,
-      port: parsed.port || undefined,
-      method: options.method || 'GET',
-      path: parsed.pathname + parsed.search,
-      headers: options.headers || {},
-      signal: options.signal
-    };
-    if (addresses && addresses.length && !isIP(hostname)) {
-      requestOptions.lookup = (_host, lookupOptions, callback) => {
-        if (typeof lookupOptions === 'function') {
-          callback = lookupOptions;
-          lookupOptions = {};
-        }
-        if (lookupOptions && lookupOptions.all) callback(null, addresses);
-        else callback(null, addresses[0].address, addresses[0].family);
-      };
-    }
-    let request;
-    try {
-      request = transport(parsed, requestOptions, (incoming) => {
-        const headers = new Headers();
-        for (const [name, raw] of Object.entries(incoming.headers || {})) {
-          if (raw === undefined) continue;
-          if (Array.isArray(raw)) for (const value of raw) headers.append(name, String(value));
-          else headers.set(name, String(raw));
-        }
-        const status = incoming.statusCode || 502;
-        const declared = Number(headers.get('content-length') || 0);
-        if (Number.isFinite(declared) && declared > maxBytes) {
-          finish(null, new Response(null, { status, headers }));
-          incoming.destroy();
-          return;
-        }
-        incoming.on('data', (chunk) => {
-          if (settled) return;
-          total += chunk.length;
-          if (total > maxBytes) {
-            finish(null, new Response(null, { status, headers }));
-            incoming.destroy();
-            return;
-          }
-          chunks.push(Buffer.from(chunk));
-        });
-        incoming.on('error', (error) => finish(error));
-        incoming.on('end', () => {
-          if (settled) return;
-          const body = Buffer.concat(chunks, total);
-          finish(null, new Response(body.length ? body : null, { status, headers }));
-        });
-      });
-    } catch (error) {
-      reject(error);
-      return;
-    }
-    request.on('error', (error) => finish(error));
-    request.setTimeout(OAUTH_METADATA_TIMEOUT_MS, () => request.destroy(new Error('OAuth request timed out.')));
-    request.end(options.body === undefined ? undefined : options.body);
+  const result = await pinnedRequest(parsed, {
+    addresses,
+    method: options.method || 'GET',
+    headers: options.headers || {},
+    body: options.body,
+    signal: options.signal,
+    maxBytes,
+    timeoutMs: OAUTH_METADATA_TIMEOUT_MS,
+    timeoutMessage: 'OAuth request timed out.'
   });
+  // An oversized body is reported with an empty body; readBoundedBody below
+  // then sees the declared length or the guarded caller treats it as too large.
+  if (result.tooLarge) {
+    const headers = new Headers(result.headers);
+    headers.set('content-length', String(maxBytes + 1));
+    return new Response(null, { status: result.status || 502, headers });
+  }
+  const status = result.status || 502;
+  return new Response(result.body.length && !NULL_BODY_STATUS.has(status) ? result.body : null, { status, headers: result.headers });
 }
 
 // ---------- Guarded fetch for OAuth endpoints ----------
@@ -262,34 +194,6 @@ function normalizeOAuthTimeout(value = OAUTH_METADATA_TIMEOUT_MS) {
   return Number.isFinite(parsed) && parsed > 0
     ? Math.min(30000, Math.max(1, Math.trunc(parsed)))
     : OAUTH_METADATA_TIMEOUT_MS;
-}
-
-async function readBoundedBuffer(response, maxBytes) {
-  if (!response.body) return Buffer.alloc(0);
-  const declaredLength = Number(response.headers.get('content-length'));
-  if (Number.isFinite(declaredLength) && declaredLength > maxBytes) {
-    await response.body.cancel().catch(() => {});
-    return null;
-  }
-  const reader = response.body.getReader();
-  const chunks = [];
-  let total = 0;
-  try {
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      total += value.byteLength;
-      if (total > maxBytes) {
-        await reader.cancel().catch(() => {});
-        return null;
-      }
-      chunks.push(Buffer.from(value));
-    }
-  } catch (error) {
-    await reader.cancel().catch(() => {});
-    throw error;
-  }
-  return Buffer.concat(chunks, total);
 }
 
 function requestUrl(input) {
@@ -343,7 +247,7 @@ export function createOAuthFetch(serverUrl, { fetch: fetchImpl = globalThis.fetc
         if (soft) return new Response(null, { status: 404 });
         throw new Error('OAuth endpoint ' + new URL(url).origin + ' answered with a redirect; refusing to follow it.');
       }
-      const buffer = await readBoundedBuffer(response, MAX_OAUTH_METADATA_BYTES);
+      const buffer = await readBoundedBody(response, MAX_OAUTH_METADATA_BYTES);
       if (buffer === null) {
         if (soft) return new Response(null, { status: 404 });
         throw new Error('OAuth response exceeded ' + Math.round(MAX_OAUTH_METADATA_BYTES / 1024) + ' KiB.');
