@@ -25,7 +25,7 @@
 
 <p align="center"><img src="assets/oasis-readme-hero.svg" alt="The layered OASIS portal grounded on a dark, reflective floor." width="100%"></p>
 
-OASIS is the harness and application layer, not a model provider. The model still decides much of the reasoning and code quality, and OASIS does not guarantee that every model will solve every task.
+OASIS is an open-source coding-agent runtime and development workspace. It is the harness and application layer, not a model provider. The model still decides much of the reasoning and code quality, and OASIS does not guarantee that every model will solve every task.
 
 ## Why OASIS
 
@@ -90,14 +90,14 @@ oasis -p --permission-mode dont-ask "review this diff"            # never waits 
 
 | Interface | Start it with | Highlights |
 | --- | --- | --- |
-| Terminal session | `oasis` | Streaming diffs with word highlights, inline images, tab progress, `/tasks`, `/rewind`, `/export` to Markdown or HTML |
-| Browser workspace | `oasis web --open` | Chat with step-by-step activity, Files and Changes panels, an interactive terminal (Ctrl+\`), plan mode, Undo, cost and context meters, `/` and `@` autocomplete |
+| **Terminal session** | `oasis` | Streaming diffs with word highlights, inline images, tab progress, `/tasks`, `/rewind`, `/export` to Markdown or HTML |
+| **Browser workspace** | `oasis web --open` | Chat with step-by-step activity, Files and Changes panels, an interactive terminal (<kbd>Ctrl</kbd>+<kbd>&#96;</kbd>), plan mode, Undo, cost and context meters, `/` and `@` autocomplete |
 | Desktop application | Open OASIS | The browser workspace in a native window, on the folder you choose |
-| Editor integration | `oasis ide install` | VS Code, Cursor and Windsurf: selection context, diff review, diagnostics |
-| Agent Client Protocol | `oasis acp` | Zed, JetBrains and other ACP clients |
-| CLI and headless runner | `oasis -p`, `oasis exec` | Scripts and CI: JSON and stream-JSON output, `--output-schema`, `dont-ask` mode |
-| Node.js SDK | `src/sdk.mjs` | Embed OASIS sessions in your own app |
-| GitHub Action and messaging gateways | `action.yml`, `oasis gateway` | Run on pull requests; chat from Telegram, Slack or Discord |
+| **Editor integration** | `oasis ide install` | VS Code, Cursor and Windsurf: selection context, diff review, diagnostics |
+| **Agent Client Protocol** | `oasis acp` | Zed, JetBrains and other ACP clients |
+| **CLI and headless runner** | `oasis -p`, `oasis exec` | Scripts and CI: JSON and stream-JSON output, `--output-schema`, `dont-ask` mode |
+| **Node.js SDK** | `src/sdk.mjs` | Embed OASIS sessions in your own app |
+| **GitHub Action and messaging gateways** | `action.yml`, `oasis gateway` | Run on pull requests; chat from Telegram, Slack or Discord |
 
 The browser workspace is served by OASIS on your own computer, not a hosted service. To reach it from a phone, follow [Mobile and tablet setup](MOBILE.md) on a trusted network. There is no native Android APK or iOS app.
 
