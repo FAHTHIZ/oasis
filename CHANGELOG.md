@@ -12,6 +12,7 @@ User-facing change history grouped by package version. A version heading does no
 - Fixed: the activity label for `list_files` read "Used list files".
 
 ### Browser workspace
+- The subagent list sits right under the step that started it, instead of after every later step in the turn.
 - A step waiting on an approval now says "Waiting for you" instead of "Working". Found in the normal-user run, where `npm test` showed "Working" behind the Allow sheet. The browser e2e checks it.
 - Fixed: a streamed reply that was followed by a tool call kept its blinking cursor for the rest of the chat, and steps that ended with nothing to show left empty gaps. Both seen in a real gpt-oss-20b run in the web app.
 - Subagents show up in the web app. A turn that starts subagents gets a small list with each one's task, live status (working, done, failed, stopped) and its latest note. It is saved with the chat. This replaces the classic page's run monitor for the common case; background agents that outlive the turn are still only in the terminal's `/tasks`.
