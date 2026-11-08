@@ -96,7 +96,7 @@ export const BUILTIN_COMMANDS = {
   config: 'Settings pane (theme, model, mode, editor, output style, verbose, auto-compact, memory...); /config list | get KEY | set KEY VALUE',
   doctor: 'Check this workspace: tools, language servers, sandbox, settings, provider',
   'release-notes': 'Show recent changes to Oasis',
-  export: 'Save this conversation as Markdown (/export [file])',
+  export: 'Save this conversation as Markdown or a standalone HTML page (/export FILE.md | FILE.html)',
   resume: 'List saved sessions or resume one (/resume [ID])',
   goal: 'Keep working across turns until a condition is met (/goal CONDITION | clear)',
   color: 'Set this session\'s prompt color (/color red|blue|green|yellow|purple|orange|pink|cyan|random|default)',
@@ -1579,13 +1579,14 @@ export async function runBuiltinCommand(name, argument, state) {
     case 'export': {
       if (!session || !Array.isArray(session.messages)) return { output: 'There is no active conversation to export.' };
       const requested = String(argument || '').trim();
-      if (!requested) return { output: 'Usage: /export FILE.md' };
+      if (!requested) return { output: 'Usage: /export FILE.md, or /export FILE.html for a standalone page you can open in a browser or share' };
       try {
         const target = await resolveWorkspacePath(root, requested, { rejectSymlinks: true, workspaceOnly: true });
         try { await lstat(target.absolute); const error = new Error('That file already exists: ' + target.relative); error.code = 'EEXIST'; throw error; }
         catch (error) { if (error.code !== 'ENOENT') throw error; }
-        const markdown = conversationMarkdown(session);
-        await writeFile(target.absolute, markdown, { encoding: 'utf8', flag: 'wx', mode: 0o600 });
+        const html = /\.html?$/i.test(target.relative);
+        const body = html ? (await import('./session-html.mjs')).conversationHtml(session) : conversationMarkdown(session);
+        await writeFile(target.absolute, body, { encoding: 'utf8', flag: 'wx', mode: 0o600 });
         return { output: 'Exported ' + Math.max(0, session.messages.length - 1) + ' messages to ' + target.relative };
       } catch (error) {
         if (error.code === 'EEXIST') throw error;
