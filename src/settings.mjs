@@ -379,6 +379,7 @@ export async function loadSettings(root, options = {}) {
     if (['auto', 'tmux', 'in-process'].includes(String(settings.teammateMode || '').toLowerCase())) result.teammateMode = String(settings.teammateMode).toLowerCase();
     if (Number.isInteger(settings.subagentAutoCompactPercent) && settings.subagentAutoCompactPercent >= 0 && settings.subagentAutoCompactPercent <= 100) result.subagentAutoCompactPercent = settings.subagentAutoCompactPercent;
     if (Number.isInteger(settings.subagentStallSeconds) && settings.subagentStallSeconds >= 0 && settings.subagentStallSeconds <= 86400) result.subagentStallSeconds = settings.subagentStallSeconds;
+    if (Number.isInteger(settings.subagentMaxDepth) && settings.subagentMaxDepth >= 1 && settings.subagentMaxDepth <= 3) result.subagentMaxDepth = settings.subagentMaxDepth;
     if (Number.isInteger(settings.cleanupPeriodDays) && settings.cleanupPeriodDays >= 1 && settings.cleanupPeriodDays <= 3650) result.cleanupPeriodDays = settings.cleanupPeriodDays;
     if (Number.isInteger(settings.toolSearchThreshold) && settings.toolSearchThreshold >= 1 && settings.toolSearchThreshold <= 1000) result.toolSearchThreshold = settings.toolSearchThreshold;
     // Claude Code's autoCompactEnabled: false turns automatic compaction off.

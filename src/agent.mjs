@@ -58,7 +58,7 @@ import os from 'node:os';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 const execFileAsync = promisify(execFile);
-import { TOOL_DEFINITIONS, executeTool, loadProjectInstructions, loadSkillDescriptions, loadSkillText, setAdditionalDirectories, additionalDirectories } from './tools.mjs';
+import { TOOL_DEFINITIONS, executeTool, loadProjectInstructions, loadSkillDescriptions, setAdditionalDirectories, additionalDirectories } from './tools.mjs';
 import { bridgeToolDefinition } from './tool-registry-bridge.mjs';
 import { patchFromToolCall, patchFilesNeeded, planPatch } from './apply-patch.mjs';
 import { resolveTeammateMode, openTeammatePane, mirrorToPane, closeTeammatePanes } from './teammate-panes.mjs';
@@ -82,13 +82,15 @@ import { runHooks, hasHooks, CLAUDE_TOOL_NAMES } from './hooks.mjs';
 import { resolveSandbox } from './sandbox.mjs';
 import { webSearchEnabled, searchBackends, searchBackend, webSearchToolDefinition } from './web-search.mjs';
 import { loadProjectMcpServers } from './mcp-project.mjs';
-import { access, lstat, mkdir, readFile, realpath, stat, writeFile } from 'node:fs/promises';
+import { access, mkdir, readFile, realpath, stat, writeFile } from 'node:fs/promises';
 
 async function pathExists(file) { try { await access(file); return true; } catch { return false; } }
 import { SHELL_TOOL_DEFINITION, POWERSHELL_TOOL_DEFINITION, findPowerShell, killAllBackground } from './power-tools.mjs';
 import { runLsp, serverForFile, verifyEditedFileWithLsp, stopLspClients } from './lsp.mjs';
 import { AGENT_TOOL_DEFINITIONS, AGENT_TOOL_NAMES, MAX_BACKGROUND_AGENTS, agentRegistry, registerAgent, addAgentUsage, restoreAgentHistory, runningBackgroundCount, notifyParent, drainInbox, agentStatus, agentEvents, neuronNetworkSnapshot, recordAgentEvent, sendTeamMessage, stopAgent, stopAllAgents, getAgent, getAgentTeam, createAgentTeam, agentTeamStatus, shutdownAgentTeam } from './agent-tasks.mjs';
-import { loadAgentDefinitions, taskToolDefinition, BUILTIN_AGENTS, MAX_PARALLEL_SUBAGENTS, runPool, parseFrontMatter, mapToolNames, normalizeAgentDefinition, loadAgentMemory, agentMemoryDirectory } from './subagents.mjs';
+import { subagentStepLimit, subagentDefinitionContext, verifyResumeWorktree, backgroundUsageSink, subagentMaxDepth, watchForStall } from './subagent-support.mjs';
+export { subagentMaxDepth, subagentStallLimits } from './subagent-support.mjs';
+import { loadAgentDefinitions, taskToolDefinition, BUILTIN_AGENTS, MAX_PARALLEL_SUBAGENTS, runPool, parseFrontMatter, mapToolNames, normalizeAgentDefinition } from './subagents.mjs';
 import { validateJsonSchema, extractJson } from './json-schema.mjs';
 import { createSharedTaskStore, SHARED_TASK_TOOL_NAMES, runSharedTaskTool } from './shared-tasks.mjs';
 import { saveSessionNotes } from './session-notes.mjs';
@@ -1044,6 +1046,7 @@ export async function createSession({ root, config, restore = null, permissionMo
   if (['low', 'medium', 'high', 'max'].includes(String(loadedSettings && loadedSettings.subagentEffort || '').toLowerCase())) session.subagentEffort = String(loadedSettings.subagentEffort).toLowerCase();
   if (loadedSettings && Number.isInteger(loadedSettings.subagentAutoCompactPercent)) session.subagentAutoCompactPercent = loadedSettings.subagentAutoCompactPercent;
   if (loadedSettings && Number.isInteger(loadedSettings.subagentStallSeconds)) session.subagentStallSeconds = loadedSettings.subagentStallSeconds;
+  if (loadedSettings && Number.isInteger(loadedSettings.subagentMaxDepth)) session.subagentMaxDepth = loadedSettings.subagentMaxDepth;
   const deferredMcp = deferMcpTools(session, { threshold: Number(loadedSettings.toolSearchThreshold) || undefined, env });
   const deferredRare = deferRareBuiltinTools(session, { env, explicitTools: Array.isArray(tools) || typeof tools === 'string', settings: { leanTools: config && config.leanTools !== undefined ? config.leanTools : loadedSettings.leanTools } });
   session.localContextNotices = contextProbe.localContextNotices;
@@ -3687,39 +3690,6 @@ export const RESTRICTED_TOOL_NAMES = new Set(['run_command', 'powershell', 'moni
 
 // The step cap for one subagent run: its definition's maxTurns, bounded by the
 // session-wide --subagent-max-steps when both are set.
-function subagentStepLimit(record, options) {
-  const limits = [record.maxTurns, options.subagentMaxSteps].map(Number).filter((value) => Number.isInteger(value) && value > 0);
-  return limits.length ? Math.min(...limits) : undefined;
-}
-
-// Prompt sections that come from the agent definition: preloaded skills and the
-// agent's persistent memory. Missing skills are reported, not fatal.
-async function subagentDefinitionContext(parent, agent, options) {
-  const env = options.env || process.env;
-  const sections = [];
-  if (Array.isArray(agent.skills) && agent.skills.length) {
-    let budget = 64 * 1024;
-    const loaded = [];
-    const missing = [];
-    for (const name of agent.skills) {
-      try {
-        const text = String(await loadSkillText(parent.root, name, { env })).slice(0, 24 * 1024);
-        if (text.length > budget) { missing.push(name + ' (over the preload budget)'); continue; }
-        budget -= text.length;
-        loaded.push('<skill name="' + name + '">\n' + text + '\n</skill>');
-      } catch { missing.push(name); }
-    }
-    if (loaded.length) sections.push('PRELOADED SKILLS: follow these as part of your instructions.\n' + loaded.join('\n'));
-    if (missing.length) sections.push('These skills from your definition could not be loaded: ' + missing.join(', ') + '.');
-  }
-  if (agent.memory) {
-    const dir = agentMemoryDirectory(agent, parent.root, env);
-    const memory = await loadAgentMemory(agent, parent.root, env);
-    sections.push('AGENT MEMORY (' + agent.memory + ' scope, ' + dir + '): notes you kept from earlier runs.' + (memory ? '\n<agent-memory>\n' + memory + '\n</agent-memory>' : ' MEMORY.md is empty so far.') + '\nBefore finishing, record durable lessons (patterns, pitfalls, file locations) concisely in MEMORY.md there when you are able to write it; keep it under 200 lines.');
-  }
-  return sections;
-}
-
 // Hermes-style structured output: validate the final report against the caller's
 // JSON Schema and give the agent exactly one correction turn.
 async function enforceOutputSchema(child, record, outcome, runOptions, options) {
@@ -3747,7 +3717,9 @@ async function enforceOutputSchema(child, record, outcome, runOptions, options) 
 }
 
 async function runSubagent(parent, args, context, options) {
-  if (options.isSubagent) throw new Error('Subagents cannot launch further subagents.');
+  const depth = Math.max(0, Number(parent.subagentDepth) || 0);
+  const maxDepth = subagentMaxDepth(parent, options.env || process.env);
+  if (options.isSubagent && depth >= maxDepth) throw new Error(maxDepth > 1 ? 'Subagents at depth ' + depth + ' cannot launch further subagents (subagentMaxDepth is ' + maxDepth + ').' : 'Subagents cannot launch further subagents. Set subagentMaxDepth (2-3) to allow nested delegation.');
   const agents = parent.agents || BUILTIN_AGENTS;
   const requested = String(args.subagent_type || 'general-purpose');
   // Claude Code spells built-ins "Explore" and "Plan"; accept any case.
@@ -3777,7 +3749,8 @@ async function runSubagent(parent, args, context, options) {
   const parentDeferred = parent.deferredTools instanceof Map ? parent.deferredTools : new Map();
   const definitions = [...(parent.toolDefinitions || TOOL_DEFINITIONS), ...parentDeferred.values()].filter((definition) => {
     const name = definition && definition.function && definition.function.name;
-    if (!name || name === 'task' || name === 'workflow' || name === 'enter_worktree' || name === 'exit_worktree' || name === 'schedule_wakeup' || name === 'run_specialist_review' || name === 'ask_user_question' || name === 'enter_plan_mode' || name === 'advisor' || name.startsWith('cron_') || name === 'memory_save' || name === 'memory_verify' || name === 'memory_delete' || name === 'skill_propose' || (AGENT_TOOL_NAMES.has(name) && name !== 'team_send_message')) return false;
+    if (name === 'task') return depth + 1 < maxDepth && !disallowed.has(name) && (!allowed || allowed.has(name));
+    if (!name || name === 'workflow' || name === 'enter_worktree' || name === 'exit_worktree' || name === 'schedule_wakeup' || name === 'run_specialist_review' || name === 'ask_user_question' || name === 'enter_plan_mode' || name === 'advisor' || name.startsWith('cron_') || name === 'memory_save' || name === 'memory_verify' || name === 'memory_delete' || name === 'skill_propose' || (AGENT_TOOL_NAMES.has(name) && name !== 'team_send_message')) return false;
     if (disallowed.has(name)) return false;
     return !allowed || allowed.has(name) || SHARED_TASK_TOOL_NAMES.has(name) || name === 'team_send_message';
   });
@@ -3793,7 +3766,13 @@ async function runSubagent(parent, args, context, options) {
   ].join('\n\n');
   // Coordination tools can mutate the team board or inbox without editing the workspace.
   // permissionMode: plan in the definition keeps the agent read-only whatever its tools.
-  const readOnly = agent.permissionMode === 'plan' || definitions.every((definition) => READ_ONLY_TOOLS.has(definition.function.name) || SHARED_TASK_TOOL_NAMES.has(definition.function.name) || definition.function.name === 'team_send_message');
+  // A nested task tool does not count against read-only; a read-only agent never gets it.
+  const readOnly = agent.permissionMode === 'plan' || definitions.every((definition) => definition.function.name === 'task' || READ_ONLY_TOOLS.has(definition.function.name) || SHARED_TASK_TOOL_NAMES.has(definition.function.name) || definition.function.name === 'team_send_message');
+  if (readOnly) {
+    const index = definitions.findIndex((definition) => definition.function.name === 'task');
+    if (index >= 0) definitions.splice(index, 1);
+  }
+  const nested = definitions.some((definition) => definition.function.name === 'task');
   const resume = options.resumeAgent || null;
   const isolation = resume ? '' : String(args.isolation || agent.isolation || '').toLowerCase();
   if (isolation && isolation !== 'worktree') throw new Error('isolation must be "worktree" when set.');
@@ -3845,7 +3824,9 @@ async function runSubagent(parent, args, context, options) {
     pricing: parent.pricing || null,
     costUsd: 0,
     budgetLedger: parent.budgetLedger ||= { spentUsd: Math.max(0, Number(parent.costUsd) || 0), unknownRequests: 0 },
-    agents: {}
+    agents: nested ? parent.agents || BUILTIN_AGENTS : {},
+    subagentDepth: depth + 1,
+    subagentMaxDepth: parent.subagentMaxDepth
   };
   // Not enumerable: keeps session saves and copies from walking the parent.
   Object.defineProperty(child, 'parentSessionRef', { value: parent, enumerable: false, writable: true, configurable: true });
@@ -3895,25 +3876,6 @@ async function runSubagent(parent, args, context, options) {
 // OASIS-made worktree on the recorded branch, inside this repository, with the same base
 // commit in its history. Anything else (removed, moved, switched, replaced by a symlink)
 // is refused rather than guessed at.
-async function verifyResumeWorktree(root, saved, env) {
-  const relative = String(saved.relative || '').replace(/\\/g, '/');
-  if (!relative.startsWith('.oasis/worktrees/') || relative.split('/').some((part) => part === '..' || part === '.' || !part) || relative.split('/').length !== 3) throw new Error('its saved worktree path is not valid.');
-  const rootReal = await realpath(root);
-  const absolute = path.join(rootReal, ...relative.split('/'));
-  let info;
-  try { info = await lstat(absolute); } catch { throw new Error('its worktree ' + relative + ' no longer exists.'); }
-  if (!info.isDirectory() || info.isSymbolicLink() || (await realpath(absolute)) !== absolute) throw new Error('its worktree ' + relative + ' is not a plain directory.');
-  const run = (args) => new Promise((resolve, reject) => {
-    execFile('git', args, { cwd: absolute, env: { ...env, GIT_TERMINAL_PROMPT: '0' }, timeout: 15000, maxBuffer: 1024 * 1024 }, (error, stdout) => error ? reject(error) : resolve(String(stdout).trim()));
-  });
-  let top, branch;
-  try { [top, branch] = await Promise.all([run(['rev-parse', '--show-toplevel']), run(['symbolic-ref', '--quiet', '--short', 'HEAD'])]); } catch { throw new Error('its worktree ' + relative + ' is not a git checkout on a branch.'); }
-  if (path.resolve(await realpath(top)) !== absolute) throw new Error('its worktree ' + relative + ' is not its own git worktree.');
-  if (branch !== saved.branch) throw new Error('its worktree is on branch ' + branch + ', not ' + saved.branch + '.');
-  try { await run(['merge-base', '--is-ancestor', saved.base, 'HEAD']); } catch { throw new Error('its worktree no longer contains the commit it started from.'); }
-  return { name: relative.split('/').pop(), branch: saved.branch, path: absolute, relative, base: saved.base };
-}
-
 // Runs one turn of a subagent's own conversation and records the outcome.
 async function runChildTurn(parent, record, prompt, options, { foreground }) {
   const { child, type, description } = record;
@@ -4025,15 +3987,6 @@ async function runChildTurn(parent, record, prompt, options, { foreground }) {
   };
 }
 
-// Usage from background agents: the nearest session up the chain with an
-// onBackgroundUsage function (child sessions point back at their parent).
-function backgroundUsageSink(session) {
-  for (let current = session, depth = 0; current && depth < 20; current = current.parentSessionRef, depth++) {
-    if (typeof current.onBackgroundUsage === 'function') return current.onBackgroundUsage;
-  }
-  return null;
-}
-
 function recordSharedTaskWorktree(parent, record, worktreeResult) {
   if (!record.sharedTaskId || !parent.sharedTasks || !Array.isArray(parent.sharedTasks.tasks)) return;
   const task = parent.sharedTasks.tasks.find((item) => item.id === record.sharedTaskId);
@@ -4059,31 +4012,6 @@ function recordSharedTaskWorktree(parent, record, worktreeResult) {
 // activity for the idle limit is stopped and its partial report kept. A tool that
 // is still running gets the longer in-tool limit. OASIS_SUBAGENT_STALL_SECONDS or the
 // subagentStallSeconds setting changes the idle limit; 0 turns the monitor off.
-export function subagentStallLimits(parent, env = process.env) {
-  const raw = env.OASIS_SUBAGENT_STALL_SECONDS !== undefined && env.OASIS_SUBAGENT_STALL_SECONDS !== '' ? env.OASIS_SUBAGENT_STALL_SECONDS : parent && parent.subagentStallSeconds;
-  const idle = raw === undefined || raw === null || raw === '' ? 450 : Number(raw);
-  if (!Number.isFinite(idle) || idle <= 0) return null;
-  // The in-tool limit keeps Hermes' ratio (450s idle, 1200s inside a tool).
-  return { idleMs: idle * 1000, inToolMs: Math.round(idle * 1000 * 1200 / 450) };
-}
-
-function watchForStall(parent, record, env) {
-  const limits = subagentStallLimits(parent, env);
-  if (!limits) return () => {};
-  record.lastActivityAt = Date.now();
-  record.inTool = false;
-  const timer = setInterval(() => {
-    if (record.status !== 'running') return;
-    const idle = Date.now() - (record.lastActivityAt || 0);
-    const limit = record.inTool ? limits.inToolMs : limits.idleMs;
-    if (idle < limit) return;
-    record.stalled = 'No activity for ' + Math.round(idle / 1000) + 's' + (record.inTool ? ' while a tool was running' : '') + '; the agent was stopped as stalled.';
-    try { record.controller.abort(); } catch {}
-  }, Math.max(250, Math.min(15000, Math.floor(limits.idleMs / 4))));
-  if (typeof timer.unref === 'function') timer.unref();
-  return () => clearInterval(timer);
-}
-
 function startBackgroundRun(parent, record, prompt, options) {
   record.background = true;
   record.status = 'running';

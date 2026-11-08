@@ -23,6 +23,7 @@ Sources: the [Claude Code subagent docs](https://code.claude.com/docs/en/sub-age
 - **Any provider.** OpenAI-compatible, Anthropic, Gemini and local servers, with fallback models and task-aware routing to a cheaper model for simple read-only requests.
 - **Structured subagent output.** `output_schema` on `task`, with one correction turn (from Hermes). The Claude Code subagent docs don't describe a per-call schema for a subagent's report.
 - **Stall monitor.** Background agents that go silent are stopped as `stalled`, and their partial report is kept (from Hermes).
+- **Optional nested delegation.** Claude Code subagents can't spawn subagents. With `subagentMaxDepth` set to 2 or 3, OASIS lets writing subagents delegate, as Hermes does with orchestrator agents. Read-only agents stay leaves, and the parallel and background caps are shared across the tree.
 - **Verification gate.** The agent is sent back when it reports success without reviewing its diff or running checks.
 - **Interfaces.** A local browser workspace, a desktop app, ACP for Zed and JetBrains, and Telegram, Discord and Slack gateways come in the same package.
 
@@ -33,7 +34,6 @@ Sources: the [Claude Code subagent docs](https://code.claude.com/docs/en/sub-age
 | Model quality and tuning | Claude Code's prompts and tool schemas are tuned for Claude models, and that tuning accounts for much of its reliability. | OASIS has to work across many models, so it can't tune for one family the same way. |
 | Edits in default mode | Claude Code asks before every edit in `default` mode. OASIS applies edits inside the workspace without asking. Edits are checkpointed and can be rewound, and protected config paths still prompt. | A deliberate choice for speed. Use `plan` mode or `ask` rules for `edit_file` if you want Claude Code's behaviour. |
 | Field maturity | Claude Code is used by a very large population, and its edge cases get found quickly. | OASIS has 2,200+ automated tests and adversarial suites, but far fewer real-world hours. |
-| Nested delegation | Hermes can let orchestrator agents spawn children, with a depth limit. | OASIS, like Claude Code, keeps delegation one level deep, which is simpler and easier to bound. |
 | Code signing | macOS warns on first launch of unsigned apps. | OASIS macOS packages are not code-signed yet. |
 | Monolithic core | `src/agent.mjs` is still about 6,800 lines, which slows review. | Splitting it is planned; shared pieces like the SSRF-guarded HTTP client have been extracted first. |
 
