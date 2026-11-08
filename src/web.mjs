@@ -1224,6 +1224,33 @@ export function createOasisWebServer(options = {}) {
     }
   }
 
+  // The user's own shell for the app's Terminal tab. run_command refuses shell executables
+  // because the agent could hide anything behind them; here a person types every keystroke,
+  // the agent never sees the session, and only the server's configured shell can be started.
+  async function startCompanionTerminal(job, sandbox, input) {
+    const shellPath = companionShell();
+    const ok = await approvalFor(job, 'Open an interactive terminal in the workspace?\n  ' + shellPath + '  (in ' + activeRoot + ')\nYou type into it directly; the agent cannot see or use it. Oasis strips common secret environment variables from it.' +
+      (sandbox && sandbox.available ? '\nIt will run inside the OS sandbox (' + sandbox.kind + ').' : ''), true);
+    if (!ok) return { approved: false, command: shellPath, args: [], message: 'Terminal was not opened.' };
+    const { launchCommand } = await import('./sandbox.mjs');
+    const { scrubEnvironment } = await import('./tools.mjs');
+    const launch = await launchCommand(shellPath, [], sandbox, activeRoot, { tty: true });
+    try {
+      return await ptyManager.start(launch.command, launch.args, {
+        cwd: activeRoot, env: { ...scrubEnvironment(env), TERM: 'xterm-256color', COLORTERM: 'truecolor' }, release: launch.release,
+        cols: Number.isInteger(input.cols) ? input.cols : undefined, rows: Number.isInteger(input.rows) ? input.rows : undefined,
+        display: shellPath.split(/[\\/]/).pop(), sandboxed: sandbox && sandbox.available ? sandbox.kind : null
+      });
+    } catch (error) {
+      if (typeof launch.release === 'function') launch.release();
+      throw error;
+    }
+  }
+
+  function companionShell() {
+    return process.platform === 'win32' ? 'powershell.exe' : (/^\/[\w./+-]+$/.test(String(env.SHELL || '')) ? env.SHELL : '/bin/sh');
+  }
+
   async function startTerminalJob(input) {
     const shell = input.shell === true;
     if (input.shell !== undefined && typeof input.shell !== 'boolean') {
@@ -1255,7 +1282,10 @@ export function createOasisWebServer(options = {}) {
       throw Object.assign(new Error('Shell syntax is disabled. Enable shell access in your OASIS user settings, or configure an available OS sandbox. Single executables can still run without shell syntax.'), { statusCode: 403 });
     }
     const workspaceKey = path.resolve(activeRoot);
-    if (workspaceIsBusy(workspaceKey)) throw Object.assign(new Error('This workspace already has an active task. Finish or cancel it before running another command.'), { statusCode: 409 });
+    // A companion terminal (the app's Terminal tab) runs beside the agent like an editor's
+    // integrated terminal: it neither waits for nor blocks the workspace's agent tasks.
+    const companion = interactive && input.companion === true;
+    if (!companion && workspaceIsBusy(workspaceKey)) throw Object.assign(new Error('This workspace already has an active task. Finish or cancel it before running another command.'), { statusCode: 409 });
     const releaseJobReservation = reserveJobSlot();
     const job = newJob();
     job.type = interactive ? 'terminal-pty' : 'terminal';
@@ -1263,15 +1293,15 @@ export function createOasisWebServer(options = {}) {
     job.workspaceRoot = workspaceKey;
     job.workspaceName = path.basename(workspaceKey);
     jobs.set(job.id, job);
-    busyWorkspaces.add(workspaceKey);
+    if (!companion) busyWorkspaces.add(workspaceKey);
     releaseJobReservation();
-    emit(job, 'terminal_started', { command, args, interactive, shell });
+    emit(job, 'terminal_started', { command, args, interactive, shell, ...(companion ? { companion: true } : {}) });
     let holdWorkspaceForPty = false;
     void (async () => {
       try {
         const toolName = shell ? 'run_shell' : 'run_command';
         const toolArgs = shell ? { command, timeoutSeconds } : { command, args, timeoutSeconds, ...(interactive ? { interactive: true } : {}) };
-        const result = await executeTool(toolName, toolArgs, {
+        const result = companion ? await startCompanionTerminal(job, terminalSandbox, input) : await executeTool(toolName, toolArgs, {
           root: activeRoot,
           env,
           autoApprove: false,
@@ -1283,8 +1313,10 @@ export function createOasisWebServer(options = {}) {
         });
         job.result = { ...result, jobType: interactive ? 'terminal-pty' : 'terminal', ...(shell ? { shell: true } : {}) };
         if (interactive && result && result.id && result.state) {
-          ptyWorkspaceLocks.set(result.id, workspaceKey);
-          holdWorkspaceForPty = true;
+          if (!companion) {
+            ptyWorkspaceLocks.set(result.id, workspaceKey);
+            holdWorkspaceForPty = true;
+          }
           emit(job, 'terminal_pty_started', result);
           job.status = 'completed';
           emit(job, 'completed', job.result);
@@ -1310,7 +1342,7 @@ export function createOasisWebServer(options = {}) {
           emit(job, 'failed', { jobType: 'terminal', message: job.error });
         }
       } finally {
-        if (!holdWorkspaceForPty) busyWorkspaces.delete(workspaceKey);
+        if (!holdWorkspaceForPty && !companion) busyWorkspaces.delete(workspaceKey);
       }
     })();
     return { jobId: job.id, jobType: 'terminal' };
@@ -1637,6 +1669,8 @@ export function createOasisWebServer(options = {}) {
         branch: branch ? String(branch).slice(0, 200) : null,
         workspaceAccess: 'local-filesystem',
         approvalMode: 'per-action',
+        // The shell the browser Terminal tab starts; the server may run on another OS than the browser.
+        terminalShell: companionShell(),
         setupHint
       });
       return;

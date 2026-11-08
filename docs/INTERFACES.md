@@ -61,6 +61,9 @@ The browser is only the interface. The agent process, project access and command
 | Switch permission mode | Use the mode chip, or press Shift+Tab in the message box: Ask first, Auto edit, Full auto and Plan. |
 | Undo a turn | After a turn that changed files, select **Undo** under the reply. It runs `/undo`, which restores the files and rewinds the conversation. The undone turn stays visible, dimmed. |
 | Download a chat | Press Ctrl+K and choose **Download this chat**. You get one HTML page with every tool step, with no scripts and with credentials redacted, the same page `/export FILE.html` writes. |
+| Terminal | Press Ctrl+` (or Ctrl+K → **Open terminal**) and choose **Start terminal**. After you approve it, your shell (`$SHELL`, or PowerShell on Windows) runs in the workspace on the computer hosting OASIS. The agent cannot see or type into it, and it does not block chat. Common secret environment variables are removed. Reloading the page reconnects to the same shell and replays its recent output. |
+| Resize the side panel | Drag the left edge of the Files panel, or focus it and use the arrow keys. Double-click resets the width. |
+| Download a file | Open a file from the Files tab and choose **Download**. |
 | Copy or reuse a message | Hover a message for **Copy** (the original Markdown) and, on your own messages, **Edit**, which puts the text back in the message box. Code blocks have their own Copy button. |
 | Watch the context window | The ring beside the Send button shows how full the context window is. It turns amber at 70% and red at 90%; hover it for token counts. |
 | Know when it's done | When the tab is in the background, the page title shows a badge when a task finishes or needs approval. Turn on desktop notifications under **Settings**. |
