@@ -119,7 +119,8 @@ oasis
 For non-interactive scripts and automation, use oasis exec. For diagnostics and maintenance:
 
 ```sh
-oasis doctor
+oasis doctor          # environment, provider and sandbox checks
+oasis models          # models your provider serves, with context window and price
 oasis update
 ```
 

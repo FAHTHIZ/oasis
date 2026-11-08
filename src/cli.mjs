@@ -144,6 +144,7 @@ function helpText() {
     '  oasis connect                 Paste an API key, model link or local server address; detects the provider, picks the best model and backups',
     '  oasis setup                   Configure a model provider (paste first; Enter for the step-by-step menu)',
     '  oasis setup --auto            Detect this computer (CPU, memory, GPU) and running model servers, then configure the best fit',
+    '  oasis models [filter] [--json] List the models your provider serves, with context, price and tool support',
     '  oasis doctor [--test-provider] Check the environment; optionally verify live tool calling',
     '  oasis doctor --network        Check that the provider, MCP servers and GitHub are reachable (proxy, DNS, TLS)',
     '  oasis update [--check] [--yes] Check and install the latest stable GitHub release',
@@ -3893,6 +3894,11 @@ async function main() {
     return await configureProvider(workspace);
   }
   if (command === 'connect') return await connectCommand(rest, workspace);
+  if (command === 'models') {
+    const { modelsCommand } = await import('./models-command.mjs');
+    process.exitCode = await modelsCommand(rest, { root: workspace });
+    return;
+  }
   if (command === 'doctor') return await doctor(rest, workspace);
   if (command === 'memory') return await memoryCommand(rest, workspace);
   if (command === 'diagnostics') return await diagnosticsCommand(rest, workspace, autoApprove);
