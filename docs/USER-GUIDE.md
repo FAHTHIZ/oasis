@@ -110,6 +110,8 @@ For a reliable first task, choose a bounded change with an observable outcome, s
 5. Run relevant tests and inspect their exit status and output.
 6. Commit only after you understand and accept the final diff.
 
+To keep a record or share the work, run `/export review.html`. It writes one standalone page (no scripts, no remote loads, credentials redacted) with each tool step collapsible under its input and result. `/export notes.md` writes Markdown instead.
+
 A model saying “done” is not a test result. See [Benchmark methodology](BENCHMARKS.md) for the difference between deterministic checks and live task evaluations.
 
 ## 8. Security boundaries
