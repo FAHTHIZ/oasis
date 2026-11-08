@@ -41,5 +41,6 @@ test('keyboard guide documents only shortcuts wired by the browser workspace', (
   assert.ok(keys.includes('@'));
   assert.ok(keys.includes('Tab'));
   assert.ok(keys.includes('Shift+Tab'));
-  assert.equal(APP_KEYBOARD_SHORTCUTS.length, 11);
+  assert.ok(keys.includes('Ctrl+`'));
+  assert.equal(APP_KEYBOARD_SHORTCUTS.length, 12);
 });
