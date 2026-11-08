@@ -315,6 +315,7 @@ function closeSheet(id, { fromHistory = false } = {}) {
   if (!fromHistory && history.state && history.state.sheet === id) { ignorePop = true; history.back(); }
   openSheets.splice(openSheets.indexOf(id), 1);
   if (!openSheets.length) $('backdrop').hidden = true;
+  if (id === 'approvalSheet') markWaitingTools(false);
   if (id === 'approvalSheet' && approvalResolve) { approvalResolve(false); approvalResolve = null; }
   if (id === 'questionSheet' && questionResolve) { questionResolve(''); questionResolve = null; }
 }
@@ -1519,6 +1520,7 @@ async function requestApproval({ name, args, runtime = false }) {
       $('allowAllButton').title = 'Adds the rule ' + String(args.suggestion).slice(0, 200) + ' to this project';
     }
     openSheet('approvalSheet');
+    markWaitingTools(true);
     if (navigator.vibrate) try { navigator.vibrate(12); } catch { /* not supported */ }
     return new Promise((resolve) => { approvalResolve = resolve; });
   }
@@ -1548,7 +1550,15 @@ async function requestApproval({ name, args, runtime = false }) {
   if (navigator.vibrate) try { navigator.vibrate(12); } catch { /* not supported */ }
   return new Promise((resolve) => { approvalResolve = resolve; });
 }
+// While an approval is open, the step behind it is waiting on the user, not working.
+function markWaitingTools(waiting) {
+  for (const status of document.querySelectorAll('.tool.running .tool-status')) {
+    status.textContent = waiting ? 'Waiting for you' : 'Working';
+    status.closest('.tool').classList.toggle('waiting', waiting);
+  }
+}
 function answerApproval(value) {
+  markWaitingTools(false);
   const resolve = approvalResolve;
   approvalResolve = null;
   closeSheet('approvalSheet');

@@ -205,6 +205,7 @@ svg{width:20px;height:20px;flex:none}
 .task-progress-step.in_progress .task-progress-state{color:var(--accent-2);font-weight:700}
 .tool-status{flex:none;padding:2px 7px;border:1px solid var(--line);border-radius:999px;color:var(--muted);font-size:10px;font-weight:600;line-height:1.4;white-space:nowrap}
 .tool.running .tool-status{border-color:var(--warn);color:var(--warn)}
+.tool.waiting .tool-status{border-color:var(--accent);color:var(--accent)}
 .tool.ok .tool-status{border-color:color-mix(in srgb,var(--accent-2) 35%,var(--line));color:var(--accent-2)}
 .tool.fail .tool-status{border-color:color-mix(in srgb,var(--danger) 35%,var(--line));color:var(--danger)}
 
