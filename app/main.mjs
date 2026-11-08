@@ -2,6 +2,7 @@
 // in this browser. Opened from `oasis web` or the desktop app, the same UI
 // drives the agent on that computer (runtime engine, core/runtime.mjs).
 import { PRESETS, testProvider } from './core/providers.mjs';
+import { alwaysAllowLabel } from './core/approval-rule.mjs';
 import { IndexedDBStore, Workspace, lineDiff } from './core/workspace.mjs';
 import { Agent, textOf } from './core/agent.mjs';
 import { FrameSandbox } from './core/sandbox.mjs';
@@ -788,6 +789,7 @@ function activityLabel(tool) {
   if (name === 'exit_plan_mode') return 'Presented a plan';
   if (name === 'lsp' || name === 'diagnostics' || name === 'ide_get_diagnostics') return 'Checked for code issues';
   if (EXTRA_LABELS[name]) return EXTRA_LABELS[name];
+  if (args._label && !String(args._label).startsWith('Used ')) return String(args._label);
   return fallbackToolLabel(name);
 }
 
@@ -1465,7 +1467,8 @@ async function requestApproval({ name, args, runtime = false }) {
     if (args.suggestion) {
       approvalAlways = 'always';
       $('allowAllButton').hidden = false;
-      $('allowAllButton').textContent = 'Always allow ' + String(args.suggestion).slice(0, 60);
+      $('allowAllButton').textContent = alwaysAllowLabel(args.suggestion);
+      $('allowAllButton').title = 'Adds the rule ' + String(args.suggestion).slice(0, 200) + ' to this project';
     }
     openSheet('approvalSheet');
     if (navigator.vibrate) try { navigator.vibrate(12); } catch { /* not supported */ }

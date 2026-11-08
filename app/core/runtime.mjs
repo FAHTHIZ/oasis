@@ -114,7 +114,8 @@ function pause(ms, signal) {
 
 function toolArgs(data) {
   const args = data && data.args && typeof data.args === 'object' ? { ...data.args } : {};
-  if (data && data.label && !args.summary) args.summary = data.label;
+  // The runtime's own plain-language label, used when the app has none for this tool.
+  if (data && data.label) args._label = String(data.label).slice(0, 120);
   return args;
 }
 
