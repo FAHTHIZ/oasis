@@ -36,6 +36,7 @@ test('tool activity labels name subagents and coordination tools', () => {
   assert.equal(labelToolActivity('git_commit'), 'Made a commit');
   assert.equal(labelToolActivity('browser'), 'Used the browser');
   assert.equal(labelToolActivity('some_new_tool'), 'Used some new tool');
+  assert.equal(labelToolActivity('list_files'), 'Listed project files');
 });
 
 test('tool activity categories group common actions without exposing tool names', () => {
