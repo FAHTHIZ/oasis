@@ -336,7 +336,14 @@ export function mcpToolDefinitions(clients, options = {}) {
           parameters: input
         }
       });
-      map.set(safeName, { serverName, toolName: tool.name, fingerprint, ...(outputSchema ? { outputSchema } : {}), ...(inspected.reasons.length ? { poisoned: inspected.reasons } : {}), ...(changed ? { changed: true } : {}) });
+      // A user-configured server's own read-only, closed-world annotation lets
+      // auto mode skip the classifier (MCP spec: annotations are hints, trusted
+      // only from trusted servers). Project servers, changed or withheld tools
+      // and secret-like names never qualify.
+      const notes = tool.annotations && typeof tool.annotations === 'object' ? tool.annotations : {};
+      const readOnly = client.source === 'user' && notes.readOnlyHint === true && notes.destructiveHint !== true && notes.openWorldHint === false
+        && !inspected.reasons.length && !changed && !/env|secret|token|credential|password|passwd|key|cookie|auth/i.test(tool.name);
+      map.set(safeName, { serverName, toolName: tool.name, fingerprint, ...(readOnly ? { readOnly: true } : {}), ...(outputSchema ? { outputSchema } : {}), ...(inspected.reasons.length ? { poisoned: inspected.reasons } : {}), ...(changed ? { changed: true } : {}) });
     }
   }
   if ([...clients.values()].some((client) => client.capabilities && client.capabilities.resources)) {

@@ -37,6 +37,13 @@ main model's typical reply time (up to 180 seconds) when it runs on the same
 model. Set `autoMode.timeoutSeconds` in user settings to choose the limit, or
 set `autoMode.model` to a faster model. Source: `src/auto-mode.mjs`.
 
+MCP tools also skip the classifier in `auto` mode when the server comes from
+your user MCP config (never a project `.mcp.json`) and the tool declares
+`readOnlyHint: true`, `openWorldHint: false` and no `destructiveHint`. Tools
+whose names suggest secrets (`env`, `token`, `key`, `password`, `auth`...),
+tools with a withheld description and tools whose definition changed still go
+to the classifier. Source: `src/mcp.mjs` (`mcpToolDefinitions`).
+
 ## Model providers
 
 Source: `src/provider-registry.mjs`.
