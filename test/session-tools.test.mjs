@@ -77,6 +77,16 @@ test('MCP tools stay loaded below the threshold or when disabled', () => {
   assert.equal(deferMcpTools(session, { env: { OASIS_TOOL_SEARCH: 'always' } }), 1);
 });
 
+test('a few MCP tools with very large schemas also go behind tool_search', () => {
+  const big = (name) => ({ type: 'function', function: { name, description: 'Browser action. '.repeat(200), parameters: { type: 'object', properties: {} } } });
+  const mcp = [big('mcp_playwright_click'), big('mcp_playwright_fill'), big('mcp_playwright_shot'), big('mcp_playwright_tabs')];
+  const session = { mcpToolMap: new Map(mcp.map((tool) => [tool.function.name, {}])), toolDefinitions: [def('read_file'), ...mcp] };
+  assert.equal(deferMcpTools(session, { env: {} }), 4);
+  assert.deepEqual(session.toolDefinitions.map((tool) => tool.function.name), ['read_file', 'tool_search']);
+  const small = { mcpToolMap: new Map(mcp.map((tool) => [tool.function.name, {}])), toolDefinitions: [def('read_file'), ...mcp] };
+  assert.equal(deferMcpTools(small, { env: { OASIS_TOOL_SEARCH_CHARS: '100000' } }), 0);
+});
+
 test('monitor_command returns when the pattern matches or the process exits', async () => {
   const entry = { id: 'bg_1', status: 'running', exitCode: null, output: 'booting\n', readOffset: 0 };
   const session = { background: new Map([['bg_1', entry]]) };

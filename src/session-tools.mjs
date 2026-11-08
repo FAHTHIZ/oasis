@@ -55,6 +55,9 @@ export const SESSION_TOOL_DEFINITIONS = [
 export const SESSION_TOOL_NAMES = new Set(['tool_search', ...SESSION_TOOL_DEFINITIONS.map((tool) => tool.function.name)]);
 export const SESSION_READ_ONLY_TOOLS = ['wait_for_mcp_servers', 'report_findings', 'schedule_wakeup', 'enter_worktree', 'exit_worktree', 'tool_search', 'terminal_read', 'terminal_list', 'monitor_command', 'enter_plan_mode', 'notify', 'cron_list', ...SHARED_TASK_READ_ONLY_TOOL_NAMES];
 export const DEFAULT_TOOL_SEARCH_THRESHOLD = 25;
+// MCP schemas larger than this (about 3,000 tokens) also go behind tool_search,
+// however few tools there are. One browser-automation server alone is ~20k chars.
+export const DEFAULT_TOOL_SEARCH_CHARS = 12000;
 
 // Defer MCP tools when there are many of them so they do not crowd the context window.
 export function deferMcpTools(session, { threshold = DEFAULT_TOOL_SEARCH_THRESHOLD, env = process.env } = {}) {
@@ -64,7 +67,9 @@ export function deferMcpTools(session, { threshold = DEFAULT_TOOL_SEARCH_THRESHO
   const map = session.mcpToolMap;
   if (!map || !map.size) return 0;
   const mcp = session.toolDefinitions.filter((tool) => map.has(tool.function.name));
-  if (setting !== 'always' && setting !== 'on' && mcp.length <= limit) return 0;
+  const charLimit = Number(env.OASIS_TOOL_SEARCH_CHARS) > 0 ? Number(env.OASIS_TOOL_SEARCH_CHARS) : DEFAULT_TOOL_SEARCH_CHARS;
+  const tooBig = mcp.length > 1 && JSON.stringify(mcp).length > charLimit;
+  if (setting !== 'always' && setting !== 'on' && mcp.length <= limit && !tooBig) return 0;
   session.deferredTools = new Map(mcp.map((tool) => [tool.function.name, tool]));
   session.toolDefinitions = session.toolDefinitions.filter((tool) => !session.deferredTools.has(tool.function.name)).concat([TOOL_SEARCH_DEFINITION]);
   return mcp.length;
