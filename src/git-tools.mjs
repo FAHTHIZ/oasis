@@ -292,6 +292,9 @@ async function gitCommit(root, args, options) {
   const commit = await git(root, ['commit', '--file=-', '--cleanup=strip'], { env, input: message + '\n', timeout: 300000, signal: options.signal });
   if (commit.exitCode !== 0) {
     // The changes stay staged; a later git_commit picks them up again.
+    if (/Author identity unknown|Please tell me who you are|unable to auto-detect email/i.test(commit.stderr + commit.stdout)) {
+      return fail('git commit failed: Git has no author name and email configured. Do not set one yourself; ask the user to run git config user.name "Their Name" and git config user.email "them@example.com" (or with --global), then commit again.', { exitCode: commit.exitCode, output: (commit.stdout + '\n' + commit.stderr).trim().slice(-2000) });
+    }
     return fail('git commit failed. If a Git hook (pre-commit, commit-msg) rejected it, fix the reported problems and commit again; do not skip hooks.', { exitCode: commit.exitCode, output: (commit.stdout + '\n' + commit.stderr).trim().slice(-6000) });
   }
   const head = await git(root, ['log', '-1', '--format=%h%x09%s'], { env });

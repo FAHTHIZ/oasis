@@ -198,6 +198,7 @@ export async function expandInlineShell(text, options = {}) {
   const matches = [...source.matchAll(INLINE_SHELL)];
   if (!matches.length) return { text: source, ran: [] };
   const { parseRule, ruleMatches } = await import('./permissions.mjs');
+  const { readOnlyShellLine, readOnlyCommandsEnabled } = await import('./read-only-commands.mjs');
   const bashRules = (options.allowedTools || []).map(parseRule).filter((rule) => rule && rule.tools.includes('run_shell'));
   const ran = [];
   let out = '';
@@ -208,7 +209,10 @@ export async function expandInlineShell(text, options = {}) {
     last = match.index + match[0].length;
     let skipped = '';
     if (!options.allowed) skipped = 'project commands run shell only in trusted workspaces (run oasis trust)';
-    else if (options.allowedTools && !bashRules.some((rule) => ruleMatches(rule, 'run_shell', { command }))) skipped = 'not covered by the allowed-tools Bash rules';
+    // Read-only inspection (git status/diff/log, ls, cat inside the workspace)
+    // runs without a matching rule, as in Claude Code; permission rules still apply.
+    else if (options.allowedTools && !bashRules.some((rule) => ruleMatches(rule, 'run_shell', { command }))
+      && !(readOnlyCommandsEnabled(options.env || process.env) && readOnlyShellLine(command, { root: options.root }))) skipped = 'not covered by the allowed-tools Bash rules';
     else if (options.policy) {
       const verdict = options.policy.evaluate('run_shell', { command });
       if (verdict.decision === 'deny') skipped = 'blocked by permission rule ' + verdict.rule;

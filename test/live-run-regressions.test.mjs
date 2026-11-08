@@ -59,3 +59,48 @@ test('only read-only, closed-world tools from user MCP servers skip the auto-mod
   const readOnly = [...map].filter(([, entry]) => entry.readOnly).map(([id]) => id);
   assert.deepEqual(readOnly, ['mcp_mine_get-sum']);
 });
+
+test('a commit without a Git identity says so instead of blaming hooks', async () => {
+  const { mkdtemp, writeFile, rm } = await import('node:fs/promises');
+  const os = await import('node:os');
+  const path = await import('node:path');
+  const { execFileSync } = await import('node:child_process');
+  const { runGitTool } = await import('../src/git-tools.mjs');
+  const root = await mkdtemp(path.join(os.tmpdir(), 'oasis-noid-'));
+  const home = await mkdtemp(path.join(os.tmpdir(), 'oasis-noid-home-'));
+  const env = { PATH: process.env.PATH, HOME: home, GIT_CONFIG_NOSYSTEM: '1', GIT_CONFIG_GLOBAL: path.join(home, 'none'), EMAIL: '' };
+  try {
+    execFileSync('git', ['init', '-q'], { cwd: root, env });
+    execFileSync('git', ['config', 'user.useConfigOnly', 'true'], { cwd: root, env });
+    await writeFile(path.join(root, 'a.txt'), 'a\n');
+    const result = await runGitTool('git_commit', root, { message: 'Add a' }, { autoApprove: true, env });
+    assert.equal(result.ok, false);
+    assert.match(result.message, /no author name and email/);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+    await rm(home, { recursive: true, force: true });
+  }
+});
+
+test('a compound shell line is allowed only when allow rules cover every piece', async () => {
+  const { PermissionPolicy } = await import('../src/permissions.mjs');
+  const policy = new PermissionPolicy({ permissions: { allow: ['Bash(git add:*)'], ask: [], deny: ['Bash(git commit --amend:*)'], defaultMode: 'default' } });
+  policy.rememberForSession('Bash(git commit:*)');
+  const verdict = (command) => policy.evaluate('run_shell', { command }).decision;
+  assert.equal(verdict('git add math.js && git commit -m "Fix bug"'), 'allow');
+  assert.equal(verdict('git add . && git push'), 'default');
+  assert.equal(verdict('git add x && git commit -m "$(rm -rf ~)"'), 'default');
+  assert.equal(verdict('git add a; git commit -m ok | tee /tmp/x'), 'default');
+  assert.equal(verdict('git add a && git commit --amend -m x'), 'deny');
+});
+
+test('an upstream glitch inside a chat stream restarts the reply; permanent errors stay final', async () => {
+  const { chatStreamError } = await import('../src/provider-stream.mjs');
+  const glitch = chatStreamError({ message: 'Chat Completions provider returned invalid or omitted terminal usage' });
+  assert.equal(glitch.code, 'OASIS_STREAM_INTERRUPTED');
+  assert.match(glitch.message, /interrupted: Chat Completions provider/);
+  assert.equal(chatStreamError({ message: 'Rate limited', code: 429 }).code, 'OASIS_STREAM_INTERRUPTED');
+  for (const permanent of [{ message: 'This model\'s maximum context length is 8192 tokens' }, { message: 'Invalid API key' }, { message: 'nope', code: 400 }, { message: 'You exceeded your current quota' }]) {
+    assert.equal(chatStreamError(permanent).code, undefined, permanent.message);
+  }
+});

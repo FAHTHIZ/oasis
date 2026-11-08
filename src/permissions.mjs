@@ -426,6 +426,20 @@ function astCommandPieces(line, depth = 0) {
   return out;
 }
 
+// The pieces strict allow matching checks, or null when the line cannot be
+// auto-approved at all.
+function strictCommandPieces(line) {
+  if (shellParserMode() === 'unbash') {
+    const ast = parseShellCommands(line);
+    if (!ast || ast.unparsable || ast.tooLarge || !ast.commands.length) return null;
+    if (ast.commands.some((command) => command.dynamic || command.computedName)) return null;
+    const pieces = astCommandPieces(line);
+    return pieces.length ? pieces : null;
+  }
+  const parsed = splitShellCommands(line);
+  return parsed.safe && parsed.commands.length ? parsed.commands : null;
+}
+
 function matchCommandSpecifier(specifier, line, options = {}) {
   const parsed = splitShellCommands(line);
   if (!parsed.commands.length) return false;
@@ -638,6 +652,17 @@ export class PermissionPolicy {
     for (const rule of this.ask) if (ruleMatches(rule, toolName, args, matchOptions)) return { decision: 'ask', rule: rule.raw };
     for (const rule of this.allow) if (ruleMatches(rule, toolName, args, { root: this.root })) return { decision: 'allow', rule: rule.raw };
     for (const rule of this.sessionAllow) if (ruleMatches(rule, toolName, args, { root: this.root })) return { decision: 'allow', rule: rule.raw, session: true };
+    // `git add x && git commit -m y` with Bash(git add:*) and Bash(git commit:*):
+    // every piece is covered by some allow rule, as in Claude Code. The same
+    // strict parsing as a single rule applies (no substitutions or dynamic words).
+    if (toolName === 'run_shell') {
+      const rules = [...this.allow, ...this.sessionAllow].filter((rule) => rule.tools.includes('run_shell') && rule.specifier);
+      const pieces = rules.length > 1 ? strictCommandPieces(String(args.command || '')) : null;
+      if (pieces && pieces.length > 1) {
+        const used = pieces.map((piece) => rules.find((rule) => matchSingleCommandSpecifier(rule.specifier, piece)));
+        if (used.every(Boolean)) return { decision: 'allow', rule: [...new Set(used.map((rule) => rule.raw))].join(' + '), ...(used.some((rule) => this.sessionAllow.includes(rule)) ? { session: true } : {}) };
+      }
+    }
     return { decision: 'default', rule: null };
   }
 

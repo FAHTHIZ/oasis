@@ -89,6 +89,18 @@ export function toolCallSlot(calls, part) {
   return calls.size ? next - 1 : 0;
 }
 
+// An error event inside a 200 chat stream. Gateways send one when their
+// upstream glitches (seen live from Pollinations: "provider returned invalid or
+// omitted terminal usage"); that clears on a restart like a cut-off stream.
+// Errors that cannot clear (auth, quota, context, policy, other 4xx) stay final.
+const PERMANENT_STREAM_ERROR = /context|too long|maximum.{0,20}tokens|api key|unauthori[sz]ed|forbidden|permission|quota|billing|credit|payment|content.?(policy|filter)|safety|not found|does not exist|unsupported|invalid.{0,10}(request|parameter|argument)/i;
+export function chatStreamError(raw) {
+  const message = String((raw && (raw.message || (typeof raw === 'string' ? raw : ''))) || 'The chat-completions stream failed.');
+  const status = Number(raw && (raw.status || raw.code)) || 0;
+  if ((status >= 400 && status < 500 && status !== 408 && status !== 429) || PERMANENT_STREAM_ERROR.test(message)) return Object.assign(new Error(message), status ? { status } : {});
+  return Object.assign(new Error('The model stream was interrupted: ' + message), { code: 'OASIS_STREAM_INTERRUPTED', ...(status ? { status } : {}) });
+}
+
 /** A JSON error body ({ error } or [{ error }]) found outside SSE events, if any. */
 export function strayStreamError(text) {
   const raw = String(text || '').trim();
@@ -201,7 +213,7 @@ export async function readProviderStream(response, protocol, onDelta, onProgress
   await consumeServerSentEvents(response, ({ data }) => {
     if (data === '[DONE]') { sawDone = true; return; }
     const event = parseProviderEvent(data);
-    if (event.error) throw new Error(String(event.error.message || 'The chat-completions stream failed.'));
+    if (event.error) throw chatStreamError(event.error);
     if (event.prompt_progress && typeof onProgress === 'function') { try { onProgress(event.prompt_progress); } catch {} }
     if (event.usage) usage = event.usage;
     for (const choice of Array.isArray(event.choices) ? event.choices : []) {
