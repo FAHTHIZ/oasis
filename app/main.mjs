@@ -673,6 +673,7 @@ function summarizeArgs(name, args = {}) {
   if (args.pattern) return args.pattern + (args.path ? '  in ' + args.path : '');
   if (args.url) return args.url;
   if (args.name) return args.name;
+  if (name === 'task' && args.description) return String(args.description).slice(0, 100);
   if (args.code) return String(args.code).split('\n')[0].slice(0, 80);
   if (args.command) return [args.command, ...(Array.isArray(args.args) ? args.args : [])].join(' ').slice(0, 100);
   if (args.query) return String(args.query).slice(0, 80);
@@ -702,6 +703,17 @@ function activityLabel(tool) {
   if (['git_diff', 'git_status', 'git_log'].includes(name)) return 'Reviewed project changes';
   if (name === 'todo_write') return 'Updated the task plan';
   if (name === 'load_skill' || name === 'read_skill_resource' || name === 'list_skills') return 'Used a skill';
+  if (name === 'task') {
+    const type = String(args.subagent_type || '').slice(0, 40);
+    return (args.run_in_background ? 'Started ' : 'Ran ') + (type && type !== 'general-purpose' ? 'the ' + type + ' agent' : 'a subagent');
+  }
+  if (name === 'agent_status') return 'Checked on subagents';
+  if (name === 'send_message') return 'Sent a message to a subagent';
+  if (name === 'agent_stop') return 'Stopped a subagent';
+  if (name === 'ask_user_question') return 'Asked you a question';
+  if (name === 'exit_plan_mode') return 'Presented a plan';
+  if (name === 'lsp' || name === 'diagnostics' || name === 'ide_get_diagnostics') return 'Checked for code issues';
+  if (name.startsWith('mcp_')) return 'Used a connected tool (MCP)';
   return 'Completed a project step';
 }
 

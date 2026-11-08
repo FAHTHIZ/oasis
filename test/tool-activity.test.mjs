@@ -24,6 +24,16 @@ test('tool activity labels cover tools without a model-authored narration', () =
   assert.equal(labelToolActivity('run_command', { command: 'node', args: ['--version'] }), 'Ran a command');
 });
 
+test('tool activity labels name subagents and coordination tools', () => {
+  assert.equal(labelToolActivity('task', { description: 'Find the parser', subagent_type: 'explore' }), 'Ran the explore agent');
+  assert.equal(labelToolActivity('task', { description: 'Fix it' }), 'Ran a subagent');
+  assert.equal(labelToolActivity('task', { subagent_type: 'code-review', run_in_background: true }), 'Started the code-review agent');
+  assert.equal(labelToolActivity('agent_status'), 'Checked on subagents');
+  assert.equal(labelToolActivity('ask_user_question'), 'Asked you a question');
+  assert.equal(labelToolActivity('memory_save'), 'Updated saved memory');
+  assert.equal(labelToolActivity('mcp_github_search_issues'), 'Used a connected tool (MCP)');
+});
+
 test('tool activity categories group common actions without exposing tool names', () => {
   assert.equal(toolActivityCategory('read_file'), 'read');
   assert.equal(toolActivityCategory('edit_file'), 'edit');
