@@ -246,6 +246,8 @@ export async function loadSettings(root, options = {}) {
     const permissions = settings.permissions && typeof settings.permissions === 'object' ? settings.permissions : {};
     result.permissions.deny.push(...stringList(permissions.deny));
     result.permissions.ask.push(...stringList(permissions.ask));
+    // "denyInsteadOfPrompting" only tightens (a prompt becomes a denial), so any scope may set it.
+    if (permissions.denyInsteadOfPrompting === true) result.permissions.denyInsteadOfPrompting = true;
     if (typeof settings.outputStyle === 'string' && settings.outputStyle.trim()) result.outputStyle = settings.outputStyle.trim().toLowerCase();
     if (settings.editorMode === 'vim' || settings.editorMode === 'normal') result.editorMode = settings.editorMode;
     // Reply language (Claude Code's "language" setting). Only plain language names are accepted.
