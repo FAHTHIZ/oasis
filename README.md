@@ -27,6 +27,31 @@ OASIS is an open-source coding-agent runtime and development workspace. It conne
 
 OASIS is the harness and application layer, not a model provider. The model still determines much of the reasoning and code quality; OASIS does not guarantee that every model will solve every task.
 
+## Quick start
+
+```sh
+git clone https://github.com/FAHTHIZ/oasis.git && cd oasis
+npm install && npm install --global .      # or download an installer below
+cd /path/to/your/project
+oasis connect                              # choose a provider and model
+oasis                                      # interactive terminal session
+```
+
+One-shot and scripted runs use the headless runner:
+
+```sh
+oasis exec "fix the failing test in src/parser and explain the root cause"
+oasis exec --output-format stream-json "summarize the open TODOs" > run.jsonl
+```
+
+## Why OASIS
+
+- **Any model.** OpenAI-compatible, Anthropic, Gemini, local servers and routers. Fallback models, task-aware routing, cost budgets and usage tracking come built in.
+- **A full agent system.** Built-in `explore`, `plan`, `general-purpose`, `code-review` and `security-review` subagents, custom agents in Markdown, background agents, agent teams with a shared task board, and worktree isolation. See [Subagents](docs/SUBAGENTS.md).
+- **Claude Code compatible.** Existing `CLAUDE.md`, `.claude/agents`, `.claude/skills`, `.claude/commands`, `.claude/settings.json`, `.mcp.json`, hooks and plugins work without conversion.
+- **Safety you can inspect.** Approval modes, AST-based shell risk analysis, protected paths, secret scanning, SSRF-guarded network tools and optional OS or container sandboxes.
+- **Verification first.** Language servers, test runs, diff review, checkpoints with rewind, and a verification gate that sends the agent back when it skips checks.
+
 ## See a real model run
 
 <p align="center">
@@ -131,6 +156,18 @@ npm run desktop:dev
 
 Build a distributable for the current machine with npm run desktop:dist. Platform packaging prerequisites may apply. The current macOS packages are not code-signed; macOS may ask you to confirm the first launch in Privacy & Security.
 
+## Agent system
+
+| Capability | What OASIS provides |
+|---|---|
+| Subagents | `task` tool with parallel calls (up to 6), per-agent tools, model, effort and turn limits |
+| Custom agents | Markdown + front matter in `.oasis/agents` or `.claude/agents`: `tools`, `disallowedTools`, `maxTurns`, `skills`, `memory`, `isolation`, `background` |
+| Structured results | `output_schema` validation with one automatic correction turn |
+| Background work | Up to 8 background agents, `agent_status`, `send_message` to steer or resume, `agent_stop`, stall monitor |
+| Teams | Shared task board with leases, direct teammate messages, optional tmux panes |
+| Isolation | Per-agent git worktrees, committed on their own branch when the agent finishes |
+| Lifecycle hooks | `SubagentStart`, `SubagentStop`, `PreToolUse`, `PostToolUse` and the rest of the Claude Code hook set |
+
 ## Runtime capabilities
 
 - **Model runtime:** provider adapters, streaming, model configuration, retry and fallback handling, context management and usage tracking.
@@ -187,6 +224,7 @@ A passing test suite is evidence for the cases it exercises. It is not proof tha
 - [First-run guide](docs/FIRST-RUN.md)
 - [Architecture and runtime boundaries](docs/ARCHITECTURE.md)
 - [Configuration reference](docs/CONFIGURATION.md)
+- [Subagents and agent teams](docs/SUBAGENTS.md)
 - [Interfaces and deployment](docs/INTERFACES.md)
 - [Benchmark methodology](docs/BENCHMARKS.md)
 - [Engineering scorecard](docs/ENGINEERING-SCORECARD.md)

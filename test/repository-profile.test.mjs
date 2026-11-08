@@ -62,6 +62,6 @@ test('mobile and contributor policies exist outside the installable npm package'
 test('CLI help and onboarding messages do not link to removed documentation', async () => {
   const cli = await read('../src/cli.mjs');
   assert.ok(cli.includes('Docs: https://github.com/FAHTHIZ/oasis#readme'));
-  assert.ok(cli.includes('Guide: https://github.com/FAHTHIZ/oasis#download-and-install'));
+  assert.ok(cli.includes('Guide: https://github.com/FAHTHIZ/oasis#quick-start'));
   assert.ok(!cli.includes('/docs/'), 'CLI help and setup errors must not refer to removed docs paths.');
 });
