@@ -15,7 +15,6 @@ export function formatLspVerificationBlocker(issues) {
 }
 
 
-export { verificationCommandKind as verificationCommandKindForTest };
 export function verificationCommandKind(command, args) {
   const executable = executableName(command);
   const argv = (Array.isArray(args) ? args : []).map((item) => String(item || '').toLowerCase());
