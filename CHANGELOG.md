@@ -34,6 +34,8 @@ User-facing change history grouped by package version. A version heading does no
 
 ### Browser workspace
 
+- The Files panel can be resized: drag its left edge or use the arrow keys on it, and double-click to reset. The width is remembered.
+- The file viewer has a Download button, so single files can be saved from a local project too (Export zip only covers browser projects).
 - Messages show a compact timestamp in their hover bar (the full date is in the tooltip). Saved chats keep the times.
 - Command palette → **Download this chat** saves the conversation as the standalone HTML page from `/export FILE.html` (served by `GET /api/sessions/:id/export`, which requires the session token).
 - After Undo, the reverted turn stays in the transcript, dimmed, with a note that files and conversation went back.
