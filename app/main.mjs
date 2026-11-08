@@ -14,6 +14,9 @@ import { PLUGINS, getPlugin, pluginsFor, suggestPlugins } from './core/plugins.m
 import { detectRuntime, RuntimeAgent, RuntimeWorkspace, tokenFromPaste, saveRuntimeToken } from './core/runtime.mjs';
 import { APP_KEYBOARD_SHORTCUTS, searchAppCommands } from './core/command-palette.mjs';
 import { normalizeTaskProgress } from './core/task-progress.mjs';
+import { suggestToken, rankSuggestions, applySuggestion } from './core/composer-suggest.mjs';
+// Composer autocomplete state (declared early: refreshFiles clears the file cache).
+const suggest = { token: null, items: [], index: 0, commands: null, files: null, seq: 0 };
 
 const APP_VERSION = '1.3.0';
 const $ = (id) => document.getElementById(id);
@@ -298,7 +301,9 @@ document.addEventListener('keydown', (event) => {
     openNativeDialog('shortcutsDialog');
     return;
   }
-  if (event.key === '/' && event.target === $('input') && !$('input').value && !event.altKey && !modifier && !event.isComposing) {
+  // Connected to OASIS on a computer, / types a command with inline suggestions
+  // (as in the terminal); in the browser-only app it opens the palette.
+  if (event.key === '/' && event.target === $('input') && !$('input').value && !event.altKey && !modifier && !event.isComposing && !(RT && !RT.needsToken)) {
     event.preventDefault();
     openNativeDialog('commandPaletteDialog');
     return;
@@ -1340,6 +1345,106 @@ function updateSteering() {
 }
 $('input').addEventListener('input', updateSteering);
 
+/* ---------- Composer autocomplete: / commands and skills, @ files ---------- */
+async function slashCommandList() {
+  if (!RT || RT.needsToken) return [];
+  if (!suggest.commands) suggest.commands = RT.client.api('/api/slash-commands').then((body) => Array.isArray(body && body.commands) ? body.commands : []).catch(() => { suggest.commands = null; return []; });
+  return suggest.commands;
+}
+async function filePathList() {
+  if (!workspace) return [];
+  if (!suggest.files) suggest.files = workspace.paths().catch(() => []);
+  return suggest.files;
+}
+function closeSuggest() {
+  suggest.token = null; suggest.items = []; suggest.index = 0;
+  $('composerSuggest').hidden = true;
+  $('composerSuggest').replaceChildren();
+  $('input').removeAttribute('aria-activedescendant');
+  $('input').setAttribute('aria-expanded', 'false');
+}
+function renderSuggest() {
+  const box = $('composerSuggest');
+  box.replaceChildren();
+  if (!suggest.items.length) { closeSuggest(); return; }
+  suggest.items.forEach((item, i) => {
+    const row = document.createElement('div');
+    row.className = 'suggest-row';
+    row.id = 'suggest-' + i;
+    row.setAttribute('role', 'option');
+    row.setAttribute('aria-selected', String(i === suggest.index));
+    const name = document.createElement('span');
+    name.className = 'suggest-name';
+    const detail = document.createElement('span');
+    detail.className = 'suggest-detail';
+    if (suggest.token.kind === '/') {
+      name.textContent = '/' + item.name;
+      detail.textContent = item.description || '';
+      if (item.kind && item.kind !== 'builtin') { const tag = document.createElement('span'); tag.className = 'suggest-kind'; tag.textContent = item.kind === 'skill' ? 'skill' : 'custom'; row.append(name, tag, detail); }
+      else row.append(name, detail);
+    } else {
+      const slash = item.lastIndexOf('/');
+      name.textContent = item.slice(slash + 1);
+      detail.textContent = slash >= 0 ? item.slice(0, slash + 1) : '';
+      row.append(name, detail);
+    }
+    row.addEventListener('mousedown', (event) => { event.preventDefault(); suggest.index = i; acceptSuggest(); });
+    box.appendChild(row);
+  });
+  box.hidden = false;
+  $('input').setAttribute('aria-expanded', 'true');
+  $('input').setAttribute('aria-activedescendant', 'suggest-' + suggest.index);
+  const active = box.children[suggest.index];
+  if (active && active.scrollIntoView) active.scrollIntoView({ block: 'nearest' });
+}
+async function updateSuggest() {
+  const input = $('input');
+  const token = suggestToken(input.value, input.selectionStart);
+  const seq = ++suggest.seq;
+  if (!token) { closeSuggest(); return; }
+  const items = token.kind === '/'
+    ? rankSuggestions(await slashCommandList(), token.query, (item) => item.name, 8)
+    : rankSuggestions(await filePathList(), token.query, (item) => item, 8);
+  if (seq !== suggest.seq) return;
+  const same = suggest.token && suggest.token.kind === token.kind && suggest.token.query === token.query;
+  suggest.token = token; suggest.items = items;
+  if (!same) suggest.index = 0;
+  renderSuggest();
+}
+function acceptSuggest() {
+  const item = suggest.items[suggest.index];
+  if (!item || !suggest.token) return;
+  const input = $('input');
+  const next = applySuggestion(input.value, suggest.token, suggest.token.kind === '/' ? item.name : item);
+  input.value = next.value;
+  input.setSelectionRange(next.caret, next.caret);
+  closeSuggest();
+  autosize();
+  input.focus();
+}
+$('input').setAttribute('aria-autocomplete', 'list');
+$('input').setAttribute('aria-controls', 'composerSuggest');
+$('input').addEventListener('input', updateSuggest);
+$('input').addEventListener('click', updateSuggest);
+$('input').addEventListener('blur', () => setTimeout(closeSuggest, 120));
+// Captured on the form so it runs before the composer's own Enter-to-send.
+$('composer').addEventListener('keydown', (event) => {
+  if (event.target !== $('input') || $('composerSuggest').hidden || !suggest.items.length || event.isComposing) return;
+  const count = suggest.items.length;
+  if (event.key === 'ArrowDown' || (event.key === 'n' && event.ctrlKey)) suggest.index = (suggest.index + 1) % count;
+  else if (event.key === 'ArrowUp' || (event.key === 'p' && event.ctrlKey)) suggest.index = (suggest.index - 1 + count) % count;
+  else if (event.key === 'Escape') { closeSuggest(); event.preventDefault(); event.stopImmediatePropagation(); return; }
+  else if (event.key === 'Tab' || (event.key === 'Enter' && !event.shiftKey)) {
+    const item = suggest.items[suggest.index];
+    // Enter on a command that is already typed in full sends it.
+    if (event.key === 'Enter' && suggest.token.kind === '/' && item && item.name.toLowerCase() === suggest.token.query.toLowerCase()) { closeSuggest(); return; }
+    acceptSuggest();
+  } else return;
+  event.preventDefault();
+  event.stopImmediatePropagation();
+  if (!$('composerSuggest').hidden) renderSuggest();
+}, true);
+
 function updateModeUI() {
   const mode = providerConfig().mode;
   $('modeChip').dataset.mode = mode;
@@ -1971,6 +2076,7 @@ let refreshQueued = false;
 function refreshFiles() {
   if (refreshQueued) return;
   refreshQueued = true;
+  suggest.files = null;
   setTimeout(async () => {
     refreshQueued = false;
     const changes = workspace ? await workspace.changes() : [];

@@ -30,6 +30,7 @@ User-facing change history grouped by package version. A version heading does no
 - Copy buttons under every reply and on your own messages, plus Edit to put a sent message back in the composer. Copies keep the original Markdown.
 - Fixed: the Copy button on code blocks did nothing.
 - The composer shows how full the context window is as a ring and percentage (amber past 70%, red past 90%), with token counts on hover.
+- Inline autocomplete in the composer: `/` suggests commands, custom commands and skills, and `@` suggests project files. Arrow keys move, Tab or Enter accepts, Escape closes. Connected to OASIS on a computer, `/` no longer opens the command palette (Ctrl+K still does).
 - The header shows the current git branch. `/api/status` now reports `branch`.
 
 ### Maintenance
