@@ -5,7 +5,7 @@ import path from 'node:path';
 import { mkdtemp, writeFile, rm } from 'node:fs/promises';
 import { createSession, closeSession, runAgentTurn } from '../src/agent.mjs';
 import { setWorkspaceTrust } from '../src/settings.mjs';
-import { useMcpTask } from '../src/mcp-project.mjs';
+import { useMcpTask, mcpTaskBackgroundMs } from '../src/mcp-project.mjs';
 import { McpServerClient } from '../src/mcp.mjs';
 import { scriptedModel, toolCall } from './helpers/scripted-model.mjs';
 
@@ -104,4 +104,49 @@ test('interrupting a task-backed MCP call sends tasks/cancel', async (t) => {
   assert.equal(client.activeTasks.size, 0);
   const log = await client.callTool('log', {}, { autoApprove: true });
   assert.match(JSON.stringify(log.content), /tools\/call\+task,(tasks\/get,)+tasks\/cancel/);
+});
+
+test('a long MCP task moves to the background and its result is delivered later', async (t) => {
+  const client = new McpServerClient({ name: 'jobs', command: process.execPath, args: ['-e', SERVER] });
+  t.after(() => client.close());
+  await client.start();
+  let background = null;
+  const controller = new AbortController();
+  const result = await client.callTool('slow', {}, { autoApprove: true, signal: controller.signal, env: { OASIS_MCP_TASK_BACKGROUND_MS: '20' }, onBackgroundTask: (task) => { background = task; } });
+  assert.match(JSON.stringify(result.content), /moved to the background/);
+  assert.equal(background.server, 'jobs');
+  assert.equal(background.tool, 'slow');
+  // Ending the turn after the move does not cancel the task.
+  controller.abort(new Error('turn ended'));
+  const settled = await background.settled;
+  assert.equal(settled.isError, false);
+  assert.match(JSON.stringify(settled.content), /slow-result after 3 polls/);
+});
+
+test('without a background sink, or with the opt-out, the call waits for the task', async (t) => {
+  assert.equal(mcpTaskBackgroundMs({}), 5000);
+  assert.equal(mcpTaskBackgroundMs({ OASIS_MCP_TASK_BACKGROUND: '0' }), -1);
+  assert.equal(mcpTaskBackgroundMs({ CLAUDE_CODE_DISABLE_MCP_TASK_BACKGROUND: '1' }), -1);
+  const client = new McpServerClient({ name: 'jobs', command: process.execPath, args: ['-e', SERVER] });
+  t.after(() => client.close());
+  await client.start();
+  let called = false;
+  const waited = await client.callTool('slow', {}, { autoApprove: true, env: { OASIS_MCP_TASK_BACKGROUND: '0' }, onBackgroundTask: () => { called = true; } });
+  assert.equal(called, false);
+  assert.match(JSON.stringify(waited.content), /slow-result/);
+});
+
+test('an interactive session gets the background MCP result in its inbox and is woken', async (t) => {
+  const prior = process.env.OASIS_MCP_TASK_BACKGROUND_MS;
+  process.env.OASIS_MCP_TASK_BACKGROUND_MS = '20';
+  t.after(() => { if (prior === undefined) delete process.env.OASIS_MCP_TASK_BACKGROUND_MS; else process.env.OASIS_MCP_TASK_BACKGROUND_MS = prior; });
+  const { session, requests } = await sessionWithServer(t, [toolCall('c1', 'mcp_jobs_slow', {}), { content: 'started it' }]);
+  const woke = new Promise((resolve) => { session.onBackgroundEvent = resolve; });
+  await runAgentTurn(session, 'run the slow job', { autoApprove: true });
+  assert.match(toolTexts(requests, 1)[0], /moved to the background/);
+  const event = await woke;
+  assert.equal(event.kind, 'mcp-task');
+  const notice = session.inbox.find((entry) => entry.kind === 'mcp-task');
+  assert.match(notice.text, /Background MCP task task-\d+ \(jobs slow\) finished/);
+  assert.match(notice.text, /slow-result after 3 polls/);
 });
