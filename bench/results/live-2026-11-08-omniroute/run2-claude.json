@@ -1,0 +1,67 @@
+{
+  "label": "Claude Code 2.1.319 (Claude Code) (openrouter/nvidia/nemotron-3-ultra-550b-a55b:free)",
+  "sourceRevision": "bd852c8fe200b4c78979530b2cb2a46b26767d41",
+  "runId": "2026-11-08T16-04-29-832Z-8509",
+  "startedAt": "2026-11-08T16:04:29.832Z",
+  "completedAt": "2026-11-08T16:05:28.831Z",
+  "taskCount": 1,
+  "taskIds": [
+    "safe-relative-path"
+  ],
+  "trialsPerTask": 1,
+  "timeoutSeconds": 600,
+  "runtime": {
+    "node": "v24.11.0",
+    "platform": "linux",
+    "arch": "x64"
+  },
+  "passRate": 0,
+  "passed": 0,
+  "failed": 1,
+  "medianTimeMs": 58959,
+  "totalCostUSD": 0.2671,
+  "costPerPassedTaskUSD": null,
+  "provider": {
+    "model": "openrouter/nvidia/nemotron-3-ultra-550b-a55b:free",
+    "protocol": "claude-code-cli",
+    "cliVersion": "2.1.319 (Claude Code)",
+    "maxTurns": 30,
+    "timeoutSeconds": 600,
+    "budgetUSD": null
+  },
+  "pricing": {
+    "note": "Cost is taken only from Claude Code JSON usage metadata. If the CLI or sign-in method does not expose a per-run USD cost, costUSD remains null; this does not mean the run was free."
+  },
+  "results": [
+    {
+      "taskId": "safe-relative-path",
+      "taskFingerprint": "dbe12f1491bf325a011df1c905b9f64d3210928beff78c3cd24903fdb945e045",
+      "category": "security-boundaries",
+      "difficulty": "medium",
+      "trial": 1,
+      "status": "failed",
+      "passed": false,
+      "model": "openrouter/nvidia/nemotron-3-ultra-550b-a55b:free",
+      "inputTokens": 47338,
+      "outputTokens": 2353,
+      "totalTokens": 49691,
+      "costUSD": 0.2671,
+      "wallTimeMs": 58959,
+      "cliVersion": "2.1.319 (Claude Code)",
+      "finished": true,
+      "toolCalls": 11,
+      "verification": {
+        "exitCode": 1,
+        "output": "\nnode:internal/modules/run_main:107\n    triggerUncaughtException(\n    ^\n\nAssertionError [ERR_ASSERTION]: Expected values to be strictly equal:\n+ actual - expected\n\n+ Promise {\n+   <pending>\n+ }\n- '/tmp/work/src/lib.mjs'\n\n    at file:///home/user/workspace/oasis/evals/tasks/safe-relative-path/verify.mjs:11:8 {\n  generatedMessage: true,\n  code: 'ERR_ASSERTION',\n  actual: Promise { <pending> },\n  expected: '/tmp/work/src/lib.mjs',\n  operator: 'strictEqual',\n  diff: 'simple'\n}\n\nNode.js v24.11.0\n"
+      },
+      "changes": [
+        {
+          "path": "src/lib.mjs",
+          "status": "added",
+          "content": "import path from 'node:path';\nimport { realpath } from 'node:fs/promises';\n\n/**\n * Resolve a relative path below the workspace root and return the absolute result.\n * If the value is an absolute path, or escapes the root via ../, throw an Error\n * whose message contains the word \"escapes\".\n * Uses path.relative rather than string-prefix checks.\n *\n * @param {string} root - The workspace root directory\n * @param {string} value - The relative path to resolve\n * @returns {Promise<string>} The absolute resolved path\n * @throws {Error} If the path is absolute or escapes the workspace root\n */\nexport async function resolveRelative(root, value) {\n  const rootReal = await realpath(root);\n  const input = String(value || '');\n\n  // Check if the input path is absolute\n  if (path.isAbsolute(input)) {\n    throw new Error(`Path escapes the workspace: ${input}`);\n  }\n\n  // Resolve the target path relative to the workspace root\n  const target = path.resolve(rootReal, input);\n\n  // Use path.relative to check if the resolved path escapes the workspace\n  const relative = path.relative(rootReal, target);\n\n  // If relative starts with '..', it means the path escapes the workspace\n  if (relative.startsWith('..' + path.sep) || relative === '..' || path.isAbsolute(relative)) {\n    throw new Error(`Path escapes the workspace: ${input}`);\n  }\n\n  return target;\n}"
+        }
+      ],
+      "error": null
+    }
+  ]
+}

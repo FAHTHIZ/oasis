@@ -1,0 +1,67 @@
+{
+  "label": "Claude Code 2.1.319 (Claude Code) (openrouter/nvidia/nemotron-3-ultra-550b-a55b:free)",
+  "sourceRevision": "5c2f00860bd1a7986b1e4ee5eded341bf69b28c6",
+  "runId": "2026-11-08T16-00-36-437Z-30737",
+  "startedAt": "2026-11-08T16:00:36.437Z",
+  "completedAt": "2026-11-08T16:02:37.799Z",
+  "taskCount": 1,
+  "taskIds": [
+    "clamp-integer"
+  ],
+  "trialsPerTask": 1,
+  "timeoutSeconds": 600,
+  "runtime": {
+    "node": "v24.11.0",
+    "platform": "linux",
+    "arch": "x64"
+  },
+  "passRate": 1,
+  "passed": 1,
+  "failed": 0,
+  "medianTimeMs": 121322,
+  "totalCostUSD": 0.278451,
+  "costPerPassedTaskUSD": 0.278451,
+  "provider": {
+    "model": "openrouter/nvidia/nemotron-3-ultra-550b-a55b:free",
+    "protocol": "claude-code-cli",
+    "cliVersion": "2.1.319 (Claude Code)",
+    "maxTurns": 30,
+    "timeoutSeconds": 600,
+    "budgetUSD": null
+  },
+  "pricing": {
+    "note": "Cost is taken only from Claude Code JSON usage metadata. If the CLI or sign-in method does not expose a per-run USD cost, costUSD remains null; this does not mean the run was free."
+  },
+  "results": [
+    {
+      "taskId": "clamp-integer",
+      "taskFingerprint": "dab0c2159b42de21f3e8608ea63ea2036a332621147205eeab0bcc14e425d3d1",
+      "category": "utility-logic",
+      "difficulty": "small",
+      "trial": 1,
+      "status": "passed",
+      "passed": true,
+      "model": "openrouter/nvidia/nemotron-3-ultra-550b-a55b:free",
+      "inputTokens": 49102,
+      "outputTokens": 3050,
+      "totalTokens": 52152,
+      "costUSD": 0.2784512,
+      "wallTimeMs": 121322,
+      "cliVersion": "2.1.319 (Claude Code)",
+      "finished": true,
+      "toolCalls": 12,
+      "verification": {
+        "exitCode": 0,
+        "output": ""
+      },
+      "changes": [
+        {
+          "path": "src/lib.mjs",
+          "status": "added",
+          "content": "/**\n * Parses a value as a base-10 integer and clamps it between min and max (inclusive).\n * Returns fallback when the value does not parse to a valid integer.\n * Explicit zero (0 or '0') is treated as valid input, not as invalid.\n *\n * @param {unknown} value - The value to parse and clamp (string, number, etc.)\n * @param {number} fallback - The value to return when parsing fails\n * @param {number} min - The minimum allowed value (inclusive)\n * @param {number} max - The maximum allowed value (inclusive)\n * @returns {number} The clamped integer or fallback\n */\nexport function clampInteger(value, fallback, min, max) {\n  // Handle explicit zero first - it's a valid integer\n  if (value === 0 || value === '0') {\n    return Math.max(min, Math.min(max, 0));\n  }\n\n  // Try to parse as integer\n  const parsed = parseInt(value, 10);\n\n  // Check if parsing resulted in a valid integer (NaN means invalid)\n  if (Number.isNaN(parsed)) {\n    return fallback;\n  }\n\n  // Clamp the value between min and max (inclusive)\n  return Math.max(min, Math.min(max, parsed));\n}"
+        }
+      ],
+      "error": null
+    }
+  ]
+}

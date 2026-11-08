@@ -1,0 +1,143 @@
+{
+  "label": "OASIS 1.1.1 (openrouter/nvidia/nemotron-3-ultra-550b-a55b:free)",
+  "sourceRevision": "5c2f00860bd1a7986b1e4ee5eded341bf69b28c6",
+  "runId": "2026-11-08T15-59-51-961Z-30737",
+  "startedAt": "2026-11-08T15:59:51.961Z",
+  "completedAt": "2026-11-08T16:00:36.409Z",
+  "taskCount": 1,
+  "taskIds": [
+    "clamp-integer"
+  ],
+  "trialsPerTask": 1,
+  "timeoutSeconds": 600,
+  "runtime": {
+    "node": "v24.11.0",
+    "platform": "linux",
+    "arch": "x64"
+  },
+  "passRate": 1,
+  "passed": 1,
+  "failed": 0,
+  "medianTimeMs": 44318,
+  "totalCostUSD": 0,
+  "costPerPassedTaskUSD": 0,
+  "routing": {
+    "enabled": false
+  },
+  "provider": {
+    "model": "openrouter/nvidia/nemotron-3-ultra-550b-a55b:free",
+    "protocol": "openai-compatible",
+    "baseURL": "http://127.0.0.1:20128/v1",
+    "maxSteps": 60,
+    "maxOutputTokens": null
+  },
+  "pricing": {
+    "inputUsdPerMillionTokens": null,
+    "outputUsdPerMillionTokens": null,
+    "note": "Cost is a rough estimate from configured rates and does not distinguish cached tokens. Pass-rate differences under 10 percentage points are noisy with small task samples; run at least three trials per task when benchmarking."
+  },
+  "results": [
+    {
+      "taskId": "clamp-integer",
+      "taskFingerprint": "dab0c2159b42de21f3e8608ea63ea2036a332621147205eeab0bcc14e425d3d1",
+      "category": "utility-logic",
+      "difficulty": "small",
+      "trial": 1,
+      "status": "passed",
+      "model": "openrouter/nvidia/nemotron-3-ultra-550b-a55b:free",
+      "requestedModel": "openrouter/nvidia/nemotron-3-ultra-550b-a55b:free",
+      "routeTier": "strong",
+      "routeReason": "automatic routing is disabled",
+      "strongModel": "openrouter/nvidia/nemotron-3-ultra-550b-a55b:free",
+      "protocol": "openai-compatible",
+      "baseURL": "http://127.0.0.1:20128/v1",
+      "maxSteps": 60,
+      "maxOutputTokens": null,
+      "inputTokens": 54064,
+      "outputTokens": 1316,
+      "totalTokens": 55380,
+      "costUSD": 0,
+      "strongModelCostUSD": 0,
+      "routingSavingsUSD": 0,
+      "costSource": "per-model list-price estimate (cloud model behind a localhost gateway; free-tier keys are not billed)",
+      "wallTimeMs": 44318,
+      "finished": true,
+      "toolCalls": 6,
+      "trace": [
+        {
+          "tool": "list_files",
+          "arg": ".",
+          "resultChars": 552
+        },
+        {
+          "tool": "read_file",
+          "arg": "package.json",
+          "resultChars": 879
+        },
+        {
+          "tool": "glob_files",
+          "arg": "src/lib*",
+          "resultChars": 53
+        },
+        {
+          "tool": "write_file",
+          "arg": "src/lib.mjs",
+          "resultChars": 339
+        },
+        {
+          "tool": "run_command",
+          "arg": "npm test",
+          "resultChars": 2245
+        },
+        {
+          "tool": "run_command",
+          "arg": "node --eval import { clampInteger } from './src/lib.mjs'; console.log('8 ->', clampInteger('8', 0, 1, 10)); console.log(",
+          "resultChars": 838,
+          "failed": true
+        }
+      ],
+      "requestTokens": [
+        [
+          6793,
+          125
+        ],
+        [
+          7000,
+          64
+        ],
+        [
+          7359,
+          48
+        ],
+        [
+          7418,
+          325
+        ],
+        [
+          7812,
+          49
+        ],
+        [
+          8546,
+          297
+        ],
+        [
+          9136,
+          408
+        ]
+      ],
+      "verification": {
+        "exitCode": 0,
+        "output": ""
+      },
+      "changes": [
+        {
+          "path": "src/lib.mjs",
+          "status": "added",
+          "content": "/**\n * Parse value as a base-10 integer and clamp it inclusively between min and max.\n * Returns fallback when value does not parse to an integer.\n * Explicit zero is valid and must not be mistaken for invalid input.\n */\nexport function clampInteger(value, fallback, min, max) {\n  // Handle explicit zero and other numbers directly\n  if (typeof value === 'number' && Number.isInteger(value)) {\n    return Math.min(Math.max(value, min), max);\n  }\n\n  // Parse string values\n  if (typeof value === 'string') {\n    const trimmed = value.trim();\n    // Empty string is invalid\n    if (trimmed === '') {\n      return fallback;\n    }\n    // Check if it's a valid integer string (no decimals, no scientific notation)\n    if (!/^[+-]?\\d+$/.test(trimmed)) {\n      return fallback;\n    }\n    const parsed = parseInt(trimmed, 10);\n    if (!Number.isInteger(parsed)) {\n      return fallback;\n    }\n    return Math.min(Math.max(parsed, min), max);\n  }\n\n  // All other types (null, undefined, objects, arrays, floats, etc.) return fallback\n  return fallback;\n}"
+        }
+      ],
+      "error": null
+    }
+  ]
+}
