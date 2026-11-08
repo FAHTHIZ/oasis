@@ -27,7 +27,6 @@ import { parseChannelEntries, mcpInstructionsSection, flushPendingChannels } fro
 import { SESSION_TOOL_DEFINITIONS, SESSION_TOOL_NAMES, SESSION_READ_ONLY_TOOLS, deferMcpTools, deferRareBuiltinTools, loadDeferredTool, deferredToolsPrompt, toolGuidanceFor, runSessionTool, stopCron, TOOL_SEARCH_DEFINITION } from './session-tools.mjs';
 import { loadOutputStyles, systemPromptWithStyle, BUILTIN_STYLES } from './output-styles.mjs';
 import { priceFor, estimateCostUsd, recordBudgetSpend, formatUsd, cloudModelBehindGateway } from './pricing.mjs';
-import { isTestPath } from './test-tamper.mjs';
 import { hasImages, toChatMessagesWithImages, fitImages } from './images.mjs';
 import { beginCheckpoint, captureBeforeChange, checkpointPersistenceEnabled, FILE_CHANGING_TOOLS, loadCheckpoints } from './checkpoints.mjs';
 import { nestedMemoryFor } from './memory.mjs';
@@ -64,7 +63,7 @@ import { connectMcpServers, mcpToolDefinitions, callMappedMcpTool, closeMcpClien
 import { resolveMcpPrompt, expandMcpResourceMentions } from './mcp-extras.mjs';
 import { autoMemoryEnabled, memoryIndexPrompt, recallForPrompt, MEMORY_TOOL_DEFINITIONS, listMemories, saveMemory } from './auto-memory.mjs';
 import { learningEnabled, LEARNING_TOOL_DEFINITIONS, assertLearningVerification } from './learning.mjs';
-import { countTextTokens, countJsonTokens } from './tokens.mjs';
+import { countJsonTokens } from './tokens.mjs';
 import { recordContextAnchor } from './context.mjs';
 import { estimateTokens, microcompact, maskObservations, contextWindowSize, modelContextWindow, compactionThresholdChars, mustPreserveContextBlock, appendMustPreserveContext } from './context.mjs';
 import { validateProtocol, validateBaseUrl } from './config.mjs';
@@ -97,7 +96,7 @@ import { repairToolArguments, extractTextToolCalls, unknownTextToolCalls } from 
 import { isLocalModelEndpoint, probeLocalContext, probeProviderModelWindow, applySmallContextProfile, localContextAdvice, SMALL_CONTEXT_TOKENS, RECOMMENDED_LOCAL_CONTEXT } from './local-context.mjs';
 import { ripgrepPathAddition } from './ripgrep.mjs';
 import { MAX_PROVIDER_RETRIES, QUICK_PROVIDER_RETRIES, RETRYABLE_PROVIDER_STATUSES, isHardQuotaError, isMalformedGenerationError, notifyProviderRetry, providerErrorSummary, providerRetryDelayMs, providerRetryLimit, rateLimitResetMs, rateLimitWaitMs, shortRateLimitMs, waitForProviderRetry } from './provider-retry.mjs';
-import { ACTION_NUDGE, AUTO_LSP_EDIT_TOOLS, CONTINUE_NUDGE, CYCLE_HALT_AT, CYCLE_WARN_AT, CYCLE_WINDOW_STEPS, EMPTY_REPLY_NOTICE, EMPTY_REPLY_NUDGE, FALSE_CLAIM_NUDGE, FILE_EDITING_TOOL_NAMES, GIVE_UP_NUDGE, MAX_EMPTY_REPLY_NUDGES, MAX_SESSION_TOOL_CALLS, PROTECTED_EDIT_TOOLS, REFUSAL_NUDGE, RETRY_HALT_AT, RETRY_TRACKED_COMMANDS, RETRY_WARN_AT, SOURCE_EXTENSIONS, THRASH_ESCALATE_AT, THRASH_WARN_AT, UNREADABLE_CALL_NUDGE, VERIFICATION_RUNNERS, activeLspBaseline, announcesNextStep, appendLspUnavailableNotice, asksForAction, asksForNewTests, assistedVerificationCalls, assistedVerificationEnabled, claimsUnmadeChange, diffReviewComplete, executableName, failureSignature, fencedFileFromReply, givesUpEarly, isCompleteFileRead, isVerificationCommand, lspCallOptions, normalizeReviewPath, parallelToolCalls, promptCacheKeyField, readsLikeInstructions, refusesSpuriously, samplingTemperature, successfulMutation, targetFileHint, untestedNewCode, verificationIssues, wrongFileNudge } from './turn-guards.mjs';
+import { ACTION_NUDGE, AUTO_LSP_EDIT_TOOLS, CONTINUE_NUDGE, CYCLE_HALT_AT, CYCLE_WARN_AT, CYCLE_WINDOW_STEPS, EMPTY_REPLY_NOTICE, EMPTY_REPLY_NUDGE, FALSE_CLAIM_NUDGE, FILE_EDITING_TOOL_NAMES, GIVE_UP_NUDGE, MAX_EMPTY_REPLY_NUDGES, MAX_SESSION_TOOL_CALLS, PROTECTED_EDIT_TOOLS, REFUSAL_NUDGE, RETRY_HALT_AT, RETRY_TRACKED_COMMANDS, RETRY_WARN_AT, THRASH_ESCALATE_AT, THRASH_WARN_AT, UNREADABLE_CALL_NUDGE, activeLspBaseline, announcesNextStep, appendLspUnavailableNotice, asksForAction, asksForNewTests, assistedVerificationCalls, assistedVerificationEnabled, claimsUnmadeChange, failureSignature, fencedFileFromReply, givesUpEarly, isCompleteFileRead, isVerificationCommand, lspCallOptions, normalizeReviewPath, parallelToolCalls, promptCacheKeyField, readsLikeInstructions, refusesSpuriously, samplingTemperature, successfulMutation, targetFileHint, untestedNewCode, verificationIssues, wrongFileNudge } from './turn-guards.mjs';
 import { MAX_OUTPUT_RECOVERIES, applyEffort, claudeEffortFor, claudeThinkingMode, firstPositiveConfiguredInteger, inlineEffortLevel, isOpenRouterBaseURL, maxOutputTokensFor, openRouterOutputCapFromError, outputCapFromError, reasoningEffortFor, resolveTurnLimits, stripInlineEffort, subagentEffortConfig, thinkingBudgetFor, truncationRecoveryPrompt } from './model-budgets.mjs';
 import { HISTORY_COMPACT_INPUT_LIMIT, HISTORY_COMPACT_THRESHOLD_CHARS, announceCompaction, compactionDeadline, compactionError, deterministicHistorySummary, findCompactionBoundary, historyBudgetSize, historyTextSize, reportCompaction, safeHistoryLine, supersedeBeforeCompaction, usableCompactionSummary } from './compaction-history.mjs';
 import { applyAnthropicCacheBreakpoints, promptCachingEnabled, replaysReasoning, withProviderExtraContent } from './provider-request.mjs';
@@ -106,6 +105,12 @@ import { STEER_LIMIT, deliverSteering, pendingSteering, steeringMessage } from '
 import { describeProject, fileLayout } from './project-profile.mjs';
 import { formatApiError, responseText } from './api-error.mjs';
 import { compactSystemPrompt, systemPrompt } from './system-prompt.mjs';
+import { formatLspVerificationBlocker, verificationCommandKind, verificationSummary } from './verification-summary.mjs';
+import { ASK_USER_TOOL_DEFINITION, askUserQuestion, questionBudget } from './ask-user.mjs';
+import { normalizeUsage, usageOrEstimate } from './usage-estimate.mjs';
+export { usageOrEstimate } from './usage-estimate.mjs';
+export { normalizeQuestion, resolveQuestionAnswer } from './ask-user.mjs';
+export { formatLspVerificationBlocker } from './verification-summary.mjs';
 export { compactProjectContext, compactSkillLines } from './system-prompt.mjs';
 export { apiErrorAdvice } from './api-error.mjs';
 export { describeProject, fileLayout } from './project-profile.mjs';
@@ -1949,40 +1954,6 @@ export function fitLargeResult(value, max = MAX_REPLY_CHARS) {
   return null;
 }
 
-// Some OpenAI-compatible gateways never report usage, even with include_usage.
-// Estimate from characters (about 4 per token) so spend tracking and
-// --max-budget-usd still work; the estimate is marked so it is never mistaken
-// for provider-reported counts.
-export function usageOrEstimate(rawUsage, requestText, message = {}) {
-  const usage = normalizeUsage(rawUsage || {});
-  // A usage object with any token field is the provider's own report, even if zero.
-  const reported = rawUsage && typeof rawUsage === 'object' && ['prompt_tokens', 'completion_tokens', 'total_tokens', 'input_tokens', 'output_tokens'].some((key) => rawUsage[key] !== undefined && rawUsage[key] !== null);
-  if (reported || usage.totalTokens > 0) return usage;
-  let outputTokens = typeof message.content === 'string' ? countTextTokens(message.content) : 0;
-  for (const call of Array.isArray(message.tool_calls) ? message.tool_calls : []) outputTokens += countTextTokens(String(call && call.function && call.function.arguments || '')) + countTextTokens(String(call && call.function && call.function.name || ''));
-  const inputTokens = countTextTokens(String(requestText || ''));
-  if (!inputTokens && !outputTokens) return usage;
-  return { inputTokens, outputTokens, totalTokens: inputTokens + outputTokens, estimated: true };
-}
-
-function normalizeUsage(usage = {}) {
-  const baseInput = Number(usage.input_tokens ?? usage.prompt_tokens ?? 0) || 0;
-  const cacheTokens = usage.cache_creation_input_tokens || 0;
-  const cacheRead = usage.cache_read_input_tokens || 0;
-  const inputTokens = usage.input_tokens !== undefined ? baseInput + cacheTokens + cacheRead : baseInput;
-  const outputTokens = Number(usage.output_tokens ?? usage.completion_tokens ?? 0) || 0;
-  const cachedOpenAI = Number(usage.prompt_tokens_details && usage.prompt_tokens_details.cached_tokens || usage.input_tokens_details && usage.input_tokens_details.cached_tokens || 0) || 0;
-  // OpenAI (GPT-5.6+) reports cache writes in input_tokens_details.cache_write_tokens,
-  // split into 30-minute and 12-hour writes; cached_tokens excludes them.
-  const details = usage.input_tokens_details || usage.prompt_tokens_details || {};
-  const openaiWrites = Number(details.cache_write_tokens || 0) || 0;
-  const openaiLongWrites = Number(details.cache_write_tokens_details && details.cache_write_tokens_details.ttl_12h_tokens || 0) || 0;
-  const out = { inputTokens, outputTokens, totalTokens: inputTokens + outputTokens };
-  if (cacheRead || cachedOpenAI) out.cacheReadTokens = Number(cacheRead || cachedOpenAI);
-  if (cacheTokens || openaiWrites) out.cacheCreationTokens = Number(cacheTokens || openaiWrites);
-  if (!cacheTokens && openaiLongWrites) out.cacheWriteLongTokens = Math.min(openaiLongWrites, openaiWrites || openaiLongWrites);
-  return out;
-}
 
 // Raw Node errors ("ENOENT: no such file or directory, stat '/abs/path'") leak
 // absolute paths and tell the model nothing about what to do next.
@@ -2009,151 +1980,10 @@ const EXIT_PLAN_TOOL_DEFINITION = { type: 'function', function: {
   description: 'Only in plan mode: present your finished implementation plan to the user and ask to start implementing it. Use it once research is done and the plan is concrete (files, steps, verification). Do not use it for pure research questions.',
   parameters: { type: 'object', properties: { plan: { type: 'string', description: 'The plan in concise Markdown' } }, required: ['plan'] }
 } };
-// Users report agents halting mid-task to ask several obvious questions per
-// turn. Cap interactive questions per turn (default 2); further calls tell the
-// model to decide and state its assumption. OASIS_MAX_QUESTIONS_PER_TURN or
-// config.maxQuestionsPerTurn overrides; "off"/"unlimited" removes the cap.
-function questionBudget(session, options = {}) {
-  const env = options.env || process.env;
-  const raw = env.OASIS_MAX_QUESTIONS_PER_TURN !== undefined && env.OASIS_MAX_QUESTIONS_PER_TURN !== ''
-    ? env.OASIS_MAX_QUESTIONS_PER_TURN
-    : session && session.config && session.config.maxQuestionsPerTurn;
-  if (raw === undefined || raw === null || raw === '') return 2;
-  if (/^(off|unlimited|none|false)$/i.test(String(raw))) return null;
-  const value = Number(raw);
-  return Number.isInteger(value) && value >= 0 ? value : 2;
-}
-
-const ASK_USER_TOOL_DEFINITION = { type: 'function', function: {
-  name: 'ask_user_question',
-  description: 'Ask the user a multiple-choice question when a decision really changes the work. Options may be strings or objects with a label and optional description. Not for permission or things you can find out yourself.',
-  parameters: { type: 'object', properties: {
-    question: { type: 'string', description: 'One clear question ending with a question mark' },
-    header: { type: 'string', description: 'Very short label, up to 12 characters' },
-    options: { type: 'array', minItems: 2, maxItems: 4, items: { oneOf: [
-      { type: 'string', minLength: 1 },
-      { type: 'object', properties: {
-        label: { type: 'string', minLength: 1, description: '1-5 word choice' },
-        description: { type: 'string', description: 'What this choice means or its trade-off' }
-      }, required: ['label'], additionalProperties: false }
-    ] } },
-    multiSelect: { type: 'boolean', description: 'Allow choosing several options' }
-  }, required: ['question', 'options'] }
-} };
-
-export function normalizeQuestion(args = {}) {
-  const question = String(args.question || '').trim().slice(0, 600);
-  if (!question) throw new Error('ask_user_question needs a question.');
-  const options = (Array.isArray(args.options) ? args.options : []).slice(0, 4).map((item) => typeof item === 'string'
-    ? { label: item.trim().slice(0, 80), description: '' }
-    : { label: String(item && item.label || '').trim().slice(0, 80), description: String(item && item.description || '').trim().slice(0, 300) }).filter((item) => item.label);
-  if (options.length < 2) throw new Error('ask_user_question needs 2-4 options.');
-  return { question, header: String(args.header || '').trim().slice(0, 12), options, multiSelect: Boolean(args.multiSelect) };
-}
-
-// Multiple-choice question from the agent: answer with numbers or type freely.
-export function resolveQuestionAnswer(question, raw) {
-  const text = String(raw || '').trim();
-  if (!text) return '';
-  const picks = text.split(/[\s,]+/);
-  if (picks.every((item) => /^\d+$/.test(item) && Number(item) >= 1 && Number(item) <= question.options.length)) {
-    const chosen = [...new Set(picks.map(Number))].map((index) => question.options[index - 1].label);
-    return (question.multiSelect ? chosen : chosen.slice(0, 1)).join(', ');
-  }
-  return text;
-}
-
-async function askUserQuestion(session, args, options) {
-  const question = normalizeQuestion(args);
-  if (typeof options.askUser !== 'function') {
-    return { answered: false, message: 'No user is available to answer (non-interactive run). Choose the most reasonable option, state the assumption in your reply, and continue.' };
-  }
-  const answer = await options.askUser(question);
-  if (answer === null || answer === undefined || String(answer).trim() === '') {
-    return { answered: false, message: 'The user did not answer. Pick the safest reasonable option, say which one you picked, and continue.' };
-  }
-  return { answered: true, question: question.question, answer: String(answer).slice(0, 2000) };
-}
 
 const SPECIALIST_REVIEW_TOOLS = new Set(['git_status', 'git_diff', 'git_log', 'lsp', 'list_files', 'glob_files', 'repo_map', 'read_file', 'search_files', 'grep', 'ast_grep']);
 const MAX_SPECIALIST_REVIEWS_PER_TASK = 2;
 const MAX_TOOL_BATCH = 16;
-export function formatLspVerificationBlocker(issues) {
-  const blockers = (Array.isArray(issues) ? issues : []).filter((issue) =>
-    issue.startsWith('LSP verification unavailable') || issue.startsWith('LSP reports ')
-  );
-  if (!blockers.length) return null;
-  return 'Verification incomplete: Oasis did not mark this change as successful because the LSP gate remains blocked.\n' +
-    blockers.map((issue) => '- ' + issue).join('\n') +
-    '\nFix or explicitly resolve these diagnostics, then run verification again.';
-}
-
-
-export { verificationCommandKind as verificationCommandKindForTest };
-function verificationCommandKind(command, args) {
-  const executable = executableName(command);
-  const argv = (Array.isArray(args) ? args : []).map((item) => String(item || '').toLowerCase());
-  const taskTokens = [argv[0], argv[0] === 'run' ? argv[1] : '', argv[0] === 'exec' || argv[0] === 'x' || argv[0] === 'dlx'
-    ? argv.slice(1).find((item) => VERIFICATION_RUNNERS.has(executableName(item))) || ''
-    : ''].filter(Boolean);
-  const testRunners = new Set(['pytest', 'vitest', 'jest', 'mocha', 'tap', 'ava', 'phpunit']);
-  const lintRunners = new Set(['eslint', 'prettier', 'ruff', 'flake8', 'stylelint', 'shellcheck', 'golangci-lint', 'swiftlint']);
-  const typeCheckRunners = new Set(['tsc', 'pyright', 'mypy', 'phpstan']);
-  // `node test.mjs`, `python tests.py`, `bash test.sh`: running a test file is a test run.
-  const runsTestFile = argv.some((item) => !item.startsWith('-') && isTestPath(item));
-  if (argv.includes('--test') || runsTestFile || testRunners.has(executable) || argv.some((item) => testRunners.has(executableName(item))) ||
-      taskTokens.some((item) => item === 'test' || item === 'tests' || item.startsWith('test:'))) return 'test';
-  if (lintRunners.has(executable) || argv.some((item) => lintRunners.has(executableName(item))) ||
-      taskTokens.some((item) => item === 'lint' || item.startsWith('lint:'))) return 'lint';
-  if (typeCheckRunners.has(executable) || argv.some((item) => typeCheckRunners.has(executableName(item))) ||
-      taskTokens.some((item) => ['typecheck', 'type-check', 'types'].includes(item))) return 'type-check';
-  if (taskTokens.some((item) => ['build', 'compile', 'compileall', 'package', 'verify'].includes(item))) return 'build';
-  return 'check';
-}
-
-function verificationSummary(state) {
-  const changedPaths = [...state.changedPaths];
-  const diffReviewed = diffReviewComplete(state);
-  const checkRequired = changedPaths.some((item) => SOURCE_EXTENSIONS.has(path.extname(item).toLowerCase()));
-  const lastCheck = state.lastVerificationKind
-    ? {
-        kind: state.lastVerificationKind,
-        exitCode: Number.isInteger(state.lastVerificationExitCode) ? state.lastVerificationExitCode : null,
-        passed: state.lastVerificationExitCode === 0
-      }
-    : null;
-  const lsp = [...(state.lspVerificationByPath || new Map()).entries()]
-    .filter(([file]) => changedPaths.includes(file))
-    .map(([file, result]) => ({
-      path: file,
-      status: result && result.status === 'unavailable'
-        ? 'unavailable'
-        : result && result.status === 'not_applicable'
-          ? 'not_applicable'
-          : result && Array.isArray(result.newErrors) && result.newErrors.length
-            ? 'errors'
-            : result && (result.status === 'warnings' || Array.isArray(result.newWarnings) && result.newWarnings.length)
-              ? 'warnings'
-              : 'clean',
-      ...(result && result.status === 'unavailable' ? { blocking: result.blocking !== false } : {}),
-      newErrorCount: result && Array.isArray(result.newErrors) ? result.newErrors.length : 0,
-      newWarningCount: result && Array.isArray(result.newWarnings) ? result.newWarnings.length : 0,
-      ...(result && result.reason ? { reason: String(result.reason).replace(/[\r\n\0]/g, ' ').slice(0, 240) } : {})
-    }));
-  const issues = verificationIssues(state);
-  return {
-    required: changedPaths.length > 0,
-    changedPaths,
-    diffReviewed,
-    checkRequired,
-    lastCheck,
-    lsp,
-    ...(state.autoTestLast ? { autoTest: state.autoTestLast } : {}),
-    ...(Array.isArray(state.testTampering) && state.testTampering.length ? { testTampering: state.testTampering } : {}),
-    complete: issues.length === 0,
-    issues
-  };
-}
 
 const SPECIALIST_ROLES = {
   'code-review': 'Review likely regressions, correctness, edge cases, compatibility, and maintainability. Prioritize actionable findings supported by specific paths and line numbers.',
