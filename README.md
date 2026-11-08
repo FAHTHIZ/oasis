@@ -18,6 +18,7 @@
   <a href="#download-and-install">Install</a> ·
   <a href="#quick-start">Quick start</a> ·
   <a href="#what-you-get">Features</a> ·
+  <a href="#providers-mcp-and-plugins">Integrations</a> ·
   <a href="#how-it-compares">Comparison</a> ·
   <a href="docs/USER-GUIDE.md">User guide</a> ·
   <a href="docs/README.md">Docs</a>
@@ -101,12 +102,20 @@ oasis -p --permission-mode dont-ask "review this diff"            # never waits 
 
 The browser workspace is served by OASIS on your own computer, not a hosted service. To reach it from a phone, follow [Mobile and tablet setup](MOBILE.md) on a trusted network. There is no native Android APK or iOS app.
 
+<table>
+  <tr>
+    <td width="50%"><img src="assets/screenshots/real-model-approval.png" alt="The OASIS browser workspace in dark mode during a real gpt-oss-20b run: the agent has read and edited math.js and asks for approval before running node math.test.js, marked Risky."></td>
+    <td width="50%"><img src="assets/screenshots/real-model-fixed.png" alt="The same run after approval: the passing test output, the agent's summary of the add() fix, and the Changes panel listing math.js as modified."></td>
+  </tr>
+  <tr>
+    <td><sub>A real gpt-oss-20b run asks before it runs the tests.</sub></td>
+    <td><sub>After approval: tests pass, the diff is reviewed, and math.js shows as modified.</sub></td>
+  </tr>
+</table>
+
 <p align="center">
-  <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="assets/screenshots/workspace-dark.png">
-    <img src="assets/screenshots/workspace-light.png" alt="The OASIS browser workspace: a request to fix add(), the steps the agent took (an explore subagent, reading and editing math.js, running the tests), its reply with an Undo button, and the Changes panel listing math.js." width="100%">
-  </picture>
-  <br><sub>The browser workspace after a bug fix: each step the agent took, the reply with Undo, cost and context use, and the Changes panel. Recorded against a scripted test model.</sub>
+  <img src="assets/screenshots/real-model-pdf.png" alt="The OASIS browser workspace in light mode: the user uploaded report.pdf, the agent read it and replied that revenue grew 14% and churn fell to 2.1%." width="80%">
+  <br><sub>A PDF uploaded through the browser workspace, read by the same free model in 49 seconds. All three screenshots come from unscripted runs on 8 November 2026.</sub>
 </p>
 
 ### Agents and subagents
@@ -132,6 +141,60 @@ The browser workspace is served by OASIS on your own computer, not a hosted serv
 - File, search (ripgrep, ast-grep), edit, patch, shell, git, LSP, web search and fetch, browser automation, PDF and image tools.
 - MCP servers over stdio and HTTP with OAuth, including MCP Tasks: long tool calls run as background tasks and appear in `/tasks`.
 - Agent Skills, native plugins, slash commands, output styles and the full lifecycle hook set.
+
+## Providers, MCP and plugins
+
+### Providers and gateways
+
+`oasis connect` accepts an API key, a model page link or a server address. It works out the provider, lists the models, tests the best ones with a real tool call, and saves the first that works plus backups.
+
+```sh
+oasis connect                                  # paste a key (kept out of shell history)
+oasis connect --from-env gemini                # use GEMINI_API_KEY from the environment
+oasis connect http://localhost:11434           # Ollama, LM Studio, llama.cpp or vLLM
+oasis connect http://127.0.0.1:20128/v1        # an OmniRoute gateway
+```
+
+[OmniRoute](https://github.com/cheaper-inference/omniroute) is a built-in gateway provider. OASIS lists its routed models, skips upstreams with no connected account and fails over to a backup at once instead of retrying a route that can never work. See [Model providers](docs/CONFIGURATION.md#model-providers) and [OmniRoute](docs/CONFIGURATION.md#omniroute-gateway).
+
+### MCP servers
+
+```sh
+oasis mcp search filesystem                          # the official MCP Registry
+oasis mcp install NAME                               # pinned version, asks first
+oasis mcp add everything -- npx -y @modelcontextprotocol/server-everything
+oasis mcp add --transport http docs https://example.com/mcp
+oasis mcp serve                                      # expose OASIS tools to other MCP clients
+```
+
+Servers run over stdio, HTTP or SSE, with OAuth (`oasis mcp login`), elicitation and MCP Tasks. In auto mode, a tool from a server you added yourself skips the approval classifier only when it says it is read-only and closed-world and its description has not changed since you approved it. Project `.mcp.json` servers wait until you trust the workspace.
+
+### Claude Code plugins
+
+```sh
+oasis plugin marketplace add anthropics/claude-code
+oasis plugin install commit-commands@claude-code-plugins
+oasis -p "/commit-commands:commit"
+```
+
+Plugin commands, agents, skills, hooks and MCP servers load as they do in Claude Code. A command's `allowed-tools` apply to its run, and its `` !`git status` `` context lines run when they are read-only.
+
+## Tested with real models
+
+These runs used the real application with real providers, not a scripted model. They were recorded on 5 and 8 November 2026.
+
+| Workflow | Model | Result |
+| --- | --- | --- |
+| Fix a bug, run the tests after approval, review the diff (terminal and browser) | gpt-oss-20b (free endpoint) | Passed |
+| Read an uploaded PDF in the browser workspace | gpt-oss-20b | Passed in 49 s |
+| Attach a screenshot to a text-only model | gpt-oss-20b | Handled: the image is set aside with a note, and the conversation continues |
+| Call an MCP tool in auto mode (`server-everything`) | gpt-oss-20b | Passed |
+| Install and run the `commit-commands` plugin | gpt-oss-20b | Committed. A retry loop the model fell into was fixed afterwards. |
+| Delegate to an `explore` subagent in a git worktree | gpt-oss-20b | Passed, and the worktree was removed afterwards |
+| Resume a session with `oasis -c` | gpt-oss-20b | Passed |
+| Connect through OmniRoute and fail over between routes | llm7 models | Connection and failover passed. Full agent runs hit the free daily quota. |
+
+Each failure in these runs became a fix with a regression test (see [test/live-run-regressions.test.mjs](test/live-run-regressions.test.mjs) and the [Changelog](CHANGELOG.md)). Strong frontier models were not part of this round because no paid key was available. A free 20B model is a hard test for a harness, but it says little about how a frontier model performs.
 
 ## How it works
 

@@ -13,6 +13,10 @@ User-facing change history grouped by package version. A version heading does no
 - Nested delegation, as in Claude Code: subagents can launch their own up to three layers deep. Set `subagentMaxDepth`, `OASIS_SUBAGENT_MAX_DEPTH` or `CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH` (`1` disables it). Read-only agents never delegate, and `Agent` in a `tools` list maps to `task`.
 - `neuron_network` loads on demand with the other background-agent tools, saving about 200 tokens per request.
 - New [Subagents guide](docs/SUBAGENTS.md).
+- Found in a real delegation run with gpt-oss-20b. Optional tool fields sent as `null` (`"model": null`) are now dropped when the call is valid without them, instead of costing a correction turn.
+- Subagent requests now stream even with no display, so a silent provider trips the idle watchdog (`OASIS_STREAM_IDLE_SECONDS`, 120 s) instead of the 600 s header timeout. In the live run, one hang held the parent for 300 s. To turn this off, set `OASIS_SUBAGENT_STREAM=0`.
+
+- `oasis plugin --help` and `oasis --help` now list the Claude Code plugin marketplace commands (`plugin marketplace add`, `plugin install`). Before, they showed only `plugin eval`.
 
 ### Providers
 - [OmniRoute](https://github.com/cheaper-inference/omniroute) is a built-in gateway provider (`omniroute`, `OMNIROUTE_API_KEY`, `localhost:20128`). See [Configuration](docs/CONFIGURATION.md#omniroute-gateway).
