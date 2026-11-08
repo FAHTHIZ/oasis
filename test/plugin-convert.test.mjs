@@ -182,3 +182,16 @@ test('an MCP server that cannot start says whether the program or its folder is 
   assert.equal(byName.noprog, 'MCP server noprog could not start: the program "oasis-test-no-such-program" is not installed or not on your PATH.');
   assert.equal(byName.nodir, 'MCP server nodir could not start: its folder ' + path.join(dir, 'gone') + ' does not exist.');
 });
+
+test('oasis mcp login finds an HTTP server that comes from a plugin (context7 needs sign-in)', async (t) => {
+  const { src, root, env } = await fixture(t, {
+    '.claude-plugin/plugin.json': { name: 'docs7', version: '1.0.0' },
+    '.mcp.json': { mcpServers: { docs7: { type: 'http', url: 'https://mcp.example.com/mcp?client=claude-code-plugin' } } }
+  });
+  await addAnything(src, { root, env, approve: async () => true });
+  const { findHttpServer } = await import('../src/mcp-auth-commands.mjs');
+  const server = await findHttpServer(root, 'docs7', { env });
+  assert.equal(server.type, 'http');
+  assert.equal(server.url, 'https://mcp.example.com/mcp?client=claude-code-plugin');
+  await assert.rejects(findHttpServer(root, 'nope', { env }), /or in an enabled plugin/);
+});

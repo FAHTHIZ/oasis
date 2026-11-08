@@ -135,7 +135,7 @@ Plugin commands, agents, skills, hooks, MCP servers and language servers load th
 | security-guidance | Security hooks | Session-start hook ran (about 10 s) |
 | hookify | Your own hooks from plain language | PreToolUse and PostToolUse ran |
 | commit-commands | `/commit`, `/commit-push-pr` | Committed in a live run |
-| context7, playwright, github, figma | MCP servers | Installed; context7 and playwright started |
+| context7, playwright, github, figma | MCP servers | Installed; playwright starts. context7 and figma ask you to sign in (`oasis mcp login context7`); github needs `GITHUB_PERSONAL_ACCESS_TOKEN` |
 | typescript-lsp | TypeScript language server | Loaded |
 | claude-md-management, ralph-loop | Commands and hooks | Loaded |
 
