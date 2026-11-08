@@ -192,6 +192,18 @@ export function obviousProjectCheck({ toolName, args, messages } = {}) {
   return label ? { decision: 'allow', rule: 'Test and build', reason: label + ' is the project\'s own check (allowed without a model call).', fast: true } : null;
 }
 
+// The classifier's time limit: `autoMode.timeoutSeconds` when set, else 30 s,
+// stretched to 1.5x the main model's typical reply time (up to 180 s) when the
+// classifier runs on that same model. A free model at 45 s per reply never
+// met a fixed 30 s limit, so every check fell back to a prompt (seen live).
+export function classifierTimeoutSeconds(settings = {}, modelLatencyMs = 0) {
+  const set = Number(settings && settings.timeoutSeconds);
+  if (Number.isFinite(set) && set > 0) return Math.min(set, 600);
+  if (settings && settings.model) return 30;
+  const observed = Number(modelLatencyMs) > 0 ? Math.ceil(Number(modelLatencyMs) * 1.5 / 1000) : 0;
+  return Math.max(30, Math.min(180, observed));
+}
+
 // Returns { decision: 'allow'|'block'|'ask', reason, paused? }.
 // `evaluate({ system, prompt, model, signal })` returns the model's reply text.
 export async function classifyAction(state, request, evaluate, options = {}) {
@@ -222,7 +234,7 @@ export async function classifyAction(state, request, evaluate, options = {}) {
     verdict = parseClassifierReply(reply);
   } catch (error) {
     // The provider layer reports any abort as a user cancel; name the timeout.
-    const why = signal.aborted ? 'no answer within ' + timeoutSeconds + ' s; set autoMode.model to a faster model' : (error.message || error);
+    const why = signal.aborted ? 'no answer within ' + timeoutSeconds + ' s; set autoMode.model to a faster model or raise autoMode.timeoutSeconds' : (error.message || error);
     return { decision: 'ask', reason: 'The auto mode classifier failed (' + why + '); asking you instead.' };
   }
   if (!verdict) return { decision: 'ask', reason: 'The auto mode classifier gave no clear answer; asking you instead.' };

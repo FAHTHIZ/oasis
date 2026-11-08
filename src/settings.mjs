@@ -395,6 +395,8 @@ export async function loadSettings(root, options = {}) {
       const personal = scope === 'user' || scope === 'managed' || scope === 'flag';
       if (personal && typeof settings.autoMode.model === 'string' && settings.autoMode.model.trim()) result.autoMode.model = settings.autoMode.model.trim();
       result.autoMode.rules.push(...stringList(settings.autoMode.rules).map((rule) => rule.slice(0, 500)));
+      // A longer wait only changes how long a check may take, not what it allows.
+      if (personal && Number.isFinite(Number(settings.autoMode.timeoutSeconds)) && Number(settings.autoMode.timeoutSeconds) > 0) result.autoMode.timeoutSeconds = Math.min(600, Number(settings.autoMode.timeoutSeconds));
       if (typeof settings.autoMode.classifyAllShell === 'boolean' && (personal || settings.autoMode.classifyAllShell)) result.autoMode.classifyAllShell = settings.autoMode.classifyAllShell;
       for (const section of ['environment', 'allow', 'soft_deny', 'hard_deny']) {
         const list = settings.autoMode[section];

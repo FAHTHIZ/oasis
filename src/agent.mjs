@@ -74,7 +74,7 @@ import { withReplyLanguage } from './reply-language.mjs';
 import { effectivePhrases, normalizeCommentMode, withWritingRules } from './style-rules.mjs';
 import { PermissionPolicy, suggestRule } from './permissions.mjs';
 import { loadShellParser } from './shell-ast.mjs';
-import { classifyAction, newAutoModeState } from './auto-mode.mjs';
+import { classifierTimeoutSeconds, classifyAction, newAutoModeState } from './auto-mode.mjs';
 import { runHooks, hasHooks, CLAUDE_TOOL_NAMES } from './hooks.mjs';
 import { resolveSandbox } from './sandbox.mjs';
 import { webSearchEnabled, webSearchToolDefinition } from './web-search.mjs';
@@ -2979,7 +2979,7 @@ async function authorizeCall(session, name, args, context, options) {
     if (mode === 'auto' && !force) {
       session.autoMode ||= newAutoModeState();
       const autoSettings = session.autoModeSettings || {};
-      const verdict = await classifyAction(session.autoMode, { toolName: CLAUDE_TOOL_NAMES[name] || name, args: safeArgs, messages: session.intentMessages || session.messages, root: session.root, rules: autoSettings.rules || [] }, hookOptions(session, context.env).evaluatePrompt, { model: autoSettings.model, config: autoSettings });
+      const verdict = await classifyAction(session.autoMode, { toolName: CLAUDE_TOOL_NAMES[name] || name, args: safeArgs, messages: session.intentMessages || session.messages, root: session.root, rules: autoSettings.rules || [] }, hookOptions(session, context.env).evaluatePrompt, { model: autoSettings.model, config: autoSettings, timeoutSeconds: classifierTimeoutSeconds(autoSettings, session.modelLatencyMs) });
       session.autoMode.log.push({ tool: name, decision: verdict.decision, reason: verdict.reason, ...(verdict.rule ? { rule: verdict.rule } : {}), at: Date.now() });
       if (session.autoMode.log.length > 100) session.autoMode.log.shift();
       if (options.onAutoMode) options.onAutoMode({ tool: name, ...verdict });
@@ -4220,6 +4220,7 @@ async function runAgentTurnRaw(session, prompt, options = {}) {
     if (waitHook) {
       try { waitHook({ phase: 'start', step: step + 1, inputTokens: estimateTokens(session.messages || []) + countJsonTokens(session.toolDefinitions || TOOL_DEFINITIONS), model: session.config && session.config.model, local: isLoopbackProvider(session.config) && !cloudModelBehindGateway(session.config && session.config.model, session.config) }); } catch {}
     }
+    const modelStarted = Date.now();
     try {
       assistant = await requestCompletion(session, {
         ...(options.signal ? { signal: options.signal } : {}),
@@ -4276,6 +4277,9 @@ async function runAgentTurnRaw(session, prompt, options = {}) {
       throw error;
     }
     throwIfCancelled(options.signal);
+    // How long this provider takes per reply, so side calls on the same model
+    // (the auto-mode classifier) get a time limit the provider can meet.
+    session.modelLatencyMs = Math.round(session.modelLatencyMs ? session.modelLatencyMs * 0.6 + (Date.now() - modelStarted) * 0.4 : Date.now() - modelStarted);
     const usage = assistant.usage || { inputTokens: 0, outputTokens: 0, totalTokens: 0 };
     tokensUsed += Number(usage.totalTokens || 0);
     const pricedModel = resolveModelAlias(session.config && session.config.model, {

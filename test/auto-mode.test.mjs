@@ -190,3 +190,13 @@ test('a classifier timeout is reported as a timeout, not a user cancel', async (
   clearTimeout(keepAlive);
   assert.match(verdict.reason, /no answer within 0\.05 s/);
 });
+
+test('the classifier time limit follows the provider\'s reply time', async () => {
+  const { classifierTimeoutSeconds } = await import('../src/auto-mode.mjs');
+  assert.equal(classifierTimeoutSeconds({}, 0), 30);
+  assert.equal(classifierTimeoutSeconds({}, 4000), 30, 'a fast provider keeps the 30 s limit');
+  assert.equal(classifierTimeoutSeconds({}, 45000), 68, 'a 45 s-per-reply model gets 1.5x');
+  assert.equal(classifierTimeoutSeconds({}, 600000), 180, 'capped');
+  assert.equal(classifierTimeoutSeconds({ model: 'fast-model' }, 45000), 30, 'a separate classifier model is not stretched');
+  assert.equal(classifierTimeoutSeconds({ timeoutSeconds: 90 }, 1000), 90, 'an explicit setting wins');
+});
