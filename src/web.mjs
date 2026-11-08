@@ -1475,6 +1475,49 @@ export function createOasisWebServer(options = {}) {
       return;
     }
 
+    // Claude Code plugins and marketplaces, as `oasis plugin` manages them.
+    if (req.method === 'GET' && pathname === '/api/plugins') {
+      const { pluginOverview } = await import('./claude-plugins.mjs');
+      json(res, 200, await pluginOverview(activeRoot, { env }));
+      return;
+    }
+
+    if (req.method === 'POST' && pathname === '/api/plugins') {
+      const body = await readJsonBody(req);
+      const action = String(body.action || '');
+      const target = String(body.target || '').trim();
+      if (!target || target.length > 400) {
+        json(res, 400, { error: 'Name the plugin (NAME@MARKETPLACE) or marketplace (OWNER/REPO).' });
+        return;
+      }
+      const plugins = await import('./claude-plugins.mjs');
+      try {
+        let message;
+        if (action === 'install') {
+          const result = await plugins.installPlugin(target, { env, root: activeRoot, scope: 'user' });
+          message = 'Installed ' + result.id + '. It loads in new conversations.';
+        } else if (action === 'uninstall') {
+          message = 'Removed ' + await plugins.uninstallPlugin(target, { env }) + '.';
+        } else if (action === 'enable' || action === 'disable') {
+          const result = await plugins.setPluginEnabled(target, action === 'enable', { env, root: activeRoot, scope: 'user' });
+          message = (action === 'enable' ? 'Turned on ' : 'Turned off ') + result.id + '. This applies to new conversations.';
+        } else if (action === 'add-marketplace') {
+          const added = await plugins.addMarketplace(target, { env, cwd: activeRoot });
+          message = 'Added ' + added.name + ' with ' + added.plugins.length + ' plugins.';
+        } else if (action === 'remove-marketplace') {
+          await plugins.removeMarketplace(target, { env });
+          message = 'Removed the ' + target + ' marketplace. Installed plugins stay until you remove them.';
+        } else {
+          json(res, 400, { error: 'Unknown action. Use install, uninstall, enable, disable, add-marketplace or remove-marketplace.' });
+          return;
+        }
+        json(res, 200, { ok: true, message, ...(await plugins.pluginOverview(activeRoot, { env })) });
+      } catch (error) {
+        json(res, 400, { error: String(error && error.message || error).slice(0, 2000) });
+      }
+      return;
+    }
+
     if (req.method === 'GET' && pathname === '/api/extensions') {
       json(res, 200, await listInstalledExtensions({ root: activeRoot, env }));
       return;

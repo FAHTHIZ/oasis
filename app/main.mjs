@@ -17,6 +17,7 @@ import { normalizeTaskProgress } from './core/task-progress.mjs';
 import { RuntimeTerminal, loadXterm } from './core/terminal.mjs';
 import { suggestToken, rankSuggestions, applySuggestion } from './core/composer-suggest.mjs';
 import { mcpServerFromForm, describeMcpServer } from './core/mcp.mjs';
+import { searchMarketplace, marketplaceCount, OFFICIAL_MARKETPLACE } from './core/claude-plugins.mjs';
 // Composer autocomplete state (declared early: refreshFiles clears the file cache).
 const suggest = { token: null, items: [], index: 0, commands: null, files: null, seq: 0 };
 
@@ -1833,7 +1834,96 @@ function runStarter(plugin, starter) {
 function renderPluginGrid() {
   const grid = $('pluginGrid');
   grid.replaceChildren(...PLUGINS.map((plugin) => pluginTile(plugin)));
+  $('ccPlugins').hidden = !mcpAvailable();
+  if (mcpAvailable() && !ccLoading) void refreshClaudePlugins();
 }
+// Claude Code plugins on the computer running `oasis web` (/api/plugins).
+let ccOverview = { installed: [], marketplaces: [] };
+let ccLoading = false;
+function ccStatus(text, kind = '') { const node = $('ccStatus'); node.textContent = text; node.className = 'test-result' + (kind === 'error' ? ' fail' : ''); }
+function ccButton(label, aria, kind, onClick) {
+  const button = document.createElement('button');
+  button.type = 'button';
+  button.className = 'btn small' + (kind ? ' ' + kind : '');
+  button.textContent = label;
+  button.setAttribute('aria-label', aria);
+  button.addEventListener('click', onClick);
+  return button;
+}
+function ccRow(title, detail, buttons) {
+  const li = document.createElement('li');
+  const info = document.createElement('div');
+  info.className = 'connection-info';
+  const strong = document.createElement('strong');
+  strong.textContent = title;
+  info.append(strong);
+  if (detail) { const span = document.createElement('span'); span.textContent = detail; info.append(span); }
+  const actions = document.createElement('div');
+  actions.className = 'row';
+  actions.append(...buttons);
+  li.append(info, actions);
+  return li;
+}
+function renderClaudePlugins() {
+  const oldOffer = document.getElementById('ccOffer');
+  if (oldOffer) oldOffer.remove();
+  const installed = $('ccInstalled');
+  installed.replaceChildren(...ccOverview.installed.map((plugin) => ccRow(
+    plugin.name + (plugin.enabled ? '' : ' (off)'),
+    [plugin.marketplace, plugin.version ? 'v' + plugin.version : '', plugin.description].filter(Boolean).join(' · '),
+    [
+      ccButton(plugin.enabled ? 'Turn off' : 'Turn on', (plugin.enabled ? 'Turn off ' : 'Turn on ') + plugin.name, '', () => void ccAction(plugin.enabled ? 'disable' : 'enable', plugin.id)),
+      ...(plugin.fromClaudeCode ? [] : [ccButton('Remove', 'Remove ' + plugin.name, 'ghost', () => { if (confirm('Remove the plugin "' + plugin.name + '"?')) void ccAction('uninstall', plugin.id); })])
+    ]
+  )));
+  installed.hidden = !ccOverview.installed.length;
+  const results = $('ccResults');
+  const count = marketplaceCount(ccOverview);
+  $('ccMarket').hidden = !count;
+  if (!ccOverview.marketplaces.length) {
+    results.replaceChildren();
+    const offer = ccRow('Anthropic plugin marketplace', 'About 300 plugins, including frontend-design, superpowers, code-review, context7 and playwright.', [
+      ccButton('Add it', 'Add the Anthropic plugin marketplace', '', () => void ccAction('add-marketplace', OFFICIAL_MARKETPLACE))
+    ]);
+    $('ccInstalled').after(offer);
+    offer.id = 'ccOffer';
+    return;
+  }
+  const items = searchMarketplace(ccOverview, $('ccSearch').value, 24);
+  results.replaceChildren(...items.map((item) => ccRow(
+    item.name,
+    item.description.slice(0, 160),
+    item.installed ? [Object.assign(document.createElement('span'), { className: 'hint', textContent: 'Installed' })]
+      : [ccButton('Install', 'Install ' + item.name, '', () => {
+        if (confirm('Install "' + item.name + '" from ' + item.marketplace + '? Its hooks and MCP servers will run on this computer in new chats.')) void ccAction('install', item.id);
+      })]
+  )));
+  if (!items.length) results.replaceChildren(ccRow('No plugins match', 'Try a shorter word.', []));
+}
+async function refreshClaudePlugins() {
+  ccLoading = true;
+  try { ccOverview = await RT.client.api('/api/plugins'); ccStatus(''); }
+  catch (error) { ccOverview = { installed: [], marketplaces: [] }; ccStatus('Could not load plugins: ' + error.message, 'error'); }
+  finally { ccLoading = false; }
+  renderClaudePlugins();
+}
+async function ccAction(action, target) {
+  const busy = { install: 'Installing ', uninstall: 'Removing ', enable: 'Turning on ', disable: 'Turning off ', 'add-marketplace': 'Downloading ' }[action] || '';
+  ccStatus(busy + target + '…');
+  try {
+    const result = await RT.client.api('/api/plugins', { method: 'POST', body: { action, target } });
+    ccOverview = { installed: result.installed || [], marketplaces: result.marketplaces || [] };
+    renderClaudePlugins();
+    ccStatus(result.message || 'Done.');
+    if (action !== 'add-marketplace') toast(result.message || 'Done.');
+  } catch (error) { ccStatus(error.message, 'error'); }
+}
+$('ccSearch').addEventListener('input', () => renderClaudePlugins());
+$('ccMarketAdd').addEventListener('click', () => {
+  const source = $('ccMarketInput').value.trim();
+  if (!source) { ccStatus('Enter a repository such as ' + OFFICIAL_MARKETPLACE + '.', 'error'); return; }
+  void ccAction('add-marketplace', source).then(() => { $('ccMarketInput').value = ''; $('ccAddMarket').open = false; });
+});
 function renderPluginState() {
   const count = enabledPluginIds().length;
   $('pluginCount').textContent = count ? String(count) : '';

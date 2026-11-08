@@ -499,3 +499,12 @@ html.lite .topbar{backdrop-filter:none;-webkit-backdrop-filter:none;background:v
 .recommend span:not(.recommend-label){font-size:13px;color:var(--text-2)}
 .recommend small{font:12px/1.4 var(--mono);color:var(--muted)}
 .recommend .btn{margin-top:6px;text-decoration:none}
+.cc-plugins{margin:0 0 20px;padding-bottom:16px;border-bottom:1px solid var(--line)}
+.sheet-body h3{margin:0 0 6px;font-size:15px}
+.cc-plugins .connection-list{margin:10px 0}
+.cc-plugins .connection-list li{display:flex;align-items:center;gap:12px;padding:10px 12px;border:1px solid var(--line);border-radius:12px}
+.cc-plugins .connection-info{flex:1;min-width:0}
+.cc-plugins .connection-info span{font-family:inherit;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
+.cc-plugins .connection-list .row{flex:none;margin:0}
+.cc-market label{display:block;margin-top:8px}
+.cc-market #ccResults{max-height:340px;overflow:auto}
