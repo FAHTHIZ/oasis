@@ -5,6 +5,7 @@ User-facing change history grouped by package version. A version heading does no
 ## Unreleased
 
 ### Runtime
+- A first request that a gateway rejects as too large, without saying how large the window is, now retries with the smaller tool set and prompt instead of stopping.
 
 - `oasis mcp login NAME` and `/mcp login NAME` find HTTP servers that come from plugins. context7's plugin server now requires sign-in, and OASIS told users to run `oasis mcp login context7`, which then said there was no such server.
 
@@ -89,6 +90,7 @@ User-facing change history grouped by package version. A version heading does no
 - `oasis plugin --help` and `oasis --help` now list the Claude Code plugin marketplace commands (`plugin marketplace add`, `plugin install`). Before, they showed only `plugin eval`.
 
 ### Benchmarks
+- `bench:live --router` now sends Codex CLI through the gateway; Codex ignores `OPENAI_BASE_URL`, so it gets a provider entry instead.
 - `bench:live --router` now gives Claude Code `ANTHROPIC_API_KEY` as well as `ANTHROPIC_AUTH_TOKEN`. Claude Code 2.1.319 stopped at "Not logged in" with only the token set, so every Claude Code trial through a gateway failed before sending a request.
 
 ### Providers

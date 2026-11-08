@@ -114,3 +114,31 @@ test('a llama-server overflow on an unprobed port identifies the server for prom
   await runAgentTurn(session, 'again', { autoApprove: true, onDelta: () => {}, onModelWait: () => {} });
   assert.equal(bodies.at(-1).return_progress, true);
 });
+
+test('a first request rejected without a window size (gateway input limit) retries with the compact profile', async (t) => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'oasis-overflow-gateway-'));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const toolCounts = [];
+  const server = createServer(async (req, res) => {
+    let body = '';
+    for await (const chunk of req) body += chunk.toString();
+    const tools = (JSON.parse(body).tools || []).length;
+    toolCounts.push(tools);
+    if (tools > SMALL_CONTEXT_TOOLS.length) {
+      res.writeHead(429, { 'content-type': 'application/json' });
+      res.end(JSON.stringify({ error: { message: '[429]: DuckDuckGo AI Chat error: ERR_INPUT_LIMIT', type: 'rate_limit_error' } }));
+      return;
+    }
+    res.writeHead(200, { 'content-type': 'application/json' });
+    res.end(JSON.stringify({ choices: [{ message: { role: 'assistant', content: 'Ready.' } }] }));
+  });
+  await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
+  t.after(() => server.close());
+  const session = await createSession({ root, config: { protocol: 'openai-compatible', baseURL: 'http://127.0.0.1:' + server.address().port + '/v1', model: 'gateway-model', apiKey: '', maxSteps: 3 } });
+  const events = [];
+  const result = await runAgentTurn(session, 'hello', { autoApprove: true, onContextOverflow: (info) => events.push(info) });
+  assert.equal(result.text, 'Ready.');
+  assert.equal(events[0].smallContextTools, true);
+  assert.ok(toolCounts.at(-1) <= SMALL_CONTEXT_TOOLS.length, toolCounts.join(','));
+  assert.ok(session.toolDefinitions.some((tool) => tool.function.name === 'tool_search'));
+});

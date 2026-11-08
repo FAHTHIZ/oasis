@@ -1096,9 +1096,12 @@ export function parseGeminiOutput(rawOutput) {
   };
 }
 
-export function buildCodexArgs(config, prompt) {
+export function buildCodexArgs(config, prompt, env = process.env) {
   // workspace-write keeps Codex's default network-off sandbox, matching the benchmark rule of no network.
-  return ['exec', '--json', '--sandbox', 'workspace-write', '--skip-git-repo-check', ...(config.model ? ['-m', config.model] : []), prompt];
+  // Codex 0.1xx ignores OPENAI_BASE_URL, so a gateway needs its own provider entry.
+  const base = String(env.OASIS_CODEX_BASE_URL || '').trim();
+  const provider = base ? ['-c', 'model_provider=bench', '-c', 'model_providers.bench.name=' + JSON.stringify('bench'), '-c', 'model_providers.bench.base_url=' + JSON.stringify(base), '-c', 'model_providers.bench.env_key=' + JSON.stringify('OPENAI_API_KEY'), '-c', 'model_providers.bench.wire_api=' + JSON.stringify('responses')] : [];
+  return ['exec', '--json', '--sandbox', 'workspace-write', '--skip-git-repo-check', ...provider, ...(config.model ? ['-m', config.model] : []), prompt];
 }
 
 export function buildGeminiArgs(config, prompt) {
@@ -1237,7 +1240,7 @@ async function runClaudeCodeEval(config, options = {}) {
       try {
         await copySnapshot(task.repoDir, workspace);
         const prompt = task.taskText.trim() + '\n\nBenchmark constraints: solve this task using only the current workspace. Do not access files outside this workspace, use the network, change the task harness, or bypass verification. The harness runs the task verifier independently after you finish.';
-        cliResult = await runCli(adapter.buildArgs(config, prompt), {
+        cliResult = await runCli(adapter.buildArgs(config, prompt, env), {
           cwd: workspace,
           // OpenCode (and other Bun/shell-based CLIs) take the project from
           // $PWD, not the process cwd; an inherited PWD sent it to edit the

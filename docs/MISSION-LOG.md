@@ -17,15 +17,22 @@ weaknesses. Newest first. Detailed user-facing notes go in the CHANGELOG.
 - MCP: start failures name the cause (program not on PATH, missing folder, missing Node/Python dependencies, port in use) without echoing stderr.
 - Web app: a note lists tool servers that did not start, with the reason (browser e2e asserts it). Web sessions now use the server's `env`; they used to read `process.env`, ignoring `OASIS_CONFIG_DIR` passed to the server.
 - CLI: `oasis add --help`/`-h`/bare `oasis add` print usage instead of starting the agent.
+- Runtime: a first request rejected as too large without a stated window (DuckDuckGo gateway `ERR_INPUT_LIMIT`) now retries with the compact tool profile and prompt; before, OASIS stopped while Codex's smaller prompt fit (`test/context-overflow.test.mjs`).
+- Benchmark harness: Codex 0.130 ignores `OPENAI_BASE_URL` and went to api.openai.com (401). `bench-live` now passes a `model_providers.bench` entry through `-c` (`test/bench-live.test.mjs`).
 
 ### Tests
+- Full local `npm test` after the overflow and Codex harness fixes: 2,361 pass, 0 fail, 8 skipped.
 - Full local `npm test` after the plugin and web changes: 2,358 pass, 0 fail, 8 skipped. Browser e2e passes (8 model requests, 1 approval).
 - CI was red from 44b4a727 to a87c068e: one test still checked for the deleted `scripts/check-browser-app.mjs`, and four README tests pinned the old wording. Fixed in 4ce472a6; quality checks green again. Lesson: run the full `npm test` before pushing doc or file removals.
 - Full local `npm test` before the fix: 2,362 tests, 2,350 pass, 4 fail (the README tests above), 8 skipped.
 
 ### Normal-user runs
+- Fresh Linux install as a new user (clean HOME, `install.sh --yes --skip-setup`): 14 s, `oasis doctor` clean, PATH entry added. `oasis setup` opens with a paste-a-key prompt and three clear choices.
 - Web app, gpt-oss-20b (Pollinations, free), Ask first: slugify fix + `node:test` test, 409 s, 2 approvals, 1 test passing.
 - Codex plugins with `oasis add owner/repo --yes`: BuilderIO/skills, n8n-io/skills, DataDog/pup, NVIDIA/nvidia-kaggle (dual-format) installed, 78 skills. Codex-only: nexu-io/codex-slides started and added 38 tools after `pnpm install` in the plugin (pnpm 10; its workspace file needs it); Storybloq needs the `storybloq` program; n8n's MCP server needs `n8n_url`.
+
+### Blockers
+- Free upstreams for a three-agent run: DuckDuckGo's gpt-oss-120b (through OmniRoute) accepts tool calls but drops streams (HTTP 502) and caps input; all three agents failed `clamp-integer` on it, so it is not used for results. Pollinations now needs a key; Cloudflare Playground needs a browser runtime in OmniRoute. OpenRouter free tier: 9 of 50 requests left until the daily reset.
 
 ## 2026-11-08
 
