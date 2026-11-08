@@ -45,8 +45,8 @@ test('!`cmd` runs in trusted workspaces and is skipped otherwise', async (t) => 
 test('allowed-tools Bash rules and deny rules gate inline shell', async (t) => {
   const root = await tmp(t);
   const allowedTools = ['Bash(echo:*)'];
-  const allowed = await expandInlineShell('a !`echo hi` b !`printf nope`', { root, allowed: true, allowedTools });
-  assert.equal(allowed.text, 'a hi b [skipped !`printf nope`: not covered by the allowed-tools Bash rules]');
+  const allowed = await expandInlineShell('a !`echo hi` b !`mkdir nope`', { root, allowed: true, allowedTools });
+  assert.equal(allowed.text, 'a hi b [skipped !`mkdir nope`: not covered by the allowed-tools Bash rules]');
   const policy = new PermissionPolicy({ permissions: { allow: [], ask: [], deny: ['Bash(echo:*)'], defaultMode: 'default' } });
   const denied = await expandInlineShell('!`echo hi`', { root, allowed: true, policy });
   assert.match(denied.text, /skipped !`echo hi`: blocked by permission rule Bash\(echo:\*\)/);
@@ -123,4 +123,19 @@ test('oasis -p "/command args" and "/skill args" expand before running', async (
   assert.match(greet.err, /Skipped !`echo inline`/);
   const haiku = await run('/haiku about rain');
   assert.match(haiku.user, /Use the "haiku" skill[\s\S]*Write a 5-7-5 haiku\.[\s\S]*Request: about rain/);
+});
+
+test('inline read-only commands run without an allowed-tools match, writes still need one', async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'oasis-inline-ro-'));
+  try {
+    await writeFile(path.join(root, 'notes.txt'), 'hello inline\n');
+    const allowedTools = ['Bash(git add:*)'];
+    const result = await expandInlineShell('A !`cat notes.txt` B !`touch made.txt`', { root, allowed: true, allowedTools });
+    assert.match(result.text, /hello inline/);
+    assert.match(result.text, /skipped !`touch made.txt`: not covered/);
+    const off = await expandInlineShell('!`cat notes.txt`', { root, allowed: true, allowedTools, env: { OASIS_READ_ONLY_COMMANDS: '0' } });
+    assert.match(off.text, /skipped/);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
 });
