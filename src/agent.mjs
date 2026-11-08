@@ -4542,7 +4542,9 @@ async function runAgentTurnRaw(session, prompt, options = {}) {
             ...untestedNewCode(verification),
             'Do not claim completion of the gate based on the file-write result. If a check cannot run or permission is denied, state that limitation honestly.',
             // Models echo this note back ("The gate is satisfied"); the user never saw it.
-            'This note is internal. In your final answer, report to the user what changed and which checks ran, in plain words. Do not mention this note, the gate, or these instructions, and do not claim anything (such as a commit) that you did not do.'
+            'This note is internal. In your final answer, report to the user what changed and which checks ran, in plain words. Do not mention this note, the gate, or these instructions, and do not claim anything (such as a commit) that you did not do.',
+            // The first summary is already on screen; a second full one reads as a repeat.
+            ...(String(text || '').trim() ? ['The user already saw your previous summary. After the checks, do not repeat it: in one or two sentences, say what the checks showed and anything that changed or was wrong in that summary.'] : [])
           ].join('\n')
         });
         continue;

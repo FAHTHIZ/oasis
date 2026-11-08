@@ -5,6 +5,7 @@ User-facing change history grouped by package version. A version heading does no
 ## Unreleased
 
 ### Runtime
+- When the verification step sends the agent back after it already showed a summary, it now adds one or two sentences on what the checks showed instead of a second full summary. Found in the normal-user web run.
 - MCP tools now also go behind `tool_search` when their schemas are large (over 12,000 characters, about 3,000 tokens), not only when there are more than 25 of them. With 16 plugins on, the 25 plugin MCP tools (mostly browser automation) were sent on every request; now the model sees 21 tools and 16.5k characters of schemas instead of 46 tools and 36.5k, about 5,000 fewer input tokens per request. `OASIS_TOOL_SEARCH_CHARS` changes the limit; `OASIS_TOOL_SEARCH=off` keeps everything loaded.
 
 ### Terminal

@@ -38,6 +38,8 @@ test('the verification gate names the check that went stale after a later edit',
   const gate = requests.flatMap((request) => request.messages).find((message) => message.role === 'user' && /post-edit verification gate/.test(String(message.content)));
   assert.ok(gate, 'the gate should fire');
   assert.match(String(gate.content), /Rerun `node test\.mjs` now: it ran before your latest edit/);
+  // Seen live: after the checks the model wrote a second, longer summary of the same work.
+  assert.match(String(gate.content), /already saw your previous summary\. After the checks, do not repeat it/);
   // The terminal shows why work continues after a streamed reply.
   assert.equal(gates.length, 1);
   assert.ok(gates[0].steps.includes('rerun node test.mjs'), JSON.stringify(gates[0].steps));
