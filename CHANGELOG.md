@@ -33,6 +33,7 @@ User-facing change history grouped by package version. A version heading does no
 
 ### Browser workspace
 
+- Command palette → **Download this chat** saves the conversation as the standalone HTML page from `/export FILE.html` (served by `GET /api/sessions/:id/export`, which requires the session token).
 - After Undo, the reverted turn stays in the transcript, dimmed, with a note that files and conversation went back.
 - The usage chip next to Send shows the estimated spend for the chat (subagents included) beside the context meter, with a `+` when some requests used a model with no known price.
 - Copy buttons under every reply and on your own messages, plus Edit to put a sent message back in the composer. Copies keep the original Markdown.

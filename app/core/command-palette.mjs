@@ -3,6 +3,7 @@
 export const APP_PALETTE_COMMANDS = Object.freeze([
   { id: 'new-chat', label: 'New chat', description: 'Start a fresh conversation', section: 'Workspace', keywords: 'conversation reset start over' },
   { id: 'open-chats', label: 'Open chats', description: 'Browse saved conversations in this project', section: 'Workspace', keywords: 'history sessions previous messages' },
+  { id: 'export-chat', label: 'Download this chat', description: 'Save the conversation, with every tool step, as one HTML page', section: 'Workspace', keywords: 'export share save html transcript download' },
   { id: 'open-files', label: 'Open files', description: 'Browse project files and review changes', section: 'Workspace', keywords: 'workspace source code editor diff changes' },
   { id: 'open-plugins', label: 'Browse plugins and skills', description: 'Discover the integrations and specialist skills available to OASIS', section: 'Integrations', keywords: 'mcp tools extensions connectors plugins skills' },
   { id: 'open-settings', label: 'Open settings', description: 'Manage model providers, approvals and workspace behaviour', section: 'Workspace', keywords: 'configuration preferences model provider api key' },

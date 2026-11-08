@@ -230,6 +230,24 @@ function renderCommandPalette() {
   updatePaletteSelection();
 }
 
+// Saves the current chat as the standalone page /export FILE.html writes.
+async function downloadChat() {
+  if (!RT || RT.needsToken) { toast('Downloading a chat needs OASIS running on a computer (oasis web).'); return; }
+  const id = agent && agent.sessionId;
+  if (!id) { toast('Send a message first; there is nothing to download yet.'); return; }
+  try {
+    const html = await RT.client.exportSession(id);
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(new Blob([html], { type: 'text/html' }));
+    link.download = 'oasis-chat-' + new Date().toISOString().slice(0, 10) + '.html';
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    setTimeout(() => URL.revokeObjectURL(link.href), 4000);
+    toast('Chat downloaded.');
+  } catch (error) { toast(error.message || 'Could not download this chat.'); }
+}
+
 function updatePaletteSelection() {
   const buttons = [...$('commandPaletteResults').querySelectorAll('.command-result')];
   if (!buttons.length) return;
@@ -247,7 +265,8 @@ function runPaletteCommand(id) {
     'open-settings': () => openSettings(),
     'approval-mode': () => $('modeChip').click(),
     'focus-composer': () => $('input').focus(),
-    'keyboard-help': () => requestAnimationFrame(() => openNativeDialog('shortcutsDialog'))
+    'keyboard-help': () => requestAnimationFrame(() => openNativeDialog('shortcutsDialog')),
+    'export-chat': () => downloadChat()
   };
   closeNativeDialog('commandPaletteDialog');
   const action = actions[id];
