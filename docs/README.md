@@ -20,6 +20,7 @@ Use this index to find the right guide without having to understand the reposito
 - [First-run guide](FIRST-RUN.md) — provider setup, workspace trust, permissions and verification.
 - [Interfaces and deployment](INTERFACES.md) — terminal, browser workspace, desktop, editor, ACP, SDK and automation.
 - [Configuration reference](CONFIGURATION.md) — provider registry, fallback models, output limits and search options.
+- [Comparison with Claude Code and Hermes](COMPARISON.md) — where OASIS matches, goes further and still lags.
 - [Subagents](SUBAGENTS.md) — built-in and custom agents, front matter, structured output, background agents and teams.
 - [Mobile and tablet setup](../MOBILE.md) — connected browser sessions and advanced Termux setup.
 
