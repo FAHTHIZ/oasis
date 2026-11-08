@@ -359,6 +359,9 @@ export class RuntimeAgent {
               this.emit('usage', { usage: { ...this.usage } });
               break;
             }
+            case 'session_state':
+              if (Number(data.contextWindow) > 0) this.emit('context', { tokens: Number(data.contextTokens) || 0, window: Number(data.contextWindow), percent: Number(data.contextPercent) || 0 });
+              break;
             case 'compaction_completed': this.emit('compacted', { mode: data.usedModelSummary ? 'summary' : 'trim' }); break;
             case 'completed':
               if (data.sessionId) this.sessionId = data.sessionId;
