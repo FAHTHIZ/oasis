@@ -13,6 +13,7 @@ const WAKE_KINDS = new Set(['monitor', 'monitor-end', 'background-exit', 'backgr
 const WAKE_PREFIX = '[background event] ';
 import { createSession, runAgentTurn, runAgentPlan, closeSession, suggestNextPrompt, steerSession, takeSteering, steeringMessage, formatWait } from './agent.mjs';
 import { expandFileMentions } from './commands.mjs';
+import { labelToolActivity } from './tool-activity.mjs';
 import { visionEnabled } from './images.mjs';
 import { saveSession, loadSession } from './sessions.mjs';
 import { validateJsonSchema, extractJson } from './json-schema.mjs';
@@ -149,13 +150,24 @@ export async function runHeadless(options) {
     permissionPrompts = null,
     includeHookEvents = false,
     forwardSubagentText = false,
-    promptSuggestions = false
+    promptSuggestions = false,
+    // Text mode: one short line per step on stderr, so `oasis -p` is not
+    // silent for minutes. On by default only when stderr is a terminal;
+    // OASIS_PROGRESS=1 forces it on, OASIS_PROGRESS=0 turns it off.
+    progressWrite = null
   } = options;
   if (!OUTPUT_FORMATS.includes(outputFormat)) throw new Error('--output-format must be one of ' + OUTPUT_FORMATS.join(', ') + '.');
   const started = Date.now();
   const emit = (event) => {
     if (onEvent) onEvent(event);
     if (outputFormat === 'stream-json') write(JSON.stringify(event) + '\n');
+  };
+  const progressOn = outputFormat === 'text' && (progressWrite || env.OASIS_PROGRESS === '1' || (env.OASIS_PROGRESS !== '0' && process.stderr.isTTY));
+  const progress = !progressOn ? null : progressWrite || ((line) => process.stderr.write(process.stderr.isTTY ? '\x1b[2m' + line + '\x1b[22m\n' : line + '\n'));
+  const progressLine = (name, args) => {
+    const label = labelToolActivity(name, args || {});
+    const command = /^(run_command|run_shell|powershell)$/.test(name) && args ? [args.command, ...(Array.isArray(args.args) ? args.args : [])].filter(Boolean).join(' ') : '';
+    return '  · ' + label + (command && !label.includes(command) ? ': ' + command.replace(/\s+/g, ' ').slice(0, 100) : '');
   };
   const denied = [];
   let session = null;
@@ -253,7 +265,7 @@ export async function runHeadless(options) {
         denied.push({ tool_name: meta && meta.tool || null, detail: String(message).replace(/\s+/g, ' ').trim().slice(0, 300) });
         return false;
       },
-      onToolStart: ({ name, args, subagent, call }) => emit({ type: 'tool_use', ...(call && call.id ? { id: call.id } : {}), name, input: args, ...(subagent ? { subagent } : {}) }),
+      onToolStart: ({ name, args, subagent, call }) => (progress && !subagent && progress(progressLine(name, args)), emit({ type: 'tool_use', ...(call && call.id ? { id: call.id } : {}), name, input: args, ...(subagent ? { subagent } : {}) })),
       ...(forwardSubagentText || env.CLAUDE_CODE_FORWARD_SUBAGENT_TEXT === '1' || env.OASIS_FORWARD_SUBAGENT_TEXT === '1' ? { onSubagentText: ({ text, subagent, agentId, parentToolUseId }) => emit({ type: 'assistant', message: { role: 'assistant', content: [{ type: 'text', text }] }, parent_tool_use_id: parentToolUseId, subagent, agent_id: agentId, session_id: session.sessionId || null }) } : {}),
       onToolResult: ({ name, result: toolResult, subagent }) => emit({ type: 'tool_result', name, is_error: Boolean(toolResult && (toolResult.error || (toolResult.exitCode !== undefined && toolResult.exitCode !== 0))), content: truncateValue(toolResult), ...(subagent ? { subagent } : {}) }),
       onText: (text) => emit({ type: 'assistant', text }),

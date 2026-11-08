@@ -4,6 +4,10 @@ User-facing change history grouped by package version. A version heading does no
 
 ## Unreleased
 
+### Terminal
+- `oasis -p` is no longer silent while it works. In text mode it prints one dim line per step on stderr ("· Edited math.mjs", "· Ran the tests: npm test") when stderr is a terminal. The answer on stdout is unchanged, so pipes and scripts see the same output. `OASIS_PROGRESS=1` forces the lines on, `OASIS_PROGRESS=0` turns them off. Found in the normal-user test, where a 10-minute run printed nothing.
+- Fixed: the activity label for `list_files` read "Used list files".
+
 ### Browser workspace
 - Activity cards name every tool. Tools without a written label (plugin and MCP tools, `git_commit`, `browser` and others) used to all say "Completed a project step"; they now say what ran, for example "Used context7: resolve library id" or "Made a commit". Same change in the terminal labels. Hints that only repeat the label are hidden.
 - Steps that only ran tools sit together as one compact list, and the written answer gets clear space above it. Whitespace-only streamed text (common with gpt-oss) no longer leaves empty bubbles with their own timestamp row.
