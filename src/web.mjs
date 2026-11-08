@@ -2001,6 +2001,21 @@ export function createOasisWebServer(options = {}) {
       return;
     }
 
+    // Standalone HTML page for a saved chat (the same page as /export FILE.html).
+    const exportMatch = pathname.match(/^\/api\/sessions\/([a-f0-9-]{20,80})\/export$/i);
+    if (req.method === 'GET' && exportMatch) {
+      let saved;
+      try { saved = await loadSession(activeRoot, exportMatch[1], { env }); }
+      catch (error) { json(res, error && error.code === 'ENOENT' ? 404 : 400, { error: 'Could not export that chat: ' + (error && error.message || 'unknown error') }); return; }
+      const { conversationHtml } = await import('./session-html.mjs');
+      const live = activeSessions.get(String(exportMatch[1]).toLowerCase());
+      const model = String(live && live.config && live.config.model || saved.provider && saved.provider.model || '');
+      const html = conversationHtml({ root: activeRoot, config: { model: model || 'unknown' }, messages: saved.messages });
+      res.writeHead(200, { 'content-type': 'text/html; charset=utf-8', 'content-disposition': 'attachment; filename="oasis-chat-' + exportMatch[1].slice(0, 8) + '.html"', 'cache-control': 'no-store', 'x-content-type-options': 'nosniff', 'content-security-policy': "default-src 'none'; style-src 'unsafe-inline'; img-src data:" });
+      res.end(html);
+      return;
+    }
+
     if (req.method === 'DELETE' && sessionMatch) {
       const id = sessionMatch[1].toLowerCase();
       if (busySessions.has(id) || startingSessions.has(id)) { json(res, 409, { error: 'That chat is still running. Stop it before deleting it.' }); return; }
