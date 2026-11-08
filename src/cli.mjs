@@ -2,6 +2,7 @@
 import { getProvider, providerApiKey, providerForEndpoint, providerRegistry } from './provider-registry.mjs';
 import { probeLocalContext, isLocalModelEndpoint, localContextAdvice, SMALL_CONTEXT_TOKENS, RECOMMENDED_LOCAL_CONTEXT } from './local-context.mjs';
 import { notifyAttention } from './attention.mjs';
+import { createTerminalProgress } from './terminal-progress.mjs';
 import { playSound, configureSounds, completedTodoCount, DONE_SOUND_AFTER_MS } from './sounds.mjs';
 import { cronState, formatFindings } from './session-tools.mjs';
 import { hasHooks as hasConfiguredHooks } from './hooks.mjs';
@@ -1090,8 +1091,21 @@ let approvalQueue = Promise.resolve();
 // The interactive session connected to an IDE, if any: edit approvals open its diff view.
 let ideSession = null;
 const IDE_REVIEW_TOOLS = new Set(['edit_file', 'multi_edit', 'write_file']);
+let TERMINAL_PROGRESS = null;
+function terminalProgress() {
+  if (!TERMINAL_PROGRESS) {
+    TERMINAL_PROGRESS = createTerminalProgress({ stream: stdout });
+    // Never leave a busy or error indicator on the tab after OASIS exits.
+    if (TERMINAL_PROGRESS.enabled) process.once('exit', () => TERMINAL_PROGRESS.set('clear'));
+  }
+  return TERMINAL_PROGRESS;
+}
+
 function approve(prompt, forceInteractive = false, autoApprove = false, meta = {}) {
   if (autoApprove && !forceInteractive) return Promise.resolve(true);
+  const progress = terminalProgress();
+  const resumeState = progress.state;
+  if (resumeState === 'busy') progress.set('paused');
   const next = approvalQueue.then(async () => {
     if (ideSession && ideSession.ide && meta && IDE_REVIEW_TOOLS.has(meta.tool)) {
       const { reviewEditInIde } = await import('./ide.mjs');
@@ -1103,6 +1117,7 @@ function approve(prompt, forceInteractive = false, autoApprove = false, meta = {
     return askApproval(prompt, forceInteractive, meta);
   });
   approvalQueue = next.catch(() => {});
+  next.then(() => { if (progress.state === 'paused') progress.set(resumeState); }, () => { if (progress.state === 'paused') progress.set(resumeState); });
   return next;
 }
 
@@ -2208,6 +2223,8 @@ async function runPrompt(prompt, root, autoApprove, session = null, persistence 
   if (stdin.isTTY) process.on('SIGINT', onInterrupt);
   const turnStartedAt = Date.now();
   CURRENT_TURN_STARTED_AT = turnStartedAt;
+  terminalProgress().set('busy');
+  let turnFailed = false;
   if (session && session.settings) configureSounds({ enabled: typeof session.settings.sounds === 'boolean' ? session.settings.sounds : undefined, volume: session.settings.soundVolume });
   let lastToolHeader = null;
   let todosDone = completedTodoCount(session && session.todos);
@@ -2356,11 +2373,13 @@ async function runPrompt(prompt, root, autoApprove, session = null, persistence 
       if (changed.length) stdout.write('  ⎿ ' + (changed.length === 1 ? changed[0] + ' was' : changed.length + ' files were') + ' changed before you stopped; /rewind 1 undoes ' + (changed.length === 1 ? 'it' : 'them') + '.\n');
     } else {
       stdout.write('\nOASIS error: ' + (error.message || String(error)) + '\n');
+      turnFailed = true;
       playSound('error', { stream: stdout });
       haltAutoContinue(error);
     }
   } finally {
     stopWaitIndicator();
+    terminalProgress().set(turnFailed ? 'error' : 'clear');
     process.removeListener('SIGINT', onInterrupt);
     if (turnKeys) { turnKeys.stop(); turnKeys = null; }
     // Steering that arrived too late for this turn (or after Esc) is never lost:
