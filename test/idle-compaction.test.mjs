@@ -114,8 +114,6 @@ test('the browser workspace wires idle compaction between jobs', async () => {
   assert.match(web, /session\.idleCompaction = startIdleCompaction\(session/);
   assert.match(web, /await idleCompaction\.settle\(\)/);
   assert.match(web, /job\.status === 'completed'/);
-  const html = await readFile(new URL('../index.html', import.meta.url), 'utf8');
-  assert.match(html, /summarized while you were away/);
 });
 
 test('compaction replies that are not summaries are rejected', async (t) => {

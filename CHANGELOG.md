@@ -5,6 +5,9 @@ User-facing change history grouped by package version. A version heading does no
 ## Unreleased
 
 ### Browser workspace
+- One web interface. The classic single-file page (`index.html`, served at `/classic`) is retired; `/`, `/classic` and `/index.html` now open the app at `/app/`. OASIS has two first-class interfaces: the terminal and the web app (the desktop app and `oasis app` package the same web app). A worker left by the old page clears its caches and unregisters itself. Not carried over yet: the subagent run monitor, cloud jobs list, GitHub status and local model list.
+- The browser end-to-end check now drives the app: a scripted model fixes a bug, the user approves the edit in the approval sheet, the test passes, and axe finds no color-contrast problems in dark, light and phone views. Screenshots are saved as CI artifacts.
+- Accessibility: the message box is announced as a combobox for its `/` and `@` suggestions, and the files-panel resize handle reports its width.
 - Chats lists **Earlier on this computer**: sessions from the terminal (`oasis`, `oasis -p`) or other tabs. Opening one continues it in the browser with its full history. The file list also refreshes when you come back to the tab, so files changed in the terminal show up.
 - The Plugins sheet manages Claude Code plugins on the computer running `oasis web`: see installed plugins, turn them on or off, remove them, search a marketplace (popular plugins such as frontend-design, superpowers and code-review first) and install with one click. With no marketplace yet, it offers Anthropic's official one (about 300 plugins). New `GET/POST /api/plugins` endpoint, same code paths as `oasis plugin`.
 - Fixed: when OASIS checked its own edits after a streamed reply, the next reply was drawn in the same bubble with no break ("Provide confirmation.✅ Created…"). The `verification_gate` event now ends the bubble. Found while using the app as a normal user with gpt-oss-20b.

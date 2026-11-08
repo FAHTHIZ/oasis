@@ -26,11 +26,11 @@ test('web page is served with a hash-based Content-Security-Policy covering ever
   const root = await mkdtemp(path.join(os.tmpdir(), 'oasis-web-csp-'));
   const app = await startOasisWebServer({ root, host: '127.0.0.1', port: 0, env: { OASIS_CONFIG_DIR: path.join(root, 'c'), HOME: root }, token: 'test-runtime-token-0123456789' });
   t.after(() => app.close());
-  const response = await fetch('http://127.0.0.1:' + app.port + '/classic');
+  const response = await fetch('http://127.0.0.1:' + app.port + '/app/');
   const html = await response.text();
   const csp = response.headers.get('content-security-policy');
   assert.match(csp, /object-src 'none'/);
-  assert.match(csp, /frame-ancestors 'none'/);
+  assert.match(csp, /frame-ancestors 'self'/);
   assert.match(csp, /connect-src 'self'/);
   assert.doesNotMatch(csp.split(';').find((d) => d.trim().startsWith('script-src')), /unsafe-inline|unsafe-eval/);
   let inline = 0;
@@ -39,7 +39,7 @@ test('web page is served with a hash-based Content-Security-Policy covering ever
     inline++;
     assert.ok(csp.includes("'sha256-" + createHash('sha256').update(match[2]).digest('base64') + "'"), 'inline script ' + inline + ' is allowed');
   }
-  assert.ok(inline >= 1);
+  assert.ok(inline >= 1, 'the import map is an inline script');
   assert.doesNotMatch(html, /\son[a-z]+="/, 'no inline event handlers (CSP would block them)');
   assert.match(pageContentSecurityPolicy('<script>a()</script><script src="/x.js"></script>'), /script-src 'self' 'sha256-[^']+'(;|$)/);
 });
