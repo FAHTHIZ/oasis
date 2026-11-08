@@ -4,11 +4,9 @@
 import { oasisVersion } from './version.mjs';
 import { lstat, mkdir, realpath, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
-import { request as httpRequest } from 'node:http';
-import { request as httpsRequest } from 'node:https';
 import { lookup } from 'node:dns/promises';
 import { isIP } from 'node:net';
-import { isNonPublicIpAddress } from './network-safety.mjs';
+import { isBlockedAddress, isLocalHostname, normalizeHostname, pinnedRequest, readBoundedBody, resolvePublicAddresses } from './safe-http.mjs';
 import { isLoopbackUrl } from './config.mjs';
 import { inflateRawSync } from 'node:zlib';
 
@@ -147,144 +145,49 @@ export async function extractZip(buffer, destination) {
   return files;
 }
 
-// --plugin-url URL: download a plugin .zip for this session only and return the plugin root
-// (the directory with .claude-plugin/plugin.json, or the single top-level folder).
-function blockedAddress(address) {
-  const version = isIP(String(address || '').replace(/^\[|\]$/g, ''));
-  return version !== 4 && version !== 6 || isNonPublicIpAddress(address);
-}
-
 async function validateArchiveTarget(rawUrl, lookupImpl = lookup) {
   let parsed;
   try { parsed = new URL(rawUrl); } catch { throw new Error('--plugin-url needs a valid public HTTP or HTTPS URL.'); }
   if (!['http:', 'https:'].includes(parsed.protocol)) throw new Error('--plugin-url accepts HTTP(S) URLs only (http/https); local file URLs are blocked.');
   if (parsed.username || parsed.password) throw new Error('--plugin-url must not contain embedded credentials.');
-  const host = parsed.hostname.toLowerCase().replace(/^\[|\]$/g, '').replace(/\.+$/, '');
+  const host = normalizeHostname(parsed);
   const local = isLoopbackUrl(parsed.toString());
   if (parsed.protocol === 'http:' && !local) throw new Error('--plugin-url requires HTTPS for non-local downloads.');
   if (local) {
     const addresses = host === 'localhost' ? [{ address: '127.0.0.1', family: 4 }] : null;
     return { url: parsed, addresses };
   }
-  if (host === 'localhost' || host.endsWith('.localhost') || host.endsWith('.local') ||
-      host.endsWith('.internal') || host.endsWith('.home.arpa') || host === 'metadata.google.internal') {
-    throw new Error('--plugin-url cannot target a local or internal hostname.');
-  }
+  if (isLocalHostname(host)) throw new Error('--plugin-url cannot target a local or internal hostname.');
   // Classify IP literals before the single-label hostname rule so IPv6 literals
   // are checked by the shared SSRF policy rather than mistaken for hostnames.
   if (isIP(host)) {
-    if (blockedAddress(host)) throw new Error('--plugin-url cannot target private or special-purpose IP addresses.');
+    if (isBlockedAddress(host)) throw new Error('--plugin-url cannot target private or special-purpose IP addresses.');
     return { url: parsed, addresses: null };
   }
   if (!host.includes('.')) throw new Error('--plugin-url cannot target a single-label hostname.');
-  let records;
-  try { records = await lookupImpl(host, { all: true, verbatim: true }); }
-  catch { throw new Error('--plugin-url hostname could not be safely resolved.'); }
-  if (!records.length || records.some((record) => blockedAddress(record.address))) {
-    throw new Error('--plugin-url hostname resolves to a private or special-purpose address.');
-  }
-  return { url: parsed, addresses: records.map((record) => ({ address: record.address, family: record.family || isIP(record.address) })) };
+  const resolved = await resolvePublicAddresses(host, { lookupImpl });
+  if (resolved.reason === 'unresolved') throw new Error('--plugin-url hostname could not be safely resolved.');
+  if (resolved.reason === 'private') throw new Error('--plugin-url hostname resolves to a private or special-purpose address.');
+  return { url: parsed, addresses: resolved.addresses };
 }
 
-async function boundedResponseBytes(response, maxBytes) {
-  const declaredLength = Number(response.headers.get('content-length') || 0);
-  if (Number.isFinite(declaredLength) && declaredLength > maxBytes) {
-    await response.body?.cancel().catch(() => {});
-    throw new Error('--plugin-url archive is larger than ' + Math.round(maxBytes / 1048576) + ' MB.');
-  }
-  if (!response.body) return Buffer.alloc(0);
-  const reader = response.body.getReader();
-  const chunks = [];
-  let total = 0;
-  try {
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      total += value.byteLength;
-      if (total > maxBytes) {
-        await reader.cancel().catch(() => {});
-        throw new Error('--plugin-url archive is larger than ' + Math.round(maxBytes / 1048576) + ' MB.');
-      }
-      chunks.push(Buffer.from(value));
-    }
-  } catch (error) {
-    await reader.cancel().catch(() => {});
-    throw error;
-  }
-  return Buffer.concat(chunks, total);
+function tooLargeError(maxBytes) {
+  return new Error('--plugin-url archive is larger than ' + Math.round(maxBytes / 1048576) + ' MB.');
 }
 
 async function fetchPinnedArchiveBytes(parsed, addresses, maxBytes, signal) {
-  const hostname = parsed.hostname.toLowerCase().replace(/^\[|\]$/g, '').replace(/\.+$/, '');
-  const transport = parsed.protocol === 'https:' ? httpsRequest : httpRequest;
-  return await new Promise((resolve, reject) => {
-    let settled = false;
-    let total = 0;
-    const chunks = [];
-    const finish = (error, value) => {
-      if (settled) return;
-      settled = true;
-      if (error) reject(error);
-      else resolve(value);
-    };
-    const options = {
-      protocol: parsed.protocol,
-      hostname,
-      port: parsed.port || undefined,
-      method: 'GET',
-      path: parsed.pathname + parsed.search,
-      headers: { 'user-agent': 'OasisOSS/' + oasisVersion() + ' (+https://github.com/FAHTHIZ/oasis)', accept: 'application/zip, application/octet-stream, */*;q=0.1' },
-      signal
-    };
-    if (addresses && addresses.length && !isIP(hostname)) {
-      options.lookup = (_host, lookupOptions, callback) => {
-        if (typeof lookupOptions === 'function') { callback = lookupOptions; lookupOptions = {}; }
-        if (lookupOptions && lookupOptions.all) callback(null, addresses);
-        else callback(null, addresses[0].address, addresses[0].family);
-      };
-    }
-    let request;
-    try {
-      request = transport(parsed, options, (response) => {
-        response.on('error', (error) => finish(error));
-        if (response.statusCode >= 300 && response.statusCode < 400) {
-          finish(null, { status: response.statusCode, location: response.headers.location || null });
-          response.destroy();
-          return;
-        }
-        if (response.statusCode < 200 || response.statusCode >= 300) {
-          finish(null, { status: response.statusCode, location: null });
-          response.destroy();
-          return;
-        }
-        const declaredLength = Number(response.headers['content-length'] || 0);
-        if (Number.isFinite(declaredLength) && declaredLength > maxBytes) {
-          finish(new Error('--plugin-url archive is larger than ' + Math.round(maxBytes / 1048576) + ' MB.'));
-          response.destroy();
-          return;
-        }
-        response.on('data', (chunk) => {
-          if (settled) return;
-          total += chunk.length;
-          if (total > maxBytes) {
-            finish(new Error('--plugin-url archive is larger than ' + Math.round(maxBytes / 1048576) + ' MB.'));
-            response.destroy();
-            return;
-          }
-          chunks.push(Buffer.from(chunk));
-        });
-        response.on('end', () => {
-          if (!settled) finish(null, { status: response.statusCode, body: Buffer.concat(chunks, total) });
-        });
-      });
-    } catch (error) {
-      reject(error);
-      return;
-    }
-    request.on('error', (error) => finish(error));
-    request.setTimeout(60000, () => request.destroy(new Error('--plugin-url download timed out.')));
-    request.end();
+  const response = await pinnedRequest(parsed, {
+    addresses,
+    maxBytes,
+    signal,
+    timeoutMs: 60000,
+    timeoutMessage: '--plugin-url download timed out.',
+    headers: { 'user-agent': 'OasisOSS/' + oasisVersion() + ' (+https://github.com/FAHTHIZ/oasis)', accept: 'application/zip, application/octet-stream, */*;q=0.1' }
   });
+  if (response.status >= 300 && response.status < 400) return { status: response.status, location: response.headers.get('location') };
+  if (response.status < 200 || response.status >= 300) return { status: response.status, location: null };
+  if (response.tooLarge) throw tooLargeError(maxBytes);
+  return { status: response.status, body: response.body };
 }
 
 // --plugin-url URL: download an HTTP(S) plugin .zip for this session only and return the plugin root
@@ -321,7 +224,9 @@ export async function fetchPluginArchive(url, { fetchImpl = globalThis.fetch, tm
           await response.body?.cancel().catch(() => {});
         } else {
           if (!response.ok) throw new Error('--plugin-url download failed: HTTP ' + response.status + ' for ' + parsed.href);
-          result = { status: response.status, body: await boundedResponseBytes(response, limit) };
+          const body = await readBoundedBody(response, limit);
+          if (body === null) throw tooLargeError(limit);
+          result = { status: response.status, body };
         }
       }
       if ([301, 302, 303, 307, 308].includes(result.status)) {
