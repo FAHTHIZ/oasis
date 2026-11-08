@@ -21,7 +21,7 @@ test('CI keeps latest pending concurrency per ref and lets active quality runs f
 test('README and package metadata describe the current product without unsupported claims', async () => {
   const readme = await readFile(new URL('../README.md', import.meta.url), 'utf8');
   const pkg = JSON.parse(await readFile(new URL('../package.json', import.meta.url), 'utf8'));
-  assert.ok(readme.includes('open-source coding-agent runtime and development workspace'));
+  assert.ok(readme.includes('The open-source coding agent for any model.'));
   assert.ok(readme.includes('does not guarantee that every model will solve every task'));
   assert.ok(readme.includes('Approval prompts are not a replacement for operating-system isolation'));
   assert.ok(readme.includes('Apache License 2.0'));
