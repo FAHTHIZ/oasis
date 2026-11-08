@@ -11,6 +11,8 @@ User-facing change history grouped by package version. A version heading does no
 - MCP tools now also go behind `tool_search` when their schemas are large (over 12,000 characters, about 3,000 tokens), not only when there are more than 25 of them. With 16 plugins on, the 25 plugin MCP tools (mostly browser automation) were sent on every request; now the model sees 21 tools and 16.5k characters of schemas instead of 46 tools and 36.5k, about 5,000 fewer input tokens per request. `OASIS_TOOL_SEARCH_CHARS` changes the limit; `OASIS_TOOL_SEARCH=off` keeps everything loaded.
 
 ### Terminal
+
+- `oasis add --help`, `oasis add -h` and a bare `oasis add` print the usage line. Before, they were sent to the agent, which asked for a model provider.
 - `oasis -p` is no longer silent while it works. In text mode it prints one dim line per step on stderr ("· Edited math.mjs", "· Ran the tests: npm test") when stderr is a terminal. The answer on stdout is unchanged, so pipes and scripts see the same output. `OASIS_PROGRESS=1` forces the lines on, `OASIS_PROGRESS=0` turns them off. Found in the normal-user test, where a 10-minute run printed nothing.
 - Fixed: the activity label for `list_files` read "Used list files".
 
