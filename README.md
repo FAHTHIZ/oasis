@@ -161,7 +161,8 @@ Build a distributable for the current machine with npm run desktop:dist. Platfor
 | Capability | What OASIS provides |
 |---|---|
 | Subagents | `task` tool with parallel calls (up to 6), per-agent tools, model, effort and turn limits |
-| Custom agents | Markdown + front matter in `.oasis/agents` or `.claude/agents`: `tools`, `disallowedTools`, `maxTurns`, `skills`, `memory`, `isolation`, `background` |
+| Custom agents | Markdown + front matter in `.oasis/agents` or `.claude/agents`, with the Claude Code field set: `tools`, `disallowedTools`, `maxTurns`, `permissionMode`, `skills`, `memory`, `mcpServers`, `hooks`, `isolation`, `background`, `initialPrompt`, `omitClaudeMd`, `autoCompactWindow` |
+| Nested delegation | Subagents can delegate up to 3 layers deep (`subagentMaxDepth`, `CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH`); read-only agents stay leaves |
 | Structured results | `output_schema` validation with one automatic correction turn |
 | Background work | Up to 8 background agents, `agent_status`, `send_message` to steer or resume, `agent_stop`, stall monitor |
 | Teams | Shared task board with leases, direct teammate messages, optional tmux panes |
