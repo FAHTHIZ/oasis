@@ -2,6 +2,7 @@ import { atomicWriteFile } from './atomic-write.mjs';
 import { credentialEnvName } from './credential-env.mjs';
 import { inspectMcpTool, toolFingerprint, checkPin, repin, heldToolReason } from './mcp-trust.mjs';
 import { spawn } from 'node:child_process';
+import { existsSync } from 'node:fs';
 import { processTreeSpawnOptions, signalProcessTree } from './process-tree.mjs';
 import { debugLog } from './debug-log.mjs';
 import { mkdir, readFile, chmod, stat } from 'node:fs/promises';
@@ -161,9 +162,10 @@ class ProcessStdioTransport {
 
   async start() {
     const owner = this.owner;
+    // A server's own working directory (plugin servers ship scripts beside it), else the workspace.
+    const cwd = typeof owner.config.cwd === 'string' && owner.config.cwd ? path.resolve(owner.root, owner.config.cwd) : owner.root;
     const child = this.child = owner.child = spawn(owner.config.command, owner.config.args, {
-      // A server's own working directory (plugin servers ship scripts beside it), else the workspace.
-      cwd: typeof owner.config.cwd === 'string' && owner.config.cwd ? path.resolve(owner.root, owner.config.cwd) : owner.root,
+      cwd,
       env: safeEnvironment(owner.config, owner.env, owner.extraEnv),
       shell: false,
       windowsHide: true,
@@ -172,7 +174,9 @@ class ProcessStdioTransport {
     });
     await new Promise((resolve, reject) => {
       child.once('spawn', resolve);
-      child.once('error', (error) => reject(new Error('MCP server ' + owner.config.name + ' could not start: ' + error.message)));
+      child.once('error', (error) => reject(new Error('MCP server ' + owner.config.name + ' could not start: ' + (error.code === 'ENOENT'
+        ? (cwd !== owner.root && !existsSync(cwd) ? 'its folder ' + cwd + ' does not exist.' : 'the program "' + owner.config.command + '" is not installed or not on your PATH.')
+        : error.message))));
     });
     child.on('error', (error) => this.onerror && this.onerror(error));
     child.stdin.on('error', () => {});

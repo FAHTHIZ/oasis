@@ -492,8 +492,19 @@ export async function pluginMcpServers(plugins, options = {}) {
   for (const plugin of plugins) {
     const vars = pluginVariables(plugin, options.env, options.root);
     for (const map of await jsonComponent(plugin, plugin.manifest.mcpServers, '.mcp.json', 'mcpServers')) {
-      const expanded = JSON.parse(JSON.stringify(map), (key, value) => typeof value === 'string' ? expandPluginVariables(value, vars) : value);
-      out.push({ plugin: plugin.id, mcpServers: expanded, env: vars });
+      // A server that needs an option nobody set (n8n's "${user_config.n8n_url}/mcp-server/http")
+      // would start with an empty value and fail as "Invalid URL". Say what to set instead.
+      // An unset value in `env` stays empty, as Gemini CLI settings do.
+      const ready = {};
+      const failures = [];
+      for (const [name, spec] of Object.entries(map || {})) {
+        const unset = [...new Set([...JSON.stringify(spec && typeof spec === 'object' ? { ...spec, env: undefined } : null).matchAll(/\$\{user_config\.([A-Za-z_][A-Za-z0-9_]*)\}/g)].map((m) => m[1]))]
+          .filter((key) => vars['CLAUDE_PLUGIN_OPTION_' + key.toUpperCase()] === undefined && !(/^[A-Z][A-Z0-9_]*$/.test(key) && process.env[key] !== undefined));
+        if (unset.length) failures.push({ name, error: 'needs ' + unset.join(', ') + ': run oasis plugin config ' + plugin.id + ' ' + unset.map((key) => key + '=VALUE').join(' ') });
+        else ready[name] = spec;
+      }
+      const expanded = JSON.parse(JSON.stringify(ready), (key, value) => typeof value === 'string' ? expandPluginVariables(value, vars) : value);
+      out.push({ plugin: plugin.id, mcpServers: expanded, env: vars, failures });
     }
   }
   return out;

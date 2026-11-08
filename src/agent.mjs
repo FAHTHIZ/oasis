@@ -449,7 +449,7 @@ export async function createSession({ root, config, restore = null, permissionMo
       for (const item of await pluginMcpServers(await loadEnabledPlugins(root, { env }), { env, root })) {
         const parsed = parseMcpServerEntries({ mcpServers: item.mcpServers }, { ...env, ...item.env }, 'plugin');
         project.servers.push(...parsed.servers.map((server) => ({ ...server, plugin: item.plugin })));
-        project.failures.push(...parsed.failures.map((failure) => ({ ...failure, name: item.plugin + ':' + failure.name })));
+        project.failures.push(...[...(item.failures || []), ...parsed.failures].map((failure) => ({ ...failure, name: item.plugin + ':' + failure.name })));
       }
     } catch (error) { project.failures.push({ name: 'plugins', error: error.message }); }
   }
