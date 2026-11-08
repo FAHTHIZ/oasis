@@ -125,6 +125,13 @@ async function currentBranch(root, env) {
   return out.exitCode === 0 ? out.stdout : null;
 }
 
+// The checked-out branch for status displays (the browser workspace header).
+// null outside a repository, on a detached HEAD, or when git is missing.
+export async function workspaceBranch(root, env = process.env) {
+  try { return await currentBranch(root, await commandEnv(env, false)); }
+  catch { return null; }
+}
+
 async function ensureRepository(root, env) {
   const out = await git(root, ['rev-parse', '--is-inside-work-tree'], { env });
   if (out.exitCode !== 0 || out.stdout !== 'true') throw new Error('This workspace is not a Git repository.');

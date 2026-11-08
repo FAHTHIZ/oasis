@@ -243,6 +243,7 @@ $('commandPaletteClose').addEventListener('click', () => closeNativeDialog('comm
 $('shortcutsClose').addEventListener('click', () => closeNativeDialog('shortcutsDialog'));
 $('commandPaletteInput').addEventListener('input', renderCommandPalette);
 $('shortcutsFilter').addEventListener('input', renderShortcutGuide);
+$('transcript').addEventListener('click', onTranscriptClick);
 $('commandPaletteInput').addEventListener('keydown', (event) => {
   const buttons = $('commandPaletteResults').querySelectorAll('.command-result');
   if (event.key === 'ArrowDown' && buttons.length) { event.preventDefault(); commandPaletteSelected = (commandPaletteSelected + 1) % buttons.length; updatePaletteSelection(); }
@@ -409,7 +410,7 @@ async function send(text) {
   turnSettled = new Promise((resolve) => { settle = resolve; });
   try { await agent.send(message, { maxSteps: Number(settings.maxSteps) || 40, plugins, images }); }
   catch { /* shown through the error event */ }
-  finally { setBusy(false); persistChat(); refreshFiles(); settle(); }
+  finally { setBusy(false); persistChat(); refreshFiles(); settle(); if (RT) refreshRuntimeStatus().then(updateProjectUI).catch(() => {}); }
 }
 
 // Switching chats stops the running turn and waits for it to wind down, so
@@ -698,9 +699,80 @@ function addMessage(role, content) {
   } else {
     wrap.textContent = content;
   }
+  if (role === 'user' || role === 'assistant') {
+    messageSource.set(wrap, String(content || ''));
+    wrap.appendChild(messageActions(role));
+  }
   $('transcript').appendChild(wrap);
   $('welcome').hidden = true;
   return wrap;
+}
+
+// Copy (and, for your own messages, edit) controls under each message. The
+// Markdown source is kept per message so a copy is what was written, not the
+// rendered text.
+const messageSource = new WeakMap();
+function messageActions(role) {
+  const bar = document.createElement('div');
+  bar.className = 'msg-actions';
+  const button = (action, label, path) => {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.dataset.action = action;
+    b.setAttribute('aria-label', label);
+    b.title = label;
+    b.innerHTML = '<svg viewBox="0 0 20 20" aria-hidden="true"><path d="' + path + '" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+    bar.appendChild(b);
+  };
+  button('copy', 'Copy', 'M7 7V4.5A1.5 1.5 0 018.5 3h7A1.5 1.5 0 0117 4.5v7a1.5 1.5 0 01-1.5 1.5H13M4.5 7h7A1.5 1.5 0 0113 8.5v7a1.5 1.5 0 01-1.5 1.5h-7A1.5 1.5 0 013 15.5v-7A1.5 1.5 0 014.5 7z');
+  if (role === 'user') button('edit', 'Edit and resend', 'M12.5 4.5l3 3M4 16l1-4 8.5-8.5 3 3L8 15l-4 1z');
+  return bar;
+}
+async function copyText(text) {
+  try { await navigator.clipboard.writeText(text); return true; }
+  catch {
+    const area = document.createElement('textarea');
+    area.value = text; area.setAttribute('readonly', ''); area.style.position = 'fixed'; area.style.opacity = '0';
+    document.body.appendChild(area); area.select();
+    let ok = false;
+    try { ok = document.execCommand('copy'); } catch { ok = false; }
+    area.remove();
+    return ok;
+  }
+}
+function flashCopied(button) {
+  button.classList.add('copied');
+  const label = button.getAttribute('aria-label');
+  button.setAttribute('aria-label', 'Copied');
+  if (button.classList.contains('copy')) button.textContent = 'Copied';
+  setTimeout(() => { button.classList.remove('copied'); button.setAttribute('aria-label', label); if (button.classList.contains('copy')) button.textContent = 'Copy'; }, 1400);
+}
+function messageText(wrap) {
+  if (currentTurn && currentTurn.wrap === wrap) return currentTurn.text;
+  const saved = messageSource.get(wrap);
+  if (saved) return saved;
+  const node = wrap.querySelector('.body, .bubble');
+  return node ? node.innerText : '';
+}
+function onTranscriptClick(event) {
+  const codeCopy = event.target.closest('pre > button.copy');
+  if (codeCopy) {
+    const code = codeCopy.parentElement.querySelector('code');
+    copyText(code ? code.textContent : '').then((ok) => ok ? flashCopied(codeCopy) : toast('Could not copy.'));
+    return;
+  }
+  const action = event.target.closest('.msg-actions button');
+  if (!action) return;
+  const wrap = action.closest('.msg');
+  const text = messageText(wrap);
+  if (action.dataset.action === 'copy') copyText(text).then((ok) => ok ? flashCopied(action) : toast('Could not copy.'));
+  else if (action.dataset.action === 'edit') {
+    if (document.body.classList.contains('busy')) { toast('Wait for OASIS to finish, or stop it first.'); return; }
+    $('input').value = text;
+    autosize();
+    $('input').focus();
+    $('input').setSelectionRange(text.length, text.length);
+  }
 }
 
 function scrollDown(force = false) {
@@ -788,6 +860,7 @@ function handleEvent(event) {
       if (!currentTurn) startTurn();
       currentTurn.text = event.content || '';
       currentTurn.entry.content = currentTurn.text;
+      messageSource.set(currentTurn.wrap, currentTurn.text);
       currentTurn.body.classList.remove('cursor');
       currentTurn.body.innerHTML = renderMarkdown(currentTurn.text);
       currentTurn.body.hidden = !currentTurn.text;
@@ -818,7 +891,8 @@ function handleEvent(event) {
       break;
     }
     case 'todos': renderTodos(event.todos); break;
-    case 'usage': $('usage').textContent = formatTokens(event.usage.input + event.usage.output) + ' tok'; break;
+    case 'usage': usageState.tokens = event.usage.input + event.usage.output; renderUsage(); break;
+    case 'context': usageState.context = event; renderUsage(); break;
     case 'compacted': addMessage('note', event.mode === 'summary' ? 'Earlier conversation summarised to save context.' : 'Older tool output trimmed to save context.'); break;
     case 'stopped':
       removeThinking();
@@ -836,6 +910,7 @@ function handleEvent(event) {
       break;
     case 'done':
       removeThinking();
+      if (currentTurn) messageSource.set(currentTurn.wrap, currentTurn.text);
       currentTurn = null;
       trimTranscript();
       break;
@@ -843,6 +918,27 @@ function handleEvent(event) {
   }
 }
 
+// Token total plus, when the runtime reports it, how full the context window
+// is (a small ring that turns amber past 70% and red past 90%).
+const usageState = { tokens: 0, context: null };
+function renderUsage() {
+  const el = $('usage');
+  const ctx = usageState.context;
+  el.replaceChildren();
+  el.classList.remove('warn', 'full');
+  if (ctx && ctx.window) {
+    const percent = Math.max(0, Math.min(100, Math.round(ctx.percent)));
+    const ring = document.createElement('span');
+    ring.className = 'ctx-ring';
+    ring.style.setProperty('--p', String(percent));
+    el.append(ring, document.createTextNode(percent === 0 && ctx.tokens > 0 ? '<1%' : percent + '%'));
+    if (percent >= 90) el.classList.add('full'); else if (percent >= 70) el.classList.add('warn');
+    el.title = 'Context: ' + formatTokens(ctx.tokens) + ' of ' + formatTokens(ctx.window) + ' tokens' + (usageState.tokens ? ' · ' + formatTokens(usageState.tokens) + ' used this chat' : '') + (percent >= 70 ? '. Older work is summarised automatically, or type /compact.' : '');
+  } else if (usageState.tokens) {
+    el.textContent = formatTokens(usageState.tokens) + ' tok';
+    el.title = formatTokens(usageState.tokens) + ' tokens used this chat';
+  } else el.removeAttribute('title');
+}
 function formatTokens(n) { return n >= 1e6 ? (n / 1e6).toFixed(1) + 'M' : n >= 1e3 ? (n / 1e3).toFixed(1) + 'k' : String(n); }
 
 function renderTodos(todos) {
@@ -1042,7 +1138,7 @@ async function restoreChat({ keepChat = false } = {}) {
   display = [];
   agent.reset();
   renderTodos([]);
-  $('usage').textContent = '';
+  usageState.tokens = 0; usageState.context = null; renderUsage();
   if (!workspace) { $('welcome').hidden = false; return; }
   if (!keepChat) chatId = (await chatIndex(workspace.project.id)).current || 'main';
   const saved = await store.getValue(chatKey(workspace.project.id, chatId));
@@ -1842,6 +1938,10 @@ for (const id of ['folderInput', 'filesInput']) {
 
 function updateProjectUI() {
   $('projectName').textContent = workspace ? workspace.project.name : RT ? 'This computer' : 'No project';
+  const branch = RT && RT.status && RT.status.branch;
+  $('projectBranch').hidden = !branch;
+  $('projectBranch').textContent = branch || '';
+  $('projectBranch').title = branch ? 'Git branch: ' + branch : '';
   const github = workspace && workspace.project.source && workspace.project.source.type === 'github';
   $('pushButton').hidden = !github || Boolean(RT);
   $('exportButton').hidden = Boolean(RT);
