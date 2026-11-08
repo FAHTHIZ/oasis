@@ -2935,6 +2935,13 @@ async function main() {
   if (command === 'mcp') return await manageMcp(rest, workspace, { approve });
   // A pasted install command (npx …, uvx …, claude mcp add …, /plugin install …,
   // npx skills add …) is one source too, quoted or not.
+  const ADD_USAGE = 'Usage: oasis add <GitHub link | owner/repo[#name] | plugin@marketplace | MCP URL | npm package | registry name> [--project] [--name NAME]\n';
+  if (command === 'add' && (!rest.some((word) => !/^-/.test(word)) || rest[0] === '--help' || rest[0] === '-h')) {
+    // Without a source (or with --help) this is a usage question, not a task for the agent.
+    stdout.write(ADD_USAGE);
+    if (!rest.includes('--help') && !rest.includes('-h')) process.exitCode = 1;
+    return;
+  }
   const pastedInstall = command === 'add' && /^(npx|uvx|bunx|pnpx|docker|pipx|claude|codex|gemini|qwen|opencode|skills|\/plugin)$/i.test(String(rest[0] || '')) && rest.length > 1;
   if (pastedInstall) {
     const { addAnything } = await import('./add-anything.mjs');
@@ -2965,7 +2972,7 @@ async function main() {
     const nameAt = rest.indexOf('--name');
     const name = nameAt >= 0 ? rest[nameAt + 1] : undefined;
     const source = words.filter((word) => word !== name).join(' ');
-    if (!source) { stdout.write('Usage: oasis add <GitHub link | owner/repo[#name] | plugin@marketplace | MCP URL | npm package | registry name> [--project] [--name NAME]\n'); process.exitCode = 1; return; }
+    if (!source) { stdout.write(ADD_USAGE); process.exitCode = 1; return; }
     stdout.write('Looking at ' + source + '…\n');
     const result = await addAnything(source, { root: workspace, env: process.env, scope, name, approve: async (summary) => {
       stdout.write(summary + '\n');
