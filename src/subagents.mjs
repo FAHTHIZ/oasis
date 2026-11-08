@@ -141,6 +141,10 @@ export function normalizeAgentDefinition(raw, body, { name, source, plugin = fal
     memory: MEMORY_SCOPES.includes(memory) ? memory : null,
     background: booleanField(data.background),
     color: AGENT_COLORS.includes(color) ? color : null,
+    // Hooks scoped to this agent; ignored for plugin agents (matches Claude Code).
+    hooks: !plugin && data.hooks && typeof data.hooks === 'object' && !Array.isArray(data.hooks) ? data.hooks : null,
+    // Start without CLAUDE.md / OASIS.md project instructions.
+    omitClaudeMd: booleanField(data.omitclaudemd),
     prompt: String(body || '').trim().slice(0, 30000),
     source
   };

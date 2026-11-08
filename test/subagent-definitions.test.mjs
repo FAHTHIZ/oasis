@@ -44,11 +44,12 @@ test('agent memory reads the first 200 lines of MEMORY.md for the chosen scope',
   assert.equal(agentMemoryDirectory({ name: 'r', memory: 'user' }, root, { HOME: '/h' }), path.join('/h', '.claude', 'agent-memory', 'r'));
 });
 
-async function harness(t, { definition, taskArgs, childReplies }) {
+async function harness(t, { definition, taskArgs, childReplies, files = {}, inline = null, type = 'scout' }) {
   const root = await mkdtemp(path.join(os.tmpdir(), 'oasis-subdef-'));
   t.after(() => rm(root, { recursive: true, force: true }));
   await mkdir(path.join(root, '.oasis', 'agents'), { recursive: true });
   await writeFile(path.join(root, '.oasis', 'agents', 'scout.md'), '---\nname: scout\ndescription: Finds files\n' + definition + '---\nYou find files.\n');
+  for (const [name, text] of Object.entries(files)) await writeFile(path.join(root, name), text);
   const payloads = [];
   let childCalls = 0;
   let taskResult = null;
@@ -62,14 +63,14 @@ async function harness(t, { definition, taskArgs, childReplies }) {
     let message;
     if (isChild) message = { role: 'assistant', content: childReplies[Math.min(childCalls++, childReplies.length - 1)] };
     else if (toolMessage) { taskResult = toolMessage.content; message = { role: 'assistant', content: 'all done' }; }
-    else message = { role: 'assistant', content: null, tool_calls: [{ id: 't1', type: 'function', function: { name: 'task', arguments: JSON.stringify({ description: 'find', prompt: 'find the config', subagent_type: 'scout', ...taskArgs }) } }] };
+    else message = { role: 'assistant', content: null, tool_calls: [{ id: 't1', type: 'function', function: { name: 'task', arguments: JSON.stringify({ description: 'find', prompt: 'find the config', subagent_type: type, ...taskArgs }) } }] };
     res.writeHead(200, { 'content-type': 'application/json' });
     res.end(JSON.stringify({ choices: [{ message }] }));
   });
   await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
   t.after(() => server.close());
   const env = { ...process.env, OASIS_SUBAGENT_EFFORT: '', CLAUDE_CODE_SUBAGENT_EFFORT: '' };
-  const session = await createSession({ root, env, config: { protocol: 'openai-compatible', baseURL: 'http://127.0.0.1:' + server.address().port + '/v1', model: 'fixture', apiKey: '', maxSteps: 4 } });
+  const session = await createSession({ root, env, agentsInline: inline, config: { protocol: 'openai-compatible', baseURL: 'http://127.0.0.1:' + server.address().port + '/v1', model: 'fixture', apiKey: '', maxSteps: 4 } });
   await runAgentTurn(session, 'go', { autoApprove: true, env });
   const children = payloads.filter((payload) => /You find files/.test(payload.messages[0].content));
   return { children, taskResult, root };
@@ -126,4 +127,39 @@ test('a background agent with no activity is stopped as stalled', async (t) => {
   await record.promise;
   assert.equal(record.status, 'stalled');
   assert.match(record.error, /No activity for \d+s/);
+});
+
+test('agent hooks merge with the parent hooks; Stop becomes SubagentStop; untrusted project files add none', async () => {
+  const { agentScopedHooks } = await import('../src/subagent-support.mjs');
+  const parentHooks = { PreToolUse: [{ matcher: '', hooks: [{ type: 'command', command: 'parent' }] }] };
+  const hooks = { Stop: [{ hooks: [{ type: 'command', command: 'check-report' }] }], PreToolUse: [{ matcher: 'run_command', hooks: [{ type: 'command', command: 'lint' }] }] };
+  const agent = normalizeAgentDefinition({ hooks }, '', { name: 'r', source: 'user:/x' });
+  const merged = agentScopedHooks({ hooks: parentHooks, settings: {} }, agent);
+  assert.equal(merged.PreToolUse.length, 2);
+  assert.equal(merged.SubagentStop[0].hooks[0].command, 'check-report');
+  assert.ok(!merged.Stop);
+  assert.equal(parentHooks.PreToolUse.length, 1, 'the parent hooks are not mutated');
+  const project = normalizeAgentDefinition({ hooks }, '', { name: 'r', source: 'project:/x' });
+  assert.equal(agentScopedHooks({ hooks: parentHooks, settings: { trusted: false } }, project), parentHooks);
+  assert.equal(agentScopedHooks({ hooks: parentHooks, settings: { trusted: true } }, project).PreToolUse.length, 2);
+  assert.equal(normalizeAgentDefinition({ hooks }, '', { name: 'p:r', source: 'plugin:p', plugin: true }).hooks, null);
+});
+
+test('omitClaudeMd starts the agent without project instructions', async (t) => {
+  const marker = 'PROJECT-RULE-7Q';
+  const run = async (definition) => {
+    const result = await harness(t, { definition, taskArgs: {}, childReplies: ['ok'], files: { 'OASIS.md': '# Rules\n' + marker + '\n' } });
+    return result.children[0].messages[0].content;
+  };
+  assert.match(await run(''), new RegExp(marker));
+  const omitted = await run('omitClaudeMd: true\n');
+  assert.doesNotMatch(omitted, new RegExp(marker));
+  assert.match(omitted, /Project instruction files are omitted for this agent/);
+  assert.match(omitted, /You find files/);
+});
+
+test('a Stop hook in an agent definition runs as SubagentStop and sends the agent back', async (t) => {
+  const { children } = await harness(t, { definition: '', taskArgs: {}, childReplies: ['first', 'second'], inline: { scout2: { description: 'x', prompt: 'You find files.', hooks: { Stop: [{ hooks: [{ type: 'command', command: process.execPath + ' -e "process.stderr.write(\'add the summary\');process.exit(2)"' }] }] } } }, type: 'scout2' });
+  assert.ok(children.length >= 2);
+  assert.match(children[1].messages.at(-1).content, /SubagentStop hook asked you to continue/);
 });
