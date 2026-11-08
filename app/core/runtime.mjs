@@ -76,7 +76,7 @@ export async function detectRuntime({ win = globalThis, fetchImpl = globalThis.f
   }
 }
 
-const APP_TO_RUNTIME_MODE = { ask: 'default', edits: 'acceptEdits', auto: 'auto' };
+const APP_TO_RUNTIME_MODE = { ask: 'default', edits: 'acceptEdits', auto: 'auto', plan: 'plan' };
 const MAX_PENDING_SHELL_ITEMS = 3;
 const MAX_PENDING_SHELL_COMMAND_CHARS = 300;
 const MAX_PENDING_SHELL_OUTPUT_CHARS = 1000;

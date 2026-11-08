@@ -33,6 +33,7 @@ User-facing change history grouped by package version. A version heading does no
 - Inline autocomplete in the composer: `/` suggests commands, custom commands and skills, and `@` suggests project files. Arrow keys move, Tab or Enter accepts, Escape closes. Connected to OASIS on a computer, `/` no longer opens the command palette (Ctrl+K still does).
 - After a turn that changed files, the last reply offers Undo, which runs `/undo` to restore the files and rewind the conversation by one turn.
 - While the tab is in the background, the page title shows a badge when a task finishes or needs approval. Optional desktop notifications are under Settings.
+- Plan mode in the browser app's mode menu (when connected to OASIS on a computer), and Shift+Tab in the composer cycles modes as in the terminal.
 - The header shows the current git branch. `/api/status` now reports `branch`.
 
 ### Maintenance
