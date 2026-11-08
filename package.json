@@ -33,7 +33,10 @@
     "README.md",
     "LICENSE",
     "evals/",
-    "desktop/"
+    "desktop/",
+    "!assets/demo/",
+    "!assets/screenshots/",
+    "!scripts/demo/"
   ],
   "scripts": {
     "test": "node --test test/*.test.mjs",

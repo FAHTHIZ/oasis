@@ -1,3 +1,5 @@
+**Downloads:** [Windows (.exe)](https://github.com/FAHTHIZ/oasis/releases/latest) · [macOS (.dmg)](https://github.com/FAHTHIZ/oasis/releases/latest) · [Linux (.AppImage / .deb)](https://github.com/FAHTHIZ/oasis/releases/latest) · [All releases](https://github.com/FAHTHIZ/oasis/releases)
+
 <p align="center">
   <img src="assets/oasis-icon.svg" alt="OASIS app icon" width="88">
 </p>
@@ -13,7 +15,7 @@
   <a href="LICENSE"><img alt="Apache 2.0 license" src="https://img.shields.io/github/license/FAHTHIZ/oasis?style=flat-square"></a>
 </p>
 <p align="center">
-  <a href="#install">Install</a> ·
+  <a href="#download-and-install">Install</a> ·
   <a href="#quick-start">Quick start</a> ·
   <a href="#what-you-get">Features</a> ·
   <a href="#how-it-compares">Comparison</a> ·
@@ -21,23 +23,19 @@
   <a href="docs/README.md">Docs</a>
 </p>
 
-<p align="center">
-  <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="assets/screenshots/workspace-dark.png">
-    <img src="assets/screenshots/workspace-light.png" alt="The OASIS browser workspace: a request to fix add(), the steps the agent took (an explore subagent, reading and editing math.js, running the tests), its reply with an Undo button, and the Changes panel listing math.js." width="100%">
-  </picture>
-  <br><sub>The browser workspace after a bug fix: each step the agent took, the reply with Undo, cost and context use, and the Changes panel. Recorded against a scripted test model.</sub>
-</p>
+<p align="center"><img src="assets/oasis-readme-hero.svg" alt="The layered OASIS portal grounded on a dark, reflective floor." width="100%"></p>
+
+OASIS is the harness and application layer, not a model provider. The model still decides much of the reasoning and code quality, and OASIS does not guarantee that every model will solve every task.
 
 ## Why OASIS
 
 - **Any model, no lock-in.** OpenAI, Anthropic, Gemini, OpenRouter, Groq, DeepSeek, Mistral, xAI, Together, Fireworks, Bedrock, Vertex AI, Foundry, any OpenAI-compatible endpoint, or a local server (Ollama, LM Studio, llama.cpp, vLLM). Fallback models and task-aware routing come built in.
 - **A real agent system.** Parallel, background and resumable subagents, agent teams with a shared task board, nested delegation and per-agent git worktrees. See [Subagents](docs/SUBAGENTS.md).
 - **Your Claude Code setup works as is.** `CLAUDE.md`, `.claude/agents`, skills, commands, settings, hooks, plugins and `.mcp.json` load without conversion.
-- **It checks its own work.** A verification gate sends the agent back when it claims success without reviewing its diff or running checks. Language servers, checkpoints and one-step rewind are always available.
+- **It checks its own work.** A verification gate sends the agent back when it claims success without reviewing its diff or running checks. Every edit is checkpointed, and language-server diagnostics run when a server is installed.
 - **Safety you can read.** Permission modes, AST-based shell risk analysis, protected paths, secret scanning, SSRF-guarded network tools and optional OS or container sandboxes.
 
-## Install
+## Download and install
 
 | Platform | Download |
 | --- | --- |
@@ -58,7 +56,7 @@ brew tap fahthiz/oasis https://github.com/FAHTHIZ/oasis && brew install fahthiz/
 git clone https://github.com/FAHTHIZ/oasis.git && cd oasis && npm install && npm install --global .  # from source
 ```
 
-Every release lists SHA-256 checksums. See [Downloads and releases](docs/RELEASES.md) for ARM builds and checksum verification.
+Every release ships a SHA256SUMS file; verify your download against it. See [Downloads and releases](docs/RELEASES.md) for ARM builds and checksum verification.
 
 ## Quick start
 
@@ -92,14 +90,24 @@ oasis -p --permission-mode dont-ask "review this diff"            # never waits 
 
 | Interface | Start it with | Highlights |
 | --- | --- | --- |
-| Terminal | `oasis` | Streaming diffs with word highlights, inline images, tab progress, `/tasks`, `/rewind`, `/export` to Markdown or HTML |
+| Terminal session | `oasis` | Streaming diffs with word highlights, inline images, tab progress, `/tasks`, `/rewind`, `/export` to Markdown or HTML |
 | Browser workspace | `oasis web --open` | Chat with step-by-step activity, Files and Changes panels, an interactive terminal (Ctrl+\`), plan mode, Undo, cost and context meters, `/` and `@` autocomplete |
-| Desktop app | Open OASIS | The browser workspace in a native window, on the folder you choose |
-| Editors | `oasis ide install`, `oasis acp` | VS Code, Cursor and Windsurf extension; Zed and JetBrains over the Agent Client Protocol |
-| Automation | `oasis -p`, `action.yml`, `src/sdk.mjs` | Headless runs with JSON output and `--output-schema`, a GitHub Action, a Node.js SDK |
-| Chat apps | `oasis gateway` | Telegram, Slack and Discord |
+| Desktop application | Open OASIS | The browser workspace in a native window, on the folder you choose |
+| Editor integration | `oasis ide install` | VS Code, Cursor and Windsurf: selection context, diff review, diagnostics |
+| Agent Client Protocol | `oasis acp` | Zed, JetBrains and other ACP clients |
+| CLI and headless runner | `oasis -p`, `oasis exec` | Scripts and CI: JSON and stream-JSON output, `--output-schema`, `dont-ask` mode |
+| Node.js SDK | `src/sdk.mjs` | Embed OASIS sessions in your own app |
+| GitHub Action and messaging gateways | `action.yml`, `oasis gateway` | Run on pull requests; chat from Telegram, Slack or Discord |
 
-The browser workspace is served by OASIS on your own computer, not a hosted service. To reach it from a phone, follow [Mobile and tablet setup](MOBILE.md) on a trusted network.
+The browser workspace is served by OASIS on your own computer, not a hosted service. To reach it from a phone, follow [Mobile and tablet setup](MOBILE.md) on a trusted network. There is no native Android APK or iOS app.
+
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="assets/screenshots/workspace-dark.png">
+    <img src="assets/screenshots/workspace-light.png" alt="The OASIS browser workspace: a request to fix add(), the steps the agent took (an explore subagent, reading and editing math.js, running the tests), its reply with an Undo button, and the Changes panel listing math.js." width="100%">
+  </picture>
+  <br><sub>The browser workspace after a bug fix: each step the agent took, the reply with Undo, cost and context use, and the Changes panel. Recorded against a scripted test model.</sub>
+</p>
 
 ### Agents and subagents
 
@@ -159,7 +167,7 @@ The full comparison, with sources and the gaps that remain, is in [docs/COMPARIS
 
 ## Security
 
-OASIS can read and change project files, run commands and send context to your model provider. Treat it like any tool that runs with your account's permissions.
+OASIS can read and change project files, run commands and send context to your model provider. Treat it like any tool that runs with your account's permissions. Approval prompts are not a replacement for operating-system isolation.
 
 - Permission modes range from `plan` (read-only) to `dont-ask` (never waits, denies anything not allowed). The default runs read-only commands freely and asks before other commands, installs, deletions and new websites.
 - The OS sandbox (bubblewrap, macOS Seatbelt, or Docker and Podman) is optional. Don't assume it's on unless `oasis doctor` says so.
@@ -179,7 +187,7 @@ npm run lint
 
 CI also runs platform security regressions, a live Docker sandbox test, native PTY coverage and browser end-to-end checks. A green suite covers the cases it tests. It doesn't prove OASIS beats another tool on your tasks. See [Benchmark methodology](docs/BENCHMARKS.md).
 
-Contributions are welcome. Start with the [contributing guide](CONTRIBUTING.md).
+Contributions are welcome. Start with the [Contributing guide](CONTRIBUTING.md).
 
 ## Documentation
 
@@ -190,6 +198,7 @@ Contributions are welcome. Start with the [contributing guide](CONTRIBUTING.md).
 | [Interfaces](docs/INTERFACES.md) | [Subagents](docs/SUBAGENTS.md) | [Security](SECURITY.md) |
 | [Downloads](docs/RELEASES.md) | [Comparison](docs/COMPARISON.md) | [Support](SUPPORT.md) |
 | [Mobile setup](MOBILE.md) | [Benchmarks](docs/BENCHMARKS.md) | [Code of Conduct](CODE_OF_CONDUCT.md) |
+| | | [Brand guidelines](BRAND.md) |
 
 All guides are listed in the [documentation index](docs/README.md).
 
