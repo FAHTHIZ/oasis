@@ -25,6 +25,13 @@ User-facing change history grouped by package version. A version heading does no
 ### Terminal
 - Edit previews highlight the changed words inside a changed line (theme tokens `diffAddedWord` / `diffRemovedWord`), as in Claude Code and Cursor. Unrelated replacements stay whole-line.
 
+### Browser workspace
+
+- Copy buttons under every reply and on your own messages, plus Edit to put a sent message back in the composer. Copies keep the original Markdown.
+- Fixed: the Copy button on code blocks did nothing.
+- The composer shows how full the context window is as a ring and percentage (amber past 70%, red past 90%), with token counts on hover.
+- The header shows the current git branch. `/api/status` now reports `branch`.
+
 ### Maintenance
 - Removed duplicated chat chunking (Telegram gateway) and generated-media file handling (images and speech).
 - README: quick start, agent system overview and Claude Code compatibility summary.

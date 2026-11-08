@@ -1621,6 +1621,7 @@ export function createOasisWebServer(options = {}) {
         providerConfigured = false;
         setupHint = error.message || 'Run oasis setup in the terminal.';
       }
+      const branch = await import('./git-tools.mjs').then((mod) => mod.workspaceBranch(activeRoot, env)).catch(() => null);
       json(res, 200, {
         connected: true,
         providerConfigured,
@@ -1629,6 +1630,7 @@ export function createOasisWebServer(options = {}) {
         providerSetupAvailable: isLoopbackClient(req),
         workspaceName: path.basename(activeRoot),
         workspacePath: activeRoot,
+        branch: branch ? String(branch).slice(0, 200) : null,
         workspaceAccess: 'local-filesystem',
         approvalMode: 'per-action',
         setupHint

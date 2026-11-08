@@ -253,6 +253,7 @@ test('browser runtime serves the app but requires a bearer token for every agent
   assert.equal(statusBody.providerSetupAvailable, true);
   assert.equal(statusBody.workspacePath, root);
   assert.equal(statusBody.workspaceName, path.basename(root));
+  assert.ok(statusBody.branch === null || typeof statusBody.branch === 'string', 'status reports the git branch, or null outside a repository');
   assert.equal('apiKey' in statusBody, false);
 
   const anonymousMonitor = await fetch(base + '/api/agent-monitor');
