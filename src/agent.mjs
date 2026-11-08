@@ -88,7 +88,7 @@ async function pathExists(file) { try { await access(file); return true; } catch
 import { SHELL_TOOL_DEFINITION, POWERSHELL_TOOL_DEFINITION, findPowerShell, killAllBackground } from './power-tools.mjs';
 import { runLsp, serverForFile, verifyEditedFileWithLsp, stopLspClients } from './lsp.mjs';
 import { AGENT_TOOL_DEFINITIONS, AGENT_TOOL_NAMES, MAX_BACKGROUND_AGENTS, agentRegistry, registerAgent, addAgentUsage, restoreAgentHistory, runningBackgroundCount, notifyParent, drainInbox, agentStatus, agentEvents, neuronNetworkSnapshot, recordAgentEvent, sendTeamMessage, stopAgent, stopAllAgents, getAgent, getAgentTeam, createAgentTeam, agentTeamStatus, shutdownAgentTeam } from './agent-tasks.mjs';
-import { subagentStepLimit, subagentDefinitionContext, verifyResumeWorktree, backgroundUsageSink, subagentMaxDepth, watchForStall } from './subagent-support.mjs';
+import { subagentStepLimit, subagentDefinitionContext, verifyResumeWorktree, backgroundUsageSink, subagentMaxDepth, watchForStall, agentScopedHooks, withoutProjectInstructions } from './subagent-support.mjs';
 export { subagentMaxDepth, subagentStallLimits } from './subagent-support.mjs';
 import { loadAgentDefinitions, taskToolDefinition, BUILTIN_AGENTS, MAX_PARALLEL_SUBAGENTS, runPool, parseFrontMatter, mapToolNames, normalizeAgentDefinition } from './subagents.mjs';
 import { validateJsonSchema, extractJson } from './json-schema.mjs';
@@ -837,6 +837,7 @@ export async function createSession({ root, config, restore = null, permissionMo
   if (!systemPromptOverride) systemText += mcpInstructionsSection(mcp.clients, { channels: channelEntries, settings: loadedSettings });
   if (appendSystemPrompt) systemText += '\n\n' + String(appendSystemPrompt).slice(0, 20000);
   const session = {
+    projectContextText: projectContext || '',
     createEnv: env,
     channels: channelEntries,
     root,
@@ -3755,7 +3756,8 @@ async function runSubagent(parent, args, context, options) {
     return !allowed || allowed.has(name) || SHARED_TASK_TOOL_NAMES.has(name) || name === 'team_send_message';
   });
   const agentContext = await subagentDefinitionContext(parent, agent, options);
-  const base = parent.baseSystemPrompt || String(parent.messages && parent.messages[0] && parent.messages[0].content || '');
+  const parentBase = parent.baseSystemPrompt || String(parent.messages && parent.messages[0] && parent.messages[0].content || '');
+  const base = agent.omitClaudeMd ? withoutProjectInstructions(parentBase, parent.projectContextText) : parentBase;
   const systemText = [
     base,
     'SUBAGENT MODE (' + agent.name + '). ' + agent.prompt,
@@ -3810,7 +3812,7 @@ async function runSubagent(parent, args, context, options) {
     settings: parent.settings,
     permissions: parent.permissions,
     sandbox: parent.sandbox,
-    hooks: parent.hooks || {},
+    hooks: agentScopedHooks(parent, agent),
     background: new Map(),
     hookMessages: parent.hookMessages || [],
     // Auto mode judges a subagent's actions against what the user asked the parent.
@@ -3826,6 +3828,7 @@ async function runSubagent(parent, args, context, options) {
     budgetLedger: parent.budgetLedger ||= { spentUsd: Math.max(0, Number(parent.costUsd) || 0), unknownRequests: 0 },
     agents: nested ? parent.agents || BUILTIN_AGENTS : {},
     subagentDepth: depth + 1,
+    projectContextText: parent.projectContextText || '',
     subagentMaxDepth: parent.subagentMaxDepth
   };
   // Not enumerable: keeps session saves and copies from walking the parent.

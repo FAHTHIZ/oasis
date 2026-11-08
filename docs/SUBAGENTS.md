@@ -62,6 +62,10 @@ and report the commands you ran with their results.
 | `isolation` | `worktree` gives the agent its own git worktree and branch. Oasis commits its changes there when it finishes. |
 | `effort` | `low`, `medium`, `high`, or `max` reasoning effort for this agent only. |
 | `color` | Display color: `red`, `blue`, `green`, `yellow`, `purple`, `orange`, `pink`, `cyan`. |
+| `hooks` | Hooks that apply only while this agent runs, in the settings format. A `Stop` hook runs as `SubagentStop`. Project agent files add hooks only in a trusted workspace; plugin agents can't set them. |
+| `omitClaudeMd` | `true` starts the agent without the `CLAUDE.md` / `OASIS.md` project instructions, for agents that get everything from the prompt. |
+
+Not read yet: `mcpServers` (subagents use the parent's MCP servers), `initialPrompt`, `autoCompactWindow` and `experimental`. Unknown fields are ignored, as in Claude Code.
 
 ## Structured output
 

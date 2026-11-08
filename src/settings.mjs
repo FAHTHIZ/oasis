@@ -190,7 +190,7 @@ function normalizeHook(hook) {
   return null;
 }
 
-function normalizeHooks(raw) {
+export function normalizeHooks(raw) {
   const out = {};
   if (!raw || typeof raw !== 'object') return out;
   for (const [event, groups] of Object.entries(raw)) {
@@ -208,7 +208,7 @@ function normalizeHooks(raw) {
   return out;
 }
 
-function mergeHooks(target, extra, source) {
+export function mergeHooks(target, extra, source) {
   for (const [event, groups] of Object.entries(extra)) {
     for (const group of groups) (target[event] ||= []).push({ ...group, source });
   }
