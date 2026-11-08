@@ -36,7 +36,7 @@ export const UNCONFIGURED_ROUTE_PATTERN = /\bnot configured\b|\bno (?:active |av
 // "Prompt too long (max 6000 characters)" (Cloudflare's playground behind
 // OmniRoute, wrapped in a 502), "context length exceeded" and the like never
 // clear on a retry: the same request is just as large next time.
-export const PROMPT_TOO_LARGE_PATTERN = /prompt (?:is )?too (?:long|large)|context.?length.?exceeded|maximum context length|input is too long|request (?:entity )?too large/i;
+export const PROMPT_TOO_LARGE_PATTERN = /prompt (?:is )?too (?:long|large)|context.?length.?exceeded|maximum context length|input is too long|request (?:entity )?too large|ERR_INPUT_LIMIT|input (?:length )?limit (?:exceeded|reached)/i;
 export function isPromptTooLargeError(text) {
   return PROMPT_TOO_LARGE_PATTERN.test(String(text || ''));
 }

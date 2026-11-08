@@ -1005,7 +1005,7 @@ export function isContextOverflowError(error) {
   const status = Number(error.status || error.statusCode);
   const text = String(error.message || '');
   if (/max_tokens|max_output|output tokens/i.test(text) && !/prompt|input|context/i.test(text)) return false;
-  return status === 413 || /prompt (?:is )?too long|context.?length.?exceeded|maximum context length|context window|input is too long|too many (?:input )?tokens|request (?:entity )?too large|reduce the length of the (?:messages|input|prompt)|input length .*exceed|exceeds? the (?:model'?s )?(?:maximum |available )?context|available context size/i.test(text);
+  return status === 413 || isPromptTooLargeError(text) || /prompt (?:is )?too long|context.?length.?exceeded|maximum context length|context window|input is too long|too many (?:input )?tokens|request (?:entity )?too large|reduce the length of the (?:messages|input|prompt)|input length .*exceed|exceeds? the (?:model'?s )?(?:maximum |available )?context|available context size/i.test(text);
 }
 
 export function stopFailureType(error) {

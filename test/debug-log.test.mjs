@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import os from 'node:os';
 import path from 'node:path';
-import { mkdtemp, readFile, writeFile, stat } from 'node:fs/promises';
+import { mkdtemp, readFile, writeFile, stat, rm } from 'node:fs/promises';
 import '../src/tools.mjs';
 import { enableDebug, disableDebug, debugLog, debugEnabled, parseDebugCategories } from '../src/debug-log.mjs';
 import { createSession, runAgentTurn, closeSession } from '../src/agent.mjs';
@@ -27,6 +27,7 @@ test('categories filter and secrets are redacted', async (t) => {
 test('OASIS_DEBUG logs api, tools and permissions for a turn; /debug and /heapdump work', async (t) => {
   t.after(disableDebug);
   const root = await mkdtemp(path.join(os.tmpdir(), 'oasis-debug-root-'));
+  t.after(() => rm(root, { recursive: true, force: true }));
   await writeFile(path.join(root, 'a.txt'), 'hello');
   const file = path.join(root, 'debug.txt');
   const env = { ...process.env, HOME: root, OASIS_CONFIG_DIR: path.join(root, 'cfg'), OASIS_DEBUG: 'all', OASIS_DEBUG_FILE: file };

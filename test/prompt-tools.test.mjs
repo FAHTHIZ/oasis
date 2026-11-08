@@ -96,3 +96,12 @@ test('a prompt that is too large is reported as such and not retried as a server
   assert.match(message, /retrying will not help/);
   assert.doesNotMatch(message, /server-side problem/);
 });
+
+test('DuckDuckGo-style ERR_INPUT_LIMIT (sent as 429) counts as prompt too large, not a rate limit', async () => {
+  const { isContextOverflowError } = await import('../src/agent.mjs');
+  const body = '{"error":{"message":"[429]: DuckDuckGo AI Chat error: ERR_INPUT_LIMIT","type":"rate_limit_error","code":"rate_limit_exceeded"}}';
+  assert.equal(isPromptTooLargeError(body), true);
+  assert.equal(isContextOverflowError({ status: 429, message: formatApiError(429, body, 'openai-compatible') }), true);
+  assert.match(formatApiError(429, body, "openai-compatible"), /larger than this model/);
+  assert.equal(isPromptTooLargeError('{"error":{"message":"Rate limit reached, try again in 20s"}}'), false);
+});
