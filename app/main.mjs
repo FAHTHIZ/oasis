@@ -797,15 +797,18 @@ function activityLabel(tool) {
 
 // Subagents started in this turn, with their live status (running, done, failed).
 function renderSubagents(wrap, workers = []) {
-  let box = wrap.querySelector(':scope > .subagents');
+  let box = wrap.querySelector('.subagents');
   if (!workers.length) { if (box) box.remove(); return; }
   if (!box) {
     box = document.createElement('section');
     box.className = 'subagents';
     box.setAttribute('aria-label', 'Subagents');
-    const tools = wrap.querySelector(':scope > .tools');
-    wrap.insertBefore(box, tools ? tools.nextSibling : null);
   }
+  // Sit right under the step that started them, not after every later step.
+  const launches = wrap.querySelectorAll('.tools > .tool[data-name="task"]');
+  const anchor = launches[launches.length - 1];
+  if (anchor) { if (anchor.nextSibling !== box) anchor.after(box); }
+  else if (!box.parentNode) { const tools = wrap.querySelector(':scope > .tools'); wrap.insertBefore(box, tools ? tools.nextSibling : null); }
   const running = workers.filter((w) => w.status === 'running' || w.status === 'stopping').length;
   const head = document.createElement('div');
   head.className = 'subagents-head';
@@ -827,6 +830,7 @@ function toolCard(tool) {
   const el = document.createElement('details');
   el.className = 'tool ' + (tool.ok === undefined ? 'running' : tool.ok ? 'ok' : 'fail');
   el.dataset.id = tool.id;
+  el.dataset.name = tool.name || '';
   const summary = document.createElement('summary');
   summary.innerHTML = '<span class="state" aria-hidden="true"></span><span class="name"></span><span class="arg"></span><span class="tool-status"></span><span class="chevron" aria-hidden="true">›</span>';
   const status = tool.ok === undefined ? 'in progress' : tool.ok ? 'completed' : 'failed';
