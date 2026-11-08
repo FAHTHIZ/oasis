@@ -11,7 +11,7 @@
 // Chat commands: /new (fresh session), /stop (cancel the running turn),
 // /status, /mode default|acceptEdits|plan|auto, /help.
 import path from 'node:path';
-import { receiveAttachments, gatewayTranscriber } from './gateway-core.mjs';
+import { receiveAttachments, gatewayTranscriber, chunkText } from './gateway-core.mjs';
 import { speakableText, synthesizeSpeech, textToSpeechConfig, voiceReplyMode } from './tts.mjs';
 
 const API = 'https://api.telegram.org';
@@ -24,17 +24,7 @@ export function parseAllowedChats(value) {
 
 // Telegram caps messages at 4096 characters; split on line breaks when possible.
 export function chunkMessage(text, size = MAX_MESSAGE) {
-  const source = String(text || '').trim() || '(empty reply)';
-  const parts = [];
-  let rest = source;
-  while (rest.length > size) {
-    let cut = rest.lastIndexOf('\n', size);
-    if (cut < size / 2) cut = size;
-    parts.push(rest.slice(0, cut));
-    rest = rest.slice(cut).replace(/^\n/, '');
-  }
-  if (rest) parts.push(rest);
-  return parts;
+  return chunkText(text, size);
 }
 
 export function createTelegramGateway(options = {}) {
