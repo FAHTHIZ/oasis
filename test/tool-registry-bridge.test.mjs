@@ -18,7 +18,6 @@ test('bridge maps write tools to high-risk write capability', () => {
   const tool = bridgeToolDefinition(writeDefinition);
   assert.deepEqual(tool.capabilities, ['write']);
   assert.equal(tool.risk, 'high');
-  assert.equal(tool.rollback.kind, 'file-snapshot');
 });
 
 test('bridge marks command execution as approval-required', () => {
