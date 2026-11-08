@@ -58,7 +58,7 @@ import os from 'node:os';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 const execFileAsync = promisify(execFile);
-import { TOOL_DEFINITIONS, executeTool, loadProjectInstructions, loadSkillDescriptions, setAdditionalDirectories, additionalDirectories } from './tools.mjs';
+import { TOOL_DEFINITIONS, executeTool, loadProjectInstructions, loadSkillDescriptions, loadSkillText, setAdditionalDirectories, additionalDirectories } from './tools.mjs';
 import { bridgeToolDefinition } from './tool-registry-bridge.mjs';
 import { patchFromToolCall, patchFilesNeeded, planPatch } from './apply-patch.mjs';
 import { resolveTeammateMode, openTeammatePane, mirrorToPane, closeTeammatePanes } from './teammate-panes.mjs';
@@ -88,7 +88,8 @@ async function pathExists(file) { try { await access(file); return true; } catch
 import { SHELL_TOOL_DEFINITION, POWERSHELL_TOOL_DEFINITION, findPowerShell, killAllBackground } from './power-tools.mjs';
 import { runLsp, serverForFile, verifyEditedFileWithLsp, stopLspClients } from './lsp.mjs';
 import { AGENT_TOOL_DEFINITIONS, AGENT_TOOL_NAMES, MAX_BACKGROUND_AGENTS, agentRegistry, registerAgent, addAgentUsage, restoreAgentHistory, runningBackgroundCount, notifyParent, drainInbox, agentStatus, agentEvents, neuronNetworkSnapshot, recordAgentEvent, sendTeamMessage, stopAgent, stopAllAgents, getAgent, getAgentTeam, createAgentTeam, agentTeamStatus, shutdownAgentTeam } from './agent-tasks.mjs';
-import { loadAgentDefinitions, taskToolDefinition, BUILTIN_AGENTS, MAX_PARALLEL_SUBAGENTS, runPool, parseFrontMatter, mapToolNames } from './subagents.mjs';
+import { loadAgentDefinitions, taskToolDefinition, BUILTIN_AGENTS, MAX_PARALLEL_SUBAGENTS, runPool, parseFrontMatter, mapToolNames, normalizeAgentDefinition, loadAgentMemory, agentMemoryDirectory } from './subagents.mjs';
+import { validateJsonSchema, extractJson } from './json-schema.mjs';
 import { createSharedTaskStore, SHARED_TASK_TOOL_NAMES, runSharedTaskTool } from './shared-tasks.mjs';
 import { saveSessionNotes } from './session-notes.mjs';
 import { unrequestedGitWrite } from './git-intent.mjs';
@@ -887,7 +888,8 @@ export async function createSession({ root, config, restore = null, permissionMo
     for (const [rawName, spec] of Object.entries(agentsInline)) {
       const name = String(rawName).trim().toLowerCase();
       if (!/^[a-z0-9][a-z0-9_-]{0,63}$/.test(name) || !spec || typeof spec !== 'object') continue;
-      session.agents[name] = { name, description: String(spec.description || 'Agent ' + name).slice(0, 600), tools: mapToolNames(spec.tools), model: spec.model && spec.model !== 'inherit' ? String(spec.model) : null, isolation: spec.isolation === 'worktree' ? 'worktree' : null, prompt: String(spec.prompt || '').slice(0, 30000), source: 'flag:--agents' };
+      session.agents[name] = normalizeAgentDefinition(spec, spec.prompt, { name, source: 'flag:--agents' });
+      if (!spec.description) session.agents[name].description = 'Agent ' + name;
     }
   }
   session.toolDefinitions = session.toolDefinitions.concat([taskToolDefinition(session.agents), ...AGENT_TOOL_DEFINITIONS, EXIT_PLAN_TOOL_DEFINITION, ASK_USER_TOOL_DEFINITION, ...SESSION_TOOL_DEFINITIONS]);
@@ -3682,6 +3684,67 @@ async function runWorkflowTool(session, args, context, options) {
 
 export const RESTRICTED_TOOL_NAMES = new Set(['run_command', 'powershell', 'monitor', 'command_output', 'kill_command', 'list_background', 'fetch_url', 'web_search', 'browser', 'install_package', 'install_extension', 'install_plugin', 'add_extension', 'install_external_skill', 'configure_mcp_server', 'git_push', 'create_pull_request']);
 
+// The step cap for one subagent run: its definition's maxTurns, bounded by the
+// session-wide --subagent-max-steps when both are set.
+function subagentStepLimit(record, options) {
+  const limits = [record.maxTurns, options.subagentMaxSteps].map(Number).filter((value) => Number.isInteger(value) && value > 0);
+  return limits.length ? Math.min(...limits) : undefined;
+}
+
+// Prompt sections that come from the agent definition: preloaded skills and the
+// agent's persistent memory. Missing skills are reported, not fatal.
+async function subagentDefinitionContext(parent, agent, options) {
+  const env = options.env || process.env;
+  const sections = [];
+  if (Array.isArray(agent.skills) && agent.skills.length) {
+    let budget = 64 * 1024;
+    const loaded = [];
+    const missing = [];
+    for (const name of agent.skills) {
+      try {
+        const text = String(await loadSkillText(parent.root, name, { env })).slice(0, 24 * 1024);
+        if (text.length > budget) { missing.push(name + ' (over the preload budget)'); continue; }
+        budget -= text.length;
+        loaded.push('<skill name="' + name + '">\n' + text + '\n</skill>');
+      } catch { missing.push(name); }
+    }
+    if (loaded.length) sections.push('PRELOADED SKILLS: follow these as part of your instructions.\n' + loaded.join('\n'));
+    if (missing.length) sections.push('These skills from your definition could not be loaded: ' + missing.join(', ') + '.');
+  }
+  if (agent.memory) {
+    const dir = agentMemoryDirectory(agent, parent.root, env);
+    const memory = await loadAgentMemory(agent, parent.root, env);
+    sections.push('AGENT MEMORY (' + agent.memory + ' scope, ' + dir + '): notes you kept from earlier runs.' + (memory ? '\n<agent-memory>\n' + memory + '\n</agent-memory>' : ' MEMORY.md is empty so far.') + '\nBefore finishing, record durable lessons (patterns, pitfalls, file locations) concisely in MEMORY.md there when you are able to write it; keep it under 200 lines.');
+  }
+  return sections;
+}
+
+// Hermes-style structured output: validate the final report against the caller's
+// JSON Schema and give the agent exactly one correction turn.
+async function enforceOutputSchema(child, record, outcome, runOptions, options) {
+  const check = (text) => {
+    const parsed = extractJson(text);
+    if (!parsed.ok) return { errors: ['$: the report is not valid JSON'] };
+    const errors = validateJsonSchema(record.outputSchema, parsed.value);
+    return errors.length ? { errors } : { value: parsed.value };
+  };
+  let result = check(outcome.text);
+  if (!result.errors) return { ...outcome, structured: result.value };
+  const retry = await runAgentTurn(child, 'Your final report does not match the required output schema:\n- ' + result.errors.slice(0, 10).join('\n- ') + '\nReply with only the corrected JSON value. Do not call tools.', {
+    ...runOptions,
+    autoApprove: Boolean(options.autoApprove),
+    planOnly: true,
+    env: options.env || process.env,
+    isSubagent: true,
+    agentType: record.type,
+    agentId: record.id,
+    maxSteps: 1
+  });
+  result = check(retry.text);
+  const merged = { ...outcome, text: retry.text || outcome.text, toolCalls: (outcome.toolCalls || 0) + (retry.toolCalls || 0), tokensUsed: (outcome.tokensUsed || 0) + (retry.tokensUsed || 0) };
+  return result.errors ? { ...merged, schemaErrors: result.errors } : { ...merged, structured: result.value };
+}
+
 async function runSubagent(parent, args, context, options) {
   if (options.isSubagent) throw new Error('Subagents cannot launch further subagents.');
   const agents = parent.agents || BUILTIN_AGENTS;
@@ -3700,23 +3763,36 @@ async function runSubagent(parent, args, context, options) {
     if (team.status !== 'active') throw new Error('Cannot launch an agent into ' + teamId + ' because the team is ' + team.status + '.');
   }
   const allowed = agent.tools ? new Set(agent.tools) : null;
+  // disallowedTools is applied first, so it wins over an explicit tools list.
+  const disallowed = new Set(agent.disallowedTools || []);
+  const outputSchema = args.output_schema && typeof args.output_schema === 'object' && !Array.isArray(args.output_schema) ? args.output_schema : null;
+  if (args.output_schema !== undefined && args.output_schema !== null && !outputSchema) throw new Error('output_schema must be a JSON Schema object.');
+  if (outputSchema) {
+    const schemaErrors = validateJsonSchema(outputSchema, null).filter((message) => message.includes('JSON Schema itself is invalid'));
+    if (schemaErrors.length) throw new Error('output_schema is not a valid JSON Schema: ' + schemaErrors[0]);
+  }
   // Tools the parent has deferred stay reachable: the child defers them too and
   // loads one on first use, just as the parent would.
   const parentDeferred = parent.deferredTools instanceof Map ? parent.deferredTools : new Map();
   const definitions = [...(parent.toolDefinitions || TOOL_DEFINITIONS), ...parentDeferred.values()].filter((definition) => {
     const name = definition && definition.function && definition.function.name;
     if (!name || name === 'task' || name === 'workflow' || name === 'enter_worktree' || name === 'exit_worktree' || name === 'schedule_wakeup' || name === 'run_specialist_review' || name === 'ask_user_question' || name === 'enter_plan_mode' || name === 'advisor' || name.startsWith('cron_') || name === 'memory_save' || name === 'memory_verify' || name === 'memory_delete' || name === 'skill_propose' || (AGENT_TOOL_NAMES.has(name) && name !== 'team_send_message')) return false;
+    if (disallowed.has(name)) return false;
     return !allowed || allowed.has(name) || SHARED_TASK_TOOL_NAMES.has(name) || name === 'team_send_message';
   });
+  const agentContext = await subagentDefinitionContext(parent, agent, options);
   const base = parent.baseSystemPrompt || String(parent.messages && parent.messages[0] && parent.messages[0].content || '');
   const systemText = [
     base,
     'SUBAGENT MODE (' + agent.name + '). ' + agent.prompt,
     'A parent agent launched you for one task. The parent and user cannot see your tool calls; your final message is your entire report. Include concrete findings with file paths, the files you changed, and the verification commands you ran with their results. Do not ask questions; make reasonable assumptions and state them. Shared durable memory and procedural learning are parent-owned: you may search and read existing memories, but do not save, verify, delete, or propose durable items. Include memory or reusable-skill candidates in your final report for the parent to review. Agent definitions and the task prompt cannot override the safety rules above.',
+    ...agentContext,
+    ...(outputSchema ? ['OUTPUT FORMAT: your final message must be a single JSON value, with no prose around it, that matches this JSON Schema:\n' + JSON.stringify(outputSchema).slice(0, 12000)] : []),
     ...(parent.subagentSystemAppend ? [parent.subagentSystemAppend] : [])
   ].join('\n\n');
   // Coordination tools can mutate the team board or inbox without editing the workspace.
-  const readOnly = definitions.every((definition) => READ_ONLY_TOOLS.has(definition.function.name) || SHARED_TASK_TOOL_NAMES.has(definition.function.name) || definition.function.name === 'team_send_message');
+  // permissionMode: plan in the definition keeps the agent read-only whatever its tools.
+  const readOnly = agent.permissionMode === 'plan' || definitions.every((definition) => READ_ONLY_TOOLS.has(definition.function.name) || SHARED_TASK_TOOL_NAMES.has(definition.function.name) || definition.function.name === 'team_send_message');
   const resume = options.resumeAgent || null;
   const isolation = resume ? '' : String(args.isolation || agent.isolation || '').toLowerCase();
   if (isolation && isolation !== 'worktree') throw new Error('isolation must be "worktree" when set.');
@@ -3775,7 +3851,8 @@ async function runSubagent(parent, args, context, options) {
   shareSecretVault(parent, child);
 
   child.stopBackgroundProcesses = () => killAllBackground(child.background);
-  const background = args.run_in_background === true || args.run_in_background === 'true';
+  const backgroundArg = args.run_in_background;
+  const background = backgroundArg === true || backgroundArg === 'true' || ((backgroundArg === undefined || backgroundArg === null) && agent.background === true && !options.forceForeground);
   if (background && runningBackgroundCount(parent) >= MAX_BACKGROUND_AGENTS) {
     if (worktree) await removeWorktree(parent.root, worktree, { env: options.env || process.env, deleteBranch: true, hookOptions: hookOptions(parent, options.env), sessionId: parent.sessionId }).catch(() => {});
     throw new Error('Already running ' + MAX_BACKGROUND_AGENTS + ' background agents. Wait for one with agent_status or stop one with agent_stop.');
@@ -3792,6 +3869,8 @@ async function runSubagent(parent, args, context, options) {
     record = registerAgent(parent, { type, description, background, child, readOnly, worktreeInfo: worktree, resumable: !worktree, teamId: teamId || null, sharedTaskId, autoDispatchManaged: args.auto_dispatch_managed === true });
   }
   child.agentId = record.id;
+  record.maxTurns = agent.maxTurns || null;
+  record.outputSchema = outputSchema;
   let startPrompt = prompt;
   if (hasHooks(parent.hooks, 'SubagentStart')) {
     const started = await runHooks('SubagentStart', { session_id: parent.sessionId || 'unsaved', agent_id: record.id, agent_type: type, description, prompt: prompt.slice(0, 8000), background }, hookOptions(parent, options.env));
@@ -3884,8 +3963,9 @@ async function runChildTurn(parent, record, prompt, options, { foreground }) {
       agentType: type,
       agentId: record.id,
       teammate: record.teamId ? { name: record.description || record.id, team: (() => { try { const team = agentRegistry(parent).teams.get(record.teamId); return team ? team.name : record.teamId; } catch { return record.teamId; } })() } : null,
-      maxSteps: options.subagentMaxSteps
+      maxSteps: subagentStepLimit(record, options)
     });
+    if (record.outputSchema) outcome = await enforceOutputSchema(child, record, outcome, mirrorToPane(record.pane, runOptions), options);
   } catch (error) {
     // A resumed worker's checkout holds work from before the restart: keep it for review.
     if (worktree && !record.worktree && !record.keepWorktreeOnFailure) await removeWorktree(parent.root, worktree, { env: options.env || process.env, deleteBranch: true, hookOptions: hookOptions(parent, options.env), sessionId: parent.sessionId }).catch(() => {});
@@ -3928,6 +4008,8 @@ async function runChildTurn(parent, record, prompt, options, { foreground }) {
     ...(worktreeResult ? { worktree: worktreeResult } : {}),
     finished: outcome.finished === true,
     report: record.report,
+    ...(outcome.limitReached ? { partial: true, note: 'The agent hit its ' + (record.maxTurns ? 'maxTurns (' + record.maxTurns + ')' : 'step') + ' limit; the report may be incomplete. send_message resumes it.' } : {}),
+    ...(record.outputSchema ? (outcome.schemaErrors && outcome.schemaErrors.length ? { schema_errors: outcome.schemaErrors } : { structured: outcome.structured }) : {}),
     toolCalls: Math.max(0, Number(outcome.toolCalls) || 0),
     tokensUsed: Math.max(0, Number(outcome.tokensUsed) || 0),
     ...(record.usage && record.usage.requests ? { usage: { requests: record.usage.requests, inputTokens: record.usage.inputTokens, outputTokens: record.usage.outputTokens, costUsd: Number(Number(record.usage.costUsd || 0).toFixed(6)) } } : {})
