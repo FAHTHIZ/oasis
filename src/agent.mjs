@@ -88,7 +88,7 @@ async function pathExists(file) { try { await access(file); return true; } catch
 import { SHELL_TOOL_DEFINITION, POWERSHELL_TOOL_DEFINITION, findPowerShell, killAllBackground } from './power-tools.mjs';
 import { runLsp, serverForFile, verifyEditedFileWithLsp, stopLspClients } from './lsp.mjs';
 import { AGENT_TOOL_DEFINITIONS, AGENT_TOOL_NAMES, MAX_BACKGROUND_AGENTS, agentRegistry, registerAgent, addAgentUsage, restoreAgentHistory, runningBackgroundCount, notifyParent, drainInbox, agentStatus, agentEvents, neuronNetworkSnapshot, recordAgentEvent, sendTeamMessage, stopAgent, stopAllAgents, getAgent, getAgentTeam, createAgentTeam, agentTeamStatus, shutdownAgentTeam } from './agent-tasks.mjs';
-import { subagentStepLimit, subagentDefinitionContext, verifyResumeWorktree, backgroundUsageSink, subagentMaxDepth, watchForStall, agentScopedHooks, withoutProjectInstructions } from './subagent-support.mjs';
+import { subagentStepLimit, subagentDefinitionContext, verifyResumeWorktree, backgroundUsageSink, subagentMaxDepth, watchForStall, agentScopedHooks, withoutProjectInstructions, agentMcpSpec, connectAgentMcp, closeAgentMcp } from './subagent-support.mjs';
 export { subagentMaxDepth, subagentStallLimits } from './subagent-support.mjs';
 import { loadAgentDefinitions, taskToolDefinition, BUILTIN_AGENTS, MAX_PARALLEL_SUBAGENTS, runPool, parseFrontMatter, mapToolNames, normalizeAgentDefinition } from './subagents.mjs';
 import { validateJsonSchema, extractJson } from './json-schema.mjs';
@@ -3837,6 +3837,12 @@ async function runSubagent(parent, args, context, options) {
     projectContextText: parent.projectContextText || '',
     subagentMaxDepth: parent.subagentMaxDepth
   };
+  const mcpSpec = agentMcpSpec(parent, agent);
+  if (mcpSpec) {
+    child.mcpClients = new Map(child.mcpClients);
+    child.mcpToolMap = new Map(child.mcpToolMap);
+    child.agentMcpSpec = mcpSpec;
+  }
   // Not enumerable: keeps session saves and copies from walking the parent.
   Object.defineProperty(child, 'parentSessionRef', { value: parent, enumerable: false, writable: true, configurable: true });
   shareSecretVault(parent, child);
@@ -3886,7 +3892,26 @@ async function runSubagent(parent, args, context, options) {
 // commit in its history. Anything else (removed, moved, switched, replaced by a symlink)
 // is refused rather than guessed at.
 // Runs one turn of a subagent's own conversation and records the outcome.
-async function runChildTurn(parent, record, prompt, options, { foreground }) {
+// The agent's own MCP servers are connected for each turn and closed after it.
+async function runChildTurn(parent, record, prompt, options, flags) {
+  const child = record.child;
+  if (child && child.agentMcpSpec) {
+    const connected = await connectAgentMcp(child, options.env || process.env).catch((error) => ({ definitions: [], failures: [{ name: 'mcpServers', error: error.message }] }));
+    for (const definition of connected.definitions) {
+      if (child.allowedToolNames.has(definition.function.name)) continue;
+      child.toolDefinitions.push(definition);
+      child.allowedToolNames.add(definition.function.name);
+    }
+    if (connected.failures.length && !child.agentMcpFailureNoted) {
+      child.agentMcpFailureNoted = true;
+      prompt += '\n\n(These MCP servers from your agent definition did not start: ' + connected.failures.map((failure) => failure.name + ': ' + String(failure.error || '').slice(0, 160)).join('; ') + '.)';
+    }
+  }
+  try { return await runChildTurnInner(parent, record, prompt, options, flags); }
+  finally { closeAgentMcp(record.child); }
+}
+
+async function runChildTurnInner(parent, record, prompt, options, { foreground }) {
   const { child, type, description } = record;
   const worktree = record.worktreeInfo;
   const tag = (event) => ({ ...event, subagent: description, agentType: type, agentId: record.id });
