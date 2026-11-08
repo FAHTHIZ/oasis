@@ -1093,25 +1093,6 @@ export function createOasisWebServer(options = {}) {
     };
   }
 
-  async function getGithubRepos() {
-    const status = await getGithubStatus();
-    if (!status.cliAvailable) throw Object.assign(new Error(status.hint), { statusCode: 412 });
-    if (!status.authenticated) throw Object.assign(new Error(status.hint), { statusCode: 412 });
-    const args = [
-      'api', 'user/repos?per_page=30&sort=updated',
-      '--jq', '[.[] | {nameWithOwner: .full_name, name: .name, url: .html_url, isPrivate: .private}]'
-    ];
-    const result = await runReadOnlyGh(args, 30);
-    if (result.error || result.exitCode !== 0) {
-      throw Object.assign(new Error('Could not list GitHub repositories. ' + String(result.stderr || result.error || result.stdout || 'GitHub CLI request failed').slice(0, 1800)), { statusCode: 502 });
-    }
-    let repositories;
-    try { repositories = JSON.parse(result.stdout || '[]'); }
-    catch { throw Object.assign(new Error('GitHub CLI returned invalid repository JSON. Update GitHub CLI and try again.'), { statusCode: 502 }); }
-    if (!Array.isArray(repositories)) throw Object.assign(new Error('GitHub CLI returned an unexpected repository list.'), { statusCode: 502 });
-    return { repositories: repositories.filter((repo) => repo && typeof repo.nameWithOwner === 'string').slice(0, 30), source: 'GitHub CLI', limit: 30 };
-  }
-
   async function startGithubCloneJob(input) {
     const repository = String(input.repository || '').trim();
     if (!/^[A-Za-z0-9][A-Za-z0-9_.-]{0,99}\/[A-Za-z0-9][A-Za-z0-9_.-]{0,99}$/.test(repository)) {
@@ -1956,16 +1937,6 @@ export function createOasisWebServer(options = {}) {
         provider: { protocol, provider: new URL(baseURL).host, model, authentication: apiKey ? 'API key configured' : (isLoopbackUrl(baseURL) ? 'local endpoint; no API key required' : 'not configured') },
         note: 'The provider returned a valid tool-call response. The inert probe was not executed; settings were saved locally and the API key is never returned.'
       });
-      return;
-    }
-
-    if (req.method === 'GET' && pathname === '/api/github/status') {
-      json(res, 200, await getGithubStatus());
-      return;
-    }
-
-    if (req.method === 'GET' && pathname === '/api/github/repos') {
-      json(res, 200, await getGithubRepos());
       return;
     }
 
