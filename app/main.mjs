@@ -2389,7 +2389,7 @@ async function openEditor(path, status) {
     $('editor').readOnly = true;
     for (const id of ['revertButton', 'deleteFileButton', 'saveFileButton']) $(id).hidden = true;
     $('diffToggle').hidden = !status;
-    $('diffView').hidden = true;
+    $('diffView').hidden = true; $('editorSheet').classList.remove('fit');
     $('editor').hidden = false;
     $('diffToggle').textContent = 'Diff';
     openSheet('editorSheet');
@@ -2406,7 +2406,7 @@ async function openEditor(path, status) {
   $('revertButton').hidden = !status;
   $('deleteFileButton').hidden = Boolean(file && file.deleted);
   $('saveFileButton').hidden = Boolean(file && file.deleted);
-  $('diffView').hidden = true;
+  $('diffView').hidden = true; $('editorSheet').classList.remove('fit');
   $('editor').hidden = false;
   $('diffToggle').textContent = 'Diff';
   if (status === 'deleted') showDiff();
@@ -2417,18 +2417,18 @@ async function showDiff() {
     let lines = workspace.fileDiff(editingPath);
     if (!lines.length) lines = $('editor').value.split('\n').map((text) => ({ type: 'add', text }));
     renderDiff($('diffView'), lines);
-    $('diffView').hidden = false;
+    $('diffView').hidden = false; $('editorSheet').classList.add('fit');
     $('editor').hidden = true;
     $('diffToggle').textContent = 'File';
     return;
   }
   const file = (await workspace.load()).get(editingPath);
   renderDiff($('diffView'), lineDiff(file.original || '', file.deleted ? '' : $('editor').value));
-  $('diffView').hidden = false;
+  $('diffView').hidden = false; $('editorSheet').classList.add('fit');
   $('editor').hidden = true;
   $('diffToggle').textContent = 'Edit';
 }
-$('diffToggle').addEventListener('click', () => { if ($('diffView').hidden) showDiff(); else { $('diffView').hidden = true; $('editor').hidden = false; $('diffToggle').textContent = 'Diff'; } });
+$('diffToggle').addEventListener('click', () => { if ($('diffView').hidden) showDiff(); else { $('diffView').hidden = true; $('editorSheet').classList.remove('fit'); $('editor').hidden = false; $('diffToggle').textContent = 'Diff'; } });
 $('saveFileButton').addEventListener('click', async () => { await workspace.write(editingPath, $('editor').value); refreshFiles(); toast('Saved ' + editingPath); closeSheet('editorSheet'); });
 $('revertButton').addEventListener('click', async () => { if (!confirm('Revert ' + editingPath + ' to how it was when opened?')) return; await workspace.revert(editingPath); refreshFiles(); closeSheet('editorSheet'); toast('Reverted ' + editingPath); });
 $('deleteFileButton').addEventListener('click', async () => { if (!confirm('Delete ' + editingPath + '?')) return; await workspace.remove(editingPath); refreshFiles(); closeSheet('editorSheet'); });
