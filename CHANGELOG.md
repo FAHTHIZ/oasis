@@ -6,6 +6,7 @@ User-facing change history grouped by package version. A version heading does no
 
 ### Browser workspace
 - Settings has a **Tools (MCP servers)** section when the workspace is connected to `oasis web`: list, add, turn on or off and remove servers in `mcp-servers.json`. Commands are split with quote support and checked before saving; environment access takes variable names only. Before, this was only in the classic page at `/classic`.
+- With no model connected, the `oasis web` welcome screen shows what fits this computer (hosted model, a local server already running, or an Ollama model to install), from `/api/system/profile`.
 
 ### Agents and subagents
 - Custom agents accept the full Claude Code front matter: `disallowedTools`, `maxTurns` (reports are marked `partial` at the limit), `permissionMode: plan`, `skills` (preloaded), `memory` (user, project or local `MEMORY.md`), `background` and `color`. Project, user, plugin and `--agents` definitions share one parser.

@@ -650,8 +650,54 @@ function maskPasted(text) {
   return text.split(/\s+/).map((token) => (parsePaste(token).keys.length || isGitHubToken(token) ? maskSecret(token) : token)).join(' ');
 }
 
+/* Connected to `oasis web` with no model yet: show what fits this computer
+   (hardware and local model servers, from /api/system/profile). */
+let profileShown = false;
+async function recommendForThisComputer() {
+  if (profileShown || !RT || RT.needsToken || !RT.client || modelReady()) return;
+  profileShown = true;
+  let rec;
+  try { rec = await RT.client.api('/api/system/profile'); } catch { return; }
+  const p = rec && rec.primary;
+  if (!p || modelReady()) return;
+  const box = $('connectFound');
+  box.replaceChildren();
+  const card = document.createElement('div');
+  card.className = 'recommend';
+  const label = document.createElement('span');
+  label.className = 'recommend-label';
+  label.textContent = 'Recommended for this computer';
+  const title = document.createElement('strong');
+  title.textContent = p.route === 'local' ? 'Use ' + p.model + ' on ' + (p.serverName || 'your local server')
+    : p.route === 'local-install' ? 'Run ' + p.model + ' privately with Ollama' : 'Use a hosted model';
+  const detail = document.createElement('span');
+  detail.textContent = [p.reason, p.route === 'local-install' && p.install ? 'After installing, run: ' + p.install.command : '', (rec.notes || [])[0]].filter(Boolean).join(' ');
+  const hw = document.createElement('small');
+  hw.textContent = rec.summary || '';
+  card.append(label, title, detail, hw);
+  if (p.route === 'local' && p.baseURL) {
+    const use = document.createElement('button');
+    use.type = 'button';
+    use.className = 'btn small';
+    use.textContent = 'Use this';
+    use.addEventListener('click', () => connectFromText(p.baseURL));
+    card.append(use);
+  } else if (p.route === 'local-install') {
+    const get = document.createElement('a');
+    get.className = 'btn small';
+    get.href = /^https:\/\//.test(p.install && p.install.url || '') ? p.install.url : 'https://ollama.com/download';
+    get.target = '_blank';
+    get.rel = 'noopener';
+    get.textContent = 'Get Ollama';
+    card.append(get);
+  }
+  box.append(card);
+  box.hidden = false;
+}
+
 async function autoDetectLocal() {
-  if (modelReady() || RT) return;
+  if (RT) { await recommendForThisComputer(); return; }
+  if (modelReady()) return;
   const found = await scanLocal();
   if (!found.length || modelReady()) return;
   const box = $('connectFound');

@@ -31,3 +31,9 @@ test('settings sheet ships the MCP section wired to the runtime API', async () =
   assert.match(main, /RT\.client\.api\('\/api\/mcp'\)/);
   assert.match(main, /method: 'POST', body: \{ servers: next \}/);
 });
+
+test('runtime welcome shows the hardware recommendation from /api/system/profile', async () => {
+  const main = await readFile(new URL('../app/main.mjs', import.meta.url), 'utf8');
+  assert.match(main, /RT\.client\.api\('\/api\/system\/profile'\)/);
+  assert.match(main, /Recommended for this computer/);
+});
