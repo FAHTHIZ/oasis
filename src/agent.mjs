@@ -235,6 +235,16 @@ async function recoverFromContextOverflow(session, requestIndex, options, attemp
   if (adopted && (session.toolDefinitions || []).length < toolsBefore) {
     return { changed: true, beforeChars: before, afterChars: historyTextSize(session.messages || []), tokensUsed: 0, smallContextTools: true, contextWindow: session.config.contextWindow };
   }
+  // Many gateways reject an oversized request without naming a window
+  // (DuckDuckGo's "ERR_INPUT_LIMIT"). The system prompt and tool schemas are
+  // then the bulk of a first request, with no history to fold: try the compact profile once.
+  const firstRequest = !(session.messages || []).some((message) => message && (message.role === 'assistant' || message.role === 'tool'));
+  if (!adopted && firstRequest && !session.overflowCompactTools) {
+    session.overflowCompactTools = true;
+    if (useCompactToolProfile(session, options.env || process.env)) {
+      return { changed: true, beforeChars: before, afterChars: historyTextSize(session.messages || []), tokensUsed: 0, smallContextTools: true, contextWindow: session.config && session.config.contextWindow };
+    }
+  }
   let tokensUsed = 0;
   try {
     const earlier = await compactHistoryIfNeeded(session, { ...options, force: true });
