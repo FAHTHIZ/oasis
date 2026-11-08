@@ -1,5 +1,5 @@
-// OmniRoute as a built-in gateway provider: registry entry, pricing and the
-// "route not configured" 5xx that must not be retried.
+// Regressions found in live runs against real providers and servers (2026-11-08):
+// OmniRoute as a gateway, slow free models, one-at-a-time 429s and MCP annotations.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { BUILTIN_PROVIDERS, providerForEndpoint, providerApiKey } from '../src/provider-registry.mjs';
@@ -43,4 +43,19 @@ test('a one-request-at-a-time 429 waits briefly instead of failing', async () =>
   assert.equal(shortRateLimitMs('Too many concurrent requests'), 5000);
   assert.equal(shortRateLimitMs('Daily token quota exceeded'), null);
   assert.equal(shortRateLimitMs('concurrency limit reached; add billing credit'), null);
+});
+
+test('only read-only, closed-world tools from user MCP servers skip the auto-mode classifier', async () => {
+  const { mcpToolDefinitions } = await import('../src/mcp.mjs');
+  const ro = { readOnlyHint: true, destructiveHint: false, openWorldHint: false };
+  const tools = [
+    { name: 'get-sum', inputSchema: { type: 'object' }, annotations: ro },
+    { name: 'get-env', inputSchema: { type: 'object' }, annotations: ro },
+    { name: 'fetch-page', inputSchema: { type: 'object' }, annotations: { ...ro, openWorldHint: true } },
+    { name: 'toggle', inputSchema: { type: 'object' }, annotations: { readOnlyHint: false } },
+    { name: 'plain', inputSchema: { type: 'object' } }
+  ];
+  const { map } = mcpToolDefinitions(new Map([['mine', { source: 'user', tools }], ['repo', { source: 'project', tools }]]));
+  const readOnly = [...map].filter(([, entry]) => entry.readOnly).map(([id]) => id);
+  assert.deepEqual(readOnly, ['mcp_mine_get-sum']);
 });

@@ -2978,6 +2978,14 @@ async function authorizeCall(session, name, args, context, options) {
     // Explicit "ask" rules (force) always reach you.
     if (mode === 'auto' && !force) {
       session.autoMode ||= newAutoModeState();
+      const mcpEntry = session.mcpToolMap && session.mcpToolMap.get(name);
+      if (mcpEntry && mcpEntry.readOnly) {
+        const verdict = { decision: 'allow', rule: 'Read-only inspection', reason: 'The ' + mcpEntry.serverName + ' server (your MCP config) marks ' + mcpEntry.toolName + ' as read-only and closed-world.', fast: true };
+        session.autoMode.log.push({ tool: name, decision: 'allow', reason: verdict.reason, rule: verdict.rule, at: Date.now() });
+        if (session.autoMode.log.length > 100) session.autoMode.log.shift();
+        if (options.onAutoMode) options.onAutoMode({ tool: name, ...verdict });
+        return true;
+      }
       const autoSettings = session.autoModeSettings || {};
       const verdict = await classifyAction(session.autoMode, { toolName: CLAUDE_TOOL_NAMES[name] || name, args: safeArgs, messages: session.intentMessages || session.messages, root: session.root, rules: autoSettings.rules || [] }, hookOptions(session, context.env).evaluatePrompt, { model: autoSettings.model, config: autoSettings, timeoutSeconds: classifierTimeoutSeconds(autoSettings, session.modelLatencyMs) });
       session.autoMode.log.push({ tool: name, decision: verdict.decision, reason: verdict.reason, ...(verdict.rule ? { rule: verdict.rule } : {}), at: Date.now() });
