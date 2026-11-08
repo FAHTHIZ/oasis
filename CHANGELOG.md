@@ -72,6 +72,9 @@ User-facing change history grouped by package version. A version heading does no
 - The header shows the current git branch. `/api/status` now reports `branch`.
 
 ### Agents and subagents
+
+- The line under each subagent shows only what matters: "own worktree" and "read-only" when they apply, then the model. It used to read "shared workspace · write-capable access · model … · 27 tools available".
+- Fixed: model names under subagents lost every "r", "n" and "0" ("e2e-coder" showed as "e2e-code") because of a doubly escaped character class.
 - Custom agents accept the full Claude Code front matter: `disallowedTools`, `maxTurns` (reports are marked `partial` at the limit), `permissionMode: plan`, `skills` (preloaded), `memory` (user, project or local `MEMORY.md`), `background` and `color`. Project, user, plugin and `--agents` definitions share one parser.
 - `/tasks` lists finished and restart-interrupted subagents under **Earlier in this session**, and `/tasks send ID MESSAGE` steers a running one or resumes a finished one with its saved conversation (Claude Code 2.1.319 parity). Background MCP tasks appear in `/tasks` too.
 - Agent files also accept `hooks` (scoped to the agent; `Stop` runs as `SubagentStop`; project files need a trusted workspace) and `omitClaudeMd`, plus `mcpServers`: inline servers connect only for that agent's turns and close afterwards; and `autoCompactWindow`. With `--agent`, `initialPrompt` starts the session and `disallowedTools` applies to the main agent too.

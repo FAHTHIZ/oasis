@@ -883,7 +883,7 @@ test('agent lifecycle observers receive structured events without affecting orch
   assert.equal(view.backgroundProcesses, 1);
   assert.equal(view.interactiveTerminals, 1);
   const startedEvent = agentEvents(session).events.find((event) => event.type === 'agent.started');
-  assert.match(startedEvent.detail, /read-only access/);
+  assert.equal(startedEvent.detail, 'read-only · fixture-model', 'the model name is shown whole (r, n and 0 used to be stripped)');
   assert.equal(observed.length, 1);
   assert.equal(observed[0].type, 'agent.started');
   assert.equal(observed[0].run_id, 'monitor-run-1');

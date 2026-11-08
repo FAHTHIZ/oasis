@@ -289,13 +289,13 @@ export function registerAgent(session, fields) {
   registry.agents.set(id, record);
   if (team) team.members.push(id);
   const child = record.child || {};
-  const model = String(child.config && child.config.model || '').replace(/[\\r\\n\\0]+/g, ' ').slice(0, 120);
-  const toolCount = child.allowedToolNames instanceof Set ? child.allowedToolNames.size : 0;
+  const model = String(child.config && child.config.model || '').replace(/[\r\n\0]+/g, ' ').slice(0, 120);
+  // Shown under the worker in the app and terminal: only what differs from the usual
+  // (its own worktree, read-only), then the model.
   const details = [
-    record.worktreeInfo || record.worktree ? 'isolated worktree' : 'shared workspace',
-    record.readOnly ? 'read-only access' : 'write-capable access',
-    model ? 'model ' + model : '',
-    toolCount ? toolCount + ' tools available' : ''
+    record.worktreeInfo || record.worktree ? 'own worktree' : '',
+    record.readOnly ? 'read-only' : '',
+    model
   ].filter(Boolean).join(' · ').slice(0, 450);
   recordAgentEvent(session, 'agent.started', {
     agentId: id,
