@@ -15,7 +15,7 @@ Last reviewed November 2026. Sources are linked in each section. Where a page di
 | Desktop app | Yes | Yes | Yes | No | Beta | Yes |
 | MCP | Yes, including MCP Tasks | Yes | Yes | Yes | Yes | Yes |
 | Subagents | Yes: parallel, background, resumable, teams, worktrees | Yes | Agent command center | Yes: built-in and custom, parallel | `general` subagent | No |
-| Claude Code plugins | Yes, from any marketplace, with a one-click installer in the web app | Yes | No (own plugin format) | No (own extensions) | No (own plugins) | No |
+| Claude Code plugins | Yes, from any marketplace, with a one-click installer in the web app; Codex plugins and Gemini CLI extensions are converted on install | Yes | No (own plugin format) | No (own extensions) | No (own plugins) | No |
 
 Sources: [Gemini CLI subagents](https://developers.googleblog.com/en/subagents-have-arrived-in-gemini-cli/), [OpenCode web](https://opencode.ai/docs), [Codex README](https://github.com/openai/codex), [Codex releases](https://github.com/openai/codex/releases), [Gemini CLI README](https://github.com/google-gemini/gemini-cli), [OpenCode README](https://github.com/sst/opencode), [Goose README](https://github.com/block/goose), [Claude Code changelog](https://code.claude.com/docs/en/changelog).
 
@@ -69,6 +69,7 @@ Claude Code is the reference point for agent behaviour, and OASIS reads its conf
 - **Verification gate.** The agent is sent back when it reports success without reviewing its diff or running checks.
 - **Two interfaces, one runtime.** The terminal and a local web app (interactive terminal, Files and Changes panels, plugin installer), which the desktop app wraps. Sessions move between them. ACP, editor, SDK and messaging integrations connect to the same runtime.
 - **Claude Code plugins.** Installed and used from Anthropic's official marketplace on 8 November 2026: superpowers, frontend-design, code-review, context7, playwright, hookify, security-guidance and others, including their hooks, skills and MCP servers.
+- **Codex plugins.** On 9 November 2026, BuilderIO/skills, n8n-io/skills, DataDog/pup and NVIDIA/nvidia-kaggle installed with `oasis add` (78 skills). Codex-only plugins install too, and their MCP servers resolve a relative `cwd`, `./` commands and `${PLUGIN_ROOT}` against the plugin folder, as Codex does ([Codex source](https://github.com/openai/codex/blob/main/codex-rs/codex-mcp/src/agent_plugin_config.rs)). Plugins that need their own dependencies (nexu-io/codex-slides needs `pnpm install`) or programs (Storybloq) still need that setup.
 - **Terminal integration.** Inline images (Kitty and iTerm2) and OSC 9;4 progress in the tab or taskbar.
 
 ## Where OASIS still lags, and why
