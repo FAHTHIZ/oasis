@@ -18,6 +18,9 @@ User-facing change history grouped by package version. A version heading does no
 
 - `oasis plugin --help` and `oasis --help` now list the Claude Code plugin marketplace commands (`plugin marketplace add`, `plugin install`). Before, they showed only `plugin eval`.
 
+### Benchmarks
+- `bench:live --router` now gives Claude Code `ANTHROPIC_API_KEY` as well as `ANTHROPIC_AUTH_TOKEN`. Claude Code 2.1.319 stopped at "Not logged in" with only the token set, so every Claude Code trial through a gateway failed before sending a request.
+
 ### Providers
 - [OmniRoute](https://github.com/cheaper-inference/omniroute) is a built-in gateway provider (`omniroute`, `OMNIROUTE_API_KEY`, `localhost:20128`). See [Configuration](docs/CONFIGURATION.md#omniroute-gateway).
 - Pasting a server address with a key no longer fails with "needs an API key" when the server also guards an Ollama-style `/api/tags` route, and a wrong key is now reported as a wrong key.

@@ -53,7 +53,10 @@ export function agentEnvironment(agent, options, env = process.env) {
   const openaiBase = /\/v1$/.test(options.router) ? options.router : options.router + '/v1';
   const anthropicBase = openaiBase.replace(/\/v1$/, '');
   if (agent === 'oasis') { next.OASIS_BASE_URL = openaiBase; next.OASIS_PROTOCOL = 'openai-compatible'; if (key) next.OASIS_API_KEY = key; }
-  if (agent === 'claude') { next.ANTHROPIC_BASE_URL = anthropicBase; if (key) next.ANTHROPIC_AUTH_TOKEN = key; }
+  // Claude Code 2.1.3xx answers "Not logged in" in -p mode when only
+  // ANTHROPIC_AUTH_TOKEN is set; ANTHROPIC_API_KEY (x-api-key) is what makes it
+  // send the request. Set both so gateways that check either header work.
+  if (agent === 'claude') { next.ANTHROPIC_BASE_URL = anthropicBase; if (key) { next.ANTHROPIC_API_KEY = key; next.ANTHROPIC_AUTH_TOKEN = key; } }
   if (agent === 'codex') { next.OPENAI_BASE_URL = openaiBase; if (key) next.OPENAI_API_KEY = key; }
   // OpenCode ignores OPENAI_BASE_URL and needs a provider entry for a custom
   // gateway; without one it fails before sending a request.
