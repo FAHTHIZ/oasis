@@ -77,4 +77,4 @@ Pass `output_schema` (a JSON Schema object) to `task` when the parent needs mach
 
 ## Safety boundaries
 
-Subagents cannot launch further subagents, ask the user questions, enter plan mode, schedule cron jobs, or write shared durable memory. They suggest memory and skill candidates in their report for the parent to review. Their spend counts toward the parent's `--max-budget-usd`. `SubagentStart` and `SubagentStop` hooks run around every child.
+By default subagents cannot launch further subagents. Set `subagentMaxDepth` to 2 or 3 (or `OASIS_SUBAGENT_MAX_DEPTH`) to allow nested delegation: writing subagents then get the `task` tool until the depth limit, read-only agents never do, and the parallel and background caps stay shared across the whole tree. Subagents cannot ask the user questions, enter plan mode, schedule cron jobs, or write shared durable memory. They suggest memory and skill candidates in their report for the parent to review. Their spend counts toward the parent's `--max-budget-usd`. `SubagentStart` and `SubagentStop` hooks run around every child.
