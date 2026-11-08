@@ -26,6 +26,40 @@ export function agentScopedHooks(parent, agent) {
   return merged;
 }
 
+// Inline MCP servers from the agent file. They start third-party code, so a
+// project agent file only gets them in a trusted workspace (like .mcp.json).
+export function agentMcpSpec(parent, agent) {
+  const inline = agent && agent.mcpServers && agent.mcpServers.inline;
+  if (!inline || !Object.keys(inline).length) return null;
+  if (String(agent.source || '').startsWith('project') && !(parent.settings && parent.settings.trusted)) return null;
+  return inline;
+}
+
+// Connects the agent's own servers into its (copied) client and tool maps.
+// Names already used by the parent keep the parent's connection.
+export async function connectAgentMcp(child, env = process.env) {
+  if (!child.agentMcpSpec || child.agentMcpClients) return { definitions: [], failures: [] };
+  const { parseMcpServerEntries } = await import('./mcp-project.mjs');
+  const { connectMcpServers, mcpToolDefinitions } = await import('./mcp.mjs');
+  const parsed = parseMcpServerEntries({ mcpServers: child.agentMcpSpec }, env, 'agent');
+  const servers = parsed.servers.filter((server) => !child.mcpClients.has(server.name)).map((server) => ({ ...server, source: 'agent' }));
+  const { clients, failures } = servers.length ? await connectMcpServers({ root: child.root, env, skipUser: true, extraServers: servers }) : { clients: new Map(), failures: [] };
+  child.agentMcpClients = clients;
+  for (const [name, client] of clients) child.mcpClients.set(name, client);
+  const { definitions, map } = mcpToolDefinitions(clients);
+  for (const [name, entry] of map) child.mcpToolMap.set(name, entry);
+  return { definitions, failures: [...parsed.failures, ...failures] };
+}
+
+export function closeAgentMcp(child) {
+  if (!child || !child.agentMcpClients) return;
+  for (const [name, client] of child.agentMcpClients) {
+    try { client.close(); } catch {}
+    child.mcpClients.delete(name);
+  }
+  child.agentMcpClients = null;
+}
+
 // The parent's system prompt without the project instruction block, for agents
 // with omitClaudeMd.
 export function withoutProjectInstructions(base, projectContext) {
