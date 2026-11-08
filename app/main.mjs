@@ -784,6 +784,21 @@ function clearAttention() { if (!document.hidden) document.title = BASE_TITLE; }
 document.addEventListener('visibilitychange', clearAttention);
 window.addEventListener('focus', clearAttention);
 
+// Dims the undone turn (the user message, its tool steps and the reply) so the
+// transcript shows what no longer applies, as the conversation does after /undo.
+function markTurnUndone(reply) {
+  const turn = [reply];
+  for (let node = reply.previousElementSibling; node; node = node.previousElementSibling) {
+    turn.push(node);
+    if (node.classList.contains('msg') && node.classList.contains('user')) break;
+  }
+  for (const node of turn) node.classList.add('undone');
+  const tag = document.createElement('div');
+  tag.className = 'undone-note';
+  tag.textContent = 'Undone: files and conversation went back to before this turn.';
+  reply.after(tag);
+}
+
 async function copyText(text) {
   try { await navigator.clipboard.writeText(text); return true; }
   catch {
@@ -825,6 +840,7 @@ function onTranscriptClick(event) {
   else if (action.dataset.action === 'undo') {
     if (document.body.classList.contains('busy')) { toast('Wait for OASIS to finish, or stop it first.'); return; }
     action.remove();
+    markTurnUndone(wrap);
     send('/undo');
   } else if (action.dataset.action === 'edit') {
     if (document.body.classList.contains('busy')) { toast('Wait for OASIS to finish, or stop it first.'); return; }
