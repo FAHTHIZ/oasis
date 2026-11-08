@@ -24,6 +24,7 @@ User-facing change history grouped by package version. A version heading does no
 
 ### Terminal
 
+- Terminal progress (OSC 9;4): Windows Terminal, ConEmu, Ghostty 1.2+ and iTerm2 3.6.6+ show a busy indicator in the tab while a turn runs, paused while approval is pending, and error after a failed turn. `OASIS_TERMINAL_PROGRESS=off` disables it.
 - `/export FILE.html` writes the conversation as one standalone page you can open or share. Each tool step is collapsible and shows its input and result. A Content-Security-Policy blocks scripts and remote loads, and credentials are redacted. `/export FILE.md` still writes Markdown.
 - Inline image previews: screenshots and images from tools, and `@image.png` mentions, are drawn in the terminal on Kitty, Ghostty, iTerm2, WezTerm, Warp and VS Code. They are off in tmux, screen, Zellij, CI and pipes. `OASIS_INLINE_IMAGES=0` turns them off; `=kitty` or `=iterm` forces a protocol.
 - `oasis models [filter] [--json] [--refresh]` lists the models the configured provider serves, with context window, price and image support from the models.dev catalog. The current model is marked, and `availableModels` policy is respected.
