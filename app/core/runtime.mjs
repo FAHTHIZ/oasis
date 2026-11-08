@@ -54,6 +54,17 @@ export class RuntimeClient {
     if (!response.ok) throw Object.assign(new Error(data.error || 'OASIS runtime error ' + response.status), { status: response.status, data });
     return data;
   }
+
+  /** Fetches a saved chat as a standalone HTML page (text). */
+  async exportSession(sessionId) {
+    const response = await this.fetch(this.origin + '/api/sessions/' + encodeURIComponent(sessionId) + '/export', { headers: { authorization: 'Bearer ' + this.token } });
+    if (!response.ok) {
+      let data = {};
+      try { data = await response.json(); } catch { /* not JSON */ }
+      throw Object.assign(new Error(data.error || 'Could not export this chat (' + response.status + ').'), { status: response.status });
+    }
+    return response.text();
+  }
 }
 
 /**
