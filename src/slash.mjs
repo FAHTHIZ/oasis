@@ -1732,7 +1732,8 @@ export async function runBuiltinCommand(name, argument, state) {
       }
       const agents = session ? listAgents(session) : [];
       const procs = session && session.background ? [...session.background.values()] : [];
-      if (!agents.length && !procs.length) return { output: 'No subagents or background processes in this session.' };
+      const mcpTasks = session && session.mcpBackgroundTasks ? [...session.mcpBackgroundTasks.entries()] : [];
+      if (!agents.length && !procs.length && !mcpTasks.length) return { output: 'No subagents, background processes or MCP tasks in this session.' };
       const lines = [];
       if (agents.length) {
         lines.push('Agents:');
@@ -1741,6 +1742,10 @@ export async function runBuiltinCommand(name, argument, state) {
       if (procs.length) {
         lines.push('Processes:');
         for (const entry of procs) lines.push('  ' + entry.id + '  ' + entry.status + (entry.exitCode !== null ? ' (exit ' + entry.exitCode + ')' : '') + '  ' + entry.command);
+      }
+      if (mcpTasks.length) {
+        lines.push('MCP tasks (result arrives as a notification):');
+        for (const [id, task] of mcpTasks) lines.push('  ' + id + '  running  ' + task.server + ' ' + task.tool + '  (' + Math.max(1, Math.round((Date.now() - task.startedAt) / 1000)) + 's)');
       }
       lines.push('Details: /tasks ID   Stop: /tasks stop ID');
       return { output: lines.join('\n') };

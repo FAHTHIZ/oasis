@@ -150,3 +150,11 @@ test('an interactive session gets the background MCP result in its inbox and is 
   assert.match(notice.text, /Background MCP task task-\d+ \(jobs slow\) finished/);
   assert.match(notice.text, /slow-result after 3 polls/);
 });
+
+test('/tasks lists MCP tasks running in the background', async () => {
+  const { runBuiltinCommand } = await import('../src/slash.mjs');
+  const session = { root: '/tmp', messages: [], mcpBackgroundTasks: new Map([['task-9', { server: 'jobs', tool: 'slow', startedAt: Date.now() - 4000 }]]) };
+  const { output } = await runBuiltinCommand('tasks', '', { root: '/tmp', session, env: {} });
+  assert.match(output, /MCP tasks/);
+  assert.match(output, /task-9 {2}running {2}jobs slow {2}\(4s\)/);
+});
