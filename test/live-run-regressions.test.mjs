@@ -104,3 +104,26 @@ test('an upstream glitch inside a chat stream restarts the reply; permanent erro
     assert.equal(chatStreamError(permanent).code, undefined, permanent.message);
   }
 });
+
+test('a repeated commit after success says the work is already committed', async () => {
+  const { mkdtemp, writeFile, rm } = await import('node:fs/promises');
+  const os = await import('node:os');
+  const path = await import('node:path');
+  const { execFileSync } = await import('node:child_process');
+  const { runGitTool } = await import('../src/git-tools.mjs');
+  const root = await mkdtemp(path.join(os.tmpdir(), 'oasis-recommit-'));
+  try {
+    execFileSync('git', ['init', '-q'], { cwd: root });
+    execFileSync('git', ['config', 'user.name', 'T'], { cwd: root });
+    execFileSync('git', ['config', 'user.email', 't@example.com'], { cwd: root });
+    await writeFile(path.join(root, 'a.txt'), 'a\n');
+    const session = {};
+    const first = await runGitTool('git_commit', root, { message: 'Add a' }, { autoApprove: true, session });
+    assert.equal(first.ok, true);
+    const again = await runGitTool('git_commit', root, { message: 'Add a again' }, { autoApprove: true, session });
+    assert.equal(again.ok, false);
+    assert.match(again.message, new RegExp('already created ' + first.commit + '.*Do not commit again'));
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
