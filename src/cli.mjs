@@ -2125,7 +2125,10 @@ async function runPrompt(prompt, root, autoApprove, session = null, persistence 
       stdout.write('[context] Included ' + expanded.files.map((file) => '@' + file).join(', ') + '\n');
       prompt = expanded.text;
     }
-    if (expanded.images && expanded.images.length) modeOptions = { ...modeOptions, images: expanded.images };
+    if (expanded.images && expanded.images.length) {
+      modeOptions = { ...modeOptions, images: expanded.images };
+      if (stdout.isTTY) await import('./inline-image.mjs').then(({ writeInlineImages }) => writeInlineImages(expanded.images, { stream: stdout, maxRows: 10 })).catch(() => {});
+    }
   } catch {}
   if (!config.configured) {
     stdout.write('Oasis needs a model provider for general coding tasks. Run oasis setup first, or configure OASIS_PROTOCOL, OASIS_BASE_URL, OASIS_MODEL, and the matching API-key environment variable. Local Ollama-style endpoints can use a loopback URL without an API key.\n');
@@ -2263,6 +2266,8 @@ async function runPrompt(prompt, root, autoApprove, session = null, persistence 
           stdout.write('[tool result] ' + name + ': ' + String(result.error || ('exit code ' + result.exitCode)).slice(0, 700) + '\n');
         }
         if (summary) lastToolHeader = '#result'; // a later result in the batch is away from its header too
+        // Screenshots and image files the agent looked at, drawn inline where the terminal can.
+        if (result && result.imageData && richOutput()) import('./inline-image.mjs').then(({ writeInlineImages }) => writeInlineImages([result.imageData], { stream: stdout })).catch(() => {});
         if (name === 'auto_test' && result && result.passed) stdout.write('[auto-test] passed in ' + (Math.round(result.durationMs / 100) / 10) + 's\n');
         if (name === 'report_findings' && result && !result.error) { endStream(); stdout.write('\n[findings]\n' + formatFindings(session.reportedFindings, { color: colorEnabled(stdout) }) + '\n'); }
         if (verboseEnabled(session)) { const shown = verboseToolOutput(name, result, { color: colorEnabled(stdout) }); if (shown) stdout.write(shown + '\n'); }
