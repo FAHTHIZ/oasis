@@ -5,7 +5,7 @@ import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { randomUUID } from 'node:crypto';
-import { createCloudTaskStore } from '../src/cloud-task-store.mjs';
+import { createTaskHistoryStore } from '../src/task-history-store.mjs';
 import { startOasisWebServer } from '../src/web.mjs';
 import { createWorktree, removeWorktree } from '../src/worktrees.mjs';
 
@@ -29,7 +29,7 @@ test('runtime restart marks an active task interrupted and exposes a safe partia
 
   const env = { ...process.env, OASIS_CONFIG_DIR: path.join(temp, 'config') };
   const id = randomUUID();
-  const store = createCloudTaskStore(root, { env });
+  const store = createTaskHistoryStore(root, { env });
   await store.save({
     id,
     type: 'agent',

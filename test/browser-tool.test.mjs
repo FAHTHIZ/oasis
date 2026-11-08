@@ -79,7 +79,7 @@ test('the browser tool drives Chrome inside an agent turn', { skip: chrome ? fal
   t.after(() => server.close());
   const url = 'http://localhost:' + server.address().port + '/';
   const root = await mkdtemp(path.join(os.tmpdir(), 'oasis-browser-'));
-  const env = { ...process.env, HOME: root, OASIS_CHROME_HEADLESS: '1' };
+  const env = { ...process.env, HOME: root, OASIS_CHROME_HEADLESS: '1', OASIS_CHROME_PATH: chrome };
   const settings = { permissions: { allow: [], ask: [], deny: [], defaultMode: 'default' }, hooks: {}, sandbox: { enabled: false }, shell: { enabled: false } };
   const { config, requests } = await scriptedModel(t, [
     toolCall('n', 'browser', { action: 'navigate', url }),
