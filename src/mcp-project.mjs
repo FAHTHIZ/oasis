@@ -148,7 +148,13 @@ export function parseMcpServerEntries(parsed, env = process.env, source = 'proje
           if (!/^[A-Z_][A-Z0-9_]*$/i.test(key) || /^(PATH|HOME|SHELL|NODE_OPTIONS|LD_PRELOAD|DYLD_INSERT_LIBRARIES)$/i.test(key)) throw new Error('env cannot set ' + key);
           extraEnv[key] = expandVariables(value, env);
         }
-        servers.push({ name, command: String(spec.command || ''), args: Array.isArray(spec.args) ? spec.args.map((arg) => expandVariables(arg, env)) : [], passEnv: [], enabled: true, extraEnv, source });
+        // A working directory: plugin servers get plugin-root paths; a relative one is under the workspace.
+        let cwd;
+        if (spec.cwd !== undefined) {
+          if (typeof spec.cwd !== 'string' || !spec.cwd.trim() || spec.cwd.includes('\0')) throw new Error('cwd must be a directory path');
+          cwd = expandVariables(spec.cwd, env);
+        }
+        servers.push({ name, command: String(spec.command || ''), args: Array.isArray(spec.args) ? spec.args.map((arg) => expandVariables(arg, env)) : [], passEnv: [], enabled: true, extraEnv, ...(cwd ? { cwd } : {}), source });
       } else {
         throw new Error('transport "' + type + '" is not supported (use stdio, http or sse)');
       }

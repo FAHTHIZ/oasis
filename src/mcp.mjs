@@ -91,6 +91,10 @@ export function validateMcpServerConfig(server) {
     enabled: server.enabled !== false
   };
   if (server.origin !== undefined) normalized.origin = validateMcpServerOrigin(server.origin);
+  if (server.cwd !== undefined) {
+    if (typeof server.cwd !== 'string' || !server.cwd.trim() || server.cwd.length > 1000 || server.cwd.includes('\0')) throw new Error('MCP server cwd must be a directory path.');
+    normalized.cwd = server.cwd;
+  }
   return normalized;
 }
 
@@ -158,7 +162,8 @@ class ProcessStdioTransport {
   async start() {
     const owner = this.owner;
     const child = this.child = owner.child = spawn(owner.config.command, owner.config.args, {
-      cwd: owner.root,
+      // A server's own working directory (plugin servers ship scripts beside it), else the workspace.
+      cwd: typeof owner.config.cwd === 'string' && owner.config.cwd ? path.resolve(owner.root, owner.config.cwd) : owner.root,
       env: safeEnvironment(owner.config, owner.env, owner.extraEnv),
       shell: false,
       windowsHide: true,

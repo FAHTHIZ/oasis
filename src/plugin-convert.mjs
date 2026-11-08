@@ -100,6 +100,18 @@ function convertGeminiHooks(doc) {
   return Object.keys(out).length ? { hooks: out } : null;
 }
 
+// Codex and Agent Plugins resolve a relative stdio `cwd` (and a `./` command)
+// against the plugin root, and expand ${PLUGIN_ROOT} / ${PLUGIN_DATA}. Claude
+// Code plugins spell those ${CLAUDE_PLUGIN_ROOT} / ${CLAUDE_PLUGIN_DATA}.
+const ROOT = '${CLAUDE_PLUGIN_ROOT}';
+const portableVars = (value) => typeof value === 'string'
+  ? value.replace(/\$\{PLUGIN_ROOT\}/g, ROOT).replace(/\$\{PLUGIN_DATA\}/g, '${CLAUDE_PLUGIN_DATA}')
+  : value;
+const underRoot = (rel) => {
+  const clean = path.posix.normalize(String(rel).replace(/\\/g, '/')).replace(/^\.\/?/, '').replace(/\/$/, '');
+  return clean && clean !== '.' ? ROOT + '/' + clean : ROOT;
+};
+
 function normalizeServers(doc) {
   const raw = doc && (doc.mcpServers || doc.servers);
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return {};
@@ -109,6 +121,15 @@ function normalizeServers(doc) {
     const copy = { ...server };
     if (copy.type === 'stdio') delete copy.type;
     if (copy.type === 'streamable-http' || copy.type === 'streamableHttp') copy.type = 'http';
+    if (typeof copy.command === 'string') {
+      copy.command = portableVars(copy.command);
+      if (/^\.\.?\//.test(copy.command)) copy.command = underRoot(copy.command);
+      if (Array.isArray(copy.args)) copy.args = copy.args.map(portableVars);
+      if (copy.env && typeof copy.env === 'object') copy.env = Object.fromEntries(Object.entries(copy.env).map(([k, v]) => [k, portableVars(v)]));
+      const cwd = typeof copy.cwd === 'string' ? portableVars(copy.cwd) : '';
+      // No cwd: Agent Plugins default to the plugin root, and so do bundled servers in practice.
+      copy.cwd = !cwd ? ROOT : cwd.startsWith('${') || path.isAbsolute(cwd) ? cwd : underRoot(cwd);
+    }
     out[name] = copy;
   }
   return out;
@@ -192,9 +213,14 @@ export async function convertToClaudePlugin(srcDir, destDir, info) {
       await writeFile(path.join(dir, 'SKILL.md'), '---\nname: ' + name + '-guide\ndescription: ' + JSON.stringify(('How to use the ' + name + ' extension' + (info.description ? ' (' + info.description + ')' : '') + '. Read this before using its tools or commands.').slice(0, 900)) + '\n---\n\n' + body.trim() + '\n');
     }
   } else {
-    // A root .mcp.json is read by the plugin loader already; inline anything else.
-    const hasDefault = Boolean(await readJson(path.join(destDir, '.mcp.json')));
-    const servers = hasDefault ? {} : await foreignServers(destDir, info);
+    // A root .mcp.json is read by the plugin loader already: rewrite it in place
+    // with plugin-root paths. Servers anywhere else are inlined in the manifest.
+    const rootDoc = await readJson(path.join(destDir, '.mcp.json'));
+    if (rootDoc) {
+      const converted = normalizeServers(rootDoc);
+      if (Object.keys(converted).length) await writeFile(path.join(destDir, '.mcp.json'), JSON.stringify({ mcpServers: converted }, null, 2) + '\n');
+    }
+    const servers = rootDoc ? {} : await foreignServers(destDir, info);
     if (Object.keys(servers).length) manifest.mcpServers = servers;
     const openai = (m.extensions && m.extensions['com.openai']) || {};
     const hooksRel = typeof m.hooks === 'string' ? m.hooks : (typeof openai.hooks === 'string' ? openai.hooks : '');
