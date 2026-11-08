@@ -110,8 +110,6 @@ export function truncationRecoveryPrompt(limit, droppedCall) {
   ].filter(Boolean).join(' ');
 }
 
-// Anthropic prompt caching: mark the system prompt, the tool list, and the newest
-// message so each request reuses the previous prefix (cheaper and faster).
 // OASIS prompt keywords can request a larger per-turn reasoning budget.
 // MAX_THINKING_TOKENS / OASIS_THINKING_BUDGET or config.thinkingBudget set a default.
 export function thinkingBudgetFor(prompt, config = {}, env = process.env) {
