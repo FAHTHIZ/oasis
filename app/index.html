@@ -97,6 +97,7 @@
    </div>
 
     <aside class="panel" id="filesPanel" aria-label="Files" hidden>
+      <div class="panel-resize" id="panelResize" role="separator" aria-orientation="vertical" aria-label="Resize files panel" tabindex="0"></div>
       <div class="panel-head">
         <div class="tabs" role="tablist">
           <button role="tab" class="tab active" data-tab="files" aria-selected="true">Files</button>
@@ -251,6 +252,7 @@
     <div class="row">
       <button class="btn small ghost" id="diffToggle" hidden>Diff</button>
       <button class="btn small ghost" id="revertButton" hidden>Revert</button>
+      <button class="btn small ghost" id="downloadFileButton" title="Download this file">Download</button>
       <button class="btn small ghost danger" id="deleteFileButton">Delete</button>
       <button class="btn small primary" id="saveFileButton">Save</button>
       <button class="icon-btn small" data-close="editorSheet" aria-label="Close"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M5 5l10 10M15 5L5 15" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg></button>
