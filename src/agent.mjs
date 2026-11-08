@@ -1043,6 +1043,7 @@ export async function createSession({ root, config, restore = null, permissionMo
   session.rulesRefreshedAtChars = historyTextSize(session.messages || []);
   if (['low', 'medium', 'high', 'max'].includes(String(loadedSettings && loadedSettings.subagentEffort || '').toLowerCase())) session.subagentEffort = String(loadedSettings.subagentEffort).toLowerCase();
   if (loadedSettings && Number.isInteger(loadedSettings.subagentAutoCompactPercent)) session.subagentAutoCompactPercent = loadedSettings.subagentAutoCompactPercent;
+  if (loadedSettings && Number.isInteger(loadedSettings.subagentStallSeconds)) session.subagentStallSeconds = loadedSettings.subagentStallSeconds;
   const deferredMcp = deferMcpTools(session, { threshold: Number(loadedSettings.toolSearchThreshold) || undefined, env });
   const deferredRare = deferRareBuiltinTools(session, { env, explicitTools: Array.isArray(tools) || typeof tools === 'string', settings: { leanTools: config && config.leanTools !== undefined ? config.leanTools : loadedSettings.leanTools } });
   session.localContextNotices = contextProbe.localContextNotices;
@@ -3935,10 +3936,12 @@ async function runChildTurn(parent, record, prompt, options, { foreground }) {
     // Nobody can answer a prompt while the agent works in the background.
     approval: async () => false,
     signal: record.controller.signal,
-    onToolStart: track,
+    onToolStart: (event) => { track(event); record.lastActivityAt = Date.now(); record.inTool = true; },
+    onToolResult: () => { record.lastActivityAt = Date.now(); record.inTool = false; },
     // The parent turn may be over, so usage goes to the session's background
     // sink (set by the CLI, headless and web front ends) instead.
     onUsage: (usage) => {
+      record.lastActivityAt = Date.now();
       runTokens += Math.max(0, Number(usage && usage.totalTokens) || 0);
       addAgentUsage(record, usage);
       const sink = backgroundUsageSink(parent);
@@ -3977,10 +3980,16 @@ async function runChildTurn(parent, record, prompt, options, { foreground }) {
     // Requests made before the failure were billed: keep them in the count.
     record.tokensUsed += runTokens;
     record.finishedAt = Date.now();
-    record.status = record.cancelRequested || error.name === 'AbortError' ? 'cancelled' : 'failed';
-    record.error = error.message;
+    record.status = record.stalled ? 'stalled' : record.cancelRequested || error.name === 'AbortError' ? 'cancelled' : 'failed';
+    record.error = record.stalled ? record.stalled : error.message;
+    if (record.stalled) {
+      // Keep whatever the agent had written so far so the parent can still use it.
+      const partial = [...(child.messages || [])].reverse().find((message) => message.role === 'assistant' && typeof message.content === 'string' && message.content.trim());
+      if (partial) record.report = String(partial.content).slice(0, 30000);
+      error.message = record.stalled + (partial ? ' Partial report:\n' + record.report.slice(0, 6000) : '');
+    }
     if (record.pane) record.pane.write('[' + record.status + '] ' + error.message);
-    recordAgentEvent(parent, record.status === 'cancelled' ? 'agent.cancelled' : 'agent.failed', { agentId: record.id, teamId: record.teamId || undefined, description: record.description, detail: error.message });
+    recordAgentEvent(parent, record.status === 'cancelled' ? 'agent.cancelled' : record.status === 'stalled' ? 'agent.stalled' : 'agent.failed', { agentId: record.id, teamId: record.teamId || undefined, description: record.description, detail: error.message });
     throw error;
   }
   let worktreeResult = null;
@@ -4046,6 +4055,35 @@ function recordSharedTaskWorktree(parent, record, worktreeResult) {
   });
 }
 
+// Stall monitor (as in Hermes delegation): a background agent with no model or tool
+// activity for the idle limit is stopped and its partial report kept. A tool that
+// is still running gets the longer in-tool limit. OASIS_SUBAGENT_STALL_SECONDS or the
+// subagentStallSeconds setting changes the idle limit; 0 turns the monitor off.
+export function subagentStallLimits(parent, env = process.env) {
+  const raw = env.OASIS_SUBAGENT_STALL_SECONDS !== undefined && env.OASIS_SUBAGENT_STALL_SECONDS !== '' ? env.OASIS_SUBAGENT_STALL_SECONDS : parent && parent.subagentStallSeconds;
+  const idle = raw === undefined || raw === null || raw === '' ? 450 : Number(raw);
+  if (!Number.isFinite(idle) || idle <= 0) return null;
+  // The in-tool limit keeps Hermes' ratio (450s idle, 1200s inside a tool).
+  return { idleMs: idle * 1000, inToolMs: Math.round(idle * 1000 * 1200 / 450) };
+}
+
+function watchForStall(parent, record, env) {
+  const limits = subagentStallLimits(parent, env);
+  if (!limits) return () => {};
+  record.lastActivityAt = Date.now();
+  record.inTool = false;
+  const timer = setInterval(() => {
+    if (record.status !== 'running') return;
+    const idle = Date.now() - (record.lastActivityAt || 0);
+    const limit = record.inTool ? limits.inToolMs : limits.idleMs;
+    if (idle < limit) return;
+    record.stalled = 'No activity for ' + Math.round(idle / 1000) + 's' + (record.inTool ? ' while a tool was running' : '') + '; the agent was stopped as stalled.';
+    try { record.controller.abort(); } catch {}
+  }, Math.max(250, Math.min(15000, Math.floor(limits.idleMs / 4))));
+  if (typeof timer.unref === 'function') timer.unref();
+  return () => clearInterval(timer);
+}
+
 function startBackgroundRun(parent, record, prompt, options) {
   record.background = true;
   record.status = 'running';
@@ -4053,11 +4091,13 @@ function startBackgroundRun(parent, record, prompt, options) {
   record.noticeRead = false;
   record.error = null;
   record.finishedAt = null;
+  record.stalled = null;
   record.controller = new AbortController();
   recordAgentEvent(parent, record.runs > 1 ? 'agent.resumed' : 'agent.background_started', { agentId: record.id, teamId: record.teamId || undefined, description: record.description });
   // Detach from the parent turn: its cancellation must not kill the agent.
   const detached = { ...options, signal: undefined, onToolStart: undefined, onToolResult: undefined, onUsage: undefined, onDelta: undefined };
-  record.promise = runChildTurn(parent, record, prompt, detached, { foreground: false }).then(async (result) => {
+  const stopWatch = watchForStall(parent, record, options.env || process.env);
+  record.promise = runChildTurn(parent, record, prompt, detached, { foreground: false }).finally(stopWatch).then(async (result) => {
     const parts = ['Background agent ' + record.id + ' ("' + record.description + '") finished.'];
     if (result.worktree && result.worktree.branch) parts.push('Its changes are on branch ' + result.worktree.branch + '.');
     parts.push('Report:\n' + record.report.slice(0, 6000) + (record.report.length > 6000 ? '\n[truncated; agent_status id ' + record.id + ' has the full report]' : ''));
