@@ -13,13 +13,15 @@ export const APP_PALETTE_COMMANDS = Object.freeze([
 
 export const APP_KEYBOARD_SHORTCUTS = Object.freeze([
   { keys: 'MOD+K', label: 'Open the command palette', detail: 'Search workspace actions, chats, plugins and skills.' },
-  { keys: '/', label: 'Open the command palette from the message box', detail: 'Type / when the message box is empty.' },
+  { keys: '/', label: 'Open the command palette from the message box', detail: 'Type / when the message box is empty. Connected to OASIS on a computer, / suggests commands and skills instead; Ctrl+K opens the palette.' },
+  { keys: '@', label: 'Mention a project file', detail: 'Type @ and part of a name; Tab or Enter inserts the path.' },
   { keys: 'MOD+/', label: 'Open keyboard shortcuts and help', detail: 'Works anywhere in the browser workspace.' },
   { keys: 'Enter', label: 'Send your message', detail: 'On a desktop keyboard. On touch devices, use the Send button.' },
   { keys: 'Shift+Enter', label: 'Add a new line', detail: 'Keep writing without sending the message.' },
   { keys: 'Escape', label: 'Close the top dialog or menu', detail: 'The current task keeps running.' },
   { keys: '↑ / ↓', label: 'Move through command results', detail: 'Available while the command palette is open.' },
-  { keys: 'Enter', label: 'Run the selected command', detail: 'Available while the command palette is open.' }
+  { keys: 'Enter', label: 'Run the selected command', detail: 'Available while the command palette is open.' },
+  { keys: 'Tab', label: 'Accept a / or @ suggestion', detail: 'Arrow keys move through suggestions; Escape closes them.' }
 ]);
 
 function termScore(words, term) {
