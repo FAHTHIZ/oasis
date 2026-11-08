@@ -4,7 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { parseBenchArgs, agentEnvironment, runBenchmark, summarize, renderSummary } from '../scripts/bench-live.mjs';
-import { parseAiderOutput, parseOpenCodeOutput, buildAiderArgs, buildOpenCodeArgs, EXTERNAL_AGENTS } from '../src/eval.mjs';
+import { parseAiderOutput, parseOpenCodeOutput, buildAiderArgs, buildOpenCodeArgs, buildCodexArgs, EXTERNAL_AGENTS } from '../src/eval.mjs';
 
 test('bench:live parses options and refuses unknown agents', () => {
   const options = parseBenchArgs(['--agents', 'oasis,claude', '--model', 'cc/claude-opus-4-6', '--router', 'http://localhost:20128/v1/', '--trials', '3', '--yes']);
@@ -25,6 +25,7 @@ test('--router points every agent at the same gateway with the shared key', () =
   // Without ANTHROPIC_API_KEY current Claude Code stops at "Not logged in" before any request.
   assert.equal(agentEnvironment('claude', options, env).ANTHROPIC_API_KEY, 'sk-test');
   assert.equal(agentEnvironment('codex', options, env).OPENAI_BASE_URL, 'http://localhost:20128/v1');
+  assert.equal(agentEnvironment('codex', options, env).OASIS_CODEX_BASE_URL, 'http://localhost:20128/v1');
   assert.equal(agentEnvironment('aider', options, env).OPENAI_API_BASE, 'http://localhost:20128/v1');
   assert.equal(agentEnvironment('oasis', parseBenchArgs([]), env).OASIS_BASE_URL, undefined);
 });
@@ -147,4 +148,13 @@ test('OpenCode gets a generated gateway provider, since it ignores OPENAI_BASE_U
   assert.equal(config.provider.bench.options.apiKey, 'k');
   assert.ok(config.provider.bench.models['qwen3-coder'].tool_call);
   assert.equal(agentEnvironment('opencode', options, { OPENCODE_CONFIG: '/x.json' }).OPENCODE_CONFIG_CONTENT, undefined);
+});
+
+test('Codex gets a gateway provider entry because it ignores OPENAI_BASE_URL', () => {
+  const args = buildCodexArgs({ model: 'm1' }, 'do it', { OASIS_CODEX_BASE_URL: 'http://127.0.0.1:20128/v1' });
+  assert.ok(args.includes('model_provider=bench'));
+  assert.ok(args.includes('model_providers.bench.base_url="http://127.0.0.1:20128/v1"'));
+  assert.ok(args.includes('model_providers.bench.env_key="OPENAI_API_KEY"'));
+  assert.deepEqual(args.slice(-3), ['-m', 'm1', 'do it']);
+  assert.ok(!buildCodexArgs({}, 'x', {}).includes('-c'));
 });
