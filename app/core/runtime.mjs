@@ -361,6 +361,7 @@ export class RuntimeAgent {
             }
             case 'session_state':
               if (Number(data.contextWindow) > 0) this.emit('context', { tokens: Number(data.contextTokens) || 0, window: Number(data.contextWindow), percent: Number(data.contextPercent) || 0 });
+              if (Number(data.costUsd) > 0) this.emit('cost', { usd: Number(data.costUsd), partial: Boolean(data.costPartial) });
               break;
             case 'compaction_completed': this.emit('compacted', { mode: data.usedModelSummary ? 'summary' : 'trim' }); break;
             case 'completed':

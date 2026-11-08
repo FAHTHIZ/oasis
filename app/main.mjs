@@ -954,6 +954,7 @@ function handleEvent(event) {
     case 'todos': renderTodos(event.todos); break;
     case 'usage': usageState.tokens = event.usage.input + event.usage.output; renderUsage(); break;
     case 'context': usageState.context = event; renderUsage(); break;
+    case 'cost': usageState.cost = event; renderUsage(); break;
     case 'compacted': addMessage('note', event.mode === 'summary' ? 'Earlier conversation summarised to save context.' : 'Older tool output trimmed to save context.'); break;
     case 'stopped':
       removeThinking();
@@ -982,7 +983,7 @@ function handleEvent(event) {
 
 // Token total plus, when the runtime reports it, how full the context window
 // is (a small ring that turns amber past 70% and red past 90%).
-const usageState = { tokens: 0, context: null };
+const usageState = { tokens: 0, context: null, cost: null };
 function renderUsage() {
   const el = $('usage');
   const ctx = usageState.context;
@@ -1000,7 +1001,14 @@ function renderUsage() {
     el.textContent = formatTokens(usageState.tokens) + ' tok';
     el.title = formatTokens(usageState.tokens) + ' tokens used this chat';
   } else el.removeAttribute('title');
+  const cost = usageState.cost;
+  if (cost && cost.usd > 0) {
+    const label = formatUsd(cost.usd) + (cost.partial ? '+' : '');
+    el.append(document.createTextNode((el.childNodes.length ? ' · ' : '') + label));
+    el.title = (el.title ? el.title + '\n' : '') + 'Estimated spend this chat: ' + label + (cost.partial ? ' (some requests used a model with no known price)' : '') + ', subagents included.';
+  }
 }
+function formatUsd(n) { return n < 0.01 ? '$' + n.toFixed(4) : '$' + n.toFixed(2); }
 function formatTokens(n) { return n >= 1e6 ? (n / 1e6).toFixed(1) + 'M' : n >= 1e3 ? (n / 1e3).toFixed(1) + 'k' : String(n); }
 
 function renderTodos(todos) {
@@ -1200,7 +1208,7 @@ async function restoreChat({ keepChat = false } = {}) {
   display = [];
   agent.reset();
   renderTodos([]);
-  usageState.tokens = 0; usageState.context = null; renderUsage();
+  usageState.tokens = 0; usageState.context = null; usageState.cost = null; renderUsage();
   if (!workspace) { $('welcome').hidden = false; return; }
   if (!keepChat) chatId = (await chatIndex(workspace.project.id)).current || 'main';
   const saved = await store.getValue(chatKey(workspace.project.id, chatId));

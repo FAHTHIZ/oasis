@@ -31,6 +31,7 @@ User-facing change history grouped by package version. A version heading does no
 
 ### Browser workspace
 
+- The usage chip next to Send shows the estimated spend for the chat (subagents included) beside the context meter, with a `+` when some requests used a model with no known price.
 - Copy buttons under every reply and on your own messages, plus Edit to put a sent message back in the composer. Copies keep the original Markdown.
 - Fixed: the Copy button on code blocks did nothing.
 - The composer shows how full the context window is as a ring and percentage (amber past 70%, red past 90%), with token counts on hover.

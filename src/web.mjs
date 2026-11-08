@@ -47,7 +47,11 @@ export function webSessionState(session, env = process.env) {
     contextTokens,
     contextWindow: windowSize,
     contextPercent: windowSize ? Math.min(100, Math.round(contextTokens / windowSize * 100)) : 0,
-    totalTokens: Number(usage.totalTokens || 0)
+    totalTokens: Number(usage.totalTokens || 0),
+    // Spend so far, subagents included (the shared budget ledger). 0 when the
+    // model has no known price, such as a local model.
+    costUsd: Math.max(0, Number(session.budgetLedger && session.budgetLedger.spentUsd || session.costUsd) || 0),
+    costPartial: Boolean(session.budgetLedger && session.budgetLedger.unknownRequests > 0)
   };
 }
 
