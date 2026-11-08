@@ -216,3 +216,11 @@ test('/stop terminates background processes through process-tree cleanup', async
   assert.ok(entry.killTimer, 'the normal process-tree SIGKILL escalation should be scheduled');
   clearTimeout(entry.killTimer);
 });
+
+test('/agents lists one subagent per line', async () => {
+  const { state } = await setup();
+  const output = (await runBuiltinCommand('agents', '', state)).output;
+  assert.doesNotMatch(output, /\\n/, 'no literal backslash-n in the output');
+  assert.ok(output.split('\n').length > 2, 'each agent is on its own line');
+  assert.match(output, /^Available subagents:\n {2}\S/);
+});
