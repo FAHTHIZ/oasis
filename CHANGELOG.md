@@ -5,6 +5,7 @@ User-facing change history grouped by package version. A version heading does no
 ## Unreleased
 
 ### Browser workspace
+- Fixed: connecting a keyless remote endpoint (for example `https://text.pollinations.ai/openai`) said "Locked in" but the app kept asking for a key. Connections proven to work without a key are saved with `keyless: true` and count as configured for that endpoint only.
 - Settings has a **Tools (MCP servers)** section when the workspace is connected to `oasis web`: list, add, turn on or off and remove servers in `mcp-servers.json`. Commands are split with quote support and checked before saving; environment access takes variable names only. Before, this was only in the classic page at `/classic`.
 - With no model connected, the `oasis web` welcome screen shows what fits this computer (hosted model, a local server already running, or an Ollama model to install), from `/api/system/profile`.
 
