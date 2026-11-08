@@ -4,6 +4,21 @@ User-facing change history grouped by package version. A version heading does no
 
 ## Unreleased
 
+### Agents and subagents
+- Custom agents accept the full Claude Code front matter: `disallowedTools`, `maxTurns` (reports are marked `partial` at the limit), `permissionMode: plan`, `skills` (preloaded), `memory` (user, project or local `MEMORY.md`), `background` and `color`. Project, user, plugin and `--agents` definitions share one parser.
+- `task` accepts `output_schema`; the report is validated and the agent gets one correction turn, then the result carries `structured` or `schema_errors`.
+- Background agents that go silent are stopped as `stalled` after 450 seconds (1200 seconds inside a running tool) and keep their last text as a partial report. Set `OASIS_SUBAGENT_STALL_SECONDS` or `subagentStallSeconds`; `0` disables it.
+- New [Subagents guide](docs/SUBAGENTS.md).
+
+### Security and reliability
+- The SSRF address policy is built on `ipaddr.js` with declarative CIDR tables.
+- Plugin downloads, MCP OAuth discovery and public web fetches share one DNS-pinned, size-bounded HTTP client (`src/safe-http.mjs`) instead of three copies.
+- The test suite is green on `main` again after the tool-registry and Pages removals.
+
+### Maintenance
+- Removed duplicated chat chunking (Telegram gateway) and generated-media file handling (images and speech).
+- README: quick start, agent system overview and Claude Code compatibility summary.
+
 ## [1.1.1] - 2026-11-07
 
 - Rebuilt the README around platform downloads and clearly separated terminal, browser-workspace and desktop entry points.
