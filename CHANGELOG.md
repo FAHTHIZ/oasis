@@ -14,6 +14,13 @@ User-facing change history grouped by package version. A version heading does no
 - `neuron_network` loads on demand with the other background-agent tools, saving about 200 tokens per request.
 - New [Subagents guide](docs/SUBAGENTS.md).
 
+### Providers
+- [OmniRoute](https://github.com/cheaper-inference/omniroute) is a built-in gateway provider (`omniroute`, `OMNIROUTE_API_KEY`, `localhost:20128`). See [Configuration](docs/CONFIGURATION.md#omniroute-gateway).
+- Pasting a server address with a key no longer fails with "needs an API key" when the server also guards an Ollama-style `/api/tags` route, and a wrong key is now reported as a wrong key.
+- Model setup on a gateway rules out an unconnected upstream after one failed probe, and keeps its models out of the backups.
+- Gateway 5xx errors such as "not configured" are no longer retried for minutes. They fail over at once, with advice to connect the provider.
+- Model ranking ignores digits in a provider prefix (`llm7/…`), so they no longer count as a model version.
+
 ### Security and reliability
 - Shutting down the browser workspace now waits briefly for cancelled tasks to record their final status, then closes task history, so no write lands after shutdown. This fixes an intermittent cleanup failure on Node 26.
 - New `dontAsk` permission mode and `permissions.denyInsteadOfPrompting` setting (Claude Code parity): calls that would wait on an approval prompt are denied with a readable reason and the turn continues, so CI and unattended runs never hang. See [Permission modes](docs/CONFIGURATION.md#permission-modes).

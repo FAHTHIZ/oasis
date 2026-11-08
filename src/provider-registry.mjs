@@ -43,6 +43,9 @@ const BUILTIN = {
   lmstudio: { label: 'LM Studio', protocol: 'openai-compatible', baseURL: 'http://127.0.0.1:1234/v1', keyEnv: [], model: '', local: { probe: '/v1/models', kind: 'openai' } },
   llamacpp: { label: 'llama.cpp server', protocol: 'openai-compatible', baseURL: 'http://127.0.0.1:8080/v1', keyEnv: [], model: '', local: { probe: '/v1/models', kind: 'openai' } },
   jan: { label: 'Jan', protocol: 'openai-compatible', baseURL: 'http://127.0.0.1:1337/v1', keyEnv: [], model: '', local: { probe: '/v1/models', kind: 'openai' } },
+  // OmniRoute is a self-hosted gateway on loopback that forwards to cloud
+  // providers, so `gateway` keeps it from being priced or tuned as a local model.
+  omniroute: { label: 'OmniRoute', protocol: 'openai-compatible', baseURL: 'http://127.0.0.1:20128/v1', keyEnv: ['OMNIROUTE_API_KEY'], model: 'auto', gateway: true },
   vllm: { label: 'vLLM', protocol: 'openai-compatible', baseURL: 'http://127.0.0.1:8000/v1', keyEnv: ['VLLM_API_KEY'], model: '', local: { probe: '/v1/models', kind: 'openai' } }
 };
 
@@ -79,6 +82,7 @@ function userEntry(id, raw, base) {
     model: raw.model === undefined ? (base ? base.model : '') : String(raw.model).slice(0, 200),
     ...(raw.catalog !== undefined ? (/^[a-z0-9][a-z0-9.-]{0,59}$/.test(String(raw.catalog)) ? { catalog: String(raw.catalog) } : {}) : (base && base.catalog ? { catalog: base.catalog } : {})),
     ...(base && base.local ? { local: base.local } : {}),
+    ...((raw.gateway !== undefined ? raw.gateway === true : base && base.gateway) ? { gateway: true } : {}),
     custom: true
   };
 }
@@ -145,10 +149,6 @@ export function providerForEndpoint(baseURL, protocol, options) {
   return '';
 }
 
-/** Local OpenAI-compatible servers to probe, in registry order. */
-export function localProviders(options) {
-  return Object.values(providerRegistry(options)).filter((entry) => entry.local);
-}
 
 /** Compare two base URLs ignoring a trailing slash. */
 export function sameBaseURL(a, b) {

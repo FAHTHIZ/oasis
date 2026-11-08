@@ -1,6 +1,7 @@
 // Provider HTTP error messages: the provider's own message, plus advice for the
 // usual causes (credit or quota limits, rate limits, wrong key or endpoint).
 import { openRouterCreditInfo } from './model-budgets.mjs';
+import { isUnconfiguredRouteError } from './provider-retry.mjs';
 
 export function formatApiError(status, body, protocol, baseURL = '') {
   let detail = '';
@@ -42,6 +43,7 @@ export function apiErrorAdvice(status, detail = '', mode = 'OpenAI-compatible ch
   if (status === 429) return 'The provider is rate-limiting requests. Wait a little and try again, or lower the request rate.';
   if (status === 401 || status === 403) return 'Check the API key for this provider (oasis setup, or the matching environment variable).';
   if (status === 404) return 'Check the model name and the ' + mode + ' endpoint URL.';
+  if (isUnconfiguredRouteError(status, text)) return 'The gateway has no working account for this model\'s provider. Connect that provider in the gateway (for OmniRoute: its dashboard), or pick another model with /model.';
   if (status >= 500) return 'The provider had a server-side problem. Try again shortly.';
   return 'Check the configured ' + mode + ' endpoint, model name, credentials, and tool-calling support.';
 }

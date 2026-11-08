@@ -12,7 +12,12 @@ export function runtimeConfigFromConnection(result, { fallbackCount = 3 } = {}) 
   const { connection, model } = result;
   const protocol = APP_TO_RUNTIME[connection.protocol] || 'openai-compatible';
   const unusable = new Set(result.unusable || []);
-  const fallbacks = connection.models.filter((id) => id && id !== model && !unusable.has(id)).slice(0, fallbackCount);
+  const usable = connection.models.filter((id) => id && id !== model && !unusable.has(id));
+  // On a gateway the chosen model's own upstream (llm7/… on OmniRoute) is the
+  // one known to be connected, so its siblings are the safest backups.
+  const prefix = connection.provider === 'omniroute' && model.includes('/') ? model.slice(0, model.indexOf('/') + 1) : '';
+  const ordered = prefix ? [...usable.filter((id) => id.startsWith(prefix)), ...usable.filter((id) => !id.startsWith(prefix))] : usable;
+  const fallbacks = ordered.slice(0, fallbackCount);
   return { protocol, baseURL: connection.baseURL, model, apiKey: connection.apiKey || '', fallbackModel: fallbacks.join(',') };
 }
 

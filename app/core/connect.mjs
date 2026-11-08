@@ -191,7 +191,10 @@ export function scoreModel(id) {
   const lower = text.toLowerCase();
   let score = 50;
   for (const [pattern, base] of FAMILIES) if (pattern.test(lower)) { score = base; break; }
-  score += Math.min(versionOf(lower), 12) * 2;
+  // Version, size and date come from the model's own name: a digit in a
+  // provider or gateway prefix (llm7/…, 01-ai/…) is not a model version.
+  const name = lower.slice(lower.lastIndexOf('/') + 1);
+  score += Math.min(versionOf(name), 12) * 2;
   if (/fable/.test(lower)) score += 12;
   else if (/opus|\bultra|-max\b|-pro\b|\bpro\b|-sol\b/.test(lower)) score += 9;
   else if (/sonnet|plus|large|-medium/.test(lower)) score += 4;
@@ -205,9 +208,9 @@ export function scoreModel(id) {
   // Specialist models answer chat requests but are tuned for something else.
   if (/robotics|-er-\d|omni|nano-banana|learnlm|medgemma|-math\b|translate|guardian/.test(lower)) score -= 30;
   if (/base\b|-base-/.test(lower)) score -= 20;
-  const params = paramsOf(lower);
+  const params = paramsOf(name);
   if (params) score += params < 4 ? -22 : params < 8 ? -14 : params < 15 ? -7 : params < 30 ? -2 : params >= 200 ? 4 : 2;
-  const date = lower.match(/20(2\d)[-]?(\d{2})[-]?(\d{2})?/);
+  const date = name.match(/20(2\d)[-]?(\d{2})[-]?(\d{2})?/);
   if (date) score += (Number(date[1]) - 20) * 0.3 + Number(date[2]) * 0.02;
   return score;
 }
@@ -359,6 +362,10 @@ async function lockIn(connection, ranked, { fetchImpl, onStatus, tries = 4, pref
   const order = [...preferred.filter((id) => !ranked.includes(id)), ...preferred.filter((id) => ranked.includes(id)), ...ranked.filter((id) => !preferred.includes(id))];
   const failures = [];
   const unusable = [];
+  const gateway = connection.provider === 'omniroute';
+  const skippedProviders = new Set();
+  // Hundreds of listed models: allow more chat-only answers before settling.
+  if (gateway) tries = Math.max(tries, 8);
   const tried = new Set();
   let noTools = null;
   let hardFailures = 0;
@@ -402,6 +409,18 @@ async function lockIn(connection, ranked, { fetchImpl, onStatus, tries = 4, pref
       // An instant "no quota" or "retired" answer is free to rule out, so it
       // does not use up an attempt; only the time budget bounds those.
       if ((kind === 'model' || kind === 'credits' || kind === 'rate') && Date.now() - started < 3000 && cheap < 40) { attempts -= 1; cheap += 1; }
+      // A gateway (OmniRoute) lists every provider it knows, connected or not.
+      // A provider-level failure (no account, upstream down) rules out the rest
+      // of that provider's models at once instead of one probe each.
+      const prefix = gateway && model.includes('/') ? model.slice(0, model.indexOf('/')) : '';
+      if (prefix && !error.timedOut && (kind === 'auth' || kind === 'server' || kind === 'credits')) {
+        attempts -= 1;
+        skippedProviders.add(prefix);
+        for (const id of ranked) if (id.startsWith(prefix + '/') && !unusable.includes(id)) unusable.push(id);
+        for (let at = order.length - 1; at >= 0; at--) if (order[at].startsWith(prefix + '/')) order.splice(at, 1);
+        if (skippedProviders.size > 60) break;
+        continue;
+      }
       if (kind === 'auth' || kind === 'network') throw error;
       if (kind === 'model' || kind === 'credits') unusable.push(model);
       if (!['model', 'credits', 'rate', 'server'].includes(kind)) hardFailures += 1;
@@ -423,6 +442,7 @@ async function lockIn(connection, ranked, { fetchImpl, onStatus, tries = 4, pref
     : failures.some((failure) => failure.kind === 'server' || failure.kind === 'rate')
     ? ' Some models were busy or rate limited; try again in a minute.'
     : allCredits ? ' The key has no credit or quota for these models; add billing or use another key.' : '';
+  if (gateway) lines.push('  This gateway lists models from providers it is not connected to. Connect a provider in its dashboard, or paste the address and key with a model name after them.');
   throw new ProviderError('No model on this connection answered (' + failures.length + ' tried).' + hint + '\n' + lines.join('\n'), { status: allCredits ? 402 : 0 });
 }
 
@@ -573,17 +593,26 @@ export async function probeEndpoint(raw, { apiKey = '', fetchImpl = globalThis.f
   if (knownPreset) bases.unshift(knownPreset[1].baseURL);
   for (const base of [...new Set(bases)]) attempts.push({ kind: 'openai', base, test: () => listModels({ protocol: 'openai', baseURL: base, apiKey }, { fetchImpl, timeoutMs }) });
   let lastError = null;
+  let authError = null;
   for (const attempt of attempts) {
     try {
       const ids = await attempt.test();
       if (attempt.kind === 'ollama') return makeConnection('ollama', { baseURL: origin + '/v1', local: true, models: rankModels(ids), label: local ? 'Ollama (this device)' : 'Ollama at ' + url.host });
-      const provider = knownPreset ? knownPreset[0] : /:1234$/.test(origin) ? 'lmstudio' : /:8080$/.test(origin) ? 'llamacpp' : 'custom';
+      const provider = knownPreset ? knownPreset[0] : /:1234$/.test(origin) ? 'lmstudio' : /:8080$/.test(origin) ? 'llamacpp' : /:20128$/.test(origin) ? 'omniroute' : 'custom';
       const label = knownPreset ? knownPreset[1].label : provider === 'custom' ? url.host : PRESETS[provider].label;
-      return makeConnection(provider, { baseURL: attempt.base, apiKey, local, models: rankModels(ids), label });
+      // A gateway on localhost forwards to the cloud: time and label it as cloud.
+      return makeConnection(provider, { baseURL: attempt.base, apiKey, local: local && provider !== 'omniroute', models: rankModels(ids), label });
     } catch (error) {
-      if (error instanceof ProviderError && (error.status === 401 || error.status === 403)) throw new ProviderError(url.host + ' needs an API key. Paste the key together with the address.', { status: error.status });
+      // A gateway can guard an Ollama-style alias (/api/tags) as well as /v1, so an
+      // auth failure on one probe must not stop the probes that carry the key.
+      if (error instanceof ProviderError && (error.status === 401 || error.status === 403)) { authError = authError || error; continue; }
       lastError = error;
     }
+  }
+  if (authError) {
+    throw new ProviderError(apiKey
+      ? url.host + ' did not accept that key. Check it was copied whole and is allowed to list models.'
+      : url.host + ' needs an API key. Paste the key together with the address.', { status: authError.status });
   }
   const reason = lastError instanceof TypeError || (lastError && lastError.name === 'AbortError')
     ? (local ? 'Nothing answered there. Is the server running, and does it allow browser apps? (Ollama: OLLAMA_ORIGINS=* ollama serve)' : 'Nothing answered there, or the server does not allow browser apps (CORS).')
