@@ -214,3 +214,12 @@ also keeps the raw output in `.oasis/command-logs/` (the same place truncated
 output goes) and names the file; `run_shell` keeps no raw log. That directory
 contains a `.gitignore` with `*`, so logs do not appear in `git status`,
 `git_diff` or `git add -A`. Set `OASIS_CONDENSE_OUTPUT=0` to turn the filter off.
+
+## Inline images
+
+In terminals that support graphics (Kitty and Ghostty through the Kitty protocol;
+iTerm2, WezTerm, Warp and the VS Code terminal through the iTerm2 protocol), images
+returned by tools and images attached with `@path.png` are previewed inline, at most
+16 rows tall. Previews are skipped inside tmux, screen and Zellij, in CI, and when
+output is not a terminal. Set `OASIS_INLINE_IMAGES=0` to disable them, or
+`OASIS_INLINE_IMAGES=kitty` / `iterm` to force a protocol.
