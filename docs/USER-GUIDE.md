@@ -62,6 +62,8 @@ oasis
 
 Use oasis for the interactive session. Use oasis exec for a non-interactive task in scripts or automation. Use oasis doctor to inspect the local environment, oasis models to list the models your provider serves (add a filter or --json), and oasis update to update a script-installed version.
 
+Subagents you or OASIS start show up in `/tasks`. Running ones are listed first, and finished ones appear under **Earlier in this session**, even after a restart. `/tasks ID` shows an agent's report. `/tasks send ID MESSAGE` steers a running agent or resumes a finished one with its earlier conversation. `/tasks stop ID` stops one.
+
 Keep the terminal open while the session is active. The process has the permissions of the account running it, subject to OASIS's configured permission and sandbox controls.
 
 ## 5. Browser workspace
@@ -88,6 +90,7 @@ For phone or tablet access, follow [Mobile and tablet setup](../MOBILE.md). Keep
 | Copy or reuse a message | Hover a message for **Copy** (the original Markdown) and, on your own messages, **Edit**, which puts the text back in the message box. Code blocks have their own Copy button. |
 | Watch the context window | The ring beside the Send button shows how full the context window is. It turns amber at 70% and red at 90%; hover it for token counts. |
 | Know when it's done | When the tab is in the background, the page title shows a badge when a task finishes or needs approval. Turn on desktop notifications under **Settings**. |
+| Use a terminal | Press Ctrl+` and choose **Start terminal** to get your own shell in the workspace beside the chat. The agent cannot see it, and reloading the page reconnects to it. |
 | Open everything else | Ctrl+K (Cmd+K on macOS) opens the command palette. Ctrl+/ lists every shortcut. |
 
 ## 6. Desktop application

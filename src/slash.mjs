@@ -75,7 +75,7 @@ export const BUILTIN_COMMANDS = {
   rewind: 'Undo recent turns: restore files and/or conversation (/rewind [N] [code|chat])',
   review: 'Review changes for correctness bugs (/review [low|medium|high|xhigh|max|ultra] [--fix] [--comment] [--max-findings N|all] [PR#|branch|path])',
   audit: 'Run isolated security, performance, test-coverage, and dependency reviewers, then merge and verify findings (/audit [path-or-scope])',
-  tasks: 'List background agents and processes (/tasks, /tasks ID, /tasks stop ID)',
+  tasks: 'List background agents and processes (/tasks, /tasks ID, /tasks send ID MESSAGE, /tasks stop ID)',
   workflows: 'List workflow runs and saved workflows (/workflows, /workflows ID, stop ID, save ID [--user])',
   commit: 'Commit the current changes with a well-written message (/commit [hint])',
   pr: 'Create a branch if needed, commit, push, and open a pull request (/pr [base])',
@@ -1726,6 +1726,21 @@ export async function runBuiltinCommand(name, argument, state) {
         }
         return { output: 'No agent or process with id ' + words[1] + '.' };
       }
+      if (session && (words[0] === 'send' || words[0] === 'message') && words[1]) {
+        const id = words[1];
+        const message = argument.trim().replace(/^\S+\s+\S+\s*/, '');
+        if (!session.agentTasks || !session.agentTasks.agents.has(id)) return { output: 'No subagent with id ' + id + '. /tasks lists them.' };
+        if (!message) return { output: 'Usage: /tasks send ' + id + ' MESSAGE' };
+        if (message.length > 20000) return { output: 'Messages must be 20,000 characters or fewer.' };
+        const record = getAgent(session, id);
+        if (record.status === 'running' && record.child) {
+          (record.child.inbox || (record.child.inbox = [])).push({ text: 'New message from the user:\n' + message });
+          return { output: 'Queued for ' + id + '; it sees the message at its next step.' };
+        }
+        if (!record.child && !record.restoredTranscript) return { output: 'Agent ' + id + ' cannot be resumed (its conversation was not saved). Start a new task from its report: /tasks ' + id };
+        // Resuming needs this turn's approvals and model settings, so the main agent sends it.
+        return { prompt: 'Call send_message with id ' + JSON.stringify(id) + ' and exactly this message, then reply in one short sentence that it was sent. Do nothing else.\nMessage: ' + JSON.stringify(message) };
+      }
       if (session && words[0] && session.agentTasks && session.agentTasks.agents.has(words[0])) {
         const info = summarizeAgent(getAgent(session, words[0]), { full: true });
         return { output: [info.id + '  ' + info.status + '  ' + info.agent + '  ' + info.description + '  (' + info.elapsed + ', ' + info.toolCalls + ' tool calls' + (info.usage ? ', ' + info.usage.requests + ' requests, ' + info.usage.inputTokens.toLocaleString('en-US') + ' in / ' + info.usage.outputTokens.toLocaleString('en-US') + ' out tokens' + (info.usage.costUsd > 0 ? ', $' + info.usage.costUsd.toFixed(4) : '') : '') + ')', info.error ? 'Error: ' + info.error : '', info.report || (info.recentTools ? 'Recent tools: ' + info.recentTools.join(', ') : '')].filter(Boolean).join('\n') };
@@ -1735,9 +1750,16 @@ export async function runBuiltinCommand(name, argument, state) {
       const mcpTasks = session && session.mcpBackgroundTasks ? [...session.mcpBackgroundTasks.entries()] : [];
       if (!agents.length && !procs.length && !mcpTasks.length) return { output: 'No subagents, background processes or MCP tasks in this session.' };
       const lines = [];
-      if (agents.length) {
-        lines.push('Agents:');
-        for (const agent of agents) lines.push('  ' + agent.id.padEnd(9) + ' ' + agent.status.padEnd(10) + ' ' + (agent.background ? 'bg ' : 'fg ') + agent.agent + ': ' + agent.description + '  (' + agent.elapsed + ', ' + agent.toolCalls + ' tool calls' + (agent.recentTools ? ', now: ' + agent.recentTools[agent.recentTools.length - 1] : '') + ')');
+      const agentLine = (agent) => '  ' + agent.id.padEnd(9) + ' ' + agent.status.padEnd(10) + ' ' + (agent.background ? 'bg ' : 'fg ') + agent.agent + ': ' + agent.description + '  (' + agent.elapsed + ', ' + agent.toolCalls + ' tool calls' + (agent.status === 'running' && agent.recentTools ? ', now: ' + agent.recentTools[agent.recentTools.length - 1] : '') + ')';
+      const running = agents.filter((agent) => agent.status === 'running');
+      const earlier = agents.filter((agent) => agent.status !== 'running');
+      if (running.length) { lines.push('Agents:'); for (const agent of running) lines.push(agentLine(agent)); }
+      if (earlier.length) {
+        // Like Claude Code's "Earlier in this session": finished (or restart-interrupted)
+        // agents stay listed and can be reopened and messaged.
+        lines.push('Earlier in this session:');
+        for (const agent of earlier.slice(-20)) lines.push(agentLine(agent));
+        if (earlier.length > 20) lines.push('  … ' + (earlier.length - 20) + ' older');
       }
       if (procs.length) {
         lines.push('Processes:');
@@ -1747,7 +1769,7 @@ export async function runBuiltinCommand(name, argument, state) {
         lines.push('MCP tasks (result arrives as a notification):');
         for (const [id, task] of mcpTasks) lines.push('  ' + id + '  running  ' + task.server + ' ' + task.tool + '  (' + Math.max(1, Math.round((Date.now() - task.startedAt) / 1000)) + 's)');
       }
-      lines.push('Details: /tasks ID   Stop: /tasks stop ID');
+      lines.push('Details: /tasks ID   Message or resume: /tasks send ID MESSAGE   Stop: /tasks stop ID');
       return { output: lines.join('\n') };
     }
     case 'bashes': {

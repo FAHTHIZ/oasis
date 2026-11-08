@@ -158,3 +158,28 @@ test('/tasks lists MCP tasks running in the background', async () => {
   assert.match(output, /MCP tasks/);
   assert.match(output, /task-9 {2}running {2}jobs slow {2}\(4s\)/);
 });
+
+test('/tasks groups finished agents under Earlier in this session and can message them', async () => {
+  const { runBuiltinCommand } = await import('../src/slash.mjs');
+  const inbox = [];
+  const now = Date.now();
+  const agents = new Map([
+    ['agent_1', { id: 'agent_1', type: 'explore', description: 'map the repo', status: 'running', background: true, startedAt: now - 3000, finishedAt: null, toolCalls: 2, recentTools: ['grep'], child: { inbox } }],
+    ['agent_2', { id: 'agent_2', type: 'general', description: 'fix the parser', status: 'completed', background: true, startedAt: now - 9000, finishedAt: now - 1000, toolCalls: 7, recentTools: [], child: null, restoredTranscript: true }],
+    ['agent_3', { id: 'agent_3', type: 'general', description: 'old job', status: 'completed', background: false, startedAt: now - 9000, finishedAt: now - 5000, toolCalls: 1, recentTools: [], child: null }]
+  ]);
+  const session = { root: '/tmp', messages: [], agentTasks: { next: 4, agents, teams: new Map(), events: [], nextEventId: 1 } };
+  const state = { root: '/tmp', session, env: {} };
+  const { output } = await runBuiltinCommand('tasks', '', state);
+  assert.match(output, /Agents:\n {2}agent_1 +running/);
+  assert.match(output, /Earlier in this session:\n {2}agent_2 +completed[^\n]*\n {2}agent_3/);
+  assert.match(output, /\/tasks send ID MESSAGE/);
+  const queued = await runBuiltinCommand('tasks', 'send agent_1 also check the tests', state);
+  assert.match(queued.output, /Queued for agent_1/);
+  assert.equal(inbox[0].text, 'New message from the user:\nalso check the tests');
+  const resumed = await runBuiltinCommand('tasks', 'send agent_2 handle "quotes" too', state);
+  assert.match(resumed.prompt, /send_message with id "agent_2"/);
+  assert.match(resumed.prompt, /"handle \\"quotes\\" too"/);
+  const blocked = await runBuiltinCommand('tasks', 'send agent_3 hi', state);
+  assert.match(blocked.output, /cannot be resumed/);
+});
