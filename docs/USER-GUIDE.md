@@ -60,7 +60,7 @@ oasis connect
 oasis
 ```
 
-Use oasis for the interactive session. Use oasis exec for a non-interactive task in scripts or automation. Use oasis doctor to inspect the local environment and oasis update to update a script-installed version.
+Use oasis for the interactive session. Use oasis exec for a non-interactive task in scripts or automation. Use oasis doctor to inspect the local environment, oasis models to list the models your provider serves (add a filter or --json), and oasis update to update a script-installed version.
 
 Keep the terminal open while the session is active. The process has the permissions of the account running it, subject to OASIS's configured permission and sandbox controls.
 

@@ -9,6 +9,7 @@ export const COMPLETION_COMMANDS = {
   connect: 'Paste an API key, model link or local server',
   setup: 'Choose a model provider or a local model',
   doctor: 'Check Node, Git, provider, sandbox and config',
+  models: 'List the models your provider serves',
   update: 'Update to the latest stable release',
   init: 'Create OASIS.md project instructions',
   mcp: 'Model Context Protocol servers',
