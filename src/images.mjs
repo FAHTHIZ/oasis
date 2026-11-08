@@ -241,4 +241,23 @@ export function responsesImageItems(message, index, keep) {
   return message.images.map((image) => ({ type: 'input_image', image_url: 'data:' + image.mediaType + ';base64,' + image.data }));
 }
 
+// A text-only model behind a chat endpoint rejects image parts. Seen live from
+// Pollinations (gpt-oss-20b): HTTP 400 "This model does not support image input".
+const IMAGE_UNSUPPORTED = /(?:does not|doesn't|do not|cannot|can't|not) (?:support|accept|handle|process|allow)\w* (?:image|vision|multimodal|multi-modal)|image(?:s| input| content| parts?)? (?:is |are )?not (?:supported|allowed|enabled|available)|(?:image|vision)\w*(?: input)? (?:is )?unsupported|unsupported (?:content|input|message)(?: part)? type\W{0,4}image|image_url\W.{0,40}(?:not supported|unsupported|unknown variant)/i;
+export function imagesUnsupportedError(status, text) {
+  return status >= 400 && status < 500 && IMAGE_UNSUPPORTED.test(String(text || ''));
+}
+
+// The conversation without image data, each image replaced by a note the model
+// can act on (tell the user, suggest a vision model). The stored images stay,
+// so switching to a vision model sends them again.
+export function withoutImages(messages, model = 'this model') {
+  return messages.map((message) => {
+    if (!Array.isArray(message.images) || !message.images.length) return message;
+    const { images, ...rest } = message;
+    const count = images.length;
+    return { ...rest, content: String(rest.content || '') + '\n[' + count + ' image' + (count === 1 ? '' : 's') + ' not sent: ' + model + ' cannot read images. If the request depends on ' + (count === 1 ? 'it' : 'them') + ', say you cannot see images with this model and suggest switching to a vision-capable model; do not guess the contents.]' };
+  });
+}
+
 export { recentImageSet };

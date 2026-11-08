@@ -27,7 +27,7 @@ import { parseChannelEntries, mcpInstructionsSection, flushPendingChannels } fro
 import { SESSION_TOOL_DEFINITIONS, SESSION_TOOL_NAMES, SESSION_READ_ONLY_TOOLS, deferMcpTools, deferRareBuiltinTools, loadDeferredTool, deferredToolsPrompt, toolGuidanceFor, runSessionTool, stopCron, TOOL_SEARCH_DEFINITION } from './session-tools.mjs';
 import { loadOutputStyles, systemPromptWithStyle, BUILTIN_STYLES } from './output-styles.mjs';
 import { priceFor, estimateCostUsd, recordBudgetSpend, formatUsd, cloudModelBehindGateway } from './pricing.mjs';
-import { hasImages, toChatMessagesWithImages, fitImages } from './images.mjs';
+import { hasImages, toChatMessagesWithImages, fitImages, imagesUnsupportedError, withoutImages } from './images.mjs';
 import { beginCheckpoint, captureBeforeChange, checkpointPersistenceEnabled, FILE_CHANGING_TOOLS, loadCheckpoints } from './checkpoints.mjs';
 import { nestedMemoryFor } from './memory.mjs';
 import { resolveModelAlias, isModelAlias, modelAllowed, modelRestrictionMessage, fastModeRequest } from './model-aliases.mjs';
@@ -1318,6 +1318,8 @@ async function requestCompletionTracedInner(session, options = {}) {
 
 async function requestCompletionRaw(session, options = {}) {
   const config = withResolvedModel(session.config, options.env || session.providerEnv || session.modelEnv || process.env, Boolean(session.permissions && session.permissions.mode === 'plan'));
+  const textOnly = Boolean(session.textOnlyModels && session.textOnlyModels.has(String(config.model || '')));
+  const sentMessages = textOnly && hasImages(session.messages) ? withoutImages(session.messages, config.model) : session.messages;
   const nativeAnthropic = isAnthropicFamily(config.protocol);
   const cloudAnthropic = config.protocol === 'bedrock' || config.protocol === 'vertex' || config.protocol === 'foundry';
   const providerEnv = options.env || session.providerEnv || process.env;
@@ -1373,7 +1375,7 @@ async function requestCompletionRaw(session, options = {}) {
     const thinkingMode = claudeThinkingMode(config.model);
     const adaptive = thinkingMode !== 'budget';
     // Adaptive models return signed thinking blocks on their own; they must be replayed in tool loops.
-    const converted = toAnthropicRequest(session.messages, { thinking: adaptive || (Boolean(session.thinkingBudget) && !options.forceTool) });
+    const converted = toAnthropicRequest(sentMessages, { thinking: adaptive || (Boolean(session.thinkingBudget) && !options.forceTool) });
     const cache = promptCachingEnabled(config, options.env || process.env);
     const anthropicTools = availableTools.map((tool) => ({
       name: tool.function.name,
@@ -1403,7 +1405,7 @@ async function requestCompletionRaw(session, options = {}) {
     if (cloudAnthropic) bodyObject = cloudBody(config.protocol, bodyObject);
   } else if (nativeResponses) {
     endpoint = responsesEndpoint(config.baseURL);
-    const converted = toResponsesRequest(session.messages);
+    const converted = toResponsesRequest(sentMessages);
     bodyObject = {
       model: config.model,
       instructions: converted.instructions,
@@ -1434,7 +1436,7 @@ async function requestCompletionRaw(session, options = {}) {
       model: config.model,
       ...(explicitChatLimit ? { max_tokens: explicitChatLimit } : {}),
       ...samplingTemperature(config, providerEnv),
-      messages: withProviderExtraContent(hasImages(session.messages) ? toChatMessagesWithImages(session.messages) : session.messages, config.baseURL, config.model),
+      messages: withProviderExtraContent(hasImages(sentMessages) ? toChatMessagesWithImages(sentMessages) : sentMessages, config.baseURL, config.model),
       ...(session.reasoningEffort && !options.forceTool ? { reasoning_effort: session.reasoningEffort } : {}),
       ...(availableTools.length ? { tools: availableTools.map(chatCompletionTool), tool_choice: options.forceTool ? { type: 'function', function: { name: options.forceTool } } : 'auto', parallel_tool_calls: parallelToolCalls(config, providerEnv) } : {}),
       ...(typeof options.onDelta === 'function' ? { stream: true } : {}),
@@ -1590,6 +1592,15 @@ async function requestCompletionRaw(session, options = {}) {
         clearTimeout(timer);
         if (options.signal) options.signal.removeEventListener('abort', abortFromCaller);
         return requestCompletionRaw(session, { ...options, outputCapRetried: true });
+      }
+      if (!textOnly && hasImages(session.messages) && imagesUnsupportedError(status, errorBody)) {
+        // Remember that this model is text-only for the session and resend
+        // without image data; otherwise every later message fails the same way.
+        (session.textOnlyModels ||= new Set()).add(String(config.model || ''));
+        if (typeof options.onProviderRetry === 'function') { try { options.onProviderRetry({ status, attempt: 1, limit: 1, waitMs: 0, reason: config.model + ' cannot read images; sending the conversation without them' }); } catch {} }
+        clearTimeout(timer);
+        if (options.signal) options.signal.removeEventListener('abort', abortFromCaller);
+        return requestCompletionRaw(session, options);
       }
       throw Object.assign(new Error(formatApiError(status, errorBody, config.protocol, config.baseURL)), { status });
     }

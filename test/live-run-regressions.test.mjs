@@ -127,3 +127,41 @@ test('a repeated commit after success says the work is already committed', async
     await rm(root, { recursive: true, force: true });
   }
 });
+
+test('a text-only model that rejects an attached image gets the conversation without it, now and on later turns', async (t) => {
+  const http = await import('node:http');
+  const { mkdtemp, rm } = await import('node:fs/promises');
+  const os = await import('node:os');
+  const path = await import('node:path');
+  const { createSession, runAgentTurn, closeSession } = await import('../src/agent.mjs');
+  const bodies = [];
+  const server = http.createServer(async (req, res) => {
+    let raw = ''; for await (const chunk of req) raw += chunk;
+    const body = JSON.parse(raw);
+    bodies.push(body);
+    const sentImage = JSON.stringify(body.messages).includes('image_url');
+    res.writeHead(sentImage ? 400 : 200, { 'content-type': 'application/json' });
+    res.end(JSON.stringify(sentImage
+      ? { error: { message: 'This model does not support image input' } }
+      : { choices: [{ message: { role: 'assistant', content: 'I cannot see images with this model.' }, finish_reason: 'stop' }], usage: { prompt_tokens: 5, completion_tokens: 5 } }));
+  });
+  await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
+  const root = await mkdtemp(path.join(os.tmpdir(), 'oasis-textonly-'));
+  const home = await mkdtemp(path.join(os.tmpdir(), 'oasis-textonly-home-'));
+  t.after(async () => { server.close(); await rm(root, { recursive: true, force: true }); await rm(home, { recursive: true, force: true }); });
+  const env = { ...process.env, HOME: home, OASIS_CONFIG_DIR: path.join(home, 'cfg') };
+  const config = { protocol: 'openai-compatible', baseURL: 'http://127.0.0.1:' + server.address().port + '/v1', apiKey: 'x', model: 'text-only-1', configured: true };
+  const session = await createSession({ root, config, env });
+  t.after(() => closeSession(session));
+  const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==', 'base64');
+  const retries = [];
+  const first = await runAgentTurn(session, 'What error is in this screenshot?', { env, images: [{ mediaType: 'image/png', data: png.toString('base64') }], onProviderRetry: (event) => retries.push(event.reason) });
+  assert.match(String(first.content || first.text || first), /cannot see images/);
+  assert.match(retries.join(' '), /cannot read images/);
+  const notes = JSON.stringify(bodies[bodies.length - 1].messages);
+  assert.match(notes, /1 image not sent: text-only-1 cannot read images/);
+  const before = bodies.length;
+  await runAgentTurn(session, 'OK, then just say hi.', { env });
+  assert.equal(bodies.length, before + 1, 'the next turn is not rejected again');
+  assert.ok(session.messages.some((message) => Array.isArray(message.images) && message.images.length), 'the stored image is kept for a later vision model');
+});
