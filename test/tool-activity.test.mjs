@@ -31,7 +31,11 @@ test('tool activity labels name subagents and coordination tools', () => {
   assert.equal(labelToolActivity('agent_status'), 'Checked on subagents');
   assert.equal(labelToolActivity('ask_user_question'), 'Asked you a question');
   assert.equal(labelToolActivity('memory_save'), 'Updated saved memory');
-  assert.equal(labelToolActivity('mcp_github_search_issues'), 'Used a connected tool (MCP)');
+  assert.equal(labelToolActivity('mcp_github_search_issues'), 'Used a connected tool: github search issues');
+  assert.equal(labelToolActivity('mcp__context7__resolve-library-id'), 'Used context7: resolve library id');
+  assert.equal(labelToolActivity('git_commit'), 'Made a commit');
+  assert.equal(labelToolActivity('browser'), 'Used the browser');
+  assert.equal(labelToolActivity('some_new_tool'), 'Used some new tool');
 });
 
 test('tool activity categories group common actions without exposing tool names', () => {

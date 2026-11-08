@@ -158,6 +158,10 @@ svg{width:20px;height:20px;flex:none}
 .msg.user .msg-actions{order:-1;margin-top:0}
 .msg:hover .msg-actions,.msg-actions:focus-within{opacity:1}
 .msg.assistant{display:flex;flex-direction:column}
+/* Tool-only steps sit close together, like one list of actions. */
+.msg.assistant:has(>.body[hidden]):not(:has(.thinking)){margin-bottom:6px}
+.msg.assistant:has(>.body[hidden])>.tools{margin:0}
+.msg.assistant:has(>.body[hidden])+.msg.assistant:not(:has(>.body[hidden])){margin-top:18px}
 .msg.assistant>.msg-actions{order:9}
 .msg.assistant:has(.thinking) .msg-actions,.msg.assistant:has(.cursor) .msg-actions,.msg.assistant:has(.body[hidden]) .msg-actions{display:none}
 .msg-actions button{width:28px;height:28px;display:grid;place-items:center;border-radius:7px;color:var(--faint);background:none;border:0}
