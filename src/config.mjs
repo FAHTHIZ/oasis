@@ -206,7 +206,7 @@ export async function loadConfig(options = {}) {
   }
   return {
     ...normalizedSaved, protocol, baseURL, model, apiKey, configPath, ...(apiKeyHelper ? { apiKeyHelper } : {}),
-    configured: Boolean(apiKey) || Boolean(apiKeyHelper) || isLoopbackUrl(baseURL) || (cloud && cloudCredentialsPresent(protocol, env)),
+    configured: Boolean(apiKey) || Boolean(apiKeyHelper) || isLoopbackUrl(baseURL) || (cloud && cloudCredentialsPresent(protocol, env)) || (sameSavedTarget && saved.keyless === true),
     maxSteps: clampInteger(env.OASIS_MAX_STEPS || saved.maxSteps, 60, 1, 400),
     maxToolCalls: clampInteger(env.OASIS_MAX_TOOL_CALLS || saved.maxToolCalls, 300, 1, 2000),
     maxTokens: clampInteger(env.OASIS_MAX_TOKENS || saved.maxTokens, 2000000, 10000, 20000000),
@@ -217,7 +217,7 @@ export async function loadConfig(options = {}) {
 const PROVIDER_IDENTITY_KEYS = new Set(['protocol', 'baseURL', 'model', 'apiKey']);
 // Computed by loadConfig or taken from the environment; never written back.
 const RUNTIME_CONFIG_KEYS = new Set(['configPath', 'configured', 'apiKeyHelper']);
-const ENDPOINT_CONFIG_KEYS = new Set(['customHeaders', 'customHeadersHelper', 'betas', 'fallbackModel']);
+const ENDPOINT_CONFIG_KEYS = new Set(['customHeaders', 'customHeadersHelper', 'betas', 'fallbackModel', 'keyless']);
 const MODEL_CONFIG_KEYS = new Set(['contextWindow', 'maxOutputTokens', 'thinkingBudget', 'vision', 'visionCapability', 'replayReasoning']);
 // saveConfig validates these itself and drops invalid values rather than copying them.
 const VALIDATED_CONFIG_KEYS = new Set(['maxSteps', 'maxToolCalls', 'maxTokens', 'maxCommandSeconds', 'contextWindow', 'vision', 'promptCache', 'readDedup', 'maxQuestionsPerTurn', 'leanTools', 'followups', 'secretShield', 'parallelToolCalls', 'thinkingBudget', 'requireReadBeforeEdit', 'maxOutputTokens', 'reasoningEffort']);
