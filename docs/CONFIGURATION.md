@@ -90,6 +90,16 @@ Built-in providers:
 Amazon Bedrock, Google Vertex AI and Microsoft Foundry are configured through
 `src/cloud-providers.mjs`, not this table.
 
+Keys for local servers: OASIS never sends an ambient `OPENAI_API_KEY` or
+`ANTHROPIC_API_KEY` to a `localhost` address. A local gateway that needs a key
+(LiteLLM, OmniRoute with authentication) gets `OASIS_LOCAL_API_KEY`, or
+`OASIS_API_KEY` when `OASIS_BASE_URL` points at that server in the same
+environment:
+
+```bash
+OASIS_BASE_URL=http://127.0.0.1:4000/v1 OASIS_API_KEY=sk-litellm-key oasis
+```
+
 ### OmniRoute gateway
 
 [OmniRoute](https://github.com/cheaper-inference/omniroute) is an MIT-licensed,

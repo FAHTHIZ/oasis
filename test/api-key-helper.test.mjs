@@ -89,3 +89,14 @@ test('apiKeyHelper TTL falls back to its default for invalid values', () => {
   assert.equal(helperTtl({ OASIS_API_KEY_HELPER_TTL_MS: '0' }), 5 * 60 * 1000);
   assert.equal(helperTtl({ OASIS_API_KEY_HELPER_TTL_MS: '1200' }), 1200);
 });
+
+test('a key-protected local gateway gets OASIS_API_KEY only when OASIS_BASE_URL names it', async (t) => {
+  const home = await mkdtemp(path.join(os.tmpdir(), 'oasis-local-key-'));
+  t.after(() => rm(home, { recursive: true, force: true }));
+  const base = { HOME: home, OASIS_CONFIG_DIR: path.join(home, 'cfg'), OASIS_PROTOCOL: 'openai-compatible', OASIS_MODEL: 'm' };
+  const local = 'http://127.0.0.1:4000/v1';
+  assert.equal((await loadConfig({ env: { ...base, OASIS_BASE_URL: local, OASIS_API_KEY: 'sk-gateway' } })).apiKey, 'sk-gateway');
+  assert.equal((await loadConfig({ env: { ...base, OASIS_BASE_URL: local, OASIS_LOCAL_API_KEY: 'sk-local', OASIS_API_KEY: 'sk-gateway' } })).apiKey, 'sk-local');
+  // An ambient cloud key is never sent to a local server.
+  assert.equal((await loadConfig({ env: { ...base, OASIS_BASE_URL: local, OPENAI_API_KEY: 'sk-cloud' } })).apiKey, '');
+});

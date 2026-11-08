@@ -39,7 +39,7 @@
     "!scripts/demo/"
   ],
   "scripts": {
-    "test": "node --test test/*.test.mjs",
+    "test": "node scripts/run-tests.mjs",
     "check:quick": "node scripts/check-browser-app.mjs && node .github/scripts/check-eval-quarantine.mjs && node bench/harness/run.mjs --check && node bench/tokens/run.mjs --check",
     "check": "node scripts/check-browser-app.mjs && node .github/scripts/check-eval-quarantine.mjs && node --test test/*.test.mjs && node bench/harness/run.mjs --check && node bench/tokens/run.mjs --check && node src/cli.mjs eval --validate && node src/cli.mjs eval --negative-control",
     "postinstall": "node scripts/vendor-terminal.mjs",
