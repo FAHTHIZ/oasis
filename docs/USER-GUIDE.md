@@ -85,6 +85,8 @@ For phone or tablet access, follow [Mobile and tablet setup](../MOBILE.md). Keep
 | --- | --- |
 | Run a command or skill | Type `/` in the message box. Suggestions list built-in commands, your custom commands and skills. Arrow keys move, Tab or Enter accepts, Escape closes. |
 | Point at a file | Type `@` and part of a file name, then Tab or Enter to insert the path. The file is attached to the message. |
+| Attach a screenshot | Use the image button or paste an image. If the model is text-only, OASIS sends the message without the image and the model says it can't see it; pick a vision model to use images. |
+| Add documents to the project | Open the project menu, choose **Files or zip**, and pick files (PDF, text, images; up to 10 MB each). They are written into the project folder, where the agent can read them. Protected paths such as `.env` and `.git` are refused, and replacing a file asks first. |
 | Switch permission mode | Use the mode chip, or press Shift+Tab in the message box: Ask first, Auto edit, Full auto and Plan. |
 | Undo a turn | After a turn that changed files, select **Undo** under the reply. It runs `/undo`, which restores the files and rewinds the conversation. |
 | Copy or reuse a message | Hover a message for **Copy** (the original Markdown) and, on your own messages, **Edit**, which puts the text back in the message box. Code blocks have their own Copy button. |
