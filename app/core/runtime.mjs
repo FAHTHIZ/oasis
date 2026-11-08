@@ -381,6 +381,7 @@ export class RuntimeAgent {
               if (Number(data.contextWindow) > 0) this.emit('context', { tokens: Number(data.contextTokens) || 0, window: Number(data.contextWindow), percent: Number(data.contextPercent) || 0 });
               if (Number(data.costUsd) > 0) this.emit('cost', { usd: Number(data.costUsd), partial: Boolean(data.costPartial) });
               break;
+            case 'mcp_failures': if (Array.isArray(data.servers) && data.servers.length) this.emit('mcp_failures', { servers: data.servers }); break;
             case 'compaction_completed': this.emit('compacted', { mode: data.usedModelSummary ? 'summary' : 'trim' }); break;
             case 'completed':
               if (data.sessionId) this.sessionId = data.sessionId;
