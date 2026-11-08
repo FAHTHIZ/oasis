@@ -1,255 +1,198 @@
-**Downloads:** [Windows (.exe)](https://github.com/FAHTHIZ/oasis/releases/latest) · [macOS (.dmg)](https://github.com/FAHTHIZ/oasis/releases/latest) · [Linux (.AppImage / .deb)](https://github.com/FAHTHIZ/oasis/releases/latest) · [All releases](https://github.com/FAHTHIZ/oasis/releases)
-
-<sub>Choose the asset matching your operating system and CPU architecture. Release assets are published only after the same-commit quality, installer and packaging gates pass.</sub>
-
 <p align="center">
   <img src="assets/oasis-icon.svg" alt="OASIS app icon" width="88">
 </p>
 <h1 align="center">OASIS</h1>
 <p align="center">
-  <strong>An open-source, model-agnostic coding-agent runtime.</strong><br>
-  Bring your own model. OASIS provides the tools, permissions, coordination and verification around it.
+  <strong>An open-source agent workspace for coding and everything around it.</strong><br>
+  Bring any model. OASIS supplies the tools, subagents, permissions and verification, in your terminal, your browser, your editor or a desktop app.
 </p>
-<p align="center"><img src="assets/oasis-readme-hero.svg" alt="The layered OASIS portal grounded on a dark, reflective floor." width="100%"></p>
 <p align="center">
   <a href="https://github.com/FAHTHIZ/oasis/actions/workflows/quality.yml"><img alt="Quality checks" src="https://github.com/FAHTHIZ/oasis/actions/workflows/quality.yml/badge.svg?branch=main"></a>
-  <a href="https://github.com/FAHTHIZ/oasis/actions/workflows/desktop-build.yml"><img alt="Desktop installer builds" src="https://img.shields.io/github/actions/workflow/status/FAHTHIZ/oasis/desktop-build.yml?branch=main&style=flat-square"></a>
+  <a href="https://github.com/FAHTHIZ/oasis/releases/latest"><img alt="Latest release" src="https://img.shields.io/github/v/release/FAHTHIZ/oasis?style=flat-square"></a>
   <img alt="Node.js 22.15 or newer" src="https://img.shields.io/badge/Node.js-22.15%2B-339933?style=flat-square&logo=node.js&logoColor=white">
   <a href="LICENSE"><img alt="Apache 2.0 license" src="https://img.shields.io/github/license/FAHTHIZ/oasis?style=flat-square"></a>
 </p>
 <p align="center">
-  <a href="#download-and-install-oasis">Downloads</a> · <a href="#terminal-session">Terminal</a> · <a href="#browser-workspace">Browser workspace</a> · <a href="#desktop-application">Desktop app</a> · <a href="docs/USER-GUIDE.md">User guide</a> · <a href="docs/README.md">Documentation</a> · <a href="CONTRIBUTING.md">Contributing</a> · <a href="SECURITY.md">Security</a>
+  <a href="#install">Install</a> ·
+  <a href="#quick-start">Quick start</a> ·
+  <a href="#what-you-get">Features</a> ·
+  <a href="#how-it-compares">Comparison</a> ·
+  <a href="docs/USER-GUIDE.md">User guide</a> ·
+  <a href="docs/README.md">Docs</a>
 </p>
 
----
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="assets/screenshots/workspace-dark.png">
+    <img src="assets/screenshots/workspace-light.png" alt="The OASIS browser workspace: a request to fix add(), the steps the agent took (an explore subagent, reading and editing math.js, running the tests), its reply with an Undo button, and the Changes panel listing math.js." width="100%">
+  </picture>
+  <br><sub>The browser workspace after a bug fix: each step the agent took, the reply with Undo, cost and context use, and the Changes panel. Recorded against a scripted test model.</sub>
+</p>
 
-OASIS is an open-source coding-agent runtime and development workspace. It connects a model provider to a project and supplies the execution layer around it: workspace tools, command execution, permissions, agent coordination, recovery and verification.
+## Why OASIS
 
-OASIS is the harness and application layer, not a model provider. The model still determines much of the reasoning and code quality; OASIS does not guarantee that every model will solve every task.
+- **Any model, no lock-in.** OpenAI, Anthropic, Gemini, OpenRouter, Groq, DeepSeek, Mistral, xAI, Together, Fireworks, Bedrock, Vertex AI, Foundry, any OpenAI-compatible endpoint, or a local server (Ollama, LM Studio, llama.cpp, vLLM). Fallback models and task-aware routing come built in.
+- **A real agent system.** Parallel, background and resumable subagents, agent teams with a shared task board, nested delegation and per-agent git worktrees. See [Subagents](docs/SUBAGENTS.md).
+- **Your Claude Code setup works as is.** `CLAUDE.md`, `.claude/agents`, skills, commands, settings, hooks, plugins and `.mcp.json` load without conversion.
+- **It checks its own work.** A verification gate sends the agent back when it claims success without reviewing its diff or running checks. Language servers, checkpoints and one-step rewind are always available.
+- **Safety you can read.** Permission modes, AST-based shell risk analysis, protected paths, secret scanning, SSRF-guarded network tools and optional OS or container sandboxes.
+
+## Install
+
+| Platform | Download |
+| --- | --- |
+| Windows | [`.exe` installer](https://github.com/FAHTHIZ/oasis/releases/latest) (x64) |
+| macOS | [`.dmg`](https://github.com/FAHTHIZ/oasis/releases/latest) (Apple Silicon). Not code-signed yet, so confirm the first launch in Privacy & Security. |
+| Linux | [`.AppImage` or `.deb`](https://github.com/FAHTHIZ/oasis/releases/latest) (x64) |
+
+To install the command-line tool on macOS or Linux (Node.js 22.15+ and Git required):
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/FAHTHIZ/oasis/main/scripts/install.sh | sh
+```
+
+The script installs the latest stable release into `~/.local`, asks before changing anything and runs `oasis doctor`. Other options:
+
+```sh
+brew tap fahthiz/oasis https://github.com/FAHTHIZ/oasis && brew install fahthiz/oasis/oasis-cli   # Homebrew
+git clone https://github.com/FAHTHIZ/oasis.git && cd oasis && npm install && npm install --global .  # from source
+```
+
+Every release lists SHA-256 checksums. See [Downloads and releases](docs/RELEASES.md) for ARM builds and checksum verification.
 
 ## Quick start
 
 ```sh
-git clone https://github.com/FAHTHIZ/oasis.git && cd oasis
-npm install && npm install --global .      # or download an installer below
-cd /path/to/your/project
-oasis connect                              # choose a provider and model
-oasis                                      # interactive terminal session
+cd your-project
+oasis connect        # paste an API key, a model link or a local server address
+oasis                # chat in the terminal
+oasis web --open     # or open the browser workspace on this folder
 ```
 
-One-shot and scripted runs use the headless runner:
+Then ask in plain words: "find out why the login test fails and fix it". OASIS reads the code, edits the files, runs the checks and shows you the diff. Edits are checkpointed: `/rewind` (or Esc Esc) undoes them.
+
+For scripts and CI:
 
 ```sh
-oasis exec "fix the failing test in src/parser and explain the root cause"
-oasis exec --output-format stream-json "summarize the open TODOs" > run.jsonl
+oasis -p "summarize the open TODOs"                              # one-shot, no prompts
+oasis exec --output-format stream-json "fix the lint errors" > run.jsonl
+oasis -p --permission-mode dont-ask "review this diff"            # never waits on an approval
 ```
 
-## Why OASIS
-
-- **Any model.** OpenAI-compatible, Anthropic, Gemini, local servers and routers. Fallback models, task-aware routing, cost budgets and usage tracking come built in.
-- **A full agent system.** Built-in `explore`, `plan`, `general-purpose`, `code-review` and `security-review` subagents, custom agents in Markdown, background agents, agent teams with a shared task board, and worktree isolation. See [Subagents](docs/SUBAGENTS.md).
-- **Claude Code compatible.** Existing `CLAUDE.md`, `.claude/agents`, `.claude/skills`, `.claude/commands`, `.claude/settings.json`, `.mcp.json`, hooks and plugins work without conversion.
-- **Safety you can inspect.** Approval modes, AST-based shell risk analysis, protected paths, secret scanning, SSRF-guarded network tools and optional OS or container sandboxes.
-- **Verification first.** Language servers, test runs, diff review, checkpoints with rewind, and a verification gate that sends the agent back when it skips checks.
-
-## See a real model run
+### A real model run
 
 <p align="center">
-  <a href="assets/demo/oasis-real-model-demo.mp4"><img src="assets/demo/oasis-real-model-demo.gif" alt="Unscripted OASIS run with gpt-oss-20b: the agent reads a file, fixes a bug, adds a test, runs the test after approval, and is sent back by the verification gate to review its changes." width="100%"></a>
-  <br><sub>Unscripted gpt-oss-20b run recorded on 5 November 2026. Rate-limit waits from the free endpoint were shortened; the model's mistakes and the verification gate's send-back are preserved. The original run took 6m 19s, used 7 tool calls and reported 50.9k tokens. <a href="assets/demo/oasis-real-model-demo.cast">Raw terminal recording</a>.</sub>
+  <a href="assets/demo/oasis-real-model-demo.mp4"><img src="assets/demo/oasis-real-model-demo.gif" alt="Unscripted OASIS run with gpt-oss-20b in the terminal: the agent reads a file, fixes a bug, adds a test, runs the test after approval, and is sent back by the verification gate to review its changes." width="100%"></a>
+  <br><sub>Unscripted gpt-oss-20b run in the terminal, recorded on 5 November 2026. Rate-limit waits from the free endpoint were shortened; the model's mistakes and the verification gate's send-back are kept. <a href="assets/demo/oasis-real-model-demo.cast">Raw recording</a>.</sub>
 </p>
 
-## Choose your OASIS experience
+## What you get
 
-The terminal is a native CLI session; the browser is a UI connected to a runtime on your machine; the desktop app packages that local experience in an Electron window.
+### One runtime, every interface
 
-| Interface | Start it with | Where the agent and project run |
-|---|---|---|
-| **Terminal session** | oasis | In your terminal, on the computer running OASIS. |
-| **Browser workspace** | `oasis web --open` | In the local OASIS runtime on the host computer; the browser is the interface. |
-| **Desktop application** | Open the installed OASIS app | In the desktop host process, against the folder you choose. |
-| **Editor integration** | oasis ide install | Through the editor host and connected OASIS runtime. |
-| **Agent Client Protocol** | oasis acp | In the OASIS ACP process started by the compatible client. |
-| **Node.js SDK** | src/sdk.mjs | Inside the Node.js application embedding OASIS. |
-| **GitHub Action and messaging gateways** | action.yml / configured gateway | On the configured automation runner or gateway host. |
+| Interface | Start it with | Highlights |
+| --- | --- | --- |
+| Terminal | `oasis` | Streaming diffs with word highlights, inline images, tab progress, `/tasks`, `/rewind`, `/export` to Markdown or HTML |
+| Browser workspace | `oasis web --open` | Chat with step-by-step activity, Files and Changes panels, an interactive terminal (Ctrl+\`), plan mode, Undo, cost and context meters, `/` and `@` autocomplete |
+| Desktop app | Open OASIS | The browser workspace in a native window, on the folder you choose |
+| Editors | `oasis ide install`, `oasis acp` | VS Code, Cursor and Windsurf extension; Zed and JetBrains over the Agent Client Protocol |
+| Automation | `oasis -p`, `action.yml`, `src/sdk.mjs` | Headless runs with JSON output and `--output-schema`, a GitHub Action, a Node.js SDK |
+| Chat apps | `oasis gateway` | Telegram, Slack and Discord |
 
-## Download and install OASIS
+The browser workspace is served by OASIS on your own computer, not a hosted service. To reach it from a phone, follow [Mobile and tablet setup](MOBILE.md) on a trusted network.
 
-**GitHub Releases is the download source of truth.** Each platform link at the top opens the latest release page. Download only an asset listed under that release, and verify it against the attached SHA256SUMS file.
+### Agents and subagents
 
-| Platform | Primary installer | Additional builds |
-|---|---|---|
-| Windows | .exe installer (x64) | ARM64 when its optional CI build succeeds |
-| macOS / MacBook | .dmg disk image (Apple Silicon) | Intel x64 when its optional CI build succeeds |
-| Linux | .AppImage and .deb (x64) | ARM64 when its optional CI build succeeds |
+| Capability | Details |
+| --- | --- |
+| Built-in agents | `explore`, `plan`, `general-purpose`, `code-review`, `security-review` |
+| Custom agents | Markdown files in `.oasis/agents` or `.claude/agents`, with the full Claude Code front matter (`tools`, `model`, `permissionMode`, `skills`, `memory`, `hooks`, `mcpServers`, `isolation`, `background` and more) |
+| Parallel and background | Up to 6 at once and 8 in the background, with `agent_status`, `send_message` and `agent_stop`. A stall monitor stops agents that go silent and keeps their partial report. |
+| Resume | `/tasks` lists running and finished agents. `/tasks send ID MESSAGE` steers a running agent or resumes a finished one with its saved conversation, even after a restart. |
+| Teams | Shared task board with leases, teammate messages and optional tmux panes |
+| Isolation | Each agent can work on its own git worktree and branch |
+| Structured results | `output_schema` on a task validates the report, with one correction turn |
 
-The release pipeline validates the source, builds the platform packages, generates SHA-256 checksums and publishes installers only after the required same-commit gates pass. A tag or short-lived Actions artifact is not a public release.
+### Models and context
 
-For Homebrew:
+- OpenAI Responses, Chat Completions and Anthropic Messages protocols, Gemini thought-signature replay, and Amazon Bedrock, Google Vertex AI and Microsoft Foundry.
+- `oasis models` lists what your provider serves, with context window, price and image support.
+- Automatic compaction, prompt caching, per-model output and thinking budgets, and spend limits (`--max-budget-usd`).
 
-```sh
-brew tap fahthiz/oasis https://github.com/FAHTHIZ/oasis
-brew install --cask fahthiz/oasis/oasis
-brew install fahthiz/oasis/oasis-cli
+### Tools and extensions
+
+- File, search (ripgrep, ast-grep), edit, patch, shell, git, LSP, web search and fetch, browser automation, PDF and image tools.
+- MCP servers over stdio and HTTP with OAuth, including MCP Tasks: long tool calls run as background tasks and appear in `/tasks`.
+- Agent Skills, native plugins, slash commands, output styles and the full lifecycle hook set.
+
+## How it works
+
+```mermaid
+flowchart LR
+    U[You] --> I[Terminal · Browser · Desktop · Editor · CI]
+    I --> S[Session and turn loop]
+    S <--> M[Any model provider]
+    S --> P{Permissions and safety checks}
+    P --> T[Tools · MCP · Skills · Plugins]
+    T --> W[Your project: files, git, processes]
+    S --> A[Subagents and teams]
+    A --> P
+    S --> V[Verification gate: diff review, tests, LSP]
+    V --> S
+    S <--> D[(Sessions · memory · checkpoints)]
 ```
 
-See [Downloads and releases](docs/RELEASES.md) for asset names, checksum verification, architecture notes and mobile availability.
+The model proposes replies and tool calls. OASIS decides which tools are available, which calls need approval, how results go back to the model and what counts as verified. See [Architecture](docs/ARCHITECTURE.md).
 
-## Terminal session
+## How it compares
 
-The terminal interface is a separate, first-class OASIS experience. It runs directly in your shell; it is not the browser UI embedded in a terminal panel. The CLI and headless runner are distinct modes: the interactive `oasis` command is for a human-driven terminal session; `oasis exec` is for scripts and automation.
+OASIS has close parity with Claude Code's agent features and adds provider freedom, a local browser workspace and a verification gate. It still lags in model-specific tuning, hosted cloud execution and real-world hours.
 
-Requirements: Node.js 22.15 or newer and Git.
+| | OASIS | Claude Code | Codex | Gemini CLI | OpenCode | Goose |
+| --- | --- | --- | --- | --- | --- | --- |
+| Open source | Yes | No | Yes | Yes | Yes | Yes |
+| Any model | Yes | Anthropic | OpenAI | Google | Yes | Yes |
+| Subagents | Parallel, background, resumable, teams | Yes | Agent command center | No | `general` subagent | No |
+| Browser workspace | Local | Cloud | Cloud | No | No | No |
 
-```sh
-git clone https://github.com/FAHTHIZ/oasis.git
-cd oasis
-npm install
-npm install --global .
-```
+The full comparison, with sources and the gaps that remain, is in [docs/COMPARISON.md](docs/COMPARISON.md).
 
-Open a project and start the interactive terminal session:
+## Security
 
-```sh
-cd /path/to/your/project
-oasis connect
-oasis
-```
+OASIS can read and change project files, run commands and send context to your model provider. Treat it like any tool that runs with your account's permissions.
 
-For non-interactive scripts and automation, use oasis exec. For diagnostics and maintenance:
+- Permission modes range from `plan` (read-only) to `dont-ask` (never waits, denies anything not allowed). The default runs read-only commands freely and asks before other commands, installs, deletions and new websites.
+- The OS sandbox (bubblewrap, macOS Seatbelt, or Docker and Podman) is optional. Don't assume it's on unless `oasis doctor` says so.
+- Project settings that loosen permissions, run hooks or start MCP servers apply only after you trust the workspace.
+- MCP servers, hooks and plugins can run third-party code. Review them before you enable them.
 
-```sh
-oasis doctor          # environment, provider and sandbox checks
-oasis models          # models your provider serves, with context window and price
-oasis update
-```
+Read the [security policy](SECURITY.md) before using OASIS on sensitive code.
 
-Run oasis --help for the complete command list. See the [Terminal section of the user guide](docs/USER-GUIDE.md#terminal-session).
-
-## Browser workspace
-
-OASIS includes a browser-based workspace served by the local runtime. It is not a hosted website or remote SaaS service: by default, the browser connects to the OASIS process running on the computer that owns the project.
-
-```sh
-cd /path/to/your/project
-oasis web --open
-```
-
-The browser provides the workspace UI while file access, tool execution and model requests remain in the host runtime. To connect a phone or another device, follow [Mobile and tablet setup](MOBILE.md) and use only a trusted private network. Do not expose the workspace directly to the public internet.
-
-There is no native Android APK or iOS App Store package. Advanced Android users can run the CLI manually in Termux; this is not a one-click mobile installer.
-
-## Desktop application
-
-The Electron desktop app starts the local OASIS runtime, lets you choose a project folder and opens the same workspace experience in a native window.
-
-1. Open [the latest GitHub Release](https://github.com/FAHTHIZ/oasis/releases/latest).
-2. Download the installer for your operating system and architecture.
-3. Verify its checksum using the release's SHA256SUMS.
-4. Install and launch OASIS, then choose the project folder.
-
-For developers building from source:
+## Development
 
 ```sh
 npm install
-npm run desktop:dev
-```
-
-Build a distributable for the current machine with npm run desktop:dist. Platform packaging prerequisites may apply. The current macOS packages are not code-signed; macOS may ask you to confirm the first launch in Privacy & Security.
-
-## Agent system
-
-| Capability | What OASIS provides |
-|---|---|
-| Subagents | `task` tool with parallel calls (up to 6), per-agent tools, model, effort and turn limits |
-| Custom agents | Markdown + front matter in `.oasis/agents` or `.claude/agents`, with the Claude Code field set: `tools`, `disallowedTools`, `maxTurns`, `permissionMode`, `skills`, `memory`, `mcpServers`, `hooks`, `isolation`, `background`, `initialPrompt`, `omitClaudeMd`, `autoCompactWindow` |
-| Nested delegation | Subagents can delegate up to 3 layers deep (`subagentMaxDepth`, `CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH`); read-only agents stay leaves |
-| Structured results | `output_schema` validation with one automatic correction turn |
-| Background work | Up to 8 background agents, `agent_status`, `send_message` to steer or resume, `agent_stop`, stall monitor |
-| Teams | Shared task board with leases, direct teammate messages, optional tmux panes |
-| Isolation | Per-agent git worktrees, committed on their own branch when the agent finishes |
-| Lifecycle hooks | `SubagentStart`, `SubagentStop`, `PreToolUse`, `PostToolUse` and the rest of the Claude Code hook set |
-
-## Runtime capabilities
-
-- **Model runtime:** provider adapters, streaming, model configuration, retry and fallback handling, context management and usage tracking.
-- **Workspace operations:** file reading, search, editing, patching, command execution, process management and Git operations.
-- **Permissions and safety:** approval modes, command-risk analysis, protected paths, secret scanning and optional OS/container sandbox integrations.
-- **Task-aware routing:** optionally send clearly simple, read-only requests to a lower-cost model while keeping complex or tool-requiring work on the stronger configured model; see the [routing configuration](docs/CONFIGURATION.md#task-aware-model-routing).
-- **Agent coordination:** subagents, specialist reviews, shared tasks, background sessions, MCP servers, hooks, plugins and Agent Skills.
-- **Verification and recovery:** diagnostics, language-server integration, test execution, diff review, session history, checkpoints and worktree-based isolation.
-- **Additional workflows:** web retrieval, browser-related tools, PDF and image handling, voice features and automation integrations.
-
-Capabilities depend on the interface, operating system, provider and configuration. The optional sandbox is not enabled in every setup and is not a universal security boundary.
-
-## Security model
-
-OASIS can read and modify project files, execute commands and send context to configured providers or external services. Treat it as software with access to the permissions of the process running it.
-
-- Approval prompts are not a replacement for operating-system isolation. Commands may run with the permissions of the OASIS process.
-- Do not assume a sandbox is active unless OASIS reports that it is available and enabled. Backend availability and isolation strength vary by platform.
-- MCP servers, hooks, plugins and imported extensions may execute third-party code. Review their source and permissions before enabling them.
-- Hosted providers and external services may receive prompts, project context or tool output.
-- Keep important work under version control, maintain backups and review diffs before accepting changes.
-
-Read the [security policy](SECURITY.md) before using OASIS with sensitive projects. Implementation boundaries are described in [Architecture](docs/ARCHITECTURE.md).
-
-## Development and validation
-
-Requirements: Node.js 22.15 or newer and Git.
-
-```sh
-npm install
-npm test
-npm run check
+npm test           # about 2,300 tests
+npm run check      # browser-app checks, tests, benchmark regressions, eval validation
 npm run lint
 ```
 
-Deterministic harness checks:
+CI also runs platform security regressions, a live Docker sandbox test, native PTY coverage and browser end-to-end checks. A green suite covers the cases it tests. It doesn't prove OASIS beats another tool on your tasks. See [Benchmark methodology](docs/BENCHMARKS.md).
 
-```sh
-npm run bench:harness
-npm run bench:tokens
-```
-
-- npm test runs the Node.js test suite.
-- npm run check runs browser-app integrity checks, evaluation-fixture validation, the test suite, benchmark-regression checks and evaluation validation.
-- CI adds platform-specific security regressions, a live Docker sandbox test, native PTY coverage and browser end-to-end checks.
-
-A passing test suite is evidence for the cases it exercises. It is not proof that the software is defect-free, security-certified, qualified on every platform or equivalent to another coding agent. See [Benchmark methodology](docs/BENCHMARKS.md) before interpreting benchmark results.
+Contributions are welcome. Start with the [contributing guide](CONTRIBUTING.md).
 
 ## Documentation
 
-- [Start here: User guide](docs/USER-GUIDE.md)
-- [Downloads and releases](docs/RELEASES.md)
-- [Documentation index](docs/README.md)
-- [First-run guide](docs/FIRST-RUN.md)
-- [Architecture and runtime boundaries](docs/ARCHITECTURE.md)
-- [Configuration reference](docs/CONFIGURATION.md)
-- [Subagents and agent teams](docs/SUBAGENTS.md)
-- [Comparison with Claude Code and Hermes](docs/COMPARISON.md)
-- [Interfaces and deployment](docs/INTERFACES.md)
-- [Benchmark methodology](docs/BENCHMARKS.md)
-- [Engineering scorecard](docs/ENGINEERING-SCORECARD.md)
-- [Whole-system replacement roadmap](docs/REPLACEMENT-ROADMAP.md)
-- [Architecture alternatives](docs/ARCHITECTURE-ALTERNATIVES.md)
-- [Agent runtime alternatives](docs/AGENT-RUNTIME-ALTERNATIVES.md)
-- [Project-quality benchmark](docs/PROJECT-QUALITY-BENCHMARK.md)
-- [Brand guidelines](BRAND.md)
-- [Mobile and tablet setup](MOBILE.md)
-- [Contributing guide](CONTRIBUTING.md)
-- [Support and troubleshooting](SUPPORT.md)
-- [Security policy](SECURITY.md)
-- [Changelog](CHANGELOG.md)
-- [Code of Conduct](CODE_OF_CONDUCT.md)
+| Get started | Go deeper | Project |
+| --- | --- | --- |
+| [User guide](docs/USER-GUIDE.md) | [Architecture](docs/ARCHITECTURE.md) | [Changelog](CHANGELOG.md) |
+| [First run](docs/FIRST-RUN.md) | [Configuration](docs/CONFIGURATION.md) | [Contributing](CONTRIBUTING.md) |
+| [Interfaces](docs/INTERFACES.md) | [Subagents](docs/SUBAGENTS.md) | [Security](SECURITY.md) |
+| [Downloads](docs/RELEASES.md) | [Comparison](docs/COMPARISON.md) | [Support](SUPPORT.md) |
+| [Mobile setup](MOBILE.md) | [Benchmarks](docs/BENCHMARKS.md) | [Code of Conduct](CODE_OF_CONDUCT.md) |
 
-## Project links
-
-- [GitHub Releases](https://github.com/FAHTHIZ/oasis/releases)
-- [Issue tracker](https://github.com/FAHTHIZ/oasis/issues)
-- [GitHub Discussions](https://github.com/FAHTHIZ/oasis/discussions)
-- [Source code](https://github.com/FAHTHIZ/oasis)
+All guides are listed in the [documentation index](docs/README.md).
 
 ## License
 
-OASIS is distributed under the [Apache License 2.0](LICENSE).
+[Apache License 2.0](LICENSE).
