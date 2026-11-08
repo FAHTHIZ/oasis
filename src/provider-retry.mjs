@@ -29,6 +29,13 @@ export const HARD_QUOTA_PATTERN = /insufficient_quota|exceeded your current quot
 export function isMalformedGenerationError(status, text) {
   return status === 400 && /<\|(?:channel|message|start|end|call|constrain|return)\|>/.test(String(text || ''));
 }
+// A gateway (OmniRoute, LiteLLM) answers 5xx for a route it has no account
+// for: "bridge is not configured", "no active connection". Seen live from
+// OmniRoute; it never clears on a retry, so move to the next model at once.
+export const UNCONFIGURED_ROUTE_PATTERN = /\bnot configured\b|\bno (?:active |available )?(?:connections?|credentials|accounts?)\b|\bnot connected\b|\bprovider (?:is )?disabled\b/i;
+export function isUnconfiguredRouteError(status, text) {
+  return status >= 500 && UNCONFIGURED_ROUTE_PATTERN.test(String(text || ''));
+}
 export function isHardQuotaError(text) {
   return HARD_QUOTA_PATTERN.test(String(text || '')) && shortRateLimitMs(text) === null;
 }

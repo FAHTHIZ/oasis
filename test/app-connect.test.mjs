@@ -420,3 +420,46 @@ test('when every model fails, the error lists each one and a next step', async (
     : new Response(JSON.stringify({ error: { message: 'You exceeded your current quota, limit: 0' } }), { status: 429 });
   await assert.rejects(smartConnect(GEMINI_AUTH_KEY, { fetchImpl, retryDelayMs: 1 }), (error) => /2 tried/.test(error.message) && /gemini-4-pro/.test(error.message) && /gemini-3\.1-pro/.test(error.message) && /quota/.test(error.message) && error.status === 402);
 });
+
+test('smartConnect: OmniRoute guarding /api/tags with 401 still connects with the pasted key', async () => {
+  const key = 'sk-' + 'a1b2c3d4'.repeat(4);
+  const { fetchImpl } = fakeFetch([
+    [/:20128\/api\/tags$/, () => ({ status: 401, body: { error: { message: 'Authentication required' } } })],
+    [/:20128\/v1\/models$/, (url, options) => (JSON.stringify(options.headers || {}).includes(key)
+      ? { data: [{ id: 'dva/claude-fable-5-1-high' }, { id: 'dva/claude-fable-5-1-low' }, { id: 'dva/claude-fable-5-1-max' }, { id: 'aug/fable-5' }, { id: 'llm7/codestral-latest' }] }
+      : { status: 401, body: { error: { message: 'Authentication required' } } })],
+    [/:20128\/v1\/chat\/completions$/, (url, options) => {
+      const body = JSON.parse(options.body);
+      if (body.model.startsWith('dva/')) return { status: 503, body: { error: { message: '[503]: Devin agentic bridge is not configured' } } };
+      if (body.model.startsWith('aug/')) return { status: 401, body: { error: { message: 'no credentials for auggie' } } };
+      return toolReply;
+    }]
+  ]);
+  const steps = [];
+  const result = await smartConnect('http://localhost:20128/v1 ' + key, { fetchImpl, retryDelayMs: 0, onStatus: (s) => steps.push(s.text) });
+  assert.equal(result.connection.provider, 'omniroute');
+  assert.equal(result.connection.local, false, 'a localhost gateway forwards to the cloud');
+  assert.equal(result.model, 'llm7/codestral-latest');
+  assert.equal(steps.filter((s) => /^Testing dva\//.test(s)).length, 1, 'one failure rules out the whole unconnected upstream');
+  assert.ok(['dva/claude-fable-5-1-low', 'dva/claude-fable-5-1-max', 'aug/fable-5'].every((id) => result.unusable.includes(id)));
+  const { runtimeConfigFromConnection } = await import('../src/provider-connect.mjs');
+  assert.equal(runtimeConfigFromConnection(result).fallbackModel, '', 'dead upstreams never become backups');
+});
+
+test('smartConnect: a rejected key at an address says so instead of asking for a key', async () => {
+  const key = 'sk-' + 'a1b2c3d4'.repeat(4);
+  const { fetchImpl } = fakeFetch([[/:20128\//, () => ({ status: 401, body: { error: { message: 'Invalid API key' } } })]]);
+  await assert.rejects(smartConnect('http://localhost:20128/v1 ' + key, { fetchImpl }), (error) => /did not accept that key/.test(error.message));
+  await assert.rejects(smartConnect('http://localhost:20128/v1', { fetchImpl }), (error) => /needs an API key/.test(error.message));
+});
+
+test('scoreModel: a digit in a provider prefix is not a model version', () => {
+  assert.equal(scoreModel('llm7/codestral-latest'), scoreModel('codestral-latest'));
+  assert.equal(scoreModel('01-ai/yi-large'), scoreModel('yi-large'));
+});
+
+test('runtimeConfigFromConnection: gateway backups prefer the chosen upstream', async () => {
+  const { runtimeConfigFromConnection } = await import('../src/provider-connect.mjs');
+  const config = runtimeConfigFromConnection({ model: 'llm7/codestral-latest', connection: { provider: 'omniroute', protocol: 'openai', baseURL: 'http://localhost:20128/v1', models: ['llm7/codestral-latest', 'cfp/glm', 'llm7/gpt-oss:20b'] } });
+  assert.equal(config.fallbackModel, 'llm7/gpt-oss:20b,cfp/glm');
+});
