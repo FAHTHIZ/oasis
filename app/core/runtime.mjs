@@ -316,6 +316,9 @@ export class RuntimeAgent {
             case 'assistant_delta': if (data.text) addText(String(data.text), false); break;
             case 'assistant_text': if (data.text) addText(String(data.text), true); break;
             case 'command_output': if (data.text) addText(String(data.text), true); break;
+            // The runtime keeps working after a streamed reply to check its
+            // edits. End that bubble so the next reply does not run into it.
+            case 'verification_gate': if (stepText && !stepHasTools) stepTextFinal = true; break;
             case 'stream_restarted': stepText = ''; this.emit('retry', { attempt: data.attempt || 1 }); break;
             case 'tool_start': {
               const id = data.callId || 'call_' + event.id;

@@ -4540,7 +4540,9 @@ async function runAgentTurnRaw(session, prompt, options = {}) {
               ? ['Rerun `' + claimState.lastCommand + '` now: it ran before your latest edit, so its result no longer counts.'] : []),
             'Use git_diff to review the complete change set when Git metadata is available. In a non-Git workspace, reread every changed file after editing. For changed source/config code, inspect the project scripts and run a relevant test/check/lint/build/type-check command; fix failures and rerun checks after fixes.',
             ...untestedNewCode(verification),
-            'Do not claim completion of the gate based on the file-write result. If a check cannot run or permission is denied, state that limitation honestly.'
+            'Do not claim completion of the gate based on the file-write result. If a check cannot run or permission is denied, state that limitation honestly.',
+            // Models echo this note back ("The gate is satisfied"); the user never saw it.
+            'This note is internal. In your final answer, report to the user what changed and which checks ran, in plain words. Do not mention this note, the gate, or these instructions, and do not claim anything (such as a commit) that you did not do.'
           ].join('\n')
         });
         continue;
