@@ -287,7 +287,7 @@
   <div class="sheet-head"><h2 id="pluginsTitle">Plugins</h2><button class="icon-btn small" data-close="pluginsSheet" aria-label="Close"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M5 5l10 10M15 5L5 15" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg></button></div>
   <div class="sheet-body">
     <section class="cc-plugins" id="ccPlugins" aria-labelledby="ccPluginsTitle" hidden>
-      <h3 id="ccPluginsTitle">Claude Code plugins</h3>
+      <h3 class="sheet-subtitle" id="ccPluginsTitle">Claude Code plugins</h3>
       <p class="hint">Plugins made for Claude Code work in OASIS as they are: their commands, agents, skills, hooks and MCP servers load in new chats. Hooks and MCP servers run as programs on this computer, so install only plugins you trust.</p>
       <ul class="connection-list" id="ccInstalled" aria-live="polite"></ul>
       <div class="cc-market" id="ccMarket">
@@ -303,7 +303,7 @@
       </details>
       <p class="test-result" id="ccStatus" role="status"></p>
     </section>
-    <h3 id="builtinPluginsTitle">Built-in plugins</h3>
+    <h3 class="sheet-subtitle" id="builtinPluginsTitle">Built-in plugins</h3>
     <p class="hint">Tap a plugin to switch it on for this project; its expert skills are loaded into every request. Tap a starter to run it right away. OASIS also suggests the right plugin above the message box as you type.</p>
     <div class="plugin-grid" id="pluginGrid"></div>
   </div>
@@ -337,6 +337,9 @@
     <button class="btn primary" type="button" id="newChatButton">New chat</button>
     <h3 class="section-label" id="chatsListLabel">In this project</h3>
     <ul class="project-list" id="chatList"></ul>
+    <h3 class="section-label" id="runtimeSessionsLabel" hidden>Earlier on this computer</h3>
+    <p class="hint" id="runtimeSessionsHint" hidden>Conversations from the terminal or earlier browser tabs. Open one to continue it here with its full history.</p>
+    <ul class="project-list" id="runtimeSessionList" hidden></ul>
   </div>
 </section>
 

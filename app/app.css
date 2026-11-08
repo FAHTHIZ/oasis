@@ -273,8 +273,8 @@ input[type="checkbox"]{width:18px;height:18px;accent-color:var(--accent)}
 .progress{height:4px;border-radius:2px;background:var(--sunken);overflow:hidden}
 .progress div{height:100%;width:0;background:var(--accent);transition:width .2s}
 .section-label{font-size:12px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--faint);margin:20px 0 8px}
-.project-list{list-style:none;margin:0;padding:0;display:grid;gap:6px}
-.project-item{display:flex;align-items:center;gap:8px;border:1px solid var(--line);border-radius:var(--r-md);padding:4px 4px 4px 12px}
+.project-list{list-style:none;margin:0;padding:0;display:grid;grid-template-columns:minmax(0,1fr);gap:6px}
+.project-item{min-width:0;display:flex;align-items:center;gap:8px;border:1px solid var(--line);border-radius:var(--r-md);padding:4px 4px 4px 12px}
 .project-item.current{border-color:var(--accent-line);background:var(--accent-soft)}
 .project-item .open{flex:1;min-width:0;text-align:left;padding:8px 0}
 .project-item .open strong{display:block;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -500,7 +500,7 @@ html.lite .topbar{backdrop-filter:none;-webkit-backdrop-filter:none;background:v
 .recommend small{font:12px/1.4 var(--mono);color:var(--muted)}
 .recommend .btn{margin-top:6px;text-decoration:none}
 .cc-plugins{margin:0 0 20px;padding-bottom:16px;border-bottom:1px solid var(--line)}
-.sheet-body h3{margin:0 0 6px;font-size:15px}
+.sheet-subtitle{margin:0 0 6px;font-size:15px}
 .cc-plugins .connection-list{margin:10px 0}
 .cc-plugins .connection-list li{display:flex;align-items:center;gap:12px;padding:10px 12px;border:1px solid var(--line);border-radius:12px}
 .cc-plugins .connection-info{flex:1;min-width:0}
