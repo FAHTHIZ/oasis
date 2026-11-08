@@ -99,3 +99,31 @@ test('output_schema reports schema_errors when the correction still fails', asyn
   const result = JSON.parse(taskResult);
   assert.ok(Array.isArray(result.schema_errors) && result.schema_errors.length);
 });
+
+test('a background agent with no activity is stopped as stalled', async (t) => {
+  const { getAgent, listAgents } = await import('../src/agent-tasks.mjs');
+  const root = await mkdtemp(path.join(os.tmpdir(), 'oasis-stall-'));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const hanging = new Set();
+  const server = createServer(async (req, res) => {
+    let body = '';
+    for await (const chunk of req) body += chunk.toString();
+    const payload = JSON.parse(body);
+    if (/SUBAGENT MODE/.test(payload.messages[0].content)) { hanging.add(res); return; }
+    const done = payload.messages.some((message) => message.role === 'tool');
+    const message = done ? { role: 'assistant', content: 'started' }
+      : { role: 'assistant', content: null, tool_calls: [{ id: 't1', type: 'function', function: { name: 'task', arguments: JSON.stringify({ description: 'slow', prompt: 'wait', run_in_background: true }) } }] };
+    res.writeHead(200, { 'content-type': 'application/json' });
+    res.end(JSON.stringify({ choices: [{ message }] }));
+  });
+  await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
+  t.after(() => { for (const res of hanging) res.destroy(); server.close(); });
+  const env = { ...process.env, OASIS_SUBAGENT_STALL_SECONDS: '1' };
+  const session = await createSession({ root, env, config: { protocol: 'openai-compatible', baseURL: 'http://127.0.0.1:' + server.address().port + '/v1', model: 'fixture', apiKey: '', maxSteps: 4 } });
+  await runAgentTurn(session, 'go', { autoApprove: true, env });
+  const [summary] = listAgents(session);
+  const record = getAgent(session, summary.id);
+  await record.promise;
+  assert.equal(record.status, 'stalled');
+  assert.match(record.error, /No activity for \d+s/);
+});

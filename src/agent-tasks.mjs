@@ -24,7 +24,7 @@ export const AGENT_TOOL_DEFINITIONS = [
     wait_seconds: { type: 'integer', description: 'Wait up to this many seconds for the agent to finish' }
   }, required: [] } } },
   { type: 'function', function: { name: 'neuron_network', description: 'Inspect the Oasis Neuron Network as a bounded, read-only graph: agent hierarchy, roles, statuses, teams, shared tasks, workspace isolation and aggregate usage. It never exposes worker prompts, transcripts, reports, or tool arguments.', parameters: { type: 'object', properties: {
-    status: { type: 'string', enum: ['running', 'completed', 'failed', 'cancelled', 'interrupted'], description: 'Optional lifecycle filter' },
+    status: { type: 'string', enum: ['running', 'completed', 'failed', 'cancelled', 'stalled', 'interrupted'], description: 'Optional lifecycle filter' },
     team_id: { type: 'string', description: 'Optional team ID filter' },
     parent_id: { type: 'string', description: 'Optional direct-parent filter, such as main or agent_2' },
     include_inactive: { type: 'boolean', description: 'Include finished workers; defaults to true' },
@@ -81,7 +81,7 @@ export function restoreAgentHistory(session, snapshots = []) {
     const match = id.match(/^agent_([1-9]\d{0,8})$/);
     if (!match || registry.agents.has(id)) continue;
     const wasRunning = snapshot.status === 'running';
-    const status = wasRunning ? 'interrupted' : ['completed', 'failed', 'cancelled', 'interrupted'].includes(snapshot.status) ? snapshot.status : 'interrupted';
+    const status = wasRunning ? 'interrupted' : ['completed', 'failed', 'cancelled', 'stalled', 'interrupted'].includes(snapshot.status) ? snapshot.status : 'interrupted';
     const record = {
       id,
       parentId: typeof snapshot.parentId === 'string' ? snapshot.parentId.slice(0, 100) : 'main',

@@ -73,6 +73,7 @@ Pass `output_schema` (a JSON Schema object) to `task` when the parent needs mach
 - `agent_status` (with `wait_seconds` to block), `send_message` to steer or resume, and `agent_stop` to cancel.
 - `team_create` groups agents around a shared task board. Members coordinate with `team_send_message` and the `task_*` tools.
 - Background agents cannot ask for approval. Any action outside the allowed rules is denied.
+- A stall monitor stops a background agent after 450 seconds with no model or tool activity (1200 seconds while a tool is still running). Its status becomes `stalled` and its last written text is kept as a partial report. Change the idle limit with `OASIS_SUBAGENT_STALL_SECONDS` or the `subagentStallSeconds` setting; `0` turns it off.
 
 ## Safety boundaries
 
