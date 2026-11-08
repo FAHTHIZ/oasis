@@ -1847,7 +1847,8 @@ async function executeToolUnlocked(name, args = {}, context = {}) {
         ruleAllowed: Boolean(context.ruleAllowed),
         env: context.env || process.env,
         signal: context.signal,
-        branchRules: context.session && context.session.branchRules
+        branchRules: context.session && context.session.branchRules,
+        session: context.session
       });
     case 'skill_propose': {
       const { runLearningTool } = await import('./learning.mjs');
