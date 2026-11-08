@@ -11,6 +11,7 @@
 //   }
 // "${VAR}" and "${VAR:-default}" expand from the host environment when the session
 // starts; expanded values are never written back to disk.
+import { debugLog } from './debug-log.mjs';
 import { readFile } from 'node:fs/promises';
 import { oasisVersion } from './version.mjs';
 import { spawn } from 'node:child_process';
@@ -207,6 +208,18 @@ function plainHeaderObject(headers) {
   return { ...headers };
 }
 
+const TASK_MAX_MS = 2 * 60 * 60 * 1000;
+
+// Task augmentation needs the server's tasks.requests.tools.call capability;
+// "required" tools must use it and "optional" tools do (long jobs then skip
+// the request timeout). Absent or "forbidden" means a plain call.
+export function useMcpTask(client, tool) {
+  const caps = client && client.capabilities;
+  if (!(caps && caps.tasks && caps.tasks.requests && caps.tasks.requests.tools && caps.tasks.requests.tools.call)) return false;
+  const support = tool && tool.execution && tool.execution.taskSupport;
+  return support === 'required' || support === 'optional';
+}
+
 // Non-spec (extension) methods need a result schema; this Standard Schema passes results through.
 const ANY_RESULT = Object.freeze({ '~standard': Object.freeze({ version: 1, vendor: 'oasis', validate: (value) => ({ value }) }) });
 
@@ -391,13 +404,15 @@ export class McpHttpClient {
     return result;
   }
 
-  async _request(method, params = {}, timeoutMs = 30000, signal = undefined) {
+  async _request(method, params = {}, timeoutMs = 30000, signal = undefined, raw = false) {
     if (this.closed) throw new Error('MCP server session closed.');
     if (!this.client) throw new Error('MCP server ' + this.config.name + ' is not connected.');
     if (signal && signal.aborted) throw mcpAbortReason(signal);
     const requestOptions = { timeout: timeoutMs, ...(signal ? { signal } : {}) };
     try {
       try {
+        // raw: task-augmented results are not the method's normal result shape.
+        if (raw) return await this.client.request({ method, params }, ANY_RESULT, requestOptions) || {};
         return await this.client.request({ method, params }, requestOptions) || {};
       } catch (error) {
         if (!(error instanceof TypeError) || !/not a spec method/.test(error.message)) throw error;
@@ -503,7 +518,9 @@ export class McpHttpClient {
     const timeoutMs = Number.isFinite(requestedTimeout) && requestedTimeout > 0
       ? Math.min(900000, Math.max(1, Math.floor(requestedTimeout)))
       : 120000;
-    const result = await this._request('tools/call', { name, arguments: args }, timeoutMs, options.signal);
+    const result = useMcpTask(this, registeredTool)
+      ? await this._callToolAsTask(registeredTool, args, options)
+      : await this._request('tools/call', { name, arguments: args }, timeoutMs, options.signal);
     // MCP output schemas apply to structuredContent rather than display text.
     // Validate it when present; preserve text-only legacy responses.
     const outputSchema = registeredTool.outputSchema || options.outputSchema;
@@ -515,6 +532,53 @@ export class McpHttpClient {
       }
     }
     return { isError: Boolean(result.isError), content: compactResult(result), ...(result.structuredContent !== undefined ? { structuredContent: result.structuredContent } : {}) };
+  }
+
+  // MCP tasks run through the official @modelcontextprotocol/ext-tasks
+  // requester: it creates the task, polls tasks/get at the server's interval,
+  // reads the result, routes mid-task input and cancels on interrupt. Long
+  // jobs are bound by the task deadline, not the per-request timeout.
+  async _callToolAsTask(tool, args, options = {}) {
+    const ext = await import('@modelcontextprotocol/ext-tasks/client');
+    if (!this.taskSession) {
+      this.taskSession = ext.createTaskSessionFromClient(this.client, {
+        endpointId: 'oasis:' + this.config.name,
+        onError: (error) => debugLog('mcp', this.config.name + ' task session: ' + sdkMessage(error).slice(0, 300))
+      });
+    }
+    const deadline = AbortSignal.timeout(Math.min(TASK_MAX_MS, Number(options.taskTimeoutMs) || TASK_MAX_MS));
+    const signal = options.signal ? AbortSignal.any([options.signal, deadline]) : deadline;
+    const execution = await this.taskSession.callTool(tool.name, args || {}, {
+      declaration: ext.toolDeclarationFromMcpTool(tool),
+      signal,
+      requestTimeoutMs: 30000,
+      task: { preference: 'prefer' }
+    });
+    this.activeTasks ||= new Map();
+    const taskId = execution.kind === 'task' ? String(execution.handle.taskId) : null;
+    if (taskId) this.activeTasks.set(taskId, { tool: tool.name, status: 'working', startedAt: Date.now() });
+    try {
+      const { outcome } = await execution.settle({
+        signal,
+        onEvent: (event) => {
+          const view = ext.taskViewFromExecutionEvent(event);
+          if (!view || !taskId) return;
+          this.activeTasks.set(taskId, { ...this.activeTasks.get(taskId), status: view.status, statusMessage: view.statusMessage });
+          debugLog('mcp', this.config.name + ' task ' + taskId + ' ' + view.status + (view.statusMessage ? ': ' + String(view.statusMessage).slice(0, 200) : ''));
+        }
+      });
+      if (outcome.status === 'cancelled') return { isError: true, content: [{ type: 'text', text: 'MCP task was cancelled by the server' + (outcome.task && outcome.task.statusMessage ? ': ' + outcome.task.statusMessage : '.') }] };
+      if (outcome.status === 'failed') return { isError: true, content: [{ type: 'text', text: 'MCP task failed: ' + sdkMessage(outcome.error) + (outcome.task && outcome.task.statusMessage ? ' (' + outcome.task.statusMessage + ')' : '') }] };
+      return outcome.result || {};
+    } catch (error) {
+      if (taskId) await execution.cancel().catch(() => {});
+      if (options.signal && options.signal.aborted) throw mcpAbortReason(options.signal);
+      if (deadline.aborted) throw new Error('MCP task on ' + this.config.name + ' did not finish in time; it was cancelled.');
+      throw this._translate(error);
+    } finally {
+      if (taskId) this.activeTasks.delete(taskId);
+      await execution.close().catch(() => {});
+    }
   }
 
   close() {
