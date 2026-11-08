@@ -165,3 +165,42 @@ test('a text-only model that rejects an attached image gets the conversation wit
   assert.equal(bodies.length, before + 1, 'the next turn is not rejected again');
   assert.ok(session.messages.some((message) => Array.isArray(message.images) && message.images.length), 'the stored image is kept for a later vision model');
 });
+
+test('optional tool fields sent as null are dropped instead of failing validation', async (t) => {
+  const { mkdtemp, writeFile, rm } = await import('node:fs/promises');
+  const os = await import('node:os');
+  const path = await import('node:path');
+  const { scriptedModel, toolCall } = await import('./helpers/scripted-model.mjs');
+  const { createSession, runAgentTurn, closeSession } = await import('../src/agent.mjs');
+  const root = await mkdtemp(path.join(os.tmpdir(), 'oasis-nulls-'));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  await writeFile(path.join(root, 'a.txt'), 'alpha\n');
+  const { config, requests } = await scriptedModel(t, [toolCall('c1', 'read_file', { path: 'a.txt', offset: null, limit: null }), { content: 'done' }]);
+  const session = await createSession({ root, config, env: { ...process.env, HOME: root, OASIS_CONFIG_DIR: path.join(root, '.cfg') } });
+  t.after(() => closeSession(session));
+  await runAgentTurn(session, 'read a.txt', { autoApprove: true });
+  const toolMessage = requests[1].messages.find((message) => message.role === 'tool');
+  assert.match(String(toolMessage.content), /alpha/);
+  assert.doesNotMatch(String(toolMessage.content), /Invalid arguments/);
+});
+
+test('subagent requests stream so a silent provider trips the idle watchdog instead of the long header timeout', async (t) => {
+  const { mkdtemp, rm } = await import('node:fs/promises');
+  const os = await import('node:os');
+  const path = await import('node:path');
+  const { scriptedModel, toolCall } = await import('./helpers/scripted-model.mjs');
+  const { createSession, runAgentTurn, closeSession } = await import('../src/agent.mjs');
+  const root = await mkdtemp(path.join(os.tmpdir(), 'oasis-substream-'));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const { config, requests } = await scriptedModel(t, [
+    (payload) => payload.messages[0].content.includes('SUBAGENT MODE') ? { content: 'child done' } : payload.messages.some((m) => m.role === 'tool') ? { content: 'parent done' } : toolCall('t1', 'task', { description: 'look', prompt: 'look around' })
+  ]);
+  const session = await createSession({ root, config, env: { ...process.env, HOME: root, OASIS_CONFIG_DIR: path.join(root, '.cfg') } });
+  t.after(() => closeSession(session));
+  await runAgentTurn(session, 'delegate', { autoApprove: true });
+  const child = requests.find((payload) => payload.messages[0].content.includes('SUBAGENT MODE'));
+  const parent = requests.find((payload) => !payload.messages[0].content.includes('SUBAGENT MODE'));
+  assert.ok(child, 'the subagent sent a request');
+  assert.equal(child.stream, true);
+  assert.notEqual(parent.stream, true, 'a parent with no display keeps its old request shape');
+});
