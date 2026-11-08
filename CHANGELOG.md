@@ -24,6 +24,9 @@ User-facing change history grouped by package version. A version heading does no
 - Model setup on a gateway rules out an unconnected upstream after one failed probe, and keeps its models out of the backups.
 - Gateway 5xx errors such as "not configured" are no longer retried for minutes. They fail over at once, with advice to connect the provider.
 - Model ranking ignores digits in a provider prefix (`llm7/…`), so they no longer count as a model version.
+- Prompt-mode tool calling for endpoints that ignore `tools` or drop system messages: set `toolCalling: "prompt"` / `OASIS_TOOL_CALLING=prompt`, and optionally `systemMessages: "user"` / `OASIS_SYSTEM_MESSAGES=user`. Verified with gpt-oss-20b, which fixed a failing test with no native tools sent. See [Configuration](docs/CONFIGURATION.md#endpoints-without-native-tool-calling).
+- Tool names with trained-in namespaces (`repo_browser_read_file`, `repo_browser.read_file`, `default_api:grep`) now map to the real tool. In a live gpt-oss run they cost two wasted turns.
+- When a gateway such as OmniRoute reports a 502 whose upstream cause is "Prompt too long", the error now shows that cause and suggests `/compact` or a larger model. Before, it was retried as a server fault.
 
 ### Security and reliability
 - Found by running Anthropic's `commit-commands` plugin on a real free model. In `oasis -p "/command"`, the command's `allowed-tools` were dropped, and its read-only context lines (`git diff HEAD`, `git log`) were skipped. Both now behave as in Claude Code. A compound shell line is allowed when allow rules cover every piece. A commit that fails because Git has no author identity says so instead of blaming hooks.
