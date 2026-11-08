@@ -1035,7 +1035,8 @@ function queueRender() {
     if (!currentTurn) return;
     currentTurn.body.innerHTML = renderMarkdown(currentTurn.text);
     currentTurn.body.hidden = !currentTurn.text.trim();
-    currentTurn.body.classList.add('cursor');
+    // Once this step has started a tool, its text is finished.
+    currentTurn.body.classList.toggle('cursor', !currentTurn.tools.childElementCount);
     scrollDown();
   });
   if (wait) setTimeout(run, wait); else run();
@@ -1047,6 +1048,14 @@ function trimTranscript() {
 }
 
 function startTurn() {
+  // A new step ends any earlier streamed reply; its cursor must not linger.
+  for (const body of document.querySelectorAll('#transcript .body.cursor')) body.classList.remove('cursor');
+  // Drop the previous step if it ended with nothing to show (no text, tools or subagents).
+  if (currentTurn && !currentTurn.text.trim() && !currentTurn.entry.tools.length && !currentTurn.entry.subagents) {
+    currentTurn.wrap.remove();
+    const index = display.indexOf(currentTurn.entry);
+    if (index >= 0) display.splice(index, 1);
+  }
   const at = Date.now();
   const wrap = addMessage('assistant', '', at);
   const body = wrap.querySelector('.body');
@@ -1111,6 +1120,8 @@ function handleEvent(event) {
       break;
     }
     case 'tool_start': {
+      if (!currentTurn) startTurn();
+      currentTurn.body.classList.remove('cursor');
       const tool = { id: event.id, name: event.name, args: event.args, ...(event.open ? { open: true } : {}) };
       currentTurn.entry.tools.push(tool);
       currentTurn.tools.appendChild(toolCard(tool));
@@ -1161,6 +1172,7 @@ function handleEvent(event) {
       break;
     case 'done':
       removeThinking();
+      for (const body of document.querySelectorAll('#transcript .body.cursor')) body.classList.remove('cursor');
       if (currentTurn) messageSource.set(currentTurn.wrap, currentTurn.text);
       currentTurn = null;
       offerUndo();
