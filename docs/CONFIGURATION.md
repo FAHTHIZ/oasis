@@ -44,6 +44,14 @@ whose names suggest secrets (`env`, `token`, `key`, `password`, `auth`...),
 tools with a withheld description and tools whose definition changed still go
 to the classifier. Source: `src/mcp.mjs` (`mcpToolDefinitions`).
 
+A shell line made of several commands (`git add x && git commit -m y`) is
+allowed when every piece matches some allow rule, as in Claude Code. A piece
+nothing covers, a `$(...)` substitution or a dynamic word keeps it unapproved.
+A command file's `allowed-tools` apply to the turn it starts, including
+`oasis -p "/name"`. Its inline `` !`cmd` `` lines run when they match those
+rules or are read-only inspection (`git status`, `git diff`, `git log`, `cat`
+inside the workspace). Source: `src/permissions.mjs`, `src/commands.mjs`.
+
 ## Model providers
 
 Source: `src/provider-registry.mjs`.

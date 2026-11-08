@@ -2478,6 +2478,8 @@ async function printModeRun(root, headless, args, autoApprove, persistence, stat
       prompt = custom.prompt;
       if (custom.command.model && !SESSION_OPTIONS.model) SESSION_OPTIONS.model = custom.command.model;
       if (custom.command.effort && !SESSION_OPTIONS.effort) SESSION_OPTIONS.effort = custom.command.effort;
+      // The whole -p run is this command, so its allowed-tools apply to the run.
+      if (Array.isArray(custom.grantTools)) SESSION_OPTIONS.allowedTools.push(...custom.grantTools);
     } else {
       const skillCommand = await resolveSkillCommand(root, prompt.trim()).catch(() => null);
       if (skillCommand) prompt = skillCommand.options.fork ? 'Use the task tool with subagent_type "' + (skillCommand.options.fork.agent || 'general-purpose') + '" to run this, then report its result:\n\n' + skillCommand.prompt : skillCommand.prompt;

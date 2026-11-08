@@ -22,6 +22,8 @@ User-facing change history grouped by package version. A version heading does no
 - Model ranking ignores digits in a provider prefix (`llm7/…`), so they no longer count as a model version.
 
 ### Security and reliability
+- Found by running Anthropic's `commit-commands` plugin on a real free model. In `oasis -p "/command"`, the command's `allowed-tools` were dropped, and its read-only context lines (`git diff HEAD`, `git log`) were skipped. Both now behave as in Claude Code. A compound shell line is allowed when allow rules cover every piece. A commit that fails because Git has no author identity says so instead of blaming hooks.
+- An `error` event inside a chat-completions stream now restarts the reply (within the usual restart limit) unless it is permanent (auth, quota, context length, policy, other 4xx). Pollinations sends one when its upstream glitches, and it used to end the whole run.
 - Auto mode approves the project's own test, lint and build commands (`npm test`, `node --test`, `node x.test.js`, `pytest`, `cargo test`, `go test`, `make test`) without a classifier call, while the default "Test and build" rule is in force. Seen live: on a free model that takes 45 s per reply, every test run had been denied when the 30 s classifier call timed out.
 - The auto-mode classifier's time limit stretches to 1.5x the main model's typical reply time (up to 180 s) when it runs on the same model; `autoMode.timeoutSeconds` sets it.
 - A classifier timeout is reported as a timeout, with a hint to set `autoMode.model`, instead of "cancelled by the user".
