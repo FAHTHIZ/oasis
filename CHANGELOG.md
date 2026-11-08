@@ -57,6 +57,9 @@ User-facing change history grouped by package version. A version heading does no
 - Edit previews highlight the changed words inside a changed line (theme tokens `diffAddedWord` / `diffRemovedWord`), as in Claude Code and Cursor. Unrelated replacements stay whole-line.
 
 ### Browser workspace
+- Found in a hands-on pass. The terminal pane showed a blinking cursor that ignored typing until you found Start terminal. It now shows a hint, and Enter starts the shell (approval still applies). After the shell exits, Enter starts a new one.
+- `?` opens the keyboard shortcuts when you are not typing, as in GitHub and Gmail.
+- On touch screens, the composer buttons are 40px tall instead of 28px.
 
 - New Terminal tab, connected to OASIS on a computer: an interactive shell beside the chat, rendered with xterm.js and opened with Ctrl+`. It asks before starting and only launches the server's own shell (the request cannot name another program). It is invisible to the agent, does not lock the workspace, strips common secret environment variables, and reattaches after a page reload.
 - The Files panel can be resized: drag its left edge or use the arrow keys on it, and double-click to reset. The width is remembered.
