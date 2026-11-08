@@ -19,6 +19,9 @@ User-facing change history grouped by package version. A version heading does no
 - Plugin downloads, MCP OAuth discovery and public web fetches share one DNS-pinned, size-bounded HTTP client (`src/safe-http.mjs`) instead of three copies.
 - The test suite is green on `main` again after the tool-registry and Pages removals.
 
+### MCP
+- Long-running MCP tools run as MCP Tasks through the official [`@modelcontextprotocol/ext-tasks`](https://github.com/modelcontextprotocol/ext-tasks) requester. When a server declares `tasks.requests.tools.call` and a tool sets `execution.taskSupport` to `required` or `optional`, OASIS creates a task, polls at the server's interval, reads the result and sends `tasks/cancel` when you interrupt. Task calls are not bound by the per-request timeout (2-hour ceiling).
+
 ### Terminal
 - Edit previews highlight the changed words inside a changed line (theme tokens `diffAddedWord` / `diffRemovedWord`), as in Claude Code and Cursor. Unrelated replacements stay whole-line.
 
