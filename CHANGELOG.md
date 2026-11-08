@@ -6,6 +6,9 @@ User-facing change history grouped by package version. A version heading does no
 
 ### Runtime
 
+- Plugin MCP servers that need an option nobody set (the n8n plugin's `${user_config.n8n_url}`) are skipped with "needs n8n_url: run oasis plugin config … n8n_url=VALUE" instead of failing as "Invalid URL". An unset value only in `env` stays empty, as before.
+- Local MCP servers that fail to start say why: a missing program ("not installed or not on your PATH"), a missing folder, missing Node.js or Python dependencies (with the folder to run `npm install` in), or a port in use. Stderr itself is still not shown, because it can contain tokens.
+
 - Codex and Agent Plugins MCP servers now start where Codex starts them. A relative `cwd` (such as `"."`), a `./` command and `${PLUGIN_ROOT}` / `${PLUGIN_DATA}` resolve against the installed plugin, and stdio servers without a `cwd` start in the plugin root. Before this, every MCP server started in the workspace, so bundled scripts such as nexu-io/codex-slides' `./scripts/start-mcp.mjs` were not found. MCP server configs keep their `cwd` through validation.
 - When the verification step sends the agent back after it already showed a summary, it now adds one or two sentences on what the checks showed instead of a second full summary. Found in the normal-user web run.
 - MCP tools now also go behind `tool_search` when their schemas are large (over 12,000 characters, about 3,000 tokens), not only when there are more than 25 of them. With 16 plugins on, the 25 plugin MCP tools (mostly browser automation) were sent on every request; now the model sees 21 tools and 16.5k characters of schemas instead of 46 tools and 36.5k, about 5,000 fewer input tokens per request. `OASIS_TOOL_SEARCH_CHARS` changes the limit; `OASIS_TOOL_SEARCH=off` keeps everything loaded.
