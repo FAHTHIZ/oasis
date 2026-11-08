@@ -165,6 +165,33 @@ export function parseClassifierReply(text) {
   }
 }
 
+// The project's own test, lint and build commands, run as an argv (no shell),
+// are what the default "Test and build" allow rule describes. Approving them
+// without a model call keeps auto mode usable on slow or weak providers, where
+// a 30 s classifier call can time out (seen live: a 45 s-per-reply free model
+// had every `node math.test.js` denied). Anything else still goes to the model.
+const CHECK_SUBCOMMANDS = /^(?:test|t|lint|build|check|typecheck|type-check|tsc|vet|clippy|fmt)$/;
+const RISKY_ARG = /[;&|`$<>\n]|^-(?:e|p|r|c)$|^--(?:eval|print|require|import|loader|experimental-loader|script-shell|registry|prefix|userconfig|global|location)\b/;
+const NO_RUN_INTENT = /\b(?:don'?t|do not|never|without)\s+(?:run(?:ning)?|execut\w*|test\w*|build\w*)/i;
+export function obviousProjectCheck({ toolName, args, messages } = {}) {
+  if (!['Bash', 'run_command'].includes(toolName) || !args || typeof args.command !== 'string') return null;
+  const argv = [args.command, ...(Array.isArray(args.args) ? args.args : [])].map(String);
+  if (argv.length > 12 || argv.some((arg) => RISKY_ARG.test(arg)) || args.run_in_background === true || args.interactive === true) return null;
+  if (userIntent(messages).some((text) => NO_RUN_INTENT.test(text))) return null;
+  const [cmd, sub, third] = argv;
+  const inWorkspace = (file) => !!file && !/^(?:\/|[A-Za-z]:|~)/.test(file) && !file.split(/[\\/]/).includes('..');
+  let label = '';
+  if (/^(?:npm|pnpm|yarn|bun)$/.test(cmd) && (CHECK_SUBCOMMANDS.test(sub || '') || sub === 'run' && CHECK_SUBCOMMANDS.test(third || ''))) label = cmd + ' ' + (sub === 'run' ? 'run ' + third : sub);
+  else if (cmd === 'node' && sub === '--test' && argv.slice(2).every(inWorkspace)) label = 'node --test';
+  else if (cmd === 'node' && argv.length === 2 && inWorkspace(sub) && /\.(?:test|spec)\.[cm]?[jt]sx?$/.test(sub)) label = 'node ' + sub;
+  else if ((cmd === 'pytest' || /^python3?$/.test(cmd) && sub === '-m' && third === 'pytest') && argv.slice(cmd === 'pytest' ? 1 : 3).every((arg) => inWorkspace(arg) || /^-[qvxs]+$/.test(arg))) label = 'pytest';
+  else if (cmd === 'cargo' && /^(?:test|build|check|clippy|fmt)$/.test(sub || '')) label = 'cargo ' + sub;
+  else if (cmd === 'go' && /^(?:test|build|vet)$/.test(sub || '')) label = 'go ' + sub;
+  else if (cmd === 'make' && /^(?:test|check|lint|build)$/.test(sub || '') && argv.length === 2) label = 'make ' + sub;
+  else if (cmd === 'deno' && /^(?:test|lint|check|fmt)$/.test(sub || '')) label = 'deno ' + sub;
+  return label ? { decision: 'allow', rule: 'Test and build', reason: label + ' is the project\'s own check (allowed without a model call).', fast: true } : null;
+}
+
 // Returns { decision: 'allow'|'block'|'ask', reason, paused? }.
 // `evaluate({ system, prompt, model, signal })` returns the model's reply text.
 export async function classifyAction(state, request, evaluate, options = {}) {
@@ -180,13 +207,23 @@ export async function classifyAction(state, request, evaluate, options = {}) {
     state.blockedInRow = 0;
     return { ...state.allowed.get(key), cached: true };
   }
+  // Only while the default "Test and build" allow rule is in force.
+  const effective = options.config ? effectiveAutoModeConfig(options.config) : DEFAULT_AUTO_MODE;
+  if (effective.allow.includes(DEFAULT_AUTO_MODE.allow[0]) && !(request.rules && request.rules.length)) {
+    const fast = obviousProjectCheck(request);
+    if (fast) { state.blockedInRow = 0; state.fastAllowed = (state.fastAllowed || 0) + 1; return fast; }
+  }
   let verdict = null;
+  const timeoutSeconds = options.timeoutSeconds || 30;
+  const signal = AbortSignal.timeout(timeoutSeconds * 1000);
   try {
     const system = options.config ? classifierSystem(effectiveAutoModeConfig(options.config)) : SYSTEM;
-    const reply = await evaluate({ system, prompt: buildClassifierPrompt(request), model: options.model, signal: AbortSignal.timeout((options.timeoutSeconds || 30) * 1000) });
+    const reply = await evaluate({ system, prompt: buildClassifierPrompt(request), model: options.model, signal });
     verdict = parseClassifierReply(reply);
   } catch (error) {
-    return { decision: 'ask', reason: 'The auto mode classifier failed (' + (error.message || error) + '); asking you instead.' };
+    // The provider layer reports any abort as a user cancel; name the timeout.
+    const why = signal.aborted ? 'no answer within ' + timeoutSeconds + ' s; set autoMode.model to a faster model' : (error.message || error);
+    return { decision: 'ask', reason: 'The auto mode classifier failed (' + why + '); asking you instead.' };
   }
   if (!verdict) return { decision: 'ask', reason: 'The auto mode classifier gave no clear answer; asking you instead.' };
   state.checked = (state.checked || 0) + 1;
