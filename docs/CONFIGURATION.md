@@ -32,8 +32,10 @@ In `auto` mode the project's own checks (`npm test`, `npm run lint|build`,
 default "Test and build" allow rule describes. This applies only to plain argv
 commands inside the workspace, and only while that default rule is in force. It
 does not apply when the user's message says not to run them. Everything else
-goes to the classifier, which has 30 seconds to answer. On a slow provider, set
-`autoMode.model` to a faster model. Source: `src/auto-mode.mjs`.
+goes to the classifier. It has 30 seconds to answer, stretched to 1.5 times the
+main model's typical reply time (up to 180 seconds) when it runs on the same
+model. Set `autoMode.timeoutSeconds` in user settings to choose the limit, or
+set `autoMode.model` to a faster model. Source: `src/auto-mode.mjs`.
 
 ## Model providers
 

@@ -23,6 +23,7 @@ User-facing change history grouped by package version. A version heading does no
 
 ### Security and reliability
 - Auto mode approves the project's own test, lint and build commands (`npm test`, `node --test`, `node x.test.js`, `pytest`, `cargo test`, `go test`, `make test`) without a classifier call, while the default "Test and build" rule is in force. Seen live: on a free model that takes 45 s per reply, every test run had been denied when the 30 s classifier call timed out.
+- The auto-mode classifier's time limit stretches to 1.5x the main model's typical reply time (up to 180 s) when it runs on the same model; `autoMode.timeoutSeconds` sets it.
 - A classifier timeout is reported as a timeout, with a hint to set `autoMode.model`, instead of "cancelled by the user".
 - A 429 that means "one request at a time" (Pollinations' keyless API) now waits and retries instead of failing in under a second.
 - A declined command now tells the model not to retry or ask again, but to finish what it can and name the command for the user.
