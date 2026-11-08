@@ -211,6 +211,7 @@
         <option value="ask">Ask before edits and web access</option>
         <option value="edits">Edit files freely, ask for the rest</option>
         <option value="auto">Full auto (still asks before pushing)</option>
+        <option value="plan" hidden disabled>Plan only (approve the plan before any change)</option>
       </select>
       <div class="field" id="maxStepsField">
         <label for="maxStepsInput">Steps per request</label>
@@ -337,6 +338,7 @@
   <button role="menuitemradio" data-mode="ask"><strong>Ask first</strong><span>Approve each edit and web request</span></button>
   <button role="menuitemradio" data-mode="edits"><strong>Auto edit</strong><span>Edit files freely, ask for the rest</span></button>
   <button role="menuitemradio" data-mode="auto"><strong>Full auto</strong><span>Never asks except before pushing</span></button>
+  <button role="menuitemradio" data-mode="plan" hidden><strong>Plan</strong><span>Read and plan only; nothing changes until you approve the plan</span></button>
 </div>
 
 <div class="menu" id="modelMenu" role="menu" hidden></div>

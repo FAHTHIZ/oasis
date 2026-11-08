@@ -21,6 +21,7 @@ export const APP_KEYBOARD_SHORTCUTS = Object.freeze([
   { keys: 'Escape', label: 'Close the top dialog or menu', detail: 'The current task keeps running.' },
   { keys: '↑ / ↓', label: 'Move through command results', detail: 'Available while the command palette is open.' },
   { keys: 'Enter', label: 'Run the selected command', detail: 'Available while the command palette is open.' },
+  { keys: 'Shift+Tab', label: 'Switch permission mode', detail: 'Cycles Ask first, Auto edit, Full auto and (on a computer) Plan.' },
   { keys: 'Tab', label: 'Accept a / or @ suggestion', detail: 'Arrow keys move through suggestions; Escape closes them.' }
 ]);
 

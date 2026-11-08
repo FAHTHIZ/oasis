@@ -65,7 +65,20 @@ function activeEntry() {
   const model = settings.activeModel && (connection.models.includes(settings.activeModel) || connection.id === settings.activeConnection) ? settings.activeModel : connection.models[0];
   return model ? { connection, model } : null;
 }
-function currentMode() { return allowEditsThisSession && settings.mode === 'ask' ? 'edits' : settings.mode; }
+// Plan mode needs OASIS on a computer; the browser-only agent treats it as Ask first.
+function currentMode() {
+  if (settings.mode === 'plan' && !(RT && !RT.needsToken)) return 'ask';
+  return allowEditsThisSession && settings.mode === 'ask' ? 'edits' : settings.mode;
+}
+const MODE_CYCLE = ['ask', 'edits', 'auto', 'plan'];
+function cycleMode() {
+  const modes = MODE_CYCLE.filter((mode) => mode !== 'plan' || (RT && !RT.needsToken));
+  settings.mode = modes[(modes.indexOf(currentMode()) + 1) % modes.length];
+  allowEditsThisSession = false;
+  saveSettings();
+  updateModeUI();
+  toast('Mode: ' + $('modeLabel').textContent);
+}
 function providerConfig() {
   const entry = activeEntry();
   if (!entry) return { protocol: 'openai', baseURL: '', apiKey: '', model: '', mode: currentMode(), provider: '' };
@@ -916,7 +929,6 @@ function handleEvent(event) {
     }
     case 'tool_start': {
       const tool = { id: event.id, name: event.name, args: event.args, ...(event.open ? { open: true } : {}) };
-      if (/write|edit|patch|delete|move|rename|notebook/i.test(String(event.name || ''))) turnEdited = true;
       currentTurn.entry.tools.push(tool);
       currentTurn.tools.appendChild(toolCard(tool));
       scrollDown();
@@ -927,6 +939,7 @@ function handleEvent(event) {
       let tool = currentTurn.entry.tools.find((t) => t.id === event.id);
       if (!tool) { tool = { id: event.id, name: event.name, args: {} }; currentTurn.entry.tools.push(tool); currentTurn.tools.appendChild(toolCard(tool)); }
       tool.ok = event.ok;
+      if (event.ok !== false && /write|edit|patch|delete|move|rename|notebook/i.test(String(event.name || tool.name || ''))) turnEdited = true;
       if (RT && /^(write_file|edit_file|multi_edit|delete_file|notebook_edit|run_command|git_commit)$/.test(event.name || tool.name)) refreshFiles();
       tool.content = event.content.length > 6000 ? event.content.slice(0, 6000) + '\n…' : event.content;
       const card = currentTurn.tools.querySelector('[data-id="' + CSS.escape(event.id) + '"]');
@@ -1363,6 +1376,8 @@ $('settingsConnectButton').addEventListener('click', async () => {
 });
 $('settingsConnectInput').addEventListener('keydown', (event) => { if (event.key === 'Enter') { event.preventDefault(); $('settingsConnectButton').click(); } });
 $('input').addEventListener('keydown', (event) => {
+  // Shift+Tab cycles the permission mode, as in the terminal.
+  if (event.key === 'Tab' && event.shiftKey && !event.ctrlKey && !event.metaKey && !event.altKey) { event.preventDefault(); cycleMode(); return; }
   if (event.key === 'Enter' && !event.shiftKey && !event.isComposing && matchMedia('(pointer:fine)').matches) {
     event.preventDefault();
     $('composer').requestSubmit();
@@ -1494,7 +1509,7 @@ $('composer').addEventListener('keydown', (event) => {
 function updateModeUI() {
   const mode = providerConfig().mode;
   $('modeChip').dataset.mode = mode;
-  $('modeLabel').textContent = mode === 'auto' ? 'Full auto' : mode === 'edits' ? 'Auto edit' : 'Ask first';
+  $('modeLabel').textContent = mode === 'auto' ? 'Full auto' : mode === 'edits' ? 'Auto edit' : mode === 'plan' ? 'Plan' : 'Ask first';
   for (const button of $('modeMenu').querySelectorAll('button')) button.setAttribute('aria-checked', String(button.dataset.mode === mode));
   const entry = activeEntry();
   $('modelChip').textContent = entry ? entry.model.split('/').pop().replace(/:free$/, ' (free)') : (innerWidth < 440 ? 'Connect' : 'Connect a model');
@@ -1790,7 +1805,7 @@ function openSettings() {
   $('manualSetup').open = false;
   $('autoSwitch').checked = settings.autoSwitch !== false;
   $('settingsConnectLog').replaceChildren();
-  $('modeSelect').value = settings.mode;
+  $('modeSelect').value = currentMode() === 'edits' && settings.mode === 'ask' ? 'ask' : currentMode();
   $('maxStepsInput').value = settings.maxSteps;
   $('themeSelect').value = settings.theme;
   $('notifyInput').checked = Boolean(settings.notify) && typeof Notification !== 'undefined' && Notification.permission === 'granted';
@@ -2294,9 +2309,9 @@ async function startRuntime(found) {
   RT.phone = /^(?:127\.\d+\.\d+\.\d+|localhost|\[::1\])$/.test(location.hostname);
   // On a computer, file edits are checkpointed and undoable; approvals are
   // about commands and other actions with effects outside the files.
-  const RUNTIME_MODES = { ask: 'Approve commands and risky actions. Edits can be undone.', edits: 'Also run routine file operations without asking.', auto: 'Decides on its own; asks only for risky actions.' };
-  for (const button of $('modeMenu').querySelectorAll('button')) button.querySelector('span').textContent = RUNTIME_MODES[button.dataset.mode];
-  for (const option of $('modeSelect').options) option.textContent = { ask: 'Ask before commands (edits can be undone)', edits: 'Allow routine file operations', auto: 'Full auto (asks only for risky actions)' }[option.value];
+  const RUNTIME_MODES = { ask: 'Approve commands and risky actions. Edits can be undone.', edits: 'Also run routine file operations without asking.', auto: 'Decides on its own; asks only for risky actions.', plan: 'Reads and plans only; nothing changes until you approve the plan.' };
+  for (const button of $('modeMenu').querySelectorAll('button')) { button.querySelector('span').textContent = RUNTIME_MODES[button.dataset.mode]; button.hidden = false; }
+  for (const option of $('modeSelect').options) { option.textContent = { ask: 'Ask before commands (edits can be undone)', edits: 'Allow routine file operations', auto: 'Full auto (asks only for risky actions)', plan: 'Plan only (approve the plan before any change)' }[option.value]; option.hidden = false; option.disabled = false; }
   RT.entry = runtimeEntryFrom(RT.status);
   agent = new RuntimeAgent({
     client: RT.client,
