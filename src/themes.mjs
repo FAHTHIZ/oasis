@@ -193,7 +193,8 @@ export function applyTheme(theme) {
   Object.assign(ANSI, DEFAULT_ANSI, {
     red: fg('error', DEFAULT_ANSI.red), green: fg('success', DEFAULT_ANSI.green), yellow: fg('number', DEFAULT_ANSI.yellow),
     blue: fg('link', DEFAULT_ANSI.blue), magenta: fg('keyword', DEFAULT_ANSI.magenta), cyan: fg('code', DEFAULT_ANSI.cyan), gray: fg('inactive', DEFAULT_ANSI.gray),
-    bgRed: bg('diffRemoved'), bgGreen: bg('diffAdded')
+    bgRed: bg('diffRemoved'), bgGreen: bg('diffAdded'),
+    bgRedWord: bg('diffRemovedWord'), bgGreenWord: bg('diffAddedWord')
   });
   return theme;
 }

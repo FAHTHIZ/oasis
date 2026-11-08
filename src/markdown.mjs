@@ -3,7 +3,7 @@
 // partial line is shown raw and replaced by its rendered form once complete.
 import { Lexer } from 'marked';
 import { createRequire } from 'node:module';
-import { diffArrays } from 'diff';
+import { diffArrays, diffWordsWithSpace } from 'diff';
 import wrapAnsi from 'wrap-ansi';
 import stripAnsi from 'strip-ansi';
 import { stringWidth } from './line-editor.mjs';
@@ -13,7 +13,8 @@ const C = {
   reset: '\x1b[0m', bold: '\x1b[1m', dim: '\x1b[2m', italic: '\x1b[3m', underline: '\x1b[4m',
   noBold: '\x1b[22m', noItalic: '\x1b[23m', noUnderline: '\x1b[24m', fg: '\x1b[39m',
   red: '\x1b[31m', green: '\x1b[32m', yellow: '\x1b[33m', blue: '\x1b[34m', magenta: '\x1b[35m', cyan: '\x1b[36m', gray: '\x1b[90m',
-  bgRed: '\x1b[48;5;52m', bgGreen: '\x1b[48;5;22m', bg: '\x1b[49m'
+  bgRed: '\x1b[48;5;52m', bgGreen: '\x1b[48;5;22m', bg: '\x1b[49m',
+  bgRedWord: '\x1b[48;5;88m', bgGreenWord: '\x1b[48;5;28m'
 };
 
 export function colorEnabled(stream = process.stdout, env = process.env) {
@@ -295,8 +296,43 @@ export function diffStats(ops) {
   return { added: ops.filter((op) => op.op === '+').length, removed: ops.filter((op) => op.op === '-').length };
 }
 
+// Word-level highlights for a changed line: pairs the i-th removed line of a
+// change block with the i-th added line and marks the words that differ, when
+// the two lines are similar enough that the highlight helps (Claude Code and
+// Cursor show the same). Returns Map(index -> [{ text, changed }]).
+const WORD_DIFF_MAX = 400;
+export function wordHighlights(ops) {
+  const out = new Map();
+  let index = 0;
+  while (index < ops.length) {
+    if (ops[index].op !== '-') { index += 1; continue; }
+    const removed = [];
+    while (index < ops.length && ops[index].op === '-') removed.push(index++);
+    const added = [];
+    while (index < ops.length && ops[index].op === '+') added.push(index++);
+    for (let k = 0; k < Math.min(removed.length, added.length); k += 1) {
+      const a = ops[removed[k]].line;
+      const b = ops[added[k]].line;
+      if (!a.trim() || !b.trim() || a.length > WORD_DIFF_MAX || b.length > WORD_DIFF_MAX) continue;
+      const parts = diffWordsWithSpace(a, b);
+      const same = parts.filter((part) => !part.added && !part.removed).reduce((sum, part) => sum + part.value.trim().length, 0);
+      if (same < 0.4 * Math.max(a.trim().length, b.trim().length)) continue;
+      out.set(removed[k], parts.filter((part) => !part.added).map((part) => ({ text: part.value, changed: Boolean(part.removed) })));
+      out.set(added[k], parts.filter((part) => !part.removed).map((part) => ({ text: part.value, changed: Boolean(part.added) })));
+    }
+  }
+  return out;
+}
+
+function highlightedLine(segments, lineBg, wordBg) {
+  return segments.map((segment) => segment.changed
+    ? (wordBg ? wordBg + segment.text + lineBg : C.bold + C.underline + segment.text + C.noUnderline + C.noBold)
+    : segment.text).join('');
+}
+
 export function renderDiff(before, after, { color = true, context = 2, maxLines = 40 } = {}) {
   const ops = lineDiff(before, after);
+  const words = color ? wordHighlights(ops) : new Map();
   const keep = new Set();
   ops.forEach((op, index) => { if (op.op !== ' ') for (let k = index - context; k <= index + context; k += 1) keep.add(k); });
   const lines = [];
@@ -309,8 +345,13 @@ export function renderDiff(before, after, { color = true, context = 2, maxLines 
     // On a tinted background the code stays in the normal text color so it is
     // readable; only the +/- sign carries the color. Themes without diff
     // backgrounds (ANSI, colorblind) color the whole line instead.
-    else if (op.op === '+') lines.push('    ' + (C.bgGreen ? C.bgGreen + C.green + C.bold + '+' + C.noBold + C.fg + ' ' + op.line : C.green + text) + C.fg + C.bg);
-    else if (op.op === '-') lines.push('    ' + (C.bgRed ? C.bgRed + C.red + C.bold + '-' + C.noBold + C.fg + ' ' + op.line : C.red + text) + C.fg + C.bg);
+    else if (op.op === '+') {
+      const body = words.has(index) ? highlightedLine(words.get(index), C.bgGreen, C.bgGreen && C.bgGreenWord) : op.line;
+      lines.push('    ' + (C.bgGreen ? C.bgGreen + C.green + C.bold + '+' + C.noBold + C.fg + ' ' + body : C.green + '+ ' + body) + C.fg + C.bg);
+    } else if (op.op === '-') {
+      const body = words.has(index) ? highlightedLine(words.get(index), C.bgRed, C.bgRed && C.bgRedWord) : op.line;
+      lines.push('    ' + (C.bgRed ? C.bgRed + C.red + C.bold + '-' + C.noBold + C.fg + ' ' + body : C.red + '- ' + body) + C.fg + C.bg);
+    }
     else lines.push('    ' + C.dim + text + C.noBold);
   });
   const stats = diffStats(ops);

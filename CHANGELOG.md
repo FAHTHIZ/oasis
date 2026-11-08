@@ -19,6 +19,9 @@ User-facing change history grouped by package version. A version heading does no
 - Plugin downloads, MCP OAuth discovery and public web fetches share one DNS-pinned, size-bounded HTTP client (`src/safe-http.mjs`) instead of three copies.
 - The test suite is green on `main` again after the tool-registry and Pages removals.
 
+### Terminal
+- Edit previews highlight the changed words inside a changed line (theme tokens `diffAddedWord` / `diffRemovedWord`), as in Claude Code and Cursor. Unrelated replacements stay whole-line.
+
 ### Maintenance
 - Removed duplicated chat chunking (Telegram gateway) and generated-media file handling (images and speech).
 - README: quick start, agent system overview and Claude Code compatibility summary.
