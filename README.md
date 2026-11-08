@@ -97,7 +97,7 @@ OASIS has two interfaces, both on the same runtime, sessions and settings. Start
   </tr>
 </table>
 
-The web app runs on your own computer, not a hosted service. The desktop app is the same web app in a native window. To use it from a phone on your network, see [Mobile and tablet setup](MOBILE.md).
+The web app runs on your own computer, not a hosted service. The desktop app is the same web app in a native window. To use it from a phone on your network, see [Mobile and tablet setup](MOBILE.md). There is no native Android or iOS app.
 
 <table>
   <tr>
@@ -173,7 +173,8 @@ These runs used the released app the way a person would: type a request, approve
 | --- | --- | --- | --- |
 | "Build a small to-do web app in index.html" | Web app | gpt-oss-20b (free) | Working app in about 6 minutes |
 | "math.mjs add() is wrong. Fix it and add a test, then run it." | `oasis -p` | gpt-oss-20b | Fixed, test written and passing, exit 0. About 10 minutes, mostly provider wait. |
-| Fix a bug and run the tests after approval | Terminal and web app | gpt-oss-20b | Passed |
+| "slugify() only replaces the first space. Fix it, add a test, run the tests." | Web app, Ask first | gpt-oss-20b | Fixed with a global regex, test added, 1 passing. 409 s, 2 approvals. Screenshot above. |
+| Fix a bug and run the tests after approval | Terminal | gpt-oss-20b | Passed |
 | Read an uploaded PDF | Web app | gpt-oss-20b | Passed in 49 s |
 | Install 16 Claude Code plugins and use them | Web app and terminal | gpt-oss-20b | All installed; hooks, skills and MCP servers ran |
 | Call an MCP tool in auto mode | Terminal | gpt-oss-20b | Passed |
@@ -182,7 +183,7 @@ These runs used the released app the way a person would: type a request, approve
 
 Everything that went wrong in these runs became a fix with a regression test. Examples: a streamed reply glued onto the next one, the agent telling the user about its internal checks, a keyless endpoint that kept asking for a key, activity cards that all said "Completed a project step". See the [Changelog](CHANGELOG.md).
 
-Known rough edges: `oasis -p` prints nothing until it finishes, and free endpoints are slow (35–140 s per request).
+Known rough edges: free endpoints are slow (35–140 s per request), and with small models the verification step sometimes produces a second, longer summary after the first. `oasis -p` used to print nothing until it finished; it now shows one line per step.
 
 ## Benchmarks
 
@@ -193,7 +194,7 @@ Known rough edges: `oasis -p` prints nothing until it finishes, and free endpoin
 | `clamp-integer` (small) | Pass · 44 s · 55k tokens | Pass · 121 s · 52k tokens |
 | `safe-relative-path` (medium) | Fail · 28 s · 121k tokens | Fail · 59 s · 50k tokens |
 
-Two tasks and one trial cannot rank agents; the free tier allowed about 50 requests a day. A larger run with a strong model is the next step. Raw results: [bench/results/live-2026-11-08-omniroute](bench/results/live-2026-11-08-omniroute/README.md). Method: [docs/BENCHMARKS.md](docs/BENCHMARKS.md).
+Two tasks and one trial cannot rank agents, and OASIS does not guarantee that every model will solve every task: results depend heavily on the model. The free tier allowed about 50 requests a day. A larger run with a strong model is the next step. Raw results: [bench/results/live-2026-11-08-omniroute](bench/results/live-2026-11-08-omniroute/README.md). Method: [docs/BENCHMARKS.md](docs/BENCHMARKS.md).
 
 ## How it compares
 
@@ -235,6 +236,7 @@ OASIS can read and change files, run commands and send context to your model pro
 - The OS sandbox (bubblewrap, macOS Seatbelt, Docker or Podman) is optional. `oasis doctor` tells you whether it's on.
 - Project settings that loosen permissions, run hooks or start MCP servers apply only after you trust the workspace.
 - Plugins, hooks and MCP servers can run third-party code. Review them before turning them on.
+- Approval prompts are not a replacement for operating-system isolation. Use the sandbox, a container or a throwaway machine for untrusted code.
 
 Read the [security policy](SECURITY.md) before using OASIS on sensitive code.
 

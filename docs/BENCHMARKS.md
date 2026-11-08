@@ -67,6 +67,20 @@ When recording a live result, include at least:
 
 Compare systems using the same model, task set, provider settings and environment wherever possible. Report repetitions and variance when the benchmark is nondeterministic.
 
+## Normal-user runs
+
+Separate from scored benchmarks, OASIS is used the way a person would: type a request, approve steps, read the answer. These runs use real providers and no scripted model, so they show speed, wording and rough edges a harness does not.
+
+| Date | Request | Interface | Model | Outcome |
+| --- | --- | --- | --- | --- |
+| 8 Nov 2026 | Fix `slugify()` (only the first space was replaced), add a `node:test` test, run the tests | Web app, Ask first | gpt-oss-20b (Pollinations, free) | Pass. Global-regex fix, new test file, 1 test passing. 409 s, 2 approvals. |
+| 8 Nov 2026 | Same task, earlier build | Web app | gpt-oss-20b | Pass in 411 s. Found: stale reply cursor, empty steps, "Working" shown behind the approval sheet. All fixed. |
+| 7 Nov 2026 | "math.mjs add() is wrong. Fix it, add a test, run it." | `oasis -p` | gpt-oss-20b | Pass, exit 0, about 10 minutes. Found: no output until the end. Fixed with per-step progress on stderr. |
+| 7 Nov 2026 | Build a to-do web app in `index.html` | Web app | gpt-oss-20b | Working app in about 6 minutes. |
+| 7 Nov 2026 | Install and use 16 plugins from `anthropics/claude-plugins-official` | Web app and terminal | gpt-oss-20b | All installed; hooks, skills and MCP servers ran. Found: 46 tools and 36.5k characters of schemas per request. Large MCP servers now load on demand (21 tools, 16.5k characters). |
+
+Times are dominated by the free endpoint (35–140 s per request, one request at a time). Each problem found became a fix with a regression test; see the [Changelog](../CHANGELOG.md).
+
 ## Interpreting results
 
 - A harness benchmark measures selected runtime behaviours, not general coding ability.
