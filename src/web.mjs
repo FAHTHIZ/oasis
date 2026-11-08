@@ -731,7 +731,7 @@ export function createOasisWebServer(options = {}) {
     const activeId = sessionId || session.sessionId;
     // The app sends its permission chip with every message (never bypass).
     const requestedMode = typeof input.permissionMode === 'string' ? input.permissionMode : '';
-    if (['default', 'acceptEdits', 'plan', 'auto'].includes(requestedMode) && session.permissions) {
+    if (['default', 'acceptEdits', 'plan', 'auto', 'dontAsk'].includes(requestedMode) && session.permissions) {
       try {
         if (typeof session.permissions.setMode === 'function') session.permissions.setMode(requestedMode);
         else session.permissions.mode = requestedMode;

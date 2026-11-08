@@ -14,6 +14,7 @@ User-facing change history grouped by package version. A version heading does no
 - New [Subagents guide](docs/SUBAGENTS.md).
 
 ### Security and reliability
+- New `dontAsk` permission mode and `permissions.denyInsteadOfPrompting` setting (Claude Code parity): calls that would wait on an approval prompt are denied with a readable reason and the turn continues, so CI and unattended runs never hang. See [Permission modes](docs/CONFIGURATION.md#permission-modes).
 - The SSRF address policy is built on `ipaddr.js` with declarative CIDR tables.
 - Plugin downloads, MCP OAuth discovery and public web fetches share one DNS-pinned, size-bounded HTTP client (`src/safe-http.mjs`) instead of three copies.
 - The test suite is green on `main` again after the tool-registry and Pages removals.

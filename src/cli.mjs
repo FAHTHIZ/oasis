@@ -110,7 +110,7 @@ function printQuickHelp() {
     '',
     'Safety',
     ...rows([
-      ['--permission-mode <mode>', 'manual (default), accept-edits, plan, auto'],
+      ['--permission-mode <mode>', 'manual (default), accept-edits, plan, auto, dont-ask'],
       ['--safe-mode', 'Start with skills, hooks, MCP and plugins off'],
       ['--restricted', 'No command or network tools; managed settings only'],
       ['-w, --worktree [name]', 'Work on an isolated Git worktree branch'],
@@ -229,7 +229,7 @@ function helpText() {
     '  --workspace PATH              Choose the workspace root',
     '  --yes, -y                     Auto-approve supported commands and installs',
     '                                (destructive operations remain blocked or gated)',
-    '  --permission-mode MODE        manual/default | acceptEdits/accept-edits | plan | auto | bypassPermissions',
+    '  --permission-mode MODE        manual/default | acceptEdits/accept-edits | plan | auto | dontAsk/dont-ask | bypassPermissions',
     '  --add-dir PATH                Let tools read and edit another directory (repeatable)',
     '  --dangerously-skip-permissions  Same as --permission-mode bypassPermissions --yes',
     '  --continue, -c                Continue the most recent saved session',
