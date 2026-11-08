@@ -34,7 +34,9 @@ const CLAUDE_TO_OASIS = {
   read: ['read_file'], write: ['write_file'], edit: ['edit_file'], multiedit: ['multi_edit'], notebookedit: ['notebook_edit'],
   bash: ['run_command', 'run_shell', 'command_output', 'kill_command', 'list_background'],
   grep: ['grep', 'search_files', 'ast_grep'], glob: ['glob_files'], ls: ['list_files'], webfetch: ['fetch_url'], websearch: ['web_search'],
-  todowrite: ['todo_write'], bashoutput: ['command_output'], killshell: ['kill_command']
+  todowrite: ['todo_write'], bashoutput: ['command_output'], killshell: ['kill_command'],
+  // Agent (formerly Task) launches subagents; Agent(type, ...) type lists are ignored, as in Claude Code.
+  agent: ['task'], task: ['task']
 };
 
 const READ_ONLY = ['git_status', 'git_diff', 'git_log', 'lsp', 'list_files', 'glob_files', 'repo_map', 'read_file', 'search_files', 'grep', 'ast_grep', 'fetch_url', 'web_search', 'list_skills', 'load_skill', 'read_skill_resource', 'memory_search', 'memory_read', 'session_search'];
@@ -89,7 +91,8 @@ export function mapToolNames(list) {
   for (const raw of items) {
     const name = String(raw).trim();
     if (!name) continue;
-    const mapped = CLAUDE_TO_OASIS[name.toLowerCase()];
+    const key = name.toLowerCase();
+    const mapped = CLAUDE_TO_OASIS[key] || (/^(agent|task)\s*\(/.test(key) ? ['task'] : null);
     if (mapped) mapped.forEach((tool) => out.add(tool));
     else out.add(name);
   }

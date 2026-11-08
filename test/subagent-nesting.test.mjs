@@ -7,12 +7,20 @@ import path from 'node:path';
 import { createSession, runAgentTurn, subagentMaxDepth } from '../src/agent.mjs';
 import { listAgents } from '../src/agent-tasks.mjs';
 
-test('subagentMaxDepth defaults to 1 and is clamped to 1-3', () => {
-  assert.equal(subagentMaxDepth({}, {}), 1);
+test('subagentMaxDepth defaults to 3 like Claude Code and is clamped to 1-5', () => {
+  assert.equal(subagentMaxDepth({}, {}), 3);
   assert.equal(subagentMaxDepth({ subagentMaxDepth: 2 }, {}), 2);
-  assert.equal(subagentMaxDepth({ subagentMaxDepth: 2 }, { OASIS_SUBAGENT_MAX_DEPTH: '9' }), 3);
+  assert.equal(subagentMaxDepth({ subagentMaxDepth: 2 }, { OASIS_SUBAGENT_MAX_DEPTH: '9' }), 5);
   assert.equal(subagentMaxDepth({}, { OASIS_SUBAGENT_MAX_DEPTH: '0' }), 1);
-  assert.equal(subagentMaxDepth({}, { OASIS_SUBAGENT_MAX_DEPTH: 'x' }), 1);
+  assert.equal(subagentMaxDepth({}, { CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH: '1' }), 1);
+  assert.equal(subagentMaxDepth({}, { OASIS_SUBAGENT_MAX_DEPTH: '2', CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH: '1' }), 2);
+  assert.equal(subagentMaxDepth({}, { OASIS_SUBAGENT_MAX_DEPTH: 'x' }), 3);
+});
+
+test('Agent and Agent(type) in a tools list map to the task tool', async () => {
+  const { mapToolNames } = await import('../src/subagents.mjs');
+  assert.deepEqual(mapToolNames('Read, Agent'), ['read_file', 'task']);
+  assert.deepEqual(mapToolNames(['Agent(explore, plan)']), ['task']);
 });
 
 // main -> general-purpose (depth 1) -> explore (depth 2)
@@ -45,7 +53,7 @@ async function run(t, maxDepth) {
   return { seen, session };
 }
 
-test('with subagentMaxDepth 2 a writing subagent delegates to a read-only leaf', async (t) => {
+test('with depth 2 a writing subagent delegates to a read-only leaf', async (t) => {
   const { seen, session } = await run(t, 2);
   const worker = seen.find((entry) => entry.role === 'worker');
   const leaf = seen.find((entry) => entry.role === 'explore');
@@ -58,7 +66,7 @@ test('with subagentMaxDepth 2 a writing subagent delegates to a read-only leaf',
   assert.equal(agents.length, 2);
 });
 
-test('the default depth keeps subagents from delegating', async (t) => {
+test('depth 1 keeps subagents from delegating', async (t) => {
   const { seen } = await run(t, 1);
   const worker = seen.find((entry) => entry.role === 'worker');
   assert.ok(!worker.tools.includes('task'));
