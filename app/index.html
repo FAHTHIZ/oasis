@@ -102,6 +102,7 @@
         <div class="tabs" role="tablist">
           <button role="tab" class="tab active" data-tab="files" aria-selected="true">Files</button>
           <button role="tab" class="tab" data-tab="changes" aria-selected="false">Changes <span class="count" id="changesCount"></span></button>
+          <button role="tab" class="tab" data-tab="terminal" aria-selected="false" id="terminalTab" hidden>Terminal</button>
         </div>
         <button class="icon-btn small" data-close="filesPanel" aria-label="Close files">
           <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M5 5l10 10M15 5L5 15" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>
@@ -113,6 +114,10 @@
       </div>
       <div class="file-list" id="fileList"></div>
       <div class="changes-list" id="changesList" hidden></div>
+      <div class="terminal-view" id="terminalView" hidden>
+        <div class="terminal-bar"><span class="terminal-status" id="terminalStatus">Not started</span><span class="row"><button class="btn ghost small" id="terminalStart">Start terminal</button><button class="btn ghost small" id="terminalStop" hidden>Stop</button></span></div>
+        <div class="terminal-host" id="terminalHost"></div>
+      </div>
       <div class="panel-foot" id="panelFoot">
         <button class="btn ghost small" id="exportButton">Export zip</button>
         <button class="btn primary small" id="pushButton" hidden>Push to GitHub</button>

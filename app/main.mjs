@@ -14,6 +14,7 @@ import { PLUGINS, getPlugin, pluginsFor, suggestPlugins } from './core/plugins.m
 import { detectRuntime, RuntimeAgent, RuntimeWorkspace, tokenFromPaste, saveRuntimeToken } from './core/runtime.mjs';
 import { APP_KEYBOARD_SHORTCUTS, searchAppCommands } from './core/command-palette.mjs';
 import { normalizeTaskProgress } from './core/task-progress.mjs';
+import { RuntimeTerminal, loadXterm } from './core/terminal.mjs';
 import { suggestToken, rankSuggestions, applySuggestion } from './core/composer-suggest.mjs';
 // Composer autocomplete state (declared early: refreshFiles clears the file cache).
 const suggest = { token: null, items: [], index: 0, commands: null, files: null, seq: 0 };
@@ -189,7 +190,7 @@ function renderShortcutGuide() {
 
 function renderCommandPalette() {
   const results = $('commandPaletteResults');
-  const items = searchAppCommands($('commandPaletteInput').value);
+  const items = searchAppCommands($('commandPaletteInput').value).filter((item) => !item.runtimeOnly || (RT && !RT.needsToken));
   results.replaceChildren();
   commandPaletteSelected = 0;
   if (!items.length) {
@@ -266,7 +267,8 @@ function runPaletteCommand(id) {
     'approval-mode': () => $('modeChip').click(),
     'focus-composer': () => $('input').focus(),
     'keyboard-help': () => requestAnimationFrame(() => openNativeDialog('shortcutsDialog')),
-    'export-chat': () => downloadChat()
+    'export-chat': () => downloadChat(),
+    'open-terminal': () => { toggleFiles(true); showPanelTab('terminal'); }
   };
   closeNativeDialog('commandPaletteDialog');
   const action = actions[id];
@@ -325,6 +327,11 @@ document.addEventListener('keydown', (event) => {
   if (modifier && event.key.toLowerCase() === 'k') {
     event.preventDefault();
     if (!$('shortcutsDialog').open) openNativeDialog('commandPaletteDialog');
+    return;
+  }
+  if (event.ctrlKey && !event.metaKey && !event.altKey && (event.key === '`' || event.code === 'Backquote') && RT && !RT.needsToken) {
+    event.preventDefault();
+    toggleTerminal();
     return;
   }
   if (modifier && event.key === '/') {
@@ -2179,6 +2186,9 @@ function updateProjectUI() {
   $('pushButton').hidden = !github || Boolean(RT);
   $('exportButton').hidden = Boolean(RT);
   $('newFileButton').hidden = Boolean(RT);
+  $('terminalTab').hidden = !(RT && !RT.needsToken);
+  if ($('terminalTab').hidden && !$('terminalView').hidden) showPanelTab('files');
+  $('panelFoot').hidden = (!$('terminalView').hidden) || ($('exportButton').hidden && $('pushButton').hidden);
 }
 
 /* ---------- Files panel ---------- */
@@ -2220,13 +2230,93 @@ function setPanelWidth(px) {
   });
   handle.addEventListener('dblclick', () => { document.documentElement.style.removeProperty('--panel-w'); localStorage.removeItem('oasis.panelWidth'); });
 }
-for (const tab of document.querySelectorAll('.tab')) {
-  tab.addEventListener('click', () => {
-    for (const other of document.querySelectorAll('.tab')) { other.classList.toggle('active', other === tab); other.setAttribute('aria-selected', String(other === tab)); }
-    $('fileList').hidden = tab.dataset.tab !== 'files';
-    $('changesList').hidden = tab.dataset.tab !== 'changes';
-    $('fileFilter').parentElement.hidden = tab.dataset.tab !== 'files';
-  });
+function showPanelTab(name) {
+  for (const other of document.querySelectorAll('#filesPanel .tab')) { other.classList.toggle('active', other.dataset.tab === name); other.setAttribute('aria-selected', String(other.dataset.tab === name)); }
+  $('fileList').hidden = name !== 'files';
+  $('changesList').hidden = name !== 'changes';
+  $('terminalView').hidden = name !== 'terminal';
+  $('fileFilter').parentElement.hidden = name !== 'files';
+  $('panelFoot').hidden = name === 'terminal' || ($('exportButton').hidden && $('pushButton').hidden);
+  if (name === 'terminal') void openTerminal();
+}
+for (const tab of document.querySelectorAll('#filesPanel .tab')) tab.addEventListener('click', () => showPanelTab(tab.dataset.tab));
+
+/* ---------- Terminal (connected to OASIS on a computer) ---------- */
+let terminal = null;
+let xterm = null;
+let fitTerminal = null;
+function termTheme() {
+  return { background: '#0B100C', foreground: '#E6EDE4', cursor: '#9BFF55', selectionBackground: '#9BFF5540' };
+}
+async function openTerminal() {
+  if (!RT || RT.needsToken) { $('terminalStatus').textContent = 'Connect to OASIS on a computer to use a terminal.'; return; }
+  if (!xterm) {
+    try { await loadXterm(); } catch (error) { $('terminalStatus').textContent = error.message; return; }
+    const Fit = globalThis.FitAddon && (globalThis.FitAddon.FitAddon || globalThis.FitAddon);
+    xterm = new globalThis.Terminal({ fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace', fontSize: 13, cursorBlink: true, convertEol: false, scrollback: 5000, theme: termTheme() });
+    if (typeof Fit === 'function') { const fit = new Fit(); xterm.loadAddon(fit); fitTerminal = () => { try { fit.fit(); } catch { /* hidden */ } }; }
+    xterm.open($('terminalHost'));
+    xterm.onData((data) => { if (terminal) void terminal.write(data); });
+    xterm.onResize(({ cols, rows }) => { if (terminal) void terminal.resize(cols, rows); });
+    new ResizeObserver(() => { if (!$('terminalView').hidden && fitTerminal) fitTerminal(); }).observe($('terminalHost'));
+  }
+  requestAnimationFrame(() => { if (fitTerminal) fitTerminal(); xterm.focus(); });
+  const saved = sessionStorage.getItem('oasis.terminal');
+  if (saved && !(terminal && terminal.running)) {
+    ensureTerminal();
+    if (await terminal.attach(saved)) { setTerminalRunning(true); $('terminalStatus').textContent = 'Reconnected · running'; void terminal.resize(xterm.cols, xterm.rows); }
+    else sessionStorage.removeItem('oasis.terminal');
+  }
+}
+function setTerminalRunning(running) {
+  $('terminalStart').hidden = running;
+  $('terminalStop').hidden = !running;
+}
+$('terminalStart').addEventListener('click', async () => {
+  if (!RT || RT.needsToken) return;
+  await openTerminal();
+  if (!xterm) return;
+  ensureTerminal();
+  const shell = (RT.status && RT.status.terminalShell) || '/bin/sh';
+  $('terminalStart').disabled = true;
+  try {
+    if (fitTerminal) fitTerminal();
+    terminal.size = { cols: xterm.cols, rows: xterm.rows };
+    const id = await terminal.start(shell, []);
+    if (id) {
+      sessionStorage.setItem('oasis.terminal', id);
+      setTerminalRunning(true);
+      $('terminalStatus').textContent = shell.split(/[\\/]/).pop() + ' · running';
+      void terminal.resize(xterm.cols, xterm.rows);
+      xterm.focus();
+    }
+  } catch (error) { $('terminalStatus').textContent = error.message || String(error); }
+  finally { $('terminalStart').disabled = false; }
+});
+function ensureTerminal() {
+  if (!terminal) {
+    terminal = new RuntimeTerminal({
+      client: RT.client,
+      approve: requestApproval,
+      onStatus: (text) => { $('terminalStatus').textContent = text; },
+      onOutput: (data, { truncated }) => { if (truncated) xterm.writeln('\r\n[older output dropped]'); xterm.write(data); },
+      onExit: (code, { lost = false } = {}) => {
+        setTerminalRunning(false);
+        if (lost) return; // The shell may still be running; reopening the tab reattaches.
+        sessionStorage.removeItem('oasis.terminal');
+        xterm.writeln('\r\n\x1b[2m[process exited]\x1b[0m');
+      }
+    });
+  }
+}
+$('terminalStop').addEventListener('click', () => { if (terminal) void terminal.stop(); });
+function toggleTerminal() {
+  if (!RT || RT.needsToken) return;
+  const panel = $('filesPanel');
+  const onTerminal = !panel.hidden && !$('terminalView').hidden;
+  if (onTerminal) { toggleFiles(false); $('input').focus(); return; }
+  toggleFiles(true);
+  showPanelTab('terminal');
 }
 $('fileFilter').addEventListener('input', () => refreshFiles());
 

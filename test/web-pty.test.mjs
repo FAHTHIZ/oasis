@@ -101,3 +101,30 @@ test('browser PTY endpoints require the bearer token and control only authorized
   assert.equal((await post('input', { id: 'unknown-id', data: 'no' })).status, 404);
   assert.ok(ptyManager.calls.some((call) => call.kind === 'write' && call.data === 'hello\r'));
 });
+
+test('companion terminal starts only the server shell, asks first and leaves the workspace free', async (t) => {
+  const root = await tempDir();
+  const ptyManager = fakePtyManager();
+  const app = await startOasisWebServer({ root, host: '127.0.0.1', port: 0, token: 'web-pty-test-token-0123456789', env: { OASIS_CONFIG_DIR: path.join(root, 'config'), SHELL: '/bin/bash', OPENAI_API_KEY: 'sk-secret' }, ptyManager });
+  t.after(async () => { await app.close(); await rm(root, { recursive: true, force: true }); });
+  const base = 'http://127.0.0.1:' + app.port;
+  const auth = { authorization: 'Bearer ' + app.token, 'content-type': 'application/json' };
+  const status = await (await fetch(base + '/api/status', { headers: auth })).json();
+  assert.equal(status.terminalShell, process.platform === 'win32' ? 'powershell.exe' : '/bin/bash');
+  // The client cannot pick another executable: the server always launches its own shell.
+  const start = await fetch(base + '/api/terminal/command', { method: 'POST', headers: auth, body: JSON.stringify({ command: 'curl', args: [], interactive: true, companion: true }) });
+  const startBody = await start.json();
+  assert.equal(start.status, 202, JSON.stringify(startBody));
+  const { jobId } = startBody;
+  assert.equal(ptyManager.calls.filter((call) => call.kind === 'start').length, 0, 'nothing starts before approval');
+  await waitForApproval(base, app.token, jobId);
+  for (let i = 0; i < 50 && !ptyManager.calls.some((call) => call.kind === 'start'); i++) await new Promise((resolve) => setTimeout(resolve, 10));
+  const started = ptyManager.calls.find((call) => call.kind === 'start');
+  if (process.platform !== 'win32') assert.equal(started.command, '/bin/bash');
+  assert.deepEqual(started.args, []);
+  assert.equal(started.options.cwd, root);
+  assert.equal(started.options.env.OPENAI_API_KEY, undefined, 'secrets are stripped');
+  // A second command (or a chat turn) is not blocked by the open companion terminal.
+  const second = await fetch(base + '/api/terminal/command', { method: 'POST', headers: auth, body: JSON.stringify({ command: 'node', args: ['--version'] }) });
+  assert.equal(second.status, 202, JSON.stringify(await second.json()));
+});
