@@ -9,6 +9,7 @@ User-facing change history grouped by package version. A version heading does no
 - Fixed: the activity label for `list_files` read "Used list files".
 
 ### Browser workspace
+- The approval sheet's "Always allow" button reads in plain words: "Always allow npm test commands" instead of "Always allow run_command(npm test:*)". The exact rule is in the button's tooltip. Activity cards no longer repeat the runtime's label as a grey hint.
 - Activity cards name every tool. Tools without a written label (plugin and MCP tools, `git_commit`, `browser` and others) used to all say "Completed a project step"; they now say what ran, for example "Used context7: resolve library id" or "Made a commit". Same change in the terminal labels. Hints that only repeat the label are hidden.
 - Steps that only ran tools sit together as one compact list, and the written answer gets clear space above it. Whitespace-only streamed text (common with gpt-oss) no longer leaves empty bubbles with their own timestamp row.
 - One web interface. The classic single-file page (`index.html`, served at `/classic`) is retired; `/`, `/classic` and `/index.html` now open the app at `/app/`. OASIS has two first-class interfaces: the terminal and the web app (the desktop app and `oasis app` package the same web app). A worker left by the old page clears its caches and unregisters itself. Not carried over yet: the subagent run monitor, cloud jobs list, GitHub status and local model list.
