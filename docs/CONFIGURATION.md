@@ -5,6 +5,27 @@ section names the source file that implements it, so the text can be checked
 against the code. Settings files are layered as described in
 [Architecture](ARCHITECTURE.md#settings-and-workspace-trust).
 
+## Permission modes
+
+`--permission-mode` (or `/mode`, or `permissions.defaultMode` in settings) picks how OASIS handles calls that need approval:
+
+| Mode | Behavior |
+| --- | --- |
+| `default` (`manual`) | Asks before commands, network access and protected-path edits. |
+| `acceptEdits` (`accept-edits`) | Applies file edits without asking; still asks for commands. |
+| `plan` | Read-only research; proposes a plan before changing anything. |
+| `auto` | A classifier approves routine actions and blocks risky ones; asks when unsure. |
+| `dontAsk` (`dont-ask`) | Never prompts. Calls that an allow rule or the mode default permits run; anything that would ask is denied with a reason the model can read, and the turn continues. |
+| `bypassPermissions` | Skips approval prompts. Refused under `--restricted` or `permissions.disableBypassPermissionsMode`. |
+
+`dontAsk` suits CI and unattended runs: pair it with `permissions.allow` rules for the commands the task needs. To keep your usual mode but turn every prompt into a denial, set:
+
+```json
+{ "permissions": { "denyInsteadOfPrompting": true } }
+```
+
+This setting only tightens, so OASIS honors it from any scope, including untrusted project settings. `PermissionDenied` hooks run for each denied call.
+
 ## Model providers
 
 Source: `src/provider-registry.mjs`.

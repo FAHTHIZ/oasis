@@ -4604,6 +4604,16 @@ async function authorizeCall(session, name, args, context, options) {
         return false;
       }
     }
+    // dontAsk mode / permissions.denyInsteadOfPrompting: a prompt becomes a
+    // denial the model can read, so unattended runs never hang on approval.
+    if (policy && policy.neverPrompt) {
+      overlay.permissionHookDenial = 'Denied without prompting (' + (policy.mode === 'dontAsk' ? 'dontAsk mode' : 'permissions.denyInsteadOfPrompting') + '): ' + (CLAUDE_TOOL_NAMES[name] || name) + ' needs approval and no allow rule covers it. Use an allowed tool or approach, or tell the user which permission rule would allow it.';
+      if (hasHooks(session.hooks, 'PermissionDenied')) {
+        const denied = await runHooks('PermissionDenied', { session_id: session.sessionId || 'unsaved', tool_name: hookToolName(session, name), oasis_tool_name: name, tool_name_oasis: name, tool_input: safeArgs, reason: 'never-prompt' }, hookOptions(session, context.env)).catch(() => null);
+        if (denied) session.hookMessages.push(...denied.messages);
+      }
+      return false;
+    }
     if (!baseApproval) return false;
     if (hasHooks(session.hooks, 'Notification')) {
       runHooks('Notification', { session_id: session.sessionId || 'unsaved', notification_type: 'permission_prompt', title: 'Permission needed', message: 'Oasis needs your permission to use ' + (CLAUDE_TOOL_NAMES[name] || name) }, hookOptions(session, context.env))

@@ -604,6 +604,12 @@ export class PermissionPolicy {
     this.sessionAllow = [];
     this.root = path.resolve(options.root || process.cwd());
     this.mode = normalizePermissionMode(options.mode) || normalizePermissionMode(permissions.defaultMode) || 'default';
+    this.denyInsteadOfPrompting = permissions.denyInsteadOfPrompting === true;
+  }
+
+  // True when a call that would wait on an approval prompt is denied instead.
+  get neverPrompt() {
+    return this.mode === 'dontAsk' || this.denyInsteadOfPrompting;
   }
 
   setMode(mode) {
@@ -656,6 +662,7 @@ export class PermissionPolicy {
   describe() {
     return {
       mode: this.mode,
+      denyInsteadOfPrompting: this.denyInsteadOfPrompting,
       allow: this.allow.map((r) => r.raw),
       ask: this.ask.map((r) => r.raw),
       deny: this.deny.map((r) => r.raw),

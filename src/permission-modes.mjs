@@ -1,11 +1,16 @@
 // Canonical permission-mode names and accepted CLI/user-facing aliases.
 // Aliases must map to an existing mode; they never add a less restrictive mode.
-export const PERMISSION_MODES = ['default', 'acceptEdits', 'plan', 'auto', 'bypassPermissions'];
+// dontAsk: never prompt. Calls an allow rule (or the mode default) permits run;
+// anything that would wait on an approval prompt is denied and the turn goes on.
+export const PERMISSION_MODES = ['default', 'acceptEdits', 'plan', 'auto', 'dontAsk', 'bypassPermissions'];
 
 const MODE_ALIASES = new Map([
   ['manual', 'default'],
   ['accept-edits', 'acceptEdits'],
-  ['accept_edits', 'acceptEdits']
+  ['accept_edits', 'acceptEdits'],
+  ['dont-ask', 'dontAsk'],
+  ['dont_ask', 'dontAsk'],
+  ['dontask', 'dontAsk']
 ]);
 
 export function normalizePermissionMode(value) {

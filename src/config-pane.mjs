@@ -46,7 +46,7 @@ export function configItems() {
     },
     {
       key: 'permissions.defaultMode', label: 'Default permission mode', description: 'Mode new sessions start in',
-      choices: async () => ['default', 'acceptEdits', 'plan', 'auto'],
+      choices: async () => ['default', 'acceptEdits', 'plan', 'auto', 'dontAsk'],
       current: async (state, saved) => getPath(saved, 'permissions.defaultMode') || 'default',
       apply: async (value, state, run) => { await saveSetting('permissions.defaultMode', value, state.env); if (state.session) await run('mode', value); return 'Default permission mode set to ' + value + '.'; }
     },

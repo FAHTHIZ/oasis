@@ -256,6 +256,7 @@ const MODE_LABELS = {
   acceptEdits: '⏵⏵ accept edits on',
   plan: '⏸ plan mode on',
   auto: '⏵⏵ auto mode on',
+  dontAsk: '⏵ never ask (denies prompts)',
   bypassPermissions: '⏵⏵ bypass permissions on'
 };
 
