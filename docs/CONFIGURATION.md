@@ -59,9 +59,43 @@ Built-in providers:
 | `llamacpp` (local) | openai-compatible | `http://127.0.0.1:8080/v1` | none |
 | `jan` (local) | openai-compatible | `http://127.0.0.1:1337/v1` | none |
 | `vllm` (local) | openai-compatible | `http://127.0.0.1:8000/v1` | `VLLM_API_KEY` (optional) |
+| `omniroute` (gateway) | openai-compatible | `http://127.0.0.1:20128/v1` | `OMNIROUTE_API_KEY` |
 
 Amazon Bedrock, Google Vertex AI and Microsoft Foundry are configured through
 `src/cloud-providers.mjs`, not this table.
+
+### OmniRoute gateway
+
+[OmniRoute](https://github.com/cheaper-inference/omniroute) is an MIT-licensed,
+self-hosted gateway: one OpenAI-compatible endpoint on `localhost:20128` that
+routes to the providers you connect in its dashboard, with fallback, quota
+tracking and `auto/*` routing combos.
+
+1. Install and start it: `npm install -g omniroute`, then `omniroute` (Node.js 22.22.2+ or
+   24–26; the setup wizard sets an admin password).
+2. In its dashboard, connect at least one provider and create an API key under
+   **Endpoints**.
+3. Connect OASIS. Paste the address, the key and (recommended) a model in one go:
+   `oasis connect` → `http://localhost:20128/v1 sk-… llm7/codestral-latest`.
+   Or use the environment: `OMNIROUTE_API_KEY=sk-… oasis connect --from-env`.
+
+What OASIS does differently for a gateway:
+
+- OmniRoute's model list includes models from providers that are not connected.
+  When a probe fails with an account or upstream error, OASIS rules out that
+  provider's other models in one step, never saves them as backups, and prefers
+  backups from the upstream that answered.
+- A 5xx such as "bridge is not configured" is not retried; the run moves to the
+  next fallback at once.
+- It runs on localhost but forwards to the cloud, so it is not offered as a local
+  model, gets cloud timeouts, and is never priced as free. Model prices come from
+  the [models.dev](https://models.dev) catalogue when the name is known. Use
+  OmniRoute's own usage page for actual spend.
+
+Tested on 2026-11-08 with OmniRoute 3.8.53 and the keyless LLM7 upstream
+(`llm7/codestral-latest`, `llm7/gpt-oss:20b`): model discovery, streaming tool
+calls, the paste flow and the no-retry path. LLM7's free daily token quota runs
+out fast; OmniRoute passes its 429 through and OASIS reports it as a daily limit.
 
 ### Adding or re-pointing a provider
 

@@ -21,6 +21,7 @@ export const PRESETS = {
   ollama: { label: 'Ollama (your computer)', protocol: 'openai', baseURL: 'http://localhost:11434/v1', model: 'qwen3-coder:30b', keyHint: 'not needed', note: 'Start Ollama with OLLAMA_ORIGINS=* so the app may reach it.' },
   lmstudio: { label: 'LM Studio (your computer)', protocol: 'openai', baseURL: 'http://localhost:1234/v1', model: '', keyHint: 'not needed', note: 'Turn on the local server and CORS in LM Studio.' },
   llamacpp: { label: 'llama.cpp server', protocol: 'openai', baseURL: 'http://localhost:8080/v1', model: '', keyHint: 'not needed' },
+  omniroute: { label: 'OmniRoute (gateway)', protocol: 'openai', baseURL: 'http://localhost:20128/v1', model: 'auto', keyHint: 'sk-… from Dashboard → Endpoints', note: 'A self-hosted gateway that routes one endpoint to many providers. Start it with `omniroute`.' },
   custom: { label: 'Custom (OpenAI-compatible)', protocol: 'openai', baseURL: '', model: '', keyHint: '' }
 };
 

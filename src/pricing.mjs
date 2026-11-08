@@ -20,8 +20,12 @@ export function isLocalProvider(config = {}) {
 // cloud model instead of shown as free.
 const LOCAL_MODEL_PORTS = new Set(['11434', '1234', '8080']);
 const CLOUD_ONLY_MODEL = /^(?:[\w.-]+\/)?(?:gpt-|o[1-9](?:-|$)|claude|gemini-|grok-)/i;
+// OmniRoute's default port: every model behind it is a routed cloud model,
+// whatever its name (llm7/codestral-latest), so it is never priced as free.
+const GATEWAY_PORTS = new Set(['20128']);
 export function cloudModelBehindGateway(model, config = {}) {
   if (config.protocol === 'ollama') return false;
+  try { if (GATEWAY_PORTS.has(new URL(String(config.baseURL || '')).port)) return true; } catch { /* not a URL */ }
   if (!CLOUD_ONLY_MODEL.test(String(model || ''))) return false;
   try {
     const url = new URL(String(config.baseURL || ''));
