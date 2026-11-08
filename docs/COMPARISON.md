@@ -9,7 +9,7 @@ Sources: the [Claude Code subagent docs](https://code.claude.com/docs/en/sub-age
 | Area | Claude Code | OASIS |
 | --- | --- | --- |
 | Built-in subagents | Explore, Plan, general-purpose | `explore`, `plan`, `general-purpose`, plus `code-review` and `security-review` |
-| Agent files | `.claude/agents/*.md` front matter | Reads the same files and fields: `tools`, `disallowedTools`, `model`, `maxTurns`, `permissionMode`, `skills`, `memory`, `background`, `isolation`, `effort`, `color`, `hooks`, `omitClaudeMd`, `initialPrompt` |
+| Agent files | `.claude/agents/*.md` front matter | Reads the same files and fields: `tools`, `disallowedTools`, `model`, `maxTurns`, `permissionMode`, `skills`, `memory`, `background`, `isolation`, `effort`, `color`, `hooks`, `omitClaudeMd`, `initialPrompt`, `mcpServers` |
 | Parallel and background agents | Yes | Yes: 6 parallel, 8 background, with `agent_status`, `send_message` and `agent_stop` |
 | Agent teams | Shared task list, messaging | Shared task board with leases, teammate messages, tmux panes |
 | Worktree isolation | `isolation: worktree` | Same, and changes are committed on the agent's branch |
@@ -34,7 +34,6 @@ Sources: the [Claude Code subagent docs](https://code.claude.com/docs/en/sub-age
 | Model quality and tuning | Claude Code's prompts and tool schemas are tuned for Claude models, and that tuning accounts for much of its reliability. | OASIS has to work across many models, so it can't tune for one family the same way. |
 | Edits in default mode | Claude Code asks before every edit in `default` mode. OASIS applies edits inside the workspace without asking. Edits are checkpointed and can be rewound, and protected config paths still prompt. | A deliberate choice for speed. Use `plan` mode or `ask` rules for `edit_file` if you want Claude Code's behaviour. |
 | Field maturity | Claude Code is used by a very large population, and its edge cases get found quickly. | OASIS has 2,200+ automated tests and adversarial suites, but far fewer real-world hours. |
-| Per-agent MCP servers | Claude Code agent files can declare their own `mcpServers`, connected only while the agent runs. | OASIS subagents share the parent's MCP servers; inline per-agent servers are not supported yet. |
 | Code signing | macOS warns on first launch of unsigned apps. | OASIS macOS packages are not code-signed yet. |
 | Monolithic core | `src/agent.mjs` is still about 6,800 lines, which slows review. | Splitting it is planned; shared pieces like the SSRF-guarded HTTP client have been extracted first. |
 

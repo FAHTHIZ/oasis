@@ -110,6 +110,20 @@ function listField(value) {
   return items.map((item) => String(item).trim()).filter(Boolean);
 }
 
+function mcpServersField(value) {
+  if (!value || typeof value !== 'object') return null;
+  const refs = [];
+  const inline = {};
+  const take = (map) => { for (const [name, spec] of Object.entries(map)) if (spec && typeof spec === 'object' && !Array.isArray(spec) && Object.keys(inline).length < 10) inline[name] = spec; };
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      if (typeof item === 'string' && item.trim()) refs.push(item.trim());
+      else if (item && typeof item === 'object' && !Array.isArray(item)) take(item);
+    }
+  } else take(value);
+  return refs.length || Object.keys(inline).length ? { refs, inline } : null;
+}
+
 function booleanField(value) {
   return value === true || String(value).toLowerCase() === 'true';
 }
@@ -143,6 +157,9 @@ export function normalizeAgentDefinition(raw, body, { name, source, plugin = fal
     color: AGENT_COLORS.includes(color) ? color : null,
     // Hooks scoped to this agent; ignored for plugin agents (matches Claude Code).
     hooks: !plugin && data.hooks && typeof data.hooks === 'object' && !Array.isArray(data.hooks) ? data.hooks : null,
+    // MCP servers for this agent: names of configured servers (already shared
+    // with every subagent) and inline definitions connected only while it runs.
+    mcpServers: plugin ? null : mcpServersField(data.mcpservers),
     // Start without CLAUDE.md / OASIS.md project instructions.
     omitClaudeMd: booleanField(data.omitclaudemd),
     // First user turn when this agent runs as the main session agent (--agent); not for plugin agents.
