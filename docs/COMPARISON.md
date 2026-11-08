@@ -11,12 +11,13 @@ Last reviewed November 2026. Sources are linked in each section. Where a page di
 | License | Open source | Proprietary | Apache-2.0 | Apache-2.0 | Open source | Apache-2.0 |
 | Models | Any: OpenAI-compatible, Anthropic, Gemini, Bedrock, Vertex, Foundry, local | Anthropic | ChatGPT plan or API key | Gemini API, Vertex AI, Code Assist | Many providers | 15+ providers |
 | Terminal UI | Yes | Yes | Yes | Yes | Yes | Yes |
-| Browser workspace | Yes, local | Cloud sessions | Codex Web (cloud) | No | No | No |
+| Web interface | Yes, local | Cloud sessions | Codex Web (cloud) | No | Yes, local (`opencode web`) | No |
 | Desktop app | Yes | Yes | Yes | No | Beta | Yes |
 | MCP | Yes, including MCP Tasks | Yes | Yes | Yes | Yes | Yes |
-| Subagents | Yes: parallel, background, resumable, teams, worktrees | Yes | Agent command center | No | `general` subagent | No |
+| Subagents | Yes: parallel, background, resumable, teams, worktrees | Yes | Agent command center | Yes: built-in and custom, parallel | `general` subagent | No |
+| Claude Code plugins | Yes, from any marketplace, with a one-click installer in the web app | Yes | No (own plugin format) | No (own extensions) | No (own plugins) | No |
 
-Sources: [Codex README](https://github.com/openai/codex), [Codex releases](https://github.com/openai/codex/releases), [Gemini CLI README](https://github.com/google-gemini/gemini-cli), [OpenCode README](https://github.com/sst/opencode), [Goose README](https://github.com/block/goose), [Claude Code changelog](https://code.claude.com/docs/en/changelog).
+Sources: [Gemini CLI subagents](https://developers.googleblog.com/en/subagents-have-arrived-in-gemini-cli/), [OpenCode web](https://opencode.ai/docs), [Codex README](https://github.com/openai/codex), [Codex releases](https://github.com/openai/codex/releases), [Gemini CLI README](https://github.com/google-gemini/gemini-cli), [OpenCode README](https://github.com/sst/opencode), [Goose README](https://github.com/block/goose), [Claude Code changelog](https://code.claude.com/docs/en/changelog).
 
 ## Claude Code
 
@@ -48,11 +49,11 @@ Claude Code is the reference point for agent behaviour, and OASIS reads its conf
 
 ## Gemini CLI
 
-[Gemini CLI](https://github.com/google-gemini/gemini-cli) covers MCP, sandboxing, checkpointing and headless `json` / `stream-json` output, with a VS Code companion. It runs Google's models only, and its README doesn't describe subagents. OASIS runs Gemini models too, with thought-signature replay, and adds subagents, teams and other providers.
+[Gemini CLI](https://github.com/google-gemini/gemini-cli) covers MCP, sandboxing, checkpointing and headless `json` / `stream-json` output, with a VS Code companion. It runs Google's models only. Since v0.36 it has [subagents](https://developers.googleblog.com/en/subagents-have-arrived-in-gemini-cli/): built-in `codebase_investigator`, `cli_help` and `generalist`, custom agents in `.gemini/agents`, parallel runs and remote A2A agents. OASIS runs Gemini models too, with thought-signature replay, and adds background and resumable agents, teams, worktree isolation and other providers.
 
 ## OpenCode
 
-[OpenCode](https://github.com/sst/opencode) has a `build` agent, a read-only `plan` agent and a `general` subagent invoked with `@general`, plus a desktop app in beta. OASIS has the same split (default and `plan` modes, built-in subagents) and adds background, resumable and team agents, worktree isolation and a browser workspace.
+[OpenCode](https://github.com/sst/opencode) has a `build` agent, a read-only `plan` agent and a `general` subagent invoked with `@general`, plus a desktop app and a local [web app](https://opencode.ai/docs) (`opencode web`, `opencode pair`). It is the closest open-source competitor and has a much larger community. OASIS has the same split (default and `plan` modes, built-in subagents) and adds background, resumable and team agents, worktree isolation, Claude Code plugin compatibility and a verification step after edits.
 
 ## Goose
 
@@ -66,7 +67,8 @@ Claude Code is the reference point for agent behaviour, and OASIS reads its conf
 
 - **Any provider.** OpenAI-compatible, Anthropic, Gemini, cloud and local servers. Fallback models and task-aware routing send simple read-only requests to a cheaper model.
 - **Verification gate.** The agent is sent back when it reports success without reviewing its diff or running checks.
-- **One package, every interface.** The terminal, a local browser workspace (with an interactive terminal, file panel and diff review), a desktop app, ACP for Zed and JetBrains, and Telegram, Discord and Slack gateways.
+- **Two interfaces, one runtime.** The terminal and a local web app (interactive terminal, Files and Changes panels, plugin installer), which the desktop app wraps. Sessions move between them. ACP, editor, SDK and messaging integrations connect to the same runtime.
+- **Claude Code plugins.** Installed and used from Anthropic's official marketplace on 8 November 2026: superpowers, frontend-design, code-review, context7, playwright, hookify, security-guidance and others, including their hooks, skills and MCP servers.
 - **Terminal integration.** Inline images (Kitty and iTerm2) and OSC 9;4 progress in the tab or taskbar.
 
 ## Where OASIS still lags, and why
@@ -78,6 +80,7 @@ Claude Code is the reference point for agent behaviour, and OASIS reads its conf
 | Field maturity | Claude Code and Codex are used by very large populations, so their edge cases get found quickly. | OASIS has about 2,300 automated tests and adversarial suites, but far fewer real-world hours. |
 | Edits in default mode | Claude Code asks before every edit in `default` mode. OASIS applies edits inside the workspace without asking (they are checkpointed and can be rewound, and protected config paths still prompt). | A deliberate choice for speed. Use `plan` mode or `ask` rules for `edit_file` to get Claude Code's behaviour. |
 | Code signing | macOS warns on first launch of unsigned apps. | OASIS macOS packages are not code-signed yet. |
+| Plugin cost | Each enabled plugin adds tools and prompt text. With 15 on, a request carried 47 tools and about 14,500 input tokens. | Plugin MCP tools are loaded eagerly. Lazy loading is planned. |
 | Core size | `src/agent.mjs` is about 5,500 lines, down from 6,800, and the turn loop alone is about 1,000 lines. | Splitting continues. Provider retry, request shaping, model budgets, turn guards, compaction, tool results and steering are already separate modules. |
 
 ## How to check these claims

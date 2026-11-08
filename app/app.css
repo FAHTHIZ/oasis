@@ -512,3 +512,18 @@ html.lite .topbar{backdrop-filter:none;-webkit-backdrop-filter:none;background:v
 .cc-plugins .connection-list .row{flex:none;margin:0}
 .cc-market label{display:block;margin-top:8px}
 .cc-market #ccResults{max-height:340px;overflow:auto}
+
+/* Subagents started in a turn */
+.subagents{border:1px solid var(--line);border-radius:var(--r-md);background:var(--panel);padding:10px 12px;margin:0 0 14px}
+.subagents-head{font-size:12.5px;font-weight:600;color:var(--text-2);margin-bottom:6px}
+.subagents ul{list-style:none;margin:0;padding:0;display:grid;gap:6px}
+.subagent{display:grid;grid-template-columns:10px minmax(0,1fr) auto;column-gap:10px;align-items:center;font-size:13.5px}
+.subagent .state{width:8px;height:8px;border-radius:50%;background:var(--muted)}
+.subagent.running .state,.subagent.stopping .state{background:var(--warn);animation:pulse 1.2s ease-in-out infinite}
+.subagent.completed .state{background:var(--accent)}
+.subagent.failed .state,.subagent.cancelled .state,.subagent.interrupted .state{background:var(--danger)}
+.subagent .sa-name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--text)}
+.subagent .sa-status{font-size:12px;color:var(--muted)}
+.subagent .sa-detail{grid-column:2 / -1;font-size:12.5px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.subagent .sa-detail:empty{display:none}
+@media (prefers-reduced-motion:reduce){.subagent .state{animation:none}}

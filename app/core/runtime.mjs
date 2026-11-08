@@ -4,6 +4,7 @@
 // everything else in the app (chat, plugins, approvals, files panel) stays the
 // same, so there is one interface whether OASIS runs in a tab or on a laptop.
 
+import { SubagentTracker } from './subagents.mjs';
 import { extractRuntimeTodos } from './task-progress.mjs';
 
 const TOKEN_KEY = 'oasis.web.token';
@@ -296,6 +297,7 @@ export class RuntimeAgent {
       let after = 0;
       let done = false;
       let idle = 0;
+      const subagents = new SubagentTracker();
       while (!done) {
         if (signal.aborted) { this.emit('stopped'); break; }
         let job;
@@ -314,6 +316,7 @@ export class RuntimeAgent {
           const data = event.data || {};
           switch (event.type) {
             case 'started': if (data.sessionId) this.sessionId = data.sessionId; break;
+            case 'agent_activity': if (subagents.update(data)) this.emit('subagents', { workers: subagents.list() }); break;
             case 'assistant_delta': if (data.text) addText(String(data.text), false); break;
             case 'assistant_text': if (data.text) addText(String(data.text), true); break;
             case 'command_output': if (data.text) addText(String(data.text), true); break;
