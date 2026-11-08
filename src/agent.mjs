@@ -3719,7 +3719,7 @@ async function enforceOutputSchema(child, record, outcome, runOptions, options) 
 async function runSubagent(parent, args, context, options) {
   const depth = Math.max(0, Number(parent.subagentDepth) || 0);
   const maxDepth = subagentMaxDepth(parent, options.env || process.env);
-  if (options.isSubagent && depth >= maxDepth) throw new Error(maxDepth > 1 ? 'Subagents at depth ' + depth + ' cannot launch further subagents (subagentMaxDepth is ' + maxDepth + ').' : 'Subagents cannot launch further subagents. Set subagentMaxDepth (2-3) to allow nested delegation.');
+  if (options.isSubagent && depth >= maxDepth) throw new Error(maxDepth > 1 ? 'Subagents at depth ' + depth + ' cannot launch further subagents (subagentMaxDepth is ' + maxDepth + ').' : 'Subagents cannot launch further subagents (subagentMaxDepth is 1).');
   const agents = parent.agents || BUILTIN_AGENTS;
   const requested = String(args.subagent_type || 'general-purpose');
   // Claude Code spells built-ins "Explore" and "Plan"; accept any case.

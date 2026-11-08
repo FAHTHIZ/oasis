@@ -17,13 +17,13 @@ Sources: the [Claude Code subagent docs](https://code.claude.com/docs/en/sub-age
 | Project instructions, skills, commands, plugins, MCP | `CLAUDE.md`, `.claude/*`, `.mcp.json` | Reads all of these without conversion |
 | Headless mode | `claude -p`, `--output-format stream-json` | `oasis -p` / `oasis exec`, same output formats, `--output-schema` |
 | Checkpoints and rewind | Yes | Yes |
+| Nested delegation | Up to 3 layers, `CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH` | Same default and variable (or `subagentMaxDepth`); read-only agents stay leaves |
 
 ## Where OASIS goes further
 
 - **Any provider.** OpenAI-compatible, Anthropic, Gemini and local servers, with fallback models and task-aware routing to a cheaper model for simple read-only requests.
 - **Structured subagent output.** `output_schema` on `task`, with one correction turn (from Hermes). The Claude Code subagent docs don't describe a per-call schema for a subagent's report.
 - **Stall monitor.** Background agents that go silent are stopped as `stalled`, and their partial report is kept (from Hermes).
-- **Optional nested delegation.** Claude Code subagents can't spawn subagents. With `subagentMaxDepth` set to 2 or 3, OASIS lets writing subagents delegate, as Hermes does with orchestrator agents. Read-only agents stay leaves, and the parallel and background caps are shared across the tree.
 - **Verification gate.** The agent is sent back when it reports success without reviewing its diff or running checks.
 - **Interfaces.** A local browser workspace, a desktop app, ACP for Zed and JetBrains, and Telegram, Discord and Slack gateways come in the same package.
 
