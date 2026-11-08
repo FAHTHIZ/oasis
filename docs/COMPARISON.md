@@ -9,7 +9,7 @@ Sources: the [Claude Code subagent docs](https://code.claude.com/docs/en/sub-age
 | Area | Claude Code | OASIS |
 | --- | --- | --- |
 | Built-in subagents | Explore, Plan, general-purpose | `explore`, `plan`, `general-purpose`, plus `code-review` and `security-review` |
-| Agent files | `.claude/agents/*.md` front matter | Reads the same files and fields: `tools`, `disallowedTools`, `model`, `maxTurns`, `permissionMode`, `skills`, `memory`, `background`, `isolation`, `effort`, `color`, `hooks`, `omitClaudeMd`, `initialPrompt`, `mcpServers` |
+| Agent files | `.claude/agents/*.md` front matter | Reads the same files and fields: `tools`, `disallowedTools`, `model`, `maxTurns`, `permissionMode`, `skills`, `memory`, `background`, `isolation`, `effort`, `color`, `hooks`, `omitClaudeMd`, `initialPrompt`, `mcpServers`, `autoCompactWindow` |
 | Parallel and background agents | Yes | Yes: 6 parallel, 8 background, with `agent_status`, `send_message` and `agent_stop` |
 | Agent teams | Shared task list, messaging | Shared task board with leases, teammate messages, tmux panes |
 | Worktree isolation | `isolation: worktree` | Same, and changes are committed on the agent's branch |

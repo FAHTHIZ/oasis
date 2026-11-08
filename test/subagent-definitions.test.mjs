@@ -44,7 +44,7 @@ test('agent memory reads the first 200 lines of MEMORY.md for the chosen scope',
   assert.equal(agentMemoryDirectory({ name: 'r', memory: 'user' }, root, { HOME: '/h' }), path.join('/h', '.claude', 'agent-memory', 'r'));
 });
 
-async function harness(t, { definition, taskArgs, childReplies, files = {}, inline = null, type = 'scout' }) {
+async function harness(t, { definition, taskArgs, childReplies, files = {}, inline = null, type = 'scout', extraEnv = {} }) {
   const root = await mkdtemp(path.join(os.tmpdir(), 'oasis-subdef-'));
   t.after(() => rm(root, { recursive: true, force: true }));
   await mkdir(path.join(root, '.oasis', 'agents'), { recursive: true });
@@ -69,11 +69,11 @@ async function harness(t, { definition, taskArgs, childReplies, files = {}, inli
   });
   await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
   t.after(() => server.close());
-  const env = { ...process.env, OASIS_SUBAGENT_EFFORT: '', CLAUDE_CODE_SUBAGENT_EFFORT: '' };
+  const env = { ...process.env, OASIS_SUBAGENT_EFFORT: '', CLAUDE_CODE_SUBAGENT_EFFORT: '', ...extraEnv };
   const session = await createSession({ root, env, agentsInline: inline, config: { protocol: 'openai-compatible', baseURL: 'http://127.0.0.1:' + server.address().port + '/v1', model: 'fixture', apiKey: '', maxSteps: 4 } });
   await runAgentTurn(session, 'go', { autoApprove: true, env });
   const children = payloads.filter((payload) => /You find files/.test(payload.messages[0].content));
-  return { children, taskResult, root };
+  return { children, taskResult, root, session };
 }
 
 test('disallowedTools removes tools from the child and memory is injected', async (t) => {
@@ -191,4 +191,14 @@ test('--agent applies initialPrompt to the first turn and honours disallowedTool
   assert.ok(!names.includes('run_command') && !names.includes('run_shell'));
   const skipped = await createSession({ root, config, agent: 'triage', skipAgentInitialPrompt: true });
   assert.equal(skipped.agentInitialPrompt, undefined);
+});
+
+test('autoCompactWindow lowers the window the agent compacts against', async (t) => {
+  const { getAgent, listAgents } = await import('../src/agent-tasks.mjs');
+  const { compactionThresholdChars } = await import('../src/context.mjs');
+  const { session } = await harness(t, { definition: 'autoCompactWindow: 200000\n', taskArgs: {}, childReplies: ['ok'], extraEnv: { OASIS_CONTEXT_WINDOW: '1000000' } });
+  const child = getAgent(session, listAgents(session)[0].id).child;
+  assert.equal(child.config.compactThresholdChars, compactionThresholdChars({ contextWindow: 200000 }, {}));
+  assert.ok(child.config.compactThresholdChars < compactionThresholdChars(session.config, { OASIS_CONTEXT_WINDOW: '1000000' }));
+  assert.equal(normalizeAgentDefinition({ autoCompactWindow: '5000' }, '', { name: 'x', source: 'user' }).autoCompactWindow, null);
 });
