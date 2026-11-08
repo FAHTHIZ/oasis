@@ -129,7 +129,11 @@ function printQuickHelp() {
 }
 
 function printHelp() {
-  stdout.write([
+  stdout.write(helpText());
+}
+
+function helpText() {
+  return ([
     'OASIS — a plain-English coding agent',
     '',
     'Usage:',
@@ -3164,7 +3168,22 @@ async function watchCommentsCommand(root, autoApprove, persistence = {}) {
   if (session) closeSession(session);
 }
 
+const WEB_HELP = [
+  'Usage: oasis web [--open] [--host HOST] [--port PORT] [--tls-cert FILE --tls-key FILE] [--allow-insecure-lan]',
+  '',
+  'Serves the OASIS browser workspace from this computer. The browser is only the interface;',
+  'files, commands and model requests stay in this process.',
+  '',
+  '  --open                 open the workspace in your default browser',
+  '  --host HOST            bind address (default 127.0.0.1; use 0.0.0.0 only on a trusted private network)',
+  '  --port PORT            port (default 3917; 0 picks a free port)',
+  '  --tls-cert FILE        serve HTTPS with this certificate (requires --tls-key)',
+  '  --tls-key FILE         private key for --tls-cert',
+  '  --allow-insecure-lan   allow plain HTTP on a non-loopback address'
+].join('\n');
+
 async function startWebWorkspace(root, args) {
+  if (args.includes('--help') || args.includes('-h')) { process.stdout.write(WEB_HELP + '\n'); return; }
   await ensureModelProviderSetup(root);
   let host = '127.0.0.1';
   let port = 3917;
@@ -3447,6 +3466,23 @@ async function manageExternalExtensions(root, args, autoApprove) {
   throw new Error('Unknown extensions action "' + action + '". Use list, inspect, install, or remove.');
 }
 
+// Commands that print their own detailed help for --help.
+const SELF_HELP_COMMANDS = new Set(['connect', 'setup', 'update', 'web']);
+
+// `oasis COMMAND --help` prints that command's lines from the main help instead
+// of running it (some commands would otherwise create files or start servers).
+function subcommandHelp(rawArgs) {
+  const command = rawArgs[0];
+  if (!command || command.startsWith('-') || SELF_HELP_COMMANDS.has(command)) return false;
+  if (!rawArgs.slice(1).some((arg) => arg === '--help' || arg === '-h')) return false;
+  const lines = helpText().split('\n');
+  const pattern = new RegExp('^\\s+oasis ' + command.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '(\\s|$)');
+  const matches = lines.filter((line) => pattern.test(line));
+  if (!matches.length) return false;
+  stdout.write('Usage:\n' + matches.join('\n') + '\n\nRun oasis --help for every command.\n');
+  return true;
+}
+
 async function main() {
   // HTTPS_PROXY / HTTP_PROXY / NO_PROXY for every outbound request (Node's fetch ignores them).
   installProxyFromEnv();
@@ -3463,6 +3499,7 @@ async function main() {
       i--;
     }
   }
+  if (subcommandHelp(rawArgs)) return;
   if (process.env.OASIS_PROFILE) { const { activeProfile } = await import('./config.mjs'); activeProfile(process.env); }
   if (rawArgs[0] === 'completion' || rawArgs[0] === 'completions') {
     const { completionScript, completionUsage } = await import('./shell-completion.mjs');
