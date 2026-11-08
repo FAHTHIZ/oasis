@@ -5,6 +5,8 @@ User-facing change history grouped by package version. A version heading does no
 ## Unreleased
 
 ### Browser workspace
+- Activity cards name every tool. Tools without a written label (plugin and MCP tools, `git_commit`, `browser` and others) used to all say "Completed a project step"; they now say what ran, for example "Used context7: resolve library id" or "Made a commit". Same change in the terminal labels. Hints that only repeat the label are hidden.
+- Steps that only ran tools sit together as one compact list, and the written answer gets clear space above it. Whitespace-only streamed text (common with gpt-oss) no longer leaves empty bubbles with their own timestamp row.
 - One web interface. The classic single-file page (`index.html`, served at `/classic`) is retired; `/`, `/classic` and `/index.html` now open the app at `/app/`. OASIS has two first-class interfaces: the terminal and the web app (the desktop app and `oasis app` package the same web app). A worker left by the old page clears its caches and unregisters itself. Not carried over yet: the subagent run monitor, cloud jobs list, GitHub status and local model list.
 - The browser end-to-end check now drives the app: a scripted model fixes a bug, the user approves the edit in the approval sheet, the test passes, and axe finds no color-contrast problems in dark, light and phone views. Screenshots are saved as CI artifacts.
 - Accessibility: the message box is announced as a combobox for its `/` and `@` suggestions, and the files-panel resize handle reports its width.
