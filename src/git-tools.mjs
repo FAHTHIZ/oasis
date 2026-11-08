@@ -275,7 +275,16 @@ async function gitCommit(root, args, options) {
   if (entries.some((entry) => entry.status.includes('U'))) return fail('The repository has unresolved merge conflicts. Resolve them before committing.');
   // Already-staged files are committed too, so they count toward the secret check.
   const selected = entries.filter((entry) => entry.status[0] !== ' ' && entry.status[0] !== '?' || within(entry.file, prefixes));
-  if (!selected.length) return fail('There is nothing to commit' + (prefixes.length ? ' under ' + prefixes.join(', ') : '') + '.');
+  if (!selected.length) {
+    // Weak models retry a commit that already succeeded (seen live with
+    // gpt-oss-20b: six more attempts). Say plainly that the work is committed.
+    const earlier = options.session && options.session.lastGitCommit;
+    const head = earlier ? await git(root, ['rev-parse', '--short', 'HEAD'], { env }) : null;
+    if (earlier && head && head.stdout.trim() === earlier.commit) {
+      return fail('There is nothing left to commit: your earlier git_commit already created ' + earlier.commit + ' ("' + earlier.subject + '") and the working tree is clean. The commit is done. Do not commit again; tell the user the commit hash and subject.', { alreadyCommitted: earlier });
+    }
+    return fail('There is nothing to commit' + (prefixes.length ? ' under ' + prefixes.join(', ') : '') + '.');
+  }
   const secrets = selected.filter((entry) => !entry.status.includes('D') && sensitivePath(entry.file)).map((entry) => entry.file);
   if (secrets.length) return fail('Refusing to commit files that look like secrets: ' + secrets.join(', ') + '. Add them to .gitignore, or commit them yourself if this is intentional.', { blocked: secrets });
   const leaked = await stagedSecretHits(root, prefixes, env);
@@ -300,7 +309,8 @@ async function gitCommit(root, args, options) {
   const head = await git(root, ['log', '-1', '--format=%h%x09%s'], { env });
   const stat = await git(root, ['show', '--stat', '--format=', '--no-color', 'HEAD'], { env });
   const [hash, subject] = head.stdout.split('\t');
-  return { ok: true, commit: hash, subject, branch, files: selected.length, stat: stat.stdout.slice(-4000), ...(commit.stdout.includes('hook') ? { output: commit.stdout.slice(-2000) } : {}) };
+  if (options.session) options.session.lastGitCommit = { commit: hash, subject };
+  return { ok: true, done: 'Committed. Tell the user the hash and subject; do not commit again unless they ask.', commit: hash, subject, branch, files: selected.length, stat: stat.stdout.slice(-4000), ...(commit.stdout.includes('hook') ? { output: commit.stdout.slice(-2000) } : {}) };
 }
 
 async function gitBranch(root, args, options) {
