@@ -977,3 +977,5 @@ svg.gi{display:inline-block;width:1em;height:1em;vertical-align:-0.125em;flex:no
 .phone-link-text{display:grid;gap:6px;flex:1 1 220px;min-width:0}
 .phone-link-text code{font-size:12px;word-break:break-all;user-select:all}
 .phone-link-text small{color:var(--muted);font-size:12.5px;line-height:1.4}
+/* Code never uses ligatures, even when JetBrains Mono is installed locally. */
+:is(code,pre,kbd,samp,textarea),:is(code,pre) *{font-variant-ligatures:none;font-feature-settings:"calt" 0,"liga" 0}

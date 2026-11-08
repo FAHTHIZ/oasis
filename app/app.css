@@ -484,3 +484,6 @@ html.lite .topbar{backdrop-filter:none;-webkit-backdrop-filter:none;background:v
 .terminal-status{font-size:12px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .terminal-host{flex:1;min-height:160px;border:1px solid var(--line);border-radius:10px;background:#0B100C;padding:6px;overflow:hidden}
 .terminal-host .xterm{height:100%}
+/* Code never uses ligatures: "=>" must not look like "⇒". Last in the file, and on
+   descendants, because `font` shorthands on diff and code lines reset the feature settings. */
+:is(code,pre,.diff,.editor,.tool .arg,.file-row,.model-chip,.mono),:is(code,pre,.diff,.editor,.mono) *{font-variant-ligatures:none;font-feature-settings:"calt" 0,"liga" 0}
