@@ -453,7 +453,7 @@ export const DEFERRED_TOOL_GROUPS = Object.freeze({
   'Git and GitHub': ['git_commit', 'git_branch', 'git_log', 'git_push', 'create_pull_request', 'enter_worktree', 'exit_worktree', 'worktree_inspect', 'worktree_merge'],
   'Code intelligence': ['repo_map', 'lsp', 'diagnostics', 'search_files', 'notebook_edit', 'execute_code', 'security_scan', 'report_findings', 'run_specialist_review'],
   'Files': ['delete_file'],
-  'Background work': ['command_output', 'kill_command', 'agent_status', 'agent_events', 'agent_stop', 'send_message', 'list_background', 'monitor', 'monitor_command', 'notify',
+  'Background work': ['command_output', 'kill_command', 'agent_status', 'neuron_network', 'agent_events', 'agent_stop', 'send_message', 'list_background', 'monitor', 'monitor_command', 'notify',
     'terminal_read', 'terminal_list', 'terminal_input', 'terminal_resize', 'terminal_interrupt', 'terminal_stop', 'cron_create', 'cron_list', 'cron_delete'],
   'Task board and teams': ['task_create', 'task_list', 'task_get', 'task_update', 'task_claim', 'task_release', 'task_renew', 'task_checkpoint', 'dispatch_ready_tasks',
     'team_create', 'team_send_message', 'team_status', 'team_shutdown', 'workflow'],
