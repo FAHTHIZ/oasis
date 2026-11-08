@@ -37,7 +37,9 @@ async function customCatalog(t) {
 }
 
 test('the bundled models.dev snapshot resolves current models across id spellings', () => {
-  const env = {};
+  // An empty config dir: a fresher models.dev download in ~/.oasis/cache would
+  // otherwise replace the bundled snapshot this test pins.
+  const env = { OASIS_CONFIG_DIR: path.join(os.tmpdir(), 'oasis-catalog-empty-' + process.pid) };
   assert.equal(findCatalogModel('claude-opus-5-5', { env }).provider, 'anthropic');
   assert.equal(findCatalogModel('claude-sonnet-4-5-20250929', { env }).id, 'claude-sonnet-4-5-20250929');
   // Router prefixes, Bedrock profile ids and dotted/dashed versions all reach a catalog entry.
