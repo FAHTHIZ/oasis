@@ -1,0 +1,151 @@
+{
+  "label": "OASIS 1.1.1 (openrouter/nvidia/nemotron-3-ultra-550b-a55b:free)",
+  "sourceRevision": "bd852c8fe200b4c78979530b2cb2a46b26767d41",
+  "runId": "2026-11-08T16-04-01-202Z-8509",
+  "startedAt": "2026-11-08T16:04:01.202Z",
+  "completedAt": "2026-11-08T16:04:29.787Z",
+  "taskCount": 1,
+  "taskIds": [
+    "safe-relative-path"
+  ],
+  "trialsPerTask": 1,
+  "timeoutSeconds": 600,
+  "runtime": {
+    "node": "v24.11.0",
+    "platform": "linux",
+    "arch": "x64"
+  },
+  "passRate": 0,
+  "passed": 0,
+  "failed": 1,
+  "medianTimeMs": 28371,
+  "totalCostUSD": 0,
+  "costPerPassedTaskUSD": null,
+  "routing": {
+    "enabled": false
+  },
+  "provider": {
+    "model": "openrouter/nvidia/nemotron-3-ultra-550b-a55b:free",
+    "protocol": "openai-compatible",
+    "baseURL": "http://127.0.0.1:20128/v1",
+    "maxSteps": 60,
+    "maxOutputTokens": null
+  },
+  "pricing": {
+    "inputUsdPerMillionTokens": null,
+    "outputUsdPerMillionTokens": null,
+    "note": "Cost is a rough estimate from configured rates and does not distinguish cached tokens. Pass-rate differences under 10 percentage points are noisy with small task samples; run at least three trials per task when benchmarking."
+  },
+  "results": [
+    {
+      "taskId": "safe-relative-path",
+      "taskFingerprint": "dbe12f1491bf325a011df1c905b9f64d3210928beff78c3cd24903fdb945e045",
+      "category": "security-boundaries",
+      "difficulty": "medium",
+      "trial": 1,
+      "status": "failed",
+      "model": "openrouter/nvidia/nemotron-3-ultra-550b-a55b:free",
+      "requestedModel": "openrouter/nvidia/nemotron-3-ultra-550b-a55b:free",
+      "routeTier": "strong",
+      "routeReason": "automatic routing is disabled",
+      "strongModel": "openrouter/nvidia/nemotron-3-ultra-550b-a55b:free",
+      "protocol": "openai-compatible",
+      "baseURL": "http://127.0.0.1:20128/v1",
+      "maxSteps": 60,
+      "maxOutputTokens": null,
+      "inputTokens": 119881,
+      "outputTokens": 1105,
+      "totalTokens": 120986,
+      "costUSD": 0,
+      "strongModelCostUSD": 0,
+      "routingSavingsUSD": 0,
+      "costSource": "per-model list-price estimate (cloud model behind a localhost gateway; free-tier keys are not billed)",
+      "wallTimeMs": 28371,
+      "finished": true,
+      "toolCalls": 7,
+      "trace": [
+        {
+          "tool": "list_files",
+          "arg": ".",
+          "resultChars": 552
+        },
+        {
+          "tool": "read_file",
+          "arg": "package.json",
+          "resultChars": 879
+        },
+        {
+          "tool": "read_file",
+          "arg": "src/config.mjs",
+          "resultChars": 6895
+        },
+        {
+          "tool": "read_file",
+          "arg": "test/runtime.test.mjs",
+          "resultChars": 28208
+        },
+        {
+          "tool": "read_file",
+          "arg": "src/tools.mjs",
+          "resultChars": 36613
+        },
+        {
+          "tool": "write_file",
+          "arg": "src/lib.mjs",
+          "resultChars": 338
+        },
+        {
+          "tool": "run_command",
+          "arg": "npm test",
+          "resultChars": 2244
+        }
+      ],
+      "requestTokens": [
+        [
+          6797,
+          126
+        ],
+        [
+          7004,
+          61
+        ],
+        [
+          7363,
+          49
+        ],
+        [
+          9392,
+          49
+        ],
+        [
+          16718,
+          56
+        ],
+        [
+          23712,
+          445
+        ],
+        [
+          24081,
+          47
+        ],
+        [
+          24814,
+          272
+        ]
+      ],
+      "verification": {
+        "exitCode": 1,
+        "output": "\nnode:internal/modules/run_main:107\n    triggerUncaughtException(\n    ^\n\nAssertionError [ERR_ASSERTION]: Expected values to be strictly equal:\n+ actual - expected\n\n+ Promise {\n+   <pending>\n+ }\n- '/tmp/work/src/lib.mjs'\n\n    at file:///home/user/workspace/oasis/evals/tasks/safe-relative-path/verify.mjs:11:8 {\n  generatedMessage: true,\n  code: 'ERR_ASSERTION',\n  actual: Promise { <pending> },\n  expected: '/tmp/work/src/lib.mjs',\n  operator: 'strictEqual',\n  diff: 'simple'\n}\n\nNode.js v24.11.0\n"
+      },
+      "changes": [
+        {
+          "path": "src/lib.mjs",
+          "status": "added",
+          "content": "import path from 'node:path';\nimport { realpath } from 'node:fs/promises';\n\n/**\n * Resolve a relative path below the workspace root and return the absolute result.\n * If the value is an absolute path, or escapes the root via ../, throw an Error\n * whose message contains the word \"escapes\".\n * Uses path.relative rather than string-prefix checks.\n */\nexport async function resolveRelative(root, value) {\n  const rootReal = await realpath(root);\n  const input = String(value || '.');\n\n  // Reject absolute paths\n  if (path.isAbsolute(input)) {\n    throw new Error(`Path escapes the workspace: ${input}`);\n  }\n\n  // Resolve the target path\n  const target = path.resolve(rootReal, input);\n\n  // Use path.relative to check if the target escapes the root\n  const relative = path.relative(rootReal, target);\n  if (relative.startsWith('..' + path.sep) || relative === '..' || path.isAbsolute(relative)) {\n    throw new Error(`Path escapes the workspace: ${input}`);\n  }\n\n  return target;\n}"
+        }
+      ],
+      "error": null
+    }
+  ]
+}
