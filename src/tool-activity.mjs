@@ -42,7 +42,7 @@ const EXTRA_LABELS = {
   advisor: 'Asked the advisor model', run_specialist_review: 'Ran a specialist review', install_extension: 'Installed an extension',
   add_extension: 'Added an extension', install_external_skill: 'Installed a skill', install_plugin: 'Installed a plugin', plugins: 'Checked plugins',
   configure_mcp_server: 'Set up a tool server', configure_provider: 'Set up a model provider', mcp: 'Checked tool servers',
-  list_directory: 'Listed a folder', read_notebook: 'Read a notebook', notebook_read: 'Read a notebook'
+  list_files: 'Listed project files', list_directory: 'Listed a folder', read_notebook: 'Read a notebook', notebook_read: 'Read a notebook'
 };
 // Unknown tools still say what ran: 'mcp__context7__resolve-library-id' → 'Used context7: resolve library id'.
 function fallbackToolLabel(name) {

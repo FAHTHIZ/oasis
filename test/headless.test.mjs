@@ -76,3 +76,23 @@ test('oasis -p runs end to end with piped stdin and text output', async (t) => {
   const user = requests[0].messages.find((message) => message.role === 'user');
   assert.match(user.content, /explain this error\n\n<stdin>\nTypeError: foo is not a function/);
 });
+
+test('text mode reports each step on the progress stream and keeps stdout to the answer', async (t) => {
+  const root = await tmp();
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const { config } = await scriptedModel(t, [toolCall('c1', 'run_command', { command: 'git', args: ['--version'] }), toolCall('c2', 'list_files', { path: '.' }), { content: 'Done.' }]);
+  let out = '';
+  const lines = [];
+  await runHeadless({ prompt: 'check', root, config, outputFormat: 'text', sessionOptions: { settings, allowedTools: ['Bash(git:*)'] }, write: (text) => { out += text; }, progressWrite: (line) => lines.push(line) });
+  assert.equal(out, 'Done.\n');
+  assert.deepEqual(lines, ['  · Ran a command: git --version', '  · Listed project files']);
+});
+
+test('json output never writes progress lines', async (t) => {
+  const root = await tmp();
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const { config } = await scriptedModel(t, [toolCall('c1', 'list_files', { path: '.' }), { content: 'Done.' }]);
+  const lines = [];
+  await runHeadless({ prompt: 'check', root, config, outputFormat: 'json', sessionOptions: { settings }, write: () => {}, progressWrite: (line) => lines.push(line) });
+  assert.deepEqual(lines, []);
+});
