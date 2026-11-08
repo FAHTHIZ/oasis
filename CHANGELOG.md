@@ -44,6 +44,7 @@ User-facing change history grouped by package version. A version heading does no
 - The usage chip next to Send shows the estimated spend for the chat (subagents included) beside the context meter, with a `+` when some requests used a model with no known price.
 - Copy buttons under every reply and on your own messages, plus Edit to put a sent message back in the composer. Copies keep the original Markdown.
 - Fixed: the Copy button on code blocks did nothing.
+- Fixed: diffs and code blocks drew `=>`, `!=` and similar as ligatures (`⇒`, `≠`), so code could read differently from what is in the file.
 - Activity steps name the subagent that ran ("Ran the explore agent", with its task description), and coordination, question, plan, memory and MCP steps get their own labels instead of "Completed a project step". The server sends the same labels to the browser when OASIS runs on a computer.
 - The composer shows how full the context window is as a ring and percentage (amber past 70%, red past 90%), with token counts on hover.
 - Inline autocomplete in the composer: `/` suggests commands, custom commands and skills, and `@` suggests project files. Arrow keys move, Tab or Enter accepts, Escape closes. Connected to OASIS on a computer, `/` no longer opens the command palette (Ctrl+K still does).
