@@ -160,6 +160,8 @@ export function normalizeAgentDefinition(raw, body, { name, source, plugin = fal
     // MCP servers for this agent: names of configured servers (already shared
     // with every subagent) and inline definitions connected only while it runs.
     mcpServers: plugin ? null : mcpServersField(data.mcpservers),
+    // Compact as if the context window were this many tokens (100,000-1,000,000).
+    autoCompactWindow: (() => { const value = Number.parseInt(data.autocompactwindow ?? '', 10); return Number.isInteger(value) && value >= 100_000 && value <= 1_000_000 ? value : null; })(),
     // Start without CLAUDE.md / OASIS.md project instructions.
     omitClaudeMd: booleanField(data.omitclaudemd),
     // First user turn when this agent runs as the main session agent (--agent); not for plugin agents.
