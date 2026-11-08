@@ -5,6 +5,8 @@ import path from 'node:path';
 import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises';
 import { addAnything } from '../src/add-anything.mjs';
 import { pickReleaseAsset } from '../src/plugin-convert.mjs';
+import { parseMcpServerEntries } from '../src/mcp-project.mjs';
+import { connectMcpServers } from '../src/mcp.mjs';
 import { loadEnabledPlugins, pluginCommands, pluginSkills, pluginMcpServers, pluginHooks } from '../src/claude-plugins.mjs';
 
 async function fixture(t, files) {
@@ -84,7 +86,8 @@ test('a Codex marketplace lists its plugins and installs the one picked with #na
   assert.deepEqual(plugins.map((p) => p.name).sort(), ['helper', 'tracker']);
   assert.deepEqual((await pluginSkills(plugins)).map((s) => s.name), ['plan']);
   const servers = Object.assign({}, ...(await pluginMcpServers(plugins, { env, root })).map((m) => m.mcpServers));
-  assert.deepEqual(servers.tracker, { command: 'tracker-mcp' });
+  const trackerPlugin = plugins.find((p) => p.name === 'tracker');
+  assert.deepEqual(servers.tracker, { command: 'tracker-mcp', cwd: trackerPlugin.root }, 'Agent Plugins stdio servers start in the plugin root');
   await assert.rejects(addAnything(src + '#nope', { root, env, approve: async () => true }), /no plugin called nope/);
 });
 
@@ -95,4 +98,42 @@ test('Gemini release archives are chosen the way Gemini CLI chooses them', () =>
   assert.equal(pickReleaseAsset(assets, { platform: 'linux', arch: 'arm64' }), null);
   assert.equal(pickReleaseAsset([{ name: 'ext.tar.gz' }], { platform: 'linux', arch: 'arm64' }).name, 'ext.tar.gz');
   assert.equal(pickReleaseAsset([], {}), null);
+});
+
+// A bundled server as Codex plugins ship it (nexu-io/codex-slides): `node ./scripts/start.mjs`
+// with "cwd": ".", which Codex resolves against the plugin root. OASIS used to start
+// every MCP server in the workspace, so the script was not found.
+const TINY_SERVER = [
+  "let buffer = ''; process.stdin.setEncoding('utf8');",
+  "process.stdin.on('data', (chunk) => { buffer += chunk; let i;",
+  "  while ((i = buffer.indexOf('\\n')) >= 0) { const line = buffer.slice(0, i); buffer = buffer.slice(i + 1);",
+  "    let m; try { m = JSON.parse(line); } catch { continue; } if (m.id === undefined) continue; let result = {};",
+  "    if (m.method === 'initialize') result = { protocolVersion: '2024-11-05', serverInfo: { name: 'slides', version: '1' }, capabilities: { tools: {} } };",
+  "    if (m.method === 'tools/list') result = { tools: [{ name: 'make_deck', inputSchema: { type: 'object', properties: {} } }] };",
+  "    process.stdout.write(JSON.stringify({ jsonrpc: '2.0', id: m.id, result }) + '\\n'); } });"
+].join('\n');
+
+test('a Codex plugin MCP server with a relative cwd starts from the plugin root', async (t) => {
+  const { src, root, env } = await fixture(t, {
+    '.codex-plugin/plugin.json': { name: 'slides', version: '0.1.0', skills: './skills/', mcpServers: './.mcp.json' },
+    '.mcp.json': { mcpServers: { slides: { command: 'node', args: ['./scripts/start.mjs', '${PLUGIN_DATA}'], cwd: '.' } } },
+    'scripts/start.mjs': TINY_SERVER,
+    'skills/deck/SKILL.md': '---\nname: deck\ndescription: Make a deck\n---\nDeck.\n'
+  });
+  const added = await addAnything(src, { root, env, approve: async () => true });
+  assert.match(added.message, /converted from a Codex plugin/);
+  const plugins = await loadEnabledPlugins(root, { env });
+  const [item] = await pluginMcpServers(plugins, { env, root });
+  const spec = item.mcpServers.slides;
+  assert.equal(spec.cwd, plugins[0].root);
+  assert.equal(spec.args[0], './scripts/start.mjs');
+  assert.equal(spec.args[1], item.env.CLAUDE_PLUGIN_DATA, '${PLUGIN_DATA} becomes the plugin data folder');
+  const parsed = parseMcpServerEntries({ mcpServers: item.mcpServers }, { ...env, ...item.env }, 'plugin');
+  assert.deepEqual(parsed.failures, []);
+  assert.equal(parsed.servers[0].cwd, plugins[0].root);
+  const { clients, failures } = await connectMcpServers({ env, root, skipUser: true, extraServers: parsed.servers });
+  t.after(() => { for (const client of clients.values()) client.close(); });
+  assert.deepEqual(failures.map((f) => f.error), []);
+  const tools = [...clients.values()].flatMap((client) => client.tools.map((tool) => tool.name));
+  assert.deepEqual(tools, ['make_deck']);
 });
