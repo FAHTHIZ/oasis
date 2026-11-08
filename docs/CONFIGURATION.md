@@ -232,3 +232,19 @@ returned by tools and images attached with `@path.png` are previewed inline, at 
 16 rows tall. Previews are skipped inside tmux, screen and Zellij, in CI, and when
 output is not a terminal. Set `OASIS_INLINE_IMAGES=0` to disable them, or
 `OASIS_INLINE_IMAGES=kitty` / `iterm` to force a protocol.
+
+## Long-running MCP tools
+
+When an MCP server supports tasks (MCP 2025-11-25) and a tool declares
+`execution.taskSupport`, OASIS runs the call as a task: it polls the server and
+sends `tasks/cancel` if you interrupt. A task still running after 5 seconds moves
+to the background in the interactive terminal and in streaming headless sessions.
+The turn continues, and the result arrives later as a notification that wakes an
+idle session.
+
+| Variable | Effect |
+| --- | --- |
+| `OASIS_MCP_TASK_BACKGROUND_MS` | Grace period before a task moves to the background (default `5000`). |
+| `OASIS_MCP_TASK_BACKGROUND=0` | Always wait for the task. `CLAUDE_CODE_DISABLE_MCP_TASK_BACKGROUND=1` does the same. |
+
+One-shot `oasis -p` runs and the browser workspace always wait for the result.

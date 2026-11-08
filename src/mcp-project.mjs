@@ -228,6 +228,14 @@ function sdkMessage(error) {
 }
 
 // Streamable HTTP MCP client with the same surface as McpServerClient.
+// Grace period before a long MCP task moves to the background (ms); -1 waits.
+// OASIS_MCP_TASK_BACKGROUND=0 or CLAUDE_CODE_DISABLE_MCP_TASK_BACKGROUND=1 always waits.
+export function mcpTaskBackgroundMs(env = process.env) {
+  if (/^(0|false|off|no)$/i.test(String(env.OASIS_MCP_TASK_BACKGROUND || '')) || /^(1|true)$/i.test(String(env.CLAUDE_CODE_DISABLE_MCP_TASK_BACKGROUND || ''))) return -1;
+  const raw = Number(env.OASIS_MCP_TASK_BACKGROUND_MS);
+  return Number.isFinite(raw) && raw >= 0 ? Math.min(raw, 600000) : 5000;
+}
+
 export class McpHttpClient {
   constructor(config, options = {}) {
     this.config = { name: config.name, url: config.url, headers: config.headers || {}, enabled: true, type: config.type === 'sse' ? 'sse' : 'http', ...(config.oauth ? { oauth: config.oauth } : {}), ...(config.headersHelper ? { headersHelper: config.headersHelper, pluginRoot: config.pluginRoot } : {}) };
@@ -547,7 +555,16 @@ export class McpHttpClient {
       });
     }
     const deadline = AbortSignal.timeout(Math.min(TASK_MAX_MS, Number(options.taskTimeoutMs) || TASK_MAX_MS));
-    const signal = options.signal ? AbortSignal.any([options.signal, deadline]) : deadline;
+    // The turn's Esc/interrupt cancels the task only until it moves to the
+    // background; after that only the task deadline or session close ends it.
+    const turnLink = new AbortController();
+    const onTurnAbort = () => turnLink.abort(options.signal.reason);
+    if (options.signal) {
+      if (options.signal.aborted) onTurnAbort();
+      else options.signal.addEventListener('abort', onTurnAbort, { once: true });
+    }
+    const signal = AbortSignal.any([turnLink.signal, deadline]);
+    const unlinkTurn = () => { if (options.signal) options.signal.removeEventListener('abort', onTurnAbort); };
     const execution = await this.taskSession.callTool(tool.name, args || {}, {
       declaration: ext.toolDeclarationFromMcpTool(tool),
       signal,
@@ -557,6 +574,7 @@ export class McpHttpClient {
     this.activeTasks ||= new Map();
     const taskId = execution.kind === 'task' ? String(execution.handle.taskId) : null;
     if (taskId) this.activeTasks.set(taskId, { tool: tool.name, status: 'working', startedAt: Date.now() });
+    const settle = (async () => {
     try {
       const { outcome } = await execution.settle({
         signal,
@@ -572,13 +590,32 @@ export class McpHttpClient {
       return outcome.result || {};
     } catch (error) {
       if (taskId) await execution.cancel().catch(() => {});
-      if (options.signal && options.signal.aborted) throw mcpAbortReason(options.signal);
+      if (turnLink.signal.aborted && options.signal && options.signal.aborted) throw mcpAbortReason(options.signal);
       if (deadline.aborted) throw new Error('MCP task on ' + this.config.name + ' did not finish in time; it was cancelled.');
       throw this._translate(error);
     } finally {
+      unlinkTurn();
       if (taskId) this.activeTasks.delete(taskId);
       await execution.close().catch(() => {});
     }
+    })();
+    // Claude Code behaviour: a task still running after a short grace period
+    // moves to the background, the turn continues, and the result arrives as a
+    // notification. Without a background sink (headless callers, tests) or
+    // with OASIS_MCP_TASK_BACKGROUND=0, the call waits as before.
+    const graceMs = mcpTaskBackgroundMs(options.env || process.env);
+    if (!taskId || typeof options.onBackgroundTask !== 'function' || graceMs < 0) return await settle;
+    let timer = null;
+    const moved = await Promise.race([
+      settle.then(() => false, () => false),
+      new Promise((resolve) => { timer = setTimeout(() => resolve(true), graceMs); if (timer.unref) timer.unref(); })
+    ]);
+    clearTimeout(timer);
+    if (!moved) return await settle;
+    unlinkTurn();
+    try { options.onBackgroundTask({ server: this.config.name, tool: tool.name, taskId, settled: settle.then((result) => ({ isError: Boolean(result && result.isError), content: compactResult(result || {}) }), (error) => ({ isError: true, content: [{ type: 'text', text: sdkMessage(error) }] })) }); }
+    catch (error) { debugLog('mcp', 'background task sink failed: ' + sdkMessage(error).slice(0, 200)); }
+    return { isError: false, backgrounded: true, content: [{ type: 'text', text: 'MCP task ' + taskId + ' (' + this.config.name + ' ' + tool.name + ') is still running, so it moved to the background. Its result arrives as a notification when it finishes; continue with other work and do not call the tool again for the same request.' }] };
   }
 
   close() {

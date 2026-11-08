@@ -1861,6 +1861,24 @@ async function emitDisplayText(session, options, text) {
 // Charges a side request (compaction summary, advisor, review) to the shared
 // budget ledger. It never throws: the next main-model step enforces the limit,
 // so a summary or advice already paid for is not thrown away.
+// A long MCP task that moved to the background reports back through the
+// agent inbox (like a finished background agent) and wakes an idle session.
+// Its output is external content, so it goes through the injection guard.
+function trackBackgroundMcpTask(session, { server, tool, taskId, settled }) {
+  const label = server + ' ' + tool;
+  (session.mcpBackgroundTasks ||= new Map()).set(taskId, { server, tool, startedAt: Date.now() });
+  settled.then((result) => {
+    session.mcpBackgroundTasks.delete(taskId);
+    let text = typeof result.content === 'string' ? result.content.slice(0, 12000) : (Array.isArray(result.content) ? result.content : []).map((part) => part && typeof part.text === 'string' ? part.text : part && part.type ? '[' + part.type + ']' : '').filter(Boolean).join('\n').slice(0, 12000);
+    if (text && untrustedGuardEnabled(session, process.env)) text = guardExternalContent(session, 'mcp__' + server + '__' + tool, text);
+    (session.inbox ||= []).push({ kind: 'mcp-task', text: 'Background MCP task ' + taskId + ' (' + label + ') ' + (result.isError ? 'failed' : 'finished') + '. Result:\n' + (text || '(no text output)') });
+    if (typeof session.onAgentNotice === 'function') { try { session.onAgentNotice('MCP task ' + label + (result.isError ? ' failed' : ' finished')); } catch {} }
+    if (typeof session.onBackgroundEvent === 'function') {
+      try { session.onBackgroundEvent({ kind: 'mcp-task', id: taskId, description: 'MCP task ' + label + (result.isError ? ' failed' : ' finished') }); } catch {}
+    }
+  });
+}
+
 export function chargeAuxiliaryUsage(session, usage, { env = process.env, model } = {}) {
   if (!session || !usage) return 0;
   const config = session.config || {};
@@ -5083,6 +5101,9 @@ async function executeMappedMcpToolWithKernel(session, name, args, context, opti
       mcpOptions.signal = runtime.signal;
       mcpOptions.timeoutMs = 120000;
       mcpOptions.env = runtime.env;
+      // Only sessions that can wake when the result lands (interactive CLI,
+      // streaming headless) background a task; one-shot runs keep waiting.
+      if (typeof session.onBackgroundEvent === 'function') mcpOptions.onBackgroundTask = (task) => trackBackgroundMcpTask(session, task);
       return await callMappedMcpTool(session, name, validatedInput, mcpOptions);
     }
   });
