@@ -33,6 +33,13 @@ export function isMalformedGenerationError(status, text) {
 // for: "bridge is not configured", "no active connection". Seen live from
 // OmniRoute; it never clears on a retry, so move to the next model at once.
 export const UNCONFIGURED_ROUTE_PATTERN = /\bnot configured\b|\bno (?:active |available )?(?:connections?|credentials|accounts?)\b|\bnot connected\b|\bprovider (?:is )?disabled\b/i;
+// "Prompt too long (max 6000 characters)" (Cloudflare's playground behind
+// OmniRoute, wrapped in a 502), "context length exceeded" and the like never
+// clear on a retry: the same request is just as large next time.
+export const PROMPT_TOO_LARGE_PATTERN = /prompt (?:is )?too (?:long|large)|context.?length.?exceeded|maximum context length|input is too long|request (?:entity )?too large/i;
+export function isPromptTooLargeError(text) {
+  return PROMPT_TOO_LARGE_PATTERN.test(String(text || ''));
+}
 export function isUnconfiguredRouteError(status, text) {
   return status >= 500 && UNCONFIGURED_ROUTE_PATTERN.test(String(text || ''));
 }
@@ -148,7 +155,9 @@ export function providerErrorSummary(body) {
   try {
     const parsed = JSON.parse(text);
     const error = (Array.isArray(parsed) ? parsed[0] : parsed)?.error;
-    if (error) return String(typeof error === 'string' ? error : error.message || error.status || '').slice(0, 120);
+    const upstream = parsed && parsed.upstream_details && parsed.upstream_details.error;
+    const upstreamText = upstream ? String(typeof upstream === 'string' ? upstream : upstream.message || '') : '';
+    if (error) return (String(typeof error === 'string' ? error : error.message || error.status || '') + (upstreamText ? ' (upstream: ' + upstreamText + ')' : '')).slice(0, 200);
   } catch {}
   return text.replace(/\s+/g, ' ').trim().slice(0, 120);
 }

@@ -171,6 +171,28 @@ key is never sent to another provider; a bare model runs on the current
 provider. Hosted providers without a key in the environment are skipped; local
 servers do not need one. Source: `src/fallback-chain.mjs`.
 
+### Endpoints without native tool calling
+
+Some endpoints accept a request but drop the `tools` field, or drop system
+messages: some free playgrounds, older vLLM and llama.cpp builds, and models
+served without a tool parser. On these, the model answers in plain text and
+never calls a tool. Prompt mode moves tool calling into the conversation
+itself, as OpenHands does with its function-call converter:
+
+| Setting | Environment | Effect |
+| --- | --- | --- |
+| `"toolCalling": "prompt"` | `OASIS_TOOL_CALLING=prompt` | The `tools` field is not sent. The tool list goes into the system prompt and the model writes `<function=NAME><parameter=KEY>value</parameter></function>`. Earlier calls are replayed in that format, and results come back as `EXECUTION RESULT of [NAME]:` user turns. `native` forces it off. |
+| `"systemMessages": "user"` | `OASIS_SYSTEM_MESSAGES=user` | The system prompt goes inside the first user turn as `<system_instructions>`, and later system notes become `<system_reminder>` user turns. |
+
+Calls written as text go through the same validation, permissions, hooks and
+approvals as native calls. Prompt mode applies to the Chat Completions
+protocol (`openai-compatible`). It was checked with gpt-oss-20b on a real
+endpoint: it fixed a failing test in 13 requests, and none of them sent `tools`.
+The tool list makes the prompt longer, so endpoints with a small input limit
+(for example, 6,000 characters) still cannot run a full agent turn. OASIS
+reports that limit as "Prompt too long" instead of retrying a server error.
+Source: `src/prompt-tools.mjs`.
+
 ## Task-aware model routing
 
 Source: `src/model-routing.mjs`, integrated by `src/agent.mjs`.

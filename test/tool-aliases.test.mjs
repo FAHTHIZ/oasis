@@ -121,3 +121,12 @@ test('singular and plural slips map to the one matching tool', () => {
   assert.equal(resolveToolAlias('list_file', {}, tools).name, 'list_files');
   assert.ok(resolveToolAlias('search_thing', {}, tools).error);
 });
+
+test('trained-in namespaces (repo_browser, default_api, functions) map to the real tool', () => {
+  const names = new Set(['read_file', 'list_files', 'grep']);
+  assert.deepEqual(resolveToolAlias('repo_browser_read_file', { path: 'a' }, names), { name: 'read_file', args: { path: 'a' }, aliasedFrom: 'repo_browser_read_file' });
+  assert.equal(resolveToolAlias('repo_browser.list_files', {}, names).name, 'list_files');
+  assert.equal(resolveToolAlias('default_api:grep', {}, names).name, 'grep');
+  assert.equal(resolveToolAlias('functions_ReadFile', {}, names).name, 'read_file');
+  assert.ok(resolveToolAlias('repo_browser_open_everything', {}, names).error);
+});

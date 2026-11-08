@@ -277,6 +277,8 @@ export function extractTextToolCalls(content, availableNames, schemas = null) {
   const special = [
     // Qwen3-Coder: optional <tool_call> wrapper around <function=…><parameter=…>.
     [/(?:<tool_call>\s*)?<function=([\w.-]+)>((?:(?!<\/function>)[\s\S])*?<parameter=[\s\S]*?)(?:<\/function>\s*(?:<\/tool_call>)?|$)/g, (m) => [m[1], xmlParameterArgs(m[2])]],
+    // The same syntax with no parameters (<function=list_files></function>), used by prompt-mode tool calling.
+    [/(?:<tool_call>\s*)?<function=([\w.-]+)>\s*<\/function>(?:\s*<\/tool_call>)?/g, (m) => [m[1], {}]],
     // GLM-4.5: <tool_call>name<arg_key>…</arg_key><arg_value>…</arg_value></tool_call>
     [/<tool_call>\s*([\w.-]+\s*<arg_key>[\s\S]*?)(?:<\/tool_call>|$)/g, (m) => { const c = argKeyCall(m[1]); return c ? [c.name, c.args] : null; }],
     // Kimi K2
