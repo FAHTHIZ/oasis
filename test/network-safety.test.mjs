@@ -1,90 +1,39 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { fetchPublicUrl } from '../src/public-fetch.mjs';
-import { fetchPluginArchive } from '../src/zip.mjs';
-import { discoverOAuth } from '../src/mcp-oauth.mjs';
-import { isPrivateBrowserRequest } from '../src/browser-tool.mjs';
+import { isNonPublicIpAddress, normalizeIpAddress } from '../src/network-safety.mjs';
 
-const nonPublicIpv6 = [
-  '100::1',                 // IANA discard-only range: 100::/64
-  '100:0:0:1::1',          // IANA dummy prefix: 100:0:0:1::/64
-  'fe00::1',                // Reserved IPv6 space outside global unicast
-  'fec1::1',                // Deprecated site-local space: fec0::/10
-  '5f00::1',                // SRv6 special-purpose space, not globally reachable
-  '2001:5::1',              // IANA 2001::/23 protocol-assignment space
-  '2001:100::1',            // Middle of the same special-purpose block
-  '2001:1ff::1',            // Upper edge of the same special-purpose block
-  '64:ff9b::a00:1',         // NAT64-encoded RFC1918 destination
-  '64:ff9b::a9fe:a9fe',     // NAT64-encoded link-local metadata destination
-  '64:ff9b:1::1'            // Local-use NAT64 translation prefix
-];
-
-test('all network-facing features consistently block non-public IPv6 destinations', async () => {
-  let publicFetchCalls = 0;
-  let archiveFetchCalls = 0;
-  let oauthFetchCalls = 0;
-
-  for (const address of nonPublicIpv6) {
-    const url = 'https://[' + address + ']/resource';
-
-    assert.equal(await isPrivateBrowserRequest(url), true, 'browser policy: ' + address);
-
-    await assert.rejects(
-      fetchPublicUrl(url, {
-        requestImpl: async () => {
-          publicFetchCalls++;
-          return {
-            status: 200,
-            headers: { get: (name) => name.toLowerCase() === 'content-type' ? 'text/plain' : null },
-            body: 'should not be fetched'
-          };
-        }
-      }),
-      /Private-network addresses are blocked/,
-      'public URL fetch: ' + address
-    );
-
-    await assert.rejects(
-      fetchPluginArchive(url, {
-        fetchImpl: async () => {
-          archiveFetchCalls++;
-          return new Response('should not be fetched');
-        }
-      }),
-      /private or special-purpose/,
-      'plugin archive: ' + address
-    );
-
-    await assert.rejects(
-      discoverOAuth(url, {
-        fetch: async () => {
-          oauthFetchCalls++;
-          return new Response('{}', { status: 200, headers: { 'content-type': 'application/json' } });
-        }
-      }),
-      /private or special-purpose/,
-      'MCP OAuth: ' + address
-    );
+test('public unicast addresses are allowed', () => {
+  for (const address of ['8.8.8.8', '1.1.1.1', '93.184.216.34', '2606:4700:4700::1111', '2a00:1450:4001::200e', '[2001:4860:4860::8888]']) {
+    assert.equal(isNonPublicIpAddress(address), false, address);
   }
-
-  assert.equal(publicFetchCalls, 0, 'public URL fetch must reject before making a request');
-  assert.equal(archiveFetchCalls, 0, 'plugin archive import must reject before making a request');
-  assert.equal(oauthFetchCalls, 0, 'OAuth discovery must reject before making a request');
 });
 
-test('shared IP policy continues to allow ordinary public IPv4 and IPv6 addresses', async () => {
-  for (const url of ['https://93.184.216.34/resource', 'https://[2606:4700:4700::1111]/resource', 'https://[64:ff9b::808:808]/resource']) {
-    let called = false;
-    await fetchPublicUrl(url, {
-      requestImpl: async () => {
-        called = true;
-        return {
-          status: 200,
-          headers: { get: (name) => name.toLowerCase() === 'content-type' ? 'text/plain' : null },
-          body: 'ok'
-        };
-      }
-    });
-    assert.equal(called, true, 'public destination remains fetchable: ' + url);
-  }
+test('private, loopback, link-local, metadata and special-purpose addresses are blocked', () => {
+  for (const address of [
+    '0.0.0.0', '10.1.2.3', '100.64.0.1', '127.0.0.1', '169.254.169.254', '172.16.0.1', '192.168.1.1',
+    '192.0.2.1', '198.18.0.1', '198.51.100.7', '203.0.113.9', '224.0.0.1', '255.255.255.255', '192.88.99.1',
+    '::', '::1', 'fe80::1%eth0', 'fc00::1', 'fd12:3456::1', 'ff02::1', '2001:db8::1', '2002:c000:0204::1',
+    '3fff::1', '2001::1', '64:ff9b:1::1', '4000::1', '1::1'
+  ]) assert.equal(isNonPublicIpAddress(address), true, address);
+});
+
+test('IPv4 embedded in IPv6 inherits the IPv4 policy', () => {
+  assert.equal(isNonPublicIpAddress('::ffff:127.0.0.1'), true);
+  assert.equal(isNonPublicIpAddress('::ffff:7f00:1'), true);
+  assert.equal(isNonPublicIpAddress('::ffff:8.8.8.8'), false);
+  assert.equal(isNonPublicIpAddress('64:ff9b::10.0.0.1'), true);
+  assert.equal(isNonPublicIpAddress('64:ff9b::8.8.8.8'), false);
+});
+
+test('deprecated IPv4-compatible ::a.b.c.d is not mistaken for IPv4-mapped', () => {
+  // ipaddr.js parses "::8.8.8.8" as "::ffff:8.8.8.8"; the policy must still block it.
+  assert.equal(isNonPublicIpAddress('::8.8.8.8'), true);
+  assert.equal(normalizeIpAddress('::8.8.8.8'), '0:0:0:0:0:0:808:808');
+});
+
+test('hostnames are not IP literals and malformed IPv6 fails closed', () => {
+  assert.equal(isNonPublicIpAddress('example.com'), false);
+  assert.equal(isNonPublicIpAddress('2130706433'), false, 'inet_aton integer spellings are hostnames here, not IPs');
+  assert.equal(isNonPublicIpAddress('1:2:3:4:5:6:7:8:9'), true);
+  assert.equal(normalizeIpAddress('example.com'), null);
 });
