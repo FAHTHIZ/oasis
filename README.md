@@ -83,7 +83,7 @@ OASIS has two interfaces, both on the same runtime, sessions and settings. Start
   </tr>
   <tr>
     <td><a href="assets/demo/oasis-real-model-demo.mp4"><img src="assets/demo/oasis-real-model-demo.gif" alt="Unscripted OASIS terminal run with gpt-oss-20b: the agent reads a file, fixes a bug, adds a test, runs it after approval and is sent back to review its changes."></a></td>
-    <td><img src="assets/screenshots/web-approval-dark.png" alt="The OASIS web app asking for approval to run npm test, with the step behind it marked as waiting."></td>
+    <td><img src="assets/screenshots/web-approval-dark.png" alt="The OASIS web app asking for approval to run npm test in a card above the message box, with the step behind it marked as waiting and the task sidebar showing Needs you."></td>
   </tr>
   <tr>
     <td>Streaming diffs with word highlights, inline images, <code>/tasks</code>, <code>/rewind</code>, <code>/export</code> to Markdown or HTML. <code>oasis -p</code> and <code>oasis exec</code> for scripts, with JSON output and <code>--output-schema</code>.</td>
