@@ -252,7 +252,7 @@ Two tasks and one trial cannot rank agents, and OASIS does not guarantee that ev
 | Models | Any provider or local server | Anthropic | OpenAI first | Cursor's catalog, some BYOK | Any provider | Kimi first | Any provider |
 | Runs Claude Code plugins | Yes, plus Codex plugins and Gemini extensions | Yes | Own plugins | Own rules and hooks | Own plugins | Own skills | Own skills |
 | Web interface | Self-hosted, remote-ready | Cloud | Cloud | Cloud agents | Local web app | Local web app | Messaging apps |
-| Subagents | Parallel, background, resumable, teams, worktrees | Yes | Yes | Yes | Yes | Yes | Yes |
+| Subagents | Parallel, background, resumable, teams, worktrees, `/batch` (`/swarm`) | Yes | Yes | Yes | Yes | Yes | Yes |
 | Keeps going until a goal holds | `/goal` with pause and resume, also in `-p --goal` for CI | ralph-loop plugin | `/goal` | Long-running cloud agents | Not documented | `/goal` | Not documented |
 | Refuses unobserved "tests pass" claims | Built in | With hooks | Not documented | Not documented | Not documented | Not documented | Not documented |
 
