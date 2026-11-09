@@ -150,6 +150,27 @@ test('OpenCode gets a generated gateway provider, since it ignores OPENAI_BASE_U
   assert.equal(agentEnvironment('opencode', options, { OPENCODE_CONFIG: '/x.json' }).OPENCODE_CONFIG_CONTENT, undefined);
 });
 
+test('live benchmark respects an OpenCode config supplied through its injected environment', async () => {
+  const out = await mkdtemp(path.join(os.tmpdir(), 'oasis-bench-opencode-env-'));
+  const calls = [];
+  try {
+    const runner = async (args, { resultsDir }) => {
+      calls.push(args);
+      const rows = [{ taskId: 'a', taskFingerprint: 'a'.repeat(64), category: 'utility-logic', difficulty: 'small', trial: 1, status: 'passed', wallTimeMs: 10, totalTokens: 1, costUSD: 0 }];
+      const file = path.join(resultsDir, 'opencode.json');
+      await writeFile(file, JSON.stringify({ results: rows }));
+      return { resultsPath: file, summary: { label: 'OpenCode fixture' }, results: rows };
+    };
+    await runBenchmark(parseBenchArgs(['--agents', 'opencode', '--model', 'qwen3-coder', '--router', 'http://127.0.0.1:8789/v1', '--out', out]), {
+      env: { OPENCODE_CONFIG: '/tmp/custom-opencode.json', OASIS_BENCH_API_KEY: 'test-key' }, runner
+    });
+    assert.ok(calls[0].includes('qwen3-coder'));
+    assert.ok(!calls[0].includes('bench/qwen3-coder'), 'custom config owns the provider name; do not inject the generated bench prefix');
+  } finally {
+    await rm(out, { recursive: true, force: true });
+  }
+});
+
 test('Codex gets a gateway provider entry because it ignores OPENAI_BASE_URL', () => {
   const args = buildCodexArgs({ model: 'm1' }, 'do it', { OASIS_CODEX_BASE_URL: 'http://127.0.0.1:20128/v1' });
   assert.ok(args.includes('model_provider=bench'));
