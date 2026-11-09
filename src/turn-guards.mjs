@@ -355,6 +355,9 @@ export async function assistedVerificationCalls(root, verification) {
     if (git) calls.push({ name: 'git_diff', args: {} });
     else for (const file of changed.slice(0, 3)) calls.push({ name: 'read_file', args: { path: file } });
   }
+  if (verification.lastVerificationExitCode === 0) {
+    for (const file of unloadedNewModules(verification).slice(0, 3)) calls.push({ name: 'run_command', args: moduleImportCheck(file) });
+  }
   if (changed.some((item) => SOURCE_EXTENSIONS.has(path.extname(item).toLowerCase())) && verification.lastVerificationExitCode !== 0) {
     const test = await detectProjectTestCommand(root);
     if (test) calls.push({ name: 'run_command', args: test });
@@ -437,6 +440,49 @@ export async function activeLspBaseline(session, file, callContext, options) {
 // overwritten files still need git_diff or a full reread.
 // Seen live: a model wrote a new module, ran the existing test suite (which
 // never imports it), and finished with a bug the suite could not catch.
+// A passing `npm test` proves nothing about a brand-new module that no test
+// imports. Seen in a live eval: the model wrote src/lib.mjs with a CommonJS
+// `require.main` check in an ES module, ran npm test (green, it never loaded
+// the file) and stopped; the module threw on import. New JavaScript modules
+// that export something must be imported or run once after the last edit.
+export const MODULE_CHECK_EXTENSIONS = new Set(['.mjs', '.cjs', '.js']);
+
+export function newModuleCandidate(file, content) {
+  const ext = path.extname(String(file || '')).toLowerCase();
+  if (!MODULE_CHECK_EXTENSIONS.has(ext) || isTestPath(file)) return false;
+  const text = String(content || '');
+  if (!/(^|\n)\s*export\s|module\.exports|exports\.[A-Za-z_$]/.test(text)) return false;
+  // Browser or bundler code cannot be imported by plain Node.
+  if (/\b(?:document|window|navigator|localStorage)\.|<[A-Z][A-Za-z]*[\s/>]|import\s[^;]*?['"][^'"]+\.(?:css|scss|less|svg|png|jpe?g|vue|svelte)['"]|import\.meta\.env/.test(text)) return false;
+  // Loading must be quick and side-effect free: skip servers, watchers and CLIs.
+  if (/\.listen\(|setInterval\(|process\.stdin|readline|createServer|process\.argv/.test(text)) return false;
+  return true;
+}
+
+export function unloadedNewModules(state) {
+  const changed = [...(state.changedPaths || [])];
+  if (changed.some((item) => isTestPath(item))) return [];
+  const candidates = state.moduleCandidates instanceof Set ? state.moduleCandidates : new Set();
+  const loaded = state.loadedPaths instanceof Set ? state.loadedPaths : new Set();
+  return [...candidates].filter((item) => changed.includes(item) && !loaded.has(item));
+}
+
+// A command that ran a new module by path (node src/lib.mjs, an import check).
+export function markLoadedModules(state, commandText, exitCode) {
+  if (exitCode !== 0 || !(state.moduleCandidates instanceof Set) || !state.moduleCandidates.size) return;
+  const text = String(commandText || '');
+  for (const file of state.moduleCandidates) {
+    if (text.includes(file) || text.includes(path.basename(file))) (state.loadedPaths ||= new Set()).add(file);
+  }
+}
+
+export function moduleImportCheck(file) {
+  // Running the file loads it the same way an import does. Inline code
+  // (node -e, --import) is high risk and never auto-approved, so the check
+  // stays a plain `node <file>`; long-running modules are skipped upstream.
+  return { command: 'node', args: [file] };
+}
+
 export function untestedNewCode(state) {
   const changed = [...(state.changedPaths || [])];
   if (changed.some((item) => isTestPath(item))) return [];
@@ -473,6 +519,10 @@ export function verificationIssues(state) {
   }
   if (changed.some((item) => SOURCE_EXTENSIONS.has(path.extname(item).toLowerCase())) && state.lastVerificationExitCode !== 0) {
     issues.push('no relevant test, check, lint, build, or type-check command has passed after the latest code edit');
+  }
+  const unloaded = state.lastVerificationExitCode === 0 ? unloadedNewModules(state) : [];
+  if (unloaded.length) {
+    issues.push('the new module ' + unloaded.slice(0, 5).join(', ') + (unloaded.length > 1 ? ' were' : ' was') + ' not loaded or run by any check after the latest edit, so the passing check says nothing about it; import or run it (or add a test that does)');
   }
   if (state.testsRequested && !changed.some((item) => isTestPath(item))) {
     issues.push('the request asked for new tests, but no test file was added or changed; add tests that cover the new behavior and run them');
