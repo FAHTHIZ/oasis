@@ -202,3 +202,23 @@ test('memory recall stems words but not pasted blobs', () => {
   assert.deepEqual(terms, ['note', blob, 'test']);
   assert.ok(elapsed < 250, 'a 64,000-letter token is not stemmed (took ' + Math.round(elapsed) + ' ms)');
 });
+
+test('a full memory store archives its least valuable note instead of refusing, and outdated notes leave the index', async (t) => {
+  const { root, env: base } = await setup(t);
+  const env = { ...base, OASIS_MEMORY_LIMIT: '5' };
+  const topics = ['postgres pool size tuning', 'eslint flat config migration', 'docker compose healthchecks', 'vitest snapshot policy', 'release tagging scheme'];
+  for (const [i, topic] of topics.entries()) await saveMemory(root, { name: topic, content: 'Note number ' + i + ' about ' + topic + ' with distinct words ' + 'abcdefghij'[i].repeat(6) + '.' }, { env });
+  const outdatedId = (await findMemory(root, 'docker compose healthchecks', { env })).id;
+  await verifyMemory(root, outdatedId, { status: 'outdated', evidence: 'compose file was removed in the migration', env });
+  const index = await memoryIndexPrompt(root, { env });
+  assert.doesNotMatch(index, /docker compose healthchecks/);
+  assert.match(index, /1 more not shown/);
+  const saved = await saveMemory(root, { name: 'kafka consumer lag alerts', content: 'Alert when consumer lag passes 10k messages for five minutes.' }, { env });
+  assert.equal(saved.action, 'created');
+  assert.equal(saved.archived, outdatedId);
+  const left = await listMemories(root, { env });
+  assert.equal(left.length, 5);
+  assert.ok(!left.some((memory) => memory.id === outdatedId));
+  const archivedFile = path.join(memoryRoots(root, env).project, '.archive', 'project', 'docker-compose-healthchecks.md');
+  assert.match(await readFile(archivedFile, 'utf8'), /docker compose healthchecks/);
+});
