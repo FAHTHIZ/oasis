@@ -128,6 +128,8 @@ The default Bash parsing path was replaced on \`main\` with \`unbash\` 6.0.3. Th
 4. Keep unsupported, malformed, dynamic and resource-limited input behind review; never let partial AST output become implicit auto-approval.
 5. Benchmark parse latency and memory on OASIS fixtures before removing any rollback or conservative legacy path.
 
+Progress (November 2026): \`test/shell-policy-adversarial.test.mjs\` now checks policy, not only parser output. 54 compound, substituted, redirected, wrapped and malformed inputs must never match a strict allow rule; 41 spellings of \`rm\` (shell \`-c\`, \`eval\`, functions, loops, case arms, process substitution, \`sudo\`/\`env\`/\`nohup\`/\`xargs\`/\`find -exec\`, quoting tricks, \`busybox\`/\`toybox\` applets) must hit a \`Bash(rm:*)\` deny rule; and computed program names always need a person. The corpus found one gap, now fixed: \`busybox rm x\` and \`toybox rm x\` escaped deny rules. Parser parity covers 30 more static forms; the remaining differences (\`time\`, \`coproc\`, \`select\` and C-style \`for\` headers) are policy-neutral because both backends still report the inner command. Measured unbash parse latency on this machine: p50 5.7 µs, p99 18.7 µs per command line.
+
 The integration is useful and the existing test/CI results are encouraging, but it is **not a security certification**. Record parser parity and policy coverage before calling this cycle complete.
 
 ### Main-branch implementation history

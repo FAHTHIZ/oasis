@@ -304,7 +304,7 @@ function shellWords(text) {
 }
 
 const DENY_WRAPPERS = new Set([...WRAPPERS_LIST(), 'sudo', 'doas', 'builtin', 'run0', 'pkexec']);
-function WRAPPERS_LIST() { return ['env', 'nice', 'nohup', 'timeout', 'stdbuf', 'xargs', 'time', 'command', 'exec', 'ionice', 'chrt', 'taskset', 'setsid', 'unbuffer', 'caffeinate', 'flock', 'watch', 'strace', 'ltrace', 'faketime', 'firejail', 'nsenter', 'unshare', 'chroot']; }
+function WRAPPERS_LIST() { return ['env', 'nice', 'nohup', 'timeout', 'stdbuf', 'xargs', 'time', 'command', 'exec', 'ionice', 'chrt', 'taskset', 'setsid', 'unbuffer', 'caffeinate', 'flock', 'watch', 'strace', 'ltrace', 'faketime', 'firejail', 'nsenter', 'unshare', 'chroot', 'busybox', 'toybox']; }
 const SHELLS = new Set(['sh', 'bash', 'zsh', 'dash', 'ksh', 'mksh', 'ash', 'fish', 'busybox']);
 const GIT_VALUE_OPTIONS = new Set(['-C', '-c', '--git-dir', '--work-tree', '--namespace', '--exec-path', '--config-env', '--super-prefix', '--list-cmds', '--attr-source']);
 
@@ -362,6 +362,9 @@ export function commandSpellings(piece, depth = 0) {
       for (const inner of splitShellCommands(words.slice(1).join(' '), depth + 1).commands) for (const spelling of commandSpellings(inner, depth + 1)) out.add(spelling);
       break;
     }
+    // busybox/toybox APPLET ...: a multi-call binary runs the named applet
+    // (busybox rm x is rm x). Only the shell applets fall through to -c parsing.
+    if ((base === 'busybox' || base === 'toybox') && words[1] && !words[1].startsWith('-') && !SHELLS.has(words[1])) { words = words.slice(1); continue; }
     if (SHELLS.has(base)) {
       let index = 1;
       if (base === 'busybox' && SHELLS.has(String(words[1] || ''))) index = 2;
@@ -734,7 +737,7 @@ export const BLOCKED_EXECUTABLES = new Set([
   'mount', 'umount', 'chmod', 'chown', 'chgrp', 'chattr'
 ]);
 
-const WRAPPERS = new Set(['env', 'nice', 'nohup', 'timeout', 'stdbuf', 'xargs', 'time', 'command', 'exec', 'ionice', 'chrt', 'taskset', 'setsid', 'unbuffer', 'caffeinate', 'flock', 'watch', 'strace', 'ltrace', 'script', 'faketime', 'firejail', 'nsenter', 'unshare', 'chroot']);
+const WRAPPERS = new Set(['env', 'nice', 'nohup', 'timeout', 'stdbuf', 'xargs', 'time', 'command', 'exec', 'ionice', 'chrt', 'taskset', 'setsid', 'unbuffer', 'caffeinate', 'flock', 'watch', 'strace', 'ltrace', 'script', 'faketime', 'firejail', 'nsenter', 'unshare', 'chroot', 'busybox', 'toybox']);
 
 const INTERPRETER_EVAL_FLAGS = {
   node: ['-e', '--eval', '-p', '--print', '-r', '--require', '--import', '--loader', '--experimental-loader'],
