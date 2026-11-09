@@ -80,7 +80,7 @@ export function splitShell(line) {
   return commands;
 }
 
-const PREFIXES = new Set(['sudo', 'doas', 'command', 'builtin', 'exec', 'time', 'nice', 'nohup', 'env', 'xargs', 'timeout', 'stdbuf', 'ionice', 'setsid', 'unbuffer', 'chronic', 'flock', 'then', 'do', 'else', '!', 'npx', 'pnpx', 'bunx', 'busybox', 'chrt', 'taskset']);
+const PREFIXES = new Set(['sudo', 'doas', 'command', 'builtin', 'exec', 'time', 'nice', 'nohup', 'env', 'xargs', 'timeout', 'stdbuf', 'ionice', 'setsid', 'unbuffer', 'chronic', 'flock', 'then', 'do', 'else', '!', 'npx', 'pnpx', 'bunx', 'busybox', 'toybox', 'chrt', 'taskset']);
 // Options of transparent prefixes that consume the next token as their value.
 const PREFIX_VALUE_OPTIONS = {
   sudo: new Set(['-u', '-g', '-h', '-p', '-C', '-D', '-r', '-t', '-U', '-T']),
