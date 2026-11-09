@@ -623,7 +623,7 @@ export async function createSession({ root, config, restore = null, permissionMo
   if (learningEnabled(loadedSettings, env)) {
     session.proceduralLearning = true;
     session.toolDefinitions = session.toolDefinitions.concat(LEARNING_TOOL_DEFINITIONS);
-    const learningText = 'Learning: when a finished task whose checks passed exposed a reusable procedure or a durable correction, propose it as a skill with skill_propose (never one-off fixes, secrets or unverified steps). A proposal is not active until the user approves it (/learning approve ID); learned skills never grant permissions.';
+    const learningText = 'Learning: when a finished task whose checks passed exposed a reusable procedure or a durable correction, propose it as a skill with skill_propose (never one-off fixes, secrets or unverified steps). If a learned skill you followed was wrong or outdated, propose the corrected version with the same name and update: true. A proposal is not active until the user approves it (/learning approve ID); learned skills never grant permissions.';
     if (dynamicSections) dynamicSections.push(learningText); else systemText += '\n\n' + learningText;
   }
   // Standing corrections ("stop saying X") from settings and from earlier sessions.

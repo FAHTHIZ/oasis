@@ -200,6 +200,14 @@ export async function createSkillProposal(root, input = {}, { env = process.env,
   const evidence = oneLine(validateTextWithoutSecrets('Evidence', input.evidence, MAX_EVIDENCE_CHARS), MAX_EVIDENCE_CHARS);
   if (evidence.length < 12) throw new Error('Evidence must identify a meaningful task result, changed files, or a verification check.');
 
+  // update: true proposes a revision of a skill already installed in this
+  // scope's learned-skill folder (Hermes-style self-improving skills). It is
+  // still inert until approved, and approval keeps the old file as SKILL.md.bak.
+  const update = input.update === true;
+  if (update) {
+    const target = await existingLearnedSkill(root, scope, name, env);
+    if (!target) throw new Error('No skill named "' + name + '" exists in ' + (scope === 'user' ? '~/.config/agents/skills' : '.agents/skills') + ' to update. Propose it as a new skill instead.');
+  }
   const proposals = await readProposalsInScope(root, scope, env);
   if (proposals.length >= MAX_PROPOSALS_PER_SCOPE) {
     throw new Error('This scope already has ' + MAX_PROPOSALS_PER_SCOPE + ' proposals. Reject or promote old proposals before adding another.');
@@ -219,10 +227,11 @@ export async function createSkillProposal(root, input = {}, { env = process.env,
     updatedAt: createdAt,
     sourceSession: oneLine(session && session.sessionId, 120) || null,
     evidence,
+    ...(update ? { update: true } : {}),
     body
   };
   await atomicWrite(file, JSON.stringify(proposal, null, 2) + '\n');
-  return { id, name, description, scope, status: 'pending', createdAt, evidence };
+  return { id, name, description, scope, status: 'pending', createdAt, evidence, ...(update ? { update: true } : {}) };
 }
 
 function ensureInside(base, candidate) {
@@ -267,6 +276,19 @@ async function skillDestination(root, scope, env) {
   return { base, path: '.agents/skills' };
 }
 
+async function existingLearnedSkill(root, scope, name, env) {
+  const destination = await skillDestination(root, scope, env);
+  const directory = path.resolve(destination.base, name);
+  if (!ensureInside(path.resolve(destination.base), directory) || directory === path.resolve(destination.base)) return null;
+  const file = path.join(directory, 'SKILL.md');
+  try {
+    const dirInfo = await lstat(directory);
+    const info = await lstat(file);
+    if (!dirInfo.isDirectory() || dirInfo.isSymbolicLink() || !info.isFile() || info.isSymbolicLink()) return null;
+  } catch { return null; }
+  return { file, directory, path: path.join(destination.path, name, 'SKILL.md').split(path.sep).join('/') };
+}
+
 export async function approveSkillProposal(root, id, { env = process.env } = {}) {
   const proposal = await getSkillProposal(root, id, { env });
   if (!proposal) throw new Error('No learning proposal matches ' + id + '.');
@@ -282,14 +304,6 @@ export async function approveSkillProposal(root, id, { env = process.env } = {})
   if (proposal.evidence.length < 12) throw new Error('Stored evidence is too short.');
   // Collision checks include bundled, imported, project, and user skills. A learned
   // skill must never silently shadow an existing skill from another source.
-  const { listAvailableSkills } = await import('./tools.mjs');
-  const existing = await listAvailableSkills(root, { env });
-  if (existing.some((skill) => skill.name.toLowerCase() === proposal.name.toLowerCase())) {
-    throw new Error('A skill named "' + proposal.name + '" already exists. Rename the proposal before promoting it.');
-  }
-  const destination = await skillDestination(root, proposal.scope, env);
-  const { skillDirectory } = await createSkillDirectory(destination.base, proposal.name);
-  const file = path.join(skillDirectory, 'SKILL.md');
   const markdown = [
     '---',
     'name: ' + proposal.name,
@@ -299,19 +313,38 @@ export async function approveSkillProposal(root, id, { env = process.env } = {})
     proposal.body.trim(),
     ''
   ].join('\n');
-  try {
-    await atomicWrite(file, markdown);
-  } catch (error) {
-    await rm(skillDirectory, { recursive: true, force: true }).catch(() => {});
-    throw error;
+  let promotedPath;
+  if (proposal.update === true) {
+    const target = await existingLearnedSkill(root, proposal.scope, proposal.name, env);
+    if (!target) throw new Error('The skill "' + proposal.name + '" this proposal updates no longer exists. Reject it, or propose it as a new skill.');
+    const previous = await readFile(target.file, 'utf8');
+    await atomicWrite(path.join(target.directory, 'SKILL.md.bak'), previous);
+    await atomicWrite(target.file, markdown);
+    promotedPath = target.path;
+  } else {
+    const { listAvailableSkills } = await import('./tools.mjs');
+    const existing = await listAvailableSkills(root, { env });
+    if (existing.some((skill) => skill.name.toLowerCase() === proposal.name.toLowerCase())) {
+      throw new Error('A skill named "' + proposal.name + '" already exists. Rename the proposal, or propose it with update: true to revise a learned skill.');
+    }
+    const destination = await skillDestination(root, proposal.scope, env);
+    const { skillDirectory } = await createSkillDirectory(destination.base, proposal.name);
+    const file = path.join(skillDirectory, 'SKILL.md');
+    try {
+      await atomicWrite(file, markdown);
+    } catch (error) {
+      await rm(skillDirectory, { recursive: true, force: true }).catch(() => {});
+      throw error;
+    }
+    promotedPath = path.join(destination.path, proposal.name, 'SKILL.md').split(path.sep).join('/');
   }
   const promotedAt = new Date().toISOString();
   proposal.status = 'approved';
   proposal.updatedAt = promotedAt;
   proposal.promotedAt = promotedAt;
-  proposal.promotedPath = path.join(destination.path, proposal.name, 'SKILL.md').split(path.sep).join('/');
+  proposal.promotedPath = promotedPath;
   await persistProposal(proposal);
-  return { id: proposal.id, name: proposal.name, scope: proposal.scope, status: proposal.status, path: proposal.promotedPath };
+  return { id: proposal.id, name: proposal.name, scope: proposal.scope, status: proposal.status, path: proposal.promotedPath, ...(proposal.update === true ? { updated: true, backup: promotedPath.replace(/SKILL\.md$/, 'SKILL.md.bak') } : {}) };
 }
 
 export async function rejectSkillProposal(root, id, reason = '', { env = process.env } = {}) {
@@ -329,7 +362,7 @@ export async function rejectSkillProposal(root, id, reason = '', { env = process
 export function learningProposalText(proposal) {
   return [
     proposal.name + ' (' + proposal.id + ')',
-    'Status: ' + proposal.status + ' · Scope: ' + proposal.scope,
+    'Status: ' + proposal.status + ' · Scope: ' + proposal.scope + (proposal.update === true ? ' · Updates the existing skill (the old version is kept as SKILL.md.bak)' : ''),
     'Description: ' + proposal.description,
     'Evidence: ' + proposal.evidence,
     ...(proposal.promotedPath ? ['Promoted to: ' + proposal.promotedPath] : []),
@@ -343,7 +376,7 @@ export const LEARNING_TOOL_DEFINITIONS = [{
   type: 'function',
   function: {
     name: 'skill_propose',
-    description: 'Propose a reusable Agent Skill after a non-trivial task has actually succeeded and its relevant verification checks passed. Capture a repeatable procedure, not a one-off solution. Save to project scope by default; use user scope only for a broadly reusable preference or workflow that should follow this user across projects. This creates an inert pending proposal only: it does not activate, install, or overwrite a skill. The user must review it with /learning show ID and explicitly promote it with /learning approve ID.',
+    description: 'Propose a reusable Agent Skill after a non-trivial task has actually succeeded and its relevant verification checks passed. Capture a repeatable procedure, not a one-off solution. Save to project scope by default; use user scope only for a broadly reusable preference or workflow that should follow this user across projects. When a learned skill you used turned out outdated, wrong or incomplete, propose the corrected full body with the same name and update: true. This creates an inert pending proposal only: it does not activate, install, or overwrite anything until approved (an approved update keeps the old version as SKILL.md.bak). The user must review it with /learning show ID and explicitly promote it with /learning approve ID.',
     parameters: {
       type: 'object',
       properties: {
@@ -351,7 +384,8 @@ export const LEARNING_TOOL_DEFINITIONS = [{
         description: { type: 'string', description: 'One-sentence description, 12–180 characters.' },
         body: { type: 'string', description: 'Complete declarative Markdown skill body with Purpose, Inputs, Workflow, Required provider capabilities, Permissions, and Success criteria headings. Do not include front matter or executable scripts.' },
         evidence: { type: 'string', description: 'Brief evidence: what worked, changed files, and relevant passing check. Do not claim a check passed unless a tool result proves it.' },
-        scope: { type: 'string', enum: ['project', 'user'], description: 'Defaults to project. User scope is shared across this user’s projects.' }
+        scope: { type: 'string', enum: ['project', 'user'], description: 'Defaults to project. User scope is shared across this user’s projects.' },
+        update: { type: 'boolean', description: 'true to revise an existing learned skill of this name in this scope instead of adding a new one.' }
       },
       required: ['name', 'description', 'body', 'evidence'],
       additionalProperties: false
