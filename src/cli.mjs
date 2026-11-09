@@ -135,6 +135,7 @@ function helpText() {
     '  oasis                         Start an interactive agent session',
     '  oasis "fix the failing tests"  Give a task in plain English',
     '  oasis -p "task" [--output-format text|json|stream-json] [--max-turns N]  Run once without prompts (scripts/CI)',
+    '  oasis -p --goal "npm test passes"  Keep working until a strict check says the goal holds',
     '  cat log.txt | oasis -p "explain this error"  Piped input is added to the prompt',
     '  oasis connect                 Paste an API key, model link or local server address; detects the provider, picks the best model and backups',
     '  oasis setup                   Configure a model provider (paste first; Enter for the step-by-step menu)',
@@ -1656,7 +1657,7 @@ async function printModeRun(root, headless, args, autoApprove, persistence, stat
       if (skillCommand) prompt = skillCommand.options.fork ? 'Use the task tool with subagent_type "' + (skillCommand.options.fork.agent || 'general-purpose') + '" to run this, then report its result:\n\n' + skillCommand.prompt : skillCommand.prompt;
     }
   }
-  if (!prompt.trim() && !streamInput) throw new Error('Usage: oasis -p "your task" [--output-format text|json|stream-json] [--max-turns N] [--model ID]');
+  if (!prompt.trim() && !streamInput) throw new Error('Usage: oasis -p "your task" [--output-format text|json|stream-json] [--max-turns N] [--goal "condition"] [--model ID]');
   const config = await loadConfig();
   if (SESSION_OPTIONS.model) config.model = SESSION_OPTIONS.model;
   if (SESSION_OPTIONS.effort) Object.assign(config, applyEffort(config, SESSION_OPTIONS.effort));
