@@ -15,7 +15,8 @@
 </p>
 
 <p align="center">
-  <b>Bring any model. Keep your Claude Code setup. Get work that is actually checked.</b><br>
+  <b>The open-source coding agent for any model.</b><br>
+  Bring any model, keep your Claude Code setup, and get work that is actually checked.<br>
   OASIS runs on your machine or server and works from the terminal or any browser.<br>
   It supplies the tools, subagents, permissions and memory, and it won't say "tests pass" unless it saw them pass.
 </p>
@@ -101,6 +102,7 @@ For scripts and CI:
 oasis -p "summarize the open TODOs"                                  # one-shot
 oasis exec --output-format stream-json "fix the lint errors" > run.jsonl
 oasis -p --permission-mode dont-ask "review this diff"               # never waits on an approval
+oasis -p --permission-mode auto --goal "npm test passes"              # keeps going until the check says it holds
 ```
 
 ## Two ways to work
@@ -251,7 +253,7 @@ Two tasks and one trial cannot rank agents, and OASIS does not guarantee that ev
 | Runs Claude Code plugins | Yes, plus Codex plugins and Gemini extensions | Yes | Own plugins | Own rules and hooks | Own plugins | Own skills | Own skills |
 | Web interface | Self-hosted, remote-ready | Cloud | Cloud | Cloud agents | Local web app | Local web app | Messaging apps |
 | Subagents | Parallel, background, resumable, teams, worktrees | Yes | Yes | Yes | Yes | Yes | Yes |
-| Keeps going until a goal holds | `/goal` with pause and resume | ralph-loop plugin | `/goal` | Long-running cloud agents | Not documented | `/goal` | Not documented |
+| Keeps going until a goal holds | `/goal` with pause and resume, also in `-p --goal` for CI | ralph-loop plugin | `/goal` | Long-running cloud agents | Not documented | `/goal` | Not documented |
 | Refuses unobserved "tests pass" claims | Built in | With hooks | Not documented | Not documented | Not documented | Not documented | Not documented |
 
 Gemini CLI is now for Gemini Code Assist enterprise users; free and AI Pro users were moved to Antigravity CLI. OASIS still trails in model-specific tuning, hosted cloud runs, community size and real-world hours. The full comparison, with sources, is in [docs/COMPARISON.md](docs/COMPARISON.md).

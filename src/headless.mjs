@@ -151,6 +151,11 @@ export async function runHeadless(options) {
     includeHookEvents = false,
     forwardSubagentText = false,
     promptSuggestions = false,
+    // Goal mode (oasis -p --goal "..."): after each turn a strict side check
+    // asks whether the condition is met; if not, the run continues with the
+    // reviewer's reason, up to goalMaxTurns turns. Same loop as /goal.
+    goal = null,
+    goalMaxTurns = 10,
     // Text mode: one short line per step on stderr, so `oasis -p` is not
     // silent for minutes. On by default only when stderr is a terminal;
     // OASIS_PROGRESS=1 forces it on, OASIS_PROGRESS=0 turns it off.
@@ -178,6 +183,7 @@ export async function runHeadless(options) {
   let requests = 0;
   let structured;
   let schemaErrors = null;
+  let goalState = null;
   try {
     let restored = null;
     if (persistence.resumeId) restored = await loadSession(root, persistence.resumeId);
@@ -438,6 +444,20 @@ export async function runHeadless(options) {
       }
       } finally { if (stopInbox) stopInbox(); }
     }
+    if (goal && session && result && !inputStream) {
+      const { evaluateGoal } = await import('./agent.mjs');
+      goalState = { condition: String(goal), met: false, turns: 1, reason: '' };
+      while (!(signal && signal.aborted) && result && !result.limitReached) {
+        const verdict = await evaluateGoal(session, goalState.condition).catch((caught) => ({ met: false, reason: 'Check failed: ' + (caught.message || caught) }));
+        goalState.met = verdict.met;
+        goalState.reason = verdict.reason;
+        emit({ type: 'system', subtype: 'goal_check', met: verdict.met, reason: String(verdict.reason || '').slice(0, 500), turn: goalState.turns });
+        if (outputFormat === 'text' && env.OASIS_PROGRESS !== '0') { try { process.stderr.write('[goal] ' + (verdict.met ? 'Met' : 'Not met yet') + ': ' + verdict.reason + '\n'); } catch {} }
+        if (verdict.met || goalState.turns >= goalMaxTurns) break;
+        goalState.turns += 1;
+        result = await runOne('The goal is not met yet. A reviewer said: ' + verdict.reason + '\nContinue working toward the goal: ' + goalState.condition + '\nVerify results by running checks, not by assumption.');
+      }
+    }
     // Structured output: validate, and give the model two chances to fix it.
     for (let attempt = 0; jsonSchema && result && !result.limitReached; attempt += 1) {
       const parsed = extractJson(result.text);
@@ -459,8 +479,8 @@ export async function runHeadless(options) {
   // The budget ledger also holds subagent, review and side-request spend.
   if (session && session.budgetLedger && Number(session.budgetLedger.spentUsd) > costUsd) costUsd = Number(session.budgetLedger.spentUsd);
   if (session) closeSession(session);
-  const isError = Boolean(error) || !result || result.blockedByHook === true || Boolean(schemaErrors);
-  const subtype = error && error.code === 'BUDGET_EXCEEDED' ? 'error_max_budget_usd' : error ? 'error_during_execution' : schemaErrors ? 'error_max_structured_output_retries' : result && result.limitReached ? 'error_max_turns' : result && result.finished === false && !result.verificationIncomplete ? 'error_max_turns' : 'success';
+  const isError = Boolean(error) || !result || result.blockedByHook === true || Boolean(schemaErrors) || Boolean(goalState && !goalState.met);
+  const subtype = error && error.code === 'BUDGET_EXCEEDED' ? 'error_max_budget_usd' : error ? 'error_during_execution' : schemaErrors ? 'error_max_structured_output_retries' : goalState && !goalState.met ? 'error_goal_not_met' : result && result.limitReached ? 'error_max_turns' : result && result.finished === false && !result.verificationIncomplete ? 'error_max_turns' : 'success';
   const summary = {
     type: 'result',
     subtype,
@@ -475,6 +495,7 @@ export async function runHeadless(options) {
     ...(session && session.fallbackActive ? { fallback_model: session.fallbackActive.to } : {}),
     permission_denials: denied,
     ...(structured !== undefined ? { structured_output: structured } : {}),
+    ...(goalState ? { goal: goalState } : {}),
     ...(schemaErrors ? { structured_output_errors: schemaErrors.slice(0, 20) } : {}),
     ...(result && result.verification ? { verification: result.verification } : {}),
     ...(result && result.verificationIncomplete ? { verification_issues: result.verificationIssues } : {}),
