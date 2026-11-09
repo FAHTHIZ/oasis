@@ -488,6 +488,17 @@ function matchSnippet(line, lowerNeedle) {
   return (start > 0 ? '…' : '') + line.slice(start, start + 200) + (start + 200 < line.length ? '…' : '');
 }
 
+const REGEX_LOOKING = /\||\.\*|\.\+|\\[bdswBDSW]|^\^|\$$|\[[^\]]+\]|\(\?/;
+
+// An empty result says why, so a model does not keep re-searching blind
+// (seen live: five empty search_files calls in a row on a small task).
+function emptySearchHint(needle, prefix) {
+  const words = needle.trim().split(/\s+/);
+  return 'No matches' + (prefix ? ' under ' + prefix : '') + '. search_files matches one literal, case-insensitive string' +
+    (words.length > 2 ? '; this query has ' + words.length + ' words, so try one distinctive word or symbol' : '') +
+    '. Use grep for a regex, glob_files to find files by name, or list_files to see what exists. If the code does not exist yet, stop searching and create it.';
+}
+
 export async function searchWorkspaceFiles(root, query, limit = 25, scope) {
   const needle = String(query || '');
   if (!needle.trim()) throw new Error('Search query cannot be empty.');
@@ -509,7 +520,19 @@ export async function searchWorkspaceFiles(root, query, limit = 25, scope) {
       if (!m || SKIP_DIRS_RE.test(m[1])) continue;
       matches.push({ path: m[1], line: Number(m[2]), text: matchSnippet(m[3], lowerNeedle) });
     }
-    return { query: needle, matches, truncated: found.truncated };
+    if (!matches.length && REGEX_LOOKING.test(needle)) {
+      // Models often send `a|b` or `foo.*bar` here. Retry once as a regex.
+      try {
+        const retry = await grepWorkspace(root, { pattern: needle, ignore_case: true, path: prefix || '.', limit: maxResults }, { maxFilesize: '256K', fullLines: true });
+        for (const line of retry.results) {
+          const m = line.match(/^(.*?):(\d+):(.*)$/s);
+          if (!m || SKIP_DIRS_RE.test(m[1])) continue;
+          matches.push({ path: m[1], line: Number(m[2]), text: m[3].slice(0, 200) });
+        }
+        if (matches.length) return { query: needle, matches, truncated: retry.truncated, note: 'No literal match, so the query was searched as a regular expression.' };
+      } catch {}
+    }
+    return matches.length ? { query: needle, matches, truncated: found.truncated } : { query: needle, matches, truncated: false, hint: emptySearchHint(needle, prefix) };
   }
   const inScope = (rel) => !prefix || prefix === '.' || rel === prefix || rel.startsWith(prefix + '/');
   const files = await walkFiles(await realpath(root), { includeHidden: true, maxFiles: 20000, maxDepth: 24, filter: inScope });
@@ -529,7 +552,7 @@ export async function searchWorkspaceFiles(root, query, limit = 25, scope) {
       }
     }
   }
-  return { query: needle, matches, truncated: false };
+  return matches.length ? { query: needle, matches, truncated: false } : { query: needle, matches, truncated: false, hint: emptySearchHint(needle, prefix) };
 }
 
 export function scrubEnvironment(source = process.env) {
