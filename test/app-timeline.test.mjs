@@ -53,6 +53,8 @@ test('a finished group sums up its steps; a live group names the running step', 
 test('durations are short and readable', () => {
   assert.equal(formatDuration(20), '<0.1s');
   assert.equal(formatDuration(420), '0.4s');
+  assert.equal(formatDuration(null), '');
+  assert.equal(formatDuration(undefined), '');
   assert.equal(formatDuration(12_400), '12s');
   assert.equal(formatDuration(65_000), '1m 05s');
   assert.equal(formatDuration(undefined), '');

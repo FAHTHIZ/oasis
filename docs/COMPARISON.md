@@ -47,13 +47,25 @@ Claude Code is the reference point for agent behaviour, and OASIS reads its conf
 - OASIS matches it on local execution, approval modes, MCP, image input and IDE integration (over ACP). It has no desktop app; the web app covers that role from any browser. OASIS's live agent monitor and `/tasks` cover what the command center shows.
 - Codex's advantage is Codex Web, hosted cloud execution. OASIS has no hosted service: the web app, from any device, connects to your own computer or server.
 
+Codex also has [`/goal`](https://learn.chatgpt.com/docs/cli/slash-commands): a persistent objective with pause, resume, edit and clear. OASIS's `/goal` has the same lifecycle (`/goal pause`, `/goal resume`, `/goal edit`, `/goal clear`). A goal that was running when the session was saved comes back paused, and resuming keeps the turn count and the last check.
+
+## Cursor CLI
+
+[Cursor CLI](https://cursor.com/docs/cli/changelog) is proprietary and runs Cursor's model catalog (Auto routing by default, with some bring-your-own-key options such as Bedrock). It has plan and ask modes, MCP, hooks, subagents, and a handoff that pushes a local conversation to a [Cloud Agent](https://cursor.com/changelog/cli-jan-16-2026) to keep running. OASIS has no hosted cloud. It runs wherever you install it, and the self-hosted web app reaches it from any browser.
+
+## Kimi Code CLI
+
+[Kimi Code CLI](https://github.com/MoonshotAI/kimi-code) is MIT-licensed TypeScript and the successor to the archived Python Kimi CLI. It is tuned for Kimi models and has `/goal`, `!` shell mode, built-in coder, explore and plan subagents, a local web UI and ACP ([introduction](https://www.kimi.ai/resources/kimi-code-introduction)). OASIS covers the same ground (`/goal`, `!` shell mode, explore, plan and general-purpose subagents, a web app and ACP) for any model provider, and also runs Claude Code plugins.
+
 ## Gemini CLI
+
+Gemini CLI is now for Gemini Code Assist enterprise users. Free and Google AI Pro users were moved to Antigravity CLI ([Gemini CLI README](https://raw.githubusercontent.com/google-gemini/gemini-cli/main/README.md)).
 
 [Gemini CLI](https://github.com/google-gemini/gemini-cli) covers MCP, sandboxing, checkpointing and headless `json` / `stream-json` output, with a VS Code companion. It runs Google's models only. Since v0.36 it has [subagents](https://developers.googleblog.com/en/subagents-have-arrived-in-gemini-cli/): built-in `codebase_investigator`, `cli_help` and `generalist`, custom agents in `.gemini/agents`, parallel runs and remote A2A agents. OASIS runs Gemini models too, with thought-signature replay, and adds background and resumable agents, teams, worktree isolation and other providers.
 
 ## OpenCode
 
-[OpenCode](https://github.com/sst/opencode) has a `build` agent, a read-only `plan` agent and a `general` subagent invoked with `@general`, plus a desktop app and a local [web app](https://opencode.ai/docs) (`opencode web`, `opencode pair`). It is the closest open-source competitor and has a much larger community. OASIS has the same split (default and `plan` modes, built-in subagents) and adds background, resumable and team agents, worktree isolation, Claude Code plugin compatibility and a verification step after edits.
+[OpenCode](https://github.com/anomalyco/opencode) has a `build` agent, a read-only `plan` agent and a `general` subagent invoked with `@general`, plus a desktop app and a local [web app](https://opencode.ai/docs) (`opencode web`, `opencode pair`). It is the closest open-source competitor and has a much larger community. OASIS has the same split (default and `plan` modes, built-in subagents) and adds background, resumable and team agents, worktree isolation, Claude Code plugin compatibility and a verification step after edits.
 
 ## Goose
 
@@ -66,7 +78,7 @@ Claude Code is the reference point for agent behaviour, and OASIS reads its conf
 ## Where OASIS goes further
 
 - **Any provider.** OpenAI-compatible, Anthropic, Gemini, cloud and local servers. Fallback models and task-aware routing send simple read-only requests to a cheaper model.
-- **Verification gate.** The agent is sent back when it reports success without reviewing its diff or running checks.
+- **Verification gate.** The agent is sent back when it reports success without reviewing its diff or running checks. A "tests pass" claim made when no check ran is sent back too, and an answer that still can't be verified ends with "Not verified: … Run `npm test` to confirm." (Found in a real run: the model wrote a fake passing test log after `npm test` was not approved.)
 - **Two interfaces, one runtime.** The terminal and a self-hosted web app (live timeline with expandable steps, task sidebar, interactive terminal, Files and Changes panels, plugin installer) that works the same on a laptop or a phone. Sessions move between them. ACP, editor, SDK and messaging integrations connect to the same runtime.
 - **Claude Code plugins.** Installed and used from Anthropic's official marketplace on 8 November 2026: superpowers, frontend-design, code-review, context7, playwright, hookify, security-guidance and others, including their hooks, skills and MCP servers.
 - **Codex plugins.** On 9 November 2026, BuilderIO/skills, n8n-io/skills, DataDog/pup and NVIDIA/nvidia-kaggle installed with `oasis add` (78 skills). Codex-only plugins install too, and their MCP servers resolve a relative `cwd`, `./` commands and `${PLUGIN_ROOT}` against the plugin folder, as Codex does ([Codex source](https://github.com/openai/codex/blob/main/codex-rs/codex-mcp/src/agent_plugin_config.rs)). Plugins that need their own dependencies (nexu-io/codex-slides needs `pnpm install`) or programs (Storybloq) still need that setup.
@@ -78,7 +90,7 @@ Claude Code is the reference point for agent behaviour, and OASIS reads its conf
 | --- | --- | --- |
 | Model tuning | Claude Code's prompts and tool schemas are tuned for Claude models, and much of its reliability comes from that tuning. | OASIS works across many model families, so it can't tune for one the same way. |
 | Hosted cloud execution | Codex Web and Claude Code cloud sessions run tasks without your computer being on. | OASIS runs only where you install it. Remote access from any browser goes through your own computer or server. |
-| Field maturity | Claude Code and Codex are used by very large populations, so their edge cases get found quickly. | OASIS has about 2,300 automated tests and adversarial suites, but far fewer real-world hours. |
+| Field maturity | Claude Code and Codex are used by very large populations, so their edge cases get found quickly. | OASIS has about 2,350 automated tests and adversarial suites, but far fewer real-world hours. |
 | Edits in default mode | Claude Code asks before every edit in `default` mode. OASIS applies edits inside the workspace without asking (they are checkpointed and can be rewound, and protected config paths still prompt). | A deliberate choice for speed. Use `plan` mode or `ask` rules for `edit_file` to get Claude Code's behaviour. |
 | Code signing | macOS warns on first launch of unsigned apps. | OASIS macOS packages are not code-signed yet. |
 | Plugin cost | Each enabled plugin adds tools and prompt text. With 16 on, tool schemas fell from 36.5k to 16.5k characters once large MCP servers moved behind `tool_search`. | Plugin prompt text (skills, hook output) is still loaded eagerly. |
@@ -86,7 +98,7 @@ Claude Code is the reference point for agent behaviour, and OASIS reads its conf
 
 ## How to check these claims
 
-- `npm test` runs the full suite (about 2,300 tests).
+- `npm test` runs the full suite (about 2,350 tests).
 - `node --test test/subagent-definitions.test.mjs` covers front matter, memory, `output_schema` and the stall monitor.
 - `node --test test/mcp-tasks.test.mjs` covers MCP Tasks, background tasks and `/tasks`.
 - `oasis doctor --test-provider` runs a live tool-call check against your own model.

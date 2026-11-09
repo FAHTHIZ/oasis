@@ -1851,18 +1851,23 @@ async function runGoal(goal, root, autoApprove, session, persistence) {
   const onStop = () => { stopped = true; };
   process.on('SIGINT', onStop);
   const { evaluateGoal } = await import('./agent.mjs');
-  let state = { condition: goal.condition, active: true, achieved: false, turns: 0, reason: '' };
+  const startTurns = Math.max(0, Number(goal.turns) || 0);
+  const limit = startTurns + goal.maxTurns;
+  let state = { condition: goal.condition, active: true, paused: false, achieved: false, turns: startTurns, reason: goal.reason || '' };
+  if (session) session.goal = state;
   try {
-    let prompt = 'Goal: ' + goal.condition + '\nWork toward this goal now. Verify results by running checks, not by assumption. Keep going until it is fully met.';
-    while (!stopped && state.active && state.turns < goal.maxTurns) {
+    let prompt = startTurns && state.reason
+      ? 'Resuming the goal: ' + goal.condition + '\nThe last check said: ' + state.reason + '\nInspect the current state first, do not repeat finished work, verify results by running checks, and keep going until it is fully met.'
+      : 'Goal: ' + goal.condition + '\nWork toward this goal now. Verify results by running checks, not by assumption. Keep going until it is fully met.';
+    while (!stopped && state.active && state.turns < limit) {
       state.turns += 1;
-      stdout.write('[goal] Turn ' + state.turns + ' of up to ' + goal.maxTurns + '\n');
+      stdout.write('[goal] Turn ' + (state.turns - startTurns) + ' of up to ' + goal.maxTurns + (startTurns ? ' (' + state.turns + ' in total)' : '') + '\n');
       session = await runPrompt(prompt, root, autoApprove, session, persistence);
       persistence.resumeId = null;
       if (!session) break;
       if (session.goal && session.goal !== state && !session.goal.active) break;
       session.goal = state;
-      if (stopped) break;
+      if (stopped || !state.active) break;
       const verdict = await evaluateGoal(session, goal.condition).catch((error) => ({ met: false, reason: 'Check failed: ' + error.message }));
       state.reason = verdict.reason;
       if (verdict.met) { state.achieved = true; state.active = false; stdout.write('[goal] Met: ' + verdict.reason + '\n'); break; }
@@ -1870,8 +1875,18 @@ async function runGoal(goal, root, autoApprove, session, persistence) {
       prompt = 'The goal is not met yet. A reviewer said: ' + verdict.reason + '\nContinue working toward the goal: ' + goal.condition;
     }
   } finally { process.removeListener('SIGINT', onStop); }
-  if (state.active) { state.active = false; stdout.write('[goal] Stopped after ' + state.turns + ' turn(s). /goal shows the last check.\n'); }
-  if (session) session.goal = state;
+  if (state.active) {
+    // Ctrl+C or the turn limit: keep the goal so /goal resume can pick it up.
+    state.active = false;
+    state.paused = true;
+    stdout.write('[goal] Paused after ' + state.turns + ' turn(s)' + (stopped ? '' : ' (turn limit reached)') + '. /goal shows the last check; /goal resume continues.\n');
+  }
+  if (session) {
+    session.goal = state;
+    if (persistence && persistence.enabled) {
+      try { const { saveSession } = await import('./sessions.mjs'); await saveSession(session, { env: process.env }); } catch { /* saving is best effort; the next turn saves again */ }
+    }
+  }
   return session;
 }
 
@@ -2054,6 +2069,16 @@ async function applyThemeFromSettings(settings) {
 
 async function interactive(root, autoApprove, persistence = {}) {
   let session = null;
+  // Interactive mode reads from a terminal. Piped or redirected input used to
+  // print "Oasis session closed." and exit without saying why.
+  if (!stdin.isTTY && process.env.OASIS_SIMPLE_INPUT !== '1') {
+    stderr.write('oasis: interactive mode needs a terminal, and input here is piped or redirected.\n' +
+      'To run a task from a script, use print mode:\n' +
+      '  oasis -p "fix the failing test"\n' +
+      '  echo "fix the failing test" | oasis -p\n');
+    process.exitCode = 2;
+    return session;
+  }
   // Keep model windows and prices current (models.dev, at most daily, in the background).
   import('./model-catalog.mjs').then(({ refreshModelCatalog }) => refreshModelCatalog()).catch(() => {});
   await ensureModelProviderSetup(root);
