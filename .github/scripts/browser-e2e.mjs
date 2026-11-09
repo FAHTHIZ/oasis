@@ -120,6 +120,26 @@ try {
         assert.match(await page.locator('#transcript').innerText(), /add\(\) in math\.mjs is wrong/, 'the restored chat keeps the request');
         assert.equal(await page.locator('.msg.user').count(), 1, 'the request is not shown twice after a reload');
         console.log('[resume] reload reattached to the running task');
+        // The server says which conversation is running and its live job.
+        const live = await page.evaluate(async () => {
+          const token = sessionStorage.getItem('oasis.web.token');
+          const response = await fetch('/api/sessions', { headers: { authorization: 'Bearer ' + token } });
+          return ((await response.json()).sessions || []).filter((item) => item.running);
+        });
+        assert.equal(live.length, 1, 'one running session');
+        assert.match(live[0].jobId || '', /^[0-9a-f-]{36}$/, 'the running session names its job');
+        assert.match(live[0].prompt || '', /add\(\) in math\.mjs is wrong/);
+        // Switching to a new task leaves this one running (it used to cancel it);
+        // coming back reattaches and asks the same approval again.
+        await page.locator('#sideNewTask').click();
+        await page.locator('#welcomeTitle').waitFor({ state: 'visible', timeout: timeoutMs });
+        assert.equal(await page.locator('#approvalSheet').isVisible(), false, 'the approval belongs to the other task');
+        const away = page.locator('#sideTasks .side-task.running:not(.current)');
+        await away.first().waitFor({ timeout: timeoutMs });
+        await away.first().click();
+        await page.locator('#approvalSheet').waitFor({ state: 'visible', timeout: timeoutMs });
+        assert.equal(await page.locator('.msg.user').count(), 1, 'the request is shown once after switching back');
+        console.log('[resume] switching tasks kept it running; switching back reattached');
         continue;
       }
       if (approvals === 0) await page.screenshot({ path: path.join(screenshotDir, 'approval-dark.png') });

@@ -139,6 +139,8 @@ matchMedia('(prefers-color-scheme: light)').addEventListener('change', applyThem
 
 /* ---------- Toasts ---------- */
 function toast(message, kind = '') {
+  // The same note twice in a row (for example two reconnects) shows once.
+  for (const old of $('toasts').children) if (old.textContent === message) old.remove();
   const el = document.createElement('div');
   el.className = 'toast ' + kind;
   el.textContent = message;
@@ -317,10 +319,30 @@ for (const id of ['commandPaletteDialog', 'shortcutsDialog']) {
 
 /* ---------- Sheets ---------- */
 const openSheets = [];
+// A docked approval sits over the chat column, just above the message box.
+function placeDocked() {
+  const el = $('approvalSheet');
+  if (el.hidden || !el.classList.contains('docked')) return;
+  const box = $('composer').getBoundingClientRect();
+  el.style.left = Math.round(box.left) + 'px';
+  el.style.width = Math.round(box.width) + 'px';
+  el.style.bottom = Math.round(innerHeight - box.top + 10) + 'px';
+  // Leave room so the last steps can scroll out from under the card.
+  $('chat').style.paddingBottom = (el.offsetHeight + 16) + 'px';
+  scrollDown();
+}
+addEventListener('resize', placeDocked);
+// Opening the files panel or the sidebar moves the message box too.
+if (typeof ResizeObserver === 'function') new ResizeObserver(() => placeDocked()).observe($('composer'));
 function openSheet(id) {
   const el = $(id);
   el.hidden = false;
-  $('backdrop').hidden = false;
+  // On wide screens an approval docks above the message box without blocking
+  // the page, so the sidebar stays usable and the task keeps waiting.
+  const docked = id === 'approvalSheet' && matchMedia('(min-width:1100px)').matches && !document.documentElement.classList.contains('side-hidden');
+  el.classList.toggle('docked', docked);
+  el.setAttribute('aria-modal', docked ? 'false' : 'true');
+  if (docked) placeDocked(); else $('backdrop').hidden = false;
   openSheets.push(id);
   try { history.pushState({ sheet: id }, ''); } catch { /* sandboxed frames */ }
   const focusable = el.querySelector('input,select,textarea,button:not([data-close])');
@@ -331,9 +353,10 @@ function closeSheet(id, { fromHistory = false } = {}) {
   const el = $(id);
   if (!el || el.hidden) return;
   el.hidden = true;
+  if (el.classList.contains('docked')) { el.classList.remove('docked'); el.style.left = el.style.width = el.style.bottom = ''; $('chat').style.paddingBottom = ''; }
   if (!fromHistory && history.state && history.state.sheet === id) { ignorePop = true; history.back(); }
   openSheets.splice(openSheets.indexOf(id), 1);
-  if (!openSheets.length) $('backdrop').hidden = true;
+  if (!openSheets.some((open) => !$(open).classList.contains('docked'))) $('backdrop').hidden = true;
   if (id === 'approvalSheet') markWaitingTools(false);
   if (id === 'approvalSheet' && approvalResolve) { approvalResolve(false); approvalResolve = null; }
   if (id === 'questionSheet' && questionResolve) { questionResolve(''); questionResolve = null; }
@@ -493,7 +516,11 @@ async function send(text) {
   turnSettled = new Promise((resolve) => { settle = resolve; });
   try { await agent.send(message, { maxSteps: Number(settings.maxSteps) || 40, plugins, images }); }
   catch { /* shown through the error event */ }
-  finally { setBusy(false); persistChat(); refreshFiles(); settle(); if (RT) refreshRuntimeStatus().then(updateProjectUI).catch(() => {}); attention('done', message); }
+  finally {
+    setBusy(false);
+    if (!agent.detached) { persistChat(); attention('done', message); }
+    refreshFiles(); settle(); if (RT) refreshRuntimeStatus().then(updateProjectUI).catch(() => {});
+  }
 }
 
 // Switching chats stops the running turn and waits for it to wind down, so
@@ -506,6 +533,20 @@ async function stopTurn() {
   if (!agent.busy) return;
   agent.stop();
   await Promise.race([turnSettled, new Promise((resolve) => setTimeout(resolve, 5000))]);
+}
+// Leaving a chat (switching, new task): a task on the computer keeps running
+// and is picked up again when its chat is opened. Only the in-browser engine
+// has to stop.
+// Returns true when it detached; the chat was saved with its job id then, and
+// the caller must not save it again (that would drop the job id).
+async function leaveTurn() {
+  if (!agent.busy) return false;
+  if (!(RT && agent.detach && agent.jobId && agent.jobKind === 'agent')) { await stopTurn(); return false; }
+  await persistChat();
+  agent.detach();
+  if (!$('approvalSheet').hidden) closeSheet('approvalSheet');
+  await Promise.race([turnSettled, new Promise((resolve) => setTimeout(resolve, 5000))]);
+  return true;
 }
 
 /* ---------- Smart connect ---------- */
@@ -1389,6 +1430,19 @@ function handleEvent(event) {
     case 'resumed':
       toast('Reconnected to the task that was running.');
       break;
+    case 'reconnecting':
+      toast('Connection lost. Reconnecting… The task keeps running on the computer.');
+      break;
+    case 'reconnected':
+      toast('Back online.');
+      break;
+    case 'detached':
+      // Switched to another chat: the task keeps running on the computer and
+      // this chat reattaches when it is opened again. Nothing is saved here,
+      // so the saved job id survives.
+      removeThinking();
+      clearCursor();
+      break;
     case 'done':
       endTurn('');
       offerUndo();
@@ -1541,7 +1595,7 @@ function persistChat() {
     id: chatId,
     title: chatTitle(),
     display: display.slice(-200).map((entry) => ({ ...entry, tools: entry.tools && entry.tools.map((t) => ({ ...t, content: (t.content || '').slice(0, 2000) })) })),
-    ...(RT && agent.busy && agent.jobId ? { turnStart } : {}),
+    ...(RT && agent.busy && agent.jobId ? { turnStart: Math.max(0, turnStart - Math.max(0, display.length - 200)) } : {}),
     messages: RT ? agent.snapshot() : agent.messages.slice(-300).map((m) => (Array.isArray(m.content) ? { ...m, content: textOf(m.content) + ' (image not kept in saved chats)' } : m)),
     ...(!RT ? { pendingSteering: agent.steering.slice(0, 20) } : {})
   }; } catch { return chatSaving; }
@@ -1570,8 +1624,7 @@ async function saveChat(snapshot) {
 }
 
 async function newChat() {
-  await stopTurn();
-  if (workspace) await persistChat();
+  if (!(await leaveTurn()) && workspace) await persistChat();
   chatId = Math.random().toString(36).slice(2, 10);
   if (workspace) { const index = await chatIndex(workspace.project.id); index.current = chatId; await store.setValue('chats:' + workspace.project.id, index); }
   await restoreChat({ keepChat: true });
@@ -1581,8 +1634,7 @@ async function newChat() {
 
 async function openChat(id) {
   if (!workspace || id === chatId) return;
-  await stopTurn();
-  await persistChat();
+  if (!(await leaveTurn())) await persistChat();
   chatId = id;
   const index = await chatIndex(workspace.project.id);
   index.current = id;
@@ -1640,19 +1692,32 @@ async function openChats() {
 }
 // Sessions saved by OASIS on this computer (terminal runs included) that this
 // browser has no chat for yet. Opening one continues it with its history.
-async function renderRuntimeSessions() {
-  const list = $('runtimeSessionList');
-  const show = (on) => { for (const id of ['runtimeSessionsLabel', 'runtimeSessionsHint', 'runtimeSessionList']) $(id).hidden = !on; };
-  if (!mcpAvailable() || !workspace) { show(false); return; }
+// The server's session store is shared by every browser and the terminal;
+// this browser's chat list only knows the chats it started or opened.
+async function runtimeSessionState() {
+  if (!mcpAvailable() || !workspace) return null;
   let sessions = [];
-  try { sessions = (await RT.client.api('/api/sessions')).sessions || []; } catch { show(false); return; }
+  try { sessions = (await RT.client.api('/api/sessions')).sessions || []; } catch { return null; }
   const linked = new Set([agent.sessionId].filter(Boolean));
+  const chatSessions = new Map();
   const index = await chatIndex(workspace.project.id);
   for (const item of index.list) {
     const saved = await store.getValue(chatKey(workspace.project.id, item.id)).catch(() => null);
-    if (saved && saved.messages && typeof saved.messages.sessionId === 'string') linked.add(saved.messages.sessionId);
+    if (saved && saved.messages && typeof saved.messages.sessionId === 'string' && saved.messages.sessionId) { linked.add(saved.messages.sessionId); chatSessions.set(item.id, saved.messages.sessionId); }
   }
-  const items = sessions.filter((item) => item && item.id && !linked.has(item.id) && item.messages > 0).slice(0, 12);
+  const running = new Set(sessions.filter((item) => item && item.running).map((item) => item.id));
+  return { sessions, linked, running, chatSessions };
+}
+async function unlinkedRuntimeSessions(limit = 12, state = null) {
+  const known = state || await runtimeSessionState();
+  if (!known) return null;
+  return known.sessions.filter((item) => item && item.id && !known.linked.has(item.id) && (item.messages > 0 || item.running)).slice(0, limit);
+}
+async function renderRuntimeSessions() {
+  const list = $('runtimeSessionList');
+  const show = (on) => { for (const id of ['runtimeSessionsLabel', 'runtimeSessionsHint', 'runtimeSessionList']) $(id).hidden = !on; };
+  const items = await unlinkedRuntimeSessions();
+  if (!items) { show(false); return; }
   list.replaceChildren();
   for (const item of items) {
     const li = document.createElement('li');
@@ -1673,19 +1738,22 @@ async function openRuntimeSession(item) {
   let saved;
   try { saved = await RT.client.api('/api/sessions/' + item.id); }
   catch (error) { toast('Could not open that session: ' + error.message, 'error'); return; }
-  await stopTurn();
-  await persistChat();
+  if (!(await leaveTurn())) await persistChat();
   chatId = Math.random().toString(36).slice(2, 10);
   const projectId = workspace.project.id;
   const shown = (saved.messages || []).map((entry) => ({ role: entry.role, content: entry.content, at: 0 }));
-  await store.setValue(chatKey(projectId, chatId), { messages: { sessionId: item.id, pendingShell: [] }, display: shown });
+  // Still running (started in another browser or the terminal): show the
+  // request it is working on, then attach to the live task.
+  const live = typeof item.jobId === 'string' && item.jobId;
+  if (live && item.prompt && !(shown.length && shown[shown.length - 1].role === 'user' && shown[shown.length - 1].content === item.prompt)) shown.push({ role: 'user', content: item.prompt, at: Date.now() });
+  await store.setValue(chatKey(projectId, chatId), { messages: { sessionId: item.id, pendingShell: [], ...(live ? { jobId: item.jobId } : {}) }, display: shown, ...(live ? { turnStart: shown.length } : {}) });
   const index = await chatIndex(projectId);
   index.current = chatId;
   index.list = [{ id: chatId, title: item.title || 'Session', updatedAt: Date.now() }, ...index.list].slice(0, 50);
   await store.setValue('chats:' + projectId, index);
   await restoreChat({ keepChat: true });
   refreshFiles();
-  toast('Continuing this session. New messages keep its history.');
+  toast(live ? 'Following the task that is running on this computer.' : 'Continuing this session. New messages keep its history.');
 }
 /* ---------- Sidebar: tasks at a glance (wide screens) ---------- */
 // Like the session lists in Codex, Claude Code and Devin: one click to start
@@ -1727,6 +1795,7 @@ async function renderSidebar() {
     const open = document.createElement('button');
     open.type = 'button';
     open.className = 'side-task' + (current ? ' current' : '') + (current && busy ? (waiting ? ' waiting' : ' running') : '');
+    open.dataset.chat = item.id;
     if (current) open.setAttribute('aria-current', 'page');
     open.innerHTML = '<span class="side-dot" aria-hidden="true"></span><span class="side-title"></span><span class="side-when"></span>';
     open.querySelector('.side-title').textContent = item.title || 'New chat';
@@ -1736,10 +1805,47 @@ async function renderSidebar() {
     li.appendChild(open);
     list.appendChild(li);
   }
+  void renderSideSessions(ticket);
   const host = location.host;
   $('sideStatusText').textContent = RT && !RT.needsToken ? (location.protocol === 'https:' ? 'Secure · ' : '') + host : RT ? 'Waiting for access key' : 'This browser only';
   $('sideStatus').classList.toggle('ok', Boolean(RT && !RT.needsToken));
 }
+// Conversations on this computer that this browser has not opened: started
+// in the terminal or on another device. A running one attaches when opened.
+async function renderSideSessions(ticket) {
+  const state = await runtimeSessionState();
+  const items = state ? await unlinkedRuntimeSessions(8, state) : null;
+  if (ticket !== sidebarRender) return;
+  // Chats left while their task kept running on the computer.
+  if (state) {
+    for (const button of $('sideTasks').querySelectorAll('.side-task[data-chat]')) {
+      const id = button.dataset.chat;
+      if (id === chatId || !state.running.has(state.chatSessions.get(id))) continue;
+      button.classList.add('running');
+      button.querySelector('.side-when').textContent = 'Working';
+    }
+  }
+  const list = $('sideSessions');
+  $('sideSessionsLabel').hidden = list.hidden = !(items && items.length);
+  list.replaceChildren();
+  for (const item of items || []) {
+    const li = document.createElement('li');
+    const open = document.createElement('button');
+    open.type = 'button';
+    open.className = 'side-task' + (item.running ? ' running' : '');
+    open.innerHTML = '<span class="side-dot" aria-hidden="true"></span><span class="side-title"></span><span class="side-when"></span>';
+    open.querySelector('.side-title').textContent = item.title || 'Untitled session';
+    open.querySelector('.side-when').textContent = item.running ? 'Working' : relativeTime(Date.parse(item.updatedAt) || 0);
+    open.title = (item.title || 'Untitled session') + (item.running ? ' (running now)' : '');
+    open.addEventListener('click', () => void openRuntimeSession(item));
+    li.appendChild(open);
+    list.appendChild(li);
+  }
+}
+// A task left running in another chat finishes on its own; refresh its dot.
+setInterval(() => {
+  if (document.visibilityState === 'visible' && document.querySelector('#sidebar .side-task.running:not(.current)')) void renderSidebar();
+}, 8000);
 const SIDEBAR_KEY = 'oasis.sidebar';
 function applySidebar() {
   let hidden = false;
@@ -1780,7 +1886,8 @@ async function restoreChat({ keepChat = false } = {}) {
     display = resumeId && Number.isInteger(saved.turnStart) ? saved.display.slice(0, saved.turnStart) : saved.display;
     renderSavedDisplay(display);
     scrollDown(true);
-    if (resumeId) void resumeTurn(resumeId);
+    // Keep where the turn starts: leaving this chat again saves it.
+    if (resumeId) { turnStart = Number.isInteger(saved.turnStart) ? saved.turnStart : display.length; void resumeTurn(resumeId); }
   } else $('welcome').hidden = false;
   void renderSidebar();
 }
@@ -1792,7 +1899,7 @@ async function resumeTurn(jobId) {
   turnSettled = new Promise((resolve) => { settle = resolve; });
   try { await agent.resume(jobId); }
   catch { /* shown through the error event */ }
-  finally { setBusy(false); persistChat(); refreshFiles(); settle(); if (RT) refreshRuntimeStatus().then(updateProjectUI).catch(() => {}); }
+  finally { setBusy(false); if (!agent.detached) persistChat(); refreshFiles(); settle(); if (RT) refreshRuntimeStatus().then(updateProjectUI).catch(() => {}); }
 }
 
 /* ---------- Approvals ---------- */

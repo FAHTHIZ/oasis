@@ -108,6 +108,7 @@ The sidebar (on wide screens) lists this project's tasks with a dot for those st
 | Copy or reuse a message | Hover a message for **Copy** (the original Markdown) and, on your own messages, **Edit**. Code blocks have their own Copy button. |
 | Watch the context window | The ring beside the Send button shows how full the context window is. It turns amber at 70% and red at 90%. |
 | Know when it's done | In a background tab the page title shows a badge when a task finishes or needs approval. Turn on browser notifications and optional sounds under **Settings**. |
+| Work on several tasks | Choose **New task** or another task in the sidebar while one runs. The running task keeps going and shows Working or Needs you; open it again to follow it or answer its approval. Tasks from other browsers or from `oasis` in a terminal are listed under **Other devices and terminal**. On wide screens the approval card sits above the message box, so the sidebar stays usable. One task runs per project at a time. |
 | Use a terminal | Press Ctrl+` and choose **Start terminal** for your own shell in the workspace beside the chat. The agent cannot see it, and reloading the page reconnects to it. |
 | Download a chat | Ctrl+K → **Download this chat** saves one HTML page with every tool step, no scripts, credentials redacted. |
 | Open everything else | Ctrl+K (Cmd+K on macOS) opens the command palette. Ctrl+/ lists every shortcut. |

@@ -3,6 +3,21 @@
 A short, dated record of changes, tests, benchmark results, blockers and known
 weaknesses. Newest first. Detailed user-facing notes go in the CHANGELOG.
 
+## 2026-11-09 (web app: background tasks, docked approvals, reconnects)
+
+### Changes
+- Leaving a running task (New task, another chat, a server session) used to call `stopTurn`, which cancelled the job on the server. `RuntimeAgent.detach()` now aborts only the local follow loop; the job keeps running and the chat is saved with its job id. `follow()` posts no approval/answer and emits `detached` instead of `stopped`/`done`.
+- `GET /api/sessions` marks running sessions with `jobId` and the original `prompt`. A brand-new conversation is not on disk until its first turn ends, so live agent jobs whose session is not listed yet are added as entries; before, the sidebar could not see a task another device had just started.
+- Sidebar section **Other devices and terminal** lists server sessions not linked to a local chat; opening a running one shows the prompt and follows the job.
+- Bug found by e2e: after a reload-resume, the in-memory `turnStart` stayed 0, so leaving the chat again saved `turnStart: 0` and returning dropped the user's request. `restoreChat` now restores `turnStart` when it resumes.
+- Approval sheet docks over the chat column on screens ≥1100 px (no backdrop, `aria-modal=false`, positioned from the composer's rect via ResizeObserver, chat gets bottom padding). The modal backdrop blocked the sidebar, so a waiting task trapped the user. Phones keep the bottom sheet.
+- Runtime client: reconnect backoff up to 5 s for ~70 tries with `reconnecting`/`reconnected` events; HTTP 401 says the browser is no longer signed in.
+
+### Tests
+- `test/app-runtime-resume.test.mjs`: detach posts no approval and no cancel, emits `detached` (4/4).
+- Browser e2e: reload reattaches; `/api/sessions` reports one running session with job id and prompt; New task hides the approval; reopening the running task asks the same approval with the request shown once. Pass, axe contrast clean in dark, light, phone and sign-in.
+- Related unit suites: 281 pass, 0 fail.
+
 ## 2026-11-09 (web app: sidebar, session recovery, remote sign-in, docs)
 
 ### Changes
