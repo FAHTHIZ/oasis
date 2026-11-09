@@ -2364,7 +2364,8 @@ async function watchCommentsCommand(root, autoApprove, persistence = {}) {
 }
 
 const WEB_HELP = [
-  'Usage: oasis web [--open] [--host HOST] [--port PORT] [--tls-cert FILE --tls-key FILE] [--allow-insecure-lan]',
+  'Usage: oasis web [--open] [--host HOST] [--port PORT] [--tls-cert FILE --tls-key FILE] [--public-url URL] [--trust-proxy] [--persistent-key] [--allow-insecure-lan]',
+  '       oasis web key [--rotate]   print (or replace) the saved access key',
   '',
   'Serves the OASIS browser workspace from this computer. The browser is only the interface;',
   'files, commands and model requests stay in this process.',
@@ -2374,12 +2375,31 @@ const WEB_HELP = [
   '  --port PORT            port (default 3917; 0 picks a free port)',
   '  --tls-cert FILE        serve HTTPS with this certificate (requires --tls-key)',
   '  --tls-key FILE         private key for --tls-cert',
-  '  --allow-insecure-lan   allow plain HTTP on a non-loopback address'
+  '  --public-url URL       the address people use to reach OASIS (domain, tunnel or proxy); accepts that host name',
+  '  --allow-host HOST      accept another host name (repeatable; *.example.com allowed)',
+  '  --trust-proxy          trust X-Forwarded-Proto/Host/For from a reverse proxy on this computer',
+  '  --persistent-key       keep the same access key across restarts (implied by --public-url)',
+  '  --allow-insecure-lan   allow plain HTTP on a non-loopback address',
+  '',
+  'Remote access: keep OASIS on 127.0.0.1 and put an HTTPS reverse proxy or tunnel in front of it,',
+  'for example: oasis web --public-url https://oasis.example.com --trust-proxy. See docs/REMOTE-ACCESS.md.'
 ].join('\n');
 
 async function startWebWorkspace(root, args) {
   if (args.includes('--help') || args.includes('-h')) { process.stdout.write(WEB_HELP + '\n'); return; }
+  if (args[0] === 'key') {
+    const { loadAccessKey } = await import('./remote-access.mjs');
+    const rotate = args.includes('--rotate');
+    const saved = loadAccessKey({ rotate });
+    if (saved.source === 'env') stdout.write('The access key comes from OASIS_WEB_TOKEN. Change that variable to replace it.\n');
+    else stdout.write((rotate ? 'New access key saved' : saved.created ? 'Access key created' : 'Saved access key') + ' (' + saved.file + '):\n' + saved.key + '\n' + (rotate ? 'Restart oasis web for the new key to take effect. Old links stop working.\n' : ''));
+    return;
+  }
   await ensureModelProviderSetup(root);
+  let publicUrl = '';
+  const allowedHosts = [];
+  let trustProxy = false;
+  let persistentKey = false;
   let host = '127.0.0.1';
   let port = 3917;
   let tlsCertFile = null;
@@ -2406,12 +2426,35 @@ async function startWebWorkspace(root, args) {
     } else if (arg.startsWith('--tls-key=')) tlsKeyFile = arg.slice(10);
     else if (arg === '--allow-insecure-lan') allowInsecureLan = true;
     else if (arg === '--open') openBrowser = true;
-    else throw new Error('Unknown web option: ' + arg + '. Supported options: --host HOST, --port PORT, --open, --tls-cert FILE, --tls-key FILE, --allow-insecure-lan.');
+    else if (arg === '--public-url' || arg.startsWith('--public-url=')) {
+      const value = arg === '--public-url' ? args[++i] : arg.slice(13);
+      if (!value) throw new Error('--public-url requires a URL such as https://oasis.example.com.');
+      let parsed;
+      try { parsed = new URL(value); } catch { throw new Error('--public-url must be a full URL such as https://oasis.example.com.'); }
+      if (parsed.protocol !== 'https:' && !['localhost', '127.0.0.1', '[::1]'].includes(parsed.hostname)) throw new Error('--public-url must use https:// so the access key and model keys are encrypted in transit.');
+      publicUrl = parsed.origin;
+    } else if (arg === '--allow-host' || arg.startsWith('--allow-host=')) {
+      const value = arg === '--allow-host' ? args[++i] : arg.slice(13);
+      if (!value) throw new Error('--allow-host requires a host name.');
+      allowedHosts.push(value);
+    } else if (arg === '--trust-proxy') trustProxy = true;
+    else if (arg === '--persistent-key') persistentKey = true;
+    else throw new Error('Unknown web option: ' + arg + '. Supported options: --host HOST, --port PORT, --open, --tls-cert FILE, --tls-key FILE, --public-url URL, --allow-host HOST, --trust-proxy, --persistent-key, --allow-insecure-lan.');
+  }
+  {
+    const { parseAllowedHosts } = await import('./remote-access.mjs');
+    const bad = allowedHosts.filter((value) => parseAllowedHosts([value]).length === 0);
+    if (bad.length) throw new Error('--allow-host value is not a valid host name: ' + bad[0]);
+  }
+  let token;
+  if (persistentKey || publicUrl || process.env.OASIS_WEB_TOKEN) {
+    const { loadAccessKey } = await import('./remote-access.mjs');
+    token = loadAccessKey().key;
   }
   if (!Number.isInteger(port) || port < 0 || port > 65535) throw new Error('--port must be an integer between 0 and 65535 (0 chooses an available port).');
   const normalizedHost = host.toLowerCase();
   if (normalizedHost !== 'localhost' && isIP(host) === 0) throw new Error('--host must be localhost or a literal IP address. Use --host 0.0.0.0 only when you intentionally want other devices on your private network to connect.');
-  const app = await startOasisWebServer({ root, host, port, tlsCertFile, tlsKeyFile, allowInsecureLan });
+  const app = await startOasisWebServer({ root, host, port, tlsCertFile, tlsKeyFile, allowInsecureLan, publicUrl, allowedHosts, trustProxy, token });
   const scheme = app.secure ? 'https' : 'http';
   const urlHost = host.includes(':') ? '[' + host + ']' : host;
   const localUrl = scheme + '://' + (host === '0.0.0.0' ? '127.0.0.1' : urlHost) + ':' + app.port + '/';
@@ -2420,6 +2463,12 @@ async function startWebWorkspace(root, args) {
   stdout.write('  Open this link to start: ' + connectUrl + '\n');
   stdout.write('  Keep it private: anyone with the link can use this folder.\n\n');
   stdout.write('  Another browser? Open ' + localUrl + ' and paste the link above into the message box.\n\n');
+  if (publicUrl) {
+    stdout.write('  Remote link: ' + publicUrl + '/app/#token=' + app.token + '\n');
+    stdout.write('  The access key is saved and survives restarts. Replace it with: oasis web key --rotate\n');
+    if (!trustProxy && !app.secure) stdout.write('  Behind an HTTPS proxy or tunnel? Add --trust-proxy so OASIS sees the HTTPS origin.\n');
+    stdout.write('\n');
+  }
   stdout.write('Commands, package installs, file deletions and bundle installs always ask for your approval in the browser first.\n');
   if (host === '0.0.0.0' || (isIP(host) > 0 && !['127.0.0.1', '::1'].includes(host))) {
     let printedLinks = false;
@@ -2439,8 +2488,8 @@ async function startWebWorkspace(root, args) {
       stdout.write('UNENCRYPTED LAN WARNING: explicit --allow-insecure-lan is active. The token and workspace traffic can be observed on the network. Never use public Wi-Fi or expose this port to the Internet.\n');
       if (!printedLinks) stdout.write('From another device, open http://<this-computer-address>:' + app.port + '/ and paste the token.\n');
     }
-  } else {
-    stdout.write('Local only: other devices cannot connect. Network access requires a trusted TLS certificate, or the explicit and unsafe --allow-insecure-lan flag.\n');
+  } else if (!publicUrl) {
+    stdout.write('Local only: other devices cannot connect. For remote access, put an HTTPS proxy or tunnel in front and pass --public-url (see oasis web --help).\n');
   }
   stdout.write('Press Ctrl+C to stop.\n');
   if (openBrowser) {
