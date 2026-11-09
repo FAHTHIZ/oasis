@@ -4,6 +4,7 @@ import { readFileSync, statSync } from 'node:fs';
 import { formatApprovalMessage, redactApprovalSecrets } from './approval-language.mjs';
 import { labelToolActivity, safeToolActivityArgs, toolActivityArtifacts, toolActivityCategory, toolActivityStatus, toolActivityWarning } from './tool-activity.mjs';
 import { createHash, randomBytes, randomUUID, timingSafeEqual } from 'node:crypto';
+import { clientAddress, createAuthLimiter, hostAllowed, isLoopbackAddress, parseAllowedHosts, requestIsSecure } from './remote-access.mjs';
 import { access, lstat, mkdir, readFile, realpath, rename, rm } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -378,29 +379,12 @@ function loadTlsOptions(options) {
   }
 }
 
-function hostIsLocalLiteral(req) {
-  try {
-    const hostHeader = String(req.headers.host || '');
-    if (!hostHeader || hostHeader.length > 255) return false;
-    const url = new URL('http://' + hostHeader);
-    const hostname = url.hostname.replace(/^\[|\]$/g, '').toLowerCase();
-    const isLocal = hostname === 'localhost' || isIP(hostname) > 0;
-    if (!isLocal) return false;
-    const origin = req.headers.origin;
-    if (origin) {
-      const parsedOrigin = new URL(String(origin));
-      const expectedProtocol = req.socket && req.socket.encrypted ? 'https:' : 'http:';
-      if (parsedOrigin.protocol !== expectedProtocol || parsedOrigin.host.toLowerCase() !== hostHeader.toLowerCase()) return false;
-    }
-    return true;
-  } catch {
-    return false;
-  }
-}
-
+// A request from this computer that did not pass through a proxy. Requests a
+// reverse proxy forwards also arrive from loopback, so forwarding headers make
+// them remote; a local client gains nothing by sending those headers itself.
 function isLoopbackClient(req) {
-  const address = String(req.socket && req.socket.remoteAddress || '').toLowerCase().replace(/^::ffff:/, '');
-  return address === '::1' || /^127(?:\.\d{1,3}){3}$/.test(address);
+  if (req.headers['x-forwarded-for'] || req.headers['x-forwarded-host'] || req.headers.forwarded || req.headers['x-real-ip']) return false;
+  return isLoopbackAddress(req.socket && req.socket.remoteAddress);
 }
 
 function hasValidToken(req, token) {
@@ -499,6 +483,14 @@ export function createOasisWebServer(options = {}) {
   let activeRoot = root;
   const env = options.env || process.env;
   const token = options.token || randomBytes(32).toString('base64url');
+  // Remote access: extra host names (a domain or tunnel), and whether to believe
+  // X-Forwarded-* from a reverse proxy running on this computer.
+  const allowedHosts = parseAllowedHosts([...(options.publicUrl ? [options.publicUrl] : []), ...(Array.isArray(options.allowedHosts) ? options.allowedHosts : parseAllowedHosts(options.allowedHosts || ''))]);
+  const trustProxy = options.trustProxy === true;
+  const authLimiter = options.authLimiter || createAuthLimiter();
+  // Managing providers, keys, updates and hardware needs a direct local
+  // connection or HTTPS, so keys never cross a network in plain text.
+  const canManage = (req) => isLoopbackClient(req) || requestIsSecure(req, { trustProxy });
   const activeSessions = new Map();
   const ptyManager = options.ptyManager || new PtySessionManager();
   const ptySession = { ptyManager, background: new Map() };
@@ -1424,8 +1416,8 @@ export function createOasisWebServer(options = {}) {
       json(res, 404, { error: 'Not found.' });
       return;
     }
-    if (!hostIsLocalLiteral(req)) {
-      json(res, 421, { error: 'Oasis API accepts requests only on localhost or a literal IP address, with same-origin browser requests.' });
+    if (!hostAllowed(req, { allowedHosts, trustProxy })) {
+      json(res, 421, { error: 'Oasis API accepts requests only on localhost, a literal IP address or a configured --public-url host, with same-origin browser requests.' });
       return;
     }
     if (req.method === 'OPTIONS') {
@@ -1433,10 +1425,19 @@ export function createOasisWebServer(options = {}) {
       res.end();
       return;
     }
+    const caller = clientAddress(req, { trustProxy });
+    const waitSeconds = authLimiter.blocked(caller);
+    if (waitSeconds) {
+      res.setHeader('retry-after', String(waitSeconds));
+      json(res, 429, { error: 'Too many wrong access keys. Try again in ' + waitSeconds + ' seconds.' });
+      return;
+    }
     if (!hasValidToken(req, token)) {
+      if (req.headers.authorization) authLimiter.fail(caller);
       json(res, 401, { error: 'A valid Oasis connection token is required.' });
       return;
     }
+    authLimiter.succeed(caller);
 
     if (req.method === 'GET' && pathname === '/api/mcp') {
       const config = await loadMcpServers({ env });
@@ -1699,7 +1700,7 @@ export function createOasisWebServer(options = {}) {
         providerConfigured,
         provider: provider ? { provider: provider.provider, protocol: provider.protocol, model: provider.model, baseURL: provider.baseURL, authentication: provider.authentication } : null,
         fallbacks,
-        providerSetupAvailable: isLoopbackClient(req),
+        providerSetupAvailable: canManage(req),
         workspaceName: path.basename(activeRoot),
         workspacePath: activeRoot,
         branch: branch ? String(branch).slice(0, 200) : null,
@@ -1733,7 +1734,7 @@ export function createOasisWebServer(options = {}) {
         return;
       }
       if (req.method === 'POST') {
-        if (!isLoopbackClient(req)) { json(res, 403, { error: 'Updates can be managed only from the same computer.' }); return; }
+        if (!canManage(req)) { json(res, 403, { error: 'Updates can be managed only from the same computer or over HTTPS.' }); return; }
         const body = await readJsonBody(req);
         const action = String(body && body.action || '');
         const version = typeof (body && body.version) === 'string' ? body.version.slice(0, 40) : '';
@@ -1755,7 +1756,7 @@ export function createOasisWebServer(options = {}) {
       // Hardware and local model servers of the computer running OASIS. Like
       // local-model discovery it probes only fixed loopback ports, and it is not
       // shown to second devices on the network.
-      if (!isLoopbackClient(req)) { json(res, 403, { error: 'Hardware detection is available only from the same computer.' }); return; }
+      if (!canManage(req)) { json(res, 403, { error: 'Hardware detection is available only from the same computer or over HTTPS.' }); return; }
       try {
         const { profileThisComputer, describeHardware } = await import('./hardware.mjs');
         let configured = false;
@@ -1770,9 +1771,9 @@ export function createOasisWebServer(options = {}) {
 
     if (req.method === 'GET' && pathname === '/api/provider/local-models') {
       // This status check never accepts a caller-supplied URL: it can only query
-      // the conventional local Ollama endpoint and is never exposed to phone clients.
-      if (!isLoopbackClient(req)) {
-        json(res, 403, { error: 'Local model discovery is available only from the same computer.' });
+      // the conventional local Ollama endpoint on this computer.
+      if (!canManage(req)) {
+        json(res, 403, { error: 'Local model discovery is available only from the same computer or over HTTPS.' });
         return;
       }
       try {
@@ -1806,10 +1807,10 @@ export function createOasisWebServer(options = {}) {
     }
 
     if (req.method === 'POST' && (pathname === '/api/provider/connect' || pathname === '/api/provider/model')) {
-      // Paste-to-connect and model switching. Keys stay on this computer:
-      // allowed only over loopback, and never echoed back.
-      if (!isLoopbackClient(req)) {
-        json(res, 403, { error: 'Connect a model on the computer running OASIS. Keys are never sent over the phone link.' });
+      // Paste-to-connect and model switching. Keys are accepted only over a direct
+      // local connection or HTTPS, are stored on this computer, and never echoed back.
+      if (!canManage(req)) {
+        json(res, 403, { error: 'Connect a model from the computer running OASIS, or open OASIS over HTTPS. Keys are never accepted over plain HTTP from another device.' });
         return;
       }
       const body = await readJsonBody(req);
@@ -1843,10 +1844,9 @@ export function createOasisWebServer(options = {}) {
     }
 
     if (req.method === 'POST' && pathname === '/api/provider/config') {
-      // Provider credentials may only be submitted over the local loopback connection.
-      // The remote-device HTTP bridge is intentionally not allowed to receive API keys.
-      if (!isLoopbackClient(req)) {
-        json(res, 403, { error: 'Provider setup is available only from the same device over localhost. Do not send model API keys over the unencrypted phone-to-computer HTTP bridge.' });
+      // Provider credentials are accepted only over a direct local connection or HTTPS.
+      if (!canManage(req)) {
+        json(res, 403, { error: 'Provider setup is available from the same computer, or from another device over HTTPS. Model API keys are never accepted over plain HTTP.' });
         return;
       }
       const body = await readJsonBody(req);
