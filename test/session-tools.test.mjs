@@ -183,6 +183,30 @@ test('slash commands: goal, rename, keybindings, simplify and verify', async (t)
   assert.match((await runBuiltinCommand('schedule', '"* *" do it', { root, session, env })).output, /5 fields/);
 });
 
+test('/goal pauses, resumes with its turn count and last check, edits, and survives a save', async (t) => {
+  const { root, env } = await workspace(t);
+  const { saveSession, loadSession, sanitizeGoal } = await import('../src/sessions.mjs');
+  const session = { root, messages: [{ role: 'system', content: 's' }, { role: 'user', content: 'go' }, { role: 'assistant', content: 'ok' }] };
+  assert.match((await runBuiltinCommand('goal', 'pause', { root, session, env })).output, /no goal to pause/);
+  session.goal = { condition: 'all tests pass', active: true, paused: false, achieved: false, turns: 3, reason: 'two tests still fail' };
+  assert.match((await runBuiltinCommand('goal', 'pause', { root, session, env })).output, /paused after 3 turn/);
+  assert.match((await runBuiltinCommand('goal', '', { root, session, env })).output, /Goal \(paused\): all tests pass[\s\S]*two tests still fail[\s\S]*\/goal resume/);
+  const resumed = await runBuiltinCommand('goal', 'resume', { root, session, env });
+  assert.deepEqual(resumed.goal, { condition: 'all tests pass', maxTurns: 20, turns: 3, reason: 'two tests still fail' });
+  const edited = await runBuiltinCommand('goal', 'edit all tests pass and lint is clean', { root, session, env });
+  assert.deepEqual(edited.goal, { condition: 'all tests pass and lint is clean', maxTurns: 20, turns: 3 });
+  assert.match((await runBuiltinCommand('goal', 'x'.repeat(4001), { root, session, env })).output, /at most 4,000/);
+  // Saved while running: comes back paused, never silently running.
+  session.goal.active = true; session.goal.paused = false;
+  const saved = await saveSession(session, { env, checkpoints: false });
+  const loaded = await loadSession(root, saved.id, { env });
+  assert.deepEqual(loaded.goal, { condition: 'all tests pass', active: false, paused: true, achieved: false, turns: 3, reason: 'two tests still fail' });
+  assert.equal(sanitizeGoal({ condition: 'done', achieved: true, active: false }).paused, false);
+  assert.equal(sanitizeGoal({ condition: '  ' }), null);
+  session.goal.achieved = true;
+  assert.match((await runBuiltinCommand('goal', 'resume', { root, session, env })).output, /already met/);
+});
+
 test('/schedule accepts @daily-style macros as a single token', async () => {
   const { runBuiltinCommand } = await import('../src/slash.mjs');
   const session = {};

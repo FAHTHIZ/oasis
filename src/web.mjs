@@ -462,6 +462,44 @@ async function readJsonBody(req, limit = MAX_BODY_BYTES) {
   return value;
 }
 
+// A saved session as the web app's timeline: prose plus the steps behind it,
+// so a task reopened in another browser (or after the browser forgot it) shows
+// the same execution groups as the live view instead of only the text.
+export function savedSessionDisplay(messages = [], { maxEntries = 400 } = {}) {
+  const display = [];
+  const byCall = new Map();
+  for (const item of Array.isArray(messages) ? messages : []) {
+    if (!item || typeof item !== 'object') continue;
+    const text = typeof item.content === 'string' ? item.content : '';
+    if (item.role === 'user') {
+      if (!text.trim() || text.startsWith('<system-reminder>')) continue;
+      display.push({ role: 'user', content: text.slice(0, 24000), at: 0 });
+    } else if (item.role === 'assistant') {
+      const calls = Array.isArray(item.tool_calls) ? item.tool_calls : [];
+      const tools = [];
+      for (const call of calls) {
+        const name = String(call && call.function && call.function.name || 'tool').slice(0, 100);
+        let args = {};
+        try { args = safeToolActivityArgs(JSON.parse(call.function.arguments || '{}')); } catch { args = {}; }
+        const tool = { id: String(call && call.id || 'step_' + display.length + '_' + tools.length).slice(0, 160), name, args, label: labelToolActivity(name, args), ok: true };
+        if (call && call.id) byCall.set(String(call.id), tool);
+        tools.push(tool);
+      }
+      if (!text.trim() && !tools.length) continue;
+      display.push({ role: 'assistant', content: text.slice(0, 24000), tools, at: 0 });
+    } else if (item.role === 'tool') {
+      const tool = byCall.get(String(item.tool_call_id || ''));
+      if (!tool) continue;
+      const status = toolActivityStatus(text);
+      tool.ok = !/^(error|failed|denied|blocked)$/i.test(status);
+      tool.label = labelToolActivity(tool.name, tool.args, text);
+      const shown = redactApprovalSecrets(text);
+      tool.content = shown.length > 2000 ? shown.slice(0, 2000) + '\n…' : shown;
+    }
+  }
+  return display.slice(-maxEntries);
+}
+
 export function summarizeToolResult(result) {
   let text;
   try { text = JSON.stringify(result); } catch { text = String(result); }
@@ -2098,7 +2136,7 @@ export function createOasisWebServer(options = {}) {
       // System reminders (checklist, hook feedback) are for the model, not the chat view.
       const messages = saved.messages.filter((item) => ['user', 'assistant'].includes(item.role) && typeof item.content === 'string' && item.content.trim() && !item.content.startsWith('<system-reminder>'))
         .map((item) => ({ role: item.role, content: item.content.slice(0, 24000) }));
-      json(res, 200, { id, updatedAt: saved.updatedAt, messages });
+      json(res, 200, { id, updatedAt: saved.updatedAt, messages, display: savedSessionDisplay(saved.messages) });
       return;
     }
 

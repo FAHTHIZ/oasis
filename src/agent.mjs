@@ -541,6 +541,7 @@ export async function createSession({ root, config, restore = null, permissionMo
     todos: Array.isArray(restore && restore.todos) ? restore.todos : [],
     sharedTasks: createSharedTaskStore(restore && restore.sharedTasks),
     mustPreserve: Array.isArray(restore && restore.mustPreserve) ? restore.mustPreserve.slice(0, 20) : [],
+    ...(restore && restore.goal && typeof restore.goal.condition === 'string' ? { goal: { ...restore.goal, active: false } } : {}),
     settings: loadedSettings,
     settingsError,
     permissions,
