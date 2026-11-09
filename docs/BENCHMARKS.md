@@ -50,6 +50,17 @@ node bench/tokens/run.mjs --check
 
 Counts use one vocabulary for every model, so they track but do not equal each provider's own tokenizer (Anthropic, Gemini and Qwen tokenize differently). `--check` refuses a baseline counted with a different counter instead of comparing incompatible numbers. The benchmark can compare prompt growth, tool-schema overhead and reusable request prefixes under its fixture assumptions; it does not establish real-world billing or model quality.
 
+## Memory retrieval benchmark
+
+`npm run bench:memory` scores memory search (`rankMemories`: MiniSearch BM25+ with Porter2 stemming) on 30 realistic project memories in [evals/memory-retrieval](../evals/memory-retrieval). It uses 15 dev questions, which may be used while tuning, and 25 held-out paraphrased questions, which are the number to report. Each question has exactly one right memory.
+
+| Split | Questions | Recall@1 | Recall@3 | MRR |
+|---|---:|---:|---:|---:|
+| Dev | 15 | 100% | 100% | 1.000 |
+| Held-out | 25 | 92% | 100% | 0.960 |
+
+Measured 2026-11-09. The two held-out misses are vocabulary gaps: "update the README images" (the note says "screenshots") and "run the python tests" (the note says "pytest"). Both still rank second. `test/memory-retrieval-bench.test.mjs` fails if held-out recall@1 drops below 88%, recall@3 below 96% or MRR below 0.93. The set is small and was written by the maintainers, so it guards against regressions; it does not measure retrieval at scale.
+
 ## Live model evaluations
 
 Live evaluations involve an actual provider and model. Their outcomes depend on the model snapshot, provider implementation, prompt, task set, context limits, tool protocol, sampling settings, network conditions and available budget.
