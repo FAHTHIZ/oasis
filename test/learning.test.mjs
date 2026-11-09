@@ -177,3 +177,25 @@ test('promotion refuses a symlinked project skill directory', { skip: process.pl
   await assert.rejects(approveSkillProposal(root, created.id, { env }), /symbolic link/);
   await assert.rejects(readFile(path.join(outside, 'skills', created.name, 'SKILL.md'), 'utf8'));
 });
+
+test('an approved update revises a learned skill and keeps the old version as SKILL.md.bak', async (t) => {
+  const { root, env } = await fixture(t);
+  await assert.rejects(
+    createSkillProposal(root, { name: 'deploy-flow', description: 'Repeatable verified deployment procedure.', body: SKILL_BODY, evidence: 'Deployment checks passed after the final edit.', update: true }, { env }),
+    /No skill named "deploy-flow" exists/
+  );
+  const first = await createSkillProposal(root, { name: 'deploy-flow', description: 'Repeatable verified deployment procedure.', body: SKILL_BODY, evidence: 'Deployment checks passed after the final edit.' }, { env });
+  await approveSkillProposal(root, first.id, { env });
+  const revised = SKILL_BODY.replace('5. Record the files changed', '5. Run the smoke test against the deployed URL.\n6. Record the files changed');
+  const update = await createSkillProposal(root, { name: 'deploy-flow', description: 'Repeatable verified deployment procedure, with a smoke test.', body: revised, evidence: 'The smoke test caught a broken deploy that the old steps missed.', update: true }, { env });
+  assert.equal(update.update, true);
+  const before = await readFile(path.join(root, '.agents', 'skills', 'deploy-flow', 'SKILL.md'), 'utf8');
+  assert.doesNotMatch(before, /smoke test against/);
+  const approved = await approveSkillProposal(root, update.id, { env });
+  assert.equal(approved.updated, true);
+  assert.equal(approved.path, '.agents/skills/deploy-flow/SKILL.md');
+  const after = await readFile(path.join(root, '.agents', 'skills', 'deploy-flow', 'SKILL.md'), 'utf8');
+  assert.match(after, /smoke test against the deployed URL/);
+  assert.match(after, /with a smoke test/);
+  assert.equal(await readFile(path.join(root, '.agents', 'skills', 'deploy-flow', 'SKILL.md.bak'), 'utf8'), before);
+});
