@@ -1490,7 +1490,7 @@ export async function runBuiltinCommand(name, argument, state) {
     case 'loop': {
       const parsed = parseLoopArgs(argument);
       if (parsed.error) return { output: parsed.error };
-      return { output: '[loop] ' + (parsed.selfPaced ? 'Self-paced: the model picks each next run (1m-1h) or stops when done' : 'Running every ' + formatInterval(parsed.intervalMs)) + (parsed.times ? ', ' + parsed.times + ' times' : '') + '. Press Ctrl+C to stop.', loop: parsed };
+      return { output: '[loop] ' + (parsed.selfPaced ? 'Self-paced: the model picks each next run (1m-1h); a run that schedules nothing ends the loop' : 'Running every ' + formatInterval(parsed.intervalMs)) + (parsed.times ? ', ' + parsed.times + ' times' : '') + '. Press Ctrl+C to stop.', loop: parsed };
     }
     case 'cd': {
       if (!argument) return { output: 'Workspace: ' + root + '\nUsage: /cd PATH' };
@@ -2065,7 +2065,7 @@ export function parseLoopArgs(argument) {
   let intervalMs = 10 * 60000;
   let times = null;
   const interval = parts[0] && parts[0].match(/^(\d+(?:\.\d+)?)([smh])$/i);
-  // No interval: self-paced. The model picks each next wake with schedule_wakeup (default 10m if it does not).
+  // No interval: self-paced. The model picks each next wake with schedule_wakeup; a run that does not reschedule ends the loop (OASIS_LOOP_KEEPALIVE=1 keeps a 10m default).
   const selfPaced = !interval;
   if (interval) { intervalMs = Math.round(Number(interval[1]) * UNIT_MS[interval[2].toLowerCase()]); parts.shift(); }
   const count = parts[0] && parts[0].match(/^x(\d{1,3})$/i);

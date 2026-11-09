@@ -1852,9 +1852,15 @@ async function runLoop(loop, root, autoApprove, session, persistence) {
       const wakeup = loop.selfPaced && session ? session.loopWakeup : null;
       if (session && loop.selfPaced) session.loopWakeup = null;
       if (wakeup && wakeup.stop) { stdout.write('[loop] The model ended the loop' + (wakeup.reason ? ': ' + wakeup.reason : '.') + '\n'); break; }
+      // Claude Code 2.1.319: a self-paced run that does not reschedule ends
+      // the loop rather than waking again on a guessed default.
+      if (loop.selfPaced && !(wakeup && wakeup.delayMs) && !/^(1|true|yes|on)$/i.test(String(process.env.OASIS_LOOP_KEEPALIVE || ''))) {
+        stdout.write('[loop] The run finished without scheduling another, so the loop ends. Set OASIS_LOOP_KEEPALIVE=1 to keep waking every ' + formatInterval(loop.intervalMs) + ' instead.\n');
+        break;
+      }
       if (stopped || (loop.times && run >= loop.times)) break;
       const delayMs = wakeup && wakeup.delayMs ? wakeup.delayMs : loop.intervalMs;
-      stdout.write('[loop] Next run in ' + formatInterval(delayMs) + (wakeup && wakeup.reason ? ' (' + wakeup.reason + ')' : loop.selfPaced ? ' (no schedule_wakeup call; default)' : '') + '. Press Ctrl+C to stop.\n');
+      stdout.write('[loop] Next run in ' + formatInterval(delayMs) + (wakeup && wakeup.reason ? ' (' + wakeup.reason + ')' : loop.selfPaced ? ' (no schedule_wakeup call; OASIS_LOOP_KEEPALIVE)' : '') + '. Press Ctrl+C to stop.\n');
       await new Promise((resolve) => { const timer = setTimeout(resolve, Number(process.env.OASIS_LOOP_DELAY_SCALE ? delayMs * Number(process.env.OASIS_LOOP_DELAY_SCALE) : delayMs)); wake = () => { clearTimeout(timer); resolve(); }; });
       wake = null;
     }
