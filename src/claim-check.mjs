@@ -40,8 +40,17 @@ export function recordEdit(state) {
 }
 
 // Returns a nudge string when the reply claims success the turn does not support.
-export function claimIssue(state, text) {
-  if (!state || state.nudged || !state.ran || !claimsPassing(text)) return '';
+export function claimIssue(state, text, { edited = false, deniedCheck = '' } = {}) {
+  if (!state || state.nudged || !claimsPassing(text)) return '';
+  // Code changed and the reply reports passing checks, but no check ran at
+  // all: the result can only have been made up.
+  if (!state.ran) {
+    if (!edited) return '';
+    state.nudged = true;
+    return 'Your reply says the checks pass, but no test, check or build command ran in this turn' +
+      (deniedCheck ? ' (`' + deniedCheck + '` was not approved, so it cannot run)' : '') +
+      '. Never write test or command output you did not see in a tool result. Rewrite the answer: say what changed, say plainly that the checks were not run, and give the user the exact command to run.';
+  }
   let problem = '';
   if (state.masked) problem = 'the latest check (`' + state.lastCommand + '`) had its exit status hidden by a pipe, so it proves nothing';
   else if (state.unfinished) problem = 'the latest check (`' + state.lastCommand + '`) did not finish (it timed out, was stopped or is still running), so it proves nothing';
@@ -51,4 +60,33 @@ export function claimIssue(state, text) {
   state.nudged = true;
   return 'Your reply says the checks pass, but ' + problem + '. Do not report success that the tool results do not show. ' +
     'Rerun the relevant check now (without piping away its exit status) and report the actual outcome; if it still fails, say so plainly and explain what remains.';
+}
+
+const NO_CHECK = /no relevant test, check, lint, build, or type-check command has passed/;
+
+/**
+ * The gate already sent the reply back once and checks are still missing.
+ * The user must not leave thinking the change was verified, so the runtime
+ * (not the model) adds one plain sentence saying what was not checked.
+ */
+const ADMITS_UNVERIFIED = /\b(not (been )?(approved|run|executed|verified)|wasn't (approved|run)|was not (approved|run)|did not run|didn't run|no (lint, build, or )?test(s)? (run|were run)|could not run|couldn't run|unverified)\b/i;
+
+export function appendUnverifiedNotice(text, issues, verification = {}, state = null) {
+  const value = String(text || '');
+  if (!Array.isArray(issues) || !issues.some((issue) => NO_CHECK.test(issue))) return value;
+  const denied = verification && verification.deniedCheck ? String(verification.deniedCheck) : '';
+  const failed = state && state.ran && Number.isInteger(state.lastExit) && state.lastExit !== 0 && !state.editedAfter;
+  const stale = state && state.ran && state.editedAfter;
+  let reason;
+  if (failed) reason = 'the last check (`' + state.lastCommand + '`) failed with exit code ' + state.lastExit;
+  else if (stale) reason = 'files changed after the last check (`' + state.lastCommand + '`) ran';
+  else if (denied) reason = '`' + denied + '` was not approved, so no check ran';
+  else reason = 'no test or check command ran after the last edit';
+  const claimed = claimsPassing(value) && !failed;
+  const command = denied || (state && state.lastCommand) || '';
+  const note = 'Not verified: ' + reason + '.' + (claimed ? ' Any passing test results described above were not observed by OASIS.' : '') + (command && !failed ? ' Run `' + command + '` to confirm.' : '');
+  if (value.includes('Not verified: ')) return value;
+  // The answer already admits the check did not run and makes no passing claim: no need to repeat it.
+  if (!claimed && !failed && !stale && ADMITS_UNVERIFIED.test(value)) return value;
+  return (value.trim() ? value.replace(/\s+$/, '') + '\n\n' : '') + note;
 }

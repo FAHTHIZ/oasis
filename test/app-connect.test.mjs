@@ -463,3 +463,40 @@ test('runtimeConfigFromConnection: gateway backups prefer the chosen upstream', 
   const config = runtimeConfigFromConnection({ model: 'llm7/codestral-latest', connection: { provider: 'omniroute', protocol: 'openai', baseURL: 'http://localhost:20128/v1', models: ['llm7/codestral-latest', 'cfp/glm', 'llm7/gpt-oss:20b'] } });
   assert.equal(config.fallbackModel, 'llm7/gpt-oss:20b,cfp/glm');
 });
+
+// Real run, 9 Nov 2026: `oasis connect https://api.llm7.io/v1` listed 61 models
+// without a key, tried a paid "pro" model first, got 401 and gave up.
+test('smartConnect: a keyless server skips models it marks as paid and keeps going after a per-model 401', async () => {
+  const tried = [];
+  const { fetchImpl } = fakeFetch([
+    [/llm\.example\/v1\/models$/, () => ({ data: [
+      { id: 'claude-opus-9', tier: 'pro', usage_based_only: true, tools_calling: true },
+      { id: 'gpt-5.9', tier: 'pro', tools_calling: true },
+      { id: 'mistral-small-3', tier: 'turbo', tools_calling: false },
+      { id: 'gpt-oss:20b', tier: 'turbo', tools_calling: true },
+      { id: 'codestral-latest', tier: 'turbo', tools_calling: true }
+    ] })],
+    [/chat\/completions$/, (url, options) => {
+      const body = JSON.parse(options.body);
+      tried.push(body.model);
+      if (body.model === 'claude-opus-9' || body.model === 'gpt-5.9') return { status: 401, body: { error: { message: 'Missing API key.' } } };
+      return toolReply;
+    }]
+  ]);
+  const result = await smartConnect('https://llm.example/v1', { fetchImpl });
+  assert.equal(result.toolCalling, true);
+  assert.ok(['gpt-oss:20b', 'codestral-latest'].includes(result.model), result.model);
+  assert.ok(!tried.includes('claude-opus-9') && !tried.includes('gpt-5.9'), 'paid models are not probed first: ' + tried.join(','));
+  const { runtimeConfigFromConnection } = await import('../src/provider-connect.mjs');
+  const config = runtimeConfigFromConnection(result);
+  assert.equal(config.keyless, true);
+  for (const id of config.fallbackModel.split(',')) assert.ok(!['claude-opus-9', 'gpt-5.9', 'mistral-small-3'].includes(id), 'no paid or tool-less backups: ' + config.fallbackModel);
+});
+
+test('smartConnect: a keyless server where every model needs a key says to paste one', async () => {
+  const { fetchImpl } = fakeFetch([
+    [/locked\.example\/v1\/models$/, () => ({ data: [{ id: 'model-a' }, { id: 'model-b' }] })],
+    [/chat\/completions$/, () => ({ status: 401, body: { error: { message: 'Missing API key.' } } })]
+  ]);
+  await assert.rejects(smartConnect('https://locked.example/v1', { fetchImpl }), (error) => error instanceof ProviderError && /needs an API key to use them/.test(error.message) && error.status === 401);
+});

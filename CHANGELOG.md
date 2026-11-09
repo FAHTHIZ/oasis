@@ -4,6 +4,12 @@ User-facing change history grouped by package version. A version heading does no
 
 ## Unreleased
 
+### Runtime
+- No more invented test results. In a real run with `npm test` not approved, the model wrote a fake "PASS … All tests passed (3)" log and OASIS printed it. Now, when code was edited and no check ran, a "tests pass" claim is sent back to the model. If it still can't be verified, the answer ends with "Not verified: `npm test` was not approved, so no check ran. Run `npm test` to confirm." That line is left off when the answer already says the check didn't run. The verification nudge now tells the model the command was not approved and that it must never write output it did not see.
+- `oasis -p` lists what was not approved (nobody can approve in print mode) and how to allow it next time: `--allowedTools "run_command(npm test:*)"` or `--permission-mode auto`. JSON output now includes each denial's `tool_input`.
+- `oasis connect URL` works with keyless gateways that also list paid models (such as LLM7). Paid models and models without tool calling are tried last. A 401 from one model no longer ends setup; OASIS moves on to the next one, and only when every model needs a key does it say the server lists models without a key but needs one to use them. Paid models are not offered as backups.
+- The "keep the key out of shell history" tip only shows when a key was actually pasted.
+
 ### Web app
 - Switching to another task or starting a new one no longer cancels the running task. It keeps going in the background, its sidebar entry shows Working or Needs you, and opening it again reattaches. Tasks started from another browser or from the `oasis` terminal are listed under **Other devices and terminal**; opening a running one follows it live.
 - On wide screens the approval card docks above the message box instead of covering the page, so the sidebar stays usable while a task waits. Toasts move out of its way and repeated toasts show once.

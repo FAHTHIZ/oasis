@@ -11,7 +11,9 @@ const APP_TO_RUNTIME = { openai: 'openai-compatible', anthropic: 'anthropic' };
 export function runtimeConfigFromConnection(result, { fallbackCount = 3 } = {}) {
   const { connection, model } = result;
   const protocol = APP_TO_RUNTIME[connection.protocol] || 'openai-compatible';
-  const unusable = new Set(result.unusable || []);
+  // Models the server itself marks as paid (on a keyless connection) or as
+  // unable to call tools are poor backups: they would fail the same way.
+  const unusable = new Set([...(result.unusable || []), ...(connection.skipModels || [])]);
   const usable = connection.models.filter((id) => id && id !== model && !unusable.has(id));
   // On a gateway the chosen model's own upstream (llm7/… on OmniRoute) is the
   // one known to be connected, so its siblings are the safest backups.

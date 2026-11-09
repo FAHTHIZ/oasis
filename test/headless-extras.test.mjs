@@ -136,3 +136,11 @@ test('--bare skips project instructions and hooks', async (t) => {
   closeSession(normal);
   closeSession(bare);
 });
+
+test('deniedHint names the command that was not approved and the flag that allows it', async () => {
+  const { deniedHint } = await import('../src/headless.mjs');
+  const hint = deniedHint([{ tool_name: 'run_command', tool_input: { command: 'npm', args: ['test'] }, detail: 'Run this command?' }]);
+  assert.match(hint, /Not approved in this run \(nobody can approve in -p mode\): `npm test`\./);
+  assert.match(hint, /--allowedTools "run_command\(npm test:\*\)"/);
+  assert.equal(deniedHint([]), '');
+});
