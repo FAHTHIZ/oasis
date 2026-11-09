@@ -737,6 +737,8 @@ export function createOasisWebServer(options = {}) {
     const job = newJob();
     job.type = 'agent';
     job.title = incomingMessage.replace(/\s+/g, ' ').slice(0, 160) || 'Coding task';
+    // Another device that opens this conversation mid-task shows the request it is working on.
+    job.prompt = incomingMessage.slice(0, 6500);
     job.sessionId = activeId;
     job.workspaceRoot = workspaceKey;
     job.workspaceName = taskWorktree ? taskWorktree.branch : path.basename(workspaceKey);
@@ -2035,7 +2037,26 @@ export function createOasisWebServer(options = {}) {
     }
 
     if (req.method === 'GET' && pathname === '/api/sessions') {
-      const sessions = (await listSessions(activeRoot, { env })).map((item) => (busySessions.has(String(item.id).toLowerCase()) ? { ...item, running: true } : item));
+      // A running conversation names its live job, so another browser (or the
+      // same one after a reload) can attach to it instead of only reading history.
+      const liveJobs = new Map();
+      for (const job of jobs.values()) {
+        if (job.type && job.type !== 'agent') continue;
+        if (!['running', 'waiting_approval', 'waiting_input'].includes(job.status) || !job.sessionId) continue;
+        liveJobs.set(String(job.sessionId).toLowerCase(), job);
+      }
+      const sessions = (await listSessions(activeRoot, { env })).map((item) => {
+        const id = String(item.id).toLowerCase();
+        if (!busySessions.has(id)) return item;
+        const job = liveJobs.get(id);
+        return { ...item, running: true, ...(job ? { jobId: job.id, prompt: job.prompt || job.title || '' } : {}) };
+      });
+      // A brand-new conversation is written to disk after its first turn; list it while it runs.
+      const listed = new Set(sessions.map((item) => String(item.id).toLowerCase()));
+      for (const [id, job] of liveJobs) {
+        if (listed.has(id)) continue;
+        sessions.unshift({ id: job.sessionId, title: job.title || 'Coding task', updatedAt: job.events.at(-1)?.at || job.createdAt, messages: 0, running: true, jobId: job.id, prompt: job.prompt || job.title || '' });
+      }
       json(res, 200, { sessions });
       return;
     }
