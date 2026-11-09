@@ -5,6 +5,7 @@ import { defaultCloudBaseURL } from './cloud-providers.mjs';
 import { loadConfig, saveConfig, DEFAULT_BASE_URL, DEFAULT_ANTHROPIC_BASE_URL, DEFAULT_MODEL, validateBaseUrl, validateProtocol, isLoopbackUrl, resolveSetupProviderPreset, inferSetupProviderPreset, shouldPromptForProviderBaseURL } from './config.mjs';
 import { testProviderConnection } from './agent.mjs';
 import { discoverLocalOllamaModels } from './ollama-discovery.mjs';
+import { parsePaste } from '../app/core/connect.mjs';
 
 // Model provider setup: oasis setup, oasis connect, and the first-run check.
 // The terminal prompt helpers live in cli.mjs (they pause the turn key reader).
@@ -286,7 +287,8 @@ export async function connectCommand(rest, root) {
   const inline = rest.join(' ').trim();
   if (inline) {
     await connectFromTerminalPaste(inline);
-    stdout.write('Tip: paste at the prompt next time (run oasis connect with nothing after it) so the key stays out of your shell history.\n');
+    // Only a pasted key belongs out of shell history; an address or link does not.
+    if (parsePaste(inline).keys.length) stdout.write('Tip: paste at the prompt next time (run oasis connect with nothing after it) so the key stays out of your shell history.\n');
     return;
   }
   if (!stdin.isTTY || !stdout.isTTY) {
