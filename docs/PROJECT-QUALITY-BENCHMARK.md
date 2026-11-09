@@ -15,7 +15,7 @@ The headline assessment is:
 
 - **Engineering foundation:** strong for a solo-maintained project, based on visible repository structure and CI configuration.
 - **Repository presentation:** good brand and core README; several avoidable trust and navigation gaps remain.
-- **Product proof:** materially improved by the README's unscripted `gpt-oss-20b` CLI recording, GIF/MP4 and raw terminal cast; still incomplete across the connected workspace and desktop.
+- **Product proof:** materially improved by the README's unscripted `gpt-oss-20b` CLI recording, GIF/MP4 and raw terminal cast; the web app now has screenshots from the browser e2e run.
 - **Competitive coding quality:** not established by this audit. Repository quality cannot show that OASIS completes more coding tasks than Codex, Claude Code, OpenCode or other agents.
 
 This is a practical gap analysis, not a universal quality ranking.
@@ -45,12 +45,12 @@ Ratings describe evidence present in the repository at the audit commit. “Stro
 | Brand identity | **Strong** | Dedicated portal mark, logo, hero artwork, icon variants and `BRAND.md`. The design language is coherent and restrained. |
 | First-screen product clarity | **Strong** | Clear statement of the product as a model-agnostic coding-agent runtime, plus a practical interface map. |
 | Real product proof | **Strong (CLI) / Partial (cross-interface)** | The README now embeds a real, unscripted `gpt-oss-20b` CLI run as a GIF with MP4 and raw `.cast` recording. It shows file reading, a bug fix, a new test, approval and a verification send-back. This is qualitative evidence from one recorded run, not a standardized task benchmark. Browser, connected-workspace and desktop captures remain outstanding. |
-| Installation accuracy | **Partial** | CLI and connected-session paths are documented. The docs said Node 22+, while `package.json` requires Node `>=22.15`; desktop copy implied downloadable installers existed. |
+| Installation accuracy | **Partial** | CLI and connected-session paths are documented. The docs said Node 22+, while `package.json` requires Node `>=22.15`; the desktop app has since been retired. |
 | Release/distribution trust | **Gap** | The `v1.1.0` Git tag exists, but the GitHub Releases API returned no published release and `/releases/latest` returned 404. The release workflow is guarded, but users must not be told an installer is available until release assets are actually published. |
 | Documentation navigation | **Partial** | Architecture and configuration guides exist, but the docs index omitted the architecture-alternatives and agent-runtime-alternatives documents. |
 | Architecture transparency | **Strong / Partial** | Detailed runtime maps and replacement studies exist. The 437 KB agent module was recently reduced to about 425 KB by extracting provider-stream parsing, but lifecycle and dispatch remain highly concentrated. |
 | Security disclosure | **Strong** | `SECURITY.md`, private reporting, explicit sandbox caveats, provider-data disclosure and trust-boundary documentation are present. |
-| CI and regression discipline | **Strong** | Quality workflow covers Node 22/24/26, Linux/Windows/macOS security regressions, clean-environment tests, benchmark checks and browser/desktop workflows. |
+| CI and regression discipline | **Strong** | Quality workflow covers Node 22/24/26, Linux/Windows/macOS security regressions, clean-environment tests, benchmark checks and the browser e2e workflow. |
 | Evaluation evidence | **Partial** | Model-free harness and token-efficiency benchmarks exist. No controlled, published, same-model task-completion comparison against other coding agents was established by this audit. |
 | Contributor onboarding | **Strong / Partial** | `CONTRIBUTING.md`, Code of Conduct, Support and issue templates exist; community pathways and governance can be made more discoverable. |
 | Release communication | **Partial** | Changelog contains useful technical detail, but version headings were linked to release pages that do not exist. |
@@ -61,8 +61,8 @@ The representative sample shows several repeatable practices worth adopting:
 
 | Pattern | Strong examples | OASIS action |
 |---|---|---|
-| Lead with a real product image or walkthrough | OpenHands, OpenDesign, OpenCode, Hermes | The README now shows an actual CLI run, with an MP4 and raw terminal recording. Add separate connected-workspace and desktop captures; keep hero brand art separate. |
-| Separate install routes by product surface | Cline, Codex, Pi, OpenCode | Keep CLI, desktop, browser and editor paths clearly distinct, with exact prerequisites and truthful availability. |
+| Lead with a real product image or walkthrough | OpenHands, OpenDesign, OpenCode, Hermes | The README now shows an actual CLI run, with an MP4 and raw terminal recording. Add separate web-app captures; keep hero brand art separate. |
+| Separate install routes by product surface | Cline, Codex, Pi, OpenCode | Keep CLI, web app and editor paths clearly distinct, with exact prerequisites and truthful availability. |
 | Show the product's boundary, not just its feature count | OpenHands, Goose, Gemini CLI | Explain where the runtime executes, what each interface can access, and which integrations are optional. OASIS already does much of this well. |
 | Make docs and support one click away | OpenCode, Superpowers, Goose, Cline | Keep one authoritative docs index and add all maintained architecture/comparison pages to it. |
 | Treat release status as product functionality | Codex, Pi, OpenCode | Ensure version, tag, release object, checksums, package assets and updater metadata agree before linking users to downloads. |
@@ -82,13 +82,13 @@ The representative sample shows several repeatable practices worth adopting:
 ### P0 — trust and first-run correctness
 
 1. **Release state:** remove “latest release” and download claims until a GitHub Release and its assets actually exist. The `v1.1.0` tag and package version alone are not a downloadable release.
-2. **Prerequisites:** use the exact package engine requirement, Node.js 22.15 or newer, consistently across README, contribution and mobile guides.
+2. **Prerequisites:** use the exact package engine requirement, Node.js 22.15 or newer, consistently across README and contribution guides.
 3. **Documentation map:** index architecture alternatives, agent-runtime alternatives and this benchmark.
 4. **Release prompt:** change stale workflow copy that refers to publishing `v1.0.0` to refer to the current package version; do not weaken approval gates.
 
 ### P1 — prove the product
 
-1. Capture separate screenshots from the connected workspace and desktop app using representative, non-sensitive project content; the real CLI demonstration is now present.
+1. Capture web-app screenshots from a real-model run using representative, non-sensitive project content; the real CLI demonstration is now present.
 2. Expand the README demo into a short product tour with meaningful captions, linking the raw terminal cast for inspection.
 3. Add a clean first-run walkthrough: choose provider/model, connect a workspace, inspect permissions, run a task, review a diff, run checks and inspect verification.
 4. Make the README's first screen answer: what it is, who it is for, what runs locally, how to try it and where to get help.
@@ -255,4 +255,4 @@ Re-run this scorecard after major UI, packaging, release, documentation or CI ch
 
 After this historical audit, the public Pages-based marketing website was retired. Its source directory, deployment workflow and site-specific build/QA scripts were removed. This does **not** retire the browser product: the root browser application, app/, src/web.mjs and its browser-app integrity tests remain in the repository. The browser workspace continues to connect to a local OASIS runtime; it is not a hosted website.
 
-The new [user guide](USER-GUIDE.md), [interfaces guide](INTERFACES.md) and [release guide](RELEASES.md) are the maintained entry points for terminal, browser, desktop and download workflows.
+The new [user guide](USER-GUIDE.md), [interfaces guide](INTERFACES.md) and [release guide](RELEASES.md) are the maintained entry points for terminal, web app, remote access and download workflows.

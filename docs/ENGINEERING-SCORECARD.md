@@ -19,12 +19,12 @@ This scorecard keeps product presentation, engineering discipline and measured r
 |---|---|---|---|
 | Public product identity | Established | Brand guide, maintained marks, repository hero and consistent OASIS naming | Keep site, README, app and release artwork aligned |
 | Public marketing website | Retired | The Pages-based marketing site and deployment workflow are removed. The local browser workspace remains a supported product interface. | No public marketing site is planned; keep browser-workspace onboarding in the repository docs. |
-| First-run onboarding | Partial | Provider setup, CLI doctor/connect flow, desktop onboarding and connected-session docs | Run repeatable first-run checks on clean desktop, Linux and a phone-sized browser |
+| First-run onboarding | Partial | Provider setup, CLI doctor/connect flow, web sign-in with Remember this device, browser e2e on desktop and phone widths | Run repeatable first-run checks on clean macOS, Windows and Linux hosts |
 | Runtime architecture | Partial | Architecture map, provider request/stream adapters, tool-schema validation and ordered tool-batch scheduling are independently testable | Continue staged decomposition with characterization tests for retries, cancellation, metadata and recovery |
 | Security boundaries | Established / Partial | Security policy, permission checks, protected paths and platform regression tests | Keep active-sandbox state explicit; expand independent threat review and platform-specific evidence |
 | Automated test discipline | Established / Partial | Large Node test suite, cross-platform regression jobs, clean-environment tests, Docker sandbox and browser checks | Maintain green same-commit CI and document skipped tests and platform limitations |
-| Release engineering | Open | Desktop packaging workflow, explicit release gates and checksum generation exist; GitHub currently has no published release assets | Publish a reviewed release with platform artifacts, checksums, provenance and install/upgrade verification |
-| Connected workspace delivery | Partial | Browser UI is served by the host runtime; there is no hosted web app | Verify host connection, session authentication, workspace scope, mobile layout and browser-client isolation |
+| Release engineering | Open | npm tarball release workflow, explicit release gates and checksum generation exist; GitHub currently has no published release assets | Publish a reviewed release with platform artifacts, checksums, provenance and install/upgrade verification |
+| Connected workspace delivery | Partial | Browser UI is served by the host runtime with access key, host allow-list, lockout and HTTPS-only provider setup; reloads reattach to running tasks | Server-side chat history shared across devices; SSE instead of polling |
 | Benchmarks | Partial | Deterministic harness/token checks and live-evaluation tooling exist | Publish repeated, same-model, same-task peer comparisons with raw data and independent verifiers |
 | Contributor experience | Partial | Contribution/security/support policies and issue templates exist | Keep PR checklist concise; validate a first-time contributor path on a clean machine |
 | Observability and operations | Partial | Usage metadata, diagnostics, sessions and command logs exist | Document operational signals, retention, error reporting and support expectations |
@@ -57,7 +57,7 @@ Revisit this scorecard after a meaningful runtime, interface, CI or release chan
 ## Current priority order
 
 1. Restore a fully green same-commit CI baseline.
-2. Verify desktop downloads and the host-connected browser workspace as distinct surfaces.
-3. Create a verifiable public desktop release, only after the manual release gates pass.
+2. Verify the web app over a real HTTPS tunnel from a phone.
+3. Publish a verifiable npm-tarball release, only after the manual release gates pass.
 4. Continue provider and agent lifecycle decomposition without destabilising existing interfaces.
 5. Publish controlled, reproducible same-model harness comparisons.

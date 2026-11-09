@@ -6,7 +6,7 @@ This document defines the public identity used by the OASIS repository, applicat
 
 The public-facing product name is OASIS. Write it in uppercase in the wordmark, application name, repository title and user-facing copy. Do not append an OSS suffix to the product name.
 
-The npm package identifier oasis-oss and Electron application identifier org.oasis.oss are technical namespaces. They are not the product name and must not be copied into logos, app titles, screenshots or promotional artwork.
+The npm package identifier oasis-oss is a technical namespace. It is not the product name and must not be copied into logos, app titles, screenshots or promotional artwork.
 
 **Tagline:** Code. Automate. Flourish.
 

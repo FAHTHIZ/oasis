@@ -11,8 +11,8 @@ Last reviewed November 2026. Sources are linked in each section. Where a page di
 | License | Open source | Proprietary | Apache-2.0 | Apache-2.0 | Open source | Apache-2.0 |
 | Models | Any: OpenAI-compatible, Anthropic, Gemini, Bedrock, Vertex, Foundry, local | Anthropic | ChatGPT plan or API key | Gemini API, Vertex AI, Code Assist | Many providers | 15+ providers |
 | Terminal UI | Yes | Yes | Yes | Yes | Yes | Yes |
-| Web interface | Yes, local | Cloud sessions | Codex Web (cloud) | No | Yes, local (`opencode web`) | No |
-| Desktop app | Yes | Yes | Yes | No | Beta | Yes |
+| Web interface | Yes, self-hosted and remote-ready (HTTPS, access key, reconnects to running tasks) | Cloud sessions | Codex Web (cloud) | No | Yes, local (`opencode web`) | No |
+| Desktop app | No (browser only, by design) | Yes | Yes | No | Beta | Yes |
 | MCP | Yes, including MCP Tasks | Yes | Yes | Yes | Yes | Yes |
 | Subagents | Yes: parallel, background, resumable, teams, worktrees | Yes | Agent command center | Yes: built-in and custom, parallel | `general` subagent | No |
 | Claude Code plugins | Yes, from any marketplace, with a one-click installer in the web app; Codex plugins and Gemini CLI extensions are converted on install | Yes | No (own plugin format) | No (own extensions) | No (own plugins) | No |
@@ -44,8 +44,8 @@ Claude Code is the reference point for agent behaviour, and OASIS reads its conf
 
 [Codex](https://github.com/openai/codex) is open source and runs in the terminal, in IDEs, as a desktop app and as Codex Web in the cloud. Its [0.167 release](https://github.com/openai/codex/releases) added an agent command center and image previews while composing.
 
-- OASIS matches it on local execution, approval modes, MCP, image input, IDE integration (over ACP) and a desktop app. OASIS's live agent monitor and `/tasks` cover what the command center shows.
-- Codex's advantage is Codex Web, hosted cloud execution. OASIS has no hosted service: the browser workspace and phone access connect to your own computer.
+- OASIS matches it on local execution, approval modes, MCP, image input and IDE integration (over ACP). It has no desktop app; the web app covers that role from any browser. OASIS's live agent monitor and `/tasks` cover what the command center shows.
+- Codex's advantage is Codex Web, hosted cloud execution. OASIS has no hosted service: the web app, from any device, connects to your own computer or server.
 
 ## Gemini CLI
 
@@ -67,7 +67,7 @@ Claude Code is the reference point for agent behaviour, and OASIS reads its conf
 
 - **Any provider.** OpenAI-compatible, Anthropic, Gemini, cloud and local servers. Fallback models and task-aware routing send simple read-only requests to a cheaper model.
 - **Verification gate.** The agent is sent back when it reports success without reviewing its diff or running checks.
-- **Two interfaces, one runtime.** The terminal and a local web app (interactive terminal, Files and Changes panels, plugin installer), which the desktop app wraps. Sessions move between them. ACP, editor, SDK and messaging integrations connect to the same runtime.
+- **Two interfaces, one runtime.** The terminal and a self-hosted web app (live timeline with expandable steps, task sidebar, interactive terminal, Files and Changes panels, plugin installer) that works the same on a laptop or a phone. Sessions move between them. ACP, editor, SDK and messaging integrations connect to the same runtime.
 - **Claude Code plugins.** Installed and used from Anthropic's official marketplace on 8 November 2026: superpowers, frontend-design, code-review, context7, playwright, hookify, security-guidance and others, including their hooks, skills and MCP servers.
 - **Codex plugins.** On 9 November 2026, BuilderIO/skills, n8n-io/skills, DataDog/pup and NVIDIA/nvidia-kaggle installed with `oasis add` (78 skills). Codex-only plugins install too, and their MCP servers resolve a relative `cwd`, `./` commands and `${PLUGIN_ROOT}` against the plugin folder, as Codex does ([Codex source](https://github.com/openai/codex/blob/main/codex-rs/codex-mcp/src/agent_plugin_config.rs)). Plugins that need their own dependencies (nexu-io/codex-slides needs `pnpm install`) or programs (Storybloq) still need that setup.
 - **Terminal integration.** Inline images (Kitty and iTerm2) and OSC 9;4 progress in the tab or taskbar.
@@ -77,7 +77,7 @@ Claude Code is the reference point for agent behaviour, and OASIS reads its conf
 | Gap | Why it matters | Reason |
 | --- | --- | --- |
 | Model tuning | Claude Code's prompts and tool schemas are tuned for Claude models, and much of its reliability comes from that tuning. | OASIS works across many model families, so it can't tune for one the same way. |
-| Hosted cloud execution | Codex Web and Claude Code cloud sessions run tasks without your computer being on. | OASIS runs only where you install it. Phone access goes through your own computer. |
+| Hosted cloud execution | Codex Web and Claude Code cloud sessions run tasks without your computer being on. | OASIS runs only where you install it. Remote access from any browser goes through your own computer or server. |
 | Field maturity | Claude Code and Codex are used by very large populations, so their edge cases get found quickly. | OASIS has about 2,300 automated tests and adversarial suites, but far fewer real-world hours. |
 | Edits in default mode | Claude Code asks before every edit in `default` mode. OASIS applies edits inside the workspace without asking (they are checkpointed and can be rewound, and protected config paths still prompt). | A deliberate choice for speed. Use `plan` mode or `ask` rules for `edit_file` to get Claude Code's behaviour. |
 | Code signing | macOS warns on first launch of unsigned apps. | OASIS macOS packages are not code-signed yet. |

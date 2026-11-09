@@ -8,7 +8,7 @@ This document describes the current source layout at a component level. It is an
 
 ```mermaid
 flowchart TD
-    U[User or automation] --> I[CLI / Desktop / Browser / IDE / ACP / SDK / Action]
+    U[User or automation] --> I[CLI / Web app / IDE / ACP / SDK / Action]
     I --> S[Session and agent orchestration]
     S <--> P[Configured model provider]
     S --> G[Tool dispatch and permission checks]
@@ -77,7 +77,7 @@ No single option should be treated as a universal security boundary. See [SECURI
 
 ## Interface boundaries
 
-The CLI, desktop application and connected browser workspace use the host-connected runtime. The browser is an untrusted client: it requests work from the host and does not receive arbitrary shell access to the device.
+The CLI and the web app use the host-connected runtime. The browser is an untrusted client: it requests work from the host and does not receive arbitrary shell access to the device.
 
 Editor and ACP integrations communicate with the runtime through their respective interfaces. The SDK exposes selected runtime functions for Node.js applications. GitHub Actions and messaging gateways are automation entry points with their own credentials and execution environment.
 
