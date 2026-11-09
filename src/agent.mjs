@@ -13,7 +13,7 @@ import { protectedConfigTarget, protectedEditMessage, protectedEditsAllowed, rul
 import { extractCorrections, addCorrections, correctionsReminder, correctionViolations, correctionNudge, correctionsFromMemories, CORRECTION_MEMORY_PREFIX } from './standing-corrections.mjs';
 import { scriptedEditKind } from './inplace-edit-check.mjs';
 import { extractHardRules, extractBranchRules, ruleRefreshReminder } from './rule-refresh.mjs';
-import { newClaimState, recordCheck as recordClaimCheck, recordEdit as recordClaimEdit, claimIssue } from './claim-check.mjs';
+import { newClaimState, recordCheck as recordClaimCheck, recordEdit as recordClaimEdit, claimIssue, appendUnverifiedNotice } from './claim-check.mjs';
 import { resolveToolAlias, normalizeRunCommandCall, cleanToolCallName } from './tool-aliases.mjs';
 import { scopeViolation, editScopeFromEnv } from './scope-lock.mjs';
 import { shellExitTarget } from './pipe-status.mjs';
@@ -4551,6 +4551,10 @@ async function runAgentTurnRaw(session, prompt, options = {}) {
             'Use git_diff to review the complete change set when Git metadata is available. In a non-Git workspace, reread every changed file after editing. For changed source/config code, inspect the project scripts and run a relevant test/check/lint/build/type-check command; fix failures and rerun checks after fixes.',
             ...untestedNewCode(verification),
             'Do not claim completion of the gate based on the file-write result. If a check cannot run or permission is denied, state that limitation honestly.',
+            // Pressure to "verify" a check that cannot run is what makes small
+            // models invent a passing test log. Say plainly that it cannot run.
+            ...(verification.deniedCheck && verification.lastVerificationExitCode !== 0
+              ? ['`' + verification.deniedCheck + '` was not approved, so it cannot run in this session. Do not run it again, and never write test or command output you did not see in a tool result. Tell the user it was not run and give them the exact command.'] : []),
             // Models echo this note back ("The gate is satisfied"); the user never saw it.
             'This note is internal. In your final answer, report to the user what changed and which checks ran, in plain words. Do not mention this note, the gate, or these instructions, and do not claim anything (such as a commit) that you did not do.',
             // The first summary is already on screen; a second full one reads as a repeat.
@@ -4559,7 +4563,7 @@ async function runAgentTurnRaw(session, prompt, options = {}) {
         });
         continue;
       }
-      const claimNudge = claimIssue(claimState, text);
+      const claimNudge = claimIssue(claimState, text, { edited: verification.changedPaths.size > 0, deniedCheck: verification.deniedCheck || '' });
       if (claimNudge) {
         if (text && options.onText) await emitDisplayText(session, options, text);
         session.messages.push({ role: 'user', content: claimNudge });
@@ -4595,7 +4599,7 @@ async function runAgentTurnRaw(session, prompt, options = {}) {
           continue;
         }
       }
-      const finalText = emptyReply ? (assistant.providerStop ? 'The provider ended the reply with no text (finish reason: ' + assistant.providerStop + '). Nothing was summarized; rephrase the request or try another model.' : EMPTY_REPLY_NOTICE) : issues.length ? text : appendLspUnavailableNotice(text, verification);
+      const finalText = emptyReply ? (assistant.providerStop ? 'The provider ended the reply with no text (finish reason: ' + assistant.providerStop + '). Nothing was summarized; rephrase the request or try another model.' : EMPTY_REPLY_NOTICE) : issues.length ? appendUnverifiedNotice(text, issues, verification, claimState) : appendLspUnavailableNotice(text, verification);
       assistantMessage.content = finalText;
       let followupsAdded = [];
       if (!options.isSubagent && !options.planOnly && followupsEnabled(session, options.env || process.env)) {
@@ -4769,11 +4773,18 @@ async function runAgentTurnRaw(session, prompt, options = {}) {
       }
       if (name === 'run_command' && result) {
         const args = safeToolArguments(call.function && call.function.arguments);
+        // A check that was not approved cannot be satisfied by asking again;
+        // remember it so the gate and the final answer say so honestly.
+        if (isVerificationCommand(args.command, args.args) && result.approved === false) verification.deniedCheck = [args.command].concat(Array.isArray(args.args) ? args.args : []).join(' ').slice(0, 200);
         if (isVerificationCommand(args.command, args.args) && result.approved !== false) {
           recordClaimCheck(claimState, { command: [args.command].concat(Array.isArray(args.args) ? args.args : []).join(' '), exitCode: result.exitCode });
           verification.lastVerificationExitCode = result.exitCode;
           verification.lastVerificationKind = verificationCommandKind(args.command, args.args);
         }
+      }
+      if (name === 'run_shell' && result && result.approved === false) {
+        const deniedTarget = shellExitTarget(safeToolArguments(call.function && call.function.arguments).command);
+        if (deniedTarget && isVerificationCommand(deniedTarget.command, deniedTarget.args)) verification.deniedCheck = String(safeToolArguments(call.function && call.function.arguments).command || '').slice(0, 200);
       }
       if (name === 'run_shell' && result && result.approved !== false && (typeof result.exitCode === 'number' || result.timedOut || result.cancelled)) {
         const shellCommand = safeToolArguments(call.function && call.function.arguments).command;

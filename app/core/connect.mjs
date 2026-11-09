@@ -256,6 +256,37 @@ function idsFrom(body) {
 }
 
 /**
+ * What a model list says about each model beyond its ID. Some servers mark
+ * models that need a paid key (LLM7 `tier: "pro"`, `usage_based_only`) or that
+ * cannot call tools (`tools_calling: false`, OpenRouter `supported_parameters`
+ * without "tools"). Probing those first on a keyless connection wastes the
+ * setup budget on answers that can only be 401 or "no tools".
+ */
+export function modelHints(body) {
+  const list = Array.isArray(body) ? body : body && (body.data || body.models || body.result || []);
+  const paid = new Set();
+  const noTools = new Set();
+  for (const item of Array.isArray(list) ? list : []) {
+    if (!item || typeof item !== 'object') continue;
+    const id = String(item.id || item.name || item.model || '').replace(/^models\//, '').trim();
+    if (!id) continue;
+    const tier = String(item.tier || item.plan || '').toLowerCase();
+    if (/^(pro|paid|premium|enterprise)$/.test(tier) || item.usage_based_only === true || item.requires_key === true) paid.add(id);
+    const caps = item.capabilities && typeof item.capabilities === 'object' ? item.capabilities : {};
+    if (item.tools_calling === false || caps.tools === false || caps.function_calling === false
+      || (Array.isArray(item.supported_parameters) && item.supported_parameters.length && !item.supported_parameters.includes('tools'))) noTools.add(id);
+  }
+  return { paid, noTools };
+}
+
+/** Moves models a keyless connection cannot use, then models without tools, to the end. */
+export function orderByHints(ranked, hints, { keyless = false } = {}) {
+  if (!hints) return ranked;
+  const bucket = (id) => (keyless && hints.paid.has(id) ? 2 : 0) + (hints.noTools.has(id) ? 1 : 0);
+  return ranked.map((id, index) => ({ id, index, rank: bucket(id) })).sort((a, b) => a.rank - b.rank || a.index - b.index).map((entry) => entry.id);
+}
+
+/**
  * Lists the models a connection can use. Throws ProviderError with the HTTP
  * status when the server answers but refuses (so a 401 means "wrong key").
  */
@@ -270,6 +301,7 @@ export async function listModels(connection, { fetchImpl = globalThis.fetch.bind
   const body = await response.json().catch(() => null);
   const ids = idsFrom(body);
   if (!ids.length && !body) throw new ProviderError('The server did not return a model list.');
+  Object.defineProperty(ids, 'hints', { value: modelHints(body), enumerable: false });
   return ids;
 }
 
@@ -322,6 +354,7 @@ function makeConnection(provider, overrides = {}) {
     apiKey: overrides.apiKey || '',
     models: overrides.models || [],
     local: Boolean(overrides.local),
+    ...(overrides.skipModels && overrides.skipModels.length ? { skipModels: overrides.skipModels } : {}),
     addedAt: Date.now()
   };
 }
@@ -421,6 +454,15 @@ async function lockIn(connection, ranked, { fetchImpl, onStatus, tries = 4, pref
         if (skippedProviders.size > 60) break;
         continue;
       }
+      // The model list answered without a key, so a 401 here is about this
+      // model (a paid tier on a free server), not a wrong key: rule it out
+      // and keep going. Only when every model says so is a key really needed.
+      if (kind === 'auth' && !connection.apiKey && !connection.local) {
+        failures[failures.length - 1].kind = 'needs-key';
+        unusable.push(model);
+        if (Date.now() - started < 3000 && cheap < 80) { attempts -= 1; cheap += 1; }
+        continue;
+      }
       if (kind === 'auth' || kind === 'network') throw error;
       if (kind === 'model' || kind === 'credits') unusable.push(model);
       if (!['model', 'credits', 'rate', 'server'].includes(kind)) hardFailures += 1;
@@ -434,6 +476,9 @@ async function lockIn(connection, ranked, { fetchImpl, onStatus, tries = 4, pref
   }
   if (noTools) return { model: noTools, toolCalling: false, failures, unusable };
   if (!failures.length) throw new ProviderError('This connection has no chat models.');
+  if (failures.every((failure) => failure.kind === 'needs-key')) {
+    throw new ProviderError('This server lists its models without a key but needs an API key to use them (' + failures.length + ' tried). Paste the key together with the address.', { status: 401 });
+  }
   const allCredits = failures.every((failure) => failure.kind === 'credits');
   const lines = failures.slice(0, 8).map((failure) => '  ' + failure.model + ': ' + briefFailure(failure.reason, failure.status));
   if (failures.length > 8) lines.push('  …and ' + (failures.length - 8) + ' more');
@@ -601,7 +646,7 @@ export async function probeEndpoint(raw, { apiKey = '', fetchImpl = globalThis.f
       const provider = knownPreset ? knownPreset[0] : /:1234$/.test(origin) ? 'lmstudio' : /:8080$/.test(origin) ? 'llamacpp' : /:20128$/.test(origin) ? 'omniroute' : 'custom';
       const label = knownPreset ? knownPreset[1].label : provider === 'custom' ? url.host : PRESETS[provider].label;
       // A gateway on localhost forwards to the cloud: time and label it as cloud.
-      return makeConnection(provider, { baseURL: attempt.base, apiKey, local: local && provider !== 'omniroute', models: rankModels(ids), label });
+      return makeConnection(provider, { baseURL: attempt.base, apiKey, local: local && provider !== 'omniroute', models: orderByHints(rankModels(ids), ids.hints, { keyless: !apiKey }), skipModels: ids.hints ? [...ids.hints.noTools, ...(apiKey ? [] : ids.hints.paid)] : [], label });
     } catch (error) {
       // A gateway can guard an Ollama-style alias (/api/tags) as well as /v1, so an
       // auth failure on one probe must not stop the probes that carry the key.

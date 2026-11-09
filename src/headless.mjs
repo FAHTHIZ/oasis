@@ -262,7 +262,7 @@ export async function runHeadless(options) {
           denied.push({ tool_name: meta && meta.tool || null, detail: (answer === 'timeout' ? 'No answer before the approval timeout. ' : 'Denied with oasis bg deny. ') + String(message).replace(/\s+/g, ' ').trim().slice(0, 260) });
           return false;
         }
-        denied.push({ tool_name: meta && meta.tool || null, detail: String(message).replace(/\s+/g, ' ').trim().slice(0, 300) });
+        denied.push({ tool_name: meta && meta.tool || null, ...(meta && meta.input && typeof meta.input === 'object' ? { tool_input: meta.input } : {}), detail: String(message).replace(/\s+/g, ' ').trim().slice(0, 300) });
         return false;
       },
       onToolStart: ({ name, args, subagent, call }) => (progress && !subagent && progress(progressLine(name, args)), emit({ type: 'tool_use', ...(call && call.id ? { id: call.id } : {}), name, input: args, ...(subagent ? { subagent } : {}) })),
@@ -483,6 +483,10 @@ export async function runHeadless(options) {
   if (outputFormat === 'none') {}
   else if (outputFormat === 'text') write(structured !== undefined ? JSON.stringify(structured) + '\n' : summary.result + (summary.result.endsWith('\n') ? '' : '\n'));
   else if (outputFormat !== 'none') write(JSON.stringify(summary) + '\n');
+  // Nobody can approve anything in -p, so say what was skipped and how to allow it next time.
+  if (outputFormat === 'text' && denied.length && env.OASIS_PROGRESS !== '0') {
+    try { process.stderr.write(deniedHint(denied)); } catch {}
+  }
   if (onEvent) onEvent(summary);
   if (suggestion) emit({ type: 'prompt_suggestion', suggestion, session_id: sessionId });
   return { exitCode: isError ? 1 : 0, summary };
@@ -497,4 +501,21 @@ export function headlessSetupErrorOutput(error, outputFormat) {
   if (outputFormat !== 'json' && outputFormat !== 'stream-json') return { stdout: '', stderr: stderrText };
   const result = { type: 'result', subtype: 'error_during_execution', is_error: true, result: message, session_id: null, num_turns: 0, duration_ms: 0, tool_calls: 0, total_cost_usd: 0, permission_denials: [] };
   return { stdout: JSON.stringify(result) + '\n', stderr: stderrText };
+}
+
+/** One stderr paragraph for `oasis -p` naming what was not approved and the flag that allows it. */
+export function deniedHint(denied) {
+  const commands = [];
+  const tools = [];
+  for (const item of denied || []) {
+    const input = item && item.tool_input;
+    if (input && typeof input.command === 'string' && (item.tool_name === 'run_command' || item.tool_name === 'run_shell')) {
+      const line = [input.command].concat(Array.isArray(input.args) ? input.args : []).join(' ').trim();
+      if (line && !commands.includes(line)) commands.push(line);
+    } else if (item && item.tool_name && !tools.includes(item.tool_name)) tools.push(item.tool_name);
+  }
+  if (!commands.length && !tools.length) return '';
+  const rules = commands.slice(0, 3).map((line) => 'run_command(' + line.split(/\s+/).slice(0, 2).join(' ') + ':*)');
+  return '\nNot approved in this run (nobody can approve in -p mode): ' + [...commands.map((line) => '`' + line + '`'), ...tools].slice(0, 6).join(', ') + '.\n' +
+    (rules.length ? 'To allow next time: --allowedTools "' + rules.join(',') + '", or --permission-mode auto.\n' : 'To allow next time: --allowedTools, --yes or --permission-mode auto.\n');
 }
