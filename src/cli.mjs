@@ -2422,29 +2422,22 @@ async function startWebWorkspace(root, args) {
   stdout.write('  Another browser? Open ' + localUrl + ' and paste the link above into the message box.\n\n');
   stdout.write('Commands, package installs, file deletions and bundle installs always ask for your approval in the browser first.\n');
   if (host === '0.0.0.0' || (isIP(host) > 0 && !['127.0.0.1', '::1'].includes(host))) {
-    // Print real phone links (and a QR code to scan) instead of a placeholder.
-    let printedPhoneLinks = false;
+    let printedLinks = false;
     try {
       const { lanAddresses } = await import('./lan-addresses.mjs');
       const addresses = host === '0.0.0.0' ? lanAddresses() : [{ address: host, name: '', virtual: false, tailscale: false }];
       if (addresses.length) {
-        const phoneUrl = (address) => scheme + '://' + address + ':' + app.port + '/app/#token=' + app.token;
-        stdout.write('\n  Phone or tablet on the same private network, open:\n');
-        for (const entry of addresses.slice(0, 4)) stdout.write('    ' + phoneUrl(entry.address) + (entry.tailscale ? '   (Tailscale)' : entry.virtual ? '   (virtual adapter)' : '') + '\n');
-        if (stdout.isTTY && process.env.OASIS_NO_QR !== '1') {
-          const { renderQrTerminal } = await import('./qr.mjs');
-          stdout.write('\n  Or scan this with the phone camera:\n\n' + renderQrTerminal(phoneUrl(addresses[0].address), { color: colorEnabled(stdout) }).split('\n').map((line) => '    ' + line).join('\n') + '\n\n');
-        }
-        stdout.write('  Then add it to the home screen (Share → Add to Home Screen on iPhone, menu → Install app on Android).\n');
-        printedPhoneLinks = true;
+        stdout.write('\n  From another device on this network, open:\n');
+        for (const entry of addresses.slice(0, 4)) stdout.write('    ' + scheme + '://' + entry.address + ':' + app.port + '/app/#token=' + app.token + (entry.tailscale ? '   (Tailscale)' : entry.virtual ? '   (virtual adapter)' : '') + '\n');
+        printedLinks = true;
       }
     } catch {}
     if (app.secure) {
       stdout.write('HTTPS is active. The certificate must be trusted by each client device and include the exact LAN IP in its subject alternative names.\n');
-      if (!printedPhoneLinks) stdout.write('On your phone, open https://<this-computer-LAN-IP>:' + app.port + '/ while connected to the same private Wi-Fi, then paste the token.\n');
+      if (!printedLinks) stdout.write('From another device, open https://<this-computer-address>:' + app.port + '/ and paste the token.\n');
     } else {
       stdout.write('UNENCRYPTED LAN WARNING: explicit --allow-insecure-lan is active. The token and workspace traffic can be observed on the network. Never use public Wi-Fi or expose this port to the Internet.\n');
-      if (!printedPhoneLinks) stdout.write('On your phone, open http://<this-computer-LAN-IP>:' + app.port + '/ while connected to the same private Wi-Fi, then paste the token.\n');
+      if (!printedLinks) stdout.write('From another device, open http://<this-computer-address>:' + app.port + '/ and paste the token.\n');
     }
   } else {
     stdout.write('Local only: other devices cannot connect. Network access requires a trusted TLS certificate, or the explicit and unsafe --allow-insecure-lan flag.\n');
@@ -2910,7 +2903,7 @@ async function main() {
   if (command === 'update') return await updateOasis(explicitYes && !rest.includes('--yes') ? [...rest, '--yes'] : rest, { ask: askLine });
   if (command === 'uninstall') return await uninstallOasis(explicitYes && !rest.includes('--yes') ? [...rest, '--yes'] : rest, { ask: askLine });
   if (command === 'web') return await startWebWorkspace(workspace, rest);
-  if (command === 'app') throw new Error('The standalone browser app has been removed. Use "oasis web --open" for a normal connected session, or install the native desktop app from GitHub Releases.');
+  if (command === 'app') throw new Error('The standalone browser app has been removed. Use "oasis web --open" for a normal connected session.');
   if (command === 'watch') return await watchCommentsCommand(workspace, autoApprove || rest.includes('--yes'), persistence);
   if (command === 'plan') {
     const planPrompt = rest.join(' ').trim();

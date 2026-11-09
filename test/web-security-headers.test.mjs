@@ -4,22 +4,6 @@ import { mkdtemp } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 
-test('desktop permission policy allows only microphone and clipboard for the app origin', async () => {
-  const { allowPermission } = await import('../desktop/permissions.mjs');
-  const app = 'http://127.0.0.1:4310';
-  assert.equal(allowPermission('media', { requestingUrl: app + '/', mediaTypes: ['audio'] }, app), true);
-  assert.equal(allowPermission('media', { requestingUrl: app + '/', mediaTypes: ['audio', 'video'] }, app), false);
-  assert.equal(allowPermission('media', { requestingUrl: app + '/', mediaType: 'video' }, app), false);
-  assert.equal(allowPermission('media', { requestingUrl: 'https://evil.example/', mediaTypes: ['audio'] }, app), false);
-  assert.equal(allowPermission('media', { requestingUrl: app + '/', mediaTypes: ['audio'], isMainFrame: false }, app), false);
-  assert.equal(allowPermission('clipboard-sanitized-write', { requestingUrl: app }, app), true);
-  assert.equal(allowPermission('notifications', { requestingUrl: app + '/' }, app), true, 'turn-finished notifications');
-  for (const permission of ['geolocation', 'midi', 'pointerLock', 'openExternal', 'display-capture', 'hid', 'serial', 'usb']) {
-    assert.equal(allowPermission(permission, { requestingUrl: app + '/' }, app), false, permission);
-  }
-  assert.equal(allowPermission('media', { requestingUrl: app, mediaTypes: ['audio'] }, null), false, 'nothing before the server is up');
-});
-
 test('web page is served with a hash-based Content-Security-Policy covering every inline script', async (t) => {
   const { startOasisWebServer, pageContentSecurityPolicy } = await import('../src/web.mjs');
   const { createHash } = await import('node:crypto');

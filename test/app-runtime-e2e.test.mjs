@@ -178,7 +178,7 @@ test('runtime engine end to end: app at /, paste to connect, approve a real edit
   assert.match(await readFile(path.join(root, 'index.html'), 'utf8'), /Counter/, 'the file was written on disk');
   assert.equal(await evaluate(page, `document.querySelectorAll('.tool').length`), 4, 'one card per tool call');
   assert.equal(await evaluate(page, `[...document.querySelectorAll('.tool')].at(-1).className`), 'tool ok', 'the approved command ran');
-  assert.match(await evaluate(page, `[...document.querySelectorAll('.tool')].at(-1).textContent`), /Ran commands.*node -e/);
+  assert.match(await evaluate(page, `[...document.querySelectorAll('.tool')].at(-1).textContent`), /Ran a command.*node -e/);
 
   await shot('4-done');
   if (process.env.OASIS_DEBUG_OVERFLOW) console.log('OVERFLOW', await evaluate(page, `JSON.stringify({ sw: document.documentElement.scrollWidth, iw: innerWidth, wide: [...document.querySelectorAll('body *')].filter((el) => el.getBoundingClientRect().right > innerWidth + 1 && el.getClientRects().length).slice(0, 12).map((el) => el.tagName + '#' + el.id + '.' + el.className + ':' + Math.round(el.getBoundingClientRect().right)) })`));
@@ -260,9 +260,5 @@ test('runtime engine end to end: app at /, paste to connect, approve a real edit
   await evaluate(page, submit);
   await waitFor(page, `!${busy} && /Your command printed 42\\./.test(document.getElementById('transcript').textContent)`, { label: 'the next message carried the command output', timeout: 30000 });
 
-  // 11. The desktop menu's "Connect a phone…" opens the app's phone sheet.
-  await evaluate(page, `window.oasisConnectPhone(); true`);
-  await waitFor(page, `!document.getElementById('phoneSheet').hidden && /home network|Tailscale|reachable/.test(document.getElementById('phoneHint').textContent) && !document.getElementById('phoneError').textContent`, { label: 'phone sheet shows the network choices' });
-  await shot('6-phone');
   assert.deepEqual(errors, [], 'no uncaught errors in the app');
 });

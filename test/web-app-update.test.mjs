@@ -68,33 +68,6 @@ test('network failures are reported without breaking the page', async (t) => {
   assert.match(body.error, /503/);
 });
 
-test('the desktop host answers from its updater and installs only on request', async (t) => {
-  const events = [];
-  const status = { phase: 'available', available: true, canInstall: true, current: '1.0.0', latest: { version: '1.1.0' }, checkedAt: '2026-11-05T00:00:00Z' };
-  const appUpdate = {
-    status: () => status,
-    check: async () => { events.push('check'); return status; },
-    skip: async (version) => { events.push('skip:' + version); return { ...status, skippedVersion: version }; },
-    prompt: async () => { events.push('prompt'); return status; },
-    install: async () => { events.push('install'); return status; }
-  };
-  const { base, auth } = await withServer(t, { appUpdate, updateFetchImpl: async () => { throw new Error('desktop must not use the CLI check'); } });
-  const body = await (await fetch(base + '/api/app/update', { headers: auth })).json();
-  assert.equal(body.host, 'desktop');
-  assert.equal(body.canInstall, true);
-  assert.deepEqual(events, [], 'a recent desktop check is reused');
-  await fetch(base + '/api/app/update?refresh=1', { headers: auth });
-  assert.deepEqual(events, ['check']);
-  const install = await fetch(base + '/api/app/update', { method: 'POST', headers: auth, body: JSON.stringify({ action: 'install' }) });
-  assert.equal(install.status, 202);
-  await new Promise((resolve) => setTimeout(resolve, 50));
-  assert.deepEqual(events, ['check', 'prompt'], 'install opens the native confirmation, it never installs blindly');
-  await fetch(base + '/api/app/update', { method: 'POST', headers: auth, body: JSON.stringify({ action: 'skip', version: '1.1.0' }) });
-  assert.equal(events.at(-1), 'skip:1.1.0');
-  const bad = await fetch(base + '/api/app/update', { method: 'POST', headers: auth, body: JSON.stringify({ action: 'explode' }) });
-  assert.equal(bad.status, 400);
-});
-
 test('Check now (?refresh=1) bypasses the six-hour cache in the CLI-hosted workspace', async (t) => {
   const next = bump(oasisVersion());
   let calls = 0;

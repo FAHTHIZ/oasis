@@ -65,7 +65,7 @@ Read [SECURITY.md](../SECURITY.md) before connecting sensitive workspaces.
 
 To work on a project stored on a computer from another device, start the connected workspace on that computer and connect from a trusted private network. The agent and project access stay on the host.
 
-See [Mobile and tablet setup](../MOBILE.md) for the connected-session and advanced Termux setup.
+See [Remote access](REMOTE-ACCESS.md) to open the workspace from another device.
 
 ## Troubleshooting
 

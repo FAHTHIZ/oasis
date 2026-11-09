@@ -1,7 +1,7 @@
 {
   "name": "oasis-oss",
   "version": "1.1.1",
-  "description": "Open-source, model-agnostic coding-agent runtime for CLI, native desktop, connected browser sessions and editor workflows.",
+  "description": "Open-source, model-agnostic coding-agent runtime with a remote-first browser workspace and terminal agent: real shell, files, MCP, subagents and approvals.",
   "type": "module",
   "main": "./src/sdk.mjs",
   "exports": {
@@ -31,7 +31,6 @@
     "README.md",
     "LICENSE",
     "evals/",
-    "desktop/",
     "!assets/demo/",
     "!assets/screenshots/",
     "!scripts/demo/"
@@ -42,9 +41,6 @@
     "check": "node .github/scripts/check-eval-quarantine.mjs && node --test test/*.test.mjs && node bench/harness/run.mjs --check && node bench/tokens/run.mjs --check && node src/cli.mjs eval --validate && node src/cli.mjs eval --negative-control",
     "postinstall": "node scripts/vendor-terminal.mjs",
     "prepack": "node scripts/vendor-terminal.mjs",
-    "desktop:dev": "electron desktop/main.mjs",
-    "desktop:dir": "electron-builder --dir --publish never",
-    "desktop:dist": "electron-builder --publish never",
     "bench:search": "node scripts/bench-web-search.mjs",
     "bench:harness": "node bench/harness/run.mjs",
     "bench:tokens": "node bench/tokens/run.mjs",
@@ -70,12 +66,13 @@
     "developer-tools",
     "cli",
     "terminal",
-    "electron",
     "vscode",
     "vscode-extension",
     "ollama",
     "nodejs",
-    "open-source"
+    "open-source",
+    "web-workspace",
+    "remote-development"
   ],
   "dependencies": {
     "@agentclientprotocol/sdk": "^2.4.0",
@@ -122,7 +119,6 @@
     "unbash": "6.0.3",
     "undici": "^7.30.2",
     "unpdf": "^1.9.1",
-    "uqr": "^0.1.3",
     "vscode-jsonrpc": "^10.0.0",
     "wink-porter2-stemmer": "^2.0.1",
     "wrap-ansi": "^10.0.2",
@@ -130,69 +126,7 @@
     "zod": "^4.6.7"
   },
   "devDependencies": {
-    "electron": "45.2.3",
-    "electron-builder": "26.18.0",
     "oxlint": "1.92.0"
-  },
-  "build": {
-    "appId": "org.oasis.oss",
-    "productName": "OASIS",
-    "directories": {
-      "output": "release"
-    },
-    "files": [
-      "src/**/*",
-      "desktop/**/*",
-      "app/**/*",
-      "sw.js",
-      "assets/**/*",
-      "skills/**/*",
-      "plugins/**/*",
-      "ide/**/*",
-      "package.json",
-      "LICENSE"
-    ],
-    "extraMetadata": {
-      "main": "desktop/main.mjs"
-    },
-    "artifactName": "${productName}-${version}-${arch}.${ext}",
-    "asar": true,
-    "asarUnpack": [
-      "**/node_modules/sharp/**/*",
-      "**/node_modules/@img/**/*"
-    ],
-    "npmRebuild": true,
-    "mac": {
-      "target": [
-        "dmg"
-      ],
-      "category": "public.app-category.developer-tools",
-      "extendInfo": {
-        "NSMicrophoneUsageDescription": "OASIS uses the microphone only while you dictate a prompt."
-      }
-    },
-    "win": {
-      "target": [
-        "nsis"
-      ]
-    },
-    "nsis": {
-      "oneClick": true,
-      "perMachine": false,
-      "allowElevation": false,
-      "createDesktopShortcut": true,
-      "createStartMenuShortcut": true,
-      "shortcutName": "OASIS"
-    },
-    "linux": {
-      "target": [
-        "AppImage",
-        "deb"
-      ],
-      "category": "Development",
-      "icon": "assets/icons/oasis-512.png"
-    },
-    "icon": "assets/icons/oasis-512.png"
   },
   "author": {
     "name": "OASIS Contributors",

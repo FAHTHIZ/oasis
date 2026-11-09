@@ -1,9 +1,12 @@
 // OASIS universal app: UI wiring. Opened on its own, all agent work happens
-// in this browser. Opened from `oasis web` or the desktop app, the same UI
+// in this browser. Opened from `oasis web`, the same UI
 // drives the agent on that computer (runtime engine, core/runtime.mjs).
 import { PRESETS, testProvider } from './core/providers.mjs';
 import { alwaysAllowLabel } from './core/approval-rule.mjs';
 import { SUBAGENT_STATUS_TEXT } from './core/subagents.mjs';
+import { createSoundPlayer } from './core/sound.mjs';
+import { ambientField } from './core/ambient.mjs';
+import { activityLabel, liveLabel, summarizeArgs, toolKind, groupTitle, groupStats, formatDuration, elapsedSince, describeInput, buildTimeline } from './core/timeline.mjs';
 import { IndexedDBStore, Workspace, lineDiff } from './core/workspace.mjs';
 import { Agent, textOf } from './core/agent.mjs';
 import { FrameSandbox } from './core/sandbox.mjs';
@@ -29,9 +32,10 @@ const store = new IndexedDBStore();
 const sandbox = new FrameSandbox();
 const skills = new SkillLibrary({ baseURL: new URL('skills/', location.href).href });
 
-const DEFAULTS = { connections: [], activeConnection: '', activeModel: '', autoSwitch: true, projectPlugins: {}, mode: 'ask', maxSteps: 40, theme: 'system', githubToken: '', notify: false };
+const DEFAULTS = { connections: [], activeConnection: '', activeModel: '', autoSwitch: true, projectPlugins: {}, mode: 'ask', maxSteps: 40, theme: 'system', githubToken: '', notify: false, sounds: false, effects: true };
 // Slow phones and old computers: fewer repaints while a reply streams, no
 // blur or animation, and a shorter transcript kept in the page.
+const sound = createSoundPlayer({ enabled: () => Boolean(settings && settings.sounds) });
 const LITE_PARAM = new URLSearchParams(location.search).get('lite');
 const LITE = LITE_PARAM === '1' ? true : LITE_PARAM === '0' ? false : Boolean((navigator.deviceMemory && navigator.deviceMemory <= 2) || (navigator.hardwareConcurrency && navigator.hardwareConcurrency <= 2) || (navigator.connection && navigator.connection.saveData) || matchMedia('(prefers-reduced-motion: reduce)').matches);
 document.documentElement.classList.toggle('lite', LITE);
@@ -116,7 +120,21 @@ function applyTheme() {
   const dark = settings.theme === 'dark' || (settings.theme === 'system' && !matchMedia('(prefers-color-scheme: light)').matches);
   document.documentElement.classList.toggle('light', !dark);
   document.querySelector('meta[name="theme-color"]').content = dark ? '#0B100C' : '#F6F8F4';
+  applyEffects();
 }
+// Particles run only where they cost nothing noticeable and are wanted.
+let ambient = null;
+const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)');
+function applyEffects() {
+  const canvas = $('ambient');
+  if (!canvas) return;
+  const wanted = settings.effects !== false && !LITE && !reducedMotion.matches;
+  document.documentElement.classList.toggle('fx', wanted);
+  if (!wanted) { if (ambient) ambient.stop(); return; }
+  ambient = ambient || ambientField(canvas, { busy: () => document.body.classList.contains('busy'), accent: () => getComputedStyle(document.documentElement).getPropertyValue('--accent').trim() || '#9BFF55' });
+  if (ambient.running) ambient.recolor(); else ambient.start();
+}
+reducedMotion.addEventListener('change', applyEffects);
 matchMedia('(prefers-color-scheme: light)').addEventListener('change', applyTheme);
 
 /* ---------- Toasts ---------- */
@@ -726,89 +744,196 @@ function setBusy(busy) {
   $('input').placeholder = busy ? 'Add a note for OASIS while it works…' : 'Ask OASIS to build, fix or explain…';
 }
 
-function summarizeArgs(name, args = {}) {
-  if (args.path) return args.path + (args.offset ? ':' + args.offset : '');
-  if (args.pattern) return args.pattern + (args.path ? '  in ' + args.path : '');
-  if (args.url) return args.url;
-  if (args.name) return args.name;
-  if (name === 'task' && args.description) return String(args.description).slice(0, 100);
-  if (args.code) return String(args.code).split('\n')[0].slice(0, 80);
-  if (args.command) return [args.command, ...(Array.isArray(args.args) ? args.args : [])].join(' ').slice(0, 100);
-  if (args.query) return String(args.query).slice(0, 80);
-  if (args.summary) return String(args.summary).slice(0, 100);
-  if (args.branch) return args.branch;
-  if (args.todos) return args.todos.length + ' items';
+/* ---------- Timeline: prose updates and execution groups ---------- */
+// The agent's work reads like Perplexity Computer's progress view: prose
+// from the agent, with tool calls folded into groups between them. A group
+// is open while it runs (its title says what is happening right now) and
+// folds into one line when the agent moves on. Every step opens to show its
+// exact input and output. Labels and grouping live in core/timeline.mjs.
+const KIND_ICONS = {
+  shell: 'M4 6l3.5 3.5L4 13M9.5 14H16',
+  read: 'M5.5 3.5h6l3 3v10h-9zM11.5 3.5v3h3M8 10h4.5M8 13h4.5',
+  edit: 'M12.5 4.5l3 3M4 16l1-4 8.5-8.5 3 3L8 15l-4 1z',
+  search: 'M8.7 3.2a5.5 5.5 0 110 11 5.5 5.5 0 010-11zM13 13l4 4',
+  web: 'M10 3a7 7 0 110 14 7 7 0 010-14zM3 10h14M10 3c2 2 2.8 4.4 2.8 7S12 15 10 17M10 3C8 5 7.2 7.4 7.2 10S8 15 10 17',
+  git: 'M6 3.5v13M6 16.5a1.6 1.6 0 100-3.2 1.6 1.6 0 000 3.2zM14 3.5a1.6 1.6 0 110 3.2 1.6 1.6 0 010-3.2zM14 6.7c0 4-8 2.8-8 6.6',
+  agent: 'M10 3.5a2.6 2.6 0 110 5.2 2.6 2.6 0 010-5.2zM4.5 16c.6-3 2.8-4.6 5.5-4.6s4.9 1.6 5.5 4.6',
+  plan: 'M7.5 5.5H16M7.5 10H16M7.5 14.5H16M4 5.5h.01M4 10h.01M4 14.5h.01',
+  tool: 'M12.6 3.6a3.8 3.8 0 00-4.7 4.9L3.6 12.8a1.6 1.6 0 002.3 2.3l4.3-4.3a3.8 3.8 0 004.9-4.7l-2.3 2.3-2.1-.5-.5-2.1z'
+};
+function iconSvg(path) {
+  return '<svg viewBox="0 0 20 20" aria-hidden="true"><path d="' + path + '" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+}
+function stepStatus(tool) {
+  if (tool.ok === undefined) return tool.waiting ? 'Waiting for you' : 'Working';
+  return tool.ok ? 'Done' : 'Failed';
+}
+function stepDuration(tool) {
+  if (Number.isFinite(Number(tool.durationMs))) return formatDuration(tool.durationMs);
+  if (Number.isFinite(Number(tool.startedAt)) && Number.isFinite(Number(tool.endedAt))) return formatDuration(tool.endedAt - tool.startedAt);
   return '';
 }
-const EXTRA_LABELS = {
-  browser: 'Used the browser', command_output: 'Checked a running command', kill_command: 'Stopped a running command',
-  list_background: 'Checked background tasks', git_branch: 'Managed branches', git_commit: 'Made a commit', git_push: 'Pushed the branch',
-  create_pull_request: 'Opened a pull request', worktree_inspect: 'Checked the review copy', worktree_merge: 'Merged the review copy',
-  advisor: 'Asked the advisor model', run_specialist_review: 'Ran a specialist review', install_extension: 'Installed an extension',
-  add_extension: 'Added an extension', install_external_skill: 'Installed a skill', install_plugin: 'Installed a plugin', plugins: 'Checked plugins',
-  configure_mcp_server: 'Set up a tool server', configure_provider: 'Set up a model provider', mcp: 'Checked tool servers',
-  list_directory: 'Listed a folder', read_notebook: 'Read a notebook', notebook_read: 'Read a notebook'
-};
-// Unknown tools still say what ran: 'mcp__context7__resolve-library-id' → 'Used context7: resolve library id'.
-function fallbackToolLabel(name) {
-  const words = (value) => String(value).replace(/[_-]+/g, ' ').trim();
-  const mcp = /^mcp__([^_]+(?:_[^_]+)*?)__(.+)$/.exec(name);
-  if (mcp) return 'Used ' + words(mcp[1]) + ': ' + words(mcp[2]);
-  if (name.startsWith('mcp_')) return 'Used a connected tool: ' + words(name.slice(4));
-  return name ? 'Used ' + words(name) : 'Completed a project step';
-}
-function activityLabel(tool) {
-  const name = String(tool.name || '').toLowerCase();
-  const args = tool.args || {};
-  const path = String(args.path || args.file_path || args.notebook_path || '').replaceAll(String.fromCharCode(92), '/').split('/').filter(Boolean).at(-1) || '';
-  if (['run_command', 'run_shell', 'powershell', 'auto_test'].includes(name)) {
-    const command = [args.command, ...(Array.isArray(args.args) ? args.args : [])].filter(Boolean).join(' ');
-    const commandParts = command.toLowerCase().split(/[ \t]+/).filter(Boolean);
-    const testRunner = ['npm', 'pnpm', 'yarn', 'bun'].includes(commandParts[0]) && commandParts.some((part) => ['test', 'check', 'vitest', 'jest', 'playwright', 'mocha'].includes(part));
-    const testCommand = testRunner || (commandParts[0] === 'node' && commandParts.includes('--test')) || commandParts[0] === 'pytest' || (commandParts[0] === 'go' && commandParts[1] === 'test') || (commandParts[0] === 'cargo' && commandParts[1] === 'test');
-    return testCommand ? 'Ran the tests' : 'Ran commands';
+
+// The inspector inside a step: what went in (command, diff, file) and what
+// came back. Built only when opened, so long sessions stay light.
+function fillInspector(box, tool) {
+  const frag = document.createDocumentFragment();
+  const section = (label, node, copyText) => {
+    const wrap = document.createElement('div');
+    wrap.className = 'inspect-section';
+    const head = document.createElement('div');
+    head.className = 'inspect-label';
+    head.textContent = label;
+    if (copyText) {
+      const copy = document.createElement('button');
+      copy.type = 'button';
+      copy.className = 'copy inspect-copy';
+      copy.textContent = 'Copy';
+      copy.setAttribute('aria-label', 'Copy ' + label.toLowerCase());
+      copy.addEventListener('click', (event) => { event.stopPropagation(); copyText().then((ok) => ok ? flashCopied(copy) : toast('Could not copy.')); });
+      head.appendChild(copy);
+    }
+    wrap.append(head, node);
+    frag.appendChild(wrap);
+  };
+  for (const part of describeInput(tool)) {
+    if (part.format === 'diff') {
+      const diff = document.createElement('div');
+      diff.className = 'diff inspect-diff';
+      renderDiff(diff, lineDiff(part.old, part.new));
+      section(part.label, diff, () => copyText(part.new));
+    } else if (part.format === 'prose' || part.format === 'text' || part.format === 'path') {
+      const text = document.createElement(part.format === 'path' ? 'code' : 'div');
+      text.className = 'inspect-text';
+      text.textContent = part.text.length > 4000 ? part.text.slice(0, 4000) + '…' : part.text;
+      section(part.label, text);
+    } else {
+      const pre = document.createElement('pre');
+      pre.className = 'inspect-pre' + (part.format === 'command' ? ' command' : '');
+      const lines = part.text.split('\n');
+      pre.textContent = (part.format === 'command' ? '$ ' : '') + (lines.length > 200 ? lines.slice(0, 200).join('\n') + '\n… ' + (lines.length - 200) + ' more lines' : part.text);
+      section(part.label, pre, () => copyText(part.text));
+    }
   }
-  if (name === 'read_file') return path ? 'Read ' + path : 'Read a file';
-  if (name === 'list_files') return 'Listed project files';
-  if (name === 'write_file') return path ? 'Wrote ' + path : 'Wrote a file';
-  if (['edit_file', 'multi_edit', 'notebook_edit', 'apply_patch'].includes(name)) return path ? 'Edited ' + path : 'Edited files';
-  if (name === 'delete_file') return path ? 'Deleted ' + path : 'Deleted a file';
-  if (['grep', 'search_files', 'glob_files', 'repo_map'].includes(name)) return 'Searched the project';
-  if (['web_search', 'fetch_url'].includes(name)) return 'Looked up information online';
-  if (name === 'git_diff') return 'Reviewed the diff';
-  if (name === 'git_status') return 'Checked project changes';
-  if (name === 'git_log') return 'Reviewed recent project history';
-  if (name === 'todo_write') return 'Updated the task plan';
-  if (name === 'load_skill' || name === 'read_skill_resource' || name === 'list_skills') return 'Used a skill';
-  if (name === 'task') {
-    const type = String(args.subagent_type || '').slice(0, 40);
-    return (args.run_in_background ? 'Started ' : 'Ran ') + (type && type !== 'general-purpose' ? 'the ' + type + ' agent' : 'a subagent');
-  }
-  if (name === 'agent_status') return 'Checked on subagents';
-  if (name === 'send_message') return 'Sent a message to a subagent';
-  if (name === 'agent_stop') return 'Stopped a subagent';
-  if (name === 'ask_user_question') return 'Asked you a question';
-  if (name === 'exit_plan_mode') return 'Presented a plan';
-  if (name === 'lsp' || name === 'diagnostics' || name === 'ide_get_diagnostics') return 'Checked for code issues';
-  if (EXTRA_LABELS[name]) return EXTRA_LABELS[name];
-  if (args._label && !String(args._label).startsWith('Used ')) return String(args._label);
-  return fallbackToolLabel(name);
+  const out = document.createElement('pre');
+  out.className = 'inspect-pre output' + (tool.ok === false ? ' failed' : '');
+  out.textContent = tool.content || (tool.ok === undefined ? (tool.waiting ? 'Waiting for your approval…' : 'Running…') : 'No output was returned.');
+  section(tool.ok === false ? 'Error' : 'Output', out, tool.content ? () => copyText(tool.content) : null);
+  box.replaceChildren(frag);
 }
 
-// Subagents started in this turn, with their live status (running, done, failed).
-function renderSubagents(wrap, workers = []) {
-  let box = wrap.querySelector('.subagents');
-  if (!workers.length) { if (box) box.remove(); return; }
+function stepRow(tool) {
+  const item = document.createElement('li');
+  const state = tool.ok === undefined ? 'running' : tool.ok ? 'ok' : 'fail';
+  item.className = 'tool ' + state + (tool.waiting ? ' waiting' : '');
+  item.dataset.id = tool.id;
+  item.dataset.name = tool.name || '';
+  item.dataset.kind = toolKind(tool.name);
+  const details = document.createElement('details');
+  const summary = document.createElement('summary');
+  summary.innerHTML = '<span class="state" aria-hidden="true"></span><span class="kind-icon">' + iconSvg(KIND_ICONS[toolKind(tool.name)] || KIND_ICONS.tool) + '</span><span class="name"></span><span class="arg"></span><span class="tool-status"></span><span class="dur"></span><span class="chevron" aria-hidden="true">›</span>';
+  const label = tool.ok === undefined ? liveLabel(tool) : (tool.label && !/^Used /.test(tool.label) ? tool.label : activityLabel(tool));
+  summary.querySelector('.name').textContent = label;
+  const argText = summarizeArgs(tool.name, tool.args);
+  summary.querySelector('.arg').textContent = argText && label.toLowerCase().includes(argText.toLowerCase()) ? '' : argText;
+  summary.querySelector('.tool-status').textContent = stepStatus(tool);
+  summary.querySelector('.dur').textContent = stepDuration(tool);
+  summary.setAttribute('aria-label', label + ', ' + stepStatus(tool).toLowerCase() + '. Expand to inspect input and output.');
+  const box = document.createElement('div');
+  box.className = 'inspect';
+  details.append(summary, box);
+  details.addEventListener('toggle', () => { if (details.open) fillInspector(box, tool); });
+  // A command the user typed (`!npm test`) shows its output straight away.
+  if (tool.open && tool.ok !== undefined) { details.open = true; fillInspector(box, tool); }
+  item.appendChild(details);
+  return item;
+}
+
+// One execution group. `steps` is the live array of tool records; the group
+// re-renders its header from it and swaps single rows as they change.
+function createGroup(steps = [], { live = false } = {}) {
+  const el = document.createElement('section');
+  el.className = 'steps';
+  const head = document.createElement('button');
+  head.type = 'button';
+  head.className = 'steps-head';
+  head.innerHTML = '<span class="steps-orb" aria-hidden="true"></span><span class="steps-title"></span><span class="steps-meta"></span><span class="chevron" aria-hidden="true">›</span>';
+  const body = document.createElement('div');
+  body.className = 'steps-body';
+  body.id = 'steps-' + Math.random().toString(36).slice(2, 10);
+  head.setAttribute('aria-controls', body.id);
+  const list = document.createElement('ol');
+  list.className = 'step-list';
+  body.appendChild(list);
+  el.append(head, body);
+  const group = { el, head, body, list, steps, subagents: [], live, touched: false, thinking: false, startedAt: Date.now() };
+  head.addEventListener('click', () => { group.touched = true; setGroupOpen(group, !el.classList.contains('open')); });
+  for (const tool of steps) list.appendChild(stepRow(tool));
+  setGroupOpen(group, live);
+  updateGroupHead(group);
+  return group;
+}
+function setGroupOpen(group, open) {
+  group.el.classList.toggle('open', open);
+  group.head.setAttribute('aria-expanded', String(open));
+  group.body.hidden = !open;
+}
+function updateGroupHead(group) {
+  const stats = groupStats(group.steps);
+  const waiting = group.steps.some((step) => step.ok === undefined && step.waiting);
+  const running = group.live && (stats.running > 0 || group.thinking);
+  group.el.classList.toggle('running', running && !waiting);
+  group.el.classList.toggle('waiting', waiting);
+  group.el.classList.toggle('failed', !running && stats.failed > 0);
+  group.el.classList.toggle('done', !running && !waiting);
+  let title = groupTitle(group.steps);
+  if (waiting) title = 'Waiting for your approval';
+  else if (group.live && !stats.running && group.thinking) title = 'Thinking about the next step';
+  group.head.querySelector('.steps-title').textContent = title;
+  const meta = [];
+  meta.push(stats.total + (stats.total === 1 ? ' step' : ' steps'));
+  if (stats.failed) meta.push(stats.failed + ' failed');
+  if (group.subagents.length) meta.push(group.subagents.length + (group.subagents.length === 1 ? ' subagent' : ' subagents'));
+  const time = running || waiting ? elapsedSince(group.startedAt) : formatDuration(stats.durationMs);
+  if (time) meta.push(time);
+  group.head.querySelector('.steps-meta').textContent = meta.join(' · ');
+  group.head.setAttribute('aria-label', title + ', ' + meta.join(', ') + '. ' + (group.el.classList.contains('open') ? 'Collapse' : 'Expand') + ' steps.');
+}
+function updateStepRow(group, tool) {
+  const row = group.list.querySelector('[data-id="' + CSS.escape(tool.id) + '"]');
+  const next = stepRow(tool);
+  if (row) {
+    const wasOpen = row.querySelector('details').open;
+    if (wasOpen) { next.querySelector('details').open = true; fillInspector(next.querySelector('.inspect'), tool); }
+    row.replaceWith(next);
+  } else group.list.appendChild(next);
+  updateGroupHead(group);
+}
+// A group stops being live when the agent speaks again or the turn ends; it
+// folds away unless the user opened or closed it by hand.
+function settleGroup(group) {
+  if (!group || !group.live) return;
+  group.live = false;
+  group.thinking = false;
+  if (!group.touched) setGroupOpen(group, false);
+  updateGroupHead(group);
+}
+
+// Subagents started in a group, with their live status (running, done, failed).
+function renderSubagents(group, workers = []) {
+  group.subagents = workers;
+  let box = group.list.querySelector('.subagents');
+  if (!workers.length) { if (box) box.remove(); updateGroupHead(group); return; }
   if (!box) {
-    box = document.createElement('section');
+    box = document.createElement('li');
     box.className = 'subagents';
     box.setAttribute('aria-label', 'Subagents');
   }
-  // Sit right under the step that started them, not after every later step.
-  const launches = wrap.querySelectorAll('.tools > .tool[data-name="task"]');
+  // Sit right under the step that started them.
+  const launches = group.list.querySelectorAll('.tool[data-name="task"]');
   const anchor = launches[launches.length - 1];
   if (anchor) { if (anchor.nextSibling !== box) anchor.after(box); }
-  else if (!box.parentNode) { const tools = wrap.querySelector(':scope > .tools'); wrap.insertBefore(box, tools ? tools.nextSibling : null); }
+  else if (!box.parentNode) group.list.appendChild(box);
   const running = workers.filter((w) => w.status === 'running' || w.status === 'stopping').length;
   const head = document.createElement('div');
   head.className = 'subagents-head';
@@ -824,33 +949,16 @@ function renderSubagents(wrap, workers = []) {
     list.appendChild(item);
   }
   box.replaceChildren(head, list);
+  updateGroupHead(group);
 }
-
-function toolCard(tool) {
-  const el = document.createElement('details');
-  el.className = 'tool ' + (tool.ok === undefined ? 'running' : tool.ok ? 'ok' : 'fail');
-  el.dataset.id = tool.id;
-  el.dataset.name = tool.name || '';
-  const summary = document.createElement('summary');
-  summary.innerHTML = '<span class="state" aria-hidden="true"></span><span class="name"></span><span class="arg"></span><span class="tool-status"></span><span class="chevron" aria-hidden="true">›</span>';
-  const status = tool.ok === undefined ? 'in progress' : tool.ok ? 'completed' : 'failed';
-  const statusLabel = tool.ok === undefined ? 'Working' : tool.ok ? 'Done' : 'Failed';
-  summary.querySelector('.name').textContent = activityLabel(tool);
-  const argText = summarizeArgs(tool.name, tool.args);
-  // Skip a hint that only repeats the label ("Reviewed the diff · Reviewed the diff").
-  summary.querySelector('.arg').textContent = argText && activityLabel(tool).toLowerCase().includes(argText.toLowerCase()) ? '' : argText;
-  summary.querySelector('.tool-status').textContent = statusLabel;
-  summary.setAttribute('aria-label', activityLabel(tool) + ', ' + status + '. Expand to view details.');
-  const pre = document.createElement('pre');
-  // Fill the output only when opened: long sessions stay light on slow phones.
-  const fill = () => { pre.textContent = tool.content || (tool.ok === undefined ? 'Running…' : 'No output was returned.'); };
-  if (el.open) fill();
-  el.addEventListener('toggle', () => { if (el.open) fill(); });
-  el.append(summary, pre);
-  // A command the user typed (`!npm test`) shows its output straight away.
-  if (tool.open && tool.ok !== undefined) { el.open = true; fill(); }
-  return el;
-}
+// One timer ticks the elapsed time of live groups.
+const liveGroups = new Set();
+setInterval(() => {
+  for (const group of liveGroups) {
+    if (!group.live || !group.el.isConnected) { liveGroups.delete(group); continue; }
+    updateGroupHead(group);
+  }
+}, 1000);
 
 function addMessage(role, content, at = 0) {
   const wrap = document.createElement('div');
@@ -1037,11 +1145,9 @@ function queueRender() {
   const run = () => requestAnimationFrame(() => {
     renderQueued = false;
     lastRender = performance.now();
-    if (!currentTurn) return;
+    if (!currentTurn || !currentTurn.body) return;
     currentTurn.body.innerHTML = renderMarkdown(currentTurn.text);
     currentTurn.body.hidden = !currentTurn.text.trim();
-    // Once this step has started a tool, its text is finished.
-    currentTurn.body.classList.toggle('cursor', !currentTurn.tools.childElementCount);
     scrollDown();
   });
   if (wait) setTimeout(run, wait); else run();
@@ -1052,30 +1158,104 @@ function trimTranscript() {
   while (transcript.childElementCount > limit) transcript.firstElementChild.remove();
 }
 
-function startTurn() {
-  // A new step ends any earlier streamed reply; its cursor must not linger.
-  for (const body of document.querySelectorAll('#transcript .body.cursor')) body.classList.remove('cursor');
-  // Drop the previous step if it ended with nothing to show (no text, tools or subagents).
+// Live turn state. Each model step gets a display entry; its prose becomes a
+// message and its tool calls join the live execution group.
+let activeGroup = null;     // the group tool calls are joining right now
+let lastTaskGroup = null;   // where subagent updates go once the agent moves on
+const groupOf = new WeakMap();
+function clearCursor() { for (const body of document.querySelectorAll('#transcript .body.cursor')) body.classList.remove('cursor'); }
+function startStep() {
+  clearCursor();
+  // Drop the previous step if it ended with nothing to show.
   if (currentTurn && !currentTurn.text.trim() && !currentTurn.entry.tools.length && !currentTurn.entry.subagents) {
-    currentTurn.wrap.remove();
+    if (currentTurn.wrap) currentTurn.wrap.remove();
     const index = display.indexOf(currentTurn.entry);
     if (index >= 0) display.splice(index, 1);
   }
-  const at = Date.now();
-  const wrap = addMessage('assistant', '', at);
-  const body = wrap.querySelector('.body');
-  const tools = document.createElement('div');
-  tools.className = 'tools';
-  wrap.appendChild(tools);
-  currentTurn = { wrap, body, tools, text: '', entry: { role: 'assistant', content: '', tools: [], at } };
-  display.push(currentTurn.entry);
+  const entry = { role: 'assistant', content: '', tools: [], at: Date.now() };
+  display.push(entry);
+  currentTurn = { entry, text: '', wrap: null, body: null };
 }
-
-function removeThinking() { const t = document.querySelector('.thinking'); if (t) t.remove(); }
+function ensureProse() {
+  if (!currentTurn) startStep();
+  if (currentTurn.wrap) return;
+  removeThinking();
+  // The agent is talking again: the work before this folds away.
+  settleGroup(activeGroup);
+  activeGroup = null;
+  const wrap = addMessage('assistant', '', currentTurn.entry.at);
+  currentTurn.wrap = wrap;
+  currentTurn.body = wrap.querySelector('.body');
+  currentTurn.body.classList.add('cursor');
+}
+function ensureGroup() {
+  if (!currentTurn) startStep();
+  const transcript = $('transcript');
+  if (activeGroup && transcript.lastElementChild !== activeGroup.el) {
+    settleGroup(activeGroup);
+    activeGroup = null;
+  }
+  if (!activeGroup) {
+    activeGroup = createGroup([], { live: true });
+    groupOf.set(activeGroup.el, activeGroup);
+    liveGroups.add(activeGroup);
+    transcript.appendChild(activeGroup.el);
+    $('welcome').hidden = true;
+  }
+  return activeGroup;
+}
+function removeThinking() { for (const t of document.querySelectorAll('#transcript .thinking')) t.remove(); }
+function showThinking() {
+  removeThinking();
+  if (activeGroup && activeGroup.live && $('transcript').lastElementChild === activeGroup.el) {
+    activeGroup.thinking = true;
+    updateGroupHead(activeGroup);
+    return;
+  }
+  const dots = document.createElement('div');
+  dots.className = 'thinking';
+  dots.setAttribute('role', 'status');
+  dots.innerHTML = '<span class="thinking-orb" aria-hidden="true"></span><span>Thinking</span>';
+  $('transcript').appendChild(dots);
+  $('welcome').hidden = true;
+}
+function findStep(id) {
+  for (const group of [activeGroup, lastTaskGroup]) {
+    const tool = group && group.steps.find((t) => t.id === id);
+    if (tool) return { tool, group };
+  }
+  const row = id && document.querySelector('#transcript .tool[data-id="' + CSS.escape(id) + '"]');
+  const group = row && groupOf.get(row.closest('.steps'));
+  const tool = group && group.steps.find((t) => t.id === id);
+  return tool ? { tool, group } : null;
+}
+// Ends the live turn: steps still marked running did not finish.
+function endTurn(reason) {
+  removeThinking();
+  clearCursor();
+  if (activeGroup) {
+    for (const tool of activeGroup.steps) {
+      if (tool.ok !== undefined) continue;
+      tool.ok = false; tool.waiting = false; tool.endedAt = Date.now();
+      tool.content = tool.content || (reason === 'stopped' ? 'Stopped before it finished.' : 'Did not finish.');
+      updateStepRow(activeGroup, tool);
+    }
+  }
+  settleGroup(activeGroup);
+  activeGroup = null;
+  if (currentTurn && currentTurn.wrap) messageSource.set(currentTurn.wrap, currentTurn.text);
+  if (currentTurn && !currentTurn.text.trim() && !currentTurn.entry.tools.length && !currentTurn.entry.subagents) {
+    const index = display.indexOf(currentTurn.entry);
+    if (index >= 0) display.splice(index, 1);
+  }
+  currentTurn = null;
+}
 
 function handleEvent(event) {
   switch (event.type) {
     case 'user': {
+      endTurn('');
+      lastTaskGroup = null;
       const at = Date.now();
       display.push({ role: 'user', content: event.content, at, ...(event.images ? { images: event.images } : {}) });
       const el = addMessage('user', event.content, at);
@@ -1084,76 +1264,91 @@ function handleEvent(event) {
       scrollDown(true);
       break;
     }
-    case 'thinking': {
-      removeThinking();
-      startTurn();
-      const dots = document.createElement('div');
-      dots.className = 'thinking';
-      dots.innerHTML = '<i></i><i></i><i></i><span>Thinking</span>';
-      currentTurn.wrap.appendChild(dots);
+    case 'thinking':
+      startStep();
+      showThinking();
       scrollDown();
       break;
-    }
     case 'delta':
-      removeThinking();
+      if (!currentTurn) startStep();
+      ensureProse();
       currentTurn.text += event.delta;
       queueRender();
       break;
     case 'retry':
       // A retried request starts its reply over; drop any half-streamed text.
-      if (currentTurn) { currentTurn.text = ''; currentTurn.body.innerHTML = ''; }
+      if (currentTurn) { currentTurn.text = ''; if (currentTurn.body) currentTurn.body.innerHTML = ''; }
       toast(event.waitMs ? 'Rate limited for a moment; retrying in ' + Math.ceil(event.waitMs / 1000) + 's…' : 'Provider busy, retrying (' + event.attempt + ')…');
       break;
     case 'model_switch': {
       const kind = classifyFailure({ message: event.reason, status: Number((String(event.reason).match(/\((\d{3})\)/) || [])[1] || 0) });
-      if (currentTurn) { currentTurn.text = ''; currentTurn.body.innerHTML = ''; }
+      if (currentTurn) { currentTurn.text = ''; if (currentTurn.body) currentTurn.body.innerHTML = ''; }
       const line = event.from + ' ' + (SWITCH_REASONS[kind] || 'failed') + '. Switched to ' + event.to + ' and carried on.';
       display.push({ role: 'note', content: line });
       addMessage('note', line);
       break;
     }
     case 'assistant': {
-      removeThinking();
-      if (!currentTurn) startTurn();
-      currentTurn.text = event.content || '';
-      currentTurn.entry.content = currentTurn.text;
-      messageSource.set(currentTurn.wrap, currentTurn.text);
-      currentTurn.body.classList.remove('cursor');
-      currentTurn.body.innerHTML = renderMarkdown(currentTurn.text);
-      currentTurn.body.hidden = !currentTurn.text.trim();
-      if (!currentTurn.text.trim() && !event.toolCalls.length) currentTurn.wrap.remove();
+      if (!currentTurn) startStep();
+      const text = event.content || '';
+      currentTurn.text = text;
+      currentTurn.entry.content = text;
+      if (text.trim()) {
+        ensureProse();
+        removeThinking();
+        messageSource.set(currentTurn.wrap, text);
+        currentTurn.body.innerHTML = renderMarkdown(text);
+        currentTurn.body.hidden = false;
+        if (!(event.toolCalls && event.toolCalls.length)) currentTurn.body.classList.add('cursor');
+        else currentTurn.body.classList.remove('cursor');
+      } else if (currentTurn.wrap) { currentTurn.wrap.remove(); currentTurn.wrap = null; currentTurn.body = null; }
+      if (!text.trim() && !(event.toolCalls && event.toolCalls.length)) removeThinking();
       break;
     }
     case 'tool_start': {
-      if (!currentTurn) startTurn();
-      currentTurn.body.classList.remove('cursor');
-      const tool = { id: event.id, name: event.name, args: event.args, ...(event.open ? { open: true } : {}) };
+      if (!currentTurn) startStep();
+      removeThinking();
+      clearCursor();
+      const group = ensureGroup();
+      group.thinking = false;
+      const tool = { id: event.id, name: event.name, args: event.args || {}, startedAt: Date.now(), ...(event.label ? { label: event.label } : {}), ...(event.open ? { open: true } : {}) };
       currentTurn.entry.tools.push(tool);
-      currentTurn.tools.appendChild(toolCard(tool));
+      group.steps.push(tool);
+      if (event.name === 'task') { lastTaskGroup = group; lastTaskGroup.taskEntry = currentTurn.entry; }
+      updateStepRow(group, tool);
       scrollDown();
       break;
     }
     case 'tool_result': {
-      if (!currentTurn) break;
-      let tool = currentTurn.entry.tools.find((t) => t.id === event.id);
-      if (!tool) { tool = { id: event.id, name: event.name, args: {} }; currentTurn.entry.tools.push(tool); currentTurn.tools.appendChild(toolCard(tool)); }
+      let found = findStep(event.id);
+      if (!found) {
+        // A result without a start (an older runtime): show it as a finished step.
+        if (!currentTurn) startStep();
+        const group = ensureGroup();
+        const tool = { id: event.id || 'step_' + Date.now(), name: event.name, args: {}, startedAt: Date.now() };
+        currentTurn.entry.tools.push(tool);
+        group.steps.push(tool);
+        found = { tool, group };
+      }
+      const { tool, group } = found;
       tool.ok = event.ok;
+      tool.waiting = false;
+      tool.endedAt = Date.now();
+      if (Number.isFinite(Number(event.durationMs))) tool.durationMs = Number(event.durationMs);
+      if (event.label) tool.label = event.label;
       if (event.ok !== false && /write|edit|patch|delete|move|rename|notebook/i.test(String(event.name || tool.name || ''))) turnEdited = true;
       if (RT && /^(write_file|edit_file|multi_edit|delete_file|notebook_edit|run_command|git_commit)$/.test(event.name || tool.name)) refreshFiles();
-      tool.content = event.content.length > 6000 ? event.content.slice(0, 6000) + '\n…' : event.content;
-      const card = currentTurn.tools.querySelector('[data-id="' + CSS.escape(event.id) + '"]');
-      if (card) {
-        const wasOpen = card.open;
-        const replacement = toolCard(tool);
-        if (wasOpen) replacement.open = true;
-        card.replaceWith(replacement);
-      }
+      const content = String(event.content || '');
+      tool.content = content.length > 6000 ? content.slice(0, 6000) + '\n…' : content;
+      updateStepRow(group, tool);
+      if (event.ok === false) sound('fail');
       break;
     }
     case 'subagents': {
-      if (!currentTurn) startTurn();
-      currentTurn.entry.subagents = event.workers;
-      renderSubagents(currentTurn.wrap, event.workers);
+      const group = lastTaskGroup || ensureGroup();
+      const owner = group.taskEntry || (currentTurn && currentTurn.entry);
+      if (owner) owner.subagents = event.workers;
+      renderSubagents(group, event.workers);
       break;
     }
     case 'todos': renderTodos(event.todos); break;
@@ -1161,30 +1356,42 @@ function handleEvent(event) {
     case 'context': usageState.context = event; renderUsage(); break;
     case 'cost': usageState.cost = event; renderUsage(); break;
     case 'mcp_failures': addMessage('note', (event.servers.length === 1 ? 'A tool server did not start. ' : event.servers.length + ' tool servers did not start. ') + event.servers.map((server) => server.name + ': ' + String(server.error).replace(/^MCP server \S+ (?:could not start: )?/, '')).join(' · ')); break;
+    case 'compacting': showThinking(); break;
     case 'compacted': addMessage('note', event.mode === 'summary' ? 'Earlier conversation summarised to save context.' : 'Older tool output trimmed to save context.'); break;
     case 'stopped':
-      removeThinking();
-      if (currentTurn) currentTurn.body.classList.remove('cursor');
+      endTurn('stopped');
       addMessage('note', 'Stopped.');
-      currentTurn = null;
       break;
     case 'error':
-      removeThinking();
-      if (currentTurn && !currentTurn.text && !currentTurn.entry.tools.length) currentTurn.wrap.remove();
+      endTurn('error');
       display.push({ role: 'error', content: event.message });
       addMessage('error', event.message);
-      currentTurn = null;
+      sound('fail');
       scrollDown(true);
       break;
     case 'done':
-      removeThinking();
-      for (const body of document.querySelectorAll('#transcript .body.cursor')) body.classList.remove('cursor');
-      if (currentTurn) messageSource.set(currentTurn.wrap, currentTurn.text);
-      currentTurn = null;
+      endTurn('');
       offerUndo();
       trimTranscript();
+      sound('done');
       break;
     default: break;
+  }
+}
+
+// Saved chats render through the same grouping as the live view.
+function renderSavedDisplay(entries) {
+  for (const block of buildTimeline(entries)) {
+    if (block.type === 'group') {
+      const group = createGroup(block.steps, { live: false });
+      groupOf.set(group.el, group);
+      $('transcript').appendChild(group.el);
+      if (block.subagents.length) renderSubagents(group, block.subagents);
+      continue;
+    }
+    const entry = block.entry;
+    const el = addMessage(block.type === 'text' ? 'assistant' : entry.role, entry.content, Number(entry.at) || 0);
+    if (entry.role === 'user' && entry.images) addImageNote(el, entry.images, []);
   }
 }
 
@@ -1473,18 +1680,7 @@ async function restoreChat({ keepChat = false } = {}) {
     if (RT) agent.load(saved.messages);
     else agent.load(saved.messages, saved.pendingSteering);
     display = saved.display;
-    for (const entry of display) {
-      const el = addMessage(entry.role, entry.content, Number(entry.at) || 0);
-      if (entry.role === 'user' && entry.images) addImageNote(el, entry.images, []);
-      if (entry.tools && entry.tools.length) {
-        const tools = document.createElement('div');
-        tools.className = 'tools';
-        for (const tool of entry.tools) tools.appendChild(toolCard(tool));
-        el.appendChild(tools);
-        if (!entry.content) el.querySelector('.body').hidden = true;
-      }
-      if (entry.subagents && entry.subagents.length) renderSubagents(el, entry.subagents);
-    }
+    renderSavedDisplay(display);
     scrollDown(true);
   } else $('welcome').hidden = false;
 }
@@ -1494,6 +1690,7 @@ let approvalResolve = null;
 let approvalAlways = null;
 async function requestApproval({ name, args, runtime = false }) {
   attention('input', 'OASIS needs your approval to continue.');
+  sound('input');
   const summary = $('approvalSummary');
   const detail = $('approvalDetail');
   detail.replaceChildren();
@@ -1557,10 +1754,14 @@ async function requestApproval({ name, args, runtime = false }) {
 }
 // While an approval is open, the step behind it is waiting on the user, not working.
 function markWaitingTools(waiting) {
-  for (const status of document.querySelectorAll('.tool.running .tool-status')) {
-    status.textContent = waiting ? 'Waiting for you' : 'Working';
-    status.closest('.tool').classList.toggle('waiting', waiting);
+  const group = activeGroup;
+  if (!group) return;
+  for (const tool of group.steps) {
+    if (tool.ok !== undefined || Boolean(tool.waiting) === waiting) continue;
+    tool.waiting = waiting;
+    updateStepRow(group, tool);
   }
+  if (waiting && !group.el.classList.contains('open')) setGroupOpen(group, true);
 }
 function answerApproval(value) {
   markWaitingTools(false);
@@ -1591,6 +1792,7 @@ function renderUnifiedDiff(container, text) {
 let questionResolve = null;
 function askQuestion(question) {
   attention('input', String(question && question.question || 'OASIS has a question.').slice(0, 160));
+  sound('input');
   $('questionText').textContent = String(question.question || '').slice(0, 600);
   const box = $('questionOptions');
   box.replaceChildren();
@@ -1927,7 +2129,6 @@ const ICON_PATHS = {
   shield: 'M10 2.5l6 2.3v4.6c0 3.9-2.5 6.6-6 8.1-3.5-1.5-6-4.2-6-8.1V4.8zM7.3 10l2 2 3.5-3.8',
   globe: 'M10 17.5a7.5 7.5 0 100-15 7.5 7.5 0 000 15zM2.5 10h15M10 2.5c2 2.1 3 4.6 3 7.5s-1 5.4-3 7.5c-2-2.1-3-4.6-3-7.5s1-5.4 3-7.5z',
   plug: 'M7 2.5v4M13 2.5v4M5 6.5h10v3a5 5 0 01-10 0zM10 14.5v3',
-  phone: 'M6.5 2.5h7a1 1 0 011 1v13a1 1 0 01-1 1h-7a1 1 0 01-1-1v-13a1 1 0 011-1zM9 15h2',
   book: 'M3.5 4.5c2.5-1 4.7-1 6.5.5 1.8-1.5 4-1.5 6.5-.5v11c-2.5-1-4.7-1-6.5.5-1.8-1.5-4-1.5-6.5-.5zM10 5v11',
   branch: 'M6 3.5v13M6 16.5a1.8 1.8 0 100-3.6M14 3.5a1.8 1.8 0 110 3.6 1.8 1.8 0 010-3.6zM14 7.1c0 4-8 3-8 6'
 };
@@ -2262,6 +2463,8 @@ function openSettings() {
   $('themeSelect').value = settings.theme;
   $('notifyInput').checked = Boolean(settings.notify) && typeof Notification !== 'undefined' && Notification.permission === 'granted';
   $('notifyInput').closest('label').hidden = typeof Notification === 'undefined';
+  $('soundInput').checked = Boolean(settings.sounds);
+  $('effectsInput').checked = settings.effects !== false;
   $('githubToken').value = settings.githubToken;
   $('testResult').textContent = '';
   $('versionLabel').textContent = APP_VERSION;
@@ -2270,7 +2473,6 @@ function openSettings() {
   $('runtimeInfo').hidden = !RT;
   if (RT && RT.status) $('runtimeInfo').textContent = 'Running on this computer in ' + (RT.status.workspacePath || RT.status.workspaceName) + '. Model keys are saved by OASIS on this computer, and backup models take over automatically.';
   $('wipeAll').hidden = Boolean(RT);
-  $('phoneSettings').hidden = !(RT && RT.client && RT.phone);
   $('mcpSettings').hidden = !mcpAvailable();
   if (mcpAvailable()) { mcpSetStatus(''); void refreshMcp(); }
   if (navigator.storage && navigator.storage.estimate) navigator.storage.estimate().then(({ usage, quota }) => { $('storageInfo').textContent = 'Using ' + (usage / 1048576).toFixed(1) + ' MB of ' + (quota / 1073741824).toFixed(1) + ' GB available on this device.'; });
@@ -2300,6 +2502,8 @@ function formSettings() {
     maxSteps: Math.min(200, Math.max(5, Number($('maxStepsInput').value) || 40)),
     theme: $('themeSelect').value,
     notify: $('notifyInput').checked,
+    sounds: $('soundInput').checked,
+    effects: $('effectsInput').checked,
     githubToken: $('githubToken').value.trim()
   };
 }
@@ -2427,7 +2631,7 @@ function openRuntimeProjects() {
   }
   const hint = document.createElement('li');
   hint.className = 'empty';
-  hint.textContent = 'To work in another folder, run oasis web there' + (navigator.userAgent.includes('Electron') ? ', or use File → Open Folder.' : '.');
+  hint.textContent = 'To work in another folder, run oasis web there.';
   list.appendChild(hint);
   if ($('projectsSheet').hidden) openSheet('projectsSheet');
 }
@@ -2930,8 +3134,6 @@ async function startRuntime(found) {
     return;
   }
   RT.rootPath = RT.status.workspacePath;
-  // Sharing with a phone is managed only from the computer itself.
-  RT.phone = /^(?:127\.\d+\.\d+\.\d+|localhost|\[::1\])$/.test(location.hostname);
   // On a computer, file edits are checkpointed and undoable; approvals are
   // about commands and other actions with effects outside the files.
   const RUNTIME_MODES = { ask: 'Approve commands and risky actions. Edits can be undone.', edits: 'Also run routine file operations without asking.', auto: 'Decides on its own; asks only for risky actions.', plan: 'Reads and plans only; nothing changes until you approve the plan.' };
@@ -2953,8 +3155,7 @@ async function startRuntime(found) {
 
 /* ---------- Updates ---------- */
 // On a computer, the runtime knows whether a newer OASIS is out. One slim bar,
-// never a dialog: the desktop app installs after its own confirmation, and
-// `oasis web` copies the one command to run.
+// never a dialog: it copies the one command to run (oasis update).
 let updateState = null;
 let updateRetries = 0;
 async function checkForUpdate() {
@@ -2974,24 +3175,13 @@ async function checkForUpdate() {
   $('updateBar').hidden = !show;
   if (!show) return;
   $('updateTitle').textContent = 'OASIS ' + version + ' is out.';
-  if (state.host === 'desktop') {
-    const downloading = state.phase === 'downloading' && state.progress && state.progress.total;
-    $('updateDetail').textContent = downloading ? 'Downloading… ' + Math.round(100 * state.progress.received / state.progress.total) + '%' : 'You have ' + state.current + '.';
-    $('updateAction').textContent = state.canInstall ? 'Install and restart' : 'Download';
-  } else {
-    $('updateDetail').textContent = 'You have ' + state.current + '. Your chats and keys stay.';
-    $('updateAction').textContent = 'Copy “oasis update”';
-  }
+  $('updateDetail').textContent = 'You have ' + state.current + '. Your chats and keys stay.';
+  $('updateAction').textContent = 'Copy “oasis update”';
 }
 function setupUpdates() {
   $('updateAction').addEventListener('click', async () => {
     const state = updateState;
     if (!state) return;
-    if (state.host === 'desktop') {
-      try { await RT.client.api('/api/app/update', { method: 'POST', body: { action: 'install' } }); toast(state.canInstall ? 'Confirm the update in the OASIS window.' : 'Opening the release page…'); }
-      catch (error) { toast('Update failed: ' + error.message, 'error'); }
-      return;
-    }
     try { await navigator.clipboard.writeText('oasis update'); toast('Copied. Run it in a terminal, then start OASIS again.'); }
     catch { toast('Run “oasis update” in a terminal, then start OASIS again.'); }
   });
@@ -3032,7 +3222,7 @@ function setupDictation() {
     input.dispatchEvent(new Event('input', { bubbles: true }));
     input.focus();
   };
-  if (Recognition && !/Electron\//.test(navigator.userAgent)) {
+  if (Recognition) {
     button.hidden = false;
     let rec = null;
     let base = '';
@@ -3137,63 +3327,6 @@ async function boot() {
 }
 // data-ready tells automation (and tests) that boot finished on this page load.
 boot().catch((error) => toast(error.message, 'error')).finally(() => { document.documentElement.dataset.ready = '1'; });
-
-// Phone link (runtime on this computer only): share this session with a phone
-// over Tailscale (encrypted) or home Wi-Fi, shown as a QR code.
-let phoneState = null;
-function renderPhone(st) {
-  phoneState = st;
-  $('phoneError').textContent = '';
-  if (st.mode === 'server') {
-    $('phoneChoices').hidden = true; $('phoneLink').hidden = true;
-    $('phoneHint').textContent = st.hint || 'This computer is already reachable on the network. Use the links printed in the terminal.';
-    return;
-  }
-  $('phoneChoices').hidden = false;
-  $('phoneTailscale').disabled = !st.tailscaleAvailable;
-  $('phoneLan').disabled = !st.lanAvailable;
-  const hints = [];
-  if (!st.tailscaleAvailable) hints.push('For an encrypted link that also works away from home, install Tailscale on this computer and the phone and sign in on both.');
-  if (!st.lanAvailable) hints.push('No home network address was found on this computer.');
-  else hints.push('Wi-Fi sharing is not encrypted: use it only on your own home network.');
-  $('phoneHint').textContent = hints.join(' ');
-  const on = Boolean(st.active && st.urls && st.urls.length);
-  $('phoneLink').hidden = !on;
-  if (on) {
-    // The QR is an SVG built by the runtime from the link alone.
-    const svg = new DOMParser().parseFromString(st.qr || '', 'image/svg+xml').documentElement;
-    $('phoneQr').replaceChildren(...(svg && svg.nodeName === 'svg' ? [document.importNode(svg, true)] : []));
-    $('phoneNetwork').textContent = st.network === 'tailscale' ? 'Shared over Tailscale (encrypted).' : 'Shared over Wi-Fi (not encrypted).';
-    $('phoneUrl').textContent = st.urls[0];
-  }
-}
-async function openPhone() {
-  if (!(RT && RT.client)) return;
-  if (!$('settingsSheet').hidden) closeSheet('settingsSheet');
-  $('phoneHint').textContent = 'Checking this computer’s networks…';
-  $('phoneLink').hidden = true; $('phoneError').textContent = '';
-  openSheet('phoneSheet');
-  try { renderPhone(await RT.client.api('/api/phone/link')); }
-  catch (error) { $('phoneHint').textContent = ''; $('phoneError').textContent = error.message; }
-}
-async function phoneAction(body) {
-  $('phoneError').textContent = '';
-  try { renderPhone(await RT.client.api('/api/phone/link', { method: 'POST', body })); }
-  catch (error) { if (!/not confirmed/i.test(error.message)) $('phoneError').textContent = error.message; }
-}
-$('phoneButton').addEventListener('click', openPhone);
-$('phoneTailscale').addEventListener('click', () => phoneAction({ action: 'start', network: 'tailscale' }));
-$('phoneLan').addEventListener('click', () => {
-  // The desktop app confirms with its own dialog; in a browser, confirm here.
-  if (phoneState && phoneState.nativeConfirm) return phoneAction({ action: 'start', network: 'lan' });
-  if (!confirm('Wi-Fi sharing is not encrypted. Anyone on the same network could watch or reuse the link. Share only on your own home network?')) return;
-  return phoneAction({ action: 'start', network: 'lan', allowUnencrypted: true });
-});
-$('phoneStop').addEventListener('click', () => phoneAction({ action: 'stop' }));
-$('phoneCopy').addEventListener('click', async () => {
-  try { await navigator.clipboard.writeText($('phoneUrl').textContent); $('phoneCopy').textContent = 'Copied'; setTimeout(() => { $('phoneCopy').textContent = 'Copy link'; }, 1500); } catch {}
-});
-window.oasisConnectPhone = openPhone;
 
 // Images: paste, drop or attach (up to 4). Large photos are scaled down on the
 // device first, which keeps uploads small on slow connections and old phones.

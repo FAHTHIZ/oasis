@@ -40,21 +40,16 @@ test('issue-template contact links point to live support, releases and private s
   assert.ok(!config.includes('docs/USER_GUIDE.md'));
 });
 
-test('mobile and contributor policies exist outside the installable npm package', async () => {
-  const [pkgText, mobile, contributing, security, support, changelog] = await Promise.all([
-    read('../package.json'), read('../MOBILE.md'), read('../CONTRIBUTING.md'),
+test('contributor policies exist outside the installable npm package', async () => {
+  const [pkgText, contributing, security, support, changelog] = await Promise.all([
+    read('../package.json'), read('../CONTRIBUTING.md'),
     read('../SECURITY.md'), read('../SUPPORT.md'), read('../CHANGELOG.md')
   ]);
   const pkg = JSON.parse(pkgText);
-  assert.ok(mobile.includes('oasis web --host 0.0.0.0'));
-  assert.ok(mobile.includes('normal OASIS session'));
-  assert.ok(!mobile.includes('oasis app --lan'), 'The retired standalone browser app command must not be documented.');
-  assert.ok(mobile.includes('does not ship a standalone browser/PWA product or a native Android/iOS package'));
   assert.ok(contributing.includes('npm run check'));
   assert.ok(security.includes('private vulnerability reporting'));
   assert.ok(support.includes('oasis doctor'));
   assert.ok(changelog.includes('[1.1.0]'));
-  assert.ok(!pkg.files.includes('MOBILE.md'));
   assert.ok(!pkg.files.includes('CONTRIBUTING.md'));
   assert.ok(!pkg.files.includes('SECURITY.md'));
 });

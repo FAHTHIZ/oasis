@@ -117,8 +117,9 @@ test('universal app end to end: paste to connect, tool-calling task, credit fall
   const lastTask = provider.state.calls.filter((call) => call.tools.includes('write_file')).pop();
   assert.match(lastTask.system, /web-app-development|Web app/i, 'the tapped plugin loaded its skill into the request');
   assert.equal(await evaluate(page, `document.querySelectorAll('.tool').length`), 3, 'three tool cards shown');
-  // Tool output is only rendered when a card is opened.
-  assert.equal(await evaluate(page, `document.querySelector('.tool pre').textContent`), '');
+  // Tool steps fold into one execution group; a step's inspector is only built when opened.
+  assert.equal(await evaluate(page, `document.querySelectorAll('.steps').length >= 1`), true, 'tool calls are grouped');
+  assert.equal(await evaluate(page, `document.querySelector('.tool .inspect').childElementCount`), 0);
 
   // 3. The best model runs out of credit mid-session: OASIS moves on by itself.
   provider.state.failModel = 'acme/coder-pro';

@@ -1,5 +1,5 @@
-// Paste-to-connect for the local runtime (the app served by `oasis web` or the
-// desktop app, and `oasis connect` in a terminal). It reuses the app's smart
+// Paste-to-connect for the local runtime (the app served by `oasis web`,
+// and `oasis connect` in a terminal). It reuses the app's smart
 // connect: work out the provider from a pasted key or link, list the models it
 // can use, rank them for agentic coding and prove the best one calls tools.
 // The result becomes an ordinary runtime config with the next-best models of

@@ -14,6 +14,7 @@
 <link rel="stylesheet" href="app.css">
 </head>
 <body>
+<canvas class="ambient" id="ambient" aria-hidden="true" hidden></canvas>
 <div class="app" id="app">
   <header class="topbar">
     <button class="brand" id="projectButton" aria-label="Projects" title="Projects">
@@ -226,11 +227,8 @@
       <label for="themeSelect">Theme</label>
       <select id="themeSelect"><option value="system">Match device</option><option value="dark">Dark</option><option value="light">Light</option></select>
       <label class="check"><input type="checkbox" id="notifyInput"> Notify me when a task finishes or needs me while this tab is in the background</label>
-    </fieldset>
-    <fieldset id="phoneSettings" hidden>
-      <legend>Phone</legend>
-      <p class="hint">Keep working on this computer from your phone's browser.</p>
-      <button class="btn" type="button" id="phoneButton">Use from your phone</button>
+      <label class="check"><input type="checkbox" id="soundInput"> Play soft sounds when a task finishes, fails or needs me</label>
+      <label class="check"><input type="checkbox" id="effectsInput"> Ambient particle effects (off automatically with reduced motion or on low-power devices)</label>
     </fieldset>
     <fieldset id="mcpSettings" hidden>
       <legend>Tools (MCP servers)</legend>
@@ -343,27 +341,6 @@
   </div>
 </section>
 
-<section class="sheet" id="phoneSheet" role="dialog" aria-modal="true" aria-labelledby="phoneTitle" hidden>
-  <div class="sheet-head"><h2 id="phoneTitle">Use from your phone</h2><button class="icon-btn small" data-close="phoneSheet" aria-label="Close"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M5 5l10 10M15 5L5 15" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg></button></div>
-  <div class="sheet-body settings">
-    <p class="hint" id="phoneHint" aria-live="polite"></p>
-    <div class="row wrap" id="phoneChoices">
-      <button class="btn primary" type="button" id="phoneTailscale">Tailscale (encrypted)</button>
-      <button class="btn" type="button" id="phoneLan">Home Wi-Fi</button>
-    </div>
-    <div class="phone-link" id="phoneLink" hidden>
-      <div class="phone-qr" id="phoneQr" aria-label="QR code for the phone link"></div>
-      <p class="hint" id="phoneNetwork"></p>
-      <code class="approval-command" id="phoneUrl"></code>
-      <div class="row wrap">
-        <button class="btn" type="button" id="phoneCopy">Copy link</button>
-        <button class="btn danger" type="button" id="phoneStop">Stop sharing</button>
-      </div>
-      <p class="hint">Scan it with the phone's camera. The link carries a private key for this session; anyone with it can use OASIS on this computer until you stop sharing.</p>
-    </div>
-    <p class="hint error-text" id="phoneError" role="alert"></p>
-  </div>
-</section>
 
 <section class="sheet" id="pushSheet" role="dialog" aria-modal="true" aria-labelledby="pushTitle" hidden>
   <div class="sheet-head"><h2 id="pushTitle">Push to GitHub</h2><button class="icon-btn small" data-close="pushSheet" aria-label="Close"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M5 5l10 10M15 5L5 15" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg></button></div>

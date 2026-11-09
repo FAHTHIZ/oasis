@@ -1,5 +1,8 @@
-name: Build OASIS desktop installers
+name: Release OASIS
 
+# Publishes the CLI + web workspace as an npm tarball on GitHub Releases when
+# package.json carries a new stable version on main (or on manual dispatch),
+# then refreshes the Homebrew formula. Only the CLI and web workspace ship.
 on:
   push:
     branches: [main]
@@ -20,13 +23,12 @@ permissions:
   contents: read
 
 concurrency:
-  # Keep only the newest desktop build per ref to avoid an obsolete build backlog.
-  group: oasis-desktop-${{ github.ref }}
+  group: oasis-release-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
-  validate:
-    name: Validate source on Linux before packaging
+  package:
+    name: Validate and pack the release tarball
     runs-on: ubuntu-latest
     steps:
       - name: Check out source
@@ -37,87 +39,26 @@ jobs:
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 22
-      - name: Install production dependencies and vendor terminal assets
-        run: npm install --omit=dev --no-audit --no-fund
-      - name: Run complete quality gate
-        run: npm run check
-
-  package:
-    name: Build desktop installer (${{ matrix.platform }})
-    needs: validate
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - platform: windows-x64
-            os: windows-2022
-            command: win
-          - platform: macos
-            os: macos-latest
-            command: mac
-          - platform: linux-x64
-            os: ubuntu-latest
-            command: linux
-          # Extra CPU types. They are optional: a failure here never blocks the
-          # release of the main installers, it only leaves that file out.
-          - platform: macos-x64
-            os: macos-latest
-            command: mac
-            arch: x64
-            optional: true
-          - platform: linux-arm64
-            os: ubuntu-24.04-arm
-            command: linux
-            arch: arm64
-            optional: true
-          - platform: windows-arm64
-            os: windows-11-arm
-            command: win
-            arch: arm64
-            optional: true
-    runs-on: ${{ matrix.os }}
-    continue-on-error: ${{ matrix.optional == true }}
-    steps:
-      - name: Check out source
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-      - name: Set up Node.js
-        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
-        with:
-          node-version: 22
-      - name: Set up Visual Studio Build Tools
-        if: matrix.command == 'win'
-        uses: microsoft/setup-msbuild@30375c66a4eea26614e0d39710365f22f8b0af57 # v3
-        with:
-          # The Windows ARM runner image ships a newer Visual Studio than x64.
-          vs-version: ${{ matrix.arch == 'arm64' && '[17.0,)' || '[17.0,18.0)' }}
-      - name: Install app and packaging dependencies
-        env:
-          # The Windows ARM image ships only Visual Studio 2026 (version 18).
-          GYP_MSVS_VERSION: ${{ matrix.command == 'win' && (matrix.arch == 'arm64' && '2026' || '2022') || '' }}
-        run: npm install --no-audit --no-fund
-      - name: Package Windows installer
-        if: matrix.command == 'win'
-        env:
-          GYP_MSVS_VERSION: ${{ matrix.arch == 'arm64' && '2026' || '2022' }}
-          npm_config_msvs_version: ${{ matrix.arch == 'arm64' && '2026' || '2022' }}
-        run: npm run desktop:dist -- --win nsis ${{ matrix.arch && format('--{0}', matrix.arch) || '--x64' }}
-      - name: Package macOS disk image
-        if: matrix.command == 'mac'
-        run: npm run desktop:dist -- --mac dmg ${{ matrix.arch && format('--{0}', matrix.arch) || '--arm64' }}
-      - name: Package Linux installers
-        if: matrix.command == 'linux'
-        run: npm run desktop:dist -- --linux AppImage deb ${{ matrix.arch && format('--{0}', matrix.arch) || '--x64' }}
-      - name: Drop updater metadata from extra CPU builds
-        # latest*.yml names collide between CPU types; the main build's copy is kept.
-        if: matrix.optional == true
-        shell: bash
-        run: rm -f release/latest*.yml
-      - name: Upload platform installer
+      - name: Install dependencies and vendor terminal assets
+        run: npm ci --no-audit --no-fund
+      - name: Run quick quality gate
+        run: npm run check:quick
+      - name: Pack npm tarball
+        run: |
+          set -euo pipefail
+          mkdir -p release
+          npm pack --pack-destination release
+          ls -l release
+      - name: Smoke-test the packed CLI
+        run: |
+          set -euo pipefail
+          prefix="$(mktemp -d)"
+          npm install --global --prefix "$prefix" --no-audit --no-fund release/*.tgz
+          "$prefix/bin/oasis" --version
+      - name: Upload tarball
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: oasis-desktop-${{ matrix.platform }}
+          name: oasis-release
           path: release/*
           if-no-files-found: error
           retention-days: 14
@@ -126,13 +67,12 @@ jobs:
     name: Publish the explicitly approved OASIS release
     if: >-
       needs.package.result == 'success' &&
-      needs.validate.result == 'success' &&
       github.ref == 'refs/heads/main' &&
       (github.event_name == 'push' ||
        (github.event_name == 'workflow_dispatch' &&
         inputs.publish_release == true &&
         inputs.confirm_stable_release == true))
-    needs: [validate, package]
+    needs: [package]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -234,21 +174,18 @@ jobs:
               exit 1
             fi
           done
-      - name: Download all platform installers
+      - name: Download the release tarball
         if: steps.release-version.outputs.publish == 'true'
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
-          pattern: oasis-desktop-*
+          name: oasis-release
           path: release-assets
-          merge-multiple: true
       - name: Generate SHA-256 checksums for release assets
         if: steps.release-version.outputs.publish == 'true'
         shell: bash
         run: |
           set -euo pipefail
           cd release-assets
-          # electron-builder's internal build log is not a user download.
-          rm -f builder-debug.yml builder-effective-config.yaml
           find . -maxdepth 1 -type f ! -name SHA256SUMS -print0 | sort -z | xargs -0 sha256sum > SHA256SUMS
           test -s SHA256SUMS
       - name: Publish GitHub release
@@ -264,11 +201,10 @@ jobs:
           fail_on_unmatched_files: true
           draft: false
           files: release-assets/*
-      - name: Refresh the Homebrew cask on main
-        # Casks/oasis.rb pins each release's dmg checksums and Formula/oasis-cli.rb
-        # the tag's source tarball. Pushes made with the
-        # workflow token do not start other workflows, so this cannot loop.
-        # Stable releases only: release candidates keep the cask on the last stable.
+      - name: Refresh the Homebrew formula on main
+        # Formula/oasis-cli.rb pins the tag's source tarball. Pushes made with
+        # the workflow token do not start other workflows, so this cannot loop.
+        # Stable releases only.
         if: steps.release-version.outputs.publish == 'true' && steps.release-version.outputs.prerelease == 'false'
         env:
           GH_TOKEN: ${{ github.token }}
@@ -277,18 +213,17 @@ jobs:
         run: |
           set -euo pipefail
           RELEASE_VERSION="${RELEASE_TAG#v}"
-          git clone --quiet --depth 20 --branch main "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" cask-main
-          cd cask-main
-          # GitHub keeps tag archive checksums stable; the CLI formula pins this one.
+          git clone --quiet --depth 20 --branch main "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" tap-main
+          cd tap-main
           source_sha="$(curl -fsSL --retry 3 "https://github.com/${GITHUB_REPOSITORY}/archive/refs/tags/${RELEASE_TAG}.tar.gz" | sha256sum | cut -d' ' -f1)"
-          node scripts/homebrew-cask.mjs --version "$RELEASE_VERSION" --sums ../release-assets/SHA256SUMS --source-sha "$source_sha"
-          if git diff --quiet -- Casks/oasis.rb Formula/oasis-cli.rb && [ -z "$(git status --porcelain -- Formula)" ]; then echo "Homebrew tap already current."; exit 0; fi
+          node scripts/homebrew-formula.mjs --version "$RELEASE_VERSION" --source-sha "$source_sha"
+          if git diff --quiet -- Formula/oasis-cli.rb; then echo "Homebrew formula already current."; exit 0; fi
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add Casks/oasis.rb Formula/oasis-cli.rb
-          git commit --quiet -m "Update Homebrew tap to OASIS $RELEASE_VERSION"
+          git add Formula/oasis-cli.rb
+          git commit --quiet -m "Update Homebrew formula to OASIS $RELEASE_VERSION"
           for attempt in 1 2 3; do
             if git push --quiet origin HEAD:main; then exit 0; fi
             git pull --quiet --rebase origin main
           done
-          echo "::warning::Could not push the Homebrew tap update; run node scripts/homebrew-cask.mjs --version $RELEASE_VERSION --sums SHA256SUMS --source-sha <tarball sha256> and commit Casks/ and Formula/."
+          echo "::warning::Could not push the Homebrew formula update; run node scripts/homebrew-formula.mjs --version $RELEASE_VERSION --source-sha <tarball sha256> and commit Formula/."

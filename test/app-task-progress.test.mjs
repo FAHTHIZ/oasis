@@ -53,7 +53,8 @@ test('browser displays an accessible, collapsible progress guide and explicit to
   assert.ok(app.includes("track.setAttribute('role', 'progressbar')"));
   assert.ok(app.includes("row.setAttribute('aria-current', 'step')"));
   assert.match(app, /All steps completed/);
-  assert.match(app, /statusLabel = tool\.ok === undefined \? 'Working' : tool\.ok \? 'Done' : 'Failed'/);
+  assert.ok(app.includes("if (tool.ok === undefined) return tool.waiting ? 'Waiting for you' : 'Working';"));
+  assert.ok(app.includes("return tool.ok ? 'Done' : 'Failed';"));
   assert.match(runtime, /case 'plan':\s+case 'todos':/);
   assert.match(runtime, /data\.name === 'todo_write'/);
   assert.ok(runtime.includes('extractRuntimeTodos(call.args.todos)'));
