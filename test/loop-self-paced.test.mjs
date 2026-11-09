@@ -50,3 +50,23 @@ test('/loop without an interval lets the model pace and stop the loop', { skip: 
   assert.match(JSON.stringify(requests[0].messages), /self-paced loop/);
   assert.equal(requests.length, 4);
 });
+
+test('a self-paced run that schedules nothing ends the loop', async (t) => {
+  const home = await mkdtemp(path.join(os.tmpdir(), 'oasis-loop-'));
+  t.after(() => rm(home, { recursive: true, force: true }));
+  const { config, requests } = await scriptedModel(t, [{ content: 'checked; nothing to wait on' }]);
+  const child = spawn('script', ['-qfec', JSON.stringify(process.execPath) + ' ' + JSON.stringify(cli), '/dev/null'], { cwd: home, env: { ...process.env, OASIS_SIMPLE_INPUT: '1', OASIS_NO_STREAM: '1', OASIS_DISABLE_THEME_RELOAD: '1', HOME: home, OASIS_CONFIG_DIR: path.join(home, '.oasis'), OASIS_PROTOCOL: 'openai-compatible', OASIS_BASE_URL: config.baseURL, OASIS_MODEL: 'fixture', OASIS_LOOP_DELAY_SCALE: '0.001', OASIS_LOOP_KEEPALIVE: '' } });
+  let out = '';
+  child.stdout.on('data', (d) => { out += d; });
+  child.stderr.on('data', (d) => { out += d; });
+  child.stdin.write('/loop check whether the deploy finished\n');
+  const timer = setTimeout(() => child.kill(), 30000);
+  await new Promise((resolve) => {
+    const iv = setInterval(() => { if (out.includes('[loop] Stopped.')) { clearInterval(iv); child.stdin.end('/exit\n'); resolve(); } }, 50);
+    child.on('exit', () => { clearInterval(iv); resolve(); });
+  });
+  await new Promise((resolve) => child.exitCode !== null ? resolve() : child.on('exit', resolve));
+  clearTimeout(timer);
+  assert.match(out, /finished without scheduling another, so the loop ends/, out);
+  assert.equal(requests.length, 1);
+});
