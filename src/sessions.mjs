@@ -233,6 +233,21 @@ function boundedHistory(messages) {
   return [messages[0], ...anchor, ...tail];
 }
 
+// A /goal survives a restart. One that was running when the session was saved
+// comes back paused: nothing works on it until the user types /goal resume.
+export function sanitizeGoal(goal) {
+  if (!goal || typeof goal !== 'object' || typeof goal.condition !== 'string' || !goal.condition.trim()) return null;
+  const turns = Math.max(0, Math.min(10000, Math.floor(Number(goal.turns) || 0)));
+  return {
+    condition: safePersistedText(goal.condition.trim(), 4000),
+    active: false,
+    paused: Boolean(goal.paused || goal.active) && !goal.achieved,
+    achieved: Boolean(goal.achieved),
+    turns,
+    reason: typeof goal.reason === 'string' ? safePersistedText(goal.reason, 2000) : ''
+  };
+}
+
 export async function saveSession(session, options = {}) {
   if (!session || !Array.isArray(session.messages)) throw new Error('There is no active session to save.');
   const env = options.env || process.env;
@@ -257,6 +272,7 @@ export async function saveSession(session, options = {}) {
     todos: sanitizeTodos(session.todos),
     sharedTasks: sanitizeSharedTaskStore(session.sharedTasks),
     mustPreserve: sanitizeMustPreserve(session.mustPreserve),
+    ...(sanitizeGoal(session.goal) ? { goal: sanitizeGoal(session.goal) } : {}),
     agents: sanitizeAgentHistory(session.agentTasks),
     workflowCheckpoint: sanitizeWorkflowCheckpoint(
       session.agentTasks && session.agentTasks.autoDispatch && session.agentTasks.autoDispatch.enabled === true
@@ -315,6 +331,7 @@ export async function loadSession(root, id, options = {}) {
     todos: sanitizeTodos(payload.todos),
     sharedTasks: sanitizeSharedTaskStore(payload.sharedTasks),
     mustPreserve: sanitizeMustPreserve(payload.mustPreserve),
+    goal: sanitizeGoal(payload.goal),
     agents: sanitizeAgentHistory(payload.agents),
     workflowCheckpoint: sanitizeWorkflowCheckpoint(payload.workflowCheckpoint),
     checkpointsDir: checkpointDirectory(root, payload.id, env)

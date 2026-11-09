@@ -19,6 +19,7 @@ import { startOasisWebServer } from '../../src/web.mjs';
 import { saveConfig } from '../../src/config.mjs';
 
 const timeoutMs = 20_000;
+const README_SHOT = '.msg.note { display: none !important; }';
 const root = await mkdtemp(path.join(os.tmpdir(), 'oasis-browser-e2e-'));
 const project = path.join(root, 'todo-app');
 const env = { ...process.env, OASIS_CONFIG_DIR: path.join(root, 'config'), HOME: root };
@@ -113,7 +114,8 @@ try {
     if (await page.locator('#approvalSheet').isVisible()) {
       if (!approvalShot) {
         approvalShot = true;
-        await page.screenshot({ path: path.join(screenshotDir, 'approval-dark.png') });
+        // README image: leave out the note about the tool server this test breaks on purpose.
+        await page.screenshot({ path: path.join(screenshotDir, 'approval-dark.png'), style: README_SHOT });
         await contrast(page, 'approval open (dark)');
         // The step behind an open approval waits on the user; it must not say "Working".
         if (await page.locator('.tool.running:not(.waiting)').count()) throw new Error('A step behind the approval sheet still says Working');
@@ -199,6 +201,25 @@ try {
   await page.locator('#pluginsSheet').waitFor({ state: 'visible' });
   await page.screenshot({ path: path.join(screenshotDir, 'plugins-dark.png') });
   await context.close();
+
+  // README hero: the finished task opened from the sidebar in a fresh browser,
+  // the way someone reviews it later. No reconnect toast and no note about the
+  // tool server this test breaks on purpose.
+  {
+    const hero = await open({ viewport: { width: 1440, height: 900 }, colorScheme: 'dark' });
+    await hero.page.locator('#sideTasks .side-task, #sideSessions .side-task').first().click();
+    await hero.page.waitForFunction(() => /1 test passed/.test(document.getElementById('transcript').innerText), null, { timeout: timeoutMs });
+    const group = hero.page.locator('.steps').first();
+    if (await group.count() && (await group.locator('.steps-head').getAttribute('aria-expanded')) !== 'true') await group.locator('.steps-head').click();
+    await hero.page.locator('.toast').first().waitFor({ state: 'hidden', timeout: 8000 }).catch(() => {});
+    await hero.page.waitForTimeout(400);
+    await contrast(hero.page, 'reopened task (dark)');
+    await hero.page.screenshot({ path: path.join(screenshotDir, 'hero-dark.png') });
+    assert.equal(await hero.page.locator('.steps').count(), 3, 'the reopened task keeps its three execution groups');
+    assert.match(await hero.page.locator('.subagents, .steps').first().innerText(), /explore/i, 'the reopened task shows the subagent step');
+    console.log('[hero] reopened task shows its steps');
+    await hero.context.close();
+  }
 
   // Light theme and phone width: the welcome screen.
   for (const [label, options] of [['light', { viewport: { width: 1440, height: 900 }, colorScheme: 'light' }], ['phone', { viewport: { width: 390, height: 844 }, colorScheme: 'dark', isMobile: true, hasTouch: true }]]) {

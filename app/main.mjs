@@ -1751,7 +1751,10 @@ async function openRuntimeSession(item) {
   if (!(await leaveTurn())) await persistChat();
   chatId = Math.random().toString(36).slice(2, 10);
   const projectId = workspace.project.id;
-  const shown = (saved.messages || []).map((entry) => ({ role: entry.role, content: entry.content, at: 0 }));
+  // Newer servers send the timeline with its steps; older ones only the text.
+  const shown = Array.isArray(saved.display) && saved.display.length
+    ? saved.display.map((entry) => ({ ...entry, at: 0 }))
+    : (saved.messages || []).map((entry) => ({ role: entry.role, content: entry.content, at: 0 }));
   // Still running (started in another browser or the terminal): show the
   // request it is working on, then attach to the live task.
   const live = typeof item.jobId === 'string' && item.jobId;

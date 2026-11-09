@@ -98,7 +98,7 @@ export const BUILTIN_COMMANDS = {
   'release-notes': 'Show recent changes to Oasis',
   export: 'Save this conversation as Markdown or a standalone HTML page (/export FILE.md | FILE.html)',
   resume: 'List saved sessions or resume one (/resume [ID])',
-  goal: 'Keep working across turns until a condition is met (/goal CONDITION | clear)',
+  goal: 'Keep working across turns until a condition is met (/goal CONDITION | pause | resume | edit CONDITION | clear)',
   color: 'Set this session\'s prompt color (/color red|blue|green|yellow|purple|orange|pink|cyan|random|default)',
   focus: 'Show the last prompt, a one-line summary of each tool call with edit line counts, and the final response',
   background: 'Move this conversation to a background session and free the terminal (/background [one more instruction])',
@@ -950,16 +950,37 @@ export async function runBuiltinCommand(name, argument, state) {
     }
     case 'goal': {
       const stopWords = ['clear', 'stop', 'off', 'reset', 'none', 'cancel'];
+      const maxTurns = Number(env.OASIS_GOAL_MAX_TURNS) || 20;
+      const goal = session && session.goal;
+      const [verb, ...restWords] = argument.split(/\s+/);
+      const rest = restWords.join(' ').trim();
+      const lowerVerb = String(verb || '').toLowerCase();
       if (!argument) {
-        const goal = session && session.goal;
-        if (!goal) return { output: 'No goal set. Usage: /goal CONDITION (for example: /goal all tests pass and the README documents the new flag)' };
-        return { output: 'Goal' + (goal.achieved ? ' (achieved)' : goal.active ? ' (active)' : ' (cleared)') + ': ' + goal.condition + '\nTurns: ' + goal.turns + (goal.reason ? '\nLast check: ' + goal.reason : '') };
+        if (!goal) return { output: 'No goal set. Usage: /goal CONDITION (for example: /goal all tests pass and the README documents the new flag). Then /goal pause, /goal resume, /goal edit CONDITION or /goal clear.' };
+        const status = goal.achieved ? 'achieved' : goal.active ? 'active' : goal.paused ? 'paused' : 'cleared';
+        return { output: 'Goal (' + status + '): ' + goal.condition + '\nTurns: ' + goal.turns + (goal.reason ? '\nLast check: ' + goal.reason : '') + (status === 'paused' ? '\n/goal resume continues it.' : '') };
       }
       if (stopWords.includes(argument.toLowerCase())) {
-        if (session && session.goal) session.goal.active = false;
+        if (goal) { goal.active = false; goal.paused = false; }
         return { output: 'Goal cleared.' };
       }
-      return { output: '[goal] Working until: ' + argument + '\nPress Ctrl+C to stop.', goal: { condition: argument, maxTurns: Number(env.OASIS_GOAL_MAX_TURNS) || 20 } };
+      if (lowerVerb === 'pause' && !rest) {
+        if (!goal || goal.achieved || !(goal.active || goal.paused)) return { output: 'There is no goal to pause.' };
+        goal.active = false; goal.paused = true;
+        return { output: 'Goal paused after ' + goal.turns + ' turn(s). /goal resume continues it.' };
+      }
+      if (lowerVerb === 'resume' && !rest) {
+        if (!goal || !goal.condition) return { output: 'There is no goal to resume. Set one with /goal CONDITION.' };
+        if (goal.achieved) return { output: 'That goal was already met: ' + goal.condition + '\nSet a new one with /goal CONDITION.' };
+        return { output: '[goal] Resuming: ' + goal.condition + '\nPress Ctrl+C to pause.', goal: { condition: goal.condition, maxTurns, turns: goal.turns || 0, reason: goal.reason || '' } };
+      }
+      if (lowerVerb === 'edit') {
+        if (!rest) return { output: 'Usage: /goal edit NEW CONDITION' };
+        if (rest.length > 4000) return { output: 'A goal can be at most 4,000 characters. Put the details in a file and point the goal at it.' };
+        return { output: '[goal] Updated. Working until: ' + rest + '\nPress Ctrl+C to pause.', goal: { condition: rest, maxTurns, turns: goal && !goal.achieved ? goal.turns || 0 : 0 } };
+      }
+      if (argument.length > 4000) return { output: 'A goal can be at most 4,000 characters. Put the details in a file and point the goal at it.' };
+      return { output: '[goal] Working until: ' + argument + '\nPress Ctrl+C to pause.', goal: { condition: argument, maxTurns } };
     }
     case 'btw': {
       if (!argument) {

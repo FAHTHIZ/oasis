@@ -195,6 +195,8 @@ export function groupStats(steps = []) {
 }
 
 export function formatDuration(ms) {
+  // Unknown (a step reopened from a saved session) shows nothing, not "<0.1s".
+  if (ms === null || ms === undefined || ms === '') return '';
   const value = Number(ms);
   if (!Number.isFinite(value) || value < 0) return '';
   if (value < 1000) return value < 50 ? '<0.1s' : (value / 1000).toFixed(1) + 's';
