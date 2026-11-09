@@ -109,7 +109,7 @@ import { compactSystemPrompt, systemPrompt } from './system-prompt.mjs';
 import { formatLspVerificationBlocker, verificationCommandKind, verificationSummary } from './verification-summary.mjs';
 import { ASK_USER_TOOL_DEFINITION, askUserQuestion, questionBudget } from './ask-user.mjs';
 import { normalizeUsage, usageOrEstimate } from './usage-estimate.mjs';
-import { webAccessSites } from './web-access.mjs';
+import { webAccessSites, outboundEmailHit, userEmailAddresses } from './web-access.mjs';
 import { exitPlanMode, permissionMode } from './plan-mode.mjs';
 export { usageOrEstimate } from './usage-estimate.mjs';
 export { normalizeQuestion, resolveQuestionAnswer } from './ask-user.mjs';
@@ -3023,6 +3023,19 @@ async function authorizeCall(session, name, args, context, options) {
       if (!ok) return { deniedReason: overlay.permissionHookDenial || 'The user did not approve web access to ' + host + '.' };
       session.webAccessApprovals.add(key);
       siteApprovalHandled = true;
+    }
+  }
+  // Sending the user's own email address over the network always asks once
+  // per address and tool, in every mode but bypassPermissions.
+  if (mode !== 'bypassPermissions') {
+    if (!session.userEmails) session.userEmails = userEmailAddresses({ root: session.root || context.root, env: context.env || process.env });
+    const email = outboundEmailHit(name, args, session.userEmails);
+    const key = email ? 'email:' + name + ':' + email : '';
+    session.emailShareApprovals ||= new Set();
+    if (email && !session.emailShareApprovals.has(key)) {
+      const ok = await overlay.approval('This ' + (CLAUDE_TOOL_NAMES[name] || name) + ' call sends your email address (' + email + ') over the network. Allow it?', true);
+      if (!ok) return { deniedReason: overlay.permissionHookDenial || 'The user did not approve sending their email address (' + email + ') over the network. Do it without the address, or ask the user.' };
+      session.emailShareApprovals.add(key);
     }
   }
   // Protected config paths (settings, hooks, MCP, .git) always ask: writing them
