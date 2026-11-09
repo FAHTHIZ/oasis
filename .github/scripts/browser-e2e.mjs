@@ -108,8 +108,17 @@ try {
   const deadline = Date.now() + 60_000;
   let approvals = 0;
   let reloaded = false;
+  let approvalShot = false;
   while (Date.now() < deadline) {
     if (await page.locator('#approvalSheet').isVisible()) {
+      if (!approvalShot) {
+        approvalShot = true;
+        await page.screenshot({ path: path.join(screenshotDir, 'approval-dark.png') });
+        await contrast(page, 'approval open (dark)');
+        // The step behind an open approval waits on the user; it must not say "Working".
+        if (await page.locator('.tool.running:not(.waiting)').count()) throw new Error('A step behind the approval sheet still says Working');
+        console.log('[approval] waiting steps:', await page.locator('.tool.waiting').count());
+      }
       if (!reloaded) {
         // Session recovery: reloading mid-task (closed tab, dropped Wi-Fi)
         // reattaches to the running job and asks the same question again.
@@ -156,11 +165,10 @@ try {
         console.log('[devices] an approval answered in another browser closed here');
         continue;
       }
-      if (approvals === 0) { await page.screenshot({ path: path.join(screenshotDir, 'approval-dark.png') }); await contrast(page, 'approval open (dark)'); }
       // The step behind an open approval waits on the user; it must not say "Working".
       const stuck = await page.locator('.tool.running:not(.waiting)').count();
       if (stuck) throw new Error('A step behind the approval sheet still says Working');
-      if (approvals === 0) console.log('[approval] waiting steps:', await page.locator('.tool.waiting').count());
+      if (approvals <= 1) console.log('[approval] waiting steps:', await page.locator('.tool.waiting').count());
       await page.locator('#allowButton').click();
       approvals++;
       continue;
