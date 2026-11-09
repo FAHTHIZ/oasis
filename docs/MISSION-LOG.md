@@ -3,6 +3,10 @@
 A short, dated record of changes, tests, benchmark results, blockers and known
 weaknesses. Newest first. Detailed user-facing notes go in the CHANGELOG.
 
+## 2026-11-09 (accessibility gate)
+
+- Browser e2e now fails on any axe WCAG 2 A/AA violation, not only colour contrast, and also audits the page with the docked approval open. Result: zero violations on welcome (dark, light, phone), approval open, finished task and sign-in.
+
 ## 2026-11-09 (runtime: long-poll job events)
 
 ### Changes
