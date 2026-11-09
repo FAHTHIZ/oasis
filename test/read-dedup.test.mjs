@@ -64,3 +64,19 @@ test('a changed file or disabled dedup always returns fresh content', async (t) 
   const offContents = toolContents(model2.payloads[2]);
   assert.ok(offContents[1].includes('v2 line 199'), 'readDedup:false disables the optimisation');
 });
+
+// Claude Code 2.1.317 removed its "file unchanged" stub. A model that asks a
+// third time has lost track of the earlier result, so it gets the content.
+test('a second repeat of the same read returns the full content again', async (t) => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'oasis-dedup-'));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const body = Array.from({ length: 200 }, (_, i) => 'line ' + i + ' of a fairly large file').join('\n');
+  await writeFile(path.join(root, 'big.txt'), body);
+  const model = await scriptedModel(t, [read('r1'), read('r2'), read('r3'), { role: 'assistant', content: 'done' }]);
+  const session = await createSession({ root, config: { protocol: 'openai-compatible', baseURL: 'http://127.0.0.1:' + model.port + '/v1', model: 'fixture', apiKey: '', maxSteps: 6 } });
+  await runAgentTurn(session, 'Read big.txt three times.');
+  const contents = toolContents(model.payloads[3]);
+  assert.equal(contents.length, 3);
+  assert.match(contents[1], /unchanged/);
+  assert.ok(contents[2].includes('line 199'), 'the third read carries the content');
+});

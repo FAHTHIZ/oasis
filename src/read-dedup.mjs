@@ -67,6 +67,13 @@ export async function dedupedReadHit(session, args, env = process.env) {
     cacheOf(session).delete(key);
     return null;
   }
+  // A model that asks again after the pointer has lost track of the earlier
+  // result (Claude Code dropped its stub for this reason). The second repeat
+  // gets the real content; recording it starts a fresh entry.
+  if (entry.hits >= 1) {
+    cacheOf(session).delete(key);
+    return null;
+  }
   entry.hits = (entry.hits || 0) + 1;
   session.readDedupSavedBytes = (session.readDedupSavedBytes || 0) + entry.bytes;
   return {
