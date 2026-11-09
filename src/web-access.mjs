@@ -1,6 +1,7 @@
 // The sites a web tool call reaches (the fetched host, or the configured search
 // providers' hosts), so each new site is approved once per session.
 import { searchBackends, searchBackend } from './web-search.mjs';
+import { execFileSync } from 'node:child_process';
 
 export const SEARCH_PROVIDER_HOSTS = {
   duckduckgo: 'html.duckduckgo.com',
@@ -37,4 +38,38 @@ export function webAccessSites(name, args, env) {
     } catch { return []; }
   }
   return name === 'web_search' ? webSearchHosts(args, env) : [];
+}
+
+// Claude Code 2.1.317: ask before a web or shell call sends the user's own
+// email address over the network. The addresses come from git config and
+// OASIS_USER_EMAIL; GitHub noreply addresses are public by design and skipped.
+const NETWORK_SHELL = /(?:^|[\s;&|(`'"])(?:curl|wget|http|https|xh|nc|ncat|socat|ssh|scp|sftp|rsync|ftp|telnet|sendmail|mail|mutt|aws|gcloud|az|gh)(?=$|[\s;&|)'"])|\bhttps?:\/\/|\bInvoke-(?:WebRequest|RestMethod)\b|\bfetch\(/i;
+
+export function userEmailAddresses({ root = process.cwd(), env = process.env, gitEmail } = {}) {
+  const found = new Set();
+  const add = (value) => {
+    for (const item of String(value || '').split(/[,\s]+/)) {
+      const email = item.trim().toLowerCase();
+      if (/^[^@\s]+@[^@\s]+\.[a-z]{2,}$/.test(email) && !/noreply|no-reply/.test(email)) found.add(email);
+    }
+  };
+  add(env.OASIS_USER_EMAIL);
+  add(env.GIT_AUTHOR_EMAIL);
+  add(env.GIT_COMMITTER_EMAIL);
+  if (gitEmail === undefined) {
+    try { gitEmail = execFileSync('git', ['config', 'user.email'], { cwd: root, encoding: 'utf8', timeout: 1500, stdio: ['ignore', 'pipe', 'ignore'] }); } catch { gitEmail = ''; }
+  }
+  add(gitEmail);
+  return [...found];
+}
+
+export function outboundEmailHit(name, args, emails = []) {
+  if (!emails.length) return null;
+  const network = name === 'fetch_url' || name === 'web_search' || String(name).startsWith('mcp__')
+    || ((name === 'run_command' || name === 'powershell') && NETWORK_SHELL.test([args && args.command, ...(Array.isArray(args && args.args) ? args.args : [])].join(' ')));
+  if (!network) return null;
+  let text = '';
+  try { text = JSON.stringify(args).toLowerCase(); } catch { return null; }
+  const decoded = (() => { try { return decodeURIComponent(text); } catch { return text; } })();
+  return emails.find((email) => text.includes(email) || decoded.includes(email)) || null;
 }
