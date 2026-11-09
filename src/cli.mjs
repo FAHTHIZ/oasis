@@ -33,7 +33,7 @@ import { renderStatusLine, statusLinePayload } from './status-line.mjs';
 import { BUILTIN_COMMANDS, COMMAND_ALIASES, runBuiltinCommand, createUsageTracker, recordUsage, formatInterval } from './slash.mjs';
 import { appendMemoryNote } from './memory.mjs';
 import { runHeadless, OUTPUT_FORMATS, headlessSetupErrorOutput } from './headless.mjs';
-import { fstatSync, readFileSync, rmSync } from 'node:fs';
+import { fstatSync, readFileSync, realpathSync, rmSync } from 'node:fs';
 import { runDiagnostics, formatDiagnostics, CHECKERS } from './diagnostics.mjs';
 import { readInput, KeyDecoder } from './line-editor.mjs';
 import { loadHistory, appendHistory } from './input-history.mjs';
@@ -235,6 +235,8 @@ function helpText() {
     '  --resume ID, -r ID            Resume a saved session (see oasis sessions list)',
     '  --model ID                    Use a different model for this run',
     '  --max-turns N                 Limit model steps for one task (1-400)',
+    '  --goal "condition"            With -p: keep working until a strict check says the condition is met',
+    '  --goal-turns N                With --goal: most turns to try (default 10, max 100)',
     '  --allowedTools RULES          Extra allow rules, e.g. "run_command(npm test:*),Edit(src/**)"',
     '  --disallowedTools RULES       Extra deny rules for this run',
     '  --append-system-prompt TEXT   Add instructions to the system prompt',
@@ -1631,6 +1633,13 @@ async function printModeRun(root, headless, args, autoApprove, persistence, stat
   const stdinWait = Number(process.env.OASIS_STDIN_WAIT_SECONDS);
   const piped = streamInput ? '' : await readPipedStdin({ firstByteMs: prompt ? (Number.isFinite(stdinWait) && stdinWait >= 0 ? stdinWait : 3) * 1000 : 0 });
   if (piped.trim()) prompt = prompt ? prompt + '\n\n<stdin>\n' + piped + '\n</stdin>' : piped;
+  const goalCommand = /^\/goal\s+(.+)$/s.exec(prompt.trim());
+  if (goalCommand && !/^(pause|resume|clear|edit|status)\b/i.test(goalCommand[1].trim())) {
+    // oasis -p "/goal npm test passes" works like --goal.
+    headless.goal = goalCommand[1].trim().slice(0, 4000);
+    prompt = '';
+  }
+  if (headless.goal && !prompt.trim()) prompt = 'Goal: ' + headless.goal + '\nWork toward this goal now. Verify results by running checks, not by assumption. Keep going until it is fully met.';
   if (prompt.trim().startsWith('/')) {
     // oasis -p "/review src" runs a custom command or skill, like the interactive prompt.
     const custom = await resolveCustomCommand(root, prompt.trim(), await customCommandContext(root)).catch(() => null);
@@ -1680,6 +1689,7 @@ async function printModeRun(root, headless, args, autoApprove, persistence, stat
     prompt, root, config, autoApprove,
     outputFormat: headless.outputFormat,
     maxTurns: headless.maxTurns,
+    ...(headless.goal ? { goal: headless.goal, goalMaxTurns: headless.goalMaxTurns || 10 } : {}),
     planOnly: headless.planOnly,
     jsonSchema: headless.jsonSchema || null,
     sessionOptions: { ...sessionCreateOptions(), channels: [] },
@@ -2723,6 +2733,18 @@ async function main() {
       continue;
     }
     if (arg.startsWith('--output-format=')) { headless.outputFormat = arg.slice(16); continue; }
+    if (arg === '--goal') {
+      if (!rawArgs[i + 1]) throw new Error('--goal requires a condition, e.g. --goal "npm test passes".');
+      headless.goal = String(rawArgs[++i]).slice(0, 4000);
+      headless.enabled = true;
+      continue;
+    }
+    if (arg === '--goal-turns') {
+      const value = Number.parseInt(rawArgs[++i], 10);
+      if (!Number.isInteger(value) || value < 1 || value > 100) throw new Error('--goal-turns must be a whole number from 1 to 100.');
+      headless.goalMaxTurns = value;
+      continue;
+    }
     if (arg === '--max-turns') {
       const value = Number.parseInt(rawArgs[++i], 10);
       if (!Number.isInteger(value) || value < 1 || value > 400) throw new Error('--max-turns must be a whole number from 1 to 400.');
@@ -3143,7 +3165,16 @@ async function main() {
   closeSession(session);
 }
 
-main().catch((error) => {
-  stderr.write('OASIS error: ' + (error.message || String(error)) + '\n');
-  process.exitCode = 1;
-});
+// Run only as the entry point (`oasis`, `node src/cli.mjs`). Tests import
+// helpers from this file; that import must not start an interactive session.
+function isEntryPoint() {
+  if (globalThis.__OASIS_CLI_ENTRY) return true;
+  try { return realpathSync(process.argv[1] || '') === realpathSync(fileURLToPath(import.meta.url)); } catch { return false; }
+}
+
+if (isEntryPoint()) {
+  main().catch((error) => {
+    stderr.write('OASIS error: ' + (error.message || String(error)) + '\n');
+    process.exitCode = 1;
+  });
+}
