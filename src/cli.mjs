@@ -1322,6 +1322,12 @@ async function runPrompt(prompt, root, autoApprove, session = null, persistence 
       if (goalNote) stdout.write(goalNote);
     }
     session = await createSession({ root, config, restore: restored, ...sessionCreateOptions(), watchFiles: true });
+    if (restored) {
+      let price = null;
+      try { price = priceFor(session.config && session.config.model || config.model, { config: session.config || config }); } catch {}
+      const note = resumeCostNotice({ tokens: estimateTokens(session.messages), updatedAt: restored.updatedAt, price });
+      if (note) stdout.write(note);
+    }
   } else if (path.resolve(session.worktreeSession ? session.worktreeSession.originalRoot : session.root) !== path.resolve(root)) {
     closeSession(session);
     session = await createSession({ root, config, ...sessionCreateOptions(), watchFiles: true });
@@ -1856,6 +1862,17 @@ async function runLoop(loop, root, autoApprove, session, persistence) {
   if (session) session.selfPacedLoop = false;
   stdout.write('[loop] Stopped.\n');
   return session;
+}
+
+// Claude Code 2.1.304 warns before an inactive conversation is resumed at
+// full price. Provider prompt caches last minutes to hours, so resuming an
+// old, long session re-sends the whole history uncached on the next message.
+export function resumeCostNotice({ tokens = 0, updatedAt = '', price = null, now = Date.now() } = {}) {
+  const idleMs = now - (Date.parse(updatedAt || '') || now);
+  if (!price || !(Number(price.input) > 0) || tokens < 30000 || idleMs < 60 * 60 * 1000) return '';
+  const cost = tokens * Number(price.input) / 1e6;
+  if (cost < 0.05) return '';
+  return '[session] This conversation has about ' + Math.round(tokens / 1000) + 'k tokens and has been idle, so the provider cache has likely expired: the next message re-sends it for about ' + formatUsd(cost) + '. /compact first to shrink it, or /clear to start fresh.\n';
 }
 
 // A resumed session whose goal was paused (Ctrl+C, turn limit, or OASIS
