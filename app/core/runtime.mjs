@@ -1,4 +1,4 @@
-// Runtime engine. When the app is opened from `oasis web` or the desktop app,
+// Runtime engine. When the app is opened from `oasis web`,
 // the agent runs on this computer (real shell, real files, git, MCP) instead
 // of in the browser. The page talks to it over the token-protected local API;
 // everything else in the app (chat, plugins, approvals, files panel) stays the
@@ -324,7 +324,10 @@ export class RuntimeAgent {
             // edits. End that bubble so the next reply does not run into it.
             case 'verification_gate': if (stepText && !stepHasTools) stepTextFinal = true; break;
             case 'stream_restarted': stepText = ''; this.emit('retry', { attempt: data.attempt || 1 }); break;
+            case 'compaction_started': this.emit('compacting', {}); break;
             case 'tool_start': {
+              // A subagent's own steps show in its row, not the main timeline.
+              if (data.subagent) break;
               const id = data.callId || 'call_' + event.id;
               const call = { id, name: data.name, args: toolArgs(data) };
               if (data.name === 'todo_write') {
@@ -332,10 +335,11 @@ export class RuntimeAgent {
                 if (todos !== null) { this.todos = todos; this.emit('todos', { todos }); }
               }
               if (!stepHasTools) { this.emit('assistant', { content: stepText, toolCalls: [call] }); stepHasTools = true; }
-              this.emit('tool_start', { id, name: data.name, args: call.args });
+              this.emit('tool_start', { id, name: data.name, args: call.args, ...(data.label ? { label: String(data.label).slice(0, 160) } : {}) });
               break;
             }
             case 'tool_result': {
+              if (data.subagent) break;
               const ok = !/^(error|failed|denied|blocked)$/i.test(String(data.status || ''));
               const content = [data.result, data.warning].filter(Boolean).join('\n');
               if (data.name === 'todo_write') {
@@ -346,7 +350,7 @@ export class RuntimeAgent {
                   ?? extractRuntimeTodos(data);
                 if (todos !== null) { this.todos = todos; this.emit('todos', { todos }); }
               }
-              this.emit('tool_result', { id: data.callId || '', name: data.name, ok, content: String(content || data.label || '').slice(0, 4000) });
+              this.emit('tool_result', { id: data.callId || '', name: data.name, ok, content: String(content || data.label || '').slice(0, 4000), ...(Number.isFinite(Number(data.durationMs)) ? { durationMs: Number(data.durationMs) } : {}) });
               break;
             }
             case 'plan':

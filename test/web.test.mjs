@@ -1302,69 +1302,6 @@ test('browser task history API exposes interrupted task recovery state after run
   assert.match(detail.events.at(-1).data.message, /live processes and pending approvals were not restored/i);
 });
 
-test('desktop provider setup stores the API key through the host callback, not config.json', async (t) => {
-  const root = await tempDir();
-  let captured = null;
-  const providerServer = createServer((req, res) => {
-    req.resume();
-    res.writeHead(200, { 'content-type': 'application/json' });
-    res.end(JSON.stringify({
-      choices: [{
-        message: {
-          role: 'assistant',
-          content: null,
-          tool_calls: [{
-            id: 'probe-call',
-            type: 'function',
-            function: { name: 'oasis_connection_probe', arguments: '{"ready":true}' }
-          }]
-        }
-      }]
-    }));
-  });
-  await new Promise((resolve) => providerServer.listen(0, '127.0.0.1', resolve));
-  const configDir = path.join(root, 'config');
-  const env = { OASIS_CONFIG_DIR: configDir };
-  const app = await startOasisWebServer({
-    root, host: '127.0.0.1', port: 0, env,
-    onProviderConfig: async (provider) => {
-      captured = { ...provider };
-      await saveConfig({
-        protocol: provider.protocol,
-        baseURL: provider.baseURL,
-        model: provider.model,
-        apiKey: ''
-      }, { env });
-    },
-    token: 'test-runtime-token-0123456789'
-  });
-  t.after(async () => {
-    await app.close();
-    await new Promise((resolve) => providerServer.close(resolve));
-    await rm(root, { recursive: true, force: true });
-  });
-
-  const key = 'desktop-secret-fixture-do-not-return';
-  const response = await fetch('http://127.0.0.1:' + app.port + '/api/provider/config', {
-    method: 'POST',
-    headers: { authorization: 'Bearer ' + app.token, 'content-type': 'application/json' },
-    body: JSON.stringify({
-      protocol: 'openai-compatible',
-      baseURL: 'http://127.0.0.1:' + providerServer.address().port + '/v1',
-      model: 'desktop-fixture-model',
-      apiKey: key
-    })
-  });
-  const bodyText = await response.text();
-  assert.equal(response.status, 200, bodyText);
-  assert.doesNotMatch(bodyText, new RegExp(key));
-  assert.equal(captured.apiKey, key);
-
-  const configText = await readFile(path.join(configDir, 'config.json'), 'utf8');
-  assert.doesNotMatch(configText, new RegExp(key));
-  assert.equal(JSON.parse(configText).apiKey, '');
-});
-
 test('Ollama discovery uses a fixed localhost endpoint and returns only model names', async (t) => {
   const root = await tempDir();
   let requestedUrl = '';

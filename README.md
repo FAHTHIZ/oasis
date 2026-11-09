@@ -40,15 +40,7 @@
 
 ## Install
 
-**Desktop app** (includes the web app and everything it needs):
-
-| Windows | macOS | Linux |
-| --- | --- | --- |
-| [x64 `.exe`](https://github.com/FAHTHIZ/oasis/releases/latest) · [ARM64 `.exe`](https://github.com/FAHTHIZ/oasis/releases/latest) | [Apple Silicon `.dmg`](https://github.com/FAHTHIZ/oasis/releases/latest) · [Intel `.dmg`](https://github.com/FAHTHIZ/oasis/releases/latest) | [`.AppImage`](https://github.com/FAHTHIZ/oasis/releases/latest) · [`.deb`](https://github.com/FAHTHIZ/oasis/releases/latest) (x64 and ARM64) |
-
-The macOS app is not code-signed yet: confirm the first launch under System Settings → Privacy & Security.
-
-**Command line** (needs Node.js 22.15+ and Git):
+One package gives you the terminal agent and the browser workspace (needs Node.js 22.15+ and Git):
 
 | Method | Command |
 | --- | --- |
@@ -57,7 +49,7 @@ The macOS app is not code-signed yet: confirm the first launch under System Sett
 | Homebrew | `brew tap fahthiz/oasis https://github.com/FAHTHIZ/oasis && brew install fahthiz/oasis/oasis-cli` |
 | From source | `git clone https://github.com/FAHTHIZ/oasis.git && cd oasis && npm install && npm install --global .` |
 
-The install scripts take the latest stable release, ask before changing anything, and finish with `oasis doctor`. Each release ships a `SHA256SUMS` file. See [Downloads and releases](docs/RELEASES.md).
+The install scripts take the latest stable release, ask before changing anything, and finish with `oasis doctor`. Each release ships the npm tarball and a `SHA256SUMS` file. See [Downloads and releases](docs/RELEASES.md).
 
 ## Quick start
 
@@ -97,7 +89,7 @@ OASIS has two interfaces, both on the same runtime, sessions and settings. Start
   </tr>
 </table>
 
-The web app runs on your own computer, not a hosted service. The desktop app is the same web app in a native window. To use it from a phone on your network, see [Mobile and tablet setup](MOBILE.md). There is no native Android or iOS app.
+The web app runs on a computer or server you control, not a hosted service, and opens in any modern browser. There is no separate desktop or mobile app to install.
 
 <table>
   <tr>
@@ -214,7 +206,7 @@ Two tasks and one trial cannot rank agents, and OASIS does not guarantee that ev
 | Open source | Yes | No | Yes | Yes | Yes | Yes |
 | Any model | Yes | Anthropic | OpenAI first | Google | Yes | Yes |
 | Runs Claude Code plugins | Yes, plus Codex plugins and Gemini extensions | Yes | Own plugins | Own extensions | Own plugins | Own skills |
-| Web interface | Local web app | Cloud | Cloud | No | Local web app and desktop | Messaging apps |
+| Web interface | Local web app | Cloud | Cloud | No | Self-hosted web app | Messaging apps |
 | Subagents | Parallel, background, resumable, teams | Yes | Yes | Yes | Yes | Yes |
 | Checks its work before it says done | Built in | With hooks | Not built in | Not built in | Not built in | Not built in |
 
@@ -270,7 +262,7 @@ CI also runs platform security tests, a live Docker sandbox test, native PTY tes
 | [First run](docs/FIRST-RUN.md) | [Configuration](docs/CONFIGURATION.md) | [Contributing](CONTRIBUTING.md) |
 | [Interfaces](docs/INTERFACES.md) | [Subagents](docs/SUBAGENTS.md) | [Security](SECURITY.md) |
 | [Downloads](docs/RELEASES.md) | [Comparison](docs/COMPARISON.md) | [Support](SUPPORT.md) |
-| [Mobile setup](MOBILE.md) | [Benchmarks](docs/BENCHMARKS.md) | [Brand guidelines](BRAND.md) |
+| [Releases](docs/RELEASES.md) | [Benchmarks](docs/BENCHMARKS.md) | [Brand guidelines](BRAND.md) |
 
 ## License
 

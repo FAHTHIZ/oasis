@@ -22,7 +22,7 @@ Use this index to find the right guide without having to understand the reposito
 - [Configuration reference](CONFIGURATION.md) — provider registry, fallback models, output limits and search options.
 - [Comparison with other agent harnesses](COMPARISON.md) — Claude Code, Codex, Gemini CLI, OpenCode, Goose, Pi and Hermes: where OASIS matches, goes further and still lags.
 - [Subagents](SUBAGENTS.md) — built-in and custom agents, front matter, structured output, background agents and teams.
-- [Mobile and tablet setup](../MOBILE.md) — connected browser sessions and advanced Termux setup.
+- [Remote access](REMOTE-ACCESS.md) — connected browser sessions from another device, set up securely.
 
 ## Engineering and architecture
 

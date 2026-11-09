@@ -41,20 +41,20 @@ const TEST = { path: 'math.test.mjs', content: "import test from 'node:test';\ni
 function nextStep(messages) {
   const called = new Set(messages.flatMap((m) => (m.tool_calls || []).map((c) => c.function.name + ':' + c.function.arguments)));
   const did = (name, args) => called.has(name + ':' + JSON.stringify(args));
-  const call = (name, args) => ({ role: 'assistant', content: null, tool_calls: [{ id: 'call_' + name + '_' + called.size, type: 'function', function: { name, arguments: JSON.stringify(args) } }] });
+  const call = (name, args, say = null) => ({ role: 'assistant', content: say, tool_calls: [{ id: 'call_' + name + '_' + called.size, type: 'function', function: { name, arguments: JSON.stringify(args) } }] });
   // A subagent's own requests start from its prompt; it answers at once.
   const firstUser = messages.find((m) => m.role === 'user');
   const firstText = firstUser ? (typeof firstUser.content === 'string' ? firstUser.content : JSON.stringify(firstUser.content)) : '';
   if (firstText.includes('E2E-SUBAGENT')) return { role: 'assistant', content: 'math.mjs exports add(), which subtracts.' };
   const SUB = { description: 'Find the add() function', prompt: 'E2E-SUBAGENT: find where add() is defined.', subagent_type: 'explore' };
-  if (!did('task', SUB)) return call('task', SUB);
+  if (!did('task', SUB)) return call('task', SUB, 'I will find where `add()` is defined first.');
   if (!did('read_file', { path: 'math.mjs' })) return call('read_file', { path: 'math.mjs' });
-  if (!did('edit_file', FIX)) return call('edit_file', FIX);
+  if (!did('edit_file', FIX)) return call('edit_file', FIX, 'Found it: `add()` subtracts. Fixing it and adding a test.');
   if (!did('write_file', TEST)) return call('write_file', TEST);
   if (!did('git_diff', { scope: 'all' })) return call('git_diff', { scope: 'all' });
   const tests = { command: 'npm', args: ['test'] };
   const ran = messages.filter((m) => (m.tool_calls || []).some((c) => c.function.name === 'run_command')).length;
-  if (ran < 1) return call('run_command', tests);
+  if (ran < 1) return call('run_command', tests, 'Change reviewed. Running the tests now.');
   return { role: 'assistant', content: 'Fixed `add()` in `math.mjs`: it subtracted instead of adding.\n\n- Added `math.test.mjs` with a test for `add(2, 3)`.\n- Ran `npm test`: 1 test passed.' };
 }
 
@@ -123,7 +123,15 @@ try {
     await page.waitForTimeout(150);
   }
   assert.ok(approvals >= 1, 'the edit asked for approval');
-  // The subagent shows in its own list with its final state.
+  // Finished work folds into execution groups; a person opens one to see
+  // the subagent and the exact steps.
+  await page.waitForFunction(() => /1 test passed/.test(document.getElementById('transcript').innerText), null, { timeout: timeoutMs });
+  // Prose updates and execution groups alternate, like a person narrating the work.
+  const flow = await page.evaluate(() => [...document.getElementById('transcript').children].map((el) => el.classList.contains('steps') ? 'steps' : el.classList.contains('assistant') ? 'text' : el.classList.contains('user') ? 'user' : 'other').filter((kind) => kind !== 'other'));
+  assert.deepEqual(flow, ['user', 'text', 'steps', 'text', 'steps', 'text', 'steps', 'text'], 'timeline order: ' + flow.join(' '));
+  assert.equal(await page.locator('.steps.running').count(), 0, 'no group still says it is running');
+  const firstGroup = page.locator('.steps').first();
+  if ((await firstGroup.locator('.steps-head').getAttribute('aria-expanded')) !== 'true') await firstGroup.locator('.steps-head').click();
   await page.locator('.subagents .subagent').first().waitFor({ timeout: timeoutMs });
   assert.match(await page.locator('.subagents').innerText(), /Find the add\(\) function[\s\S]*Done/);
   await page.waitForFunction(() => /1 test passed/.test(document.getElementById('transcript').innerText), null, { timeout: timeoutMs });

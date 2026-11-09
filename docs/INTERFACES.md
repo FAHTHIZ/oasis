@@ -59,7 +59,7 @@ cd /path/to/your/project
 oasis web --open
 ```
 
-The browser is only the interface. The agent process, project access and command execution remain on the host. The default server is local-only. Browser job/event history is stored locally under the OASIS config directory. Completed tasks remain reviewable after restart; active tasks are marked interrupted because live processes and pending approvals cannot be restored. Saved chat sessions use their separate session store. For phone or another device, follow [Mobile and tablet setup](../MOBILE.md); use a trusted private network and never expose the workspace directly to the public internet.
+The browser is only the interface. The agent process, project access and command execution remain on the host. The default server is local-only. Browser job/event history is stored locally under the OASIS config directory. Completed tasks remain reviewable after restart; active tasks are marked interrupted because live processes and pending approvals cannot be restored. Saved chat sessions use their separate session store. For access from another device, see [Remote access](REMOTE-ACCESS.md).
 
 ### Working in the web app
 
@@ -90,7 +90,7 @@ There is no native Android APK or iOS App Store package. Available options are:
 - Connect to a computer's OASIS runtime over a trusted private network when you need that computer's project.
 - Advanced Android users can run the CLI manually in Termux with Node.js 22.15 or newer and Git.
 
-See [MOBILE.md](../MOBILE.md) for setup and network cautions.
+See [Remote access](REMOTE-ACCESS.md) for setup and network cautions.
 
 ## Editor, ACP and SDK integrations
 

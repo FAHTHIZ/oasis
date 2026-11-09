@@ -14,19 +14,13 @@ test('README describes the two interfaces, honest limits and verifiable download
     'Terminal',
     'Web app',
     'oasis web --open',
-    'The desktop app is the same web app in a native window',
     'Agent Client Protocol',
     'Node.js SDK',
     'GitHub Action',
     'does not guarantee that every model will solve every task',
     'Approval prompts are not a replacement for operating-system isolation',
     'SHA256SUMS',
-    'Windows',
-    'macOS',
-    'Linux',
-    '.AppImage',
-    '.deb',
-    'There is no native Android or iOS app',
+    'There is no separate desktop or mobile app',
     'docs/RELEASES.md',
     'docs/INTERFACES.md',
     'Contributing guide',
@@ -51,8 +45,7 @@ test('the user guide and release guide exist and the web app has a browser end-t
   assert.ok(userGuide.includes('## 5. Browser workspace'));
   assert.ok(releasesGuide.includes('SHA256SUMS'));
   assert.ok(releasesGuide.includes('Windows'));
-  assert.ok(releasesGuide.includes('macOS'));
-  assert.ok(releasesGuide.includes('Linux'));
+  assert.ok(!/electron|\.dmg|AppImage/i.test(releasesGuide), 'no desktop installers');
   await stat(path.join(root, '.github/scripts/browser-e2e.mjs'));
 });
 
@@ -63,6 +56,6 @@ test('package manifests do not include deleted documentation or demonstration fo
   assert.ok(!pkg.files.includes('docs/'));
   assert.ok(!pkg.files.includes('SECURITY.md'));
   assert.ok(!pkg.files.includes('CONTRIBUTING.md'));
-  assert.ok(!pkg.build.files.includes('docs/**/*'));
-  assert.ok(!pkg.build.files.some((entry) => entry.includes('demo')));
+  assert.equal(pkg.build, undefined, 'no desktop packaging config');
+  assert.ok(!pkg.files.includes('desktop/'));
 });

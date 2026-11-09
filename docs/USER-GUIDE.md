@@ -77,7 +77,7 @@ oasis web --open
 
 OASIS opens the local workspace in your browser. The browser displays the interface; the runtime, project files and command execution remain on the host. Browser job/event history is stored locally under the OASIS config directory. Completed tasks remain reviewable after restart; active tasks are marked interrupted because live processes and pending approvals cannot be restored. Saved chat sessions use their separate session store.
 
-For phone or tablet access, follow [Mobile and tablet setup](../MOBILE.md). Keep access on a trusted private network and do not expose the workspace directly to the public internet.
+For access from another device, follow [Remote access](REMOTE-ACCESS.md).
 
 ### Working in the browser workspace
 
@@ -138,7 +138,7 @@ Read [SECURITY.md](../SECURITY.md) before connecting sensitive workspaces.
 | Sandbox unavailable | Do not assume isolation is active; check oasis doctor and the security policy. |
 | The result is incorrect | Inspect the diff, ask for a narrow correction and rerun the relevant test. |
 | Desktop installer is missing | Check [GitHub Releases](https://github.com/FAHTHIZ/oasis/releases); tags and temporary Actions artifacts are not public downloads. |
-| Phone cannot connect | Confirm the host runtime is running and both devices are on the same trusted private network. See [MOBILE.md](../MOBILE.md). |
+| Phone cannot connect | Confirm the host runtime is running and both devices are on the same trusted private network. See [Remote access](REMOTE-ACCESS.md). |
 
 ## Further reading
 
