@@ -92,11 +92,10 @@ try {
   }
   async function contrast(page, label) {
     const results = await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa']).analyze();
-    const bad = results.violations.filter((v) => v.id === 'color-contrast');
-    const other = results.violations.filter((v) => v.id !== 'color-contrast');
-    if (other.length) console.warn('[axe] ' + label + ': ' + other.map((v) => v.id + ' ' + v.nodes.map((n) => n.target.join(' ')).join(',')).join('; '));
-    assert.equal(bad.length, 0, '[axe] ' + label + ' color contrast: ' + bad.flatMap((v) => v.nodes.map((n) => n.target.join(' '))).join(' | '));
-    console.log('[axe] ' + label + ': no color-contrast violations');
+    // Every WCAG 2 A and AA rule axe checks, not only contrast.
+    const detail = results.violations.map((v) => v.id + ' ' + v.nodes.map((n) => n.target.join(' ')).join(',')).join('; ');
+    assert.equal(results.violations.length, 0, '[axe] ' + label + ': ' + detail);
+    console.log('[axe] ' + label + ': no WCAG 2 A/AA violations');
   }
 
   // Desktop, dark theme: the full task.
@@ -142,7 +141,7 @@ try {
         console.log('[resume] switching tasks kept it running; switching back reattached');
         continue;
       }
-      if (approvals === 0) await page.screenshot({ path: path.join(screenshotDir, 'approval-dark.png') });
+      if (approvals === 0) { await page.screenshot({ path: path.join(screenshotDir, 'approval-dark.png') }); await contrast(page, 'approval open (dark)'); }
       // The step behind an open approval waits on the user; it must not say "Working".
       const stuck = await page.locator('.tool.running:not(.waiting)').count();
       if (stuck) throw new Error('A step behind the approval sheet still says Working');
