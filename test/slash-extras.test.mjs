@@ -44,6 +44,7 @@ test('/autocompact and CLAUDE_AUTOCOMPACT_PCT_OVERRIDE move the compaction thres
 
 test('Claude Code aliases, /list-agents, /reload-* and prompt commands', async () => {
   for (const target of Object.values(COMMAND_ALIASES)) assert.ok(Object.hasOwn(BUILTIN_COMMANDS, target), target);
+  assert.match((await runBuiltinCommand('swarm', 'migrate src/api', { root: '.', env: {} })).prompt, /in parallel: migrate src\/api[\s\S]*isolation "worktree"/);
   assert.match((await runBuiltinCommand('peers', '', { root: '.', session: { messages: [] }, env: {} })).output, /No subagents, teammates/);
   assert.deepEqual(await runBuiltinCommand('reload-plugins', '', { root: '.', session: { messages: [] }, env: {} }), { output: '', reload: 'plugins' });
   assert.match((await runBuiltinCommand('reload-skills', '', { root: '.', env: {} })).output, /Nothing to reload/);
