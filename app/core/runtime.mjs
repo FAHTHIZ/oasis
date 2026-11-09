@@ -137,6 +137,8 @@ function normalizePendingShell(items) {
     .filter((item) => item.command);
 }
 
+const ELSEWHERE = Symbol('answered elsewhere');
+
 function pause(ms, signal) {
   return new Promise((resolve) => {
     const timer = setTimeout(resolve, ms);
@@ -377,6 +379,34 @@ export class RuntimeAgent {
   }
 
   // Polls the running job and maps its events onto the app's timeline.
+  /**
+   * Waits for the user's answer here, unless another device (or the terminal)
+   * answers first or the task ends: then ELSEWHERE, and nothing is posted.
+   */
+  async answeredHere(local, requestId, after, signal) {
+    const stop = new AbortController();
+    const onAbort = () => stop.abort();
+    signal.addEventListener('abort', onAbort, { once: true });
+    const watch = (async () => {
+      let since = after;
+      while (!stop.signal.aborted) {
+        let job;
+        try { job = await this.client.api('/api/jobs/' + this.jobId + '?after=' + since + '&wait=' + (this.waitMs || 20_000), { signal: stop.signal }); }
+        catch { if (stop.signal.aborted) return new Promise(() => {}); await pause(Math.max(1000, this.pollMs), stop.signal); continue; }
+        for (const event of job.events || []) {
+          since = Math.max(since, event.id);
+          const data = event.data || {};
+          if (['approval_resolved', 'question_answered'].includes(event.type) && String(data.approvalId || data.questionId || '') === requestId) return ELSEWHERE;
+        }
+        if (['completed', 'error', 'cancelled', 'interrupted'].includes(job.status)) return ELSEWHERE;
+        if (!(job.events || []).length) await pause(this.pollMs, stop.signal);
+      }
+      return new Promise(() => {});
+    })();
+    try { return await Promise.race([local, watch]); }
+    finally { stop.abort(); signal.removeEventListener('abort', onAbort); }
+  }
+
   async follow(signal) {
     // The app renders one bubble per model step: thinking, streamed text,
     // then that step's tool cards. Runtime events are mapped onto that shape.
@@ -491,18 +521,21 @@ export class RuntimeAgent {
           }
           case 'approval_required': {
             if (!live || resolved.has(String(data.approvalId || ''))) break;
-            const value = await this.approve({ name: data.tool || 'runtime', args: { prompt: data.prompt, diff: data.diff, suggestion: data.suggestion, risky: data.risky }, runtime: true });
+            const value = await this.answeredHere(this.approve({ name: data.tool || 'runtime', args: { prompt: data.prompt, diff: data.diff, suggestion: data.suggestion, risky: data.risky }, runtime: true }), String(data.approvalId || ''), event.id, signal);
             // Left for another chat or device while the sheet was open: the
             // question stays open on the computer for whoever looks next.
             if (signal.aborted) return;
+            // Answered on another device: the next poll brings its result.
+            if (value === ELSEWHERE) { resolved.add(String(data.approvalId || '')); this.emit('answered_elsewhere', { kind: 'approval' }); break; }
             const approved = value === 'always' || value === true;
             await this.client.api('/api/jobs/' + this.jobId + '/approval', { method: 'POST', body: { approvalId: data.approvalId, approved, always: value === 'always' } }).catch(() => {});
             break;
           }
           case 'question': {
             if (!live || resolved.has(String(data.questionId || ''))) break;
-            const answer = await this.ask(data);
+            const answer = await this.answeredHere(this.ask(data), String(data.questionId || ''), event.id, signal);
             if (signal.aborted) return;
+            if (answer === ELSEWHERE) { resolved.add(String(data.questionId || '')); this.emit('answered_elsewhere', { kind: 'question' }); break; }
             await this.client.api('/api/jobs/' + this.jobId + '/answer', { method: 'POST', body: { questionId: data.questionId, answer: String(answer || '') } }).catch(() => {});
             break;
           }

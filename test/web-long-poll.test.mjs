@@ -63,3 +63,13 @@ test('job long poll: waits for the next event, returns at once when one is ready
   snapshot = await (await fetch(url(Number.MAX_SAFE_INTEGER, 20_000), { headers })).json();
   assert.ok(Date.now() - begun < 2000);
 });
+
+test('a session that is not saved yet is 404, not a server error', async (t) => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'oasis-web-session404-'));
+  const env = { ...process.env, OASIS_CONFIG_DIR: path.join(root, 'config'), HOME: root };
+  const app = await startOasisWebServer({ root, host: '127.0.0.1', port: 0, env, token: 'test-runtime-token-0123456789' });
+  t.after(async () => { await app.close(); await rm(root, { recursive: true, force: true }); });
+  const response = await fetch('http://127.0.0.1:' + app.port + '/api/sessions/0f1e2d3c-4b5a-4968-8776-655443322110', { headers: { authorization: 'Bearer ' + app.token } });
+  assert.equal(response.status, 404);
+  assert.match((await response.json()).error, /not saved yet or no longer exists/);
+});
