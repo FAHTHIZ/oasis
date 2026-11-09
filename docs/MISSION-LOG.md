@@ -3,6 +3,27 @@
 A short, dated record of changes, tests, benchmark results, blockers and known
 weaknesses. Newest first. Detailed user-facing notes go in the CHANGELOG.
 
+## 2026-11-09 (web app: sidebar, session recovery, remote sign-in, docs)
+
+### Changes
+- Web app: task sidebar (Codex / Claude Code-style) on screens 1100 px and wider, with running and "Needs you" dots, search and New task; Ctrl/Cmd+B toggles it (not inside the terminal, where Ctrl+B belongs to tmux). Glass topbar and composer, aurora background, icon suggestion cards, a conic sweep around the composer while a task runs. All motion is off under `prefers-reduced-motion`.
+- Session recovery: `RuntimeAgent.send` was split into post + `follow()`. The tab saves the running job id and where the turn began; on reload `restoreChat` trims the half-drawn turn and `resume(jobId)` replays the job from the server. Approvals, questions and elicitations already answered in the event log are not asked again; none are asked for a job that is no longer live. Before, a reload mid-task lost the live view and the open approval until the job timed out.
+- Remote sign-in: opt-in **Remember this device** keeps the access key in `localStorage` (default stays per-tab `sessionStorage`). A fresh `#token=` link replaces a remembered rotated key; a stored key the server rejects is deleted and the screen says it no longer works. **Sign out of this browser** in the command palette. The sign-in screen names the host and points to `oasis web key`.
+- Fixed: the refactor briefly truncated `app/core/runtime.mjs` (lost `shellWords` and `RuntimeWorkspace`); caught by `test/runtime-engine.test.mjs` before commit.
+- Connect hint lists NVIDIA NIM and OmniRoute (both presets were already present and verified in `providers.mjs`, `connect.mjs`, `provider-registry.mjs`).
+- Docs: USER-GUIDE, INTERFACES and FIRST-RUN rewritten for the browser-only, remote-first product (no desktop or phone app). README gains "Use it from anywhere", provider key sources, and screenshots from the browser e2e run with honest captions; the earlier real-model screenshots are kept as `real-model-*.png` and linked from the runs table.
+
+### Tests
+- New `test/app-runtime-resume.test.mjs` (replay skips answered approval a1, asks open a2 once; finished job asks nothing; only running agent jobs are saved; bad ids ignored) and `test/app-runtime-device-key.test.mjs`.
+- Browser e2e now reloads the page at the first approval and asserts the sheet comes back with the request shown once, and signs in from a fresh browser with Remember this device, then opens a second tab that reconnects without the link. Axe contrast clean in dark, light, phone and sign-in views.
+- Full `npm test`: 2,335 pass, 0 fail, 8 skipped (before the doc/sign-in edits); after them, the 289 tests in README/docs/CI/app/runtime/web files pass, oxlint clean.
+
+### Blockers and remaining issues
+- No real-model run of the new interface yet: no provider key is available to the agent, and the user's personal credentials are deliberately not used. Screenshots come from the scripted-model e2e.
+- Chat history still lives in browser IndexedDB per device; the server session store should become the source of truth so a second device sees the same chats.
+- The job stream is 350 ms polling; SSE would cut latency and requests.
+- Approvals still use the modal sheet rather than inline timeline cards.
+
 ## 2026-11-09
 
 ### Changes

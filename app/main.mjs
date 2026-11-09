@@ -16,7 +16,7 @@ import { createZip, readZip } from './core/zip.mjs';
 import { renderMarkdown } from './markdown.mjs';
 import { smartConnect, looksLikeConnection, parsePaste, scanLocal, buildChain, nextInChain, configFor, classifyFailure, maskSecret, isGitHubToken } from './core/connect.mjs';
 import { PLUGINS, getPlugin, pluginsFor, suggestPlugins } from './core/plugins.mjs';
-import { detectRuntime, RuntimeAgent, RuntimeWorkspace, tokenFromPaste, saveRuntimeToken } from './core/runtime.mjs';
+import { detectRuntime, RuntimeAgent, RuntimeWorkspace, tokenFromPaste, saveRuntimeToken, forgetRuntimeToken, deviceRemembered } from './core/runtime.mjs';
 import { APP_KEYBOARD_SHORTCUTS, searchAppCommands } from './core/command-palette.mjs';
 import { normalizeTaskProgress } from './core/task-progress.mjs';
 import { RuntimeTerminal, loadXterm } from './core/terminal.mjs';
@@ -290,6 +290,7 @@ function runPaletteCommand(id) {
     'focus-composer': () => $('input').focus(),
     'keyboard-help': () => requestAnimationFrame(() => openNativeDialog('shortcutsDialog')),
     'export-chat': () => downloadChat(),
+    'sign-out': () => { forgetRuntimeToken(); delete document.documentElement.dataset.ready; location.reload(); },
     'open-terminal': () => { toggleFiles(true); showPanelTab('terminal'); }
   };
   closeNativeDialog('commandPaletteDialog');
@@ -350,6 +351,13 @@ document.addEventListener('keydown', (event) => {
   if (modifier && event.key.toLowerCase() === 'k') {
     event.preventDefault();
     if (!$('shortcutsDialog').open) openNativeDialog('commandPaletteDialog');
+    return;
+  }
+  // Ctrl+B / Cmd+B toggles the task sidebar (as in VS Code), except in the
+  // terminal, where Ctrl+B belongs to tmux and readline.
+  if (modifier && !event.altKey && !event.shiftKey && event.key.toLowerCase() === 'b' && !(event.target instanceof Element && event.target.closest('.xterm')) && matchMedia('(min-width: 1100px)').matches) {
+    event.preventDefault();
+    $('sidebarToggle').click();
     return;
   }
   if (event.ctrlKey && !event.metaKey && !event.altKey && (event.key === '`' || event.code === 'Backquote') && RT && !RT.needsToken) {
@@ -492,6 +500,8 @@ async function send(text) {
 // its last save lands in the chat it belongs to (it used to run after the
 // switch and copy the old conversation into the new chat).
 let turnSettled = Promise.resolve();
+// Where the running turn's output starts in `display` (saved with its job id).
+let turnStart = 0;
 async function stopTurn() {
   if (!agent.busy) return;
   agent.stop();
@@ -603,7 +613,7 @@ async function runtimeConnect(text, { surface = 'welcome' } = {}) {
   if (RT.needsToken) {
     const token = tokenFromPaste(value);
     if (!token) { say('error', 'Paste the link OASIS printed in your terminal (it ends in #token=…).'); return false; }
-    saveRuntimeToken(token);
+    saveRuntimeToken(token, globalThis, { remember: Boolean($('rememberDevice') && $('rememberDevice').checked) });
     delete document.documentElement.dataset.ready;
     location.reload();
     return true;
@@ -739,6 +749,7 @@ async function autoDetectLocal() {
 
 function setBusy(busy) {
   document.body.classList.toggle('busy', busy);
+  if (typeof renderSidebar === 'function') void renderSidebar();
   $('sendButton').setAttribute('aria-label', busy ? 'Stop' : 'Send');
   if (typeof updateSteering === 'function') updateSteering();
   $('input').placeholder = busy ? 'Add a note for OASIS while it works…' : 'Ask OASIS to build, fix or explain…';
@@ -1369,6 +1380,15 @@ function handleEvent(event) {
       sound('fail');
       scrollDown(true);
       break;
+    case 'job':
+      // The task now runs on the computer: save where its output starts, so
+      // a reload (or another device) can rebuild the turn and keep following it.
+      { let last = display.length - 1; while (last >= 0 && display[last].role !== 'user') last--; turnStart = last + 1; }
+      persistChat();
+      break;
+    case 'resumed':
+      toast('Reconnected to the task that was running.');
+      break;
     case 'done':
       endTurn('');
       offerUndo();
@@ -1521,11 +1541,13 @@ function persistChat() {
     id: chatId,
     title: chatTitle(),
     display: display.slice(-200).map((entry) => ({ ...entry, tools: entry.tools && entry.tools.map((t) => ({ ...t, content: (t.content || '').slice(0, 2000) })) })),
+    ...(RT && agent.busy && agent.jobId ? { turnStart } : {}),
     messages: RT ? agent.snapshot() : agent.messages.slice(-300).map((m) => (Array.isArray(m.content) ? { ...m, content: textOf(m.content) + ' (image not kept in saved chats)' } : m)),
     ...(!RT ? { pendingSteering: agent.steering.slice(0, 20) } : {})
   }; } catch { return chatSaving; }
   const save = () => saveChat(snapshot);
   chatSaving = chatSaving.then(save, save);
+  chatSaving.then(() => renderSidebar()).catch(() => {});
   return chatSaving;
 }
 async function saveChat(snapshot) {
@@ -1533,6 +1555,7 @@ async function saveChat(snapshot) {
   try {
     await store.setValue(chatKey(projectId, id), {
       messages: snapshot.messages,
+      ...(Number.isInteger(snapshot.turnStart) ? { turnStart: snapshot.turnStart } : {}),
       ...(snapshot.pendingSteering ? { pendingSteering: snapshot.pendingSteering } : {}),
       display: trimmed
     });
@@ -1664,6 +1687,78 @@ async function openRuntimeSession(item) {
   refreshFiles();
   toast('Continuing this session. New messages keep its history.');
 }
+/* ---------- Sidebar: tasks at a glance (wide screens) ---------- */
+// Like the session lists in Codex, Claude Code and Devin: one click to start
+// or switch a task, and a live dot on the one that is working or waiting.
+// It renders the same chat index as the Chats sheet, which stays the way in
+// on narrow screens.
+function relativeTime(ms) {
+  if (!ms) return '';
+  const minutes = Math.round((Date.now() - ms) / 60000);
+  if (minutes < 1) return 'now';
+  if (minutes < 60) return minutes + 'm';
+  const hours = Math.round(minutes / 60);
+  if (hours < 24) return hours + 'h';
+  const days = Math.round(hours / 24);
+  return days < 7 ? days + 'd' : new Date(ms).toLocaleDateString([], { month: 'short', day: 'numeric' });
+}
+let sidebarRender = 0;
+async function renderSidebar() {
+  const list = $('sideTasks');
+  if (!list || getComputedStyle($('sidebar')).display === 'none') return;
+  const ticket = ++sidebarRender;
+  const index = workspace ? await chatIndex(workspace.project.id).catch(() => ({ list: [] })) : { list: [] };
+  if (ticket !== sidebarRender) return;
+  const items = index.list.slice(0, 40);
+  const busy = document.body.classList.contains('busy');
+  const waiting = !$('approvalSheet').hidden;
+  if (!items.some((item) => item.id === chatId) && display.some((entry) => entry.role === 'user')) items.unshift({ id: chatId, title: chatTitle(), updatedAt: Date.now() });
+  $('sideTasksLabel').textContent = workspace ? (workspace.project.name || 'Tasks') : 'Tasks';
+  list.replaceChildren();
+  if (!items.length) {
+    const li = document.createElement('li');
+    li.className = 'side-empty';
+    li.textContent = workspace ? 'Your tasks appear here.' : 'Connect to start a task.';
+    list.appendChild(li);
+  }
+  for (const item of items) {
+    const current = item.id === chatId;
+    const li = document.createElement('li');
+    const open = document.createElement('button');
+    open.type = 'button';
+    open.className = 'side-task' + (current ? ' current' : '') + (current && busy ? (waiting ? ' waiting' : ' running') : '');
+    if (current) open.setAttribute('aria-current', 'page');
+    open.innerHTML = '<span class="side-dot" aria-hidden="true"></span><span class="side-title"></span><span class="side-when"></span>';
+    open.querySelector('.side-title').textContent = item.title || 'New chat';
+    open.querySelector('.side-when').textContent = current && busy ? (waiting ? 'Needs you' : 'Working') : relativeTime(item.updatedAt);
+    open.title = item.title || 'New chat';
+    open.addEventListener('click', () => { if (!current) void openChat(item.id).then(renderSidebar); });
+    li.appendChild(open);
+    list.appendChild(li);
+  }
+  const host = location.host;
+  $('sideStatusText').textContent = RT && !RT.needsToken ? (location.protocol === 'https:' ? 'Secure · ' : '') + host : RT ? 'Waiting for access key' : 'This browser only';
+  $('sideStatus').classList.toggle('ok', Boolean(RT && !RT.needsToken));
+}
+const SIDEBAR_KEY = 'oasis.sidebar';
+function applySidebar() {
+  let hidden = false;
+  try { hidden = localStorage.getItem(SIDEBAR_KEY) === 'hidden'; } catch { /* storage blocked */ }
+  document.documentElement.classList.toggle('side-hidden', hidden);
+  const button = $('sidebarToggle');
+  button.setAttribute('aria-expanded', String(!hidden));
+  button.title = hidden ? 'Show sidebar' : 'Hide sidebar';
+  button.setAttribute('aria-label', button.title);
+  if (!hidden) void renderSidebar();
+}
+$('sidebarToggle').addEventListener('click', () => {
+  const hidden = !document.documentElement.classList.contains('side-hidden');
+  try { localStorage.setItem(SIDEBAR_KEY, hidden ? 'hidden' : 'shown'); } catch { /* storage blocked */ }
+  applySidebar();
+});
+$('sideNewTask').addEventListener('click', async () => { await newChat(); void renderSidebar(); });
+$('sideSearch').addEventListener('click', () => openNativeDialog('commandPaletteDialog'));
+matchMedia('(min-width: 1100px)').addEventListener('change', () => void renderSidebar());
 $('chatsButton').addEventListener('click', () => openChats());
 $('newChatButton').addEventListener('click', async () => { closeSheet('chatsSheet'); await newChat(); });
 
@@ -1679,10 +1774,25 @@ async function restoreChat({ keepChat = false } = {}) {
   if (saved && saved.display && saved.display.length) {
     if (RT) agent.load(saved.messages);
     else agent.load(saved.messages, saved.pendingSteering);
-    display = saved.display;
+    // A task that was running when this page last saved: show the chat up to
+    // that turn, then replay and follow the task from the computer.
+    const resumeId = RT && agent.resumeJobId && await agent.jobStatus(agent.resumeJobId) ? agent.resumeJobId : '';
+    display = resumeId && Number.isInteger(saved.turnStart) ? saved.display.slice(0, saved.turnStart) : saved.display;
     renderSavedDisplay(display);
     scrollDown(true);
+    if (resumeId) void resumeTurn(resumeId);
   } else $('welcome').hidden = false;
+  void renderSidebar();
+}
+async function resumeTurn(jobId) {
+  if (agent.busy || !agent.resume) return;
+  setBusy(true);
+  let settle;
+  turnEdited = false;
+  turnSettled = new Promise((resolve) => { settle = resolve; });
+  try { await agent.resume(jobId); }
+  catch { /* shown through the error event */ }
+  finally { setBusy(false); persistChat(); refreshFiles(); settle(); if (RT) refreshRuntimeStatus().then(updateProjectUI).catch(() => {}); }
 }
 
 /* ---------- Approvals ---------- */
@@ -1762,6 +1872,7 @@ function markWaitingTools(waiting) {
     updateStepRow(group, tool);
   }
   if (waiting && !group.el.classList.contains('open')) setGroupOpen(group, true);
+  void renderSidebar();
 }
 function answerApproval(value) {
   markWaitingTools(false);
@@ -1990,7 +2101,7 @@ function updateModeUI() {
   $('modeLabel').textContent = mode === 'auto' ? 'Full auto' : mode === 'edits' ? 'Auto edit' : mode === 'plan' ? 'Plan' : 'Ask first';
   for (const button of $('modeMenu').querySelectorAll('button')) button.setAttribute('aria-checked', String(button.dataset.mode === mode));
   const entry = activeEntry();
-  $('modelChip').textContent = entry ? entry.model.split('/').pop().replace(/:free$/, ' (free)') : (innerWidth < 440 ? 'Connect' : 'Connect a model');
+  $('modelChip').textContent = entry ? entry.model.split('/').pop().replace(/:free$/, ' (free)') : RT && RT.needsToken ? 'Not signed in' : (innerWidth < 440 ? 'Connect' : 'Connect a model');
   $('modelChip').classList.toggle('empty', !entry);
   $('modelChip').title = entry ? entry.connection.label + ' · ' + entry.model : 'Paste an API key or model link to connect';
 }
@@ -2086,8 +2197,10 @@ function renderWelcome() {
   $('welcomeTitle').textContent = RT && RT.needsToken ? 'Paste your OASIS link.' : ready ? 'What should we build?' : 'Paste a key to start.';
   $('connectInput').placeholder = RT && RT.needsToken ? 'Paste the link from your terminal' : 'Paste a key or link';
   $('connectHint').hidden = Boolean(RT && RT.needsToken);
+  $('rememberRow').hidden = !(RT && RT.needsToken);
+  if (RT && RT.needsToken) $('rememberDevice').checked = deviceRemembered();
   $('welcomeLede').textContent = RT && RT.needsToken
-    ? 'OASIS is running on this computer. Paste the link it printed in your terminal to connect this window.'
+    ? (RT.staleToken ? 'The saved access key no longer works; it may have been rotated. ' : 'OASIS is running on ' + location.host + '. ') + 'Paste the link or access key it printed (run oasis web key on that computer to see it again).'
     : ready
       ? (RT ? 'Working in ' + (RT.status.workspaceName || 'this folder') + ' with ' + entry.model + '. Describe what you want in plain words.' : 'Using ' + entry.model + ' on ' + entry.connection.label + '. Describe what you want in plain words.')
       : RT
@@ -2112,10 +2225,13 @@ function renderWelcome() {
   });
   const box = $('suggestions');
   box.replaceChildren();
-  if (ready) for (const text of SUGGESTIONS) {
+  const SUGGESTION_ICONS = ['eye', 'bug', 'check', 'globe'];
+  if (ready) for (const [i, text] of SUGGESTIONS.entries()) {
     const chip = document.createElement('button');
     chip.className = 'suggestion';
-    chip.textContent = text;
+    chip.style.setProperty('--i', String(i));
+    chip.innerHTML = '<svg viewBox="0 0 20 20" aria-hidden="true"><path d="' + ICON_PATHS[SUGGESTION_ICONS[i % 4]] + '" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg><span></span>';
+    chip.querySelector('span').textContent = text;
     chip.addEventListener('click', () => { $('input').value = text; autosize(); renderPluginSuggest(); $('input').focus(); });
     box.appendChild(chip);
   }
@@ -2800,7 +2916,7 @@ for (const id of ['folderInput', 'filesInput']) {
 }
 
 function updateProjectUI() {
-  $('projectName').textContent = workspace ? workspace.project.name : RT ? 'This computer' : 'No project';
+  $('projectName').textContent = workspace ? workspace.project.name : RT ? (RT.needsToken ? location.hostname : 'This computer') : 'No project';
   const branch = RT && RT.status && RT.status.branch;
   $('projectBranch').hidden = !branch;
   $('projectBranch').textContent = branch || '';
@@ -3127,10 +3243,12 @@ $('pushForm').addEventListener('submit', async (event) => {
 /* ---------- Boot ---------- */
 async function startRuntime(found) {
   document.documentElement.classList.add('runtime');
-  RT = { client: found.client, status: found.status || null, needsToken: Boolean(found.needsToken), entry: null, models: [], label: '' };
+  RT = { client: found.client, status: found.status || null, needsToken: Boolean(found.needsToken), staleToken: Boolean(found.staleToken), entry: null, models: [], label: '' };
   if (RT.needsToken) {
     updateProjectUI();
+    updateModeUI();
     await restoreChat();
+    renderSidebar();
     return;
   }
   RT.rootPath = RT.status.workspacePath;
@@ -3302,6 +3420,8 @@ function setupDictation() {
 
 async function boot() {
   applyTheme();
+  applySidebar();
+  $('sideSearchKey').textContent = displayShortcut('MOD+K');
   fillProviderOptions();
   updateModeUI();
   const found = await detectRuntime().catch(() => ({ available: false }));

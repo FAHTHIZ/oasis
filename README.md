@@ -4,7 +4,7 @@
 <h1 align="center">OASIS</h1>
 <p align="center">
   <strong>The open-source coding agent for any model.</strong><br>
-  Work in your terminal or a web app. Bring your own model, your Claude Code plugins and your MCP servers.<br>
+  Run it on your machine or server, use it from any browser. Bring your own model, your Claude Code plugins and your MCP servers.<br>
   OASIS supplies the tools, subagents, permissions and a check that the work was actually verified.
 </p>
 <p align="center">
@@ -26,8 +26,8 @@
 </p>
 
 <p align="center">
-  <img src="assets/screenshots/web-task-dark.png" alt="The OASIS web app in dark mode after a real gpt-oss-20b run: a list of completed steps (read slug.mjs, edited it, wrote a test, reviewed the diff, ran the tests), the agent's summary, and the Files panel showing the changed files." width="100%">
-  <br><sub>The OASIS web app after an unscripted run with a free 20B model. Recorded 8 November 2026.</sub>
+  <img src="assets/screenshots/web-task-dark.png" alt="The OASIS web app in dark mode after a finished task: the task sidebar, the request, short progress updates alternating with folded execution groups (an explore subagent, edits with diff review, a test run), the final summary, and the Files panel with the changed files." width="100%">
+  <br><sub>Captured by the browser end-to-end test: the real OASIS runtime editing real files and running real tests, driven by a scripted model so every run is reproducible. Real-model runs are listed under <a href="#tested-like-a-real-user">Tested like a real user</a>.</sub>
 </p>
 
 ## Why OASIS
@@ -35,6 +35,8 @@
 - **Any model, no lock-in.** OpenAI, Anthropic, Gemini, OpenRouter, Groq, DeepSeek, Mistral, xAI, Bedrock, Vertex AI, Foundry, any OpenAI-compatible endpoint, gateways such as [OmniRoute](https://github.com/cheaper-inference/omniroute), or a local server (Ollama, LM Studio, llama.cpp, vLLM). Backup models and failover are built in.
 - **Your Claude Code setup works as is.** `CLAUDE.md`, `.claude/agents`, skills, slash commands, hooks, settings, `.mcp.json` and Claude Code plugins from any marketplace load without conversion.
 - **It checks its own work.** After the agent edits code, a verification step sends it back if it claims success without reviewing its diff or running the checks. Every edit is checkpointed, so Undo always works.
+- **Remote-first and secure.** One web app for laptop, tablet and phone. The agent, files, shell and keys stay on your machine; the browser gets a 256-bit access key, HTTPS-only provider setup, DNS-rebinding protection and brute-force lockout. Close the tab mid-task and it picks up where it was.
+- **You can see what it is doing.** Plain-language updates interleaved with live execution groups you can expand down to each command's exact input and output, the way Perplexity Computer, Devin and Claude Code show their work.
 - **A real agent system.** Parallel, background and resumable subagents, agent teams with a shared task board, and a separate git worktree per agent when you want isolation.
 - **Safety you can read.** Clear permission modes, shell-command risk analysis, protected paths, secret scanning, guarded network tools and optional OS or container sandboxes.
 
@@ -81,26 +83,35 @@ OASIS has two interfaces, both on the same runtime, sessions and settings. Start
   </tr>
   <tr>
     <td><a href="assets/demo/oasis-real-model-demo.mp4"><img src="assets/demo/oasis-real-model-demo.gif" alt="Unscripted OASIS terminal run with gpt-oss-20b: the agent reads a file, fixes a bug, adds a test, runs it after approval and is sent back to review its changes."></a></td>
-    <td><img src="assets/screenshots/web-approval-dark.png" alt="The OASIS web app asking for approval before a step in a real run."></td>
+    <td><img src="assets/screenshots/web-approval-dark.png" alt="The OASIS web app asking for approval to run npm test, with the step behind it marked as waiting."></td>
   </tr>
   <tr>
     <td>Streaming diffs with word highlights, inline images, <code>/tasks</code>, <code>/rewind</code>, <code>/export</code> to Markdown or HTML. <code>oasis -p</code> and <code>oasis exec</code> for scripts, with JSON output and <code>--output-schema</code>.</td>
-    <td>Step-by-step activity, Files and Changes panels, a real terminal (<kbd>Ctrl</kbd>+<kbd>&#96;</kbd>), plan mode, Undo, cost and context meters, <code>/</code> and <code>@</code> autocomplete, voice input, and one-click Claude Code plugins.</td>
+    <td>Live timeline with expandable execution groups, a task sidebar, Files and Changes panels, a real terminal (<kbd>Ctrl</kbd>+<kbd>&#96;</kbd>), plan mode, Undo, cost and context meters, <code>/</code> and <code>@</code> autocomplete, voice input, and one-click Claude Code plugins.</td>
   </tr>
 </table>
 
 The web app runs on a computer or server you control, not a hosted service, and opens in any modern browser. There is no separate desktop or mobile app to install.
 
+### Use it from anywhere
+
+```sh
+oasis web --public-url https://oasis.example.com --trust-proxy   # behind Caddy, nginx, Tailscale Serve or Cloudflare Tunnel
+oasis web key                                                    # show the access key; --rotate replaces it
+```
+
+Open the address on any device, paste the link once and tick **Remember this device**. Tasks run on the server, so a reload or dropped connection reattaches to the running task and asks any open approval again. Recipes and the full security model: [Remote access](docs/REMOTE-ACCESS.md).
+
 <table>
   <tr>
     <td width="50%"><img src="assets/screenshots/web-welcome-light.png" alt="The OASIS web app welcome screen in light mode, with suggested first tasks."></td>
     <td width="22%"><img src="assets/screenshots/web-phone-dark.png" alt="The OASIS web app at phone width in dark mode."></td>
-    <td width="28%"><img src="assets/screenshots/real-model-pdf.png" alt="The OASIS web app reading an uploaded PDF and summarising it."></td>
+    <td width="28%"><img src="assets/screenshots/web-sign-in-dark.png" alt="The OASIS sign-in screen asking for the link or access key, with a Remember this device checkbox."></td>
   </tr>
   <tr>
     <td><sub>Light theme</sub></td>
     <td><sub>Phone width</sub></td>
-    <td><sub>Reading an uploaded PDF</sub></td>
+    <td><sub>Signing in from another device</sub></td>
   </tr>
 </table>
 
@@ -162,6 +173,7 @@ Stdio, HTTP and SSE, with OAuth (`oasis mcp login`), elicitation and MCP Tasks. 
 ```sh
 oasis connect                              # paste a key (kept out of shell history)
 oasis connect --from-env gemini            # use GEMINI_API_KEY
+oasis connect --from-env nvidia            # use NVIDIA_API_KEY from build.nvidia.com (nvapi-…)
 oasis connect http://localhost:11434       # Ollama, LM Studio, llama.cpp or vLLM
 oasis connect http://127.0.0.1:20128/v1    # an OmniRoute gateway
 ```
@@ -176,9 +188,9 @@ These runs used the released app the way a person would: type a request, approve
 | --- | --- | --- | --- |
 | "Build a small to-do web app in index.html" | Web app | gpt-oss-20b (free) | Working app in about 6 minutes |
 | "math.mjs add() is wrong. Fix it and add a test, then run it." | `oasis -p` | gpt-oss-20b | Fixed, test written and passing, exit 0. About 10 minutes, mostly provider wait. |
-| "slugify() only replaces the first space. Fix it, add a test, run the tests." | Web app, Ask first | gpt-oss-20b | Fixed with a global regex, test added, 1 passing. 409 s, 2 approvals. Screenshot above. |
+| "slugify() only replaces the first space. Fix it, add a test, run the tests." | Web app, Ask first | gpt-oss-20b | Fixed with a global regex, test added, 1 passing. 409 s, 2 approvals. [Screenshot](assets/screenshots/real-model-task-dark.png) (earlier interface). |
 | Fix a bug and run the tests after approval | Terminal | gpt-oss-20b | Passed |
-| Read an uploaded PDF | Web app | gpt-oss-20b | Passed in 49 s |
+| Read an uploaded PDF | Web app | gpt-oss-20b | Passed in 49 s ([screenshot](assets/screenshots/real-model-pdf.png)) |
 | Install 16 Claude Code plugins and use them | Web app and terminal | gpt-oss-20b | All installed; hooks, skills and MCP servers ran |
 | Call an MCP tool in auto mode | Terminal | gpt-oss-20b | Passed |
 | Delegate to an `explore` subagent in a worktree | Terminal | gpt-oss-20b | Passed; worktree removed afterwards |
@@ -206,7 +218,7 @@ Two tasks and one trial cannot rank agents, and OASIS does not guarantee that ev
 | Open source | Yes | No | Yes | Yes | Yes | Yes |
 | Any model | Yes | Anthropic | OpenAI first | Google | Yes | Yes |
 | Runs Claude Code plugins | Yes, plus Codex plugins and Gemini extensions | Yes | Own plugins | Own extensions | Own plugins | Own skills |
-| Web interface | Local web app | Cloud | Cloud | No | Self-hosted web app | Messaging apps |
+| Web interface | Self-hosted, remote-ready web app | Cloud | Cloud | No | Self-hosted web app | Messaging apps |
 | Subagents | Parallel, background, resumable, teams | Yes | Yes | Yes | Yes | Yes |
 | Checks its work before it says done | Built in | With hooks | Not built in | Not built in | Not built in | Not built in |
 
@@ -252,7 +264,7 @@ npm run check      # tests, benchmark regressions, eval validation
 npm run lint
 ```
 
-CI also runs platform security tests, a live Docker sandbox test, native PTY tests and a browser test that drives the web app (a task with an approval, plus color-contrast checks in dark, light and phone views). Contributions are welcome: start with the [Contributing guide](CONTRIBUTING.md).
+CI also runs platform security tests, a live Docker sandbox test, native PTY tests and a browser test that drives the web app like a person: a task with an approval, a page reload mid-task that must reattach, signing in from a second browser with Remember this device, and color-contrast checks in dark, light, phone and sign-in views. Contributions are welcome: start with the [Contributing guide](CONTRIBUTING.md).
 
 ## Documentation
 

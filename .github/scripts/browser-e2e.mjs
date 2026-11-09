@@ -108,8 +108,20 @@ try {
   // "Ask first" mode: approve each change in the app's approval sheet.
   const deadline = Date.now() + 60_000;
   let approvals = 0;
+  let reloaded = false;
   while (Date.now() < deadline) {
     if (await page.locator('#approvalSheet').isVisible()) {
+      if (!reloaded) {
+        // Session recovery: reloading mid-task (closed tab, dropped Wi-Fi)
+        // reattaches to the running job and asks the same question again.
+        reloaded = true;
+        await page.reload({ waitUntil: 'domcontentloaded' });
+        await page.locator('#approvalSheet').waitFor({ state: 'visible', timeout: timeoutMs });
+        assert.match(await page.locator('#transcript').innerText(), /add\(\) in math\.mjs is wrong/, 'the restored chat keeps the request');
+        assert.equal(await page.locator('.msg.user').count(), 1, 'the request is not shown twice after a reload');
+        console.log('[resume] reload reattached to the running task');
+        continue;
+      }
       if (approvals === 0) await page.screenshot({ path: path.join(screenshotDir, 'approval-dark.png') });
       // The step behind an open approval waits on the user; it must not say "Working".
       const stuck = await page.locator('.tool.running:not(.waiting)').count();
@@ -152,6 +164,29 @@ try {
     await view.page.screenshot({ path: path.join(screenshotDir, 'welcome-' + label + '.png') });
     await contrast(view.page, 'welcome (' + label + ')');
     await view.context.close();
+  }
+
+  // Remote sign-in: a browser without the key sees the sign-in screen, pastes
+  // the link, ticks "Remember this device", and a new tab reconnects on its own.
+  {
+    const bare = 'http://127.0.0.1:' + app.port + '/app/';
+    const context = await browser.newContext({ serviceWorkers: 'block', viewport: { width: 1280, height: 800 }, colorScheme: 'dark' });
+    const page = await context.newPage();
+    page.on('pageerror', (error) => errors.push(error.message));
+    await page.goto(bare, { waitUntil: 'domcontentloaded', timeout: timeoutMs });
+    await page.waitForFunction(() => /Paste your OASIS link/.test(document.getElementById('welcomeTitle')?.textContent || ''), null, { timeout: timeoutMs });
+    await page.locator('#rememberRow').waitFor({ state: 'visible' });
+    await contrast(page, 'sign-in (dark)');
+    await page.screenshot({ path: path.join(screenshotDir, 'sign-in-dark.png') });
+    await page.locator('#connectInput').fill(url);
+    await page.locator('#rememberDevice').check();
+    await page.locator('#connectButton').click();
+    await page.waitForFunction(() => /e2e-coder/.test(document.getElementById('modelChip')?.textContent || ''), null, { timeout: timeoutMs });
+    const second = await context.newPage();
+    await second.goto(bare, { waitUntil: 'domcontentloaded', timeout: timeoutMs });
+    await second.waitForFunction(() => /e2e-coder/.test(document.getElementById('modelChip')?.textContent || ''), null, { timeout: timeoutMs });
+    console.log('[sign-in] remembered device reconnected in a new tab');
+    await context.close();
   }
 
   assert.deepEqual(errors.filter((text) => !/favicon/.test(text)), [], 'no page or console errors');
