@@ -9,6 +9,7 @@ export const APP_PALETTE_COMMANDS = Object.freeze([
   { id: 'open-plugins', label: 'Browse plugins and skills', description: 'Discover the integrations and specialist skills available to OASIS', section: 'Integrations', keywords: 'mcp tools extensions connectors plugins skills' },
   { id: 'open-settings', label: 'Open settings', description: 'Manage model providers, approvals and workspace behaviour', section: 'Workspace', keywords: 'configuration preferences model provider api key' },
   { id: 'approval-mode', label: 'Change approval mode', description: 'Choose Ask first, Auto edit or Full auto', section: 'Workspace', keywords: 'permissions safety approval autonomy' },
+  { id: 'sign-out', label: 'Sign out of this browser', description: 'Forget the access key here; open the OASIS link again to come back', section: 'Workspace', keywords: 'logout log out forget device access key lock', runtimeOnly: true },
   { id: 'focus-composer', label: 'Focus message box', description: 'Return to the message composer', section: 'Navigation', keywords: 'prompt input chat type message' },
   { id: 'keyboard-help', label: 'Keyboard shortcuts and help', description: 'See every supported keyboard shortcut', section: 'Help', keywords: 'help keys keyboard shortcuts guide', shortcut: 'MOD+/' }
 ]);
@@ -18,6 +19,7 @@ export const APP_KEYBOARD_SHORTCUTS = Object.freeze([
   { keys: '/', label: 'Open the command palette from the message box', detail: 'Type / when the message box is empty. Connected to OASIS on a computer, / suggests commands and skills instead; Ctrl+K opens the palette.' },
   { keys: '@', label: 'Mention a project file', detail: 'Type @ and part of a name; Tab or Enter inserts the path.' },
   { keys: 'Ctrl+`', label: 'Open or hide the terminal', detail: 'Connected to OASIS on a computer.' },
+  { keys: 'MOD+B', label: 'Show or hide the task sidebar', detail: 'On wide screens.' },
   { keys: 'MOD+/', label: 'Open keyboard shortcuts and help', detail: 'Works anywhere in the browser workspace.' },
   { keys: '?', label: 'Open keyboard shortcuts', detail: 'When you are not typing in a box or the terminal.' },
   { keys: 'Enter', label: 'Send your message', detail: 'On a desktop keyboard. On touch devices, use the Send button.' },

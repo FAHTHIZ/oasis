@@ -8,20 +8,36 @@ import { SubagentTracker } from './subagents.mjs';
 import { extractRuntimeTodos } from './task-progress.mjs';
 
 const TOKEN_KEY = 'oasis.web.token';
+// Opt-in: "Remember this device" keeps the access key in localStorage so a
+// phone or laptop you own reconnects without the link. Off by default; the key
+// otherwise lives only in this tab's sessionStorage.
+const DEVICE_KEY = 'oasis.web.token.device';
 const TOKEN_RE = /(?:^#|[#&?])token=([A-Za-z0-9_-]{16,200})/;
+const STORED_TOKEN_RE = /^[A-Za-z0-9_-]{16,200}$/;
 
-/** Read the runtime token from the address (#token=…) or this tab's storage. */
+function stored(storage, key) {
+  try { const value = storage && storage.getItem(key) || ''; return STORED_TOKEN_RE.test(value) ? value : ''; } catch { return ''; }
+}
+
+/** Read the runtime token from the address (#token=…), this tab, or a remembered device key. */
 export function runtimeToken(win = globalThis) {
   try {
     const hash = String(win.location && win.location.hash || '');
     const match = hash.match(TOKEN_RE);
     if (match) {
       try { win.sessionStorage.setItem(TOKEN_KEY, match[1]); } catch { /* storage blocked */ }
+      // A fresh link replaces a remembered key that has since been rotated.
+      if (stored(win.localStorage, DEVICE_KEY)) { try { win.localStorage.setItem(DEVICE_KEY, match[1]); } catch { /* storage blocked */ } }
       try { win.history.replaceState(null, '', win.location.pathname + win.location.search); } catch { /* sandboxed */ }
       return match[1];
     }
-    return win.sessionStorage.getItem(TOKEN_KEY) || '';
+    return stored(win.sessionStorage, TOKEN_KEY) || stored(win.localStorage, DEVICE_KEY);
   } catch { return ''; }
+}
+
+/** Is this device set to remember the access key? */
+export function deviceRemembered(win = globalThis) {
+  return Boolean(stored(win.localStorage, DEVICE_KEY));
 }
 
 /** Accept a pasted runtime link (http://host:port/app/#token=…) or a bare token. */
@@ -32,8 +48,18 @@ export function tokenFromPaste(text) {
   return /^[A-Za-z0-9_-]{32,200}$/.test(value) && !/^(sk|hf|gsk|xai|AIza|ghp|github_pat|pplx|nvapi|csk|r8|fw)[-_]/i.test(value) ? value : '';
 }
 
-export function saveRuntimeToken(token, win = globalThis) {
+export function saveRuntimeToken(token, win = globalThis, { remember = false } = {}) {
   try { win.sessionStorage.setItem(TOKEN_KEY, token); } catch { /* storage blocked */ }
+  try {
+    if (remember) win.localStorage.setItem(DEVICE_KEY, token);
+    else win.localStorage.removeItem(DEVICE_KEY);
+  } catch { /* storage blocked */ }
+}
+
+/** Sign this browser out: forget the key in this tab and on this device. */
+export function forgetRuntimeToken(win = globalThis) {
+  try { win.sessionStorage.removeItem(TOKEN_KEY); } catch { /* storage blocked */ }
+  try { win.localStorage.removeItem(DEVICE_KEY); } catch { /* storage blocked */ }
 }
 
 export class RuntimeClient {
@@ -83,7 +109,12 @@ export async function detectRuntime({ win = globalThis, fetchImpl = globalThis.f
     const status = await client.api('/api/status');
     return { available: true, client, status };
   } catch (error) {
-    if (error.status === 401) return { available: true, needsToken: true };
+    if (error.status === 401) {
+      // A stored key that no longer works (rotated, or another server) is dropped
+      // so the sign-in screen does not keep retrying it.
+      if (token) forgetRuntimeToken(win);
+      return { available: true, needsToken: true, staleToken: Boolean(token) };
+    }
     return { available: false };
   }
 }
@@ -124,6 +155,8 @@ function toolArgs(data) {
  * Same interface as the in-browser Agent (busy, send, stop, reset, load), so
  * the chat UI does not care where the agent runs. Events use the app's names.
  */
+const JOB_ID_RE = /^[a-f0-9-]{36}$/i;
+
 export class RuntimeAgent {
   constructor({ client, onEvent = () => {}, approve = async () => false, ask = async () => '', getMode = () => 'ask', getPlugins = () => [], pollMs = 350 } = {}) {
     this.client = client;
@@ -139,21 +172,66 @@ export class RuntimeAgent {
     this.usage = { input: 0, output: 0 };
     this.sessionId = '';
     this.jobId = '';
+    this.jobKind = '';
+    this.resumeJobId = '';
     this.controller = null;
     this.pendingShell = [];
   }
 
   emit(type, data = {}) { try { this.onEvent({ type, ...data }); } catch { /* UI errors never stop the agent */ } }
 
-  reset() { this.pendingShell = []; this.sessionId = ''; this.messages = []; this.todos = []; this.usage = { input: 0, output: 0 }; }
+  reset() { this.pendingShell = []; this.sessionId = ''; this.resumeJobId = ''; this.messages = []; this.todos = []; this.usage = { input: 0, output: 0 }; }
 
   load(state) {
-    if (state && typeof state === 'object' && !Array.isArray(state) && typeof state.sessionId === 'string') this.sessionId = state.sessionId;
+    const valid = state && typeof state === 'object' && !Array.isArray(state);
+    if (valid && typeof state.sessionId === 'string') this.sessionId = state.sessionId;
+    // A task that was still running when the page closed: the app can follow it again.
+    this.resumeJobId = valid && typeof state.jobId === 'string' && JOB_ID_RE.test(state.jobId) ? state.jobId : '';
     this.pendingShell = normalizePendingShell(state && state.pendingShell);
     this.messages = [];
   }
 
-  snapshot() { return { sessionId: this.sessionId, pendingShell: normalizePendingShell(this.pendingShell) }; }
+  snapshot() { return { sessionId: this.sessionId, pendingShell: normalizePendingShell(this.pendingShell), ...(this.busy && this.jobId && this.jobKind === 'agent' ? { jobId: this.jobId } : {}) }; }
+
+  /** The task's status on the computer ('running', 'completed', …), or '' when it is unknown or expired. */
+  async jobStatus(jobId) {
+    if (!JOB_ID_RE.test(String(jobId || ''))) return '';
+    try {
+      const job = await this.client.api('/api/jobs/' + jobId + '?after=' + Number.MAX_SAFE_INTEGER);
+      return typeof job.status === 'string' ? job.status : '';
+    } catch { return ''; }
+  }
+
+  /**
+   * Follow a task that is already running, for example after the page was
+   * reloaded or opened on another device. Every event is replayed from the
+   * start so the timeline rebuilds; approvals and questions that were already
+   * answered are not asked again, and ones still open are asked now.
+   */
+  async resume(jobId) {
+    if (this.busy) throw new Error('OASIS is still working on the last message.');
+    if (!JOB_ID_RE.test(String(jobId || ''))) return false;
+    this.busy = true;
+    this.controller = new AbortController();
+    this.jobId = jobId;
+    this.jobKind = 'agent';
+    this.resumeJobId = '';
+    try {
+      this.emit('resumed', { jobId });
+      this.emit('thinking');
+      await this.follow(this.controller.signal);
+    } catch (error) {
+      if (this.controller && this.controller.signal.aborted) this.emit('stopped');
+      else this.emit('error', { message: error.message || String(error) });
+    } finally {
+      this.busy = false;
+      this.jobId = '';
+      this.jobKind = '';
+      this.controller = null;
+      this.emit('done');
+    }
+    return true;
+  }
 
   /** Send a note into the running task; the runtime reads it before its next step. */
   async steer(text) {
@@ -252,6 +330,35 @@ export class RuntimeAgent {
     }
     if (names.length) message += '\n\n(Use the ' + names.join(', ') + ' plugin' + (names.length > 1 ? 's' : '') + (skills.length ? ': skills ' + skills.join(', ') : '') + '.)';
     if (message.length > 12000) message = message.slice(0, 12000);
+    try {
+      this.emit('thinking');
+      const started = await this.client.api('/api/chat', {
+        method: 'POST',
+        signal,
+        body: { message, ...(pictures.length ? { images: pictures } : {}), ...(this.sessionId ? { sessionId: this.sessionId } : {}), permissionMode: APP_TO_RUNTIME_MODE[this.getMode()] || 'default' }
+      });
+      this.jobId = started.jobId;
+      this.jobKind = 'agent';
+      if (started.sessionId) this.sessionId = started.sessionId;
+      // The runtime accepted this prompt, so the terminal context is represented
+      // in session history. Keep it if submission failed before this point.
+      if (carriedShell.length) this.pendingShell = [];
+      this.emit('job', { jobId: this.jobId });
+      await this.follow(signal);
+    } catch (error) {
+      if (signal.aborted) this.emit('stopped');
+      else this.emit('error', { message: error.message || String(error) });
+    } finally {
+      this.busy = false;
+      this.jobId = '';
+      this.jobKind = '';
+      this.controller = null;
+      this.emit('done');
+    }
+  }
+
+  // Polls the running job and maps its events onto the app's timeline.
+  async follow(signal) {
     // The app renders one bubble per model step: thinking, streamed text,
     // then that step's tool cards. Runtime events are mapped onto that shape.
     let stepText = '';
@@ -282,138 +389,129 @@ export class RuntimeAgent {
       } else this.emit('assistant', { content: stepText || finalText || '', toolCalls: [] });
       stepText = ''; stepHasTools = false; stepTextFinal = false;
     };
-    try {
-      this.emit('thinking');
-      const started = await this.client.api('/api/chat', {
-        method: 'POST',
-        signal,
-        body: { message, ...(pictures.length ? { images: pictures } : {}), ...(this.sessionId ? { sessionId: this.sessionId } : {}), permissionMode: APP_TO_RUNTIME_MODE[this.getMode()] || 'default' }
-      });
-      this.jobId = started.jobId;
-      if (started.sessionId) this.sessionId = started.sessionId;
-      // The runtime accepted this prompt, so the terminal context is represented
-      // in session history. Keep it if submission failed before this point.
-      if (carriedShell.length) this.pendingShell = [];
-      let after = 0;
-      let done = false;
-      let idle = 0;
-      const subagents = new SubagentTracker();
-      while (!done) {
+    // Approvals, questions and forms answered earlier (before a reload) are
+    // known from their resolution events and never asked twice.
+    const resolved = new Set();
+    let after = 0;
+    let done = false;
+    let idle = 0;
+    const subagents = new SubagentTracker();
+    while (!done) {
+      if (signal.aborted) { this.emit('stopped'); break; }
+      let job;
+      try { job = await this.client.api('/api/jobs/' + this.jobId + '?after=' + after, { signal }); }
+      catch (error) {
         if (signal.aborted) { this.emit('stopped'); break; }
-        let job;
-        try { job = await this.client.api('/api/jobs/' + this.jobId + '?after=' + after, { signal }); }
-        catch (error) {
-          if (signal.aborted) { this.emit('stopped'); break; }
-          if (error.status === 404) throw new Error('The task ended on this computer before the page could follow it.');
-          idle++;
-          if (idle > 20) throw new Error('Lost the connection to OASIS on this computer.');
-          await pause(1000, signal);
-          continue;
-        }
-        idle = 0;
-        for (const event of job.events || []) {
-          after = Math.max(after, event.id);
-          const data = event.data || {};
-          switch (event.type) {
-            case 'started': if (data.sessionId) this.sessionId = data.sessionId; break;
-            case 'agent_activity': if (subagents.update(data)) this.emit('subagents', { workers: subagents.list() }); break;
-            case 'assistant_delta': if (data.text) addText(String(data.text), false); break;
-            case 'assistant_text': if (data.text) addText(String(data.text), true); break;
-            case 'command_output': if (data.text) addText(String(data.text), true); break;
-            // The runtime keeps working after a streamed reply to check its
-            // edits. End that bubble so the next reply does not run into it.
-            case 'verification_gate': if (stepText && !stepHasTools) stepTextFinal = true; break;
-            case 'stream_restarted': stepText = ''; this.emit('retry', { attempt: data.attempt || 1 }); break;
-            case 'compaction_started': this.emit('compacting', {}); break;
-            case 'tool_start': {
-              // A subagent's own steps show in its row, not the main timeline.
-              if (data.subagent) break;
-              const id = data.callId || 'call_' + event.id;
-              const call = { id, name: data.name, args: toolArgs(data) };
-              if (data.name === 'todo_write') {
-                const todos = extractRuntimeTodos(call.args.todos);
-                if (todos !== null) { this.todos = todos; this.emit('todos', { todos }); }
-              }
-              if (!stepHasTools) { this.emit('assistant', { content: stepText, toolCalls: [call] }); stepHasTools = true; }
-              this.emit('tool_start', { id, name: data.name, args: call.args, ...(data.label ? { label: String(data.label).slice(0, 160) } : {}) });
-              break;
-            }
-            case 'tool_result': {
-              if (data.subagent) break;
-              const ok = !/^(error|failed|denied|blocked)$/i.test(String(data.status || ''));
-              const content = [data.result, data.warning].filter(Boolean).join('\n');
-              if (data.name === 'todo_write') {
-                const todos = extractRuntimeTodos(data.args && data.args.todos)
-                  ?? extractRuntimeTodos(data.todos)
-                  ?? extractRuntimeTodos(data.result)
-                  ?? extractRuntimeTodos(data.output)
-                  ?? extractRuntimeTodos(data);
-                if (todos !== null) { this.todos = todos; this.emit('todos', { todos }); }
-              }
-              this.emit('tool_result', { id: data.callId || '', name: data.name, ok, content: String(content || data.label || '').slice(0, 4000), ...(Number.isFinite(Number(data.durationMs)) ? { durationMs: Number(data.durationMs) } : {}) });
-              break;
-            }
-            case 'plan':
-            case 'todos': {
-              const todos = extractRuntimeTodos(data);
-              if (todos !== null) { this.todos = todos; this.emit('todos', { todos }); }
-              break;
-            }
-            case 'approval_required': {
-              const value = await this.approve({ name: data.tool || 'runtime', args: { prompt: data.prompt, diff: data.diff, suggestion: data.suggestion, risky: data.risky }, runtime: true });
-              const approved = value === 'always' || value === true;
-              await this.client.api('/api/jobs/' + this.jobId + '/approval', { method: 'POST', body: { approvalId: data.approvalId, approved, always: value === 'always' } }).catch(() => {});
-              break;
-            }
-            case 'question': {
-              const answer = await this.ask(data);
-              await this.client.api('/api/jobs/' + this.jobId + '/answer', { method: 'POST', body: { questionId: data.questionId, answer: String(answer || '') } }).catch(() => {});
-              break;
-            }
-            case 'elicitation':
-              // Forms from tool servers are answered in the terminal for now.
-              await this.client.api('/api/jobs/' + this.jobId + '/elicitation', { method: 'POST', body: { elicitationId: data.elicitationId, action: 'decline' } }).catch(() => {});
-              break;
-            case 'usage': {
-              const input = Number(data.inputTokens || data.input_tokens || 0);
-              const output = Number(data.outputTokens || data.output_tokens || 0);
-              this.usage.input += input; this.usage.output += output;
-              this.emit('usage', { usage: { ...this.usage } });
-              break;
-            }
-            case 'session_state':
-              if (Number(data.contextWindow) > 0) this.emit('context', { tokens: Number(data.contextTokens) || 0, window: Number(data.contextWindow), percent: Number(data.contextPercent) || 0 });
-              if (Number(data.costUsd) > 0) this.emit('cost', { usd: Number(data.costUsd), partial: Boolean(data.costPartial) });
-              break;
-            case 'mcp_failures': if (Array.isArray(data.servers) && data.servers.length) this.emit('mcp_failures', { servers: data.servers }); break;
-            case 'compaction_completed': this.emit('compacted', { mode: data.usedModelSummary ? 'summary' : 'trim' }); break;
-            case 'completed':
-              if (data.sessionId) this.sessionId = data.sessionId;
-              finish(stepHasTools && !data.command ? String(data.text || '') : '');
-              done = true;
-              break;
-            case 'failed': if (stepText || stepHasTools) finish(''); this.emit('error', { message: data.message || 'The task failed.' }); done = true; break;
-            case 'cancelled': if (data.sessionId) this.sessionId = data.sessionId; this.emit('stopped'); done = true; break;
-            default: break;
-          }
-          if (done) break;
-        }
-        if (!done && ['completed', 'error', 'cancelled'].includes(job.status)) {
-          if (job.status === 'completed') finish(stepHasTools ? String(job.result && job.result.text || '') : '');
-          if (job.status === 'error') this.emit('error', { message: job.error || 'The task failed.' });
-          if (job.status === 'cancelled') this.emit('stopped');
-          done = true;
-        }
-        if (!done) await pause(this.pollMs, signal);
+        if (error.status === 404) throw new Error('The task ended on this computer before the page could follow it.');
+        idle++;
+        if (idle > 20) throw new Error('Lost the connection to OASIS on this computer.');
+        await pause(1000, signal);
+        continue;
       }
-    } catch (error) {
-      if (signal.aborted) this.emit('stopped');
-      else this.emit('error', { message: error.message || String(error) });
-    } finally {
-      this.busy = false;
-      this.jobId = '';
-      this.controller = null;
-      this.emit('done');
+      idle = 0;
+      // A finished task's open approvals can no longer be answered.
+      const live = !['completed', 'error', 'cancelled', 'interrupted'].includes(job.status);
+      for (const event of job.events || []) {
+        const data = event.data || {};
+        if (['approval_resolved', 'question_answered', 'elicitation_resolved'].includes(event.type)) resolved.add(String(data.approvalId || data.questionId || data.elicitationId || ''));
+      }
+      for (const event of job.events || []) {
+        after = Math.max(after, event.id);
+        const data = event.data || {};
+        switch (event.type) {
+          case 'started': if (data.sessionId) this.sessionId = data.sessionId; break;
+          case 'agent_activity': if (subagents.update(data)) this.emit('subagents', { workers: subagents.list() }); break;
+          case 'assistant_delta': if (data.text) addText(String(data.text), false); break;
+          case 'assistant_text': if (data.text) addText(String(data.text), true); break;
+          case 'command_output': if (data.text) addText(String(data.text), true); break;
+          // The runtime keeps working after a streamed reply to check its
+          // edits. End that bubble so the next reply does not run into it.
+          case 'verification_gate': if (stepText && !stepHasTools) stepTextFinal = true; break;
+          case 'stream_restarted': stepText = ''; this.emit('retry', { attempt: data.attempt || 1 }); break;
+          case 'compaction_started': this.emit('compacting', {}); break;
+          case 'tool_start': {
+            // A subagent's own steps show in its row, not the main timeline.
+            if (data.subagent) break;
+            const id = data.callId || 'call_' + event.id;
+            const call = { id, name: data.name, args: toolArgs(data) };
+            if (data.name === 'todo_write') {
+              const todos = extractRuntimeTodos(call.args.todos);
+              if (todos !== null) { this.todos = todos; this.emit('todos', { todos }); }
+            }
+            if (!stepHasTools) { this.emit('assistant', { content: stepText, toolCalls: [call] }); stepHasTools = true; }
+            this.emit('tool_start', { id, name: data.name, args: call.args, ...(data.label ? { label: String(data.label).slice(0, 160) } : {}) });
+            break;
+          }
+          case 'tool_result': {
+            if (data.subagent) break;
+            const ok = !/^(error|failed|denied|blocked)$/i.test(String(data.status || ''));
+            const content = [data.result, data.warning].filter(Boolean).join('\n');
+            if (data.name === 'todo_write') {
+              const todos = extractRuntimeTodos(data.args && data.args.todos)
+                ?? extractRuntimeTodos(data.todos)
+                ?? extractRuntimeTodos(data.result)
+                ?? extractRuntimeTodos(data.output)
+                ?? extractRuntimeTodos(data);
+              if (todos !== null) { this.todos = todos; this.emit('todos', { todos }); }
+            }
+            this.emit('tool_result', { id: data.callId || '', name: data.name, ok, content: String(content || data.label || '').slice(0, 4000), ...(Number.isFinite(Number(data.durationMs)) ? { durationMs: Number(data.durationMs) } : {}) });
+            break;
+          }
+          case 'plan':
+          case 'todos': {
+            const todos = extractRuntimeTodos(data);
+            if (todos !== null) { this.todos = todos; this.emit('todos', { todos }); }
+            break;
+          }
+          case 'approval_required': {
+            if (!live || resolved.has(String(data.approvalId || ''))) break;
+            const value = await this.approve({ name: data.tool || 'runtime', args: { prompt: data.prompt, diff: data.diff, suggestion: data.suggestion, risky: data.risky }, runtime: true });
+            const approved = value === 'always' || value === true;
+            await this.client.api('/api/jobs/' + this.jobId + '/approval', { method: 'POST', body: { approvalId: data.approvalId, approved, always: value === 'always' } }).catch(() => {});
+            break;
+          }
+          case 'question': {
+            if (!live || resolved.has(String(data.questionId || ''))) break;
+            const answer = await this.ask(data);
+            await this.client.api('/api/jobs/' + this.jobId + '/answer', { method: 'POST', body: { questionId: data.questionId, answer: String(answer || '') } }).catch(() => {});
+            break;
+          }
+          case 'elicitation':
+            if (!live || resolved.has(String(data.elicitationId || ''))) break;
+            // Forms from tool servers are answered in the terminal for now.
+            await this.client.api('/api/jobs/' + this.jobId + '/elicitation', { method: 'POST', body: { elicitationId: data.elicitationId, action: 'decline' } }).catch(() => {});
+            break;
+          case 'usage': {
+            const input = Number(data.inputTokens || data.input_tokens || 0);
+            const output = Number(data.outputTokens || data.output_tokens || 0);
+            this.usage.input += input; this.usage.output += output;
+            this.emit('usage', { usage: { ...this.usage } });
+            break;
+          }
+          case 'session_state':
+            if (Number(data.contextWindow) > 0) this.emit('context', { tokens: Number(data.contextTokens) || 0, window: Number(data.contextWindow), percent: Number(data.contextPercent) || 0 });
+            if (Number(data.costUsd) > 0) this.emit('cost', { usd: Number(data.costUsd), partial: Boolean(data.costPartial) });
+            break;
+          case 'mcp_failures': if (Array.isArray(data.servers) && data.servers.length) this.emit('mcp_failures', { servers: data.servers }); break;
+          case 'compaction_completed': this.emit('compacted', { mode: data.usedModelSummary ? 'summary' : 'trim' }); break;
+          case 'completed':
+            if (data.sessionId) this.sessionId = data.sessionId;
+            finish(stepHasTools && !data.command ? String(data.text || '') : '');
+            done = true;
+            break;
+          case 'failed': if (stepText || stepHasTools) finish(''); this.emit('error', { message: data.message || 'The task failed.' }); done = true; break;
+          case 'cancelled': if (data.sessionId) this.sessionId = data.sessionId; this.emit('stopped'); done = true; break;
+          default: break;
+        }
+        if (done) break;
+      }
+      if (!done && ['completed', 'error', 'cancelled'].includes(job.status)) {
+        if (job.status === 'completed') finish(stepHasTools ? String(job.result && job.result.text || '') : '');
+        if (job.status === 'error') this.emit('error', { message: job.error || 'The task failed.' });
+        if (job.status === 'cancelled') this.emit('stopped');
+        done = true;
+      }
+      if (!done) await pause(this.pollMs, signal);
     }
   }
 }
