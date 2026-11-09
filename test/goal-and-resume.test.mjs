@@ -59,3 +59,13 @@ test('a resumed session mentions its paused goal', async () => {
   assert.equal(pausedGoalNotice({ condition: 'x', achieved: true, paused: false }), '');
   assert.equal(pausedGoalNotice(null), '');
 });
+
+test('resuming a long idle conversation warns what the next message will cost', async () => {
+  const { resumeCostNotice } = await import('../src/cli.mjs');
+  const now = Date.parse('2026-11-09T12:00:00Z');
+  const price = { input: 3, output: 15 };
+  assert.match(resumeCostNotice({ tokens: 120000, updatedAt: '2026-11-08T12:00:00Z', price, now }), /about 120k tokens[\s\S]*about \$0\.36[\s\S]*\/compact/);
+  assert.equal(resumeCostNotice({ tokens: 120000, updatedAt: '2026-11-09T11:50:00Z', price, now }), '', 'recent: cache may still be warm');
+  assert.equal(resumeCostNotice({ tokens: 5000, updatedAt: '2026-11-01T00:00:00Z', price, now }), '', 'small: not worth a warning');
+  assert.equal(resumeCostNotice({ tokens: 120000, updatedAt: '2026-11-01T00:00:00Z', price: { input: 0, output: 0, local: true }, now }), '', 'free or local model');
+});
