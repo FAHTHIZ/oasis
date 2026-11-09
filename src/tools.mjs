@@ -580,6 +580,52 @@ export function nonInteractiveEnvironment(env, source = process.env) {
 
 // Agents love to drop FINAL_SUMMARY.md / IMPLEMENTATION_NOTES.md files nobody asked for.
 const SUMMARY_DOC = /^(?:[A-Z0-9]+[_-])*(?:SUMMARY|REPORT|NOTES|CHANGES|CHANGELOG_SUMMARY|IMPLEMENTATION|FIXES|PROGRESS|STATUS|ANALYSIS|COMPLETION|WALKTHROUGH|OVERVIEW)(?:[_-][A-Z0-9]+)*\.md$/;
+// Seen live (glob-match eval): a model wrote `require.main === module` into
+// an ES module; tests passed because nothing imported it, and the file threw
+// "require is not defined" on first use. Flag mixed module systems at write time.
+export function moduleSystemIssues(displayPath, content, packageType = '') {
+  const ext = path.posix.extname(String(displayPath || '')).toLowerCase();
+  const esm = ext === '.mjs' || (ext === '.js' && packageType === 'module');
+  const code = String(content || '').split(/\r?\n/).filter((line) => !/^\s*(?:\/\/|\*|\/\*)/.test(line)).join('\n')
+    .replace(/`(?:\\.|[^`\\])*`|'(?:\\.|[^'\\\n])*'|"(?:\\.|[^"\\\n])*"/g, '""');
+  const issues = [];
+  if (esm) {
+    const definesRequire = /createRequire|\b(?:const|let|var|function)\s+require\b/.test(code);
+    if (!definesRequire && /(?<![.\w$])require\s*\(/.test(code)) issues.push('require()');
+    if (!definesRequire && /(?<![.\w$])require\.main\b/.test(code)) issues.push('require.main');
+    if (/(?<![.\w$])module\.exports\b|(?<![.\w$])exports\.[A-Za-z_$][\w$]*\s*=/.test(code)) issues.push('module.exports');
+    for (const name of ['__dirname', '__filename']) {
+      if (new RegExp('(?<![.\\w$])' + name + '\\b').test(code) && !new RegExp('\\b(?:const|let|var)\\s+' + name + '\\b').test(code)) issues.push(name);
+    }
+    if (!issues.length) return '';
+    return displayPath + ' is an ES module' + (ext === '.js' ? ' (package.json has "type": "module")' : '') + ' but uses CommonJS ' + [...new Set(issues)].join(', ') +
+      ', which throws when the file is loaded. Use import/export; for "run when executed directly" use `import.meta.url === pathToFileURL(process.argv[1]).href`, and for paths use `fileURLToPath(new URL(\'.\', import.meta.url))`.';
+  }
+  if (ext === '.cjs' && /(?:^|\n)\s*(?:export\s+(?:default\b|const\b|function\b|class\b|let\b|\{)|import\s+[\w*{][^;\n]*\bfrom\s)/.test(code)) {
+    return displayPath + ' is a CommonJS file (.cjs) but uses import/export syntax, which throws when it is loaded. Use require() and module.exports, or rename it to .mjs.';
+  }
+  return '';
+}
+
+async function packageTypeFor(root, absolute) {
+  let dir = path.dirname(absolute);
+  const top = path.resolve(root);
+  for (let i = 0; i < 12; i++) {
+    try { return String(JSON.parse(await readFile(path.join(dir, 'package.json'), 'utf8')).type || ''); } catch {}
+    if (dir === top || path.dirname(dir) === dir) break;
+    dir = path.dirname(dir);
+  }
+  return '';
+}
+
+async function moduleSystemWarning(root, absolute, displayPath, previous, next) {
+  const ext = path.extname(displayPath).toLowerCase();
+  if (!['.mjs', '.cjs', '.js'].includes(ext)) return '';
+  const type = ext === '.js' ? await packageTypeFor(root, absolute) : '';
+  const now = moduleSystemIssues(displayPath, next, type);
+  return now && (previous == null || !moduleSystemIssues(displayPath, previous, type)) ? now : '';
+}
+
 export function unrequestedDocWarning(displayPath, request) {
   const base = path.posix.basename(String(displayPath || ''));
   if (isScratchPath(displayPath)) return '';
@@ -1714,7 +1760,8 @@ async function executeToolUnlocked(name, args = {}, context = {}) {
       await atomicWriteFile(target.absolute, encodeText(next, fileEncoding), { encoding: 'utf8' });
       await clientMirrorWrite(context, target.absolute, next);
       await recordFileState(context, target.absolute);
-      const editWarning = combineWarnings(commentWarning(current, next, editDisplayPath, context.session && context.session.commentMode), shrinkWarning(current, next, editDisplayPath), testTamperWarning(current, next, editDisplayPath), securityWarning(current, next, editDisplayPath), recordAndDetectCircling(context.session || context, target.absolute, current, next, editDisplayPath));
+      const moduleWarning = await moduleSystemWarning(root, target.absolute, editDisplayPath, current, next).catch(() => '');
+      const editWarning = combineWarnings(moduleWarning, commentWarning(current, next, editDisplayPath, context.session && context.session.commentMode), shrinkWarning(current, next, editDisplayPath), testTamperWarning(current, next, editDisplayPath), securityWarning(current, next, editDisplayPath), recordAndDetectCircling(context.session || context, target.absolute, current, next, editDisplayPath));
       return { path: editDisplayPath, changed: true, ...(relaxed ? { matchedBy: relaxed.strategy, matchedAtLine: relaxed.line, note: 'old_string did not match exactly; it matched uniquely after normalizing ' + relaxed.strategy + ' at line ' + relaxed.line + '.' } : {}), replacements: args.replace_all === true ? matches : 1, beforeBytes: Buffer.byteLength(current, 'utf8'), afterBytes: Buffer.byteLength(next, 'utf8'), backupCreated: true, ...(editWarning ? { warning: editWarning } : {}) };
     }
     case 'write_file': {
@@ -1746,7 +1793,8 @@ async function executeToolUnlocked(name, args = {}, context = {}) {
       await clientMirrorWrite(context, target.absolute, content);
       await recordFileState(context, target.absolute);
       const docWarning = backedUpExistingFile ? '' : unrequestedDocWarning(writeDisplayPath, context.session && context.session.currentRequest);
-      const writeWarning = previousContent === null ? combineWarnings(docWarning, commentWarning('', args.content, writeDisplayPath, context.session && context.session.commentMode), securityWarning('', args.content, writeDisplayPath)) : combineWarnings(commentWarning(previousContent, args.content, writeDisplayPath, context.session && context.session.commentMode), shrinkWarning(previousContent, args.content, writeDisplayPath), testTamperWarning(previousContent, args.content, writeDisplayPath), typographyWarning(previousContent, args.content, writeDisplayPath), securityWarning(previousContent, args.content, writeDisplayPath), recordAndDetectCircling(context.session || context, target.absolute, previousContent, args.content, writeDisplayPath));
+      const writeModuleWarning = await moduleSystemWarning(root, target.absolute, writeDisplayPath, previousContent, args.content).catch(() => '');
+      const writeWarning = previousContent === null ? combineWarnings(writeModuleWarning, docWarning, commentWarning('', args.content, writeDisplayPath, context.session && context.session.commentMode), securityWarning('', args.content, writeDisplayPath)) : combineWarnings(writeModuleWarning, commentWarning(previousContent, args.content, writeDisplayPath, context.session && context.session.commentMode), shrinkWarning(previousContent, args.content, writeDisplayPath), testTamperWarning(previousContent, args.content, writeDisplayPath), typographyWarning(previousContent, args.content, writeDisplayPath), securityWarning(previousContent, args.content, writeDisplayPath), recordAndDetectCircling(context.session || context, target.absolute, previousContent, args.content, writeDisplayPath));
       return { path: writeDisplayPath, writtenBytes: Buffer.byteLength(content, 'utf8'), backedUpExistingFile, ...(conventions.kept.length ? { kept: conventions.kept } : {}), ...(writeWarning ? { warning: writeWarning } : {}) };
     }
     case 'delete_file': {
