@@ -57,8 +57,11 @@ location / {
   proxy_set_header X-Forwarded-Proto $scheme;
   proxy_set_header X-Forwarded-For $remote_addr;
   proxy_buffering off;
+  proxy_read_timeout 60s;
 }
 ```
+
+A page following a task holds one request open for up to 25 seconds until the next event (long polling). Keep the proxy's read timeout above that; nginx's default of 60 s and Caddy's defaults are fine.
 
 Tunnels work the same way. With [Tailscale Serve](https://tailscale.com/kb/1312/serve), `tailscale serve --bg 3917` publishes `https://<machine>.<tailnet>.ts.net` to your tailnet only; start OASIS with `--public-url https://<machine>.<tailnet>.ts.net --trust-proxy`. With [Cloudflare Tunnel](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/), point the tunnel at `http://127.0.0.1:3917` and add Cloudflare Access in front for a second factor.
 
