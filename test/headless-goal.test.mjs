@@ -52,3 +52,10 @@ test('a goal that is never met ends as error_goal_not_met after goalMaxTurns', a
   assert.equal(summary.goal.met, false);
   assert.match(summary.goal.reason, /Still failing/);
 });
+
+test('a resumed session mentions its paused goal', async () => {
+  const { pausedGoalNotice } = await import('../src/cli.mjs');
+  assert.match(pausedGoalNotice({ condition: 'npm test passes', paused: true, turns: 3 }), /Paused goal: npm test passes \(3 turn\(s\) so far\)\. \/goal resume/);
+  assert.equal(pausedGoalNotice({ condition: 'x', achieved: true, paused: false }), '');
+  assert.equal(pausedGoalNotice(null), '');
+});

@@ -1317,7 +1317,8 @@ async function runPrompt(prompt, root, autoApprove, session = null, persistence 
     if (persistence.resumeId) {
       restored = await loadSession(root, persistence.resumeId);
       if (SESSION_OPTIONS.forkSession) { stdout.write('[session] Forking ' + restored.id + ' into a new session.\n'); restored = { ...restored, id: null }; }
-      stdout.write('[session] Resuming ' + restored.id + ' (' + restored.messages.length + ' saved messages, last updated ' + restored.updatedAt + ').\n');
+      stdout.write('[session] Resuming ' + restored.id + ' (' + restored.messages.length + ' saved messages, last updated ' + restored.updatedAt + ').\n');      const goalNote = pausedGoalNotice(restored.goal);
+      if (goalNote) stdout.write(goalNote);
     }
     session = await createSession({ root, config, restore: restored, ...sessionCreateOptions(), watchFiles: true });
   } else if (path.resolve(session.worktreeSession ? session.worktreeSession.originalRoot : session.root) !== path.resolve(root)) {
@@ -1854,6 +1855,14 @@ async function runLoop(loop, root, autoApprove, session, persistence) {
   if (session) session.selfPacedLoop = false;
   stdout.write('[loop] Stopped.\n');
   return session;
+}
+
+// A resumed session whose goal was paused (Ctrl+C, turn limit, or OASIS
+// stopping mid-goal) says so, so the goal is not silently forgotten.
+export function pausedGoalNotice(goal) {
+  if (!goal || goal.achieved || !goal.condition || (!goal.paused && !goal.active)) return '';
+  const condition = String(goal.condition).replace(/\s+/g, ' ').slice(0, 120);
+  return '[goal] Paused goal: ' + condition + (goal.turns ? ' (' + goal.turns + ' turn(s) so far)' : '') + '. /goal resume continues it; /goal clear drops it.\n';
 }
 
 async function runGoal(goal, root, autoApprove, session, persistence) {
