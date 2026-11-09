@@ -53,7 +53,7 @@ jobs:
         run: |
           set -euo pipefail
           prefix="$(mktemp -d)"
-          npm install --global --prefix "$prefix" --no-audit --no-fund release/*.tgz
+          npm install --global --prefix "$prefix" --no-audit --no-fund "./$(ls release/*.tgz | head -1)"
           "$prefix/bin/oasis" --version
       - name: Upload tarball
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
