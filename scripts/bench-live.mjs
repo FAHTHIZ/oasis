@@ -71,12 +71,14 @@ export function openCodeGatewayConfig(baseURL, model, key = '') {
   return { $schema: 'https://opencode.ai/config.json', autoupdate: false, share: 'disabled', provider: { bench: { npm: '@ai-sdk/openai-compatible', name: 'Benchmark gateway', options: { baseURL, apiKey: key || 'gateway' }, models: { [id]: { name: id, tool_call: true } } } } };
 }
 
-function modelFor(agent, options) {
+function modelFor(agent, options, env = process.env) {
   if (options.models[agent]) return options.models[agent];
   if (!options.model) return '';
-  // Aider and OpenCode address OpenAI-compatible gateways with a provider prefix.
+  // Aider and generated OpenCode gateway configs need their provider prefix.
+  // Use the benchmark's injected environment, not the parent process: tests,
+  // embedded callers and isolated runs may intentionally supply another config.
   if (options.router && agent === 'aider' && !options.model.startsWith('openai/')) return 'openai/' + options.model;
-  if (options.router && agent === 'opencode' && !process.env.OPENCODE_CONFIG) return 'bench/' + options.model;
+  if (options.router && agent === 'opencode' && !env.OPENCODE_CONFIG) return 'bench/' + options.model;
   return options.model;
 }
 
@@ -90,7 +92,7 @@ export async function runBenchmark(options, { env = process.env, runner = runEva
   const runs = [];
   try {
   for (const agent of options.agents) {
-    const model = modelFor(agent, options);
+    const model = modelFor(agent, options, env);
     const args = [...(agent === 'oasis' ? [] : [EXTERNAL_AGENTS[agent].flag]), '--trials', String(options.trials), '--timeout-seconds', String(options.timeoutSeconds)];
     if (options.task) args.push('--task', options.task);
     if (model && agent !== 'oasis') args.push('--model', model);
