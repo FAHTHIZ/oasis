@@ -2082,7 +2082,7 @@ export function createOasisWebServer(options = {}) {
       const listed = new Set(sessions.map((item) => String(item.id).toLowerCase()));
       for (const [id, job] of liveJobs) {
         if (listed.has(id)) continue;
-        sessions.unshift({ id: job.sessionId, title: job.title || 'Coding task', updatedAt: job.events.at(-1)?.at || job.createdAt, messages: 0, running: true, jobId: job.id, prompt: job.prompt || job.title || '' });
+        sessions.unshift({ id: job.sessionId, title: job.title || 'Coding task', updatedAt: job.events.at(-1)?.at || job.createdAt, messages: 0, unsaved: true, running: true, jobId: job.id, prompt: job.prompt || job.title || '' });
       }
       json(res, 200, { sessions });
       return;
@@ -2091,7 +2091,10 @@ export function createOasisWebServer(options = {}) {
     const sessionMatch = pathname.match(/^\/api\/sessions\/([a-f0-9-]{20,80})$/i);
     if (req.method === 'GET' && sessionMatch) {
       const id = sessionMatch[1];
-      const saved = await loadSession(activeRoot, id, { env });
+      let saved;
+      // Missing (a first turn still running, or deleted) is 404, not a server error.
+      try { saved = await loadSession(activeRoot, id, { env }); }
+      catch (error) { json(res, error && error.code === 'ENOENT' ? 404 : 400, { error: error && error.code === 'ENOENT' ? 'That session is not saved yet or no longer exists.' : 'Could not open that session: ' + (error && error.message || 'unknown error') }); return; }
       // System reminders (checklist, hook feedback) are for the model, not the chat view.
       const messages = saved.messages.filter((item) => ['user', 'assistant'].includes(item.role) && typeof item.content === 'string' && item.content.trim() && !item.content.startsWith('<system-reminder>'))
         .map((item) => ({ role: item.role, content: item.content.slice(0, 24000) }));

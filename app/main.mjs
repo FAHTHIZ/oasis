@@ -1436,6 +1436,11 @@ function handleEvent(event) {
     case 'reconnected':
       toast('Back online.');
       break;
+    case 'answered_elsewhere':
+      // Another browser or the terminal answered first (or the task ended).
+      if (event.kind === 'question') closeSheet('questionSheet'); else closeSheet('approvalSheet');
+      toast(event.kind === 'question' ? 'The question was answered somewhere else.' : 'This was answered on another device.');
+      break;
     case 'detached':
       // Switched to another chat: the task keeps running on the computer and
       // this chat reattaches when it is opened again. Nothing is saved here,
@@ -1736,8 +1741,13 @@ async function renderRuntimeSessions() {
 }
 async function openRuntimeSession(item) {
   let saved;
-  try { saved = await RT.client.api('/api/sessions/' + item.id); }
-  catch (error) { toast('Could not open that session: ' + error.message, 'error'); return; }
+  try { saved = item.unsaved && item.jobId ? { messages: [] } : await RT.client.api('/api/sessions/' + item.id); }
+  catch (error) {
+    // A conversation whose first turn is still running is not saved yet:
+    // follow the live task with just its request.
+    if (!(error.status === 404 && item.jobId)) { toast('Could not open that session: ' + error.message, 'error'); return; }
+    saved = { messages: [] };
+  }
   if (!(await leaveTurn())) await persistChat();
   chatId = Math.random().toString(36).slice(2, 10);
   const projectId = workspace.project.id;
