@@ -17,7 +17,7 @@ function rootCause(error) {
   return current || error;
 }
 
-const CA_FIX = 'point NODE_EXTRA_CA_CERTS at your organisation\'s root CA file (the desktop app also trusts the system certificate store)';
+const CA_FIX = 'point NODE_EXTRA_CA_CERTS at your organisation\'s root CA file';
 
 /** The likely cause of each certificate failure, and its fix. */
 export function certificateAdvice(code) {

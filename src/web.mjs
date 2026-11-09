@@ -26,7 +26,6 @@ import { estimateTokens, contextWindowSize, contextTokens as contextTokensFor } 
 import { PtySessionManager } from './pty-sessions.mjs';
 import { createTaskHistoryStore } from './task-history-store.mjs';
 import { createWorktree, finishWorktree, removeWorktree, readWorktreeDiff, readWorktreeWorkingDiff, readWorkspaceDiff, inspectWorktree, mergeWorktree, isCommitIntegrated } from './worktrees.mjs';
-import { createPhoneLink } from './phone-link.mjs';
 import { appModuleGraph, resolveAppPath, skillsIndex } from './app-server.mjs';
 import { listWorkspaceFiles } from './workspace-files.mjs';
 import { atomicWriteFile } from './atomic-write.mjs';
@@ -845,7 +844,7 @@ export function createOasisWebServer(options = {}) {
               emit(job, 'context_files', { files: expanded.files.slice(0, 50) });
             }
           }
-          const handled = slashName === 'sounds' || slashName === 'sound' ? { output: 'In the browser and desktop app, sound effects play here in the page: turn them on or off and set the volume under Settings → Sound effects. /sounds in the terminal (oasis) controls terminal sounds.' } : terminalOnly && slashName === 'test' ? { output: '/test runs in the terminal (oasis). In the browser, type !npm test (or your test command): it asks for approval, and the output goes to Oasis with your next message.' } : terminalOnly ? { output: '/' + slashName + ' is available in the terminal (oasis). In the browser, copy replies from the chat and change workspaces from the workspace picker.' } : blockedBypass ? { output: 'bypassPermissions is available only in the terminal (oasis --permission-mode bypassPermissions). The browser always keeps approvals on.' } : await runBuiltinCommand(slashName, commandArgument, { root: taskRoot, session, env, usage: session.webUsage, sessionOptions: session.webOptions, confirm: (question) => approvalFor(job, question, true) });
+          const handled = slashName === 'sounds' || slashName === 'sound' ? { output: 'In the browser, sound effects play here in the page: turn them on or off and set the volume under Settings → Sound effects. /sounds in the terminal (oasis) controls terminal sounds.' } : terminalOnly && slashName === 'test' ? { output: '/test runs in the terminal (oasis). In the browser, type !npm test (or your test command): it asks for approval, and the output goes to Oasis with your next message.' } : terminalOnly ? { output: '/' + slashName + ' is available in the terminal (oasis). In the browser, copy replies from the chat and change workspaces from the workspace picker.' } : blockedBypass ? { output: 'bypassPermissions is available only in the terminal (oasis --permission-mode bypassPermissions). The browser always keeps approvals on.' } : await runBuiltinCommand(slashName, commandArgument, { root: taskRoot, session, env, usage: session.webUsage, sessionOptions: session.webOptions, confirm: (question) => approvalFor(job, question, true) });
           if (handled) {
             emit(job, 'command_output', { command: slash[1].toLowerCase(), text: String(handled.output || '').slice(0, 24000) });
             if (!handled.prompt) {
@@ -918,7 +917,7 @@ export function createOasisWebServer(options = {}) {
               ...(subagent ? { subagent: String(subagent).slice(0, 100) } : {})
             });
           },
-          onToolResult: ({ name, result: value, call }) => {
+          onToolResult: ({ name, result: value, call, subagent }) => {
             const callId = call && call.id ? String(call.id).slice(0, 160) : '';
             const tracked = callId ? toolActivityArgsByCallId.get(callId) : null;
             const args = tracked && tracked.args ? tracked.args : {};
@@ -934,7 +933,8 @@ export function createOasisWebServer(options = {}) {
               ...(tracked && Number.isFinite(tracked.startedAt) ? { durationMs: Math.max(0, Date.now() - tracked.startedAt) } : {}),
               result: summarizeToolResult(value),
               warning: toolActivityWarning(value),
-              ...(artifacts.length ? { artifacts, previewJobId: job.id } : {})
+              ...(artifacts.length ? { artifacts, previewJobId: job.id } : {}),
+              ...(subagent ? { subagent: String(subagent).slice(0, 100) } : {})
             });
           },
           onCompactionStart: (info) => emit(job, 'compaction_started', {
@@ -1713,18 +1713,12 @@ export function createOasisWebServer(options = {}) {
     }
 
     if (pathname === '/api/app/update') {
-      // The desktop app answers from its own updater (which can install); the
-      // CLI-hosted workspace only reports a new release and the command to run.
-      const bridge = options.appUpdate;
+      // Reports a new release and the command that installs it (oasis update).
       const statePath = path.join(getBaseConfigDirectory(env), 'update-state.json');
       if (req.method === 'GET') {
         try {
           // ?refresh=1 is a manual "Check now": skip the 6-hour cache.
           const force = parsedUrl.searchParams.get('refresh') === '1';
-          if (bridge) {
-            json(res, 200, { host: 'desktop', ...(force || !bridge.status().checkedAt ? await bridge.check() : bridge.status()) });
-            return;
-          }
           if (updateChecksDisabled(env)) { json(res, 200, { host: 'cli', phase: 'disabled', available: false, current: oasisVersion() }); return; }
           const result = await cachedUpdateCheck({ statePath, currentVersion: oasisVersion(), kind: 'cli', fetchImpl: options.updateFetchImpl || fetch, force });
           json(res, 200, {
@@ -1734,7 +1728,7 @@ export function createOasisWebServer(options = {}) {
             releasesPage: result.latest ? result.latest.url : RELEASES_PAGE
           });
         } catch (error) {
-          json(res, 200, { host: bridge ? 'desktop' : 'cli', phase: 'error', available: false, current: oasisVersion(), error: String(error && error.message || error) });
+          json(res, 200, { host: 'cli', phase: 'error', available: false, current: oasisVersion(), error: String(error && error.message || error) });
         }
         return;
       }
@@ -1744,19 +1738,12 @@ export function createOasisWebServer(options = {}) {
         const action = String(body && body.action || '');
         const version = typeof (body && body.version) === 'string' ? body.version.slice(0, 40) : '';
         if (action === 'skip') {
-          if (bridge) { json(res, 200, { host: 'desktop', ...(await bridge.skip(version || undefined)) }); return; }
           const state = await readUpdateState(statePath);
           await writeUpdateState(statePath, { ...state, skippedVersion: version || (state.lastResult && state.lastResult.latest && state.lastResult.latest.version) || '' });
           json(res, 200, { host: 'cli', skipped: true });
           return;
         }
-        if (action === 'install') {
-          if (!bridge) { json(res, 400, { error: 'Run oasis update in a terminal to install the new version.' }); return; }
-          // Respond first: installing can quit the app that serves this request.
-          json(res, 202, { host: 'desktop', accepted: true });
-          setImmediate(() => { void Promise.resolve(bridge.prompt()).catch(() => {}); });
-          return;
-        }
+        if (action === 'install') { json(res, 400, { error: 'Run oasis update in a terminal to install the new version.' }); return; }
         json(res, 400, { error: 'Unknown update action.' });
         return;
       }
@@ -1777,43 +1764,6 @@ export function createOasisWebServer(options = {}) {
         json(res, 200, { ...rec, summary: describeHardware(rec.hardware) });
       } catch (error) {
         json(res, 500, { error: 'Could not inspect this computer: ' + (error && error.message || error) });
-      }
-      return;
-    }
-
-    if (pathname === '/api/phone/link') {
-      // Share this workspace with a phone. Managed only from this computer; the
-      // phone itself never sees or changes the link.
-      if (!isLoopbackClient(req)) { json(res, 403, { error: 'Phone links can be managed only from the same computer.' }); return; }
-      if (!isLoopbackBindHost(bindHost)) {
-        // Already listening on the network (oasis web --host …): nothing to open.
-        json(res, 200, { mode: 'server', active: true, encrypted: Boolean(tlsOptions), network: 'server', urls: [], hint: 'This workspace is already reachable on the network. Use the links printed in the terminal.' });
-        return;
-      }
-      const link = getPhoneLink();
-      if (req.method === 'GET') { json(res, 200, { mode: 'link', nativeConfirm: typeof options.confirmUnencryptedPhoneLink === 'function', ...link.status() }); return; }
-      if (req.method !== 'POST') { json(res, 405, { error: 'Method not allowed.' }); return; }
-      const body = await readJsonBody(req);
-      const action = String(body && body.action || '');
-      try {
-        if (action === 'stop') { json(res, 200, { mode: 'link', nativeConfirm: typeof options.confirmUnencryptedPhoneLink === 'function', ...(await link.stop()) }); return; }
-        if (action === 'start') {
-          const network = body && body.network === 'lan' ? 'lan' : 'tailscale';
-          let allowUnencrypted = Boolean(tlsOptions);
-          if (network === 'lan' && !tlsOptions) {
-            // The desktop app asks with a native dialog the page cannot fake;
-            // the CLI-hosted page must send the user's explicit confirmation.
-            allowUnencrypted = typeof options.confirmUnencryptedPhoneLink === 'function'
-              ? Boolean(await options.confirmUnencryptedPhoneLink())
-              : body.allowUnencrypted === true;
-            if (!allowUnencrypted) { json(res, 409, { error: 'Wi-Fi sharing was not confirmed.', cancelled: true }); return; }
-          }
-          json(res, 200, { mode: 'link', nativeConfirm: typeof options.confirmUnencryptedPhoneLink === 'function', ...(await link.start({ network, allowUnencrypted })) });
-          return;
-        }
-        json(res, 400, { error: 'Unknown phone link action.' });
-      } catch (error) {
-        json(res, 400, { error: String(error && error.message || error) });
       }
       return;
     }
@@ -1881,8 +1831,7 @@ export function createOasisWebServer(options = {}) {
           next = result.config;
           reply = { label: result.label, provider: result.provider, models: result.models, toolCalling: result.toolCalling, notes: result.notes, masked: result.masked, steps: steps.slice(-12) };
         }
-        if (typeof options.onProviderConfig === 'function') await options.onProviderConfig(next);
-        else await saveConfig(next, { env });
+        await saveConfig(next, { env });
       } catch (error) {
         const raw = String(error && error.message || 'Could not connect.');
         const key = next && next.apiKey;
@@ -1934,15 +1883,9 @@ export function createOasisWebServer(options = {}) {
         json(res, 422, { saved: false, verified: false, error: safeMessage.slice(0, 1600) });
         return;
       }
-      if (typeof options.onProviderConfig === 'function') {
-        // The desktop host commits the encrypted key and non-secret provider
-        // configuration together, including best-effort rollback on save failure.
-        await options.onProviderConfig({ protocol, baseURL, model, apiKey });
-      } else {
-        // CLI/browser mode uses the local config file, protected by restrictive
-        // permissions where supported but not OS-backed encryption.
-        await saveConfig({ protocol, baseURL, model, apiKey }, { env });
-      }
+      // Saved to the local config file with owner-only permissions (0600)
+      // where the OS supports it. The key is never sent back to the page.
+      await saveConfig({ protocol, baseURL, model, apiKey }, { env });
       json(res, 200, {
         saved: true,
         verified: true,
@@ -2188,7 +2131,7 @@ export function createOasisWebServer(options = {}) {
       return;
     }
 
-    // Dictation for browsers without working speech recognition (Electron, Firefox): the page
+    // Dictation for browsers without working speech recognition (Firefox and some embedded browsers): the page
     // records with MediaRecorder and OASIS transcribes with the user's configured endpoint.
     if (req.method === 'POST' && pathname === '/api/transcribe') {
       const voice = await import('./voice.mjs');
@@ -2563,12 +2506,6 @@ export function createOasisWebServer(options = {}) {
     });
   };
   const server = tlsOptions ? createHttpsServer(tlsOptions, requestHandler) : createHttpServer(requestHandler);
-  let phoneLink = options.phoneLink || null;
-  function getPhoneLink() {
-    if (!phoneLink) phoneLink = createPhoneLink({ server, token }, { scheme: tlsOptions ? 'https' : 'http', interfaces: options.networkInterfaces });
-    return phoneLink;
-  }
-
   return {
     server,
     token,
@@ -2583,7 +2520,6 @@ export function createOasisWebServer(options = {}) {
       for (const session of activeSessions.values()) closeSession(session);
       activeSessions.clear();
       try { ptyManager.closeAll(); } catch {}
-      if (phoneLink) { try { await phoneLink.stop(); } catch {} }
       if (server.listening) {
         // server.close() waits for every open socket. Browsers keep event streams
         // and keep-alive sockets open indefinitely, so drop idle sockets now and

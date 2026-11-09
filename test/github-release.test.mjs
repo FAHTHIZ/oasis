@@ -56,12 +56,11 @@ test('a rate-limited API falls back to github.com for the release, assets and co
 
 test('app update check and oasis update both work while the API is rate limited', async () => {
   const fetchImpl = rateLimitedFetch([]);
-  const result = await checkForAppUpdate({ currentVersion: '1.0.0', kind: 'nsis', arch: 'x64', fetchImpl, env: {} });
+  const result = await checkForAppUpdate({ currentVersion: '1.0.0', fetchImpl, env: {} });
   assert.equal(result.available, true);
   assert.equal(result.latest.version, '1.1.0');
-  assert.equal(result.asset.name, 'OASIS-1.1.0-x64.exe');
-  assert.match(result.checksumsUrl, /SHA256SUMS$/);
-  assert.equal(result.canInstall, true);
+  assert.equal(result.kind, 'cli');
+  assert.equal(result.canInstall, false, 'the CLI updates through `oasis update`, not a downloaded installer');
   const commit = await latestReleaseCommit({ fetch: fetchImpl, env: {} });
   assert.deepEqual({ sha: commit.sha, tag: commit.tag }, { sha: SHA, tag: 'v1.1.0' });
 });

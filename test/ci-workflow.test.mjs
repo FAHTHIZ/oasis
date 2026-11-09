@@ -5,7 +5,7 @@ import { readFile } from 'node:fs/promises';
 test('CI keeps latest pending concurrency per ref and lets active quality runs finish', async () => {
   const cases = [
     { path: '../.github/workflows/quality.yml', group: 'group: oasis-quality-v15-${{ github.ref }}', cancel: false },
-    { path: '../.github/workflows/desktop-build.yml', group: 'group: oasis-desktop-${{ github.ref }}', cancel: true }
+    { path: '../.github/workflows/release.yml', group: 'group: oasis-release-${{ github.ref }}', cancel: true }
   ];
   for (const item of cases) {
     const workflow = await readFile(new URL(item.path, import.meta.url), 'utf8');
@@ -27,12 +27,13 @@ test('README and package metadata describe the current product without unsupport
   assert.ok(readme.includes('Apache License 2.0'));
   assert.ok(readme.includes('npm run check'));
   assert.ok(!readme.includes('beats Claude Code') && !readme.includes('100% success') && !readme.includes('security certified'));
-  assert.match(pkg.description, /native desktop, connected browser sessions/);
+  assert.match(pkg.description, /remote-first browser workspace and terminal agent/);
+  assert.ok(!pkg.devDependencies || !pkg.devDependencies.electron, 'no Electron');
   assert.equal(pkg.version.split('.').length, 3);
   assert.equal(pkg.oasisRelease?.channel, 'stable');
   assert.equal(pkg.oasisRelease?.stableTag, 'v' + pkg.version);
 });
-test('architecture and readiness docs describe the normal session and native desktop product', async () => {
+test('architecture and readiness docs describe the normal session', async () => {
   const [architecture, scorecard, index] = await Promise.all([
     readFile(new URL('../docs/ARCHITECTURE.md', import.meta.url), 'utf8'),
     readFile(new URL('../docs/ENGINEERING-SCORECARD.md', import.meta.url), 'utf8'),
@@ -45,8 +46,8 @@ test('architecture and readiness docs describe the normal session and native des
   assert.ok(index.includes('connected browser sessions'));
 });
 
-test('desktop release requires a stable version and same-commit gates, with generated release notes', async () => {
-  const workflow = await readFile(new URL('../.github/workflows/desktop-build.yml', import.meta.url), 'utf8');
+test('the release requires a stable version and same-commit gates, with generated release notes', async () => {
+  const workflow = await readFile(new URL('../.github/workflows/release.yml', import.meta.url), 'utf8');
   assert.ok(workflow.includes('branches: [main]'));
   assert.ok(!workflow.includes("tags: ['v*']"));
   assert.ok(workflow.includes('publish_release:'));

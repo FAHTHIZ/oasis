@@ -115,8 +115,8 @@ export async function updateOasis(args = [], { ask } = {}) {
       '  --check   Show the installed and latest versions without changing anything.',
       '  --yes     Install without asking first.',
       '',
-      'The desktop app updates itself: it offers new versions and installs them after',
-      'checking SHA256SUMS. Set OASIS_NO_UPDATE_CHECK=1 to turn off update notices.',
+      'The web workspace shows a notice when a new version is out.',
+      'Set OASIS_NO_UPDATE_CHECK=1 to turn off update notices.',
       'If GitHub rate-limits the API, OASIS reads the release from github.com instead;',
       'setting GH_TOKEN or GITHUB_TOKEN raises the API limit.'
     ].join('\n') + '\n');

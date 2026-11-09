@@ -1,4 +1,4 @@
-// Private network addresses of this computer, for printing a phone link that
+// Private network addresses of this computer, for printing a link that
 // works on the same Wi-Fi (or Tailscale, which uses 100.64.0.0/10).
 import os from 'node:os';
 
@@ -15,7 +15,7 @@ export function lanAddresses(interfaces = os.networkInterfaces()) {
     for (const entry of entries || []) {
       const family = typeof entry.family === 'number' ? (entry.family === 4 ? 'IPv4' : 'IPv6') : entry.family;
       if (family !== 'IPv4' || entry.internal || !isPrivateIPv4(entry.address)) continue;
-      // Docker and VM bridges are rarely reachable from a phone: list them last.
+      // Docker and VM bridges are rarely reachable from another device: list them last.
       const virtual = /^(docker|br-|veth|virbr|vmnet|vboxnet|utun|lxc|cni|flannel)/i.test(name);
       const tailscale = entry.address.startsWith('100.') || /tailscale/i.test(name);
       found.push({ name, address: entry.address, virtual, tailscale });
