@@ -158,7 +158,7 @@ function toolArgs(data) {
 const JOB_ID_RE = /^[a-f0-9-]{36}$/i;
 
 export class RuntimeAgent {
-  constructor({ client, onEvent = () => {}, approve = async () => false, ask = async () => '', getMode = () => 'ask', getPlugins = () => [], pollMs = 350 } = {}) {
+  constructor({ client, onEvent = () => {}, approve = async () => false, ask = async () => '', getMode = () => 'ask', getPlugins = () => [], pollMs = 350, waitMs = 20_000 } = {}) {
     this.client = client;
     this.onEvent = onEvent;
     this.approve = approve;
@@ -166,6 +166,7 @@ export class RuntimeAgent {
     this.getMode = getMode;
     this.getPlugins = getPlugins;
     this.pollMs = pollMs;
+    this.waitMs = waitMs;
     this.busy = false;
     this.messages = [];
     this.todos = [];
@@ -417,7 +418,9 @@ export class RuntimeAgent {
     while (!done) {
       if (signal.aborted) { if (!this.detached) this.emit('stopped'); break; }
       let job;
-      try { job = await this.client.api('/api/jobs/' + this.jobId + '?after=' + after, { signal }); }
+      const asked = Date.now();
+      // wait= holds the request on the server until the next event (long poll).
+      try { job = await this.client.api('/api/jobs/' + this.jobId + '?after=' + after + (this.waitMs ? '&wait=' + this.waitMs : ''), { signal }); }
       catch (error) {
         if (signal.aborted) { if (!this.detached) this.emit('stopped'); break; }
         if (error.status === 404) throw new Error('The task ended on this computer before the page could follow it.');
@@ -538,7 +541,9 @@ export class RuntimeAgent {
         if (job.status === 'cancelled') this.emit('stopped');
         done = true;
       }
-      if (!done) await pause(this.pollMs, signal);
+      // An answer with events, or a long poll that waited, goes straight on.
+      // A quick empty answer (an older server without wait=) is paced.
+      if (!done && !(job.events || []).length && Date.now() - asked < this.pollMs) await pause(this.pollMs, signal);
     }
   }
 }

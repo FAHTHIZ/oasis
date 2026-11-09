@@ -3,6 +3,17 @@
 A short, dated record of changes, tests, benchmark results, blockers and known
 weaknesses. Newest first. Detailed user-facing notes go in the CHANGELOG.
 
+## 2026-11-09 (runtime: long-poll job events)
+
+### Changes
+- `GET /api/jobs/:id?after=N&wait=ms` (wait capped at 25 s) holds the request until `emit()` adds an event; closing the request or the server releases it. Finished jobs and requests with events ready answer at once. Every terminal status change in `web.mjs` emits an event, so waking on events is sufficient.
+- `RuntimeAgent.follow()` sends `wait=20000` and only pauses after a quick empty answer (an older server without `wait`). Replaces the fixed 350 ms poll: event latency drops from up to 350 ms to near zero and an idle task costs one request per 20 s instead of ~3 per second. SSE was considered; long polling keeps the client's event handling and resume logic unchanged and survives proxies that buffer streams.
+- Test fakes parsed `after=` with `Number()`, which breaks with a following `&wait=`; they now use `parseInt` like the server.
+
+### Tests
+- New `test/web-long-poll.test.mjs` against a real server and scripted model: a long poll returns on the first event, holds ~300 ms with nothing new, is woken by answering an approval, and never holds a finished job.
+- Related suites 278 pass, 0 fail; browser e2e pass.
+
 ## 2026-11-09 (web app: background tasks, docked approvals, reconnects)
 
 ### Changes

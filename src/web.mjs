@@ -274,6 +274,7 @@ export function toolDetail(name, args = {}) {
 
 const APP_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const MAX_BODY_BYTES = 32 * 1024;
+const TERMINAL_JOB_STATUSES = new Set(['completed', 'error', 'cancelled', 'interrupted']);
 const MAX_UPLOAD_FILE_BYTES = 10 * 1024 * 1024;
 const MAX_UPLOAD_BODY_BYTES = 30 * 1024 * 1024;
 // Chat requests may carry pasted or dropped images (base64), so they get a
@@ -520,10 +521,36 @@ export function createOasisWebServer(options = {}) {
     return busyWorkspaces.has(workspaceKey) || startingWorkspaces.has(workspaceKey);
   }
 
+  // Long-poll readers of GET /api/jobs/:id?wait=ms, woken by the next event.
+  const jobWaiters = new Map();
+  function wakeJobWaiters(jobId) {
+    const waiting = jobWaiters.get(jobId);
+    if (!waiting) return;
+    jobWaiters.delete(jobId);
+    for (const wake of waiting) wake();
+  }
+  function waitForJobEvent(jobId, ms, req) {
+    return new Promise((resolve) => {
+      let waiting = jobWaiters.get(jobId);
+      if (!waiting) { waiting = new Set(); jobWaiters.set(jobId, waiting); }
+      const done = () => {
+        clearTimeout(timer);
+        req.off('close', done);
+        const set = jobWaiters.get(jobId);
+        if (set) { set.delete(done); if (!set.size) jobWaiters.delete(jobId); }
+        resolve();
+      };
+      const timer = setTimeout(done, ms);
+      req.once('close', done);
+      waiting.add(done);
+    });
+  }
+
   function emit(job, type, data = {}) {
     job.events.push({ id: job.nextEventId++, type, data, at: new Date().toISOString() });
     if (job.events.length > MAX_EVENTS_PER_JOB) job.events.splice(0, job.events.length - MAX_EVENTS_PER_JOB);
     taskStore.schedule(job, 250);
+    wakeJobWaiters(job.id);
   }
 
   // meta (from the agent) can offer "always allow <rule> this session"; that
@@ -2404,6 +2431,13 @@ export function createOasisWebServer(options = {}) {
     if (req.method === 'GET' && jobMatch) {
       const after = Math.max(0, Number.parseInt(parsedUrl.searchParams.get('after') || '0', 10) || 0);
       const job = jobs.get(jobMatch[1]);
+      // ?wait=ms holds the request (up to 25 s) until the next event, so a
+      // following page gets events at once instead of polling every 350 ms.
+      const wait = Math.min(25_000, Math.max(0, Number.parseInt(parsedUrl.searchParams.get('wait') || '0', 10) || 0));
+      if (job && wait && !TERMINAL_JOB_STATUSES.has(job.status) && !job.events.some((event) => event.id > after)) {
+        await waitForJobEvent(job.id, wait, req);
+        if (res.destroyed || res.writableEnded) return;
+      }
       if (job) {
         json(res, 200, {
           id: job.id,
@@ -2538,6 +2572,7 @@ export function createOasisWebServer(options = {}) {
         job.controller.abort(new Error('Oasis web server is closing.'));
         for (const pending of job.pendingApprovals.values()) pending.resolve(false);
       }
+      for (const jobId of [...jobWaiters.keys()]) wakeJobWaiters(jobId);
       for (const session of activeSessions.values()) closeSession(session);
       activeSessions.clear();
       try { ptyManager.closeAll(); } catch {}

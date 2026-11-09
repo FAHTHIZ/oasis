@@ -13,7 +13,7 @@ function fakeClient(pages) {
       calls.push({ path, body: options.body });
       if (path.startsWith('/api/jobs/' + JOB + '?after=' + Number.MAX_SAFE_INTEGER)) return { status: pages[0].status, events: [] };
       if (path.startsWith('/api/jobs/' + JOB + '?after=')) {
-        const after = Number(path.split('after=')[1]);
+        const after = Number.parseInt(path.split('after=')[1], 10);
         const page = pages[Math.min(poll++, pages.length - 1)];
         return { status: page.status, events: page.events.filter((event) => event.id > after) };
       }
@@ -90,7 +90,7 @@ test('detaching leaves the task running: no denial is posted and it resumes late
     async api(path, options = {}) {
       if (path === '/api/chat') return { jobId: JOB, sessionId: 's1' };
       if (path.endsWith('/approval') || path.endsWith('/cancel')) { posted.push(path); return {}; }
-      if (path.startsWith('/api/jobs/' + JOB)) return { status: 'waiting_approval', events: events.filter((e) => e.id > Number(path.split('after=')[1])) };
+      if (path.startsWith('/api/jobs/' + JOB)) return { status: 'waiting_approval', events: events.filter((e) => e.id > Number.parseInt(path.split('after=')[1], 10)) };
       return {};
     }
   };
