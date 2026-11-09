@@ -139,6 +139,21 @@ try {
         await page.locator('#approvalSheet').waitFor({ state: 'visible', timeout: timeoutMs });
         assert.equal(await page.locator('.msg.user').count(), 1, 'the request is shown once after switching back');
         console.log('[resume] switching tasks kept it running; switching back reattached');
+        // A second browser (another laptop or a phone) finds the running task
+        // under "Other devices and terminal" and answers the approval; the
+        // first browser's card closes instead of waiting for a click.
+        const other = await open({ viewport: { width: 1280, height: 860 }, colorScheme: 'dark' });
+        const elsewhere = other.page.locator('#sideSessions .side-task.running');
+        await elsewhere.first().waitFor({ timeout: timeoutMs });
+        await elsewhere.first().click();
+        await other.page.locator('#approvalSheet').waitFor({ state: 'visible', timeout: timeoutMs });
+        assert.match(await other.page.locator('#transcript').innerText(), /add\(\) in math\.mjs is wrong/, 'the other browser shows the request');
+        await other.page.locator('#allowButton').click();
+        await page.locator('#approvalSheet').waitFor({ state: 'hidden', timeout: timeoutMs });
+        await page.locator('.toast', { hasText: 'answered on another device' }).waitFor({ timeout: timeoutMs });
+        await other.context.close();
+        approvals++;
+        console.log('[devices] an approval answered in another browser closed here');
         continue;
       }
       if (approvals === 0) { await page.screenshot({ path: path.join(screenshotDir, 'approval-dark.png') }); await contrast(page, 'approval open (dark)'); }

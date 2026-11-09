@@ -112,3 +112,36 @@ test('detaching leaves the task running: no denial is posted and it resumes late
   assert.equal(agent.busy, false);
   assert.equal(agent.detach(), '', 'nothing to detach when idle');
 });
+
+test('an approval answered on another device closes here and is not posted again', async () => {
+  const events = [
+    { id: 1, type: 'started', data: { sessionId: 's1' } },
+    { id: 2, type: 'tool_start', data: { callId: 'c1', name: 'run_command', args: { command: 'npm test' } } },
+    { id: 3, type: 'approval_required', data: { approvalId: 'a1', prompt: 'Run npm test?' } }
+  ];
+  const later = [...events,
+    { id: 4, type: 'approval_resolved', data: { approvalId: 'a1', approved: true } },
+    { id: 5, type: 'tool_result', data: { callId: 'c1', name: 'run_command', status: 'ok', result: '1 passed' } },
+    { id: 6, type: 'completed', data: { text: 'Done.' } }];
+  let answeredElsewhere = false;
+  const calls = [];
+  const client = {
+    async api(path, options = {}) {
+      calls.push({ path, body: options.body });
+      const after = Number.parseInt(path.split('after=')[1], 10) || 0;
+      if (after === Number.MAX_SAFE_INTEGER) return { status: 'waiting_approval', events: [] };
+      // The other device answers once this page is showing the approval.
+      const list = answeredElsewhere ? later : events;
+      return { status: answeredElsewhere ? 'completed' : 'waiting_approval', events: list.filter((event) => event.id > after) };
+    }
+  };
+  const seen = [];
+  const agent = new RuntimeAgent({ client, pollMs: 1, waitMs: 1, onEvent: (event) => seen.push(event), approve: () => { setTimeout(() => { answeredElsewhere = true; }, 20); return new Promise(() => {}); } });
+  await agent.resume(JOB);
+  assert.equal(calls.filter((call) => call.path.endsWith('/approval')).length, 0, 'nothing is posted for an approval answered elsewhere');
+  const types = seen.map((event) => event.type);
+  assert.ok(types.includes('answered_elsewhere'));
+  assert.equal(seen.find((event) => event.type === 'answered_elsewhere').kind, 'approval');
+  assert.ok(seen.some((event) => event.type === 'tool_result' && event.ok));
+  assert.equal(types.at(-1), 'done');
+});

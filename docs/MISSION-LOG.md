@@ -3,6 +3,16 @@
 A short, dated record of changes, tests, benchmark results, blockers and known
 weaknesses. Newest first. Detailed user-facing notes go in the CHANGELOG.
 
+## 2026-11-09 (multiple devices on one task)
+
+### Changes
+- `RuntimeAgent.answeredHere()` races the local approval/question prompt against a long-poll watcher for that request's `approval_resolved` / `question_answered` event (or the job ending). Answered elsewhere: emits `answered_elsewhere`, posts nothing, and the app closes the card with a toast.
+- Bug: `GET /api/sessions/:id` threw (500) for a session not on disk yet, so another browser could not open a task whose first turn was running. Now 404 with a clear message; listed live-only sessions carry `unsaved: true` and the page follows the job without fetching history.
+
+### Tests
+- Unit: approval answered on another device is not posted and the turn finishes (`test/app-runtime-resume.test.mjs`, 5/5). Server: missing session is 404 (`test/web-long-poll.test.mjs`).
+- Browser e2e with two browser contexts: the second opens the running task from **Other devices and terminal**, sees the request and the approval, allows it; the first browser's card closes and shows "answered on another device". Pass, zero axe WCAG 2 A/AA violations, zero console errors.
+
 ## 2026-11-09 (accessibility gate)
 
 - Browser e2e now fails on any axe WCAG 2 A/AA violation, not only colour contrast, and also audits the page with the docked approval open. Result: zero violations on welcome (dark, light, phone), approval open, finished task and sign-in.
