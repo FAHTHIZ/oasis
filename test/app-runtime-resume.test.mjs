@@ -79,3 +79,36 @@ test('only running agent jobs are saved for resume, and bad ids are ignored', ()
   agent.load({ jobId: '../../etc' });
   assert.equal(agent.resumeJobId, '');
 });
+
+test('detaching leaves the task running: no denial is posted and it resumes later', async () => {
+  const events = [
+    { id: 1, type: 'started', data: { sessionId: 's1' } },
+    { id: 2, type: 'approval_required', data: { approvalId: 'a1', prompt: 'Run npm test?' } }
+  ];
+  const posted = [];
+  const client = {
+    async api(path, options = {}) {
+      if (path === '/api/chat') return { jobId: JOB, sessionId: 's1' };
+      if (path.endsWith('/approval') || path.endsWith('/cancel')) { posted.push(path); return {}; }
+      if (path.startsWith('/api/jobs/' + JOB)) return { status: 'waiting_approval', events: events.filter((e) => e.id > Number(path.split('after=')[1])) };
+      return {};
+    }
+  };
+  const seen = [];
+  let release;
+  const agent = new RuntimeAgent({
+    client, pollMs: 1, onEvent: (event) => seen.push(event.type),
+    approve: () => new Promise((resolve) => { release = resolve; })
+  });
+  const running = agent.send('fix it');
+  while (!release) await new Promise((resolve) => setTimeout(resolve, 2));
+  assert.equal(agent.snapshot().jobId, JOB, 'the running job is saved before leaving');
+  assert.equal(agent.detach(), JOB);
+  release(false); // the sheet closing resolves the prompt as "no"
+  await running;
+  assert.deepEqual(posted, [], 'leaving the chat neither denies the approval nor cancels the task');
+  assert.equal(seen.at(-1), 'detached');
+  assert.ok(!seen.includes('done') && !seen.includes('stopped'));
+  assert.equal(agent.busy, false);
+  assert.equal(agent.detach(), '', 'nothing to detach when idle');
+});

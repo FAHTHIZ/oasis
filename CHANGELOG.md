@@ -5,6 +5,9 @@ User-facing change history grouped by package version. A version heading does no
 ## Unreleased
 
 ### Web app
+- Switching to another task or starting a new one no longer cancels the running task. It keeps going in the background, its sidebar entry shows Working or Needs you, and opening it again reattaches. Tasks started from another browser or from the `oasis` terminal are listed under **Other devices and terminal**; opening a running one follows it live.
+- On wide screens the approval card docks above the message box instead of covering the page, so the sidebar stays usable while a task waits. Toasts move out of its way and repeated toasts show once.
+- A dropped connection shows "Reconnecting…" and retries with backoff for about a minute. A rejected access key now says you are no longer signed in instead of failing silently.
 - A task sidebar on wide screens lists this project's tasks, marks the ones running or waiting for you, and hides with Ctrl+B (Cmd+B).
 - Reloading the page, closing the tab or losing the connection no longer loses a running task. The web app reattaches, replays the timeline from the server and asks an open approval again; approvals you already answered are not asked twice.
 - **Remember this device** on the sign-in screen keeps the access key on a phone or laptop you own. **Sign out of this browser** (Ctrl+K) forgets it. A saved key that stopped working is removed, with a message saying so.

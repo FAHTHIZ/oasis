@@ -212,23 +212,26 @@ export class RuntimeAgent {
     if (this.busy) throw new Error('OASIS is still working on the last message.');
     if (!JOB_ID_RE.test(String(jobId || ''))) return false;
     this.busy = true;
+    this.detached = false;
     this.controller = new AbortController();
+    const signal = this.controller.signal;
     this.jobId = jobId;
     this.jobKind = 'agent';
     this.resumeJobId = '';
     try {
       this.emit('resumed', { jobId });
       this.emit('thinking');
-      await this.follow(this.controller.signal);
+      await this.follow(signal);
     } catch (error) {
-      if (this.controller && this.controller.signal.aborted) this.emit('stopped');
+      if (this.detached) { /* still running on the computer */ }
+      else if (signal.aborted) this.emit('stopped');
       else this.emit('error', { message: error.message || String(error) });
     } finally {
       this.busy = false;
       this.jobId = '';
       this.jobKind = '';
       this.controller = null;
-      this.emit('done');
+      this.emit(this.detached ? 'detached' : 'done');
     }
     return true;
   }
@@ -242,6 +245,19 @@ export class RuntimeAgent {
       this.emit('user', { content: note, steer: true });
       return true;
     } catch { return false; }
+  }
+
+  /**
+   * Stop following the task without stopping it: it keeps running on the
+   * computer, and `resume(jobId)` picks it up again (switching chats, or
+   * another device taking over). Emits 'detached' instead of 'stopped'/'done'.
+   */
+  detach() {
+    if (!this.busy || !this.jobId || this.jobKind !== 'agent' || !this.controller) return '';
+    const jobId = this.jobId;
+    this.detached = true;
+    this.controller.abort();
+    return jobId;
   }
 
   stop() {
@@ -313,6 +329,7 @@ export class RuntimeAgent {
     let message = String(text || '').trim();
     if (!message) return;
     this.busy = true;
+    this.detached = false;
     this.controller = new AbortController();
     const signal = this.controller.signal;
     const pictures = (Array.isArray(images) ? images : []).filter((image) => image && image.mediaType && image.data).slice(0, 4).map(({ mediaType, data, name }) => ({ mediaType, data, name }));
@@ -346,14 +363,15 @@ export class RuntimeAgent {
       this.emit('job', { jobId: this.jobId });
       await this.follow(signal);
     } catch (error) {
-      if (signal.aborted) this.emit('stopped');
+      if (this.detached) { /* still running on the computer */ }
+      else if (signal.aborted) this.emit('stopped');
       else this.emit('error', { message: error.message || String(error) });
     } finally {
       this.busy = false;
       this.jobId = '';
       this.jobKind = '';
       this.controller = null;
-      this.emit('done');
+      this.emit(this.detached ? 'detached' : 'done');
     }
   }
 
@@ -397,17 +415,22 @@ export class RuntimeAgent {
     let idle = 0;
     const subagents = new SubagentTracker();
     while (!done) {
-      if (signal.aborted) { this.emit('stopped'); break; }
+      if (signal.aborted) { if (!this.detached) this.emit('stopped'); break; }
       let job;
       try { job = await this.client.api('/api/jobs/' + this.jobId + '?after=' + after, { signal }); }
       catch (error) {
-        if (signal.aborted) { this.emit('stopped'); break; }
+        if (signal.aborted) { if (!this.detached) this.emit('stopped'); break; }
         if (error.status === 404) throw new Error('The task ended on this computer before the page could follow it.');
+        if (error.status === 401) throw new Error('This browser is no longer signed in to OASIS. The task keeps running; sign in again to follow it.');
+        // Phones sleep and Wi-Fi drops: keep retrying for about five minutes,
+        // backing off to one try every 5 s. The task itself keeps running.
         idle++;
-        if (idle > 20) throw new Error('Lost the connection to OASIS on this computer.');
-        await pause(1000, signal);
+        if (idle === 3) this.emit('reconnecting');
+        if (idle > 70) throw new Error('Lost the connection to OASIS. The task keeps running on the computer; reload the page to follow it again.');
+        await pause(Math.min(5000, 1000 * idle), signal);
         continue;
       }
+      if (idle >= 3) this.emit('reconnected');
       idle = 0;
       // A finished task's open approvals can no longer be answered.
       const live = !['completed', 'error', 'cancelled', 'interrupted'].includes(job.status);
@@ -466,6 +489,9 @@ export class RuntimeAgent {
           case 'approval_required': {
             if (!live || resolved.has(String(data.approvalId || ''))) break;
             const value = await this.approve({ name: data.tool || 'runtime', args: { prompt: data.prompt, diff: data.diff, suggestion: data.suggestion, risky: data.risky }, runtime: true });
+            // Left for another chat or device while the sheet was open: the
+            // question stays open on the computer for whoever looks next.
+            if (signal.aborted) return;
             const approved = value === 'always' || value === true;
             await this.client.api('/api/jobs/' + this.jobId + '/approval', { method: 'POST', body: { approvalId: data.approvalId, approved, always: value === 'always' } }).catch(() => {});
             break;
@@ -473,6 +499,7 @@ export class RuntimeAgent {
           case 'question': {
             if (!live || resolved.has(String(data.questionId || ''))) break;
             const answer = await this.ask(data);
+            if (signal.aborted) return;
             await this.client.api('/api/jobs/' + this.jobId + '/answer', { method: 'POST', body: { questionId: data.questionId, answer: String(answer || '') } }).catch(() => {});
             break;
           }

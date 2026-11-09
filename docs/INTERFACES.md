@@ -46,7 +46,7 @@ The browser is only the interface. The default server listens on `127.0.0.1`, ne
 
 ### Sessions and reconnects
 
-Tasks run on the server, not in the tab. Reloading, closing the tab or losing the network does not stop a task. When the page comes back it reattaches to the running job, replays its timeline from the server and asks any open approval again. Finished tasks stay reviewable after a server restart. A task that was running when the server itself stopped is marked interrupted, because live processes and pending approvals cannot be restored.
+Tasks run on the server, not in the tab. Reloading, closing the tab or losing the network does not stop a task. When the page comes back it reattaches to the running job, replays its timeline from the server and asks any open approval again. Switching to another task or starting a new one leaves the running task going; its sidebar entry says Working or Needs you, and opening it again reattaches. Tasks started from another browser or from `oasis` in a terminal appear under **Other devices and terminal**, and opening a running one follows it live. If the connection drops, the page says it is reconnecting and retries with backoff for about a minute before giving up. Finished tasks stay reviewable after a server restart. A task that was running when the server itself stopped is marked interrupted, because live processes and pending approvals cannot be restored.
 
 ### Working in the web app
 
