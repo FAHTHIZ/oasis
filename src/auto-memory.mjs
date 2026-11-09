@@ -26,6 +26,7 @@ import stemmer from 'wink-porter2-stemmer';
 
 export const MEMORY_CATEGORIES = ['preferences', 'project', 'decisions', 'lessons', 'people', 'reference'];
 const MAX_MEMORIES = 500;
+function memoryLimit(env = process.env) { return Math.min(MAX_MEMORIES, Math.max(5, Number(env.OASIS_MEMORY_LIMIT) || MAX_MEMORIES)); }
 const MAX_BODY = 8000;
 const INDEX_BUDGET_CHARS = 8000; // about 2000 tokens, the agentmemory default budget
 const RECALL_BUDGET_CHARS = 4000;
@@ -293,7 +294,6 @@ export async function saveMemory(root, input = {}, { env = process.env, source =
   if (!name) throw new Error('A memory needs a short name.');
   if (!cleaned.text.trim()) throw new Error('A memory needs content.');
   const existing = await listMemories(root, { env, scope });
-  if (existing.length >= MAX_MEMORIES) throw new Error('This memory store has ' + MAX_MEMORIES + ' memories. Delete outdated ones first (oasis memory forget).');
   const now = new Date().toISOString();
   const slug = slugify(name);
   // Merge into an existing memory with the same name, or one that says nearly the same thing.
@@ -319,12 +319,55 @@ export async function saveMemory(root, input = {}, { env = process.env, source =
     await writeIndex(root, scope, env);
     return { action: 'updated', id: target.id, file: target.file, redacted: cleaned.redacted };
   }
+  // Bounded memory (as in Hermes): a full store consolidates instead of
+  // refusing. The least valuable note (outdated first, then stale and never
+  // recalled) moves to .archive/, where it stays readable and restorable.
+  let archived = null;
+  if (existing.length >= memoryLimit(env)) {
+    const victim = leastValuableMemory(existing);
+    if (!victim) throw new Error('This memory store has ' + memoryLimit(env) + ' memories. Delete outdated ones first (oasis memory forget).');
+    archived = await archiveMemory(root, victim, env);
+  }
   const dir = path.join(memoryRoots(root, env)[scope], category);
   let file = path.join(dir, slug + '.md');
   for (let n = 2; await stat(file).then(() => true, () => false); n += 1) file = path.join(dir, slug + '-' + n + '.md');
   await atomicWrite(file, serialize({ name, description, category, created: now, updated: now, recalls: 0, source, verificationStatus: 'unverified', content: cleaned.text }));
   await writeIndex(root, scope, env);
-  return { action: 'created', id: scope + ':' + category + '/' + path.basename(file, '.md'), file, redacted: cleaned.redacted };
+  return { action: 'created', id: scope + ':' + category + '/' + path.basename(file, '.md'), file, redacted: cleaned.redacted, ...(archived ? { archived } : {}) };
+}
+
+// How much a memory is worth keeping in a bounded store and in the prompt
+// index: recalled, verified and recent notes rank high; outdated ones lowest.
+export function memoryValue(memory, now = Date.now()) {
+  const freshness = memoryFreshness(memory, now);
+  if (freshness === 'outdated') return -1000;
+  const updated = Date.parse(memory && memory.updated || '') || 0;
+  const ageDays = updated ? Math.max(0, (now - updated) / 86_400_000) : 365;
+  let value = Math.min(40, 4 * (Number(memory && memory.recalls) || 0)) - Math.min(60, ageDays / 6);
+  if (freshness === 'current') value += 15;
+  if (freshness === 'stale') value -= 10;
+  if (freshness === 'uncertain') value -= 5;
+  if (memory && memory.scope === 'user') value += 5;
+  return value;
+}
+
+export function leastValuableMemory(memories, now = Date.now()) {
+  let worst = null;
+  let worstValue = Infinity;
+  for (const memory of memories) {
+    const value = memoryValue(memory, now);
+    if (value < worstValue) { worst = memory; worstValue = value; }
+  }
+  return worst;
+}
+
+async function archiveMemory(root, memory, env) {
+  const base = memoryRoots(root, env)[memory.scope];
+  const target = path.join(base, '.archive', memory.category, path.basename(memory.file));
+  await mkdir(path.dirname(target), { recursive: true, mode: 0o700 });
+  await rename(memory.file, target);
+  await writeIndex(root, memory.scope, env);
+  return memory.id;
 }
 
 export async function findMemory(root, id, { env = process.env } = {}) {
@@ -362,10 +405,15 @@ export async function memoryIndexPrompt(root, { env = process.env, budget = INDE
     'Memories can be outdated: check them against the code before relying on them, and record what you found with memory_verify.'
   ].join(' ');
   if (!memories.length) return intro + '\nNo memories saved yet.';
-  const sorted = memories.slice().sort((a, b) => (b.scope === 'user') - (a.scope === 'user') || String(b.updated).localeCompare(String(a.updated)));
+  // Outdated notes stay searchable but leave the index; the rest are listed
+  // most valuable first, so a tight budget drops the least useful ones.
+  const now = Date.now();
+  const outdated = memories.filter((memory) => memoryFreshness(memory, now) === 'outdated').length;
+  const sorted = memories.filter((memory) => memoryFreshness(memory, now) !== 'outdated')
+    .sort((a, b) => (b.scope === 'user') - (a.scope === 'user') || memoryValue(b, now) - memoryValue(a, now) || String(b.updated).localeCompare(String(a.updated)));
   const lines = [];
   let used = 0;
-  let omitted = 0;
+  let omitted = outdated;
   for (const memory of sorted) {
     const line = '- ' + memory.id + ' (' + memory.name + '): ' + memory.description;
     if (used + line.length > budget) { omitted += 1; continue; }
