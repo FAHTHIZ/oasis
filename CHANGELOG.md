@@ -4,6 +4,12 @@ User-facing change history grouped by package version. A version heading does no
 
 ## Unreleased
 
+### Web app
+- A task sidebar on wide screens lists this project's tasks, marks the ones running or waiting for you, and hides with Ctrl+B (Cmd+B).
+- Reloading the page, closing the tab or losing the connection no longer loses a running task. The web app reattaches, replays the timeline from the server and asks an open approval again; approvals you already answered are not asked twice.
+- **Remember this device** on the sign-in screen keeps the access key on a phone or laptop you own. **Sign out of this browser** (Ctrl+K) forgets it. A saved key that stopped working is removed, with a message saying so.
+- A refreshed look: glass top bar and message box, a soft aurora background, icon cards for suggested tasks and a sweep around the message box while OASIS works. Reduced-motion settings turn the animation off.
+
 ### Runtime
 - A first request that a gateway rejects as too large, without saying how large the window is, now retries with the smaller tool set and prompt instead of stopping.
 

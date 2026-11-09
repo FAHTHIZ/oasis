@@ -42,5 +42,7 @@ test('keyboard guide documents only shortcuts wired by the browser workspace', (
   assert.ok(keys.includes('Tab'));
   assert.ok(keys.includes('Shift+Tab'));
   assert.ok(keys.includes('Ctrl+`'));
-  assert.equal(APP_KEYBOARD_SHORTCUTS.length, 13);
+  assert.ok(keys.includes('MOD+B'));
+  assert.ok(main.includes("event.key.toLowerCase() === 'b'"), 'MOD+B is wired');
+  assert.equal(APP_KEYBOARD_SHORTCUTS.length, 14);
 });

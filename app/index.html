@@ -17,6 +17,9 @@
 <canvas class="ambient" id="ambient" aria-hidden="true" hidden></canvas>
 <div class="app" id="app">
   <header class="topbar">
+    <button class="icon-btn sidebar-toggle" id="sidebarToggle" type="button" aria-controls="sidebar" aria-expanded="true" title="Hide sidebar" aria-label="Hide sidebar">
+      <svg viewBox="0 0 20 20" aria-hidden="true"><rect x="3" y="4" width="14" height="12" rx="2.2" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M8 4.5v11" stroke="currentColor" stroke-width="1.6"/></svg>
+    </button>
     <button class="brand" id="projectButton" aria-label="Projects" title="Projects">
       <img src="icons/oasis-mark.svg" alt="" width="26" height="26">
       <span class="brand-text">
@@ -46,6 +49,15 @@
   </header>
 
   <main class="main">
+   <nav class="sidebar" id="sidebar" aria-label="Tasks">
+    <button class="new-task" type="button" id="sideNewTask"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M10 4.5v11M4.5 10h11" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg><span>New task</span></button>
+    <button class="side-search" type="button" id="sideSearch"><svg viewBox="0 0 20 20" aria-hidden="true"><circle cx="8.7" cy="8.7" r="5.5" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="m13 13 4 4" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg><span>Search</span><kbd id="sideSearchKey">Ctrl K</kbd></button>
+    <h2 class="side-label" id="sideTasksLabel">Tasks</h2>
+    <ul class="side-list" id="sideTasks" aria-labelledby="sideTasksLabel"></ul>
+    <div class="side-foot">
+      <p class="side-status" id="sideStatus"><span class="side-dot" aria-hidden="true"></span><span id="sideStatusText">Connecting…</span></p>
+    </div>
+   </nav>
    <div class="chat-col">
     <div class="update-bar" id="updateBar" role="status" hidden>
       <span class="update-text"><b id="updateTitle"></b> <span id="updateDetail"></span></span>
@@ -61,9 +73,10 @@
         <form class="connect-card" id="connectForm" autocomplete="off">
           <label for="connectInput" class="sr-only">API key, model link or server address</label>
           <div class="row"><input id="connectInput" placeholder="Paste a key or link" autocapitalize="off" spellcheck="false" enterkeyhint="go"><button class="btn primary" type="submit" id="connectButton">Connect</button></div>
+          <label class="remember-device" id="rememberRow" hidden><input type="checkbox" id="rememberDevice"> Remember this device</label>
           <ol class="connect-log" id="connectLog" aria-live="polite"></ol>
           <div class="connect-found" id="connectFound" hidden></div>
-          <p class="hint" id="connectHint">Works with OpenRouter, Anthropic, OpenAI, Gemini, Groq, DeepSeek, Hugging Face, Ollama and any OpenAI-compatible server. No key yet? <a href="https://openrouter.ai/keys" target="_blank" rel="noopener">Get a free OpenRouter key</a>.</p>
+          <p class="hint" id="connectHint">Works with OpenRouter, Anthropic, OpenAI, Gemini, Groq, DeepSeek, NVIDIA NIM, Hugging Face, Ollama, OmniRoute and any OpenAI-compatible server. No key yet? <a href="https://openrouter.ai/keys" target="_blank" rel="noopener">Get a free OpenRouter key</a>.</p>
         </form>
         <div class="setup-steps" id="setupSteps"></div>
         <div class="suggestions" id="suggestions"></div>

@@ -7,8 +7,7 @@ This guide takes you from a fresh checkout to a reviewed, verified coding task. 
 | Goal | Start here | Execution boundary |
 |---|---|---|
 | Run an agent on the same machine as a project | CLI | Uses permissions of the local OASIS process |
-| Control a nearby computer from a browser | Connected browser workspace | Commands and project files stay on the host computer |
-| Use a desktop window | Electron desktop app | Local desktop host; installers are published only through GitHub Releases |
+| Work from a browser on this or any other device | Web app (`oasis web`) | Commands, project files and model keys stay on the host computer |
 | Integrate with an editor or compatible client | IDE integration or ACP | Depends on the configured host/runtime |
 
 ## 2. Install from source
@@ -61,11 +60,13 @@ MCP servers, plugins, hooks and imported skills can expand the runtime's capabil
 
 Read [SECURITY.md](../SECURITY.md) before connecting sensitive workspaces.
 
-## 7. Use a phone or tablet
+## 7. Use another device
 
-To work on a project stored on a computer from another device, start the connected workspace on that computer and connect from a trusted private network. The agent and project access stay on the host.
+Start the web app on the computer that holds the project, put HTTPS in front of it (Tailscale Serve, Cloudflare Tunnel, Caddy or nginx), and open the address in any browser:
 
-See [Remote access](REMOTE-ACCESS.md) to open the workspace from another device.
+    oasis web --public-url https://oasis.example.com --trust-proxy
+
+Paste the link or access key once and tick **Remember this device** on hardware you own. The agent and project access stay on the host. See [Remote access](REMOTE-ACCESS.md).
 
 ## Troubleshooting
 
@@ -73,7 +74,7 @@ See [Remote access](REMOTE-ACCESS.md) to open the workspace from another device.
 - **A command asks for approval:** inspect the command, arguments and working directory before deciding.
 - **Sandbox unavailable:** do not assume isolation is active; see the security policy and architecture notes.
 - **The result is not correct:** inspect the diff, ask for a narrow correction and run the relevant test again.
-- **A desktop installer is not listed:** check [GitHub Releases](https://github.com/FAHTHIZ/oasis/releases). Tags and temporary CI artifacts are not public releases.
+- **The browser asks for the link again:** tick **Remember this device**, or start with `--public-url` so the key survives restarts. `oasis web key` shows it.
 
 ## Useful project links
 
