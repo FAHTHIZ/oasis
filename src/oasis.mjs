@@ -17,4 +17,5 @@ if (argv.length === 1 && (argv[0] === '--version' || argv[0] === '-v')) {
 if (!process.env.OASIS_NO_COMPILE_CACHE && typeof module.enableCompileCache === 'function') {
   try { module.enableCompileCache(); } catch {}
 }
+globalThis.__OASIS_CLI_ENTRY = true;
 await import('./cli.mjs');
