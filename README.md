@@ -124,7 +124,7 @@ OASIS has two interfaces, both on the same runtime, sessions and settings. Start
   </tr>
 </table>
 
-The web app runs on a computer or server you control, not a hosted service, and opens in any modern browser. There is no separate desktop or mobile app to install.
+The web app runs on a computer or server you control, not a hosted service, and opens in any modern browser. An optional [desktop app](docs/DESKTOP.md) for Windows, macOS and Linux shows the same workspace in its own window; there is no separate mobile app.
 
 ### Use it from anywhere
 

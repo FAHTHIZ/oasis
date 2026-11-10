@@ -1801,6 +1801,12 @@ export function createOasisWebServer(options = {}) {
         try {
           // ?refresh=1 is a manual "Check now": skip the 6-hour cache.
           const force = parsedUrl.searchParams.get('refresh') === '1';
+          // The desktop app answers from its own updater, which can install.
+          const bridge = options.appUpdate;
+          if (bridge) {
+            json(res, 200, { host: 'desktop', ...(force || !bridge.status().checkedAt ? await bridge.check() : bridge.status()) });
+            return;
+          }
           if (updateChecksDisabled(env)) { json(res, 200, { host: 'cli', phase: 'disabled', available: false, current: oasisVersion() }); return; }
           const result = await cachedUpdateCheck({ statePath, currentVersion: oasisVersion(), kind: 'cli', fetchImpl: options.updateFetchImpl || fetch, force });
           json(res, 200, {
@@ -1810,7 +1816,7 @@ export function createOasisWebServer(options = {}) {
             releasesPage: result.latest ? result.latest.url : RELEASES_PAGE
           });
         } catch (error) {
-          json(res, 200, { host: 'cli', phase: 'error', available: false, current: oasisVersion(), error: String(error && error.message || error) });
+          json(res, 200, { host: options.appUpdate ? 'desktop' : 'cli', phase: 'error', available: false, current: oasisVersion(), error: String(error && error.message || error) });
         }
         return;
       }
@@ -1819,13 +1825,22 @@ export function createOasisWebServer(options = {}) {
         const body = await readJsonBody(req);
         const action = String(body && body.action || '');
         const version = typeof (body && body.version) === 'string' ? body.version.slice(0, 40) : '';
+        const bridge = options.appUpdate;
         if (action === 'skip') {
+          if (bridge) { json(res, 200, { host: 'desktop', ...(await bridge.skip(version || undefined)) }); return; }
           const state = await readUpdateState(statePath);
           await writeUpdateState(statePath, { ...state, skippedVersion: version || (state.lastResult && state.lastResult.latest && state.lastResult.latest.version) || '' });
           json(res, 200, { host: 'cli', skipped: true });
           return;
         }
-        if (action === 'install') { json(res, 400, { error: 'Run oasis update in a terminal to install the new version.' }); return; }
+        if (action === 'install') {
+          if (!bridge) { json(res, 400, { error: 'Run oasis update in a terminal to install the new version.' }); return; }
+          // Respond first: installing can quit the app that serves this request.
+          // The desktop host still asks with a native dialog before installing.
+          json(res, 202, { host: 'desktop', accepted: true });
+          setImmediate(() => { void Promise.resolve(bridge.prompt()).catch(() => {}); });
+          return;
+        }
         json(res, 400, { error: 'Unknown update action.' });
         return;
       }
@@ -1913,7 +1928,10 @@ export function createOasisWebServer(options = {}) {
           next = result.config;
           reply = { label: result.label, provider: result.provider, models: result.models, toolCalling: result.toolCalling, notes: result.notes, masked: result.masked, steps: steps.slice(-12) };
         }
-        await saveConfig(next, { env });
+        // The desktop app stores the key in the OS key store (Electron
+        // safeStorage) and only the non-secret details in the config file.
+        if (typeof options.onProviderConfig === 'function') await options.onProviderConfig(next);
+        else await saveConfig(next, { env });
       } catch (error) {
         const raw = String(error && error.message || 'Could not connect.');
         const key = next && next.apiKey;
@@ -1964,9 +1982,12 @@ export function createOasisWebServer(options = {}) {
         json(res, 422, { saved: false, verified: false, error: safeMessage.slice(0, 1600) });
         return;
       }
-      // Saved to the local config file with owner-only permissions (0600)
-      // where the OS supports it. The key is never sent back to the page.
-      await saveConfig({ protocol, baseURL, model, apiKey }, { env });
+      // The desktop host commits the encrypted key and the non-secret details
+      // together. Otherwise the key goes to the local config file with
+      // owner-only permissions (0600) where the OS supports it. It is never
+      // sent back to the page.
+      if (typeof options.onProviderConfig === 'function') await options.onProviderConfig({ protocol, baseURL, model, apiKey });
+      else await saveConfig({ protocol, baseURL, model, apiKey }, { env });
       json(res, 200, {
         saved: true,
         verified: true,

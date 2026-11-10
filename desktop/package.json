@@ -1,0 +1,17 @@
+{
+  "name": "oasis-desktop-build",
+  "private": true,
+  "description": "Packaging tools for the OASIS desktop app. The app itself is the OASIS runtime in ../src with the shell in this folder; this file only pins Electron and electron-builder so the npm CLI package stays free of them.",
+  "type": "module",
+  "license": "Apache-2.0",
+  "scripts": {
+    "stage": "node scripts/build.mjs --stage-only",
+    "dev": "node scripts/build.mjs --stage-only && electron .stage",
+    "dir": "node scripts/build.mjs --dir",
+    "dist": "node scripts/build.mjs"
+  },
+  "devDependencies": {
+    "electron": "45.2.3",
+    "electron-builder": "26.18.0"
+  }
+}

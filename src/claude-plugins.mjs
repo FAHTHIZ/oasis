@@ -33,6 +33,7 @@ import { cp, mkdir, readFile, readdir, realpath, rm, stat } from 'node:fs/promis
 import os from 'node:os';
 import path from 'node:path';
 import { getConfigDirectory } from './config.mjs';
+import { nodeChildEnv } from './node-process.mjs';
 
 const NAME = /^[a-z0-9][a-z0-9._-]{0,63}$/i;
 const MAX_JSON = 1024 * 1024;
@@ -709,7 +710,10 @@ export async function fetchNpmPluginSource(source, staging, env = process.env) {
   }
   await mkdir(staging, { recursive: true });
   const invocation = await resolveNpmInvocation({ env });
-  const packed = await runAsync(invocation.command, [...invocation.argsPrefix, ...args], { timeout: 180000, cwd: staging, env: { ...env, npm_config_audit: 'false', npm_config_fund: 'false', npm_config_update_notifier: 'false' } });
+  const npmEnv = { ...env, npm_config_audit: 'false', npm_config_fund: 'false', npm_config_update_notifier: 'false' };
+  // On Windows npm-cli.js runs under our own executable; in the desktop app that
+  // is Electron, which must run as node.
+  const packed = await runAsync(invocation.command, [...invocation.argsPrefix, ...args], { timeout: 180000, cwd: staging, env: invocation.command === process.execPath ? nodeChildEnv(npmEnv) : npmEnv });
   if (packed.error) throw new Error('npm is required for npm plugin sources: ' + packed.error.message);
   if (packed.status !== 0) throw new Error('npm pack ' + pkg + ' failed: ' + String(packed.stderr || packed.stdout).trim().slice(0, 500));
   let info;

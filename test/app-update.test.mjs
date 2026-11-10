@@ -1,10 +1,12 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { createHash } from 'node:crypto';
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import {
-  cachedUpdateCheck, checkForAppUpdate, compareVersions, parseChecksums, parseVersion, shouldNotify, updateChecksDisabled
+  cachedUpdateCheck, checkForAppUpdate, compareVersions, detectInstallKind, downloadVerifiedAsset,
+  installPlan, parseChecksums, parseVersion, pickReleaseAsset, shouldNotify, updateChecksDisabled
 } from '../src/app-update.mjs';
 
 const ASSETS = [
@@ -34,12 +36,34 @@ test('versions compare numerically and releases outrank their pre-releases', () 
   assert.throws(() => compareVersions('nope', '1.0.0'));
 });
 
-test('stable checks report a newer release', async () => {
+test('install kind follows the packaged platform', () => {
+  assert.equal(detectInstallKind({ packaged: false, platform: 'win32' }), 'cli');
+  assert.equal(detectInstallKind({ packaged: true, platform: 'win32' }), 'nsis');
+  assert.equal(detectInstallKind({ packaged: true, platform: 'darwin' }), 'dmg');
+  assert.equal(detectInstallKind({ packaged: true, platform: 'linux', env: { APPIMAGE: '/opt/OASIS.AppImage' } }), 'appimage');
+  assert.equal(detectInstallKind({ packaged: true, platform: 'linux', env: {} }), 'deb');
+});
+
+test('the asset picker matches each installer and architecture, ignoring blockmaps', () => {
+  assert.equal(pickReleaseAsset(ASSETS, { kind: 'nsis', arch: 'x64' }).name, 'OASIS-1.1.0-x64.exe');
+  assert.equal(pickReleaseAsset(ASSETS, { kind: 'dmg', arch: 'arm64' }).name, 'OASIS-1.1.0-arm64.dmg');
+  assert.equal(pickReleaseAsset(ASSETS, { kind: 'dmg', arch: 'x64' }), null, 'an Intel Mac must not get an Apple Silicon image');
+  assert.equal(pickReleaseAsset(ASSETS, { kind: 'appimage', arch: 'x64' }).name, 'OASIS-1.1.0-x86_64.AppImage');
+  assert.equal(pickReleaseAsset(ASSETS, { kind: 'deb', arch: 'x64' }).name, 'OASIS-1.1.0-amd64.deb');
+  assert.equal(pickReleaseAsset(ASSETS, { kind: 'deb', arch: 'arm64' }), null);
+  assert.equal(pickReleaseAsset(ASSETS, { kind: 'cli' }), null);
+  assert.equal(pickReleaseAsset([{ name: 'OASIS-2.0.0.dmg', browser_download_url: 'https://github.com/x' }], { kind: 'dmg', arch: 'x64' }).name, 'OASIS-2.0.0.dmg', 'unlabelled files are universal');
+});
+
+test('stable checks report a newer release with the right installer', async () => {
   const fetchImpl = jsonFetch({ 'https://api.github.com/repos/FAHTHIZ/oasis/releases/latest': release('v1.1.0') });
-  const result = await checkForAppUpdate({ currentVersion: '1.0.0', fetchImpl });
+  const result = await checkForAppUpdate({ currentVersion: '1.0.0', kind: 'nsis', arch: 'x64', fetchImpl });
   assert.equal(result.available, true);
   assert.equal(result.latest.version, '1.1.0');
-  const same = await checkForAppUpdate({ currentVersion: '1.1.0', fetchImpl });
+  assert.equal(result.asset.name, 'OASIS-1.1.0-x64.exe');
+  assert.match(result.checksumsUrl, /SHA256SUMS$/);
+  assert.equal(result.canInstall, true);
+  const same = await checkForAppUpdate({ currentVersion: '1.1.0', kind: 'nsis', arch: 'x64', fetchImpl });
   assert.equal(same.available, false);
   const cli = await checkForAppUpdate({ currentVersion: '1.0.0', kind: 'cli', fetchImpl });
   assert.equal(cli.available, true);
@@ -71,6 +95,60 @@ test('checksum lists parse sha256sum output, with or without ./ and binary marke
   assert.equal(sums.get('OASIS-1.1.0-x64.exe'), a);
   assert.equal(sums.get('OASIS-1.1.0-arm64.dmg'), b.toLowerCase());
   assert.equal(sums.size, 2);
+});
+
+function bodyFetch(files) {
+  return async (url) => {
+    const name = url.split('/').pop();
+    if (!(name in files)) return { ok: false, status: 404 };
+    const bytes = Buffer.from(files[name]);
+    return {
+      ok: true, status: 200,
+      headers: { get: (key) => key === 'content-length' ? String(bytes.length) : null },
+      text: async () => bytes.toString('utf8'),
+      body: new ReadableStream({ start(controller) { controller.enqueue(new Uint8Array(bytes)); controller.close(); } })
+    };
+  };
+}
+
+test('downloads are verified against SHA256SUMS before they are kept', async () => {
+  const dir = await mkdtemp(path.join(os.tmpdir(), 'oasis-update-'));
+  try {
+    const payload = 'installer bytes';
+    const digest = createHash('sha256').update(payload).digest('hex');
+    const update = {
+      asset: { name: 'OASIS-1.1.0-x64.exe', url: 'https://github.com/FAHTHIZ/oasis/releases/download/v1.1.0/OASIS-1.1.0-x64.exe', size: payload.length },
+      checksumsUrl: 'https://github.com/FAHTHIZ/oasis/releases/download/v1.1.0/SHA256SUMS'
+    };
+    const progress = [];
+    const ok = await downloadVerifiedAsset(update, { directory: dir, fetchImpl: bodyFetch({ 'OASIS-1.1.0-x64.exe': payload, SHA256SUMS: digest + '  OASIS-1.1.0-x64.exe\n' }), onProgress: (p) => progress.push(p) });
+    assert.equal(await readFile(ok.filePath, 'utf8'), payload);
+    assert.equal(ok.sha256, digest);
+    assert.ok(progress.length >= 1);
+    const again = await downloadVerifiedAsset(update, { directory: dir, fetchImpl: bodyFetch({ SHA256SUMS: digest + '  OASIS-1.1.0-x64.exe\n' }) });
+    assert.equal(again.reused, true, 'an already verified file is reused without downloading');
+
+    await rm(ok.filePath);
+    await assert.rejects(
+      downloadVerifiedAsset(update, { directory: dir, fetchImpl: bodyFetch({ 'OASIS-1.1.0-x64.exe': 'tampered', SHA256SUMS: digest + '  OASIS-1.1.0-x64.exe\n' }) }),
+      /did not match its published checksum/
+    );
+    await assert.rejects(readFile(ok.filePath), 'a mismatched download is deleted');
+    await assert.rejects(downloadVerifiedAsset(update, { directory: dir, fetchImpl: bodyFetch({ SHA256SUMS: 'f'.repeat(64) + '  other.exe\n' }) }), /does not list/);
+    await assert.rejects(downloadVerifiedAsset({ ...update, asset: { ...update.asset, url: 'https://evil.example/OASIS.exe' } }, { directory: dir, fetchImpl: bodyFetch({}) }), /Refusing to download/);
+    await assert.rejects(downloadVerifiedAsset({ ...update, asset: { ...update.asset, name: '../escape.exe' } }, { directory: dir, fetchImpl: bodyFetch({}) }), /unexpected release file name/);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test('install plans per installer type', () => {
+  assert.deepEqual(installPlan('nsis', 'C:\\t\\OASIS.exe').args, ['/S', '--updated', '--force-run']);
+  assert.equal(installPlan('appimage', '/tmp/new.AppImage', { env: { APPIMAGE: '/home/u/OASIS.AppImage' } }).target, '/home/u/OASIS.AppImage');
+  assert.equal(installPlan('appimage', '/tmp/new.AppImage', { env: {} }).action, 'manual');
+  assert.equal(installPlan('dmg', '/tmp/OASIS.dmg').action, 'open');
+  assert.match(installPlan('deb', '/tmp/OASIS.deb').command, /apt install/);
+  assert.equal(installPlan('cli', '').action, 'manual');
 });
 
 test('update checks can be disabled and skipped versions stay quiet', () => {
@@ -126,4 +204,11 @@ test('the CLI notice is instant from cache, bounded on a cold start, and respect
   } finally {
     await rm(dir, { recursive: true, force: true });
   }
+});
+
+test('installPlan refuses anything but a file path', async () => {
+  const { installPlan } = await import('../src/app-update.mjs');
+  assert.throws(() => installPlan('deb', { filePath: '/tmp/x.deb' }), TypeError);
+  assert.throws(() => installPlan('nsis', ''), TypeError);
+  assert.equal(installPlan('nsis', 'C:\\OASIS.exe').command, 'C:\\OASIS.exe');
 });

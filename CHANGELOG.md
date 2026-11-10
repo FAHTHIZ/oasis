@@ -4,6 +4,13 @@ User-facing change history grouped by package version. A version heading does no
 
 ## Unreleased
 
+### Desktop app
+- The desktop app is back, built on the same runtime as `oasis` and `oasis web` (it imports the web server rather than shipping a copy). Releases carry a Windows installer (x64, ARM64), macOS disk images (Apple Silicon, Intel) and Linux AppImage and `.deb` packages (x64, ARM64), all covered by `SHA256SUMS`. See [docs/DESKTOP.md](docs/DESKTOP.md).
+- The model key is encrypted with the operating system's key store (Keychain, DPAPI, libsecret/KWallet). On Linux without a keyring it is kept like the CLI keeps it, in an owner-only `config.json`. A key the CLI already saved moves into the key store on first launch.
+- **Help → Check for updates…** and the update bar download the new installer, check it against `SHA256SUMS`, and install it the right way for how OASIS was installed (silent Windows installer, AppImage swap, or open the `.deb`/`.dmg`).
+- Builds are not yet signed with an Apple Developer ID or Windows certificate; docs/DESKTOP.md gives the one-time macOS quarantine step and the SmartScreen note.
+- Fixed: background sessions, syntax checks and Claude plugin installs started `process.execPath`, which inside the desktop app would open another window instead of running Node.
+
 ### Web app
 - Starting a task while another one is still running in the same folder no longer ends in a dead-end "Finish or cancel it" message. The note names the running task and offers **Open the running task** (attaches to it, including its open approval) and **Stop it and send this** (cancels it and sends your new request, without a duplicate message). The server's 409 now carries `activeJob` (`id`, `type`, `title`, `sessionId`, `status`) for any client. Found while using the app: a task left running after its tab closed blocked every new tab with no way out.
 

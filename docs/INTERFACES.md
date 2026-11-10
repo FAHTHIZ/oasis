@@ -9,7 +9,7 @@ OASIS has **two interfaces**: the web app and the terminal. Both drive the same 
 
 A session started in the terminal shows up in the web app under **Chats → Earlier on this computer** and can be continued there.
 
-There is no separate desktop or mobile app. The web app is the product: a phone, tablet or laptop opens it in any modern browser, and the agent, files, shell and model keys stay on the machine running `oasis web`.
+The web app is the product: a phone, tablet or laptop opens it in any modern browser, and the agent, files, shell and model keys stay on the machine running `oasis web`. The [desktop app](DESKTOP.md) (Windows, macOS, Linux) is the same web app and runtime in its own window, with the model key in the operating system's key store and in-app updates. There is no separate mobile app.
 
 Integrations connect OASIS to other tools. They are not separate interfaces:
 

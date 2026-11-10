@@ -28,5 +28,6 @@ test('the release workflow refreshes the formula only for stable releases', () =
   assert.match(step, /outputs\.prerelease == 'false'/);
   assert.match(step, /node scripts\/homebrew-formula\.mjs --version "\$RELEASE_VERSION" --source-sha "\$source_sha"/);
   assert.match(step, /git add Formula\/oasis-cli\.rb/);
-  assert.doesNotMatch(workflow, /electron|desktop|Casks/i);
+  // The formula step commits only the formula; desktop installers ship as release assets.
+  assert.doesNotMatch(step.slice(0, step.indexOf('\n      - name:', 10) > 0 ? step.indexOf('\n      - name:', 10) : step.length), /Casks|electron/i);
 });

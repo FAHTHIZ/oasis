@@ -36,9 +36,10 @@ Status: **done** (tested and pushed) · **doing** · **open** · **blocked**
 
 | Item | Status | Evidence / notes |
 | --- | --- | --- |
-| Restore a desktop shell on the shared runtime | doing | Previous Electron sources in history before `3114f599` (`desktop/`) |
-| Windows, macOS (arm64, x64), Linux (AppImage, deb) installers in CI | open | |
-| Secure credential storage, auto-update, clean uninstall | open | |
+| Restore a desktop shell on the shared runtime | done | `desktop/` imports `src/web.mjs` directly; Electron and electron-builder live only in `desktop/package.json`. Child processes get `ELECTRON_RUN_AS_NODE` (`src/node-process.mjs`) |
+| Windows, macOS (arm64, x64), Linux (AppImage, deb) installers in CI | doing | `release.yml` `desktop` matrix builds and launch-tests each one. Linux AppImage and deb built, launched and used locally (Ollama task, terminal); Windows and macOS verified only by CI |
+| Secure credential storage, auto-update, clean uninstall | done (Linux verified) | OS key store via async `safeStorage`, 0600 fallback without a keyring; SHA256SUMS-verified updates per install kind; `apt install`/`apt remove` clean locally |
+| Code signing (Apple Developer ID, Windows certificate) | blocked | Needs the owner's certificates; builds are ad hoc signed (macOS) or unsigned (Windows), documented in docs/DESKTOP.md |
 
 ## 5. README and documentation (last)
 

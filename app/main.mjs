@@ -3464,12 +3464,20 @@ async function checkForUpdate() {
   if (!show) return;
   $('updateTitle').textContent = 'OASIS ' + version + ' is out.';
   $('updateDetail').textContent = 'You have ' + state.current + '. Your chats and keys stay.';
-  $('updateAction').textContent = 'Copy “oasis update”';
+  // The desktop app can install a checksum-verified installer itself; the
+  // CLI-hosted workspace copies the one command to run.
+  $('updateAction').textContent = state.host === 'desktop' ? (state.canInstall ? 'Install and restart' : 'Download') : 'Copy “oasis update”';
 }
 function setupUpdates() {
   $('updateAction').addEventListener('click', async () => {
     const state = updateState;
     if (!state) return;
+    if (state.host === 'desktop') {
+      // The desktop host confirms with a native dialog before it installs.
+      const done = await RT.client.api('/api/app/update', { method: 'POST', body: { action: 'install' } }).catch((error) => ({ error: String(error && error.message || error) }));
+      if (done && done.error) toast('Could not start the update: ' + done.error);
+      return;
+    }
     try { await navigator.clipboard.writeText('oasis update'); toast('Copied. Run it in a terminal, then start OASIS again.'); }
     catch { toast('Run “oasis update” in a terminal, then start OASIS again.'); }
   });
