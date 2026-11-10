@@ -1414,13 +1414,15 @@ function handleEvent(event) {
       endTurn('stopped');
       addMessage('note', 'Stopped.');
       break;
-    case 'error':
+    case 'error': {
       endTurn('error');
       display.push({ role: 'error', content: event.message });
-      addMessage('error', event.message);
+      const card = addMessage('error', event.message);
+      if (event.activeJob) busyFolderActions(card, event.activeJob, event.request || '');
       sound('fail');
       scrollDown(true);
       break;
+    }
     case 'job':
       // The task now runs on the computer: save where its output starts, so
       // a reload (or another device) can rebuild the turn and keep following it.
@@ -1767,6 +1769,54 @@ async function openRuntimeSession(item) {
   await restoreChat({ keepChat: true });
   refreshFiles();
   toast(live ? 'Following the task that is running on this computer.' : 'Continuing this session. New messages keep its history.');
+}
+// Another task holds this folder (409 from /api/chat): offer to open it, or
+// stop it and send the request that was turned away.
+const LIVE_JOB = new Set(['queued', 'running', 'waiting_approval']);
+function busyFolderActions(card, job, request) {
+  const row = document.createElement('div');
+  row.className = 'msg-actions-row';
+  const open = document.createElement('button');
+  open.type = 'button'; open.className = 'chip'; open.textContent = 'Open the running task';
+  const stop = document.createElement('button');
+  stop.type = 'button'; stop.className = 'chip'; stop.textContent = request ? 'Stop it and send this' : 'Stop it';
+  open.addEventListener('click', () => void openActiveJob(job));
+  stop.addEventListener('click', async () => {
+    open.disabled = stop.disabled = true;
+    stop.textContent = 'Stopping…';
+    if (!(await stopActiveJob(job))) { toast('That task did not stop. Open it and stop it from there.', 'error'); open.disabled = stop.disabled = false; stop.textContent = request ? 'Stop it and send this' : 'Stop it'; return; }
+    // Drop the turned-away request and this note, then send the request again.
+    let last = display.length - 1; while (last >= 0 && display[last].role !== 'user') last--;
+    if (last >= 0) display.splice(last);
+    const shown = card.previousElementSibling;
+    if (shown && shown.classList.contains('user')) shown.remove();
+    card.remove();
+    await persistChat();
+    if (request) await send(request);
+    else toast('Stopped. This folder is free again.');
+  });
+  row.append(open, stop);
+  card.appendChild(row);
+}
+async function stopActiveJob(job) {
+  try { await RT.client.api('/api/jobs/' + job.id + '/cancel', { method: 'POST', body: {} }); }
+  catch (error) { if (error.status !== 404 && error.status !== 409) return false; }
+  const deadline = Date.now() + 15000;
+  while (Date.now() < deadline) {
+    try { const state = await RT.client.api('/api/jobs/' + job.id); if (!LIVE_JOB.has(state.status)) return true; }
+    catch (error) { if (error.status === 404) return true; }
+    await new Promise((resolve) => setTimeout(resolve, 400));
+  }
+  return false;
+}
+async function openActiveJob(job) {
+  const state = await runtimeSessionState();
+  if (state && job.sessionId) {
+    for (const [id, sessionId] of state.chatSessions) if (sessionId === job.sessionId) { await openChat(id); return; }
+    const listed = state.sessions.find((item) => item && item.id === job.sessionId);
+    if (listed) { await openRuntimeSession({ ...listed, jobId: listed.jobId || job.id }); return; }
+  }
+  await openRuntimeSession({ id: job.sessionId || job.id, title: job.title, prompt: job.title, jobId: job.id, running: true, unsaved: true });
 }
 /* ---------- Sidebar: tasks at a glance (wide screens) ---------- */
 // Like the session lists in Codex, Claude Code and Devin: one click to start

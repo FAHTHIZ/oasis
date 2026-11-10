@@ -559,6 +559,22 @@ export function createOasisWebServer(options = {}) {
     return busyWorkspaces.has(workspaceKey) || startingWorkspaces.has(workspaceKey);
   }
 
+  // The 409 a busy workspace answers with names what holds it, so the app can
+  // offer to open or stop that task instead of a dead-end message.
+  function busyWorkspaceError(workspaceKey, action) {
+    const live = new Set(['queued', 'running', 'waiting_approval']);
+    const holder = [...jobs.values()].reverse().find((job) => job.workspaceRoot === workspaceKey && live.has(job.status));
+    const terminal = !holder && [...ptyWorkspaceLocks.values()].includes(workspaceKey);
+    const what = holder && holder.type === 'agent'
+      ? 'OASIS is still working on "' + String(holder.title || 'another task').slice(0, 80) + '" in this folder.'
+      : terminal ? 'A terminal command is still running in this folder.'
+      : 'Another task is still running in this folder.';
+    const error = new Error(what + ' Open that task or stop it before ' + action + '.');
+    error.statusCode = 409;
+    if (holder) error.activeJob = { id: holder.id, type: holder.type || '', title: String(holder.title || '').slice(0, 160), sessionId: holder.sessionId || null, status: holder.status };
+    return error;
+  }
+
   // Long-poll readers of GET /api/jobs/:id?wait=ms, woken by the next event.
   const jobWaiters = new Map();
   function wakeJobWaiters(jobId) {
@@ -719,9 +735,7 @@ export function createOasisWebServer(options = {}) {
       throw Object.assign(new Error('That session is already processing another message.'), { statusCode: 409 });
     }
     const workspaceKey = path.resolve(activeRoot);
-    if (workspaceIsBusy(workspaceKey)) {
-      throw Object.assign(new Error('This workspace already has an active task. Finish or cancel it before starting another task in the same workspace.'), { statusCode: 409 });
-    }
+    if (workspaceIsBusy(workspaceKey)) throw busyWorkspaceError(workspaceKey, 'starting another task');
     startingWorkspaces.add(workspaceKey);
     if (sessionId) startingSessions.add(sessionId);
 
@@ -1170,7 +1184,7 @@ export function createOasisWebServer(options = {}) {
       throw Object.assign(new Error('Choose a repository in owner/name format from the GitHub list.'), { statusCode: 400 });
     }
     const workspaceKey = path.resolve(activeRoot);
-    if (workspaceIsBusy(workspaceKey)) throw Object.assign(new Error('This workspace already has an active task. Finish or cancel it before switching workspaces.'), { statusCode: 409 });
+    if (workspaceIsBusy(workspaceKey)) throw busyWorkspaceError(workspaceKey, 'switching folders');
     startingWorkspaces.add(workspaceKey);
     try {
     const status = await getGithubStatus();
@@ -1337,7 +1351,7 @@ export function createOasisWebServer(options = {}) {
     // A companion terminal (the app's Terminal tab) runs beside the agent like an editor's
     // integrated terminal: it neither waits for nor blocks the workspace's agent tasks.
     const companion = interactive && input.companion === true;
-    if (!companion && workspaceIsBusy(workspaceKey)) throw Object.assign(new Error('This workspace already has an active task. Finish or cancel it before running another command.'), { statusCode: 409 });
+    if (!companion && workspaceIsBusy(workspaceKey)) throw busyWorkspaceError(workspaceKey, 'running another command');
     const releaseJobReservation = reserveJobSlot();
     const job = newJob();
     job.type = interactive ? 'terminal-pty' : 'terminal';
@@ -2598,7 +2612,7 @@ export function createOasisWebServer(options = {}) {
   const requestHandler = (req, res) => {
     void handle(req, res).catch((error) => {
       if (res.headersSent) { res.destroy(); return; }
-      json(res, Number.isInteger(error.statusCode) ? error.statusCode : 500, { error: String(error && error.message || error || 'Oasis server error').slice(0, 3000) });
+      json(res, Number.isInteger(error.statusCode) ? error.statusCode : 500, { error: String(error && error.message || error || 'Oasis server error').slice(0, 3000), ...(error && error.activeJob ? { activeJob: error.activeJob } : {}) });
     });
   };
   const server = tlsOptions ? createHttpsServer(tlsOptions, requestHandler) : createHttpServer(requestHandler);
@@ -2680,7 +2694,8 @@ export async function startOasisWebServer(options = {}) {
     app.server.once('listening', onListening);
     app.server.listen(port, host);
   });
-  if (options.refreshModelCatalog !== false) import('./model-catalog.mjs').then(({ refreshModelCatalog }) => refreshModelCatalog()).catch(() => {});
+  // The server's env, not process.env: OASIS_CONFIG_DIR passed to the server decides where the cache goes.
+  if (options.refreshModelCatalog !== false) import('./model-catalog.mjs').then(({ refreshModelCatalog }) => refreshModelCatalog({ env: options.env || process.env })).catch(() => {});
   const address = app.server.address();
   return { ...app, host, port: address && typeof address === 'object' ? address.port : port };
 }

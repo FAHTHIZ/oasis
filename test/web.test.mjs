@@ -780,7 +780,9 @@ test('browser runtime rejects overlapping mutating jobs before workspace capacit
       body: JSON.stringify({ message: 'Overlapping task ' + index + ' must be rejected.' })
     });
     assert.equal(response.status, 409, await response.clone().text());
-    assert.match((await response.json()).error, /workspace already has an active task/i);
+    const busy = await response.json();
+    assert.match(busy.error, /still (?:working on|running in this folder)/i);
+    assert.equal(busy.activeJob && busy.activeJob.id, jobId, 'the 409 names the running task');
   }
   assert.equal(pendingResponses.length, 1, 'rejected tasks must not reach the provider');
 
