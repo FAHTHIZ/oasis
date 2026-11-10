@@ -57,6 +57,26 @@ function alive(pid) {
   try { process.kill(pid, 0); return true; } catch (error) { return error.code === 'EPERM'; }
 }
 
+// Linux: when the kernel started a process (clock ticks since boot, /proc/PID/stat
+// field 22). It changes when a PID is reused, so a recorded run is never mistaken
+// for whatever process got its number later. null where /proc is unavailable.
+export function processStartTicks(pid, { readStat = (file) => readFileSync(file, 'utf8') } = {}) {
+  if (!Number.isInteger(pid) || pid <= 0) return null;
+  try {
+    const stat = readStat('/proc/' + pid + '/stat');
+    const value = Number(stat.slice(stat.lastIndexOf(')') + 2).split(' ')[19]);
+    return Number.isFinite(value) ? value : null;
+  } catch { return null; }
+}
+
+// Is the recorded run's own process still alive? Entries written before start
+// times were recorded (or on platforms without /proc) fall back to a PID check.
+export function sameProcess(entry, { startTicks = processStartTicks, isAlive = alive } = {}) {
+  if (!entry || !isAlive(entry.pid)) return false;
+  if (!Number.isFinite(entry.procStart)) return true;
+  return startTicks(entry.pid) === entry.procStart;
+}
+
 // Identifies the current boot so a PID recorded before a reboot or crash is not
 // mistaken for a live run when the OS reuses it. Linux exposes a boot id; other
 // platforms use the boot time rounded to a minute.
@@ -74,7 +94,7 @@ export function currentBootId() {
 function refreshStatus(entry) {
   if (entry.status !== 'running') return entry;
   const rebooted = entry.bootId && entry.bootId !== currentBootId();
-  if (rebooted || !alive(entry.pid)) return { ...entry, status: 'interrupted', ...(rebooted ? { interruptedBy: 'reboot' } : {}) };
+  if (rebooted || !sameProcess(entry)) return { ...entry, status: 'interrupted', ...(rebooted ? { interruptedBy: 'reboot' } : {}) };
   return entry;
 }
 
@@ -252,6 +272,8 @@ export async function startBackgroundSession(options = {}) {
   try {
     const child = spawn(options.execPath || process.execPath, args, { cwd: root, env: nodeChildEnv({ ...env, OASIS_BACKGROUND_ID: id, OASIS_BACKGROUND_RUN_ID: runId }), detached: true, stdio: ['ignore', out, out], windowsHide: true });
     entry.pid = child.pid;
+    const procStart = processStartTicks(child.pid);
+    if (procStart !== null) entry.procStart = procStart;
     child.unref();
   } finally { closeSync(out); }
   await writeEntry(entry, env);
@@ -302,6 +324,8 @@ export async function startExecJob(options = {}) {
   try {
     const child = spawn(options.execPath || process.execPath, ['-e', runner, command, root, entryPath(id, env), runId], { cwd: root, env: nodeChildEnv({ ...env, OASIS_BACKGROUND_ID: id, OASIS_BACKGROUND_RUN_ID: runId }), detached: true, stdio: ['ignore', out, out], windowsHide: true });
     entry.pid = child.pid;
+    const procStart = processStartTicks(child.pid);
+    if (procStart !== null) entry.procStart = procStart;
     child.unref();
   } finally { closeSync(out); }
   await writeEntry(entry, env);
@@ -367,8 +391,12 @@ export async function listBackgroundSessions(env = process.env) {
 export async function stopBackgroundSession(id, env = process.env) {
   const entry = await readEntry(id, env);
   if (entry.status !== 'running') return { ...entry, stopped: false };
+  // readEntry already re-checked the process. Signalling a process group whose
+  // leader is not this run (a reused PID) could stop unrelated programs.
   const processHandle = { pid: entry.pid, kill: (signal) => { try { process.kill(entry.pid, signal); return true; } catch { return false; } } };
   signalProcessTree(processHandle, 'SIGTERM');
+  // The escalation still reaches descendants after the leader exits; Linux does
+  // not hand a PID to a new process while its process group still exists.
   const killTimer = setTimeout(() => signalProcessTree(processHandle, 'SIGKILL'), 1500);
   killTimer.unref?.();
   const stopped = { ...entry, status: 'stopped', finishedAt: new Date().toISOString() };
