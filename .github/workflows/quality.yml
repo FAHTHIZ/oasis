@@ -128,7 +128,10 @@ jobs:
           /tmp/pyscan/bin/pip install --disable-pip-version-check -q zizmor==1.31.1 bandit==1.9.4
           mkdir -p /tmp/pyscan-bin && ln -s /tmp/pyscan/bin/zizmor /tmp/pyscan/bin/bandit /tmp/pyscan-bin/
       - name: Run tests without inherited environment variables
-        run: mkdir -p /tmp/h1 && env -i PATH="/tmp/ast-grep/node_modules/.bin:/tmp/gitleaks:/tmp/pyscan-bin:$PATH" HOME=/tmp/h1 NODE_OPTIONS="--import=$GITHUB_WORKSPACE/.github/scripts/test-resource-watch.mjs" node --test test/*.test.mjs
+        # setsid: the suite gets its own session and process group, so a test that
+        # signals a process group by mistake fails the suite instead of stopping
+        # the runner ("The runner has received a shutdown signal").
+        run: mkdir -p /tmp/h1 && setsid --wait env -i PATH="/tmp/ast-grep/node_modules/.bin:/tmp/gitleaks:/tmp/pyscan-bin:$PATH" HOME=/tmp/h1 NODE_OPTIONS="--import=$GITHUB_WORKSPACE/.github/scripts/test-resource-watch.mjs" node --test test/*.test.mjs
 
   pty-runtime:
     name: Native PTY integration (Linux / Node 22)
