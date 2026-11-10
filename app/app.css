@@ -104,6 +104,9 @@ svg{width:20px;height:20px;flex:none}
 .msg.user .bubble{background:linear-gradient(180deg,color-mix(in srgb,var(--accent) 7%,var(--raised)),var(--raised));border:1px solid var(--line);padding:10px 14px;border-radius:18px 18px 6px 18px;max-width:88%;white-space:pre-wrap;overflow-wrap:anywhere}
 .msg.assistant .body{overflow-wrap:anywhere}
 .msg.error{color:var(--danger);background:var(--danger-soft);border:1px solid color-mix(in srgb,var(--danger) 30%,transparent);border-radius:var(--r-md);padding:10px 12px;font-size:14px}
+.msg.error .msg-actions-row{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}
+.msg.error .msg-actions-row .chip{color:var(--text);background:var(--panel);cursor:pointer}
+.msg.error .msg-actions-row .chip:disabled{opacity:.6;cursor:default}
 .msg.note{color:var(--muted);font-size:13px;text-align:center}
 .body p{margin:0 0 .7em}
 .body p:last-child{margin-bottom:0}

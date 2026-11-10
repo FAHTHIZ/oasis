@@ -368,7 +368,11 @@ export class RuntimeAgent {
     } catch (error) {
       if (this.detached) { /* still running on the computer */ }
       else if (signal.aborted) this.emit('stopped');
-      else this.emit('error', { message: error.message || String(error) });
+      else {
+        // 409: another task holds this folder. Pass it on so the page can open or stop it.
+        const activeJob = !this.jobId && error && error.status === 409 && error.data && error.data.activeJob && typeof error.data.activeJob.id === 'string' ? error.data.activeJob : null;
+        this.emit('error', { message: error.message || String(error), ...(activeJob ? { activeJob, request: String(text || '').trim() } : {}) });
+      }
     } finally {
       this.busy = false;
       this.jobId = '';

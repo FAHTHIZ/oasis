@@ -3,6 +3,25 @@
 A short, dated record of changes, tests, benchmark results, blockers and known
 weaknesses. Newest first. Detailed user-facing notes go in the CHANGELOG.
 
+## 2026-11-10 (completion mandate: baseline, busy-folder recovery)
+
+### Baseline
+- Node 22.21.1, Linux x64, 2 CPU cores. Full `npm test`: 2,384 tests, 2,376 pass, 0 fail, 8 skipped (576 s). oxlint clean, `npm audit` 0 vulnerabilities. Patch/minor dependency refresh: same result (`859163c5`).
+
+### Normal-user runs (local model)
+- Clean HOME, `oasis connect http://localhost:11434`: detected Ollama, tested a real tool call and saved `qwen3:4b-instruct-2507-q4_K_M` in about a minute. Clear output.
+- `oasis -p "fix slugify" --permission-mode accept-edits`: 14.5 min on CPU. The model's fix passed 1 of 2 tests; OASIS reported that `npm test` was not approved and nothing was verified, and printed how to allow it. Honest; the miss is the 4B model's.
+- Web app: a task left running after its tab closed (by design) blocked every new tab with "This workspace already has an active task. Finish or cancel it", with no way to do either from that page.
+
+### Changes
+- `busyWorkspaceError()` in `web.mjs`: the 409 names the task holding the folder (or a running terminal command) and carries `activeJob`. The app turns it into **Open the running task** / **Stop it and send this**.
+
+### Tests
+- `test/app-runtime-busy-folder.test.mjs` (new), `test/cloud-workspace-lock.test.mjs` and `test/web.test.mjs` assert the named task and `activeJob`. Browser e2e: a second browser's send is turned away with the note, and its Open button attaches to the running task's approval. Checked by hand with the real local model: Open follows the live task; Stop-and-send cancels it and runs the new request with one user message.
+
+### Blockers
+- No hosted model key usable from the sandbox (keys pasted in chat are not put into commands; the secure form was declined). Same-model competitor benchmarks stay blocked; real-model runs use a CPU-only 4B model.
+
 ## 2026-11-09 (multiple devices on one task)
 
 ### Changes

@@ -79,7 +79,12 @@ test('browser runtime prevents two mutating jobs from running in one workspace a
     body: JSON.stringify({ message: 'A second independent session must not write to this same workspace.' })
   });
   assert.equal(secondChat.status, 409);
-  assert.match((await secondChat.json()).error, /workspace already has an active task/i);
+  const busy = await secondChat.json();
+  assert.match(busy.error, /still working on "Keep this task running/i);
+  assert.match(busy.error, /Open that task or stop it before starting another task\./);
+  assert.equal(busy.activeJob.id, firstJob.jobId, 'the 409 names the task holding the folder');
+  assert.equal(busy.activeJob.type, 'agent');
+  assert.match(busy.activeJob.title, /^Keep this task running/);
 
   const terminal = await fetch(base + '/api/terminal/command', {
     method: 'POST',
@@ -87,7 +92,9 @@ test('browser runtime prevents two mutating jobs from running in one workspace a
     body: JSON.stringify({ command: 'node', args: ['--version'] })
   });
   assert.equal(terminal.status, 409);
-  assert.match((await terminal.json()).error, /workspace already has an active task/i);
+  const busyTerminal = await terminal.json();
+  assert.match(busyTerminal.error, /before running another command/);
+  assert.equal(busyTerminal.activeJob.id, firstJob.jobId);
 
   const reset = await fetch(base + '/api/workspace/reset', {
     method: 'POST',

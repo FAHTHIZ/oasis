@@ -81,6 +81,8 @@ try {
 
   browser = await chromium.launch({ headless: true, ...(process.env.CHROME_PATH ? { executablePath: process.env.CHROME_PATH } : {}) });
   const errors = [];
+  // The busy-folder check below causes exactly one expected 409, which Chromium logs.
+  let expectedConflicts = 0;
   async function open(options) {
     const context = await browser.newContext({ serviceWorkers: 'block', ...options });
     const page = await context.newPage();
@@ -156,8 +158,17 @@ try {
         const other = await open({ viewport: { width: 1280, height: 860 }, colorScheme: 'dark' });
         const elsewhere = other.page.locator('#sideSessions .side-task.running');
         await elsewhere.first().waitFor({ timeout: timeoutMs });
-        await elsewhere.first().click();
+        // Sending there first is turned away (one task per folder), and the
+        // note names the running task with a button that opens it.
+        expectedConflicts++;
+        await other.page.locator('#input').fill('Write a README for this project.');
+        await other.page.locator('#sendButton').click();
+        const busyCard = other.page.locator('.msg.error', { hasText: 'still working on "add() in math.mjs is wrong' });
+        await busyCard.waitFor({ timeout: timeoutMs });
+        assert.equal(await busyCard.getByRole('button', { name: 'Stop it and send this' }).count(), 1, 'the busy note offers to stop the running task');
+        await busyCard.getByRole('button', { name: 'Open the running task' }).click();
         await other.page.locator('#approvalSheet').waitFor({ state: 'visible', timeout: timeoutMs });
+        console.log('[busy] a second task in the same folder was turned away with a way to open the running one');
         assert.match(await other.page.locator('#transcript').innerText(), /add\(\) in math\.mjs is wrong/, 'the other browser shows the request');
         await other.page.locator('#allowButton').click();
         await page.locator('#approvalSheet').waitFor({ state: 'hidden', timeout: timeoutMs });
@@ -252,7 +263,8 @@ try {
     await context.close();
   }
 
-  assert.deepEqual(errors.filter((text) => !/favicon/.test(text)), [], 'no page or console errors');
+  const unexpected = errors.filter((text) => !/favicon/.test(text)).filter((text) => !(/status of 409 \(Conflict\)/.test(text) && expectedConflicts-- > 0));
+  assert.deepEqual(unexpected, [], 'no page or console errors');
   console.log('Browser E2E passed: ' + requests.length + ' model requests, ' + approvals + ' approvals. Screenshots in ' + screenshotDir);
 } finally {
   if (browser) await browser.close().catch(() => {});
