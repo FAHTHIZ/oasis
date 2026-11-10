@@ -471,8 +471,13 @@ export async function runHeadless(options) {
     error = caught;
   }
   let sessionId = session && session.sessionId || null;
-  if (session && persistence.enabled && !error) {
-    try { sessionId = (await saveSession(session, { env })).id; } catch {}
+  // A run stopped part-way (timeout, SIGTERM, provider failure) keeps what it did:
+  // once the model has answered at least once, the session is saved so
+  // `oasis --resume ID` continues it instead of starting over.
+  const progressed = Boolean(session && Array.isArray(session.messages) && session.messages.some((message) => message && message.role === 'assistant'));
+  let savedAfterError = false;
+  if (session && persistence.enabled && (!error || progressed)) {
+    try { sessionId = (await saveSession(session, { env })).id; savedAfterError = Boolean(error); } catch {}
   }
   let suggestion = '';
   if (session && promptSuggestions && !error && result && (outputFormat === 'stream-json' || onEvent)) suggestion = await suggestNextPrompt(session, { signal });
@@ -507,6 +512,9 @@ export async function runHeadless(options) {
   // Nobody can approve anything in -p, so say what was skipped and how to allow it next time.
   if (outputFormat === 'text' && denied.length && env.OASIS_PROGRESS !== '0') {
     try { process.stderr.write(deniedHint(denied)); } catch {}
+  }
+  if (outputFormat === 'text' && savedAfterError && sessionId && env.OASIS_PROGRESS !== '0') {
+    try { process.stderr.write('\nThe work so far is saved. Continue it with: oasis --resume ' + sessionId + '\n'); } catch {}
   }
   if (onEvent) onEvent(summary);
   if (suggestion) emit({ type: 'prompt_suggestion', suggestion, session_id: sessionId });
