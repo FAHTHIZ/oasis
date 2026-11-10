@@ -13,7 +13,7 @@ OASIS has two interfaces that share one runtime, one session store and one set o
 | Work in a browser, on this computer or from anywhere | **Web app** | `oasis web --open` |
 | Work directly in a terminal | **Terminal session** | `oasis` |
 
-Integrations (editor extension, Agent Client Protocol, Node.js SDK, GitHub Action, messaging gateways) connect OASIS to other tools; see [Interfaces and deployment](INTERFACES.md). There is no separate desktop or mobile app: a phone, tablet or laptop opens the same web app in its browser.
+Integrations (editor extension, Agent Client Protocol, Node.js SDK, GitHub Action, messaging gateways) connect OASIS to other tools; see [Interfaces and deployment](INTERFACES.md). A phone, tablet or laptop opens the same web app in its browser. The optional [desktop app](DESKTOP.md) shows it in its own window on Windows, macOS and Linux; there is no separate mobile app.
 
 ## 2. Install OASIS
 

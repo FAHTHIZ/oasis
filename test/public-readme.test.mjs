@@ -20,7 +20,8 @@ test('README describes the two interfaces, honest limits and verifiable download
     'does not guarantee that every model will solve every task',
     'Approval prompts are not a replacement for operating-system isolation',
     'SHA256SUMS',
-    'There is no separate desktop or mobile app',
+    'optional [desktop app](docs/DESKTOP.md)',
+    'there is no separate mobile app',
     'docs/RELEASES.md',
     'docs/INTERFACES.md',
     'Contributing guide',
@@ -45,7 +46,12 @@ test('the user guide and release guide exist and the web app has a browser end-t
   assert.ok(userGuide.includes('## 5. Browser workspace'));
   assert.ok(releasesGuide.includes('SHA256SUMS'));
   assert.ok(releasesGuide.includes('Windows'));
-  assert.ok(!/electron|\.dmg|AppImage/i.test(releasesGuide), 'no desktop installers');
+  assert.ok(releasesGuide.includes('[desktop app](DESKTOP.md)'), 'the release guide points to the desktop guide');
+  assert.match(releasesGuide, /desktop installers[^\n]*SHA256SUMS/, 'every installer is covered by SHA256SUMS');
+  const desktopGuide = await read('docs/DESKTOP.md');
+  for (const fact of ['xattr -dr com.apple.quarantine', 'SmartScreen', 'not signed', 'sudo apt remove oasis-desktop', 'SHA256SUMS']) {
+    assert.ok(desktopGuide.includes(fact), fact);
+  }
   await stat(path.join(root, '.github/scripts/browser-e2e.mjs'));
 });
 

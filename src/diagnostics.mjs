@@ -26,6 +26,7 @@ import { spawn, spawnSync } from 'node:child_process';
 import { processTreeSpawnOptions, signalProcessTree } from './process-tree.mjs';
 import { readFile, stat, access } from 'node:fs/promises';
 import path from 'node:path';
+import { nodeChildEnv } from './node-process.mjs';
 // tools.mjs imports this module, so its helpers are loaded lazily to avoid a cycle.
 const workspaceTools = () => import('./tools.mjs');
 
@@ -312,7 +313,7 @@ function nodeCheck(absolute, signal) {
       if (child) signalProcessTree(child, 'SIGKILL');
     };
     try {
-      child = spawn(process.execPath, ['--check', absolute], { shell: false, stdio: ['ignore', 'ignore', 'pipe'], windowsHide: true, env: { PATH: process.env.PATH || '' }, ...processTreeSpawnOptions() });
+      child = spawn(process.execPath, ['--check', absolute], { shell: false, stdio: ['ignore', 'ignore', 'pipe'], windowsHide: true, env: nodeChildEnv({ PATH: process.env.PATH || '' }), ...processTreeSpawnOptions() });
     } catch (error) {
       finish({ code: null, stderr: error.message });
       return;

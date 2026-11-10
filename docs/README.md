@@ -9,6 +9,7 @@ Use this index to find the right guide without having to understand the reposito
 | Install OASIS and complete a first task | [User guide](USER-GUIDE.md) |
 | Choose between the terminal, the web app and editor integrations | [Interfaces and deployment](INTERFACES.md) |
 | Download an installer and verify it | [Downloads and releases](RELEASES.md) |
+| Install the desktop app on Windows, macOS or Linux | [Desktop app](DESKTOP.md) |
 | Configure providers, models and routing | [Configuration reference](CONFIGURATION.md) |
 | Delegate work to subagents and agent teams | [Subagents](SUBAGENTS.md) |
 | Understand runtime architecture and security boundaries | [Architecture](ARCHITECTURE.md) |
@@ -18,6 +19,7 @@ Use this index to find the right guide without having to understand the reposito
 - [User guide](USER-GUIDE.md) — install, connect a provider, use each interface and review results.
 - [Downloads and releases](RELEASES.md) — the npm tarball, install scripts, Homebrew and checksums.
 - [First-run guide](FIRST-RUN.md) — provider setup, workspace trust, permissions and verification.
+- [Desktop app](DESKTOP.md) — installers, first launch on unsigned builds, key storage, updates, data folders and uninstall.
 - [Interfaces and deployment](INTERFACES.md) — terminal, web app and remote deployment, editor, ACP, SDK and automation.
 - [Configuration reference](CONFIGURATION.md) — provider registry, fallback models, output limits and search options.
 - [Comparison with other agent harnesses](COMPARISON.md) — Claude Code, Codex, Gemini CLI, OpenCode, Goose, Pi and Hermes: where OASIS matches, goes further and still lags.

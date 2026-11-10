@@ -3,7 +3,11 @@
 A short, dated record of changes, tests, benchmark results, blockers and known
 weaknesses. Newest first. Detailed user-facing notes go in the CHANGELOG.
 
-## 2026-11-10 (completion mandate: baseline, busy-folder recovery)
+## 2026-11-10 (completion mandate: baseline, busy-folder recovery, desktop app)
+
+### Desktop app
+- Restored on the shared runtime (`desktop/`, Electron 45.2.3, electron-builder 26.18.0) without the retired phone-link code. Key storage uses Electron's async `safeStorage` API (the sync one is deprecated); Linux `basic_text` is treated as no key store. Found a real bug on the way: background sessions, syntax checks and plugin installs spawned `process.execPath`, which in Electron opens a second app window; they now get `ELECTRON_RUN_AS_NODE=1`.
+- Verified on Linux x64: AppImage (179 MB) and deb (140 MB) build; the packaged app opens the workspace, connects Ollama by pasting its address, runs an approved terminal command; `apt install` then `apt remove` leaves nothing behind. Windows and macOS builds are checked by the new CI matrix only.
 
 ### Baseline
 - Node 22.21.1, Linux x64, 2 CPU cores. Full `npm test`: 2,384 tests, 2,376 pass, 0 fail, 8 skipped (576 s). oxlint clean, `npm audit` 0 vulnerabilities. Patch/minor dependency refresh: same result (`859163c5`).
