@@ -5,6 +5,9 @@ weaknesses. Newest first. Detailed user-facing notes go in the CHANGELOG.
 
 ## 2026-11-10 (completion mandate: baseline, busy-folder recovery, desktop app)
 
+### CI runner shutdowns
+- "Tests with a clean environment" ended twice with "The runner has received a shutdown signal" at the same point. Reproduced once locally at higher concurrency: the test runner and its wrapper were killed by a signal to their process group, while a process in another session survived. Running the suite under `setsid --wait` made the job pass, so some test signals the process group above the suite. The exact source is not yet identified (open item). Related hardening: background-session stop now checks the recorded process start time before signalling a stored PID.
+
 ### Desktop app
 - Restored on the shared runtime (`desktop/`, Electron 45.2.3, electron-builder 26.18.0) without the retired phone-link code. Key storage uses Electron's async `safeStorage` API (the sync one is deprecated); Linux `basic_text` is treated as no key store. Found a real bug on the way: background sessions, syntax checks and plugin installs spawned `process.execPath`, which in Electron opens a second app window; they now get `ELECTRON_RUN_AS_NODE=1`.
 - Verified on Linux x64: AppImage (179 MB) and deb (140 MB) build; the packaged app opens the workspace, connects Ollama by pasting its address, runs an approved terminal command; `apt install` then `apt remove` leaves nothing behind. Windows and macOS builds are checked by the new CI matrix only.
