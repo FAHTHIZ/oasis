@@ -19,6 +19,7 @@ import { mkdir, readFile, readdir, rename, unlink, writeFile } from 'node:fs/pro
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { getConfigDirectory } from './config.mjs';
+import { nodeChildEnv } from './node-process.mjs';
 
 const CLI = fileURLToPath(new URL('./cli.mjs', import.meta.url));
 const ID = /^bg-[a-z0-9]{6,12}$/;
@@ -249,7 +250,7 @@ export async function startBackgroundSession(options = {}) {
   await writeEntry(entry, env);
   const out = openSync(logFile, 'a', 0o600);
   try {
-    const child = spawn(options.execPath || process.execPath, args, { cwd: root, env: { ...env, OASIS_BACKGROUND_ID: id, OASIS_BACKGROUND_RUN_ID: runId }, detached: true, stdio: ['ignore', out, out], windowsHide: true });
+    const child = spawn(options.execPath || process.execPath, args, { cwd: root, env: nodeChildEnv({ ...env, OASIS_BACKGROUND_ID: id, OASIS_BACKGROUND_RUN_ID: runId }), detached: true, stdio: ['ignore', out, out], windowsHide: true });
     entry.pid = child.pid;
     child.unref();
   } finally { closeSync(out); }
@@ -299,7 +300,7 @@ export async function startExecJob(options = {}) {
   ].join('\n');
   const out = openSync(logFile, 'a', 0o600);
   try {
-    const child = spawn(options.execPath || process.execPath, ['-e', runner, command, root, entryPath(id, env), runId], { cwd: root, env: { ...env, OASIS_BACKGROUND_ID: id, OASIS_BACKGROUND_RUN_ID: runId }, detached: true, stdio: ['ignore', out, out], windowsHide: true });
+    const child = spawn(options.execPath || process.execPath, ['-e', runner, command, root, entryPath(id, env), runId], { cwd: root, env: nodeChildEnv({ ...env, OASIS_BACKGROUND_ID: id, OASIS_BACKGROUND_RUN_ID: runId }), detached: true, stdio: ['ignore', out, out], windowsHide: true });
     entry.pid = child.pid;
     child.unref();
   } finally { closeSync(out); }

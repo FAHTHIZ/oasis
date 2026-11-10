@@ -36,3 +36,7 @@ android/local.properties
 *.keystore
 *.p12
 .cache/
+
+# Desktop app staging and installers
+desktop/.stage/
+release/

@@ -1,8 +1,11 @@
 name: Release OASIS
 
-# Publishes the CLI + web workspace as an npm tarball on GitHub Releases when
-# package.json carries a new stable version on main (or on manual dispatch),
-# then refreshes the Homebrew formula. Only the CLI and web workspace ship.
+# Publishes the CLI + web workspace as an npm tarball, and the desktop app
+# installers (Windows NSIS, macOS dmg, Linux AppImage and deb) built from the
+# same runtime, on GitHub Releases when package.json carries a new stable
+# version on main (or on manual dispatch), then refreshes the Homebrew formula.
+# Every push to main builds and launch-tests the installers, so a broken
+# desktop build is caught before any release.
 on:
   push:
     branches: [main]
@@ -63,16 +66,102 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
+  desktop:
+    name: Build desktop app (${{ matrix.platform }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: windows-x64
+            os: windows-2022
+            target: --win nsis --x64
+          - platform: macos-arm64
+            os: macos-latest
+            target: --mac dmg --arm64
+          - platform: linux-x64
+            os: ubuntu-latest
+            target: --linux AppImage deb --x64
+          # Extra CPU types. A failure here never blocks the release of the
+          # main installers; it only leaves that file out.
+          - platform: macos-x64
+            os: macos-15-intel
+            target: --mac dmg --x64
+            optional: true
+          - platform: linux-arm64
+            os: ubuntu-24.04-arm
+            target: --linux AppImage deb --arm64
+            optional: true
+          - platform: windows-arm64
+            os: windows-11-arm
+            target: --win nsis --arm64
+            optional: true
+    runs-on: ${{ matrix.os }}
+    continue-on-error: ${{ matrix.optional == true }}
+    timeout-minutes: 45
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Set up Node.js
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+      - name: Install the runtime (vendors terminal assets)
+        run: npm ci --no-audit --no-fund
+      - name: Install Electron and electron-builder
+        working-directory: desktop
+        run: npm ci --no-audit --no-fund
+      - name: Run the desktop unit tests
+        run: node --test test/desktop-*.test.mjs test/web-desktop-host.test.mjs test/app-update.test.mjs
+      - name: Build installers
+        working-directory: desktop
+        shell: bash
+        env:
+          # No Apple or Windows certificates are configured: macOS builds are
+          # signed ad hoc and Windows builds are unsigned (see docs/DESKTOP.md).
+          CSC_IDENTITY_AUTO_DISCOVERY: "false"
+        run: node scripts/build.mjs ${{ matrix.target }}
+      - name: Launch the packaged app and check its workspace answers
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ "$RUNNER_OS" = "Linux" ]; then
+            sudo apt-get update -qq && sudo apt-get install -y -qq xvfb > /dev/null
+            xvfb-run -a node desktop/scripts/smoke.mjs
+          else
+            node desktop/scripts/smoke.mjs
+          fi
+      - name: Keep only user downloads
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd release
+          # Unpacked folders, block maps and electron-builder's logs are not downloads.
+          find . -mindepth 1 -maxdepth 1 -type d -exec rm -rf {} +
+          rm -f builder-debug.yml builder-effective-config.yaml *.blockmap latest*.yml
+          ls -l
+      - name: Upload installers
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: oasis-desktop-${{ matrix.platform }}
+          path: release/*
+          if-no-files-found: error
+          retention-days: 14
+
   publish-release:
     name: Publish the explicitly approved OASIS release
+    # Optional CPU types may fail without blocking (continue-on-error), but the
+    # main Windows, macOS and Linux installers must build and launch.
     if: >-
       needs.package.result == 'success' &&
+      needs.desktop.result == 'success' &&
       github.ref == 'refs/heads/main' &&
       (github.event_name == 'push' ||
        (github.event_name == 'workflow_dispatch' &&
         inputs.publish_release == true &&
         inputs.confirm_stable_release == true))
-    needs: [package]
+    needs: [package, desktop]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -174,12 +263,13 @@ jobs:
               exit 1
             fi
           done
-      - name: Download the release tarball
+      - name: Download the release tarball and desktop installers
         if: steps.release-version.outputs.publish == 'true'
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
-          name: oasis-release
+          pattern: oasis-*
           path: release-assets
+          merge-multiple: true
       - name: Generate SHA-256 checksums for release assets
         if: steps.release-version.outputs.publish == 'true'
         shell: bash
