@@ -17,6 +17,8 @@
 // Anything not in the catalog is looked up in the official MCP Registry
 // (remote endpoints only), and a pasted https MCP URL works too.
 import { spawn } from 'node:child_process';
+import { readFile, stat } from 'node:fs/promises';
+import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { loadProjectMcpServers, loadUserMcpJson, loadClaudeCodeMcpServers, normalizeServerName } from './mcp-project.mjs';
 import { getStoredToken, saveStoredToken, deleteStoredToken, loginMcpServer, canonicalResource } from './mcp-oauth.mjs';
@@ -426,10 +428,67 @@ export async function runConnectService(session, args, options = {}) {
 }
 
 /** Connectors with their status, for Settings and `oasis mcp connect` with no name. */
+// Signs that a project already uses an app: files, dependency names (npm or
+// Python) and git remotes. Cheap reads only; nothing is executed.
+const PROJECT_HINTS = {
+  github: { files: ['.github'], remote: /github\.com/i },
+  gitlab: { files: ['.gitlab-ci.yml'], remote: /gitlab\.com/i },
+  vercel: { files: ['vercel.json', '.vercel'], deps: [/^vercel$/, /^@vercel\//] },
+  netlify: { files: ['netlify.toml', '.netlify'], deps: [/^@netlify\//, /^netlify-cli$/] },
+  supabase: { files: ['supabase/config.toml'], deps: [/^@supabase\//, /^supabase$/] },
+  prisma: { files: ['prisma/schema.prisma', 'schema.prisma'], deps: [/^prisma$/, /^@prisma\//] },
+  neon: { deps: [/^@neondatabase\//] },
+  stripe: { deps: [/^stripe$/, /^@stripe\//] },
+  sentry: { files: ['sentry.properties', '.sentryclirc'], deps: [/^@sentry\//, /^sentry-sdk$/] },
+  posthog: { deps: [/^posthog-(js|node)$/, /^posthog$/] },
+  cloudflare: { files: ['wrangler.toml', 'wrangler.json', 'wrangler.jsonc'], deps: [/^wrangler$/, /^@cloudflare\//] },
+  sanity: { files: ['sanity.config.ts', 'sanity.config.js', 'sanity.cli.ts'], deps: [/^sanity$/, /^@sanity\//, /^next-sanity$/] },
+  buildkite: { files: ['.buildkite'] },
+  semgrep: { files: ['.semgrep.yml', '.semgrep'] },
+  huggingface: { deps: [/^@huggingface\//, /^huggingface[-_]hub$/, /^transformers$/] },
+  mux: { deps: [/^@mux\//] },
+  airtable: { deps: [/^airtable$/] },
+  notion: { deps: [/^@notionhq\//, /^notion-client$/] },
+  linear: { deps: [/^@linear\/sdk$/] },
+  paypal: { deps: [/^@paypal\//] },
+  square: { deps: [/^square$/] },
+  klaviyo: { deps: [/^klaviyo-api$/] }
+};
+
+async function projectSignals(root) {
+  const exists = async (name) => { try { await stat(path.join(root, name)); return true; } catch { return false; } };
+  const read = async (name) => { try { return await readFile(path.join(root, name), 'utf8'); } catch { return ''; } };
+  const deps = new Set();
+  try {
+    const pkg = JSON.parse(await read('package.json') || '{}');
+    for (const field of ['dependencies', 'devDependencies', 'optionalDependencies']) for (const name of Object.keys(pkg[field] || {})) deps.add(name);
+  } catch {}
+  for (const file of ['requirements.txt', 'pyproject.toml']) {
+    for (const match of (await read(file)).matchAll(/^\s*["']?([A-Za-z0-9_.-]+)/gm)) deps.add(match[1].toLowerCase());
+  }
+  const remotes = (await read('.git/config')).match(/url\s*=\s*\S+/g) || [];
+  return { exists, deps: [...deps], remotes: remotes.join('\n') };
+}
+
+/** Catalog ids this project seems to use: { id: 'why' }. */
+export async function suggestedConnectors(root = process.cwd()) {
+  const signals = await projectSignals(root);
+  const out = {};
+  for (const [id, hint] of Object.entries(PROJECT_HINTS)) {
+    if (hint.remote && hint.remote.test(signals.remotes)) { out[id] = 'git remote'; continue; }
+    for (const file of hint.files || []) if (!out[id] && await signals.exists(file)) out[id] = file;
+    if (out[id]) continue;
+    const dep = signals.deps.find((name) => (hint.deps || []).some((pattern) => pattern.test(name)));
+    if (dep) out[id] = dep;
+  }
+  return out;
+}
+
 export async function listConnectors({ root = process.cwd(), env = process.env, session = null } = {}) {
+  const suggested = await suggestedConnectors(root).catch(() => ({}));
   return await Promise.all(CONNECTOR_CATALOG.map(async (item) => {
     const status = await connectorStatus(item, { root, env, session }).catch(() => ({ configured: null, signedIn: false, live: null, tools: [] }));
-    return { id: item.id, name: item.name, aliases: item.aliases, description: item.description, auth: item.auth, configured: Boolean(status.configured), signedIn: status.signedIn, connected: Boolean(status.configured) && status.signedIn, expired: Boolean(status.expired), live: Boolean(status.live), tools: status.tools.length };
+    return { id: item.id, name: item.name, aliases: item.aliases, description: item.description, auth: item.auth, configured: Boolean(status.configured), signedIn: status.signedIn, connected: Boolean(status.configured) && status.signedIn, expired: Boolean(status.expired), live: Boolean(status.live), tools: status.tools.length, ...(suggested[item.id] ? { suggested: suggested[item.id] } : {}) };
   }));
 }
 
