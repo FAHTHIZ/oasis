@@ -2058,8 +2058,9 @@ async function connectShortcut(message, { reason = '', keepInput = false } = {})
 async function renderApps() {
   const list = $('appList');
   connectorList = null;
-  // Connected apps first, then the catalog order.
-  const apps = (await knownConnectors()).map((app, index) => ({ app, index })).sort((a, b) => Number(Boolean(b.app.live || b.app.connected)) - Number(Boolean(a.app.live || a.app.connected)) || a.index - b.index).map((item) => item.app);
+  // Connected apps first, then ones this project uses, then the catalog order.
+  const rank = (app) => (app.live || app.connected ? 2 : app.suggested ? 1 : 0);
+  const apps = (await knownConnectors()).map((app, index) => ({ app, index })).sort((a, b) => rank(b.app) - rank(a.app) || a.index - b.index).map((item) => item.app);
   list.replaceChildren();
   for (const app of apps) {
     const row = document.createElement('li');
@@ -2072,7 +2073,8 @@ async function renderApps() {
     const name = document.createElement('strong');
     name.textContent = app.name;
     const sub = document.createElement('span');
-    sub.textContent = app.expired && !app.live ? 'Sign-in expired' : on ? 'Connected' : app.description;
+    sub.textContent = app.expired && !app.live ? 'Sign-in expired' : on ? 'Connected' : app.suggested ? 'Used in this project (' + app.suggested + ')' : app.description;
+    if (!on && app.suggested) row.classList.add('suggested');
     if (app.expired && !app.live) row.classList.add('expired');
     text.append(name, sub);
     row.appendChild(text);
