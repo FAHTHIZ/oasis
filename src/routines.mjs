@@ -473,15 +473,34 @@ export async function cancelRun(ref, { env = process.env, backgrounds } = {}) {
   return { job, cancelled: true };
 }
 
+// pid of a live scheduler for this config folder (other than this process), or 0.
+export async function runningDaemonPid(env = process.env) {
+  let other = 0;
+  try { other = Number((await readFile(path.join(schedulesDirectory(env), 'daemon.pid'), 'utf8')).trim()); } catch (error) { if (error.code !== 'ENOENT') throw error; }
+  if (!other || other === process.pid) return 0;
+  try { process.kill(other, 0); return other; } catch (error) { return error.code === 'EPERM' ? other : 0; }
+}
+
+// `oasis web` and `oasis gateway` run the scheduler in-process (as Hermes' gateway does)
+// unless a daemon already owns this config folder or OASIS_ROUTINES=off.
+export async function hostScheduler({ env = process.env, intervalMs = 30_000, log = () => {} } = {}) {
+  const idle = (reason) => ({ hosted: false, reason, routines: 0, stop: async () => {} });
+  if (/^(0|off|false|no)$/i.test(String(env.OASIS_ROUTINES || ''))) return idle('disabled by OASIS_ROUTINES');
+  const other = await runningDaemonPid(env);
+  if (other) return idle('another scheduler is running (pid ' + other + ')');
+  const routines = (await readJobs(env)).length;
+  const controller = new AbortController();
+  const done = runDaemon({ env, intervalMs, log, signal: controller.signal }).catch((error) => log('routine scheduler stopped: ' + error.message));
+  return { hosted: true, reason: '', routines, stop: async () => { controller.abort(); await done; } };
+}
+
 // Long-running scheduler loop. Only one daemon per config folder.
 export async function runDaemon({ env = process.env, intervalMs = 30_000, log = () => {}, signal } = {}) {
   const dir = schedulesDirectory(env);
   await mkdir(dir, { recursive: true, mode: 0o700 });
   const pidFile = path.join(dir, 'daemon.pid');
-  try {
-    const other = Number((await readFile(pidFile, 'utf8')).trim());
-    if (other && other !== process.pid) { try { process.kill(other, 0); throw new Error('A routine daemon is already running (pid ' + other + ').'); } catch (error) { if (error.code !== 'ESRCH') throw error; } }
-  } catch (error) { if (error.code !== 'ENOENT') throw error; }
+  const other = await runningDaemonPid(env);
+  if (other) throw new Error('A routine daemon is already running (pid ' + other + ').');
   await writeFile(pidFile, String(process.pid) + '\n', { mode: 0o600 });
   log('Routine daemon started (pid ' + process.pid + '); checking every ' + Math.round(intervalMs / 1000) + 's.');
   try {

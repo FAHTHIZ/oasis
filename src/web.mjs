@@ -1547,6 +1547,30 @@ export function createOasisWebServer(options = {}) {
       return;
     }
 
+    // Routines (`oasis schedule`), for the signed-in owner of this server.
+    if (pathname === '/api/routines' && (req.method === 'GET' || req.method === 'POST')) {
+      const routines = await import('./routines.mjs');
+      const view = (job) => ({ id: job.id, name: job.name || '', kind: job.kind, prompt: job.prompt, schedule: job.schedule.display, timezone: job.timezone || '', enabled: job.enabled !== false, state: job.activeRun ? 'running' : job.enabled === false ? job.state || 'paused' : 'scheduled', nextRunAt: job.enabled !== false ? job.nextRunAt || null : null, lastStatus: job.lastStatus || '', lastRunAt: job.lastRunAt || null, deliver: job.deliver || 'local', workdir: job.workdir || '', pausedReason: job.pausedReason || '', lastProblem: job.lastProblem || '' });
+      const overview = async () => ({ routines: (await routines.readJobs(env)).map(view), scheduler: (await routines.runningDaemonPid(env)) ? 'running' : 'stopped' });
+      if (req.method === 'GET') { json(res, 200, await overview()); return; }
+      const body = await readJsonBody(req);
+      const action = String(body.action || '');
+      const id = String(body.id || '');
+      try {
+        if (action === 'create') {
+          const f = body.fields && typeof body.fields === 'object' ? body.fields : {};
+          await routines.createJob({ schedule: String(f.schedule || ''), prompt: String(f.prompt || ''), name: f.name ? String(f.name) : undefined, kind: f.kind === 'script' ? 'script' : 'agent', timezone: f.timezone ? String(f.timezone) : undefined, deliver: f.deliver ? String(f.deliver) : undefined, workdir: f.workdir ? String(f.workdir) : activeRoot, paused: Boolean(f.paused) }, { env });
+        } else if (action === 'pause') await routines.pauseJob(id, 'Paused from the browser.', { env });
+        else if (action === 'resume') await routines.resumeJob(id, { env });
+        else if (action === 'run') await routines.triggerJob(id, { env });
+        else if (action === 'cancel') await routines.cancelRun(id, { env });
+        else if (action === 'remove') { const { stopBackgroundSession } = await import('./background-sessions.mjs'); await routines.removeJob(id, { env, stop: stopBackgroundSession }); }
+        else { json(res, 400, { error: 'Unknown routine action.' }); return; }
+      } catch (error) { json(res, 400, { error: String(error && error.message || error).slice(0, 2000) }); return; }
+      json(res, 200, await overview());
+      return;
+    }
+
     // Claude Code plugins and marketplaces, as `oasis plugin` manages them.
     if (req.method === 'GET' && pathname === '/api/plugins') {
       const { pluginOverview } = await import('./claude-plugins.mjs');
