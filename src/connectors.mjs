@@ -59,6 +59,20 @@ export const CONNECTOR_CATALOG = Object.freeze([
   { id: 'close', name: 'Close', url: 'https://mcp.close.com/mcp', auth: 'oauth', aliases: [], description: 'CRM leads, contacts, opportunities and activities.', docs: 'https://developer.close.com/mcp/' },
   { id: 'attio', name: 'Attio', url: 'https://mcp.attio.com/mcp', auth: 'oauth', aliases: [], description: 'CRM records, lists, notes and tasks.', docs: 'https://docs.attio.com/mcp/overview' },
   { id: 'todoist', name: 'Todoist', url: 'https://ai.todoist.net/mcp', auth: 'oauth', aliases: [], description: 'Tasks, projects and due dates.', docs: 'https://www.todoist.com/help/todoist/todoist-and-ai/connect-todoist-to-an-ai-assistant-xMSzFfHng' },
+  { id: 'gitlab', name: 'GitLab', url: 'https://gitlab.com/api/v4/mcp', auth: 'oauth', aliases: ['gitlab.com'], description: 'Projects, issues, merge requests and pipelines on GitLab.com.', docs: 'https://docs.gitlab.com/user/model_context_protocol/mcp_server/' },
+  { id: 'miro', name: 'Miro', url: 'https://mcp.miro.com/', auth: 'oauth', aliases: [], description: 'Boards, diagrams and sticky notes.', docs: 'https://developers.miro.com/docs/connecting-to-miro-mcp' },
+  { id: 'buildkite', name: 'Buildkite', url: 'https://mcp.buildkite.com/mcp', auth: 'oauth', aliases: [], description: 'Pipelines, builds, jobs and test results.', docs: 'https://buildkite.com/docs/apis/mcp-server' },
+  { id: 'honeycomb', name: 'Honeycomb', url: 'https://mcp.honeycomb.io/mcp', auth: 'oauth', aliases: [], description: 'Traces, queries and SLOs for observability.', docs: 'https://docs.honeycomb.io/mcp' },
+  { id: 'axiom', name: 'Axiom', url: 'https://mcp.axiom.co/mcp', auth: 'oauth', aliases: [], description: 'Logs, events and APL queries.', docs: 'https://axiom.co/docs/console/intelligence/mcp-server' },
+  { id: 'sanity', name: 'Sanity', url: 'https://mcp.sanity.io', auth: 'oauth', aliases: [], description: 'Content, schemas and releases in Sanity.', docs: 'https://www.sanity.io/docs/ai/mcp-server' },
+  { id: 'postman', name: 'Postman', url: 'https://mcp.postman.com/mcp', auth: 'oauth', aliases: [], description: 'Collections, requests, environments and APIs.', docs: 'https://learning.postman.com/docs/reference/postman-api/postman-mcp-server/postman-mcp-remote-server/' },
+  { id: 'klaviyo', name: 'Klaviyo', url: 'https://mcp.klaviyo.com/mcp', auth: 'oauth', aliases: [], description: 'Email and SMS campaigns, flows and profiles.', docs: 'https://developers.klaviyo.com/en/docs/klaviyo_mcp_server' },
+  { id: 'fireflies', name: 'Fireflies', url: 'https://api.fireflies.ai/mcp', auth: 'oauth', aliases: ['fireflies.ai'], description: 'Meeting transcripts, summaries and action items.', docs: 'https://guide.fireflies.ai/articles/8272956938-learn-about-the-fireflies-mcp-server-model-context-protocol' },
+  { id: 'dropbox', name: 'Dropbox', url: 'https://mcp.dropbox.com/mcp', auth: 'oauth', aliases: [], description: 'Files and folders in your Dropbox.', docs: 'https://help.dropbox.com/integrations/connect-dropbox-mcp-server' },
+  { id: 'make', name: 'Make', url: 'https://mcp.make.com', auth: 'oauth', aliases: ['make.com'], description: 'Run your Make scenarios as tools.', docs: 'https://help.make.com/make-mcp-server' },
+  { id: 'cal', name: 'Cal.com', url: 'https://mcp.cal.com/mcp', auth: 'oauth', aliases: ['calcom', 'cal.com'], description: 'Bookings, event types and availability.', docs: 'https://cal.com/docs/mcp-server' },
+  { id: 'grafana', name: 'Grafana Cloud', url: 'https://mcp.grafana.com/mcp', auth: 'oauth', aliases: ['grafana'], description: 'Dashboards, metrics, logs and alerts in Grafana Cloud.', docs: 'https://grafana.com/docs/grafana-cloud/ai-tools/mcp-servers/cloud-mcp/' },
+  { id: 'mux', name: 'Mux', url: 'https://mcp.mux.com', auth: 'oauth', aliases: [], description: 'Video assets, live streams and playback data.', docs: 'https://www.mux.com/docs/integrations/mcp-server' },
   { id: 'context7', name: 'Context7', url: 'https://mcp.context7.com/mcp', auth: 'none', aliases: [], description: 'Up-to-date library and framework docs for coding.', docs: 'https://context7.com/docs/installation' }
 ]);
 
