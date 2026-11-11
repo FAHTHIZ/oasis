@@ -31,7 +31,7 @@ export function srtConfig(sandbox) {
     filesystem: {
       denyRead: (sandbox.maskedPaths || []).map((item) => item.path),
       allowWrite: sandbox.writable || [],
-      denyWrite: guarded.existing.map((item) => item.path)
+      denyWrite: [...guarded.existing, ...(sandbox.readOnlyPaths || [])].map((item) => item.path)
     },
     ...(rg ? { ripgrep: { command: rg.path } } : {})
   };

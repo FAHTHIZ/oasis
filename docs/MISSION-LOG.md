@@ -26,6 +26,12 @@ weaknesses. Newest first. Detailed user-facing notes go in the CHANGELOG.
 
 ## 2026-11-11 (Claude Code parity cycle)
 
+### Claude Code sandbox settings layout
+- OASIS read `sandbox.allowedDomains` and a boolean `sandbox.network`; a Claude Code file with `sandbox.network.allowedDomains`, `sandbox.filesystem.*` or `autoAllowBashIfSandboxed` was ignored. Now read: `network.allowedDomains` / `deniedDomains` (merged across files) and `allowManagedDomainsOnly`; `autoAllowBashIfSandboxed` (same as `autoAllowCommands`); `failIfUnavailable` (managed wins; session start fails instead of only refusing each command, which OASIS already did); `filesystem.allowWrite`, `denyWrite`, `denyRead` with Claude Code's path prefixes (`/`, `//`, `~/`, else project root or `~/.claude` for user files; trailing `/**` dropped, other wildcards skipped as on Linux).
+- Enforced in bubblewrap (bind, ro-bind, /dev/null or tmpfs masks), sandbox-exec (deny rules after the allow), containers (bind mounts) and sandbox-runtime (its own lists). Paths that do not exist are not mounted. `/sandbox` toggles now keep these settings instead of dropping them.
+- Not done: `excludedCommands`, `filesystem.allowRead`, unix-socket and proxy keys, `credentials`. `allowUnsandboxedCommands` has nothing to switch off: OASIS has no unsandboxed retry.
+- Test: test/sandbox-claude-settings.test.mjs (6, one runs real bubblewrap); sandbox, settings and slash suites pass.
+
 ### includeGitInstructions and attribution
 - `includeGitInstructions: false` (any file) and `CLAUDE_CODE_DISABLE_GIT_INSTRUCTIONS` (wins both ways) now drop the branch, working-tree and recent-commit snapshot from the prompt, and skip those git calls. OASIS has no built-in commit or PR workflow text to remove; its "check git_status before editing" and commit-safety lines stay.
 - `attribution.commit` and `attribution.pr` (trusted scopes only, since the text goes into the prompt) tell the model what to end commit messages and PR descriptions with. The user's own instructions take precedence unless the text comes from managed settings, as Claude Code describes. OASIS adds no attribution by default, so `attribution: false`, empty strings and `includeCoAuthoredBy: false` change nothing; `sessionUrl` does not apply (no hosted sessions).
