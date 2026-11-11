@@ -2734,8 +2734,9 @@ async function main() {
   for (let i = 0; i < rawArgs.length; i++) {
     const arg = rawArgs[i];
     if (arg === '--yes' || arg === '-y' || arg === '--auto') { autoApprove = true; if (arg !== '--auto') explicitYes = true; continue; }
-    if (arg === '--permission-mode') {
-      const requestedMode = rawArgs[++i];
+    if (arg === '--permission-mode' || arg.startsWith('--permission-mode=')) {
+      // The Claude Agent SDK passes --permission-mode=MODE.
+      const requestedMode = arg.includes('=') ? arg.slice(arg.indexOf('=') + 1) : rawArgs[++i];
       const mode = normalizePermissionMode(requestedMode);
       if (!mode) throw new Error('--permission-mode must be one of ' + PERMISSION_MODES.join(', ') + ' (aliases: manual, accept-edits).');
       SESSION_OPTIONS.permissionMode = mode;
@@ -3057,6 +3058,8 @@ async function main() {
   if (SESSION_OPTIONS.runMaintenance) await runSetupHooks(workspace, 'maintenance');
   const command = args[0];
   const rest = args.slice(1);
+  // The Claude Agent SDK (0.3.x) launches the CLI with stream-json in and out but no -p.
+  if (!headless.enabled && headless.inputFormat === 'stream-json' && headless.outputFormat === 'stream-json') headless.enabled = true;
   const persistence = { enabled: !noPersist && (persistSession || Boolean(resumeId)), resumeId };
   if (continueSession && !resumeId) {
     const saved = (await listSessions(workspace)).filter((item) => !item.archived);
