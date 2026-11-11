@@ -708,3 +708,5 @@ html.lite .topbar{backdrop-filter:none;-webkit-backdrop-filter:none;background:v
 .app-text span{font-size:12px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .app-tile.on .app-text span{color:var(--accent)}
 .app-dot{flex:none;width:8px;height:8px;border-radius:50%;background:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
+.app-tile .app-off{color:var(--muted)}
+.app-tile .app-off:hover{color:var(--danger);border-color:color-mix(in srgb,var(--danger) 40%,transparent)}
