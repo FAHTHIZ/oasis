@@ -31,6 +31,7 @@ import { appModuleGraph, resolveAppPath, skillsIndex } from './app-server.mjs';
 import { listWorkspaceFiles } from './workspace-files.mjs';
 import { atomicWriteFile } from './atomic-write.mjs';
 import { connectFromPaste } from './provider-connect.mjs';
+import { basicAuthToken, createCursorAgentsApi, cursorError } from './cursor-agents-api.mjs';
 
 // Commands that only make sense in the terminal (the web UI has its own session picker).
 const WEB_UNSUPPORTED_COMMANDS = new Set(['resume']);
@@ -388,10 +389,14 @@ function isLoopbackClient(req) {
   return isLoopbackAddress(req.socket && req.socket.remoteAddress);
 }
 
-function hasValidToken(req, token) {
-  const match = String(req.headers.authorization || '').match(/^Bearer\s+(.+)$/i);
-  if (!match) return false;
-  const supplied = Buffer.from(match[1]);
+function hasValidToken(req, token, { allowBasic = false } = {}) {
+  const header = String(req.headers.authorization || '');
+  const match = header.match(/^Bearer\s+(.+)$/i);
+  // The Cursor-compatible API (/v0, /v1) also takes Basic auth with the access key
+  // as the username and an empty password, as Cursor's API does.
+  const value = match ? match[1] : allowBasic ? basicAuthToken(header) : null;
+  if (!value) return false;
+  const supplied = Buffer.from(value);
   const expected = Buffer.from(token);
   return supplied.length === expected.length && timingSafeEqual(supplied, expected);
 }
@@ -600,11 +605,33 @@ export function createOasisWebServer(options = {}) {
     });
   }
 
+  // Observers of every job event (the Cursor-compatible API tracks usage and run ends here).
+  const jobListeners = new Set();
   function emit(job, type, data = {}) {
-    job.events.push({ id: job.nextEventId++, type, data, at: new Date().toISOString() });
+    const event = { id: job.nextEventId++, type, data, at: new Date().toISOString() };
+    job.events.push(event);
     if (job.events.length > MAX_EVENTS_PER_JOB) job.events.splice(0, job.events.length - MAX_EVENTS_PER_JOB);
     taskStore.schedule(job, 250);
+    for (const listener of jobListeners) { try { listener(job, event); } catch { /* an observer never breaks a job */ } }
     wakeJobWaiters(job.id);
+  }
+
+  function cancelJob(job) {
+    if (!job || !['running', 'waiting_approval'].includes(job.status)) return false;
+    if (!job.cancelRequested) {
+      job.cancelRequested = true;
+      emit(job, 'cancel_requested', { message: 'Cancellation requested.' });
+      job.controller.abort(new Error('Cancelled by the user.'));
+      for (const pending of [...job.pendingApprovals.values()]) pending.resolve(false);
+    }
+    return true;
+  }
+
+  function steerJob(job, message) {
+    if (!job || !['running', 'waiting_approval'].includes(job.status) || job.cancelRequested || !job.steerTarget) return false;
+    if (!steerSession(job.steerTarget, message)) return false;
+    emit(job, 'steer_queued', { length: message.length });
+    return true;
   }
 
   // meta (from the agent) can offer "always allow <rule> this session"; that
@@ -816,7 +843,9 @@ export function createOasisWebServer(options = {}) {
       const message = importedCommand ? importedCommand.prompt : expandedCommand ? expandedCommand.prompt : incomingMessage;
       if (message.length > 24000) throw Object.assign(new Error('The expanded imported command exceeds the supported prompt size.'), { statusCode: 413 });
 
-      const config = await getConfig();
+      let config = await getConfig();
+      // The Cursor-compatible API can pick a model per agent; it uses the configured provider.
+      if (typeof input.model === 'string' && input.model) config = { ...config, model: input.model };
     if (!config.configured) {
       throw Object.assign(new Error('No model provider is configured. Choose a model under Connections, Model provider, or run oasis setup in the terminal, then retry.'), { statusCode: 503 });
     }
@@ -1556,6 +1585,23 @@ export function createOasisWebServer(options = {}) {
         if (error.statusCode === 401) authLimiter.fail(caller);
         json(res, error.statusCode || 500, { error: String(error.message || error).slice(0, 300) });
       }
+      return;
+    }
+
+    // Cursor Cloud Agents API–compatible endpoints: same host checks, lockout and access key.
+    if (/^\/v[01]\//.test(pathname)) {
+      if (!hostAllowed(req, { allowedHosts, trustProxy })) { cursorError(res, 421, 'unauthorized', 'OASIS accepts requests only on localhost, a literal IP address or a configured --public-url host.'); return; }
+      const apiCaller = clientAddress(req, { trustProxy });
+      const apiWait = authLimiter.blocked(apiCaller);
+      if (apiWait) { res.setHeader('retry-after', String(apiWait)); cursorError(res, 429, 'rate_limited', 'Too many wrong access keys. Try again in ' + apiWait + ' seconds.'); return; }
+      if (!hasValidToken(req, token, { allowBasic: true })) {
+        if (req.headers.authorization) authLimiter.fail(apiCaller);
+        res.setHeader('www-authenticate', 'Basic realm="oasis"');
+        cursorError(res, 401, 'unauthorized', 'Use the OASIS web access key as a Bearer token, or as the Basic auth username with an empty password.');
+        return;
+      }
+      authLimiter.succeed(apiCaller);
+      await cursorApi.handle(req, res, parsedUrl);
       return;
     }
 
@@ -2706,15 +2752,9 @@ export function createOasisWebServer(options = {}) {
     if (req.method === 'POST' && cancelMatch) {
       const job = jobs.get(cancelMatch[1]);
       if (!job) { json(res, 404, { error: 'Job not found or expired.' }); return; }
-      if (!['running', 'waiting_approval'].includes(job.status)) {
+      if (!cancelJob(job)) {
         json(res, 409, { error: 'Only a running or approval-blocked job can be cancelled.', status: job.status });
         return;
-      }
-      if (!job.cancelRequested) {
-        job.cancelRequested = true;
-        emit(job, 'cancel_requested', { message: 'Cancellation requested.' });
-        job.controller.abort(new Error('Cancelled by the user.'));
-        for (const pending of [...job.pendingApprovals.values()]) pending.resolve(false);
       }
       json(res, 202, { cancelRequested: true, status: job.status });
       return;
@@ -2786,6 +2826,16 @@ export function createOasisWebServer(options = {}) {
     json(res, 404, { error: 'Not found.' });
   }
 
+  const cursorApi = createCursorAgentsApi({
+    env, root, jobs, taskStore, trustProxy,
+    activeRoot: () => activeRoot,
+    startAgentJob, cancelJob, steerJob, waitForJobEvent, getConfig,
+    loadSession, deleteSession, setSessionArchived,
+    readJsonBody: (req) => readJsonBody(req, MAX_CHAT_BODY_BYTES),
+    ...(Array.isArray(options.webhookRetryDelaysMs) ? { webhookRetryDelaysMs: options.webhookRetryDelaysMs } : {})
+  });
+  jobListeners.add(cursorApi.onJobEvent);
+
   const requestHandler = (req, res) => {
     void handle(req, res).catch((error) => {
       if (res.headersSent) { res.destroy(); return; }
@@ -2825,6 +2875,7 @@ export function createOasisWebServer(options = {}) {
       while (Date.now() < settleBy && [...jobs.values()].some((job) => ['running', 'waiting_approval', 'queued', 'starting'].includes(job.status))) {
         await new Promise((resolve) => setTimeout(resolve, 25));
       }
+      await cursorApi.settle().catch(() => {});
       await taskStore.close([...jobs.values()]);
     }
   };
