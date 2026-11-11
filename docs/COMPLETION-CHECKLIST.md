@@ -69,6 +69,7 @@ Status: **done** (tested and pushed) · **doing** · **open** · **blocked**
 | Agent ignore files (`.cursorignore`, `.devinignore`, `.codeiumignore` + global, `.geminiignore`, `.aiexclude`, `.aiderignore`) | done | `test/agent-ignore.test.mjs`. Not done: blocking shell commands (Cursor does not either), Cursor's default ignore list, Cursor's `.cursorindexingignore` (indexing only; OASIS has no remote index) |
 | OpenHands microagents / skill files (always-on, `paths:`, keyword `triggers:`, task `/name`) | done | `test/openhands-microagents.test.mjs`. Not done: prompting for task-microagent `inputs`, OpenHands' public skills registry and installed-skills folder (`~/.openhands/skills/installed`, its own manifest) |
 | Skill folders of Cursor, Codex, Devin Desktop/Windsurf, Antigravity, OpenHands | done | `test/foreign-skills.test.mjs`. Not done: Antigravity's parent-folder `.agents/skills` scan, Antigravity plugin skills (`~/.gemini/config/plugins/*/skills`), keyword `triggers:` on OpenHands SKILL.md files (only on plain .md microagents) |
+| Antigravity CLI global and plugin rules | done | `test/other-agent-rules.test.mjs` (Antigravity CLI test). Not done: Antigravity's 12,000-character per-rule cap (OASIS keeps its own limits) |
 
 ## 2d. Claude Code parity (2026-11-11 cycle)
 

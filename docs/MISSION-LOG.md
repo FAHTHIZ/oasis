@@ -5,6 +5,9 @@ weaknesses. Newest first. Detailed user-facing notes go in the CHANGELOG.
 
 ## 2026-11-11 (IDE-agent interoperability: Cursor, Devin Desktop, Antigravity, OpenHands)
 
+### Antigravity CLI rules
+- The [Antigravity rules page](https://antigravity.google/docs/rules-workflows) lists `~/.gemini/antigravity-cli/rules/` and plugin `rules/` folders for the CLI. `~/.gemini/GEMINI.md` and `.agents/rules` were already read; these two are now user rules. Test: test/other-agent-rules.test.mjs (6 tests) with the OpenHands and nested-memory tests, 14 pass, 0 fail.
+
 ### Skill folders from other agents
 - OASIS read `.agents/skills`, `~/.config/agents/skills` and Claude Code's folders. Added the locations documented by [Cursor](https://cursor.com/docs/context/skills), [Devin Desktop](https://docs.windsurf.com/windsurf/cascade/skills), [Antigravity](https://antigravity.google/docs/skills) and OpenHands, plus Codex's. Home-folder skills use a new `foreign-user` source that remembers its own root, so the existing containment checks for SKILL.md and `references/` still apply. Test: test/foreign-skills.test.mjs (2 tests, including a symlinked skill folder that is skipped); extension, plugin, slash and runtime tests 101 pass, 0 fail.
 

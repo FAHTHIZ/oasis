@@ -244,6 +244,12 @@ export async function projectRules(root, { env = process.env, notices = null, ho
   if (env.OASIS_OTHER_AGENT_RULES !== '0') {
     // Devin Desktop personal rules (~/.devin/rules/*.md) apply to every project.
     rules.push(...await loadRules(path.join(home || env.HOME || os.homedir(), '.devin', 'rules'), 'user', null, notices, { prefix: '~/.devin/rules/' }));
+    // Antigravity CLI global rules and the rules of installed Antigravity CLI plugins.
+    const antigravityCli = path.join(home || env.HOME || os.homedir(), '.gemini', 'antigravity-cli');
+    rules.push(...await loadRules(path.join(antigravityCli, 'rules'), 'user', null, notices, { prefix: '~/.gemini/antigravity-cli/rules/' }));
+    let plugins = [];
+    try { plugins = (await readdir(path.join(antigravityCli, 'plugins'), { withFileTypes: true })).filter((entry) => entry.isDirectory()).map((entry) => entry.name).sort().slice(0, 40); } catch {}
+    for (const plugin of plugins) rules.push(...await loadRules(path.join(antigravityCli, 'plugins', plugin, 'rules'), 'user', null, notices, { prefix: '~/.gemini/antigravity-cli/plugins/' + plugin + '/rules/' }));
     // OpenHands user skills and legacy microagents (~/.openhands/skills, ~/.openhands/microagents).
     for (const dir of ['skills', 'microagents']) rules.push(...await loadRules(path.join(home || env.HOME || os.homedir(), '.openhands', dir), 'user', null, notices, { prefix: '~/.openhands/' + dir + '/', openhands: true }));
     for (const spec of OTHER_AGENT_RULE_DIRS) rules.push(...await loadRules(path.join(workspace, ...spec.dir.split('/')), 'project', workspace, notices, { ext: spec.ext, prefix: spec.dir + '/', openhands: spec.openhands }));
