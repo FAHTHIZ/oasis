@@ -484,6 +484,26 @@ export async function suggestedConnectors(root = process.cwd()) {
   return out;
 }
 
+/** Catalog apps this project uses that are not set up and signed in yet. */
+export async function unconnectedProjectApps(root = process.cwd(), env = process.env) {
+  const found = await suggestedConnectors(root).catch(() => ({}));
+  const out = [];
+  for (const [id, why] of Object.entries(found).slice(0, 8)) {
+    const connector = findCatalogConnector(id);
+    if (!connector) continue;
+    const status = await connectorStatus(connector, { root, env }).catch(() => null);
+    if (status && !(status.configured && status.signedIn)) out.push({ ...connector, why });
+  }
+  return out;
+}
+
+/** One short system-prompt line so the agent can offer a Connect card when a task needs one of them. */
+export async function projectAppsSection(root, env = process.env) {
+  const apps = await unconnectedProjectApps(root, env).catch(() => []);
+  if (!apps.length) return '';
+  return '\n\nApps this project uses that are not connected: ' + apps.map((app) => app.name + ' (' + app.why + ')').join(', ') + '. If a task needs live data or actions from one, call connect_service for it instead of guessing.';
+}
+
 export async function listConnectors({ root = process.cwd(), env = process.env, session = null } = {}) {
   const suggested = await suggestedConnectors(root).catch(() => ({}));
   return await Promise.all(CONNECTOR_CATALOG.map(async (item) => {

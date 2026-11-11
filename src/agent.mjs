@@ -512,6 +512,9 @@ export async function createSession({ root, config, restore = null, permissionMo
   if (extraDirs.accepted.length) systemText += '\n\nAdditional working directories (you may read and edit files there with absolute paths or paths relative to the workspace):\n' + extraDirs.accepted.map((dir) => '- ' + dir).join('\n');
   const channelEntries = parseChannelEntries(channels);
   if (!systemPromptOverride) systemText += mcpInstructionsSection(mcp.clients, { channels: channelEntries, settings: loadedSettings });
+  if (!systemPromptOverride && !bare && !dynamicOut && !restricted && env.OASIS_NO_APP_HINTS !== '1') {
+    try { systemText += await (await import('./connectors.mjs')).projectAppsSection(root, env); } catch {}
+  }
   if (appendSystemPrompt) systemText += '\n\n' + String(appendSystemPrompt).slice(0, 20000);
   const session = {
     projectContextText: projectContext || '',

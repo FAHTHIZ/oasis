@@ -150,15 +150,8 @@ export async function showStartupBanner({ root, model = '', provider = '', mode 
 /** "This project uses Vercel and Stripe: /connect vercel stripe" when they are not connected yet. */
 export async function appTip(root, env = process.env) {
   if (String(env.OASIS_TIP || '').toLowerCase() === 'off' || env.OASIS_NO_TIPS === '1') return '';
-  const { suggestedConnectors, connectorStatus, findCatalogConnector } = await import('./connectors.mjs');
-  const ids = Object.keys(await suggestedConnectors(root || process.cwd()));
-  const missing = [];
-  for (const id of ids.slice(0, 8)) {
-    const connector = findCatalogConnector(id);
-    if (!connector) continue;
-    const status = await connectorStatus(connector, { root, env }).catch(() => null);
-    if (status && !(status.configured && status.signedIn)) missing.push(connector);
-  }
+  const { unconnectedProjectApps } = await import('./connectors.mjs');
+  const missing = await unconnectedProjectApps(root || process.cwd(), env);
   if (!missing.length) return '';
   const shown = missing.slice(0, 3);
   const names = shown.map((item) => item.name);
