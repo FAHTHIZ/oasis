@@ -3,7 +3,12 @@
 A short, dated record of changes, tests, benchmark results, blockers and known
 weaknesses. Newest first. Detailed user-facing notes go in the CHANGELOG.
 
-## 2026-11-11 (terminal-agent interoperability: Gemini CLI, OpenCode, Goose, Aider, Roo/Kilo)
+## 2026-11-11 (Codex SDK drop-in)
+
+- Read the Codex TypeScript SDK source ([exec.ts](https://raw.githubusercontent.com/openai/codex/main/sdk/typescript/src/exec.ts), events.ts, items.ts, thread.ts). It spawns `codex exec --experimental-json` with flags, then `resume ID`, and writes the prompt to stdin. `oasis exec --json` now emits that event stream (new src/codex-exec-json.mjs; raw tool callbacks via a `toolObserver` option on runHeadless; `images` option for `--image`). Test: test/codex-exec-json.test.mjs (5 pass) mirrors the SDK argv and Thread.run aggregation; headless, flags, exec-alias and App Server tests 95 pass, 0 fail.
+- Known difference: OASIS's inline-code check declines `node -e`-style commands even under danger-full-access + never; they show as failed `command_execution` items.
+
+: Gemini CLI, OpenCode, Goose, Aider, Roo/Kilo)
 
 ### Gemini CLI and OpenCode agent files
 - Gemini CLI ([subagents doc](https://raw.githubusercontent.com/google-gemini/gemini-cli/main/docs/core/subagents.md)) and OpenCode ([agents doc](https://opencode.ai/docs/agents/)) agent Markdown files now load as OASIS agents. `foreignAgentFrontMatter` in src/subagents.mjs translates tool names and deny rules into `tools`/`disallowedTools`. OpenCode's default `primary` mode stays out of the task tool. Tests: test/foreign-agents.test.mjs (2); subagent and import tests 28 pass, 0 fail.
