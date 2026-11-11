@@ -232,3 +232,25 @@ test('terminal Tab completion after /connect lists apps', async () => {
   const all = await complete('/connect ', 9);
   assert.ok(all.candidates.length > 15);
 });
+
+test('lazy sign-in: an auth error from a live app shows the card instead of failing', async (t) => {
+  const { root, env } = await sandbox(t);
+  const { connectAfterAuthError } = await import('../src/agent.mjs');
+  const url = 'https://mcp.linear.app/mcp';
+  await saveStoredToken(url, { accessToken: 'revoked' }, env);
+  const session = fakeSession(root);
+  session.mcpClients.set('linear', { config: { name: 'linear', type: 'http', url }, tools: [{ name: 'list_issues' }] });
+  session.mcpToolMap = new Map([['mcp_linear_list_issues', {}]]);
+  const mapped = { serverName: 'linear', toolName: 'list_issues' };
+  const authError = Object.assign(new Error('needs sign-in'), { code: 'MCP_AUTH_REQUIRED' });
+  let shown = null;
+  const options = { env, connectorCard: async (flow) => { shown = flow.view(); flow.skip(); return flow.done; } };
+  assert.equal(await connectAfterAuthError(session, mapped, authError, options), false);
+  assert.equal(shown.connector.url, url);
+  assert.match(shown.reason, /linear needs you to sign in before it can run list_issues/);
+  assert.equal(await getStoredToken(url, env), null, 'the rejected token is forgotten');
+  // No one to click, a scope step-up, or another error: the usual error stands.
+  assert.equal(await connectAfterAuthError(session, mapped, authError, { env }), false);
+  assert.equal(await connectAfterAuthError(session, mapped, Object.assign(new Error('x'), { code: 'MCP_AUTH_REQUIRED', requiredScope: 'write' }), options), false);
+  assert.equal(await connectAfterAuthError(session, mapped, new Error('boom'), options), false);
+});
