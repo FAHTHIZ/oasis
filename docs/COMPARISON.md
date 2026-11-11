@@ -12,10 +12,13 @@ Last reviewed November 2026. Sources are linked in each section. Where a page di
 | Models | Any: OpenAI-compatible, Anthropic, Gemini, Bedrock, Vertex, Foundry, local | Anthropic | ChatGPT plan or API key | Gemini API, Vertex AI, Code Assist | Many providers | 15+ providers |
 | Terminal UI | Yes | Yes | Yes | Yes | Yes | Yes |
 | Web interface | Yes, self-hosted and remote-ready (HTTPS, access key, reconnects to running tasks) | Cloud sessions | Codex Web (cloud) | No | Yes, local (`opencode web`) | No |
-| Desktop app | No (browser only, by design) | Yes | Yes | No | Beta | Yes |
+| Desktop app | Yes (Windows, macOS, Linux; unsigned, same runtime as `oasis web`) | Yes | Yes | No | Beta | Yes |
+| Unattended scheduled tasks | Yes, on your own machine or server: cron, intervals, one-offs and signed webhooks, run by `oasis schedule daemon`, `oasis web` or `oasis gateway`; the agent can create them with approval | Yes: cloud tasks (schedule, API, GitHub events) and local Desktop tasks | Yes: Codex app automations | Not found in the docs reviewed | Not found in the docs reviewed | Not found in the docs reviewed |
 | MCP | Yes, including MCP Tasks | Yes | Yes | Yes | Yes | Yes |
 | Subagents | Yes: parallel, background, resumable, teams, worktrees | Yes | Agent command center | Yes: built-in and custom, parallel | `general` subagent | No |
 | Claude Code plugins | Yes, from any marketplace, with a one-click installer in the web app; Codex plugins and Gemini CLI extensions are converted on install | Yes | No (own plugin format) | No (own extensions) | No (own plugins) | No |
+
+Scheduling sources: [Claude Code scheduled tasks](https://code.claude.com/docs/en/routines), [Claude Code Desktop scheduled tasks](https://code.claude.com/docs/en/desktop-scheduled-tasks.md), [Codex app announcement](https://openai.com/en-US/index/introducing-the-codex-app/), [Codex automations](https://openai.com/academy/codex-automations).
 
 Sources: [Gemini CLI subagents](https://developers.googleblog.com/en/subagents-have-arrived-in-gemini-cli/), [OpenCode web](https://opencode.ai/docs), [Codex README](https://github.com/openai/codex), [Codex releases](https://github.com/openai/codex/releases), [Gemini CLI README](https://github.com/google-gemini/gemini-cli), [OpenCode README](https://github.com/sst/opencode), [Goose README](https://github.com/block/goose), [Claude Code changelog](https://code.claude.com/docs/en/changelog).
 
@@ -89,7 +92,7 @@ Gemini CLI is now for Gemini Code Assist enterprise users. Free and Google AI Pr
 | Gap | Why it matters | Reason |
 | --- | --- | --- |
 | Model tuning | Claude Code's prompts and tool schemas are tuned for Claude models, and much of its reliability comes from that tuning. | OASIS works across many model families, so it can't tune for one the same way. |
-| Hosted cloud execution | Codex Web and Claude Code cloud sessions run tasks without your computer being on. | OASIS runs only where you install it. Remote access from any browser goes through your own computer or server. |
+| Hosted cloud execution | Codex Web and Claude Code cloud sessions (including cloud scheduled tasks) run without your computer being on. OASIS routines need an OASIS process running on a machine you control. | OASIS runs only where you install it. Remote access from any browser goes through your own computer or server. |
 | Field maturity | Claude Code and Codex are used by very large populations, so their edge cases get found quickly. | OASIS has about 2,350 automated tests and adversarial suites, but far fewer real-world hours. |
 | Edits in default mode | Claude Code asks before every edit in `default` mode. OASIS applies edits inside the workspace without asking (they are checkpointed and can be rewound, and protected config paths still prompt). | A deliberate choice for speed. Use `plan` mode or `ask` rules for `edit_file` to get Claude Code's behaviour. |
 | Code signing | macOS warns on first launch of unsigned apps. | OASIS macOS packages are not code-signed yet. |
