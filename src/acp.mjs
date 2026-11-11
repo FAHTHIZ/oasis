@@ -304,7 +304,7 @@ export function createAcpServer(options = {}) {
     }
   }
 
-  async function prompt(params) {
+  async function prompt(params, requestSignal = null) {
     const entry = sessions.get(params.sessionId);
     if (!entry) throw rpcError(-32002, 'Unknown session ' + params.sessionId);
     if (entry.controller) throw rpcError(-32000, 'A prompt is already running in this session.');
@@ -322,6 +322,9 @@ export function createAcpServer(options = {}) {
     } catch {}
     const controller = new AbortController();
     entry.controller = controller;
+    // `$/cancel_request` for this prompt (the SDK aborts the request's signal)
+    // stops the turn like session/cancel; the reply is stopReason "cancelled".
+    if (requestSignal) { if (requestSignal.aborted) controller.abort(); else requestSignal.addEventListener('abort', () => controller.abort(), { once: true }); }
     const callIds = new Map();
     entry.activeCallIds = callIds;
     const before = new Map();
@@ -420,7 +423,7 @@ export function createAcpServer(options = {}) {
     } finally { entry.controller = null; entry.activeCallIds = null; await releaseTerminals(entry); }
   }
 
-  async function handle(method, params = {}) {
+  async function handle(method, params = {}, { signal = null } = {}) {
     switch (method) {
       case 'initialize':
         clientCapabilities = params.clientCapabilities || {};
@@ -494,7 +497,7 @@ export function createAcpServer(options = {}) {
         return { configOptions: configOptions(entry) };
       }
       case 'session/prompt':
-        return prompt(params);
+        return prompt(params, signal);
       case 'session/set_mode': {
         const entry = sessions.get(params.sessionId);
         if (!entry) throw rpcError(-32002, 'Unknown session ' + params.sessionId);
@@ -523,7 +526,7 @@ export function createAcpServer(options = {}) {
     [methods.agent.session.close, 'session/close'], [methods.agent.session.delete, 'session/delete'],
     [methods.agent.session.setConfigOption, 'session/set_config_option']
   ];
-  for (const [method, name] of requests) app.onRequest(method, async ({ params }) => { const result = await handle(name, params || {}); return result === undefined ? null : result; });
+  for (const [method, name] of requests) app.onRequest(method, async ({ params, signal }) => { const result = await handle(name, params || {}, { signal }); return result === undefined ? null : result; });
   app.onNotification(methods.agent.session.cancel, async ({ params }) => { await handle('session/cancel', params || {}); });
 
   function connect(stream) {
