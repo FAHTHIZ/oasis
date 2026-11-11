@@ -10,6 +10,8 @@ import { loadSettings, PERMISSION_MODES, normalizePermissionMode, normalizeLangu
 import { applyReplyLanguage } from './reply-language.mjs';
 import { applyWritingRules, effectivePhrases, normalizePhrases, normalizeCommentMode, DEFAULT_AVOID_PHRASES } from './style-rules.mjs';
 import { modelAllowed, modelRestrictionMessage } from './model-aliases.mjs';
+import { switchSessionModel } from './model-switch.mjs';
+import { hasHooks, runHooks } from './hooks.mjs';
 import { loadAgentDefinitions } from './subagents.mjs';
 import { memoryFiles } from './memory.mjs';
 import { listCheckpoints, rewind } from './checkpoints.mjs';
@@ -309,9 +311,12 @@ export async function runBuiltinCommand(name, argument, state) {
         return { output: modelRestrictionMessage(selected, available) };
       }
       if (!session.config) session.config = {};
-      session.config.model = selected;
-      sessionOptions.model = selected;
-      return { output: 'Model set to ' + selected + '.' };
+      if ((session.config.model || '') === selected) return { output: 'Model is already ' + selected + '.' };
+      // PreModelSwitch hooks may block or ask; PostModelSwitch context joins the next request.
+      const switched = await switchSessionModel(session, { to: selected, requested: selected, source: 'command', env, confirm: typeof state.confirm === 'function' ? state.confirm : null, apply: (model) => { session.config.model = model; sessionOptions.model = model; } });
+      const notes = switched.messages.length ? '\n' + switched.messages.join('\n') : '';
+      if (!switched.ok) return { output: 'Model unchanged (' + current + '): ' + switched.reason + notes };
+      return { output: 'Model set to ' + selected + '.' + notes };
     }
     case 'agents': {
       const definitions = await loadAgentDefinitions(root, { env });
@@ -411,6 +416,15 @@ export async function runBuiltinCommand(name, argument, state) {
         return { output: 'That folder is already inside the workspace or is already added.' };
       }
       session.additionalDirectories = updated.accepted;
+      // Sandboxed commands may write there too, as with --add-dir at start-up.
+      if (session.sandbox && Array.isArray(session.sandbox.writable)) {
+        for (const dir of added) if (!session.sandbox.writable.includes(dir)) session.sandbox.writable.push(dir);
+      }
+      // DirectoryAdded runs in the background once the folder is usable (Claude Code does not wait).
+      if (hasHooks(session.hooks, 'DirectoryAdded')) {
+        const options = typeof session.hookOptionsFor === 'function' ? session.hookOptionsFor() : { hooks: session.hooks, root, env };
+        for (const dir of added) runHooks('DirectoryAdded', { session_id: session.sessionId || 'unsaved', directory: dir, source: 'slash_command' }, options).catch(() => {});
+      }
       const systemMessage = session.messages && session.messages.find((message) => message.role === 'system');
       if (systemMessage && typeof systemMessage.content === 'string') {
         systemMessage.content += '\n\nAdditional working directory added: ' + added.join(', ') +
