@@ -8,7 +8,8 @@
 //            parent folders up to the git root and ~/.config/goose/.goosehints),
 //            AGENT.md and Devin Desktop's .devin/global_rules.md (else the
 //            legacy .windsurf/global_rules.md)
-//            and the files an opencode.json / kilo.jsonc "instructions" array lists
+//            and the files an opencode.json / kilo.jsonc "instructions" array lists,
+//            Aider .aider.conf.yml "read:" files, and Gemini CLI context.fileName names
 //   local    OASIS.local.md, CLAUDE.local.md, AGENTS.local.md   (personal, gitignored)
 // README.md is still included as general project context.
 //   parent   CLAUDE.md, CLAUDE.local.md, AGENTS.md, OASIS.md in directories above the
@@ -120,6 +121,55 @@ async function configInstructionFiles(workspace, env, home) {
   return out.slice(0, MAX_CONFIG_INSTRUCTIONS);
 }
 
+// Gemini CLI's context.fileName (a name or list of names, default GEMINI.md) in
+// ~/.gemini/settings.json and .gemini/settings.json; plain file names only, up to 10.
+export async function geminiContextNames(workspace, env = process.env, home = os.homedir()) {
+  const names = [];
+  for (const file of [path.join(home, '.gemini', 'settings.json'), path.join(workspace, '.gemini', 'settings.json')]) {
+    try {
+      const info = await lstat(file);
+      if (!info.isFile() || info.size > 512 * 1024) continue;
+      const data = parseJsonc(await readFile(file, 'utf8'), [], { allowTrailingComma: true });
+      const value = data && data.context && typeof data.context === 'object' ? data.context.fileName : undefined;
+      const list = typeof value === 'string' ? [value] : Array.isArray(value) ? value : [];
+      if (list.length) names.length = 0; // the workspace setting replaces the user one
+      for (const name of list) if (typeof name === 'string' && /^[\w.-]{1,100}$/.test(name) && !/^\.+$/.test(name) && !names.includes(name) && names.length < 10) names.push(name);
+    } catch { /* no settings */ }
+  }
+  return names.length ? names : ['GEMINI.md'];
+}
+
+// Aider's .aider.conf.yml "read:" files (read-only context; aider.chat/docs/config/aider_conf.html),
+// from the home folder, the git root and the workspace. Relative names resolve from the workspace.
+async function aiderReadFiles(workspace, env, home) {
+  const configs = [path.join(home, '.aider.conf.yml')];
+  for (let dir = workspace, i = 0; i < 20; i++) {
+    try { await lstat(path.join(dir, '.git')); if (dir !== workspace) configs.push(path.join(dir, '.aider.conf.yml')); break; } catch {}
+    const parent = path.dirname(dir);
+    if (parent === dir) break;
+    dir = parent;
+  }
+  configs.push(path.join(workspace, '.aider.conf.yml'));
+  const out = [];
+  const { parse } = await import('yaml');
+  for (const file of configs) {
+    let data;
+    try {
+      const info = await lstat(file);
+      if (!info.isFile() || info.size > 256 * 1024) continue;
+      data = parse(await readFile(file, 'utf8'), { schema: 'core', maxAliasCount: 20 });
+    } catch { continue; }
+    const value = data && typeof data === 'object' ? data.read : undefined;
+    const list = typeof value === 'string' ? [value] : Array.isArray(value) ? value : [];
+    for (const entry of list.slice(0, 20)) {
+      if (typeof entry !== 'string' || !entry.trim() || entry.includes('\0')) continue;
+      const raw = entry.trim().replace(/^~(?=\/|$)/, home);
+      out.push({ label: path.isAbsolute(raw) && file === configs[0] ? 'user' : 'project', path: path.resolve(workspace, raw) });
+    }
+  }
+  return out.slice(0, MAX_CONFIG_INSTRUCTIONS);
+}
+
 export async function memoryFiles(root, options = {}) {
   const env = options.env || process.env;
   const home = options.home || os.homedir();
@@ -159,6 +209,11 @@ export async function memoryFiles(root, options = {}) {
     // Gemini CLI, Copilot, Cursor, Windsurf, Cline or Aider works without copying files.
     ...(env.OASIS_OTHER_AGENT_RULES === '0' ? [] : OTHER_AGENT_RULES.map((name) => ({ label: 'project', path: path.join(workspace, name) }))),
     ...await configInstructionFiles(workspace, env, options.home || env.HOME || os.homedir()),
+    ...(env.OASIS_OTHER_AGENT_RULES === '0' ? [] : await aiderReadFiles(workspace, env, options.home || env.HOME || os.homedir())),
+    ...(env.OASIS_OTHER_AGENT_RULES === '0' ? [] : (await geminiContextNames(workspace, env, options.home || env.HOME || os.homedir())).filter((name) => name !== 'GEMINI.md').flatMap((name) => [
+      { label: 'user', path: path.join(options.home || env.HOME || os.homedir(), '.gemini', name) },
+      { label: 'project', path: path.join(workspace, name) }
+    ])),
     { label: 'local', path: path.join(workspace, 'OASIS.local.md') },
     { label: 'local', path: path.join(workspace, 'CLAUDE.local.md') },
     ...(env.OASIS_OTHER_AGENT_RULES === '0' ? [] : [{ label: 'local', path: path.join(workspace, 'AGENTS.local.md') }]),
@@ -451,10 +506,12 @@ export async function nestedMemoryFor(root, filePath, loaded = new Set(), option
   const found = [];
   const excluded = excludeMatcher(options.excludes);
   let budget = options.maxChars || 12000;
+  // Gemini CLI loads its context files (GEMINI.md or context.fileName) just in time too.
+  const nestedNames = env.OASIS_OTHER_AGENT_RULES === '0' ? NESTED_NAMES : [...new Set([...NESTED_NAMES, '.goosehints', ...(parts.length ? await geminiContextNames(workspace, env, options.home || env.HOME || os.homedir()) : [])])];
   for (let i = 1; i <= parts.length; i++) {
     const dir = path.join(workspace, ...parts.slice(0, i));
     if (/(^|\/)(node_modules|\.git)(\/|$)/.test(dir)) break;
-    for (const name of env.OASIS_OTHER_AGENT_RULES === '0' ? NESTED_NAMES : [...NESTED_NAMES, '.goosehints']) {
+    for (const name of nestedNames) {
       const file = path.join(dir, name);
       if (loaded.has(file)) continue;
       try {

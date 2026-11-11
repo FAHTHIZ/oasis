@@ -102,6 +102,8 @@ Files from these tools that OASIS reads where they are (no `oasis import` step).
 | Recipes (`*.yaml`, `*.json`; workspace or `GOOSE_RECIPE_PATH`) | Goose | `/recipe NAME key=value` renders instructions and prompt with parameters ([recipe reference](https://block.github.io/goose/docs/guides/recipes/recipe-reference)). Extensions, sub-recipes, retry and settings are not run; GitHub recipe repos are not fetched |
 | `.opencode/commands`, `.opencode/command`, `~/.config/opencode/commands`, `opencode.json` `commands` | OpenCode | Slash commands with OpenCode's `$ARGUMENTS`/`$N`, `` !`cmd` `` and append rules ([commands](https://opencode.ai/docs/commands/)); `agent`/`model` are not applied |
 | `instructions` in `opencode.json(c)`, `kilo.json(c)` | OpenCode, Kilo Code | Listed files and globs become always-on rules ([rules](https://opencode.ai/docs/rules/)); URLs are not fetched |
+| `.aider.conf.yml` `read:` (home, git root, workspace) | Aider | Listed files become always-on rules ([YAML config](https://aider.chat/docs/config/aider_conf.html)); other Aider options are not read |
+| `context.fileName` in `.gemini/settings.json`, `~/.gemini/settings.json` | Gemini CLI | Extra context-file names loaded from the workspace, `~/.gemini/` and subfolders on demand ([GEMINI.md](https://raw.githubusercontent.com/google-gemini/gemini-cli/main/docs/cli/gemini-md.md)). `GEMINI.md` still loads even when the list leaves it out |
 
 ## Kimi Code CLI
 
