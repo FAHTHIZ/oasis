@@ -5,6 +5,9 @@ weaknesses. Newest first. Detailed user-facing notes go in the CHANGELOG.
 
 ## 2026-11-11 (frontier-platform cycle: competitor gaps)
 
+### DeepSeek Harness schedule comparison (source read)
+- Read `packages/schedule` in [deepseek-harness](https://github.com/deepseek-ai/deepseek-harness) (MIT). It has: delivery targets for an existing session, one reused new session (`new_once`) or a new session per run (`new`), so OASIS's fresh / `fromSession` / `chain` cover the same ground. It also has RRULE and daily/weekly selectors, optimistic `expectedUpdatedAt` edits, receipt retention (30 days / 200 records) and `deleteInactive()`. Adopted the last three ideas (no code copied). OASIS still lacks RRULE. 5-field cron with a time zone covers the common cases.
+
 ### Regression caught by the full suite
 - `test/cli-help.test.mjs` ("oasis web leads with the one-click link") hung: after SIGTERM the in-process scheduler loop kept `oasis web` alive. Shutdown now stops the scheduler. `oasis gateway` hosts it only for a real gateway kind and stops it in `finally`, so usage errors still exit. Regression test: `oasis web exits on SIGTERM while hosting the routine scheduler`.
 

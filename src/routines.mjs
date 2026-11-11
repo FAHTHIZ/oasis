@@ -254,10 +254,14 @@ export async function createJob(fields = {}, { env = process.env, now = new Date
   });
 }
 
-export async function editJob(ref, fields = {}, { env = process.env, now = new Date() } = {}) {
+export async function editJob(ref, fields = {}, { env = process.env, now = new Date(), expectedUpdatedAt } = {}) {
   guardScheduledRun(env);
   return mutate(env, (jobs) => {
     const job = findJob(jobs, ref);
+    // Two editors (browser, agent, CLI): an edit based on a stale copy is refused.
+    if (expectedUpdatedAt !== undefined && (job.updatedAt || null) !== (expectedUpdatedAt || null)) {
+      throw Object.assign(new Error(job.id + ' changed since you loaded it (updated ' + (job.updatedAt || 'never') + '). Reload and try again.'), { code: 'ROUTINE_CONFLICT', statusCode: 409 });
+    }
     const next = normalizeFields(fields, job, now);
     // Fields cleared by normalizeFields (timezone, model, workdir, events...) must go too.
     for (const key of Object.keys(job)) if (!(key in next)) delete job[key];
@@ -306,10 +310,54 @@ export async function triggerJob(ref, { env = process.env } = {}) {
   return mutate(env, (jobs) => { const job = findJob(jobs, ref); job.manualRunRequested = true; return job; });
 }
 
+// Run history is bounded like DeepSeek Harness' schedule receipts: the newest
+// OASIS_ROUTINE_HISTORY records (default 200) and output files younger than
+// OASIS_ROUTINE_HISTORY_DAYS (default 30) are kept; the rest is pruned on append.
+function historyLimits(env) {
+  const records = Math.min(10_000, Math.max(1, Number.parseInt(env.OASIS_ROUTINE_HISTORY || '', 10) || 200));
+  const days = Math.min(3650, Math.max(1, Number.parseInt(env.OASIS_ROUTINE_HISTORY_DAYS || '', 10) || 30));
+  return { records, days };
+}
+
 async function appendRun(id, record, env) {
   const file = runsFile(id, env);
   await mkdir(path.dirname(file), { recursive: true, mode: 0o700 });
   await appendFile(file, JSON.stringify(record) + '\n', { mode: 0o600 });
+  try { await pruneHistory(id, env); } catch {}
+}
+
+async function pruneHistory(id, env, now = Date.now()) {
+  const { records, days } = historyLimits(env);
+  const file = runsFile(id, env);
+  const cutoff = now - days * UNITS.d;
+  const lines = (await readFile(file, 'utf8')).split('\n').filter(Boolean);
+  const keep = lines.slice(-records).filter((line) => {
+    try { const run = JSON.parse(line); const at = Date.parse(run.finishedAt || run.startedAt || ''); return !Number.isFinite(at) || at >= cutoff; } catch { return false; }
+  });
+  if (keep.length !== lines.length) await atomicWriteFile(file, keep.join('\n') + (keep.length ? '\n' : ''), { mode: 0o600 });
+  // Output and event files no kept record points at, and older than the cutoff, go too.
+  const referenced = new Set();
+  for (const line of keep) { try { const run = JSON.parse(line); if (run.outputFile) referenced.add(path.resolve(run.outputFile)); if (run.eventFile) referenced.add(path.resolve(run.eventFile)); } catch {} }
+  const { readdir } = await import('node:fs/promises');
+  for (const dir of [outputDir(id, env), path.join(outputDir(id, env), 'events')]) {
+    let names = [];
+    try { names = await readdir(dir); } catch { continue; }
+    for (const name of names) {
+      const full = path.join(dir, name);
+      if (referenced.has(full)) continue;
+      try { const info = await stat(full); if (info.isFile() && info.mtimeMs < cutoff) await rm(full, { force: true }); } catch {}
+    }
+  }
+}
+
+// Removes routines that will never run again (finished one-shots), keeping paused ones.
+export async function removeFinished({ env = process.env } = {}) {
+  guardScheduledRun(env);
+  return mutate(env, (jobs) => {
+    const done = jobs.filter((job) => job.state === 'completed' && !job.activeRun);
+    for (const job of done) jobs.splice(jobs.indexOf(job), 1);
+    return done.map((job) => job.id);
+  });
 }
 
 export async function listRuns(ref, { env = process.env, limit = 20 } = {}) {
