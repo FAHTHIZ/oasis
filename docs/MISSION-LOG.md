@@ -5,6 +5,9 @@ weaknesses. Newest first. Detailed user-facing notes go in the CHANGELOG.
 
 ## 2026-11-11 (IDE-agent interoperability: Cursor, Devin Desktop, Antigravity, OpenHands)
 
+### Antigravity plugin skills
+- Skills inside installed Antigravity and Antigravity CLI plugins (`~/.gemini/{config,antigravity-cli}/plugins/*/skills`) are now listed like other foreign user skills (40 plugins at most per folder). Test: test/foreign-skills.test.mjs; skill tests 21 pass, 0 fail.
+
 ### Worktree setup files
 - New worktrees had no `.env` or `node_modules`. Cursor ([worktrees docs](https://cursor.com/docs/configuration/worktrees)) and Windsurf ([Cascade worktrees](https://docs.windsurf.com/windsurf/cascade/workflows)) let a repository say how to prepare one. New src/worktree-setup.mjs follows their lookup order, OS-specific keys and environment variables; `createWorktree` runs it. Unlike those tools, OASIS requires `oasis trust` first, because a cloned repository should not run commands when a subagent starts. OpenHands' `.openhands/setup.sh` ([repository customization](https://docs.openhands.dev/openhands/usage/customization/repository)) is the fallback. OpenHands runs it at every session start inside a sandbox; on a user's own machine OASIS runs it only for a fresh worktree. Test: test/worktree-setup.test.mjs (5 tests, real git worktrees); worktree and session-tools tests 37 pass, 0 fail.
 
