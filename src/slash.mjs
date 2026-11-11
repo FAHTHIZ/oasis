@@ -302,13 +302,13 @@ export async function runBuiltinCommand(name, argument, state) {
         const { listProviderModels } = await import('./provider-models.mjs');
         const listed = await listProviderModels(session.config || {}, { env: session.providerEnv || env, cwd: root, refresh: String(argument).trim() === '--refresh' });
         if (!listed.models) return { output: 'Model: ' + current + '\n' + listed.reason + (available.length ? '\nAllowed models: ' + available.join(', ') : '') };
-        const usable = listed.models.filter((name) => modelAllowed(name, available, { env, protocol: session.config && session.config.protocol }));
+        const usable = listed.models.filter((name) => modelAllowed(name, available, { env, protocol: session.config && session.config.protocol, ...(session.modelPolicy || {}) }));
         const hidden = listed.models.length - usable.length;
         return { output: ['Model: ' + current, 'The provider serves ' + listed.models.length + ' model' + (listed.models.length === 1 ? '' : 's') + (hidden ? ' (' + hidden + ' hidden by availableModels)' : '') + ':', ...usable.map((name) => (name === current ? '* ' : '  ') + name), 'Switch with /model <name>.'].join('\n') };
       }
       const selected = String(argument).trim();
-      if (!modelAllowed(selected, available, { env, protocol: session.config && session.config.protocol })) {
-        return { output: modelRestrictionMessage(selected, available) };
+      if (!modelAllowed(selected, available, { env, protocol: session.config && session.config.protocol, ...(session.modelPolicy || {}) })) {
+        return { output: modelRestrictionMessage(selected, available, { env, ...(session.modelPolicy || {}) }) };
       }
       if (!session.config) session.config = {};
       if ((session.config.model || '') === selected) return { output: 'Model is already ' + selected + '.' };
@@ -814,10 +814,10 @@ export async function runBuiltinCommand(name, argument, state) {
       } else if (action === 'easy' || action === 'strong') {
         const model = String(words.slice(1).join(' ') || '').trim();
         if (!model || model.length > 200 || /[\r\n\0]/.test(model)) return { output: 'Usage: /routing ' + action + ' MODEL_ID' };
-        if (session.availableModels) {
+        if (session.availableModels || session.modelPolicy) {
           const { modelAllowed, modelRestrictionMessage } = await import('./model-aliases.mjs');
-          if (!modelAllowed(model, session.availableModels, { env: session.modelEnv, protocol: session.config.protocol })) {
-            return { output: modelRestrictionMessage(model, session.availableModels) };
+          if (!modelAllowed(model, session.availableModels, { env: session.modelEnv, protocol: session.config.protocol, ...(session.modelPolicy || {}) })) {
+            return { output: modelRestrictionMessage(model, session.availableModels || [], { env: session.modelEnv, ...(session.modelPolicy || {}) }) };
           }
         }
         if (action === 'easy') current.easyModel = model;
