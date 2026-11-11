@@ -3,6 +3,11 @@
 A short, dated record of changes, tests, benchmark results, blockers and known
 weaknesses. Newest first. Detailed user-facing notes go in the CHANGELOG.
 
+## 2026-11-11 (IDE-agent interoperability: Cursor, Devin Desktop, Antigravity, OpenHands)
+
+### Devin Desktop rule locations
+- Windsurf is now Devin Desktop. Its [rules page](https://docs.windsurf.com/windsurf/cascade/memories) moves rules to `.devin/rules/*.md` and `.devin/global_rules.md` (home-folder copies apply everywhere), keeps the `.windsurf/` files as a fallback (only `.devin/global_rules.md` loads when both global files exist), and reads `AGENTS.md`, `AGENTS.local.md` and `AGENT.md` per folder. OASIS already read `.windsurf/rules` and `.windsurfrules`; it now reads the new locations too, plus the legacy `~/.codeium/windsurf/memories/global_rules.md` that `oasis import windsurf` used to copy. Test: test/other-agent-rules.test.mjs.
+
 ## 2026-11-11 (frontier-platform cycle: competitor gaps)
 
 ### App Server skills, MCP status and signed tokens

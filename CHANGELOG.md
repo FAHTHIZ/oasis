@@ -4,6 +4,10 @@ User-facing change history grouped by package version. A version heading does no
 
 ## Unreleased
 
+### Rules and workflows from IDE agents
+
+- Devin Desktop (the new name of Windsurf) rule locations are read as they are: `.devin/rules/*.md` with their `trigger:` front matter (`always_on`, `glob`, `model_decision`, `manual`), the always-on `.devin/global_rules.md` (or the legacy `.windsurf/global_rules.md` when there is no `.devin` one, as Devin Desktop does), personal `~/.devin/rules/*.md` and `~/.devin/global_rules.md`, and the legacy Windsurf global rules at `~/.codeium/windsurf/memories/global_rules.md`. `AGENT.md` and `AGENTS.local.md` load like `AGENTS.md`, in the project and per folder. `OASIS_OTHER_AGENT_RULES=0` turns them off with the other agents' files.
+
 ### Crash-safe task progress
 
 - Browser tasks (`oasis web`), headless runs (`oasis -p`) and App Server turns now save the conversation while a turn is still running, as the terminal already did. If the server stops or crashes mid-task, the finished steps are kept, and the interrupted task's session can be continued. The save trails each tool step by a moment so it includes that step's result, and it runs at most every 3 seconds.

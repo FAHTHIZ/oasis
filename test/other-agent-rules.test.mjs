@@ -64,3 +64,36 @@ test('OASIS_OTHER_AGENT_RULES=0 turns other agents\' rule folders off', async (t
   const text = await loadMemory(root, { env: { ...env, OASIS_OTHER_AGENT_RULES: '0' }, home });
   assert.doesNotMatch(text, /CURSOR-ALWAYS|CLINE-ALWAYS/);
 });
+
+test('Devin Desktop rule locations, AGENT.md and AGENTS.local.md load', async (t) => {
+  const { root, env, home } = await workspace(t, {
+    '.devin/rules/always.md': '---\ntrigger: always_on\n---\nDEVIN-ALWAYS body.',
+    '.devin/rules/tests.md': '---\ntrigger: glob\nglobs: "**/*.test.ts"\n---\nDEVIN-SCOPED body.',
+    '.devin/global_rules.md': 'DEVIN-GLOBAL body.',
+    '.windsurf/global_rules.md': 'WINDSURF-GLOBAL body.',
+    'AGENT.md': 'AGENT-MD body.',
+    'AGENTS.local.md': 'AGENTS-LOCAL body.',
+    'pkg/AGENT.md': 'NESTED-AGENT-MD body.'
+  });
+  await mkdir(path.join(home, '.devin', 'rules'), { recursive: true });
+  await writeFile(path.join(home, '.devin', 'rules', 'me.md'), 'DEVIN-USER-RULE body.');
+  await writeFile(path.join(home, '.devin', 'global_rules.md'), 'DEVIN-USER-GLOBAL body.');
+  await mkdir(path.join(home, '.codeium', 'windsurf', 'memories'), { recursive: true });
+  await writeFile(path.join(home, '.codeium', 'windsurf', 'memories', 'global_rules.md'), 'WINDSURF-USER-GLOBAL body.');
+  const text = await loadMemory(root, { env, home });
+  for (const marker of ['DEVIN-ALWAYS', 'DEVIN-GLOBAL', 'AGENT-MD', 'AGENTS-LOCAL', 'DEVIN-USER-RULE', 'DEVIN-USER-GLOBAL', 'WINDSURF-USER-GLOBAL']) assert.ok(text.includes(marker), marker);
+  // Only .devin/global_rules.md loads when both global rule files exist, as in Devin Desktop.
+  assert.ok(!text.includes('WINDSURF-GLOBAL body'));
+  assert.ok(!text.includes('DEVIN-SCOPED'));
+  assert.ok(!text.includes('NESTED-AGENT-MD'));
+  const loaded = new Set();
+  assert.match((await nestedMemoryFor(root, 'src/a.test.ts', loaded, { env, home })).map((item) => item.text).join('\n'), /DEVIN-SCOPED/);
+  assert.match((await nestedMemoryFor(root, 'pkg/index.js', loaded, { env, home })).map((item) => item.text).join('\n'), /NESTED-AGENT-MD/);
+  const off = await loadMemory(root, { env: { ...env, OASIS_OTHER_AGENT_RULES: '0' }, home });
+  for (const marker of ['DEVIN-ALWAYS', 'DEVIN-GLOBAL', 'AGENT-MD', 'AGENTS-LOCAL', 'DEVIN-USER-RULE']) assert.ok(!off.includes(marker), marker);
+});
+
+test('legacy .windsurf/global_rules.md loads when there is no .devin one', async (t) => {
+  const { root, env, home } = await workspace(t, { '.windsurf/global_rules.md': 'WINDSURF-GLOBAL body.' });
+  assert.match(await loadMemory(root, { env, home }), /WINDSURF-GLOBAL/);
+});

@@ -57,6 +57,17 @@ Codex also has [`/goal`](https://learn.chatgpt.com/docs/cli/slash-commands): a p
 
 [Cursor CLI](https://cursor.com/docs/cli/changelog) is proprietary and runs Cursor's model catalog (Auto routing by default, with some bring-your-own-key options such as Bedrock). It has plan and ask modes, MCP, hooks, subagents, and a handoff that pushes a local conversation to a [Cloud Agent](https://cursor.com/changelog/cli-jan-16-2026) to keep running. OASIS has no hosted cloud. It runs wherever you install it, and the self-hosted web app reaches it from any browser.
 
+## IDE agents: Cursor, Devin Desktop (Windsurf), Antigravity, OpenHands
+
+OASIS reads these tools' project files where they are, so a repository set up for one of them works without running `oasis import`. Sources: [Devin Desktop rules](https://docs.windsurf.com/windsurf/cascade/memories), [Cascade workflows and ignore files](https://docs.windsurf.com/windsurf/cascade/workflows), [Cursor ignore files](https://cursor.com/docs/context/ignore-files), [OpenHands skills](https://docs.openhands.dev/overview/skills).
+
+| File | Source tool | OASIS |
+| --- | --- | --- |
+| `.cursor/rules/*.mdc` (`alwaysApply`, `globs`, `description`), `.cursorrules` | Cursor | Read with the same activation: always, glob-scoped, on request, manual |
+| `.devin/rules/*.md`, `.windsurf/rules/*.md` (`trigger:`), `.devin/global_rules.md`, `~/.devin/rules`, `.windsurfrules` | Devin Desktop / Windsurf | Read with the same triggers |
+| `AGENTS.md`, `AGENT.md`, `AGENTS.local.md`, per folder | Devin Desktop, Cursor, Codex | Read |
+| `.agent/rules`, `.agents/rules` | Antigravity | Read with the same triggers |
+
 ## Kimi Code CLI
 
 [Kimi Code CLI](https://github.com/MoonshotAI/kimi-code) is MIT-licensed TypeScript and the successor to the archived Python Kimi CLI. It is tuned for Kimi models and has `/goal`, `!` shell mode, built-in coder, explore and plan subagents, a local web UI and ACP ([introduction](https://www.kimi.ai/resources/kimi-code-introduction)). OASIS covers the same ground (`/goal`, `!` shell mode, explore, plan and general-purpose subagents, a web app and ACP) for any model provider, and also runs Claude Code plugins.

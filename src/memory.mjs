@@ -3,8 +3,10 @@
 //            plus ~/.codex/AGENTS.md and ~/.gemini/GEMINI.md
 //   project  OASIS.md, AGENTS.md, CLAUDE.md                     (shared, committed)
 //            plus GEMINI.md, .github/copilot-instructions.md, .cursorrules,
-//            .windsurfrules, .clinerules, CONVENTIONS.md (other agents' rules)
-//   local    OASIS.local.md, CLAUDE.local.md                    (personal, gitignored)
+//            .windsurfrules, .clinerules, CONVENTIONS.md (other agents' rules),
+//            AGENT.md and Devin Desktop's .devin/global_rules.md (else the
+//            legacy .windsurf/global_rules.md)
+//   local    OASIS.local.md, CLAUDE.local.md, AGENTS.local.md   (personal, gitignored)
 // README.md is still included as general project context.
 //   parent   CLAUDE.md, CLAUDE.local.md, AGENTS.md, OASIS.md in directories above the
 //            workspace (monorepos), nearest last, as Claude Code walks up from the cwd
@@ -24,9 +26,9 @@ const PER_FILE_LIMIT = 9000;
 // The README is background sent with every request; its opening (what the
 // project is, how to run it) is what helps. The model can read the rest.
 const README_LIMIT = 2500;
-export const OTHER_AGENT_RULES = ['GEMINI.md', path.join('.github', 'copilot-instructions.md'), '.cursorrules', '.windsurfrules', '.clinerules', 'CONVENTIONS.md'];
+export const OTHER_AGENT_RULES = ['GEMINI.md', 'AGENT.md', path.join('.github', 'copilot-instructions.md'), '.cursorrules', '.windsurfrules', path.join('.devin', 'global_rules.md'), path.join('.windsurf', 'global_rules.md'), '.clinerules', 'CONVENTIONS.md'];
 
-export function memoryFiles(root, options = {}) {
+export async function memoryFiles(root, options = {}) {
   const env = options.env || process.env;
   const home = options.home || os.homedir();
   const workspace = path.resolve(root);
@@ -43,7 +45,10 @@ export function memoryFiles(root, options = {}) {
     // Personal instructions kept for Codex and Gemini CLI apply too (OASIS_OTHER_AGENT_RULES=0 skips them).
     ...(env.OASIS_OTHER_AGENT_RULES === '0' ? [] : [
       { label: 'user', path: path.join(env.CODEX_HOME || path.join(options.home || env.HOME || os.homedir(), '.codex'), 'AGENTS.md') },
-      { label: 'user', path: path.join(options.home || env.HOME || os.homedir(), '.gemini', 'GEMINI.md') }
+      { label: 'user', path: path.join(options.home || env.HOME || os.homedir(), '.gemini', 'GEMINI.md') },
+      // Devin Desktop (formerly Windsurf) global rules, and the legacy Windsurf location.
+      { label: 'user', path: path.join(options.home || env.HOME || os.homedir(), '.devin', 'global_rules.md') },
+      { label: 'user', path: path.join(options.home || env.HOME || os.homedir(), '.codeium', 'windsurf', 'memories', 'global_rules.md') }
     ]),
     ...parents,
     { label: 'project', path: path.join(workspace, 'OASIS.md') },
@@ -55,14 +60,20 @@ export function memoryFiles(root, options = {}) {
     ...(env.OASIS_OTHER_AGENT_RULES === '0' ? [] : OTHER_AGENT_RULES.map((name) => ({ label: 'project', path: path.join(workspace, name) }))),
     { label: 'local', path: path.join(workspace, 'OASIS.local.md') },
     { label: 'local', path: path.join(workspace, 'CLAUDE.local.md') },
+    ...(env.OASIS_OTHER_AGENT_RULES === '0' ? [] : [{ label: 'local', path: path.join(workspace, 'AGENTS.local.md') }]),
     { label: 'readme', path: path.join(workspace, 'README.md') }
   ];
-  return Promise.all(candidates.map(async (item) => {
+  const found = await Promise.all(candidates.map(async (item) => {
     try {
       const info = await lstat(item.path);
       return { ...item, exists: info.isFile() && info.size <= MAX_MEMORY_FILE * 4, size: info.size };
     } catch { return { ...item, exists: false }; }
   }));
+  // Devin Desktop loads only .devin/global_rules.md when both it and the legacy
+  // .windsurf/global_rules.md exist.
+  const devinGlobal = found.find((item) => item.path === path.join(workspace, '.devin', 'global_rules.md'));
+  if (devinGlobal && devinGlobal.exists) for (const item of found) if (item.path === path.join(workspace, '.windsurf', 'global_rules.md')) item.exists = false;
+  return found;
 }
 
 async function readImports(root, text, depth = 0) {
@@ -185,6 +196,7 @@ export function readmeText(content) {
 // (listed by description; the model reads the file when relevant) or manual (skipped).
 export const OTHER_AGENT_RULE_DIRS = [
   { dir: '.cursor/rules', ext: ['.mdc', '.md'], tool: 'Cursor' },
+  { dir: '.devin/rules', ext: ['.md'], tool: 'Devin Desktop' },
   { dir: '.windsurf/rules', ext: ['.md'], tool: 'Windsurf' },
   { dir: '.agent/rules', ext: ['.md'], tool: 'Antigravity' },
   { dir: '.agents/rules', ext: ['.md'], tool: 'Antigravity' },
@@ -202,6 +214,8 @@ export async function projectRules(root, { env = process.env, notices = null, ho
     ...await loadRules(path.join(workspace, '.claude', 'rules'), 'project', workspace, notices, { prefix: '.claude/rules/' })
   ];
   if (env.OASIS_OTHER_AGENT_RULES !== '0') {
+    // Devin Desktop personal rules (~/.devin/rules/*.md) apply to every project.
+    rules.push(...await loadRules(path.join(home || env.HOME || os.homedir(), '.devin', 'rules'), 'user', null, notices, { prefix: '~/.devin/rules/' }));
     for (const spec of OTHER_AGENT_RULE_DIRS) rules.push(...await loadRules(path.join(workspace, ...spec.dir.split('/')), 'project', workspace, notices, { ext: spec.ext, prefix: spec.dir + '/' }));
   }
   return rules;
@@ -283,7 +297,8 @@ export async function appendMemoryNote(root, note, options = {}) {
 // Claude Code loads CLAUDE.md files in subdirectories only when the agent works on files there.
 // Returns the not-yet-loaded memory files between the workspace root and filePath's folder,
 // root-most first, and records them in `loaded` so each is sent once per session.
-const NESTED_NAMES = ['CLAUDE.md', 'AGENTS.md', 'OASIS.md', 'CLAUDE.local.md', path.join('.claude', 'CLAUDE.md')];
+// AGENT.md and AGENTS.local.md are read per directory by Devin Desktop.
+const NESTED_NAMES = ['CLAUDE.md', 'AGENTS.md', 'OASIS.md', 'CLAUDE.local.md', path.join('.claude', 'CLAUDE.md'), 'AGENT.md', 'AGENTS.local.md'];
 export async function nestedMemoryFor(root, filePath, loaded = new Set(), options = {}) {
   const env = options.env || process.env;
   if (env.OASIS_DISABLE_NESTED_MEMORY === '1' || typeof filePath !== 'string' || !filePath) return [];
