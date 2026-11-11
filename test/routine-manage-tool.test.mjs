@@ -63,3 +63,16 @@ test('routine_manage dispatches through runSessionTool', async () => {
   const out = await runSessionTool(session, 'routine_manage', { action: 'list' }, { env });
   assert.deepEqual(JSON.parse(typeof out === 'string' ? out : JSON.stringify(out)).routines ?? out.routines, []);
 });
+
+test('/schedule durable hands a routine request to the agent; /schedule routines lists durable routines', async () => {
+  const { runBuiltinCommand } = await import('../src/slash.mjs');
+  const env = await tempEnv();
+  const usage = await runBuiltinCommand('schedule', 'durable', { root: '/tmp', session: null, env });
+  assert.match(usage.output, /Usage: \/schedule durable/);
+  const handoff = await runBuiltinCommand('schedule', 'durable check CI every weekday at 9', { root: '/tmp', session: null, env });
+  assert.match(handoff.prompt, /routine_manage/);
+  assert.match(handoff.prompt, /check CI every weekday at 9/);
+  assert.match((await runBuiltinCommand('schedule', 'routines', { root: '/tmp', session: null, env })).output, /No routines yet/);
+  await manageRoutine(session, { action: 'create', schedule: 'every 2h', prompt: 'x', name: 'listed' }, { env, approval: async () => true });
+  assert.match((await runBuiltinCommand('routines', 'routines', { root: '/tmp', session: null, env })).output, /"listed"/);
+});

@@ -169,3 +169,25 @@ test('web /api/routines?runs=ID returns recent runs with their saved output, new
   assert.equal((await fetch('http://127.0.0.1:' + app.port + '/api/routines?runs=rt-nope0000', { headers })).status, 404);
   assert.equal((await fetch('http://127.0.0.1:' + app.port + '/api/routines?runs=' + job.id)).status, 401);
 });
+
+test('oasis web exits on SIGTERM while hosting the routine scheduler', async (t) => {
+  const { spawn } = await import('node:child_process');
+  const dir = await mkdtemp(path.join(os.tmpdir(), 'oasis-rweb-'));
+  t.after(() => rm(dir, { recursive: true, force: true }));
+  const env = { ...process.env, HOME: dir, OASIS_CONFIG_DIR: path.join(dir, 'cfg'), OASIS_NO_UPDATE_CHECK: '1', OASIS_NO_BROWSER: '1', OASIS_ROUTINES: '', OASIS_SCHEDULED_RUN: '' };
+  await createJob({ schedule: 'every 1h', prompt: 'x', paused: true }, { env });
+  const cli = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'src', 'cli.mjs');
+  const child = spawn(process.execPath, [cli, 'web', '--port', '0'], { cwd: dir, env, stdio: ['ignore', 'pipe', 'pipe'] });
+  let out = '';
+  child.stdout.on('data', (d) => { out += d; });
+  const deadline = Date.now() + 30_000;
+  while (!/Routines: 1 saved/.test(out) && Date.now() < deadline && child.exitCode === null) await new Promise((r) => setTimeout(r, 50));
+  assert.match(out, /Routines: 1 saved; this server runs them/);
+  const exited = new Promise((resolve) => child.once('exit', (code, signal) => resolve({ code, signal })));
+  child.kill('SIGTERM');
+  const timeout = new Promise((resolve) => setTimeout(() => resolve('timeout'), 10_000));
+  const result = await Promise.race([exited, timeout]);
+  if (result === 'timeout') child.kill('SIGKILL');
+  assert.notEqual(result, 'timeout', 'oasis web must exit after SIGTERM');
+  assert.equal(await runningDaemonPid(env), 0, 'the scheduler pid file is cleaned up');
+});

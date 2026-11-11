@@ -17,6 +17,7 @@ User-facing change history grouped by package version. A version heading does no
 - Fixed: `oasis schedule edit` could not clear a field (`--tz ''`, `--model ''`, `--workdir ''`).
 - Settings → Routines → Recent results shows the last 10 runs of a routine with status, delivery and saved output (`GET /api/routines?runs=ID`).
 - Conversation routines (like Codex thread automations): `--from-session ID` starts every run from a copy of a saved conversation, and `--chain` makes each run continue from the previous successful run. The original conversation is never written to, since each run forks it under a new id that the routine records. In a session, the agent's `routine_manage` takes `continue_this_conversation: true`.
+- `/schedule durable DESCRIPTION` asks the agent to set up a routine from plain language (like Claude Code's `/schedule`), and `/schedule routines` (or `/routines routines`) lists them. Plain `/schedule CRON PROMPT` still makes a session-only job and now says how to make a durable one.
 - The agent can manage routines itself with the `routine_manage` tool (list, show, create, edit, pause, resume, run, cancel, remove). Creating, editing, resuming, triggering and removing ask you every time, even with `--yes`, and the prompt shows the schedule, command, folder, permission mode and delivery target. Subagents and runs with nobody to answer are refused and told to use `oasis schedule`. Pausing and cancelling never need approval.
 
 ### Desktop app

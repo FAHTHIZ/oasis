@@ -5,6 +5,9 @@ weaknesses. Newest first. Detailed user-facing notes go in the CHANGELOG.
 
 ## 2026-11-11 (frontier-platform cycle: competitor gaps)
 
+### Regression caught by the full suite
+- `test/cli-help.test.mjs` ("oasis web leads with the one-click link") hung: after SIGTERM the in-process scheduler loop kept `oasis web` alive. Shutdown now stops the scheduler. `oasis gateway` hosts it only for a real gateway kind and stops it in `finally`, so usage errors still exit. Regression test: `oasis web exits on SIGTERM while hosting the routine scheduler`.
+
 ### Conversation routines
 - Codex thread automations and Claude Desktop local tasks can continue context. OASIS routines now take `fromSession` + `chain`. `startBackgroundSession({ resumeId, fork: true })` passes `--resume ID --fork-session --session-id NEW` (the CLI already honoured a chosen id for a fork) and records NEW, so in-place resume races with an open terminal can't happen. After an `ok` run of a chained routine, `fromSession` moves to that run's session. Failed runs don't advance the chain.
 - Found while testing: `spawnSync` against the in-process scripted model server deadlocks. The test uses async `execFile`.
