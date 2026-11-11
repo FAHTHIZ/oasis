@@ -3451,17 +3451,24 @@ async function executeRegisteredToolWithKernel(session, name, args, context, opt
 /**
  * After MCP_AUTH_REQUIRED from an HTTP server: forget the rejected sign-in,
  * show the Connect card (when someone can click it) and report whether the
- * call should be retried. Scope step-ups keep the usual advice.
+ * call should be retried. A scope step-up signs in again asking for the scope.
  */
 export async function connectAfterAuthError(session, mapped, error, options) {
-  if (!error || error.code !== 'MCP_AUTH_REQUIRED' || error.requiredScope || typeof options.connectorCard !== 'function' || !mapped) return false;
+  if (!error || error.code !== 'MCP_AUTH_REQUIRED' || typeof options.connectorCard !== 'function' || !mapped) return false;
   const client = session.mcpClients && session.mcpClients.get(mapped.serverName);
   const url = client && client.config && client.config.url;
   if (!url || !/^https:\/\//i.test(String(url))) return false;
-  const { deleteStoredToken } = await import('./mcp-oauth.mjs');
-  await deleteStoredToken(url, options.env).catch(() => false);
+  const { deleteStoredToken, rememberRequiredScope } = await import('./mcp-oauth.mjs');
+  // Step-up (403 insufficient_scope): keep the sign-in and remember the scope,
+  // so the fresh sign-in asks for it. Otherwise the token was refused: forget it.
+  const stepUp = Boolean(error.requiredScope);
+  if (stepUp) await rememberRequiredScope(client.config, error.requiredScope, options.env);
+  else await deleteStoredToken(url, options.env).catch(() => false);
   const { runConnectService } = await import('./connectors.mjs');
-  const result = await runConnectService(session, { service: url, reason: mapped.serverName + ' needs you to sign in before it can run ' + mapped.toolName + '.' }, { ...options, reauth: true });
+  const reason = stepUp
+    ? mapped.serverName + ' needs more access (' + String(error.requiredScope).slice(0, 120) + ') to run ' + mapped.toolName + '.'
+    : mapped.serverName + ' needs you to sign in before it can run ' + mapped.toolName + '.';
+  const result = await runConnectService(session, { service: url, reason }, { ...options, reauth: true });
   return Boolean(result && result.connected && session.mcpToolMap && session.mcpToolMap.size);
 }
 
