@@ -193,7 +193,7 @@ Checked on 9 November 2026: BuilderIO/skills, n8n-io/skills, DataDog/pup and NVI
 Say "connect GitHub" (or `/connect linear`) in the terminal or the web app and a Connect card appears in the conversation. Click **Connect**, approve access on the service's own page, and its tools are ready in the same chat; the agent's turn carries on where it was. The agent shows the same card itself when a task needs an app you have not connected (`connect_service`).
 
 - GitHub uses your existing `gh` sign-in at once, or runs `gh auth login --web` and shows the one-time code on the card; without `gh` it takes a pasted token.
-- Linear, Notion, Sentry, Atlassian (Jira, Confluence), Stripe, Vercel, Supabase, Neon, Cloudflare, Hugging Face, monday.com, Intercom and PayPal sign in with OAuth (dynamic client registration). Any other remote MCP server works by name from the official MCP Registry or by URL.
+- Linear, Notion, Sentry, Atlassian (Jira, Confluence), Stripe, Vercel, Supabase, Neon, Cloudflare, Hugging Face, monday.com, Intercom, Airtable, Square, Webflow, Granola and PayPal sign in with OAuth (dynamic client registration). DeepWiki, Exa and the Cloudflare docs need no sign-in. Any other remote MCP server works by name from the official MCP Registry or by URL.
 - Already connected? Nothing is shown. Signed in earlier? It reattaches quietly. Signing in from your phone? Paste the address the browser landed on into the card.
 - `oasis mcp connect NAME` does the same from a shell; `/connect` alone lists what can be connected.
 
