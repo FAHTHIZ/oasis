@@ -2,7 +2,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import os from 'node:os';
 import path from 'node:path';
-import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { existsSync } from 'node:fs';
 import { spawn } from 'node:child_process';
 import { createInterface } from 'node:readline';
 import { fileURLToPath } from 'node:url';
@@ -333,4 +334,24 @@ test('thread lifecycle: compact, loaded list, archive and unarchive (keeping the
   assert.deepEqual((await client.call('thread/delete', { threadId, cwd: root })).result, {});
   assert.ok(client.notes.some((note) => note.method === 'thread/deleted' && note.params.threadId === threadId));
   assert.equal((await client.call('thread/read', { threadId, cwd: root })).error.code, -32002);
+});
+
+test('skills/list reports built-in and repository skills with Codex scopes and SKILL.md paths', async (t) => {
+  const root = await tmp(t);
+  const home = await tmp(t, 'oasis-appsrv-home-');
+  await mkdir(path.join(root, '.agents', 'skills', 'deploy-notes'), { recursive: true });
+  await writeFile(path.join(root, '.agents', 'skills', 'deploy-notes', 'SKILL.md'), '---\nname: deploy-notes\ndescription: Write deploy notes. Use when shipping.\n---\nSteps.\n');
+  const { config } = await scriptedModel(t, [{ content: 'unused' }]);
+  const { child } = spawnServer(t, root, home, config);
+  const client = codexClient(child);
+  await client.call('initialize', { clientInfo: { name: 't' } });
+  const { result, error } = await client.call('skills/list', { cwds: [root] });
+  assert.ok(result, JSON.stringify(error));
+  assert.equal(result.data.length, 1);
+  assert.equal(result.data[0].cwd, root);
+  const repo = result.data[0].skills.find((skill) => skill.name === 'deploy-notes');
+  assert.deepEqual({ scope: repo.scope, path: repo.path, enabled: repo.enabled, description: repo.description }, { scope: 'repo', path: path.join(root, '.agents', 'skills', 'deploy-notes', 'SKILL.md'), enabled: true, description: 'Write deploy notes. Use when shipping.' });
+  const system = result.data[0].skills.filter((skill) => skill.scope === 'system');
+  assert.ok(system.length > 0, 'built-in skills are listed');
+  for (const skill of system) assert.ok(existsSync(skill.path), skill.path);
 });
