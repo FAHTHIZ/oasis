@@ -14,6 +14,11 @@ weaknesses. Newest first. Detailed user-facing notes go in the CHANGELOG.
 
 ## 2026-11-11 (Claude Code parity cycle)
 
+### Hook policy settings
+- Listed the 248 keys in Claude Code's [settings reference](https://code.claude.com/docs/en/settings-reference.md) and checked each name against `src/`; about 150 never appear. Many are Anthropic-account, desktop or UI keys. The hook policy keys came first because a user who sets them expects hooks to stop, and OASIS ran them anyway.
+- `disableAllHooks` (last scope wins; managed is separate and removes everything), `allowManagedHooksOnly` (managed only), `allowedHttpHookUrls` and `httpHookAllowedEnvVars` (merged arrays). Agent front-matter hooks are refused while hooks are restricted. Plugins force-enabled by managed `enabledPlugins` are not exempted, because OASIS has no managed force-enable; their hooks stop too.
+- Test: test/hook-policy-settings.test.mjs (7); hooks, settings and subagent suites pass (78 tests).
+
 ### Model-switch and DirectoryAdded hooks
 - Compared the event list in Claude Code's [hooks reference](https://code.claude.com/docs/en/hooks.md) with the `runHooks` call sites. All 33 event names were accepted in settings, but `PreModelSwitch`, `PostModelSwitch` and `DirectoryAdded` were never fired, so a Claude Code user's hooks for them silently did nothing.
 - New src/model-switch.mjs: `/model` (source `command`) and ACP `session/set_config_option` (source `sdk`) run PreModelSwitch with the documented input and decisions, and PostModelSwitch in the background with its output queued for the next request. Canonical names: aliases, `[1m]`, dates, Bedrock and gateway prefixes are stripped; non-Claude models get no canonical name and run every hook, as the docs describe for unknown ids. The cost estimate uses OASIS's price catalog and the last main-conversation response's usage.
