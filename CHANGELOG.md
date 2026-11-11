@@ -29,6 +29,7 @@ User-facing change history grouped by package version. A version heading does no
 - "Connect GitHub and Linear" (or `/connect github linear` in the terminal) shows one card per app, and pasting an MCP server address on its own (https://mcp.…, …/mcp, …/sse) offers its Connect card.
 - Scope step-up: when an app answers 403 insufficient_scope, the Connect card explains which access it needs, signs in again asking for that scope, and retries the call.
 - Settings → Apps has a search box, lists connected apps first, and connects any other app from a pasted MCP server URL.
+- 14 more apps, each tested to accept a loopback redirect at registration: GitLab, Miro, Buildkite, Honeycomb, Axiom, Sanity, Postman, Klaviyo, Fireflies, Dropbox, Make, Cal.com, Grafana Cloud and Mux (48 in all).
 - 13 more apps, each checked for OAuth dynamic client registration: PostHog, Netlify, Prisma, Semgrep, Jam, Wix, Supermemory, Apify, Tavily, Close, Attio and Todoist, plus Context7 (no sign-in).
 - `/disconnect NAME` in the terminal signs out of an app and removes the server OASIS added (Tab completes app names).
 - Settings → Apps and `/connect` flag a sign-in that expired with no refresh token, with a one-click Reconnect.
