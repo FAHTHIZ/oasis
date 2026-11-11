@@ -64,7 +64,11 @@
   <g font-family="Inter, 'Segoe UI', Helvetica, Arial, sans-serif">
     <text x="84" y="164" font-size="96" font-weight="800" letter-spacing="10" fill="url(#word)">OASIS</text>
     <text x="88" y="214" font-size="27" font-weight="600" fill="#E6F5EA">The open-source coding agent for any model.</text>
-    <text x="88" y="252" font-size="19" fill="#E6F5EA" opacity=".72">Terminal and web app · Claude Code plugins · verified work</text>
+    <text x="88" y="252" font-size="19" fill="#E6F5EA" opacity=".72">Terminal · web app · desktop · editors · Claude Code plugins</text>
+    <g transform="translate(88 284)"><rect width="126" height="32" rx="16" fill="#0B0F0C" stroke="#32E07A" stroke-opacity=".55"/><circle cx="17" cy="16" r="3.5" fill="#7CFF5E"/><text x="29" y="21" font-size="14" font-weight="600" fill="#E6F5EA">Any model</text></g>
+    <g transform="translate(226 284)"><rect width="145" height="32" rx="16" fill="#0B0F0C" stroke="#32E07A" stroke-opacity=".55"/><circle cx="17" cy="16" r="3.5" fill="#7CFF5E"/><text x="29" y="21" font-size="14" font-weight="600" fill="#E6F5EA">Self-hosted</text></g>
+    <g transform="translate(383 284)"><rect width="164" height="32" rx="16" fill="#0B0F0C" stroke="#32E07A" stroke-opacity=".55"/><circle cx="17" cy="16" r="3.5" fill="#7CFF5E"/><text x="29" y="21" font-size="14" font-weight="600" fill="#E6F5EA">Verified work</text></g>
+    <g transform="translate(559 284)"><rect width="136" height="32" rx="16" fill="#0B0F0C" stroke="#32E07A" stroke-opacity=".55"/><circle cx="17" cy="16" r="3.5" fill="#7CFF5E"/><text x="29" y="21" font-size="14" font-weight="600" fill="#E6F5EA">Apache-2.0</text></g>
     <text x="88" y="386" font-size="13" letter-spacing="5" fill="#E6F5EA" opacity=".75">CODE. AUTOMATE. <tspan fill="#7CFF5E" font-weight="700">FLOURISH.</tspan></text>
   </g>
   </g>

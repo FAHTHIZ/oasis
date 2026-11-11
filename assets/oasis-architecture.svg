@@ -1,0 +1,78 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="604" viewBox="0 0 1280 604" role="img" aria-labelledby="t d">
+<title id="t">How OASIS fits together</title>
+<desc id="d">Six ways in (terminal, web app, desktop app, editors over ACP, Codex App Server clients, and the SDK, CI and GitHub Action) all drive one OASIS runtime with a turn loop, permissions and sandbox, subagents, a verification gate, and checkpoints and memory. The runtime talks to any model provider, to tools such as MCP servers and Claude Code plugins, and to your project on your own machine.</desc>
+<defs>
+<linearGradient id="bg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#0B0F0C"/><stop offset="1" stop-color="#070A08"/></linearGradient>
+<linearGradient id="rt" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#14261A"/><stop offset="1" stop-color="#0F1A12"/></linearGradient>
+<linearGradient id="lime" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#7CFF5E"/><stop offset="1" stop-color="#0ED168"/></linearGradient>
+<radialGradient id="glow"><stop offset="0" stop-color="#32E07A" stop-opacity=".22"/><stop offset="1" stop-color="#32E07A" stop-opacity="0"/></radialGradient>
+<marker id="ar" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#32E07A"/></marker>
+</defs>
+<rect width="1280" height="604" rx="22" fill="url(#bg)"/>
+<ellipse cx="640" cy="340" rx="330" ry="260" fill="url(#glow)"/>
+<g font-family="Inter, 'Segoe UI', Helvetica, Arial, sans-serif">
+<text x="40" y="58" font-size="13" font-weight="700" letter-spacing="3" fill="#7CFF5E">WHERE YOU WORK</text>
+<text x="440" y="58" font-size="13" font-weight="700" letter-spacing="3" fill="#7CFF5E">ONE RUNTIME</text>
+<text x="920" y="58" font-size="13" font-weight="700" letter-spacing="3" fill="#7CFF5E">WHAT IT WORKS WITH</text>
+<rect x="40" y="84" width="320" height="70" rx="14" fill="#1A1F1B" stroke="#32E07A" stroke-opacity=".35"/>
+<text x="62" y="114" font-size="17" font-weight="700" fill="#E6F5EA">Terminal</text>
+<text x="62" y="137" font-size="13" fill="#9FE8B4" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace">oasis</text>
+<path d="M360 119.0 C 400 119.0, 400 119.0, 436 119.0" stroke="#32E07A" stroke-opacity=".7" stroke-width="2" fill="none" marker-end="url(#ar)"/>
+<rect x="40" y="168" width="320" height="70" rx="14" fill="#1A1F1B" stroke="#32E07A" stroke-opacity=".35"/>
+<text x="62" y="198" font-size="17" font-weight="700" fill="#E6F5EA">Web app</text>
+<text x="62" y="221" font-size="13" fill="#9FE8B4" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace">oasis web --open</text>
+<path d="M360 203.0 C 400 203.0, 400 203.0, 436 203.0" stroke="#32E07A" stroke-opacity=".7" stroke-width="2" fill="none" marker-end="url(#ar)"/>
+<rect x="40" y="252" width="320" height="70" rx="14" fill="#1A1F1B" stroke="#32E07A" stroke-opacity=".35"/>
+<text x="62" y="282" font-size="17" font-weight="700" fill="#E6F5EA">Desktop app</text>
+<text x="62" y="305" font-size="13" fill="#9FE8B4" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace">Windows · macOS · Linux</text>
+<path d="M360 287.0 C 400 287.0, 400 287.0, 436 287.0" stroke="#32E07A" stroke-opacity=".7" stroke-width="2" fill="none" marker-end="url(#ar)"/>
+<rect x="40" y="336" width="320" height="70" rx="14" fill="#1A1F1B" stroke="#32E07A" stroke-opacity=".35"/>
+<text x="62" y="366" font-size="17" font-weight="700" fill="#E6F5EA">Editors over ACP</text>
+<text x="62" y="389" font-size="13" fill="#9FE8B4" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace">oasis acp · Zed, JetBrains</text>
+<path d="M360 371.0 C 400 371.0, 400 371.0, 436 371.0" stroke="#32E07A" stroke-opacity=".7" stroke-width="2" fill="none" marker-end="url(#ar)"/>
+<rect x="40" y="420" width="320" height="70" rx="14" fill="#1A1F1B" stroke="#32E07A" stroke-opacity=".35"/>
+<text x="62" y="450" font-size="17" font-weight="700" fill="#E6F5EA">Codex App Server clients</text>
+<text x="62" y="473" font-size="13" fill="#9FE8B4" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace">oasis app-server</text>
+<path d="M360 455.0 C 400 455.0, 400 455.0, 436 455.0" stroke="#32E07A" stroke-opacity=".7" stroke-width="2" fill="none" marker-end="url(#ar)"/>
+<rect x="40" y="504" width="320" height="70" rx="14" fill="#1A1F1B" stroke="#32E07A" stroke-opacity=".35"/>
+<text x="62" y="534" font-size="17" font-weight="700" fill="#E6F5EA">SDK, CI and Action</text>
+<text x="62" y="557" font-size="13" fill="#9FE8B4" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace">oasis -p · src/sdk.mjs</text>
+<path d="M360 539.0 C 400 539.0, 400 539.0, 436 539.0" stroke="#32E07A" stroke-opacity=".7" stroke-width="2" fill="none" marker-end="url(#ar)"/>
+<rect x="440" y="84" width="400" height="490" rx="18" fill="url(#rt)" stroke="#32E07A" stroke-width="1.5"/>
+<text x="468" y="124" font-size="24" font-weight="800" letter-spacing="2" fill="#E6F5EA">OASIS</text>
+<text x="468" y="148" font-size="14" fill="#E6F5EA" opacity=".78">Same sessions, settings and tools everywhere</text>
+<rect x="464" y="172" width="352" height="64" rx="12" fill="#0B0F0C" stroke="#32E07A" stroke-opacity=".3"/>
+<text x="486" y="199" font-size="16" font-weight="700" fill="#E6F5EA">Turn loop</text>
+<text x="486" y="220" font-size="13" fill="#B9D9C2">streaming, steering, /goal</text>
+<rect x="464" y="248" width="352" height="64" rx="12" fill="#0B0F0C" stroke="#32E07A" stroke-opacity=".3"/>
+<text x="486" y="275" font-size="16" font-weight="700" fill="#E6F5EA">Permissions and sandbox</text>
+<text x="486" y="296" font-size="13" fill="#B9D9C2">modes, risk checks, trust</text>
+<rect x="464" y="324" width="352" height="64" rx="12" fill="#0B0F0C" stroke="#32E07A" stroke-opacity=".3"/>
+<text x="486" y="351" font-size="16" font-weight="700" fill="#E6F5EA">Subagents and teams</text>
+<text x="486" y="372" font-size="13" fill="#B9D9C2">parallel, background, worktrees</text>
+<rect x="464" y="400" width="352" height="64" rx="12" fill="url(#lime)"/>
+<text x="486" y="427" font-size="16" font-weight="700" fill="#0B0F0C">Verification gate</text>
+<text x="486" y="448" font-size="13" fill="#0B0F0C">no unobserved “tests pass”</text>
+<rect x="464" y="476" width="352" height="64" rx="12" fill="#0B0F0C" stroke="#32E07A" stroke-opacity=".3"/>
+<text x="486" y="503" font-size="16" font-weight="700" fill="#E6F5EA">Checkpoints and memory</text>
+<text x="486" y="524" font-size="13" fill="#B9D9C2">undo, resume, search</text>
+<rect x="920" y="84.0" width="320" height="150" rx="14" fill="#1A1F1B" stroke="#32E07A" stroke-opacity=".35"/>
+<text x="942" y="132" font-size="17" font-weight="700" fill="#E6F5EA">Any model</text>
+<text x="942" y="158" font-size="14" fill="#E6F5EA" opacity=".8">OpenAI, Anthropic, Gemini, Bedrock,</text>
+<text x="942" y="179" font-size="14" fill="#E6F5EA" opacity=".8">Vertex AI, OpenRouter, any</text>
+<text x="942" y="200" font-size="14" fill="#E6F5EA" opacity=".8">OpenAI-compatible or local server</text>
+<path d="M846 159 L 914 159" stroke="#32E07A" stroke-opacity=".7" stroke-width="2" fill="none" marker-start="url(#ar)" marker-end="url(#ar)"/>
+<rect x="920" y="254.0" width="320" height="150" rx="14" fill="#1A1F1B" stroke="#32E07A" stroke-opacity=".35"/>
+<text x="942" y="302" font-size="17" font-weight="700" fill="#E6F5EA">Tools and extensions</text>
+<text x="942" y="328" font-size="14" fill="#E6F5EA" opacity=".8">MCP servers, Claude Code plugins,</text>
+<text x="942" y="349" font-size="14" fill="#E6F5EA" opacity=".8">skills, hooks; Codex plugins and</text>
+<text x="942" y="370" font-size="14" fill="#E6F5EA" opacity=".8">Gemini extensions converted</text>
+<path d="M846 329 L 914 329" stroke="#32E07A" stroke-opacity=".7" stroke-width="2" fill="none" marker-start="url(#ar)" marker-end="url(#ar)"/>
+<rect x="920" y="424.0" width="320" height="150" rx="14" fill="#1A1F1B" stroke="#32E07A" stroke-opacity=".35"/>
+<text x="942" y="482" font-size="17" font-weight="700" fill="#E6F5EA">Your project</text>
+<text x="942" y="508" font-size="14" fill="#E6F5EA" opacity=".8">Files, git, shell and tests, on</text>
+<text x="942" y="529" font-size="14" fill="#E6F5EA" opacity=".8">the machine you run OASIS on</text>
+<path d="M846 499 L 914 499" stroke="#32E07A" stroke-opacity=".7" stroke-width="2" fill="none" marker-start="url(#ar)" marker-end="url(#ar)"/>
+</g>
+<rect x=".5" y=".5" width="1279" height="603" rx="22" fill="none" stroke="#32E07A" stroke-opacity=".28"/>
+</svg>
