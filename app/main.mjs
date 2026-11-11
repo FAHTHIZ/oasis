@@ -1986,7 +1986,7 @@ function connectService(card, actions) {
   removeThinking();
   const old = liveConnectorCards.get(card.id);
   if (old) old.stop();
-  const ui = createConnectorCard(card, actions, { toast, openUrl: openExternal });
+  const ui = createConnectorCard(card, actions, { toast });
   const wrap = document.createElement('div');
   wrap.className = 'msg connector';
   wrap.appendChild(ui.element);
@@ -2077,9 +2077,6 @@ async function renderApps() {
     list.appendChild(row);
   }
   if (!apps.length) { const empty = document.createElement('li'); empty.className = 'hint'; empty.textContent = 'Could not load the app list from this computer.'; list.appendChild(empty); }
-}
-function openExternal(url) {
-  try { window.open(url, '_blank', 'noopener'); } catch { /* blocked */ }
 }
 
 /* ---------- Approvals ---------- */

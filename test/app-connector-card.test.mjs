@@ -41,10 +41,11 @@ test('Connect follows the flow to Connected and resolves done', async () => {
     { ...base, status: 'connected', tools: ['a', 'b', 'c'], account: '' }
   ];
   let opened = '';
+  window.open = (url) => { if (url) opened = url; return null; };
   const ui = createConnectorCard(base, {
     act: async (body) => { posted.push(body); return { ...base, status: 'working' }; },
     status: async () => views.shift() || { ...base, status: 'connected', tools: ['a', 'b', 'c'] }
-  }, { pollMs: 1, openUrl: (url) => { opened = url; } });
+  }, { pollMs: 1 });
   ui.element.querySelector('.btn.primary').dispatchEvent(new window.Event('click'));
   const final = await ui.done;
   assert.deepEqual(posted, [{ action: 'connect' }]);
