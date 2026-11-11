@@ -342,7 +342,7 @@ async function enterWorktree(session, args = {}, options = {}) {
   const worktree = await createWorktree(session.root, String(args.name || 'session'), { env: options.env, hookOptions });
   session.worktreeSession = { originalRoot: session.root, created: worktree, current: worktree.path };
   session.root = worktree.path;
-  return { entered: worktree.path, created: true, branch: worktree.branch || null, message: 'Created ' + (worktree.relative || worktree.path) + (worktree.branch ? ' on branch ' + worktree.branch : '') + ' and switched into it. Files, commands and git act there until exit_worktree.' };
+  return { entered: worktree.path, created: true, branch: worktree.branch || null, message: 'Created ' + (worktree.relative || worktree.path) + (worktree.branch ? ' on branch ' + worktree.branch : '') + ' and switched into it. Files, commands and git act there until exit_worktree.' + (worktree.setup ? ' ' + (await import('./worktree-setup.mjs')).worktreeSetupSummary(worktree.setup) : '') };
 }
 
 async function exitWorktree(session, args = {}, options = {}) {

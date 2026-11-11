@@ -260,7 +260,13 @@ export async function createWorktree(root, label, options = {}) {
   const absolute = path.join(worktreeParent, name);
   await withRepoWorktreeLock(commonDir, () => retryOnGitLock(() => git(root, ['worktree', 'add', '-b', branch, absolute, 'HEAD'], env, 60000)));
   const base = await git(absolute, ['rev-parse', 'HEAD'], env);
-  return { name, branch, path: absolute, relative: relative.split(path.sep).join('/'), base };
+  // Cursor .cursor/worktrees.json or Windsurf post_setup_worktree (trusted workspaces only).
+  let setup = null;
+  if (options.setup !== false) {
+    const { runWorktreeSetup } = await import('./worktree-setup.mjs');
+    setup = await runWorktreeSetup(root, absolute, { env, signal: options.signal });
+  }
+  return { name, branch, path: absolute, relative: relative.split(path.sep).join('/'), base, ...(setup ? { setup } : {}) };
 }
 
 
