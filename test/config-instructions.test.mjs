@@ -1,0 +1,32 @@
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises';
+import os from 'node:os';
+import path from 'node:path';
+import { loadMemory } from '../src/memory.mjs';
+
+test('opencode.json and kilo.jsonc "instructions" files and globs are always-on rules', async (t) => {
+  const base = await mkdtemp(path.join(os.tmpdir(), 'oasis-instructions-'));
+  t.after(() => rm(base, { recursive: true, force: true }));
+  const home = path.join(base, 'home');
+  const root = path.join(base, 'root');
+  const write = async (file, text) => { await mkdir(path.dirname(file), { recursive: true }); await writeFile(file, text); };
+  await write(path.join(root, 'opencode.json'), JSON.stringify({ instructions: ['CONTRIBUTING.md', 'packages/*/RULES.md', 'https://example.com/style.md', '../outside.md', '~/secret.md'] }));
+  await write(path.join(root, 'kilo.jsonc'), '{ // Kilo\n "instructions": ["docs/**/*.rules.md",], }');
+  await write(path.join(root, 'CONTRIBUTING.md'), 'CONTRIB_RULE\n');
+  await write(path.join(root, 'packages', 'a', 'RULES.md'), 'PKG_A_RULE\n');
+  await write(path.join(root, 'packages', 'b', 'RULES.md'), 'PKG_B_RULE\n');
+  await write(path.join(root, 'packages', 'b', 'deep', 'RULES.md'), 'TOO_DEEP_RULE\n');
+  await write(path.join(root, 'docs', 'x', 'y.rules.md'), 'DOCS_GLOB_RULE\n');
+  await write(path.join(root, 'node_modules', 'docs', 'z.rules.md'), 'NODE_MODULES_RULE\n');
+  await write(path.join(base, 'outside.md'), 'OUTSIDE_RULE\n');
+  await write(path.join(home, 'secret.md'), 'HOME_SECRET_RULE\n');
+  await write(path.join(home, '.config', 'opencode', 'opencode.jsonc'), '{ "instructions": ["global-rules.md"] }');
+  await write(path.join(home, '.config', 'opencode', 'global-rules.md'), 'GLOBAL_OPENCODE_RULE\n');
+  const env = { ...process.env, HOME: home, XDG_CONFIG_HOME: path.join(home, '.config'), CLAUDE_CONFIG_DIR: path.join(base, 'claude'), OASIS_CONFIG_DIR: path.join(base, 'cfg'), CODEX_HOME: path.join(base, 'codex'), OASIS_OTHER_AGENT_RULES: '' };
+  const text = await loadMemory(root, { env, home });
+  for (const marker of ['CONTRIB_RULE', 'PKG_A_RULE', 'PKG_B_RULE', 'DOCS_GLOB_RULE', 'GLOBAL_OPENCODE_RULE']) assert.match(text, new RegExp(marker));
+  for (const marker of ['TOO_DEEP_RULE', 'NODE_MODULES_RULE', 'OUTSIDE_RULE', 'HOME_SECRET_RULE']) assert.doesNotMatch(text, new RegExp(marker));
+  const off = await loadMemory(root, { env: { ...env, OASIS_OTHER_AGENT_RULES: '0' }, home });
+  assert.doesNotMatch(off, /PKG_A_RULE|GLOBAL_OPENCODE_RULE/);
+});
