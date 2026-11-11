@@ -115,3 +115,24 @@ test('webhook routines: signed POSTs queue untrusted payloads, the next tick run
   await (await import('../src/routines.mjs')).pauseJob(job.id, '', { env });
   await assert.rejects(receiveWebhook(job.id, 'x', { signature: sign('x'), env }), (error) => error.statusCode === 409);
 });
+
+test('webhook routines: GitHub ping is acknowledged, --event filters by event and action', async (t) => {
+  const { createHmac } = await import('node:crypto');
+  const { receiveWebhook, readJobs, editJob } = await import('../src/routines.mjs');
+  const home = await mkdtemp(path.join(os.tmpdir(), 'oasis-rwf-'));
+  t.after(() => rm(home, { recursive: true, force: true }));
+  const env = { OASIS_CONFIG_DIR: path.join(home, 'cfg') };
+  const job = await createJob({ schedule: 'webhook', prompt: 'review the PR', events: ['pull_request.opened', 'release'] }, { env });
+  const sign = (body) => 'sha256=' + createHmac('sha256', job.webhookSecret).update(body).digest('hex');
+  const send = (event, body) => receiveWebhook(job.id, body, { signature: sign(body), event, env });
+  assert.equal((await send('ping', '{"zen":"x"}')).ignored, 'ping');
+  assert.match((await send('pull_request', '{"action":"closed"}')).ignored, /does not match/);
+  assert.match((await send('issues', '{"action":"opened"}')).ignored, /does not match/);
+  assert.match((await send('pull_request', '{"action":"opened"}')).queued, /^ev-/);
+  assert.match((await send('release', '{"action":"published"}')).queued, /^ev-/);
+  const [saved] = await readJobs(env);
+  assert.deepEqual(saved.pendingEvents.map((e) => e.name), ['pull_request.opened', 'release.published']);
+  await assert.rejects(createJob({ schedule: 'webhook', prompt: 'x', events: ['Bad Event!'] }, { env }), /Event names/);
+  await editJob(job.id, { events: [] }, { env });
+  assert.match((await send('anything', '{}')).queued, /^ev-/, 'no filter accepts every event');
+});

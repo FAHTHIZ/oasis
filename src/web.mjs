@@ -1506,9 +1506,11 @@ export function createOasisWebServer(options = {}) {
       const { receiveWebhook } = await import('./routines.mjs');
       try {
         const signature = req.headers['x-hub-signature-256'] || req.headers['x-oasis-signature'] || '';
-        const { queued } = await receiveWebhook(hook[1], Buffer.concat(chunks), { signature: String(signature), env });
+        const event = req.headers['x-github-event'] || req.headers['x-oasis-event'] || '';
+        const { queued, ignored } = await receiveWebhook(hook[1], Buffer.concat(chunks), { signature: String(signature), event: String(event), env });
         authLimiter.succeed(caller);
-        json(res, 202, { accepted: true, event: queued });
+        if (ignored) json(res, 200, { accepted: false, ignored });
+        else json(res, 202, { accepted: true, event: queued });
       } catch (error) {
         if (error.statusCode === 401) authLimiter.fail(caller);
         json(res, error.statusCode || 500, { error: String(error.message || error).slice(0, 300) });

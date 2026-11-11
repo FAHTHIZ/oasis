@@ -33,6 +33,10 @@ Options:
                            discord:CHANNEL_ID or webhook:https://...
   --tz ZONE                time zone for cron schedules, e.g. Asia/Dhaka
   --grace MINUTES          how late a missed cron slot may still run (0 = never)
+  --event NAME             webhook routines: run only for this event, e.g.
+                           pull_request, pull_request.opened, issues.labeled
+                           (repeatable; from X-GitHub-Event or X-OASIS-Event
+                           and the payload's "action"); --any-event clears it
   --paused                 create it paused (resume when ready)
 Output starting with [SILENT] is saved but not delivered.`;
 
@@ -40,6 +44,7 @@ function parseOptions(args) {
   const fields = {};
   const positional = [];
   const skills = [];
+  const events = [];
   for (let i = 0; i < args.length; i++) {
     const arg = args[i];
     const value = () => { if (i + 1 >= args.length) throw new Error(arg + ' needs a value.'); return args[++i]; };
@@ -51,6 +56,8 @@ function parseOptions(args) {
     else if (arg === '--permission-mode') fields.permissionMode = value();
     else if (arg === '--skill') skills.push(value());
     else if (arg === '--clear-skills') fields.skills = [];
+    else if (arg === '--event') events.push(value());
+    else if (arg === '--any-event') fields.events = [];
     else if (arg === '--deliver') fields.deliver = value();
     else if (arg === '--tz' || arg === '--timezone') fields.timezone = value();
     else if (arg === '--grace' || arg === '--grace-minutes') { const v = value(); fields.graceMinutes = v === '' ? null : Number(v); }
@@ -63,6 +70,7 @@ function parseOptions(args) {
     else positional.push(arg);
   }
   if (skills.length) fields.skills = skills;
+  if (events.length) fields.events = events;
   return { fields, positional };
 }
 
@@ -96,6 +104,7 @@ export async function scheduleCommand(args = [], { env = process.env, write = (t
     say('  ' + (job.kind === 'script' ? 'command: ' : 'prompt: ') + job.prompt.split('\n')[0].slice(0, 200));
     if (job.workdir) say('  workdir: ' + job.workdir);
     if (job.schedule.type === 'event') {
+      if (job.events?.length) say('  events:  ' + job.events.join(', '));
       say('  webhook: POST <oasis web address>/hooks/routines/' + job.id + (job.pendingEvents?.length ? '  (' + job.pendingEvents.length + ' waiting)' : ''));
       say('  secret:  ' + job.webhookSecret + '  (sign the raw body: X-Hub-Signature-256: sha256=HMAC_SHA256_HEX)');
     }
