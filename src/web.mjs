@@ -1577,6 +1577,20 @@ export function createOasisWebServer(options = {}) {
       const routines = await import('./routines.mjs');
       const view = (job) => ({ id: job.id, name: job.name || '', kind: job.kind, prompt: job.prompt, schedule: job.schedule.display, timezone: job.timezone || '', enabled: job.enabled !== false, state: job.activeRun ? 'running' : job.enabled === false ? job.state || 'paused' : 'scheduled', nextRunAt: job.enabled !== false ? job.nextRunAt || null : null, lastStatus: job.lastStatus || '', lastRunAt: job.lastRunAt || null, deliver: job.deliver || 'local', workdir: job.workdir || '', pausedReason: job.pausedReason || '', lastProblem: job.lastProblem || '', ...(job.schedule.type === 'event' ? { webhookPath: '/hooks/routines/' + job.id, webhookSecret: job.webhookSecret, pendingEvents: (job.pendingEvents || []).length } : {}) });
       const overview = async () => ({ routines: (await routines.readJobs(env)).map(view), scheduler: (await routines.runningDaemonPid(env)) ? 'running' : 'stopped' });
+      if (req.method === 'GET' && parsedUrl.searchParams.get('runs')) {
+        try {
+          const { job, runs } = await routines.listRuns(parsedUrl.searchParams.get('runs'), { env, limit: 10 });
+          const outDir = path.join(routines.schedulesDirectory(env), 'output', job.id);
+          const withOutput = await Promise.all(runs.reverse().map(async (run) => {
+            let output = '';
+            // Only files the scheduler wrote for this routine.
+            if (run.outputFile && path.dirname(path.resolve(run.outputFile)) === outDir) { try { output = (await readFile(run.outputFile, 'utf8')).slice(0, 4000); } catch {} }
+            return { status: run.status, startedAt: run.startedAt || null, finishedAt: run.finishedAt || null, manual: Boolean(run.manual), event: run.eventId || null, reason: run.reason || '', delivery: run.delivery || '', deliveryError: run.deliveryError || '', backgroundId: run.backgroundId || '', output };
+          }));
+          json(res, 200, { id: job.id, runs: withOutput });
+        } catch (error) { json(res, 404, { error: String(error.message || error).slice(0, 500) }); }
+        return;
+      }
       if (req.method === 'GET') { json(res, 200, await overview()); return; }
       const body = await readJsonBody(req);
       const action = String(body.action || '');

@@ -136,3 +136,36 @@ test('webhook routines: GitHub ping is acknowledged, --event filters by event an
   await editJob(job.id, { events: [] }, { env });
   assert.match((await send('anything', '{}')).queued, /^ev-/, 'no filter accepts every event');
 });
+
+test('web /api/routines?runs=ID returns recent runs with their saved output, newest first', async (t) => {
+  const { tick } = await import('../src/routines.mjs');
+  const root = await mkdtemp(path.join(os.tmpdir(), 'oasis-rwr-'));
+  const env = { OASIS_CONFIG_DIR: path.join(root, 'config') };
+  const app = await startOasisWebServer({ root, host: '127.0.0.1', port: 0, env, token: 'test-runtime-token-0123456789', refreshModelCatalog: false });
+  t.after(async () => { await app.close(); await rm(root, { recursive: true, force: true }); });
+  const job = await createJob({ schedule: 'every 1h', prompt: 'echo hi', kind: 'script', workdir: root }, { env });
+  const logFile = path.join(root, 'run.log');
+  await writeFile(logFile, 'hello from the routine\n');
+  let status = 'running';
+  const backgrounds = {
+    startExecJob: async () => ({ id: 'bg-res00001' }),
+    startBackgroundSession: async () => { throw new Error('unexpected'); },
+    readEntry: async () => ({ status, exitCode: 0, logFile }),
+    stopBackgroundSession: async () => {}
+  };
+  const fullEnv = { ...process.env, ...env, HOME: root, OASIS_SCHEDULED_RUN: '' };
+  const { triggerJob } = await import('../src/routines.mjs');
+  await triggerJob(job.id, { env });
+  await tick({ env: fullEnv, backgrounds });
+  status = 'completed';
+  await tick({ env: fullEnv, backgrounds });
+  const headers = { authorization: 'Bearer ' + app.token };
+  const res = await fetch('http://127.0.0.1:' + app.port + '/api/routines?runs=' + job.id, { headers });
+  assert.equal(res.status, 200);
+  const data = await res.json();
+  assert.equal(data.runs.length, 1);
+  assert.equal(data.runs[0].status, 'ok', JSON.stringify(data.runs[0]));
+  assert.match(data.runs[0].output, /hello from the routine/);
+  assert.equal((await fetch('http://127.0.0.1:' + app.port + '/api/routines?runs=rt-nope0000', { headers })).status, 404);
+  assert.equal((await fetch('http://127.0.0.1:' + app.port + '/api/routines?runs=' + job.id)).status, 401);
+});
