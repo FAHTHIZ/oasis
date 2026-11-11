@@ -45,6 +45,7 @@ function withResolvedModel(config, env, planMode) {
 }
 const NESTED_MEMORY_TOOLS = new Set(['read_file', 'write_file', 'edit_file', 'multi_edit', 'notebook_edit']);
 import { createWorktree, finishWorktree, removeWorktree, isCommitIntegrated } from './worktrees.mjs';
+import { worktreeSetupSummary } from './worktree-setup.mjs';
 import { startHookWatchers, needsHookWatchers } from './file-watch.mjs';
 import { BROWSER_TOOL_DEFINITION, closeBrowser } from './browser-tool.mjs';
 import { WORKFLOW_TOOL_DEFINITION } from './workflows.mjs';
@@ -2278,6 +2279,7 @@ async function runSubagent(parent, args, context, options) {
     worktree = await createWorktree(parent.root, description, { env: options.env || process.env, hookOptions: hookOptions(parent, options.env), sessionId: parent.sessionId });
   }
   const isolationNote = worktree && worktree.hook ? '\n\nISOLATED WORKTREE: you are working in a separate copy of the project at ' + worktree.path + ', created by a WorktreeCreate hook. Every path is relative to it; the user\'s main checkout is untouched.' : worktree ? '\n\nISOLATED WORKTREE: you are working in a separate git worktree on branch ' + worktree.branch + '. Every path is relative to it; the user\'s main checkout is untouched. Do not commit, merge, or switch branches yourself; Oasis commits your changes on this branch when you finish.' : '';
+  const setupNote = worktree && worktree.setup ? '\n' + worktreeSetupSummary(worktree.setup) : '';
   const requestedModel = String(args.model || '').trim();
   if (requestedModel && !modelAllowed(requestedModel, parent.availableModels, { env: parent.modelEnv, protocol: parent.config.protocol })) {
     throw new Error(modelRestrictionMessage(requestedModel, parent.availableModels));
@@ -2292,8 +2294,8 @@ async function runSubagent(parent, args, context, options) {
     config: subagentEffortConfig(parent, agent, options.env || process.env, childConfig),
     sessionId: parent.sessionId,
     branchRules: parent.branchRules,
-    messages: [{ role: 'system', content: systemText + isolationNote }, ...(resume ? resume.messages : args.fork_context === true ? forkedConversation(parent) : [])],
-    baseSystemPrompt: systemText + isolationNote,
+    messages: [{ role: 'system', content: systemText + isolationNote + setupNote }, ...(resume ? resume.messages : args.fork_context === true ? forkedConversation(parent) : [])],
+    baseSystemPrompt: systemText + isolationNote + setupNote,
     mcpClients: parent.mcpClients || new Map(),
     mcpToolMap: parent.mcpToolMap || new Map(),
     toolDefinitions: definitions.filter((definition) => !parentDeferred.has(definition.function.name)),

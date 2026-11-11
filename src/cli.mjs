@@ -1745,6 +1745,7 @@ async function startSessionWorktree(root, name, out) {
   catch (error) { throw new Error('--worktree: ' + error.message.replace(/isolation "worktree"/g, '--worktree').replace(/, or launch the subagent without isolation/, '')); }
   worktree.hookOptions = hookOptions;
   out.write('[worktree] Working in ' + worktree.relative + (worktree.hook ? ' (created by a WorktreeCreate hook)' : ' on branch ' + worktree.branch) + '. Your main checkout is untouched.\n');
+  if (worktree.setup) out.write('[worktree] ' + (await import('./worktree-setup.mjs')).worktreeSetupSummary(worktree.setup) + '\n');
   return worktree;
 }
 
