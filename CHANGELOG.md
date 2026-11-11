@@ -4,6 +4,13 @@ User-facing change history grouped by package version. A version heading does no
 
 ## Unreleased
 
+### Codex SDK drop-in (`oasis exec --json`)
+
+- `oasis exec --json` (alias `--experimental-json`) prints the `codex exec --json` JSONL stream: `thread.started`, `turn.started`, `item.started`/`item.updated`/`item.completed`, `turn.completed` with usage, `turn.failed` and `error`. Items use the Codex exec shapes: `agent_message`, `command_execution` (command, aggregated output, exit code), `file_change` (path and add/update/delete), `mcp_tool_call`, `web_search` and `todo_list`. OASIS tools with no Codex item type are reported as `mcp_tool_call` with server `oasis`.
+- The OpenAI Codex TypeScript SDK can run OASIS with `new Codex({ codexPathOverride: '/path/to/oasis' })`: `exec` accepts the flags it sends (`--config key=value`, `--sandbox`, `--cd`, `--add-dir`, `--image`, `--output-schema`, `--thread-source`, `--skip-git-repo-check`), the prompt on stdin, and `resume THREAD_ID` after the flags. Thread ids are OASIS session ids, so `codex.resumeThread(id)` continues the saved session.
+- `--config` keys the SDK sets are mapped: `model`, `model_reasoning_effort` (minimal/low → low, xhigh → max), `approval_policy`, `sandbox_mode`, `sandbox_workspace_write.network_access` and `web_search`. Other keys are listed on stderr and ignored. `danger-full-access` with `approval_policy="never"` runs like `--yolo`; OASIS's hard refusals and its inline-code check (for example `node -e`) still apply, so some commands Codex would run are declined and reported as failed `command_execution` items.
+- Setup failures (no provider, bad flags) print one `error` event and exit 1, which the SDK raises as an error.
+
 ### OpenTelemetry GenAI conventions
 
 - Model-call spans now carry `server.address`/`server.port`, `gen_ai.request.stream`, reasoning level, reasoning and cache-write token counts, and `gen_ai.response.finish_reasons` as a string array (it was a single string). Failures set `error.type` (HTTP status, `cancelled`, Node error code or class).

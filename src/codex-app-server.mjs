@@ -35,8 +35,8 @@ import { createAppServerHost } from './codex-app-server-host.mjs';
 
 export const APP_SERVER_PLATFORM = { family: process.platform === 'win32' ? 'windows' : 'unix', os: process.platform === 'darwin' ? 'macos' : process.platform };
 
-const EXECUTE_TOOLS = new Set(['run_command', 'run_shell', 'powershell', 'monitor_command', 'auto_test']);
-const FILE_TOOLS = new Set(['edit_file', 'write_file', 'multi_edit', 'notebook_edit', 'delete_file', 'move_file', 'apply_patch']);
+export const EXECUTE_TOOLS = new Set(['run_command', 'run_shell', 'powershell', 'monitor_command', 'auto_test']);
+export const FILE_TOOLS = new Set(['edit_file', 'write_file', 'multi_edit', 'notebook_edit', 'delete_file', 'move_file', 'apply_patch']);
 const MODES = new Set(['default', 'acceptEdits', 'plan', 'auto']);
 // OASIS hook events that have a Codex HookEventName (lowerCamelCase there).
 const CODEX_HOOK_EVENTS = new Set(['PreToolUse', 'PermissionRequest', 'PostToolUse', 'PreCompact', 'PostCompact', 'SessionStart', 'SessionEnd', 'UserPromptSubmit', 'SubagentStart', 'SubagentStop', 'Stop']);
@@ -98,7 +98,7 @@ export function permissionModeFor({ sandbox, approvalPolicy } = {}, fallback = n
   return fallback;
 }
 
-function resultText(value) {
+export function resultText(value) {
   if (value == null) return '';
   if (typeof value === 'string') return value;
   if (typeof value === 'object') {
@@ -108,13 +108,13 @@ function resultText(value) {
   try { return JSON.stringify(value); } catch { return String(value); }
 }
 
-function isFailure(value) {
+export function isFailure(value) {
   if (!value || typeof value !== 'object') return false;
   if (value.error || value.ok === false || value.cancelled || value.timedOut) return true;
   return typeof value.exitCode === 'number' && value.exitCode !== 0;
 }
 
-function toolPaths(root, name, args = {}) {
+export function toolPaths(root, name, args = {}) {
   const list = [];
   for (const key of ['path', 'file', 'from', 'to', 'destination']) if (typeof args[key] === 'string') list.push(path.resolve(root, args[key]));
   if (name === 'apply_patch' && typeof args.patch === 'string') {
@@ -123,7 +123,7 @@ function toolPaths(root, name, args = {}) {
   return [...new Set(list)];
 }
 
-function readSmall(file) {
+export function readSmall(file) {
   try { const info = statSync(file); return info.isFile() && info.size <= MAX_FILE ? readFileSync(file, 'utf8') : null; } catch { return null; }
 }
 
