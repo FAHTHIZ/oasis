@@ -222,3 +222,13 @@ test('disconnect forgets the sign-in and the mcp.json entry OASIS added', async 
   assert.equal((await listConnectors({ root, env })).find((row) => row.id === 'notion').connected, false);
   assert.match((await disconnectConnector('notion', { root, env })).message, /was not connected/);
 });
+
+test('terminal Tab completion after /connect lists apps', async () => {
+  const { createCompleter } = await import('../src/completion.mjs');
+  const complete = createCompleter({ root: process.cwd(), commands: async () => [] });
+  const result = await complete('/connect li', 11);
+  assert.deepEqual(result.candidates.map((item) => item.value), ['linear']);
+  assert.equal(result.start, 9);
+  const all = await complete('/connect ', 9);
+  assert.ok(all.candidates.length > 15);
+});

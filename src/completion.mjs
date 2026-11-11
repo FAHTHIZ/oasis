@@ -82,6 +82,14 @@ export function createCompleter({ root, commands = async () => [] }) {
   return async function complete(text, cursor) {
     const { start, end, token } = tokenAt(text, cursor);
     if (token.startsWith('@')) return completeFile(token, start, end);
+    // /connect gi<Tab> → apps from the connector catalog.
+    if (/^\/connect\s+$/i.test(text.slice(0, start)) && !token.startsWith('/')) {
+      const { CONNECTOR_CATALOG } = await import('./connectors.mjs');
+      const needle = token.toLowerCase();
+      const candidates = CONNECTOR_CATALOG.filter((item) => item.id.startsWith(needle) || item.name.toLowerCase().startsWith(needle))
+        .map((item) => ({ value: item.id, display: item.id, description: item.name + ' · ' + item.description }));
+      return { start, end, candidates };
+    }
     if (token.startsWith('/') && !text.slice(0, start).trim()) {
       const needle = token.slice(1).toLowerCase();
       const list = await commands();
