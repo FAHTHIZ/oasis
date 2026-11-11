@@ -1013,7 +1013,7 @@ export async function activateNewMcpServers(session, installed, { root, env }) {
   if (!fresh.length) return unusable.length ? { started: [], failed: unusable } : null;
   const { connectMcpServers } = await import('./mcp.mjs');
   const host = session.mcpHost || { session, onToolsChanged: (target) => refreshSessionMcpTools(target) };
-  const { clients, failures } = await connectMcpServers({ root, env, host, skipUser: true, skipProject: true, extraServers: fresh.map((server) => ({ ...server, source: server.source || 'user' })) });
+  const { clients, failures } = await connectMcpServers({ root, env, host, policy: session.settings && session.settings.mcpPolicy, skipUser: true, skipProject: true, extraServers: fresh.map((server) => ({ ...server, source: server.source || 'user' })) });
   for (const [name, client] of clients) session.mcpClients.set(name, client);
   refreshSessionMcpTools(session);
   return { started: [...clients.keys()], failed: [...unusable, ...failures.map((item) => item.name + ': ' + String(item.error).slice(0, 200))] };
