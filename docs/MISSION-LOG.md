@@ -11,6 +11,9 @@ weaknesses. Newest first. Detailed user-facing notes go in the CHANGELOG.
 
 ## 2026-11-11 (terminal-agent interoperability: Gemini CLI, OpenCode, Goose, Aider, Roo/Kilo)
 
+### Aider read files and Gemini context names
+- From Aider's [YAML config doc](https://aider.chat/docs/config/aider_conf.html) and Gemini CLI's [GEMINI.md doc](https://raw.githubusercontent.com/google-gemini/gemini-cli/main/docs/cli/gemini-md.md): `.aider.conf.yml` `read:` files and `context.fileName` names load as rules; Gemini context files in subfolders load just in time. Tests: `test/config-instructions.test.mjs`.
+
 ### OpenCode commands and instructions
 - From the OpenCode [commands](https://opencode.ai/docs/commands/) and [rules](https://opencode.ai/docs/rules/) docs: `.opencode/commands`, global commands and `opencode.json` `commands` load in place with OpenCode's placeholder and shell rules; `instructions` files and globs in `opencode.json(c)` / `kilo.json(c)` are loaded as rules. `oasis import opencode` still copies commands when wanted. Tests: `test/foreign-commands.test.mjs`, `test/config-instructions.test.mjs`.
 

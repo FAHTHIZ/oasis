@@ -30,3 +30,35 @@ test('opencode.json and kilo.jsonc "instructions" files and globs are always-on 
   const off = await loadMemory(root, { env: { ...env, OASIS_OTHER_AGENT_RULES: '0' }, home });
   assert.doesNotMatch(off, /PKG_A_RULE|GLOBAL_OPENCODE_RULE/);
 });
+
+test('Aider read: files and Gemini context.fileName names load as rules', async (t) => {
+  const base = await mkdtemp(path.join(os.tmpdir(), 'oasis-aider-gemini-'));
+  t.after(() => rm(base, { recursive: true, force: true }));
+  const home = path.join(base, 'home');
+  const repo = path.join(base, 'repo');
+  const root = path.join(repo, 'app');
+  const write = async (file, text) => { await mkdir(path.dirname(file), { recursive: true }); await writeFile(file, text); };
+  await mkdir(path.join(repo, '.git'), { recursive: true });
+  await write(path.join(home, '.aider.conf.yml'), 'read: ' + path.join(home, 'my-style.md') + '\n');
+  await write(path.join(home, 'my-style.md'), 'HOME_AIDER_RULE\n');
+  await write(path.join(repo, '.aider.conf.yml'), 'read: [STYLE.md]\n');
+  await write(path.join(root, '.aider.conf.yml'), 'read:\n  - docs/aider.md\n  - ../../outside.md\n');
+  await write(path.join(root, 'STYLE.md'), 'REPO_AIDER_RULE\n');
+  await write(path.join(root, 'docs', 'aider.md'), 'APP_AIDER_RULE\n');
+  await write(path.join(base, 'outside.md'), 'OUTSIDE_AIDER_RULE\n');
+  await write(path.join(home, '.gemini', 'settings.json'), JSON.stringify({ context: { fileName: 'USER_ONLY.md' } }));
+  await write(path.join(root, '.gemini', 'settings.json'), JSON.stringify({ context: { fileName: ['CONTEXT.md', '../bad.md', 'GEMINI.md'] } }));
+  await write(path.join(root, 'CONTEXT.md'), 'GEMINI_CONTEXT_RULE\n');
+  await write(path.join(root, 'USER_ONLY.md'), 'REPLACED_NAME_RULE\n');
+  await write(path.join(home, '.gemini', 'CONTEXT.md'), 'GEMINI_GLOBAL_CONTEXT\n');
+  await write(path.join(root, 'src', 'CONTEXT.md'), 'NESTED_CONTEXT_RULE\n');
+  const env = { ...process.env, HOME: home, XDG_CONFIG_HOME: path.join(home, '.config'), CLAUDE_CONFIG_DIR: path.join(base, 'claude'), OASIS_CONFIG_DIR: path.join(base, 'cfg'), CODEX_HOME: path.join(base, 'codex'), OASIS_OTHER_AGENT_RULES: '' };
+  const { nestedMemoryFor } = await import('../src/memory.mjs');
+  const text = await loadMemory(root, { env, home });
+  for (const marker of ['HOME_AIDER_RULE', 'REPO_AIDER_RULE', 'APP_AIDER_RULE', 'GEMINI_CONTEXT_RULE', 'GEMINI_GLOBAL_CONTEXT']) assert.match(text, new RegExp(marker));
+  for (const marker of ['OUTSIDE_AIDER_RULE', 'REPLACED_NAME_RULE', 'NESTED_CONTEXT_RULE']) assert.doesNotMatch(text, new RegExp(marker));
+  const nested = await nestedMemoryFor(root, 'src/x.js', new Set(), { env, home });
+  assert.ok(nested.some((item) => /NESTED_CONTEXT_RULE/.test(item.text)));
+  const off = await loadMemory(root, { env: { ...env, OASIS_OTHER_AGENT_RULES: '0' }, home });
+  assert.doesNotMatch(off, /AIDER_RULE|GEMINI_CONTEXT_RULE/);
+});
