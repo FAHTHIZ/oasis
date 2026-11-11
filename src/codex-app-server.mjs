@@ -6,11 +6,14 @@
 //
 // Implemented methods: initialize (+ initialized notification), thread/start,
 // thread/resume, thread/fork, thread/read, thread/list, thread/name/set, turn/start,
-// turn/steer, turn/interrupt, review/start (inline), model/list.
+// turn/steer, turn/interrupt, review/start (inline), model/list, and the host
+// methods in codex-app-server-host.mjs: fs/* (readFile, writeFile,
+// createDirectory, getMetadata, readDirectory, remove, copy, watch, unwatch)
+// and command/exec (+ write, resize, terminate), confined to the workspace roots.
 // Notifications sent: thread/started, thread/status/changed, thread/name/updated,
 // turn/started, turn/completed, turn/plan/updated, item/started, item/completed,
 // item/agentMessage/delta, item/commandExecution/outputDelta (final output only),
-// serverRequest/resolved.
+// serverRequest/resolved, fs/changed, command/exec/outputDelta.
 // Server requests sent: item/commandExecution/requestApproval and
 // item/fileChange/requestApproval (decisions accept, acceptForSession, decline,
 // cancel). Everything else answers -32601 "Method not found".
@@ -23,6 +26,7 @@ import { readFileSync, statSync } from 'node:fs';
 import { stat } from 'node:fs/promises';
 import { createInterface } from 'node:readline';
 import { createTwoFilesPatch } from 'diff';
+import { createAppServerHost } from './codex-app-server-host.mjs';
 
 export const APP_SERVER_PLATFORM = { family: process.platform === 'win32' ? 'windows' : 'unix', os: process.platform === 'darwin' ? 'macos' : process.platform };
 
@@ -130,6 +134,15 @@ export function createCodexAppServer(options = {}) {
 
   const send = (message) => { if (!closed) write(JSON.stringify(message) + '\n'); };
   const notify = (method, params) => { if (!optOut.has(method)) send({ method, params }); };
+  const host = createAppServerHost({
+    env, cwd: options.cwd || process.cwd(), notify, readOnly: options.permissionMode === 'plan', ...(options.host || {}),
+    getSandbox: options.host && options.host.getSandbox || (async (cwd) => {
+      if (env.OASIS_SANDBOX === '0') return null;
+      const { loadSettings } = await import('./settings.mjs');
+      const { resolveSandbox } = await import('./sandbox.mjs');
+      try { return resolveSandbox(await loadSettings(cwd, { env }), cwd); } catch { return null; }
+    })
+  });
   const request = (method, params) => new Promise((resolve, reject) => {
     if (closed) { reject(new Error('connection closed')); return; }
     const id = nextRequestId++;
@@ -224,6 +237,7 @@ export function createCodexAppServer(options = {}) {
       try { const { saveSession } = await load('sessions'); session.sessionId = (await saveSession(session, { env })).id; } catch { session.sessionId = randomUUID(); }
     }
     const entry = { session, root, config, turn: null, controller: null, waiting: false, createdAt: nowSeconds(), forkedFromId: fork ? restoreId : null };
+    host.addRoot(root);
     threads.set(session.sessionId, entry);
     return entry;
   }
@@ -568,6 +582,7 @@ export function createCodexAppServer(options = {}) {
         return { data, nextCursor: null };
       }
       default:
+        if (host.has(method)) return host.handle(method, params);
         throw rpcError(-32601, 'Method not found: ' + method);
     }
   }
@@ -594,6 +609,7 @@ export function createCodexAppServer(options = {}) {
 
   async function close() {
     if (closed) return;
+    host.close();
     for (const entry of threads.values()) if (entry.controller) entry.controller.abort();
     for (const waiter of pending.values()) waiter.reject(new Error('connection closed'));
     pending.clear();
