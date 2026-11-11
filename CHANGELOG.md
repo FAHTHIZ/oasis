@@ -17,6 +17,7 @@ User-facing change history grouped by package version. A version heading does no
 
 - `oasis acp` now implements the rest of the stable ACP session lifecycle: `session/list`, `session/resume` (reopen without replaying), `session/close`, `session/delete` and `logout`, advertised through `sessionCapabilities`. Editors get a Mode and a Model picker through `session/set_config_option` (only models allowed by `availableModels`), a context meter through `usage_update`, and a session title through `session_info_update`.
 - When an editor advertises `elicitation.form`, the agent's `ask_user_question` tool reaches the user as an ACP `elicitation/create` form (still unstable in ACP v1): the choices as a single- or multi-select field linked to the tool call, plus an optional free-text "Other" field. Declining, cancelling or stopping the prompt counts as no answer, and the model picks a reasonable option and says which. Editors without the capability see no change.
+- `$/cancel_request` for a running `session/prompt` now stops the turn (reply `stopReason: "cancelled"`), the same as `session/cancel`. Before, the request was marked cancelled while the agent kept working.
 
 ### Codex App Server protocol
 

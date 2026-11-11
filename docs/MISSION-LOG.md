@@ -5,6 +5,33 @@ weaknesses. Newest first. Detailed user-facing notes go in the CHANGELOG.
 
 ## 2026-11-11 (frontier-platform cycle: competitor gaps)
 
+### Asking the user over ACP and the App Server
+- OASIS's `ask_user_question` tool only reached the terminal and the web app. Editors on ACP and Codex App Server clients never saw it, because the tool is hidden when nobody can answer.
+- ACP: the unstable `elicitation/create` form from the [ACP schema](https://agentclientprotocol.com/protocol/schema), sent only when `clientCapabilities.elicitation.form` is set. The choices go in an `answer` field with `oneOf` (single choice) or `anyOf` items (multi-select), plus an optional free-text `other` field. The form uses the session scope with the tool call ID. Only `accept` counts as an answer.
+- App Server: Codex's experimental `item/tool/requestUserInput` (`codex-rs/app-server-protocol/src/protocol/v2/item.rs`), sent only when `capabilities.experimentalApi` is true, as Codex gates experimental methods.
+- Tests: an ACP test with an accepted and a declined form, checking what the model receives; two App Server tests (answered, and the tool hidden without experimentalApi).
+
+### Codex App Server Unix socket
+- Read `codex-rs/app-server-transport/src/transport/unix_socket.rs`. Codex serves the WebSocket protocol over a Unix socket at `$CODEX_HOME/app-server-control/app-server-control.sock` (folder 0700, socket 0600). It refuses a live socket and removes a stale one.
+- OASIS now does the same with `--listen unix://[PATH]`, reusing the WebSocket transport through Node's `http.listen(path)`. The default path is under the OASIS config folder. Codex's daemon pieces (startup lock, rendezvous symlink, `daemon_shutdown`) were not ported: OASIS has no app-server daemon mode.
+- Test: a real stale socket (a child process killed with SIGKILL while listening), a live-socket refusal, a non-socket file left in place, the permission modes, and `initialize` over `ws+unix://`. Also checked by hand with the CLI: the socket is removed on SIGTERM.
+
+### Skill catalogue budget
+- `loadSkillDescriptions` cut the joined list at 16,000 characters, so a large install could end in half a description, and the model was not told that more skills existed. `fitSkillCatalogue` now keeps whole lines and finishes with "(N more skills not listed; call list_skills to see them all)". Test: test/skill-catalogue-budget.test.mjs.
+
+### ACP session lifecycle and App Server fs/exec
+- ACP: `session/list`, `session/resume`, `session/close`, `session/delete`, `logout`, `session/set_config_option` (mode, model), `usage_update` and `session_info_update`, checked against the [ACP v1 schema](https://raw.githubusercontent.com/agentclientprotocol/agent-client-protocol/main/schema/v1/schema.json). Every method in the ACP schema is now handled. For `$/cancel_request`, the SDK (2.5.0) aborts a per-request signal that OASIS had ignored, so a cancelled `session/prompt` kept running. The prompt now follows that signal and answers `stopReason: "cancelled"`. A test holds the model reply open and sends `$/cancel_request`; without the fix it hangs.
+- App Server: `fs/*` and `command/exec*` in `src/codex-app-server-host.mjs` (14 tests), limited to the workspace folders and run through the sandbox.
+- Full suite before this cycle's changes: 2515 tests, 2507 pass, 0 fail, 8 skipped.
+
+### Gaps checked and found already closed (no change)
+- "The web app polls job status every 350 ms": out of date. `app/main.mjs` long-polls `/api/jobs/:id?after=&wait=20000`.
+- Hermes-style self-improving skills: `skill_propose` with `update: true` exists in `src/learning.mjs`.
+- DeepSeek Harness in-process code plugins ("everything is a plugin", Cordis): not adopted on purpose. OASIS keeps declarative plugins plus MCP servers in separate processes, so a plugin cannot run code inside the agent process.
+
+### Still blocked
+- Comparative benchmarks against other agents need a model API key. The sandbox (2 CPUs, 7 GB RAM) is too slow for fair local-model runs. No results are claimed.
+
 ### Codex App Server over WebSocket
 - Implemented the transport described in the [Codex App Server docs](https://learn.chatgpt.com/docs/app-server): `--listen ws://IP:PORT`, one message per text frame, `/readyz` and `/healthz`, 403 when an `Origin` header is present, and `--ws-auth capability-token` with `--ws-token-file` or `--ws-token-sha256`, checked during the handshake. One deliberate difference: OASIS will not listen beyond loopback without auth. New dependency: `ws` 8.22.2 (MIT, no dependencies of its own). Node has no built-in WebSocket server. Test: test/codex-app-server-ws.test.mjs spawns the real CLI and runs a turn with a command approval over the socket. It also checks 401 with no token or a wrong token, 403 for a browser Origin, a second connection that starts uninitialized, and a clean SIGTERM exit. Not done: signed bearer tokens and Unix sockets.
 - Full suite at 09fb0288: 2497 tests, 2489 pass, 0 fail, 8 skipped.
