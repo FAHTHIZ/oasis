@@ -1556,7 +1556,7 @@ export async function runBuiltinCommand(name, argument, state) {
         if (!ssh || !ssh.host) return { output: 'Usage: /sandbox ssh USER@HOST [REMOTE_DIR]' };
       } else if (!['on', 'off', 'network'].includes(words[0])) return { output: 'Usage: /sandbox on | off | network on | network off | os | docker [IMAGE] | podman [IMAGE] | ssh USER@HOST [REMOTE_DIR]' };
       const writable = current && current.writable || [root];
-      session.sandbox = resolveSandbox({ sandbox: { enabled, network, backend, image, ssh, memory: current && current.memory, cpus: current && current.cpus, autoAllowCommands: current ? current.autoAllowCommands !== false : true } }, root);
+      session.sandbox = resolveSandbox({ permissions: session.settings && session.settings.permissions, sandbox: { ...((session.settings && session.settings.sandbox) || {}), enabled, network, backend, image, ssh, memory: current && current.memory, cpus: current && current.cpus, autoAllowCommands: current ? current.autoAllowCommands !== false : true } }, root);
       if (session.sandbox.enabled && session.sandbox.backend === (current && current.backend || 'os')) session.sandbox.writable = writable;
       return { output: 'Sandbox for this session: ' + describe(session.sandbox) + '.' };
     }

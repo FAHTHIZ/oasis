@@ -241,6 +241,23 @@ export function mergeHooks(target, extra, source, sourceFile = '') {
   }
 }
 
+// Claude Code sandbox path prefixes: "/" or "//" absolute, "~/" home, anything else relative to
+// the project root (project, local, --settings and managed files) or ~/.claude (user files).
+// A trailing "/**" or "/" is dropped; entries with other wildcards are skipped, as on Linux.
+export function resolveSandboxSettingPath(entry, scope, root, env = process.env) {
+  if (typeof entry !== 'string') return null;
+  let value = entry.trim().replace(/\/\*\*$/, '');
+  if (value.length > 1) value = value.replace(/[\\/]+$/, '');
+  if (!value || /[*?]/.test(value)) return null;
+  const home = env.HOME || env.USERPROFILE || os.homedir();
+  if (value.startsWith('//')) value = value.slice(1);
+  if (value === '~') return path.resolve(home);
+  if (value.startsWith('~/')) return path.resolve(home, value.slice(2));
+  if (path.isAbsolute(value)) return path.resolve(value);
+  const base = scope === 'user' ? (env.CLAUDE_CONFIG_DIR || path.join(home, '.claude')) : root;
+  return path.resolve(base, value);
+}
+
 export async function loadSettings(root, options = {}) {
   const env = options.env || process.env;
   const result = {
@@ -383,6 +400,34 @@ export async function loadSettings(root, options = {}) {
       if (typeof settings.sandbox.network === 'boolean') result.sandbox.network = settings.sandbox.network;
       if (Array.isArray(settings.sandbox.allowedDomains)) result.sandbox.allowedDomains = settings.sandbox.allowedDomains.filter((item) => typeof item === 'string').slice(0, 500);
       if (Array.isArray(settings.sandbox.deniedDomains)) result.sandbox.deniedDomains = settings.sandbox.deniedDomains.filter((item) => typeof item === 'string').slice(0, 500);
+      // Claude Code's layout: sandbox.network.{allowedDomains,deniedDomains} merge across scopes;
+      // allowManagedDomainsOnly (managed) keeps only the managed allowed domains.
+      const network = settings.sandbox.network && typeof settings.sandbox.network === 'object' && !Array.isArray(settings.sandbox.network) ? settings.sandbox.network : null;
+      if (network) {
+        const domains = (value) => Array.isArray(value) ? value.filter((item) => typeof item === 'string') : [];
+        if (Array.isArray(network.allowedDomains)) {
+          result.sandbox.allowedDomains = [...(result.sandbox.allowedDomains || []), ...domains(network.allowedDomains)].slice(0, 500);
+          if (scope === 'managed') result.sandbox.managedAllowedDomains = [...(result.sandbox.managedAllowedDomains || []), ...domains(network.allowedDomains)].slice(0, 500);
+        }
+        if (Array.isArray(network.deniedDomains)) result.sandbox.deniedDomains = [...(result.sandbox.deniedDomains || []), ...domains(network.deniedDomains)].slice(0, 500);
+        if (scope === 'managed' && network.allowManagedDomainsOnly === true) result.sandbox.allowManagedDomainsOnly = true;
+      }
+      // Claude Code's name for autoAllowCommands.
+      if (typeof settings.sandbox.autoAllowBashIfSandboxed === 'boolean') result.sandbox.autoAllowCommands = settings.sandbox.autoAllowBashIfSandboxed;
+      // failIfUnavailable: refuse to start when the sandbox is enabled but cannot run; managed wins.
+      if (typeof settings.sandbox.failIfUnavailable === 'boolean' && !result.sandbox.failIfUnavailableManaged) {
+        result.sandbox.failIfUnavailable = settings.sandbox.failIfUnavailable;
+        if (scope === 'managed') result.sandbox.failIfUnavailableManaged = true;
+      }
+      // sandbox.filesystem.{allowWrite,denyWrite,denyRead}: path lists merged across scopes.
+      const filesystem = settings.sandbox.filesystem && typeof settings.sandbox.filesystem === 'object' && !Array.isArray(settings.sandbox.filesystem) ? settings.sandbox.filesystem : null;
+      if (filesystem) {
+        for (const key of ['allowWrite', 'denyWrite', 'denyRead']) {
+          if (!Array.isArray(filesystem[key])) continue;
+          const resolved = filesystem[key].slice(0, 200).map((entry) => resolveSandboxSettingPath(entry, scope, path.resolve(root), env)).filter(Boolean);
+          result.sandbox[key] = [...new Set([...(result.sandbox[key] || []), ...resolved])].slice(0, 500);
+        }
+      }
       if (typeof settings.sandbox.autoAllowCommands === 'boolean') result.sandbox.autoAllowCommands = settings.sandbox.autoAllowCommands;
       if (typeof settings.sandbox.maskSensitivePaths === 'boolean') result.sandbox.maskSensitivePaths = settings.sandbox.maskSensitivePaths;
       if (typeof settings.sandbox.autoAllowShellCommands === 'boolean') result.sandbox.autoAllowShellCommands = settings.sandbox.autoAllowShellCommands;

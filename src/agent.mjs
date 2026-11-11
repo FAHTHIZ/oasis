@@ -457,6 +457,7 @@ export async function createSession({ root, config, restore = null, permissionMo
   for (const rule of allowedTools || []) permissions.addRule('allow', rule);
   for (const rule of disallowedTools || []) permissions.addRule('deny', rule);
   const sandbox = resolveSandbox(loadedSettings, root);
+  if (sandbox && sandbox.enabled && !sandbox.available && sandbox.failIfUnavailable) throw new Error('The sandbox is enabled with sandbox.failIfUnavailable, but it cannot start: ' + String(sandbox.reason || 'no supported sandbox on this platform.'));
   const extraDirs = await setAdditionalDirectories(root, [...(loadedSettings.permissions.additionalDirectories || []), ...(addDirs || [])]);
   if (sandbox && Array.isArray(sandbox.writable)) sandbox.writable = [root, ...extraDirs.accepted];
   // Project .mcp.json servers start third-party code, so they need a trusted workspace.
