@@ -7,6 +7,7 @@ weaknesses. Newest first. Detailed user-facing notes go in the CHANGELOG.
 
 ### Crash-safe task progress (OpenHands comparison)
 - [OpenHands' agent architecture](https://docs.openhands.dev/sdk/arch/agent) runs each step atomically from its event history, so a conversation can be paused and resumed between steps. In OASIS only the terminal saved a conversation mid-turn. If `oasis web`, `oasis -p` or `oasis app-server` stopped mid-task, everything since the last finished turn was lost from the conversation, even though files had already changed. The mid-turn saver is now shared (`saveMidTurn` and `settleMidTurnSave` in src/sessions.mjs) and used by all four entry points. While wiring it in, a bug showed up: the callback fires before the tool result joins history, so the old saver missed the last step of a turn. The save now trails the step. Tests: test/web-midturn-save.test.mjs (it reads the session from disk while the second model request is in flight) and test/session-midturn.test.mjs.
+- Mid-turn snapshots now carry a `turnInProgress` mark (the request text and the time). A session restored with the mark gets a one-time `<interrupted-turn>` note on its next turn, the same recovery prompt that subagents already received after a restart (`interruptedTurnNote` in src/agent.mjs).
 - Full suite before this change: 2489 tests, 2481 pass, 0 fail, 8 skipped.
 
 ### Antigravity subagents (docs read)

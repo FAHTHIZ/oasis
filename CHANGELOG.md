@@ -7,6 +7,7 @@ User-facing change history grouped by package version. A version heading does no
 ### Crash-safe task progress
 
 - Browser tasks (`oasis web`), headless runs (`oasis -p`) and App Server turns now save the conversation while a turn is still running, as the terminal already did. If the server stops or crashes mid-task, the finished steps are kept, and the interrupted task's session can be continued. The save trails each tool step by a moment so it includes that step's result, and it runs at most every 3 seconds.
+- A session restored after such a stop is marked as having an unfinished turn. `oasis -c` says so, and the next turn tells the model that its last step may not have finished and that it should check the files before continuing. The warning is given once, and a normal end-of-turn save clears the mark.
 
 ### Antigravity agent definitions
 

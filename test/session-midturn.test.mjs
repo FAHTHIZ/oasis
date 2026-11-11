@@ -59,3 +59,33 @@ test('saveMidTurn trails the step, throttles snapshots, and settleMidTurnSave wa
   loaded = await loadSession(dir, session.sessionId, { env });
   assert.equal((loaded.messages || loaded.session.messages).length, 3, 'the deferred snapshot never ran');
 });
+
+test('a session saved mid-turn is marked unfinished, and the next turn warns the model once', async (t) => {
+  const { saveMidTurn, settleMidTurnSave } = await import('../src/sessions.mjs');
+  const { createSession, runAgentTurn, closeSession } = await import('../src/agent.mjs');
+  const { scriptedModel } = await import('./helpers/scripted-model.mjs');
+  const dir = await mkdtemp(path.join(os.tmpdir(), 'oasis-midturn-mark-'));
+  t.after(() => rm(dir, { recursive: true, force: true }));
+  const env = { ...process.env, OASIS_CONFIG_DIR: path.join(dir, 'cfg') };
+  const live = { root: dir, sessionId: '0f1e2d3c-4b5a-4968-8776-655443322112', currentRequest: 'refactor the parser', config: { model: 'm' }, messages: [{ role: 'system', content: 's' }, { role: 'user', content: 'refactor the parser' }, { role: 'assistant', content: 'working' }] };
+  saveMidTurn(live, { env, settleMs: 0 });
+  await new Promise((resolve) => setTimeout(resolve, 20));
+  await settleMidTurnSave(live);
+  const restored = await loadSession(dir, live.sessionId, { env });
+  assert.equal(restored.turnInProgress.request, 'refactor the parser');
+
+  const { config, requests } = await scriptedModel(t, [{ content: 'checked' }]);
+  const session = await createSession({ root: dir, config, restore: restored, env });
+  t.after(() => closeSession && closeSession(session));
+  await runAgentTurn(session, 'continue', { env });
+  await runAgentTurn(session, 'and again', { env });
+  const userText = (payload) => payload.messages.filter((m) => m.role === 'user').map((m) => typeof m.content === 'string' ? m.content : JSON.stringify(m.content));
+  const first = userText(requests[0]).at(-1);
+  assert.match(first, /<interrupted-turn>OASIS stopped before your previous turn finished \(the request was: "refactor the parser"\)/);
+  assert.match(first, /continue$/);
+  assert.doesNotMatch(userText(requests.at(-1)).at(-1), /interrupted-turn/, 'the warning is given once');
+
+  // A normal (end-of-turn) save clears the mark.
+  await saveSession(session, { env });
+  assert.equal((await loadSession(dir, session.sessionId, { env })).turnInProgress, null);
+});

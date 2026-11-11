@@ -274,6 +274,10 @@ export async function saveSession(session, options = {}) {
     mustPreserve: sanitizeMustPreserve(session.mustPreserve),
     ...(sanitizeGoal(session.goal) ? { goal: sanitizeGoal(session.goal) } : {}),
     agents: sanitizeAgentHistory(session.agentTasks),
+    // A mid-turn snapshot marks the turn as unfinished; the end-of-turn save
+    // drops the mark. A session restored with it tells the model its last
+    // step may not have completed.
+    ...(options.turnInProgress ? { turnInProgress: { request: safePersistedText(String(session.currentRequest || '').trim().slice(0, 2000), 2000), savedAt: new Date().toISOString() } } : {}),
     workflowCheckpoint: sanitizeWorkflowCheckpoint(
       session.agentTasks && session.agentTasks.autoDispatch && session.agentTasks.autoDispatch.enabled === true
         ? {
@@ -333,6 +337,9 @@ export async function loadSession(root, id, options = {}) {
     mustPreserve: sanitizeMustPreserve(payload.mustPreserve),
     goal: sanitizeGoal(payload.goal),
     agents: sanitizeAgentHistory(payload.agents),
+    turnInProgress: payload.turnInProgress && typeof payload.turnInProgress === 'object'
+      ? { request: safePersistedText(String(payload.turnInProgress.request || '').slice(0, 2000), 2000), savedAt: String(payload.turnInProgress.savedAt || '').slice(0, 40) }
+      : null,
     workflowCheckpoint: sanitizeWorkflowCheckpoint(payload.workflowCheckpoint),
     checkpointsDir: checkpointDirectory(root, payload.id, env)
   };
@@ -409,7 +416,7 @@ export function saveMidTurn(session, options = {}) {
     session.midTurnTimer = null;
     const previous = session.midTurnSave || Promise.resolve();
     session.midTurnSavedAt = Date.now();
-    session.midTurnSave = previous.then(() => saveSession(session, options.env ? { env: options.env } : {})).catch(() => {});
+    session.midTurnSave = previous.then(() => saveSession(session, { ...(options.env ? { env: options.env } : {}), turnInProgress: true })).catch(() => {});
   }, wait);
   session.midTurnTimer.unref?.();
 }
