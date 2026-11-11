@@ -33,7 +33,7 @@ Status: **done** (tested and pushed) · **doing** · **open** · **blocked**
 | Durable scheduled routines (Hermes cron parity) | done | `oasis schedule`, `test/routines.test.mjs` (13 tests, real headless run + Telegram delivery) |
 | Agent tool to manage routines (`routine_manage`, approval-gated) | done | `test/routine-manage-tool.test.mjs` |
 | Routines in the web app and hosted by `oasis web` / `oasis gateway` | done | `test/routines-hosted.test.mjs` |
-| Event-triggered routines (webhook fires a routine) | open | |
+| Event-triggered routines (webhook fires a routine) | done | `test/routines-hosted.test.mjs` (webhook test) |
 
 ## 3. Competitive evaluation
 
