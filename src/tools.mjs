@@ -1245,6 +1245,17 @@ export async function listAvailableSkills(root, options = {}) {
   return [...byName.values()].sort((a, b) => a.name.localeCompare(b.name)).slice(0, 240);
 }
 
+// Where a listed skill's SKILL.md lives, and whether it belongs to the
+// repository, the user or OASIS itself (Codex skills/list scopes).
+const REPO_SKILL_SOURCES = new Set(['workspace', 'portable-workspace', 'claude-project', 'project-extension']);
+export function skillLocation(root, item) {
+  const scope = item.source === 'built-in' ? 'system' : REPO_SKILL_SOURCES.has(item.source) ? 'repo' : 'user';
+  let file = item.absolutePath || null;
+  if (!file && item.source === 'built-in') file = path.join(BUNDLED_SKILLS_DIR, item.relativePath || item.name, 'SKILL.md');
+  else if (!file && REPO_SKILL_SOURCES.has(item.source) && item.relativePath) file = path.join(root, ...String(item.relativePath).split('/'));
+  return { scope, path: file };
+}
+
 export async function loadSkillText(root, rawName, options = {}) {
   const name = String(rawName || '');
   if (!/^[a-zA-Z][a-zA-Z0-9-]{0,63}$/.test(name)) throw new Error('Skill names must be a short identifier.');

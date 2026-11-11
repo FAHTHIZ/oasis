@@ -7,7 +7,8 @@
 // Implemented methods: initialize (+ initialized notification), thread/start,
 // thread/resume, thread/fork, thread/read, thread/list (archived, searchTerm,
 // excludedThreadIds), thread/name/set, thread/loaded/list, thread/unsubscribe,
-// thread/archive, thread/unarchive, thread/delete, thread/compact/start, turn/start,
+// thread/archive, thread/unarchive, thread/delete, thread/compact/start,
+// skills/list, turn/start,
 // turn/steer, turn/interrupt, review/start (inline), model/list, and the host
 // methods in codex-app-server-host.mjs: fs/* (readFile, writeFile,
 // createDirectory, getMetadata, readDirectory, remove, copy, watch, unwatch)
@@ -161,6 +162,7 @@ export function createCodexAppServer(options = {}) {
     if (name === 'sessions') return import('./sessions.mjs');
     if (name === 'mentions') return import('./commands.mjs');
     if (name === 'slash') return import('./slash.mjs');
+    if (name === 'tools') return import('./tools.mjs');
     throw new Error('unknown dependency ' + name);
   }
 
@@ -705,6 +707,22 @@ export function createCodexAppServer(options = {}) {
         const entry = threadEntry(params.threadId);
         if (entry.turn && (!params.turnId || params.turnId === entry.turn.id) && entry.controller) entry.controller.abort();
         return {};
+      }
+      case 'skills/list': {
+        const cwds = Array.isArray(params.cwds) && params.cwds.length ? params.cwds.filter((cwd) => typeof cwd === 'string') : [undefined];
+        const { listAvailableSkills, skillLocation } = await load('tools');
+        const data = [];
+        for (const cwd of cwds.slice(0, 20)) {
+          const root = await workspace(cwd);
+          try {
+            const skills = await listAvailableSkills(root, { env });
+            data.push({ cwd: root, errors: [], skills: skills.map((item) => {
+              const where = skillLocation(root, item);
+              return { name: item.name, description: String(item.description || ''), shortDescription: null, interface: null, dependencies: null, path: where.path || '', scope: where.scope, enabled: true, pluginId: item.plugin || null };
+            }) });
+          } catch (error) { data.push({ cwd: root, skills: [], errors: [{ path: root, message: String(error && error.message || error) }] }); }
+        }
+        return { data };
       }
       case 'model/list': {
         const { loadConfig } = await load('config');
