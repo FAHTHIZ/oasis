@@ -303,3 +303,14 @@ test('apps the project already uses are suggested', async (t) => {
   assert.equal(found.linear, undefined);
   assert.equal((await listConnectors({ root, env })).find((row) => row.id === 'vercel').suggested, 'vercel.json');
 });
+
+test('startup tip names the project apps that are not connected', async (t) => {
+  const { root, env } = await sandbox(t);
+  const fs = await import('node:fs/promises');
+  const path = await import('node:path');
+  const { appTip } = await import('../src/terminal-ui.mjs');
+  assert.equal(await appTip(root, env), '');
+  await fs.writeFile(path.join(root, 'package.json'), JSON.stringify({ dependencies: { stripe: '1', '@sentry/node': '8' } }));
+  assert.equal(await appTip(root, env), 'This project uses Stripe and Sentry. /connect stripe sentry gives Oasis their tools.');
+  assert.equal(await appTip(root, { ...env, OASIS_TIP: 'off' }), '');
+});

@@ -95,7 +95,8 @@ const STARTUP_TIPS = [
   'Read each approval prompt; Oasis runs commands with your account permissions.',
   'Use /context to see how much of the model context is in use.',
   'Use /cost to review estimated usage for this session.',
-  'Ask Oasis to run the relevant tests before it says a change is done.'
+  'Ask Oasis to run the relevant tests before it says a change is done.',
+  'Type /connect github (or linear, notion, sentry, ...) to give Oasis an app in one step.'
 ];
 
 export function startupTip(env = process.env, now = Date.now()) {
@@ -142,8 +143,27 @@ export async function showStartupBanner({ root, model = '', provider = '', mode 
   ];
   for (const [label, value] of rows) output.write('  ' + dim(label.padEnd(10)) + value + '\n');
   output.write('  ' + dim('? shortcuts · / commands · @ files · ! shell · # memory · Shift+Tab modes') + '\n');
-  const tip = startupTip(env);
+  const tip = (await appTip(root, env).catch(() => '')) || startupTip(env);
   if (tip) output.write('  Tip: ' + tip + '\n');
+}
+
+/** "This project uses Vercel and Stripe: /connect vercel stripe" when they are not connected yet. */
+export async function appTip(root, env = process.env) {
+  if (String(env.OASIS_TIP || '').toLowerCase() === 'off' || env.OASIS_NO_TIPS === '1') return '';
+  const { suggestedConnectors, connectorStatus, findCatalogConnector } = await import('./connectors.mjs');
+  const ids = Object.keys(await suggestedConnectors(root || process.cwd()));
+  const missing = [];
+  for (const id of ids.slice(0, 8)) {
+    const connector = findCatalogConnector(id);
+    if (!connector) continue;
+    const status = await connectorStatus(connector, { root, env }).catch(() => null);
+    if (status && !(status.configured && status.signedIn)) missing.push(connector);
+  }
+  if (!missing.length) return '';
+  const shown = missing.slice(0, 3);
+  const names = shown.map((item) => item.name);
+  const list = names.length > 1 ? names.slice(0, -1).join(', ') + ' and ' + names[names.length - 1] : names[0];
+  return 'This project uses ' + list + '. /connect ' + shown.map((item) => item.id).join(' ') + ' gives Oasis ' + (shown.length > 1 ? 'their' : 'its') + ' tools.';
 }
 
 // Prompt and footer -------------------------------------------------------
