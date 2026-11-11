@@ -291,6 +291,7 @@ function runInline(command, root, env, timeoutMs) {
 
 // Why a command-file shell snippet may not run: untrusted project, or a deny/ask permission rule.
 function shellSkipReason(command, options) {
+  if (options.disabledByPolicy) return 'disabled by policy';
   if (!options.allowed) return 'project commands run shell only in trusted workspaces (run oasis trust)';
   if (options.policy) {
     const verdict = options.policy.evaluate('run_shell', { command });
@@ -322,7 +323,8 @@ export async function expandInlineShell(text, options = {}) {
       && !(readOnlyCommandsEnabled(options.env || process.env) && readOnlyShellLine(command, { root: options.root }))) skipped = 'not covered by the allowed-tools Bash rules';
     if (skipped) {
       ran.push({ command, skipped });
-      out += '[skipped !`' + command + '`: ' + skipped + ']';
+      // Claude Code's disableSkillShellExecution placeholder.
+      out += options.disabledByPolicy ? '[shell command execution disabled by policy]' : '[skipped !`' + command + '`: ' + skipped + ']';
       continue;
     }
     const result = await runInline(command, options.root, options.env, (options.timeoutSeconds || 30) * 1000);
@@ -355,14 +357,14 @@ export async function resolveCustomCommand(root, rawInput, options = {}) {
   if (!command) return null;
   const argumentText = String(match[2] || '').slice(0, 8000);
   if (command.gemini) {
-    const rendered = await renderGeminiPrompt(root, command.body, argumentText, { rawInput: String(rawInput).trim(), env: options.env, allowed: command.scope === 'user' || Boolean(options.trusted), policy: options.policy });
+    const rendered = await renderGeminiPrompt(root, command.body, argumentText, { rawInput: String(rawInput).trim(), env: options.env, allowed: command.scope === 'user' || Boolean(options.trusted), policy: options.policy, disabledByPolicy: options.disableShell === true });
     return { name: command.name, args: argumentText, command, prompt: rendered.text, mentions: rendered.files, shell: rendered.ran, grantTools: null };
   }
   const { text, usedArguments } = command.foreign ? { text: command.body, usedArguments: false } : renderCommandBody(command.body, argumentText);
   let prompt = command.foreign ? foreignWorkflowPrompt(command, commands) : text;
   if (argumentText && !usedArguments) prompt += '\n\nArguments: ' + argumentText;
   // Other agents' command files have no inline-shell syntax; never run !`...` from them.
-  const shell = command.foreign ? { text: prompt, ran: [] } : await expandInlineShell(prompt, { root, env: options.env, allowed: command.scope === 'user' || Boolean(options.trusted), allowedTools: command.allowedTools, policy: options.policy });
+  const shell = command.foreign ? { text: prompt, ran: [] } : await expandInlineShell(prompt, { root, env: options.env, allowed: command.scope === 'user' || Boolean(options.trusted), allowedTools: command.allowedTools, policy: options.policy, disabledByPolicy: options.disableShell === true });
   const expanded = await expandFileMentions(root, shell.text);
   return { name: command.name, args: argumentText, command, prompt: expanded.text, mentions: expanded.files, shell: shell.ran, grantTools: command.scope === 'user' || options.trusted ? command.allowedTools : null };
 }
@@ -477,7 +479,7 @@ export async function renderGeminiPrompt(root, prompt, argumentText = '', option
     if (part.type === 'file') { out += await geminiFileInjection(workspace, part.value, options.env, files); continue; }
     const command = part.value.replace(ARGS_PLACEHOLDER, () => shellEscapeArgument(args)).trim();
     const skipped = command ? shellSkipReason(command, options) : 'empty command';
-    if (skipped) { ran.push({ command, skipped }); out += '[skipped !{' + command + '}: ' + skipped + ']'; continue; }
+    if (skipped) { ran.push({ command, skipped }); out += options.disabledByPolicy ? '[shell command execution disabled by policy]' : '[skipped !{' + command + '}: ' + skipped + ']'; continue; }
     const result = await runInline(command, workspace, options.env, (options.timeoutSeconds || 30) * 1000);
     ran.push({ command, code: result.code });
     out += result.output.replace(/\n+$/, '') + (result.code ? '\n[Shell command exited with code ' + result.code + ']' : result.code === null ? '\n[Shell command did not finish]' : '');
