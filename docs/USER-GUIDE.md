@@ -73,8 +73,11 @@ Subagents you or OASIS start show up in `/tasks`: running ones first, finished o
 ```sh
 oasis schedule add "0 9 * * 1-5" "Summarize yesterday's CI failures and open PRs" --name standup --workdir . --tz Asia/Dhaka --deliver telegram:123456
 oasis schedule add "every 6h" "df -h /" --script --deliver webhook:https://example.com/hook
+oasis schedule add "DTSTART;TZID=Asia/Dhaka:20261127T170000 RRULE:FREQ=MONTHLY;BYDAY=-1FR" "Draft the monthly status report" --name monthly
 oasis schedule daemon        # keep this running (or run `oasis schedule tick` from crontab)
 ```
+
+Schedules can be plain phrases (`weekdays at 9am`, `every monday at 14:00`), 5-field cron, `every 2h`, `in 30m`, an ISO date, or an RFC 5545 rule: one `DTSTART` (with `TZID=`, a trailing `Z`, or neither to use `--tz`) and one `RRULE` with FREQ=DAILY, WEEKLY, MONTHLY or YEARLY plus INTERVAL, COUNT, UNTIL, BYDAY (`1MO`, `-1FR`), BYMONTHDAY, BYMONTH, BYHOUR, BYMINUTE and WKST. A rule with COUNT or UNTIL marks the routine completed after its last run. Local times are kept across daylight-saving changes; a time that is skipped moves forward, and a repeated one runs once.
 
 Each run is a fresh background session (`oasis bg list` shows it) with the routine's folder, model, permission mode and skills. `oasis schedule show NAME` lists recent runs and where their output was saved; `pause`, `resume`, `run`, `cancel`, `edit` and `remove` manage it. A run that starts its answer with `[SILENT]` is saved but not delivered. A routine with no usable model credentials is marked `blocked_config` once and spends no tokens. Background runs never wait for approval: only tools your permission rules allow will run, so pick `--permission-mode` deliberately.
 

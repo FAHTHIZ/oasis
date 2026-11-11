@@ -21,6 +21,7 @@
 //   HMAC of the raw body), queues the payload and the next tick runs it. The payload is
 //   handed to the run as untrusted data in a file, never spliced into instructions.
 import { Cron } from 'croner';
+import { parseRRule, rruleNext, rruleOccurrences } from './rrule.mjs';
 import { createHmac, randomBytes, randomUUID, timingSafeEqual } from 'node:crypto';
 import { appendFile, mkdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
@@ -101,6 +102,11 @@ export function parseSchedule(input, { now = new Date(), timezone } = {}) {
   const text = String(input || '').trim();
   if (!text) throw new Error('A routine needs a schedule, for example "weekdays at 9am", "0 9 * * 1-5", "every 2h", "in 30m" or 2026-12-01T09:00.');
   if (/^(on\s+)?webhook$/i.test(text)) return { type: 'event', source: 'webhook', display: 'on webhook' };
+  if (/^(DTSTART|RRULE)[;:]/i.test(text)) {
+    const rule = parseRRule(text, { timezone, now });
+    if (!rruleNext(rule, now, { timezone })) throw new Error('That RRULE has no occurrence after now (check DTSTART, COUNT and UNTIL).');
+    return { type: 'rrule', rule: rule.text, display: rule.text.replace('\n', ' ') };
+  }
   const plain = plainCalendarCron(text);
   if (plain) return { type: 'cron', expr: plain, display: text };
   const every = /^every\s+(.+)$/i.exec(text);
@@ -126,7 +132,7 @@ export function parseSchedule(input, { now = new Date(), timezone } = {}) {
     if (!cron.nextRun(now)) throw new Error('never runs');
     return { type: 'cron', expr: text, display: text };
   } catch (error) {
-    throw new Error('Could not read the schedule "' + text + '": ' + (error.message || error) + '. Use daily at 09:00, weekdays at 9am, every monday at 14:00, a 5-field cron expression, every 2h, in 30m or an ISO date.');
+    throw new Error('Could not read the schedule "' + text + '": ' + (error.message || error) + '. Use daily at 09:00, weekdays at 9am, every monday at 14:00, a 5-field cron expression, an RRULE (DTSTART;TZID=Zone:20261201T090000 RRULE:FREQ=WEEKLY;BYDAY=MO), every 2h, in 30m or an ISO date.');
   }
 }
 
@@ -138,6 +144,7 @@ export function nextOccurrence(job, after = new Date()) {
   if (s.type === 'event') return null;
   if (s.type === 'once') return new Date(s.at) > after || !job.lastRunAt ? s.at : null;
   if (s.type === 'interval') return new Date(after.getTime() + s.everyMs).toISOString();
+  if (s.type === 'rrule') { const next = rruleNext(s.rule, after, job.timezone ? { timezone: job.timezone } : {}); return next ? next.toISOString() : null; }
   const next = cronOf(job).nextRun(after);
   return next ? next.toISOString() : null;
 }
@@ -145,8 +152,9 @@ export function nextOccurrence(job, after = new Date()) {
 // How late a missed cron slot may still run.
 export function catchUpWindowMs(job) {
   if (Number.isFinite(job.graceMinutes)) return Math.max(0, job.graceMinutes) * 60_000;
-  if (job.schedule.type !== 'cron') return Infinity;
-  const runs = cronOf(job).nextRuns(2, new Date(job.nextRunAt || Date.now()));
+  if (job.schedule.type !== 'cron' && job.schedule.type !== 'rrule') return Infinity;
+  const from = new Date(job.nextRunAt || Date.now());
+  const runs = job.schedule.type === 'rrule' ? rruleOccurrences(job.schedule.rule, new Date(from.getTime() - 1), { limit: 2, ...(job.timezone ? { timezone: job.timezone } : {}) }) : cronOf(job).nextRuns(2, from);
   const period = runs.length === 2 ? runs[1] - runs[0] : 2 * UNITS.h;
   return Math.min(2 * UNITS.h, Math.max(2 * 60_000, period / 2));
 }
@@ -332,7 +340,7 @@ export async function resumeJob(ref, { env = process.env, now = new Date() } = {
   guardScheduledRun(env);
   return mutate(env, (jobs) => {
     const job = findJob(jobs, ref);
-    if (job.state === 'completed') throw new Error(job.id + ' already ran its one-time schedule. Edit its schedule to run it again.');
+    if (job.state === 'completed') throw new Error(job.id + (job.schedule && job.schedule.type === 'rrule' ? ' has no occurrences left in its RRULE' : ' already ran its one-time schedule') + '. Edit its schedule to run it again.');
     job.enabled = true; job.state = 'scheduled';
     delete job.pausedAt; delete job.pausedReason;
     if (!job.nextRunAt) job.nextRunAt = job.schedule.type === 'once' ? job.schedule.at : nextOccurrence(job, now);
@@ -600,7 +608,7 @@ export async function tick(options = {}) {
       // Events queue behind a running fire instead of being skipped.
       if (eventDue && job.activeRun) continue;
       if (job.activeRun) { if (due) { summary.skipped.push({ id: job.id, reason: 'previous run still active' }); job.nextRunAt = nextOccurrence(job, now); } continue; }
-      if (due && !manual && job.schedule.type === 'cron' && now - new Date(job.nextRunAt) > catchUpWindowMs(job)) {
+      if (due && !manual && (job.schedule.type === 'cron' || job.schedule.type === 'rrule') && now - new Date(job.nextRunAt) > catchUpWindowMs(job)) {
         await appendRun(job.id, { fireId: randomUUID(), status: 'missed', slot: job.nextRunAt, finishedAt: now.toISOString() }, env);
         summary.skipped.push({ id: job.id, reason: 'missed slot ' + job.nextRunAt + ' is outside the catch-up window' });
         job.nextRunAt = nextOccurrence(job, now);
@@ -634,7 +642,11 @@ export async function tick(options = {}) {
       if (due) {
         if (job.schedule.type === 'event') job.nextRunAt = null;
         else if (job.schedule.type === 'once') { job.nextRunAt = null; job.enabled = false; job.state = 'completed'; }
-        else job.nextRunAt = nextOccurrence(job, now);
+        else {
+          job.nextRunAt = nextOccurrence(job, now);
+          // An RRULE with COUNT or UNTIL ends after its final occurrence.
+          if (!job.nextRunAt && job.schedule.type === 'rrule') { job.enabled = false; job.state = 'completed'; }
+        }
       }
     }
   });

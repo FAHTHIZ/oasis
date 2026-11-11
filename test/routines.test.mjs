@@ -368,3 +368,41 @@ test('plain calendar phrases compile to cron in the routine time zone', async ()
   assert.equal(next, '2026-11-16T03:00:00.000Z');
   assert.throws(() => parseSchedule('daily at 9'), /weekdays at 9am/);
 });
+
+test('RRULE routines: next runs follow the rule, missed slots honour the window, COUNT ends the routine', async () => {
+  const env = await tempEnv();
+  const bg = fakeBackgrounds();
+  const t0 = new Date('2026-11-11T00:00:00Z');
+  const job = await createJob({ schedule: 'DTSTART;TZID=Asia/Dhaka:20261111T090000 RRULE:FREQ=DAILY;COUNT=3', prompt: 'standup', kind: 'script' }, { env, now: t0 });
+  assert.equal(job.schedule.type, 'rrule');
+  assert.equal(job.schedule.rule, 'DTSTART;TZID=Asia/Dhaka:20261111T090000\nRRULE:FREQ=DAILY;COUNT=3');
+  assert.equal(job.nextRunAt, '2026-11-11T03:00:00.000Z');
+  assert.equal(catchUpWindowMs(job), 2 * 3600_000, 'a daily rule gets the 2-hour cap');
+  const first = await tick({ env, now: new Date('2026-11-11T03:00:30Z'), backgrounds: bg });
+  assert.ok(first.fired.includes(job.id));
+  let stored = (await readJobs(env)).find((j) => j.id === job.id);
+  assert.equal(stored.nextRunAt, '2026-11-12T03:00:00.000Z');
+  bg.entries.get(stored.activeRun.backgroundId).status = 'completed';
+  bg.entries.get(stored.activeRun.backgroundId).exitCode = 0;
+  // The second slot is missed by more than the window: recorded, not run.
+  const late = await tick({ env, now: new Date('2026-11-12T08:00:00Z'), backgrounds: bg });
+  assert.ok(late.skipped.some((s) => s.id === job.id && /catch-up window/.test(s.reason)));
+  stored = (await readJobs(env)).find((j) => j.id === job.id);
+  assert.equal(stored.nextRunAt, '2026-11-13T03:00:00.000Z');
+  // The third and last occurrence runs, then the routine is complete.
+  const last = await tick({ env, now: new Date('2026-11-13T03:01:00Z'), backgrounds: bg });
+  assert.ok(last.fired.includes(job.id));
+  stored = (await readJobs(env)).find((j) => j.id === job.id);
+  assert.equal(stored.nextRunAt, null);
+  assert.equal(stored.state, 'completed');
+  assert.equal(stored.enabled, false);
+  await assert.rejects(resumeJob(job.id, { env }), /no occurrences left in its RRULE/);
+  // Readable errors for bad or exhausted rules.
+  assert.throws(() => parseSchedule('RRULE:FREQ=HOURLY'), /FREQ=HOURLY is not supported/);
+  assert.throws(() => parseSchedule('DTSTART:20200101T000000Z RRULE:FREQ=DAILY;COUNT=2', { now: t0 }), /no occurrence after now/);
+  // A floating DTSTART follows the routine's time zone, also after editing it.
+  const floating = await createJob({ schedule: 'DTSTART:20261111T090000 RRULE:FREQ=WEEKLY;BYDAY=MO', timezone: 'Asia/Dhaka', prompt: 'weekly', kind: 'script' }, { env, now: t0 });
+  assert.equal(floating.nextRunAt, '2026-11-16T03:00:00.000Z');
+  const moved = await editJob(floating.id, { timezone: 'Europe/London' }, { env, now: t0 });
+  assert.equal(moved.nextRunAt, '2026-11-16T09:00:00.000Z');
+});

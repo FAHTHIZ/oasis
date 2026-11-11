@@ -22,7 +22,9 @@ Start the scheduler with "oasis schedule daemon" (or run "oasis schedule tick" f
   oasis schedule daemon [--interval SECONDS]     keep running and fire routines
 
 SCHEDULE: "weekdays at 9am", "daily at 18:30", "every monday at 14:00", "0 9 * * 1-5" (cron), "every 2h", "in 30m", 2026-12-01T09:00, or
-          "webhook" (runs when oasis web receives a signed POST; see show)
+          "webhook" (runs when oasis web receives a signed POST; see show), or an RFC 5545 rule such as
+          "DTSTART;TZID=Asia/Dhaka:20261201T090000 RRULE:FREQ=MONTHLY;BYDAY=-1FR" (last Friday each month;
+          DAILY/WEEKLY/MONTHLY/YEARLY, INTERVAL, COUNT, UNTIL, BYDAY, BYMONTHDAY, BYMONTH, BYHOUR, BYMINUTE)
 Options:
   --name NAME              a name you can use instead of the id
   --workdir DIR            run in this project folder (default: home folder)
