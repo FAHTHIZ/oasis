@@ -82,3 +82,56 @@ test('workflows above the workspace are read only up to the git root, and the sw
   const off = await loadCustomCommands(second.root, { env: { ...second.env, OASIS_OTHER_AGENT_RULES: '0' }, home: second.home });
   assert.ok(!off.has('x') && !off.has('up'));
 });
+
+test('Gemini CLI TOML commands: namespaces, {{args}}, !{shell} with escaping, @{file} and the appended command line', async (t) => {
+  const { root, home, env } = await setup(t, {
+    '.gemini/commands/git/fix.toml': 'description = "Generates a fix"\nprompt = "Fix this issue: {{args}}."\n',
+    '.gemini/commands/changelog.toml': 'prompt = """\n# Update the changelog\nParse the version.\n"""\n',
+    '.gemini/commands/grep-code.toml': 'prompt = """\nPattern `{{args}}`:\n!{printf \'%s|\' {{args}}; echo \'{"json": {"ok": true}}\'}\n!{echo oops >&2; exit 3}\n"""\n',
+    '.gemini/commands/review.toml': 'prompt = "Review using:\\n@{docs/guide.md}\\nAll docs:\\n@{docs}\\nSecret:@{.env}"\n',
+    '.gemini/commands/broken.toml': 'description = "no prompt"\n',
+    'docs/guide.md': 'GUIDE-BODY {{args}} !{echo injected}',
+    'docs/more/extra.md': 'EXTRA-BODY',
+    '.env': 'TOKEN=1',
+    '~/.gemini/commands/test.toml': 'prompt = "USER-TEST {{args}}"\n',
+    '~/.gemini/commands/changelog.toml': 'prompt = "USER-CHANGELOG"\n'
+  });
+  const commands = await loadCustomCommands(root, { env, home });
+  for (const name of ['git:fix', 'changelog', 'grep-code', 'review', 'test']) assert.ok(commands.has(name), name);
+  assert.equal(commands.has('broken'), false);
+  assert.equal(commands.get('git:fix').description, 'Generates a fix (Gemini CLI)');
+  assert.equal(commands.get('changelog').description, 'Update the changelog (Gemini CLI)');
+  // Project commands override user commands with the same name, as in Gemini CLI.
+  assert.match(commands.get('changelog').body, /Parse the version/);
+
+  const fix = await resolveCustomCommand(root, '/git:fix "Button is misaligned"', { env, home, commands });
+  assert.equal(fix.prompt, 'Fix this issue: "Button is misaligned".');
+  const changelog = await resolveCustomCommand(root, '/changelog 1.2.0 added "x"', { env, home, commands });
+  assert.match(changelog.prompt, /Parse the version\.\n\n\/changelog 1\.2\.0 added "x"$/);
+  const bare = await resolveCustomCommand(root, '/changelog', { env, home, commands });
+  assert.equal(bare.prompt.includes('/changelog'), false);
+
+  // Untrusted project: shell blocks are skipped, never run.
+  const untrusted = await resolveCustomCommand(root, "/grep-code It's x", { env, home, commands });
+  assert.match(untrusted.prompt, /\[skipped !\{printf/);
+  assert.equal(untrusted.shell.every((item) => item.skipped), true);
+  if (process.platform !== 'win32') {
+    const trusted = await resolveCustomCommand(root, "/grep-code It's x; rm -rf /", { env, home, commands, trusted: true });
+    assert.match(trusted.prompt, /Pattern `It's x; rm -rf \/`:/);
+    assert.match(trusted.prompt, /It's x; rm -rf \/\|\{"json": \{"ok": true\}\}/);
+    assert.match(trusted.prompt, /oops\n\[Shell command exited with code 3\]/);
+    const denied = await resolveCustomCommand(root, '/grep-code a', { env, home, commands, trusted: true, policy: { evaluate: () => ({ decision: 'deny', rule: 'Bash(*)' }) } });
+    assert.match(denied.prompt, /blocked by permission rule Bash\(\*\)/);
+  }
+
+  const review = await resolveCustomCommand(root, '/review FileLoader.ts', { env, home, commands, trusted: true });
+  // Injected file content is not expanded again; .env is never read.
+  assert.match(review.prompt, /GUIDE-BODY \{\{args\}\} !\{echo injected\}/);
+  assert.match(review.prompt, /--- docs\/more\/extra\.md ---\nEXTRA-BODY/);
+  assert.doesNotMatch(review.prompt, /TOKEN=1/);
+  assert.match(review.prompt, /\n\n\/review FileLoader\.ts$/);
+  assert.ok(review.mentions.includes(path.join('docs', 'guide.md')));
+
+  const user = await resolveCustomCommand(root, '/test abc', { env, home, commands });
+  assert.equal(user.prompt, 'USER-TEST abc');
+});

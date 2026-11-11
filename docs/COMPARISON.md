@@ -80,6 +80,14 @@ OASIS reads these tools' project files where they are, so a repository set up fo
 | Skill folders: `.cursor/skills`, `.codex/skills`, `.devin/skills`, `.windsurf/skills`, `.agent/skills`, `.openhands/skills`, `~/.agents/skills`, `~/.cursor/skills`, `~/.config/devin/skills`, `~/.gemini/config/skills` (and Antigravity's legacy, CLI and plugin `skills/` folders), `~/.openhands/skills` | Cursor, Codex, Devin Desktop, Antigravity, OpenHands | Listed and loadable as skills, with their `references/` files. Antigravity's scan of parent folders up to the repository root is not done |
 | `.cursor/worktrees.json`, `.windsurf/hooks.json` `post_setup_worktree`, `.openhands/setup.sh` | Cursor, Windsurf, OpenHands | Run in each new OASIS worktree, trusted workspaces only (the source tools run them without a trust step; OpenHands runs setup.sh at every session start in its sandbox, OASIS only for new worktrees). `.openhands/pre-commit.sh` is not installed as a git hook |
 
+## Terminal agents: Gemini CLI, OpenCode, Goose, Aider, Roo Code, Kilo Code
+
+Files from these tools that OASIS reads where they are (no `oasis import` step). `oasis import gemini|opencode|cline` still converts their settings into OASIS files.
+
+| File | From | How OASIS uses it |
+| --- | --- | --- |
+| `.gemini/commands/**/*.toml`, `~/.gemini/commands` | Gemini CLI | Slash commands with Gemini's `{{args}}`, `!{...}` and `@{...}` rules ([custom commands](https://raw.githubusercontent.com/google-gemini/gemini-cli/main/docs/cli/custom-commands.md)). Gemini asks before each `!{...}`; OASIS runs it for user commands, for project commands only in trusted workspaces, and never past a deny or ask rule. Images and PDFs in `@{...}` are skipped, not attached |
+
 ## Kimi Code CLI
 
 [Kimi Code CLI](https://github.com/MoonshotAI/kimi-code) is MIT-licensed TypeScript and the successor to the archived Python Kimi CLI. It is tuned for Kimi models and has `/goal`, `!` shell mode, built-in coder, explore and plan subagents, a local web UI and ACP ([introduction](https://www.kimi.ai/resources/kimi-code-introduction)). OASIS covers the same ground (`/goal`, `!` shell mode, explore, plan and general-purpose subagents, a web app and ACP) for any model provider, and also runs Claude Code plugins.

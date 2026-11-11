@@ -26,6 +26,8 @@
 // ~/.codeium/windsurf/global_workflows, Antigravity .agents/workflows,
 // .agent/workflows and ~/.gemini/config/workflows, Cline .clinerules/workflows.
 // Their files are plain prompts: inline shell and allowed-tools are not honoured.
+// Gemini CLI .gemini/commands/**/*.toml and ~/.gemini/commands are read with Gemini's
+// own {{args}}, !{...} and @{...} syntax (see renderGeminiPrompt).
 import { lstat, readdir, readFile, realpath } from 'node:fs/promises';
 import { spawn } from 'node:child_process';
 import { processTreeSpawnOptions, signalProcessTree } from './process-tree.mjs';
@@ -70,13 +72,15 @@ export async function foreignCommandDirectories(root, env = process.env, home = 
   if (env.OASIS_OTHER_AGENT_RULES === '0') return [];
   const workspace = path.resolve(root);
   const dirs = [
+    { dir: path.join(home, '.gemini', 'commands'), scope: 'user', foreign: 'Gemini CLI', gemini: true },
     { dir: path.join(home, '.gemini', 'config', 'workflows'), scope: 'user', foreign: 'Antigravity' },
     { dir: path.join(home, '.codeium', 'windsurf', 'global_workflows'), scope: 'user', foreign: 'Windsurf' },
     { dir: path.join(home, '.cursor', 'commands'), scope: 'user', foreign: 'Cursor' },
     { dir: path.join(workspace, '.clinerules', 'workflows'), scope: 'project', foreign: 'Cline' },
     { dir: path.join(workspace, '.agent', 'workflows'), scope: 'project', foreign: 'Antigravity' },
     { dir: path.join(workspace, '.agents', 'workflows'), scope: 'project', foreign: 'Antigravity' },
-    { dir: path.join(workspace, '.cursor', 'commands'), scope: 'project', foreign: 'Cursor' }
+    { dir: path.join(workspace, '.cursor', 'commands'), scope: 'project', foreign: 'Cursor' },
+    { dir: path.join(workspace, '.gemini', 'commands'), scope: 'project', foreign: 'Gemini CLI', gemini: true }
   ];
   // Devin Desktop prefers .devin/workflows over the legacy .windsurf/workflows; nearer folders win.
   for (const dir of await gitRootChain(workspace)) {
@@ -86,14 +90,14 @@ export async function foreignCommandDirectories(root, env = process.env, home = 
   return dirs;
 }
 
-async function collect(dir, prefix, depth, out) {
+async function collect(dir, prefix, depth, out, ext = '.md') {
   let entries;
   try { entries = await readdir(dir, { withFileTypes: true }); } catch { return; }
   for (const entry of entries) {
     if (entry.name.startsWith('.')) continue;
     const full = path.join(dir, entry.name);
-    if (entry.isDirectory() && depth < MAX_DEPTH) await collect(full, prefix.concat(entry.name), depth + 1, out);
-    else if (entry.isFile() && entry.name.toLowerCase().endsWith('.md')) out.push({ file: full, parts: prefix.concat(entry.name.slice(0, -3)) });
+    if (entry.isDirectory() && depth < MAX_DEPTH) await collect(full, prefix.concat(entry.name), depth + 1, out, ext);
+    else if (entry.isFile() && entry.name.toLowerCase().endsWith(ext)) out.push({ file: full, parts: prefix.concat(entry.name.slice(0, -ext.length)) });
   }
 }
 
@@ -104,10 +108,12 @@ export async function loadCustomCommands(root, options = {}) {
   const env = options.env || process.env;
   const home = options.home || os.homedir();
   const workspaceReal = await realpath(path.resolve(root)).catch(() => path.resolve(root));
-  for (const { dir, scope, foreign, outside } of [...await foreignCommandDirectories(root, env, home), ...commandDirectories(root, env, home)]) {
+  let parseToml = null;
+  for (const { dir, scope, foreign, outside, gemini } of [...await foreignCommandDirectories(root, env, home), ...commandDirectories(root, env, home)]) {
     const found = [];
-    // Other agents' folders are flat: no sub-folder namespaces.
-    await collect(dir, [], foreign ? MAX_DEPTH : 0, found);
+    // Other agents' folders are flat, except Gemini CLI's, whose sub-folders are
+    // namespaces as in OASIS's own (git/commit.toml -> /git:commit).
+    await collect(dir, [], foreign && !gemini ? MAX_DEPTH : 0, found, gemini ? '.toml' : '.md');
     for (const { file, parts } of found) {
       const name = parts.join(':').toLowerCase();
       if (!/^[a-z0-9][a-z0-9:_-]{0,100}$/.test(name)) continue;
@@ -125,6 +131,26 @@ export async function loadCustomCommands(root, options = {}) {
       let text;
       try { text = await readFile(file, 'utf8'); } catch { continue; }
       if (text.includes('\0')) continue;
+      if (gemini) {
+        // Gemini CLI TOML (v1): prompt (required) and description.
+        parseToml ||= (await import('./importers.mjs')).parseToml;
+        let data;
+        try { data = parseToml(text); } catch { continue; }
+        if (typeof data.prompt !== 'string' || !data.prompt.trim()) continue;
+        const firstPromptLine = data.prompt.split('\n').find((line) => line.trim()) || '';
+        commands.set(name, {
+          name,
+          description: (String(typeof data.description === 'string' && data.description.trim() ? data.description : firstPromptLine.replace(/^#+\s*/, '')).slice(0, 180) + ' (' + foreign + ')').trim(),
+          argumentHint: '',
+          model: null, allowedTools: null, effort: null, context: null, agent: null,
+          body: data.prompt,
+          file,
+          scope,
+          foreign,
+          gemini: true
+        });
+        continue;
+      }
       const { data: meta, body } = parseFrontMatter(text);
       const firstLine = body.split('\n').find((line) => line.trim()) || '';
       if (foreign) {
@@ -260,6 +286,17 @@ function runInline(command, root, env, timeoutMs) {
   });
 }
 
+// Why a command-file shell snippet may not run: untrusted project, or a deny/ask permission rule.
+function shellSkipReason(command, options) {
+  if (!options.allowed) return 'project commands run shell only in trusted workspaces (run oasis trust)';
+  if (options.policy) {
+    const verdict = options.policy.evaluate('run_shell', { command });
+    if (verdict.decision === 'deny') return 'blocked by permission rule ' + verdict.rule;
+    if (verdict.decision === 'ask') return 'requires explicit approval under permission rule ' + verdict.rule;
+  }
+  return '';
+}
+
 // Replaces each !`cmd` with its output. Returns { text, ran: [{ command, code, skipped }] }.
 export async function expandInlineShell(text, options = {}) {
   const source = String(text || '');
@@ -275,17 +312,11 @@ export async function expandInlineShell(text, options = {}) {
     const command = match[1].trim();
     out += source.slice(last, match.index);
     last = match.index + match[0].length;
-    let skipped = '';
-    if (!options.allowed) skipped = 'project commands run shell only in trusted workspaces (run oasis trust)';
+    let skipped = shellSkipReason(command, options);
     // Read-only inspection (git status/diff/log, ls, cat inside the workspace)
     // runs without a matching rule, as in Claude Code; permission rules still apply.
-    else if (options.allowedTools && !bashRules.some((rule) => ruleMatches(rule, 'run_shell', { command }))
+    if (!skipped && options.allowedTools && !bashRules.some((rule) => ruleMatches(rule, 'run_shell', { command }))
       && !(readOnlyCommandsEnabled(options.env || process.env) && readOnlyShellLine(command, { root: options.root }))) skipped = 'not covered by the allowed-tools Bash rules';
-    else if (options.policy) {
-      const verdict = options.policy.evaluate('run_shell', { command });
-      if (verdict.decision === 'deny') skipped = 'blocked by permission rule ' + verdict.rule;
-      else if (verdict.decision === 'ask') skipped = 'requires explicit approval under permission rule ' + verdict.rule;
-    }
     if (skipped) {
       ran.push({ command, skipped });
       out += '[skipped !`' + command + '`: ' + skipped + ']';
@@ -320,6 +351,10 @@ export async function resolveCustomCommand(root, rawInput, options = {}) {
   const command = commands.get(match[1].toLowerCase());
   if (!command) return null;
   const argumentText = String(match[2] || '').slice(0, 8000);
+  if (command.gemini) {
+    const rendered = await renderGeminiPrompt(root, command.body, argumentText, { rawInput: String(rawInput).trim(), env: options.env, allowed: command.scope === 'user' || Boolean(options.trusted), policy: options.policy });
+    return { name: command.name, args: argumentText, command, prompt: rendered.text, mentions: rendered.files, shell: rendered.ran, grantTools: null };
+  }
   const { text, usedArguments } = command.foreign ? { text: command.body, usedArguments: false } : renderCommandBody(command.body, argumentText);
   let prompt = command.foreign ? foreignWorkflowPrompt(command, commands) : text;
   if (argumentText && !usedArguments) prompt += '\n\nArguments: ' + argumentText;
@@ -327,6 +362,125 @@ export async function resolveCustomCommand(root, rawInput, options = {}) {
   const shell = command.foreign ? { text: prompt, ran: [] } : await expandInlineShell(prompt, { root, env: options.env, allowed: command.scope === 'user' || Boolean(options.trusted), allowedTools: command.allowedTools, policy: options.policy });
   const expanded = await expandFileMentions(root, shell.text);
   return { name: command.name, args: argumentText, command, prompt: expanded.text, mentions: expanded.files, shell: shell.ran, grantTools: command.scope === 'user' || options.trusted ? command.allowedTools : null };
+}
+
+// Gemini CLI custom-command prompts (docs/cli/custom-commands.md in google-gemini/gemini-cli,
+// Apache-2.0; reimplemented from the documented behaviour):
+//   @{path}   the file's content, or every file under a directory (workspace only;
+//             sensitive and agent-ignored paths are left out)
+//   !{cmd}    the command's output (stdout and stderr); a failure adds
+//             "[Shell command exited with code N]". {{args}} inside it is shell-escaped.
+//   {{args}}  the text typed after the command, unchanged.
+// Without {{args}}, typed arguments are appended after a blank line as the whole command
+// line. Braces inside @{...} and !{...} must balance. The prompt is parsed once, so file
+// content and command output are never expanded again. Gemini CLI asks before running
+// !{...}; OASIS runs it for user commands and, for project commands, only in trusted
+// workspaces, and skips it when a permission rule says deny or ask.
+const MAX_GEMINI_SNIPPETS = 10;
+const MAX_GEMINI_DIR_FILES = 50;
+
+export function geminiPromptSegments(prompt) {
+  const source = String(prompt || '');
+  const parts = [];
+  let text = '';
+  for (let i = 0; i < source.length;) {
+    const ch = source[i];
+    if ((ch === '@' || ch === '!') && source[i + 1] === '{') {
+      let depth = 1;
+      let j = i + 2;
+      for (; j < source.length && depth; j++) {
+        if (source[j] === '{') depth++;
+        else if (source[j] === '}') depth--;
+      }
+      if (depth === 0) {
+        if (text) parts.push({ type: 'text', value: text });
+        text = '';
+        parts.push({ type: ch === '@' ? 'file' : 'shell', value: source.slice(i + 2, j - 1) });
+        i = j;
+        continue;
+      }
+    }
+    text += ch;
+    i++;
+  }
+  if (text) parts.push({ type: 'text', value: text });
+  return parts;
+}
+
+export function shellEscapeArgument(value, platform = process.platform) {
+  const text = String(value);
+  if (platform === 'win32') return '"' + text.replace(/"/g, '""') + '"';
+  return "'" + text.replace(/'/g, "'\\''") + "'";
+}
+
+const ARGS_PLACEHOLDER = /\{\{\s*args\s*\}\}/g;
+
+async function geminiFileInjection(workspace, rawPath, env, files) {
+  const wanted = rawPath.trim();
+  if (!wanted) return '';
+  const absolute = path.resolve(workspace, wanted);
+  let real;
+  try { real = await realpath(absolute); } catch { return '[@{' + wanted + '}: not found]'; }
+  const relative = path.relative(workspace, real);
+  if (relative.startsWith('..') || path.isAbsolute(relative)) return '[@{' + wanted + '}: outside the workspace]';
+  const readOne = async (file, rel) => {
+    if (sensitivePath(rel.split(path.sep).join('/')) || await agentIgnoreMatch(file, { env })) return null;
+    let info;
+    try { info = await lstat(file); } catch { return null; }
+    if (!info.isFile()) return null;
+    const data = await readFile(file).catch(() => null);
+    if (!data || data.includes(0)) return null;
+    files.push(rel || path.basename(file));
+    const text = data.subarray(0, MAX_MENTION_BYTES).toString('utf8');
+    return data.length > MAX_MENTION_BYTES ? text + '\n[truncated]' : text;
+  };
+  let info;
+  try { info = await lstat(real); } catch { return '[@{' + wanted + '}: not found]'; }
+  if (!info.isDirectory()) {
+    const content = await readOne(real, relative);
+    return content === null ? '[@{' + wanted + '}: skipped (binary, sensitive or ignored)]' : content;
+  }
+  if (await agentIgnoreMatch(real, { env, isDir: true })) return '[@{' + wanted + '}: ignored]';
+  const out = [];
+  const walk = async (dir) => {
+    let entries = [];
+    try { entries = (await readdir(dir, { withFileTypes: true })).sort((a, b) => a.name.localeCompare(b.name)); } catch { return; }
+    for (const entry of entries) {
+      if (out.length >= MAX_GEMINI_DIR_FILES) return;
+      if (entry.name.startsWith('.') || entry.name === 'node_modules') continue;
+      const full = path.join(dir, entry.name);
+      if (entry.isDirectory()) { if (!await agentIgnoreMatch(full, { env, isDir: true })) await walk(full); continue; }
+      const rel = path.relative(workspace, full);
+      const content = await readOne(full, rel);
+      if (content !== null) out.push('--- ' + rel.split(path.sep).join('/') + ' ---\n' + content);
+    }
+  };
+  await walk(real);
+  return out.join('\n\n');
+}
+
+export async function renderGeminiPrompt(root, prompt, argumentText = '', options = {}) {
+  const workspace = await realpath(path.resolve(root)).catch(() => path.resolve(root));
+  const args = String(argumentText || '');
+  const segments = geminiPromptSegments(prompt);
+  const usesArgs = segments.some((part) => part.type !== 'file' && /\{\{\s*args\s*\}\}/.test(part.value));
+  const files = [];
+  const ran = [];
+  let out = '';
+  let snippets = 0;
+  for (const part of segments) {
+    if (part.type === 'text') { out += part.value.replace(ARGS_PLACEHOLDER, () => args); continue; }
+    if (++snippets > MAX_GEMINI_SNIPPETS) { out += '[skipped: more than ' + MAX_GEMINI_SNIPPETS + ' @{...} and !{...} blocks]'; continue; }
+    if (part.type === 'file') { out += await geminiFileInjection(workspace, part.value, options.env, files); continue; }
+    const command = part.value.replace(ARGS_PLACEHOLDER, () => shellEscapeArgument(args)).trim();
+    const skipped = command ? shellSkipReason(command, options) : 'empty command';
+    if (skipped) { ran.push({ command, skipped }); out += '[skipped !{' + command + '}: ' + skipped + ']'; continue; }
+    const result = await runInline(command, workspace, options.env, (options.timeoutSeconds || 30) * 1000);
+    ran.push({ command, code: result.code });
+    out += result.output.replace(/\n+$/, '') + (result.code ? '\n[Shell command exited with code ' + result.code + ']' : result.code === null ? '\n[Shell command did not finish]' : '');
+  }
+  if (!usesArgs && args.trim()) out = out.replace(/\s+$/, '') + '\n\n' + (options.rawInput || args);
+  return { text: out, files, ran };
 }
 
 // Windsurf, Devin Desktop and Antigravity workflows can say "Call /other-workflow".
