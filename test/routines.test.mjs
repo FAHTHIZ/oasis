@@ -267,3 +267,14 @@ test('delivered output has secrets redacted', async (t) => {
   assert.doesNotMatch(tg.messages[0].body.text, /abcdefghijklmnopqrstuvwxyz0123456789/);
   assert.match(tg.messages[0].body.text, /redacted/);
 });
+
+test('editing a routine can clear optional fields', async () => {
+  const env = await tempEnv();
+  const job = await createJob({ schedule: '0 9 * * *', prompt: 'x', timezone: 'Asia/Dhaka', model: 'm1', workdir: '/tmp' }, { env });
+  const edited = await editJob(job.id, { timezone: '', model: '', workdir: '' }, { env });
+  assert.equal(edited.timezone, undefined);
+  assert.equal(edited.model, undefined);
+  assert.equal(edited.workdir, undefined);
+  const [saved] = await readJobs(env);
+  assert.equal('timezone' in saved || 'model' in saved || 'workdir' in saved, false);
+});

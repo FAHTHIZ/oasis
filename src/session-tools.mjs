@@ -39,6 +39,7 @@ export const SESSION_TOOL_DEFINITIONS = [
       workdir: { type: 'string', description: 'Absolute project folder. Defaults to this workspace on create.' },
       skills: { type: 'array', items: { type: 'string' } },
       deliver: { type: 'string', description: 'local (default), telegram:CHAT_ID, slack:CHANNEL, discord:CHANNEL_ID or webhook:https://...' },
+      events: { type: 'array', items: { type: 'string' }, description: 'Webhook routines only: run just for these events, e.g. pull_request.opened, issues.' },
       timezone: { type: 'string' }, grace_minutes: { type: 'integer', minimum: 0, maximum: 1440 },
       permission_mode: { type: 'string', enum: ['default', 'acceptEdits', 'plan', 'auto', 'dontAsk'] },
       paused: { type: 'boolean' }, reason: { type: 'string' } }, ['action']),
@@ -546,7 +547,7 @@ export async function manageRoutine(session, args = {}, options = {}) {
   if (action === 'pause') return { paused: brief(await routines.pauseJob(args.id, args.reason || 'Paused by the agent.', { env })) };
   if (action === 'cancel') { const { job, cancelled } = await routines.cancelRun(args.id, { env }); return { id: job.id, cancelled }; }
   const fields = {};
-  for (const [from, to] of [['schedule', 'schedule'], ['prompt', 'prompt'], ['name', 'name'], ['kind', 'kind'], ['workdir', 'workdir'], ['skills', 'skills'], ['deliver', 'deliver'], ['timezone', 'timezone'], ['grace_minutes', 'graceMinutes'], ['permission_mode', 'permissionMode'], ['paused', 'paused']]) {
+  for (const [from, to] of [['schedule', 'schedule'], ['prompt', 'prompt'], ['name', 'name'], ['kind', 'kind'], ['workdir', 'workdir'], ['skills', 'skills'], ['deliver', 'deliver'], ['timezone', 'timezone'], ['grace_minutes', 'graceMinutes'], ['events', 'events'], ['permission_mode', 'permissionMode'], ['paused', 'paused']]) {
     if (args[from] !== undefined) fields[to] = args[from];
   }
   if (action === 'create' && !fields.workdir) fields.workdir = session.root;
