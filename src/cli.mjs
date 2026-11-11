@@ -1861,7 +1861,7 @@ async function endSessionWorktree(root, worktree, out) {
 async function customCommandContext(root) {
   const { PermissionPolicy } = await import('./permissions.mjs');
   const settings = await loadSettings(root).catch(() => null);
-  return { env: process.env, trusted: Boolean(settings && settings.trusted), policy: settings ? new PermissionPolicy(settings) : null };
+  return { env: process.env, trusted: Boolean(settings && settings.trusted), policy: settings ? new PermissionPolicy(settings) : null, disableShell: Boolean(settings && settings.disableSkillShellExecution) };
 }
 
 function customRunOptions(custom) {

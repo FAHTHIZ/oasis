@@ -49,6 +49,10 @@ weaknesses. Newest first. Detailed user-facing notes go in the CHANGELOG.
 
 ## 2026-11-11 (Claude Code parity cycle)
 
+### skillOverrides, disableBundledSkills, disableSkillShellExecution
+- Applied in `listAvailableSkills`, so the model's catalogue, `load_skill`, `/name` and the skill lists all see the same set. `off` removes the skill, `user-invocable-only` reuses the existing `disable-model-invocation` path, and `name-only` drops the description from the catalogue line.
+- With bundled skills off, `/init`, `/plan`, `/fix`, `/diagnose` and `/review` still work; their prompts suggest loading a built-in skill, which then fails with "No skill named …", and the rest of the prompt carries the instructions.
+
 ### worktree.symlinkDirectories, sparsePaths, baseRef
 - Read from any settings file (they only shape the worktree), like the existing `worktree.branchPrefix`. Only folders inside the repository that exist and are not already in the checkout are linked. `git status` lists a linked folder as untracked even when `.gitignore` has `node_modules/`, and a per-worktree `info/exclude` is not read (checked with git 2.53), so OASIS removes its links before it commits.
 - The default `baseRef` stays `head`. Claude Code defaults to `fresh`, but a subagent's worktree must contain the parent session's commits.
