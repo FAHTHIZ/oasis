@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import os from 'node:os';
 import path from 'node:path';
-import { mkdtemp, readFile, rm } from 'node:fs/promises';
+import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { spawn } from 'node:child_process';
 import { createInterface } from 'node:readline';
 import { fileURLToPath } from 'node:url';
@@ -394,4 +394,33 @@ test('ACP $/cancel_request for a running prompt stops the turn with stopReason c
   release();
   const again = await client.call('session/prompt', { sessionId, prompt: [{ type: 'text', text: 'again' }] });
   assert.ok(again.result, stderr + JSON.stringify(again));
+});
+
+test('ACP model changes run PreModelSwitch with source "sdk"; a blocking hook returns an error', async (t) => {
+  const root = await tmp(t);
+  const home = await tmp(t, 'oasis-acp-home-');
+  const seen = path.join(home, 'pre.json');
+  const hook = JSON.stringify(process.execPath) + ' -e ' + JSON.stringify('let s="";process.stdin.on("data",(c)=>s+=c);process.stdin.on("end",()=>{require("fs").writeFileSync(' + JSON.stringify(seen) + ',s);if(JSON.parse(s).to_model==="claude-opus-4-6"){process.stderr.write("Opus 4.6 is retired.");process.exit(2)}})');
+  await mkdir(path.join(home, 'cfg'), { recursive: true });
+  await writeFile(path.join(home, 'cfg', 'settings.json'), JSON.stringify({ availableModels: ['fixture', 'claude-opus-4-6', 'claude-sonnet-5'], hooks: { PreModelSwitch: [{ hooks: [{ type: 'command', command: hook }] }] } }));
+  const { config } = await scriptedModel(t, [{ content: 'ok' }]);
+  const child = spawn(process.execPath, [CLI, 'acp'], {
+    cwd: root,
+    env: { ...process.env, HOME: home, OASIS_CONFIG_DIR: path.join(home, 'cfg'), OASIS_PROTOCOL: 'openai-compatible', OASIS_BASE_URL: config.baseURL, OASIS_MODEL: 'fixture', OASIS_API_KEY: '', OASIS_SANDBOX: '0' },
+    stdio: ['pipe', 'pipe', 'pipe']
+  });
+  t.after(() => child.kill());
+  const client = editorClient(child);
+  await client.call('initialize', { protocolVersion: 1, clientCapabilities: {} });
+  const created = await client.call('session/new', { cwd: root, mcpServers: [] });
+  const sessionId = created.result.sessionId;
+  const blocked = await client.call('session/set_config_option', { sessionId, configId: 'model', value: 'claude-opus-4-6' });
+  assert.ok(blocked.error, JSON.stringify(blocked));
+  assert.equal(blocked.error.code, -32000);
+  assert.match(blocked.error.message, /Opus 4\.6 is retired/);
+  const input = JSON.parse(await readFile(seen, 'utf8'));
+  assert.equal(input.source, 'sdk');
+  assert.equal(input.from_model, 'fixture');
+  const allowed = await client.call('session/set_config_option', { sessionId, configId: 'model', value: 'claude-sonnet-5' });
+  assert.equal(allowed.result.configOptions.find((option) => option.id === 'model').currentValue, 'claude-sonnet-5');
 });

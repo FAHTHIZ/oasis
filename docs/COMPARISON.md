@@ -35,7 +35,7 @@ Claude Code is the reference point for agent behaviour, and OASIS reads its conf
 | Agent teams | Shared task list, messaging | Shared task board with leases, teammate messages, tmux panes |
 | Worktree isolation | `isolation: worktree` | Same, and changes are committed on the agent's branch |
 | Nested delegation | Up to 3 layers, `CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH` | Same default and variable; read-only agents stay leaves |
-| Hooks | Full lifecycle hook set | Same event names, including `SubagentStart` and `SubagentStop` |
+| Hooks | Full lifecycle hook set | Same event names, including `SubagentStart`, `SubagentStop`, `PreModelSwitch`, `PostModelSwitch` and `DirectoryAdded` |
 | Instructions, skills, commands, plugins, MCP | `CLAUDE.md`, `.claude/*`, `.mcp.json` | Reads all of these without conversion |
 | Permission modes | `default`, `acceptEdits`, `plan`, `bypassPermissions`, `dontAsk` | The same modes, plus `permissions.denyInsteadOfPrompting` |
 | MCP Tasks | Long tool calls run as background tasks (2.1.319) | The same, with `CLAUDE_CODE_DISABLE_MCP_TASK_BACKGROUND` honoured; running tasks are listed in `/tasks` |

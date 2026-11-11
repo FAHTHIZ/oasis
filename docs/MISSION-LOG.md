@@ -12,6 +12,15 @@ weaknesses. Newest first. Detailed user-facing notes go in the CHANGELOG.
 ### Devin Desktop rule locations
 - Windsurf is now Devin Desktop. Its [rules page](https://docs.windsurf.com/windsurf/cascade/memories) moves rules to `.devin/rules/*.md` and `.devin/global_rules.md` (home-folder copies apply everywhere), keeps the `.windsurf/` files as a fallback (only `.devin/global_rules.md` loads when both global files exist), and reads `AGENTS.md`, `AGENTS.local.md` and `AGENT.md` per folder. OASIS already read `.windsurf/rules` and `.windsurfrules`; it now reads the new locations too, plus the legacy `~/.codeium/windsurf/memories/global_rules.md` that `oasis import windsurf` used to copy. Test: test/other-agent-rules.test.mjs.
 
+## 2026-11-11 (Claude Code parity cycle)
+
+### Model-switch and DirectoryAdded hooks
+- Compared the event list in Claude Code's [hooks reference](https://code.claude.com/docs/en/hooks.md) with the `runHooks` call sites. All 33 event names were accepted in settings, but `PreModelSwitch`, `PostModelSwitch` and `DirectoryAdded` were never fired, so a Claude Code user's hooks for them silently did nothing.
+- New src/model-switch.mjs: `/model` (source `command`) and ACP `session/set_config_option` (source `sdk`) run PreModelSwitch with the documented input and decisions, and PostModelSwitch in the background with its output queued for the next request. Canonical names: aliases, `[1m]`, dates, Bedrock and gateway prefixes are stripped; non-Claude models get no canonical name and run every hook, as the docs describe for unknown ids. The cost estimate uses OASIS's price catalog and the last main-conversation response's usage.
+- `/add-dir` now fires DirectoryAdded (`slash_command`). While wiring it, found that a folder added mid-session was not added to the sandbox's writable list; fixed.
+- Not done: Claude Code's `auto` and `resume` PostModelSwitch sources. OASIS's fallback chain changes the model for one request only (Claude Code skips the hook for that case too), and resume restores the configured model rather than a saved one.
+- Tests: test/model-switch-hooks.test.mjs (7) and an ACP case in test/acp.test.mjs; hooks, slash and add-dir suites pass (70 tests).
+
 ## 2026-11-11 (frontier-platform cycle: competitor gaps)
 
 ### Shared archive state; parallel workstreams

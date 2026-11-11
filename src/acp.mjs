@@ -19,6 +19,7 @@ import { readFileSync, statSync } from 'node:fs';
 import { Readable, Writable } from 'node:stream';
 import { agent as acpAgent, methods, ndJsonStream, RequestError } from '@agentclientprotocol/sdk';
 import { contextWindowSize } from './context.mjs';
+import { switchSessionModel } from './model-switch.mjs';
 
 export const ACP_PROTOCOL_VERSION = 1;
 
@@ -492,7 +493,10 @@ export function createAcpServer(options = {}) {
         } else if (params.configId === 'model') {
           const choices = modelChoices(entry);
           if (typeof value !== 'string' || !choices.includes(value)) throw rpcError(-32602, 'Unknown model ' + value + '. Allowed: ' + choices.join(', '));
-          entry.session.config = { ...(entry.session.config || {}), model: value };
+          if ((entry.session.config && entry.session.config.model) !== value) {
+            const switched = await switchSessionModel(entry.session, { to: value, requested: value, source: 'sdk', env });
+            if (!switched.ok) throw rpcError(-32000, switched.reason);
+          }
         } else throw rpcError(-32602, 'Unknown config option ' + params.configId);
         return { configOptions: configOptions(entry) };
       }

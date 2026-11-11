@@ -63,6 +63,15 @@ Status: **done** (tested and pushed) · **doing** · **open** · **blocked**
 | Devin Desktop rule folders (`.devin/rules`, `.devin/global_rules.md`, `~/.devin/rules`), Windsurf global rules, `AGENT.md`, `AGENTS.local.md` | done | `test/other-agent-rules.test.mjs` (Devin Desktop test) |
 | Cursor commands, Devin Desktop / Windsurf / Antigravity / Cline workflows as native slash commands | done | `test/foreign-commands.test.mjs`. Not done: Devin Desktop's scan of workflow folders in sub-folders, enterprise system workflow folders, Cursor team commands (server-side) |
 
+## 2d. Claude Code parity (2026-11-11 cycle)
+
+Gaps found by checking the [hooks reference](https://code.claude.com/docs/en/hooks.md), settings, SDK and changelog against `src/`.
+
+| Item | Status | Evidence / notes |
+| --- | --- | --- |
+| `PreModelSwitch` / `PostModelSwitch` hooks fired on `/model` and ACP model changes (cost fields, canonical-name matcher, ask/deny, timeout blocks) | done | `test/model-switch-hooks.test.mjs`, `test/acp.test.mjs` (sdk source) |
+| `DirectoryAdded` hook on `/add-dir`; sandbox writable folders updated | done | `test/model-switch-hooks.test.mjs` |
+
 ## 3. Competitive evaluation
 
 | Item | Status | Evidence / notes |

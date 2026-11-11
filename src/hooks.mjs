@@ -47,7 +47,8 @@ function matchTarget(event, payload) {
   if (event === 'UserPromptExpansion') return payload.command_name;
   if (event === 'InstructionsLoaded') return payload.load_reason;
   if (event === 'DirectoryAdded') return payload.source;
-  if (event === 'PreModelSwitch' || event === 'PostModelSwitch') return payload.model;
+  // The target's canonical name (see model-switch.mjs); null runs every hook.
+  if (event === 'PreModelSwitch' || event === 'PostModelSwitch') return payload.model_canonical || null;
   if (event === 'FileChanged') return payload.file_path ? String(payload.file_path).split(/[\\/]/).pop() : null;
   if (event === 'ConfigChange') return payload.source;
   if (event === 'Elicitation' || event === 'ElicitationResult') return payload.mcp_server_name;
@@ -312,6 +313,7 @@ export async function runHooks(event, payload, options = {}) {
   if (!commands.length) return result;
   const fullPayload = { ...payload, hook_event_name: event, cwd: options.root };
   delete fullPayload.tool_name_oasis;
+  delete fullPayload.model_canonical;
   // Background command hooks never control the action; their results reach the model
   // on its next request through options.onAsyncResult.
   const foreground = [];
@@ -356,6 +358,8 @@ export async function runHooks(event, payload, options = {}) {
     if (out.exitCode !== 0 && out.exitCode !== 2 && commands[i].onFailure === 'block' && (commands[i].type === 'command' || commands[i].type === 'http' || !commands[i].type) && !['Stop', 'SubagentStop', 'TaskCompleted', 'TeammateIdle'].includes(event)) {
       out = { ...out, exitCode: 2, stderr: event + ' hook failed and is configured to block (' + (out.timedOut ? 'timeout' : out.exitCode === null ? 'did not run' : 'exit ' + out.exitCode) + '): ' + (out.stderr.trim() || describeHook(commands[i])).slice(0, 500) };
     }
+    // A PreModelSwitch hook that times out blocks the switch (Claude Code's rule).
+    if (event === 'PreModelSwitch' && out.timedOut) out = { ...out, exitCode: 2, stderr: 'PreModelSwitch hook timed out: ' + describeHook(commands[i]) };
     if (out.note) result.messages.push(event + ' hook: ' + out.note);
     if (out.exitCode !== 0) result.failed = true;
     // WorktreeCreate: the last non-empty stdout line (ANSI stripped) is the worktree path.
@@ -394,6 +398,7 @@ export async function runHooks(event, payload, options = {}) {
         const rank = { deny: 3, ask: 2, allow: 1 };
         if (!result.permissionDecision || rank[decision] > rank[result.permissionDecision]) result.permissionDecision = decision;
         if (decision === 'deny') result.reason += (result.reason ? '\n' : '') + (specific.permissionDecisionReason || 'Denied by ' + event + ' hook.');
+        if (decision === 'ask' && typeof specific.permissionDecisionReason === 'string' && specific.permissionDecisionReason.trim()) result.askReason = (result.askReason ? result.askReason + '\n' : '') + capContext(specific.permissionDecisionReason.trim());
       }
       if (specific.updatedInput && typeof specific.updatedInput === 'object') result.updatedInput = specific.updatedInput;
       if (event === 'PostToolUse' && specific.updatedToolOutput !== undefined) result.updatedToolOutput = specific.updatedToolOutput;
