@@ -20,6 +20,7 @@ User-facing change history grouped by package version. A version heading does no
 - OAuth from another device: the card can take the `http://127.0.0.1/...` address the browser landed on, so signing in from a phone finishes the computer's sign-in.
 - Terminal: the same card is drawn as a box with Connect / Not now; `/connect` lists apps with their status; `oasis mcp connect [NAME]` works from a shell. API: `GET/POST /api/connectors`, `GET/POST /api/connectors/:id` (`connect`, `skip`, `token`, `callback`).
 - More apps: Airtable, Square, Webflow and Granola (OAuth), DeepWiki and Exa (no sign-in). Settings → Apps lists them all with Connect and Disconnect. A tool server that fails because it needs sign-in now shows a Connect card in the chat.
+- 13 more apps, each checked for OAuth dynamic client registration: PostHog, Netlify, Prisma, Semgrep, Jam, Wix, Supermemory, Apify, Tavily, Close, Attio and Todoist, plus Context7 (no sign-in).
 - `/disconnect NAME` in the terminal signs out of an app and removes the server OASIS added (Tab completes app names).
 - Lazy sign-in, as in Claude's connectors: when a connected app's tool is refused because the sign-in expired or was revoked, the Connect card appears and the same call runs again once you connect. No model round trip, no lost context.
 - Brand marks come from Simple Icons (CC0) and are bundled, so the strict app CSP stays unchanged.
