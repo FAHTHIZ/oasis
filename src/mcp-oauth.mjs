@@ -288,7 +288,10 @@ export { sameEndpoint as sameMcpEndpoint };
 
 function authRequiredError(server) {
   const name = server && server.name || 'server';
-  const error = new Error('MCP server ' + name + ' needs sign-in. Run oasis mcp login ' + name + ' (or /mcp login ' + name + ' in the terminal).');
+  const url = server && server.url ? String(server.url) : '';
+  // In a chat the agent can show a Connect card for it (connect_service), then retry.
+  const card = url ? ' In a chat, call connect_service with service "' + url + '" so the user can sign in from a Connect card, then retry.' : '';
+  const error = new Error('MCP server ' + name + ' needs sign-in. Run oasis mcp login ' + name + ' (or /mcp login ' + name + ' in the terminal).' + card);
   error.code = 'MCP_AUTH_REQUIRED';
   return error;
 }
