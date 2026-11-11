@@ -8,6 +8,7 @@
 //            parent folders up to the git root and ~/.config/goose/.goosehints),
 //            AGENT.md and Devin Desktop's .devin/global_rules.md (else the
 //            legacy .windsurf/global_rules.md)
+//            and the files an opencode.json / kilo.jsonc "instructions" array lists
 //   local    OASIS.local.md, CLAUDE.local.md, AGENTS.local.md   (personal, gitignored)
 // README.md is still included as general project context.
 //   parent   CLAUDE.md, CLAUDE.local.md, AGENTS.md, OASIS.md in directories above the
@@ -21,6 +22,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { getConfigDirectory } from './config.mjs';
 import { parseFrontMatter } from './frontmatter.mjs';
+import { parse as parseJsonc } from 'jsonc-parser';
 
 const MAX_MEMORY_FILE = 40 * 1024;
 
@@ -54,6 +56,68 @@ export const OTHER_AGENT_RULES = ['GEMINI.md', 'AGENT.md', path.join('.github', 
 
 async function isGitRoot(dir) {
   try { await lstat(path.join(dir, '.git')); return true; } catch { return false; }
+}
+
+// OpenCode's (and Kilo Code's) "instructions": an array of files or globs in opencode.json(c)
+// / kilo.json(c), loaded with AGENTS.md (opencode.ai/docs/rules). Project entries resolve
+// from the workspace and must stay inside it; global entries (~/.config/opencode, ~/.config/kilo)
+// resolve from that folder. Remote URLs are not fetched.
+const MAX_CONFIG_INSTRUCTIONS = 20;
+function instructionGlob(pattern) {
+  let source = '';
+  for (let i = 0; i < pattern.length; i++) {
+    const char = pattern[i];
+    if (char === '*') {
+      if (pattern[i + 1] === '*') { i++; if (pattern[i + 1] === '/') { i++; source += '(?:.*/)?'; } else source += '.*'; } else source += '[^/]*';
+    } else if (char === '?') source += '[^/]';
+    else source += char.replace(/[|\\{}()[\]^$+.]/g, '\\$&');
+  }
+  return new RegExp('^' + source + '$');
+}
+// Files under dir (sorted, skipping node_modules and dot-git), at most `limit` entries visited.
+async function walkFiles(dir, depth, limit, out = [], budget = { left: limit }) {
+  let entries = [];
+  try { entries = (await readdir(dir, { withFileTypes: true })).sort((a, b) => a.name.localeCompare(b.name)); } catch { return out; }
+  for (const entry of entries) {
+    if (--budget.left < 0) break;
+    if (entry.name === 'node_modules' || entry.name === '.git') continue;
+    const full = path.join(dir, entry.name);
+    if (entry.isFile()) out.push(full);
+    else if (entry.isDirectory() && depth > 0) await walkFiles(full, depth - 1, limit, out, budget);
+  }
+  return out;
+}
+async function configInstructionFiles(workspace, env, home) {
+  if (env.OASIS_OTHER_AGENT_RULES === '0') return [];
+  const configHome = env.XDG_CONFIG_HOME || path.join(home, '.config');
+  const configs = [];
+  for (const [dir, label] of [[path.join(configHome, 'opencode'), 'user'], [path.join(configHome, 'kilo'), 'user'], [workspace, 'project']]) {
+    for (const name of ['opencode.json', 'opencode.jsonc', 'kilo.json', 'kilo.jsonc']) configs.push({ file: path.join(dir, name), base: dir, label });
+  }
+  const out = [];
+  for (const { file, base, label } of configs) {
+    let data;
+    try {
+      const info = await lstat(file);
+      if (!info.isFile() || info.size > 512 * 1024) continue;
+      data = parseJsonc(await readFile(file, 'utf8'), [], { allowTrailingComma: true });
+    } catch { continue; }
+    const list = data && Array.isArray(data.instructions) ? data.instructions : [];
+    for (const entry of list.slice(0, 50)) {
+      if (typeof entry !== 'string' || !entry.trim() || /^[a-z][a-z0-9+.-]*:\/\//i.test(entry) || entry.includes('\0')) continue;
+      const raw = entry.trim().replace(/^~(?=\/|$)/, home);
+      const absolute = path.resolve(base, raw).split(path.sep).join('/');
+      if (!/[*?]/.test(raw)) { out.push({ label, path: path.resolve(base, raw) }); continue; }
+      const staticPart = absolute.slice(0, absolute.search(/[*?]/)).replace(/\/[^/]*$/, '') || '/';
+      const regexp = instructionGlob(absolute);
+      for (const candidate of await walkFiles(staticPart, 6, 5000)) {
+        if (regexp.test(candidate.split(path.sep).join('/'))) out.push({ label, path: candidate });
+        if (out.length >= MAX_CONFIG_INSTRUCTIONS) return out;
+      }
+    }
+    if (out.length >= MAX_CONFIG_INSTRUCTIONS) break;
+  }
+  return out.slice(0, MAX_CONFIG_INSTRUCTIONS);
 }
 
 export async function memoryFiles(root, options = {}) {
@@ -94,6 +158,7 @@ export async function memoryFiles(root, options = {}) {
     // Instructions written for other coding agents, so a repository set up for
     // Gemini CLI, Copilot, Cursor, Windsurf, Cline or Aider works without copying files.
     ...(env.OASIS_OTHER_AGENT_RULES === '0' ? [] : OTHER_AGENT_RULES.map((name) => ({ label: 'project', path: path.join(workspace, name) }))),
+    ...await configInstructionFiles(workspace, env, options.home || env.HOME || os.homedir()),
     { label: 'local', path: path.join(workspace, 'OASIS.local.md') },
     { label: 'local', path: path.join(workspace, 'CLAUDE.local.md') },
     ...(env.OASIS_OTHER_AGENT_RULES === '0' ? [] : [{ label: 'local', path: path.join(workspace, 'AGENTS.local.md') }]),

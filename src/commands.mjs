@@ -27,6 +27,8 @@
 // .agent/workflows and ~/.gemini/config/workflows, Cline .clinerules/workflows,
 // Roo Code .roo/commands and ~/.roo/commands (their `mode:` is not applied).
 // Their files are plain prompts: inline shell and allowed-tools are not honoured.
+// OpenCode .opencode/commands (and command/), ~/.config/opencode/commands and opencode.json
+// "commands" keep OpenCode's $ARGUMENTS/$N and !`cmd` rules (see renderOpencodeTemplate).
 // Gemini CLI .gemini/commands/**/*.toml and ~/.gemini/commands are read with Gemini's
 // own {{args}}, !{...} and @{...} syntax (see renderGeminiPrompt).
 import { lstat, readdir, readFile, realpath } from 'node:fs/promises';
@@ -78,12 +80,16 @@ export async function foreignCommandDirectories(root, env = process.env, home = 
     { dir: path.join(home, '.codeium', 'windsurf', 'global_workflows'), scope: 'user', foreign: 'Windsurf' },
     { dir: path.join(home, '.cursor', 'commands'), scope: 'user', foreign: 'Cursor' },
     { dir: path.join(home, '.roo', 'commands'), scope: 'user', foreign: 'Roo Code' },
+    { dir: path.join(env.XDG_CONFIG_HOME || path.join(home, '.config'), 'opencode', 'command'), scope: 'user', foreign: 'OpenCode', opencode: true },
+    { dir: path.join(env.XDG_CONFIG_HOME || path.join(home, '.config'), 'opencode', 'commands'), scope: 'user', foreign: 'OpenCode', opencode: true },
     { dir: path.join(workspace, '.clinerules', 'workflows'), scope: 'project', foreign: 'Cline' },
     { dir: path.join(workspace, '.agent', 'workflows'), scope: 'project', foreign: 'Antigravity' },
     { dir: path.join(workspace, '.agents', 'workflows'), scope: 'project', foreign: 'Antigravity' },
     { dir: path.join(workspace, '.cursor', 'commands'), scope: 'project', foreign: 'Cursor' },
     { dir: path.join(workspace, '.roo', 'commands'), scope: 'project', foreign: 'Roo Code' },
-    { dir: path.join(workspace, '.gemini', 'commands'), scope: 'project', foreign: 'Gemini CLI', gemini: true }
+    { dir: path.join(workspace, '.gemini', 'commands'), scope: 'project', foreign: 'Gemini CLI', gemini: true },
+    { dir: path.join(workspace, '.opencode', 'command'), scope: 'project', foreign: 'OpenCode', opencode: true },
+    { dir: path.join(workspace, '.opencode', 'commands'), scope: 'project', foreign: 'OpenCode', opencode: true }
   ];
   // Devin Desktop prefers .devin/workflows over the legacy .windsurf/workflows; nearer folders win.
   for (const dir of await gitRootChain(workspace)) {
@@ -112,11 +118,21 @@ export async function loadCustomCommands(root, options = {}) {
   const home = options.home || os.homedir();
   const workspaceReal = await realpath(path.resolve(root)).catch(() => path.resolve(root));
   let parseToml = null;
-  for (const { dir, scope, foreign, outside, gemini } of [...await foreignCommandDirectories(root, env, home), ...commandDirectories(root, env, home)]) {
+  const opencodeJsonRead = new Set();
+  for (const { dir, scope, foreign, outside, gemini, opencode } of [...await foreignCommandDirectories(root, env, home), ...commandDirectories(root, env, home)]) {
+    // OpenCode commands defined under "commands" (or legacy "command") in opencode.json(c);
+    // Markdown commands of the same scope override them.
+    if (opencode && !opencodeJsonRead.has(scope)) {
+      opencodeJsonRead.add(scope);
+      for (const [file, configScope] of opencodeConfigFiles(root, env, home)) {
+        if (configScope !== scope) continue;
+        for (const item of await opencodeJsonCommands(file)) commands.set(item.name, { ...item, file, scope, foreign: 'OpenCode', opencode: true });
+      }
+    }
     const found = [];
-    // Other agents' folders are flat, except Gemini CLI's, whose sub-folders are
-    // namespaces as in OASIS's own (git/commit.toml -> /git:commit).
-    await collect(dir, [], foreign && !gemini ? MAX_DEPTH : 0, found, gemini ? '.toml' : '.md');
+    // Other agents' folders are flat, except Gemini CLI's and OpenCode's, whose sub-folders are
+    // namespaces as in OASIS's own (git/commit.toml -> /git:commit; OpenCode's /team/review is /team:review).
+    await collect(dir, [], foreign && !gemini && !opencode ? MAX_DEPTH : 0, found, gemini ? '.toml' : '.md');
     for (const { file, parts } of found) {
       const name = parts.join(':').toLowerCase();
       if (!/^[a-z0-9][a-z0-9:_-]{0,100}$/.test(name)) continue;
@@ -156,6 +172,10 @@ export async function loadCustomCommands(root, options = {}) {
       }
       const { data: meta, body } = parseFrontMatter(text);
       const firstLine = body.split('\n').find((line) => line.trim()) || '';
+      if (opencode) {
+        commands.set(name, { ...opencodeCommand(name, meta, body), file, scope, foreign, opencode: true });
+        continue;
+      }
       if (foreign) {
         commands.set(name, {
           name,
@@ -335,6 +355,78 @@ export async function expandInlineShell(text, options = {}) {
   return { text: out, ran };
 }
 
+// OpenCode commands (opencode.ai/docs/commands, MIT; reimplemented from the docs):
+// .opencode/commands/**/*.md (and legacy command/), ~/.config/opencode/commands, or
+// "commands": { name: { template, description, agent, model, subagent } } in opencode.json(c).
+// `subagent: true` (or the older `subtask`) runs the command in a forked subagent; `agent`
+// and `model` name OpenCode agents and provider/model ids, so they are not applied.
+function opencodeConfigFiles(root, env, home) {
+  const global = path.join(env.XDG_CONFIG_HOME || path.join(home, '.config'), 'opencode');
+  return [[path.join(global, 'opencode.json'), 'user'], [path.join(global, 'opencode.jsonc'), 'user'], [path.join(path.resolve(root), 'opencode.json'), 'project'], [path.join(path.resolve(root), 'opencode.jsonc'), 'project']];
+}
+
+function opencodeCommand(name, meta, body) {
+  const sub = meta.subagent !== undefined ? meta.subagent : meta.subtask;
+  const firstLine = String(body).split('\n').find((line) => line.trim()) || '';
+  return {
+    name,
+    description: (String(meta.description || firstLine.replace(/^#+\s*/, '')).slice(0, 180) + ' (OpenCode)').trim(),
+    argumentHint: '',
+    model: null, allowedTools: null, effort: null, agent: null,
+    context: sub === true || String(sub).toLowerCase() === 'true' ? 'fork' : null,
+    body: String(body).trim()
+  };
+}
+
+async function opencodeJsonCommands(file) {
+  let data;
+  try {
+    const info = await lstat(file);
+    if (!info.isFile() || info.size > 512 * 1024) return [];
+    data = (await import('./importers.mjs')).parseJsonc(await readFile(file, 'utf8'));
+  } catch { return []; }
+  const table = data && typeof data === 'object' ? (data.commands && typeof data.commands === 'object' ? data.commands : data.command) : null;
+  if (!table || typeof table !== 'object' || Array.isArray(table)) return [];
+  const out = [];
+  for (const [rawName, entry] of Object.entries(table).slice(0, 200)) {
+    const name = String(rawName).toLowerCase().replace(/\//g, ':');
+    if (!/^[a-z0-9][a-z0-9:_-]{0,100}$/.test(name) || !entry || typeof entry !== 'object' || typeof entry.template !== 'string' || !entry.template.trim() || entry.template.includes('\0')) continue;
+    out.push(opencodeCommand(name, entry, entry.template));
+  }
+  return out;
+}
+
+// Splits arguments like a shell would for grouping: single or double quotes group words and are removed.
+function opencodeArguments(text) {
+  const out = [];
+  const pattern = /"([^"]*)"|'([^']*)'|(\S+)/g;
+  let match;
+  while ((match = pattern.exec(text))) out.push({ value: match[1] ?? match[2] ?? match[3], start: match.index });
+  return out;
+}
+
+/** OpenCode template: $ARGUMENTS, $1..$N (the highest takes the rest), else arguments appended. */
+export function renderOpencodeTemplate(template, argumentText = '') {
+  const args = String(argumentText || '');
+  const body = String(template || '');
+  const numbers = [...body.matchAll(/\$(\d+)/g)].map((match) => Number(match[1])).filter((n) => n > 0);
+  const highest = numbers.length ? Math.max(...numbers) : 0;
+  const positional = opencodeArguments(args);
+  let used = false;
+  const rendered = body.replace(/\$ARGUMENTS|\$(\d+)/g, (match, digits) => {
+    used = true;
+    if (match === '$ARGUMENTS') return args;
+    const index = Number(digits);
+    if (!index) return match;
+    if (index === highest && positional.length > index) {
+      const rest = positional.slice(index - 1);
+      return rest.map((item) => item.value).join(' ');
+    }
+    return positional[index - 1] ? positional[index - 1].value : '';
+  });
+  return used || !args.trim() ? rendered : rendered + '\n\n' + args;
+}
+
 export function renderCommandBody(body, argumentText = '') {
   const args = String(argumentText || '');
   const positional = args.trim() ? args.trim().split(/\s+/) : [];
@@ -359,6 +451,11 @@ export async function resolveCustomCommand(root, rawInput, options = {}) {
   if (command.gemini) {
     const rendered = await renderGeminiPrompt(root, command.body, argumentText, { rawInput: String(rawInput).trim(), env: options.env, allowed: command.scope === 'user' || Boolean(options.trusted), policy: options.policy, disabledByPolicy: options.disableShell === true });
     return { name: command.name, args: argumentText, command, prompt: rendered.text, mentions: rendered.files, shell: rendered.ran, grantTools: null };
+  }
+  if (command.opencode) {
+    // OpenCode runs !`cmd` blocks (after placeholders) and leaves @path as plain text.
+    const shell = await expandInlineShell(renderOpencodeTemplate(command.body, argumentText), { root, env: options.env, allowed: command.scope === 'user' || Boolean(options.trusted), policy: options.policy, disabledByPolicy: options.disableShell === true });
+    return { name: command.name, args: argumentText, command, prompt: shell.text, mentions: [], shell: shell.ran, grantTools: null };
   }
   const { text, usedArguments } = command.foreign ? { text: command.body, usedArguments: false } : renderCommandBody(command.body, argumentText);
   let prompt = command.foreign ? foreignWorkflowPrompt(command, commands) : text;

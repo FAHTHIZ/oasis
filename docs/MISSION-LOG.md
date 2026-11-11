@@ -11,6 +11,9 @@ weaknesses. Newest first. Detailed user-facing notes go in the CHANGELOG.
 
 ## 2026-11-11 (terminal-agent interoperability: Gemini CLI, OpenCode, Goose, Aider, Roo/Kilo)
 
+### OpenCode commands and instructions
+- From the OpenCode [commands](https://opencode.ai/docs/commands/) and [rules](https://opencode.ai/docs/rules/) docs: `.opencode/commands`, global commands and `opencode.json` `commands` load in place with OpenCode's placeholder and shell rules; `instructions` files and globs in `opencode.json(c)` / `kilo.json(c)` are loaded as rules. `oasis import opencode` still copies commands when wanted. Tests: `test/foreign-commands.test.mjs`, `test/config-instructions.test.mjs`.
+
 ### Goose hints and recipes
 - `.goosehints` now loads like Goose does (global file, git root down to the workspace, nested folders), from the [goosehints guide](https://block.github.io/goose/docs/guides/context-engineering/using-goosehints). `/recipe` runs Goose YAML/JSON recipes per the [recipe reference](https://block.github.io/goose/docs/guides/recipes/recipe-reference) with parameter checks and templating; unsupported recipe parts are reported, not faked. Tests: `test/goose.test.mjs`. (Also restored this section's heading, which a merge had cut.)
 

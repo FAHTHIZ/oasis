@@ -100,6 +100,8 @@ Files from these tools that OASIS reads where they are (no `oasis import` step).
 | `~/.roo/rules/`, `.roorules`, `.kilocode/rules/`, `.roo/commands/`, `~/.roo/commands/` | Roo Code, Kilo Code | Always-on rules (`.roorules` only when `.roo/rules/` is empty) and slash commands; a command's `mode:` is not applied |
 | `.goosehints` (workspace, parents up to the git root, subfolders, `~/.config/goose/`) | Goose | Always-on rules, nested hints when the agent works in that folder ([goosehints](https://block.github.io/goose/docs/guides/context-engineering/using-goosehints)). `CONTEXT_FILE_NAMES` is not read |
 | Recipes (`*.yaml`, `*.json`; workspace or `GOOSE_RECIPE_PATH`) | Goose | `/recipe NAME key=value` renders instructions and prompt with parameters ([recipe reference](https://block.github.io/goose/docs/guides/recipes/recipe-reference)). Extensions, sub-recipes, retry and settings are not run; GitHub recipe repos are not fetched |
+| `.opencode/commands`, `.opencode/command`, `~/.config/opencode/commands`, `opencode.json` `commands` | OpenCode | Slash commands with OpenCode's `$ARGUMENTS`/`$N`, `` !`cmd` `` and append rules ([commands](https://opencode.ai/docs/commands/)); `agent`/`model` are not applied |
+| `instructions` in `opencode.json(c)`, `kilo.json(c)` | OpenCode, Kilo Code | Listed files and globs become always-on rules ([rules](https://opencode.ai/docs/rules/)); URLs are not fetched |
 
 ## Kimi Code CLI
 
