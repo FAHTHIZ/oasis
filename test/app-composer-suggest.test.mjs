@@ -29,3 +29,11 @@ test('applySuggestion replaces the token and leaves one space before the caret',
   const token = suggestToken(text, 11);
   assert.deepEqual(applySuggestion(text, token, 'src/math.js'), { value: 'fix @src/math.js please', caret: 16 });
 });
+
+test('/connect NAME suggests apps and completes without a slash', () => {
+  const token = suggestToken('/connect gi');
+  assert.deepEqual(token, { kind: 'app', query: 'gi', start: 9, end: 11 });
+  assert.deepEqual(applySuggestion('/connect gi', token, 'github'), { value: '/connect github ', caret: 16 });
+  assert.deepEqual(suggestToken('/connect '), { kind: 'app', query: '', start: 9, end: 9 });
+  assert.equal(suggestToken('/connect github now'), null);
+});
