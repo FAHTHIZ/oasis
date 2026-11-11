@@ -682,6 +682,8 @@ html.lite .topbar{backdrop-filter:none;-webkit-backdrop-filter:none;background:v
 .cc-result{font-size:14px;color:var(--muted);overflow-wrap:anywhere}
 .cc-result.ok{display:flex;align-items:center;gap:8px;color:var(--text)}
 .cc-result.bad{color:var(--danger)}
+.cc-tools summary{cursor:pointer;color:var(--muted);font-size:13px}
+.cc-tool-names{margin:6px 0 0;font-family:var(--mono);font-size:12px;color:var(--text-2);overflow-wrap:anywhere;max-height:120px;overflow:auto}
 .cc-check{flex:none;width:20px;height:20px;border-radius:50%;display:grid;place-items:center;background:var(--accent);color:var(--accent-ink);font-size:12px;font-weight:800}
 .cc-foot{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}
 .cc-fine{color:var(--faint);font-size:12px;overflow-wrap:anywhere;min-width:0}
