@@ -14,7 +14,7 @@ import { startIdleCompaction, idleCompactMinutes } from './idle-compaction.mjs';
 import { loadConfig, saveConfig, getProviderSummary, validateProtocol, validateBaseUrl, isLoopbackUrl, getBaseConfigDirectory } from './config.mjs';
 import { cachedUpdateCheck, updateChecksDisabled, readUpdateState, writeUpdateState, RELEASES_PAGE } from './app-update.mjs';
 import { oasisVersion } from './version.mjs';
-import { saveSession, loadSession, listSessions, deleteSession } from './sessions.mjs';
+import { saveSession, loadSession, listSessions, deleteSession, saveMidTurn, settleMidTurnSave } from './sessions.mjs';
 import { executeTool, resolveWorkspacePath, sensitivePath } from './tools.mjs';
 import { inspectGitHubExtension, inspectGitHubMcpServers, selectReviewedMcpServers, resolveImportedSlashCommand, installGitHubExtension, updateGitHubExtension, rollbackGitHubExtension, listInstalledExtensions, removeGitHubExtension } from './extensions.mjs';
 import { loadMcpServers, saveMcpServers } from './mcp.mjs';
@@ -1027,6 +1027,9 @@ export function createOasisWebServer(options = {}) {
             });
           },
           onToolResult: ({ name, result: value, call, subagent }) => {
+            // Keep finished steps on disk while the task runs, so a server
+            // restart leaves a conversation that can be continued.
+            saveMidTurn(session, { env });
             const callId = call && call.id ? String(call.id).slice(0, 160) : '';
             const tracked = callId ? toolActivityArgsByCallId.get(callId) : null;
             const args = tracked && tracked.args ? tracked.args : {};
@@ -1089,6 +1092,7 @@ export function createOasisWebServer(options = {}) {
         // arrived during the last model step are placed in history before save.
         job.steerTarget = null;
         const undeliveredSteering = carryUndeliveredSteering(session);
+        await settleMidTurnSave(session);
         const saved = await saveSession(session, { env });
         if (saved.id !== activeId) {
           activeSessions.delete(activeId);
@@ -1127,6 +1131,7 @@ export function createOasisWebServer(options = {}) {
           job.steerTarget = null;
           const leftover = carryUndeliveredSteering(session);
           try {
+            await settleMidTurnSave(session);
             const saved = await saveSession(session, { env });
             if (saved.id !== activeId) {
               activeSessions.delete(activeId);

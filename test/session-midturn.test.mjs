@@ -33,3 +33,29 @@ test('a session saved mid-turn loads back as a valid transcript', async (t) => {
   assert.equal(messages.at(-1).role, 'tool');
   assert.equal(messages.length, 4);
 });
+
+test('saveMidTurn trails the step, throttles snapshots, and settleMidTurnSave waits for the last one', async (t) => {
+  const { saveMidTurn, settleMidTurnSave } = await import('../src/sessions.mjs');
+  const dir = await mkdtemp(path.join(os.tmpdir(), 'oasis-midturn-throttle-'));
+  t.after(() => rm(dir, { recursive: true, force: true }));
+  const env = { ...process.env, OASIS_CONFIG_DIR: path.join(dir, 'cfg') };
+  const session = { root: dir, sessionId: '0f1e2d3c-4b5a-4968-8776-655443322111', config: { model: 'm' }, messages: [{ role: 'system', content: 's' }, { role: 'user', content: 'one' }] };
+  saveMidTurn(session, { env, intervalMs: 60_000, settleMs: 20 });
+  const timer = session.midTurnTimer;
+  saveMidTurn(session, { env, intervalMs: 60_000, settleMs: 20 });
+  assert.equal(session.midTurnTimer, timer, 'a pending save is not repeated');
+  // The step lands in history after the callback; the trailing save sees it.
+  session.messages.push({ role: 'assistant', content: 'two' });
+  await new Promise((resolve) => setTimeout(resolve, 60));
+  await session.midTurnSave;
+  let loaded = await loadSession(dir, session.sessionId, { env });
+  assert.equal((loaded.messages || loaded.session.messages).length, 3);
+  session.messages.push({ role: 'user', content: 'three' });
+  saveMidTurn(session, { env, intervalMs: 60_000, settleMs: 20 });
+  await new Promise((resolve) => setTimeout(resolve, 60));
+  assert.ok(session.midTurnTimer, 'a save inside the interval is deferred');
+  await settleMidTurnSave(session);
+  assert.equal(session.midTurnTimer, null, 'settling cancels the deferred save');
+  loaded = await loadSession(dir, session.sessionId, { env });
+  assert.equal((loaded.messages || loaded.session.messages).length, 3, 'the deferred snapshot never ran');
+});

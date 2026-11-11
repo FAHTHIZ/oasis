@@ -391,3 +391,30 @@ export async function pruneSessions(root, days, options = {}) {
   }
   return removed;
 }
+
+// Save the conversation while a turn is still running (at most every few
+// seconds), so closing the terminal, a crash or a server restart mid-task
+// keeps the work done so far resumable. Tool callbacks fire before the result
+// joins the history, so the save trails the call by a moment (settleMs) and
+// then captures the finished step. The end-of-turn save still runs and must
+// call settleMidTurnSave first so an older snapshot never lands last.
+export const MID_TURN_SAVE_MS = 3000;
+const MID_TURN_SETTLE_MS = 200;
+export function saveMidTurn(session, options = {}) {
+  if (!session || session.midTurnTimer) return;
+  const interval = Number.isFinite(options.intervalMs) ? options.intervalMs : MID_TURN_SAVE_MS;
+  const settle = Number.isFinite(options.settleMs) ? options.settleMs : MID_TURN_SETTLE_MS;
+  const wait = Math.max(settle, (session.midTurnSavedAt || 0) + interval - Date.now());
+  session.midTurnTimer = setTimeout(() => {
+    session.midTurnTimer = null;
+    const previous = session.midTurnSave || Promise.resolve();
+    session.midTurnSavedAt = Date.now();
+    session.midTurnSave = previous.then(() => saveSession(session, options.env ? { env: options.env } : {})).catch(() => {});
+  }, wait);
+  session.midTurnTimer.unref?.();
+}
+export async function settleMidTurnSave(session) {
+  if (!session) return;
+  if (session.midTurnTimer) { clearTimeout(session.midTurnTimer); session.midTurnTimer = null; }
+  if (session.midTurnSave) await session.midTurnSave;
+}

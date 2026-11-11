@@ -5,6 +5,10 @@ weaknesses. Newest first. Detailed user-facing notes go in the CHANGELOG.
 
 ## 2026-11-11 (frontier-platform cycle: competitor gaps)
 
+### Crash-safe task progress (OpenHands comparison)
+- [OpenHands' agent architecture](https://docs.openhands.dev/sdk/arch/agent) runs each step atomically from its event history, so a conversation can be paused and resumed between steps. In OASIS only the terminal saved a conversation mid-turn. If `oasis web`, `oasis -p` or `oasis app-server` stopped mid-task, everything since the last finished turn was lost from the conversation, even though files had already changed. The mid-turn saver is now shared (`saveMidTurn` and `settleMidTurnSave` in src/sessions.mjs) and used by all four entry points. While wiring it in, a bug showed up: the callback fires before the tool result joins history, so the old saver missed the last step of a turn. The save now trails the step. Tests: test/web-midturn-save.test.mjs (it reads the session from disk while the second model request is in flight) and test/session-midturn.test.mjs.
+- Full suite before this change: 2489 tests, 2481 pass, 0 fail, 8 skipped.
+
 ### Antigravity subagents (docs read)
 - From [antigravity.google/docs/subagents](https://antigravity.google/docs/subagents/): agents are Markdown files with YAML front matter in `.agents/agents/` or `~/.gemini/config/agents/`, with Antigravity tool names, `subagent`/`mainAgent` flags, flash/pro tiers, `commandExecutionPolicy`, inherited safety settings, idle subagents woken by messages, and worktree isolation. OASIS already had parallel subagents, `send_message` wake-ups, worktree isolation and inherited permissions. The gap was reading the definition files. Added the folders and field mapping.
 - Cursor's search page ([cursor.com/docs/agent/tools/search](https://cursor.com/docs/agent/tools/search)) now describes a local regex index (Instant Grep) and an Explore subagent, and says Cursor does not store embeddings for search. OASIS has ripgrep-backed grep, local semantic search and an explore subagent, so no work was needed here.
