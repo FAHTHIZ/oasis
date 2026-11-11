@@ -102,6 +102,7 @@ import { isLocalModelEndpoint, probeLocalContext, probeProviderModelWindow, appl
 import { ripgrepPathAddition } from './ripgrep.mjs';
 import { MAX_PROVIDER_RETRIES, QUICK_PROVIDER_RETRIES, RETRYABLE_PROVIDER_STATUSES, isHardQuotaError, isMalformedGenerationError, isUnconfiguredRouteError, isPromptTooLargeError, notifyProviderRetry, providerErrorSummary, providerRetryDelayMs, providerRetryLimit, rateLimitResetMs, rateLimitWaitMs, shortRateLimitMs, waitForProviderRetry } from './provider-retry.mjs';
 import { ACTION_NUDGE, AUTO_LSP_EDIT_TOOLS, CONTINUE_NUDGE, CYCLE_HALT_AT, CYCLE_WARN_AT, CYCLE_WINDOW_STEPS, EMPTY_REPLY_NOTICE, EMPTY_REPLY_NUDGE, FALSE_CLAIM_NUDGE, FILE_EDITING_TOOL_NAMES, GIVE_UP_NUDGE, MAX_EMPTY_REPLY_NUDGES, MAX_SESSION_TOOL_CALLS, PROTECTED_EDIT_TOOLS, REFUSAL_NUDGE, RETRY_HALT_AT, RETRY_TRACKED_COMMANDS, RETRY_WARN_AT, THRASH_ESCALATE_AT, THRASH_WARN_AT, UNREADABLE_CALL_NUDGE, activeLspBaseline, announcesNextStep, appendLspUnavailableNotice, asksForAction, asksForNewTests, assistedVerificationCalls, assistedVerificationEnabled, claimsUnmadeChange, failureSignature, fencedFileFromReply, givesUpEarly, isCompleteFileRead, isVerificationCommand, lspCallOptions, normalizeReviewPath, parallelToolCalls, promptCacheKeyField, readsLikeInstructions, refusesSpuriously, samplingTemperature, successfulMutation, targetFileHint, untestedNewCode, verificationIssues, wrongFileNudge, newModuleCandidate, markLoadedModules } from './turn-guards.mjs';
+import { postModelSwitch } from './model-switch.mjs';
 import { MAX_OUTPUT_RECOVERIES, applyEffort, claudeEffortFor, claudeThinkingMode, thinkingTurnedOff, firstPositiveConfiguredInteger, inlineEffortLevel, isOpenRouterBaseURL, maxOutputTokensFor, openRouterOutputCapFromError, outputCapFromError, reasoningEffortFor, resolveTurnLimits, stripInlineEffort, subagentEffortConfig, thinkingBudgetFor, truncationRecoveryPrompt } from './model-budgets.mjs';
 import { HISTORY_COMPACT_INPUT_LIMIT, HISTORY_COMPACT_THRESHOLD_CHARS, announceCompaction, compactionDeadline, compactionError, deterministicHistorySummary, findCompactionBoundary, historyBudgetSize, historyTextSize, reportCompaction, safeHistoryLine, supersedeBeforeCompaction, usableCompactionSummary } from './compaction-history.mjs';
 import { applyAnthropicCacheBreakpoints, promptCachingEnabled, replaysReasoning, withProviderExtraContent } from './provider-request.mjs';
@@ -1159,7 +1160,9 @@ export function restorePrimaryModel(session, env = process.env, now = Date.now()
   if (!active || !session.config) return false;
   if (session.config.model !== active.to) { session.fallbackActive = null; return false; }
   if (now - (Number(active.at) || 0) < fallbackCooldownMs(env)) return false;
+  const fallbackModel = session.config.model;
   session.config = active.fromConfig ? { ...active.fromConfig } : { ...session.config, model: active.from };
+  postModelSwitch(session, { from: fallbackModel, to: session.config.model, requested: null, source: 'auto', env });
   session.fallbackActive = null;
   (session.hookMessages ||= []).push('[fallback] back to ' + active.from + ' after the cooldown; ' + active.to + ' will be used again only if it fails.');
   return true;
@@ -1231,6 +1234,8 @@ async function requestCompletion(session, options = {}) {
       session.config = next.config;
       session.fallbackActive = { from: active ? active.from : current.model, to: next.config.model, fromConfig, kind, provider: next.entry.provider || '', reason: reason.slice(0, 200), at: Date.now() };
       (session.hookMessages ||= []).push('[fallback] ' + current.model + ' ' + (FALLBACK_REASON_TEXT[kind] || 'failed') + ' (' + reason.slice(0, 120) + '); switched to ' + (next.entry.provider ? next.entry.provider + ':' : '') + next.config.model + '.');
+      // Claude Code reports automatic fallbacks to PostModelSwitch with source "auto" and no requested model.
+      postModelSwitch(session, { from: current.model, to: next.config.model, requested: null, source: 'auto', env });
       if (typeof options.onFallback === 'function') options.onFallback(session.fallbackActive);
     }
   }
