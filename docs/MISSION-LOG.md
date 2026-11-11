@@ -58,6 +58,10 @@ weaknesses. Newest first. Detailed user-facing notes go in the CHANGELOG.
 
 ## 2026-11-11 (Claude Code parity cycle)
 
+### Fenced shell blocks in commands
+
+Claude Code's ```` ```! ```` blocks now run in command and skill files, using the same gates as inline `` !`cmd` ``. The inline form needs whitespace or a line start in front of it, as Claude Code documents. Tests: `test/command-fenced-shell.test.mjs` (3).
+
 ### PostModelSwitch on fallback
 
 Fallback switches, both down the chain and back after the cooldown, now run PostModelSwitch with `source: "auto"`. Also fixed a race in `test/model-switch-hooks.test.mjs`, where two switches wrote one record file and the older hook sometimes finished last (it failed about 1 run in 3).

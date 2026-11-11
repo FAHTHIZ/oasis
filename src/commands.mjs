@@ -10,7 +10,7 @@
 //   Create a PR titled "$ARGUMENTS". First check @CONTRIBUTING.md
 //
 // Placeholders: $ARGUMENTS (all text after the command), $1..$9 (positional).
-// Inline shell: !`git status` is replaced by the command's output before the prompt
+// Inline shell: !`git status` (or a ```! fenced block) is replaced by the command's output before the prompt
 // is sent. It runs for user commands, and for project commands only in trusted
 // workspaces. If `allowed-tools` lists Bash(...) rules, each command must match one;
 // deny rules always apply.
@@ -254,7 +254,9 @@ export function commandOptions(meta = {}) {
   };
 }
 
-const INLINE_SHELL = /!`([^`\n]{1,2000})`/g;
+// Claude Code forms: !`cmd` at the start of a line or after whitespace (KEY=!`cmd` stays
+// literal), and a fenced block opened with ```! whose body runs as one multi-line script.
+const INLINE_SHELL = /^```![ \t]*\r?\n([\s\S]{0,8000}?)\r?\n?^```[ \t]*$|(?<=^|\s)!`([^`\n]{1,2000})`/gm;
 const MAX_INLINE_OUTPUT = 16 * 1024;
 
 function inlineEnv(env) {
@@ -333,8 +335,10 @@ export async function expandInlineShell(text, options = {}) {
   let out = '';
   let last = 0;
   for (const match of matches.slice(0, 10)) {
-    const command = match[1].trim();
+    const fenced = match[1] !== undefined;
+    const command = (fenced ? match[1] : match[2]).trim();
     out += source.slice(last, match.index);
+    if (!command) { last = match.index + match[0].length; continue; }
     last = match.index + match[0].length;
     let skipped = shellSkipReason(command, options);
     // Read-only inspection (git status/diff/log, ls, cat inside the workspace)
@@ -344,7 +348,7 @@ export async function expandInlineShell(text, options = {}) {
     if (skipped) {
       ran.push({ command, skipped });
       // Claude Code's disableSkillShellExecution placeholder.
-      out += options.disabledByPolicy ? '[shell command execution disabled by policy]' : '[skipped !`' + command + '`: ' + skipped + ']';
+      out += options.disabledByPolicy ? '[shell command execution disabled by policy]' : fenced ? '[skipped ```! block: ' + skipped + ']' : '[skipped !`' + command + '`: ' + skipped + ']';
       continue;
     }
     const result = await runInline(command, options.root, options.env, (options.timeoutSeconds || 30) * 1000);
