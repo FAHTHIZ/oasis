@@ -2,12 +2,12 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import os from 'node:os';
 import path from 'node:path';
-import { createHash } from 'node:crypto';
+import { createHash, createHmac } from 'node:crypto';
 import { chmod, lstat, mkdtemp, rm, stat, writeFile } from 'node:fs/promises';
 import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import WebSocket from 'ws';
-import { defaultControlSocketPath, isLoopbackHost, loadWsAuth, parseListenUrl, startCodexAppServerWebSocket } from '../src/codex-app-server-ws.mjs';
+import { checkSignedBearerToken, defaultControlSocketPath, isLoopbackHost, loadWsAuth, parseListenUrl, startCodexAppServerWebSocket } from '../src/codex-app-server-ws.mjs';
 import { scriptedModel, toolCall } from './helpers/scripted-model.mjs';
 
 const CLI = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'src', 'cli.mjs');
@@ -72,8 +72,76 @@ test('listen URLs, loopback detection and token auth flags', async (t) => {
   assert.equal(await loadWsAuth({}), null);
   await assert.rejects(loadWsAuth({ mode: 'capability-token' }), /exactly one/);
   await assert.rejects(loadWsAuth({ mode: 'capability-token', tokenFile: 'relative' }), /absolute/);
-  await assert.rejects(loadWsAuth({ mode: 'signed-bearer-token' }), /not supported/);
+  await assert.rejects(loadWsAuth({ mode: 'signed-bearer-token' }), /--ws-shared-secret-file/);
   await assert.rejects(loadWsAuth({ tokenSha256: 'ab' }), /need --ws-auth/);
+});
+
+function signJwt(claims, secret, header = { alg: 'HS256', typ: 'JWT' }) {
+  const enc = (value) => Buffer.from(JSON.stringify(value)).toString('base64url');
+  const body = enc(header) + '.' + enc(claims);
+  return body + '.' + createHmac('sha256', secret).update(body).digest('base64url');
+}
+
+test('signed bearer tokens: HS256 JWT checks match Codex (exp, nbf, iss, aud, clock skew, secret rules)', async (t) => {
+  const SECRET = 'shared-secret-for-tests-0123456789abcdef';
+  const now = 1_800_000_000;
+  const opts = { secret: Buffer.from(SECRET), now };
+  assert.equal(checkSignedBearerToken(signJwt({ exp: now + 60 }, SECRET), opts), null);
+  assert.equal(checkSignedBearerToken(signJwt({ exp: now + 60 }, 'another-secret-0123456789abcdefghij'), opts), 'invalid websocket jwt');
+  assert.equal(checkSignedBearerToken(signJwt({ exp: now + 60 }, SECRET, { alg: 'none' }), opts), 'invalid websocket jwt');
+  assert.equal(checkSignedBearerToken(signJwt({ exp: now + 60 }, SECRET, { alg: 'HS512' }), opts), 'invalid websocket jwt');
+  assert.equal(checkSignedBearerToken(signJwt({ sub: 'no-exp' }, SECRET), opts), 'invalid websocket jwt');
+  assert.equal(checkSignedBearerToken('not.a.jwt', opts), 'invalid websocket jwt');
+  assert.equal(checkSignedBearerToken('two.parts', opts), 'invalid websocket jwt');
+  const unsigned = signJwt({ exp: now + 60 }, SECRET).split('.').slice(0, 2).join('.') + '.';
+  assert.equal(checkSignedBearerToken(unsigned, opts), 'invalid websocket jwt');
+  // Expiry and not-before allow 30 seconds of clock skew by default.
+  assert.equal(checkSignedBearerToken(signJwt({ exp: now - 30 }, SECRET), opts), null);
+  assert.equal(checkSignedBearerToken(signJwt({ exp: now - 31 }, SECRET), opts), 'expired websocket jwt');
+  assert.equal(checkSignedBearerToken(signJwt({ exp: now - 31 }, SECRET), { ...opts, maxClockSkewSeconds: 0 }), 'expired websocket jwt');
+  assert.equal(checkSignedBearerToken(signJwt({ exp: now + 600, nbf: now + 30 }, SECRET), opts), null);
+  assert.equal(checkSignedBearerToken(signJwt({ exp: now + 600, nbf: now + 31 }, SECRET), opts), 'websocket jwt is not valid yet');
+  // Issuer and audience are only checked when configured; aud may be a list.
+  const pinned = { ...opts, issuer: 'oasis-tests', audience: 'app-server' };
+  assert.equal(checkSignedBearerToken(signJwt({ exp: now + 60, iss: 'oasis-tests', aud: 'app-server' }, SECRET), pinned), null);
+  assert.equal(checkSignedBearerToken(signJwt({ exp: now + 60, iss: 'oasis-tests', aud: ['other', 'app-server'] }, SECRET), pinned), null);
+  assert.equal(checkSignedBearerToken(signJwt({ exp: now + 60, iss: 'elsewhere', aud: 'app-server' }, SECRET), pinned), 'websocket jwt issuer mismatch');
+  assert.equal(checkSignedBearerToken(signJwt({ exp: now + 60, iss: 'oasis-tests' }, SECRET), pinned), 'websocket jwt audience mismatch');
+
+  const dir = await tmp(t, 'oasis-ws-jwt-');
+  const secretFile = path.join(dir, 'secret');
+  await writeFile(secretFile, 'too-short\n', { mode: 0o600 });
+  await chmod(secretFile, 0o600);
+  await assert.rejects(loadWsAuth({ mode: 'signed-bearer-token', sharedSecretFile: secretFile }), /at least 32 bytes/);
+  await writeFile(secretFile, SECRET + '\n');
+  if (process.platform !== 'win32') {
+    await chmod(secretFile, 0o644);
+    await assert.rejects(loadWsAuth({ mode: 'signed-bearer-token', sharedSecretFile: secretFile }), /chmod 600/);
+    await chmod(secretFile, 0o600);
+  }
+  await assert.rejects(loadWsAuth({ mode: 'signed-bearer-token', sharedSecretFile: 'relative' }), /absolute/);
+  await assert.rejects(loadWsAuth({ mode: 'signed-bearer-token', sharedSecretFile: secretFile, tokenFile: secretFile }), /not signed-bearer-token/);
+  await assert.rejects(loadWsAuth({ mode: 'signed-bearer-token', sharedSecretFile: secretFile, maxClockSkewSeconds: '-5' }), /whole number/);
+  await assert.rejects(loadWsAuth({ mode: 'capability-token', tokenFile: secretFile, issuer: 'x' }), /need --ws-auth signed-bearer-token/);
+  await assert.rejects(loadWsAuth({ audience: 'x' }), /need --ws-auth signed-bearer-token/);
+  const verify = await loadWsAuth({ mode: 'signed-bearer-token', sharedSecretFile: secretFile, issuer: 'oasis-tests' });
+  const live = Math.floor(Date.now() / 1000);
+  assert.equal(verify('Bearer ' + signJwt({ exp: live + 60, iss: 'oasis-tests' }, SECRET)), true);
+  assert.equal(verify('Bearer ' + signJwt({ exp: live + 60 }, SECRET)), false);
+  assert.equal(verify(signJwt({ exp: live + 60, iss: 'oasis-tests' }, SECRET)), false);
+
+  // End to end: the listener refuses a bad JWT before any JSON-RPC and accepts a good one.
+  const listener = await startCodexAppServerWebSocket({ host: '127.0.0.1', port: 0, verify, log: () => {}, env: { ...process.env, HOME: dir, OASIS_CONFIG_DIR: path.join(dir, 'cfg') }, version: 'test' });
+  t.after(() => listener.close());
+  const open = (token) => new Promise((resolve) => {
+    const ws = new WebSocket(listener.url, { headers: { authorization: 'Bearer ' + token } });
+    ws.once('open', () => { ws.close(); resolve('open'); });
+    ws.once('unexpected-response', (req, res) => resolve(res.statusCode));
+    ws.once('error', () => {});
+  });
+  assert.equal(await open(signJwt({ exp: live - 120, iss: 'oasis-tests' }, SECRET)), 401);
+  assert.equal(await open(signJwt({ exp: live + 60, iss: 'oasis-tests' }, 'wrong-secret-0123456789abcdefghijkl')), 401);
+  assert.equal(await open(signJwt({ exp: live + 60, iss: 'oasis-tests' }, SECRET)), 'open');
 });
 
 test('oasis app-server --listen ws://: health probes, Origin and token checks, a full turn with an approval, independent connections', async (t) => {
