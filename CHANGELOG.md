@@ -7,6 +7,7 @@ User-facing change history grouped by package version. A version heading does no
 ### Rules and workflows from IDE agents
 
 - Devin Desktop (the new name of Windsurf) rule locations are read as they are: `.devin/rules/*.md` with their `trigger:` front matter (`always_on`, `glob`, `model_decision`, `manual`), the always-on `.devin/global_rules.md` (or the legacy `.windsurf/global_rules.md` when there is no `.devin` one, as Devin Desktop does), personal `~/.devin/rules/*.md` and `~/.devin/global_rules.md`, and the legacy Windsurf global rules at `~/.codeium/windsurf/memories/global_rules.md`. `AGENT.md` and `AGENTS.local.md` load like `AGENTS.md`, in the project and per folder. `OASIS_OTHER_AGENT_RULES=0` turns them off with the other agents' files.
+- Other agents' command and workflow files are slash commands without importing: Cursor `.cursor/commands/*.md` and `~/.cursor/commands`, Devin Desktop and Windsurf `.devin/workflows` and `.windsurf/workflows` (in the workspace and in parent folders up to the git root, `.devin` winning) and `~/.codeium/windsurf/global_workflows`, Antigravity `.agents/workflows`, `.agent/workflows` and `~/.gemini/config/workflows`, and Cline `.clinerules/workflows`. OASIS's own and Claude Code commands win on a name clash. A workflow that says "Call /other-workflow" gets that workflow appended (up to six, two levels deep). These files are plain prompts: inline `!` shell and `allowed-tools` are ignored, and Antigravity's `// turbo` markers do not skip approvals.
 
 ### Crash-safe task progress
 

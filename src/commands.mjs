@@ -19,6 +19,13 @@
 // "@path" includes the content of a workspace file (also in normal prompts).
 // Locations (later wins): ~/.claude/commands, ~/.config/oasis/commands,
 // .claude/commands, .oasis/commands.
+// Other agents' command and workflow folders are read too, below all of those
+// (OASIS_OTHER_AGENT_RULES=0 skips them): Cursor .cursor/commands and
+// ~/.cursor/commands, Devin Desktop / Windsurf .devin/workflows and
+// .windsurf/workflows (workspace and parents up to the git root) and
+// ~/.codeium/windsurf/global_workflows, Antigravity .agents/workflows,
+// .agent/workflows and ~/.gemini/config/workflows, Cline .clinerules/workflows.
+// Their files are plain prompts: inline shell and allowed-tools are not honoured.
 import { lstat, readdir, readFile, realpath } from 'node:fs/promises';
 import { spawn } from 'node:child_process';
 import { processTreeSpawnOptions, signalProcessTree } from './process-tree.mjs';
@@ -43,6 +50,41 @@ export function commandDirectories(root, env = process.env, home = os.homedir())
   ];
 }
 
+// Folders above the workspace up to the git root (nearest last), as Devin Desktop
+// searches for workflows. Without a git root, only the workspace itself.
+async function gitRootChain(workspace) {
+  const chain = [workspace];
+  for (let dir = workspace, i = 0; i < 20; i++) {
+    try { await lstat(path.join(dir, '.git')); return chain; } catch {}
+    const parent = path.dirname(dir);
+    if (parent === dir) break;
+    dir = parent;
+    chain.unshift(dir);
+  }
+  return [workspace];
+}
+
+/** Command and workflow folders of other coding agents, lowest precedence first. */
+export async function foreignCommandDirectories(root, env = process.env, home = os.homedir()) {
+  if (env.OASIS_OTHER_AGENT_RULES === '0') return [];
+  const workspace = path.resolve(root);
+  const dirs = [
+    { dir: path.join(home, '.gemini', 'config', 'workflows'), scope: 'user', foreign: 'Antigravity' },
+    { dir: path.join(home, '.codeium', 'windsurf', 'global_workflows'), scope: 'user', foreign: 'Windsurf' },
+    { dir: path.join(home, '.cursor', 'commands'), scope: 'user', foreign: 'Cursor' },
+    { dir: path.join(workspace, '.clinerules', 'workflows'), scope: 'project', foreign: 'Cline' },
+    { dir: path.join(workspace, '.agent', 'workflows'), scope: 'project', foreign: 'Antigravity' },
+    { dir: path.join(workspace, '.agents', 'workflows'), scope: 'project', foreign: 'Antigravity' },
+    { dir: path.join(workspace, '.cursor', 'commands'), scope: 'project', foreign: 'Cursor' }
+  ];
+  // Devin Desktop prefers .devin/workflows over the legacy .windsurf/workflows; nearer folders win.
+  for (const dir of await gitRootChain(workspace)) {
+    dirs.push({ dir: path.join(dir, '.windsurf', 'workflows'), scope: 'project', foreign: 'Windsurf', outside: dir !== workspace });
+    dirs.push({ dir: path.join(dir, '.devin', 'workflows'), scope: 'project', foreign: 'Devin Desktop', outside: dir !== workspace });
+  }
+  return dirs;
+}
+
 async function collect(dir, prefix, depth, out) {
   let entries;
   try { entries = await readdir(dir, { withFileTypes: true }); } catch { return; }
@@ -58,20 +100,45 @@ export async function loadCustomCommands(root, options = {}) {
   const commands = new Map();
   // --safe-mode starts without custom commands.
   if ((options.env || process.env).OASIS_SAFE_MODE === '1') return commands;
-  for (const { dir, scope } of commandDirectories(root, options.env || process.env, options.home || os.homedir())) {
+  const env = options.env || process.env;
+  const home = options.home || os.homedir();
+  const workspaceReal = await realpath(path.resolve(root)).catch(() => path.resolve(root));
+  for (const { dir, scope, foreign, outside } of [...await foreignCommandDirectories(root, env, home), ...commandDirectories(root, env, home)]) {
     const found = [];
-    await collect(dir, [], 0, found);
+    // Other agents' folders are flat: no sub-folder namespaces.
+    await collect(dir, [], foreign ? MAX_DEPTH : 0, found);
     for (const { file, parts } of found) {
       const name = parts.join(':').toLowerCase();
       if (!/^[a-z0-9][a-z0-9:_-]{0,100}$/.test(name)) continue;
       let info;
       try { info = await lstat(file); } catch { continue; }
       if (!info.isFile() || info.size > MAX_COMMAND_FILE) continue;
+      // A project folder's command file must stay inside the workspace (or, for
+      // workflows found above it, inside that folder) after symlinks are resolved.
+      if (foreign && scope === 'project') {
+        const real = await realpath(file).catch(() => null);
+        const base = outside ? await realpath(path.dirname(path.dirname(dir))).catch(() => null) : workspaceReal;
+        const relative = real && base ? path.relative(base, real) : '..';
+        if (!relative || relative.startsWith('..') || path.isAbsolute(relative)) continue;
+      }
       let text;
       try { text = await readFile(file, 'utf8'); } catch { continue; }
       if (text.includes('\0')) continue;
       const { data: meta, body } = parseFrontMatter(text);
       const firstLine = body.split('\n').find((line) => line.trim()) || '';
+      if (foreign) {
+        commands.set(name, {
+          name,
+          description: (String((Array.isArray(meta.description) ? meta.description.join(', ') : meta.description) || firstLine.replace(/^#+\s*/, '')).slice(0, 180) + ' (' + foreign + ')').trim(),
+          argumentHint: '',
+          model: null, allowedTools: null, effort: null, context: null, agent: null,
+          body: body.trim(),
+          file,
+          scope,
+          foreign
+        });
+        continue;
+      }
       commands.set(name, {
         name,
         description: String((Array.isArray(meta.description) ? meta.description.join(', ') : meta.description) || firstLine.replace(/^#+\s*/, '')).slice(0, 200),
@@ -252,12 +319,35 @@ export async function resolveCustomCommand(root, rawInput, options = {}) {
   const command = commands.get(match[1].toLowerCase());
   if (!command) return null;
   const argumentText = String(match[2] || '').slice(0, 8000);
-  const { text, usedArguments } = renderCommandBody(command.body, argumentText);
-  let prompt = text;
+  const { text, usedArguments } = command.foreign ? { text: command.body, usedArguments: false } : renderCommandBody(command.body, argumentText);
+  let prompt = command.foreign ? foreignWorkflowPrompt(command, commands) : text;
   if (argumentText && !usedArguments) prompt += '\n\nArguments: ' + argumentText;
-  const shell = await expandInlineShell(prompt, { root, env: options.env, allowed: command.scope === 'user' || Boolean(options.trusted), allowedTools: command.allowedTools, policy: options.policy });
+  // Other agents' command files have no inline-shell syntax; never run !`...` from them.
+  const shell = command.foreign ? { text: prompt, ran: [] } : await expandInlineShell(prompt, { root, env: options.env, allowed: command.scope === 'user' || Boolean(options.trusted), allowedTools: command.allowedTools, policy: options.policy });
   const expanded = await expandFileMentions(root, shell.text);
   return { name: command.name, args: argumentText, command, prompt: expanded.text, mentions: expanded.files, shell: shell.ran, grantTools: command.scope === 'user' || options.trusted ? command.allowedTools : null };
+}
+
+// Windsurf, Devin Desktop and Antigravity workflows can say "Call /other-workflow".
+// OASIS has no tool for the model to run a slash command, so the workflows a
+// workflow calls are appended once each (two levels deep) for the model to follow.
+const MAX_CALLED_WORKFLOWS = 6;
+function foreignWorkflowPrompt(command, commands) {
+  const included = new Set([command.name]);
+  const appended = [];
+  const visit = (body, depth) => {
+    if (depth > 2) return;
+    for (const match of String(body).matchAll(/(?:^|[\s`'"(])\/([a-z0-9][a-z0-9:_-]{0,100})\b/gi)) {
+      const called = commands.get(match[1].toLowerCase());
+      if (!called || !called.foreign || included.has(called.name) || appended.length >= MAX_CALLED_WORKFLOWS) continue;
+      included.add(called.name);
+      appended.push('--- Workflow /' + called.name + ' (called above) ---\n' + called.body);
+      visit(called.body, depth + 1);
+    }
+  };
+  visit(command.body, 1);
+  const header = command.foreign === 'Cursor' ? '' : 'Follow the ' + command.foreign + ' workflow /' + command.name + ' step by step.';
+  return [header, command.body, ...appended].filter(Boolean).join('\n\n');
 }
 
 // Replace or annotate "@path" mentions with file contents from the workspace.
