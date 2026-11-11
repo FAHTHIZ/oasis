@@ -2572,8 +2572,12 @@ async function startWebWorkspace(root, args) {
     if (closing) return;
     closing = true;
     // The in-process routine scheduler would otherwise keep the process alive.
-    if (scheduler) void scheduler.stop().catch(() => {});
-    void app.close().catch((error) => stderr.write('Oasis web shutdown error: ' + error.message + '\n'));
+    const stopping = [scheduler ? scheduler.stop().catch(() => {}) : null, app.close().catch((error) => stderr.write('Oasis web shutdown error: ' + error.message + '\n'))];
+    // Supervisors expect a prompt exit: once the server has closed (sessions
+    // saved), exit even if an idle keep-alive socket or child handle lingers,
+    // and never take longer than a few seconds after the signal.
+    void Promise.allSettled(stopping).then(() => process.exit(0));
+    setTimeout(() => process.exit(0), 5000).unref();
   };
   process.once('SIGINT', shutdown);
   process.once('SIGTERM', shutdown);
