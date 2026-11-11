@@ -33,6 +33,7 @@ User-facing change history grouped by package version. A version heading does no
 
 ### Archived sessions everywhere
 - Archiving now means the same thing in every interface. A session archived from a Codex App Server client (`thread/archive`), `oasis sessions archive ID` or the web API (`POST /api/sessions/ID/archive`, `/unarchive`) leaves the web app's session list, `/resume`, the terminal's recent-sessions menu, `oasis --continue`, `oasis sessions list` and ACP `session/list`. `oasis sessions list --archived` and `GET /api/sessions?archived=1` show archived ones, and an archived session still resumes by ID.
+- The web workspace's "Other devices and terminal" list has an Archive button on saved sessions that are not running; the toast shows the `oasis sessions unarchive ID` command to undo it.
 
 ### Agent Client Protocol (editors)
 

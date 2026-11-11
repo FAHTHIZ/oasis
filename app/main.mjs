@@ -1758,6 +1758,22 @@ async function renderRuntimeSessions() {
     open.querySelector('span').textContent = [item.running ? 'Running now' : when, item.model].filter(Boolean).join(' · ');
     open.addEventListener('click', async () => { closeSheet('chatsSheet'); await openRuntimeSession(item); });
     li.append(open);
+    // Archiving is shared: the terminal, editors and other browsers stop
+    // offering it too. `oasis sessions unarchive ID` brings it back.
+    if (!item.running && !item.unsaved) {
+      const archive = document.createElement('button');
+      archive.className = 'icon-btn small';
+      archive.setAttribute('aria-label', 'Archive session ' + (item.title || ''));
+      archive.title = 'Archive';
+      archive.innerHTML = '<svg viewBox="0 0 20 20" aria-hidden="true"><path d="M3.5 5h13v3h-13zM4.5 8v7.5h11V8M8 11h4" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+      archive.addEventListener('click', async () => {
+        try { await RT.client.api('/api/sessions/' + encodeURIComponent(item.id) + '/archive', { method: 'POST' }); }
+        catch (error) { toast('Could not archive that session: ' + error.message, 'error'); return; }
+        toast('Archived. Run oasis sessions unarchive ' + item.id + ' to bring it back.');
+        void renderRuntimeSessions();
+      });
+      li.append(archive);
+    }
     list.appendChild(li);
   }
   show(items.length > 0);
