@@ -55,6 +55,9 @@ Status: **done** (tested and pushed) · **doing** · **open** · **blocked**
 | Codex App Server `item/tool/requestUserInput` for `ask_user_question` (experimentalApi clients) | done | `test/codex-app-server.test.mjs` |
 | Plain daily/weekly schedule phrases (DSH `daily`/`weekly` selectors) | done | `test/routines.test.mjs` (plain calendar phrases) |
 | Routines that continue an existing conversation (Codex thread automations) | done | `test/routines.test.mjs` (chained fork e2e). Runs fork with `--resume ID --fork-session --session-id NEW`, so the original session file is never written. |
+| OpenTelemetry GenAI semantic conventions (spans, metrics, opt-in span names) | done | `test/telemetry.test.mjs` (collector checks names, buckets, attributes) |
+| Codex App Server `fuzzyFileSearch`, `thread/turns/list` | done | `test/codex-app-server.test.mjs` |
+| Archived sessions hidden from every resume surface (CLI, web, ACP, App Server) | done | `test/commands.test.mjs`, `test/web.test.mjs`, `test/acp.test.mjs` |
 
 ## 2c. IDE-agent interoperability (Cursor, Devin Desktop/Windsurf, Antigravity, OpenHands)
 
