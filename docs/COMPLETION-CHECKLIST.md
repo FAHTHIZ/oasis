@@ -66,6 +66,7 @@ Status: **done** (tested and pushed) · **doing** · **open** · **blocked**
 | Devin Desktop rule folders (`.devin/rules`, `.devin/global_rules.md`, `~/.devin/rules`), Windsurf global rules, `AGENT.md`, `AGENTS.local.md` | done | `test/other-agent-rules.test.mjs` (Devin Desktop test) |
 | Cursor commands, Devin Desktop / Windsurf / Antigravity / Cline workflows as native slash commands | done | `test/foreign-commands.test.mjs`. Not done: Devin Desktop's scan of workflow folders in sub-folders, enterprise system workflow folders, Cursor team commands (server-side) |
 | Agent ignore files (`.cursorignore`, `.devinignore`, `.codeiumignore` + global, `.geminiignore`, `.aiexclude`, `.aiderignore`) | done | `test/agent-ignore.test.mjs`. Not done: blocking shell commands (Cursor does not either), Cursor's default ignore list, Cursor's `.cursorindexingignore` (indexing only; OASIS has no remote index) |
+| OpenHands microagents / skill files (always-on, `paths:`, keyword `triggers:`, task `/name`) | done | `test/openhands-microagents.test.mjs`. Not done: prompting for task-microagent `inputs`, OpenHands' public skills registry and installed-skills folder (`~/.openhands/skills/installed`, its own manifest) |
 
 ## 2d. Claude Code parity (2026-11-11 cycle)
 

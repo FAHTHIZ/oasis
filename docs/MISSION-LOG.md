@@ -5,6 +5,9 @@ weaknesses. Newest first. Detailed user-facing notes go in the CHANGELOG.
 
 ## 2026-11-11 (IDE-agent interoperability: Cursor, Devin Desktop, Antigravity, OpenHands)
 
+### OpenHands microagents
+- OASIS did not read `.openhands/`. Behaviour reimplemented from the MIT-licensed OpenHands software-agent-sdk (`openhands/sdk/skills/skill.py`, `context/agent_context.py`, `skill_knowledge_info.j2`): files without triggers are repo context, `paths:` beats `triggers:`, `inputs:` adds `/name`, keywords match as whole tokens (`(?<![a-z0-9])kw(?![a-z0-9])` on the lowercased message), and each file is added once per conversation inside `<EXTRA_INFO>`. OASIS detects "already sent" from the `Skill location:` line in earlier user messages, so it survives a resumed session. Attached `@file` contents are not searched for keywords. Test: test/openhands-microagents.test.mjs (3 tests, including a real turn against a local fixture server); memory and agent tests 73 pass, 0 fail.
+
 ### Agent ignore files
 - Cursor, Devin Desktop, Windsurf, Gemini and Aider let a repository hide files from the agent with gitignore-syntax files ([Cursor](https://cursor.com/docs/context/ignore-files), [Cascade](https://docs.windsurf.com/windsurf/cascade/workflows), [Gemini CLI](https://geminicli.com/docs/cli/gemini-ignore/), [Code Assist](https://developers.google.com/gemini-code-assist/docs/create-aiexclude-file)). OASIS ignored them. New src/agent-ignore.mjs (own gitignore matcher; no new dependency) checks each ignore file from the path's folder up to the git root, plus `~/.codeium/.codeiumignore`. `resolveWorkspacePath` refuses covered paths unless a caller passes `allowIgnored` (web file panel, checkpoints, `/rollback`, export do); `walkFiles`, ripgrep results, ast-grep and `@` mentions filter them. Shell commands are still allowed, as in Cursor. Test: test/agent-ignore.test.mjs (6 tests); related tool tests 127 pass, 0 fail.
 
