@@ -110,6 +110,34 @@ export function createAcpServer(options = {}) {
   let connection = null;
 
   // Calls to the editor go through the SDK connection once it is open.
+  // ask_user_question over ACP elicitation (unstable in ACP v1): a form with
+  // the choices plus a free-text "Other" field, shown only when the client
+  // advertised elicitation.form in initialize. Decline, cancel, an error or an
+  // interrupted turn count as "no answer", so the model decides and says so.
+  const canElicitForm = () => Boolean(clientCapabilities && clientCapabilities.elicitation && clientCapabilities.elicitation.form);
+  const elicitAnswer = async (sessionId, question, { toolCallId, signal } = {}) => {
+    const choices = question.options.map((option) => ({ const: option.label, title: option.label, ...(option.description ? { description: option.description } : {}) }));
+    const title = question.header || 'Answer';
+    const answer = question.multiSelect
+      ? { type: 'array', title, description: 'Choose one or more', items: { anyOf: choices } }
+      : { type: 'string', title, description: 'Choose one', oneOf: choices };
+    const params = {
+      mode: 'form', sessionId, ...(toolCallId ? { toolCallId } : {}), message: question.question,
+      requestedSchema: { type: 'object', properties: { answer, other: { type: 'string', title: 'Other', description: 'Or type your own answer' } } }
+    };
+    let response;
+    try {
+      const pending = request('elicitation/create', params);
+      response = await (signal ? Promise.race([pending, new Promise((resolve) => { if (signal.aborted) resolve(null); else signal.addEventListener('abort', () => resolve(null), { once: true }); })]) : pending);
+    } catch (error) { log('elicitation/create failed: ' + error.message); return null; }
+    if (!response || response.action !== 'accept' || !response.content) return null;
+    const other = typeof response.content.other === 'string' ? response.content.other.trim() : '';
+    if (other) return other;
+    const picked = response.content.answer;
+    const valid = new Set(question.options.map((option) => option.label));
+    const labels = (Array.isArray(picked) ? picked : [picked]).filter((value) => typeof value === 'string' && valid.has(value));
+    return labels.length ? (question.multiSelect ? labels : labels.slice(0, 1)).join(', ') : null;
+  };
   const request = (method, params) => connection ? connection.client.request(method, params) : Promise.reject(new Error('connection closed'));
   const update = (sessionId, payload) => {
     if (!connection) return;
@@ -305,6 +333,7 @@ export function createAcpServer(options = {}) {
       const turn = await runner(entry.session, text, {
         env,
         signal: controller.signal,
+        ...(canElicitForm() ? { askUser: (question) => elicitAnswer(sessionId, question, { toolCallId: (callIds.get('ask_user_question') || []).at(-1), signal: controller.signal }) } : {}),
         onUsage: (usage) => {
           if (!usage || usage.subagent || usage.phase) return;
           const cost = Number(usage.costUsd);

@@ -303,3 +303,56 @@ test('ACP session lifecycle: list, resume, config options, usage and title updat
   const again = await client.call('session/delete', { sessionId, cwd: root });
   assert.equal(again.error.code, -32002);
 });
+
+test('ACP elicitation: ask_user_question becomes an elicitation/create form when the client supports it', async (t) => {
+  const root = await tmp(t);
+  const home = await tmp(t, 'oasis-acp-home-');
+  const { config, requests } = await scriptedModel(t, [
+    toolCall('q1', 'ask_user_question', { question: 'Which database should I use?', header: 'Database', options: [{ label: 'SQLite', description: 'File-based' }, 'Postgres'] }),
+    { content: 'Using SQLite.' },
+    toolCall('q2', 'ask_user_question', { question: 'Which test runner?', options: ['node:test', 'vitest'] }),
+    { content: 'Picked one myself.' }
+  ]);
+  const child = spawn(process.execPath, [CLI, 'acp'], {
+    cwd: root,
+    env: { ...process.env, HOME: home, OASIS_CONFIG_DIR: path.join(home, 'cfg'), OASIS_PROTOCOL: 'openai-compatible', OASIS_BASE_URL: config.baseURL, OASIS_MODEL: 'fixture', OASIS_API_KEY: '', OASIS_SANDBOX: '0' },
+    stdio: ['pipe', 'pipe', 'pipe']
+  });
+  t.after(() => child.kill());
+  let stderr = '';
+  child.stderr.on('data', (chunk) => { stderr += chunk; });
+  const elicitations = [];
+  const replies = [{ action: 'accept', content: { answer: 'SQLite' } }, { action: 'decline' }];
+  let id = 0;
+  const waiting = new Map();
+  createInterface({ input: child.stdout }).on('line', (line) => {
+    const message = JSON.parse(line);
+    if (message.method === 'elicitation/create') {
+      elicitations.push(message.params);
+      child.stdin.write(JSON.stringify({ jsonrpc: '2.0', id: message.id, result: replies.shift() }) + '\n');
+    } else if (waiting.has(message.id)) { waiting.get(message.id)(message); waiting.delete(message.id); }
+  });
+  const call = (method, params) => { const requestId = ++id; child.stdin.write(JSON.stringify({ jsonrpc: '2.0', id: requestId, method, params }) + '\n'); return new Promise((resolve) => waiting.set(requestId, resolve)); };
+  await call('initialize', { protocolVersion: 1, clientCapabilities: { elicitation: { form: {} } } });
+  const created = await call('session/new', { cwd: root, mcpServers: [] });
+  const sessionId = created.result.sessionId;
+  const first = await call('session/prompt', { sessionId, prompt: [{ type: 'text', text: 'set up storage' }] });
+  assert.equal(first.result && first.result.stopReason, 'end_turn', stderr + JSON.stringify(first));
+  assert.equal(elicitations.length, 1);
+  const form = elicitations[0];
+  assert.equal(form.mode, 'form');
+  assert.equal(form.sessionId, sessionId);
+  assert.equal(form.toolCallId, 'q1');
+  assert.equal(form.message, 'Which database should I use?');
+  assert.deepEqual(form.requestedSchema.properties.answer.oneOf, [{ const: 'SQLite', title: 'SQLite', description: 'File-based' }, { const: 'Postgres', title: 'Postgres' }]);
+  assert.equal(form.requestedSchema.properties.answer.title, 'Database');
+  const toolResult = (request) => request.messages.filter((message) => message.role === 'tool').at(-1).content;
+  assert.match(toolResult(requests[1]), /"answered":true/);
+  assert.match(toolResult(requests[1]), /SQLite/);
+
+  // A declined form tells the model to decide for itself.
+  const second = await call('session/prompt', { sessionId, prompt: [{ type: 'text', text: 'add tests' }] });
+  assert.equal(second.result && second.result.stopReason, 'end_turn', stderr + JSON.stringify(second));
+  assert.equal(elicitations.length, 2);
+  assert.match(toolResult(requests[3]), /did not answer/);
+});
