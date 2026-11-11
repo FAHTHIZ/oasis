@@ -913,7 +913,10 @@ export function createOasisWebServer(options = {}) {
       const mcpFailures = Array.isArray(session.mcpFailures) ? session.mcpFailures : [];
       const shown = session.mcpFailuresShown || 0;
       if (mcpFailures.length <= shown || !['running', 'waiting_approval'].includes(job.status)) return;
-      emit(job, 'mcp_failures', { servers: mcpFailures.slice(shown, shown + 20).map((failure) => ({ name: monitorText(failure.name, 120), error: monitorText(failure.error, 300) })) });
+      emit(job, 'mcp_failures', { servers: mcpFailures.slice(shown, shown + 20).map((failure) => {
+        const url = failure.config && /^https:\/\//i.test(String(failure.config.url || '')) ? String(failure.config.url).slice(0, 500) : '';
+        return { name: monitorText(failure.name, 120), error: monitorText(failure.error, 300), ...(url && /needs sign-in/i.test(String(failure.error)) ? { signInUrl: url } : {}) };
+      }) });
       session.mcpFailuresShown = mcpFailures.length;
     };
     reportMcpFailures();

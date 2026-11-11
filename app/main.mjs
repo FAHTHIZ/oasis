@@ -1409,7 +1409,14 @@ function handleEvent(event) {
     case 'usage': usageState.tokens = event.usage.input + event.usage.output; renderUsage(); break;
     case 'context': usageState.context = event; renderUsage(); break;
     case 'cost': usageState.cost = event; renderUsage(); break;
-    case 'mcp_failures': addMessage('note', (event.servers.length === 1 ? 'A tool server did not start. ' : event.servers.length + ' tool servers did not start. ') + event.servers.map((server) => server.name + ': ' + String(server.error).replace(/^MCP server \S+ (?:could not start: )?/, '')).join(' · ')); break;
+    case 'mcp_failures': {
+      // Servers that only need sign-in get a Connect card instead of advice to run a command.
+      const signIn = event.servers.filter((server) => server.signInUrl);
+      const rest = event.servers.filter((server) => !server.signInUrl);
+      if (rest.length) addMessage('note', (rest.length === 1 ? 'A tool server did not start. ' : rest.length + ' tool servers did not start. ') + rest.map((server) => server.name + ': ' + String(server.error).replace(/^MCP server \S+ (?:could not start: )?/, '')).join(' · '));
+      for (const server of signIn.slice(0, 3)) connectShortcut('/connect ' + server.signInUrl, { reason: server.name + ' needs you to sign in before its tools can be used.' });
+      break;
+    }
     case 'compacting': showThinking(); break;
     case 'compacted': addMessage('note', event.mode === 'summary' ? 'Earlier conversation summarised to save context.' : 'Older tool output trimmed to save context.'); break;
     case 'stopped':
@@ -2002,15 +2009,14 @@ async function knownConnectors() {
   if (!connectorList) connectorList = RT.client.api('/api/connectors').then((body) => body.connectors || []).catch(() => { connectorList = null; return []; });
   return connectorList;
 }
-async function connectShortcut(message) {
+async function connectShortcut(message, { reason = '' } = {}) {
   const intent = connectIntent(message);
   if (!intent) return false;
   const list = await knownConnectors();
   const key = intent.service.toLowerCase().replace(/[\s.]/g, '');
   const known = list.find((item) => [item.id, item.name, ...(item.aliases || [])].some((name) => String(name).toLowerCase().replace(/[\s.]/g, '') === key));
   if (!intent.explicit && !known) return false;
-  $('input').value = '';
-  autosize();
+  if (!reason) { $('input').value = ''; autosize(); }
   if (!intent.service) {
     addMessage('note', 'Connect an app: /connect ' + list.map((item) => item.id).join(', /connect ') + ', or /connect followed by an MCP server URL.');
     scrollDown(true);
@@ -2018,7 +2024,7 @@ async function connectShortcut(message) {
   }
   if (known && known.live) { toast(known.name + ' is already connected.'); return true; }
   let view;
-  try { view = await RT.client.api('/api/connectors', { method: 'POST', body: { service: known ? known.id : intent.service } }); }
+  try { view = await RT.client.api('/api/connectors', { method: 'POST', body: { service: known ? known.id : intent.service, reason } }); }
   catch (error) { toast(String(error && error.message || error).replace(/^Error:\s*/, '')); return true; }
   const actions = {
     act: (body) => RT.client.api('/api/connectors/' + encodeURIComponent(view.id), { method: 'POST', body }),
