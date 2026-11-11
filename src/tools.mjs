@@ -1292,7 +1292,38 @@ export async function listAvailableSkills(root, options = {}) {
   await scan(getClaudeUserSkillsDirectory(env), 'claude-user');
   await scan(path.join(root, '.oasis', 'skills'), 'workspace', '.oasis/skills');
   await scanImportedExtensions(path.join(root, '.oasis', 'extensions'), 'project-extension', '.oasis/extensions');
-  return [...byName.values()].sort((a, b) => a.name.localeCompare(b.name)).slice(0, 240);
+  const policy = options.skillPolicy || await skillPolicyFor(root, env);
+  return applySkillPolicy([...byName.values()], policy).sort((a, b) => a.name.localeCompare(b.name)).slice(0, 240);
+}
+
+// Claude Code's disableBundledSkills (or CLAUDE_CODE_DISABLE_BUNDLED_SKILLS=1) and skillOverrides.
+async function skillPolicyFor(root, env) {
+  let settings = {};
+  try {
+    const { loadSettings } = await import('./settings.mjs');
+    settings = await loadSettings(root, { env, skipPlugins: true });
+  } catch { settings = {}; }
+  return {
+    disableBundled: settings.disableBundledSkills === true || env.CLAUDE_CODE_DISABLE_BUNDLED_SKILLS === '1' || env.OASIS_DISABLE_BUNDLED_SKILLS === '1',
+    overrides: settings.skillOverrides || {}
+  };
+}
+
+// "off" removes a skill; "user-invocable-only" keeps /name but hides it from the model;
+// "name-only" lists it to the model without its description. Plugin skills are exempt.
+export function applySkillPolicy(skills, policy = {}) {
+  const overrides = policy.overrides || {};
+  const lower = Object.fromEntries(Object.entries(overrides).map(([key, value]) => [key.toLowerCase(), value]));
+  const out = [];
+  for (const skill of skills) {
+    if (policy.disableBundled && skill.source === 'built-in') continue;
+    const mode = skill.source === 'plugin' ? '' : lower[String(skill.name).toLowerCase()];
+    if (mode === 'off') continue;
+    if (mode === 'user-invocable-only') out.push({ ...skill, modelInvocable: false });
+    else if (mode === 'name-only') out.push({ ...skill, nameOnly: true });
+    else out.push(skill);
+  }
+  return out;
 }
 
 // Where a listed skill's SKILL.md lives, and whether it belongs to the
@@ -1449,7 +1480,7 @@ export async function loadSkillDescriptions(root, options = {}) {
   const skills = (await listAvailableSkills(root, options)).filter((item) => item.modelInvocable !== false);
   if (!skills.length) return '';
   // Built-in skills carry no tag (it would repeat on every line of every request).
-  const lines = skills.map((item) => '- ' + item.name + (item.source === 'built-in' ? '' : ' [' + (['global-extension', 'project-extension', 'portable-workspace', 'global-portable', 'foreign-user'].includes(item.source) ? 'EXTERNAL UNTRUSTED PROMPT' : item.source) + ']') + ': ' + skillCatalogueLine(item.description));
+  const lines = skills.map((item) => '- ' + item.name + (item.source === 'built-in' ? '' : ' [' + (['global-extension', 'project-extension', 'portable-workspace', 'global-portable', 'foreign-user'].includes(item.source) ? 'EXTERNAL UNTRUSTED PROMPT' : item.source) + ']') + (item.nameOnly ? '' : ': ' + skillCatalogueLine(item.description)));
   return fitSkillCatalogue(lines, options.maxChars ?? SKILL_CATALOGUE_CHARS);
 }
 

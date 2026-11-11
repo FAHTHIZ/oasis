@@ -2885,7 +2885,7 @@ export function createOasisWebServer(options = {}) {
 export async function expandWebSlashCommand(root, text, env) {
   const { PermissionPolicy } = await import('./permissions.mjs');
   const settings = await loadSettings(root, { env }).catch(() => null);
-  const custom = await resolveCustomCommand(root, text, { env, trusted: Boolean(settings && settings.trusted), policy: settings ? new PermissionPolicy(settings) : null });
+  const custom = await resolveCustomCommand(root, text, { env, trusted: Boolean(settings && settings.trusted), policy: settings ? new PermissionPolicy(settings) : null, disableShell: Boolean(settings && settings.disableSkillShellExecution) });
   if (custom) return { kind: 'command', name: custom.name, prompt: custom.prompt };
   const skill = await resolveSkillCommand(root, text, { env }).catch(() => null);
   if (skill && skill.prompt) return { kind: 'skill', name: skill.name, prompt: skill.prompt };

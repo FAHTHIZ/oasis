@@ -302,6 +302,16 @@ export async function loadSettings(root, options = {}) {
     if (settings.editorMode === 'vim' || settings.editorMode === 'normal') result.editorMode = settings.editorMode;
     // Claude Code's alwaysThinkingEnabled: false turns extended thinking off (true is the default).
     if (typeof settings.alwaysThinkingEnabled === 'boolean') result.alwaysThinkingEnabled = settings.alwaysThinkingEnabled;
+    // Claude Code skill visibility: skillOverrides (name -> on | name-only | user-invocable-only | off)
+    // and disableBundledSkills. Both only hide skills, so any file may set them.
+    if (settings.skillOverrides && typeof settings.skillOverrides === 'object' && !Array.isArray(settings.skillOverrides)) {
+      result.skillOverrides = { ...(result.skillOverrides || {}) };
+      for (const [name, mode] of Object.entries(settings.skillOverrides).slice(0, 500)) if (/^[A-Za-z0-9][A-Za-z0-9:_-]{0,100}$/.test(name) && ['on', 'name-only', 'user-invocable-only', 'off'].includes(mode)) result.skillOverrides[name] = mode;
+    }
+    if (typeof settings.disableBundledSkills === 'boolean') result.disableBundledSkills = settings.disableBundledSkills;
+    // disableSkillShellExecution: a true from any file turns command-file shell off; a managed true
+    // cannot be turned back on, and false is taken from trusted files only (below).
+    if (settings.disableSkillShellExecution === true) { result.disableSkillShellExecution = true; if (scope === 'managed') result.disableSkillShellExecutionManaged = true; }
     // Reply language (Claude Code's "language" setting). Only plain language names are accepted.
     if (typeof settings.language === 'string' && normalizeLanguage(settings.language)) result.language = normalizeLanguage(settings.language);
     if (settings.worktree && typeof settings.worktree === 'object' && typeof settings.worktree.branchPrefix === 'string') result.worktree = { ...(result.worktree || {}), branchPrefix: settings.worktree.branchPrefix.trim().slice(0, 40) };
@@ -364,7 +374,7 @@ export async function loadSettings(root, options = {}) {
       const routingEnabled = settings.modelRouting && typeof settings.modelRouting === 'object' && (settings.modelRouting.enabled === true || Boolean(String(settings.modelRouting.easyModel || '').trim()) || Boolean(String(settings.modelRouting.strongModel || '').trim()));
       const loosening = stringList(permissions.allow).length || settings.hooks || permissions.defaultMode || settings.sandbox || settings.shell || settings.statusLine || settings.lspServers || settings.autoMode || routingEnabled || settings.env || settings.apiKeyHelper || settings.customHeadersHelper || settings.autoTest;
       // Any other key is also skipped until trust; say so instead of dropping it silently.
-      const untrustedSafe = new Set(['$schema', 'permissions', 'outputStyle', 'editorMode', 'language', 'worktree', 'avoidPhrases', 'codeComments', 'theme', 'agent', 'channelsEnabled', 'autoMemory', 'autoLearning', 'memoryWriteApproval', 'memory', 'executeCode', 'sessionSearch', 'textToolCalls', 'sounds', 'soundVolume', 'idleCompactMinutes', 'deniedMcpServers', 'disabledMcpjsonServers', 'claudeMdExcludes', 'includeGitInstructions', 'alwaysThinkingEnabled']);
+      const untrustedSafe = new Set(['$schema', 'permissions', 'outputStyle', 'editorMode', 'language', 'worktree', 'avoidPhrases', 'codeComments', 'theme', 'agent', 'channelsEnabled', 'autoMemory', 'autoLearning', 'memoryWriteApproval', 'memory', 'executeCode', 'sessionSearch', 'textToolCalls', 'sounds', 'soundVolume', 'idleCompactMinutes', 'deniedMcpServers', 'disabledMcpjsonServers', 'claudeMdExcludes', 'includeGitInstructions', 'alwaysThinkingEnabled', 'skillOverrides', 'disableBundledSkills', 'disableSkillShellExecution']);
       const skipped = Object.keys(settings).filter((key) => !untrustedSafe.has(key));
       if (loosening || skipped.length) result.ignoredUntrusted.push(file);
       return;
@@ -463,6 +473,7 @@ export async function loadSettings(root, options = {}) {
     // Claude Code's plansDirectory: where exit_plan_mode saves plan files (relative to the project root). Trusted files only:
     // an untrusted repository should not choose where OASIS writes.
     if (typeof settings.plansDirectory === 'string' && settings.plansDirectory.trim() && !/[\r\n\0]/.test(settings.plansDirectory)) result.plansDirectory = settings.plansDirectory.trim().slice(0, 500);
+    if (settings.disableSkillShellExecution === false && !result.disableSkillShellExecutionManaged) result.disableSkillShellExecution = false;
     // modelOverrides: { "claude-opus-4-6": "arn:aws:bedrock:..." } maps model ids to provider ids.
     if (settings.modelOverrides && typeof settings.modelOverrides === 'object' && !Array.isArray(settings.modelOverrides)) {
       result.modelOverrides = { ...(result.modelOverrides || {}) };
