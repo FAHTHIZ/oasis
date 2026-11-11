@@ -162,6 +162,7 @@ Beyond the two interfaces, OASIS speaks the protocols other tools already use, s
 | --- | --- | --- |
 | Zed, JetBrains and other ACP editors | `oasis acp` | The Agent Client Protocol over stdio: sessions you can list, load, resume, close and delete, Mode and Model pickers, a context meter, questions shown as editor forms, and `$/cancel_request` that really stops the turn |
 | Codex App Server clients | `oasis app-server` | Clients built for `codex app-server` drive OASIS with any model: threads, turns, steering, approvals, inline review, files, commands and fuzzy file search |
+| Cursor Cloud Agents API scripts | `oasis web --persistent-key` | Cursor's v1 and v0 REST endpoints (agents, runs, follow-ups, steering, run stream, signed webhooks) served by your own OASIS with any model; PRs and branch creation are refused. [Details](docs/INTERFACES.md#cursor-cloud-agents-api) |
 | VS Code, Cursor, Windsurf | `oasis ide install` | The VS Code-family extension, connected to an OASIS runtime |
 | Your own code | `import` from `src/sdk.mjs` | The Node.js SDK: session, headless, tool and hook APIs in your process |
 | CI | `action.yml` | A GitHub Action that runs OASIS in a workflow with its credentials and permissions |

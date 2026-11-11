@@ -4,6 +4,12 @@ User-facing change history grouped by package version. A version heading does no
 
 ## Unreleased
 
+### Cursor Cloud Agents API on `oasis web`
+
+- `oasis web` answers Cursor's Cloud Agents REST API under `/v1` and the legacy `/v0`, so scripts and tools written for it drive OASIS agents on your own computer or server with any configured model. Agents are OASIS conversations in the served folder; runs are agent turns. Supported: creating agents, listing with cursor pagination, follow-ups (`409 agent_busy` while a run is active), steering, cancelling, a Server-Sent Events run stream with `Last-Event-ID` resume, per-run token usage, archive, unarchive and delete, plus models, `me` and repositories. v0 adds the conversation, follow-up, stop and HMAC-signed `statusChange` webhooks. See [Cursor Cloud Agents API](docs/INTERFACES.md#cursor-cloud-agents-api).
+- It uses the web server's access key and protections: Bearer, or Basic with the key as the username and an empty password; the same host checks and wrong-key lockout. Approvals still apply to API runs.
+- What OASIS cannot do honestly is refused with a 4xx that names the field: opening pull requests, creating branches, PR URLs, other repositories, Cursor cloud environments, `envVars`, inline MCP servers, custom subagents and image URLs.
+
 ### Codex SDK drop-in (`oasis exec --json`)
 
 - `oasis exec --json` (alias `--experimental-json`) prints the `codex exec --json` JSONL stream: `thread.started`, `turn.started`, `item.started`/`item.updated`/`item.completed`, `turn.completed` with usage, `turn.failed` and `error`. Items use the Codex exec shapes: `agent_message`, `command_execution` (command, aggregated output, exit code), `file_change` (path and add/update/delete), `mcp_tool_call`, `web_search` and `todo_list`. OASIS tools with no Codex item type are reported as `mcp_tool_call` with server `oasis`.
