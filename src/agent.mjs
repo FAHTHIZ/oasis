@@ -3447,6 +3447,23 @@ async function executeRegisteredToolWithKernel(session, name, args, context, opt
   return await executeThroughToolKernel(session, tool, args, context, { ...options, authorize: authorization.authorize });
 }
 
+/**
+ * After MCP_AUTH_REQUIRED from an HTTP server: forget the rejected sign-in,
+ * show the Connect card (when someone can click it) and report whether the
+ * call should be retried. Scope step-ups keep the usual advice.
+ */
+export async function connectAfterAuthError(session, mapped, error, options) {
+  if (!error || error.code !== 'MCP_AUTH_REQUIRED' || error.requiredScope || typeof options.connectorCard !== 'function' || !mapped) return false;
+  const client = session.mcpClients && session.mcpClients.get(mapped.serverName);
+  const url = client && client.config && client.config.url;
+  if (!url || !/^https:\/\//i.test(String(url))) return false;
+  const { deleteStoredToken } = await import('./mcp-oauth.mjs');
+  await deleteStoredToken(url, options.env).catch(() => false);
+  const { runConnectService } = await import('./connectors.mjs');
+  const result = await runConnectService(session, { service: url, reason: mapped.serverName + ' needs you to sign in before it can run ' + mapped.toolName + '.' }, { ...options, reauth: true });
+  return Boolean(result && result.connected && session.mcpToolMap && session.mcpToolMap.size);
+}
+
 async function executeMappedMcpToolWithKernel(session, name, args, context, options = {}) {
   const definition = (session.toolDefinitions || []).find((item) => item && item.function && item.function.name === name);
   if (!definition) throw new Error('Unknown or unavailable MCP tool: ' + name + '; no registered schema was found.');
@@ -3490,7 +3507,15 @@ async function executeMappedMcpToolWithKernel(session, name, args, context, opti
       // Only sessions that can wake when the result lands (interactive CLI,
       // streaming headless) background a task; one-shot runs keep waiting.
       if (typeof session.onBackgroundEvent === 'function') mcpOptions.onBackgroundTask = (task) => trackBackgroundMcpTask(session, task);
-      return await callMappedMcpTool(session, name, validatedInput, mcpOptions);
+      try {
+        return await callMappedMcpTool(session, name, validatedInput, mcpOptions);
+      } catch (error) {
+        // Lazy sign-in: the server wants an account. Show the Connect card for
+        // it and, once connected, run the same call again.
+        const retry = await connectAfterAuthError(session, mapped, error, { ...options, env: runtime.env || options.env });
+        if (!retry) throw error;
+        return await callMappedMcpTool(session, name, validatedInput, mcpOptions);
+      }
     }
   });
 

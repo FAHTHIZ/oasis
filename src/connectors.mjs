@@ -366,11 +366,12 @@ export async function runConnectService(session, args, options = {}) {
   try { connector = await resolveConnector(args.service, { env, signal: options.signal }); }
   catch (error) { return { connected: false, message: error.message }; }
   const status = await connectorStatus(connector, { root, env, session });
-  if (status.live) {
+  // reauth: the server just refused this chat's sign-in, so a live client does not count.
+  if (status.live && !options.reauth) {
     return { connected: true, alreadyConnected: true, service: connector.name, server: status.live.config && status.live.config.name || connector.id, tools: status.tools.slice(0, 60), message: connector.name + ' is already connected in this chat. Use its tools (' + status.tools.length + ').' };
   }
   // Set up and signed in earlier, just not running in this chat: attach it quietly.
-  if (status.configured && status.signedIn && session) {
+  if (status.configured && status.signedIn && session && !options.reauth) {
     try {
       const { reconnectMcpServer } = await import('./mcp.mjs');
       const client = await reconnectMcpServer(session, status.configured, { env, host: session.mcpHost });
