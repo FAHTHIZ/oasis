@@ -40,6 +40,10 @@ weaknesses. Newest first. Detailed user-facing notes go in the CHANGELOG.
 
 ## 2026-11-11 (frontier-platform cycle: competitor gaps)
 
+### App Server shell commands, remote diff, config read; web archive
+
+Added `thread/shellCommand` (behaviour taken from Codex's `thread_shell_command.rs` tests: own turn when idle, existing turn when active, `userShell` source), `gitDiffToRemote` (nearest remote-contained commit + diff with untracked files; verified by applying the diff to a fresh clone) and `config/read` (Codex `Config` shape, layers with redaction). Web workspace: Archive button in the "Other devices and terminal" list.
+
 ### OpenTelemetry GenAI conventions
 
 Aligned model, tool and turn telemetry with the OpenTelemetry GenAI semantic conventions (client inference, execute_tool, invoke_agent, token metrics): standard metrics with recommended buckets, `finish_reasons` as an array, `server.*`, `error.type`, reasoning and cache-write tokens. Standard span names are behind `OTEL_SEMCONV_STABILITY_OPT_IN=gen_ai_latest_experimental` so existing `oasis.*` dashboards keep working. Telemetry is now documented in docs/CONFIGURATION.md. Tests: test/telemetry.test.mjs (9 pass).

@@ -323,7 +323,9 @@ export function nextMode(current, { allowBypass = false } = {}) {
 
 const MAX_CAPTURE = 30000;
 
-export function runShellPassthrough(command, { root, output = process.stdout, env = process.env, powershell = null } = {}) {
+// `signal` and `timeoutMs` stop the command (App Server thread/shellCommand);
+// `trapSigint: false` leaves Ctrl+C to the host process.
+export function runShellPassthrough(command, { root, output = process.stdout, env = process.env, powershell = null, signal = null, timeoutMs = null, trapSigint = true } = {}) {
   return new Promise((resolve) => {
     // "defaultShell": "powershell" routes ! commands through PowerShell.
     const shell = powershell || (process.platform === 'win32' ? (env.ComSpec || 'cmd.exe') : (env.SHELL || '/bin/sh'));
@@ -341,11 +343,18 @@ export function runShellPassthrough(command, { root, output = process.stdout, en
     child.stdout.on('data', capture);
     child.stderr.on('data', capture);
     const onInt = () => { try { child.kill('SIGINT'); } catch {} };
-    process.on('SIGINT', onInt);
+    if (trapSigint) process.on('SIGINT', onInt);
+    let timedOut = false;
+    const stop = () => { try { child.kill('SIGTERM'); } catch {} setTimeout(() => { try { child.kill('SIGKILL'); } catch {} }, 2000).unref(); };
+    const onAbort = () => stop();
+    if (signal) { if (signal.aborted) stop(); else signal.addEventListener('abort', onAbort, { once: true }); }
+    const timer = Number.isFinite(timeoutMs) && timeoutMs >= 0 ? setTimeout(() => { timedOut = true; stop(); }, timeoutMs) : null;
     child.on('error', (error) => { captured += String(error.message); });
-    child.on('close', (code, signal) => {
-      process.removeListener('SIGINT', onInt);
-      resolve({ code: code === null ? 130 : code, signal, output: captured.length > MAX_CAPTURE ? '…' + captured.slice(-MAX_CAPTURE) : captured });
+    child.on('close', (code, exitSignal) => {
+      if (trapSigint) process.removeListener('SIGINT', onInt);
+      if (timer) clearTimeout(timer);
+      if (signal) signal.removeEventListener('abort', onAbort);
+      resolve({ code: code === null ? 130 : code, signal: exitSignal, timedOut, cancelled: Boolean(signal && signal.aborted), output: captured.length > MAX_CAPTURE ? '…' + captured.slice(-MAX_CAPTURE) : captured });
     });
   });
 }

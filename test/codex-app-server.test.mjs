@@ -424,3 +424,105 @@ test('thread/turns/list pages turns newest first by default, with summary/full/n
   assert.equal((await client.call('thread/turns/list', { threadId, sortDirection: 'sideways' })).error.code, -32602);
   assert.equal((await client.call('thread/turns/list', {})).error.code, -32602);
 });
+
+test('thread/shellCommand runs the user\'s command in its own turn and the model sees it next turn', async (t) => {
+  const root = await tmp(t);
+  const home = await tmp(t, 'oasis-appsrv-home-');
+  const { config, requests } = await scriptedModel(t, [{ content: 'Seen it.' }]);
+  const { child, stderr } = spawnServer(t, root, home, config);
+  const client = codexClient(child);
+  await client.call('initialize', { clientInfo: { name: 't' } });
+  const threadId = (await client.call('thread/start', { cwd: root })).result.thread.id;
+  assert.equal((await client.call('thread/shellCommand', { threadId, command: '  ' })).error.code, -32602);
+  assert.equal((await client.call('thread/shellCommand', { threadId, command: 'true', timeoutMs: -1 })).error.code, -32602);
+  const ack = await client.call('thread/shellCommand', { threadId, command: 'echo hello from bang | tr a-z A-Z' });
+  assert.deepEqual(ack.result, {}, stderr() + JSON.stringify(ack));
+  const done = await client.until((note) => note.method === 'turn/completed');
+  assert.equal(done.params.turn.status, 'completed');
+  const started = client.notes.find((note) => note.method === 'item/started');
+  assert.equal(started.params.item.type, 'commandExecution');
+  assert.equal(started.params.item.source, 'userShell');
+  assert.equal(started.params.item.status, 'inProgress');
+  assert.equal(started.params.item.cwd, root);
+  const delta = client.notes.find((note) => note.method === 'item/commandExecution/outputDelta');
+  assert.equal(delta.params.delta.trim(), 'HELLO FROM BANG', 'shell syntax (pipes) is kept');
+  const completed = client.notes.find((note) => note.method === 'item/completed').params.item;
+  assert.equal(completed.status, 'completed');
+  assert.equal(completed.exitCode, 0);
+  assert.equal(completed.source, 'userShell');
+  assert.equal(completed.aggregatedOutput.trim(), 'HELLO FROM BANG');
+
+  // A failing command and a timeout.
+  client.notes.length = 0;
+  await client.call('thread/shellCommand', { threadId, command: 'exit 3' });
+  await client.until((note) => note.method === 'turn/completed');
+  const failed = client.notes.find((note) => note.method === 'item/completed').params.item;
+  assert.equal(failed.status, 'failed');
+  assert.equal(failed.exitCode, 3);
+  client.notes.length = 0;
+  await client.call('thread/shellCommand', { threadId, command: 'sleep 5', timeoutMs: 0 });
+  await client.until((note) => note.method === 'turn/completed');
+  const timed = client.notes.find((note) => note.method === 'item/completed').params.item;
+  assert.equal(timed.status, 'failed');
+  assert.equal(timed.exitCode, null);
+  assert.match(timed.aggregatedOutput, /timed out after 0 ms/);
+
+  client.notes.length = 0;
+  await client.call('turn/start', { threadId, input: [{ type: 'text', text: 'what did I run?' }] });
+  await client.until((note) => note.method === 'turn/completed');
+  const sent = JSON.stringify(requests[0].messages);
+  assert.match(sent, /Commands I ran in my terminal/);
+  assert.match(sent, /echo hello from bang \| tr a-z A-Z/);
+  assert.match(sent, /HELLO FROM BANG/);
+  assert.match(sent, /exit-code=\\"3\\"/);
+  assert.match(sent, /exit-code=\\"timeout\\"/);
+  assert.match(sent, /what did I run\?/);
+});
+
+test('thread/shellCommand is refused in plan mode', async (t) => {
+  const root = await tmp(t);
+  const home = await tmp(t, 'oasis-appsrv-home-');
+  const { config } = await scriptedModel(t, []);
+  const { child } = spawnServer(t, root, home, config);
+  const client = codexClient(child);
+  await client.call('initialize', { clientInfo: { name: 't' } });
+  const threadId = (await client.call('thread/start', { cwd: root, sandbox: 'read-only' })).result.thread.id;
+  const reply = await client.call('thread/shellCommand', { threadId, command: 'touch made' });
+  assert.equal(reply.error && reply.error.code, -32000, JSON.stringify(reply));
+  assert.match(reply.error.message, /plan/);
+});
+
+test('config/read reports the effective configuration in Codex shape, with layers and no secrets', async (t) => {
+  const root = await tmp(t);
+  const home = await tmp(t, 'oasis-appsrv-home-');
+  await mkdir(path.join(root, '.oasis'), { recursive: true });
+  await writeFile(path.join(root, '.oasis', 'settings.json'), JSON.stringify({ permissions: { deny: ['Bash(rm:*)'] }, env: { GITHUB_TOKEN: 'ghp_secret_value' }, hooks: {} }));
+  const { config } = await scriptedModel(t, []);
+  const { child, stderr } = spawnServer(t, root, home, config);
+  const client = codexClient(child);
+  await client.call('initialize', { clientInfo: { name: 't' } });
+  const reply = await client.call('config/read', { cwd: root, includeLayers: true });
+  assert.ok(reply.result, stderr() + JSON.stringify(reply));
+  const { config: effective, origins, layers } = reply.result;
+  assert.equal(effective.model, 'fixture');
+  assert.equal(effective.model_provider, 'openai-compatible');
+  assert.equal(effective.approval_policy, 'on-request');
+  assert.equal(effective.sandbox_mode, 'danger-full-access', 'no OS sandbox is configured, and config/read says so');
+  assert.equal(effective.oasis.permissionMode, 'default');
+  assert.deepEqual(origins.model.name, { type: 'sessionFlags' }, 'OASIS_MODEL comes from the environment');
+  const project = layers.find((layer) => layer.name.type === 'project');
+  assert.ok(project, JSON.stringify(layers));
+  assert.equal(project.name.dotCodexFolder, path.join(root, '.oasis'));
+  assert.match(project.version, /^[0-9a-f]{16}$/);
+  assert.deepEqual(project.config.permissions, { deny: ['Bash(rm:*)'] });
+  assert.equal(project.config.env, '[redacted]');
+  assert.match(project.disabledReason, /not trusted/);
+  assert.doesNotMatch(JSON.stringify(reply), /ghp_secret_value/);
+  const plain = await client.call('config/read', { cwd: root });
+  assert.equal(plain.result.layers, undefined);
+});
+
+test('redactConfig hides secret-looking values at any depth', async () => {
+  const { redactConfig } = await import('../src/codex-app-server.mjs');
+  assert.deepEqual(redactConfig({ apiKey: 'x', a: { headers: { Authorization: 'Bearer y' }, list: [{ token: 'z', name: 'n' }] }, keyless: true, model: 'm' }), { apiKey: '[redacted]', a: { headers: '[redacted]', list: [{ token: '[redacted]', name: 'n' }] }, keyless: true, model: 'm' });
+});
