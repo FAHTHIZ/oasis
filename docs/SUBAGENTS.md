@@ -21,10 +21,14 @@ Names are matched case-insensitively, so `Explore` and `Plan` work too.
 Create a Markdown file with front matter. Later locations override earlier ones:
 
 1. `~/.claude/agents/`
-2. `~/.config/oasis/agents/`
-3. `<project>/.claude/agents/`
-4. `<project>/.oasis/agents/`
-5. Enabled Claude Code plugins (named `plugin:agent`)
+2. `~/.gemini/config/agents/` (Google Antigravity)
+3. `~/.config/oasis/agents/`
+4. `<project>/.claude/agents/`
+5. `<project>/.agents/agents/` (Google Antigravity)
+6. `<project>/.oasis/agents/`
+7. Enabled Claude Code plugins (named `plugin:agent`)
+
+The Antigravity folders accept `<name>.md` or `<name>/agent.md`. Antigravity tool names map to OASIS tools: `view_file` and `view_code_item` to `read_file`, `replace_file_content` to `edit_file`, `grep_search` to `grep` and `search_files`, `find_by_name` to `glob_files`, `list_dir` to `list_files`, and `codebase_search` to `semantic_search`. `model: flash` and `model: pro` inherit the session model, because those tier names do not identify a model on other providers. `subagent: false` keeps an agent out of the `task` tool; it can still run as the main agent with `--agent`. `commandExecutionPolicy: off` removes the shell tools. Skill paths such as `skills/security-checklist` load the skill of that name.
 
 You can also pass agents for one session as JSON with `--agents`.
 

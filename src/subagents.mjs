@@ -36,7 +36,12 @@ const CLAUDE_TO_OASIS = {
   grep: ['grep', 'search_files', 'ast_grep'], glob: ['glob_files'], ls: ['list_files'], webfetch: ['fetch_url'], websearch: ['web_search'],
   todowrite: ['todo_write'], bashoutput: ['command_output'], killshell: ['kill_command'],
   // Agent (formerly Task) launches subagents; Agent(type, ...) type lists are ignored, as in Claude Code.
-  agent: ['task'], task: ['task']
+  agent: ['task'], task: ['task'],
+  // Google Antigravity tool names (.agents/agents/*.md).
+  view_file: ['read_file'], view_code_item: ['read_file'], replace_file_content: ['edit_file'], multi_replace_file_content: ['multi_edit'],
+  write_to_file: ['write_file'], grep_search: ['grep', 'search_files'], find_by_name: ['glob_files'], list_dir: ['list_files'],
+  codebase_search: ['semantic_search'], read_url_content: ['fetch_url'], search_web: ['web_search'], command_status: ['command_output'],
+  invoke_subagent: ['task']
 };
 
 const READ_ONLY = ['git_status', 'git_diff', 'git_log', 'lsp', 'list_files', 'glob_files', 'repo_map', 'read_file', 'search_files', 'grep', 'ast_grep', 'fetch_url', 'web_search', 'list_skills', 'load_skill', 'read_skill_resource', 'memory_search', 'memory_read', 'session_search'];
@@ -143,15 +148,17 @@ export function normalizeAgentDefinition(raw, body, { name, source, plugin = fal
     name,
     description: String(data.description || (plugin ? 'Plugin agent ' : 'Custom agent ') + name).slice(0, 600),
     tools: mapToolNames(data.tools),
-    disallowedTools: mapToolNames(data.disallowedtools),
-    model: data.model && data.model !== 'inherit' ? String(data.model) : null,
+    // Antigravity's commandExecutionPolicy: off removes the shell tools (other values keep OASIS's own approval rules).
+    disallowedTools: lower(data.commandexecutionpolicy) === 'off' ? [...new Set([...(mapToolNames(data.disallowedtools) || []), ...CLAUDE_TO_OASIS.bash])] : mapToolNames(data.disallowedtools),
+    // Antigravity's model tiers (flash, pro) name no concrete model, so they inherit.
+    model: data.model && !['inherit', 'flash', 'pro'].includes(lower(data.model)) ? String(data.model) : null,
     isolation: lower(data.isolation) === 'worktree' ? 'worktree' : null,
     effort: EFFORTS.includes(lower(data.effort)) ? lower(data.effort) : null,
     maxTurns: Number.isInteger(maxTurns) && maxTurns > 0 ? Math.min(maxTurns, 400) : null,
     // Plugin agents cannot change their permission mode (matches Claude Code).
     // Only `plan` is honoured: a definition file may tighten, never loosen, approvals.
     permissionMode: !plugin && lower(data.permissionmode) === 'plan' ? 'plan' : null,
-    skills: listField(data.skills).filter((skill) => /^[a-zA-Z][a-zA-Z0-9-]{0,63}$/.test(skill)).slice(0, MAX_PRELOADED_SKILLS),
+    skills: listField(data.skills).map((skill) => skill.replace(/\/+$/, '').split('/').pop()).filter((skill) => /^[a-zA-Z][a-zA-Z0-9-]{0,63}$/.test(skill)).slice(0, MAX_PRELOADED_SKILLS),
     memory: MEMORY_SCOPES.includes(memory) ? memory : null,
     background: booleanField(data.background),
     color: AGENT_COLORS.includes(color) ? color : null,
@@ -167,6 +174,8 @@ export function normalizeAgentDefinition(raw, body, { name, source, plugin = fal
     // First user turn when this agent runs as the main session agent (--agent); not for plugin agents.
     initialPrompt: !plugin && data.initialprompt ? String(data.initialprompt).trim().slice(0, 20000) : '',
     prompt: String(body || '').trim().slice(0, 30000),
+    // Antigravity: `subagent: false` keeps an agent out of the task tool (it can still be the main agent).
+    subagentAllowed: data.subagent === undefined ? true : booleanField(data.subagent),
     source
   };
 }
@@ -198,10 +207,14 @@ export async function loadAgentMemory(agent, root, env = process.env) {
 
 function agentDirectories(root, env) {
   const home = env.HOME || env.USERPROFILE || os.homedir();
+  // Later folders override earlier ones: user before project, OASIS's own folders last.
   return [
     { dir: path.join(home, '.claude', 'agents'), source: 'user' },
+    // Google Antigravity layouts: <name>.md or <name>/agent.md.
+    { dir: path.join(home, '.gemini', 'config', 'agents'), source: 'user', nested: true },
     { dir: path.join(getConfigDirectory(env), 'agents'), source: 'user' },
     { dir: path.join(root, '.claude', 'agents'), source: 'project' },
+    { dir: path.join(root, '.agents', 'agents'), source: 'project', nested: true },
     { dir: path.join(root, '.oasis', 'agents'), source: 'project' }
   ];
 }
@@ -209,18 +222,22 @@ function agentDirectories(root, env) {
 export async function loadAgentDefinitions(root, options = {}) {
   const env = options.env || process.env;
   const agents = { ...BUILTIN_AGENTS };
-  for (const { dir, source } of agentDirectories(root, env)) {
+  for (const { dir, source, nested } of agentDirectories(root, env)) {
     let entries;
     try { entries = await readdir(dir, { withFileTypes: true }); } catch { continue; }
     for (const entry of entries) {
-      if (!entry.isFile() || !entry.name.endsWith('.md')) continue;
+      let file;
+      let fallback;
+      if (entry.isFile() && entry.name.endsWith('.md')) { file = path.join(dir, entry.name); fallback = entry.name.replace(/\.md$/, ''); }
+      else if (nested && entry.isDirectory()) { file = path.join(dir, entry.name, 'agent.md'); fallback = entry.name; }
+      else continue;
       let text;
-      try { text = await readFile(path.join(dir, entry.name), 'utf8'); } catch { continue; }
+      try { const info = await stat(file); if (!info.isFile() || info.size > MAX_AGENT_FILE) continue; text = await readFile(file, 'utf8'); } catch { continue; }
       if (Buffer.byteLength(text) > MAX_AGENT_FILE) continue;
       const { data, body } = parseFrontMatter(text);
-      const name = String(data.name || entry.name.replace(/\.md$/, '')).trim().toLowerCase();
+      const name = String(data.name || fallback).trim().toLowerCase();
       if (!/^[a-z0-9][a-z0-9_-]{0,63}$/.test(name)) continue;
-      agents[name] = normalizeAgentDefinition(data, body, { name, source: source + ':' + path.join(dir, entry.name) });
+      agents[name] = normalizeAgentDefinition(data, body, { name, source: source + ':' + file });
     }
   }
   // Agents from enabled Claude Code plugins, named plugin-name:agent.
@@ -244,6 +261,7 @@ export function taskToolDefinition(agents) {
   // Keep the schema lean: projects with dozens of custom agents used to send
   // every 600-char description on every request. Clip each entry and cap the list.
   const clip = (text, max) => { const value = String(text || '').replace(/\s+/g, ' ').trim(); return value.length > max ? value.slice(0, max - 1).trimEnd() + '…' : value; };
+  agents = Object.fromEntries(Object.entries(agents).filter(([, agent]) => agent.subagentAllowed !== false));
   const entries = Object.values(agents).map((agent) => '- ' + agent.name + ': ' + clip(agent.summary || agent.description, 220) + (agent.tools && agent.source !== 'built-in' ? ' (tools: ' + clip(agent.tools.join(', '), 120) + ')' : ''));
   const kept = [];
   let used = 0;
