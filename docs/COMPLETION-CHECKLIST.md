@@ -89,6 +89,12 @@ Gaps found by checking the [hooks reference](https://code.claude.com/docs/en/hoo
 | Model policy: managed `deniedModels` and `availableModelsMatch`; `modelOverrides` | done | `test/model-policy-settings.test.mjs` (5 tests); `enforceAvailableModels` needs nothing: OASIS always falls back to an allowed startup model |
 | `sandbox.excludedCommands`, `filesystem.allowRead`, `credentials`, unix-socket/proxy keys | open | `allowUnsandboxedCommands` needs nothing: OASIS has no unsandboxed retry |
 
+## 2e. Terminal-agent interoperability (Gemini CLI, OpenCode, Goose, Aider, Roo/Kilo/Cline)
+
+| Item | Status | Evidence / notes |
+| --- | --- | --- |
+| Gemini CLI `.gemini/commands/**/*.toml` as native slash commands (`{{args}}`, `!{...}` with escaping, `@{...}` files and folders, namespaces) | done | `test/foreign-commands.test.mjs` (Gemini test). Not done: an interactive confirmation for each `!{...}` (OASIS uses workspace trust and permission rules instead), multimodal `@{image}`, `.gitignore` filtering inside `@{folder}` (agent-ignore files and sensitive paths are filtered), extension commands outside installed extensions |
+
 ## 3. Competitive evaluation
 
 | Item | Status | Evidence / notes |
