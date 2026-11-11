@@ -16,7 +16,7 @@
 // serverRequest/resolved, fs/changed, command/exec/outputDelta.
 // Server requests sent: item/commandExecution/requestApproval and
 // item/fileChange/requestApproval (decisions accept, acceptForSession, decline,
-// cancel). Everything else answers -32601 "Method not found".
+// cancel), plus item/tool/requestUserInput for experimentalApi clients. Everything else answers -32601 "Method not found".
 //
 // Field names and item shapes follow codex-rs/app-server-protocol (Apache-2.0);
 // this is an independent implementation, no Codex code is included.
@@ -129,6 +129,7 @@ export function createCodexAppServer(options = {}) {
   const pending = new Map();
   let initialized = false;
   let optOut = new Set();
+  let experimentalApi = false;
   let nextRequestId = 0;
   let closed = false;
 
@@ -285,6 +286,33 @@ export function createCodexAppServer(options = {}) {
     return decision === 'accept' || decision === 'acceptWithExecpolicyAmendment';
   }
 
+  // ask_user_question as Codex's EXPERIMENTAL item/tool/requestUserInput, sent
+  // only to clients that set capabilities.experimentalApi in initialize. The
+  // reply maps question ids to { answers: [...] }; an empty or failed reply,
+  // or an interrupted turn, means no answer.
+  async function askUser(entry, turn, items, question) {
+    const open = [...items.values()].reverse().find((item) => item.tool === 'ask_user_question' && !item.done);
+    const params = {
+      threadId: entry.session.sessionId, turnId: turn.id, itemId: open ? open.item.id : 'item-' + randomUUID(), isBlocking: true, autoResolutionMs: null,
+      questions: [{ id: 'q1', header: question.header || 'Question', question: question.question + (question.multiSelect ? ' (you can choose more than one)' : ''), isOther: true, isSecret: false, options: question.options.map((option) => ({ label: option.label, description: option.description || '' })) }]
+    };
+    entry.waiting = true;
+    notify('thread/status/changed', { threadId: entry.session.sessionId, status: threadStatus(entry) });
+    const requestId = nextRequestId;
+    let reply = null;
+    try {
+      const signal = entry.controller && entry.controller.signal;
+      const pending = request('item/tool/requestUserInput', params);
+      reply = await (signal ? Promise.race([pending, new Promise((resolve) => { if (signal.aborted) resolve(null); else signal.addEventListener('abort', () => resolve(null), { once: true }); })]) : pending);
+    } catch (error) { log('requestUserInput failed: ' + error.message); }
+    entry.waiting = false;
+    notify('serverRequest/resolved', { threadId: entry.session.sessionId, requestId });
+    notify('thread/status/changed', { threadId: entry.session.sessionId, status: threadStatus(entry) });
+    const answers = reply && reply.answers && reply.answers.q1 && Array.isArray(reply.answers.q1.answers) ? reply.answers.q1.answers.filter((value) => typeof value === 'string' && value.trim()) : [];
+    if (!answers.length) return null;
+    return (question.multiSelect ? answers : answers.slice(0, 1)).join(', ');
+  }
+
   async function runTurn(entry, turn, text, images, { onFinish = null } = {}) {
     const threadId = entry.session.sessionId;
     const items = new Map();
@@ -381,7 +409,8 @@ export function createCodexAppServer(options = {}) {
           }
           notify('item/completed', { item, threadId, turnId: turn.id, completedAtMs: Date.now() });
         },
-        approval: (text, _force = false, meta = {}) => approve(entry, turn, items, text, meta)
+        approval: (text, _force = false, meta = {}) => approve(entry, turn, items, text, meta),
+        ...(experimentalApi ? { askUser: (question) => askUser(entry, turn, items, question) } : {})
       });
       finishMessage(message ? streamed : '');
       turn.status = entry.controller.signal.aborted ? 'interrupted' : 'completed';
@@ -461,6 +490,7 @@ export function createCodexAppServer(options = {}) {
       if (initialized) throw rpcError(-32600, 'Already initialized');
       initialized = true;
       const caps = params && params.capabilities || {};
+      experimentalApi = caps.experimentalApi === true;
       optOut = new Set(Array.isArray(caps.optOutNotificationMethods) ? caps.optOutNotificationMethods.filter((name) => typeof name === 'string') : []);
       const client = params && params.clientInfo && params.clientInfo.name ? String(params.clientInfo.name).slice(0, 80) : 'client';
       return { userAgent: 'oasis/' + (options.version || '0') + ' (' + client + ')', codexHome: env.OASIS_CONFIG_DIR || path.join(env.HOME || env.USERPROFILE || '', '.oasis'), platformFamily: APP_SERVER_PLATFORM.family, platformOs: APP_SERVER_PLATFORM.os };

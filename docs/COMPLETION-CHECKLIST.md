@@ -49,6 +49,7 @@ Status: **done** (tested and pushed) · **doing** · **open** · **blocked**
 | Codex App Server: detached review, signed bearer tokens | open | |
 | ACP stable session lifecycle (list, resume, close, delete, config options, usage and title updates) | done | `test/acp.test.mjs` (lifecycle test against a real `oasis acp` process) |
 | ACP elicitation (`ask_user_question` as an `elicitation/create` form) | done | `test/acp.test.mjs` (accepted and declined forms) |
+| Codex App Server `item/tool/requestUserInput` for `ask_user_question` (experimentalApi clients) | done | `test/codex-app-server.test.mjs` |
 | Plain daily/weekly schedule phrases (DSH `daily`/`weekly` selectors) | done | `test/routines.test.mjs` (plain calendar phrases) |
 | Routines that continue an existing conversation (Codex thread automations) | done | `test/routines.test.mjs` (chained fork e2e). Runs fork with `--resume ID --fork-session --session-id NEW`, so the original session file is never written. |
 
