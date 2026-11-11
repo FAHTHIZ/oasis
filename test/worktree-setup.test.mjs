@@ -81,3 +81,12 @@ test('setup does not run in an untrusted workspace, outside-repo scripts are ref
   const plan = await worktreeSetupPlan(root, path.join(root, 'nowhere'));
   assert.match(plan.error, /outside the repository/);
 });
+
+test('OpenHands .openhands/setup.sh runs in a new worktree when there is no Cursor or Windsurf setup', { skip: !unix }, async (t) => {
+  const { root, env } = await repo(t, { '.openhands/setup.sh': '#!/bin/bash\nset -e\necho "openhands $(pwd)" > oh-marker.txt\n' });
+  const worktree = await createWorktree(root, 'openhands', { env });
+  t.after(() => removeWorktree(root, worktree, { env }).catch(() => {}));
+  assert.equal(worktree.setup.ok, true, JSON.stringify(worktree.setup));
+  assert.equal(worktree.setup.source, '.openhands/setup.sh');
+  assert.match(await readFile(path.join(worktree.path, 'oh-marker.txt'), 'utf8'), /openhands .*\.oasis\/worktrees\//);
+});

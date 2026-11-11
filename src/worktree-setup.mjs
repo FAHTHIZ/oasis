@@ -7,6 +7,8 @@
 //   Windsurf      .windsurf/hooks.json  hooks.post_setup_worktree[].command, run in the new
 //                 worktree with $ROOT_WORKSPACE_PATH = project root.
 //                 https://docs.windsurf.com/windsurf/cascade/workflows
+//   OpenHands     .openhands/setup.sh, run with bash in the new worktree (10 minutes at most).
+//                 https://docs.openhands.dev/openhands/usage/customization/repository
 // These are repository-supplied commands, so they run only in a trusted workspace
 // (oasis trust); otherwise the result says how to allow them. OASIS_WORKTREE_SETUP=0
 // turns this off.
@@ -16,7 +18,7 @@ import { runWorktreeCommand } from './worktrees.mjs';
 
 const MAX_CONFIG = 64 * 1024;
 const MAX_COMMANDS = 40;
-const COMMAND_TIMEOUT = 10 * 60 * 1000;
+const COMMAND_TIMEOUT = 10 * 60 * 1000; // OpenHands' setup.sh limit too
 
 function inside(base, target) {
   const relative = path.relative(base, target);
@@ -68,6 +70,18 @@ export async function worktreeSetupPlan(root, worktreePath, options = {}) {
   const entries = hooks && hooks.hooks && Array.isArray(hooks.hooks.post_setup_worktree) ? hooks.hooks.post_setup_worktree : [];
   const commands = entries.map((entry) => (entry && typeof entry.command === 'string' ? entry.command.trim() : '')).filter(Boolean).slice(0, MAX_COMMANDS);
   if (commands.length) return { source: '.windsurf/hooks.json (post_setup_worktree)', file: hooksFile, env: { ROOT_WORKSPACE_PATH: root }, steps: commands.map((command) => ({ label: command, argv: shellCommand(command, platform) })) };
+  // OpenHands runs .openhands/setup.sh with bash whenever it starts on a repository
+  // (10-minute limit); in OASIS that is each fresh worktree. Not on Windows.
+  if (platform !== 'win32') {
+    for (const base of [worktreePath, root]) {
+      const script = path.join(base, '.openhands', 'setup.sh');
+      try {
+        const info = await lstat(script);
+        if (!info.isFile()) continue;
+        return { source: '.openhands/setup.sh', file: script, env: { ROOT_WORKSPACE_PATH: root }, steps: [{ label: '.openhands/setup.sh', argv: ['bash', [script]] }] };
+      } catch {}
+    }
+  }
   return null;
 }
 
