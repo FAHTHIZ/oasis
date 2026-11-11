@@ -159,7 +159,12 @@ export async function runHeadless(options) {
     // Text mode: one short line per step on stderr, so `oasis -p` is not
     // silent for minutes. On by default only when stderr is a terminal;
     // OASIS_PROGRESS=1 forces it on, OASIS_PROGRESS=0 turns it off.
-    progressWrite = null
+    progressWrite = null,
+    // Raw tool callbacks ({ name, args, call, subagent } / { name, result, call, subagent }),
+    // used by `oasis exec --json` to build Codex exec items from untruncated results.
+    toolObserver = null,
+    // Extra images for the first prompt (Codex exec --image), [{ mediaType, data, name }].
+    images: extraImages = []
   } = options;
   if (!OUTPUT_FORMATS.includes(outputFormat)) throw new Error('--output-format must be one of ' + OUTPUT_FORMATS.join(', ') + '.');
   const started = Date.now();
@@ -203,6 +208,7 @@ export async function runHeadless(options) {
     }
     emit({ type: 'system', subtype: 'init', session_id: session.sessionId || null, cwd: root, model: config.model, permission_mode: session.permissions.mode, tools: session.toolDefinitions.map((tool) => tool.function.name) });
     const expanded = await expandFileMentions(root, rawPrompt, { images: visionEnabled(config, env) }).catch(() => ({ text: rawPrompt, files: [] }));
+    if (Array.isArray(extraImages) && extraImages.length) expanded.images = [...(expanded.images || []), ...extraImages];
     const runner = planOnly ? runAgentPlan : runAgentTurn;
     const schemaInstruction = jsonSchema ? '\n\nWhen you are done, your final message must be only a JSON value that matches this JSON Schema, with no other text and no code fence:\n' + JSON.stringify(jsonSchema) : '';
     const turnOptions = {
@@ -271,9 +277,9 @@ export async function runHeadless(options) {
         denied.push({ tool_name: meta && meta.tool || null, ...(meta && meta.input && typeof meta.input === 'object' ? { tool_input: meta.input } : {}), detail: String(message).replace(/\s+/g, ' ').trim().slice(0, 300) });
         return false;
       },
-      onToolStart: ({ name, args, subagent, call }) => (progress && !subagent && progress(progressLine(name, args)), emit({ type: 'tool_use', ...(call && call.id ? { id: call.id } : {}), name, input: args, ...(subagent ? { subagent } : {}) })),
+      onToolStart: ({ name, args, subagent, call }) => (toolObserver && toolObserver.start && toolObserver.start({ name, args, subagent, call }), progress && !subagent && progress(progressLine(name, args)), emit({ type: 'tool_use', ...(call && call.id ? { id: call.id } : {}), name, input: args, ...(subagent ? { subagent } : {}) })),
       ...(forwardSubagentText || env.CLAUDE_CODE_FORWARD_SUBAGENT_TEXT === '1' || env.OASIS_FORWARD_SUBAGENT_TEXT === '1' ? { onSubagentText: ({ text, subagent, agentId, parentToolUseId }) => emit({ type: 'assistant', message: { role: 'assistant', content: [{ type: 'text', text }] }, parent_tool_use_id: parentToolUseId, subagent, agent_id: agentId, session_id: session.sessionId || null }) } : {}),
-      onToolResult: ({ name, result: toolResult, subagent }) => { if (persistence.enabled) saveMidTurn(session, { env }); emit({ type: 'tool_result', name, is_error: Boolean(toolResult && (toolResult.error || (toolResult.exitCode !== undefined && toolResult.exitCode !== 0))), content: truncateValue(toolResult), ...(subagent ? { subagent } : {}) }) },
+      onToolResult: ({ name, result: toolResult, subagent, call }) => { if (persistence.enabled) saveMidTurn(session, { env }); if (toolObserver && toolObserver.result) toolObserver.result({ name, result: toolResult, subagent, call }); emit({ type: 'tool_result', ...(call && call.id ? { tool_use_id: call.id } : {}), name, is_error: Boolean(toolResult && (toolResult.error || (toolResult.exitCode !== undefined && toolResult.exitCode !== 0))), content: truncateValue(toolResult), ...(subagent ? { subagent } : {}) }) },
       onText: (text) => emit({ type: 'assistant', text }),
       onAutoMode: ({ tool, decision, reason }) => emit({ type: 'system', subtype: 'auto_mode', tool, decision, reason }),
       // Notice on stderr in every output format, so text results on stdout stay clean.

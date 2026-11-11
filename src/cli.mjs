@@ -33,6 +33,7 @@ import { renderStatusLine, statusLinePayload } from './status-line.mjs';
 import { BUILTIN_COMMANDS, COMMAND_ALIASES, runBuiltinCommand, createUsageTracker, recordUsage, formatInterval } from './slash.mjs';
 import { appendMemoryNote } from './memory.mjs';
 import { runHeadless, OUTPUT_FORMATS, headlessSetupErrorOutput } from './headless.mjs';
+import { randomUUID } from 'node:crypto';
 import { fstatSync, readFileSync, realpathSync, rmSync } from 'node:fs';
 import { runDiagnostics, formatDiagnostics, CHECKERS } from './diagnostics.mjs';
 import { readInput, KeyDecoder } from './line-editor.mjs';
@@ -1610,12 +1611,45 @@ async function readPipedStdin(options = {}) {
   return data.slice(0, 1024 * 1024);
 }
 
+// Codex `--config key=value` for `oasis exec`: the keys the Codex SDK sets map to
+// OASIS options; anything else is reported on stderr and ignored.
+function applyCodexConfig(pair, headless, { parseCodexConfigValue, codexEffort }) {
+  const key = pair.slice(0, pair.indexOf('=')).trim();
+  const value = parseCodexConfigValue(pair.slice(pair.indexOf('=') + 1));
+  if (key === 'model') { SESSION_OPTIONS.model = String(value); return; }
+  if (key === 'model_reasoning_effort') { const level = codexEffort(value); if (level) SESSION_OPTIONS.effort = level; return; }
+  if (key === 'approval_policy') {
+    headless.codexApproval = String(value);
+    if (value === 'never') SESSION_OPTIONS.permissionMode = SESSION_OPTIONS.permissionMode === 'plan' ? 'plan' : 'auto';
+    else SESSION_OPTIONS.permissionMode = SESSION_OPTIONS.permissionMode || 'default';
+    return;
+  }
+  if (key === 'sandbox_mode') {
+    headless.codexSandbox = String(value);
+    if (value === 'read-only') SESSION_OPTIONS.permissionMode = 'plan';
+    else if (value === 'workspace-write') process.env.OASIS_SANDBOX = '1';
+    else if (value === 'danger-full-access') process.env.OASIS_SANDBOX = '0';
+    return;
+  }
+  if (key === 'sandbox_workspace_write.network_access') { SESSION_OPTIONS.settingsOverrides.push({ settings: { sandbox: { network: value === true } }, file: '--config' }); return; }
+  if (key === 'web_search') { if (value === 'disabled' || value === false) SESSION_OPTIONS.disallowedTools.push('web_search'); return; }
+  if (key === 'tools.web_search') { if (value === false) SESSION_OPTIONS.disallowedTools.push('web_search'); return; }
+  (headless.ignoredConfig ||= []).push(key);
+}
+
 async function printMode(root, headless, args, autoApprove, persistence) {
   const state = { started: false };
   try {
     return await printModeRun(root, headless, args, autoApprove, persistence, state);
   } catch (error) {
     if (state.started) throw error;
+    if (headless.codexJson) {
+      // Codex exec --json: a parseable error event on stdout, the message on stderr, exit 1.
+      stdout.write(JSON.stringify({ type: 'error', message: String(error && error.message || error) }) + '\n');
+      stderr.write('OASIS error: ' + String(error && error.message || error) + '\n');
+      process.exitCode = 1;
+      return;
+    }
     const out = headlessSetupErrorOutput(error, headless.outputFormat);
     if (out.stdout) stdout.write(out.stdout);
     stderr.write(out.stderr);
@@ -1625,6 +1659,19 @@ async function printMode(root, headless, args, autoApprove, persistence) {
 
 async function printModeRun(root, headless, args, autoApprove, persistence, state) {
   let prompt = [headless.prompt, ...args].filter(Boolean).join(' ').trim();
+  if (headless.codexConfig && headless.codexConfig.length) {
+    const helpers = await import('./codex-exec-json.mjs');
+    for (const pair of headless.codexConfig) applyCodexConfig(pair, headless, helpers);
+  }
+  // Codex danger-full-access + approval never is Codex's "no sandbox, no approvals"
+  // (--dangerously-bypass-approvals-and-sandbox): the same as --yolo here. The
+  // runtime's hard refusals (home deletion, force pushes, ...) still apply.
+  if (headless.codexSandbox === 'danger-full-access' && headless.codexApproval === 'never' && !SESSION_OPTIONS.restricted) {
+    SESSION_OPTIONS.permissionMode = 'bypassPermissions'; SESSION_OPTIONS.allowBypass = true; autoApprove = true;
+  }
+  // Codex exec: a prompt of "-" means read it from stdin.
+  if (prompt === '-') prompt = '';
+  if (headless.ignoredConfig && headless.ignoredConfig.length) stderr.write('[exec] Ignored Codex config key(s) with no OASIS equivalent: ' + headless.ignoredConfig.join(', ') + '\n');
   const streamInput = headless.inputFormat === 'stream-json';
   const stdinWait = Number(process.env.OASIS_STDIN_WAIT_SECONDS);
   const piped = streamInput ? '' : await readPipedStdin({ firstByteMs: prompt ? (Number.isFinite(stdinWait) && stdinWait >= 0 ? stdinWait : 3) * 1000 : 0 });
@@ -1680,10 +1727,26 @@ async function printModeRun(root, headless, args, autoApprove, persistence, stat
   try {
   let summary;
   state.started = true;
+  let codexStream = null;
+  let codexImages = [];
+  if (headless.codexJson) {
+    const { createCodexExecJsonStream } = await import('./codex-exec-json.mjs');
+    // The thread id is known up front (Codex prints thread.started first), so name the session now.
+    if (!persistence.resumeId && !SESSION_OPTIONS.sessionId) SESSION_OPTIONS.sessionId = randomUUID();
+    codexStream = createCodexExecJsonStream({ write: (text) => stdout.write(text), root, threadId: persistence.resumeId || SESSION_OPTIONS.sessionId });
+    if (headless.images && headless.images.length) {
+      const { inputToPrompt } = await import('./codex-app-server.mjs');
+      const converted = inputToPrompt(headless.images.map((file) => ({ type: 'localImage', path: file })), root);
+      codexImages = converted.images;
+      if (converted.text) prompt += '\n\n' + converted.text;
+    }
+  }
   ({ exitCode, summary } = await runHeadless({
     signal: stopController.signal,
     prompt, root, config, autoApprove,
-    outputFormat: headless.outputFormat,
+    ...(codexStream ? { onEvent: codexStream.onEvent, onSession: codexStream.onSession, toolObserver: codexStream.toolObserver } : {}),
+    ...(codexImages.length ? { images: codexImages } : {}),
+    outputFormat: codexStream ? 'none' : headless.outputFormat,
     maxTurns: headless.maxTurns,
     ...(headless.goal ? { goal: headless.goal, goalMaxTurns: headless.goalMaxTurns || 10 } : {}),
     planOnly: headless.planOnly,
@@ -2640,7 +2703,18 @@ async function main() {
     return;
   }
   // `oasis exec PROMPT` is an alias for `oasis -p PROMPT` (Codex CLI muscle memory).
-  if (rawArgs[0] === 'exec') rawArgs[0] = '-p';
+  // `oasis exec --json` / `--experimental-json` streams Codex exec JSONL events, so
+  // the Codex SDK can run OASIS (codexPathOverride). `exec resume ID|--last` continues.
+  let execMode = false;
+  if (rawArgs[0] === 'exec') {
+    execMode = true;
+    rawArgs[0] = '-p';
+    if (rawArgs[1] === 'resume') {
+      if (rawArgs[2] === '--last') rawArgs.splice(1, 2, '-c');
+      else if (rawArgs[2] && !rawArgs[2].startsWith('-')) rawArgs.splice(1, 2, '-r', rawArgs[2]);
+      else rawArgs.splice(1, 1);
+    }
+  }
   // `oasis resume [--last | ID]` (Codex CLI) maps to -c / -r.
   if (rawArgs[0] === 'resume' && (rawArgs.length === 1 || rawArgs[1] === '--last' || /^[0-9a-f][0-9a-f-]{6,}$/i.test(rawArgs[1] || '') || String(rawArgs[1] || '').startsWith('-'))) {
     if (rawArgs[1] === '--last') rawArgs.splice(0, 2, '-c'); else rawArgs[0] = '-r';
@@ -2861,6 +2935,7 @@ async function main() {
     if (arg === '--full-auto') { SESSION_OPTIONS.permissionMode = 'acceptEdits'; process.env.OASIS_SANDBOX = '1'; continue; }
     if (arg === '--sandbox' || arg === '-s' || arg.startsWith('--sandbox=')) {
       const value = arg.includes('=') ? arg.slice(arg.indexOf('=') + 1) : rawArgs[++i];
+      headless.codexSandbox = value;
       if (value === 'read-only') SESSION_OPTIONS.permissionMode = 'plan';
       else if (value === 'workspace-write') process.env.OASIS_SANDBOX = '1';
       else if (value === 'danger-full-access') process.env.OASIS_SANDBOX = '0';
@@ -2870,6 +2945,7 @@ async function main() {
     if (arg === '--ask-for-approval' || arg === '-a' || arg.startsWith('--ask-for-approval=')) {
       const value = arg.includes('=') ? arg.slice(arg.indexOf('=') + 1) : rawArgs[++i];
       // never: no prompts, like Codex; OASIS uses auto mode, whose risk check still blocks dangerous commands.
+      headless.codexApproval = value;
       if (value === 'never') SESSION_OPTIONS.permissionMode = 'auto';
       else if (value === 'on-request' || value === 'on-failure' || value === 'untrusted') SESSION_OPTIONS.permissionMode = SESSION_OPTIONS.permissionMode || 'default';
       else throw new Error('--ask-for-approval must be untrusted, on-failure, on-request or never.');
@@ -2890,6 +2966,28 @@ async function main() {
       continue;
     }
     if (arg === '--skip-git-repo-check') continue;
+    if (execMode && (arg === '--json' || arg === '--experimental-json')) { headless.codexJson = true; continue; }
+    if (execMode && (arg === '--config' || arg.startsWith('--config=') || (arg === '-c' && /^[\w.-]+=/.test(rawArgs[i + 1] || '')))) {
+      const pair = arg.includes('=') && arg.startsWith('--config=') ? arg.slice('--config='.length) : rawArgs[++i];
+      if (!pair || !pair.includes('=')) throw new Error('--config needs key=value.');
+      (headless.codexConfig ||= []).push(pair);
+      continue;
+    }
+    if (arg === '--image' || (execMode && arg === '-i') || arg.startsWith('--image=')) {
+      const value = arg.includes('=') ? arg.slice(arg.indexOf('=') + 1) : rawArgs[++i];
+      if (!value) throw new Error('--image needs a file path.');
+      for (const file of value.split(',').map((item) => item.trim()).filter(Boolean)) (headless.images ||= []).push(path.resolve(file));
+      continue;
+    }
+    if (execMode && (arg === '--thread-source' || arg === '--color')) { i++; continue; }
+    if (execMode && arg === '--ephemeral') { noPersist = true; continue; }
+    if (execMode && arg === 'resume' && !args.length) {
+      // The Codex SDK puts `resume THREAD_ID` after the flags.
+      const next = rawArgs[i + 1];
+      if (next === '--last') { i++; persistSession = true; continueSession = true; }
+      else if (next && !next.startsWith('-')) { resumeId = rawArgs[++i]; persistSession = true; }
+      continue;
+    }
     // Gemini CLI: start the interactive session with this first message.
     if (arg === '-i' || arg === '--prompt-interactive' || arg.startsWith('--prompt-interactive=')) {
       const value = arg.includes('=') ? arg.slice(arg.indexOf('=') + 1) : rawArgs[++i];

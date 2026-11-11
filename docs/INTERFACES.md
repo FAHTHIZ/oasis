@@ -81,6 +81,8 @@ oasis
 
 Use `oasis -p` or `oasis exec` for non-interactive runs and `oasis doctor` to check the local environment. In text mode, `oasis -p` prints one dim progress line per step on stderr when stderr is a terminal; stdout carries only the answer. Set `OASIS_PROGRESS=0` to hide the lines or `OASIS_PROGRESS=1` to keep them when stderr is redirected. The terminal does not need the web app to be open.
 
+`oasis exec --json` prints the Codex exec JSONL event stream (`thread.started`, `item.*`, `turn.completed`), so the OpenAI Codex TypeScript SDK can drive OASIS with `codexPathOverride` pointing at the `oasis` binary. Thread ids are OASIS session ids; `resume THREAD_ID` continues one. See CHANGELOG for the item and `--config` mapping.
+
 Android users who want the CLI on the device itself can run it in Termux with Node.js 22.15 or newer and Git.
 
 ## Downloads
