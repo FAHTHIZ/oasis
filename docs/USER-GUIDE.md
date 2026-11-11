@@ -82,6 +82,8 @@ To run a routine when something happens instead of on a clock, use `webhook` as 
 
 `oasis web` and `oasis gateway` also run routines while they are open (one scheduler per config folder; `OASIS_ROUTINES=off` turns this off), and Settings → Routines in the browser lists and manages them.
 
+To keep a conversation's context, add `--from-session ID` (from `oasis sessions list`). Every run starts from a copy of that conversation and the original stays as it is. Add `--chain` and each run continues from the last one, so the routine remembers what it found before. In a chat, ask for a routine that "continues this conversation".
+
 You can also ask in a session, for example "check CI every weekday at 9 and send the summary to Telegram". The agent uses its `routine_manage` tool and shows you the exact routine before saving it; you approve every create, edit, resume, extra run or removal, even with `--yes`.
 
 ## 5. Browser workspace

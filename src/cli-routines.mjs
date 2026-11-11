@@ -37,6 +37,10 @@ Options:
                            pull_request, pull_request.opened, issues.labeled
                            (repeatable; from X-GitHub-Event or X-OASIS-Event
                            and the payload's "action"); --any-event clears it
+  --from-session ID        each run starts from this saved conversation (forked,
+                           so the original is never changed); '' clears it
+  --chain                  with --from-session: each run continues from the
+                           previous run's conversation (--no-chain to stop)
   --paused                 create it paused (resume when ready)
 Output starting with [SILENT] is saved but not delivered.`;
 
@@ -57,6 +61,9 @@ function parseOptions(args) {
     else if (arg === '--skill') skills.push(value());
     else if (arg === '--clear-skills') fields.skills = [];
     else if (arg === '--event') events.push(value());
+    else if (arg === '--from-session') fields.fromSession = value();
+    else if (arg === '--chain') fields.chain = true;
+    else if (arg === '--no-chain') fields.chain = false;
     else if (arg === '--any-event') fields.events = [];
     else if (arg === '--deliver') fields.deliver = value();
     else if (arg === '--tz' || arg === '--timezone') fields.timezone = value();
@@ -103,6 +110,7 @@ export async function scheduleCommand(args = [], { env = process.env, write = (t
     say(describeJob(job));
     say('  ' + (job.kind === 'script' ? 'command: ' : 'prompt: ') + job.prompt.split('\n')[0].slice(0, 200));
     if (job.workdir) say('  workdir: ' + job.workdir);
+    if (job.fromSession) say('  continues: ' + job.fromSession + (job.chain ? ' (chained: each run continues the last one)' : ' (each run forks it)'));
     if (job.schedule.type === 'event') {
       if (job.events?.length) say('  events:  ' + job.events.join(', '));
       say('  webhook: POST <oasis web address>/hooks/routines/' + job.id + (job.pendingEvents?.length ? '  (' + job.pendingEvents.length + ' waiting)' : ''));

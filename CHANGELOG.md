@@ -16,6 +16,7 @@ User-facing change history grouped by package version. A version heading does no
 - Webhook routines can filter events like Claude Code's GitHub triggers: `--event pull_request.opened --event release` matches `X-GitHub-Event` (or `X-OASIS-Event`) plus the payload's `action`. GitHub's `ping` is acknowledged and never runs. Non-matching events get `200 {accepted:false}` and are not queued.
 - Fixed: `oasis schedule edit` could not clear a field (`--tz ''`, `--model ''`, `--workdir ''`).
 - Settings → Routines → Recent results shows the last 10 runs of a routine with status, delivery and saved output (`GET /api/routines?runs=ID`).
+- Conversation routines (like Codex thread automations): `--from-session ID` starts every run from a copy of a saved conversation, and `--chain` makes each run continue from the previous successful run. The original conversation is never written to, since each run forks it under a new id that the routine records. In a session, the agent's `routine_manage` takes `continue_this_conversation: true`.
 - The agent can manage routines itself with the `routine_manage` tool (list, show, create, edit, pause, resume, run, cancel, remove). Creating, editing, resuming, triggering and removing ask you every time, even with `--yes`, and the prompt shows the schedule, command, folder, permission mode and delivery target. Subagents and runs with nobody to answer are refused and told to use `oasis schedule`. Pausing and cancelling never need approval.
 
 ### Desktop app

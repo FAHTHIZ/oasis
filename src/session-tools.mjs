@@ -40,6 +40,8 @@ export const SESSION_TOOL_DEFINITIONS = [
       skills: { type: 'array', items: { type: 'string' } },
       deliver: { type: 'string', description: 'local (default), telegram:CHAT_ID, slack:CHANNEL, discord:CHANNEL_ID or webhook:https://...' },
       events: { type: 'array', items: { type: 'string' }, description: 'Webhook routines only: run just for these events, e.g. pull_request.opened, issues.' },
+      continue_this_conversation: { type: 'boolean', description: 'Each run starts from a copy of this conversation, so it keeps the context so far (the original is never changed). Set chain too to carry context from run to run.' },
+      chain: { type: 'boolean' },
       timezone: { type: 'string' }, grace_minutes: { type: 'integer', minimum: 0, maximum: 1440 },
       permission_mode: { type: 'string', enum: ['default', 'acceptEdits', 'plan', 'auto', 'dontAsk'] },
       paused: { type: 'boolean' }, reason: { type: 'string' } }, ['action']),
@@ -547,12 +549,18 @@ export async function manageRoutine(session, args = {}, options = {}) {
   if (action === 'pause') return { paused: brief(await routines.pauseJob(args.id, args.reason || 'Paused by the agent.', { env })) };
   if (action === 'cancel') { const { job, cancelled } = await routines.cancelRun(args.id, { env }); return { id: job.id, cancelled }; }
   const fields = {};
-  for (const [from, to] of [['schedule', 'schedule'], ['prompt', 'prompt'], ['name', 'name'], ['kind', 'kind'], ['workdir', 'workdir'], ['skills', 'skills'], ['deliver', 'deliver'], ['timezone', 'timezone'], ['grace_minutes', 'graceMinutes'], ['events', 'events'], ['permission_mode', 'permissionMode'], ['paused', 'paused']]) {
+  for (const [from, to] of [['schedule', 'schedule'], ['prompt', 'prompt'], ['name', 'name'], ['kind', 'kind'], ['workdir', 'workdir'], ['skills', 'skills'], ['deliver', 'deliver'], ['timezone', 'timezone'], ['grace_minutes', 'graceMinutes'], ['events', 'events'], ['chain', 'chain'], ['permission_mode', 'permissionMode'], ['paused', 'paused']]) {
     if (args[from] !== undefined) fields[to] = args[from];
   }
   if (action === 'create' && !fields.workdir) fields.workdir = session.root;
+  if (args.continue_this_conversation) {
+    const sessionId = session.sessionId || null;
+    if (!sessionId) throw new Error('This conversation is not saved, so a routine cannot continue it. Start OASIS without --no-session-persistence.');
+    fields.fromSession = sessionId;
+    fields.workdir = session.root;
+  }
   const describe = () => {
-    if (action === 'create') return 'Create a routine that runs ' + (fields.kind === 'script' ? 'the shell command ' : 'an agent task ') + JSON.stringify(String(fields.prompt || '').slice(0, 300)) + ' on schedule "' + fields.schedule + '"' + (fields.timezone ? ' (' + fields.timezone + ')' : '') + ' in ' + fields.workdir + ', permission mode ' + (fields.permissionMode || 'your default rules') + ', delivering to ' + (fields.deliver || 'local') + '? It runs unattended while oasis schedule daemon is running.';
+    if (action === 'create') return 'Create a routine that runs ' + (fields.kind === 'script' ? 'the shell command ' : 'an agent task ') + JSON.stringify(String(fields.prompt || '').slice(0, 300)) + ' on schedule "' + fields.schedule + '"' + (fields.timezone ? ' (' + fields.timezone + ')' : '') + ' in ' + fields.workdir + (fields.fromSession ? ', continuing this conversation' + (fields.chain ? ' run after run' : '') : '') + ', permission mode ' + (fields.permissionMode || 'your default rules') + ', delivering to ' + (fields.deliver || 'local') + '? It runs unattended while oasis schedule daemon is running.';
     if (action === 'edit') return 'Change routine ' + args.id + ': ' + JSON.stringify(fields) + '?';
     return { resume: 'Resume routine ' + args.id + ' so it runs on its schedule again?', run: 'Run routine ' + args.id + ' once now (an extra unattended run)?', remove: 'Delete routine ' + args.id + ' (and stop a run in progress)?' }[action];
   };

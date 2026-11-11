@@ -257,11 +257,13 @@ export async function startBackgroundSession(options = {}) {
   const dir = backgroundDirectory(env);
   await mkdir(dir, { recursive: true, mode: 0o700 });
   const id = options.id && ID.test(options.id) ? options.id : 'bg-' + randomUUID().replace(/-/g, '').slice(0, 8);
-  const sessionId = options.resumeId || randomUUID();
+  // fork: start from a saved conversation under a new id, leaving the original untouched.
+  const fork = Boolean(options.resumeId && options.fork);
+  const sessionId = options.resumeId && !fork ? options.resumeId : randomUUID();
   const runId = randomUUID();
   const logFile = path.join(dir, id + '.log');
   const args = [CLI, '-p', prompt, '--output-format', 'stream-json', '--workspace', root];
-  if (options.resumeId) args.push('--resume', options.resumeId); else args.push('--session-id', sessionId);
+  if (options.resumeId) { args.push('--resume', options.resumeId); if (fork) args.push('--fork-session', '--session-id', sessionId); } else args.push('--session-id', sessionId);
   if (options.permissionMode) args.push('--permission-mode', options.permissionMode);
   if (options.model) args.push('--model', options.model);
   if (options.name) args.push('--name', options.name);
