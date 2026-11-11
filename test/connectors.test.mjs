@@ -314,3 +314,13 @@ test('startup tip names the project apps that are not connected', async (t) => {
   assert.equal(await appTip(root, env), 'This project uses Stripe and Sentry. /connect stripe sentry gives Oasis their tools.');
   assert.equal(await appTip(root, { ...env, OASIS_TIP: 'off' }), '');
 });
+
+test('the system prompt names project apps that are not connected', async (t) => {
+  const { root, env } = await sandbox(t);
+  const fs = await import('node:fs/promises');
+  const path = await import('node:path');
+  const { projectAppsSection } = await import('../src/connectors.mjs');
+  assert.equal(await projectAppsSection(root, env), '');
+  await fs.writeFile(path.join(root, 'netlify.toml'), '');
+  assert.match(await projectAppsSection(root, env), /Apps this project uses that are not connected: Netlify \(netlify\.toml\)\. If a task needs live data or actions from one, call connect_service/);
+});
