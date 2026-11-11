@@ -6,6 +6,7 @@ weaknesses. Newest first. Detailed user-facing notes go in the CHANGELOG.
 ## 2026-11-11 (Codex SDK drop-in)
 
 - Read the Codex TypeScript SDK source ([exec.ts](https://raw.githubusercontent.com/openai/codex/main/sdk/typescript/src/exec.ts), events.ts, items.ts, thread.ts). It spawns `codex exec --experimental-json` with flags, then `resume ID`, and writes the prompt to stdin. `oasis exec --json` now emits that event stream (new src/codex-exec-json.mjs; raw tool callbacks via a `toolObserver` option on runHeadless; `images` option for `--image`). Test: test/codex-exec-json.test.mjs (5 pass) mirrors the SDK argv and Thread.run aggregation; headless, flags, exec-alias and App Server tests 95 pass, 0 fail.
+- Manual check with the published `@openai/codex-sdk` 0.167.1 and a scripted model: `thread.run` returned the command, file change and final message items with usage; `runStreamed` with `outputSchema` returned the JSON document; `resumeThread` kept the thread id. The SDK needs an executable path, so point `codexPathOverride` at the installed `oasis` binary (or a wrapper script).
 - Known difference: OASIS's inline-code check declines `node -e`-style commands even under danger-full-access + never; they show as failed `command_execution` items.
 
 : Gemini CLI, OpenCode, Goose, Aider, Roo/Kilo)
