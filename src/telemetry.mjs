@@ -164,10 +164,10 @@ export class Telemetry {
     return { ...this.baseAttributes(), ...(branch ? { 'vcs.ref.head.name': branch } : {}) };
   }
 
-  instrument(kind, name, unit, description) {
+  instrument(kind, name, unit, description, buckets = null) {
     const key = kind + '\u0000' + name;
     if (!this.instruments.has(key)) {
-      const options = { unit, description, valueType: this.sdk.api.ValueType.DOUBLE };
+      const options = { unit, description, valueType: this.sdk.api.ValueType.DOUBLE, ...(buckets ? { advice: { explicitBucketBoundaries: buckets } } : {}) };
       this.instruments.set(key, kind === 'counter' ? this.meter.createCounter(name, options) : this.meter.createHistogram(name, options));
     }
     return this.instruments.get(key);
@@ -185,6 +185,21 @@ export class Telemetry {
     if (!Number.isFinite(Number(value))) return;
     const all = cleanAttributes({ ...this.baseAttributes(), ...attrs });
     this.whenReady(() => this.instrument('histogram', name, unit, description).record(Number(value), all));
+  }
+
+  // OpenTelemetry GenAI metrics (gen_ai.*). They carry only the attributes the
+  // conventions list (no session.id), so dashboards built on the conventions
+  // aggregate across sessions. buckets: the boundaries the conventions advise.
+  genAiCount(name, value, attrs = {}, description = '') {
+    if (!Number.isFinite(Number(value)) || Number(value) <= 0) return;
+    const all = cleanAttributes(attrs);
+    this.whenReady(() => this.instrument('counter', name, '{token}', description).add(Number(value), all));
+  }
+
+  genAiRecord(name, value, attrs = {}, unit = 's', buckets = GENAI_DURATION_BUCKETS, description = '') {
+    if (!Number.isFinite(Number(value))) return;
+    const all = cleanAttributes(attrs);
+    this.whenReady(() => this.instrument('histogram', name, unit, description, buckets).record(Number(value), all));
   }
 
   event(name, attrs = {}) {
@@ -281,6 +296,40 @@ const GENAI_HOSTS = [
   [/(^|\.)mistral\.ai$/, 'mistral_ai'], [/(^|\.)groq\.com$/, 'groq'], [/(^|\.)x\.ai$/, 'x_ai'], [/(^|\.)deepseek\.com$/, 'deepseek'],
   [/(^|\.)perplexity\.ai$/, 'perplexity'], [/(^|\.)openrouter\.ai$/, 'openrouter'], [/(^|\.)cohere\.(com|ai)$/, 'cohere']
 ];
+
+// Bucket boundaries from the OpenTelemetry GenAI conventions
+// (client-inference.md, execute-tool.md, gen-ai-token-metrics.md).
+export const GENAI_DURATION_BUCKETS = [0.01, 0.02, 0.04, 0.08, 0.16, 0.32, 0.64, 1.28, 2.56, 5.12, 10.24, 20.48, 40.96, 81.92];
+export const GENAI_TOKEN_BUCKETS = [1, 4, 16, 64, 256, 1024, 4096, 16384, 65536, 262144, 1048576, 4194304, 16777216, 67108864];
+
+// OTEL_SEMCONV_STABILITY_OPT_IN=gen_ai_latest_experimental (the standard
+// opt-in used by OpenTelemetry instrumentations) switches span names to the
+// GenAI conventions: "chat MODEL", "execute_tool TOOL", "invoke_agent AGENT".
+// The default keeps OASIS's oasis.* names, which Claude Code-style dashboards use.
+export function genAiSpanNames(env = process.env) {
+  return String(env.OTEL_SEMCONV_STABILITY_OPT_IN || '').split(',').map((item) => item.trim()).includes('gen_ai_latest_experimental');
+}
+
+// server.address / server.port for the model endpoint, when OASIS knows it.
+export function genAiServer(config = {}) {
+  let url;
+  try { url = new URL(String(config && (config.baseUrl || config.baseURL) || '')); } catch { return {}; }
+  if (!/^https?:$/.test(url.protocol) || !url.hostname) return {};
+  const port = url.port ? Number(url.port) : url.protocol === 'https:' ? 443 : 80;
+  return { 'server.address': url.hostname.replace(/^\[|\]$/g, ''), 'server.port': port };
+}
+
+// A low-cardinality error.type: the HTTP status, a Node error code, an
+// exception class name, or the conventions' _OTHER fallback.
+export function genAiErrorType(error) {
+  if (!error) return '_OTHER';
+  const status = Number(error.status || error.statusCode);
+  if (Number.isInteger(status) && status >= 100 && status < 600) return String(status);
+  if (error.name === 'AbortError') return 'cancelled';
+  if (typeof error.code === 'string' && /^[A-Z][A-Z0-9_]{1,40}$/.test(error.code)) return error.code;
+  if (typeof error.name === 'string' && error.name && error.name !== 'Error' && /^[A-Za-z][A-Za-z0-9_.]{1,60}$/.test(error.name)) return error.name;
+  return '_OTHER';
+}
 
 export function genAiProviderName(config = {}) {
   const protocol = String(config && config.protocol || '');

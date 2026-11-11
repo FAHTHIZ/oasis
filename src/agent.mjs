@@ -67,7 +67,7 @@ import { countJsonTokens } from './tokens.mjs';
 import { recordContextAnchor } from './context.mjs';
 import { estimateTokens, microcompact, maskObservations, contextWindowSize, modelContextWindow, compactionThresholdChars, mustPreserveContextBlock, appendMustPreserveContext } from './context.mjs';
 import { validateProtocol, validateBaseUrl } from './config.mjs';
-import { getTelemetry, lineChanges, genAiProviderName } from './telemetry.mjs';
+import { GENAI_TOKEN_BUCKETS, genAiErrorType, genAiProviderName, genAiServer, genAiSpanNames, getTelemetry, lineChanges } from './telemetry.mjs';
 import { isAnthropicFamily, cloudEndpoint, cloudBody, cloudHeaders, cloudStreams } from './cloud-providers.mjs';
 import { loadSettings, normalizeLanguage } from './settings.mjs';
 import { withReplyLanguage } from './reply-language.mjs';
@@ -1243,8 +1243,25 @@ async function requestCompletionTracedInner(session, options = {}) {
   if (!tel) return requestCompletionRaw(session, options);
   const model = session.config && session.config.model || '';
   const attrs = { model, provider: session.config && session.config.protocol || '', ...(session.sessionId ? { 'session.id': session.sessionId } : {}) };
-  const genAi = { 'gen_ai.operation.name': 'chat', 'gen_ai.provider.name': genAiProviderName(session.config), 'gen_ai.request.model': model, ...(session.sessionId ? { 'gen_ai.conversation.id': session.sessionId } : {}) };
-  return tel.span('oasis.llm_request', { ...attrs, ...genAi }, async (span) => {
+  const server = genAiServer(session.config);
+  const genAi = { 'gen_ai.operation.name': 'chat', 'gen_ai.provider.name': genAiProviderName(session.config), 'gen_ai.request.model': model, ...server, ...(session.sessionId ? { 'gen_ai.conversation.id': session.sessionId } : {}), ...(typeof options.onDelta === 'function' ? { 'gen_ai.request.stream': true } : {}), ...(session.reasoningEffort ? { 'gen_ai.request.reasoning.level': String(session.reasoningEffort) } : {}) };
+  // Attributes for the gen_ai.client.inference.* metrics (no session id).
+  const metricAttrs = { 'gen_ai.operation.name': 'chat', 'gen_ai.provider.name': genAi['gen_ai.provider.name'], 'gen_ai.request.model': model, ...server };
+  const recordInference = (seconds, usage, extra = {}) => {
+    const all = { ...metricAttrs, ...extra };
+    tel.genAiRecord('gen_ai.client.inference.duration', seconds, all, 's', undefined, 'GenAI inference duration');
+    tel.genAiRecord('gen_ai.client.inference.operation.input_tokens', usage.inputTokens || 0, all, '{token}', GENAI_TOKEN_BUCKETS, 'Input tokens per inference');
+    tel.genAiRecord('gen_ai.client.inference.operation.output_tokens', usage.outputTokens || 0, all, '{token}', GENAI_TOKEN_BUCKETS, 'Output tokens per inference');
+    // Providers do not split OASIS's counts by modality, so they are "unknown".
+    const counted = { ...all, 'gen_ai.token.modality': 'unknown' };
+    tel.genAiCount('gen_ai.client.inference.usage.input_tokens', usage.inputTokens, counted, 'Input tokens, including cached tokens');
+    tel.genAiCount('gen_ai.client.inference.usage.output_tokens', usage.outputTokens, counted, 'Output tokens, including reasoning tokens');
+    tel.genAiCount('gen_ai.client.inference.usage.cache_read.input_tokens', usage.cacheReadTokens, counted, 'Input tokens served from a provider cache');
+    tel.genAiCount('gen_ai.client.inference.usage.cache_write.input_tokens', usage.cacheCreationTokens, counted, 'Input tokens written to a provider cache');
+    tel.genAiCount('gen_ai.client.inference.usage.reasoning.output_tokens', usage.reasoningTokens, all, 'Output tokens used for reasoning');
+  };
+  const spanName = genAiSpanNames(tel.env) ? ('chat ' + (model || '')).trim() : 'oasis.llm_request';
+  return tel.span(spanName, { ...attrs, ...genAi }, async (span) => {
     const started = Date.now();
     try {
       const reply = await requestCompletionRaw(session, options);
@@ -1254,9 +1271,13 @@ async function requestCompletionTracedInner(session, options = {}) {
         'gen_ai.usage.input_tokens': usage.inputTokens || 0,
         'gen_ai.usage.output_tokens': usage.outputTokens || 0,
         ...(usage.cacheReadTokens ? { 'gen_ai.usage.cache_read.input_tokens': usage.cacheReadTokens } : {}),
-        ...(usage.cacheCreationTokens ? { 'gen_ai.usage.cache_creation.input_tokens': usage.cacheCreationTokens } : {}),
-        'gen_ai.response.finish_reasons': reply.truncated ? 'length' : Array.isArray(reply.tool_calls) && reply.tool_calls.length ? 'tool_calls' : 'stop'
+        // cache_write is the current name; cache_creation is kept for existing dashboards.
+        ...(usage.cacheCreationTokens ? { 'gen_ai.usage.cache_write.input_tokens': usage.cacheCreationTokens, 'gen_ai.usage.cache_creation.input_tokens': usage.cacheCreationTokens } : {}),
+        ...(usage.reasoningTokens ? { 'gen_ai.usage.reasoning.output_tokens': usage.reasoningTokens } : {}),
+        // string[] per the conventions: one reason per returned choice (OASIS asks for one).
+        'gen_ai.response.finish_reasons': [reply.truncated ? 'length' : Array.isArray(reply.tool_calls) && reply.tool_calls.length ? 'tool_calls' : 'stop']
       });
+      recordInference(duration / 1000, usage);
       tel.record('oasis.api.duration', duration, attrs, 'ms', 'Model request latency');
       tel.add('oasis.token.usage', usage.inputTokens || 0, { ...attrs, type: 'input' }, 'tokens', 'Tokens used');
       tel.add('oasis.token.usage', usage.outputTokens || 0, { ...attrs, type: 'output' }, 'tokens', 'Tokens used');
@@ -1268,7 +1289,8 @@ async function requestCompletionTracedInner(session, options = {}) {
     } catch (error) {
       tel.add('oasis.api.error.count', 1, attrs, '1', 'Failed model requests');
       tel.event('oasis.api_error', { ...attrs, duration_ms: Date.now() - started, error: String(error && error.message || error).slice(0, 500) });
-      span.attrs['error.type'] = error && (error.status || error.code || error.name) ? String(error.status || error.code || error.name).slice(0, 80) : '_OTHER';
+      span.attrs['error.type'] = genAiErrorType(error);
+      recordInference((Date.now() - started) / 1000, {}, { 'error.type': span.attrs['error.type'] });
       throw error;
     }
   }, { kind: 3 });
@@ -3328,13 +3350,17 @@ async function executeOneCallTraced(session, call, context, options) {
   const name = call.function && call.function.name || 'unknown';
   const attrs = { tool_name: name, ...(session.sessionId ? { 'session.id': session.sessionId } : {}), ...(options.isSubagent ? { subagent: true } : {}) };
   const genAi = { 'gen_ai.operation.name': 'execute_tool', 'gen_ai.tool.name': name, 'gen_ai.tool.type': name.startsWith('mcp_') ? 'extension' : 'function', ...(call.id ? { 'gen_ai.tool.call.id': String(call.id).slice(0, 200) } : {}), ...(session.sessionId ? { 'gen_ai.conversation.id': session.sessionId } : {}) };
-  return tel.span('oasis.tool', { ...attrs, ...genAi }, async (span) => {
+  const agentName = options.isSubagent && options.agentType ? String(options.agentType) : 'oasis';
+  genAi['gen_ai.agent.name'] = agentName;
+  return tel.span(genAiSpanNames(tel.env) ? 'execute_tool ' + name : 'oasis.tool', { ...attrs, ...genAi }, async (span) => {
     const started = Date.now();
     const message = await executeOneCallRaw(session, call, context, options);
     const result = message && message.result;
     const error = result && typeof result === 'object' && typeof result.error === 'string' ? result.error : '';
     const duration = Date.now() - started;
     if (error) { span.error = error; span.attrs['error.type'] = 'tool_error'; }
+    if (result && typeof result === 'object' && Number.isInteger(result.exitCode)) span.attrs['process.exit.code'] = result.exitCode;
+    tel.genAiRecord('gen_ai.execute_tool.duration', duration / 1000, { 'gen_ai.tool.name': name, 'gen_ai.tool.type': genAi['gen_ai.tool.type'], 'gen_ai.agent.name': agentName, ...(error ? { 'error.type': 'tool_error' } : {}) }, 's', undefined, 'GenAI tool execution duration');
     tel.add('oasis.tool.count', 1, { ...attrs, success: !error }, '1', 'Tool calls');
     tel.record('oasis.tool.duration', duration, attrs, 'ms', 'Tool latency');
     const args = safeToolArguments(call.function && call.function.arguments);
@@ -4021,7 +4047,7 @@ async function runAgentTurnWithTelemetry(session, prompt, options = {}) {
   const attrs = { ...(session.sessionId ? { 'session.id': session.sessionId } : {}), model: session.config && session.config.model || '', ...(options.isSubagent ? { subagent: true } : {}) };
   tel.event('oasis.user_prompt', { ...attrs, prompt_length: request.length, ...(tel.logPrompts ? { prompt: request.slice(0, 20000) } : {}) });
   const genAi = { 'gen_ai.operation.name': 'invoke_agent', 'gen_ai.agent.name': options.isSubagent ? String(options.agentType || 'subagent') : 'oasis', ...(options.agentId ? { 'gen_ai.agent.id': String(options.agentId) } : {}), 'gen_ai.provider.name': genAiProviderName(session.config), 'gen_ai.request.model': attrs.model, ...(session.sessionId ? { 'gen_ai.conversation.id': session.sessionId } : {}) };
-  return tel.span(options.isSubagent ? 'oasis.subagent_turn' : 'oasis.turn', { ...attrs, ...genAi }, async (span) => {
+  return tel.span(genAiSpanNames(tel.env) ? 'invoke_agent ' + genAi['gen_ai.agent.name'] : options.isSubagent ? 'oasis.subagent_turn' : 'oasis.turn', { ...attrs, ...genAi }, async (span) => {
     const started = Date.now();
     const result = await runAgentTurnRaw(session, prompt, options);
     Object.assign(span.attrs, { tool_calls: result.toolCalls || 0, tokens: result.tokensUsed || 0, finished: Boolean(result.finished) });

@@ -4,7 +4,7 @@ import http from 'node:http';
 import { mkdtemp } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import { Telemetry, telemetryEnabled, getTelemetry, shutdownTelemetry, lineChanges, genAiProviderName } from '../src/telemetry.mjs';
+import { Telemetry, telemetryEnabled, getTelemetry, shutdownTelemetry, lineChanges, genAiProviderName, genAiErrorType, genAiServer, genAiSpanNames } from '../src/telemetry.mjs';
 import { createSession, runAgentTurn } from '../src/agent.mjs';
 import { scriptedModel, toolCall } from './helpers/scripted-model.mjs';
 
@@ -113,7 +113,10 @@ test('an agent turn exports turn, model and tool spans plus metrics to a collect
   assert.ok(attr(llm, 'gen_ai.provider.name'));
   assert.ok(attr(llm, 'gen_ai.request.model'));
   assert.notEqual(attr(llm, 'gen_ai.usage.input_tokens'), undefined);
-  assert.equal(attr(llm, 'gen_ai.response.finish_reasons'), 'tool_calls');
+  const finish = llm.attributes.find((x) => x.key === 'gen_ai.response.finish_reasons');
+  assert.deepEqual(finish.value.arrayValue.values.map((v) => v.stringValue), ['tool_calls'], 'finish_reasons is a string[]');
+  assert.equal(attr(llm, 'server.address'), '127.0.0.1');
+  assert.ok(Number(attr(llm, 'server.port')) > 0);
   const tool = spans.find((s) => s.name === 'oasis.tool');
   assert.equal(attr(tool, 'gen_ai.operation.name'), 'execute_tool');
   assert.equal(attr(tool, 'gen_ai.tool.name'), 'list_files');
@@ -122,6 +125,17 @@ test('an agent turn exports turn, model and tool spans plus metrics to a collect
   assert.equal(attr(turn, 'gen_ai.agent.name'), 'oasis');
   const metricNames = received.metrics.flatMap((p) => p.resourceMetrics[0].scopeMetrics[0].metrics.map((m) => m.name));
   for (const name of ['oasis.session.count', 'oasis.tool.count', 'oasis.api.duration', 'oasis.turn.duration']) assert.ok(metricNames.includes(name), name);
+  for (const name of ['gen_ai.client.inference.duration', 'gen_ai.client.inference.operation.input_tokens', 'gen_ai.client.inference.operation.output_tokens', 'gen_ai.execute_tool.duration']) assert.ok(metricNames.includes(name), name);
+  const allMetrics = received.metrics.flatMap((p) => p.resourceMetrics[0].scopeMetrics[0].metrics);
+  const inference = allMetrics.find((m) => m.name === 'gen_ai.client.inference.duration');
+  assert.equal(inference.unit, 's');
+  assert.deepEqual(inference.histogram.dataPoints[0].explicitBounds, [0.01, 0.02, 0.04, 0.08, 0.16, 0.32, 0.64, 1.28, 2.56, 5.12, 10.24, 20.48, 40.96, 81.92]);
+  const pointKeys = inference.histogram.dataPoints[0].attributes.map((a) => a.key);
+  assert.ok(pointKeys.includes('gen_ai.operation.name') && pointKeys.includes('gen_ai.provider.name') && pointKeys.includes('server.port'));
+  assert.equal(pointKeys.includes('session.id'), false, 'GenAI metrics stay low-cardinality');
+  const tokens = allMetrics.find((m) => m.name === 'gen_ai.client.inference.operation.input_tokens');
+  assert.equal(tokens.histogram.dataPoints[0].explicitBounds[1], 4);
+  assert.equal(names.includes('chat fixture'), false, 'oasis.* span names stay the default');
   const logs = JSON.stringify(received.logs);
   assert.match(logs, /oasis\.user_prompt/);
   assert.match(logs, /oasis\.tool_result/);
@@ -159,4 +173,41 @@ test('gen_ai.provider.name follows the OpenTelemetry well-known values', () => {
   assert.equal(genAiProviderName({ protocol: 'openai-compatible', baseUrl: 'https://api.groq.com/openai/v1' }), 'groq');
   assert.equal(genAiProviderName({ protocol: 'openai-compatible', baseUrl: 'http://127.0.0.1:11434/v1' }), 'ollama');
   assert.equal(genAiProviderName({ protocol: 'openai-compatible', baseUrl: 'https://llm.internal.example/v1' }), 'openai-compatible');
+});
+
+test('GenAI helpers: error.type, server address, and the semconv opt-in for span names', () => {
+  assert.equal(genAiErrorType(Object.assign(new Error('x'), { status: 429 })), '429');
+  assert.equal(genAiErrorType(Object.assign(new Error('x'), { code: 'ETIMEDOUT' })), 'ETIMEDOUT');
+  assert.equal(genAiErrorType(Object.assign(new Error('x'), { name: 'AbortError' })), 'cancelled');
+  assert.equal(genAiErrorType(new TypeError('x')), 'TypeError');
+  assert.equal(genAiErrorType(new Error('plain')), '_OTHER');
+  assert.equal(genAiErrorType(null), '_OTHER');
+  assert.deepEqual(genAiServer({ baseUrl: 'https://api.openai.com/v1' }), { 'server.address': 'api.openai.com', 'server.port': 443 });
+  assert.deepEqual(genAiServer({ baseUrl: 'http://localhost:11434/v1' }), { 'server.address': 'localhost', 'server.port': 11434 });
+  assert.deepEqual(genAiServer({ baseUrl: '' }), {});
+  assert.equal(genAiSpanNames({}), false);
+  assert.equal(genAiSpanNames({ OTEL_SEMCONV_STABILITY_OPT_IN: 'http, gen_ai_latest_experimental' }), true);
+});
+
+test('OTEL_SEMCONV_STABILITY_OPT_IN=gen_ai_latest_experimental names spans "invoke_agent", "chat MODEL" and "execute_tool TOOL"', async (t) => {
+  await shutdownTelemetry();
+  const received = { metrics: [], logs: [], traces: [] };
+  const collector = http.createServer((req, res) => {
+    let body = '';
+    req.on('data', (c) => { body += c; });
+    req.on('end', () => { received[req.url.split('/').pop()].push(JSON.parse(body)); res.end('{}'); });
+  });
+  await new Promise((r) => collector.listen(0, '127.0.0.1', r));
+  t.after(() => collector.close());
+  const env = { ...process.env, OASIS_ENABLE_TELEMETRY: '1', OTEL_SEMCONV_STABILITY_OPT_IN: 'gen_ai_latest_experimental', OTEL_METRICS_EXPORTER: 'none', OTEL_LOGS_EXPORTER: 'none', OTEL_TRACES_EXPORTER: 'otlp', OTEL_EXPORTER_OTLP_HEADERS: '', OTEL_EXPORTER_OTLP_TRACES_HEADERS: '', OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: '', OTEL_EXPORTER_OTLP_ENDPOINT: 'http://127.0.0.1:' + collector.address().port };
+  const root = await mkdtemp(path.join(os.tmpdir(), 'oasis-otel-'));
+  const { config } = await scriptedModel(t, [toolCall('c1', 'list_files', { path: '.' }), { content: 'done' }]);
+  const session = await createSession({ root, config, settings, bare: true, env });
+  await runAgentTurn(session, 'hi', { env, autoApprove: true });
+  await shutdownTelemetry();
+  const names = received.traces.flatMap((p) => p.resourceSpans[0].scopeSpans[0].spans).map((s) => s.name);
+  assert.ok(names.includes('invoke_agent oasis'), names.join(', '));
+  assert.ok(names.includes('chat ' + config.model), names.join(', '));
+  assert.ok(names.includes('execute_tool list_files'), names.join(', '));
+  assert.equal(names.some((n) => n.startsWith('oasis.')), false);
 });
