@@ -11,7 +11,7 @@ Status: **done** (tested and pushed) · **doing** · **open** · **blocked**
 
 | Item | Status | Evidence / notes |
 | --- | --- | --- |
-| Codex TypeScript SDK drop-in (`oasis exec --json`, `codexPathOverride`) | done | `test/codex-exec-json.test.mjs` (5 tests: spawns OASIS with the SDK's exact argv, prompt on stdin, resume by thread id, output schema, setup error). Not yet run against the published `@openai/codex-sdk` package. |
+| Codex TypeScript SDK drop-in (`oasis exec --json`, `codexPathOverride`) | done | `test/codex-exec-json.test.mjs` (5 tests: spawns OASIS with the SDK's exact argv, prompt on stdin, resume by thread id, output schema, setup error). Also checked by hand with the published `@openai/codex-sdk` 0.167.1 (`codexPathOverride` → a shell wrapper for `oasis`): `run`, `runStreamed` with `outputSchema`, and `resumeThread` all worked against a scripted model. |
 | Clone and inventory the repository | done | 2,865 commits, ~69k lines in `src/`, ~8k in `app/`, 458 test files (2026-11-10) |
 | Read history, mission log, scorecard, architecture docs | done | Desktop (Electron) app retired in `3114f599` on 2026-11-09; browser-only since |
 | Baseline: lint, audit, full test suite on Node 22 | done | oxlint 0 warnings; `npm audit` 0 vulnerabilities; 2,384 tests, 0 failures |
