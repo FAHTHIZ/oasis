@@ -310,3 +310,37 @@ test('end to end: a chained routine forks a saved conversation, never changes it
   assert.match(saved.fromSession, /^[0-9a-f-]{36}$/);
   await assert.rejects(createJob({ schedule: 'every 1h', prompt: 'x', chain: true }, { env }), /chain needs fromSession/);
 });
+
+test('run history is bounded, stale edits conflict, and prune removes finished one-shots', async () => {
+  const { removeFinished } = await import('../src/routines.mjs');
+  const env = await tempEnv({ OASIS_ROUTINE_HISTORY: '3' });
+  const job = await createJob({ schedule: 'every 1h', prompt: 'x', kind: 'script' }, { env });
+  const { utimes, writeFile: wf, mkdir: md, access } = await import('node:fs/promises');
+  const { schedulesDirectory } = await import('../src/routines.mjs');
+  const outDir = path.join(schedulesDirectory(env), 'output', job.id);
+  await md(outDir, { recursive: true });
+  const stale = path.join(outDir, 'old.md');
+  const fresh = path.join(outDir, 'new.md');
+  await wf(stale, 'old'); await wf(fresh, 'new');
+  const longAgo = new Date(Date.now() - 40 * 86_400_000);
+  await utimes(stale, longAgo, longAgo);
+  // Records go through the same append path, which prunes.
+  for (let i = 0; i < 6; i++) await triggerJob(job.id, { env }).then(() => tick({ env, backgrounds: { startExecJob: async () => { throw new Error('boom ' + i); } } }));
+  const { runs } = await listRuns(job.id, { env, limit: 100 });
+  assert.equal(runs.length, 3);
+  assert.match(runs.at(-1).reason, /boom 5/);
+  await assert.rejects(access(stale), 'output older than 30 days is removed');
+  await access(fresh);
+  // Optimistic concurrency.
+  const first = await editJob(job.id, { name: 'a' }, { env, expectedUpdatedAt: null });
+  await assert.rejects(editJob(job.id, { name: 'b' }, { env, expectedUpdatedAt: null }), (error) => error.code === 'ROUTINE_CONFLICT');
+  assert.equal((await editJob(job.id, { name: 'b' }, { env, expectedUpdatedAt: first.updatedAt })).name, 'b');
+  // Prune.
+  const once = await createJob({ schedule: 'in 1m', prompt: 'echo', kind: 'script' }, { env });
+  const later = new Date(Date.now() + 5 * 60_000);
+  await tick({ env, now: later, backgrounds: { startExecJob: async () => ({ id: 'bg-once0001' }), readEntry: async () => ({ status: 'running' }) } });
+  assert.deepEqual(await removeFinished({ env }), [], 'a running one-shot is kept');
+  await tick({ env, now: later, backgrounds: { startExecJob: async () => ({ id: 'bg-once0002' }), readEntry: async () => ({ status: 'completed', exitCode: 0 }) } });
+  assert.deepEqual(await removeFinished({ env }), [once.id]);
+  assert.deepEqual((await readJobs(env)).map((j) => j.id), [job.id]);
+});
