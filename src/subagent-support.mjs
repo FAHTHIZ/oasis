@@ -16,6 +16,8 @@ import { normalizeHooks, mergeHooks } from './settings.mjs';
 export function agentScopedHooks(parent, agent) {
   const base = parent.hooks || {};
   if (!agent || !agent.hooks) return base;
+  // disableAllHooks / allowManagedHooksOnly also block hooks declared in agent files.
+  if (parent.settings && parent.settings.hooksDisabled) return base;
   if (String(agent.source || '').startsWith('project') && !(parent.settings && parent.settings.trusted)) return base;
   const raw = { ...agent.hooks };
   if (raw.Stop) { raw.SubagentStop = [...(Array.isArray(raw.SubagentStop) ? raw.SubagentStop : []), ...(Array.isArray(raw.Stop) ? raw.Stop : [])]; delete raw.Stop; }
