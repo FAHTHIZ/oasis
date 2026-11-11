@@ -32,6 +32,7 @@ User-facing change history grouped by package version. A version heading does no
 - 14 more apps, each tested to accept a loopback redirect at registration: GitLab, Miro, Buildkite, Honeycomb, Axiom, Sanity, Postman, Klaviyo, Fireflies, Dropbox, Make, Cal.com, Grafana Cloud and Mux (48 in all).
 - 13 more apps, each checked for OAuth dynamic client registration: PostHog, Netlify, Prisma, Semgrep, Jam, Wix, Supermemory, Apify, Tavily, Close, Attio and Todoist, plus Context7 (no sign-in).
 - `/disconnect NAME` in the terminal signs out of an app and removes the server OASIS added (Tab completes app names).
+- The new-chat screen shows "This project uses" with one-click Connect chips for project apps that are not connected.
 - The terminal start-up tip names project apps that are not connected yet, with the /connect line to run.
 - Apps the project already uses (vercel.json, a stripe or @sentry dependency, a GitHub remote, ...) are listed next in Settings → Apps and `/connect`, marked "Used in this project".
 - Settings → Apps and `/connect` flag a sign-in that expired with no refresh token, with a one-click Reconnect.
