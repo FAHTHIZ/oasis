@@ -45,21 +45,78 @@ export function resolveModelAlias(model, options = {}) {
 // with /model, --model, agent front matter or the advisor. "default" is always allowed.
 // A family alias ("opus") allows every model of that family; an id allows itself and any
 // alias that resolves to it.
-export function modelAllowed(model, list, options = {}) {
-  if (!Array.isArray(list) || !list.length) return true;
+//
+// Claude Code's matching: an id entry also permits ids that extend it with another segment
+// ("claude-opus-5" permits claude-opus-5-5) unless options.match is "exact"; dated, Bedrock and
+// gateway spellings compare by their canonical name. options.denied (managed deniedModels)
+// blocks a family, a version in every spelling, or (for an id without a minor version) later
+// minors too; "claude-opus-5-0" blocks Opus 5 alone.
+const FAMILIES = ['opus', 'sonnet', 'haiku', 'fable'];
+
+export function canonicalClaudeId(model, options = {}) {
+  const raw = String(model || '').trim();
+  if (!raw) return null;
+  let name = resolveModelAlias(raw, { protocol: options.protocol, env: options.env || process.env }).toLowerCase();
+  name = name.replace(/\[1m\]$/, '').split('/').pop();
+  name = name.replace(/^(?:[a-z]{2,4}\.)?anthropic\./, '').replace(/-v\d+(?::\d+)?$/, '').replace(/[@-]\d{8}$/, '');
+  return /^claude-[a-z0-9.-]+$/.test(name) ? name : null;
+}
+
+const dashed = (value) => String(value || '').replace(/\./g, '-');
+
+export function modelDenied(model, denied, options = {}) {
+  if (!Array.isArray(denied) || !denied.length) return false;
   const raw = String(model || '').trim().toLowerCase().replace(/\[1m\]$/, '');
+  if (!raw) return false;
+  const resolved = String(resolveModelAlias(raw, options)).toLowerCase();
+  const canonical = dashed(canonicalClaudeId(raw, options) || resolved);
+  return denied.some((item) => {
+    let entry = String(item || '').trim().toLowerCase().replace(/\[1m\]$/, '');
+    if (!entry || ['best', 'opusplan', 'default'].includes(entry)) return false;
+    if (FAMILIES.includes(entry)) return resolved.includes(entry) || raw.includes(entry);
+    if (isModelAlias(entry)) entry = String(resolveModelAlias(entry, options)).toLowerCase();
+    entry = dashed(canonicalClaudeId(entry, options) || entry);
+    if (/^claude-[a-z]+-\d+-0$/.test(entry)) return canonical === entry || canonical === entry.slice(0, -2);
+    return canonical === entry || (/^claude-[a-z]+-\d+$/.test(entry) && canonical.startsWith(entry + '-')) || resolved === entry;
+  });
+}
+
+export function modelAllowed(model, list, options = {}) {
+  const raw = String(model || '').trim().toLowerCase().replace(/\[1m\]$/, '');
+  if (raw && raw !== 'default' && modelDenied(raw, options.denied, options)) return false;
+  if (!Array.isArray(list) || !list.length) return true;
   if (!raw || raw === 'default') return true;
   const resolved = String(resolveModelAlias(raw, options)).toLowerCase();
+  const canonical = dashed(canonicalClaudeId(raw, options) || resolved);
   return list.some((item) => {
     const entry = String(item || '').trim().toLowerCase().replace(/\[1m\]$/, '');
     if (!entry) return false;
     if (entry === raw || entry === resolved) return true;
-    if (['opus', 'sonnet', 'haiku', 'fable'].includes(entry) && (resolved.includes(entry) || raw.includes(entry))) return true;
-    return isModelAlias(entry) && String(resolveModelAlias(entry, options)).toLowerCase() === resolved;
+    if (FAMILIES.includes(entry) && (resolved.includes(entry) || raw.includes(entry))) return true;
+    if (isModelAlias(entry)) return String(resolveModelAlias(entry, options)).toLowerCase() === resolved;
+    const id = dashed(canonicalClaudeId(entry, options) || entry);
+    if (canonical === id) return true;
+    return options.match !== 'exact' && canonical.startsWith(id + '-');
   });
 }
 
-export function modelRestrictionMessage(model, list) {
+// Claude Code's modelOverrides: { "claude-opus-4-6": "arn:aws:bedrock:..." } sends the mapped id
+// to the provider. Keys match the resolved id or its canonical Claude name.
+export function applyModelOverride(model, overrides, options = {}) {
+  if (!overrides || typeof overrides !== 'object' || !model) return model;
+  const resolved = String(model);
+  if (typeof overrides[resolved] === 'string' && overrides[resolved].trim()) return overrides[resolved].trim();
+  const canonical = canonicalClaudeId(resolved, options);
+  for (const [key, value] of Object.entries(overrides)) {
+    if (typeof value !== 'string' || !value.trim()) continue;
+    const id = canonicalClaudeId(key, options) || key.toLowerCase();
+    if (canonical && dashed(id) === dashed(canonical)) return value.trim();
+  }
+  return model;
+}
+
+export function modelRestrictionMessage(model, list, options = {}) {
+  if (options.denied && modelDenied(model, options.denied, options)) return 'Model ' + model + ' is blocked by deniedModels in managed settings.';
   return 'Model ' + model + ' is not in availableModels (' + list.join(', ') + '). Pick one of those, or "default".';
 }
 

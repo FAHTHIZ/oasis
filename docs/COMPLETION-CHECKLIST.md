@@ -86,6 +86,7 @@ Gaps found by checking the [hooks reference](https://code.claude.com/docs/en/hoo
 | `includeGitInstructions` / `CLAUDE_CODE_DISABLE_GIT_INSTRUCTIONS`; `attribution.commit` / `attribution.pr` | done | `test/git-instructions-attribution.test.mjs` (4 tests); `sessionUrl` not applicable |
 | Claude Code sandbox keys: `network.allowedDomains`/`deniedDomains`/`allowManagedDomainsOnly`, `autoAllowBashIfSandboxed`, `failIfUnavailable`, `filesystem.allowWrite`/`denyWrite`/`denyRead` | done | `test/sandbox-claude-settings.test.mjs` (6 tests, real bubblewrap) |
 | `permissions.blockReadsOutsideWorkingDirectories` / `blockWritesOutsideWorkingDirectories` (file tools, repository folders, worktree tools) | done | `test/block-outside-working-dirs.test.mjs` (3 tests); the sandbox read block is open |
+| Model policy: managed `deniedModels` and `availableModelsMatch`; `modelOverrides` | done | `test/model-policy-settings.test.mjs` (5 tests); `enforceAvailableModels` needs nothing: OASIS always falls back to an allowed startup model |
 | `sandbox.excludedCommands`, `filesystem.allowRead`, `credentials`, unix-socket/proxy keys | open | `allowUnsandboxedCommands` needs nothing: OASIS has no unsandboxed retry |
 
 ## 3. Competitive evaluation

@@ -94,7 +94,7 @@ export async function pickerFor(command, { session = null, env = process.env, se
     const mapsAliases = Object.keys(env).some((name) => /^ANTHROPIC_DEFAULT_\w+_MODEL$/.test(name) && env[name]);
     const aliases = session && session.config && session.config.protocol && !['anthropic', 'bedrock', 'vertex', 'foundry'].includes(session.config.protocol) && served.length && !mapsAliases ? [] : MODEL_ALIASES;
     const names = [...new Set([...(current ? [current] : []), ...aliases, ...(allowed || []), ...served])]
-      .filter((name) => modelAllowed(name, allowed, { env, protocol: session && session.config && session.config.protocol }));
+      .filter((name) => modelAllowed(name, allowed, { env, protocol: session && session.config && session.config.protocol, ...((session && session.modelPolicy) || {}) }));
     const options = names.map((name) => ({ label: name + (name === current ? ' (current)' : ''), value: name }));
     return { context: 'ModelPicker', options: [...options, cancel], initial: Math.max(0, names.indexOf(current)) };
   }

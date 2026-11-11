@@ -30,7 +30,7 @@ import { priceFor, estimateCostUsd, recordBudgetSpend, formatUsd, cloudModelBehi
 import { hasImages, toChatMessagesWithImages, fitImages, imagesUnsupportedError, withoutImages } from './images.mjs';
 import { beginCheckpoint, captureBeforeChange, checkpointPersistenceEnabled, FILE_CHANGING_TOOLS, loadCheckpoints } from './checkpoints.mjs';
 import { keywordRulesFor, nestedMemoryFor } from './memory.mjs';
-import { resolveModelAlias, isModelAlias, modelAllowed, modelRestrictionMessage, fastModeRequest } from './model-aliases.mjs';
+import { resolveModelAlias, isModelAlias, modelAllowed, modelDenied, modelRestrictionMessage, applyModelOverride, fastModeRequest } from './model-aliases.mjs';
 import { selectTaskModel } from './model-routing.mjs';
 import { readProviderStream, mergeAnthropicUsage, toolCallSlot, strayStreamError } from './provider-stream.mjs';
 import { planToolBatches } from './tool-batch-scheduler.mjs';
@@ -39,9 +39,12 @@ import { redactAuditValue, runTool } from './tool-kernel.mjs';
 import { openAIEndpoint, responsesEndpoint, anthropicEndpoint, toResponsesRequest, toAnthropicRequest, chatCompletionTool } from './provider-requests.mjs';
 export { mergeAnthropicUsage, toolCallSlot, strayStreamError };
 
-function withResolvedModel(config, env, planMode) {
-  if (!config || !isModelAlias(config.model)) return config;
-  return { ...config, model: resolveModelAlias(config.model, { protocol: config.protocol, env, planMode }) };
+function withResolvedModel(config, env, planMode, overrides) {
+  if (!config) return config;
+  const resolved = isModelAlias(config.model) ? { ...config, model: resolveModelAlias(config.model, { protocol: config.protocol, env, planMode }) } : config;
+  // Claude Code's modelOverrides: send the provider-specific id (a Bedrock ARN, a gateway name).
+  const mapped = overrides ? applyModelOverride(resolved.model, overrides, { env, protocol: config.protocol }) : resolved.model;
+  return mapped === resolved.model ? resolved : { ...resolved, model: mapped };
 }
 const NESTED_MEMORY_TOOLS = new Set(['read_file', 'write_file', 'edit_file', 'multi_edit', 'notebook_edit']);
 import { createWorktree, finishWorktree, removeWorktree, isCommitIntegrated } from './worktrees.mjs';
@@ -630,10 +633,13 @@ export async function createSession({ root, config, restore = null, permissionMo
     session.debugFile = enableDebug({ categories: env.OASIS_DEBUG, file: env.OASIS_DEBUG_FILE || null, env, sessionId: session.sessionId || null });
   }
   session.availableModels = loadedSettings.availableModels || null;
-  if (session.availableModels && session.config && session.config.model && !modelAllowed(session.config.model, session.availableModels, { env, protocol: session.config.protocol })) {
+  // Managed deniedModels and availableModelsMatch (Claude Code model policy).
+  if ((loadedSettings.deniedModels && loadedSettings.deniedModels.length) || loadedSettings.availableModelsMatch === 'exact') session.modelPolicy = { denied: loadedSettings.deniedModels || [], match: loadedSettings.availableModelsMatch || 'prefix' };
+  if ((session.availableModels || session.modelPolicy) && session.config && session.config.model && !modelAllowed(session.config.model, session.availableModels, { env, protocol: session.config.protocol, ...(session.modelPolicy || {}) })) {
     // Like Claude Code, a disallowed startup model falls back instead of failing.
-    const fallback = session.availableModels[0];
-    session.modelRestrictionNote = 'Model ' + session.config.model + ' is not in availableModels; using ' + fallback + '.';
+    const fallback = (session.availableModels || []).find((item) => modelAllowed(item, session.availableModels, { env, protocol: session.config.protocol, ...(session.modelPolicy || {}) }));
+    if (!fallback) throw new Error(modelRestrictionMessage(session.config.model, session.availableModels || [], { env, ...(session.modelPolicy || {}) }) + ' No allowed model is configured; set availableModels or pick another model.');
+    session.modelRestrictionNote = (modelDenied(session.config.model, session.modelPolicy && session.modelPolicy.denied, { env, protocol: session.config.protocol }) ? 'Model ' + session.config.model + ' is blocked by deniedModels' : 'Model ' + session.config.model + ' is not in availableModels') + '; using ' + fallback + '.';
     session.config = { ...session.config, model: fallback };
   }
   session.initialModel = session.config && session.config.model;
@@ -641,7 +647,7 @@ export async function createSession({ root, config, restore = null, permissionMo
   const chromeWanted = chrome !== null ? Boolean(chrome) : env.OASIS_CHROME ? env.OASIS_CHROME !== '0' : loadedSettings.chrome === true;
   if (chromeWanted && !restricted) setChrome(session, true);
   const advisorModel = String(advisor || env.OASIS_ADVISOR_MODEL || loadedSettings.advisorModel || '').trim();
-  if (advisorModel && advisorModel !== 'off' && modelAllowed(advisorModel, session.availableModels, { env, protocol: session.config.protocol })) setAdvisor(session, advisorModel);
+  if (advisorModel && advisorModel !== 'off' && modelAllowed(advisorModel, session.availableModels, { env, protocol: session.config.protocol, ...(session.modelPolicy || {}) })) setAdvisor(session, advisorModel);
   if (autoMemoryEnabled(loadedSettings, env)) {
     session.autoMemory = true;
     session.recalledMemoryIds = new Set();
@@ -1343,7 +1349,7 @@ async function requestCompletionTracedInner(session, options = {}) {
 }
 
 async function requestCompletionRaw(session, options = {}) {
-  const config = withResolvedModel(session.config, options.env || session.providerEnv || session.modelEnv || process.env, Boolean(session.permissions && session.permissions.mode === 'plan'));
+  const config = withResolvedModel(session.config, options.env || session.providerEnv || session.modelEnv || process.env, Boolean(session.permissions && session.permissions.mode === 'plan'), session.settings && session.settings.modelOverrides);
   const textOnly = Boolean(session.textOnlyModels && session.textOnlyModels.has(String(config.model || '')));
   const sentMessages = textOnly && hasImages(session.messages) ? withoutImages(session.messages, config.model) : session.messages;
   const nativeAnthropic = isAnthropicFamily(config.protocol);
@@ -2293,10 +2299,10 @@ async function runSubagent(parent, args, context, options) {
   const isolationNote = worktree && worktree.hook ? '\n\nISOLATED WORKTREE: you are working in a separate copy of the project at ' + worktree.path + ', created by a WorktreeCreate hook. Every path is relative to it; the user\'s main checkout is untouched.' : worktree ? '\n\nISOLATED WORKTREE: you are working in a separate git worktree on branch ' + worktree.branch + '. Every path is relative to it; the user\'s main checkout is untouched. Do not commit, merge, or switch branches yourself; Oasis commits your changes on this branch when you finish.' : '';
   const setupNote = worktree && worktree.setup ? '\n' + worktreeSetupSummary(worktree.setup) : '';
   const requestedModel = String(args.model || '').trim();
-  if (requestedModel && !modelAllowed(requestedModel, parent.availableModels, { env: parent.modelEnv, protocol: parent.config.protocol })) {
-    throw new Error(modelRestrictionMessage(requestedModel, parent.availableModels));
+  if (requestedModel && !modelAllowed(requestedModel, parent.availableModels, { env: parent.modelEnv, protocol: parent.config.protocol, ...(parent.modelPolicy || {}) })) {
+    throw new Error(modelRestrictionMessage(requestedModel, parent.availableModels || [], { env: parent.modelEnv, ...(parent.modelPolicy || {}) }));
   }
-  const configuredAgentModel = agent.model && modelAllowed(agent.model, parent.availableModels, { env: parent.modelEnv, protocol: parent.config.protocol })
+  const configuredAgentModel = agent.model && modelAllowed(agent.model, parent.availableModels, { env: parent.modelEnv, protocol: parent.config.protocol, ...(parent.modelPolicy || {}) })
     ? agent.model
     : null;
   const selectedModel = requestedModel || configuredAgentModel;
@@ -3983,7 +3989,8 @@ export async function runAgentTurn(session, prompt, options = {}) {
       env: session.modelEnv || env
     });
   let selectedModel = route.model || originalModel;
-  if (route.enabled && session.availableModels && !modelAllowed(selectedModel, session.availableModels, {
+  if (route.enabled && (session.availableModels || session.modelPolicy) && !modelAllowed(selectedModel, session.availableModels, {
+    ...(session.modelPolicy || {}),
     env: session.modelEnv || env,
     protocol: originalConfig && originalConfig.protocol
   })) {
@@ -5171,7 +5178,7 @@ export function setChrome(session, on) {
 
 export function setAdvisor(session, model) {
   const name = String(model || '').trim();
-  if (name && name !== 'off' && !modelAllowed(name, session.availableModels, { env: session.modelEnv, protocol: session.config && session.config.protocol })) throw new Error(modelRestrictionMessage(name, session.availableModels));
+  if (name && name !== 'off' && !modelAllowed(name, session.availableModels, { env: session.modelEnv, protocol: session.config && session.config.protocol, ...(session.modelPolicy || {}) })) throw new Error(modelRestrictionMessage(name, session.availableModels || [], { env: session.modelEnv, ...(session.modelPolicy || {}) }));
   session.toolDefinitions = (session.toolDefinitions || []).filter((tool) => tool.function.name !== 'advisor');
   if (!name || name === 'off') { session.advisorModel = null; return null; }
   session.advisorModel = name;

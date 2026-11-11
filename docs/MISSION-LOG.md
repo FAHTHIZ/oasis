@@ -32,6 +32,11 @@ weaknesses. Newest first. Detailed user-facing notes go in the CHANGELOG.
 
 ## 2026-11-11 (Claude Code parity cycle)
 
+### Model policy: deniedModels, availableModelsMatch, modelOverrides
+- `deniedModels` and `availableModelsMatch` are taken from managed settings only, as in Claude Code. The deny check runs before the allow list at every place a model is picked, and a startup model that is denied falls back to the first allowed `availableModels` entry (or the session refuses to start if none is left).
+- `availableModels` id entries now match by prefix by default, so `gpt-5` also allows `gpt-5-mini`; `availableModelsMatch: "exact"` turns that off. Existing alias and family matching is unchanged.
+- `modelOverrides` is applied when the request is built, after alias resolution; the session keeps the Claude id for display and policy checks, and only the outgoing request carries the mapped id.
+
 ### blockReads/WritesOutsideWorkingDirectories
 - OASIS file tools already refuse paths outside the working directories in every mode, so the main effect of these keys was there. What changed: a `true` in any file (an untrusted repository too) turns them on; while on, folders listed only in the repository's `.claude/settings.json` `additionalDirectories` are not working directories; and the write block denies `enter_worktree` and `exit_worktree`, as Claude Code removes its worktree tools.
 - Fixed on the way: the session replaced the sandbox's writable list with the working directories, which dropped the cache folders and `sandbox.filesystem.allowWrite`. They are now kept.

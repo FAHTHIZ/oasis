@@ -68,9 +68,12 @@ export async function modelsCommand(args = [], { root = process.cwd(), env = pro
   try { config = configOverride || await loadConfig(); }
   catch (error) { stderr.write('No model provider is configured (' + String(error && error.message || error) + '). Run oasis setup or oasis connect.\n'); return 1; }
   let allowed = [];
+  let policy = {};
   try {
     const { loadSettings } = await import('./settings.mjs');
-    allowed = (await loadSettings(root, { env })).availableModels || [];
+    const loaded = await loadSettings(root, { env });
+    allowed = loaded.availableModels || [];
+    policy = { denied: loaded.deniedModels || [], match: loaded.availableModelsMatch || 'prefix' };
   } catch { allowed = []; }
   const current = config.model || '';
   const listed = await listProviderModels(config, { env, cwd: root, refresh: args.includes('--refresh'), ...(fetchImpl ? { fetchImpl } : {}) });
@@ -79,7 +82,7 @@ export async function modelsCommand(args = [], { root = process.cwd(), env = pro
     else stderr.write((current ? 'Current model: ' + current + '\n' : '') + listed.reason + '\n');
     return 1;
   }
-  const usable = listed.models.filter((id) => !allowed.length || modelAllowed(id, allowed, { env, protocol: config.protocol }));
+  const usable = listed.models.filter((id) => modelAllowed(id, allowed, { env, protocol: config.protocol, ...policy }));
   const hidden = listed.models.length - usable.length;
   const rows = usable.filter((id) => !filter || id.toLowerCase().includes(filter)).map((id) => describeModel(id, config, env));
   if (json) {

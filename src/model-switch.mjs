@@ -8,7 +8,7 @@
 // changes). It cannot block; its output reaches the model with the next request,
 // and only the newest switch's output is delivered.
 import { hasHooks, runHooks } from './hooks.mjs';
-import { resolveModelAlias } from './model-aliases.mjs';
+import { resolveModelAlias, canonicalClaudeId } from './model-aliases.mjs';
 import { priceFor } from './pricing.mjs';
 
 const CACHE_TTL_MS = { '5m': 5 * 60 * 1000, '1h': 60 * 60 * 1000 };
@@ -20,12 +20,7 @@ const DEFAULT_INPUT_PRICE = 3;
 // "claude-opus-5". Returns null for models without a Claude canonical name, and
 // then every hook runs regardless of matcher.
 export function canonicalModelName(model, options = {}) {
-  const raw = String(model || '').trim();
-  if (!raw) return null;
-  let name = resolveModelAlias(raw, { protocol: options.protocol, env: options.env || process.env }).toLowerCase();
-  name = name.replace(/\[1m\]$/, '').split('/').pop();
-  name = name.replace(/^(?:[a-z]{2,4}\.)?anthropic\./, '').replace(/-v\d+(?::\d+)?$/, '').replace(/[@-]\d{8}$/, '');
-  return /^claude-[a-z0-9.-]+$/.test(name) ? name : null;
+  return canonicalClaudeId(model, options);
 }
 
 function cacheTtl(env) {
