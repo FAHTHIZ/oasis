@@ -71,10 +71,10 @@ const SOURCE_LABEL = { catalog: 'Verified', registry: 'MCP Registry', url: 'Cust
 /**
  * Renders a card for `data` (a flow view) and drives it. Returns
  * { element, done } where done resolves with the final view.
- * options: { openUrl(url), copy(text), toast(text), pollMs, autoConnect }
+ * options: { copy(text), toast(text), pollMs, autoConnect }
  */
 export function createConnectorCard(data, actions, options = {}) {
-  const { openUrl = (url) => window.open(url, '_blank', 'noopener'), copy = (text) => navigator.clipboard && navigator.clipboard.writeText(text), toast = () => {}, pollMs = 1000 } = options;
+  const { copy = (text) => navigator.clipboard && navigator.clipboard.writeText(text), toast = () => {}, pollMs = 1000 } = options;
   let view = { ...data, connector: { ...(data.connector || {}) } };
   const connector = view.connector;
   const card = el('section', 'connector-card');
@@ -134,10 +134,9 @@ export function createConnectorCard(data, actions, options = {}) {
     if (openedUrl === url) return;
     openedUrl = url;
     popup = null;
-    const win = window.open(url, 'oasis-connect', 'popup,width=520,height=720');
-    // Desktop app: the sign-in opens in the system browser instead.
-    if (!win) openUrl(url);
-    else popup = win;
+    // In the desktop app this opens the system browser and returns null; in a
+    // browser that blocked the popup, the card's "Open sign-in page" button works.
+    popup = window.open(url, 'oasis-connect', 'popup,width=520,height=720');
   }
 
   function closePopup() {
