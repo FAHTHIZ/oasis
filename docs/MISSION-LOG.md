@@ -17,8 +17,14 @@ weaknesses. Newest first. Detailed user-facing notes go in the CHANGELOG.
 
 ## 2026-11-11 (Claude Code parity cycle)
 
+### MCP server policy and .mcp.json approvals
+- OASIS ignored all five keys, so a managed `deniedMcpServers` entry or a `disabledMcpjsonServers` rejection did nothing. Now `deniedMcpServers` and `allowedMcpServers` (by `serverName`, exact `serverCommand` or `serverUrl` with `*`; denial wins; `allowManagedMcpServersOnly` keeps only the managed allowlist) apply to every server source: user, project, plugin, `claude mcp add`, `--mcp-config`, agent files and servers started after an install.
+- `.mcp.json` approvals follow the [settings reference](https://code.claude.com/docs/en/settings-reference.md): `disabledMcpjsonServers` rejects from any file; `enableAllProjectMcpServers` and `enabledMcpjsonServers` from user, `--settings` or managed settings start those servers in an untrusted workspace. A trusted workspace still starts every `.mcp.json` server, because OASIS has no per-server approval prompt.
+- Not done: Claude Code's exemptions for built-in servers and `managed-mcp.json`, which OASIS does not have.
+- Test: test/mcp-policy-settings.test.mjs (8); MCP, settings, plugin and subagent suites pass (58 tests).
+
 ### Hook policy settings
-- Listed the 248 keys in Claude Code's [settings reference](https://code.claude.com/docs/en/settings-reference.md) and checked each name against `src/`; about 150 never appear. Many are Anthropic-account, desktop or UI keys. The hook policy keys came first because a user who sets them expects hooks to stop, and OASIS ran them anyway.
+- Listed the 248 keys in Claude Code's [settings reference](https://code.claude.com/docs/en/settings-reference.md) and checked each name against `src/`; about 175 never appear. Many are Anthropic-account, desktop or UI keys. The hook policy keys came first because a user who sets them expects hooks to stop, and OASIS ran them anyway.
 - `disableAllHooks` (last scope wins; managed is separate and removes everything), `allowManagedHooksOnly` (managed only), `allowedHttpHookUrls` and `httpHookAllowedEnvVars` (merged arrays). Agent front-matter hooks are refused while hooks are restricted. Plugins force-enabled by managed `enabledPlugins` are not exempted, because OASIS has no managed force-enable; their hooks stop too.
 - Test: test/hook-policy-settings.test.mjs (7); hooks, settings and subagent suites pass (78 tests).
 
