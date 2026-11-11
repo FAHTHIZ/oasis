@@ -15,7 +15,7 @@ import { createSession, runAgentTurn, runAgentPlan, closeSession, suggestNextPro
 import { expandFileMentions } from './commands.mjs';
 import { labelToolActivity } from './tool-activity.mjs';
 import { visionEnabled } from './images.mjs';
-import { saveSession, loadSession } from './sessions.mjs';
+import { saveSession, loadSession, saveMidTurn, settleMidTurnSave } from './sessions.mjs';
 import { validateJsonSchema, extractJson } from './json-schema.mjs';
 import { callMappedMcpTool } from './mcp.mjs';
 
@@ -273,7 +273,7 @@ export async function runHeadless(options) {
       },
       onToolStart: ({ name, args, subagent, call }) => (progress && !subagent && progress(progressLine(name, args)), emit({ type: 'tool_use', ...(call && call.id ? { id: call.id } : {}), name, input: args, ...(subagent ? { subagent } : {}) })),
       ...(forwardSubagentText || env.CLAUDE_CODE_FORWARD_SUBAGENT_TEXT === '1' || env.OASIS_FORWARD_SUBAGENT_TEXT === '1' ? { onSubagentText: ({ text, subagent, agentId, parentToolUseId }) => emit({ type: 'assistant', message: { role: 'assistant', content: [{ type: 'text', text }] }, parent_tool_use_id: parentToolUseId, subagent, agent_id: agentId, session_id: session.sessionId || null }) } : {}),
-      onToolResult: ({ name, result: toolResult, subagent }) => emit({ type: 'tool_result', name, is_error: Boolean(toolResult && (toolResult.error || (toolResult.exitCode !== undefined && toolResult.exitCode !== 0))), content: truncateValue(toolResult), ...(subagent ? { subagent } : {}) }),
+      onToolResult: ({ name, result: toolResult, subagent }) => { if (persistence.enabled) saveMidTurn(session, { env }); emit({ type: 'tool_result', name, is_error: Boolean(toolResult && (toolResult.error || (toolResult.exitCode !== undefined && toolResult.exitCode !== 0))), content: truncateValue(toolResult), ...(subagent ? { subagent } : {}) }) },
       onText: (text) => emit({ type: 'assistant', text }),
       onAutoMode: ({ tool, decision, reason }) => emit({ type: 'system', subtype: 'auto_mode', tool, decision, reason }),
       // Notice on stderr in every output format, so text results on stdout stay clean.
@@ -476,6 +476,7 @@ export async function runHeadless(options) {
   // `oasis --resume ID` continues it instead of starting over.
   const progressed = Boolean(session && Array.isArray(session.messages) && session.messages.some((message) => message && message.role === 'assistant'));
   let savedAfterError = false;
+  if (session) await settleMidTurnSave(session);
   if (session && persistence.enabled && (!error || progressed)) {
     try { sessionId = (await saveSession(session, { env })).id; savedAfterError = Boolean(error); } catch {}
   }
