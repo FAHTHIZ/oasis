@@ -37,6 +37,9 @@ weaknesses. Newest first. Detailed user-facing notes go in the CHANGELOG.
 
 ## 2026-11-11 (Claude Code parity cycle)
 
+### alwaysThinkingEnabled
+- Thinking on budget-mode Claude models was already off unless a keyword or saved budget asked for it, so `true` changes nothing. `false` now blocks those budgets, and on adaptive (4.6) models drops the `thinking` field and caps effort at `high`, following the settings reference. Always-thinking models (4.7 and later, Fable) are unchanged. `MAX_THINKING_TOKENS=0` now means "off" instead of "not set".
+
 ### Model policy: deniedModels, availableModelsMatch, modelOverrides
 - `deniedModels` and `availableModelsMatch` are taken from managed settings only, as in Claude Code. The deny check runs before the allow list at every place a model is picked, and a startup model that is denied falls back to the first allowed `availableModels` entry (or the session refuses to start if none is left).
 - `availableModels` id entries now match by prefix by default, so `gpt-5` also allows `gpt-5-mini`; `availableModelsMatch: "exact"` turns that off. Existing alias and family matching is unchanged.

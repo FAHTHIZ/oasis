@@ -102,7 +102,7 @@ import { isLocalModelEndpoint, probeLocalContext, probeProviderModelWindow, appl
 import { ripgrepPathAddition } from './ripgrep.mjs';
 import { MAX_PROVIDER_RETRIES, QUICK_PROVIDER_RETRIES, RETRYABLE_PROVIDER_STATUSES, isHardQuotaError, isMalformedGenerationError, isUnconfiguredRouteError, isPromptTooLargeError, notifyProviderRetry, providerErrorSummary, providerRetryDelayMs, providerRetryLimit, rateLimitResetMs, rateLimitWaitMs, shortRateLimitMs, waitForProviderRetry } from './provider-retry.mjs';
 import { ACTION_NUDGE, AUTO_LSP_EDIT_TOOLS, CONTINUE_NUDGE, CYCLE_HALT_AT, CYCLE_WARN_AT, CYCLE_WINDOW_STEPS, EMPTY_REPLY_NOTICE, EMPTY_REPLY_NUDGE, FALSE_CLAIM_NUDGE, FILE_EDITING_TOOL_NAMES, GIVE_UP_NUDGE, MAX_EMPTY_REPLY_NUDGES, MAX_SESSION_TOOL_CALLS, PROTECTED_EDIT_TOOLS, REFUSAL_NUDGE, RETRY_HALT_AT, RETRY_TRACKED_COMMANDS, RETRY_WARN_AT, THRASH_ESCALATE_AT, THRASH_WARN_AT, UNREADABLE_CALL_NUDGE, activeLspBaseline, announcesNextStep, appendLspUnavailableNotice, asksForAction, asksForNewTests, assistedVerificationCalls, assistedVerificationEnabled, claimsUnmadeChange, failureSignature, fencedFileFromReply, givesUpEarly, isCompleteFileRead, isVerificationCommand, lspCallOptions, normalizeReviewPath, parallelToolCalls, promptCacheKeyField, readsLikeInstructions, refusesSpuriously, samplingTemperature, successfulMutation, targetFileHint, untestedNewCode, verificationIssues, wrongFileNudge, newModuleCandidate, markLoadedModules } from './turn-guards.mjs';
-import { MAX_OUTPUT_RECOVERIES, applyEffort, claudeEffortFor, claudeThinkingMode, firstPositiveConfiguredInteger, inlineEffortLevel, isOpenRouterBaseURL, maxOutputTokensFor, openRouterOutputCapFromError, outputCapFromError, reasoningEffortFor, resolveTurnLimits, stripInlineEffort, subagentEffortConfig, thinkingBudgetFor, truncationRecoveryPrompt } from './model-budgets.mjs';
+import { MAX_OUTPUT_RECOVERIES, applyEffort, claudeEffortFor, claudeThinkingMode, thinkingTurnedOff, firstPositiveConfiguredInteger, inlineEffortLevel, isOpenRouterBaseURL, maxOutputTokensFor, openRouterOutputCapFromError, outputCapFromError, reasoningEffortFor, resolveTurnLimits, stripInlineEffort, subagentEffortConfig, thinkingBudgetFor, truncationRecoveryPrompt } from './model-budgets.mjs';
 import { HISTORY_COMPACT_INPUT_LIMIT, HISTORY_COMPACT_THRESHOLD_CHARS, announceCompaction, compactionDeadline, compactionError, deterministicHistorySummary, findCompactionBoundary, historyBudgetSize, historyTextSize, reportCompaction, safeHistoryLine, supersedeBeforeCompaction, usableCompactionSummary } from './compaction-history.mjs';
 import { applyAnthropicCacheBreakpoints, promptCachingEnabled, replaysReasoning, withProviderExtraContent } from './provider-request.mjs';
 import { modelFacingResult, refreshTodoPrompt, repairInterruptedHistory, throwIfCancelled } from './tool-results.mjs';
@@ -1405,7 +1405,9 @@ async function requestCompletionRaw(session, options = {}) {
   if (nativeAnthropic) {
     endpoint = cloudAnthropic ? cloudEndpoint(config, providerEnv, typeof options.onDelta === 'function' && cloudStreams(config.protocol)) : anthropicEndpoint(config.baseURL);
     const thinkingMode = claudeThinkingMode(config.model);
-    const adaptive = thinkingMode !== 'budget';
+    // Models that can turn adaptive thinking off do so when the session has thinking off
+    // (alwaysThinkingEnabled: false, MAX_THINKING_TOKENS=0); always-thinking models ignore it.
+    const adaptive = thinkingMode === 'adaptive-only' || (thinkingMode === 'adaptive' && !session.thinkingOff);
     // Adaptive models return signed thinking blocks on their own; they must be replayed in tool loops.
     const converted = toAnthropicRequest(sentMessages, { thinking: adaptive || (Boolean(session.thinkingBudget) && !options.forceTool) });
     const cache = promptCachingEnabled(config, options.env || process.env);
@@ -1418,9 +1420,15 @@ async function requestCompletionRaw(session, options = {}) {
     const cappedThinking = options.forceTool ? 0 : Math.min(Number(session.thinkingBudget || 0), session.outputTokenCap ? Math.max(0, session.outputTokenCap - 2048) : Infinity);
     const thinkingBudget = cappedThinking >= 1024 ? cappedThinking : 0;
     outputLimit = session.outputTokenCap || maxOutputTokensFor(config, providerEnv);
-    const effort = adaptive && !options.forceTool ? claudeEffortFor(config.model, { level: session.effortLevel, budget: thinkingBudget }) : '';
+    let effort = adaptive && !options.forceTool ? claudeEffortFor(config.model, { level: session.effortLevel, budget: thinkingBudget }) : '';
+    // With thinking off, an adaptive model still takes effort, capped at high (higher levels need thinking).
+    if (thinkingMode === 'adaptive' && session.thinkingOff && !options.forceTool) {
+      effort = claudeEffortFor(config.model, { level: session.effortLevel, budget: 0 });
+      if (effort === 'xhigh' || effort === 'max') effort = 'high';
+    }
     let thinkingFields = {};
     if (!adaptive && thinkingBudget) thinkingFields = { thinking: { type: 'enabled', budget_tokens: thinkingBudget } };
+    else if (thinkingMode === 'adaptive' && session.thinkingOff && effort) thinkingFields = { output_config: { effort } };
     else if (adaptive && (thinkingBudget || effort)) thinkingFields = { thinking: { type: 'adaptive' }, ...(effort ? { output_config: { effort } } : {}) };
     // Claude 4.7+ rejects forced tool_choice (thinking is on); the probe prompt asks for the call instead.
     const forcedChoice = options.forceTool && thinkingMode !== 'adaptive-only' ? { type: 'tool', name: options.forceTool } : { type: 'auto' };
@@ -4233,7 +4241,9 @@ async function runAgentTurnRaw(session, prompt, options = {}) {
     if (typeof options.onInlineEffort === 'function') options.onInlineEffort(inlineEffort);
   }
   const turnConfig = inlineEffort ? applyEffort(session.config, inlineEffort) : session.config;
-  session.thinkingBudget = isAnthropicFamily(session.config.protocol) ? thinkingBudgetFor(request, turnConfig, options.env || process.env) : 0;
+  const thinkingConfig = session.settings && session.settings.alwaysThinkingEnabled === false ? { ...turnConfig, alwaysThinkingEnabled: false } : turnConfig;
+  session.thinkingBudget = isAnthropicFamily(session.config.protocol) ? thinkingBudgetFor(request, thinkingConfig, options.env || process.env) : 0;
+  session.thinkingOff = isAnthropicFamily(session.config.protocol) && thinkingTurnedOff(thinkingConfig, options.env || process.env);
   session.effortLevel = isAnthropicFamily(session.config.protocol) && !['0', 'off', 'false'].includes(String((options.env || process.env).OASIS_THINKING || '').toLowerCase()) ? (turnConfig.effortLevel || '') : '';
   const claudeEffort = isAnthropicFamily(session.config.protocol) ? claudeEffortFor(resolveModelAlias(session.config.model, { protocol: session.config.protocol, env: options.env || process.env }), { level: session.effortLevel, budget: session.thinkingBudget }) : '';
   if (claudeEffort) { if (typeof options.onReasoningEffort === 'function') options.onReasoningEffort(claudeEffort); }

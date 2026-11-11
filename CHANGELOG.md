@@ -40,6 +40,7 @@ User-facing change history grouped by package version. A version heading does no
 - Fixed: with the sandbox on, the cache folders and extra writable paths were dropped from the sandbox when the session started.
 - Managed `deniedModels` blocks models everywhere a model is chosen (startup, `/model`, `/advisor`, `/routing`, subagents, model lists), even without `availableModels`. A family alias blocks the family; an id blocks that version in every spelling, and an id without a minor version (`claude-opus-5`) blocks later minors too. Managed `availableModelsMatch` picks `prefix` (the default: `claude-opus-5` also allows `claude-opus-5-5`) or `exact` matching for `availableModels` id entries.
 - `modelOverrides` (trusted settings files) maps a model id to the id sent to the provider, such as a Bedrock inference profile ARN.
+- `alwaysThinkingEnabled: false` (any settings file) turns extended thinking off: think keywords and saved budgets no longer add a budget, and Claude 4.6 models get no thinking field, with effort capped at `high`. A positive `MAX_THINKING_TOKENS` still turns thinking on for the session, and `MAX_THINKING_TOKENS=0` now turns it off. Models that always think are unchanged.
 
 ### Crash-safe task progress
 

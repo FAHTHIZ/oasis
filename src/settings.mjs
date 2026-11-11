@@ -300,6 +300,8 @@ export async function loadSettings(root, options = {}) {
     for (const key of ['blockReadsOutsideWorkingDirectories', 'blockWritesOutsideWorkingDirectories']) if (permissions[key] === true) result.permissions[key] = true;
     if (typeof settings.outputStyle === 'string' && settings.outputStyle.trim()) result.outputStyle = settings.outputStyle.trim().toLowerCase();
     if (settings.editorMode === 'vim' || settings.editorMode === 'normal') result.editorMode = settings.editorMode;
+    // Claude Code's alwaysThinkingEnabled: false turns extended thinking off (true is the default).
+    if (typeof settings.alwaysThinkingEnabled === 'boolean') result.alwaysThinkingEnabled = settings.alwaysThinkingEnabled;
     // Reply language (Claude Code's "language" setting). Only plain language names are accepted.
     if (typeof settings.language === 'string' && normalizeLanguage(settings.language)) result.language = normalizeLanguage(settings.language);
     if (settings.worktree && typeof settings.worktree === 'object' && typeof settings.worktree.branchPrefix === 'string') result.worktree = { ...(result.worktree || {}), branchPrefix: settings.worktree.branchPrefix.trim().slice(0, 40) };
@@ -357,7 +359,7 @@ export async function loadSettings(root, options = {}) {
       const routingEnabled = settings.modelRouting && typeof settings.modelRouting === 'object' && (settings.modelRouting.enabled === true || Boolean(String(settings.modelRouting.easyModel || '').trim()) || Boolean(String(settings.modelRouting.strongModel || '').trim()));
       const loosening = stringList(permissions.allow).length || settings.hooks || permissions.defaultMode || settings.sandbox || settings.shell || settings.statusLine || settings.lspServers || settings.autoMode || routingEnabled || settings.env || settings.apiKeyHelper || settings.customHeadersHelper || settings.autoTest;
       // Any other key is also skipped until trust; say so instead of dropping it silently.
-      const untrustedSafe = new Set(['$schema', 'permissions', 'outputStyle', 'editorMode', 'language', 'worktree', 'avoidPhrases', 'codeComments', 'theme', 'agent', 'channelsEnabled', 'autoMemory', 'autoLearning', 'memoryWriteApproval', 'memory', 'executeCode', 'sessionSearch', 'textToolCalls', 'sounds', 'soundVolume', 'idleCompactMinutes', 'deniedMcpServers', 'disabledMcpjsonServers', 'claudeMdExcludes', 'includeGitInstructions']);
+      const untrustedSafe = new Set(['$schema', 'permissions', 'outputStyle', 'editorMode', 'language', 'worktree', 'avoidPhrases', 'codeComments', 'theme', 'agent', 'channelsEnabled', 'autoMemory', 'autoLearning', 'memoryWriteApproval', 'memory', 'executeCode', 'sessionSearch', 'textToolCalls', 'sounds', 'soundVolume', 'idleCompactMinutes', 'deniedMcpServers', 'disabledMcpjsonServers', 'claudeMdExcludes', 'includeGitInstructions', 'alwaysThinkingEnabled']);
       const skipped = Object.keys(settings).filter((key) => !untrustedSafe.has(key));
       if (loosening || skipped.length) result.ignoredUntrusted.push(file);
       return;
