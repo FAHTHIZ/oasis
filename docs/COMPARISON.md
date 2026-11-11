@@ -45,6 +45,7 @@ Claude Code is the reference point for agent behaviour, and OASIS reads its conf
 | Plan files | `plansDirectory` (default `~/.claude/plans`) | Honoured when set; nothing is saved when unset |
 | Worktree layout | `worktree.symlinkDirectories`, `sparsePaths`, `baseRef` (default `fresh`) | Honoured; default base is `head` |
 | SDK query controls | `Query.setModel()`, `setPermissionMode()`, `interrupt()`, `setMaxThinkingTokens()` | Same method names on the `query()` generator, plus `supportedModels()`, `mcpServerStatus()` and `close()`; single-prompt only, no streaming input |
+| Spinner verbs | `spinnerVerbs` | Honoured for the terminal's wait line |
 | Skill visibility | `skillOverrides`, `disableBundledSkills`, `disableSkillShellExecution` | Honoured, for both `` !`cmd` `` and ```` ```! ```` blocks |
 | MCP policy | `allowedMcpServers`, `deniedMcpServers`, `.mcp.json` approval keys | Honoured; trusting a workspace approves all its `.mcp.json` servers (no per-server prompt) |
 | Permission modes | `default`, `acceptEdits`, `plan`, `bypassPermissions`, `dontAsk` | The same modes, plus `permissions.denyInsteadOfPrompting` |
