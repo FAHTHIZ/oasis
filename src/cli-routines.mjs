@@ -1,7 +1,7 @@
 // `oasis schedule` (aliases: cron, routines): durable scheduled jobs. See src/routines.mjs.
 import path from 'node:path';
 import { stdout } from 'node:process';
-import { cancelRun, createJob, describeJob, editJob, listRuns, pauseJob, readJobs, removeJob, resumeJob, runDaemon, tick, triggerJob } from './routines.mjs';
+import { cancelRun, createJob, describeJob, editJob, listRuns, pauseJob, readJobs, removeFinished, removeJob, resumeJob, runDaemon, tick, triggerJob } from './routines.mjs';
 
 export const SCHEDULE_USAGE = `Usage: oasis schedule COMMAND
 
@@ -17,6 +17,7 @@ Start the scheduler with "oasis schedule daemon" (or run "oasis schedule tick" f
   oasis schedule run ID|NAME                     run it on the next tick (extra run)
   oasis schedule cancel ID|NAME                  stop the run in progress
   oasis schedule remove ID|NAME                  delete it (stops a live run)
+  oasis schedule prune                           delete routines that finished (one-time runs)
   oasis schedule tick                            one scheduler pass, then exit
   oasis schedule daemon [--interval SECONDS]     keep running and fire routines
 
@@ -42,7 +43,8 @@ Options:
   --chain                  with --from-session: each run continues from the
                            previous run's conversation (--no-chain to stop)
   --paused                 create it paused (resume when ready)
-Output starting with [SILENT] is saved but not delivered.`;
+Output starting with [SILENT] is saved but not delivered. Each routine keeps its newest
+200 runs and 30 days of output (OASIS_ROUTINE_HISTORY, OASIS_ROUTINE_HISTORY_DAYS).`;
 
 function parseOptions(args) {
   const fields = {};
@@ -103,6 +105,7 @@ export async function scheduleCommand(args = [], { env = process.env, write = (t
     for (const job of jobs) say(describeJob(job));
     return jobs;
   }
+  if (sub === 'prune') { const ids = await removeFinished({ env }); say(ids.length ? 'Removed ' + ids.length + ' finished routine' + (ids.length === 1 ? '' : 's') + ': ' + ids.join(', ') : 'No finished routines.'); return ids; }
   const ref = positional[0];
   if (sub === 'show' || sub === 'runs') {
     const { job, runs } = await listRuns(ref, { env });
