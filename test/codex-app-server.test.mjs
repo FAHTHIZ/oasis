@@ -526,3 +526,58 @@ test('redactConfig hides secret-looking values at any depth', async () => {
   const { redactConfig } = await import('../src/codex-app-server.mjs');
   assert.deepEqual(redactConfig({ apiKey: 'x', a: { headers: { Authorization: 'Bearer y' }, list: [{ token: 'z', name: 'n' }] }, keyless: true, model: 'm' }), { apiKey: '[redacted]', a: { headers: '[redacted]', list: [{ token: '[redacted]', name: 'n' }] }, keyless: true, model: 'm' });
 });
+
+test('hooks/list reports user hooks in Codex shape and explains what it cannot list', async (t) => {
+  const root = await tmp(t);
+  const home = await tmp(t, 'oasis-appsrv-home-');
+  const cfg = path.join(home, 'cfg');
+  await mkdir(cfg, { recursive: true });
+  const userFile = path.join(cfg, 'settings.json');
+  await writeFile(userFile, JSON.stringify({ hooks: {
+    PreToolUse: [{ matcher: 'run_command', hooks: [{ type: 'command', command: 'echo pre', timeout: 5, statusMessage: 'Checking' }, { type: 'mcp_tool', server: 'lint', tool: 'check' }] }],
+    UserPromptSubmit: [{ hooks: [{ type: 'prompt', prompt: 'Is this ok?' }] }],
+    Notification: [{ hooks: [{ type: 'command', command: 'notify-send hi' }] }],
+    Stop: [{ hooks: [{ type: 'http', url: 'https://example.com/hook' }] }]
+  } }));
+  await mkdir(path.join(root, '.oasis'), { recursive: true });
+  await writeFile(path.join(root, '.oasis', 'settings.json'), JSON.stringify({ hooks: { PreToolUse: [{ hooks: [{ type: 'command', command: 'curl evil' }] }] } }));
+  const { config } = await scriptedModel(t, []);
+  const { child, stderr } = spawnServer(t, root, home, config);
+  const client = codexClient(child);
+  await client.call('initialize', { clientInfo: { name: 't' } });
+  const reply = await client.call('hooks/list', { cwds: [root] });
+  assert.ok(reply.result, stderr() + JSON.stringify(reply));
+  const [entry] = reply.result.data;
+  assert.equal(entry.cwd, root);
+  const pre = entry.hooks.find((hook) => hook.handlerType === 'command' && hook.eventName === 'preToolUse');
+  assert.equal(pre.command, 'echo pre');
+  assert.equal(pre.matcher, 'run_command');
+  assert.equal(pre.timeoutSec, 5);
+  assert.equal(pre.statusMessage, 'Checking');
+  assert.equal(pre.source, 'user');
+  assert.equal(pre.sourcePath, userFile);
+  assert.equal(pre.trustStatus, 'trusted');
+  assert.match(pre.currentHash, /^[0-9a-f]{64}$/);
+  assert.ok(entry.hooks.some((hook) => hook.handlerType === 'mcpTool' && hook.server === 'lint' && hook.tool === 'check'));
+  const prompt = entry.hooks.find((hook) => hook.eventName === 'userPromptSubmit');
+  assert.equal(prompt.handlerType, 'prompt');
+  assert.equal(prompt.timeoutSec, 30);
+  assert.equal(entry.hooks.some((hook) => hook.command === 'curl evil'), false, 'untrusted project hooks are not active');
+  assert.equal(entry.hooks.some((hook) => hook.command === 'notify-send hi'), false);
+  const warnings = entry.warnings.join('\n');
+  assert.match(warnings, /Notification/);
+  assert.match(warnings, /1 HTTP hook not listed/);
+  assert.match(warnings, /ignored until this folder is trusted/);
+  assert.deepEqual(new Set(entry.hooks.map((hook) => hook.key)).size, entry.hooks.length, 'keys are unique');
+});
+
+test('account/read says no OpenAI login is needed and reports a configured provider as an API key', async (t) => {
+  const root = await tmp(t);
+  const home = await tmp(t, 'oasis-appsrv-home-');
+  const { config } = await scriptedModel(t, []);
+  const { child } = spawnServer(t, root, home, config);
+  const client = codexClient(child);
+  await client.call('initialize', { clientInfo: { name: 't' } });
+  const reply = await client.call('account/read', {});
+  assert.deepEqual(reply.result, { account: { type: 'apiKey' }, userId: null, requiresOpenaiAuth: false, workspaceRouting: null });
+});

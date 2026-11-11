@@ -481,7 +481,7 @@ export async function pluginHooks(plugins, options = {}) {
   for (const plugin of plugins) {
     const vars = pluginVariables(plugin, options.env, options.root);
     for (const hooks of await jsonComponent(plugin, plugin.manifest.hooks, path.join('hooks', 'hooks.json'), 'hooks')) {
-      out.push({ plugin: plugin.id, hooks, env: vars });
+      out.push({ plugin: plugin.id, root: plugin.root, hooks, env: vars });
     }
   }
   return out;

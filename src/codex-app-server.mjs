@@ -9,7 +9,7 @@
 // excludedThreadIds), thread/name/set, thread/loaded/list, thread/unsubscribe,
 // thread/archive, thread/unarchive, thread/delete, thread/compact/start,
 // thread/turns/list, skills/list, mcpServerStatus/list (for a loaded thread), turn/start,
-// thread/shellCommand, config/read, turn/steer, turn/interrupt, review/start (inline), model/list, and the host
+// thread/shellCommand, config/read, hooks/list, account/read, turn/steer, turn/interrupt, review/start (inline), model/list, and the host
 // methods in codex-app-server-host.mjs: fs/* (readFile, writeFile,
 // createDirectory, getMetadata, readDirectory, remove, copy, watch, unwatch)
 // command/exec (+ write, resize, terminate) and fuzzyFileSearch, confined to
@@ -38,6 +38,8 @@ export const APP_SERVER_PLATFORM = { family: process.platform === 'win32' ? 'win
 const EXECUTE_TOOLS = new Set(['run_command', 'run_shell', 'powershell', 'monitor_command', 'auto_test']);
 const FILE_TOOLS = new Set(['edit_file', 'write_file', 'multi_edit', 'notebook_edit', 'delete_file', 'move_file', 'apply_patch']);
 const MODES = new Set(['default', 'acceptEdits', 'plan', 'auto']);
+// OASIS hook events that have a Codex HookEventName (lowerCamelCase there).
+const CODEX_HOOK_EVENTS = new Set(['PreToolUse', 'PermissionRequest', 'PostToolUse', 'PreCompact', 'PostCompact', 'SessionStart', 'SessionEnd', 'UserPromptSubmit', 'SubagentStart', 'SubagentStop', 'Stop']);
 const MAX_FILE = 1024 * 1024;
 
 const nowSeconds = () => Math.floor(Date.now() / 1000);
@@ -851,6 +853,63 @@ export function createCodexAppServer(options = {}) {
           }
         }
         return result;
+      }
+      case 'account/read': {
+        // OASIS signs in to model providers with their own keys or local
+        // servers, never with an OpenAI/ChatGPT account, so clients should not
+        // show a ChatGPT login. A configured provider reads as an API-key account.
+        const { loadConfig } = await load('config');
+        const config = await loadConfig({ env }).catch(() => ({ configured: false }));
+        return { account: config.configured ? { type: 'apiKey' } : null, userId: null, requiresOpenaiAuth: false, workspaceRouting: null };
+      }
+      case 'hooks/list': {
+        // OASIS hooks in Codex's HooksListEntry shape. Codex has a fixed set of
+        // event names and handler types, so hooks on other OASIS events (for
+        // example PostToolUseFailure or Notification) and HTTP hooks are
+        // counted in `warnings` instead of being listed.
+        let cwds;
+        if (typeof params.threadId === 'string' && params.threadId) cwds = [threadEntry(params.threadId).root];
+        else cwds = Array.isArray(params.cwds) && params.cwds.length ? params.cwds.filter((cwd) => typeof cwd === 'string') : [undefined];
+        const { loadSettings } = await load('settings');
+        const { defaultTimeout } = await import('./hooks.mjs');
+        const data = [];
+        for (const raw of cwds) {
+          let root;
+          try { root = await workspace(raw); } catch (error) { data.push({ cwd: String(raw || ''), hooks: [], warnings: [], errors: [{ path: String(raw || ''), message: error.message }] }); continue; }
+          const settings = await loadSettings(root, { env });
+          const hooks = [];
+          const skipped = { events: new Set(), http: 0 };
+          let order = 0;
+          for (const [event, groups] of Object.entries(settings.hooks || {})) {
+            const eventName = CODEX_HOOK_EVENTS.has(event) ? event[0].toLowerCase() + event.slice(1) : null;
+            for (const [groupIndex, group] of groups.entries()) {
+              for (const [hookIndex, hook] of (group.hooks || []).entries()) {
+                if (!eventName) { skipped.events.add(event); continue; }
+                const handler = hook.type === 'command' ? { handlerType: 'command', command: hook.command, async: Boolean(hook.async) }
+                  : hook.type === 'mcp_tool' ? { handlerType: 'mcpTool', server: hook.server, tool: hook.tool }
+                  : hook.type === 'prompt' ? { handlerType: 'prompt' } : hook.type === 'agent' ? { handlerType: 'agent' } : null;
+                if (!handler) { skipped.http++; continue; }
+                const source = String(group.source || '');
+                const managed = source === 'managed';
+                const sourcePath = group.sourceFile || '';
+                hooks.push({
+                  key: [sourcePath || source, event, groupIndex, hookIndex].join(':'), eventName, ...handler,
+                  matcher: group.matcher || null, timeoutSec: defaultTimeout(hook, event), statusMessage: hook.statusMessage || null, additionalContextLimit: null,
+                  sourcePath, source: managed ? 'system' : source === 'user' ? 'user' : source === 'project' || source === 'local' ? 'project' : source === 'flag' ? 'sessionFlags' : source.startsWith('plugin:') ? 'plugin' : 'unknown',
+                  pluginId: source.startsWith('plugin:') ? source.slice(7) : null, environmentId: null, displayOrder: order++, enabled: true, isManaged: managed,
+                  currentHash: createHash('sha256').update(JSON.stringify({ event, matcher: group.matcher || '', hook })).digest('hex'), trustStatus: managed ? 'managed' : 'trusted'
+                });
+              }
+            }
+          }
+          const warnings = [];
+          if (skipped.events.size) warnings.push('Hooks on ' + [...skipped.events].sort().join(', ') + ' run in OASIS but have no Codex event name, so they are not listed.');
+          if (skipped.http) warnings.push(skipped.http + ' HTTP hook' + (skipped.http === 1 ? '' : 's') + ' not listed: Codex has no HTTP hook type.');
+          if (settings.hooksDisabled) warnings.push(settings.hooksDisabled === 'managed' ? 'Managed settings turn every hook off (disableAllHooks).' : 'Only managed hooks run (' + (settings.hooksDisabled === 'settings' ? 'disableAllHooks' : 'allowManagedHooksOnly') + ').');
+          for (const file of settings.ignoredUntrusted || []) warnings.push('Hooks and other loosening settings in ' + file + ' are ignored until this folder is trusted (`oasis trust`).');
+          data.push({ cwd: root, hooks, warnings, errors: [] });
+        }
+        return { data };
       }
       case 'thread/shellCommand': {
         const entry = threadEntry(params.threadId);
