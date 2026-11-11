@@ -147,7 +147,7 @@ The interface follows your system's light or dark theme and honours reduced-moti
 
 ### Connect apps
 
-Apps (GitHub, Linear, Notion, Sentry, Stripe, Vercel, Supabase, PostHog, Todoist and about 25 more) give the agent their tools through remote MCP servers. You never edit a config file:
+Apps (GitHub, Linear, Notion, Sentry, Stripe, Vercel, Supabase, PostHog, GitLab, Dropbox, Todoist and about 40 more) give the agent their tools through remote MCP servers. You never edit a config file:
 
 1. Ask for it: "connect to GitHub", `/connect notion`, or a server URL such as `/connect https://mcp.example.com/mcp`. The agent can also ask by itself when a task needs an app.
 2. A **Connect** card appears in the chat with the app's logo, what it gives access to and why it is being asked. Click **Connect**; **Not now** skips it.
