@@ -651,8 +651,8 @@ html.lite .topbar{backdrop-filter:none;-webkit-backdrop-filter:none;background:v
 .routine-output { max-height: 220px; overflow: auto; white-space: pre-wrap; word-break: break-word; font-size: 0.8em; padding: 8px; border-radius: 6px; background: var(--code-bg, rgba(127, 127, 127, 0.12)); }
 
 /* Connect card: inline in the conversation when the agent asks to connect an app. */
-.msg.connector{animation:rise .25s var(--ease)}
-.connector-card{max-width:520px;background:linear-gradient(180deg,color-mix(in srgb,var(--accent) 4%,var(--panel)),var(--panel));border:1px solid var(--line-strong);border-radius:var(--r-lg);padding:14px 14px 12px;box-shadow:0 10px 30px -18px #000c;display:flex;flex-direction:column;gap:10px}
+.msg.connector{animation:rise .25s var(--ease);min-width:0;max-width:100%}
+.connector-card{max-width:520px;width:100%;min-width:0;box-sizing:border-box;background:linear-gradient(180deg,color-mix(in srgb,var(--accent) 4%,var(--panel)),var(--panel));border:1px solid var(--line-strong);border-radius:var(--r-lg);padding:14px 14px 12px;box-shadow:0 10px 30px -18px #000c;display:flex;flex-direction:column;gap:10px}
 .cc-head{display:flex;align-items:center;gap:12px;min-width:0}
 .cc-mark{flex:none;width:40px;height:40px;border-radius:11px;display:grid;place-items:center;box-shadow:inset 0 0 0 1px #ffffff1f}
 .cc-mark svg{width:22px;height:22px}
@@ -663,7 +663,7 @@ html.lite .topbar{backdrop-filter:none;-webkit-backdrop-filter:none;background:v
 .cc-badge{flex:none;font-size:11px;font-weight:600;padding:2px 7px;border-radius:999px;border:1px solid var(--line-strong);color:var(--muted)}
 .cc-badge.ok{color:var(--accent);border-color:var(--accent-line);background:var(--accent-soft)}
 .cc-sub{color:var(--muted);font-size:13px;margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.cc-reason{margin:0;color:var(--text-2);font-size:14px;line-height:1.45}
+.cc-reason{margin:0;color:var(--text-2);font-size:14px;line-height:1.45;overflow-wrap:anywhere}
 .cc-stage:empty{display:none}
 .cc-stage{display:flex;flex-direction:column;gap:8px}
 .cc-progress{display:flex;align-items:center;gap:8px;color:var(--text-2);font-size:14px}
@@ -684,7 +684,7 @@ html.lite .topbar{backdrop-filter:none;-webkit-backdrop-filter:none;background:v
 .cc-result.bad{color:var(--danger)}
 .cc-check{flex:none;width:20px;height:20px;border-radius:50%;display:grid;place-items:center;background:var(--accent);color:var(--accent-ink);font-size:12px;font-weight:800}
 .cc-foot{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}
-.cc-fine{color:var(--faint);font-size:12px}
+.cc-fine{color:var(--faint);font-size:12px;overflow-wrap:anywhere;min-width:0}
 .cc-buttons{display:flex;gap:8px;margin-left:auto}
 .cc-buttons:not(:has(:not([hidden]))){display:none}
 .connector-card[data-status="connected"]{border-color:var(--accent-line)}
