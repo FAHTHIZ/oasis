@@ -308,6 +308,15 @@ $('shortcutsClose').addEventListener('click', () => closeNativeDialog('shortcuts
 $('commandPaletteInput').addEventListener('input', renderCommandPalette);
 $('shortcutsFilter').addEventListener('input', renderShortcutGuide);
 $('appFilter').addEventListener('input', filterApps);
+function connectCustomApp() {
+  const url = $('appCustomUrl').value.trim();
+  if (!/^https:\/\//i.test(url)) { toast('Use the https address of the MCP server.'); return; }
+  $('appCustomUrl').value = '';
+  closeSheet('settingsSheet');
+  void connectShortcut('/connect ' + url, { keepInput: true });
+}
+$('appCustomConnect').addEventListener('click', connectCustomApp);
+$('appCustomUrl').addEventListener('keydown', (event) => { if (event.key === 'Enter') { event.preventDefault(); connectCustomApp(); } });
 $('transcript').addEventListener('click', onTranscriptClick);
 $('commandPaletteInput').addEventListener('keydown', (event) => {
   const buttons = $('commandPaletteResults').querySelectorAll('.command-result');
