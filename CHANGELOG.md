@@ -4,6 +4,10 @@ User-facing change history grouped by package version. A version heading does no
 
 ## Unreleased
 
+### Codex App Server protocol
+
+- `oasis app-server` serves the core of the Codex App Server v2 protocol over stdio JSONL, so clients written for `codex app-server` can drive OASIS. It supports threads (start, resume, read, list, rename), turns (start, steer, interrupt), `model/list`, and `userMessage`, `agentMessage`, `commandExecution`, `fileChange` (with unified diffs), `mcpToolCall` and `dynamicToolCall` items. Approvals arrive as Codex approval requests with the accept, acceptForSession, decline and cancel decisions. Field names follow the Apache-2.0 protocol definitions in `openai/codex`; no Codex code is included.
+
 ### Connect cards
 - Say "connect GitHub", type `/connect linear`, or let the agent ask: a Connect card appears inline in the conversation (brand mark, what it is for, **Connect** / **Not now**), the way hosted assistants show one. Connect opens the sign-in in a popup (the system browser in the desktop app), the card follows it, and it settles as Connected with the number of tools ready. The task waits on the card and continues in the same turn.
 - New `connect_service` tool (in the Setup tool group) so the agent can ask for an app it needs. It returns at once when the app is already connected, quietly reattaches one that was signed in before, and never runs in subagents or headless runs (those are told to run `oasis mcp connect NAME`).

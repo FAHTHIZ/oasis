@@ -194,6 +194,7 @@ function helpText() {
     '  oasis gateway telegram        Chat with this workspace agent from Telegram (allowlisted chats only)',
     '  oasis gateway discord|slack   The same from a Discord bot or a Slack app (Socket Mode); allowlisted users only',
     '  oasis acp [--permission-mode MODE] [--editor-terminal]  Run as an Agent Client Protocol agent for Zed, JetBrains, Neovim and other ACP editors',
+    '  oasis app-server [--permission-mode MODE]  Speak the Codex App Server protocol (JSONL on stdio) so Codex app-server clients can drive OASIS',
     '  oasis mcp login|logout NAME   Sign in to (or out of) a remote MCP server with OAuth',
     '  oasis skills list              List skills visible to Oasis',
     '  oasis skills find [query]      Search the skills.sh ecosystem',
@@ -3179,6 +3180,18 @@ async function main() {
     }
     try { await runGateway(rest, { root: workspace, env: process.env, permissionMode: SESSION_OPTIONS.permissionMode || null }); }
     finally { if (scheduler) await scheduler.stop().catch(() => {}); }
+    return;
+  }
+  if (command === 'app-server') {
+    const { serveCodexAppServer } = await import('./codex-app-server.mjs');
+    const { oasisVersion } = await import('./version.mjs');
+    const listenAt = rest.indexOf('--listen');
+    const listen = listenAt >= 0 ? rest[listenAt + 1] : 'stdio://';
+    if (listen !== 'stdio://' && listen !== 'stdio') throw new Error('oasis app-server supports --listen stdio:// only. For remote clients, run it over SSH (ssh host oasis app-server).');
+    const modeAt = rest.indexOf('--permission-mode');
+    const permissionMode = (modeAt >= 0 ? rest[modeAt + 1] : null) || SESSION_OPTIONS.permissionMode || null;
+    if (permissionMode && !['default', 'acceptEdits', 'plan', 'auto'].includes(permissionMode)) throw new Error('oasis app-server --permission-mode must be default, acceptEdits, plan or auto.');
+    await serveCodexAppServer({ env: process.env, version: oasisVersion(), permissionMode });
     return;
   }
   if (command === 'acp') {

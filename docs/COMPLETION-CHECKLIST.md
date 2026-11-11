@@ -37,6 +37,8 @@ Status: **done** (tested and pushed) · **doing** · **open** · **blocked**
 | Webhook event filters (GitHub `event.action`, ping) | done | `test/routines-hosted.test.mjs` |
 | Routine results review in the browser (Codex Triage parity) | done | `test/routines-hosted.test.mjs` (runs endpoint) |
 | Routine history retention, stale-edit conflicts, prune finished | done | `test/routines.test.mjs` (bounded history) |
+| Codex App Server protocol (core: threads, turns, items, approvals over stdio) | done | `test/codex-app-server.test.mjs` |
+| Codex App Server: WebSocket transport, thread/fork, review/start, command/exec, fs/* | open | Out of scope for the first cut |
 | Plain daily/weekly schedule phrases (DSH `daily`/`weekly` selectors) | done | `test/routines.test.mjs` (plain calendar phrases) |
 | RRULE schedules (DeepSeek Harness parity) | open | Low priority; cron + time zone covers common cases. |
 | Routines that continue an existing conversation (Codex thread automations) | done | `test/routines.test.mjs` (chained fork e2e). Runs fork with `--resume ID --fork-session --session-id NEW`, so the original session file is never written. |
