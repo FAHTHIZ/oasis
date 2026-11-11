@@ -331,6 +331,7 @@ export function createCodexAppServer(options = {}) {
           }
         },
         onToolResult: ({ name, result, call }) => {
+          load('sessions').then(({ saveMidTurn }) => saveMidTurn(entry.session, { env })).catch(() => {});
           const key = call && call.id ? String(call.id) : [...items.keys()].reverse().find((id) => items.get(id).tool === name && !items.get(id).done);
           const record = key && items.get(key);
           if (!record) return;
@@ -376,7 +377,7 @@ export function createCodexAppServer(options = {}) {
       turn.status = entry.controller.signal.aborted ? 'interrupted' : 'failed';
       if (turn.status === 'failed') turn.error = { message: String(error && error.message || error), codexErrorInfo: null, additionalDetails: null };
     } finally {
-      try { const { saveSession } = await load('sessions'); await saveSession(entry.session, { env }); } catch {}
+      try { const { saveSession, settleMidTurnSave } = await load('sessions'); await settleMidTurnSave(entry.session); await saveSession(entry.session, { env }); } catch {}
       turn.completedAt = nowSeconds();
       if (onFinish) { try { onFinish(lastText); } catch (error) { log('turn finish hook failed: ' + error.message); } }
       entry.turn = null; entry.controller = null;

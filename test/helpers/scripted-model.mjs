@@ -35,7 +35,7 @@ export async function scriptedModel(t, script, { registerTeardown = true } = {})
     }
     requests.push(payload);
     const step = script[Math.min(requests.length - 1, script.length - 1)];
-    const message = typeof step === 'function' ? step(payload, requests) : step;
+    const message = typeof step === 'function' ? await step(payload, requests) : step;
     if (res.destroyed) return;
     res.setHeader('content-type', 'application/json');
     const { finish_reason: finishReason, ...reply } = message || {};

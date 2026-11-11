@@ -16,7 +16,7 @@ import { loadConfig, getProviderSummary, carryLearnedContextWindow } from './con
 import { startIdleCompaction, idleCompactMinutes, idleCompactionNote } from './idle-compaction.mjs';
 import { compactHistoryIfNeeded } from './agent.mjs';
 import { applyEffort, createSession, runAgentTurn, runAgentPlan, runForkedTurn, closeSession, repairInterruptedHistory, resolveQuestionAnswer, stopFailureType, formatWait, steerSession, takeSteering } from './agent.mjs';
-import { loadSession, saveSession, listSessions, pruneSessions } from './sessions.mjs';
+import { loadSession, saveSession, listSessions, pruneSessions, saveMidTurn, settleMidTurnSave } from './sessions.mjs';
 import { executeTool, listAvailableSkills } from './tools.mjs';
 import { parseInstallIntent, planPackageInstall } from './installer.mjs';
 import { listBackups, restoreBackup } from './backups.mjs';
@@ -1242,24 +1242,6 @@ async function waitForBackgroundRegistration() {
   throw new Error('Timed out waiting for the parent process to register this background run. No task was started.');
 }
 
-// Save the conversation while a turn is still running (at most every few
-// seconds), so closing the terminal or a crash mid-task keeps the work done
-// so far resumable with oasis -c. The end-of-turn save still runs as before.
-const MID_TURN_SAVE_MS = 3000;
-function saveMidTurn(session) {
-  if (!session || session.midTurnSaving) return;
-  const due = (session.midTurnSavedAt || 0) + MID_TURN_SAVE_MS;
-  if (Date.now() < due) {
-    if (!session.midTurnTimer) {
-      session.midTurnTimer = setTimeout(() => { session.midTurnTimer = null; saveMidTurn(session); }, due - Date.now());
-      session.midTurnTimer.unref?.();
-    }
-    return;
-  }
-  session.midTurnSaving = true;
-  session.midTurnSavedAt = Date.now();
-  session.midTurnSave = saveSession(session).catch(() => {}).finally(() => { session.midTurnSaving = false; });
-}
 // What a retried model response was, in plain words: a dropped or stalled
 // stream, or a tool call the model sent in a form that could not be parsed.
 export function streamRestartNotice(info = {}, partialShown = false) {
@@ -1282,11 +1264,6 @@ export function labelToolResult(summary, name, call) {
   return String(summary).replace('⎿ ', '⎿ ' + short + ' · ');
 }
 
-async function settleMidTurnSave(session) {
-  if (!session) return;
-  if (session.midTurnTimer) { clearTimeout(session.midTurnTimer); session.midTurnTimer = null; }
-  if (session.midTurnSave) await session.midTurnSave;
-}
 
 async function runPrompt(prompt, root, autoApprove, session = null, persistence = {}, modeOptions = {}) {
   const requestText = String(prompt || '');

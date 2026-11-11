@@ -4,6 +4,10 @@ User-facing change history grouped by package version. A version heading does no
 
 ## Unreleased
 
+### Crash-safe task progress
+
+- Browser tasks (`oasis web`), headless runs (`oasis -p`) and App Server turns now save the conversation while a turn is still running, as the terminal already did. If the server stops or crashes mid-task, the finished steps are kept, and the interrupted task's session can be continued. The save trails each tool step by a moment so it includes that step's result, and it runs at most every 3 seconds.
+
 ### Antigravity agent definitions
 
 - Custom agents are also read from Google Antigravity's folders: `.agents/agents/<name>.md` or `<name>/agent.md` in the project, and `~/.gemini/config/agents/`. Antigravity tool names, `subagent: false`, `commandExecutionPolicy: off`, model tiers and skill paths are mapped (see docs/SUBAGENTS.md).

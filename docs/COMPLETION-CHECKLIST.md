@@ -34,6 +34,7 @@ Status: **done** (tested and pushed) · **doing** · **open** · **blocked**
 | Agent tool to manage routines (`routine_manage`, approval-gated) | done | `test/routine-manage-tool.test.mjs` |
 | Routines in the web app and hosted by `oasis web` / `oasis gateway` | done | `test/routines-hosted.test.mjs` |
 | Event-triggered routines (webhook fires a routine) | done | `test/routines-hosted.test.mjs` (webhook test) |
+| Crash-safe mid-turn saves in web, headless and App Server turns | done | `test/web-midturn-save.test.mjs`, `test/session-midturn.test.mjs` |
 | Webhook event filters (GitHub `event.action`, ping) | done | `test/routines-hosted.test.mjs` |
 | Routine results review in the browser (Codex Triage parity) | done | `test/routines-hosted.test.mjs` (runs endpoint) |
 | Routine history retention, stale-edit conflicts, prune finished | done | `test/routines.test.mjs` (bounded history) |
