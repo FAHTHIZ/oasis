@@ -20,6 +20,11 @@ weaknesses. Newest first. Detailed user-facing notes go in the CHANGELOG.
 
 ## 2026-11-11 (Claude Code parity cycle)
 
+### claudeMdExcludes
+- In a monorepo, a parent folder's CLAUDE.md written for another team was always loaded. `claudeMdExcludes` (globs or absolute paths, matched against the absolute path and the symlink target, merged from every settings file) now skips parent, project, local and user instruction files, `.claude/rules` files (always-on and path-scoped), and nested CLAUDE.md files loaded when the agent works in a folder. Instruction loading now waits for settings, so the session reads them in sequence rather than in parallel.
+- OASIS does not follow symlinked rule files at all, so Claude Code's symlink case for rules does not arise.
+- Test: test/claude-md-excludes.test.mjs (3); memory, rules and settings suites pass (43 tests).
+
 ### MCP server policy and .mcp.json approvals
 - OASIS ignored all five keys, so a managed `deniedMcpServers` entry or a `disabledMcpjsonServers` rejection did nothing. Now `deniedMcpServers` and `allowedMcpServers` (by `serverName`, exact `serverCommand` or `serverUrl` with `*`; denial wins; `allowManagedMcpServersOnly` keeps only the managed allowlist) apply to every server source: user, project, plugin, `claude mcp add`, `--mcp-config`, agent files and servers started after an install.
 - `.mcp.json` approvals follow the [settings reference](https://code.claude.com/docs/en/settings-reference.md): `disabledMcpjsonServers` rejects from any file; `enableAllProjectMcpServers` and `enabledMcpjsonServers` from user, `--settings` or managed settings start those servers in an untrusted workspace. A trusted workspace still starts every `.mcp.json` server, because OASIS has no per-server approval prompt.
