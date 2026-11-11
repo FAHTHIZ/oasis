@@ -5,6 +5,11 @@ weaknesses. Newest first. Detailed user-facing notes go in the CHANGELOG.
 
 ## 2026-11-11 (frontier-platform cycle: competitor gaps)
 
+### App Server skills, MCP status and signed tokens
+- Added `skills/list` and `mcpServerStatus/list`. OASIS starts MCP servers per thread, not per process as Codex does, so the status list needs a loaded thread's `threadId` (or exactly one loaded thread).
+- Added `--ws-auth signed-bearer-token`, following the checks in Codex's `codex-rs/websocket-auth/src/lib.rs`: HS256 only, `exp` required, `nbf` honoured, optional issuer and audience, 30 seconds of default clock skew, and a secret of at least 32 bytes. Verified with Node's `crypto` (HMAC and constant-time compare), so there is no new dependency. The test signs tokens and checks the reasons for refusal, plus a real WebSocket handshake: 401 for expired or wrongly signed tokens, open for a good one.
+- Full suite at 59156d95: 2535 tests, 2527 pass, 0 fail, 8 skipped. A rerun covering later commits is in progress.
+
 ### App Server thread management
 - Compared the client methods in Codex's `common.rs` (187) with OASIS. Most of the 162 missing ones are tied to OpenAI accounts or products: accounts, remote control, realtime voice, ChatGPT projects and plugin sharing. Added the ones that make sense for a local agent: `thread/archive`, `thread/unarchive`, `thread/delete`, `thread/unsubscribe`, `thread/loaded/list` and `thread/compact/start`, plus the `archived`, `searchTerm` and `excludedThreadIds` filters on `thread/list`. Shapes follow `v2/thread.rs`.
 - Codex dropped `delivery: "detached"` for reviews (its docs now say to start a thread and review on it), so that checklist item is closed as not needed.

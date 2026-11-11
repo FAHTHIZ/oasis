@@ -194,7 +194,7 @@ function helpText() {
     '  oasis gateway telegram        Chat with this workspace agent from Telegram (allowlisted chats only)',
     '  oasis gateway discord|slack   The same from a Discord bot or a Slack app (Socket Mode); allowlisted users only',
     '  oasis acp [--permission-mode MODE] [--editor-terminal]  Run as an Agent Client Protocol agent for Zed, JetBrains, Neovim and other ACP editors',
-    '  oasis app-server [--listen stdio://|unix://[PATH]|ws://IP:PORT] [--ws-auth capability-token --ws-token-file PATH] [--permission-mode MODE]  Speak the Codex App Server protocol (JSONL on stdio, or one message per WebSocket text frame) so Codex app-server clients can drive OASIS',
+    '  oasis app-server [--listen stdio://|unix://[PATH]|ws://IP:PORT] [--ws-auth capability-token --ws-token-file PATH | --ws-auth signed-bearer-token --ws-shared-secret-file PATH] [--permission-mode MODE]  Speak the Codex App Server protocol (JSONL on stdio, or one message per WebSocket text frame) so Codex app-server clients can drive OASIS',
     '  oasis mcp login|logout NAME   Sign in to (or out of) a remote MCP server with OAuth',
     '  oasis skills list              List skills visible to Oasis',
     '  oasis skills find [query]      Search the skills.sh ecosystem',
@@ -3170,9 +3170,9 @@ async function main() {
     if (permissionMode && !['default', 'acceptEdits', 'plan', 'auto'].includes(permissionMode)) throw new Error('oasis app-server --permission-mode must be default, acceptEdits, plan or auto.');
     const { parseListenUrl, loadWsAuth, startCodexAppServerWebSocket } = await import('./codex-app-server-ws.mjs');
     const target = parseListenUrl(listen);
-    const authFlags = { mode: flag('--ws-auth'), tokenFile: flag('--ws-token-file'), tokenSha256: flag('--ws-token-sha256') };
+    const authFlags = { mode: flag('--ws-auth'), tokenFile: flag('--ws-token-file'), tokenSha256: flag('--ws-token-sha256'), sharedSecretFile: flag('--ws-shared-secret-file'), issuer: flag('--ws-issuer'), audience: flag('--ws-audience'), maxClockSkewSeconds: flag('--ws-max-clock-skew-seconds') };
     if (target.transport === 'stdio' || target.transport === 'unix') {
-      if (authFlags.mode || authFlags.tokenFile || authFlags.tokenSha256) throw new Error('--ws-auth flags only apply to --listen ws://IP:PORT; a unix:// socket is private to this user.');
+      if (Object.values(authFlags).some((value) => value !== undefined)) throw new Error('--ws-auth flags only apply to --listen ws://IP:PORT; a unix:// socket is private to this user.');
     }
     if (target.transport === 'stdio') {
       await serveCodexAppServer({ env: process.env, version: oasisVersion(), permissionMode });

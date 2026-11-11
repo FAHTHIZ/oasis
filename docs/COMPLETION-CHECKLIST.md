@@ -49,7 +49,7 @@ Status: **done** (tested and pushed) · **doing** · **open** · **blocked**
 | Codex App Server: thread archive/unarchive/delete/unsubscribe/loaded list/compact | done | `test/codex-app-server.test.mjs` (lifecycle test) |
 | Codex App Server: `skills/list`, `mcpServerStatus/list` | done | `test/codex-app-server.test.mjs` |
 | Codex App Server: detached review | not needed | Codex removed `delivery: "detached"`; its docs say to start a thread and review on it, which OASIS supports |
-| Codex App Server: signed bearer tokens | open | |
+| Codex App Server: signed bearer tokens | done | `test/codex-app-server-ws.test.mjs` (HS256 JWT checks and a 401/open handshake) |
 | ACP stable session lifecycle (list, resume, close, delete, config options, usage and title updates) | done | `test/acp.test.mjs` (lifecycle test against a real `oasis acp` process) |
 | ACP elicitation (`ask_user_question` as an `elicitation/create` form) | done | `test/acp.test.mjs` (accepted and declined forms) |
 | Codex App Server `item/tool/requestUserInput` for `ask_user_question` (experimentalApi clients) | done | `test/codex-app-server.test.mjs` |
