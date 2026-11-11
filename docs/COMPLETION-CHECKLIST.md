@@ -43,6 +43,7 @@ Status: **done** (tested and pushed) · **doing** · **open** · **blocked**
 | Codex App Server protocol (core: threads, turns, items, approvals over stdio) | done | `test/codex-app-server.test.mjs` |
 | Codex App Server thread/fork (with lastTurnId) | done | `test/codex-app-server.test.mjs` (fork) |
 | Codex App Server review/start (inline) | done | `test/codex-app-server.test.mjs` (review) |
+| Codex App Server WebSocket transport (`--listen ws://`, /readyz, /healthz, Origin 403, capability-token auth) | done | `test/codex-app-server-ws.test.mjs` |
 | Codex App Server: WebSocket transport, detached review, command/exec, fs/* | open | Out of scope for the first cut |
 | Plain daily/weekly schedule phrases (DSH `daily`/`weekly` selectors) | done | `test/routines.test.mjs` (plain calendar phrases) |
 | RRULE schedules (DeepSeek Harness parity) | open | Low priority; cron + time zone covers common cases. |

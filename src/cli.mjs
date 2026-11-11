@@ -194,7 +194,7 @@ function helpText() {
     '  oasis gateway telegram        Chat with this workspace agent from Telegram (allowlisted chats only)',
     '  oasis gateway discord|slack   The same from a Discord bot or a Slack app (Socket Mode); allowlisted users only',
     '  oasis acp [--permission-mode MODE] [--editor-terminal]  Run as an Agent Client Protocol agent for Zed, JetBrains, Neovim and other ACP editors',
-    '  oasis app-server [--permission-mode MODE]  Speak the Codex App Server protocol (JSONL on stdio) so Codex app-server clients can drive OASIS',
+    '  oasis app-server [--listen stdio://|ws://IP:PORT] [--ws-auth capability-token --ws-token-file PATH] [--permission-mode MODE]  Speak the Codex App Server protocol (JSONL on stdio, or one message per WebSocket text frame) so Codex app-server clients can drive OASIS',
     '  oasis mcp login|logout NAME   Sign in to (or out of) a remote MCP server with OAuth',
     '  oasis skills list              List skills visible to Oasis',
     '  oasis skills find [query]      Search the skills.sh ecosystem',
@@ -3163,13 +3163,24 @@ async function main() {
   if (command === 'app-server') {
     const { serveCodexAppServer } = await import('./codex-app-server.mjs');
     const { oasisVersion } = await import('./version.mjs');
-    const listenAt = rest.indexOf('--listen');
-    const listen = listenAt >= 0 ? rest[listenAt + 1] : 'stdio://';
-    if (listen !== 'stdio://' && listen !== 'stdio') throw new Error('oasis app-server supports --listen stdio:// only. For remote clients, run it over SSH (ssh host oasis app-server).');
+    const flag = (name) => { const at = rest.indexOf(name); return at >= 0 ? rest[at + 1] : undefined; };
+    const listen = flag('--listen') || 'stdio://';
     const modeAt = rest.indexOf('--permission-mode');
     const permissionMode = (modeAt >= 0 ? rest[modeAt + 1] : null) || SESSION_OPTIONS.permissionMode || null;
     if (permissionMode && !['default', 'acceptEdits', 'plan', 'auto'].includes(permissionMode)) throw new Error('oasis app-server --permission-mode must be default, acceptEdits, plan or auto.');
-    await serveCodexAppServer({ env: process.env, version: oasisVersion(), permissionMode });
+    const { parseListenUrl, loadWsAuth, startCodexAppServerWebSocket } = await import('./codex-app-server-ws.mjs');
+    const target = parseListenUrl(listen);
+    const authFlags = { mode: flag('--ws-auth'), tokenFile: flag('--ws-token-file'), tokenSha256: flag('--ws-token-sha256') };
+    if (target.transport === 'stdio') {
+      if (authFlags.mode || authFlags.tokenFile || authFlags.tokenSha256) throw new Error('--ws-auth flags only apply to --listen ws://IP:PORT.');
+      await serveCodexAppServer({ env: process.env, version: oasisVersion(), permissionMode });
+      return;
+    }
+    const verify = await loadWsAuth(authFlags);
+    const listener = await startCodexAppServerWebSocket({ host: target.host, port: target.port, verify, env: process.env, version: oasisVersion(), permissionMode });
+    process.stderr.write('[oasis app-server] listening on ' + listener.url + (verify ? ' (bearer token required)' : ' (loopback only, no auth)') + '; health: /readyz, /healthz\n');
+    await new Promise((resolve) => { const stop = () => resolve(); process.once('SIGINT', stop); process.once('SIGTERM', stop); });
+    await listener.close();
     return;
   }
   if (command === 'acp') {
