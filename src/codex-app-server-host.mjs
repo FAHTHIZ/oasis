@@ -2,7 +2,8 @@
 // fs/readFile, fs/writeFile, fs/createDirectory, fs/getMetadata,
 // fs/readDirectory, fs/remove, fs/copy, fs/watch, fs/unwatch (+ fs/changed),
 // command/exec, command/exec/write, command/exec/resize,
-// command/exec/terminate (+ command/exec/outputDelta), and fuzzyFileSearch.
+// command/exec/terminate (+ command/exec/outputDelta), fuzzyFileSearch and
+// gitDiffToRemote.
 //
 // Shapes follow codex-rs/app-server-protocol/src/protocol/v2/{fs,command_exec}.rs
 // (Apache-2.0); this is an independent implementation.
@@ -407,6 +408,53 @@ export function createAppServerHost(options = {}) {
     }
   }
 
+  // ---- gitDiffToRemote -----------------------------------------------------
+  // The commit nearest HEAD that some remote already has, and the diff from it
+  // to the working tree, untracked files included (the patch a cloud runner
+  // would need to reproduce this checkout). Read-only git plumbing; no fetch.
+
+  function git(args, cwd, { maxBytes = 64 * 1024 * 1024, okCodes = [0] } = {}) {
+    return new Promise((resolve, reject) => {
+      const child = spawnProcess('git', ['-c', 'core.quotepath=off', ...args], { cwd, env: { ...env, GIT_TERMINAL_PROMPT: '0', GIT_OPTIONAL_LOCKS: '0' }, stdio: ['ignore', 'pipe', 'pipe'] });
+      const chunks = [];
+      let size = 0;
+      let stderr = '';
+      const timer = setTimeout(() => { try { child.kill('SIGKILL'); } catch {} }, 60_000);
+      child.stdout.on('data', (chunk) => { size += chunk.length; if (size <= maxBytes) chunks.push(chunk); });
+      child.stderr.on('data', (chunk) => { stderr += chunk; });
+      child.on('error', (error) => { clearTimeout(timer); reject(error); });
+      child.on('close', (code) => {
+        clearTimeout(timer);
+        if (size > maxBytes) reject(rpcError(-32000, 'The diff is larger than ' + Math.round(maxBytes / 1048576) + ' MB.'));
+        else if (okCodes.includes(code)) resolve(Buffer.concat(chunks).toString('utf8'));
+        else reject(rpcError(-32000, 'git ' + args[0] + ' failed: ' + (stderr.trim().split('\n').pop() || 'exit ' + code)));
+      });
+    });
+  }
+
+  async function gitDiffToRemote(params) {
+    const cwd = await allowed(params.cwd, 'cwd');
+    const top = (await git(['rev-parse', '--show-toplevel'], cwd).catch(() => '')).trim();
+    if (!top) throw rpcError(-32000, 'Not a git repository: ' + cwd);
+    // The diff covers the whole repository, so its top folder must be allowed too.
+    await allowed(top, 'repository root');
+    const remotes = (await git(['remote'], cwd)).split('\n').map((line) => line.trim()).filter(Boolean);
+    if (!remotes.length) throw rpcError(-32000, 'This repository has no remotes, so there is no remote commit to diff against.');
+    // Commits on HEAD that no remote-tracking branch contains...
+    const local = new Set((await git(['rev-list', 'HEAD', '--not', '--remotes'], cwd)).split('\n').filter(Boolean));
+    // ...so the first commit in HEAD's history outside that set is on a remote.
+    const history = (await git(['rev-list', '--topo-order', '--max-count=' + (local.size + 1000), 'HEAD'], cwd)).split('\n').filter(Boolean);
+    const sha = history.find((commit) => !local.has(commit));
+    if (!sha) throw rpcError(-32000, 'No commit in HEAD\'s history is on a remote yet. Push a branch or fetch first.');
+    let diff = await git(['diff', '--no-textconv', '--no-ext-diff', '--binary', sha], top);
+    const untracked = (await git(['ls-files', '--others', '--exclude-standard', '-z'], top)).split('\0').filter(Boolean);
+    for (const file of untracked) {
+      // `git diff --no-index` exits 1 when the files differ, which they always do here.
+      diff += await git(['diff', '--no-textconv', '--no-ext-diff', '--binary', '--no-index', '--', '/dev/null', file], top, { okCodes: [0, 1] });
+    }
+    return { sha, diff };
+  }
+
   const WRITES = new Set(['fs/writeFile', 'fs/createDirectory', 'fs/remove', 'fs/copy', 'command/exec', 'command/exec/write', 'command/exec/resize', 'command/exec/terminate']);
   const methods = {
     'fs/readFile': readFileMethod,
@@ -422,7 +470,8 @@ export function createAppServerHost(options = {}) {
     'command/exec/write': execWrite,
     'command/exec/resize': execResize,
     'command/exec/terminate': execTerminate,
-    fuzzyFileSearch
+    fuzzyFileSearch,
+    gitDiffToRemote
   };
 
   return {

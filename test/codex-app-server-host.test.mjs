@@ -264,3 +264,44 @@ test('fuzzyFileSearch ranks files and folders inside allowed roots, skips secret
   assert.deepEqual(first, { files: [] });
   assert.ok(second.files.length >= 2);
 });
+
+test('gitDiffToRemote: nearest pushed commit and the diff from it, untracked files included', async (t) => {
+  const { execFileSync } = await import('node:child_process');
+  const base = await tmp(t, 'oasis-host-git-');
+  const remote = path.join(base, 'remote.git');
+  const root = path.join(base, 'work');
+  const gitEnv = { ...process.env, GIT_AUTHOR_NAME: 't', GIT_AUTHOR_EMAIL: 't@example.com', GIT_COMMITTER_NAME: 't', GIT_COMMITTER_EMAIL: 't@example.com', GIT_CONFIG_GLOBAL: '/dev/null', GIT_CONFIG_NOSYSTEM: '1' };
+  const run = (cwd, ...args) => execFileSync('git', args, { cwd, env: gitEnv, encoding: 'utf8' }).trim();
+  run(base, 'init', '-q', '--bare', remote);
+  await mkdir(root);
+  run(root, 'init', '-q', '-b', 'main');
+  const { host } = hostFor(root);
+  await assert.rejects(host.handle('gitDiffToRemote', { cwd: root }), /no remotes/);
+  await writeFile(path.join(root, 'a.txt'), 'one\n');
+  run(root, 'add', '.'); run(root, 'commit', '-qm', 'first');
+  run(root, 'remote', 'add', 'origin', remote);
+  await assert.rejects(host.handle('gitDiffToRemote', { cwd: root }), /No commit in HEAD's history is on a remote/);
+  run(root, 'push', '-q', 'origin', 'main');
+  const pushed = run(root, 'rev-parse', 'HEAD');
+  // A local-only commit, an uncommitted edit and an untracked file.
+  await writeFile(path.join(root, 'b.txt'), 'local commit\n');
+  run(root, 'add', '.'); run(root, 'commit', '-qm', 'local');
+  await writeFile(path.join(root, 'a.txt'), 'one\ntwo\n');
+  await writeFile(path.join(root, '-new file.txt'), 'untracked\n');
+  const result = await host.handle('gitDiffToRemote', { cwd: root });
+  assert.equal(result.sha, pushed);
+  assert.match(result.diff, /\+local commit/);
+  assert.match(result.diff, /\+two/);
+  assert.match(result.diff, /\+untracked/);
+  assert.match(result.diff, /-new file\.txt/);
+  // The patch reproduces the checkout on top of the pushed commit.
+  const clone = path.join(base, 'clone');
+  run(base, 'clone', '-q', remote, clone);
+  run(clone, 'checkout', '-q', result.sha);
+  execFileSync('git', ['apply', '-'], { cwd: clone, env: gitEnv, input: result.diff });
+  assert.equal(await readFile(path.join(clone, 'a.txt'), 'utf8'), 'one\ntwo\n');
+  assert.equal(await readFile(path.join(clone, 'b.txt'), 'utf8'), 'local commit\n');
+  assert.equal(await readFile(path.join(clone, '-new file.txt'), 'utf8'), 'untracked\n');
+  // A folder outside the allowed roots is refused.
+  await assert.rejects(host.handle('gitDiffToRemote', { cwd: base }), (error) => error.rpc && error.rpc.code === -32001);
+});

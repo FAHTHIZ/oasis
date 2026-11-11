@@ -9,7 +9,7 @@
 // excludedThreadIds), thread/name/set, thread/loaded/list, thread/unsubscribe,
 // thread/archive, thread/unarchive, thread/delete, thread/compact/start,
 // thread/turns/list, skills/list, mcpServerStatus/list (for a loaded thread), turn/start,
-// turn/steer, turn/interrupt, review/start (inline), model/list, and the host
+// thread/shellCommand, config/read, turn/steer, turn/interrupt, review/start (inline), model/list, and the host
 // methods in codex-app-server-host.mjs: fs/* (readFile, writeFile,
 // createDirectory, getMetadata, readDirectory, remove, copy, watch, unwatch)
 // command/exec (+ write, resize, terminate) and fuzzyFileSearch, confined to
@@ -26,7 +26,7 @@
 // Field names and item shapes follow codex-rs/app-server-protocol (Apache-2.0);
 // this is an independent implementation, no Codex code is included.
 import path from 'node:path';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { readFileSync, statSync } from 'node:fs';
 import { stat } from 'node:fs/promises';
 import { createInterface } from 'node:readline';
@@ -125,6 +125,26 @@ function readSmall(file) {
   try { const info = statSync(file); return info.isFile() && info.size <= MAX_FILE ? readFileSync(file, 'utf8') : null; } catch { return null; }
 }
 
+// config/read never returns credentials: values under keys that look like
+// secrets (apiKey, token, password, env, headers...) are replaced.
+const SECRET_KEY = /(key|token|secret|password|passwd|credential|auth|cookie|^env$|headers?$)/i;
+export function redactConfig(value, depth = 0) {
+  if (depth > 12) return null;
+  if (Array.isArray(value)) return value.map((entry) => redactConfig(entry, depth + 1));
+  if (!value || typeof value !== 'object') return value;
+  const out = {};
+  for (const [key, entry] of Object.entries(value)) out[key] = SECRET_KEY.test(key) && entry !== null && entry !== '' && typeof entry !== 'boolean' ? '[redacted]' : redactConfig(entry, depth + 1);
+  return out;
+}
+
+// OASIS settings layers as Codex ConfigLayerSource values.
+function layerSource(scope, file) {
+  if (scope === 'managed') return { type: 'system', file };
+  if (scope === 'user') return { type: 'user', file, profile: null };
+  if (scope === 'project' || scope === 'local') return { type: 'project', dotCodexFolder: path.dirname(file) };
+  return { type: 'sessionFlags' };
+}
+
 export function createCodexAppServer(options = {}) {
   const env = options.env || process.env;
   const write = options.write || ((line) => process.stdout.write(line));
@@ -164,6 +184,8 @@ export function createCodexAppServer(options = {}) {
     if (name === 'mentions') return import('./commands.mjs');
     if (name === 'slash') return import('./slash.mjs');
     if (name === 'tools') return import('./tools.mjs');
+    if (name === 'terminal') return import('./terminal-ui.mjs');
+    if (name === 'settings') return import('./settings.mjs');
     throw new Error('unknown dependency ' + name);
   }
 
@@ -494,6 +516,52 @@ export function createCodexAppServer(options = {}) {
     return turn;
   }
 
+  // thread/shellCommand: the user's own `!` command, run on this computer in
+  // the thread's folder with the user's shell (no agent sandbox, as in Codex).
+  // It shows as a commandExecution item with source "userShell" in the active
+  // turn, or in a turn of its own when the thread is idle. The model sees the
+  // command and its output with the next request, like `!` in the terminal.
+  async function runUserShell(entry, turn, command, timeoutMs, signal) {
+    const threadId = entry.session.sessionId;
+    const item = { type: 'commandExecution', id: 'item-' + randomUUID(), pluginId: null, scriptPath: null, command, cwd: entry.root, processId: null, source: 'userShell', status: 'inProgress', commandActions: [], aggregatedOutput: null, exitCode: null, durationMs: null };
+    const started = Date.now();
+    notify('item/started', { item, threadId, turnId: turn.id, startedAtMs: started });
+    const { runShellPassthrough, shellContextBlock } = await load('terminal');
+    const ran = await runShellPassthrough(command, { root: entry.root, env, output: { write() {} }, signal, timeoutMs, trapSigint: false });
+    item.durationMs = Date.now() - started;
+    item.aggregatedOutput = ran.output + (ran.timedOut ? (ran.output && !ran.output.endsWith('\n') ? '\n' : '') + '[timed out after ' + timeoutMs + ' ms]' : '');
+    item.exitCode = ran.timedOut || ran.cancelled ? null : ran.code;
+    item.status = ran.timedOut || ran.cancelled || ran.code !== 0 ? 'failed' : 'completed';
+    if (item.aggregatedOutput) notify('item/commandExecution/outputDelta', { threadId, turnId: turn.id, itemId: item.id, delta: item.aggregatedOutput });
+    notify('item/completed', { item, threadId, turnId: turn.id, completedAtMs: Date.now() });
+    const block = shellContextBlock([{ command, code: ran.timedOut ? 'timeout' : ran.code, output: ran.output }]);
+    return { item, block };
+  }
+
+  function beginShellTurn(entry, command, timeoutMs) {
+    const threadId = entry.session.sessionId;
+    const turn = { id: randomUUID(), status: 'inProgress', error: null, startedAt: nowSeconds(), completedAt: null, shell: true };
+    entry.turn = turn;
+    entry.controller = new AbortController();
+    queueMicrotask(async () => {
+      notify('turn/started', { threadId, turn: turnView(turn) });
+      notify('thread/status/changed', { threadId, status: threadStatus(entry) });
+      try {
+        const { block } = await runUserShell(entry, turn, command, timeoutMs, entry.controller.signal);
+        entry.pendingShell = [...(entry.pendingShell || []), block].slice(-10);
+        turn.status = entry.controller.signal.aborted ? 'interrupted' : 'completed';
+      } catch (error) {
+        turn.status = 'failed';
+        turn.error = { message: String(error && error.message || error), codexErrorInfo: null, additionalDetails: null };
+      } finally {
+        turn.completedAt = nowSeconds();
+        entry.turn = null; entry.controller = null;
+        notify('turn/completed', { threadId, turn: turnView(turn) });
+        notify('thread/status/changed', { threadId, status: threadStatus(entry) });
+      }
+    });
+  }
+
   async function reviewRequest(target = {}) {
     const { reviewPrompt } = await load('slash');
     const readOnly = 'This is a read-only review: do not modify files.';
@@ -716,7 +784,9 @@ export function createCodexAppServer(options = {}) {
           if (typeof entry.session.permissions.setMode === 'function') entry.session.permissions.setMode(mode); else entry.session.permissions.mode = mode;
         }
         const userItem = { type: 'userMessage', id: 'item-' + randomUUID(), clientId: params.clientUserMessageId || null, content: Array.isArray(params.input) ? params.input : [] };
-        const turn = beginTurn(entry, text, images, [userItem]);
+        const shellContext = entry.pendingShell && entry.pendingShell.length ? 'Commands I ran in my terminal (for context):\n' + entry.pendingShell.join('\n\n') + '\n\n' : '';
+        entry.pendingShell = [];
+        const turn = beginTurn(entry, shellContext + text, images, [userItem]);
         return { turn: turnView(turn) };
       }
       case 'review/start': {
@@ -736,6 +806,76 @@ export function createCodexAppServer(options = {}) {
         });
         turnId = turn.id;
         return { turn: turnView(turn), reviewThreadId: threadId };
+      }
+      case 'config/read': {
+        // The effective OASIS configuration in Codex's Config shape. Fields
+        // Codex has and OASIS does not stay null; OASIS-only values are under
+        // "oasis". Credentials are never included.
+        const root = await workspace(params.cwd);
+        const { loadConfig } = await load('config');
+        const { loadSettings } = await load('settings');
+        const [config, settings] = await Promise.all([loadConfig({ env }), loadSettings(root, { env, skipPlugins: true })]);
+        const mode = options.permissionMode || settings.permissions.defaultMode || 'default';
+        const sandboxOn = Boolean(settings.sandbox && settings.sandbox.enabled);
+        const userConfig = { type: 'user', file: config.configPath, profile: null };
+        const fromEnv = (name) => (env[name] ? { type: 'sessionFlags' } : userConfig);
+        const version = (text) => createHash('sha256').update(String(text)).digest('hex').slice(0, 16);
+        const result = {
+          config: {
+            model: config.model || null, review_model: null, model_context_window: Number.isInteger(config.contextWindow) ? config.contextWindow : null,
+            model_auto_compact_token_limit: null, model_auto_compact_token_limit_scope: null, model_provider: config.protocol || null,
+            approval_policy: mode === 'bypassPermissions' || mode === 'dontAsk' ? 'never' : 'on-request',
+            sandbox_mode: mode === 'plan' ? 'read-only' : sandboxOn ? 'workspace-write' : 'danger-full-access',
+            sandbox_workspace_write: sandboxOn ? { writable_roots: settings.sandbox.writable || [], network_access: Boolean(settings.sandbox.network), exclude_tmpdir_env_var: false, exclude_slash_tmp: false } : null,
+            forced_chatgpt_workspace_id: null, forced_login_method: null, web_search: null, client_search_provider: null, tools: null,
+            instructions: null, developer_instructions: null, compact_prompt: null,
+            model_reasoning_effort: typeof config.reasoningEffort === 'string' && config.reasoningEffort ? config.reasoningEffort : null,
+            model_reasoning_summary: null, model_verbosity: null, service_tier: null, analytics: null, apps: null, browser_use: null, computer_use: null, desktop: null,
+            oasis: { permissionMode: mode, baseUrl: config.baseURL || null, configured: Boolean(config.configured), maxSteps: config.maxSteps, maxToolCalls: config.maxToolCalls, sandbox: { enabled: sandboxOn, network: Boolean(settings.sandbox && settings.sandbox.network) }, workspaceTrusted: Boolean(settings.trusted) }
+          },
+          origins: {
+            model: { name: fromEnv('OASIS_MODEL'), version: '' },
+            model_provider: { name: fromEnv('OASIS_PROTOCOL'), version: '' },
+            ...(Number.isInteger(config.contextWindow) ? { model_context_window: { name: userConfig, version: '' } } : {})
+          }
+        };
+        if (params.includeLayers) {
+          const { readFile } = await import('node:fs/promises');
+          result.layers = [];
+          for (const { scope, file } of settings.sources || []) {
+            const text = file && path.isAbsolute(file) ? await readFile(file, 'utf8').catch(() => null) : null;
+            let parsed = null;
+            try { parsed = text === null ? null : JSON.parse(text); } catch { parsed = null; }
+            const untrusted = (scope === 'project' || scope === 'local') && !settings.trusted;
+            result.layers.push({ name: layerSource(scope, file), version: text === null ? '' : version(text), config: redactConfig(parsed || {}), ...(untrusted ? { disabledReason: 'This folder is not trusted: its allow rules, hooks and mode or sandbox changes are ignored; deny and ask rules still apply. Run `oasis trust` to trust it.' } : {}) });
+          }
+        }
+        return result;
+      }
+      case 'thread/shellCommand': {
+        const entry = threadEntry(params.threadId);
+        const command = typeof params.command === 'string' ? params.command.trim() : '';
+        if (!command) throw rpcError(-32602, 'command must be a non-empty string.');
+        const timeoutMs = params.timeoutMs === undefined || params.timeoutMs === null ? 60 * 60 * 1000 : Number(params.timeoutMs);
+        if (!Number.isInteger(timeoutMs) || timeoutMs < 0) throw rpcError(-32602, 'timeoutMs must be a non-negative integer.');
+        const mode = entry.session.permissions && entry.session.permissions.mode;
+        if (mode === 'plan' || options.permissionMode === 'plan') throw rpcError(-32000, 'Shell commands are turned off in plan (read-only) mode.');
+        if (entry.turn && entry.turn.status === 'inProgress' && entry.controller) {
+          // A running turn: show the command in it and pass the result to the
+          // model as a steering message, so it sees it before its next step.
+          const turn = entry.turn;
+          const signal = entry.controller.signal;
+          queueMicrotask(() => {
+            runUserShell(entry, turn, command, timeoutMs, signal).then(async ({ block }) => {
+              const { steerSession } = await load('agent');
+              const text = 'Command I ran in my terminal (for context):\n' + block;
+              if (turn.shell || !(entry.turn === turn && steerSession(entry.session, text))) entry.pendingShell = [...(entry.pendingShell || []), block].slice(-10);
+            }).catch((error) => log('shell command failed: ' + error.message));
+          });
+        } else {
+          beginShellTurn(entry, command, timeoutMs);
+        }
+        return {};
       }
       case 'turn/steer': {
         const entry = threadEntry(params.threadId);
