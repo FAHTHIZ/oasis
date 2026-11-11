@@ -4,7 +4,7 @@
 import { PRESETS, testProvider } from './core/providers.mjs';
 import { alwaysAllowLabel } from './core/approval-rule.mjs';
 import { SUBAGENT_STATUS_TEXT } from './core/subagents.mjs';
-import { createConnectorCard, connectIntent } from './core/connector-card.mjs';
+import { createConnectorCard, connectIntent, brandMark } from './core/connector-card.mjs';
 import { createSoundPlayer } from './core/sound.mjs';
 import { ambientField } from './core/ambient.mjs';
 import { activityLabel, liveLabel, summarizeArgs, toolKind, groupTitle, groupStats, formatDuration, elapsedSince, describeInput, buildTimeline } from './core/timeline.mjs';
@@ -2033,6 +2033,41 @@ async function connectShortcut(message, { reason = '' } = {}) {
   connectService(view, actions).then(() => { connectorList = null; });
   return true;
 }
+// Settings → Apps: every catalog app with its status and one Connect button.
+async function renderApps() {
+  const list = $('appList');
+  connectorList = null;
+  const apps = await knownConnectors();
+  list.replaceChildren();
+  for (const app of apps) {
+    const row = document.createElement('li');
+    row.className = 'app-tile' + (app.live || app.signedIn ? ' on' : '');
+    row.appendChild(brandMark(app));
+    const text = document.createElement('div');
+    text.className = 'app-text';
+    const name = document.createElement('strong');
+    name.textContent = app.name;
+    const sub = document.createElement('span');
+    sub.textContent = app.signedIn ? 'Connected' : app.description;
+    text.append(name, sub);
+    row.appendChild(text);
+    if (!app.signedIn) {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'btn small';
+      button.textContent = 'Connect';
+      button.addEventListener('click', () => { closeSheet('settingsSheet'); void connectShortcut('/connect ' + app.id); });
+      row.appendChild(button);
+    } else {
+      const dot = document.createElement('span');
+      dot.className = 'app-dot';
+      dot.title = 'Connected';
+      row.appendChild(dot);
+    }
+    list.appendChild(row);
+  }
+  if (!apps.length) { const empty = document.createElement('li'); empty.className = 'hint'; empty.textContent = 'Could not load the app list from this computer.'; list.appendChild(empty); }
+}
 function openExternal(url) {
   try { window.open(url, '_blank', 'noopener'); } catch { /* blocked */ }
 }
@@ -2922,6 +2957,8 @@ function openSettings() {
   $('runtimeInfo').hidden = !RT;
   if (RT && RT.status) $('runtimeInfo').textContent = 'Running on this computer in ' + (RT.status.workspacePath || RT.status.workspaceName) + '. Model keys are saved by OASIS on this computer, and backup models take over automatically.';
   $('wipeAll').hidden = Boolean(RT);
+  $('appSettings').hidden = !RT || RT.needsToken;
+  if (RT && !RT.needsToken) void renderApps();
   $('mcpSettings').hidden = !mcpAvailable();
   if (mcpAvailable()) { mcpSetStatus(''); void refreshMcp(); }
   $('routineSettings').hidden = !mcpAvailable();
