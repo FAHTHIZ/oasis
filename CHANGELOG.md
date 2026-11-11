@@ -28,7 +28,7 @@ User-facing change history grouped by package version. A version heading does no
 - More apps: Airtable, Square, Webflow and Granola (OAuth), DeepWiki and Exa (no sign-in). Settings → Apps lists them all with Connect and Disconnect. A tool server that fails because it needs sign-in now shows a Connect card in the chat.
 - "Connect GitHub and Linear" (or `/connect github linear` in the terminal) shows one card per app, and pasting an MCP server address on its own (https://mcp.…, …/mcp, …/sse) offers its Connect card.
 - Scope step-up: when an app answers 403 insufficient_scope, the Connect card explains which access it needs, signs in again asking for that scope, and retries the call.
-- Settings → Apps has a search box and lists connected apps first.
+- Settings → Apps has a search box, lists connected apps first, and connects any other app from a pasted MCP server URL.
 - 13 more apps, each checked for OAuth dynamic client registration: PostHog, Netlify, Prisma, Semgrep, Jam, Wix, Supermemory, Apify, Tavily, Close, Attio and Todoist, plus Context7 (no sign-in).
 - `/disconnect NAME` in the terminal signs out of an app and removes the server OASIS added (Tab completes app names).
 - Lazy sign-in, as in Claude's connectors: when a connected app's tool is refused because the sign-in expired or was revoked, the Connect card appears and the same call runs again once you connect. No model round trip, no lost context.
