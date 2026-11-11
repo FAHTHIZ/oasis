@@ -225,7 +225,7 @@ async function githubDeviceFlow(clientId, { fetchImpl = globalThis.fetch, onCode
  *
  * states: ready → working → authorize | device | token → connected | failed | skipped
  */
-export function createConnectFlow(connector, { root = process.cwd(), env = process.env, session = null, reason = '', onUpdate = () => {}, deps = {} } = {}) {
+export function createConnectFlow(connector, { root = process.cwd(), env = process.env, session = null, reason = '', onUpdate = () => {}, deps = {}, forceSignIn = false } = {}) {
   const fetchImpl = deps.fetch || globalThis.fetch;
   const login = deps.loginMcpServer || loginMcpServer;
   const addServer = deps.addRemoteMcpServer || addRemoteMcpServer;
@@ -322,7 +322,8 @@ export function createConnectFlow(connector, { root = process.cwd(), env = proce
       const server = await ensureConfigured();
       update({ serverName: server.name });
       const status = await connectorStatus(connector, { root, env, session });
-      if (!status.signedIn) {
+      // forceSignIn: a scope step-up, so the existing sign-in is not enough.
+      if (!status.signedIn || (forceSignIn && connector.auth === 'oauth')) {
         if (connector.auth === 'github') await signInGitHub(server);
         else if (connector.auth !== 'none') await signInOAuth(server);
       }
@@ -395,7 +396,7 @@ export async function runConnectService(session, args, options = {}) {
   if (typeof options.connectorCard !== 'function') {
     return { connected: false, service: connector.name, message: 'No one is here to click Connect (non-interactive run). Tell the user to run: oasis mcp connect ' + connector.id + ' (or ask again in the terminal or web app).' };
   }
-  const flow = createConnectFlow(connector, { root, env, session, reason: args.reason });
+  const flow = createConnectFlow(connector, { root, env, session, reason: args.reason, forceSignIn: Boolean(options.reauth) });
   const result = await options.connectorCard(flow);
   const final = result && result.status ? result : flow.view();
   if (final.status === 'connected') return { connected: true, service: connector.name, server: final.serverName, ...(final.account ? { account: final.account } : {}), tools: final.tools.slice(0, 60), message: final.message };

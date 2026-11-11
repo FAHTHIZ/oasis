@@ -249,9 +249,13 @@ test('lazy sign-in: an auth error from a live app shows the card instead of fail
   assert.equal(shown.connector.url, url);
   assert.match(shown.reason, /linear needs you to sign in before it can run list_issues/);
   assert.equal(await getStoredToken(url, env), null, 'the rejected token is forgotten');
-  // No one to click, a scope step-up, or another error: the usual error stands.
+  // No one to click, or another error: the usual error stands.
   assert.equal(await connectAfterAuthError(session, mapped, authError, { env }), false);
-  assert.equal(await connectAfterAuthError(session, mapped, Object.assign(new Error('x'), { code: 'MCP_AUTH_REQUIRED', requiredScope: 'write' }), options), false);
+  // Scope step-up: the sign-in stays, the scope is remembered and the card says why.
+  await saveStoredToken(url, { accessToken: 'narrow' }, env);
+  assert.equal(await connectAfterAuthError(session, mapped, Object.assign(new Error('x'), { code: 'MCP_AUTH_REQUIRED', requiredScope: 'issues:write' }), options), false);
+  assert.match(shown.reason, /needs more access \(issues:write\) to run list_issues/);
+  assert.equal((await getStoredToken(url, env)).requiredScope, 'issues:write');
   assert.equal(await connectAfterAuthError(session, mapped, new Error('boom'), options), false);
 });
 
