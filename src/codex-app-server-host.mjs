@@ -1,8 +1,8 @@
 // Host methods of the Codex App Server protocol that work without a thread:
 // fs/readFile, fs/writeFile, fs/createDirectory, fs/getMetadata,
 // fs/readDirectory, fs/remove, fs/copy, fs/watch, fs/unwatch (+ fs/changed),
-// and command/exec, command/exec/write, command/exec/resize,
-// command/exec/terminate (+ command/exec/outputDelta).
+// command/exec, command/exec/write, command/exec/resize,
+// command/exec/terminate (+ command/exec/outputDelta), and fuzzyFileSearch.
 //
 // Shapes follow codex-rs/app-server-protocol/src/protocol/v2/{fs,command_exec}.rs
 // (Apache-2.0); this is an independent implementation.
@@ -15,6 +15,11 @@
 // - command/exec runs through the sandbox configured in OASIS settings
 //   (bubblewrap, Seatbelt, containers, SSH), the same wrapper agent commands use.
 //   When the sandbox is enabled but unavailable the command is refused.
+// - fuzzyFileSearch lists files the way OASIS's own tools do (git-visible
+//   files, no secrets, no dependency folders) and ranks them with the prompt's
+//   @-mention matcher rather than Codex's nucleo matcher, so scores differ.
+//   Like Codex it returns at most 50 matches, includes folders, and a newer
+//   request with the same cancellationToken makes the older one return empty.
 // - PTY mode needs the optional node-pty component; without it the request
 //   fails with a clear message instead of falling back silently.
 import path from 'node:path';
@@ -29,6 +34,7 @@ const MAX_READ_BYTES = 64 * 1024 * 1024;
 const MAX_PROCESSES = 16;
 const MAX_WATCHES = 64;
 const WATCH_DEBOUNCE_MS = 150;
+const FUZZY_MATCH_LIMIT = 50;
 
 function rpcError(code, message) {
   const error = new Error(message);
@@ -354,6 +360,53 @@ export function createAppServerHost(options = {}) {
     return {};
   }
 
+  // ---- fuzzyFileSearch ------------------------------------------------------
+
+  const pendingSearches = new Map();
+  async function fuzzyFileSearch(params) {
+    const query = typeof params.query === 'string' ? params.query : '';
+    if (!Array.isArray(params.roots)) throw invalid('roots must be an array of absolute paths.');
+    const token = params.cancellationToken === undefined || params.cancellationToken === null ? null : String(params.cancellationToken);
+    const flag = { cancelled: false };
+    if (token !== null) {
+      const previous = pendingSearches.get(token);
+      if (previous) previous.cancelled = true;
+      pendingSearches.set(token, flag);
+    }
+    try {
+      const roots = [];
+      for (const [index, raw] of params.roots.entries()) roots.push(await allowed(raw, 'roots[' + index + ']'));
+      if (!query || !roots.length) return { files: [] };
+      const [{ walkFiles }, { fuzzyScore }] = await Promise.all([import('./tools.mjs'), import('./completion.mjs')]);
+      const files = [];
+      for (const root of roots) {
+        const listed = await walkFiles(root, { maxFiles: 50000, maxDepth: 24, env }).catch(() => []);
+        if (flag.cancelled) return { files: [] };
+        const seen = new Set();
+        const consider = (rel, matchType) => {
+          const hit = fuzzyScore(rel, query);
+          if (hit) files.push({ root, path: rel, match_type: matchType, file_name: path.posix.basename(rel), score: hit.score, indices: hit.indices });
+        };
+        for (const item of listed) {
+          const rel = item.relative.split(path.sep).join('/');
+          consider(rel, 'file');
+          const parts = rel.split('/');
+          for (let i = 1; i < parts.length; i++) {
+            const dir = parts.slice(0, i).join('/');
+            if (seen.has(dir)) break;
+            seen.add(dir);
+            consider(dir, 'directory');
+          }
+        }
+      }
+      if (flag.cancelled) return { files: [] };
+      files.sort((a, b) => b.score - a.score || (a.path < b.path ? -1 : a.path > b.path ? 1 : 0));
+      return { files: files.slice(0, FUZZY_MATCH_LIMIT) };
+    } finally {
+      if (token !== null && pendingSearches.get(token) === flag) pendingSearches.delete(token);
+    }
+  }
+
   const WRITES = new Set(['fs/writeFile', 'fs/createDirectory', 'fs/remove', 'fs/copy', 'command/exec', 'command/exec/write', 'command/exec/resize', 'command/exec/terminate']);
   const methods = {
     'fs/readFile': readFileMethod,
@@ -368,7 +421,8 @@ export function createAppServerHost(options = {}) {
     'command/exec': exec,
     'command/exec/write': execWrite,
     'command/exec/resize': execResize,
-    'command/exec/terminate': execTerminate
+    'command/exec/terminate': execTerminate,
+    fuzzyFileSearch
   };
 
   return {

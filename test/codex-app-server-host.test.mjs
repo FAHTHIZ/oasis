@@ -232,3 +232,35 @@ test('the App Server routes fs/* and command/exec after initialize and adds thre
   const missing = await call(5, 'fs/nope', {});
   assert.equal(missing.error.code, -32601);
 });
+
+test('fuzzyFileSearch ranks files and folders inside allowed roots, skips secrets, honours cancellation tokens', async (t) => {
+  const root = await tmp(t);
+  await mkdir(path.join(root, 'src', 'agent'), { recursive: true });
+  await writeFile(path.join(root, 'src', 'agent', 'loop.mjs'), 'x');
+  await writeFile(path.join(root, 'src', 'cli.mjs'), 'x');
+  await writeFile(path.join(root, 'README.md'), 'x');
+  await writeFile(path.join(root, '.env'), 'SECRET=1');
+  const { host } = hostFor(root);
+  assert.ok(host.has('fuzzyFileSearch'));
+  const { files } = await host.handle('fuzzyFileSearch', { query: 'cli', roots: [root] });
+  assert.equal(files[0].path, 'src/cli.mjs');
+  assert.deepEqual(Object.keys(files[0]).sort(), ['file_name', 'indices', 'match_type', 'path', 'root', 'score']);
+  assert.equal(files[0].file_name, 'cli.mjs');
+  assert.equal(files[0].match_type, 'file');
+  assert.equal(files[0].root, root);
+  assert.deepEqual(files[0].indices, [4, 5, 6]);
+  const agent = await host.handle('fuzzyFileSearch', { query: 'agent', roots: [root] });
+  assert.ok(agent.files.some((f) => f.path === 'src/agent' && f.match_type === 'directory'));
+  const loose = await host.handle('fuzzyFileSearch', { query: 'salp', roots: [root] });
+  assert.equal(loose.files[0].path, 'src/agent/loop.mjs');
+  assert.equal((await host.handle('fuzzyFileSearch', { query: 'env', roots: [root] })).files.length, 0);
+  assert.deepEqual(await host.handle('fuzzyFileSearch', { query: '', roots: [root] }), { files: [] });
+  await assert.rejects(host.handle('fuzzyFileSearch', { query: 'x', roots: [os.tmpdir()] }), (e) => e.rpc.code === -32001);
+  await assert.rejects(host.handle('fuzzyFileSearch', { query: 'x' }), (e) => e.rpc.code === -32602);
+  const [first, second] = await Promise.all([
+    host.handle('fuzzyFileSearch', { query: 'mjs', roots: [root], cancellationToken: 'picker' }),
+    host.handle('fuzzyFileSearch', { query: 'mjs', roots: [root], cancellationToken: 'picker' })
+  ]);
+  assert.deepEqual(first, { files: [] });
+  assert.ok(second.files.length >= 2);
+});

@@ -12,7 +12,8 @@
 // turn/steer, turn/interrupt, review/start (inline), model/list, and the host
 // methods in codex-app-server-host.mjs: fs/* (readFile, writeFile,
 // createDirectory, getMetadata, readDirectory, remove, copy, watch, unwatch)
-// and command/exec (+ write, resize, terminate), confined to the workspace roots.
+// command/exec (+ write, resize, terminate) and fuzzyFileSearch, confined to
+// the workspace roots.
 // Notifications sent: thread/started, thread/status/changed, thread/name/updated,
 // thread/archived, thread/unarchived, thread/deleted, thread/closed, thread/compacted,
 // turn/started, turn/completed, turn/plan/updated, item/started, item/completed,
