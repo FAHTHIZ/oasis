@@ -340,3 +340,17 @@ idle session.
 | `OASIS_MCP_TASK_BACKGROUND=0` | Always wait for the task. `CLAUDE_CODE_DISABLE_MCP_TASK_BACKGROUND=1` does the same. |
 
 One-shot `oasis -p` runs and the browser workspace always wait for the result.
+
+## Connected apps
+
+`/connect NAME` (terminal or web), Settings → Apps and the agent's
+`connect_service` tool all add an app from the built-in catalog or any remote
+MCP server URL; see [Connect apps](USER-GUIDE.md#connect-apps). OASIS reads
+`package.json`, `requirements.txt`, `pyproject.toml`, well-known config files
+(`vercel.json`, `netlify.toml`, `wrangler.toml`, `prisma/schema.prisma`, ...)
+and git remotes to suggest the apps a project uses. Nothing is executed.
+
+| Variable | Effect |
+| --- | --- |
+| `OASIS_NO_APP_HINTS=1` | Leave the "apps this project uses that are not connected" line out of the system prompt. |
+| `OASIS_TIP=off` | No start-up tip in the terminal, including the project-apps tip. |
