@@ -202,7 +202,7 @@ export function containerArgs(command, args, sandbox, cwd, platform = process.pl
     seen.add(inside);
     wrapped.push('--volume', safeContainerValue(dir, 'path') + ':' + inside + ':rw');
   }
-  for (const item of protectedWritePaths(sandbox.protectedRoots || []).existing) {
+  for (const item of [...protectedWritePaths(sandbox.protectedRoots || []).existing, ...(sandbox.readOnlyPaths || []).filter((entry) => (sandbox.writable || []).some((dir) => pathContains(dir, entry.path)))]) {
     wrapped.push('--volume', safeContainerValue(item.path, 'path') + ':' + containerPath(item.path, platform) + ':ro');
   }
   const masked = new Set();
@@ -279,13 +279,21 @@ export function resolveSandbox(settings = {}, root, force = false) {
   if (!wanted) return { enabled: false, available: false, kind: 'none' };
   const backend = CONTAINER_BACKENDS.includes(settings.sandbox.backend) || settings.sandbox.backend === 'ssh' ? settings.sandbox.backend : 'os';
   const ssh = backend === 'ssh' ? normalizeSshSettings(settings.sandbox.ssh || {}, process.env, root) : null;
-  const allowedDomains = domainList(settings.sandbox.allowedDomains);
+  const allowedDomains = domainList(settings.sandbox.allowManagedDomainsOnly ? settings.sandbox.managedAllowedDomains || [] : settings.sandbox.allowedDomains);
   const deniedDomains = domainList(settings.sandbox.deniedDomains);
   const filtered = backend === 'os' && allowedDomains.length > 0;
   const probe = filtered ? detectSandboxRuntime(force) : backend === 'os' ? detectSandbox(force) : backend === 'ssh' ? detectSshRuntime(ssh, force) : detectContainerRuntime(backend, force);
   const additionalWritable = ((settings.permissions && settings.permissions.additionalDirectories) || []).map((dir) => path.resolve(root, dir));
   const caches = settings.sandbox.writableCaches === false ? [] : collectCacheDirectories();
-  const writable = [root, ...additionalWritable, ...caches.filter((dir) => !pathContains(root, dir))];
+  // sandbox.filesystem (Claude Code): extra writable paths, read-only paths inside writable ones,
+  // and paths hidden from reads. Only paths that exist can be mounted.
+  const existing = (list) => (Array.isArray(list) ? list : []).map((item) => { try { const real = realpathSync(item); const info = statSync(real); return { path: real, type: info.isDirectory() ? 'directory' : info.isFile() ? 'file' : null }; } catch { return null; } }).filter((item) => item && item.type);
+  const allowWrite = existing(settings.sandbox.allowWrite).filter((item) => item.type === 'directory' || item.type === 'file').map((item) => item.path);
+  const readOnlyPaths = existing(settings.sandbox.denyWrite);
+  const deniedReads = existing(settings.sandbox.denyRead);
+  const writable = [root, ...additionalWritable, ...allowWrite.filter((dir) => !pathContains(root, dir)), ...caches.filter((dir) => !pathContains(root, dir))];
+  const masked = settings.sandbox.maskSensitivePaths === false ? [] : collectSensitivePaths();
+  for (const item of deniedReads) if (!masked.some((entry) => pathContains(entry.path, item.path))) masked.push(item);
   return {
     enabled: true,
     available: probe.available,
@@ -296,8 +304,10 @@ export function resolveSandbox(settings = {}, root, force = false) {
     autoAllowCommands: settings.sandbox.autoAllowCommands !== false,
     autoAllowShellCommands: settings.sandbox.autoAllowShellCommands === true,
     maskSensitivePaths: settings.sandbox.maskSensitivePaths !== false,
-    maskedPaths: settings.sandbox.maskSensitivePaths === false ? [] : collectSensitivePaths(),
-    writable: backend === 'os' ? writable : [root, ...additionalWritable],
+    maskedPaths: masked,
+    readOnlyPaths,
+    failIfUnavailable: settings.sandbox.failIfUnavailable === true,
+    writable: backend === 'os' ? writable : [root, ...additionalWritable, ...allowWrite.filter((dir) => !pathContains(root, dir))],
     protectedRoots: settings.sandbox.protectProjectConfig === false ? [] : [root, ...additionalWritable],
     writableCaches: backend === 'os' ? caches : [],
     backend,
@@ -346,6 +356,7 @@ export function macProfile(sandbox) {
     ...((sandbox.maskedPaths || []).map((item) => '(deny file-read* (' + (item.type === 'directory' ? 'subpath ' : 'literal ') + seatbeltString(item.path) + '))')),
     '(allow file-write* ' + writable.map((dir) => '(subpath ' + seatbeltString(dir) + ')').join(' ') + ' (literal "/dev/null") (literal "/dev/stdout") (literal "/dev/stderr") (regex #"^/dev/tty"))',
     ...protectedSeatbeltRules(sandbox.protectedRoots || []),
+    ...((sandbox.readOnlyPaths || []).map((item) => '(deny file-write* (' + (item.type === 'directory' ? 'subpath ' : 'literal ') + seatbeltString(item.path) + '))')),
     sandbox.network ? '' : '(deny network*) (allow network* (remote unix-socket))'
   ].join('\n');
 }
@@ -387,6 +398,7 @@ export function wrapCommand(command, args, sandbox, cwd, options = {}) {
     const wrapped = ['--ro-bind', '/', '/', '--dev', '/dev', '--proc', '/proc', '--tmpfs', '/tmp', '--unshare-pid', '--die-with-parent', '--new-session'];
     for (const dir of tmpToolchainMounts(command)) wrapped.push('--ro-bind', dir, dir);
     for (const dir of sandbox.writable) wrapped.push('--bind', dir, dir);
+    for (const item of sandbox.readOnlyPaths || []) wrapped.push('--ro-bind', item.path, item.path);
     for (const item of sandbox.maskedPaths || []) {
       if (item.type === 'directory') wrapped.push('--tmpfs', item.path);
       else if (item.type === 'file') wrapped.push('--ro-bind', '/dev/null', item.path);

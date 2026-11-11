@@ -83,6 +83,8 @@ Gaps found by checking the [hooks reference](https://code.claude.com/docs/en/hoo
 | MCP policy settings: `allowedMcpServers`, `deniedMcpServers`, `allowManagedMcpServersOnly`; `.mcp.json` approvals `enableAllProjectMcpServers`, `enabledMcpjsonServers`, `disabledMcpjsonServers` | done | `test/mcp-policy-settings.test.mjs` (8 tests, real stdio servers) |
 | `claudeMdExcludes` for instruction files, rules and nested CLAUDE.md | done | `test/claude-md-excludes.test.mjs` (3 tests) |
 | `includeGitInstructions` / `CLAUDE_CODE_DISABLE_GIT_INSTRUCTIONS`; `attribution.commit` / `attribution.pr` | done | `test/git-instructions-attribution.test.mjs` (4 tests); `sessionUrl` not applicable |
+| Claude Code sandbox keys: `network.allowedDomains`/`deniedDomains`/`allowManagedDomainsOnly`, `autoAllowBashIfSandboxed`, `failIfUnavailable`, `filesystem.allowWrite`/`denyWrite`/`denyRead` | done | `test/sandbox-claude-settings.test.mjs` (6 tests, real bubblewrap) |
+| `sandbox.excludedCommands`, `filesystem.allowRead`, `credentials`, unix-socket/proxy keys | open | `allowUnsandboxedCommands` needs nothing: OASIS has no unsandboxed retry |
 
 ## 3. Competitive evaluation
 
