@@ -205,6 +205,10 @@ test('Cursor API v1: follow-ups, 409 agent_busy, steer, cancel, archive and dele
   const busy = await h.call('POST', '/v1/agents/' + agentId + '/runs', { prompt: { text: 'another' } });
   assert.equal(busy.status, 409);
   assert.equal(busy.body.error.code, 'agent_busy');
+  // One task per folder: another agent cannot start while this one works.
+  const other = await h.call('POST', '/v1/agents', { prompt: { text: 'parallel' } });
+  assert.equal(other.status, 409);
+  assert.equal(other.body.error.code, 'workspace_busy');
   const badSteer = await h.call('POST', '/v1/agents/' + agentId + '/runs', { prompt: { text: 'x' }, delivery: 'steer', model: { id: 'fixture' }, mode: 'plan' });
   assert.equal(badSteer.status, 400);
   assert.equal(badSteer.body.error.message, '"model", "mode" are not allowed with delivery "steer"');

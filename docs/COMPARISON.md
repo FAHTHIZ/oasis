@@ -66,6 +66,8 @@ Codex also has [`/goal`](https://learn.chatgpt.com/docs/cli/slash-commands): a p
 
 [Cursor CLI](https://cursor.com/docs/cli/changelog) is proprietary and runs Cursor's model catalog (Auto routing by default, with some bring-your-own-key options such as Bedrock). It has plan and ask modes, MCP, hooks, subagents, and a handoff that pushes a local conversation to a [Cloud Agent](https://cursor.com/changelog/cli-jan-16-2026) to keep running. OASIS has no hosted cloud. It runs wherever you install it, and the self-hosted web app reaches it from any browser.
 
+Scripts written for Cursor's [Cloud Agents API](https://cursor.com/docs/cloud-agent/api/endpoints) can call `oasis web` instead: it answers the v1 and v0 REST endpoints (agents, runs, follow-ups, steering, cancel, the run event stream, usage, conversation and signed `statusChange` webhooks) with the OASIS web access key as the API key, and runs the agent in the folder the server serves with any configured model. Cursor's Cloud Agents also clone repositories, create branches and open pull requests on hosted machines. OASIS does none of that: those fields return a 4xx naming the field. Details are in [Interfaces](INTERFACES.md#cursor-cloud-agents-api).
+
 ## IDE agents: Cursor, Devin Desktop (Windsurf), Antigravity, OpenHands
 
 OASIS reads these tools' project files where they are, so a repository set up for one of them works without running `oasis import`. Sources: [Devin Desktop rules](https://docs.windsurf.com/windsurf/cascade/memories), [Cascade workflows and ignore files](https://docs.windsurf.com/windsurf/cascade/workflows), [Cursor ignore files](https://cursor.com/docs/context/ignore-files), [OpenHands skills](https://docs.openhands.dev/overview/skills).
