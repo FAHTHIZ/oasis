@@ -44,9 +44,9 @@ Status: **done** (tested and pushed) · **doing** · **open** · **blocked**
 | Codex App Server thread/fork (with lastTurnId) | done | `test/codex-app-server.test.mjs` (fork) |
 | Codex App Server review/start (inline) | done | `test/codex-app-server.test.mjs` (review) |
 | Codex App Server WebSocket transport (`--listen ws://`, /readyz, /healthz, Origin 403, capability-token auth) | done | `test/codex-app-server-ws.test.mjs` |
-| Codex App Server: WebSocket transport, detached review, command/exec, fs/* | open | Out of scope for the first cut |
+| Codex App Server `fs/*` and `command/exec` (+ write, resize, terminate, outputDelta) | done | `test/codex-app-server-host.test.mjs` (14 tests: root confinement, symlink escape, read-only, watch, streaming, cap, PTY, sandbox launcher) |
+| Codex App Server: detached review, signed bearer tokens, Unix socket | open | |
 | Plain daily/weekly schedule phrases (DSH `daily`/`weekly` selectors) | done | `test/routines.test.mjs` (plain calendar phrases) |
-| RRULE schedules (DeepSeek Harness parity) | open | Low priority; cron + time zone covers common cases. |
 | Routines that continue an existing conversation (Codex thread automations) | done | `test/routines.test.mjs` (chained fork e2e). Runs fork with `--resume ID --fork-session --session-id NEW`, so the original session file is never written. |
 
 ## 3. Competitive evaluation
