@@ -383,7 +383,18 @@ async function compactMidTurnHistoryIfNeeded(session, requestIndex, options = {}
 }
 
 
-async function describeEnvironment(root, env = process.env) {
+// Claude Code's "attribution" setting: text to end commit messages and pull request
+// descriptions with. OASIS adds no attribution of its own, so only set text is used.
+export function attributionSection(attribution) {
+  if (!attribution || typeof attribution !== 'object') return '';
+  const lines = [];
+  if (attribution.commit && attribution.commit.trim()) lines.push('When you write a git commit message, end it with exactly this text (after a blank line):\n' + attribution.commit.trim());
+  if (attribution.pr && attribution.pr.trim()) lines.push('When you write a pull request description, end it with exactly this text:\n' + attribution.pr.trim());
+  if (!lines.length) return '';
+  return '\n\nAttribution (from settings' + (attribution.managed ? ', set by your organization' : '; the user\'s own instructions about attribution take precedence') + '):\n' + lines.join('\n');
+}
+
+async function describeEnvironment(root, env = process.env, { gitSnapshot = true } = {}) {
   const lines = ['Platform: ' + process.platform + ' ' + os.release() + ' (' + process.arch + '), Node ' + process.version, "Today's date: " + new Date().toISOString().slice(0, 10)];
   const git = async (args) => {
     try {
@@ -396,14 +407,15 @@ async function describeEnvironment(root, env = process.env) {
   const inside = await git(['rev-parse', '--is-inside-work-tree']);
   if (inside !== 'true') { lines.push('Git repository: no'); return lines.join('\n'); }
   const [branch, status, log, files] = await Promise.all([
-    git(['branch', '--show-current']),
-    git(['status', '--porcelain']),
-    git(['log', '--oneline', '-n', '5', '--no-decorate']),
+    gitSnapshot ? git(['branch', '--show-current']) : null,
+    gitSnapshot ? git(['status', '--porcelain']) : null,
+    gitSnapshot ? git(['log', '--oneline', '-n', '5', '--no-decorate']) : null,
     git(['ls-files', '--cached', '--others', '--exclude-standard'])
   ]);
-  lines.push('Git repository: yes' + (branch ? ', branch ' + branch : ', detached HEAD'));
+  lines.push('Git repository: yes' + (gitSnapshot ? (branch ? ', branch ' + branch : ', detached HEAD') : ''));
   const layout = files === null || env.OASIS_FILE_LAYOUT === '0' ? '' : fileLayout(files.split('\n'));
   if (layout) lines.push(layout);
+  if (!gitSnapshot) return lines.join('\n');
   if (status !== null) {
     const changed = status ? status.split('\n').length : 0;
     lines.push('Working tree: ' + (changed ? changed + ' changed or untracked path' + (changed === 1 ? '' : 's') + ' (use git_status for details)' : 'clean'));
@@ -512,7 +524,11 @@ export async function createSession({ root, config, restore = null, permissionMo
   // --exclude-dynamic-system-prompt-sections: per-machine context (workspace path, date, git state,
   // memory location) moves to the first user message so the system prompt caches across machines.
   const dynamicOut = Boolean(excludeDynamicSections) && !systemPromptOverride;
-  const environmentText = await describeEnvironment(root, env);
+  // "includeGitInstructions": false (or CLAUDE_CODE_DISABLE_GIT_INSTRUCTIONS, which wins) drops the
+  // branch, working-tree and recent-commit snapshot.
+  const disableGit = String(env.CLAUDE_CODE_DISABLE_GIT_INSTRUCTIONS || '').trim();
+  const gitSnapshot = disableGit ? /^(?:0|false|no|off)$/i.test(disableGit) : loadedSettings.includeGitInstructions !== false;
+  const environmentText = await describeEnvironment(root, env, { gitSnapshot });
   // Local model servers: use the context window that is actually loaded. Probed
   // before the prompt is built so small windows get the compact prompt.
   const contextProbe = { config, localContextNotices: [] };
@@ -522,6 +538,7 @@ export async function createSession({ root, config, restore = null, permissionMo
   const dynamicSections = dynamicOut ? ['The current workspace root is: ' + root, 'Environment:\n' + environmentText] : null;
   // If an overflow later reveals a small window, swap the base prompt for the compact one.
   const compactPromptSwap = !smallContext && !systemPromptOverride && !dynamicOut && !bare ? { full: systemText, compact: compactSystemPrompt(root, projectContext, visibleSkills, environmentText) } : null;
+  if (!systemPromptOverride) systemText += attributionSection(loadedSettings.attribution);
   if (extraDirs.accepted.length) systemText += '\n\nAdditional working directories (you may read and edit files there with absolute paths or paths relative to the workspace):\n' + extraDirs.accepted.map((dir) => '- ' + dir).join('\n');
   const channelEntries = parseChannelEntries(channels);
   if (!systemPromptOverride) systemText += mcpInstructionsSection(mcp.clients, { channels: channelEntries, settings: loadedSettings });

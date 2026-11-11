@@ -26,6 +26,11 @@ weaknesses. Newest first. Detailed user-facing notes go in the CHANGELOG.
 
 ## 2026-11-11 (Claude Code parity cycle)
 
+### includeGitInstructions and attribution
+- `includeGitInstructions: false` (any file) and `CLAUDE_CODE_DISABLE_GIT_INSTRUCTIONS` (wins both ways) now drop the branch, working-tree and recent-commit snapshot from the prompt, and skip those git calls. OASIS has no built-in commit or PR workflow text to remove; its "check git_status before editing" and commit-safety lines stay.
+- `attribution.commit` and `attribution.pr` (trusted scopes only, since the text goes into the prompt) tell the model what to end commit messages and PR descriptions with. The user's own instructions take precedence unless the text comes from managed settings, as Claude Code describes. OASIS adds no attribution by default, so `attribution: false`, empty strings and `includeCoAuthoredBy: false` change nothing; `sessionUrl` does not apply (no hosted sessions).
+- Test: test/git-instructions-attribution.test.mjs (4, real git repositories); settings, headless, slash, eval and auto-commit suites pass (55 tests).
+
 ### claudeMdExcludes
 - In a monorepo, a parent folder's CLAUDE.md written for another team was always loaded. `claudeMdExcludes` (globs or absolute paths, matched against the absolute path and the symlink target, merged from every settings file) now skips parent, project, local and user instruction files, `.claude/rules` files (always-on and path-scoped), and nested CLAUDE.md files loaded when the agent works in a folder. Instruction loading now waits for settings, so the session reads them in sequence rather than in parallel.
 - OASIS does not follow symlinked rule files at all, so Claude Code's symlink case for rules does not arise.
