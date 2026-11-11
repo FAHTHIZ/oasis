@@ -5,12 +5,15 @@
 // line; the "jsonrpc" field may be omitted, as in Codex.
 //
 // Implemented methods: initialize (+ initialized notification), thread/start,
-// thread/resume, thread/fork, thread/read, thread/list, thread/name/set, turn/start,
+// thread/resume, thread/fork, thread/read, thread/list (archived, searchTerm,
+// excludedThreadIds), thread/name/set, thread/loaded/list, thread/unsubscribe,
+// thread/archive, thread/unarchive, thread/delete, thread/compact/start, turn/start,
 // turn/steer, turn/interrupt, review/start (inline), model/list, and the host
 // methods in codex-app-server-host.mjs: fs/* (readFile, writeFile,
 // createDirectory, getMetadata, readDirectory, remove, copy, watch, unwatch)
 // and command/exec (+ write, resize, terminate), confined to the workspace roots.
 // Notifications sent: thread/started, thread/status/changed, thread/name/updated,
+// thread/archived, thread/unarchived, thread/deleted, thread/closed, thread/compacted,
 // turn/started, turn/completed, turn/plan/updated, item/started, item/completed,
 // item/agentMessage/delta, item/commandExecution/outputDelta (final output only),
 // serverRequest/resolved, fs/changed, command/exec/outputDelta.
@@ -208,7 +211,7 @@ export function createCodexAppServer(options = {}) {
       createdAt: createdAt || (entry && entry.createdAt) || nowSeconds(), updatedAt: updatedAt || nowSeconds(), recencyAt: null,
       status: threadStatus(entry), path: null, cwd: root || entry.root, cliVersion: options.version || '', originator: 'oasis', source: 'appServer',
       canAcceptDirectInput: true, threadSource: null, agentNickname: null, agentRole: null, gitInfo: null,
-      name: name ?? (session && session.name) ?? null, daybreakEnabled: null, turns
+      name: name ?? ((session && session.sessionName) || null), daybreakEnabled: null, turns
     };
   }
 
@@ -430,6 +433,47 @@ export function createCodexAppServer(options = {}) {
   }
 
   // Reply first, then stream: clients expect the turn id before its events.
+  // thread/compact/start: a turn holding one contextCompaction item, like
+  // Codex. The reply comes first; turn/started, item/*, turn/completed follow.
+  function beginCompaction(entry) {
+    const threadId = entry.session.sessionId;
+    const turn = { id: randomUUID(), status: 'inProgress', error: null, startedAt: nowSeconds(), completedAt: null };
+    entry.turn = turn;
+    entry.controller = new AbortController();
+    queueMicrotask(async () => {
+      notify('turn/started', { threadId, turn: turnView(turn) });
+      notify('thread/status/changed', { threadId, status: threadStatus(entry) });
+      const item = { type: 'contextCompaction', id: 'item-' + randomUUID() };
+      notify('item/started', { item, threadId, turnId: turn.id, startedAtMs: Date.now() });
+      try {
+        const { compactHistoryIfNeeded } = await load('agent');
+        const result = await compactHistoryIfNeeded(entry.session, { force: true, env, mustPreserve: entry.session.mustPreserve, signal: entry.controller.signal });
+        if (result && result.blockedByHook) { turn.status = 'failed'; turn.error = { message: 'A PreCompact hook cancelled compaction: ' + (result.reason || 'no reason given'), codexErrorInfo: null, additionalDetails: null }; }
+        else turn.status = entry.controller.signal.aborted ? 'interrupted' : 'completed';
+        if (result && result.compacted) notify('thread/compacted', { threadId, turnId: turn.id });
+      } catch (error) {
+        turn.status = entry.controller.signal.aborted ? 'interrupted' : 'failed';
+        if (turn.status === 'failed') turn.error = { message: String(error && error.message || error), codexErrorInfo: null, additionalDetails: null };
+      } finally {
+        notify('item/completed', { item, threadId, turnId: turn.id, completedAtMs: Date.now() });
+        try { const { saveSession } = await load('sessions'); await saveSession(entry.session, { env }); } catch {}
+        turn.completedAt = nowSeconds();
+        entry.turn = null; entry.controller = null;
+        notify('turn/completed', { threadId, turn: turnView(turn) });
+        notify('thread/status/changed', { threadId, status: threadStatus(entry) });
+      }
+    });
+    return turn;
+  }
+
+  // Unload a thread from this connection (saving it first). Used by
+  // thread/unsubscribe, thread/archive and thread/delete.
+  async function unloadThread(entry, { save = true } = {}) {
+    if (save) { try { const { saveSession } = await load('sessions'); await saveSession(entry.session, { env }); } catch {} }
+    try { const { closeSession } = await load('agent'); if (closeSession) await closeSession(entry.session); } catch {}
+    threads.delete(entry.session.sessionId);
+  }
+
   function beginTurn(entry, text, images, leadItems = [], hooks = {}) {
     const threadId = entry.session.sessionId;
     const turn = { id: randomUUID(), status: 'inProgress', error: null, startedAt: nowSeconds(), completedAt: null };
@@ -541,7 +585,10 @@ export function createCodexAppServer(options = {}) {
       case 'thread/list': {
         const root = await workspace(params.cwd);
         const { listSessions } = await load('sessions');
-        const all = await listSessions(root, { env });
+        const wantArchived = params.archived === true;
+        const excluded = new Set(Array.isArray(params.excludedThreadIds) ? params.excludedThreadIds.filter((id) => typeof id === 'string') : []);
+        const term = typeof params.searchTerm === 'string' ? params.searchTerm.trim().toLowerCase() : '';
+        const all = (await listSessions(root, { env })).filter((saved) => Boolean(saved.archived) === wantArchived && !excluded.has(saved.id) && (!term || String(saved.title || '').toLowerCase().includes(term)));
         const start = Math.max(0, Number.parseInt(params.cursor || '0', 10) || 0);
         const limit = Math.min(200, Math.max(1, Number(params.limit) || 50));
         const page = all.slice(start, start + limit);
@@ -554,9 +601,64 @@ export function createCodexAppServer(options = {}) {
       case 'thread/name/set': {
         const entry = threadEntry(params.threadId);
         const name = String(params.name || '').trim().slice(0, 120);
-        entry.session.name = name;
+        entry.session.sessionName = name;
         try { const { saveSession } = await load('sessions'); await saveSession(entry.session, { env }); } catch {}
         notify('thread/name/updated', { threadId: params.threadId, threadName: name || null });
+        return {};
+      }
+      case 'thread/loaded/list': {
+        const ids = [...threads.keys()];
+        const start = Math.max(0, Number.parseInt(params.cursor || '0', 10) || 0);
+        const limit = Math.min(500, Math.max(1, Number(params.limit) || 100));
+        return { data: ids.slice(start, start + limit), nextCursor: start + limit < ids.length ? String(start + limit) : null };
+      }
+      case 'thread/unsubscribe': {
+        if (typeof params.threadId !== 'string' || !params.threadId) throw rpcError(-32602, 'threadId is required.');
+        const entry = threads.get(params.threadId);
+        if (!entry) return { status: 'notLoaded' };
+        if (entry.controller) entry.controller.abort();
+        await unloadThread(entry);
+        notify('thread/closed', { threadId: params.threadId });
+        return { status: 'unsubscribed' };
+      }
+      case 'thread/archive':
+      case 'thread/unarchive': {
+        if (typeof params.threadId !== 'string' || !params.threadId) throw rpcError(-32602, 'threadId is required.');
+        const archive = method === 'thread/archive';
+        const entry = threads.get(params.threadId);
+        if (entry && entry.turn) throw rpcError(-32600, 'Interrupt the running turn before archiving this thread.');
+        const root = entry ? entry.root : await workspace(params.cwd);
+        const { saveSession, setSessionArchived, loadSession } = await load('sessions');
+        if (entry) { entry.session.archived = archive; await saveSession(entry.session, { env }); }
+        else {
+          try { await setSessionArchived(root, params.threadId, archive, { env }); }
+          catch (error) { throw rpcError(-32002, 'Thread not found: ' + error.message); }
+        }
+        // Archiving unloads the thread, as in Codex; unarchive returns the thread.
+        if (archive && entry) await unloadThread(entry, { save: false });
+        notify(archive ? 'thread/archived' : 'thread/unarchived', { threadId: params.threadId });
+        if (archive) return {};
+        if (entry) return { thread: threadView(entry, { preview: preview(entry.session) }) };
+        const saved = await loadSession(root, params.threadId, { env });
+        const updated = Date.parse(saved.updatedAt) ? Math.floor(Date.parse(saved.updatedAt) / 1000) : nowSeconds();
+        return { thread: threadView(null, { id: saved.id, root, preview: preview(saved), name: saved.name || null, createdAt: updated, updatedAt: updated, model: saved.provider && saved.provider.model || null }) };
+      }
+      case 'thread/delete': {
+        if (typeof params.threadId !== 'string' || !params.threadId) throw rpcError(-32602, 'threadId is required.');
+        const entry = threads.get(params.threadId);
+        if (entry && entry.turn) throw rpcError(-32600, 'Interrupt the running turn before deleting this thread.');
+        const root = entry ? entry.root : await workspace(params.cwd);
+        if (entry) await unloadThread(entry, { save: false });
+        const { deleteSession } = await load('sessions');
+        try { await deleteSession(root, params.threadId, { env }); }
+        catch (error) { if (!entry) throw rpcError(-32002, 'Thread not found: ' + error.message); }
+        notify('thread/deleted', { threadId: params.threadId });
+        return {};
+      }
+      case 'thread/compact/start': {
+        const entry = threadEntry(params.threadId);
+        if (entry.turn) throw rpcError(-32000, 'A turn is already running in this thread.');
+        beginCompaction(entry);
         return {};
       }
       case 'turn/start': {
