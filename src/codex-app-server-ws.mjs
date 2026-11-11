@@ -8,6 +8,13 @@
 // Any request with an Origin header, including a WebSocket upgrade, gets 403,
 // so a web page in a browser cannot reach the server.
 //
+// Unix socket: `--listen unix://` (default path
+// <config dir>/app-server-control/app-server-control.sock) or
+// `--listen unix://PATH` serves the same WebSocket protocol over a Unix domain
+// socket, as Codex does. The folder is created 0700 and the socket chmod 0600,
+// so only this user can connect; no token is needed. A stale socket left by a
+// crashed server is removed; a live one or a non-socket file is an error.
+//
 // Auth: `--ws-auth capability-token` with `--ws-token-file PATH` or
 // `--ws-token-sha256 HEX`. Clients send `Authorization: Bearer TOKEN` in the
 // handshake; the check happens before any JSON-RPC message is read. Unlike
@@ -15,19 +22,36 @@
 // rollout), OASIS refuses to listen beyond loopback without auth.
 import { createServer } from 'node:http';
 import { createHash, timingSafeEqual } from 'node:crypto';
-import { readFile, stat } from 'node:fs/promises';
+import { chmod, lstat, mkdir, readFile, stat, unlink } from 'node:fs/promises';
+import { connect as netConnect } from 'node:net';
 import path from 'node:path';
 import { WebSocketServer } from 'ws';
 import { createCodexAppServer } from './codex-app-server.mjs';
 
 const MAX_FRAME_BYTES = 16 * 1024 * 1024;
 
-export function parseListenUrl(value) {
+export const CONTROL_SOCKET_DIR = 'app-server-control';
+export const CONTROL_SOCKET_FILE = 'app-server-control.sock';
+
+export function defaultControlSocketPath(env = process.env) {
+  const home = env.OASIS_CONFIG_DIR || path.join(env.HOME || env.USERPROFILE || '', '.oasis');
+  return path.join(home, CONTROL_SOCKET_DIR, CONTROL_SOCKET_FILE);
+}
+
+export function parseListenUrl(value, { env = process.env, cwd = process.cwd() } = {}) {
   const text = String(value || '').trim();
   if (!text || text === 'stdio' || text === 'stdio://') return { transport: 'stdio' };
+  if (text.startsWith('unix://')) {
+    if (process.platform === 'win32') throw new Error('--listen unix:// is not supported on Windows by OASIS; use ws://127.0.0.1:PORT.');
+    const raw = text.slice('unix://'.length);
+    const socketPath = raw ? path.resolve(cwd, raw) : defaultControlSocketPath(env);
+    // Linux sun_path is 108 bytes including the terminator; macOS is 104.
+    if (Buffer.byteLength(socketPath) > 103) throw new Error('Unix socket path is too long (' + Buffer.byteLength(socketPath) + ' bytes, at most 103): ' + socketPath);
+    return { transport: 'unix', socketPath, defaultPath: !raw };
+  }
   let url;
-  try { url = new URL(text); } catch { throw new Error('--listen must be stdio:// or ws://IP:PORT, got ' + text + '.'); }
-  if (url.protocol !== 'ws:') throw new Error('--listen supports stdio:// and ws://IP:PORT (put TLS in front with a proxy for wss).');
+  try { url = new URL(text); } catch { throw new Error('--listen must be stdio://, unix://[PATH] or ws://IP:PORT, got ' + text + '.'); }
+  if (url.protocol !== 'ws:') throw new Error('--listen supports stdio://, unix://[PATH] and ws://IP:PORT (put TLS in front with a proxy for wss).');
   if (url.pathname && url.pathname !== '/') throw new Error('--listen takes ws://IP:PORT with no path.');
   const host = url.hostname.replace(/^\[|\]$/g, '');
   const port = url.port === '' ? NaN : Number(url.port);
@@ -71,9 +95,32 @@ export async function loadWsAuth({ mode, tokenFile, tokenSha256 } = {}) {
   };
 }
 
+// Make the socket path usable: a private parent folder (when OASIS created it
+// or it is the default folder), and no live server or foreign file in the way.
+export async function prepareSocketPath(socketPath, { privateDir = true } = {}) {
+  const dir = path.dirname(socketPath);
+  await mkdir(dir, { recursive: true, mode: 0o700 });
+  if (privateDir) {
+    const info = await lstat(dir);
+    if (!info.isDirectory() || info.isSymbolicLink()) throw new Error('Socket folder is not a plain directory: ' + dir);
+    if (typeof process.getuid === 'function' && info.uid !== process.getuid()) throw new Error('Socket folder belongs to another user: ' + dir);
+    if (info.mode & 0o077) await chmod(dir, 0o700);
+  }
+  let existing;
+  try { existing = await lstat(socketPath); } catch (error) { if (error.code === 'ENOENT') return; throw error; }
+  if (!existing.isSocket()) throw new Error('App Server socket path exists and is not a socket: ' + socketPath);
+  const live = await new Promise((resolve) => {
+    const probe = netConnect(socketPath);
+    probe.once('connect', () => { probe.destroy(); resolve(true); });
+    probe.once('error', () => resolve(false));
+  });
+  if (live) throw new Error('An App Server is already listening on ' + socketPath + '.');
+  await unlink(socketPath);
+}
+
 export async function startCodexAppServerWebSocket(options = {}) {
-  const { host = '127.0.0.1', port = 0, verify = null } = options;
-  if (!verify && !isLoopbackHost(host)) throw new Error('Listening on ' + host + ' without auth would let anyone on the network run commands. Use --ws-auth capability-token --ws-token-file PATH, or listen on 127.0.0.1 and use SSH port forwarding.');
+  const { host = '127.0.0.1', port = 0, verify = null, socketPath = null } = options;
+  if (!socketPath && !verify && !isLoopbackHost(host)) throw new Error('Listening on ' + host + ' without auth would let anyone on the network run commands. Use --ws-auth capability-token --ws-token-file PATH, or listen on 127.0.0.1 and use SSH port forwarding.');
   const log = options.log || ((text) => process.stderr.write('[oasis app-server] ' + text + '\n'));
   const connections = new Set();
   let accepting = false;
@@ -107,16 +154,20 @@ export async function startCodexAppServerWebSocket(options = {}) {
     ws.on('close', () => { connections.delete(entry); server.close().catch(() => {}); });
     ws.on('error', () => {});
   });
+  if (socketPath) await prepareSocketPath(socketPath, { privateDir: options.privateDir !== false });
   await new Promise((resolve, rejectListen) => {
     http.once('error', rejectListen);
-    http.listen(port, host, () => { http.off('error', rejectListen); resolve(); });
+    const done = () => { http.off('error', rejectListen); resolve(); };
+    if (socketPath) http.listen(socketPath, done); else http.listen(port, host, done);
   });
+  if (socketPath) await chmod(socketPath, 0o600);
   accepting = true;
   const address = http.address();
   return {
-    host,
-    port: address.port,
-    url: 'ws://' + (host.includes(':') ? '[' + host + ']' : host) + ':' + address.port,
+    host: socketPath ? null : host,
+    port: socketPath ? null : address.port,
+    socketPath,
+    url: socketPath ? 'unix://' + socketPath : 'ws://' + (host.includes(':') ? '[' + host + ']' : host) + ':' + address.port,
     connections,
     async close() {
       accepting = false;
@@ -124,6 +175,7 @@ export async function startCodexAppServerWebSocket(options = {}) {
       connections.clear();
       await new Promise((resolve) => { wss.close(() => resolve()); });
       await new Promise((resolve) => http.close(() => resolve()));
+      if (socketPath) await unlink(socketPath).catch(() => {});
     }
   };
 }

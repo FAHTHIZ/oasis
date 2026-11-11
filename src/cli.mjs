@@ -194,7 +194,7 @@ function helpText() {
     '  oasis gateway telegram        Chat with this workspace agent from Telegram (allowlisted chats only)',
     '  oasis gateway discord|slack   The same from a Discord bot or a Slack app (Socket Mode); allowlisted users only',
     '  oasis acp [--permission-mode MODE] [--editor-terminal]  Run as an Agent Client Protocol agent for Zed, JetBrains, Neovim and other ACP editors',
-    '  oasis app-server [--listen stdio://|ws://IP:PORT] [--ws-auth capability-token --ws-token-file PATH] [--permission-mode MODE]  Speak the Codex App Server protocol (JSONL on stdio, or one message per WebSocket text frame) so Codex app-server clients can drive OASIS',
+    '  oasis app-server [--listen stdio://|unix://[PATH]|ws://IP:PORT] [--ws-auth capability-token --ws-token-file PATH] [--permission-mode MODE]  Speak the Codex App Server protocol (JSONL on stdio, or one message per WebSocket text frame) so Codex app-server clients can drive OASIS',
     '  oasis mcp login|logout NAME   Sign in to (or out of) a remote MCP server with OAuth',
     '  oasis skills list              List skills visible to Oasis',
     '  oasis skills find [query]      Search the skills.sh ecosystem',
@@ -3171,14 +3171,16 @@ async function main() {
     const { parseListenUrl, loadWsAuth, startCodexAppServerWebSocket } = await import('./codex-app-server-ws.mjs');
     const target = parseListenUrl(listen);
     const authFlags = { mode: flag('--ws-auth'), tokenFile: flag('--ws-token-file'), tokenSha256: flag('--ws-token-sha256') };
+    if (target.transport === 'stdio' || target.transport === 'unix') {
+      if (authFlags.mode || authFlags.tokenFile || authFlags.tokenSha256) throw new Error('--ws-auth flags only apply to --listen ws://IP:PORT; a unix:// socket is private to this user.');
+    }
     if (target.transport === 'stdio') {
-      if (authFlags.mode || authFlags.tokenFile || authFlags.tokenSha256) throw new Error('--ws-auth flags only apply to --listen ws://IP:PORT.');
       await serveCodexAppServer({ env: process.env, version: oasisVersion(), permissionMode });
       return;
     }
-    const verify = await loadWsAuth(authFlags);
-    const listener = await startCodexAppServerWebSocket({ host: target.host, port: target.port, verify, env: process.env, version: oasisVersion(), permissionMode });
-    process.stderr.write('[oasis app-server] listening on ' + listener.url + (verify ? ' (bearer token required)' : ' (loopback only, no auth)') + '; health: /readyz, /healthz\n');
+    const verify = target.transport === 'unix' ? null : await loadWsAuth(authFlags);
+    const listener = await startCodexAppServerWebSocket({ ...(target.transport === 'unix' ? { socketPath: target.socketPath } : { host: target.host, port: target.port }), verify, env: process.env, version: oasisVersion(), permissionMode });
+    process.stderr.write('[oasis app-server] listening on ' + listener.url + (target.transport === 'unix' ? ' (this user only)' : verify ? ' (bearer token required)' : ' (loopback only, no auth)') + '; health: /readyz, /healthz\n');
     await new Promise((resolve) => { const stop = () => resolve(); process.once('SIGINT', stop); process.once('SIGTERM', stop); });
     await listener.close();
     return;
