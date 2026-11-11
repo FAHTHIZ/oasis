@@ -2539,9 +2539,10 @@ async function startWebWorkspace(root, args) {
     stdout.write('\n');
   }
   stdout.write('Commands, package installs, file deletions and bundle installs always ask for your approval in the browser first.\n');
+  let scheduler = null;
   try {
     const { hostScheduler } = await import('./routines.mjs');
-    const scheduler = await hostScheduler({ env: process.env, log: (line) => { if (process.env.OASIS_DEBUG) stderr.write('[routines] ' + line + '\n'); } });
+    scheduler = await hostScheduler({ env: process.env, log: (line) => { if (process.env.OASIS_DEBUG) stderr.write('[routines] ' + line + '\n'); } });
     if (scheduler.hosted && scheduler.routines) stdout.write('Routines: ' + scheduler.routines + ' saved; this server runs them while it is open (oasis schedule list).\n');
   } catch (error) { stderr.write('Routines are not running: ' + error.message + '\n'); }
   if (host === '0.0.0.0' || (isIP(host) > 0 && !['127.0.0.1', '::1'].includes(host))) {
@@ -2574,6 +2575,8 @@ async function startWebWorkspace(root, args) {
   const shutdown = () => {
     if (closing) return;
     closing = true;
+    // The in-process routine scheduler would otherwise keep the process alive.
+    if (scheduler) void scheduler.stop().catch(() => {});
     void app.close().catch((error) => stderr.write('Oasis web shutdown error: ' + error.message + '\n'));
   };
   process.once('SIGINT', shutdown);
@@ -3150,12 +3153,17 @@ async function main() {
   }
   if (command === 'gateway') {
     const { runGateway } = await import('./gateway-telegram.mjs');
-    try {
-      const { hostScheduler } = await import('./routines.mjs');
-      const scheduler = await hostScheduler({ env: process.env, log: (line) => stderr.write('[routines] ' + line + '\n') });
-      if (!scheduler.hosted && process.env.OASIS_DEBUG) stderr.write('[routines] not hosted: ' + scheduler.reason + '\n');
-    } catch (error) { stderr.write('Routines are not running: ' + error.message + '\n'); }
-    await runGateway(rest, { root: workspace, env: process.env, permissionMode: SESSION_OPTIONS.permissionMode || null });
+    let scheduler = null;
+    // Host routines only for a real gateway; a usage error must still exit.
+    if (['telegram', 'discord', 'slack'].includes(String(rest[0] || '').toLowerCase())) {
+      try {
+        const { hostScheduler } = await import('./routines.mjs');
+        scheduler = await hostScheduler({ env: process.env, log: (line) => stderr.write('[routines] ' + line + '\n') });
+        if (!scheduler.hosted && process.env.OASIS_DEBUG) stderr.write('[routines] not hosted: ' + scheduler.reason + '\n');
+      } catch (error) { stderr.write('Routines are not running: ' + error.message + '\n'); }
+    }
+    try { await runGateway(rest, { root: workspace, env: process.env, permissionMode: SESSION_OPTIONS.permissionMode || null }); }
+    finally { if (scheduler) await scheduler.stop().catch(() => {}); }
     return;
   }
   if (command === 'acp') {
