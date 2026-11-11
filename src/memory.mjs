@@ -3,7 +3,8 @@
 //            plus ~/.codex/AGENTS.md and ~/.gemini/GEMINI.md
 //   project  OASIS.md, AGENTS.md, CLAUDE.md                     (shared, committed)
 //            plus GEMINI.md, .github/copilot-instructions.md, .cursorrules,
-//            .windsurfrules, .clinerules, CONVENTIONS.md (other agents' rules),
+//            .windsurfrules, .clinerules, .roorules (when .roo/rules is empty),
+//            CONVENTIONS.md (other agents' rules),
 //            AGENT.md and Devin Desktop's .devin/global_rules.md (else the
 //            legacy .windsurf/global_rules.md)
 //   local    OASIS.local.md, CLAUDE.local.md, AGENTS.local.md   (personal, gitignored)
@@ -48,7 +49,7 @@ const PER_FILE_LIMIT = 9000;
 // The README is background sent with every request; its opening (what the
 // project is, how to run it) is what helps. The model can read the rest.
 const README_LIMIT = 2500;
-export const OTHER_AGENT_RULES = ['GEMINI.md', 'AGENT.md', path.join('.github', 'copilot-instructions.md'), '.cursorrules', '.windsurfrules', path.join('.devin', 'global_rules.md'), path.join('.windsurf', 'global_rules.md'), '.clinerules', 'CONVENTIONS.md'];
+export const OTHER_AGENT_RULES = ['GEMINI.md', 'AGENT.md', path.join('.github', 'copilot-instructions.md'), '.cursorrules', '.windsurfrules', path.join('.devin', 'global_rules.md'), path.join('.windsurf', 'global_rules.md'), '.clinerules', '.roorules', 'CONVENTIONS.md'];
 
 export async function memoryFiles(root, options = {}) {
   const env = options.env || process.env;
@@ -95,6 +96,13 @@ export async function memoryFiles(root, options = {}) {
   // .windsurf/global_rules.md exist.
   const devinGlobal = found.find((item) => item.path === path.join(workspace, '.devin', 'global_rules.md'));
   if (devinGlobal && devinGlobal.exists) for (const item of found) if (item.path === path.join(workspace, '.windsurf', 'global_rules.md')) item.exists = false;
+  // Roo Code reads the .roorules file only when .roo/rules/ has no rule files.
+  const roorules = found.find((item) => item.path === path.join(workspace, '.roorules'));
+  if (roorules && roorules.exists) {
+    let names = [];
+    try { names = await readdir(path.join(workspace, '.roo', 'rules'), { recursive: true }); } catch {}
+    if (names.some((name) => /\.(?:md|txt)$/i.test(String(name)))) roorules.exists = false;
+  }
   return found;
 }
 
@@ -228,6 +236,7 @@ export const OTHER_AGENT_RULE_DIRS = [
   { dir: '.kiro/steering', ext: ['.md'], tool: 'Kiro' },
   { dir: '.clinerules', ext: ['.md', '.txt'], tool: 'Cline' },
   { dir: '.roo/rules', ext: ['.md', '.txt'], tool: 'Roo Code' },
+  { dir: '.kilocode/rules', ext: ['.md', '.txt'], tool: 'Kilo Code' },
   // OpenHands: always-on repository context (no triggers), path rules (paths:) and
   // keyword-triggered knowledge (triggers:). SKILL.md folders are skills, not rules.
   { dir: '.openhands/microagents', ext: ['.md'], tool: 'OpenHands', openhands: true },
@@ -244,6 +253,8 @@ export async function projectRules(root, { env = process.env, notices = null, ho
   if (env.OASIS_OTHER_AGENT_RULES !== '0') {
     // Devin Desktop personal rules (~/.devin/rules/*.md) apply to every project.
     rules.push(...await loadRules(path.join(home || env.HOME || os.homedir(), '.devin', 'rules'), 'user', null, notices, { prefix: '~/.devin/rules/' }));
+    // Roo Code global rules (~/.roo/rules), for every project and mode.
+    rules.push(...await loadRules(path.join(home || env.HOME || os.homedir(), '.roo', 'rules'), 'user', null, notices, { ext: ['.md', '.txt'], prefix: '~/.roo/rules/' }));
     // Antigravity CLI global rules and the rules of installed Antigravity CLI plugins.
     const antigravityCli = path.join(home || env.HOME || os.homedir(), '.gemini', 'antigravity-cli');
     rules.push(...await loadRules(path.join(antigravityCli, 'rules'), 'user', null, notices, { prefix: '~/.gemini/antigravity-cli/rules/' }));
