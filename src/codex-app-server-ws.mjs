@@ -17,11 +17,16 @@
 //
 // Auth: `--ws-auth capability-token` with `--ws-token-file PATH` or
 // `--ws-token-sha256 HEX`. Clients send `Authorization: Bearer TOKEN` in the
-// handshake; the check happens before any JSON-RPC message is read. Unlike
+// handshake; the check happens before any JSON-RPC message is read.
+// `--ws-auth signed-bearer-token --ws-shared-secret-file PATH` instead accepts
+// an HS256 JWT signed with the shared secret (at least 32 bytes), as Codex
+// does: `exp` is required, `nbf` is honoured, `--ws-issuer` and
+// `--ws-audience` pin `iss` and `aud`, and `--ws-max-clock-skew-seconds`
+// (default 30) allows for clock drift. Unlike
 // Codex (which allows unauthenticated non-loopback listeners during its
 // rollout), OASIS refuses to listen beyond loopback without auth.
 import { createServer } from 'node:http';
-import { createHash, timingSafeEqual } from 'node:crypto';
+import { createHash, createHmac, timingSafeEqual } from 'node:crypto';
 import { chmod, lstat, mkdir, readFile, stat, unlink } from 'node:fs/promises';
 import { connect as netConnect } from 'node:net';
 import path from 'node:path';
@@ -66,32 +71,88 @@ export function isLoopbackHost(host) {
 
 const sha256 = (text) => createHash('sha256').update(String(text), 'utf8').digest();
 
+const bearerToken = (header) => {
+  const m = /^Bearer\s+(\S+)\s*$/i.exec(String(header || ''));
+  return m ? m[1] : null;
+};
+
+async function readSecretFile(flagName, file, minLength, unit) {
+  if (!path.isAbsolute(file)) throw new Error(flagName + ' must be an absolute path.');
+  const info = await stat(file).catch(() => null);
+  if (!info || !info.isFile()) throw new Error(flagName + ' ' + file + ' is not a readable file.');
+  if (process.platform !== 'win32' && (info.mode & 0o077)) throw new Error(flagName + ' ' + file + ' is readable by other users; run chmod 600 on it.');
+  const secret = (await readFile(file, 'utf8')).trim();
+  const size = unit === 'bytes' ? Buffer.byteLength(secret, 'utf8') : secret.length;
+  if (size < minLength) throw new Error('The secret in ' + flagName + ' must be at least ' + minLength + ' ' + unit + '.');
+  return secret;
+}
+
+const base64UrlJson = (part) => {
+  if (!/^[A-Za-z0-9_-]*$/.test(part)) return null;
+  try { return JSON.parse(Buffer.from(part, 'base64url').toString('utf8')); } catch { return null; }
+};
+
+// Check an HS256 JWT the way Codex's websocket-auth crate does. Returns null
+// when the token is good, or the reason it was refused.
+export function checkSignedBearerToken(token, { secret, issuer = null, audience = null, maxClockSkewSeconds = 30, now = Math.floor(Date.now() / 1000) } = {}) {
+  const parts = String(token || '').split('.');
+  if (parts.length !== 3) return 'invalid websocket jwt';
+  const header = base64UrlJson(parts[0]);
+  const claims = base64UrlJson(parts[1]);
+  if (!header || header.alg !== 'HS256' || !claims || typeof claims !== 'object' || Array.isArray(claims)) return 'invalid websocket jwt';
+  if (!/^[A-Za-z0-9_-]+$/.test(parts[2])) return 'invalid websocket jwt';
+  const expected = createHmac('sha256', secret).update(parts[0] + '.' + parts[1]).digest();
+  const actual = Buffer.from(parts[2], 'base64url');
+  if (actual.length !== expected.length || !timingSafeEqual(actual, expected)) return 'invalid websocket jwt';
+  if (!Number.isInteger(claims.exp)) return 'invalid websocket jwt';
+  if (claims.nbf !== undefined && claims.nbf !== null && !Number.isInteger(claims.nbf)) return 'invalid websocket jwt';
+  if (now > claims.exp + maxClockSkewSeconds) return 'expired websocket jwt';
+  if (Number.isInteger(claims.nbf) && now < claims.nbf - maxClockSkewSeconds) return 'websocket jwt is not valid yet';
+  if (issuer && claims.iss !== issuer) return 'websocket jwt issuer mismatch';
+  if (audience) {
+    const aud = claims.aud;
+    const ok = typeof aud === 'string' ? aud === audience : Array.isArray(aud) && aud.includes(audience);
+    if (!ok) return 'websocket jwt audience mismatch';
+  }
+  return null;
+}
+
 // Resolve --ws-auth flags into a verifier. Returns null for no auth.
-export async function loadWsAuth({ mode, tokenFile, tokenSha256 } = {}) {
+export async function loadWsAuth({ mode, tokenFile, tokenSha256, sharedSecretFile, issuer, audience, maxClockSkewSeconds } = {}) {
+  const signedFlags = Boolean(sharedSecretFile || issuer || audience || (maxClockSkewSeconds !== undefined && maxClockSkewSeconds !== null));
   if (!mode) {
     if (tokenFile || tokenSha256) throw new Error('--ws-token-file and --ws-token-sha256 need --ws-auth capability-token.');
+    if (signedFlags) throw new Error('--ws-shared-secret-file, --ws-issuer, --ws-audience and --ws-max-clock-skew-seconds need --ws-auth signed-bearer-token.');
     return null;
   }
-  if (mode === 'signed-bearer-token') throw new Error('--ws-auth signed-bearer-token is not supported by OASIS yet; use --ws-auth capability-token.');
-  if (mode !== 'capability-token') throw new Error('--ws-auth must be capability-token.');
+  if (mode === 'signed-bearer-token') {
+    if (tokenFile || tokenSha256) throw new Error('--ws-token-file and --ws-token-sha256 need --ws-auth capability-token, not signed-bearer-token.');
+    if (!sharedSecretFile) throw new Error('--ws-auth signed-bearer-token needs --ws-shared-secret-file PATH.');
+    let skew = 30;
+    if (maxClockSkewSeconds !== undefined && maxClockSkewSeconds !== null) {
+      skew = Number(maxClockSkewSeconds);
+      if (!Number.isSafeInteger(skew) || skew < 0 || !/^\d+$/.test(String(maxClockSkewSeconds).trim())) throw new Error('--ws-max-clock-skew-seconds must be a whole number of seconds.');
+    }
+    const secret = await readSecretFile('--ws-shared-secret-file', sharedSecretFile, 32, 'bytes');
+    const settings = { secret: Buffer.from(secret, 'utf8'), issuer: String(issuer || '').trim() || null, audience: String(audience || '').trim() || null, maxClockSkewSeconds: skew };
+    return (header) => {
+      const token = bearerToken(header);
+      return token !== null && checkSignedBearerToken(token, settings) === null;
+    };
+  }
+  if (mode !== 'capability-token') throw new Error('--ws-auth must be capability-token or signed-bearer-token.');
+  if (signedFlags) throw new Error('--ws-shared-secret-file, --ws-issuer, --ws-audience and --ws-max-clock-skew-seconds need --ws-auth signed-bearer-token.');
   if (Boolean(tokenFile) === Boolean(tokenSha256)) throw new Error('--ws-auth capability-token needs exactly one of --ws-token-file PATH or --ws-token-sha256 HEX.');
   let digest;
   if (tokenFile) {
-    if (!path.isAbsolute(tokenFile)) throw new Error('--ws-token-file must be an absolute path.');
-    const info = await stat(tokenFile).catch(() => null);
-    if (!info || !info.isFile()) throw new Error('--ws-token-file ' + tokenFile + ' is not a readable file.');
-    if (process.platform !== 'win32' && (info.mode & 0o077)) throw new Error('--ws-token-file ' + tokenFile + ' is readable by other users; run chmod 600 on it.');
-    const token = (await readFile(tokenFile, 'utf8')).trim();
-    if (token.length < 16) throw new Error('The token in --ws-token-file must be at least 16 characters.');
-    digest = sha256(token);
+    digest = sha256(await readSecretFile('--ws-token-file', tokenFile, 16, 'characters'));
   } else {
     if (!/^[0-9a-f]{64}$/i.test(String(tokenSha256))) throw new Error('--ws-token-sha256 must be 64 hex characters (the SHA-256 of the token).');
     digest = Buffer.from(String(tokenSha256), 'hex');
   }
   return (header) => {
-    const m = /^Bearer\s+(\S+)\s*$/i.exec(String(header || ''));
-    if (!m) return false;
-    return timingSafeEqual(sha256(m[1]), digest);
+    const token = bearerToken(header);
+    return token !== null && timingSafeEqual(sha256(token), digest);
   };
 }
 
@@ -120,7 +181,7 @@ export async function prepareSocketPath(socketPath, { privateDir = true } = {}) 
 
 export async function startCodexAppServerWebSocket(options = {}) {
   const { host = '127.0.0.1', port = 0, verify = null, socketPath = null } = options;
-  if (!socketPath && !verify && !isLoopbackHost(host)) throw new Error('Listening on ' + host + ' without auth would let anyone on the network run commands. Use --ws-auth capability-token --ws-token-file PATH, or listen on 127.0.0.1 and use SSH port forwarding.');
+  if (!socketPath && !verify && !isLoopbackHost(host)) throw new Error('Listening on ' + host + ' without auth would let anyone on the network run commands. Use --ws-auth capability-token --ws-token-file PATH (or --ws-auth signed-bearer-token --ws-shared-secret-file PATH), or listen on 127.0.0.1 and use SSH port forwarding.');
   const log = options.log || ((text) => process.stderr.write('[oasis app-server] ' + text + '\n'));
   const connections = new Set();
   let accepting = false;
