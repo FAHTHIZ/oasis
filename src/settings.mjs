@@ -235,9 +235,9 @@ export function applyHookPolicy(result) {
   return result;
 }
 
-export function mergeHooks(target, extra, source) {
+export function mergeHooks(target, extra, source, sourceFile = '') {
   for (const [event, groups] of Object.entries(extra)) {
-    for (const group of groups) (target[event] ||= []).push({ ...group, source });
+    for (const group of groups) (target[event] ||= []).push({ ...group, source, ...(sourceFile ? { sourceFile } : {}) });
   }
 }
 
@@ -368,7 +368,7 @@ export async function loadSettings(root, options = {}) {
     result.permissions.additionalDirectories.push(...stringList(permissions.additionalDirectories));
     const configuredMode = normalizePermissionMode(permissions.defaultMode);
     if (configuredMode) result.permissions.defaultMode = configuredMode;
-    mergeHooks(result.hooks, normalizeHooks(settings.hooks), scope);
+    mergeHooks(result.hooks, normalizeHooks(settings.hooks), scope, file);
     // Claude Code hook policy keys (applied once every scope has loaded, see applyHookPolicy).
     if (typeof settings.disableAllHooks === 'boolean') {
       if (scope === 'managed') result.hookPolicy.disableAllManaged = result.hookPolicy.disableAllManaged || settings.disableAllHooks;
@@ -525,7 +525,7 @@ export async function loadSettings(root, options = {}) {
       for (const item of await pluginHooks(plugins, { env, root })) {
         const normalized = normalizeHooks(item.hooks);
         for (const groups of Object.values(normalized)) for (const group of groups) for (const hook of group.hooks) if (hook.type === 'command' || hook.command) hook.pluginEnv = item.env;
-        mergeHooks(result.hooks, normalized, 'plugin:' + item.plugin);
+        mergeHooks(result.hooks, normalized, 'plugin:' + item.plugin, item.root ? path.join(item.root, 'hooks', 'hooks.json') : '');
       }
     } catch { /* Plugins are optional; `oasis plugin list` reports problems. */ }
   }
