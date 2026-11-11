@@ -66,6 +66,18 @@ In scripts and CI use `oasis -p --permission-mode auto --goal "npm test passes"`
 
 Subagents you or OASIS start show up in `/tasks`: running ones first, finished ones under **Earlier in this session**, even after a restart. `/tasks ID` shows a report, `/tasks send ID MESSAGE` steers or resumes one, and `/tasks stop ID` stops it.
 
+### Routines that run on a schedule
+
+`/schedule` jobs live only as long as their session. For work that should happen whether or not a terminal is open, create a routine:
+
+```sh
+oasis schedule add "0 9 * * 1-5" "Summarize yesterday's CI failures and open PRs" --name standup --workdir . --tz Asia/Dhaka --deliver telegram:123456
+oasis schedule add "every 6h" "df -h /" --script --deliver webhook:https://example.com/hook
+oasis schedule daemon        # keep this running (or run `oasis schedule tick` from crontab)
+```
+
+Each run is a fresh background session (`oasis bg list` shows it) with the routine's folder, model, permission mode and skills. `oasis schedule show NAME` lists recent runs and where their output was saved; `pause`, `resume`, `run`, `cancel`, `edit` and `remove` manage it. A run that starts its answer with `[SILENT]` is saved but not delivered. A routine with no usable model credentials is marked `blocked_config` once and spends no tokens. Background runs never wait for approval: only tools your permission rules allow will run, so pick `--permission-mode` deliberately.
+
 ## 5. Browser workspace
 
 ### Start it

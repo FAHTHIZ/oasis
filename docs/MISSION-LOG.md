@@ -3,6 +3,19 @@
 A short, dated record of changes, tests, benchmark results, blockers and known
 weaknesses. Newest first. Detailed user-facing notes go in the CHANGELOG.
 
+## 2026-11-11 (frontier-platform cycle: competitor gaps)
+
+### Competitor research (source-level)
+- Hermes Agent cron ([docs](https://hermes-agent.nousresearch.com/docs/user-guide/features/cron)): durable jobs run by the gateway in fresh sessions, a single `cronjob_manage` tool, pause/resume/run/cancel/remove, catch-up windows (half the period, 2 min to 2 h), `no_agent` script jobs, `[SILENT]`, delivery to chat platforms, pre-dispatch config validation (`blocked_config`, no tokens spent), and no cron management inside cron runs.
+- OASIS gap found: `/schedule` and `cron_create` live inside one session ("runs while this session stays open"). Nothing ran unattended.
+
+### Changes
+- Routines: `src/routines.mjs` + `src/cli-routines.mjs`, `oasis schedule|cron|routines`. Execution reuses `src/background-sessions.mjs` (no second execution path); delivery reuses the gateway token variables and `chunkText`; output goes through `redactSecrets`. State is file-based under `<config>/schedules` with a cross-process lock, so a daemon restart reconciles earlier runs instead of firing them twice. Interrupted or lost runs pause the routine (never re-run automatically).
+- Found while testing: `redactSecrets()` returns `{ text, redacted }`, not a string; the first delivery attempt sent `[object Object]`. Fixed in the caller and covered by a test.
+
+### Tests
+- `test/routines.test.mjs` (13 tests): schedule parsing and time zones, catch-up window, lifecycle and name lookup, recursion guard, overlap skipping, one-shot completion, manual runs, interrupted-run pause, `blocked_config` recorded once, a real headless agent run against the scripted model delivering to a fake Telegram API, a `[SILENT]` script run, CLI flag handling, secret redaction.
+
 ## 2026-11-10 (completion mandate: baseline, busy-folder recovery, desktop app)
 
 ### CI runner shutdowns

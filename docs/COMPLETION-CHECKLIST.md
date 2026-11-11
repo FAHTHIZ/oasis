@@ -26,6 +26,15 @@ Status: **done** (tested and pushed) · **doing** · **open** · **blocked**
 | Dependency refresh (patch/minor) | done | `859163c5`; undici 8 (major) deferred |
 | Continue `src/agent.mjs` (5,105 lines) and `src/cli.mjs` (3,213) decomposition | open | Only with characterization tests first |
 
+## 2b. Frontier-platform gaps (2026-11-11 cycle)
+
+| Item | Status | Evidence / notes |
+| --- | --- | --- |
+| Durable scheduled routines (Hermes cron parity) | done | `oasis schedule`, `test/routines.test.mjs` (13 tests, real headless run + Telegram delivery) |
+| Agent tool to manage routines (`routine_manage`, approval-gated) | open | |
+| Routines in the web app and hosted by `oasis web` / `oasis gateway` | open | |
+| Event-triggered routines (webhook fires a routine) | open | |
+
 ## 3. Competitive evaluation
 
 | Item | Status | Evidence / notes |
