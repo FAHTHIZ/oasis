@@ -1299,6 +1299,7 @@ async function runPrompt(prompt, root, autoApprove, session = null, persistence 
       if (SESSION_OPTIONS.forkSession) { stdout.write('[session] Forking ' + restored.id + ' into a new session.\n'); restored = { ...restored, id: null }; }
       stdout.write('[session] Resuming ' + restored.id + ' (' + restored.messages.length + ' saved messages, last updated ' + restored.updatedAt + ').\n');      const goalNote = pausedGoalNotice(restored.goal);
       if (goalNote) stdout.write(goalNote);
+      if (restored.turnInProgress) stdout.write('[session] The last turn stopped before it finished; Oasis will ask the model to check the files before continuing.\n');
     }
     session = await createSession({ root, config, restore: restored, ...sessionCreateOptions(), watchFiles: true });
     if (restored) {

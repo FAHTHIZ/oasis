@@ -531,6 +531,7 @@ export async function createSession({ root, config, restore = null, permissionMo
     pendingSteering: Array.isArray(restore && restore.pendingSteering)
       ? restore.pendingSteering.filter((note) => typeof note === 'string').map((note) => note.trim().slice(0, 20000)).filter(Boolean).slice(-20)
       : [],
+    interruptedTurn: restore && restore.turnInProgress && typeof restore.turnInProgress === 'object' ? restore.turnInProgress : null,
     mcpClients: mcp.clients,
     webAccessApprovals: new Set(),
     mcpHost,
@@ -3866,6 +3867,14 @@ async function executeOneCallRaw(session, call, context, options) {
   };
 }
 
+// The previous turn of a restored session stopped part-way (crash, closed
+// terminal, server restart). Its finished steps are in the history; the step
+// that was running may have left files half-changed.
+export function interruptedTurnNote(info = {}) {
+  const request = String(info && info.request || '').replace(/\s+/g, ' ').trim().slice(0, 300);
+  return '<interrupted-turn>OASIS stopped before your previous turn finished' + (request ? ' (the request was: "' + request + '")' : '') + '. The conversation was restored up to the last completed step. Check the current state of the files before continuing, because your last step may not have finished.</interrupted-turn>';
+}
+
 export async function runAgentTurn(session, prompt, options = {}) {
   // Tools use the environment the session was created with unless the turn
   // passes its own (a session made for another config dir stays in it).
@@ -4030,6 +4039,10 @@ async function runAgentTurnRaw(session, prompt, options = {}) {
     ? session.pendingSteering.filter((note) => typeof note === 'string' && note.trim()).slice(-STEER_LIMIT)
     : [];
   if (carriedSteering.length) userContent = steeringMessage(carriedSteering) + '\n\n' + userContent;
+  if (!options.isSubagent && session.interruptedTurn) {
+    userContent = interruptedTurnNote(session.interruptedTurn) + '\n\n' + userContent;
+    session.interruptedTurn = null;
+  }
   session.currentRequest = request;
   if (session.pendingDynamicContext && !options.isSubagent) { userContent = '<session-context>\n' + session.pendingDynamicContext + '\n</session-context>\n\n' + userContent; session.pendingDynamicContext = null; }
   // Opt-in repository map on the first turn (settings.repoMap: true | { maxChars }, or OASIS_REPO_MAP=1).
