@@ -37,6 +37,7 @@ Status: **done** (tested and pushed) · **doing** · **open** · **blocked**
 | Webhook event filters (GitHub `event.action`, ping) | done | `test/routines-hosted.test.mjs` |
 | Routine results review in the browser (Codex Triage parity) | done | `test/routines-hosted.test.mjs` (runs endpoint) |
 | Routine history retention, stale-edit conflicts, prune finished | done | `test/routines.test.mjs` (bounded history) |
+| Antigravity custom agent folders and front matter | done | `test/subagent-definitions.test.mjs` (Antigravity) |
 | Codex App Server protocol (core: threads, turns, items, approvals over stdio) | done | `test/codex-app-server.test.mjs` |
 | Codex App Server thread/fork (with lastTurnId) | done | `test/codex-app-server.test.mjs` (fork) |
 | Codex App Server review/start (inline) | done | `test/codex-app-server.test.mjs` (review) |

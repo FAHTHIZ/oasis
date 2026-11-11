@@ -4,6 +4,10 @@ User-facing change history grouped by package version. A version heading does no
 
 ## Unreleased
 
+### Antigravity agent definitions
+
+- Custom agents are also read from Google Antigravity's folders: `.agents/agents/<name>.md` or `<name>/agent.md` in the project, and `~/.gemini/config/agents/`. Antigravity tool names, `subagent: false`, `commandExecutionPolicy: off`, model tiers and skill paths are mapped (see docs/SUBAGENTS.md).
+
 ### Codex App Server protocol
 
 - `oasis app-server` serves the core of the Codex App Server v2 protocol over stdio JSONL, so clients written for `codex app-server` can drive OASIS. It supports threads (start, resume, fork with `lastTurnId`, read, list, rename), turns (start, steer, interrupt), inline `review/start` (current changes, base branch, commit or custom), `model/list`, and `userMessage`, `agentMessage`, `commandExecution`, `fileChange` (with unified diffs), `mcpToolCall` and `dynamicToolCall` items. Approvals arrive as Codex approval requests with the accept, acceptForSession, decline and cancel decisions. Field names follow the Apache-2.0 protocol definitions in `openai/codex`; no Codex code is included.
