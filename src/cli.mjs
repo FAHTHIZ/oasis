@@ -609,11 +609,13 @@ let streamedSoFar = '';
 let markdownStream = null;
 const richOutput = () => colorEnabled(stdout) && process.env.OASIS_PLAIN_OUTPUT !== '1';
 let waitIndicator = null;
+// Claude Code's spinnerVerbs, refreshed from the session settings before each prompt.
+let spinnerVerbsSetting = null;
 function onModelWait(event = {}) {
   if (event.phase === 'progress') { if (waitIndicator) waitIndicator.update({ promptProgress: event.promptProgress }); return; }
   if (event.phase !== 'start') { stopWaitIndicator(); return; }
   flushExploration();
-  if (!waitIndicator) waitIndicator = createActivityIndicator({ stream: stdout, env: process.env, color: richOutput() });
+  if (!waitIndicator) waitIndicator = createActivityIndicator({ stream: stdout, env: process.env, color: richOutput(), verbs: () => spinnerVerbsSetting });
   waitIndicator.start(event);
 }
 // The first rate-limit wait in a turn gets a dim line; later ones count down in
@@ -622,7 +624,7 @@ function onModelWait(event = {}) {
 let rateLimitWaitsThisTurn = 0;
 function onRateLimitWait(event = {}) {
   stopWaitIndicator();
-  if (!waitIndicator) waitIndicator = createActivityIndicator({ stream: stdout, env: process.env, color: richOutput() });
+  if (!waitIndicator) waitIndicator = createActivityIndicator({ stream: stdout, env: process.env, color: richOutput(), verbs: () => spinnerVerbsSetting });
   const live = waitIndicator.level !== 'off';
   if (!live || rateLimitWaitsThisTurn++ === 0 || (event.compactTools && !compactToolsNoticeShown)) process.stderr.write(rateLimitNotice(event, colorEnabled(process.stderr)) + '\n');
   if (live) waitIndicator.start({ rateLimitMs: Number(event.waitMs) || 0 });
@@ -2239,6 +2241,7 @@ async function interactive(root, autoApprove, persistence = {}) {
   const pendingShell = [];
   while (true) {
     let input;
+    spinnerVerbsSetting = (session && session.settings || startupSettings || {}).spinnerVerbs || null;
     const statusLine = (session && session.settings || startupSettings || {}).statusLine;
     if (statusLine) {
       const line = await renderStatusLine(statusLine, statusLinePayload({ root, session, config: await loadConfig().catch(() => ({})), usage: USAGE, outputStyle: SESSION_OPTIONS.outputStyle }), { root, env: process.env, keepColor: Boolean(stdout.isTTY) }).catch(() => null);

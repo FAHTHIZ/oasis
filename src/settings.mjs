@@ -312,6 +312,12 @@ export async function loadSettings(root, options = {}) {
     // disableSkillShellExecution: a true from any file turns command-file shell off; a managed true
     // cannot be turned back on, and false is taken from trusted files only (below).
     if (settings.disableSkillShellExecution === true) { result.disableSkillShellExecution = true; if (scope === 'managed') result.disableSkillShellExecutionManaged = true; }
+    // spinnerVerbs: { mode: "append" | "replace", verbs: [...] } words for the live "Thinking…" line.
+    // Display-only text, so any file may set it; control characters are dropped.
+    if (settings.spinnerVerbs && typeof settings.spinnerVerbs === 'object' && Array.isArray(settings.spinnerVerbs.verbs)) {
+      const verbs = settings.spinnerVerbs.verbs.filter((verb) => typeof verb === 'string').map((verb) => verb.replace(/[\u0000-\u001f\u007f-\u009f\u2028\u2029]/g, '').trim().slice(0, 40)).filter(Boolean).slice(0, 200);
+      result.spinnerVerbs = { mode: settings.spinnerVerbs.mode === 'replace' ? 'replace' : 'append', verbs };
+    }
     // Reply language (Claude Code's "language" setting). Only plain language names are accepted.
     if (typeof settings.language === 'string' && normalizeLanguage(settings.language)) result.language = normalizeLanguage(settings.language);
     if (settings.worktree && typeof settings.worktree === 'object' && typeof settings.worktree.branchPrefix === 'string') result.worktree = { ...(result.worktree || {}), branchPrefix: settings.worktree.branchPrefix.trim().slice(0, 40) };
@@ -374,7 +380,7 @@ export async function loadSettings(root, options = {}) {
       const routingEnabled = settings.modelRouting && typeof settings.modelRouting === 'object' && (settings.modelRouting.enabled === true || Boolean(String(settings.modelRouting.easyModel || '').trim()) || Boolean(String(settings.modelRouting.strongModel || '').trim()));
       const loosening = stringList(permissions.allow).length || settings.hooks || permissions.defaultMode || settings.sandbox || settings.shell || settings.statusLine || settings.lspServers || settings.autoMode || routingEnabled || settings.env || settings.apiKeyHelper || settings.customHeadersHelper || settings.autoTest;
       // Any other key is also skipped until trust; say so instead of dropping it silently.
-      const untrustedSafe = new Set(['$schema', 'permissions', 'outputStyle', 'editorMode', 'language', 'worktree', 'avoidPhrases', 'codeComments', 'theme', 'agent', 'channelsEnabled', 'autoMemory', 'autoLearning', 'memoryWriteApproval', 'memory', 'executeCode', 'sessionSearch', 'textToolCalls', 'sounds', 'soundVolume', 'idleCompactMinutes', 'deniedMcpServers', 'disabledMcpjsonServers', 'claudeMdExcludes', 'includeGitInstructions', 'alwaysThinkingEnabled', 'skillOverrides', 'disableBundledSkills', 'disableSkillShellExecution']);
+      const untrustedSafe = new Set(['$schema', 'permissions', 'outputStyle', 'editorMode', 'language', 'worktree', 'avoidPhrases', 'codeComments', 'theme', 'agent', 'channelsEnabled', 'autoMemory', 'autoLearning', 'memoryWriteApproval', 'memory', 'executeCode', 'sessionSearch', 'textToolCalls', 'sounds', 'soundVolume', 'idleCompactMinutes', 'deniedMcpServers', 'disabledMcpjsonServers', 'claudeMdExcludes', 'includeGitInstructions', 'alwaysThinkingEnabled', 'skillOverrides', 'disableBundledSkills', 'disableSkillShellExecution', 'spinnerVerbs']);
       const skipped = Object.keys(settings).filter((key) => !untrustedSafe.has(key));
       if (loosening || skipped.length) result.ignoredUntrusted.push(file);
       return;

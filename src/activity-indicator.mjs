@@ -65,9 +65,22 @@ export function formatTokens(count) {
   return Math.round(n / 1000) + 'k';
 }
 
+// Claude Code's spinnerVerbs setting as a pool for the generic label. null stands
+// for the built-in word ("Thinking"/"Working"); an empty replace list keeps it.
+export function spinnerVerbPool(setting) {
+  if (!setting || !Array.isArray(setting.verbs) || !setting.verbs.length) return [];
+  return setting.mode === 'replace' ? [...setting.verbs] : [null, ...setting.verbs];
+}
+
 // Words for the label; chosen by what the agent is waiting for, not at random.
+// A spinnerVerbs word (info.verb) replaces only the generic Thinking/Working.
 export function waitLabel(info = {}, elapsedMs = 0) {
   if (info.label) return String(info.label);
+  const generic = waitLabelFor(info, elapsedMs);
+  return info.verb && (generic === 'Thinking' || generic === 'Working') ? String(info.verb) : generic;
+}
+
+function waitLabelFor(info, elapsedMs) {
   if (Number(info.rateLimitMs) > elapsedMs) return 'Rate limited';
   const progress = info.promptProgress;
   if (progress && Number(progress.total) > 0) return Number(progress.processed) < Number(progress.total) ? 'Local model is reading the prompt' : 'Thinking';
@@ -127,7 +140,7 @@ export function shimmer(text, frame, { base = '\x1b[36m', highlight = '\x1b[1;97
   return out + reset;
 }
 
-export function createActivityIndicator({ stream = process.stdout, env = process.env, color = true, setting = null, now = () => Date.now(), timers = { setInterval, clearInterval } } = {}) {
+export function createActivityIndicator({ stream = process.stdout, env = process.env, color = true, setting = null, verbs = null, random = Math.random, now = () => Date.now(), timers = { setInterval, clearInterval } } = {}) {
   const level = motionLevel({ env, stream, setting });
   let handle = null;
   let startedAt = 0;
@@ -168,6 +181,9 @@ export function createActivityIndicator({ stream = process.stdout, env = process
     start(next = {}) {
       if (level === 'off') return false;
       info = { ...next };
+      // One spinnerVerbs word per wait, picked at random like Claude Code's rotation.
+      const pool = spinnerVerbPool(typeof verbs === 'function' ? verbs() : verbs);
+      if (pool.length && !info.verb) info.verb = pool[Math.min(pool.length - 1, Math.floor(random() * pool.length))] || '';
       progressAt = 0;
       startedAt = now();
       frame = 0;
