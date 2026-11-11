@@ -6,7 +6,7 @@ import path from 'node:path';
 import { spawn } from 'node:child_process';
 import { processTreeSpawnOptions, signalProcessTree } from './process-tree.mjs';
 import { randomBytes } from 'node:crypto';
-import { appendFile, lstat, mkdir, readFile, realpath, rm, stat } from 'node:fs/promises';
+import { appendFile, lstat, mkdir, readFile, readlink, realpath, rm, stat, symlink, unlink } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { runHooks, hasHooks } from './hooks.mjs';
 import { normalizeBranchPrefix } from './branch-names.mjs';
@@ -197,6 +197,62 @@ async function createHookWorktree(root, label, options) {
 // Branch prefix for OASIS-made worktrees: "oasis/" unless the team has a naming
 // convention (settings "worktree": { "branchPrefix": "feature/" } or
 // OASIS_WORKTREE_BRANCH_PREFIX). Kept to a conservative ref-safe charset.
+// Claude Code's worktree.symlinkDirectories / sparsePaths / baseRef, read like branchPrefix.
+async function worktreeSettings(root, env) {
+  try {
+    const { loadSettings } = await import('./settings.mjs');
+    const settings = await loadSettings(root, { env, skipPlugins: true });
+    return settings.worktree || {};
+  } catch { return {}; }
+}
+
+// "fresh": origin's default branch (origin/HEAD, else origin/main or origin/master); HEAD if none.
+async function worktreeBaseRef(root, baseRef, env) {
+  if (baseRef !== 'fresh') return 'HEAD';
+  const candidates = [];
+  const remoteHead = await git(root, ['symbolic-ref', '--quiet', 'refs/remotes/origin/HEAD'], env).catch(() => '');
+  if (remoteHead) candidates.push(remoteHead);
+  candidates.push('refs/remotes/origin/main', 'refs/remotes/origin/master');
+  for (const ref of candidates) {
+    if (await git(root, ['rev-parse', '--verify', '--quiet', ref + '^{commit}'], env).then(() => true, () => false)) return ref.replace(/^refs\/remotes\//, '');
+  }
+  return 'HEAD';
+}
+
+function relativeInside(value) {
+  if (typeof value !== 'string') return null;
+  const clean = path.posix.normalize(value.trim().replace(/\\/g, '/')).replace(/\/+$/, '');
+  if (!clean || clean === '.' || clean.startsWith('../') || clean === '..' || path.posix.isAbsolute(clean) || /^[A-Za-z]:/.test(clean) || clean.split('/').includes('.git')) return null;
+  return clean;
+}
+
+async function linkSharedDirectories(root, worktreePath, list) {
+  const linked = [];
+  const realRoot = await realpath(root);
+  for (const entry of (Array.isArray(list) ? list : []).slice(0, 50)) {
+    const rel = relativeInside(entry);
+    if (!rel || rel === WORKTREE_DIR.split(path.sep).join('/').split('/')[0]) continue;
+    const source = path.join(root, rel);
+    const real = await realpath(source).catch(() => null);
+    if (!real || !(real === realRoot || real.startsWith(realRoot + path.sep))) continue;
+    if (!(await stat(real).catch(() => null))?.isDirectory()) continue;
+    const target = path.join(worktreePath, rel);
+    if (await lstat(target).catch(() => null)) continue; // tracked or already present
+    await mkdir(path.dirname(target), { recursive: true });
+    try { await symlink(real, target, process.platform === 'win32' ? 'junction' : 'dir'); linked.push(rel); } catch { /* skip */ }
+  }
+  return linked;
+}
+
+// Remove the symlinks OASIS made so they are never committed or followed on removal.
+async function unlinkSharedDirectories(worktree) {
+  for (const rel of worktree.symlinks || []) {
+    const target = path.join(worktree.path, rel);
+    const info = await lstat(target).catch(() => null);
+    if (info && info.isSymbolicLink() && await readlink(target).catch(() => null)) await unlink(target).catch(() => {});
+  }
+}
+
 export async function worktreeBranchPrefix(root, env = process.env) {
   const fromEnv = normalizeBranchPrefix(env.OASIS_WORKTREE_BRANCH_PREFIX);
   if (fromEnv) return fromEnv;
@@ -258,7 +314,16 @@ export async function createWorktree(root, label, options = {}) {
   const relative = path.join(WORKTREE_DIR, name);
   const worktreeParent = await ensureWorktreeParent(root);
   const absolute = path.join(worktreeParent, name);
-  await withRepoWorktreeLock(commonDir, () => retryOnGitLock(() => git(root, ['worktree', 'add', '-b', branch, absolute, 'HEAD'], env, 60000)));
+  const configured = options.worktreeSettings || await worktreeSettings(root, env);
+  const startRef = await worktreeBaseRef(root, configured.baseRef, env);
+  const sparse = [...new Set((Array.isArray(configured.sparsePaths) ? configured.sparsePaths : []).map(relativeInside).filter(Boolean))].slice(0, 200);
+  await withRepoWorktreeLock(commonDir, () => retryOnGitLock(() => git(root, ['worktree', 'add', ...(sparse.length ? ['--no-checkout'] : []), '-b', branch, absolute, startRef], env, 60000)));
+  if (sparse.length) {
+    // Cone-mode sparse checkout: the listed directories plus root-level files.
+    await git(absolute, ['sparse-checkout', 'set', '--cone', '--', ...sparse], env, 60000);
+    await git(absolute, ['checkout', '-q'], env, 60000).catch(() => git(absolute, ['read-tree', '-mu', 'HEAD'], env, 60000));
+  }
+  const symlinks = await linkSharedDirectories(root, absolute, configured.symlinkDirectories);
   const base = await git(absolute, ['rev-parse', 'HEAD'], env);
   // Cursor .cursor/worktrees.json or Windsurf post_setup_worktree (trusted workspaces only).
   let setup = null;
@@ -266,7 +331,7 @@ export async function createWorktree(root, label, options = {}) {
     const { runWorktreeSetup } = await import('./worktree-setup.mjs');
     setup = await runWorktreeSetup(root, absolute, { env, signal: options.signal });
   }
-  return { name, branch, path: absolute, relative: relative.split(path.sep).join('/'), base, ...(setup ? { setup } : {}) };
+  return { name, branch, path: absolute, relative: relative.split(path.sep).join('/'), base, ...(startRef !== 'HEAD' ? { baseRef: startRef } : {}), ...(sparse.length ? { sparsePaths: sparse } : {}), ...(symlinks.length ? { symlinks } : {}), ...(setup ? { setup } : {}) };
 }
 
 
@@ -306,6 +371,7 @@ async function inspectWorktreeSecrets(worktree, options = {}) {
 export async function finishWorktree(root, worktree, options = {}) {
   const env = options.env || process.env;
   if (worktree.hook) return { changed: true, branch: null, path: worktree.path, hook: true, note: 'Created by a WorktreeCreate hook; OASIS leaves it in place without committing or merging.' };
+  await unlinkSharedDirectories(worktree);
   const status = await git(worktree.path, ['status', '--porcelain', '--untracked-files=all'], env).catch(() => '');
   if (!status) {
     await removeWorktree(root, worktree, { env, deleteBranch: true });
@@ -396,6 +462,7 @@ export async function removeWorktree(root, worktree, options = {}) {
     if (result.failed && existsSync(worktree.path)) throw new Error('worktree removal failed, kept: ' + worktree.path + (result.messages[0] ? ' (' + result.messages[0] + ')' : ''));
     return { removed: true };
   }
+  await unlinkSharedDirectories(worktree);
   const commonDir = await git(root, ['rev-parse', '--git-common-dir'], env)
     .then((dir) => path.resolve(root, dir)).catch(() => path.resolve(root));
   await withRepoWorktreeLock(commonDir, async () => {

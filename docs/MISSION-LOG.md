@@ -46,6 +46,10 @@ weaknesses. Newest first. Detailed user-facing notes go in the CHANGELOG.
 
 ## 2026-11-11 (Claude Code parity cycle)
 
+### worktree.symlinkDirectories, sparsePaths, baseRef
+- Read from any settings file (they only shape the worktree), like the existing `worktree.branchPrefix`. Only folders inside the repository that exist and are not already in the checkout are linked. `git status` lists a linked folder as untracked even when `.gitignore` has `node_modules/`, and a per-worktree `info/exclude` is not read (checked with git 2.53), so OASIS removes its links before it commits.
+- The default `baseRef` stays `head`. Claude Code defaults to `fresh`, but a subagent's worktree must contain the parent session's commits.
+
 ### plansDirectory
 - OASIS did not store plans on disk. With `plansDirectory` set, `exit_plan_mode` now writes the plan there before asking for approval. Unlike Claude Code, which defaults to `~/.claude/plans`, nothing is written when the key is unset, and an untrusted repository cannot set it.
 

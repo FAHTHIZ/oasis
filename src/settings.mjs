@@ -305,6 +305,11 @@ export async function loadSettings(root, options = {}) {
     // Reply language (Claude Code's "language" setting). Only plain language names are accepted.
     if (typeof settings.language === 'string' && normalizeLanguage(settings.language)) result.language = normalizeLanguage(settings.language);
     if (settings.worktree && typeof settings.worktree === 'object' && typeof settings.worktree.branchPrefix === 'string') result.worktree = { ...(result.worktree || {}), branchPrefix: settings.worktree.branchPrefix.trim().slice(0, 40) };
+    // Claude Code's worktree.symlinkDirectories, sparsePaths (repository-relative folders) and baseRef.
+    if (settings.worktree && typeof settings.worktree === 'object') {
+      for (const key of ['symlinkDirectories', 'sparsePaths']) if (Array.isArray(settings.worktree[key])) result.worktree = { ...(result.worktree || {}), [key]: settings.worktree[key].filter((item) => typeof item === 'string' && item.trim() && !/[\r\n\0]/.test(item)).map((item) => item.trim()).slice(0, 200) };
+      if (settings.worktree.baseRef === 'fresh' || settings.worktree.baseRef === 'head') result.worktree = { ...(result.worktree || {}), baseRef: settings.worktree.baseRef };
+    }
     // Writing rules: phrases accumulate across scopes; the most specific codeComments wins.
     if (settings.avoidPhrases !== undefined) result.avoidPhrases = normalizePhrases([...(result.avoidPhrases || []), ...normalizePhrases(settings.avoidPhrases)]);
     if (normalizeCommentMode(settings.codeComments)) result.codeComments = normalizeCommentMode(settings.codeComments);
