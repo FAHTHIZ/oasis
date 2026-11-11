@@ -697,6 +697,8 @@ html.lite .topbar{backdrop-filter:none;-webkit-backdrop-filter:none;background:v
 .connector-card a.btn{text-decoration:none}
 .connector-card:is([data-status="connected"],[data-status="failed"],[data-status="skipped"]) .cc-foot{display:none}
 /* Settings → Apps */
+.app-filter{width:100%;box-sizing:border-box;margin:0 0 10px}
+.app-tile[hidden]{display:none}
 .app-grid{list-style:none;margin:0;padding:0;display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:8px}
 .app-tile{display:flex;align-items:center;gap:10px;padding:10px;border:1px solid var(--line);border-radius:var(--r-md);background:var(--panel-2);min-width:0}
 .app-tile.on{border-color:var(--accent-line)}
