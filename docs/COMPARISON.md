@@ -46,7 +46,7 @@ Claude Code is the reference point for agent behaviour, and OASIS reads its conf
 | MCP policy | `allowedMcpServers`, `deniedMcpServers`, `.mcp.json` approval keys | Honoured; trusting a workspace approves all its `.mcp.json` servers (no per-server prompt) |
 | Permission modes | `default`, `acceptEdits`, `plan`, `bypassPermissions`, `dontAsk` | The same modes, plus `permissions.denyInsteadOfPrompting` |
 | MCP Tasks | Long tool calls run as background tasks (2.1.319) | The same, with `CLAUDE_CODE_DISABLE_MCP_TASK_BACKGROUND` honoured; running tasks are listed in `/tasks` |
-| Headless | `claude -p`, `stream-json` | `oasis -p` / `oasis exec`, the same output formats, `--output-schema`; `oasis exec --json` emits the Codex exec JSONL stream so the Codex TypeScript SDK runs OASIS via `codexPathOverride` (tested against the SDK's argument and event contract, not the published npm package) |
+| Headless | `claude -p`, `stream-json` | `oasis -p` / `oasis exec`, the same output formats, `--output-schema`; `oasis exec --json` emits the Codex exec JSONL stream so the Codex TypeScript SDK runs OASIS via `codexPathOverride` (tested against the SDK's argument and event contract, and checked by hand with `@openai/codex-sdk` 0.167.1) |
 | Checkpoints and rewind | Yes | Yes |
 | Model env variables | `ANTHROPIC_MODEL`, `ANTHROPIC_DEFAULT_*_MODEL`, `CLAUDE_CODE_SUBAGENT_EFFORT` | Honoured |
 
