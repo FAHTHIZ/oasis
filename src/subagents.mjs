@@ -19,6 +19,9 @@
 //   ---
 //   You are a test specialist...
 // Locations (later wins): ~/.claude/agents, ~/.config/oasis/agents, .claude/agents, .oasis/agents
+// Other agents' definition folders are read below those (OASIS_OTHER_AGENT_RULES=0 skips them):
+// Gemini CLI ~/.gemini/agents and .gemini/agents, OpenCode ~/.config/opencode/agents and
+// .opencode/agents (also the older singular agent/), translated by foreignAgentFrontMatter.
 import { readdir, readFile, stat } from 'node:fs/promises';
 import { parseFrontMatter } from './frontmatter.mjs';
 
@@ -205,14 +208,94 @@ export async function loadAgentMemory(agent, root, env = process.env) {
   } catch { return ''; }
 }
 
+// Gemini CLI tool names (docs/core/subagents.md, docs/tools in google-gemini/gemini-cli).
+const GEMINI_TOOLS = {
+  read_file: ['read_file'], read_many_files: ['read_file'], write_file: ['write_file'], replace: ['edit_file'],
+  run_shell_command: CLAUDE_TO_OASIS.bash, grep_search: CLAUDE_TO_OASIS.grep, search_file_content: CLAUDE_TO_OASIS.grep,
+  glob: ['glob_files'], list_directory: ['list_files'], web_fetch: ['fetch_url'], google_web_search: ['web_search'],
+  write_todos: ['todo_write']
+};
+// OpenCode tool and permission names (opencode.ai/docs/agents, /docs/permissions).
+const OPENCODE_TOOLS = {
+  bash: CLAUDE_TO_OASIS.bash, shell: CLAUDE_TO_OASIS.bash, read: ['read_file'], edit: ['edit_file', 'multi_edit', 'write_file', 'apply_patch'],
+  write: ['write_file'], patch: ['apply_patch'], grep: CLAUDE_TO_OASIS.grep, glob: ['glob_files'], list: ['list_files'],
+  webfetch: ['fetch_url', 'web_search'], websearch: ['web_search'], todowrite: ['todo_write'], task: ['task'], subagent: ['task']
+};
+
+/**
+ * Gemini CLI and OpenCode agent front matter -> the Claude-style fields
+ * normalizeAgentDefinition reads. Returns null for files OASIS cannot run
+ * (Gemini remote/A2A agents, disabled OpenCode agents). Models are not carried over:
+ * Gemini model ids and OpenCode provider/model ids rarely name a model on the
+ * user's OASIS provider, so these agents inherit the session model.
+ */
+export function foreignAgentFrontMatter(flavor, raw = {}) {
+  const data = raw && typeof raw === 'object' ? raw : {};
+  const lower = (value) => String(value ?? '').trim().toLowerCase();
+  if (flavor === 'gemini') {
+    if (lower(data.kind) === 'remote') return null;
+    const listed = Array.isArray(data.tools) ? data.tools.map(String) : data.tools ? String(data.tools).split(',') : null;
+    let tools = null;
+    if (listed && !listed.some((tool) => tool.trim() === '*')) {
+      // MCP wildcards (mcp_*, mcp_server_*) have no OASIS equivalent and are dropped.
+      tools = [...new Set(listed.flatMap((tool) => GEMINI_TOOLS[lower(tool)] || (lower(tool).includes('*') ? [] : [tool.trim()])))];
+      if (!tools.length) tools = ['read_file'];
+    }
+    const maxTurns = Number.parseInt(data.max_turns ?? '', 10);
+    return { name: data.name, description: data.description, tools: tools || undefined, maxTurns: Number.isInteger(maxTurns) && maxTurns > 0 ? maxTurns : undefined, mcpServers: data.mcpServers };
+  }
+  if (flavor === 'opencode') {
+    if (data.disable === true || data.disabled === true || lower(data.disable) === 'true' || lower(data.disabled) === 'true') return null;
+    const denied = new Set();
+    const deny = (name) => (OPENCODE_TOOLS[lower(name)] || []).forEach((tool) => denied.add(tool));
+    // V1: tools: { write: false, bash: false }
+    if (data.tools && typeof data.tools === 'object' && !Array.isArray(data.tools)) for (const [tool, on] of Object.entries(data.tools)) if (on === false || lower(on) === 'false') deny(tool);
+    // V1: permission: { edit: deny, bash: deny | { pattern: action }, webfetch: deny }. Only a whole-tool deny
+    // is carried over; ask and per-command rules leave OASIS's own approvals in charge.
+    if (data.permission && typeof data.permission === 'object' && !Array.isArray(data.permission)) {
+      for (const [tool, value] of Object.entries(data.permission)) {
+        if (lower(value) === 'deny' || (value && typeof value === 'object' && Object.keys(value).length === 1 && lower(value['*']) === 'deny')) deny(tool);
+      }
+    }
+    // V2: permissions: [{ action, resource, effect }], last match wins; only resource "*" rules apply here.
+    if (Array.isArray(data.permissions)) {
+      const effect = {};
+      for (const rule of data.permissions) if (rule && typeof rule === 'object' && (rule.resource === undefined || rule.resource === '*')) effect[lower(rule.action)] = lower(rule.effect);
+      for (const [action, value] of Object.entries(effect)) if (value === 'deny') deny(action);
+    }
+    const steps = Number.parseInt(data.steps ?? data.maxSteps ?? '', 10);
+    const mode = lower(data.mode) || 'primary';
+    return {
+      description: data.description,
+      disallowedTools: denied.size ? [...denied] : undefined,
+      maxTurns: Number.isInteger(steps) && steps > 0 ? steps : undefined,
+      // Primary-only and hidden agents can run as the main agent (oasis --agent NAME) but are not offered to the task tool.
+      subagent: mode === 'primary' || data.hidden === true || lower(data.hidden) === 'true' ? false : undefined
+    };
+  }
+  return data;
+}
+
 function agentDirectories(root, env) {
   const home = env.HOME || env.USERPROFILE || os.homedir();
-  // Later folders override earlier ones: user before project, OASIS's own folders last.
+  const foreign = env.OASIS_OTHER_AGENT_RULES !== '0';
+  const opencodeHome = path.join(env.XDG_CONFIG_HOME || path.join(home, '.config'), 'opencode');
+  // Later folders override earlier ones: user before project, other agents' folders first, OASIS's own last.
   return [
+    ...(foreign ? [
+      { dir: path.join(home, '.gemini', 'agents'), source: 'user', flavor: 'gemini' },
+      { dir: path.join(opencodeHome, 'agent'), source: 'user', flavor: 'opencode' },
+      { dir: path.join(opencodeHome, 'agents'), source: 'user', flavor: 'opencode' }
+    ] : []),
     { dir: path.join(home, '.claude', 'agents'), source: 'user' },
     // Google Antigravity layouts: <name>.md or <name>/agent.md.
     { dir: path.join(home, '.gemini', 'config', 'agents'), source: 'user', nested: true },
     { dir: path.join(getConfigDirectory(env), 'agents'), source: 'user' },
+    ...(foreign ? [
+      { dir: path.join(root, '.gemini', 'agents'), source: 'project', flavor: 'gemini' },
+      { dir: path.join(root, '.opencode', 'agent'), source: 'project', flavor: 'opencode' },
+      { dir: path.join(root, '.opencode', 'agents'), source: 'project', flavor: 'opencode' }
+    ] : []),
     { dir: path.join(root, '.claude', 'agents'), source: 'project' },
     { dir: path.join(root, '.agents', 'agents'), source: 'project', nested: true },
     { dir: path.join(root, '.oasis', 'agents'), source: 'project' }
@@ -222,7 +305,7 @@ function agentDirectories(root, env) {
 export async function loadAgentDefinitions(root, options = {}) {
   const env = options.env || process.env;
   const agents = { ...BUILTIN_AGENTS };
-  for (const { dir, source, nested } of agentDirectories(root, env)) {
+  for (const { dir, source, nested, flavor } of agentDirectories(root, env)) {
     let entries;
     try { entries = await readdir(dir, { withFileTypes: true }); } catch { continue; }
     for (const entry of entries) {
@@ -234,10 +317,14 @@ export async function loadAgentDefinitions(root, options = {}) {
       let text;
       try { const info = await stat(file); if (!info.isFile() || info.size > MAX_AGENT_FILE) continue; text = await readFile(file, 'utf8'); } catch { continue; }
       if (Buffer.byteLength(text) > MAX_AGENT_FILE) continue;
-      const { data, body } = parseFrontMatter(text);
-      const name = String(data.name || fallback).trim().toLowerCase();
+      const parsed = parseFrontMatter(text);
+      const data = flavor ? foreignAgentFrontMatter(flavor, parsed.data) : parsed.data;
+      if (!data) continue;
+      // OpenCode names agents by file name only.
+      const name = String((flavor !== 'opencode' && data.name) || fallback).trim().toLowerCase();
       if (!/^[a-z0-9][a-z0-9_-]{0,63}$/.test(name)) continue;
-      agents[name] = normalizeAgentDefinition(data, body, { name, source: source + ':' + file });
+      agents[name] = normalizeAgentDefinition(data, parsed.body, { name, source: source + ':' + file });
+      if (flavor) agents[name].origin = flavor === 'gemini' ? 'Gemini CLI' : 'OpenCode';
     }
   }
   // Agents from enabled Claude Code plugins, named plugin-name:agent.
