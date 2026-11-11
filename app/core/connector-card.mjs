@@ -244,9 +244,17 @@ export function createConnectorCard(data, actions, options = {}) {
     } else if (status === 'connected') {
       const ok = el('div', 'cc-result ok');
       ok.appendChild(el('span', 'cc-check', '✓'));
-      const count = (view.tools || []).length;
+      const names = view.tools || [];
+      const count = Math.max(Number(view.toolCount) || 0, names.length);
       ok.appendChild(el('span', '', 'Connected' + (view.account ? ' as ' + view.account : '') + (count ? ' · ' + count + ' tool' + (count === 1 ? '' : 's') + ' ready' : '')));
       stage.appendChild(ok);
+      // What the agent can now do, one click away.
+      if (names.length) {
+        const list = el('details', 'cc-tools');
+        list.appendChild(el('summary', '', 'Show tools'));
+        list.appendChild(el('p', 'cc-tool-names', names.join(', ') + (count > names.length ? ' and ' + (count - names.length) + ' more' : '')));
+        stage.appendChild(list);
+      }
     } else if (status === 'failed') {
       stage.appendChild(el('div', 'cc-result bad', view.message || 'Could not connect.'));
     } else if (status === 'skipped') {

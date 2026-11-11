@@ -92,3 +92,11 @@ test('connect intent: a pasted MCP address, and several apps at once', async () 
   assert.deepEqual(splitServices('GitHub & Linear'), ['GitHub', 'Linear']);
   assert.deepEqual(splitServices('https://mcp.example.com/mcp'), ['https://mcp.example.com/mcp']);
 });
+
+test('a connected card can list the tools it added', () => {
+  const view = { ...base, status: 'connected', tools: ['list_issues', 'create_issue'], toolCount: 52 };
+  const ui = createConnectorCard(view, { act: async () => view, status: async () => view });
+  const root = ui.element || ui;
+  assert.match(root.textContent, /52 tools ready/);
+  assert.match(root.querySelector('.cc-tool-names').textContent, /list_issues, create_issue and 50 more/);
+});

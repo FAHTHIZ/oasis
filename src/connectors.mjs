@@ -333,7 +333,7 @@ export function createConnectFlow(connector, { root = process.cwd(), env = proce
         const client = await reconnect(session, server, { env, host: session.mcpHost });
         tools = (client && client.tools || []).map((tool) => tool.name).filter(Boolean);
       }
-      finish('connected', { tools, message: connector.name + ' is connected' + (state.account ? ' as ' + state.account : '') + (session ? '. ' + tools.length + ' tool(s) are ready in this chat.' : '. Its tools are ready from your next message.') });
+      finish('connected', { tools, toolCount: tools.length, message: connector.name + ' is connected' + (state.account ? ' as ' + state.account : '') + (session ? '. ' + tools.length + ' tool(s) are ready in this chat.' : '. Its tools are ready from your next message.') });
     } catch (error) {
       finish('failed', { message: String(error && error.message || error).slice(0, 600) });
     }
