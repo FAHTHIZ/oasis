@@ -46,6 +46,7 @@ Status: **done** (tested and pushed) · **doing** · **open** · **blocked**
 | Codex App Server WebSocket transport (`--listen ws://`, /readyz, /healthz, Origin 403, capability-token auth) | done | `test/codex-app-server-ws.test.mjs` |
 | Codex App Server `fs/*` and `command/exec` (+ write, resize, terminate, outputDelta) | done | `test/codex-app-server-host.test.mjs` (14 tests: root confinement, symlink escape, read-only, watch, streaming, cap, PTY, sandbox launcher) |
 | Codex App Server: detached review, signed bearer tokens, Unix socket | open | |
+| ACP stable session lifecycle (list, resume, close, delete, config options, usage and title updates) | done | `test/acp.test.mjs` (lifecycle test against a real `oasis acp` process) |
 | Plain daily/weekly schedule phrases (DSH `daily`/`weekly` selectors) | done | `test/routines.test.mjs` (plain calendar phrases) |
 | Routines that continue an existing conversation (Codex thread automations) | done | `test/routines.test.mjs` (chained fork e2e). Runs fork with `--resume ID --fork-session --session-id NEW`, so the original session file is never written. |
 
