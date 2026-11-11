@@ -99,6 +99,7 @@ Gaps found by checking the [hooks reference](https://code.claude.com/docs/en/hoo
 | --- | --- | --- |
 | Gemini CLI `.gemini/commands/**/*.toml` as native slash commands (`{{args}}`, `!{...}` with escaping, `@{...}` files and folders, namespaces) | done | `test/foreign-commands.test.mjs` (Gemini test). Not done: an interactive confirmation for each `!{...}` (OASIS uses workspace trust and permission rules instead), multimodal `@{image}`, `.gitignore` filtering inside `@{folder}` (agent-ignore files and sensitive paths are filtered), extension commands outside installed extensions |
 | Gemini CLI `.gemini/agents` and OpenCode `.opencode/agents` agent files as native agents | done | `test/foreign-agents.test.mjs` (2 tests). Not done: OpenCode agents defined inline in `opencode.json` (`agent`/`agents` keys; `oasis import opencode` still covers `.opencode` files), per-pattern permission rules, nested OpenCode agent IDs (`team/reviewer`), `temperature`, model ids, Gemini remote A2A agents |
+| Roo Code / Kilo Code custom modes, mode rules, Kilo agent folders, Roo global rules, `.roorules`, `.kilocode/rules`, `.roo/commands` | done | `test/roo-kilo.test.mjs` (2 tests). Not done: enforcing `fileRegex` edit limits, the `mcp`/`browser` groups, global `custom_modes.yaml` in VS Code storage, a command's `mode:` switch, Kilo `kilo.jsonc` `agent` / `instructions` keys. Cline memory bank is a prompt convention (files in `memory-bank/` read by custom instructions), so it needs no loader |
 
 ## 3. Competitive evaluation
 

@@ -21,7 +21,9 @@
 // Locations (later wins): ~/.claude/agents, ~/.config/oasis/agents, .claude/agents, .oasis/agents
 // Other agents' definition folders are read below those (OASIS_OTHER_AGENT_RULES=0 skips them):
 // Gemini CLI ~/.gemini/agents and .gemini/agents, OpenCode ~/.config/opencode/agents and
-// .opencode/agents (also the older singular agent/), translated by foreignAgentFrontMatter.
+// .opencode/agents (also the older singular agent/), Kilo Code .kilo/agents, .kilo/agent,
+// .kilocode/agents and ~/.config/kilo/agent (OpenCode's format), translated by
+// foreignAgentFrontMatter; Roo Code .roomodes and Kilo .kilocodemodes custom modes (loadLegacyModes).
 import { readdir, readFile, stat } from 'node:fs/promises';
 import { parseFrontMatter } from './frontmatter.mjs';
 
@@ -276,6 +278,106 @@ export function foreignAgentFrontMatter(flavor, raw = {}) {
   return data;
 }
 
+// Roo Code `.roomodes` and Kilo Code's legacy `.kilocodemodes` (YAML or JSON, `customModes:`),
+// from docs.roocode.com/features/custom-modes and /custom-instructions. Each mode becomes an
+// agent: whenToUse (or description, or the first sentence of roleDefinition) describes it,
+// and its prompt is roleDefinition, customInstructions and the mode's rule files
+// (.roo/rules-{slug}/ in the workspace and home, else .roorules-{slug}, else .clinerules-{slug};
+// .kilocode/rules-{slug}/ for Kilo). Tool groups left out of `groups` are removed
+// (read, edit, command); an edit `fileRegex` is passed on as an instruction only, and the mcp
+// and browser groups are not enforced. Global custom_modes.yaml in VS Code storage is not read.
+const ROO_GROUP_TOOLS = {
+  read: ['read_file', 'list_files', 'glob_files', 'search_files', 'grep', 'ast_grep', 'repo_map', 'lsp', 'semantic_search'],
+  edit: ['write_file', 'edit_file', 'multi_edit', 'apply_patch', 'notebook_edit'],
+  command: CLAUDE_TO_OASIS.bash
+};
+const MAX_MODE_RULES = 48 * 1024;
+
+async function readRuleTree(dir, budget) {
+  const files = [];
+  const walk = async (current, depth) => {
+    let entries = [];
+    try { entries = await readdir(current, { withFileTypes: true }); } catch { return; }
+    for (const entry of entries) {
+      if (entry.name.startsWith('.') || /\.(?:swp|tmp)$|~$/.test(entry.name)) continue;
+      const full = path.join(current, entry.name);
+      if (entry.isDirectory() && depth < 4) await walk(full, depth + 1);
+      else if (entry.isFile()) files.push(full);
+    }
+  };
+  await walk(dir, 0);
+  // Roo sorts by file name only, case-insensitively.
+  files.sort((a, b) => path.basename(a).toLowerCase().localeCompare(path.basename(b).toLowerCase()));
+  const parts = [];
+  let used = 0;
+  for (const file of files.slice(0, 50)) {
+    let text;
+    try { text = await readFile(file, 'utf8'); } catch { continue; }
+    if (!text.trim() || text.includes('\0') || used + text.length > budget) continue;
+    used += text.length;
+    parts.push('# Rules from ' + file + ':\n' + text.trim());
+  }
+  return parts;
+}
+
+async function readRuleFile(file) {
+  try {
+    const info = await stat(file);
+    if (!info.isFile() || info.size > MAX_MODE_RULES) return '';
+    const text = await readFile(file, 'utf8');
+    return text.trim() && !text.includes('\0') ? text.trim() : '';
+  } catch { return ''; }
+}
+
+async function loadLegacyModes(root, env) {
+  const home = env.HOME || env.USERPROFILE || os.homedir();
+  const out = [];
+  const seen = new Set();
+  // Roo's file wins over Kilo's legacy file for the same slug.
+  for (const { file, tool } of [{ file: '.roomodes', tool: 'Roo Code' }, { file: '.kilocodemodes', tool: 'Kilo Code' }]) {
+    let text;
+    try { const info = await stat(path.join(root, file)); if (!info.isFile() || info.size > MAX_AGENT_FILE * 4) continue; text = await readFile(path.join(root, file), 'utf8'); } catch { continue; }
+    let parsed;
+    try { parsed = (await import('yaml')).parse(text, { schema: 'core', maxAliasCount: 50 }); } catch { continue; }
+    const modes = parsed && Array.isArray(parsed.customModes) ? parsed.customModes : [];
+    for (const mode of modes.slice(0, 50)) {
+      if (!mode || typeof mode !== 'object' || !/^[a-zA-Z0-9-]{1,64}$/.test(String(mode.slug || ''))) continue;
+      const slug = String(mode.slug);
+      const name = slug.toLowerCase();
+      if (seen.has(name)) continue;
+      seen.add(name);
+      const role = typeof mode.roleDefinition === 'string' ? mode.roleDefinition.trim() : '';
+      const groups = Array.isArray(mode.groups) ? mode.groups : [];
+      const granted = new Set();
+      const notes = [];
+      for (const group of groups) {
+        const [id, options] = Array.isArray(group) ? group : [group];
+        granted.add(String(id).toLowerCase());
+        if (String(id).toLowerCase() === 'edit' && options && typeof options.fileRegex === 'string') {
+          try { new RegExp(options.fileRegex); notes.push('Edit only files whose workspace-relative path matches the regular expression `' + options.fileRegex + '`' + (options.description ? ' (' + String(options.description) + ')' : '') + '.'); } catch { /* invalid patterns are ignored, as Roo rejects them */ }
+        }
+      }
+      const disallowed = Object.entries(ROO_GROUP_TOOLS).filter(([group]) => !granted.has(group)).flatMap(([, tools]) => tools);
+      const ruleDirs = tool === 'Roo Code' ? [path.join(home, '.roo', 'rules-' + slug), path.join(root, '.roo', 'rules-' + slug)] : [path.join(root, '.kilocode', 'rules-' + slug)];
+      let rules = [];
+      for (const dir of ruleDirs) rules.push(...await readRuleTree(dir, MAX_MODE_RULES));
+      if (!rules.length) {
+        for (const fallback of tool === 'Roo Code' ? ['.roorules-' + slug, '.clinerules-' + slug] : ['.kilocoderules-' + slug]) {
+          const content = await readRuleFile(path.join(root, fallback));
+          if (content) { rules = ['# Rules from ' + fallback + ':\n' + content]; break; }
+        }
+      }
+      const body = [role, typeof mode.customInstructions === 'string' ? mode.customInstructions.trim() : '', ...notes, ...rules].filter(Boolean).join('\n\n');
+      const description = String(mode.whenToUse || mode.description || role.split(/(?<=[.!?])\s/)[0] || mode.name || slug).trim();
+      const agent = normalizeAgentDefinition({ description, disallowedTools: disallowed.length ? disallowed : undefined }, body, { name, source: 'project:' + path.join(root, file) });
+      agent.origin = tool + ' mode';
+      if (mode.name) agent.displayName = String(mode.name).slice(0, 80);
+      out.push(agent);
+    }
+  }
+  return out;
+}
+
 function agentDirectories(root, env) {
   const home = env.HOME || env.USERPROFILE || os.homedir();
   const foreign = env.OASIS_OTHER_AGENT_RULES !== '0';
@@ -285,7 +387,10 @@ function agentDirectories(root, env) {
     ...(foreign ? [
       { dir: path.join(home, '.gemini', 'agents'), source: 'user', flavor: 'gemini' },
       { dir: path.join(opencodeHome, 'agent'), source: 'user', flavor: 'opencode' },
-      { dir: path.join(opencodeHome, 'agents'), source: 'user', flavor: 'opencode' }
+      { dir: path.join(opencodeHome, 'agents'), source: 'user', flavor: 'opencode' },
+      // Kilo Code's current agents use OpenCode's format.
+      { dir: path.join(env.XDG_CONFIG_HOME || path.join(home, '.config'), 'kilo', 'agent'), source: 'user', flavor: 'opencode', label: 'Kilo Code' },
+      { dir: path.join(env.XDG_CONFIG_HOME || path.join(home, '.config'), 'kilo', 'agents'), source: 'user', flavor: 'opencode', label: 'Kilo Code' }
     ] : []),
     { dir: path.join(home, '.claude', 'agents'), source: 'user' },
     // Google Antigravity layouts: <name>.md or <name>/agent.md.
@@ -294,7 +399,10 @@ function agentDirectories(root, env) {
     ...(foreign ? [
       { dir: path.join(root, '.gemini', 'agents'), source: 'project', flavor: 'gemini' },
       { dir: path.join(root, '.opencode', 'agent'), source: 'project', flavor: 'opencode' },
-      { dir: path.join(root, '.opencode', 'agents'), source: 'project', flavor: 'opencode' }
+      { dir: path.join(root, '.opencode', 'agents'), source: 'project', flavor: 'opencode' },
+      { dir: path.join(root, '.kilocode', 'agents'), source: 'project', flavor: 'opencode', label: 'Kilo Code' },
+      { dir: path.join(root, '.kilo', 'agent'), source: 'project', flavor: 'opencode', label: 'Kilo Code' },
+      { dir: path.join(root, '.kilo', 'agents'), source: 'project', flavor: 'opencode', label: 'Kilo Code' }
     ] : []),
     { dir: path.join(root, '.claude', 'agents'), source: 'project' },
     { dir: path.join(root, '.agents', 'agents'), source: 'project', nested: true },
@@ -305,7 +413,9 @@ function agentDirectories(root, env) {
 export async function loadAgentDefinitions(root, options = {}) {
   const env = options.env || process.env;
   const agents = { ...BUILTIN_AGENTS };
-  for (const { dir, source, nested, flavor } of agentDirectories(root, env)) {
+  // Roo Code / Kilo Code custom modes come first, so any agent file of the same name wins.
+  if (env.OASIS_OTHER_AGENT_RULES !== '0') for (const mode of await loadLegacyModes(root, env)) agents[mode.name] = mode;
+  for (const { dir, source, nested, flavor, label } of agentDirectories(root, env)) {
     let entries;
     try { entries = await readdir(dir, { withFileTypes: true }); } catch { continue; }
     for (const entry of entries) {
@@ -324,7 +434,7 @@ export async function loadAgentDefinitions(root, options = {}) {
       const name = String((flavor !== 'opencode' && data.name) || fallback).trim().toLowerCase();
       if (!/^[a-z0-9][a-z0-9_-]{0,63}$/.test(name)) continue;
       agents[name] = normalizeAgentDefinition(data, parsed.body, { name, source: source + ':' + file });
-      if (flavor) agents[name].origin = flavor === 'gemini' ? 'Gemini CLI' : 'OpenCode';
+      if (flavor) agents[name].origin = label || (flavor === 'gemini' ? 'Gemini CLI' : 'OpenCode');
     }
   }
   // Agents from enabled Claude Code plugins, named plugin-name:agent.

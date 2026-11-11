@@ -11,6 +11,9 @@ weaknesses. Newest first. Detailed user-facing notes go in the CHANGELOG.
 
 : Gemini CLI, OpenCode, Goose, Aider, Roo/Kilo)
 
+### Roo Code and Kilo Code modes, rules and commands
+- From the Roo docs ([custom modes](https://docs.roocode.com/features/custom-modes), [custom instructions](https://docs.roocode.com/features/custom-instructions), [slash commands](https://docs.roocode.com/features/slash-commands)) and Kilo's ([custom modes](https://kilo.ai/docs/customize/custom-modes), [custom rules](https://kilo.ai/docs/customize/custom-rules)). Kilo has moved to OpenCode-style agent files and migrates `.kilocodemodes` on startup, so both formats are read. Tool groups are enforced by removing tools; `fileRegex` is an instruction only, because OASIS has no per-agent path limit for edits. Tests: test/roo-kilo.test.mjs (2); rule, command, agent and memory tests 48 pass, 0 fail.
+
 ### Gemini CLI and OpenCode agent files
 - Gemini CLI ([subagents doc](https://raw.githubusercontent.com/google-gemini/gemini-cli/main/docs/core/subagents.md)) and OpenCode ([agents doc](https://opencode.ai/docs/agents/)) agent Markdown files now load as OASIS agents. `foreignAgentFrontMatter` in src/subagents.mjs translates tool names and deny rules into `tools`/`disallowedTools`. OpenCode's default `primary` mode stays out of the task tool. Tests: test/foreign-agents.test.mjs (2); subagent and import tests 28 pass, 0 fail.
 

@@ -24,7 +24,8 @@
 // ~/.cursor/commands, Devin Desktop / Windsurf .devin/workflows and
 // .windsurf/workflows (workspace and parents up to the git root) and
 // ~/.codeium/windsurf/global_workflows, Antigravity .agents/workflows,
-// .agent/workflows and ~/.gemini/config/workflows, Cline .clinerules/workflows.
+// .agent/workflows and ~/.gemini/config/workflows, Cline .clinerules/workflows,
+// Roo Code .roo/commands and ~/.roo/commands (their `mode:` is not applied).
 // Their files are plain prompts: inline shell and allowed-tools are not honoured.
 // Gemini CLI .gemini/commands/**/*.toml and ~/.gemini/commands are read with Gemini's
 // own {{args}}, !{...} and @{...} syntax (see renderGeminiPrompt).
@@ -76,10 +77,12 @@ export async function foreignCommandDirectories(root, env = process.env, home = 
     { dir: path.join(home, '.gemini', 'config', 'workflows'), scope: 'user', foreign: 'Antigravity' },
     { dir: path.join(home, '.codeium', 'windsurf', 'global_workflows'), scope: 'user', foreign: 'Windsurf' },
     { dir: path.join(home, '.cursor', 'commands'), scope: 'user', foreign: 'Cursor' },
+    { dir: path.join(home, '.roo', 'commands'), scope: 'user', foreign: 'Roo Code' },
     { dir: path.join(workspace, '.clinerules', 'workflows'), scope: 'project', foreign: 'Cline' },
     { dir: path.join(workspace, '.agent', 'workflows'), scope: 'project', foreign: 'Antigravity' },
     { dir: path.join(workspace, '.agents', 'workflows'), scope: 'project', foreign: 'Antigravity' },
     { dir: path.join(workspace, '.cursor', 'commands'), scope: 'project', foreign: 'Cursor' },
+    { dir: path.join(workspace, '.roo', 'commands'), scope: 'project', foreign: 'Roo Code' },
     { dir: path.join(workspace, '.gemini', 'commands'), scope: 'project', foreign: 'Gemini CLI', gemini: true }
   ];
   // Devin Desktop prefers .devin/workflows over the legacy .windsurf/workflows; nearer folders win.
@@ -501,7 +504,7 @@ function foreignWorkflowPrompt(command, commands) {
     }
   };
   visit(command.body, 1);
-  const header = command.foreign === 'Cursor' ? '' : 'Follow the ' + command.foreign + ' workflow /' + command.name + ' step by step.';
+  const header = command.foreign === 'Cursor' || command.foreign === 'Roo Code' ? '' : 'Follow the ' + command.foreign + ' workflow /' + command.name + ' step by step.';
   return [header, command.body, ...appended].filter(Boolean).join('\n\n');
 }
 
