@@ -58,6 +58,10 @@ weaknesses. Newest first. Detailed user-facing notes go in the CHANGELOG.
 
 ## 2026-11-11 (Claude Code parity cycle)
 
+### fileSuggestion
+
+Terminal `@` completion can come from a Claude Code `fileSuggestion` command, using the documented stdin/stdout contract and the same gates as the status line. Tests: `test/file-suggestion-setting.test.mjs` (3).
+
 ### spinnerVerbs
 
 The terminal wait line takes its generic word from Claude Code's `spinnerVerbs` (append or replace). Status words that carry information are unchanged. Tests: `test/spinner-verbs-setting.test.mjs` (4).
