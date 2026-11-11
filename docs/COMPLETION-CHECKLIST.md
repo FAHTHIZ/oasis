@@ -96,6 +96,7 @@ Gaps found by checking the [hooks reference](https://code.claude.com/docs/en/hoo
 | `sandbox.excludedCommands`, `sandbox.filesystem.allowRead` | done | `test/sandbox-excluded-allowread.test.mjs` (5 tests, real bubblewrap); OS backend only, not containers or SSH |
 | Agent SDK `Query` controls (`interrupt`, `setModel`, `setPermissionMode`, `setMaxThinkingTokens`, `supportedModels`, `mcpServerStatus`, `close`) | done | `test/sdk-controls.test.mjs` (5 tests); no streaming-input mode, `rewindFiles`, `applyFlagSettings` or plugin/skill reload controls |
 | PostModelSwitch `source: "auto"` for fallbacks | done | `test/fallback-chain.test.mjs` (1 new test); `source: "resume"` does not apply because resuming keeps the current model instead of restoring the saved one |
+| ```` ```! ```` fenced shell blocks in commands/skills | done | `test/command-fenced-shell.test.mjs` (3 tests); the `shell: powershell` frontmatter key is not honoured |
 | `sandbox.credentials`, unix-socket/proxy keys, `allowManagedReadPathsOnly`, admin-required repository locks | open | `allowUnsandboxedCommands` needs nothing: OASIS has no unsandboxed retry |
 
 ## 2e. Terminal-agent interoperability (Gemini CLI, OpenCode, Goose, Aider, Roo/Kilo/Cline)

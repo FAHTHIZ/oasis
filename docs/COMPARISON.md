@@ -45,7 +45,7 @@ Claude Code is the reference point for agent behaviour, and OASIS reads its conf
 | Plan files | `plansDirectory` (default `~/.claude/plans`) | Honoured when set; nothing is saved when unset |
 | Worktree layout | `worktree.symlinkDirectories`, `sparsePaths`, `baseRef` (default `fresh`) | Honoured; default base is `head` |
 | SDK query controls | `Query.setModel()`, `setPermissionMode()`, `interrupt()`, `setMaxThinkingTokens()` | Same method names on the `query()` generator, plus `supportedModels()`, `mcpServerStatus()` and `close()`; single-prompt only, no streaming input |
-| Skill visibility | `skillOverrides`, `disableBundledSkills`, `disableSkillShellExecution` | Honoured; no ```` ```! ```` blocks |
+| Skill visibility | `skillOverrides`, `disableBundledSkills`, `disableSkillShellExecution` | Honoured, for both `` !`cmd` `` and ```` ```! ```` blocks |
 | MCP policy | `allowedMcpServers`, `deniedMcpServers`, `.mcp.json` approval keys | Honoured; trusting a workspace approves all its `.mcp.json` servers (no per-server prompt) |
 | Permission modes | `default`, `acceptEdits`, `plan`, `bypassPermissions`, `dontAsk` | The same modes, plus `permissions.denyInsteadOfPrompting` |
 | MCP Tasks | Long tool calls run as background tasks (2.1.319) | The same, with `CLAUDE_CODE_DISABLE_MCP_TASK_BACKGROUND` honoured; running tasks are listed in `/tasks` |
