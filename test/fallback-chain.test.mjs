@@ -130,3 +130,27 @@ test('a stream that keeps dropping after its restarts moves down the chain, a ma
   const malformed = Object.assign(new Error('The model stream was interrupted: the model produced a malformed tool call (MALFORMED_FUNCTION_CALL).'), { code: 'OASIS_STREAM_INTERRUPTED', malformedCall: true });
   assert.equal(fallbackReason(malformed), '');
 });
+
+test('automatic fallback and the return after the cooldown run PostModelSwitch with source "auto"', async (t) => {
+  const root = await tmp();
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const main = await mockProvider((payload) => payload.model === 'main' ? { status: 402, message: 'Insufficient credits' } : { text: 'backup answered' });
+  t.after(() => new Promise((resolve) => main.server.close(resolve)));
+  const log = path.join(root, 'switches.jsonl');
+  const hook = JSON.stringify(process.execPath) + ' -e ' + JSON.stringify('let s="";process.stdin.on("data",(c)=>s+=c);process.stdin.on("end",()=>require("fs").appendFileSync(' + JSON.stringify(log) + ',s.trim()+"\\n"))');
+  const hooks = { PostModelSwitch: [{ hooks: [{ type: 'command', command: hook }] }] };
+  const env = { ...process.env, OASIS_FALLBACK_COOLDOWN_MINUTES: '0' };
+  const session = await createSession({ root, config: { protocol: 'openai-compatible', baseURL: main.url, model: 'main', apiKey: 'k', maxSteps: 2 }, settings: { ...settings, hooks }, fallbackModel: 'backup', env });
+  t.after(() => closeSession(session));
+  const result = await runAgentTurn(session, 'hi', { env });
+  assert.match(JSON.stringify(result), /backup answered/);
+  await session.pendingModelSwitch;
+  assert.equal(restorePrimaryModel(session, env), true);
+  await session.pendingModelSwitch;
+  const { readFile } = await import('node:fs/promises');
+  const inputs = (await readFile(log, 'utf8')).trim().split('\n').map((line) => JSON.parse(line));
+  assert.deepEqual(inputs.map((input) => [input.hook_event_name, input.source, input.from_model, input.to_model, input.requested_model]), [
+    ['PostModelSwitch', 'auto', 'main', 'backup', null],
+    ['PostModelSwitch', 'auto', 'backup', 'main', null]
+  ]);
+});

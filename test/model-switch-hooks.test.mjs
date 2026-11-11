@@ -120,7 +120,7 @@ test('PostModelSwitch output reaches the model with the next request; only the n
     PostModelSwitch: [
       group({ type: 'command', command: echo('Opus guidance: delegate implementation to subagents.') }, '.*opus.*'),
       group({ type: 'command', command: echo('Sonnet guidance: keep it short.') }, 'claude-sonnet-5'),
-      group({ type: 'command', command: recordingHook(seen) })
+      group({ type: 'command', command: nodeHook('let s="";process.stdin.on("data",(c)=>s+=c);process.stdin.on("end",()=>require("fs").appendFileSync(' + JSON.stringify(seen) + ',s.trim()+"\\n"))') })
     ]
   };
   const session = await createSession({ root, config, settings: settingsWith(hooks) });
@@ -128,9 +128,11 @@ test('PostModelSwitch output reaches the model with the next request; only the n
   // The model id itself must still reach the scripted server, so the switch keeps
   // the fixture endpoint; only the name changes.
   await runBuiltinCommand('model', 'claude-opus-5', { root, session, env: {}, sessionOptions: {} });
+  const firstSwitch = session.pendingModelSwitch;
   await runBuiltinCommand('model', 'claude-sonnet-5', { root, session, env: {}, sessionOptions: {} });
-  await session.pendingModelSwitch;
-  const input = JSON.parse(await readFile(seen, 'utf8'));
+  // Both switches append to the same file and may finish in either order.
+  await Promise.all([firstSwitch, session.pendingModelSwitch]);
+  const input = (await readFile(seen, 'utf8')).trim().split('\n').map((line) => JSON.parse(line)).find((entry) => entry.to_model === 'claude-sonnet-5');
   assert.equal(input.hook_event_name, 'PostModelSwitch');
   assert.equal(input.from_model, 'claude-opus-5');
   assert.equal(input.to_model, 'claude-sonnet-5');
