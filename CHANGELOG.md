@@ -68,6 +68,7 @@ User-facing change history grouped by package version. A version heading does no
 - The SDK `query()` object now has Agent SDK style controls: `interrupt()`, `close()`, `setModel(model?)` (`undefined` or `"default"` restores the starting model; `availableModels`/`deniedModels` apply and PreModelSwitch/PostModelSwitch hooks run with source `"sdk"`), `setPermissionMode(mode)` (refuses `bypassPermissions` when `disableBypassPermissionsMode` is set), `setMaxThinkingTokens(n | null)`, `supportedModels()` and `mcpServerStatus()`.
 - An automatic `fallbackModel` switch, and the return to the main model after the cooldown, run PostModelSwitch hooks with `source: "auto"` and `requested_model: null`, as Claude Code does.
 - Command and skill files run ```` ```! ```` fenced blocks as one multi-line script, with the same trust, permission-rule and `disableSkillShellExecution` checks as inline `` !`cmd` ``. Inline `` !`cmd` `` now runs only at the start of a line or after whitespace, so `` KEY=!`cmd` `` stays literal text, as in Claude Code.
+- `spinnerVerbs` (`{ "mode": "append" | "replace", "verbs": [...] }`, any settings file) supplies the words for the terminal's live "Thinking…" line. One word is picked per wait. Informative labels such as "Rate limited" or "Local model is reading the prompt" still win, and an empty `replace` list keeps the built-in words.
 
 ### Crash-safe task progress
 

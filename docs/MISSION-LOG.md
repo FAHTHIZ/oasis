@@ -58,6 +58,10 @@ weaknesses. Newest first. Detailed user-facing notes go in the CHANGELOG.
 
 ## 2026-11-11 (Claude Code parity cycle)
 
+### spinnerVerbs
+
+The terminal wait line takes its generic word from Claude Code's `spinnerVerbs` (append or replace). Status words that carry information are unchanged. Tests: `test/spinner-verbs-setting.test.mjs` (4).
+
 ### Fenced shell blocks in commands
 
 Claude Code's ```` ```! ```` blocks now run in command and skill files, using the same gates as inline `` !`cmd` ``. The inline form needs whitespace or a line start in front of it, as Claude Code documents. Tests: `test/command-fenced-shell.test.mjs` (3).
