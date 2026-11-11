@@ -3525,7 +3525,7 @@ async function executeSessionToolWithKernel(session, name, args, context, option
     capabilities: sessionToolCapabilities(name),
     risk: name === 'terminal_input' || name === 'terminal_interrupt' || name === 'terminal_stop' || name === 'exit_worktree'
       ? 'high'
-      : name === 'enter_worktree' || name.startsWith('task_') || name === 'cron_create' || name === 'cron_delete'
+      : name === 'enter_worktree' || name.startsWith('task_') || name === 'cron_create' || name === 'cron_delete' || name === 'routine_manage'
         ? 'medium'
         : 'low',
     requiresApproval: false,

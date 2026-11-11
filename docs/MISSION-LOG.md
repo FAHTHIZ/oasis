@@ -5,6 +5,10 @@ weaknesses. Newest first. Detailed user-facing notes go in the CHANGELOG.
 
 ## 2026-11-11 (frontier-platform cycle: competitor gaps)
 
+### routine_manage tool
+- Hermes exposes one `cronjob_manage` tool so the agent can schedule from natural language. OASIS now has `routine_manage` (deferred under "Background work"), a thin layer over `src/routines.mjs`. Every action that authorizes future unattended runs (create/edit/resume/run/remove) asks with `always=true`, so `--yes` does not skip it. Subagents get no approver and are refused. Pause/cancel/list/show need no approval. Create defaults the workdir to the session root. Risk medium, write capability, so plan mode denies it.
+- Tests: `test/routine-manage-tool.test.mjs` (5).
+
 ### Competitor research (source-level)
 - Hermes Agent cron ([docs](https://hermes-agent.nousresearch.com/docs/user-guide/features/cron)): durable jobs run by the gateway in fresh sessions, a single `cronjob_manage` tool, pause/resume/run/cancel/remove, catch-up windows (half the period, 2 min to 2 h), `no_agent` script jobs, `[SILENT]`, delivery to chat platforms, pre-dispatch config validation (`blocked_config`, no tokens spent), and no cron management inside cron runs.
 - OASIS gap found: `/schedule` and `cron_create` live inside one session ("runs while this session stays open"). Nothing ran unattended.
