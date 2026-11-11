@@ -146,8 +146,15 @@ export async function connectorStatus(connector, { root = process.cwd(), env = p
   const servers = await configuredHttpServers(root, env);
   const configured = servers.find((item) => sameUrl(item.url, connector.url)) || servers.find((item) => item.name === connector.id) || null;
   let signedIn = connector.auth === 'none' || Boolean(configured && hasAuthHeader(configured));
+  let expired = false;
   if (!signedIn) {
-    try { const entry = await getStoredToken((configured || connector).url, env); signedIn = Boolean(entry && (entry.accessToken || (entry.tokens && entry.tokens.access_token))); } catch {}
+    try {
+      const entry = await getStoredToken((configured || connector).url, env);
+      signedIn = Boolean(entry && (entry.accessToken || (entry.tokens && entry.tokens.access_token)));
+      // Past its expiry with nothing to refresh it: the next call will ask for sign-in.
+      const ends = entry && entry.expiresAt ? Date.parse(entry.expiresAt) : NaN;
+      expired = signedIn && Number.isFinite(ends) && ends < Date.now() && !(entry.refreshToken || (entry.tokens && entry.tokens.refresh_token));
+    } catch {}
   }
   let live = null;
   if (session && session.mcpClients instanceof Map) {
@@ -157,7 +164,7 @@ export async function connectorStatus(connector, { root = process.cwd(), env = p
     }
   }
   const tools = live && Array.isArray(live.tools) ? live.tools.map((tool) => tool.name).filter(Boolean) : [];
-  return { configured, signedIn, live: live && tools.length ? live : null, tools };
+  return { configured, signedIn, expired, live: live && tools.length ? live : null, tools };
 }
 
 /* ---------- GitHub sign-in through the GitHub CLI ---------- */
@@ -323,7 +330,7 @@ export function createConnectFlow(connector, { root = process.cwd(), env = proce
       update({ serverName: server.name });
       const status = await connectorStatus(connector, { root, env, session });
       // forceSignIn: a scope step-up, so the existing sign-in is not enough.
-      if (!status.signedIn || (forceSignIn && connector.auth === 'oauth')) {
+      if (!status.signedIn || status.expired || (forceSignIn && connector.auth === 'oauth')) {
         if (connector.auth === 'github') await signInGitHub(server);
         else if (connector.auth !== 'none') await signInOAuth(server);
       }
@@ -385,7 +392,7 @@ export async function runConnectService(session, args, options = {}) {
     return { connected: true, alreadyConnected: true, service: connector.name, server: status.live.config && status.live.config.name || connector.id, tools: status.tools.slice(0, 60), message: connector.name + ' is already connected in this chat. Use its tools (' + status.tools.length + ').' };
   }
   // Set up and signed in earlier, just not running in this chat: attach it quietly.
-  if (status.configured && status.signedIn && session && !options.reauth) {
+  if (status.configured && status.signedIn && !status.expired && session && !options.reauth) {
     try {
       const { reconnectMcpServer } = await import('./mcp.mjs');
       const client = await reconnectMcpServer(session, status.configured, { env, host: session.mcpHost });
@@ -408,7 +415,7 @@ export async function runConnectService(session, args, options = {}) {
 export async function listConnectors({ root = process.cwd(), env = process.env, session = null } = {}) {
   return await Promise.all(CONNECTOR_CATALOG.map(async (item) => {
     const status = await connectorStatus(item, { root, env, session }).catch(() => ({ configured: null, signedIn: false, live: null, tools: [] }));
-    return { id: item.id, name: item.name, aliases: item.aliases, description: item.description, auth: item.auth, configured: Boolean(status.configured), signedIn: status.signedIn, connected: Boolean(status.configured) && status.signedIn, live: Boolean(status.live), tools: status.tools.length };
+    return { id: item.id, name: item.name, aliases: item.aliases, description: item.description, auth: item.auth, configured: Boolean(status.configured), signedIn: status.signedIn, connected: Boolean(status.configured) && status.signedIn, expired: Boolean(status.expired), live: Boolean(status.live), tools: status.tools.length };
   }));
 }
 

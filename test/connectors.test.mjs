@@ -275,3 +275,13 @@ test('/connect with several apps returns one connect per app', async (t) => {
   assert.deepEqual((await runBuiltinCommand('connect', 'github linear', { root, env })).connect, ['github', 'linear']);
   assert.equal((await runBuiltinCommand('connect', 'hugging face', { root, env })).connect, 'hugging face');
 });
+
+test('an expired sign-in with no refresh token shows as expired', async (t) => {
+  const { root, env } = await sandbox(t);
+  const { listConnectors, connectorStatus, findCatalogConnector } = await import('../src/connectors.mjs');
+  await saveStoredToken('https://mcp.notion.com/mcp', { accessToken: 'old', expiresAt: new Date(Date.now() - 60000).toISOString() }, env);
+  assert.equal((await connectorStatus(findCatalogConnector('notion'), { root, env })).expired, true);
+  await saveStoredToken('https://mcp.linear.app/mcp', { accessToken: 'old', refreshToken: 'r', expiresAt: new Date(Date.now() - 60000).toISOString() }, env);
+  const rows = await listConnectors({ root, env });
+  assert.equal(rows.find((row) => row.id === 'linear').expired, false, 'a refresh token renews it');
+});
