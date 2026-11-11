@@ -703,6 +703,12 @@ html.lite .topbar{backdrop-filter:none;-webkit-backdrop-filter:none;background:v
 .app-custom input{flex:1;min-width:0}
 .app-tile.expired .app-text span{color:var(--warn,#d9a441)}
 .app-tile.suggested .app-text span{color:var(--accent)}
+.welcome-apps{grid-column:1/-1;display:flex;flex-wrap:wrap;align-items:center;justify-content:flex-start;gap:8px;margin-top:6px}
+.welcome-apps-label{color:var(--muted);font-size:13px}
+.app-chip{display:inline-flex;align-items:center;gap:8px}
+.app-chip .cc-mark{width:20px;height:20px;border-radius:6px}
+.app-chip .cc-mark svg{width:12px;height:12px}
+.app-chip .cc-mark.letter{font-size:11px}
 .app-filter{width:100%;box-sizing:border-box;margin:0 0 10px}
 .app-tile[hidden]{display:none}
 .app-grid{list-style:none;margin:0;padding:0;display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:8px}

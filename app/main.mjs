@@ -2570,6 +2570,29 @@ function renderWelcome() {
     chip.addEventListener('click', () => { $('input').value = text; autosize(); renderPluginSuggest(); $('input').focus(); });
     box.appendChild(chip);
   }
+  if (ready && RT && !RT.needsToken) void renderWelcomeApps(box);
+}
+
+// "This project uses Vercel and Stripe": one-click Connect chips on the new-chat screen.
+let welcomeAppsToken = 0;
+async function renderWelcomeApps(box) {
+  const token = ++welcomeAppsToken;
+  const apps = (await knownConnectors().catch(() => [])).filter((app) => app.suggested && !app.live && !app.connected).slice(0, 4);
+  if (token !== welcomeAppsToken || !apps.length || !box.isConnected) return;
+  box.querySelector('.welcome-apps')?.remove();
+  const row = document.createElement('div');
+  row.className = 'welcome-apps';
+  row.appendChild(Object.assign(document.createElement('span'), { className: 'welcome-apps-label', textContent: 'This project uses' }));
+  for (const app of apps) {
+    const chip = document.createElement('button');
+    chip.type = 'button';
+    chip.className = 'suggestion app-chip';
+    chip.title = 'Connect ' + app.name + ' (found ' + app.suggested + ')';
+    chip.append(brandMark(app), Object.assign(document.createElement('span'), { textContent: 'Connect ' + app.name }));
+    chip.addEventListener('click', () => { chip.disabled = true; void connectShortcut('/connect ' + app.id, { keepInput: true }).finally(() => { connectorList = null; }); row.remove(); });
+    row.appendChild(chip);
+  }
+  box.appendChild(row);
 }
 
 /* ---------- Plugins ---------- */
