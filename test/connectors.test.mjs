@@ -207,3 +207,18 @@ test('gh device prompt parsing and terminal card', async () => {
   assert.equal(final.status, 'skipped');
   assert.match(out, /Connect Notion/);
 });
+
+test('disconnect forgets the sign-in and the mcp.json entry OASIS added', async (t) => {
+  const { root, env } = await sandbox(t);
+  const { disconnectConnector, listConnectors } = await import('../src/connectors.mjs');
+  const flow = createConnectFlow(findCatalogConnector('notion'), { root, env, deps: { loginMcpServer: async (server, options) => { await saveStoredToken(server.url, { accessToken: 'tok' }, options.env); return { ok: true }; } } });
+  flow.connect();
+  assert.equal((await flow.done).status, 'connected');
+  assert.equal((await listConnectors({ root, env })).find((row) => row.id === 'notion').connected, true);
+  const result = await disconnectConnector('notion', { root, env });
+  assert.equal(result.signedOut, true);
+  assert.equal(result.removed, true);
+  assert.equal(await getStoredToken('https://mcp.notion.com/mcp', env), null);
+  assert.equal((await listConnectors({ root, env })).find((row) => row.id === 'notion').connected, false);
+  assert.match((await disconnectConnector('notion', { root, env })).message, /was not connected/);
+});

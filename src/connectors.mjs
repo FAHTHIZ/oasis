@@ -19,8 +19,8 @@
 import { spawn } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { loadProjectMcpServers, loadUserMcpJson, loadClaudeCodeMcpServers, normalizeServerName } from './mcp-project.mjs';
-import { getStoredToken, saveStoredToken, loginMcpServer, canonicalResource } from './mcp-oauth.mjs';
-import { addRemoteMcpServer } from './mcp-remote-add.mjs';
+import { getStoredToken, saveStoredToken, deleteStoredToken, loginMcpServer, canonicalResource } from './mcp-oauth.mjs';
+import { addRemoteMcpServer, removeUserMcpJsonServer } from './mcp-remote-add.mjs';
 import { onPathSync } from './clipboard-path.mjs';
 
 // Verified hosted endpoints (vendor docs). Keep entries to servers that a
@@ -387,8 +387,27 @@ export async function runConnectService(session, args, options = {}) {
 export async function listConnectors({ root = process.cwd(), env = process.env, session = null } = {}) {
   return await Promise.all(CONNECTOR_CATALOG.map(async (item) => {
     const status = await connectorStatus(item, { root, env, session }).catch(() => ({ configured: null, signedIn: false, live: null, tools: [] }));
-    return { id: item.id, name: item.name, aliases: item.aliases, description: item.description, auth: item.auth, configured: Boolean(status.configured), signedIn: status.signedIn, live: Boolean(status.live), tools: status.tools.length };
+    return { id: item.id, name: item.name, aliases: item.aliases, description: item.description, auth: item.auth, configured: Boolean(status.configured), signedIn: status.signedIn, connected: Boolean(status.configured) && status.signedIn, live: Boolean(status.live), tools: status.tools.length };
   }));
+}
+
+/**
+ * Disconnect: forgets the sign-in and removes the server OASIS added to
+ * mcp.json. Servers from a project .mcp.json or a plugin stay configured.
+ */
+export async function disconnectConnector(query, { root = process.cwd(), env = process.env } = {}) {
+  const connector = await resolveConnector(query, { env });
+  const status = await connectorStatus(connector, { root, env });
+  const urls = new Set([connector.url, status.configured && status.configured.url].filter(Boolean));
+  let signedOut = false;
+  for (const url of urls) { try { if (await deleteStoredToken(url, env)) signedOut = true; } catch {} }
+  let removed = null;
+  if (status.configured) removed = await removeUserMcpJsonServer(status.configured.name, { env }).catch(() => null);
+  const parts = [];
+  if (signedOut) parts.push('signed out');
+  if (removed) parts.push('removed from mcp.json');
+  const note = connector.id === 'github' && signedOut ? ' Your GitHub CLI (gh) sign-in is unchanged.' : '';
+  return { service: connector.name, signedOut, removed: Boolean(removed), message: parts.length ? connector.name + ': ' + parts.join(' and ') + '.' + note : connector.name + ' was not connected.' };
 }
 
 /* ---------- The card in a terminal ---------- */
