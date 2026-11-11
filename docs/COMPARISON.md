@@ -67,6 +67,9 @@ OASIS reads these tools' project files where they are, so a repository set up fo
 | `.devin/rules/*.md`, `.windsurf/rules/*.md` (`trigger:`), `.devin/global_rules.md`, `~/.devin/rules`, `.windsurfrules` | Devin Desktop / Windsurf | Read with the same triggers |
 | `AGENTS.md`, `AGENT.md`, `AGENTS.local.md`, per folder | Devin Desktop, Cursor, Codex | Read |
 | `.agent/rules`, `.agents/rules` | Antigravity | Read with the same triggers |
+| `.cursor/commands`, `~/.cursor/commands` | Cursor | Slash commands |
+| `.devin/workflows`, `.windsurf/workflows` (up to the git root), `~/.codeium/windsurf/global_workflows` | Devin Desktop / Windsurf | Slash commands; workflows a workflow calls are appended. Sub-folder workflow folders are not scanned |
+| `.agents/workflows`, `.agent/workflows`, `~/.gemini/config/workflows` | Antigravity | Slash commands; `// turbo` auto-run markers are not honoured |
 
 ## Kimi Code CLI
 

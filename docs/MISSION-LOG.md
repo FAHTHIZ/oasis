@@ -5,6 +5,10 @@ weaknesses. Newest first. Detailed user-facing notes go in the CHANGELOG.
 
 ## 2026-11-11 (IDE-agent interoperability: Cursor, Devin Desktop, Antigravity, OpenHands)
 
+### Workflows and commands from other agents
+- `oasis import` already copied Cursor commands and Windsurf workflows into `.oasis/commands`, but a repository that had them was not usable until someone ran it. They are now read in place: Cursor `.cursor/commands` (project and home), Devin Desktop `.devin/workflows` and the legacy `.windsurf/workflows` (searched up to the git root, as the [Cascade docs](https://docs.windsurf.com/windsurf/cascade/workflows) describe), Windsurf global workflows, Antigravity `.agents/workflows` and `~/.gemini/config/workflows` (paths from the [workflows-to-skills migration page](https://antigravity.google/docs/migration/workflows-to-skills)) and Cline workflows.
+- Windsurf and Antigravity workflows may say "Call /workflow-2". OASIS has no tool for the model to run a slash command, so called workflows are appended to the prompt once each. Their files never run inline shell: that syntax belongs to Claude Code commands, and a repository file should not gain it by being renamed. Test: test/foreign-commands.test.mjs (4 tests, including a symlink that points out of the workspace).
+
 ### Devin Desktop rule locations
 - Windsurf is now Devin Desktop. Its [rules page](https://docs.windsurf.com/windsurf/cascade/memories) moves rules to `.devin/rules/*.md` and `.devin/global_rules.md` (home-folder copies apply everywhere), keeps the `.windsurf/` files as a fallback (only `.devin/global_rules.md` loads when both global files exist), and reads `AGENTS.md`, `AGENTS.local.md` and `AGENT.md` per folder. OASIS already read `.windsurf/rules` and `.windsurfrules`; it now reads the new locations too, plus the legacy `~/.codeium/windsurf/memories/global_rules.md` that `oasis import windsurf` used to copy. Test: test/other-agent-rules.test.mjs.
 

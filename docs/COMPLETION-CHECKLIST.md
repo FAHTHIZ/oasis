@@ -61,6 +61,7 @@ Status: **done** (tested and pushed) · **doing** · **open** · **blocked**
 | Item | Status | Evidence / notes |
 | --- | --- | --- |
 | Devin Desktop rule folders (`.devin/rules`, `.devin/global_rules.md`, `~/.devin/rules`), Windsurf global rules, `AGENT.md`, `AGENTS.local.md` | done | `test/other-agent-rules.test.mjs` (Devin Desktop test) |
+| Cursor commands, Devin Desktop / Windsurf / Antigravity / Cline workflows as native slash commands | done | `test/foreign-commands.test.mjs`. Not done: Devin Desktop's scan of workflow folders in sub-folders, enterprise system workflow folders, Cursor team commands (server-side) |
 
 ## 3. Competitive evaluation
 
