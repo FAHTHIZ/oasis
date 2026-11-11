@@ -173,10 +173,11 @@ Beyond the two interfaces, OASIS speaks the protocols other tools already use, s
 - Transports: JSONL on stdio; `--listen ws://IP:PORT` for WebSocket (one message per frame, `/readyz` and `/healthz` probes, any request with an `Origin` header refused); `--listen unix://[PATH]` for a private Unix socket (folder mode 700, socket mode 600, no token needed).
 - WebSocket auth: `--ws-auth capability-token` with a mode-600 token file or SHA-256 hash, or `--ws-auth signed-bearer-token` for HS256 JWTs with `exp`, `nbf`, issuer, audience and clock-skew checks. A non-loopback listener without auth is refused.
 - Threads: start, resume, fork, read, list and search, rename, archive and unarchive, delete, unsubscribe, list loaded, and compact. Turns: start, steer, interrupt, and `review/start` for inline code review.
-- Discovery: `model/list`, `skills/list` (system, repo and user scopes) and `mcpServerStatus/list` for a loaded thread.
+- Discovery: `model/list`, `skills/list` (system, repo and user scopes), `mcpServerStatus/list` for a loaded thread, `hooks/list`, `config/read` (read-only, secrets redacted) and `account/read`.
+- Also: `thread/turns/list`, `thread/shellCommand` and `gitDiffToRemote`.
 - Files and commands: `fs/*` (read, write, list, copy, remove, watch) and `command/exec` with stdin, resize, terminate and streamed output, including PTY mode. Paths stay inside the workspace folders, commands go through OASIS's sandbox, and a plan-mode server refuses writes and commands.
 - `fuzzyFileSearch` ranks files and folders for @-file pickers, with match positions and cancellation tokens.
-- Not implemented yet: account, config and plugin methods, and MCP methods other than the status list. Field names follow the Apache-2.0 protocol definitions in `openai/codex`; no Codex code is included.
+- Not implemented: account login, rate-limit and usage methods (OASIS needs no OpenAI account), config writes, plugin, marketplace and app methods, realtime sessions, and MCP methods other than the status list. Field names follow the Apache-2.0 protocol definitions in `openai/codex`; no Codex code is included.
 
 </details>
 
