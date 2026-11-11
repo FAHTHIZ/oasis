@@ -3,11 +3,11 @@ import assert from 'node:assert/strict';
 import os from 'node:os';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
-import { chmod, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { chmod, lstat, mkdtemp, rm, stat, writeFile } from 'node:fs/promises';
 import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import WebSocket from 'ws';
-import { isLoopbackHost, loadWsAuth, parseListenUrl, startCodexAppServerWebSocket } from '../src/codex-app-server-ws.mjs';
+import { defaultControlSocketPath, isLoopbackHost, loadWsAuth, parseListenUrl, startCodexAppServerWebSocket } from '../src/codex-app-server-ws.mjs';
 import { scriptedModel, toolCall } from './helpers/scripted-model.mjs';
 
 const CLI = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'src', 'cli.mjs');
@@ -137,4 +137,48 @@ test('oasis app-server --listen ws://: health probes, Origin and token checks, a
   const exited = new Promise((resolve) => child.once('exit', (code, signal) => resolve({ code, signal })));
   child.kill('SIGTERM');
   assert.deepEqual(await exited, { code: 0, signal: null });
+});
+
+test('--listen unix://: private socket, Codex-style default path, stale socket cleanup, live socket refused', { skip: process.platform === 'win32' }, async (t) => {
+  const env = { HOME: '/home/someone' };
+  assert.deepEqual(parseListenUrl('unix://', { env }), { transport: 'unix', socketPath: '/home/someone/.oasis/app-server-control/app-server-control.sock', defaultPath: true });
+  assert.equal(defaultControlSocketPath({ OASIS_CONFIG_DIR: '/cfg' }), '/cfg/app-server-control/app-server-control.sock');
+  assert.deepEqual(parseListenUrl('unix://run/as.sock', { cwd: '/work' }), { transport: 'unix', socketPath: '/work/run/as.sock', defaultPath: false });
+  assert.throws(() => parseListenUrl('unix:///' + 'x'.repeat(120)), /too long/);
+
+  const dir = await tmp(t, 'oasis-as-unix-');
+  const socketDir = path.join(dir, 'ctl');
+  const socketPath = path.join(socketDir, 's.sock');
+  const listener = await startCodexAppServerWebSocket({ socketPath, env: process.env, version: '0.0.0-test' });
+  t.after(() => listener.close());
+  assert.equal(listener.url, 'unix://' + socketPath);
+  assert.equal((await stat(socketPath)).mode & 0o777, 0o600);
+  assert.equal((await stat(socketDir)).mode & 0o777, 0o700);
+
+  const client = wsClient('ws+unix://' + socketPath + ':/');
+  await client.opened;
+  const init = await client.call('initialize', { clientInfo: { name: 'unix_test', version: '1' } });
+  assert.match(init.result.userAgent, /^oasis\//);
+  client.close();
+
+  // A second server on the same live socket is refused rather than stealing it.
+  await assert.rejects(startCodexAppServerWebSocket({ socketPath, env: process.env }), /already listening/);
+  await listener.close();
+  await assert.rejects(lstat(socketPath), { code: 'ENOENT' });
+
+  // A stale socket (no listener) is removed; a regular file is left alone.
+  const stalePath = path.join(socketDir, 'stale.sock');
+  const holder = spawn(process.execPath, ['-e', 'require("net").createServer().listen(process.argv[1], () => console.log("up"))', stalePath], { stdio: ['ignore', 'pipe', 'inherit'] });
+  await new Promise((resolve) => holder.stdout.once('data', resolve));
+  const killed = new Promise((resolve) => holder.once('exit', resolve));
+  holder.kill('SIGKILL');
+  await killed;
+  assert.equal((await lstat(stalePath)).isSocket(), true, 'SIGKILL leaves the socket file behind');
+  const again = await startCodexAppServerWebSocket({ socketPath: stalePath, env: process.env });
+  assert.equal(again.url, 'unix://' + stalePath);
+  await again.close();
+  const filePath = path.join(socketDir, 'plain');
+  await writeFile(filePath, 'not a socket');
+  await assert.rejects(startCodexAppServerWebSocket({ socketPath: filePath, env: process.env }), /not a socket/);
+  assert.equal((await stat(filePath)).isFile(), true);
 });
