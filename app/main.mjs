@@ -4,7 +4,7 @@
 import { PRESETS, testProvider } from './core/providers.mjs';
 import { alwaysAllowLabel } from './core/approval-rule.mjs';
 import { SUBAGENT_STATUS_TEXT } from './core/subagents.mjs';
-import { createConnectorCard, connectIntent, brandMark } from './core/connector-card.mjs';
+import { createConnectorCard, connectIntent, splitServices, brandMark } from './core/connector-card.mjs';
 import { createSoundPlayer } from './core/sound.mjs';
 import { ambientField } from './core/ambient.mjs';
 import { activityLabel, liveLabel, summarizeArgs, toolKind, groupTitle, groupStats, formatDuration, elapsedSince, describeInput, buildTimeline } from './core/timeline.mjs';
@@ -2011,14 +2011,24 @@ async function knownConnectors() {
   if (!connectorList) connectorList = RT.client.api('/api/connectors').then((body) => body.connectors || []).catch(() => { connectorList = null; return []; });
   return connectorList;
 }
-async function connectShortcut(message, { reason = '' } = {}) {
+async function connectShortcut(message, { reason = '', keepInput = false } = {}) {
   const intent = connectIntent(message);
   if (!intent) return false;
   const list = await knownConnectors();
-  const key = intent.service.toLowerCase().replace(/[\s.]/g, '');
-  const known = list.find((item) => [item.id, item.name, ...(item.aliases || [])].some((name) => String(name).toLowerCase().replace(/[\s.]/g, '') === key));
+  const lookup = (service) => {
+    const key = service.toLowerCase().replace(/[\s.]/g, '');
+    return list.find((item) => [item.id, item.name, ...(item.aliases || [])].some((name) => String(name).toLowerCase().replace(/[\s.]/g, '') === key));
+  };
+  // "connect github and linear": one card per app, when every name is a known app.
+  const parts = splitServices(intent.service);
+  if (parts.length > 1 && parts.every(lookup)) {
+    if (!reason) { $('input').value = ''; autosize(); }
+    for (const part of parts) await connectShortcut('/connect ' + lookup(part).id, { reason, keepInput: true });
+    return true;
+  }
+  const known = lookup(intent.service);
   if (!intent.explicit && !known) return false;
-  if (!reason) { $('input').value = ''; autosize(); }
+  if (!reason && !keepInput) { $('input').value = ''; autosize(); }
   if (!intent.service) {
     addMessage('note', 'Connect an app: /connect ' + list.map((item) => item.id).join(', /connect ') + ', or /connect followed by an MCP server URL.');
     scrollDown(true);

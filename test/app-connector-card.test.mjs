@@ -82,3 +82,13 @@ test('brand tiles keep the logo readable on light brand colours', () => {
   assert.ok(luminance('#181717') < 0.1);
   assert.equal(Object.keys(BRAND_ICONS).length >= 13, true);
 });
+
+test('connect intent: a pasted MCP address, and several apps at once', async () => {
+  const { splitServices } = await import('../app/core/connector-card.mjs');
+  assert.deepEqual(connectIntent('https://mcp.posthog.com/mcp'), { service: 'https://mcp.posthog.com/mcp', explicit: true });
+  assert.deepEqual(connectIntent('https://example.com/api/sse'), { service: 'https://example.com/api/sse', explicit: true });
+  assert.equal(connectIntent('https://example.com/blog/post'), null);
+  assert.deepEqual(splitServices('github, linear and notion'), ['github', 'linear', 'notion']);
+  assert.deepEqual(splitServices('GitHub & Linear'), ['GitHub', 'Linear']);
+  assert.deepEqual(splitServices('https://mcp.example.com/mcp'), ['https://mcp.example.com/mcp']);
+});
