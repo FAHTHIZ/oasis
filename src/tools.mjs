@@ -21,7 +21,7 @@ import { fetchPublicUrl } from './public-fetch.mjs';
 import { gitVisibleFiles } from './git-visible-files.mjs';
 import { createHash } from 'node:crypto';
 import { readdir, readFile, mkdir, unlink, lstat, realpath, stat, open as openFile } from 'node:fs/promises';
-import { createReadStream } from 'node:fs';
+import { createReadStream, readdirSync } from 'node:fs';
 import { createInterface } from 'node:readline';
 import path from 'node:path';
 import os from 'node:os';
@@ -1162,7 +1162,14 @@ export function foreignUserSkillDirectories(env = process.env) {
     ['~/.gemini/skills', path.join(home, '.gemini', 'skills')],
     ['~/.gemini/antigravity-cli/skills', path.join(home, '.gemini', 'antigravity-cli', 'skills')],
     ['~/.gemini/config/skills', path.join(home, '.gemini', 'config', 'skills')],
-    ['~/.openhands/skills', path.join(home, '.openhands', 'skills')]
+    ['~/.openhands/skills', path.join(home, '.openhands', 'skills')],
+    // Skills bundled with installed Antigravity / Antigravity CLI plugins.
+    ...['config', 'antigravity-cli'].flatMap((base) => {
+      const plugins = path.join(home, '.gemini', base, 'plugins');
+      let names = [];
+      try { names = readdirSync(plugins, { withFileTypes: true }).filter((entry) => entry.isDirectory()).map((entry) => entry.name).sort().slice(0, 40); } catch {}
+      return names.map((name) => ['~/.gemini/' + base + '/plugins/' + name + '/skills', path.join(plugins, name, 'skills')]);
+    })
   ];
 }
 
