@@ -278,9 +278,7 @@ async function loadRules(dir, scope, workspace = null, notices = null, { ext = [
           if (!text.trim() || text.includes('\0')) continue;
           const { paths, body, mode, description, triggers } = splitRuleFrontMatter(text, path.basename(entry.name, path.extname(entry.name)));
           const name = path.relative(dir, full).split(path.sep).join('/');
-          out.push({ scope, real, name, label: (prefix || (scope === 'user' ? '~/.claude/rules/' : '.claude/rules/')) + name, paths, mode, description, ...(triggers ? { triggers } : {}), body: workspace ? await readImports(workspace, body) : body });
-
-          out.push({ scope, real, file: full, name, label: (prefix || (scope === 'user' ? '~/.claude/rules/' : '.claude/rules/')) + name, paths, mode, description, body: workspace ? await readImports(workspace, body) : body });
+          out.push({ scope, real, file: full, name, label: (prefix || (scope === 'user' ? '~/.claude/rules/' : '.claude/rules/')) + name, paths, mode, description, ...(triggers ? { triggers } : {}), body: workspace ? await readImports(workspace, body) : body });
         } catch {}
       }
     }
