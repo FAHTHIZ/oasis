@@ -431,8 +431,6 @@ export async function createSession({ root, config, restore = null, permissionMo
     settingSources = ['managed'];
     if (permissionMode === 'bypassPermissions') throw new Error('--restricted refuses bypassPermissions mode.');
   }
-  const instructionNotices = [];
-  const [projectContext, skillDescriptions] = bare ? ['', []] : await Promise.all([loadProjectInstructions(root, { env, notices: instructionNotices }), loadSkillDescriptions(root, { env })]);
   let loadedSettings = settings;
   let settingsError = null;
   if (!loadedSettings) {
@@ -440,6 +438,8 @@ export async function createSession({ root, config, restore = null, permissionMo
     catch (error) { settingsError = error.message; loadedSettings = { permissions: { allow: [], ask: [], deny: [], defaultMode: 'default' }, hooks: {}, sandbox: { enabled: false }, shell: { enabled: false } }; }
   }
   if (bare) loadedSettings = { ...loadedSettings, hooks: {}, autoMemory: false, statusLine: null };
+  const instructionNotices = [];
+  const [projectContext, skillDescriptions] = bare ? ['', []] : await Promise.all([loadProjectInstructions(root, { env, notices: instructionNotices, excludes: loadedSettings.claudeMdExcludes }), loadSkillDescriptions(root, { env })]);
   if (restricted && loadedSettings.permissions && loadedSettings.permissions.defaultMode === 'bypassPermissions') loadedSettings = { ...loadedSettings, permissions: { ...loadedSettings.permissions, defaultMode: 'default' } };
   const permissions = new PermissionPolicy(loadedSettings, { mode: permissionMode || undefined, root });
   for (const rule of allowedTools || []) permissions.addRule('allow', rule);
@@ -3863,7 +3863,7 @@ async function executeOneCallRaw(session, call, context, options) {
     if (NESTED_MEMORY_TOOLS.has(name) && result && typeof result === 'object' && !result.error) {
       const target = args && (args.path || args.file_path || args.notebook_path);
       if (!session.nestedMemoryLoaded) session.nestedMemoryLoaded = new Set();
-      const nested = await nestedMemoryFor(session.root, target, session.nestedMemoryLoaded, { env: callContext.env || process.env }).catch(() => []);
+      const nested = await nestedMemoryFor(session.root, target, session.nestedMemoryLoaded, { env: callContext.env || process.env, excludes: session.settings && session.settings.claudeMdExcludes }).catch(() => []);
       if (nested.length) result.directoryInstructions = 'Project instructions for this folder (follow them for files here):\n' + nested.map((item) => '--- ' + item.path + ' ---\n' + item.text).join('\n\n');
     }
     if (fileMutationResult && lspVerificationPath) {

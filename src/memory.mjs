@@ -21,6 +21,28 @@ import { getConfigDirectory } from './config.mjs';
 import { parseFrontMatter } from './frontmatter.mjs';
 
 const MAX_MEMORY_FILE = 40 * 1024;
+
+// Claude Code's "claudeMdExcludes": glob patterns (or absolute paths) matched
+// against a memory file's absolute path; the file is skipped if either its
+// path or its symlink target matches.
+function excludeMatcher(patterns) {
+  const list = (Array.isArray(patterns) ? patterns : []).filter((item) => typeof item === 'string' && item.trim());
+  if (!list.length) return null;
+  const toRegExp = (pattern) => {
+    let source = '';
+    for (let i = 0; i < pattern.length; i++) {
+      const char = pattern[i];
+      if (char === '*') {
+        if (pattern[i + 1] === '*') { i++; if (pattern[i + 1] === '/') { i++; source += '(?:.*/)?'; } else source += '.*'; } else source += '[^/]*';
+      } else if (char === '?') source += '[^/]';
+      else source += char.replace(/[|\\{}()[\]^$+.]/g, '\\$&');
+    }
+    return new RegExp('^' + source + '$');
+  };
+  const regexps = list.map((pattern) => toRegExp(pattern.trim().split(path.sep).join('/')));
+  return (...files) => files.some((file) => file && regexps.some((re) => re.test(path.resolve(file).split(path.sep).join('/'))));
+}
+
 const MAX_TOTAL = 40000;
 const PER_FILE_LIMIT = 9000;
 // The README is background sent with every request; its opening (what the
@@ -105,6 +127,7 @@ function clipInstruction(name, content, notices) {
 }
 
 export async function loadMemory(root, options = {}) {
+  const excluded = excludeMatcher(options.excludes);
   const files = await memoryFiles(root, options);
   const notices = Array.isArray(options.notices) ? options.notices : [];
   const parts = [];
@@ -117,6 +140,7 @@ export async function loadMemory(root, options = {}) {
     }
     let real;
     try { real = await realpath(file.path); } catch { continue; }
+    if (excluded && file.label !== 'readme' && excluded(file.path, real)) continue;
     if (file.label !== 'user' && file.label !== 'parent') {
       const workspace = await realpath(path.resolve(root)).catch(() => path.resolve(root));
       const relative = path.relative(workspace, real);
@@ -140,7 +164,7 @@ export async function loadMemory(root, options = {}) {
     else parts.push(block);
   }
   const env = options.env || process.env;
-  const rules = await projectRules(root, { env, notices, home: options.home });
+  const rules = await projectRules(root, { env, notices, home: options.home, excludes: options.excludes });
   // Scoped instructions are deliberately excluded from base memory to keep the prompt small.
   const requested = [];
   for (const rule of rules) {
@@ -210,7 +234,7 @@ export const OTHER_AGENT_RULE_DIRS = [
   { dir: '.openhands/skills', ext: ['.md'], tool: 'OpenHands', openhands: true }
 ];
 
-export async function projectRules(root, { env = process.env, notices = null, home = null } = {}) {
+export async function projectRules(root, { env = process.env, notices = null, home = null, excludes = null } = {}) {
   const workspace = path.resolve(root);
   const claudeHome = env.CLAUDE_CONFIG_DIR || path.join(home || env.HOME || os.homedir(), '.claude');
   const rules = [
@@ -224,7 +248,8 @@ export async function projectRules(root, { env = process.env, notices = null, ho
     for (const dir of ['skills', 'microagents']) rules.push(...await loadRules(path.join(home || env.HOME || os.homedir(), '.openhands', dir), 'user', null, notices, { prefix: '~/.openhands/' + dir + '/', openhands: true }));
     for (const spec of OTHER_AGENT_RULE_DIRS) rules.push(...await loadRules(path.join(workspace, ...spec.dir.split('/')), 'project', workspace, notices, { ext: spec.ext, prefix: spec.dir + '/', openhands: spec.openhands }));
   }
-  return rules;
+  const excluded = excludeMatcher(excludes);
+  return excluded ? rules.filter((rule) => !excluded(rule.file, rule.real)) : rules;
 }
 
 async function loadRules(dir, scope, workspace = null, notices = null, { ext = ['.md'], prefix = '', openhands = false } = {}) {
@@ -254,6 +279,8 @@ async function loadRules(dir, scope, workspace = null, notices = null, { ext = [
           const { paths, body, mode, description, triggers } = splitRuleFrontMatter(text, path.basename(entry.name, path.extname(entry.name)));
           const name = path.relative(dir, full).split(path.sep).join('/');
           out.push({ scope, real, name, label: (prefix || (scope === 'user' ? '~/.claude/rules/' : '.claude/rules/')) + name, paths, mode, description, ...(triggers ? { triggers } : {}), body: workspace ? await readImports(workspace, body) : body });
+
+          out.push({ scope, real, file: full, name, label: (prefix || (scope === 'user' ? '~/.claude/rules/' : '.claude/rules/')) + name, paths, mode, description, body: workspace ? await readImports(workspace, body) : body });
         } catch {}
       }
     }
@@ -329,6 +356,7 @@ export async function nestedMemoryFor(root, filePath, loaded = new Set(), option
   if (relative.startsWith('..') || path.isAbsolute(relative)) return [];
   const parts = relative ? relative.split(path.sep).filter(Boolean).slice(0, 30) : [];
   const found = [];
+  const excluded = excludeMatcher(options.excludes);
   let budget = options.maxChars || 12000;
   for (let i = 1; i <= parts.length; i++) {
     const dir = path.join(workspace, ...parts.slice(0, i));
@@ -343,6 +371,7 @@ export async function nestedMemoryFor(root, filePath, loaded = new Set(), option
         const back = path.relative(workspace, real);
         if (back.startsWith('..') || path.isAbsolute(back)) continue;
         loaded.add(file);
+        if (excluded && excluded(file, real)) continue;
         const shown = path.relative(workspace, file);
         if (info.size > MAX_MEMORY_FILE) {
           found.push({ path: shown, text: '[' + shown + ' applies to this directory but is ' + info.size + ' bytes, over the ' + MAX_MEMORY_FILE + '-byte limit, so it was not loaded. read_file it before editing here.]' });
@@ -361,7 +390,7 @@ export async function nestedMemoryFor(root, filePath, loaded = new Set(), option
     }
   }
   // Load path-frontmatter rules only for a specific matching file, never globally.
-  const scoped = (await projectRules(workspace, { env, home: options.home }))
+  const scoped = (await projectRules(workspace, { env, home: options.home, excludes: options.excludes }))
     .filter((rule) => rule.mode === 'scoped' && rule.paths.length && rule.paths.some((pattern) => rulePathMatches(pattern, targetRelative)));
   scoped.sort((a, b) => ruleSpecificity(a) - ruleSpecificity(b) || (a.scope === b.scope ? a.name.localeCompare(b.name) : a.scope === 'user' ? -1 : 1));
   for (const rule of scoped) {
