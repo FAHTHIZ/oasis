@@ -135,3 +135,35 @@ test('Gemini CLI TOML commands: namespaces, {{args}}, !{shell} with escaping, @{
   const user = await resolveCustomCommand(root, '/test abc', { env, home, commands });
   assert.equal(user.prompt, 'USER-TEST abc');
 });
+
+test('OpenCode Markdown and opencode.json commands keep OpenCode placeholders', async (t) => {
+  const { root, home, env } = await setup(t, {
+    '.opencode/commands/team/review.md': '---\ndescription: Review code\nsubagent: true\nagent: plan\nmodel: anthropic/x\n---\nCheck $1. Focus on $2.',
+    '.opencode/command/explain.md': 'Explain this code clearly. @README.md',
+    '.opencode/commands/history.md': 'Log:\n!`echo commits-$1`',
+    '~/.config/opencode/commands/standup.md': 'Write my standup about $ARGUMENTS.',
+    '~/.config/opencode/opencode.json': JSON.stringify({ commands: { standup: { template: 'json standup' }, globaljson: { template: 'Global $ARGUMENTS', description: 'From JSON' } } }),
+    'opencode.jsonc': '{ // comment\n "command": { "fix": { "template": "Fix $ARGUMENTS", "subtask": true }, }, }',
+    '.opencode/commands/fix.md': 'Markdown fix $ARGUMENTS'
+  });
+  const commandEnv = { ...env, XDG_CONFIG_HOME: path.join(home, '.config') };
+  const commands = await loadCustomCommands(root, { env: commandEnv, home });
+  const review = commands.get('team:review');
+  assert.equal(review.description, 'Review code (OpenCode)');
+  assert.equal(review.context, 'fork');
+  assert.equal(review.agent, null);
+  assert.equal(review.model, null);
+  assert.equal(commands.get('standup').body, 'Write my standup about $ARGUMENTS.');
+  assert.equal(commands.get('globaljson').description, 'From JSON (OpenCode)');
+  assert.equal(commands.get('fix').body, 'Markdown fix $ARGUMENTS');
+  const resolve = (input, extra = {}) => resolveCustomCommand(root, input, { env: commandEnv, home, commands, ...extra });
+  assert.equal((await resolve('/team:review src/auth.ts "error handling" now')).prompt, 'Check src/auth.ts. Focus on error handling now.');
+  assert.equal((await resolve('/team:review only')).prompt, 'Check only. Focus on .');
+  const explain = await resolve('/explain src/cache.ts');
+  assert.equal(explain.prompt, 'Explain this code clearly. @README.md\n\nsrc/cache.ts');
+  assert.deepEqual(explain.mentions, []);
+  assert.match((await resolve('/history 5', { trusted: true })).prompt, /commits-5/);
+  assert.doesNotMatch((await resolve('/history 5')).prompt, /^commits-5$/m);
+  const off = await loadCustomCommands(root, { env: { ...commandEnv, OASIS_OTHER_AGENT_RULES: '0' }, home });
+  assert.equal(off.has('team:review') || off.has('globaljson'), false);
+});
