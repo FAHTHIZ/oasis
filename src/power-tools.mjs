@@ -28,6 +28,7 @@ import { assertNoNewElision, shrinkWarning, recordAndDetectCircling, testTamperW
 import { commentWarning } from './style-rules.mjs';
 import { snapshotScriptedEdit, noOpEditWarning } from './inplace-edit-check.mjs';
 import { resolveWorkspacePath, walkFiles, sensitivePath, scrubEnvironment, nonInteractiveEnvironment } from './tools.mjs';
+import { agentIgnoreMatch } from './agent-ignore.mjs';
 import { assertSandboxAvailable, launchCommand } from './sandbox.mjs';
 import { fileGlobMatcher } from './glob.mjs';
 import { editNotebook } from './notebook.mjs';
@@ -281,6 +282,7 @@ export async function grepWorkspace(root, args = {}, options = {}) {
       const line = raw.startsWith('./') ? raw.slice(2) : raw;
       const file = mode === 'files_with_matches' ? line : line.split(/[:-]\d+[:-]|:(?=\d+$)/)[0];
       if (sensitivePath(file)) continue;
+      if (await agentIgnoreMatch(path.resolve(rootReal, file), { env: options.env })) continue;
       if (skipped < offset) { skipped++; continue; }
       if (results.length >= limit) { truncated = true; break; }
       if (mode === 'content' && !options.fullLines && !args.multiline && LONG_LINE_PREVIEW.test(line)) {

@@ -13,6 +13,7 @@ import { existsSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { resolveWorkspacePath, sensitivePath } from './tools.mjs';
+import { filterAgentIgnored } from './agent-ignore.mjs';
 import { lineDiff } from './markdown.mjs';
 import { createTwoFilesPatch, FILE_HEADERS_ONLY } from 'diff';
 
@@ -217,7 +218,7 @@ export async function runAstGrep(root, args = {}, context = {}) {
   if (run.code !== 0 && run.code !== 1 && !run.matches.length) {
     return { error: 'ast-grep failed' + (run.code === null ? '' : ' (exit ' + run.code + ')') + ': ' + cleanHint(run.stderr), pattern };
   }
-  const visible = run.matches.filter((match) => match && typeof match.file === 'string' && !sensitivePath(match.file));
+  const visible = await filterAgentIgnored(run.matches.filter((match) => match && typeof match.file === 'string' && !sensitivePath(match.file)), (match) => path.resolve(target.root, match.file), { env });
   const hint = /ERROR node|matched nothing/i.test(run.stderr) ? cleanHint(run.stderr) : '';
   if (rewrite === null) {
     const matches = visible.map((match) => {

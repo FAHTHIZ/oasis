@@ -34,6 +34,7 @@ import path from 'node:path';
 import { getConfigDirectory } from './config.mjs';
 import { parseFrontMatter } from './frontmatter.mjs';
 import { sensitivePath } from './tools.mjs';
+import { agentIgnoreMatch } from './agent-ignore.mjs';
 import { imageMediaType, MAX_SOURCE_IMAGE_BYTES } from './images.mjs';
 
 const MAX_COMMAND_FILE = 64 * 1024;
@@ -378,6 +379,8 @@ export async function expandFileMentions(root, text, options = {}) {
     if (sensitivePath(relative.split(path.sep).join('/'))) continue;
     let info;
     try { info = await lstat(real); } catch { continue; }
+    // Paths excluded by .cursorignore and similar files are not attached (Cursor blocks @ references too).
+    if (await agentIgnoreMatch(absolute, { env: options.env, isDir: info.isDirectory() }) || (real !== absolute && await agentIgnoreMatch(real, { env: options.env, isDir: info.isDirectory() }))) continue;
     if (info.isDirectory()) {
       let names = [];
       try { names = (await readdir(real)).filter((name) => !name.startsWith('.')).sort().slice(0, 200); } catch {}

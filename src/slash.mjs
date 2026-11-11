@@ -507,7 +507,7 @@ export async function runBuiltinCommand(name, argument, state) {
       const recovery = [];
       for (const [relative, entry] of currentTurn.files) {
         if (entry.skipped) continue;
-        const target = await resolveWorkspacePath(root, relative, { rejectSymlinks: true });
+        const target = await resolveWorkspacePath(root, relative, { rejectSymlinks: true, allowIgnored: true });
         let info;
         try { info = await lstat(target.absolute); }
         catch (error) { if (error.code === 'ENOENT') continue; throw error; }
@@ -1629,7 +1629,7 @@ export async function runBuiltinCommand(name, argument, state) {
       const requested = String(argument || '').trim();
       if (!requested) return { output: 'Usage: /export FILE.md, or /export FILE.html for a standalone page you can open in a browser or share' };
       try {
-        const target = await resolveWorkspacePath(root, requested, { rejectSymlinks: true, workspaceOnly: true });
+        const target = await resolveWorkspacePath(root, requested, { rejectSymlinks: true, workspaceOnly: true, allowIgnored: true });
         try { await lstat(target.absolute); const error = new Error('That file already exists: ' + target.relative); error.code = 'EEXIST'; throw error; }
         catch (error) { if (error.code !== 'ENOENT') throw error; }
         const html = /\.html?$/i.test(target.relative);

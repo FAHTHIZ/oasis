@@ -48,6 +48,7 @@ import { BUILTIN_PROVIDERS, getProvider, providerApiKey, providerRegistry, sameB
 import { DIAGNOSTICS_TOOL_DEFINITION, runDiagnostics } from './diagnostics.mjs';
 import { SECURITY_SCAN_TOOL_DEFINITION } from './security-scan.mjs';
 import { MONITOR_TOOL_DEFINITION } from './monitor-definition.mjs';
+import { assertNotAgentIgnored, filterAgentIgnored } from './agent-ignore.mjs';
 import { startCommandMonitor, startWsMonitor, backgroundExitNotifier, backgroundStuckNotifier } from './monitors.mjs';
 import { LSP_TOOL_DEFINITION, runLsp } from './lsp.mjs';
 import { isPdfPath, readPdf } from './pdf.mjs';
@@ -260,7 +261,14 @@ export async function resolveWorkspacePath(root, rawPath, options = {}) {
       if (!inside(base, resolved)) throw new Error('That path resolves outside the workspace through a symbolic link.');
       const resolvedRelative = base === rootReal ? path.relative(base, resolved) : resolved;
       if (!options.allowSensitive && sensitivePath(resolvedRelative)) throw new Error('That symbolic link resolves to a sensitive file. Oasis will not access it.');
-      if (cursor === target) return { absolute: target, real: resolved, relative: relative || '.', root: base, external: base !== rootReal };
+      if (cursor === target) {
+        if (!options.allowIgnored && relative) {
+          const ignoreOptions = { env: options.env, isDir: linkInfo.isDirectory(), shown: relative.split(path.sep).join('/') };
+          await assertNotAgentIgnored(target, ignoreOptions);
+          if (resolved !== target) await assertNotAgentIgnored(resolved, { ...ignoreOptions, isDir: (await stat(resolved).catch(() => null))?.isDirectory() });
+        }
+        return { absolute: target, real: resolved, relative: relative || '.', root: base, external: base !== rootReal };
+      }
       break;
     } catch (error) {
       if (error.code !== 'ENOENT') throw error;
@@ -271,6 +279,8 @@ export async function resolveWorkspacePath(root, rawPath, options = {}) {
   }
   const existingAncestor = await realpath(cursor);
   if (!inside(base, existingAncestor)) throw new Error('That path resolves outside the workspace through a symbolic link.');
+  // A new file is refused too when an ignore file covers it (Devin Desktop: no creating files there).
+  if (!options.allowIgnored && relative) await assertNotAgentIgnored(target, { env: options.env, shown: relative.split(path.sep).join('/') });
   return { absolute: target, real: target, relative: relative || '.', root: base, external: base !== rootReal };
 }
 
@@ -292,7 +302,7 @@ export async function walkFiles(root, options = {}) {
   const filter = typeof options.filter === 'function' ? options.filter : null;
   if (options.respectGitignore !== false) {
     const visible = await gitVisibleFiles(root, { maxFiles, maxDepth, includeHidden, skipDirs: SKIP_DIRS, skip: (rel) => sensitivePath(rel), filter, env: options.env }).catch(() => null);
-    if (visible) return visible;
+    if (visible) return options.allowIgnored ? visible : filterAgentIgnored(visible, (item) => item.absolute, { env: options.env });
   }
   const output = [];
   let scanned = 0;
@@ -312,7 +322,7 @@ export async function walkFiles(root, options = {}) {
     }
   }
   await walk(root, 0);
-  return output;
+  return options.allowIgnored ? output : filterAgentIgnored(output, (item) => item.absolute, { env: options.env });
 }
 
 export async function listWorkspaceFiles(root, options = {}) {

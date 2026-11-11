@@ -37,7 +37,7 @@ export async function captureBeforeChange(session, root, toolName, args = {}) {
   const turn = session.checkpoints.turns.at(-1);
   if (!turn) return;
   let target;
-  try { target = await resolveWorkspacePath(root, args.path, { rejectSymlinks: true }); } catch { return; }
+  try { target = await resolveWorkspacePath(root, args.path, { rejectSymlinks: true, allowIgnored: true }); } catch { return; }
   if (turn.files.has(target.relative)) return;
   let info = null;
   try { info = await lstat(target.absolute); } catch {}
@@ -156,7 +156,7 @@ export async function rewind(session, count = 1, mode = 'both') {
     for (const [file, entry] of originals) {
       const absolute = path.join(session.root, file);
       let target;
-      try { target = await resolveWorkspacePath(session.root, file, { rejectSymlinks: true }); } catch { skipped.push(file); continue; }
+      try { target = await resolveWorkspacePath(session.root, file, { rejectSymlinks: true, allowIgnored: true }); } catch { skipped.push(file); continue; }
       if (entry.skipped) { skipped.push(file); continue; }
       if (!entry.existed) {
         try { await unlink(target.absolute); deleted.push(file); } catch (error) { if (error.code !== 'ENOENT') skipped.push(file); }
