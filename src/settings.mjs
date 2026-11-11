@@ -208,6 +208,32 @@ export function normalizeHooks(raw) {
   return out;
 }
 
+// Claude Code's disableAllHooks and allowManagedHooksOnly. disableAllHooks in
+// managed settings turns every hook and the status line off. Anywhere else, and
+// with allowManagedHooksOnly (managed only), only managed hooks and a managed
+// status line remain; user, project, local and plugin hooks stop, and agent
+// front-matter hooks are refused (see subagent-support.mjs).
+export function applyHookPolicy(result) {
+  const policy = result.hookPolicy || {};
+  if (policy.disableAllManaged) {
+    result.hooks = {};
+    result.statusLine = null;
+    result.hooksDisabled = 'managed';
+    return result;
+  }
+  if (policy.disableAll || result.allowManagedHooksOnly) {
+    const kept = {};
+    for (const [event, groups] of Object.entries(result.hooks || {})) {
+      const managed = groups.filter((group) => group.source === 'managed');
+      if (managed.length) kept[event] = managed;
+    }
+    result.hooks = kept;
+    if (result.statusLine && result.statusLineSource !== 'managed') result.statusLine = null;
+    result.hooksDisabled = policy.disableAll ? 'settings' : 'managed-only';
+  }
+  return result;
+}
+
 export function mergeHooks(target, extra, source) {
   for (const [event, groups] of Object.entries(extra)) {
     for (const group of groups) (target[event] ||= []).push({ ...group, source });
@@ -237,6 +263,7 @@ export async function loadSettings(root, options = {}) {
     lspServers: {},
     modelRouting: { enabled: false, easyModel: '', strongModel: '' },
     trusted: false,
+    hookPolicy: { disableAll: false, disableAllManaged: false },
     sources: [],
     ignoredUntrusted: []
   };
@@ -324,6 +351,15 @@ export async function loadSettings(root, options = {}) {
     const configuredMode = normalizePermissionMode(permissions.defaultMode);
     if (configuredMode) result.permissions.defaultMode = configuredMode;
     mergeHooks(result.hooks, normalizeHooks(settings.hooks), scope);
+    // Claude Code hook policy keys (applied once every scope has loaded, see applyHookPolicy).
+    if (typeof settings.disableAllHooks === 'boolean') {
+      if (scope === 'managed') result.hookPolicy.disableAllManaged = result.hookPolicy.disableAllManaged || settings.disableAllHooks;
+      else result.hookPolicy.disableAll = settings.disableAllHooks;
+    }
+    if (scope === 'managed' && settings.allowManagedHooksOnly === true) result.allowManagedHooksOnly = true;
+    // HTTP hook allowlists merge across scopes; once defined, an empty list allows nothing.
+    if (Array.isArray(settings.allowedHttpHookUrls)) result.allowedHttpHookUrls = [...(result.allowedHttpHookUrls || []), ...stringList(settings.allowedHttpHookUrls).map((item) => item.slice(0, 2000))].slice(0, 500);
+    if (Array.isArray(settings.httpHookAllowedEnvVars)) result.httpHookAllowedEnvVars = [...(result.httpHookAllowedEnvVars || []), ...stringList(settings.httpHookAllowedEnvVars)].slice(0, 500);
     if (settings.sandbox && typeof settings.sandbox === 'object') {
       if (typeof settings.sandbox.enabled === 'boolean') result.sandbox.enabled = settings.sandbox.enabled;
       if (typeof settings.sandbox.network === 'boolean') result.sandbox.network = settings.sandbox.network;
@@ -431,7 +467,7 @@ export async function loadSettings(root, options = {}) {
     // autoTest: "npm test" | { command, maxAttempts, timeoutSeconds } — Oasis runs it after edits (trusted scopes only).
     if (settings.autoTest === false) result.autoTest = null;
     else if (settings.autoTest) { const autoTest = normalizeAutoTestSetting(settings.autoTest); if (autoTest) result.autoTest = autoTest; }
-    if (settings.statusLine && typeof settings.statusLine === 'object' && settings.statusLine.type === 'command' && typeof settings.statusLine.command === 'string' && settings.statusLine.command.trim()) result.statusLine = { type: 'command', command: settings.statusLine.command.trim() };
+    if (settings.statusLine && typeof settings.statusLine === 'object' && settings.statusLine.type === 'command' && typeof settings.statusLine.command === 'string' && settings.statusLine.command.trim()) { result.statusLine = { type: 'command', command: settings.statusLine.command.trim() }; result.statusLineSource = scope; }
   };
 
   // --setting-sources user,project,local limits which files load; --settings adds a file or JSON on top.
@@ -475,6 +511,7 @@ export async function loadSettings(root, options = {}) {
       }
     } catch { /* Plugins are optional; `oasis plugin list` reports problems. */ }
   }
+  applyHookPolicy(result);
   if (env.OASIS_SANDBOX === '1') result.sandbox.enabled = true;
   if (env.OASIS_SANDBOX === '0') result.sandbox.enabled = false;
   if (['os', 'docker', 'podman', 'ssh'].includes(env.OASIS_SANDBOX_BACKEND)) result.sandbox.backend = env.OASIS_SANDBOX_BACKEND;

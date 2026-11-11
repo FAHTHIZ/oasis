@@ -74,6 +74,7 @@ Gaps found by checking the [hooks reference](https://code.claude.com/docs/en/hoo
 | --- | --- | --- |
 | `PreModelSwitch` / `PostModelSwitch` hooks fired on `/model` and ACP model changes (cost fields, canonical-name matcher, ask/deny, timeout blocks) | done | `test/model-switch-hooks.test.mjs`, `test/acp.test.mjs` (sdk source) |
 | `DirectoryAdded` hook on `/add-dir`; sandbox writable folders updated | done | `test/model-switch-hooks.test.mjs` |
+| Hook policy settings: `disableAllHooks`, `allowManagedHooksOnly`, `allowedHttpHookUrls`, `httpHookAllowedEnvVars` | done | `test/hook-policy-settings.test.mjs` (7 tests, includes a real HTTP server) |
 
 ## 3. Competitive evaluation
 

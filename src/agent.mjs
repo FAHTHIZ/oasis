@@ -923,6 +923,8 @@ export function hookOptions(session, env) {
     env: env || process.env,
     onHookEvent: session.onHookEvent || null,
     onHookStatus: session.onHookStatus || null,
+    allowedHttpHookUrls: session.settings && session.settings.allowedHttpHookUrls,
+    httpHookAllowedEnvVars: session.settings && session.settings.httpHookAllowedEnvVars,
     evaluatePrompt: async ({ system, prompt, model, signal }) => {
       const config = model ? { ...session.config, model } : session.config;
       const completion = await requestCompletion({ config, toolDefinitions: [], messages: [{ role: 'system', content: system }, { role: 'user', content: prompt }] }, { noTools: true, signal });

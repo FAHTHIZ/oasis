@@ -155,11 +155,33 @@ function interpolateHeader(value, allowed, env) {
   return String(value).replace(/\$\{?([A-Za-z_][A-Za-z0-9_]*)\}?/g, (match, name) => allowed.includes(name) ? String(env[name] ?? '') : '');
 }
 
+// allowedHttpHookUrls patterns: "*" is a wildcard; the scheme and host compare
+// case-insensitively and a trailing dot on the host is ignored, as in DNS.
+function normalizeHookUrl(text) {
+  const match = /^([a-z][a-z0-9+.-]*:\/\/)([^/?#]*)(.*)$/i.exec(String(text || ''));
+  if (!match) return String(text || '');
+  const authority = match[2].toLowerCase().replace(/^([^:]*?)\.(?=:|$)/, '$1');
+  return match[1].toLowerCase() + authority + match[3];
+}
+
+export function httpHookUrlAllowed(url, patterns) {
+  if (!Array.isArray(patterns)) return true;
+  let target;
+  try { const parsed = new URL(url); target = normalizeHookUrl(parsed.protocol + '//' + parsed.host + parsed.pathname + parsed.search); } catch { return false; }
+  return patterns.some((pattern) => {
+    const source = normalizeHookUrl(pattern).split('*').map((part) => part.replace(/[.+?^${}()|[\]\\]/g, '\\$&')).join('.*');
+    return new RegExp('^' + source + '$').test(target);
+  });
+}
+
 export async function runHttpHook(hook, payload, options = {}) {
   const env = options.env || process.env;
   const timeoutMs = Math.max(1, Math.min(600, Number(hook.timeout) || 30)) * 1000;
   const headers = { 'content-type': 'application/json' };
-  const allowed = Array.isArray(hook.allowedEnvVars) ? hook.allowedEnvVars : [];
+  if (!httpHookUrlAllowed(hook.url, options.allowedHttpHookUrls)) return { exitCode: 1, stdout: '', stderr: 'HTTP hook not run: ' + hook.url + ' is not in allowedHttpHookUrls.', failed: true };
+  // httpHookAllowedEnvVars is an outer limit on every hook's own allowedEnvVars.
+  const outer = Array.isArray(options.httpHookAllowedEnvVars) ? options.httpHookAllowedEnvVars : null;
+  const allowed = (Array.isArray(hook.allowedEnvVars) ? hook.allowedEnvVars : []).filter((name) => !outer || outer.includes(name));
   for (const [key, value] of Object.entries(hook.headers || {})) headers[key] = interpolateHeader(value, allowed, env);
   try {
     const response = await fetch(hook.url, { method: 'POST', headers, body: JSON.stringify(payload), signal: AbortSignal.timeout(timeoutMs), redirect: 'error' });
