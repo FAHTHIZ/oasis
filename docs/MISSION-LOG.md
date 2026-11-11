@@ -58,6 +58,10 @@ weaknesses. Newest first. Detailed user-facing notes go in the CHANGELOG.
 
 ## 2026-11-11 (Claude Code parity cycle)
 
+### SDK query controls
+
+`query()` returns the generator with Agent SDK style control methods. `setModel()` goes through the same model policy and model-switch hooks as `/model` (source `"sdk"`), `setPermissionMode()` changes the live permission policy, and `setMaxThinkingTokens()` holds a thinking budget across turns until it is reset with `null`. Tests: `test/sdk-controls.test.mjs` (5).
+
 ### sandbox.excludedCommands and filesystem.allowRead
 - The shape check lives in `src/sandbox-exclusions.mjs`. It is a small quote-aware splitter that refuses anything it does not understand, and the existing `Bash(...)` matcher matches each command. It applies to `run_shell` and `run_command` on the OS backend only; container and SSH backends keep every command inside, because "outside" would mean a different machine or filesystem.
 - `allowRead` only re-opens paths under `denyRead` entries. OASIS's built-in secret masks (`~/.ssh` and others) are not re-opened. In bubblewrap the path is mounted back after the masks, and `denyRead` entries inside it are masked again; a broader mask used to swallow those, which the bubblewrap test caught.

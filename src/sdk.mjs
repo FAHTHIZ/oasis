@@ -124,8 +124,71 @@ export function createToolServer(name, tools = []) {
 //   jsonSchema, tools (tool() items or createToolServer() servers),
 //   canUseTool(toolName, input, { message }) -> true | false | { behavior },
 //   autoApprove, abortController, resume (session id), persistSession, bare, env.
-export async function* query({ prompt, options = {} }) {
+// The returned object is an async generator with Agent SDK style controls:
+//   interrupt(), setModel(model?), setPermissionMode(mode), setMaxThinkingTokens(n | null),
+//   supportedModels(), mcpServerStatus(), close().
+export function query({ prompt, options = {} } = {}) {
   if (!prompt || typeof prompt !== 'string') throw new Error('query() needs a prompt string.');
+  const control = { session: null, controller: new AbortController(), pending: [], waiters: [] };
+  const generator = runQuery({ prompt, options }, control);
+  const withSession = () => control.session ? Promise.resolve(control.session) : new Promise((resolve, reject) => control.waiters.push({ resolve, reject }));
+  const env = options.env || process.env;
+  return Object.assign(generator, {
+    async interrupt() { control.controller.abort(new Error('Interrupted by the SDK host.')); },
+    close() { control.controller.abort(new Error('Closed by the SDK host.')); },
+    // Like Claude Code's setModel(): undefined or "default" goes back to the starting model.
+    // availableModels/deniedModels apply and PreModelSwitch/PostModelSwitch hooks run with source "sdk".
+    async setModel(model) {
+      const session = await withSession();
+      const { modelAllowed, modelRestrictionMessage } = await import('./model-aliases.mjs');
+      const { switchSessionModel } = await import('./model-switch.mjs');
+      const target = model === undefined || model === null || model === 'default' ? control.startModel : String(model).trim();
+      if (!target || target.length > 200 || /[\r\n\0]/.test(target)) throw new Error('setModel() needs a model id.');
+      if (!modelAllowed(target, session.availableModels, { env, protocol: session.config && session.config.protocol, ...(session.modelPolicy || {}) })) {
+        throw new Error(modelRestrictionMessage(target, session.availableModels || [], { env, ...(session.modelPolicy || {}) }));
+      }
+      if ((session.config.model || '') === target) return;
+      const switched = await switchSessionModel(session, { to: target, requested: model === undefined ? null : String(model), source: 'sdk', env, apply: (next) => { session.config = { ...session.config, model: next }; } });
+      if (!switched.ok) throw new Error('Model unchanged: ' + switched.reason);
+    },
+    async setPermissionMode(mode) {
+      const { PERMISSION_MODES } = await import('./permission-modes.mjs');
+      if (!PERMISSION_MODES.includes(mode)) throw new Error('Unknown permission mode ' + JSON.stringify(mode) + '. Use one of: ' + PERMISSION_MODES.join(', ') + '.');
+      const session = await withSession();
+      const permissions = session.settings && session.settings.permissions || {};
+      if (mode === 'bypassPermissions' && permissions.disableBypassPermissionsMode) throw new Error('bypassPermissions mode is disabled by settings (disableBypassPermissionsMode).');
+      session.permissions.setMode(mode);
+    },
+    // Takes effect from the next model request; null restores the turn's own budget.
+    async setMaxThinkingTokens(tokens) {
+      const session = await withSession();
+      if (tokens === null) {
+        session.thinkingOverride = null;
+        if (session.turnThinking) { session.thinkingBudget = session.turnThinking.budget; session.thinkingOff = session.turnThinking.off; }
+        return;
+      }
+      const value = Number(tokens);
+      if (!Number.isInteger(value) || value < 0) throw new Error('setMaxThinkingTokens() needs a whole number of tokens, or null.');
+      session.thinkingOverride = value === 0 ? 0 : Math.max(1024, Math.min(value, 64000));
+      session.thinkingBudget = session.thinkingOverride;
+      session.thinkingOff = value === 0;
+    },
+    async supportedModels() {
+      const session = await withSession();
+      const current = session.config && session.config.model || '';
+      return [...new Set([current, ...(session.availableModels || [])].filter((item) => item && !item.includes('*')))].map((value) => ({ value, displayName: value, description: value === current ? 'Current model' : '' }));
+    },
+    async mcpServerStatus() {
+      const session = await withSession();
+      const connected = [...(session.mcpClients || new Map()).keys()].map((name) => ({ name, status: 'connected' }));
+      const failed = (session.mcpFailures || []).map((failure) => ({ name: failure.name || String(failure.server || ''), status: 'failed', error: String(failure.error || failure.message || '') }));
+      const pending = session.mcpConnecting ? [{ name: '(connecting)', status: 'pending' }] : [];
+      return [...connected, ...failed, ...pending];
+    }
+  });
+}
+
+async function* runQuery({ prompt, options }, control) {
   const env = options.env || process.env;
   const root = path.resolve(options.cwd || process.cwd());
   const config = { ...(await loadConfig({ env })), ...(options.provider || {}) };
@@ -146,7 +209,7 @@ export async function* query({ prompt, options = {} }) {
   // Owned by this generator: a consumer that stops iterating (break, return,
   // throw) stops the agent too, instead of leaving it calling the model and
   // running tools in the background with nothing reading its events.
-  const controller = new AbortController();
+  const controller = control.controller;
   const external = options.abortController ? options.abortController.signal : null;
   const forwardAbort = () => controller.abort(external.reason);
   if (external) {
@@ -175,9 +238,18 @@ export async function* query({ prompt, options = {} }) {
     },
     signal: controller.signal,
     canUseTool: options.canUseTool || null,
-    onSession: (session) => { for (const server of servers) attachToolServer(session, server); },
+    onSession: (session) => {
+      for (const server of servers) attachToolServer(session, server);
+      control.session = session;
+      control.startModel = session.config && session.config.model || '';
+      for (const waiter of control.waiters.splice(0)) waiter.resolve(session);
+    },
     onEvent: push
-  }).catch((error) => { failure = error; }).finally(() => { finished = true; if (wake) { wake(); wake = null; } });
+  }).catch((error) => { failure = error; }).finally(() => {
+    finished = true;
+    for (const waiter of control.waiters.splice(0)) waiter.reject(new Error('The query finished before the session started.'));
+    if (wake) { wake(); wake = null; }
+  });
 
   let completed = false;
   try {
