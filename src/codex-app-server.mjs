@@ -8,7 +8,7 @@
 // thread/resume, thread/fork, thread/read, thread/list (archived, searchTerm,
 // excludedThreadIds), thread/name/set, thread/loaded/list, thread/unsubscribe,
 // thread/archive, thread/unarchive, thread/delete, thread/compact/start,
-// skills/list, turn/start,
+// skills/list, mcpServerStatus/list (for a loaded thread), turn/start,
 // turn/steer, turn/interrupt, review/start (inline), model/list, and the host
 // methods in codex-app-server-host.mjs: fs/* (readFile, writeFile,
 // createDirectory, getMetadata, readDirectory, remove, copy, watch, unwatch)
@@ -723,6 +723,30 @@ export function createCodexAppServer(options = {}) {
           } catch (error) { data.push({ cwd: root, skills: [], errors: [{ path: root, message: String(error && error.message || error) }] }); }
         }
         return { data };
+      }
+      case 'mcpServerStatus/list': {
+        // OASIS connects MCP servers per thread, so the status comes from a
+        // loaded thread: the one named, or the only one loaded.
+        const entry = typeof params.threadId === 'string' && params.threadId ? threadEntry(params.threadId) : (threads.size === 1 ? [...threads.values()][0] : null);
+        if (!entry) throw rpcError(-32602, 'Pass the threadId of a loaded thread; OASIS starts MCP servers per thread.');
+        if (entry.session.mcpConnecting) await Promise.race([entry.session.mcpConnecting.catch(() => {}), new Promise((resolve) => setTimeout(resolve, 0))]);
+        const toolsOnly = params.detail === 'toolsAndAuthOnly';
+        const origin = (url) => { try { return new URL(url).origin; } catch { return null; } };
+        const rows = [];
+        for (const [name, client] of entry.session.mcpClients || new Map()) {
+          const config = client.config || {};
+          const tools = {};
+          for (const tool of Array.isArray(client.tools) ? client.tools : []) tools[tool.name] = tool;
+          rows.push({ name, runtimeStatus: 'connected', pluginId: null, httpOrigin: config.url ? origin(config.url) : null, serverInfo: toolsOnly ? null : (client.serverInfo || null), serverCapabilities: toolsOnly ? null : (client.capabilities || null), toolListMeta: null, tools, toolsError: null, resources: toolsOnly ? [] : (client.resources || []), resourceTemplates: toolsOnly ? [] : (client.resourceTemplates || []), authStatus: config.oauth ? 'oAuth' : (config.headers && Object.keys(config.headers).some((key) => key.toLowerCase() === 'authorization') ? 'bearerToken' : (config.url ? 'unknown' : 'unsupported')) });
+        }
+        for (const failure of entry.session.mcpFailures || []) {
+          if (!failure || !failure.name || rows.some((row) => row.name === failure.name)) continue;
+          rows.push({ name: String(failure.name), runtimeStatus: /auth|401|login/i.test(String(failure.error || '')) ? 'authenticationRequired' : 'failed', pluginId: null, httpOrigin: null, serverInfo: null, serverCapabilities: null, toolListMeta: null, tools: {}, toolsError: String(failure.error || 'failed to start').slice(0, 2000), resources: [], resourceTemplates: [], authStatus: 'unknown' });
+        }
+        const filtered = typeof params.serverName === 'string' && params.serverName ? rows.filter((row) => row.name === params.serverName) : rows;
+        const start = Math.max(0, Number.parseInt(params.cursor || '0', 10) || 0);
+        const limit = Math.min(200, Math.max(1, Number(params.limit) || 100));
+        return { data: filtered.slice(start, start + limit), nextCursor: start + limit < filtered.length ? String(start + limit) : null };
       }
       case 'model/list': {
         const { loadConfig } = await load('config');

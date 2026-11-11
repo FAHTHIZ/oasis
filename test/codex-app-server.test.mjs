@@ -355,3 +355,39 @@ test('skills/list reports built-in and repository skills with Codex scopes and S
   assert.ok(system.length > 0, 'built-in skills are listed');
   for (const skill of system) assert.ok(existsSync(skill.path), skill.path);
 });
+
+test('mcpServerStatus/list reports the thread\'s connected and failed MCP servers', async (t) => {
+  const root = await tmp(t);
+  const home = await tmp(t, 'oasis-appsrv-home-');
+  const server = [
+    "let buffer = '';",
+    "process.stdin.setEncoding('utf8');",
+    "const reply = (id, result) => process.stdout.write(JSON.stringify({ jsonrpc: '2.0', id, result }) + '\\n');",
+    "process.stdin.on('data', (chunk) => { buffer += chunk; let i;",
+    "  while ((i = buffer.indexOf('\\n')) >= 0) { const line = buffer.slice(0, i); buffer = buffer.slice(i + 1);",
+    "    let m; try { m = JSON.parse(line); } catch { continue; } if (m.id === undefined) continue;",
+    "    if (m.method === 'initialize') reply(m.id, { protocolVersion: '2025-03-26', serverInfo: { name: 'fixture-server', version: '1.2.3' }, capabilities: { tools: {} } });",
+    "    else if (m.method === 'tools/list') reply(m.id, { tools: [{ name: 'ping', description: 'Ping', inputSchema: { type: 'object', properties: {} } }] });",
+    "    else reply(m.id, {}); } });"
+  ].join('\n');
+  await writeFile(path.join(root, '.mcp.json'), JSON.stringify({ mcpServers: { good: { command: process.execPath, args: ['-e', server] }, broken: { command: path.join(root, 'no-such-binary') } } }));
+  const { setWorkspaceTrust } = await import('../src/settings.mjs');
+  await setWorkspaceTrust(root, true, { ...process.env, HOME: home, OASIS_CONFIG_DIR: path.join(home, 'cfg') });
+  const { config } = await scriptedModel(t, [{ content: 'unused' }]);
+  const { child, stderr } = spawnServer(t, root, home, config);
+  const client = codexClient(child);
+  await client.call('initialize', { clientInfo: { name: 't' } });
+  assert.equal((await client.call('mcpServerStatus/list', {})).error.code, -32602, 'no loaded thread');
+  const { result } = await client.call('thread/start', { cwd: root });
+  const listed = await client.call('mcpServerStatus/list', { threadId: result.thread.id });
+  assert.ok(listed.result, stderr() + JSON.stringify(listed));
+  const byName = Object.fromEntries(listed.result.data.map((row) => [row.name, row]));
+  assert.equal(byName.good.runtimeStatus, 'connected');
+  assert.deepEqual(byName.good.serverInfo, { name: 'fixture-server', version: '1.2.3' });
+  assert.deepEqual(Object.keys(byName.good.tools), ['ping']);
+  assert.equal(byName.good.authStatus, 'unsupported');
+  assert.equal(byName.broken.runtimeStatus, 'failed');
+  assert.ok(byName.broken.toolsError);
+  const one = await client.call('mcpServerStatus/list', { threadId: result.thread.id, serverName: 'good', detail: 'toolsAndAuthOnly' });
+  assert.deepEqual(one.result.data.map((row) => [row.name, row.serverInfo]), [['good', null]]);
+});
