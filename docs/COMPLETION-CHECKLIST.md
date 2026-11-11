@@ -57,7 +57,7 @@ Status: **done** (tested and pushed) · **doing** · **open** · **blocked**
 | Routines that continue an existing conversation (Codex thread automations) | done | `test/routines.test.mjs` (chained fork e2e). Runs fork with `--resume ID --fork-session --session-id NEW`, so the original session file is never written. |
 | OpenTelemetry GenAI semantic conventions (spans, metrics, opt-in span names) | done | `test/telemetry.test.mjs` (collector checks names, buckets, attributes) |
 | Codex App Server `fuzzyFileSearch`, `thread/turns/list` | done | `test/codex-app-server.test.mjs` |
-| Codex App Server `thread/shellCommand`, `gitDiffToRemote`, `config/read` | done | `test/codex-app-server.test.mjs` (shell turn, failure, timeout, next-turn context, plan refusal; config shape and redaction), `test/codex-app-server-host.test.mjs` (diff applies cleanly to a clone) |
+| Codex App Server `thread/shellCommand`, `gitDiffToRemote`, `config/read`, `hooks/list`, `account/read` | done | `test/codex-app-server.test.mjs` (shell turn, failure, timeout, next-turn context, plan refusal; config shape and redaction), `test/codex-app-server-host.test.mjs` (diff applies cleanly to a clone) |
 | Archived sessions hidden from every resume surface (CLI, web, ACP, App Server) | done | `test/commands.test.mjs`, `test/web.test.mjs`, `test/acp.test.mjs` |
 
 ## 2c. IDE-agent interoperability (Cursor, Devin Desktop/Windsurf, Antigravity, OpenHands)

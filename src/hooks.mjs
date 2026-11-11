@@ -263,7 +263,7 @@ export async function runMcpToolHook(hook, payload, options = {}) {
   }
 }
 
-function defaultTimeout(hook, event) {
+export function defaultTimeout(hook, event) {
   if (hook.timeout) return hook.timeout;
   if (hook.type === 'prompt') return 30;
   if (hook.type === 'agent') return 60;
