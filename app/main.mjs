@@ -2731,6 +2731,69 @@ $('mcpAddButton').addEventListener('click', async () => {
     $('mcpAdd').open = false;
   } else mcpSetStatus('');
 });
+// Routines (`oasis schedule`) on the computer running `oasis web` (/api/routines).
+let routineItems = [];
+function routineSetStatus(text, kind = '') { const node = $('routineStatus'); node.textContent = text; node.className = 'test-result' + (kind === 'error' ? ' fail' : ''); }
+function renderRoutines(data, problem = '') {
+  routineItems = (data && data.routines) || [];
+  $('routineScheduler').textContent = problem || (data && data.scheduler === 'running' ? 'The scheduler is running.' : 'The scheduler is not running, so routines will not fire until oasis web restarts or you run oasis schedule daemon.');
+  const list = $('routineList');
+  list.replaceChildren();
+  if (!routineItems.length && !problem) { const li = document.createElement('li'); li.className = 'hint'; li.textContent = 'No routines yet. You can also ask the agent, for example: check CI every weekday at 9.'; list.appendChild(li); }
+  for (const job of routineItems) {
+    const li = document.createElement('li');
+    li.className = 'connection routine' + (job.enabled ? ' current' : '');
+    const info = document.createElement('div');
+    info.className = 'connection-info';
+    const title = document.createElement('strong');
+    title.textContent = (job.name || job.id) + ' · ' + job.state;
+    const when = document.createElement('span');
+    when.textContent = job.schedule + (job.timezone ? ' (' + job.timezone + ')' : '') + (job.nextRunAt ? ' · next ' + new Date(job.nextRunAt).toLocaleString() : '') + (job.lastStatus ? ' · last ' + job.lastStatus : '');
+    const what = document.createElement('span');
+    what.textContent = (job.kind === 'script' ? '$ ' : '') + job.prompt.slice(0, 160) + (job.deliver && job.deliver !== 'local' ? ' → ' + job.deliver : '');
+    info.append(title, when, what);
+    if (job.pausedReason || job.lastProblem) { const note = document.createElement('span'); note.textContent = job.lastProblem || job.pausedReason; info.append(note); }
+    const actions = document.createElement('div');
+    actions.className = 'row';
+    const button = (label, action, ghost = false) => {
+      const b = document.createElement('button');
+      b.type = 'button'; b.className = 'btn small' + (ghost ? ' ghost' : ''); b.textContent = label;
+      b.setAttribute('aria-label', label + ' ' + (job.name || job.id));
+      b.addEventListener('click', () => {
+        if (action === 'remove' && !confirm('Delete the routine "' + (job.name || job.id) + '"?')) return;
+        void routineAction({ action, id: job.id }, label + ': ' + (job.name || job.id));
+      });
+      actions.append(b);
+    };
+    if (job.state === 'running') button('Stop run', 'cancel');
+    else button('Run now', 'run');
+    button(job.enabled ? 'Pause' : 'Resume', job.enabled ? 'pause' : 'resume');
+    button('Remove', 'remove', true);
+    li.append(info, actions);
+    list.appendChild(li);
+  }
+}
+async function refreshRoutines() {
+  if (!mcpAvailable()) return;
+  try { renderRoutines(await RT.client.api('/api/routines')); }
+  catch (error) { renderRoutines(null, 'Could not load routines: ' + error.message); }
+}
+async function routineAction(body, done) {
+  try { renderRoutines(await RT.client.api('/api/routines', { method: 'POST', body })); toast(done); return true; }
+  catch (error) { toast('Routine not changed: ' + error.message, 'error'); return false; }
+}
+$('routineAddButton').addEventListener('click', async () => {
+  const fields = { name: $('routineName').value.trim(), schedule: $('routineSchedule').value.trim(), prompt: $('routinePrompt').value.trim(), kind: $('routineScript').checked ? 'script' : 'agent', deliver: $('routineDeliver').value.trim() };
+  if (!fields.schedule || !fields.prompt) { routineSetStatus('Add a schedule and a task.', 'error'); return; }
+  if (fields.kind === 'script' && !confirm('This command will run on your computer on schedule "' + fields.schedule + '":\n\n' + fields.prompt)) return;
+  routineSetStatus('Saving…');
+  if (await routineAction({ action: 'create', fields }, 'Routine added.')) {
+    for (const id of ['routineName', 'routineSchedule', 'routinePrompt', 'routineDeliver']) $(id).value = '';
+    $('routineScript').checked = false;
+    $('routineAdd').open = false;
+  }
+  routineSetStatus('');
+});
 function openSettings() {
   renderConnections();
   const entry = activeEntry();
@@ -2761,6 +2824,8 @@ function openSettings() {
   $('wipeAll').hidden = Boolean(RT);
   $('mcpSettings').hidden = !mcpAvailable();
   if (mcpAvailable()) { mcpSetStatus(''); void refreshMcp(); }
+  $('routineSettings').hidden = !mcpAvailable();
+  if (mcpAvailable()) { routineSetStatus(''); void refreshRoutines(); }
   if (navigator.storage && navigator.storage.estimate) navigator.storage.estimate().then(({ usage, quota }) => { $('storageInfo').textContent = 'Using ' + (usage / 1048576).toFixed(1) + ' MB of ' + (quota / 1073741824).toFixed(1) + ' GB available on this device.'; });
   openSheet('settingsSheet');
 }
