@@ -397,6 +397,9 @@ export async function loadSettings(root, options = {}) {
       else result.hookPolicy.disableAll = settings.disableAllHooks;
     }
     if (scope === 'managed' && settings.allowManagedHooksOnly === true) result.allowManagedHooksOnly = true;
+    // Claude Code model policy: deniedModels and availableModelsMatch come from managed settings only.
+    if (scope === 'managed' && Array.isArray(settings.deniedModels)) result.deniedModels = [...new Set([...(result.deniedModels || []), ...settings.deniedModels.filter((item) => typeof item === 'string' && item.trim()).map((item) => item.trim())])].slice(0, 200);
+    if (scope === 'managed' && (settings.availableModelsMatch === 'exact' || settings.availableModelsMatch === 'prefix')) result.availableModelsMatch = settings.availableModelsMatch;
     // HTTP hook allowlists merge across scopes; once defined, an empty list allows nothing.
     if (Array.isArray(settings.allowedHttpHookUrls)) result.allowedHttpHookUrls = [...(result.allowedHttpHookUrls || []), ...stringList(settings.allowedHttpHookUrls).map((item) => item.slice(0, 2000))].slice(0, 500);
     if (Array.isArray(settings.httpHookAllowedEnvVars)) result.httpHookAllowedEnvVars = [...(result.httpHookAllowedEnvVars || []), ...stringList(settings.httpHookAllowedEnvVars)].slice(0, 500);
@@ -450,6 +453,11 @@ export async function loadSettings(root, options = {}) {
     if (typeof settings.model === 'string' && settings.model.trim()) result.model = settings.model.trim();
     if (Array.isArray(settings.availableModels)) result.availableModels = settings.availableModels.filter((item) => typeof item === 'string' && item.trim()).map((item) => item.trim()).slice(0, 100);
     if (typeof settings.chrome === 'boolean') result.chrome = settings.chrome;
+    // modelOverrides: { "claude-opus-4-6": "arn:aws:bedrock:..." } maps model ids to provider ids.
+    if (settings.modelOverrides && typeof settings.modelOverrides === 'object' && !Array.isArray(settings.modelOverrides)) {
+      result.modelOverrides = { ...(result.modelOverrides || {}) };
+      for (const [key, value] of Object.entries(settings.modelOverrides).slice(0, 100)) if (key.trim() && typeof value === 'string' && value.trim() && !/[\r\n\0]/.test(value)) result.modelOverrides[key.trim()] = value.trim().slice(0, 500);
+    }
     if (settings.defaultShell === 'powershell' || settings.defaultShell === 'bash') result.defaultShell = settings.defaultShell;
     if (typeof settings.advisorModel === 'string' && settings.advisorModel.trim()) result.advisorModel = settings.advisorModel.trim().slice(0, 200);
     if (settings.autoMemory === true) result.autoMemory = true;
