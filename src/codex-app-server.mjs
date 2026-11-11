@@ -6,7 +6,7 @@
 //
 // Implemented methods: initialize (+ initialized notification), thread/start,
 // thread/resume, thread/fork, thread/read, thread/list, thread/name/set, turn/start,
-// turn/steer, turn/interrupt, model/list.
+// turn/steer, turn/interrupt, review/start (inline), model/list.
 // Notifications sent: thread/started, thread/status/changed, thread/name/updated,
 // turn/started, turn/completed, turn/plan/updated, item/started, item/completed,
 // item/agentMessage/delta, item/commandExecution/outputDelta (final output only),
@@ -143,6 +143,7 @@ export function createCodexAppServer(options = {}) {
     if (name === 'config') return import('./config.mjs');
     if (name === 'sessions') return import('./sessions.mjs');
     if (name === 'mentions') return import('./commands.mjs');
+    if (name === 'slash') return import('./slash.mjs');
     throw new Error('unknown dependency ' + name);
   }
 
@@ -270,11 +271,12 @@ export function createCodexAppServer(options = {}) {
     return decision === 'accept' || decision === 'acceptWithExecpolicyAmendment';
   }
 
-  async function runTurn(entry, turn, text, images) {
+  async function runTurn(entry, turn, text, images, { onFinish = null } = {}) {
     const threadId = entry.session.sessionId;
     const items = new Map();
     let message = null;
     let streamed = '';
+    let lastText = '';
     const startMessage = () => {
       if (message) return message;
       message = { type: 'agentMessage', id: 'item-' + randomUUID(), text: '', phase: null, memoryCitation: null };
@@ -285,6 +287,7 @@ export function createCodexAppServer(options = {}) {
       if (!message && !finalText) return;
       const item = startMessage();
       item.text = finalText || streamed;
+      if (item.text) lastText = item.text;
       notify('item/completed', { item, threadId, turnId: turn.id, completedAtMs: Date.now() });
       message = null; streamed = '';
     };
@@ -375,9 +378,53 @@ export function createCodexAppServer(options = {}) {
     } finally {
       try { const { saveSession } = await load('sessions'); await saveSession(entry.session, { env }); } catch {}
       turn.completedAt = nowSeconds();
+      if (onFinish) { try { onFinish(lastText); } catch (error) { log('turn finish hook failed: ' + error.message); } }
       entry.turn = null; entry.controller = null;
       notify('turn/completed', { threadId, turn: turnView(turn) });
       notify('thread/status/changed', { threadId, status: threadStatus(entry) });
+    }
+  }
+
+  // Reply first, then stream: clients expect the turn id before its events.
+  function beginTurn(entry, text, images, leadItems = [], hooks = {}) {
+    const threadId = entry.session.sessionId;
+    const turn = { id: randomUUID(), status: 'inProgress', error: null, startedAt: nowSeconds(), completedAt: null };
+    entry.turn = turn;
+    entry.controller = new AbortController();
+    queueMicrotask(() => {
+      notify('turn/started', { threadId, turn: turnView(turn) });
+      notify('thread/status/changed', { threadId, status: threadStatus(entry) });
+      for (const item of leadItems) {
+        notify('item/started', { item, threadId, turnId: turn.id, startedAtMs: Date.now() });
+        notify('item/completed', { item, threadId, turnId: turn.id, completedAtMs: Date.now() });
+      }
+      runTurn(entry, turn, text, images, hooks).catch((error) => log('turn failed: ' + error.message));
+    });
+    return turn;
+  }
+
+  async function reviewRequest(target = {}) {
+    const { reviewPrompt } = await load('slash');
+    const readOnly = 'This is a read-only review: do not modify files.';
+    switch (target && target.type) {
+      case 'uncommittedChanges': return { label: 'current changes', prompt: reviewPrompt('code-review', '') };
+      case 'baseBranch': {
+        const branch = String(target.branch || '').trim();
+        if (!/^[\w./@-]{1,200}$/.test(branch) || branch.startsWith('-')) throw rpcError(-32602, 'target.branch must be a branch name.');
+        return { label: 'changes against ' + branch, prompt: reviewPrompt('code-review', branch) };
+      }
+      case 'commit': {
+        const sha = String(target.sha || '').trim();
+        if (!/^[0-9a-f]{4,64}$/i.test(sha)) throw rpcError(-32602, 'target.sha must be a commit hash.');
+        const title = target.title ? ' (' + String(target.title).slice(0, 200) + ')' : '';
+        return { label: 'commit ' + sha.slice(0, 12) + title, prompt: 'Scope: review only the changes introduced by commit ' + sha + title + '. Read them with `git show ' + sha + '`; ignore other pending changes.\n' + reviewPrompt('code-review', sha + '~1') };
+      }
+      case 'custom': {
+        const instructions = String(target.instructions || '').trim();
+        if (!instructions) throw rpcError(-32602, 'target.instructions is required.');
+        return { label: instructions.slice(0, 120), prompt: instructions.slice(0, 20000) + '\n' + readOnly };
+      }
+      default: throw rpcError(-32602, 'target.type must be uncommittedChanges, baseBranch, commit or custom.');
     }
   }
 
@@ -476,19 +523,27 @@ export function createCodexAppServer(options = {}) {
           const mode = permissionModeFor(params);
           if (typeof entry.session.permissions.setMode === 'function') entry.session.permissions.setMode(mode); else entry.session.permissions.mode = mode;
         }
-        const turn = { id: randomUUID(), status: 'inProgress', error: null, startedAt: nowSeconds(), completedAt: null };
-        entry.turn = turn;
-        entry.controller = new AbortController();
         const userItem = { type: 'userMessage', id: 'item-' + randomUUID(), clientId: params.clientUserMessageId || null, content: Array.isArray(params.input) ? params.input : [] };
-        // Reply first, then stream: clients expect the turn id before its events.
-        queueMicrotask(() => {
-          notify('turn/started', { threadId: params.threadId, turn: turnView(turn) });
-          notify('thread/status/changed', { threadId: params.threadId, status: threadStatus(entry) });
-          notify('item/started', { item: userItem, threadId: params.threadId, turnId: turn.id, startedAtMs: Date.now() });
-          notify('item/completed', { item: userItem, threadId: params.threadId, turnId: turn.id, completedAtMs: Date.now() });
-          runTurn(entry, turn, text, images).catch((error) => log('turn failed: ' + error.message));
-        });
+        const turn = beginTurn(entry, text, images, [userItem]);
         return { turn: turnView(turn) };
+      }
+      case 'review/start': {
+        const entry = threadEntry(params.threadId);
+        if (entry.turn) throw rpcError(-32000, 'A turn is already running in this thread.');
+        if (params.delivery && params.delivery !== 'inline') throw rpcError(-32602, 'Only inline review delivery is supported.');
+        const { label, prompt } = await reviewRequest(params.target);
+        const threadId = entry.session.sessionId;
+        let turnId = null;
+        const entered = { type: 'enteredReviewMode', id: 'item-' + randomUUID(), review: label };
+        const turn = beginTurn(entry, prompt, [], [entered], {
+          onFinish: (text) => {
+            const exited = { type: 'exitedReviewMode', id: 'item-' + randomUUID(), review: text || '' };
+            notify('item/started', { item: exited, threadId, turnId, startedAtMs: Date.now() });
+            notify('item/completed', { item: exited, threadId, turnId, completedAtMs: Date.now() });
+          }
+        });
+        turnId = turn.id;
+        return { turn: turnView(turn), reviewThreadId: threadId };
       }
       case 'turn/steer': {
         const entry = threadEntry(params.threadId);

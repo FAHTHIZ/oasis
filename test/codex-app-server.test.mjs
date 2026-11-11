@@ -222,3 +222,29 @@ test('thread/fork copies history into a new thread, optionally up to lastTurnId'
   assert.doesNotMatch(JSON.stringify(original.result.thread.turns), /fork only/);
   assert.equal((await client.call('thread/fork', { threadId, lastTurnId: 'abc' })).error.code, -32602);
 });
+
+test('review/start runs an inline review turn wrapped in review-mode items', async (t) => {
+  const root = await tmp(t);
+  const home = await tmp(t, 'oasis-appsrv-home-');
+  const { config, requests } = await scriptedModel(t, [{ content: 'No issues found in the pending changes.' }]);
+  const { child, stderr } = spawnServer(t, root, home, config);
+  const client = codexClient(child);
+  await client.call('initialize', { clientInfo: { name: 't' } });
+  const { result } = await client.call('thread/start', { cwd: root });
+  const threadId = result.thread.id;
+  assert.equal((await client.call('review/start', { threadId, target: { type: 'commit', sha: 'not-a-sha;rm' } })).error.code, -32602);
+  assert.equal((await client.call('review/start', { threadId, target: { type: 'baseBranch', branch: '--output=x' } })).error.code, -32602);
+  const review = await client.call('review/start', { threadId, target: { type: 'uncommittedChanges' } });
+  assert.ok(review.result, stderr() + JSON.stringify(review));
+  assert.equal(review.result.reviewThreadId, threadId);
+  const done = await client.until((note) => note.method === 'turn/completed');
+  assert.equal(done.params.turn.status, 'completed');
+  const items = client.notes.filter((note) => note.method === 'item/completed').map((note) => note.params.item);
+  assert.equal(items[0].type, 'enteredReviewMode');
+  assert.equal(items[0].review, 'current changes');
+  const exited = items.find((item) => item.type === 'exitedReviewMode');
+  assert.match(exited.review, /No issues found/);
+  const order = client.notes.map((note) => note.method + ':' + (note.params.item ? note.params.item.type : ''));
+  assert.ok(order.lastIndexOf('item/completed:exitedReviewMode') < order.indexOf('turn/completed:'));
+  assert.match(JSON.stringify(requests[0].messages), /git diff HEAD/);
+});
