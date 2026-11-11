@@ -8,7 +8,7 @@ import { getConfigDirectory } from './config.mjs';
 import { listAvailableSkills, loadSkillText } from './tools.mjs';
 
 const tokens = (text) => countTextTokens(text);
-const EXTERNAL = ['global-extension', 'project-extension', 'portable-workspace', 'global-portable'];
+const EXTERNAL = ['global-extension', 'project-extension', 'portable-workspace', 'global-portable', 'foreign-user'];
 
 // Names matched by Skill(...) deny rules; "*" globs are supported.
 export function skillDenied(name, deny = []) {

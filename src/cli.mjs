@@ -1093,7 +1093,7 @@ async function listSkills(root) {
     'project-extension': 'project extension'
   };
   for (const skill of skills) {
-    stdout.write('  ' + skill.name + ' [' + (sourceLabels[skill.source] || skill.source) + '] — ' + skill.description + '\n');
+    stdout.write('  ' + skill.name + ' [' + (skill.origin || sourceLabels[skill.source] || skill.source) + '] — ' + skill.description + '\n');
   }
 }
 
