@@ -691,6 +691,38 @@ export function createOasisWebServer(options = {}) {
     });
   }
 
+  // Connector cards (connect_service, or Settings → Connectors). The flow runs
+  // here; the page shows its view and posts Connect / Not now / a token.
+  const connectFlows = new Map();
+  function keepFlow(flow) {
+    connectFlows.set(flow.id, flow);
+    // Forget settled cards after a while; the page has the final view by then.
+    flow.done.then(() => { const timer = setTimeout(() => connectFlows.delete(flow.id), 30 * 60 * 1000); timer.unref?.(); });
+    if (connectFlows.size > 50) for (const [id, other] of connectFlows) { if (connectFlows.size <= 50) break; if (['connected', 'failed', 'skipped'].includes(other.view().status)) connectFlows.delete(id); }
+  }
+  function connectorCardFor(job, flow) {
+    keepFlow(flow);
+    let settled = false;
+    const timer = setTimeout(() => flow.skip(), 15 * 60 * 1000);
+    timer.unref?.();
+    const unsubscribe = flow.subscribe((view) => {
+      if (settled) return;
+      emit(job, 'connector_update', view);
+    });
+    job.pendingApprovals.set(flow.id, { resolve: () => flow.skip(), connector: true });
+    job.status = 'waiting_approval';
+    emit(job, 'connector_card', { ...flow.view(), expiresInSeconds: 900 });
+    return flow.done.then((view) => {
+      settled = true;
+      unsubscribe();
+      clearTimeout(timer);
+      job.pendingApprovals.delete(flow.id);
+      if (job.pendingApprovals.size === 0 && job.status === 'waiting_approval') job.status = 'running';
+      emit(job, 'connector_resolved', { id: flow.id, status: view.status, connector: view.connector, account: view.account, tools: view.tools.length, message: view.message });
+      return view;
+    });
+  }
+
   function pruneJobs(additionalReservations = 0) {
     if (jobs.size + reservedJobSlots + additionalReservations <= MAX_JOBS) return;
     for (const [id, job] of jobs) {
@@ -960,6 +992,7 @@ export function createOasisWebServer(options = {}) {
           ...(withAttached(images).length ? { images: withAttached(images) } : {}),
           approval: (prompt, forceInteractive, meta) => approvalFor(job, prompt, forceInteractive, meta),
           askUser: (question) => questionFor(job, question),
+          connectorCard: (flow) => connectorCardFor(job, flow),
           onUsage: (usage) => { if (session.webUsage) recordUsage(session.webUsage, usage); emit(job, 'usage', usage); },
           onModelWait: (event) => {
             if (!event || event.phase !== 'progress' || !event.promptProgress) return;
@@ -1544,6 +1577,37 @@ export function createOasisWebServer(options = {}) {
       return;
     }
     authLimiter.succeed(caller);
+
+    if (pathname === '/api/connectors' && (req.method === 'GET' || req.method === 'POST')) {
+      const connectors = await import('./connectors.mjs');
+      if (req.method === 'GET') { json(res, 200, { connectors: await connectors.listConnectors({ root, env }) }); return; }
+      const body = await readJsonBody(req);
+      let connector;
+      try { connector = await connectors.resolveConnector(String(body.service || '').slice(0, 300), { env }); }
+      catch (error) { json(res, 404, { error: String(error.message || error).slice(0, 800) }); return; }
+      const flow = connectors.createConnectFlow(connector, { root, env, reason: String(body.reason || '') });
+      keepFlow(flow);
+      json(res, 200, flow.view());
+      return;
+    }
+    const connectorMatch = pathname.match(/^\/api\/connectors\/([a-f0-9-]{36})$/i);
+    if (connectorMatch && (req.method === 'GET' || req.method === 'POST')) {
+      const flow = connectFlows.get(connectorMatch[1]);
+      if (!flow) { json(res, 404, { error: 'That connector card has expired. Ask again to get a new one.' }); return; }
+      if (req.method === 'GET') { json(res, 200, flow.view()); return; }
+      const body = await readJsonBody(req);
+      try {
+        const action = String(body.action || '');
+        const view = action === 'connect' ? flow.connect()
+          : action === 'skip' ? flow.skip()
+          : action === 'token' ? flow.submitToken(String(body.token || '').slice(0, 300))
+          : action === 'callback' ? flow.pasteCallback(String(body.address || '').slice(0, 4000))
+          : null;
+        if (!view) { json(res, 400, { error: 'action must be connect, skip, token or callback.' }); return; }
+        json(res, 200, view);
+      } catch (error) { json(res, 400, { error: String(error.message || error).slice(0, 500) }); }
+      return;
+    }
 
     if (req.method === 'GET' && pathname === '/api/mcp') {
       const config = await loadMcpServers({ env });
@@ -2689,7 +2753,7 @@ export function createOasisWebServer(options = {}) {
       const approved = body.approved;
       if (typeof approved !== 'boolean') { json(res, 400, { error: 'approved must be true or false.' }); return; }
       const pending = job.pendingApprovals.get(approvalId);
-      if (!pending || pending.question || pending.elicitation) { json(res, 404, { error: 'That approval request is no longer pending.' }); return; }
+      if (!pending || pending.question || pending.elicitation || pending.connector) { json(res, 404, { error: 'That approval request is no longer pending.' }); return; }
       const always = approved && body.always === true && Boolean(pending.suggestion);
       pending.resolve(always ? 'always' : approved);
       json(res, 200, { resolved: true, approved, always });

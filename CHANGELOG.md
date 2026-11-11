@@ -4,6 +4,15 @@ User-facing change history grouped by package version. A version heading does no
 
 ## Unreleased
 
+### Connect cards
+- Say "connect GitHub", type `/connect linear`, or let the agent ask: a Connect card appears inline in the conversation (brand mark, what it is for, **Connect** / **Not now**), the way hosted assistants show one. Connect opens the sign-in in a popup (the system browser in the desktop app), the card follows it, and it settles as Connected with the number of tools ready. The task waits on the card and continues in the same turn.
+- New `connect_service` tool (in the Setup tool group) so the agent can ask for an app it needs. It returns at once when the app is already connected, quietly reattaches one that was signed in before, and never runs in subagents or headless runs (those are told to run `oasis mcp connect NAME`).
+- A built-in catalog of remote MCP servers with verified OAuth: GitHub, Linear, Notion, Sentry, Atlassian, Stripe, Vercel, Supabase, Neon, Cloudflare (and its docs), Hugging Face, monday.com, Intercom and PayPal. Other names resolve through the official MCP Registry (remote servers only); a pasted `https://` URL works too.
+- GitHub: an existing `gh` sign-in connects instantly; otherwise `gh auth login --web` runs and the one-time code is shown on the card with a "Copy code and open GitHub" button; without `gh`, a token box. The token is checked against the GitHub API and stored like other MCP sign-ins.
+- OAuth from another device: the card can take the `http://127.0.0.1/...` address the browser landed on, so signing in from a phone finishes the computer's sign-in.
+- Terminal: the same card is drawn as a box with Connect / Not now; `/connect` lists apps with their status; `oasis mcp connect [NAME]` works from a shell. API: `GET/POST /api/connectors`, `GET/POST /api/connectors/:id` (`connect`, `skip`, `token`, `callback`).
+- Brand marks come from Simple Icons (CC0) and are bundled, so the strict app CSP stays unchanged.
+
 ### Routines (durable scheduling)
 - `oasis schedule` (aliases `oasis cron`, `oasis routines`) adds routines: prompts or shell commands that run on a schedule whether or not a terminal is open. In-session `/schedule` jobs still end with their session. Schedules are 5-field cron with an optional per-routine time zone (`--tz Asia/Dhaka`), `every 2h`, `in 30m`, or an ISO date. `oasis schedule daemon` runs them; `oasis schedule tick` does one pass for a system crontab.
 - Each fire runs in a fresh background session (the same tools, permission rules and logs as `oasis --bg`), in the routine's `--workdir`, with its own `--model`, `--permission-mode` and `--skill` list. `--script` runs a command with no model at all.
