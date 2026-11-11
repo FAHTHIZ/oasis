@@ -37,6 +37,9 @@ weaknesses. Newest first. Detailed user-facing notes go in the CHANGELOG.
 
 ## 2026-11-11 (Claude Code parity cycle)
 
+### plansDirectory
+- OASIS did not store plans on disk. With `plansDirectory` set, `exit_plan_mode` now writes the plan there before asking for approval. Unlike Claude Code, which defaults to `~/.claude/plans`, nothing is written when the key is unset, and an untrusted repository cannot set it.
+
 ### alwaysThinkingEnabled
 - Thinking on budget-mode Claude models was already off unless a keyword or saved budget asked for it, so `true` changes nothing. `false` now blocks those budgets, and on adaptive (4.6) models drops the `thinking` field and caps effort at `high`, following the settings reference. Always-thinking models (4.7 and later, Fable) are unchanged. `MAX_THINKING_TOKENS=0` now means "off" instead of "not set".
 
