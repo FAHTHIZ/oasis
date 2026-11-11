@@ -1236,7 +1236,7 @@ export function createOasisWebServer(options = {}) {
 
     const [owner, name] = repository.split('/');
     const relative = '.oasis/workspaces/' + owner + '--' + name;
-    const resolved = await resolveWorkspacePath(root, relative, { rejectSymlinks: true, workspaceOnly: true });
+    const resolved = await resolveWorkspacePath(root, relative, { rejectSymlinks: true, workspaceOnly: true, allowIgnored: true });
     try {
       await access(resolved.absolute);
       const check = await executeTool('run_command', {
@@ -1280,7 +1280,7 @@ export function createOasisWebServer(options = {}) {
         }
         await mkdir(path.dirname(resolved.absolute), { recursive: true });
         const stagingRelative = relative + '.clone-' + job.id;
-        const staging = await resolveWorkspacePath(root, stagingRelative, { rejectSymlinks: true, workspaceOnly: true });
+        const staging = await resolveWorkspacePath(root, stagingRelative, { rejectSymlinks: true, workspaceOnly: true, allowIgnored: true });
         const result = await executeTool('run_command', {
           command: 'gh',
           args: ['repo', 'clone', repository, staging.absolute],
@@ -1289,13 +1289,13 @@ export function createOasisWebServer(options = {}) {
         const output = [result.stdout || '', result.stderr ? '\n' + result.stderr : '', result.error ? '\n' + result.error : ''].join('').slice(-12000);
         const cleanStaging = async () => {
           try {
-            const safeStaging = await resolveWorkspacePath(root, stagingRelative, { rejectSymlinks: true, workspaceOnly: true });
+            const safeStaging = await resolveWorkspacePath(root, stagingRelative, { rejectSymlinks: true, workspaceOnly: true, allowIgnored: true });
             await rm(safeStaging.absolute, { recursive: true, force: true });
           } catch { /* Never follow or remove an unsafe/symlinked path during cleanup. */ }
         };
         if (result.exitCode === 0 && !result.error) {
           try {
-            const safeTarget = await resolveWorkspacePath(root, relative, { rejectSymlinks: true, workspaceOnly: true });
+            const safeTarget = await resolveWorkspacePath(root, relative, { rejectSymlinks: true, workspaceOnly: true, allowIgnored: true });
             try {
               await access(safeTarget.absolute);
               throw Object.assign(new Error('The clone destination appeared while cloning. The new checkout was left in staging rather than replacing existing files.'), { statusCode: 409 });
@@ -2171,7 +2171,7 @@ export function createOasisWebServer(options = {}) {
         previewRoot = previewJob.executionRoot;
       }
       try {
-        const target = await resolveWorkspacePath(previewRoot, requestedPath, { rejectSymlinks: true, workspaceOnly: true });
+        const target = await resolveWorkspacePath(previewRoot, requestedPath, { rejectSymlinks: true, workspaceOnly: true, allowIgnored: true });
         const info = await lstat(target.absolute);
         if (!info.isFile() || info.isSymbolicLink()) {
           json(res, 400, { error: 'Only regular text files can be previewed here.' });
@@ -2250,7 +2250,7 @@ export function createOasisWebServer(options = {}) {
         const data = typeof (file && file.base64) === 'string' ? Buffer.from(file.base64, 'base64') : typeof (file && file.content) === 'string' ? Buffer.from(file.content, 'utf8') : null;
         if (!relative || relative.length > 500 || !data || data.length > MAX_UPLOAD_FILE_BYTES) { refused.push({ path: relative || '(unnamed)', reason: data && data.length > MAX_UPLOAD_FILE_BYTES ? 'larger than 10 MB' : 'invalid file' }); continue; }
         let target;
-        try { target = await resolveWorkspacePath(activeRoot, relative, { rejectSymlinks: true, workspaceOnly: true }); }
+        try { target = await resolveWorkspacePath(activeRoot, relative, { rejectSymlinks: true, workspaceOnly: true, allowIgnored: true }); }
         catch { refused.push({ path: relative, reason: 'outside the project or a link' }); continue; }
         const rel = target.relative.split(path.sep).join('/');
         if (sensitivePath(rel) || /^\.git(\/|$)/.test(rel) || /^\.oasis(\/|$)/.test(rel)) { refused.push({ path: rel, reason: 'protected path' }); continue; }
