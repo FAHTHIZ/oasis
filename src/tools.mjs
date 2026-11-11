@@ -1388,7 +1388,31 @@ export async function loadSkillDescriptions(root, options = {}) {
   const skills = (await listAvailableSkills(root, options)).filter((item) => item.modelInvocable !== false);
   if (!skills.length) return '';
   // Built-in skills carry no tag (it would repeat on every line of every request).
-  return skills.map((item) => '- ' + item.name + (item.source === 'built-in' ? '' : ' [' + (['global-extension', 'project-extension', 'portable-workspace', 'global-portable'].includes(item.source) ? 'EXTERNAL UNTRUSTED PROMPT' : item.source) + ']') + ': ' + skillCatalogueLine(item.description)).join('\n').slice(0, 16000);
+  const lines = skills.map((item) => '- ' + item.name + (item.source === 'built-in' ? '' : ' [' + (['global-extension', 'project-extension', 'portable-workspace', 'global-portable'].includes(item.source) ? 'EXTERNAL UNTRUSTED PROMPT' : item.source) + ']') + ': ' + skillCatalogueLine(item.description));
+  return fitSkillCatalogue(lines, options.maxChars ?? SKILL_CATALOGUE_CHARS);
+}
+
+export const SKILL_CATALOGUE_CHARS = 16000;
+
+// Keep whole lines within the budget. Dropped skills are counted in a last
+// line that points at list_skills, instead of ending on half a description
+// with the model unaware that more skills exist.
+export function fitSkillCatalogue(lines, maxChars = SKILL_CATALOGUE_CHARS) {
+  const kept = [];
+  let used = 0;
+  for (let index = 0; index < lines.length; index += 1) {
+    const rest = lines.length - index - 1;
+    const note = rest ? ('\n- (' + rest + ' more skill' + (rest === 1 ? '' : 's') + ' not listed; call list_skills to see them all)').length : 0;
+    const cost = (kept.length ? 1 : 0) + lines[index].length;
+    if (used + cost + note > maxChars) {
+      const missing = lines.length - index;
+      kept.push('- (' + missing + ' more skill' + (missing === 1 ? '' : 's') + ' not listed; call list_skills to see them all)');
+      break;
+    }
+    kept.push(lines[index]);
+    used += cost;
+  }
+  return kept.join('\n');
 }
 
 // One catalogue line per skill: what it does plus its "Use for/when" trigger,
