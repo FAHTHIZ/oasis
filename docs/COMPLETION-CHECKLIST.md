@@ -88,6 +88,7 @@ Gaps found by checking the [hooks reference](https://code.claude.com/docs/en/hoo
 | `permissions.blockReadsOutsideWorkingDirectories` / `blockWritesOutsideWorkingDirectories` (file tools, repository folders, worktree tools) | done | `test/block-outside-working-dirs.test.mjs` (3 tests); the sandbox read block is open |
 | Model policy: managed `deniedModels` and `availableModelsMatch`; `modelOverrides` | done | `test/model-policy-settings.test.mjs` (5 tests); `enforceAvailableModels` needs nothing: OASIS always falls back to an allowed startup model |
 | `alwaysThinkingEnabled` and `MAX_THINKING_TOKENS=0` | done | `test/always-thinking-setting.test.mjs` (3 tests); `true` is a no-op, as in Claude Code |
+| `plansDirectory` (plan files from `exit_plan_mode`) | done | `test/plans-directory.test.mjs` (3 tests); trusted files only, and no plan file is written when unset |
 | `sandbox.excludedCommands`, `filesystem.allowRead`, `credentials`, unix-socket/proxy keys | open | `allowUnsandboxedCommands` needs nothing: OASIS has no unsandboxed retry |
 
 ## 2e. Terminal-agent interoperability (Gemini CLI, OpenCode, Goose, Aider, Roo/Kilo/Cline)
