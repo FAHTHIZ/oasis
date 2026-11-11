@@ -644,3 +644,8 @@ html.lite .topbar{backdrop-filter:none;-webkit-backdrop-filter:none;background:v
 .remember-device { display: flex; align-items: center; gap: 8px; margin-top: 10px; font-size: 13px; color: var(--muted); cursor: pointer; user-select: none; }
 .remember-device input { accent-color: var(--accent); width: 16px; height: 16px; margin: 0; }
 #sideSessions{flex:0 1 auto;max-height:34%}
+
+/* Routine results in Settings → Routines */
+.routine-results { margin-top: 6px; }
+.routine-results summary { cursor: pointer; font-size: 0.85em; }
+.routine-output { max-height: 220px; overflow: auto; white-space: pre-wrap; word-break: break-word; font-size: 0.8em; padding: 8px; border-radius: 6px; background: var(--code-bg, rgba(127, 127, 127, 0.12)); }

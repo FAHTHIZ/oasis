@@ -2774,6 +2774,29 @@ function renderRoutines(data, problem = '') {
     else button('Run now', 'run');
     button(job.enabled ? 'Pause' : 'Resume', job.enabled ? 'pause' : 'resume');
     button('Remove', 'remove', true);
+    const results = document.createElement('details');
+    results.className = 'routine-results';
+    const summary = document.createElement('summary');
+    summary.textContent = 'Recent results';
+    const body = document.createElement('div');
+    results.append(summary, body);
+    results.addEventListener('toggle', async () => {
+      if (!results.open) return;
+      body.textContent = 'Loading…';
+      try {
+        const data = await RT.client.api('/api/routines?runs=' + encodeURIComponent(job.id));
+        body.replaceChildren();
+        if (!data.runs.length) body.textContent = 'No runs yet.';
+        for (const run of data.runs) {
+          const head = document.createElement('div');
+          head.className = 'hint';
+          head.textContent = [run.finishedAt ? new Date(run.finishedAt).toLocaleString() : 'running', run.status, run.manual ? 'manual' : '', run.event ? 'webhook' : '', run.reason, run.deliveryError ? 'delivery failed: ' + run.deliveryError : run.delivery ? 'sent to ' + run.delivery : ''].filter(Boolean).join(' · ');
+          body.appendChild(head);
+          if (run.output) { const pre = document.createElement('pre'); pre.className = 'routine-output'; pre.textContent = run.output; body.appendChild(pre); }
+        }
+      } catch (error) { body.textContent = 'Could not load results: ' + error.message; }
+    });
+    info.append(results);
     li.append(info, actions);
     list.appendChild(li);
   }
