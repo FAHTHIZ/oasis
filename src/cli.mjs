@@ -1423,6 +1423,13 @@ async function runPrompt(prompt, root, autoApprove, session = null, persistence 
       onRateLimitWait: (event) => onRateLimitWait(event),
       approval: (message, forceInteractive = false, meta = {}) => approve(message, forceInteractive, autoApprove, meta),
       ...(stdin.isTTY && stdout.isTTY ? { askUser: (question) => { endStream(); return askQuestionInTerminal(question); } } : {}),
+      ...(stdin.isTTY && stdout.isTTY ? { connectorCard: async (flow) => {
+        endStream();
+        playSound('attention', { stream: stdout });
+        const { connectInTerminal } = await import('./connectors.mjs');
+        const { openInBrowser } = await import('./mcp-oauth.mjs');
+        return await connectInTerminal(flow, { write: (text) => stdout.write(text), askLine: (question) => askLine(question), askSecret: (question) => askSecret(question), open: (url) => openInBrowser(url), width: stdout.columns || 80 });
+      } } : {}),
       onToolStart: (event) => {
         if (richOutput() && !verboseEnabled(session) && event && !event.subagent && EXPLORE_TOOLS.has(event.name)) { holdExploration(event); return; }
         endStream(); lastToolHeader = event && event.call ? event.call.id : null; stdout.write('\n' + (richOutput() ? describeTool(event, { color: true }) : describeToolStart(event)) + '\n'); },
@@ -2327,6 +2334,14 @@ async function interactive(root, autoApprove, persistence = {}) {
           }
           if (handled.osc52 && stdout.isTTY) stdout.write('\x1b]52;c;' + handled.osc52 + '\x07');
           if (handled.forked) persistence.enabled = true;
+          if (handled.connect) {
+            try {
+              const { runConnectService, connectInTerminal } = await import('./connectors.mjs');
+              const { openInBrowser } = await import('./mcp-oauth.mjs');
+              const result = await runConnectService(session, { service: handled.connect }, { env: process.env, root, ...(stdin.isTTY && stdout.isTTY ? { connectorCard: (flow) => connectInTerminal(flow, { write: (text) => stdout.write(text), askLine: (question) => askLine(question), askSecret: (question) => askSecret(question), open: (url) => openInBrowser(url), width: stdout.columns || 80 }) } : {}) });
+              stdout.write((result.skipped ? 'Not connected.' : result.message || (result.connected ? 'Connected.' : 'Not connected.')) + '\n');
+            } catch (error) { stdout.write('[connect] ' + error.message + '\n'); }
+          }
           if (handled.mcpLogin) {
             try { stdout.write((await (await import('./mcp-auth-commands.mjs')).mcpLogin(root, handled.mcpLogin, { env: process.env, session, print: (text) => stdout.write(text + '\n') })) + '\n'); }
             catch (error) { stdout.write('[mcp] ' + error.message + '\n'); }
@@ -3070,7 +3085,7 @@ async function main() {
   if (command === 'init') return await initWorkspace(workspace);
   if (command === 'update' || command === 'self-update') return await selfUpdate(autoApprove);
   if (command === 'config' || command === 'status') return printConfig(await loadConfig());
-  if (command === 'mcp') return await manageMcp(rest, workspace, { approve });
+  if (command === 'mcp') return await manageMcp(rest, workspace, { approve, askLine: (question) => askLine(question), askSecret: stdin.isTTY ? (question) => askSecret(question) : null });
   // A pasted install command (npx …, uvx …, claude mcp add …, /plugin install …,
   // npx skills add …) is one source too, quoted or not.
   const ADD_USAGE = 'Usage: oasis add <GitHub link | owner/repo[#name] | plugin@marketplace | MCP URL | npm package | registry name> [--project] [--name NAME]\n';

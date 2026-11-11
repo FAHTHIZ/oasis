@@ -32,6 +32,7 @@ const CAPABILITY_BY_TOOL = {
   configure_provider: ['network'],
   install_external_skill: ['network', 'write'],
   configure_mcp_server: ['mcp', 'execute'],
+  connect_service: ['mcp', 'network'],
   add_extension: ['network', 'write'],
   install_plugin: ['write'],
   web_search: ['network'],

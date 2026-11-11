@@ -4,6 +4,7 @@
 import { PRESETS, testProvider } from './core/providers.mjs';
 import { alwaysAllowLabel } from './core/approval-rule.mjs';
 import { SUBAGENT_STATUS_TEXT } from './core/subagents.mjs';
+import { createConnectorCard, connectIntent } from './core/connector-card.mjs';
 import { createSoundPlayer } from './core/sound.mjs';
 import { ambientField } from './core/ambient.mjs';
 import { activityLabel, liveLabel, summarizeArgs, toolKind, groupTitle, groupStats, formatDuration, elapsedSince, describeInput, buildTimeline } from './core/timeline.mjs';
@@ -485,6 +486,7 @@ async function send(text) {
   if (!message) return;
   if (RT && RT.needsToken) { $('input').value = ''; autosize(); await connectFromText(message, { surface: 'chat' }); return; }
   if (looksLikeConnection(message)) { $('input').value = ''; autosize(); await connectFromText(message, { surface: 'chat' }); return; }
+  if (RT && !attachments.length && !agent.busy && await connectShortcut(message)) return;
   if (!modelReady()) {
     $('welcome').hidden = false;
     $('connectInput').focus();
@@ -1440,6 +1442,7 @@ function handleEvent(event) {
       break;
     case 'answered_elsewhere':
       // Another browser or the terminal answered first (or the task ended).
+      if (event.kind === 'connector') { for (const ui of liveConnectorCards.values()) ui.stop(); liveConnectorCards.clear(); toast('The connect card was answered somewhere else.'); break; }
       if (event.kind === 'question') closeSheet('questionSheet'); else closeSheet('approvalSheet');
       toast(event.kind === 'question' ? 'The question was answered somewhere else.' : 'This was answered on another device.');
       break;
@@ -1963,6 +1966,69 @@ async function resumeTurn(jobId) {
   try { await agent.resume(jobId); }
   catch { /* shown through the error event */ }
   finally { setBusy(false); if (!agent.detached) persistChat(); refreshFiles(); settle(); if (RT) refreshRuntimeStatus().then(updateProjectUI).catch(() => {}); }
+}
+
+/* ---------- Connector cards ---------- */
+// The agent asked to connect an app (connect_service): an inline card in the
+// conversation, under the step that asked. The task waits until it settles.
+const liveConnectorCards = new Map();
+function connectService(card, actions) {
+  attention('input', 'OASIS wants to connect ' + String(card.connector && card.connector.name || 'an app') + '.');
+  sound('input');
+  removeThinking();
+  const old = liveConnectorCards.get(card.id);
+  if (old) old.stop();
+  const ui = createConnectorCard(card, actions, { toast, openUrl: openExternal });
+  const wrap = document.createElement('div');
+  wrap.className = 'msg connector';
+  wrap.appendChild(ui.element);
+  $('transcript').appendChild(wrap);
+  $('welcome').hidden = true;
+  liveConnectorCards.set(card.id, ui);
+  scrollDown(true);
+  return ui.done.then((view) => {
+    liveConnectorCards.delete(card.id);
+    if (view.status === 'connected') { sound('done'); toast((view.connector && view.connector.name || 'App') + ' connected.'); }
+    // Settled cards fold to one line after a moment; the step row keeps the record.
+    setTimeout(() => wrap.classList.add('settled'), 2500);
+    return view;
+  });
+}
+// "/connect github", "connect my Linear account", "link notion": the card
+// shows at once, no model turn needed. Plain sentences only count when they
+// name a known app, so "connect the two functions" still goes to the agent.
+let connectorList = null;
+async function knownConnectors() {
+  if (!connectorList) connectorList = RT.client.api('/api/connectors').then((body) => body.connectors || []).catch(() => { connectorList = null; return []; });
+  return connectorList;
+}
+async function connectShortcut(message) {
+  const intent = connectIntent(message);
+  if (!intent) return false;
+  const list = await knownConnectors();
+  const key = intent.service.toLowerCase().replace(/[\s.]/g, '');
+  const known = list.find((item) => [item.id, item.name, ...(item.aliases || [])].some((name) => String(name).toLowerCase().replace(/[\s.]/g, '') === key));
+  if (!intent.explicit && !known) return false;
+  $('input').value = '';
+  autosize();
+  if (!intent.service) {
+    addMessage('note', 'Connect an app: /connect ' + list.map((item) => item.id).join(', /connect ') + ', or /connect followed by an MCP server URL.');
+    scrollDown(true);
+    return true;
+  }
+  if (known && known.live) { toast(known.name + ' is already connected.'); return true; }
+  let view;
+  try { view = await RT.client.api('/api/connectors', { method: 'POST', body: { service: known ? known.id : intent.service } }); }
+  catch (error) { toast(String(error && error.message || error).replace(/^Error:\s*/, '')); return true; }
+  const actions = {
+    act: (body) => RT.client.api('/api/connectors/' + encodeURIComponent(view.id), { method: 'POST', body }),
+    status: () => RT.client.api('/api/connectors/' + encodeURIComponent(view.id))
+  };
+  connectService(view, actions).then(() => { connectorList = null; });
+  return true;
+}
+function openExternal(url) {
+  try { window.open(url, '_blank', 'noopener'); } catch { /* blocked */ }
 }
 
 /* ---------- Approvals ---------- */
@@ -3526,6 +3592,7 @@ async function startRuntime(found) {
     onEvent: handleEvent,
     approve: requestApproval,
     ask: askQuestion,
+    connect: connectService,
     getMode: () => currentMode()
   });
   workspace = new RuntimeWorkspace(RT.client, RT.status);

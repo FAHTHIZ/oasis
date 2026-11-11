@@ -14,7 +14,7 @@ const SEARCH = new Set(['grep', 'search_files', 'glob_files', 'repo_map', 'lsp',
 const WEB = new Set(['web_search', 'fetch_url', 'browser']);
 const GIT = new Set(['git_diff', 'git_status', 'git_log', 'git_branch', 'git_commit', 'git_push', 'create_pull_request', 'github_push', 'worktree_inspect', 'worktree_merge']);
 const AGENT = new Set(['task', 'agent_status', 'send_message', 'agent_stop', 'advisor', 'run_specialist_review']);
-const PLAN = new Set(['todo_write', 'exit_plan_mode', 'ask_user_question', 'load_skill', 'read_skill_resource', 'list_skills']);
+const PLAN = new Set(['todo_write', 'exit_plan_mode', 'ask_user_question', 'connect_service', 'load_skill', 'read_skill_resource', 'list_skills']);
 
 export const STEP_KINDS = ['shell', 'read', 'edit', 'search', 'web', 'git', 'agent', 'plan', 'tool'];
 
@@ -107,6 +107,7 @@ export function activityLabel(tool = {}) {
   if (name === 'send_message') return 'Sent a message to a subagent';
   if (name === 'agent_stop') return 'Stopped a subagent';
   if (name === 'ask_user_question') return 'Asked you a question';
+  if (name === 'connect_service') return 'Connected ' + (String(args.service || '').slice(0, 40) || 'a service');
   if (name === 'exit_plan_mode') return 'Presented a plan';
   if (name === 'lsp' || name === 'diagnostics' || name === 'ide_get_diagnostics') return 'Checked for code issues';
   if (EXTRA_LABELS[name]) return EXTRA_LABELS[name];
@@ -138,6 +139,7 @@ export function liveLabel(tool = {}) {
   if (name === 'todo_write') return 'Updating the plan';
   if (name === 'task') return args.description ? 'Delegating: ' + String(args.description).slice(0, 60) : 'Starting a subagent';
   if (name === 'ask_user_question') return 'Waiting for your answer';
+  if (name === 'connect_service') return 'Waiting for you to connect ' + (String(args.service || '').slice(0, 40) || 'a service');
   if (name === 'lsp' || name === 'diagnostics' || name === 'ide_get_diagnostics') return 'Checking for code issues';
   if (name === 'browser') return 'Using the browser';
   const done = activityLabel(tool);

@@ -5,7 +5,7 @@ import { inspectGitHubExtension, inspectGitHubMcpServers, selectReviewedMcpServe
 import { loadSettings } from './settings.mjs';
 
 // `oasis mcp` and `oasis extensions` subcommands.
-export async function manageMcp(rest, root = process.cwd(), { approve } = {}) {
+export async function manageMcp(rest, root = process.cwd(), { approve, askLine, askSecret } = {}) {
   const action = rest[0] || 'list';
   const config = await loadMcpServers();
   if (action === 'list') {
@@ -57,6 +57,15 @@ export async function manageMcp(rest, root = process.cwd(), { approve } = {}) {
     stdout.write((action === 'login'
       ? await commands.mcpLogin(root, rest[1], { env: process.env, print: (text) => stdout.write(text + '\n') })
       : await commands.mcpLogout(root, rest[1], { env: process.env })) + '\n');
+    return;
+  }
+  if (action === 'connect') {
+    const { connectCommand } = await import('./connectors.mjs');
+    const { openInBrowser } = await import('./mcp-oauth.mjs');
+    const name = rest.slice(1).join(' ').trim();
+    if (name && !askLine) throw new Error('oasis mcp connect needs an interactive terminal.');
+    const final = await connectCommand(name, { root, env: process.env, write: (text) => stdout.write(text), askLine, askSecret, open: (url) => openInBrowser(url), width: stdout.columns || 80 });
+    if (final && final.status === 'failed') process.exitCode = 1;
     return;
   }
   if (action === 'search') {

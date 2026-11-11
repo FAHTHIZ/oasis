@@ -87,6 +87,7 @@ export function labelToolActivity(name, args = {}, result = null) {
   if (tool === 'send_message') return 'Sent a message to a subagent';
   if (tool === 'agent_stop') return 'Stopped a subagent';
   if (tool === 'ask_user_question') return 'Asked you a question';
+  if (tool === 'connect_service') return 'Connected ' + (text(args && args.service, 40) || 'a service');
   if (tool === 'exit_plan_mode') return 'Presented a plan';
   if (tool === 'todo_write') return 'Updated the task plan';
   if (tool === 'lsp') return 'Checked code with the language server';
