@@ -138,8 +138,22 @@ The sidebar (on wide screens) lists this project's tasks with a dot for those st
 | Use a terminal | Press Ctrl+` and choose **Start terminal** for your own shell in the workspace beside the chat. The agent cannot see it, and reloading the page reconnects to it. |
 | Download a chat | Ctrl+K → **Download this chat** saves one HTML page with every tool step, no scripts, credentials redacted. |
 | Open everything else | Ctrl+K (Cmd+K on macOS) opens the command palette. Ctrl+/ lists every shortcut. |
+| Connect an app | Type `connect github` or `/connect linear` in the message box, or open **Settings → Apps**. See [Connect apps](#connect-apps). |
 
 The interface follows your system's light or dark theme and honours reduced-motion settings: the particle background, jitter and sweep animations switch off.
+
+### Connect apps
+
+Apps (GitHub, Linear, Notion, Sentry, Stripe, Vercel, Supabase, PostHog, Todoist and about 25 more) give the agent their tools through remote MCP servers. You never edit a config file:
+
+1. Ask for it: "connect to GitHub", `/connect notion`, or a server URL such as `/connect https://mcp.example.com/mcp`. The agent can also ask by itself when a task needs an app.
+2. A **Connect** card appears in the chat with the app's logo, what it gives access to and why it is being asked. Click **Connect**; **Not now** skips it.
+3. Approve access in the page that opens. GitHub uses your GitHub CLI (`gh`) sign-in when it has one, or takes a pasted token. Apps like DeepWiki, Exa and Context7 need no sign-in.
+4. The card turns green and the app's tools are ready in the same chat.
+
+If a sign-in expires or is revoked, or an app needs more access for one action, the card comes back with the reason and OASIS retries the action once you connect. **Settings → Apps** lists every app (search it, connected ones first) with Connect and Disconnect; `/disconnect NAME` does the same in the terminal. Tokens stay in the OASIS config folder on the computer running OASIS, never in the project or the browser.
+
+In a terminal, `/connect` lists apps (Tab completes names) and `oasis mcp connect NAME` works outside a session.
 
 ## 6. Review every task
 
