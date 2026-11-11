@@ -18,7 +18,7 @@ async function tmp(t, prefix = 'oasis-appsrv-') {
 }
 
 // A minimal Codex app-server client: JSONL without the "jsonrpc" field, as Codex sends it.
-function codexClient(child, { decide = () => 'accept' } = {}) {
+function codexClient(child, { decide = () => 'accept', respond = null } = {}) {
   let id = 100;
   const waiting = new Map();
   const notes = [];
@@ -29,7 +29,7 @@ function codexClient(child, { decide = () => 'accept' } = {}) {
     const message = JSON.parse(line);
     if (message.method && Object.hasOwn(message, 'id')) {
       approvals.push(message);
-      child.stdin.write(JSON.stringify({ id: message.id, result: { decision: decide(message) } }) + '\n');
+      child.stdin.write(JSON.stringify({ id: message.id, result: respond ? respond(message) : { decision: decide(message) } }) + '\n');
     } else if (message.method) {
       notes.push(message);
       for (const waiter of waiters.splice(0)) waiter();
@@ -247,4 +247,45 @@ test('review/start runs an inline review turn wrapped in review-mode items', asy
   const order = client.notes.map((note) => note.method + ':' + (note.params.item ? note.params.item.type : ''));
   assert.ok(order.lastIndexOf('item/completed:exitedReviewMode') < order.indexOf('turn/completed:'));
   assert.match(JSON.stringify(requests[0].messages), /git diff HEAD/);
+});
+
+test('ask_user_question reaches experimentalApi clients as item/tool/requestUserInput', async (t) => {
+  const root = await tmp(t);
+  const home = await tmp(t, 'oasis-appsrv-home-');
+  const { config, requests } = await scriptedModel(t, [
+    toolCall('ask_1', 'ask_user_question', { question: 'Which port?', header: 'Port', options: [{ label: '8080', description: 'Default' }, '3000'] }),
+    { content: 'Using 3000.' }
+  ]);
+  const { child, stderr } = spawnServer(t, root, home, config);
+  const client = codexClient(child, { respond: (message) => message.method === 'item/tool/requestUserInput' ? { answers: { q1: { answers: ['3000'] } } } : { decision: 'accept' } });
+  await client.call('initialize', { clientInfo: { name: 't' }, capabilities: { experimentalApi: true } });
+  const { result } = await client.call('thread/start', { cwd: root });
+  await client.call('turn/start', { threadId: result.thread.id, input: [{ type: 'text', text: 'pick a port' }] });
+  const done = await client.until((note) => note.method === 'turn/completed');
+  assert.equal(done.params.turn.status, 'completed', stderr());
+  const asked = client.approvals.find((message) => message.method === 'item/tool/requestUserInput');
+  assert.ok(asked, JSON.stringify(client.approvals));
+  assert.equal(asked.params.threadId, result.thread.id);
+  assert.equal(asked.params.itemId, 'ask_1');
+  assert.equal(asked.params.isBlocking, true);
+  assert.deepEqual(asked.params.questions, [{ id: 'q1', header: 'Port', question: 'Which port?', isOther: true, isSecret: false, options: [{ label: '8080', description: 'Default' }, { label: '3000', description: '' }] }]);
+  assert.ok(client.notes.some((note) => note.method === 'serverRequest/resolved'));
+  const answer = requests[1].messages.filter((message) => message.role === 'tool').at(-1).content;
+  assert.match(answer, /"answered":true/);
+  assert.match(answer, /3000/);
+});
+
+test('without experimentalApi the App Server never sends requestUserInput', async (t) => {
+  const root = await tmp(t);
+  const home = await tmp(t, 'oasis-appsrv-home-');
+  const { config, requests } = await scriptedModel(t, [{ content: 'Done.' }]);
+  const { child } = spawnServer(t, root, home, config);
+  const client = codexClient(child);
+  await client.call('initialize', { clientInfo: { name: 't' } });
+  const { result } = await client.call('thread/start', { cwd: root });
+  await client.call('turn/start', { threadId: result.thread.id, input: [{ type: 'text', text: 'hi' }] });
+  await client.until((note) => note.method === 'turn/completed');
+  const names = (requests[0].tools || []).map((tool) => tool.function && tool.function.name);
+  assert.ok(names.includes('read_file'), 'tools were sent');
+  assert.ok(!names.includes('ask_user_question'), 'the tool is hidden when nobody can answer');
 });
