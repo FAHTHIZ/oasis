@@ -144,7 +144,7 @@ export async function loadMemory(root, options = {}) {
   // Scoped instructions are deliberately excluded from base memory to keep the prompt small.
   const requested = [];
   for (const rule of rules) {
-    if (rule.mode === 'scoped' || rule.mode === 'manual' || seen.has(rule.real)) continue;
+    if (rule.mode === 'scoped' || rule.mode === 'manual' || rule.mode === 'keyword' || seen.has(rule.real)) continue;
     seen.add(rule.real);
     if (rule.mode === 'requested') { requested.push(rule); continue; }
     const fingerprint = rule.body.replace(/\s+/g, ' ').trim();
@@ -203,7 +203,11 @@ export const OTHER_AGENT_RULE_DIRS = [
   { dir: '.github/instructions', ext: ['.instructions.md'], tool: 'Copilot' },
   { dir: '.kiro/steering', ext: ['.md'], tool: 'Kiro' },
   { dir: '.clinerules', ext: ['.md', '.txt'], tool: 'Cline' },
-  { dir: '.roo/rules', ext: ['.md', '.txt'], tool: 'Roo Code' }
+  { dir: '.roo/rules', ext: ['.md', '.txt'], tool: 'Roo Code' },
+  // OpenHands: always-on repository context (no triggers), path rules (paths:) and
+  // keyword-triggered knowledge (triggers:). SKILL.md folders are skills, not rules.
+  { dir: '.openhands/microagents', ext: ['.md'], tool: 'OpenHands', openhands: true },
+  { dir: '.openhands/skills', ext: ['.md'], tool: 'OpenHands', openhands: true }
 ];
 
 export async function projectRules(root, { env = process.env, notices = null, home = null } = {}) {
@@ -216,21 +220,26 @@ export async function projectRules(root, { env = process.env, notices = null, ho
   if (env.OASIS_OTHER_AGENT_RULES !== '0') {
     // Devin Desktop personal rules (~/.devin/rules/*.md) apply to every project.
     rules.push(...await loadRules(path.join(home || env.HOME || os.homedir(), '.devin', 'rules'), 'user', null, notices, { prefix: '~/.devin/rules/' }));
-    for (const spec of OTHER_AGENT_RULE_DIRS) rules.push(...await loadRules(path.join(workspace, ...spec.dir.split('/')), 'project', workspace, notices, { ext: spec.ext, prefix: spec.dir + '/' }));
+    // OpenHands user skills and legacy microagents (~/.openhands/skills, ~/.openhands/microagents).
+    for (const dir of ['skills', 'microagents']) rules.push(...await loadRules(path.join(home || env.HOME || os.homedir(), '.openhands', dir), 'user', null, notices, { prefix: '~/.openhands/' + dir + '/', openhands: true }));
+    for (const spec of OTHER_AGENT_RULE_DIRS) rules.push(...await loadRules(path.join(workspace, ...spec.dir.split('/')), 'project', workspace, notices, { ext: spec.ext, prefix: spec.dir + '/', openhands: spec.openhands }));
   }
   return rules;
 }
 
-async function loadRules(dir, scope, workspace = null, notices = null, { ext = ['.md'], prefix = '' } = {}) {
+async function loadRules(dir, scope, workspace = null, notices = null, { ext = ['.md'], prefix = '', openhands = false } = {}) {
   const out = [];
   try { if (!(await lstat(dir)).isDirectory()) return out; } catch { return out; }
   const walk = async (current, depth) => {
     if (depth > 4 || out.length >= 60) return;
     let entries;
     try { entries = await readdir(current, { withFileTypes: true }); } catch { return; }
+    // OpenHands skips README.md and SKILL.md folders (those are Agent Skills).
+    if (openhands && depth > 0 && entries.some((entry) => entry.name.toLowerCase() === 'skill.md')) return;
     for (const entry of entries.sort((a, b) => a.name.localeCompare(b.name))) {
       const full = path.join(current, entry.name);
       if (entry.isDirectory()) await walk(full, depth + 1);
+      else if (openhands && ['readme.md', 'skill.md'].includes(entry.name.toLowerCase())) continue;
       else if (entry.isFile() && ext.some((suffix) => entry.name.endsWith(suffix))) {
         try {
           const info = await lstat(full);
@@ -242,9 +251,9 @@ async function loadRules(dir, scope, workspace = null, notices = null, { ext = [
           }
           const text = await readFile(real, 'utf8');
           if (!text.trim() || text.includes('\0')) continue;
-          const { paths, body, mode, description } = splitRuleFrontMatter(text);
+          const { paths, body, mode, description, triggers } = splitRuleFrontMatter(text, path.basename(entry.name, path.extname(entry.name)));
           const name = path.relative(dir, full).split(path.sep).join('/');
-          out.push({ scope, real, name, label: (prefix || (scope === 'user' ? '~/.claude/rules/' : '.claude/rules/')) + name, paths, mode, description, body: workspace ? await readImports(workspace, body) : body });
+          out.push({ scope, real, name, label: (prefix || (scope === 'user' ? '~/.claude/rules/' : '.claude/rules/')) + name, paths, mode, description, ...(triggers ? { triggers } : {}), body: workspace ? await readImports(workspace, body) : body });
         } catch {}
       }
     }
@@ -257,8 +266,9 @@ const listOf = (value) => (Array.isArray(value) ? value : typeof value === 'stri
 
 // Front matter of Claude (paths), Cursor (alwaysApply, globs, description), Windsurf and
 // Antigravity (trigger: always_on | glob | model_decision | manual, globs), Copilot
-// (applyTo) and Kiro (inclusion: always | fileMatch | manual, fileMatchPattern).
-function splitRuleFrontMatter(text) {
+// (applyTo), Kiro (inclusion: always | fileMatch | manual, fileMatchPattern) and
+// OpenHands (triggers: [keywords]; inputs: adds the /name keyword; paths: wins over both).
+function splitRuleFrontMatter(text, stem = '') {
   const { data: f, body, hasFrontMatter } = parseFrontMatter(text);
   if (!hasFrontMatter) return { paths: [], body: text, mode: 'always', description: '' };
   const description = typeof f.description === 'string' ? f.description.slice(0, 300) : '';
@@ -269,6 +279,14 @@ function splitRuleFrontMatter(text) {
   else if (['manual'].includes(trigger)) mode = 'manual';
   else if (['model_decision', 'agent_requested', 'auto'].includes(trigger) && !paths.length) mode = 'requested';
   else if (paths.length) mode = 'scoped';
+  else if (Array.isArray(f.triggers) && f.triggers.length || f.inputs !== undefined) {
+    const triggers = (Array.isArray(f.triggers) ? f.triggers : []).map((item) => String(item).trim()).filter(Boolean).slice(0, 40);
+    if (f.inputs !== undefined) {
+      const slash = '/' + (typeof f.name === 'string' && f.name.trim() ? f.name.trim() : stem);
+      if (!triggers.includes(slash)) triggers.push(slash);
+    }
+    return { paths: [], body, mode: 'keyword', description, triggers };
+  }
   else if (String(f.alwaysapply).toLowerCase() === 'false') mode = description ? 'requested' : 'manual';
   else mode = 'always';
   if (paths.some((p) => p === '**' || p === '**/*')) { mode = 'always'; paths = []; }
@@ -353,6 +371,43 @@ export async function nestedMemoryFor(root, filePath, loaded = new Set(), option
     found.push({ path: rule.label, text: '[Path-scoped ' + rule.scope + ' rule matching ' + targetRelative + ']\n' + rule.body.slice(0, PER_FILE_LIMIT) });
   }
   return found;
+}
+
+// OpenHands keyword matching (behaviour of _keyword_matches in OpenHands
+// software-agent-sdk skills/skill.py, MIT): whole token, case-insensitive, bounded by
+// non-alphanumerics, so "git" does not fire on "github" but "/linear" works.
+export function keywordMatches(keyword, message) {
+  const word = String(keyword || '').toLowerCase();
+  if (!word) return false;
+  return new RegExp('(?<![a-z0-9])' + word.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '(?![a-z0-9])').test(String(message || '').toLowerCase());
+}
+
+/**
+ * Keyword-triggered rules (OpenHands knowledge microagents and skills with
+ * "triggers:") that the message mentions, formatted the way OpenHands adds them
+ * to the user message. `alreadyLoaded(label)` skips rules sent earlier in the
+ * conversation, as OpenHands does with skip_skill_names.
+ */
+export async function keywordRulesFor(root, message, options = {}) {
+  const env = options.env || process.env;
+  const text = String(message || '').trim();
+  if (!text || env.OASIS_OTHER_AGENT_RULES === '0') return { text: '', labels: [] };
+  const alreadyLoaded = typeof options.alreadyLoaded === 'function' ? options.alreadyLoaded : () => false;
+  const blocks = [];
+  const labels = [];
+  let budget = 20000;
+  for (const rule of await projectRules(root, { env, home: options.home })) {
+    if (rule.mode !== 'keyword' || labels.includes(rule.label) || alreadyLoaded(rule.label)) continue;
+    const trigger = rule.triggers.find((keyword) => keywordMatches(keyword, text));
+    if (!trigger) continue;
+    const body = cleanInstructionText('rule ' + rule.label, rule.body, null).slice(0, Math.min(PER_FILE_LIMIT, budget));
+    if (!body.trim()) continue;
+    budget -= body.length;
+    labels.push(rule.label);
+    blocks.push('<EXTRA_INFO>\nThe following information has been included based on a keyword match for "' + trigger + '".\nIt may or may not be relevant to the user\'s request.\nSkill location: ' + rule.label + '\n\n' + body.trim() + '\n</EXTRA_INFO>');
+    if (budget <= 0) break;
+  }
+  return { text: blocks.join('\n'), labels };
 }
 
 function ruleSpecificity(rule) {

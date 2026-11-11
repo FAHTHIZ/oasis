@@ -72,6 +72,7 @@ OASIS reads these tools' project files where they are, so a repository set up fo
 | `.devin/workflows`, `.windsurf/workflows` (up to the git root), `~/.codeium/windsurf/global_workflows` | Devin Desktop / Windsurf | Slash commands; workflows a workflow calls are appended. Sub-folder workflow folders are not scanned |
 | `.agents/workflows`, `.agent/workflows`, `~/.gemini/config/workflows` | Antigravity | Slash commands; `// turbo` auto-run markers are not honoured |
 | `.cursorignore`, `.devinignore`, `.codeiumignore`, `~/.codeium/.codeiumignore`, `.geminiignore`, `.aiexclude`, `.aiderignore` | Cursor, Devin Desktop / Windsurf, Gemini CLI / Code Assist, Aider | Agent file tools refuse covered paths; listings, search and `@` mentions skip them. Shell commands are not blocked (Cursor does not block them either). Cursor's built-in default ignore list is not copied |
+| `.openhands/microagents/*.md`, `.openhands/skills/*.md`, `~/.openhands/skills`, `~/.openhands/microagents` | OpenHands | No triggers: always-on; `paths:`: path-scoped; `triggers:`: keyword-injected once per conversation with OpenHands' whole-word matching. Task `inputs:` are not prompted for |
 
 ## Kimi Code CLI
 

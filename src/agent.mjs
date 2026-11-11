@@ -29,7 +29,7 @@ import { loadOutputStyles, systemPromptWithStyle, BUILTIN_STYLES } from './outpu
 import { priceFor, estimateCostUsd, recordBudgetSpend, formatUsd, cloudModelBehindGateway } from './pricing.mjs';
 import { hasImages, toChatMessagesWithImages, fitImages, imagesUnsupportedError, withoutImages } from './images.mjs';
 import { beginCheckpoint, captureBeforeChange, checkpointPersistenceEnabled, FILE_CHANGING_TOOLS, loadCheckpoints } from './checkpoints.mjs';
-import { nestedMemoryFor } from './memory.mjs';
+import { keywordRulesFor, nestedMemoryFor } from './memory.mjs';
 import { resolveModelAlias, isModelAlias, modelAllowed, modelRestrictionMessage, fastModeRequest } from './model-aliases.mjs';
 import { selectTaskModel } from './model-routing.mjs';
 import { readProviderStream, mergeAnthropicUsage, toolCallSlot, strayStreamError } from './provider-stream.mjs';
@@ -4177,6 +4177,13 @@ async function runAgentTurnRaw(session, prompt, options = {}) {
     session.followupsReminded = true;
     try { const reminder = await followupReminder(session.root); if (reminder) userContent += '\n\n' + reminder; } catch {}
   }
+  // OpenHands knowledge microagents: a rule with "triggers:" is added once per
+  // conversation when the prompt mentions one of its keywords.
+  try {
+    const sent = (label) => session.messages.some((message) => message && message.role === 'user' && typeof message.content === 'string' && message.content.includes('Skill location: ' + label + '\n'));
+    const recalled = await keywordRulesFor(session.root, request.replace(/<(file|directory)\b[^>]*>[\s\S]*?<\/\1>/g, ' '), { env: options.env || process.env, alreadyLoaded: sent });
+    if (recalled.text) userContent += '\n\n' + recalled.text;
+  } catch {}
   if (!options.isSubagent) repairInterruptedHistory(session);
   // Non-enumerable so provider credentials in the env never end up in copies or logs.
   if (options.env) Object.defineProperty(session, 'providerEnv', { value: options.env, writable: true, configurable: true, enumerable: false });
