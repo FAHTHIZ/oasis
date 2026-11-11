@@ -2363,7 +2363,7 @@ function renderSuggest() {
       else row.append(name, detail);
     } else if (suggest.token.kind === 'app') {
       name.textContent = item.name;
-      detail.textContent = item.live || item.connected ? 'Connected' : item.description || '';
+      detail.textContent = item.live || item.connected ? 'Connected' : item.suggested ? 'Used in this project' : item.description || '';
       row.append(brandMark(item), name, detail);
       row.classList.add('suggest-app');
     } else {
@@ -2388,7 +2388,7 @@ async function updateSuggest() {
   if (!token) { closeSuggest(); return; }
   const items = token.kind === '/'
     ? rankSuggestions(await slashCommandList(), token.query, (item) => item.name, 8)
-    : token.kind === 'app' ? (RT && !RT.needsToken ? rankSuggestions(await knownConnectors(), token.query, (item) => item.id, 8) : [])
+    : token.kind === 'app' ? (RT && !RT.needsToken ? rankSuggestions(await knownConnectors().then((list) => token.query ? list : [...list].sort((a, b) => Number(Boolean(b.suggested && !b.connected)) - Number(Boolean(a.suggested && !a.connected)))), token.query, (item) => item.id, 8) : [])
     : rankSuggestions(await filePathList(), token.query, (item) => item, 8);
   if (seq !== suggest.seq) return;
   const same = suggest.token && suggest.token.kind === token.kind && suggest.token.query === token.query;
