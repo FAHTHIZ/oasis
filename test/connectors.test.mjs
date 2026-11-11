@@ -267,3 +267,11 @@ test('/disconnect signs out from the terminal', async (t) => {
   assert.match(result.output, /Notion: signed out/);
   assert.match((await runBuiltinCommand('disconnect', '', { root, env })).output, /Usage: \/disconnect NAME/);
 });
+
+test('/connect with several apps returns one connect per app', async (t) => {
+  const { root, env } = await sandbox(t);
+  const { runBuiltinCommand } = await import('../src/slash.mjs');
+  assert.deepEqual((await runBuiltinCommand('connect', 'github, linear and notion', { root, env })).connect, ['github', 'linear', 'notion']);
+  assert.deepEqual((await runBuiltinCommand('connect', 'github linear', { root, env })).connect, ['github', 'linear']);
+  assert.equal((await runBuiltinCommand('connect', 'hugging face', { root, env })).connect, 'hugging face');
+});

@@ -2313,11 +2313,11 @@ async function interactive(root, autoApprove, persistence = {}) {
           }
           if (handled.osc52 && stdout.isTTY) stdout.write('\x1b]52;c;' + handled.osc52 + '\x07');
           if (handled.forked) persistence.enabled = true;
-          if (handled.connect) {
+          for (const service of handled.connect ? [].concat(handled.connect) : []) {
             try {
               const { runConnectService, connectInTerminal } = await import('./connectors.mjs');
               const { openInBrowser } = await import('./mcp-oauth.mjs');
-              const result = await runConnectService(session, { service: handled.connect }, { env: process.env, root, ...(stdin.isTTY && stdout.isTTY ? { connectorCard: (flow) => connectInTerminal(flow, { write: (text) => stdout.write(text), askLine: (question) => askLine(question), askSecret: (question) => askSecret(question), open: (url) => openInBrowser(url), width: stdout.columns || 80 }) } : {}) });
+              const result = await runConnectService(session, { service }, { env: process.env, root, ...(stdin.isTTY && stdout.isTTY ? { connectorCard: (flow) => connectInTerminal(flow, { write: (text) => stdout.write(text), askLine: (question) => askLine(question), askSecret: (question) => askSecret(question), open: (url) => openInBrowser(url), width: stdout.columns || 80 }) } : {}) });
               stdout.write((result.skipped ? 'Not connected.' : result.message || (result.connected ? 'Connected.' : 'Not connected.')) + '\n');
             } catch (error) { stdout.write('[connect] ' + error.message + '\n'); }
           }
