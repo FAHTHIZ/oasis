@@ -25,6 +25,7 @@ import { listWorktrees } from './worktrees.mjs';
 import { listAgentTeams } from './agent-tasks.mjs';
 import { killBackgroundEntry } from './power-tools.mjs';
 import path from 'node:path';
+import { listRecipes, recipePrompt } from './goose-recipes.mjs';
 
 // Claude Code aliases for built-in commands (and /swarm from Kimi Code, which is /batch here).
 export const COMMAND_ALIASES = { tokens: 'context', approvals: 'permissions', ask: 'plan', keys: 'keybindings', peers: 'list-agents', settings: 'config', checkpoint: 'rewind', continue: 'resume', 'allowed-tools': 'permissions', stats: 'usage', checkup: 'doctor', 'code-review': 'review', bg: 'background', proactive: 'loop', reset: 'clear', new: 'clear', quit: 'exit', routines: 'schedule', feedback: 'bug', share: 'export', 'install-github-action': 'install-github-app', swarm: 'batch' };
@@ -122,6 +123,7 @@ export const BUILTIN_COMMANDS = {
   import: 'Import MCP servers, instructions, commands, rules, skills and memories from Codex, Gemini CLI, Cursor, Claude Code, Hermes, OpenCode, Antigravity, Windsurf or Cline (/import [SOURCE] [--dry-run] [--yes])',
   advisor: 'Let the agent consult a second, stronger model mid-task (/advisor MODEL, /advisor off)',
   subtask: 'Run a task in a forked background subagent that inherits this conversation and reports back (/subtask TASK)',
+  recipe: 'Run a Goose recipe (YAML/JSON) from the workspace or GOOSE_RECIPE_PATH (/recipe [FILE|NAME] [key=value ...])',
   btw: 'Ask a side question about this session without adding it to the conversation (/btw QUESTION)',
   recap: 'One-line summary of this session',
   rename: 'Name this session (/rename NAME)',
@@ -227,7 +229,7 @@ export async function runBuiltinCommand(name, argument, state) {
       const groups = [
         { title: 'Core workflows', commands: ['init', 'plan', 'fix', 'diagnose', 'review', 'rollback'] },
         { title: 'Getting started', commands: ['help', 'setup', 'status', 'doctor', 'context', 'cost', 'undo'] },
-        { title: 'Working', commands: ['clear', 'compact', 'test', 'diagnostics', 'audit', 'tasks', 'workflows', 'learning', 'commit', 'pr', 'goal', 'batch', 'simplify', 'verify', 'todos', 'agents', 'teams', 'worktrees', 'resume', 'fork', 'copy', 'export'] },
+        { title: 'Working', commands: ['clear', 'compact', 'test', 'diagnostics', 'audit', 'tasks', 'workflows', 'learning', 'commit', 'pr', 'goal', 'recipe', 'batch', 'simplify', 'verify', 'todos', 'agents', 'teams', 'worktrees', 'resume', 'fork', 'copy', 'export'] },
         { title: 'Safety', commands: ['permissions', 'mode', 'sandbox', 'security-review', 'undo', 'rewind', 'purge', 'logout', 'doctor'] },
         { title: 'Settings', commands: ['model', 'effort', 'config', 'language', 'avoid', 'comments', 'output-style', 'fast', 'color', 'add-dir', 'login', 'logout', 'auto-mode-setup', 'chrome'] }
       ];
@@ -997,6 +999,16 @@ export async function runBuiltinCommand(name, argument, state) {
       }
       if (argument.length > 4000) return { output: 'A goal can be at most 4,000 characters. Put the details in a file and point the goal at it.' };
       return { output: '[goal] Working until: ' + argument + '\nPress Ctrl+C to pause.', goal: { condition: argument, maxTurns } };
+    }
+    case 'recipe': {
+      if (!argument) {
+        const recipes = await listRecipes(root, env);
+        if (!recipes.length) return { output: 'No Goose recipes found. Put NAME.yaml in the workspace or a GOOSE_RECIPE_PATH folder, then run /recipe NAME key=value.' };
+        return { output: ['Goose recipes:', ...recipes.map((item) => '  ' + item.name.padEnd(24) + ' ' + item.title + (item.description ? ' - ' + item.description : ''))].join('\n') };
+      }
+      const result = await recipePrompt(root, argument, env);
+      if (result.error) return { output: result.error };
+      return { output: result.output, prompt: result.prompt };
     }
     case 'btw': {
       if (!argument) {

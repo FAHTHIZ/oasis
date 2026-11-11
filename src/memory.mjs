@@ -4,7 +4,8 @@
 //   project  OASIS.md, AGENTS.md, CLAUDE.md                     (shared, committed)
 //            plus GEMINI.md, .github/copilot-instructions.md, .cursorrules,
 //            .windsurfrules, .clinerules, .roorules (when .roo/rules is empty),
-//            CONVENTIONS.md (other agents' rules),
+//            CONVENTIONS.md, .goosehints (other agents' rules; Goose's also from
+//            parent folders up to the git root and ~/.config/goose/.goosehints),
 //            AGENT.md and Devin Desktop's .devin/global_rules.md (else the
 //            legacy .windsurf/global_rules.md)
 //   local    OASIS.local.md, CLAUDE.local.md, AGENTS.local.md   (personal, gitignored)
@@ -49,7 +50,11 @@ const PER_FILE_LIMIT = 9000;
 // The README is background sent with every request; its opening (what the
 // project is, how to run it) is what helps. The model can read the rest.
 const README_LIMIT = 2500;
-export const OTHER_AGENT_RULES = ['GEMINI.md', 'AGENT.md', path.join('.github', 'copilot-instructions.md'), '.cursorrules', '.windsurfrules', path.join('.devin', 'global_rules.md'), path.join('.windsurf', 'global_rules.md'), '.clinerules', '.roorules', 'CONVENTIONS.md'];
+export const OTHER_AGENT_RULES = ['GEMINI.md', 'AGENT.md', path.join('.github', 'copilot-instructions.md'), '.cursorrules', '.windsurfrules', path.join('.devin', 'global_rules.md'), path.join('.windsurf', 'global_rules.md'), '.clinerules', '.roorules', 'CONVENTIONS.md', '.goosehints'];
+
+async function isGitRoot(dir) {
+  try { await lstat(path.join(dir, '.git')); return true; } catch { return false; }
+}
 
 export async function memoryFiles(root, options = {}) {
   const env = options.env || process.env;
@@ -61,6 +66,12 @@ export async function memoryFiles(root, options = {}) {
     const dirs = [];
     for (let dir = path.dirname(workspace); dir && dir !== path.dirname(dir) && dirs.length < 20; dir = path.dirname(dir)) dirs.unshift(dir);
     for (const dir of dirs) for (const name of ['CLAUDE.md', 'AGENTS.md', 'OASIS.md', 'CLAUDE.local.md']) parents.push({ label: 'parent', path: path.join(dir, name) });
+    // Goose reads .goosehints in each directory from the git root down to the cwd.
+    if (env.OASIS_OTHER_AGENT_RULES !== '0' && !await isGitRoot(workspace)) {
+      let gitRoot = -1;
+      for (let i = dirs.length - 1; i >= 0; i--) if (await isGitRoot(dirs[i])) { gitRoot = i; break; }
+      if (gitRoot >= 0) for (const dir of dirs.slice(gitRoot)) parents.push({ label: 'parent', path: path.join(dir, '.goosehints') });
+    }
   }
   const candidates = [
     { label: 'user', path: path.join(getConfigDirectory(env, home), 'OASIS.md') },
@@ -71,7 +82,9 @@ export async function memoryFiles(root, options = {}) {
       { label: 'user', path: path.join(options.home || env.HOME || os.homedir(), '.gemini', 'GEMINI.md') },
       // Devin Desktop (formerly Windsurf) global rules, and the legacy Windsurf location.
       { label: 'user', path: path.join(options.home || env.HOME || os.homedir(), '.devin', 'global_rules.md') },
-      { label: 'user', path: path.join(options.home || env.HOME || os.homedir(), '.codeium', 'windsurf', 'memories', 'global_rules.md') }
+      { label: 'user', path: path.join(options.home || env.HOME || os.homedir(), '.codeium', 'windsurf', 'memories', 'global_rules.md') },
+      // Goose global hints.
+      { label: 'user', path: path.join(env.XDG_CONFIG_HOME || path.join(options.home || env.HOME || os.homedir(), '.config'), 'goose', '.goosehints') }
     ]),
     ...parents,
     { label: 'project', path: path.join(workspace, 'OASIS.md') },
@@ -376,7 +389,7 @@ export async function nestedMemoryFor(root, filePath, loaded = new Set(), option
   for (let i = 1; i <= parts.length; i++) {
     const dir = path.join(workspace, ...parts.slice(0, i));
     if (/(^|\/)(node_modules|\.git)(\/|$)/.test(dir)) break;
-    for (const name of NESTED_NAMES) {
+    for (const name of env.OASIS_OTHER_AGENT_RULES === '0' ? NESTED_NAMES : [...NESTED_NAMES, '.goosehints']) {
       const file = path.join(dir, name);
       if (loaded.has(file)) continue;
       try {
