@@ -5,6 +5,10 @@ weaknesses. Newest first. Detailed user-facing notes go in the CHANGELOG.
 
 ## 2026-11-11 (frontier-platform cycle: competitor gaps)
 
+### Conversation routines
+- Codex thread automations and Claude Desktop local tasks can continue context. OASIS routines now take `fromSession` + `chain`. `startBackgroundSession({ resumeId, fork: true })` passes `--resume ID --fork-session --session-id NEW` (the CLI already honoured a chosen id for a fork) and records NEW, so in-place resume races with an open terminal can't happen. After an `ok` run of a chained routine, `fromSession` moves to that run's session. Failed runs don't advance the chain.
+- Found while testing: `spawnSync` against the in-process scripted model server deadlocks. The test uses async `execFile`.
+
 ### Webhook-triggered routines
 - Hermes has webhook subscriptions and Claude Code routines can be triggered by API/GitHub events; OASIS routines were clock-only. New schedule type `event` (`webhook`): `receiveWebhook()` checks an HMAC-SHA256 signature over the raw body with timing-safe comparison, queues the payload, and `tick()` launches one run per event. Events wait behind an active run (cron slots are skipped instead, since a missed slot comes back; a missed event does not). Payload goes to a 0600 file plus a fenced `<webhook_payload>` block with closing tags stripped and an untrusted-data notice.
 - Endpoint `/hooks/routines/rt-XXXXXXXX` in `src/web.mjs` sits before the access-key check, but the host check and failed-auth lockout still apply.
