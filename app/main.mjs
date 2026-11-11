@@ -2022,7 +2022,7 @@ async function connectShortcut(message, { reason = '' } = {}) {
     scrollDown(true);
     return true;
   }
-  if (known && known.live) { toast(known.name + ' is already connected.'); return true; }
+  if (known && (known.live || known.connected)) { toast(known.name + ' is already connected. Disconnect it in Settings → Apps.'); return true; }
   let view;
   try { view = await RT.client.api('/api/connectors', { method: 'POST', body: { service: known ? known.id : intent.service, reason } }); }
   catch (error) { toast(String(error && error.message || error).replace(/^Error:\s*/, '')); return true; }
@@ -2041,17 +2041,18 @@ async function renderApps() {
   list.replaceChildren();
   for (const app of apps) {
     const row = document.createElement('li');
-    row.className = 'app-tile' + (app.live || app.signedIn ? ' on' : '');
+    const on = app.live || app.connected;
+    row.className = 'app-tile' + (on ? ' on' : '');
     row.appendChild(brandMark(app));
     const text = document.createElement('div');
     text.className = 'app-text';
     const name = document.createElement('strong');
     name.textContent = app.name;
     const sub = document.createElement('span');
-    sub.textContent = app.signedIn ? 'Connected' : app.description;
+    sub.textContent = on ? 'Connected' : app.description;
     text.append(name, sub);
     row.appendChild(text);
-    if (!app.signedIn) {
+    if (!on) {
       const button = document.createElement('button');
       button.type = 'button';
       button.className = 'btn small';
@@ -2059,10 +2060,18 @@ async function renderApps() {
       button.addEventListener('click', () => { closeSheet('settingsSheet'); void connectShortcut('/connect ' + app.id); });
       row.appendChild(button);
     } else {
-      const dot = document.createElement('span');
-      dot.className = 'app-dot';
-      dot.title = 'Connected';
-      row.appendChild(dot);
+      const off = document.createElement('button');
+      off.type = 'button';
+      off.className = 'btn small ghost app-off';
+      off.textContent = 'Disconnect';
+      off.addEventListener('click', async () => {
+        if (!confirm('Disconnect ' + app.name + '? OASIS forgets its sign-in; you can connect again any time.')) return;
+        off.disabled = true;
+        try { const result = await RT.client.api('/api/connectors', { method: 'POST', body: { service: app.id, action: 'disconnect' } }); toast(result.message || 'Disconnected.'); }
+        catch (error) { toast(String(error && error.message || error).replace(/^Error:\s*/, '')); }
+        void renderApps();
+      });
+      row.appendChild(off);
     }
     list.appendChild(row);
   }

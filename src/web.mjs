@@ -1585,6 +1585,11 @@ export function createOasisWebServer(options = {}) {
       const connectors = await import('./connectors.mjs');
       if (req.method === 'GET') { json(res, 200, { connectors: await connectors.listConnectors({ root, env }) }); return; }
       const body = await readJsonBody(req);
+      if (body.action === 'disconnect') {
+        try { json(res, 200, await connectors.disconnectConnector(String(body.service || '').slice(0, 300), { root, env })); }
+        catch (error) { json(res, 404, { error: String(error.message || error).slice(0, 800) }); }
+        return;
+      }
       let connector;
       try { connector = await connectors.resolveConnector(String(body.service || '').slice(0, 300), { env }); }
       catch (error) { json(res, 404, { error: String(error.message || error).slice(0, 800) }); return; }

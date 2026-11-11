@@ -1666,7 +1666,7 @@ export async function runBuiltinCommand(name, argument, state) {
       if (!service) {
         const { listConnectors } = await import('./connectors.mjs');
         const rows = await listConnectors({ root, env, session });
-        return { output: 'Connect an app with /connect NAME (or paste an MCP server URL):\n' + rows.map((row) => '  ' + (row.live ? '● ' : row.signedIn ? '◐ ' : '○ ') + row.id.padEnd(16) + row.name + (row.live ? ' · connected, ' + row.tools + ' tool(s)' : row.signedIn ? ' · signed in' : '')).join('\n') };
+        return { output: 'Connect an app with /connect NAME (or paste an MCP server URL):\n' + rows.map((row) => '  ' + (row.live ? '● ' : row.connected ? '◐ ' : '○ ') + row.id.padEnd(16) + row.name + (row.live ? ' · connected, ' + row.tools + ' tool(s)' : row.connected ? ' · connected' : '')).join('\n') };
       }
       return { connect: service };
     }
