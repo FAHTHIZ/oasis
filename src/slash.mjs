@@ -1669,6 +1669,12 @@ export async function runBuiltinCommand(name, argument, state) {
         const rows = await listConnectors({ root, env, session });
         return { output: 'Connect an app with /connect NAME (or paste an MCP server URL):\n' + rows.map((row) => '  ' + (row.live ? '● ' : row.connected ? '◐ ' : '○ ') + row.id.padEnd(16) + row.name + (row.live ? ' · connected, ' + row.tools + ' tool(s)' : row.connected ? ' · connected' : '')).join('\n') };
       }
+      // "/connect github linear" or "github, linear and notion": one card each, in turn.
+      if (!/^https?:\/\//i.test(service)) {
+        const { findCatalogConnector } = await import('./connectors.mjs');
+        const parts = service.split(/\s*(?:,|&|\+|\band\b|\s)\s*/i).filter(Boolean);
+        if (parts.length > 1 && parts.every((part) => findCatalogConnector(part))) return { connect: parts.map((part) => findCatalogConnector(part).id) };
+      }
       return { connect: service };
     }
     case 'disconnect': {
