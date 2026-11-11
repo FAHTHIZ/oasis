@@ -29,6 +29,12 @@ weaknesses. Newest first. Detailed user-facing notes go in the CHANGELOG.
 
 ## 2026-11-11 (Claude Code parity cycle)
 
+### blockReads/WritesOutsideWorkingDirectories
+- OASIS file tools already refuse paths outside the working directories in every mode, so the main effect of these keys was there. What changed: a `true` in any file (an untrusted repository too) turns them on; while on, folders listed only in the repository's `.claude/settings.json` `additionalDirectories` are not working directories; and the write block denies `enter_worktree` and `exit_worktree`, as Claude Code removes its worktree tools.
+- Fixed on the way: the session replaced the sandbox's writable list with the working directories, which dropped the cache folders and `sandbox.filesystem.allowWrite`. They are now kept.
+- Not done: the sandbox side of the read block (hiding home and other user roots from sandboxed commands, then re-opening git config). `.claude/settings.local.json` is treated as personal, without Claude Code's git-tracked check.
+- Test: test/block-outside-working-dirs.test.mjs (3); add-dir, slash, sandbox, settings, worktree and permissions suites pass (89 + 1 skipped).
+
 ### Claude Code sandbox settings layout
 - OASIS read `sandbox.allowedDomains` and a boolean `sandbox.network`; a Claude Code file with `sandbox.network.allowedDomains`, `sandbox.filesystem.*` or `autoAllowBashIfSandboxed` was ignored. Now read: `network.allowedDomains` / `deniedDomains` (merged across files) and `allowManagedDomainsOnly`; `autoAllowBashIfSandboxed` (same as `autoAllowCommands`); `failIfUnavailable` (managed wins; session start fails instead of only refusing each command, which OASIS already did); `filesystem.allowWrite`, `denyWrite`, `denyRead` with Claude Code's path prefixes (`/`, `//`, `~/`, else project root or `~/.claude` for user files; trailing `/**` dropped, other wildcards skipped as on Linux).
 - Enforced in bubblewrap (bind, ro-bind, /dev/null or tmpfs masks), sandbox-exec (deny rules after the allow), containers (bind mounts) and sandbox-runtime (its own lists). Paths that do not exist are not mounted. `/sandbox` toggles now keep these settings instead of dropping them.

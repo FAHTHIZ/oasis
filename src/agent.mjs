@@ -459,8 +459,20 @@ export async function createSession({ root, config, restore = null, permissionMo
   for (const rule of disallowedTools || []) permissions.addRule('deny', rule);
   const sandbox = resolveSandbox(loadedSettings, root);
   if (sandbox && sandbox.enabled && !sandbox.available && sandbox.failIfUnavailable) throw new Error('The sandbox is enabled with sandbox.failIfUnavailable, but it cannot start: ' + String(sandbox.reason || 'no supported sandbox on this platform.'));
-  const extraDirs = await setAdditionalDirectories(root, [...(loadedSettings.permissions.additionalDirectories || []), ...(addDirs || [])]);
-  if (sandbox && Array.isArray(sandbox.writable)) sandbox.writable = [root, ...extraDirs.accepted];
+  // permissions.blockReads/WritesOutsideWorkingDirectories (Claude Code): folders added only by the
+  // repository's .claude/settings.json are not working directories, and worktree switching is off
+  // under the write block.
+  const blockOutside = loadedSettings.permissions.blockReadsOutsideWorkingDirectories === true || loadedSettings.permissions.blockWritesOutsideWorkingDirectories === true;
+  const repoDirs = blockOutside ? new Set(loadedSettings.permissions.repoAdditionalDirectories || []) : new Set();
+  const settingDirs = (loadedSettings.permissions.additionalDirectories || []).filter((dir) => !repoDirs.has(dir));
+  if (loadedSettings.permissions.blockWritesOutsideWorkingDirectories === true) { permissions.addRule('deny', 'enter_worktree'); permissions.addRule('deny', 'exit_worktree'); }
+  const extraDirs = await setAdditionalDirectories(root, [...settingDirs, ...(addDirs || [])]);
+  if (sandbox && Array.isArray(sandbox.writable)) {
+    // Keep cache folders and sandbox.filesystem.allowWrite; replace only the working directories.
+    const settingResolved = new Set((loadedSettings.permissions.additionalDirectories || []).map((dir) => path.resolve(root, dir)));
+    const kept = sandbox.writable.filter((dir) => dir !== root && !settingResolved.has(dir) && !extraDirs.accepted.includes(dir));
+    sandbox.writable = [root, ...extraDirs.accepted, ...kept];
+  }
   // Project .mcp.json servers start third-party code, so they need a trusted workspace.
   let project = { servers: [], failures: [] };
   if (bare) project = { servers: [], failures: [] };

@@ -32,6 +32,8 @@ User-facing change history grouped by package version. A version heading does no
 - `includeGitInstructions: false` leaves the git snapshot (branch, working-tree summary, recent commits) out of the prompt; `CLAUDE_CODE_DISABLE_GIT_INSTRUCTIONS=1` does the same for one session, and `=0` turns it back on.
 - `attribution.commit` and `attribution.pr` set the text the agent ends commit messages and pull request descriptions with, for example a `Co-Authored-By` trailer. OASIS adds no attribution of its own, so leaving them unset (or `attribution: false`) adds nothing. A repository's settings can set them only once the workspace is trusted.
 - Claude Code's sandbox settings layout is read. `sandbox.network.allowedDomains` and `deniedDomains` (combined from every settings file; `allowManagedDomainsOnly` in managed settings keeps only the managed list), `sandbox.autoAllowBashIfSandboxed`, `sandbox.failIfUnavailable` (OASIS will not start when the sandbox is on but cannot run), and `sandbox.filesystem.allowWrite`, `denyWrite` and `denyRead`. Paths use Claude Code's prefixes: `/` absolute, `~/` home, anything else relative to the project (or to `~/.claude` in user settings). `/sandbox on`, `off` and backend changes keep these settings.
+- `permissions.blockReadsOutsideWorkingDirectories` and `blockWritesOutsideWorkingDirectories` are read from any settings file. OASIS file tools already stay inside the working directories; with either key on, folders that only the repository's own settings add are no longer working directories, and the write block turns off `enter_worktree` and `exit_worktree`.
+- Fixed: with the sandbox on, the cache folders and extra writable paths were dropped from the sandbox when the session started.
 
 ### Crash-safe task progress
 
