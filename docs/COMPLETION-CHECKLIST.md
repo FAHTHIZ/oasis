@@ -96,6 +96,7 @@ Gaps found by checking the [hooks reference](https://code.claude.com/docs/en/hoo
 | Item | Status | Evidence / notes |
 | --- | --- | --- |
 | Gemini CLI `.gemini/commands/**/*.toml` as native slash commands (`{{args}}`, `!{...}` with escaping, `@{...}` files and folders, namespaces) | done | `test/foreign-commands.test.mjs` (Gemini test). Not done: an interactive confirmation for each `!{...}` (OASIS uses workspace trust and permission rules instead), multimodal `@{image}`, `.gitignore` filtering inside `@{folder}` (agent-ignore files and sensitive paths are filtered), extension commands outside installed extensions |
+| Gemini CLI `.gemini/agents` and OpenCode `.opencode/agents` agent files as native agents | done | `test/foreign-agents.test.mjs` (2 tests). Not done: OpenCode agents defined inline in `opencode.json` (`agent`/`agents` keys; `oasis import opencode` still covers `.opencode` files), per-pattern permission rules, nested OpenCode agent IDs (`team/reviewer`), `temperature`, model ids, Gemini remote A2A agents |
 
 ## 3. Competitive evaluation
 

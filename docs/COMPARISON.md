@@ -89,6 +89,8 @@ Files from these tools that OASIS reads where they are (no `oasis import` step).
 | File | From | How OASIS uses it |
 | --- | --- | --- |
 | `.gemini/commands/**/*.toml`, `~/.gemini/commands` | Gemini CLI | Slash commands with Gemini's `{{args}}`, `!{...}` and `@{...}` rules ([custom commands](https://raw.githubusercontent.com/google-gemini/gemini-cli/main/docs/cli/custom-commands.md)). Gemini asks before each `!{...}`; OASIS runs it for user commands, for project commands only in trusted workspaces, and never past a deny or ask rule. Images and PDFs in `@{...}` are skipped, not attached |
+| `.gemini/agents/*.md`, `~/.gemini/agents` | Gemini CLI | Subagents for the task tool; Gemini tool names mapped, `max_turns` honoured. Remote (A2A) agents, `temperature` and `timeout_mins` are not supported, and the model id is not carried over |
+| `.opencode/agents`, `.opencode/agent`, `~/.config/opencode/agents` | OpenCode | `subagent`/`all` agents are task subagents; `primary` agents run with `oasis --agent`. Tool switches and whole-tool deny rules remove tools; per-command `ask`/`allow` patterns and `opencode.json` `agents` entries are not read; the model id is not carried over |
 
 ## Kimi Code CLI
 
