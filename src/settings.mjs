@@ -455,6 +455,9 @@ export async function loadSettings(root, options = {}) {
     if (typeof settings.model === 'string' && settings.model.trim()) result.model = settings.model.trim();
     if (Array.isArray(settings.availableModels)) result.availableModels = settings.availableModels.filter((item) => typeof item === 'string' && item.trim()).map((item) => item.trim()).slice(0, 100);
     if (typeof settings.chrome === 'boolean') result.chrome = settings.chrome;
+    // Claude Code's plansDirectory: where exit_plan_mode saves plan files (relative to the project root). Trusted files only:
+    // an untrusted repository should not choose where OASIS writes.
+    if (typeof settings.plansDirectory === 'string' && settings.plansDirectory.trim() && !/[\r\n\0]/.test(settings.plansDirectory)) result.plansDirectory = settings.plansDirectory.trim().slice(0, 500);
     // modelOverrides: { "claude-opus-4-6": "arn:aws:bedrock:..." } maps model ids to provider ids.
     if (settings.modelOverrides && typeof settings.modelOverrides === 'object' && !Array.isArray(settings.modelOverrides)) {
       result.modelOverrides = { ...(result.modelOverrides || {}) };
