@@ -329,16 +329,27 @@ export async function loadSettings(root, options = {}) {
     if (Number.isFinite(settings.soundVolume)) result.soundVolume = Math.max(0, Math.min(100, Math.round(settings.soundVolume)));
     // Denials and .mcp.json rejections count from any file; allowlists and approvals need trust.
     collectMcpPolicy(result, settings, scope, trusted);
+    // "includeGitInstructions": false leaves the git snapshot out of the prompt (removing context only, so any file).
+    if (typeof settings.includeGitInstructions === 'boolean') result.includeGitInstructions = settings.includeGitInstructions;
     // "claudeMdExcludes": instruction files to skip. Arrays merge from every file (skipping only tightens).
     if (Array.isArray(settings.claudeMdExcludes)) result.claudeMdExcludes = [...(result.claudeMdExcludes || []), ...settings.claudeMdExcludes.filter((item) => typeof item === 'string' && item.trim()).map((item) => item.trim().slice(0, 1000)).slice(0, 200)];
     if (!trusted) {
       const routingEnabled = settings.modelRouting && typeof settings.modelRouting === 'object' && (settings.modelRouting.enabled === true || Boolean(String(settings.modelRouting.easyModel || '').trim()) || Boolean(String(settings.modelRouting.strongModel || '').trim()));
       const loosening = stringList(permissions.allow).length || settings.hooks || permissions.defaultMode || settings.sandbox || settings.shell || settings.statusLine || settings.lspServers || settings.autoMode || routingEnabled || settings.env || settings.apiKeyHelper || settings.customHeadersHelper || settings.autoTest;
       // Any other key is also skipped until trust; say so instead of dropping it silently.
-      const untrustedSafe = new Set(['$schema', 'permissions', 'outputStyle', 'editorMode', 'language', 'worktree', 'avoidPhrases', 'codeComments', 'theme', 'agent', 'channelsEnabled', 'autoMemory', 'autoLearning', 'memoryWriteApproval', 'memory', 'executeCode', 'sessionSearch', 'textToolCalls', 'sounds', 'soundVolume', 'idleCompactMinutes', 'deniedMcpServers', 'disabledMcpjsonServers', 'claudeMdExcludes']);
+      const untrustedSafe = new Set(['$schema', 'permissions', 'outputStyle', 'editorMode', 'language', 'worktree', 'avoidPhrases', 'codeComments', 'theme', 'agent', 'channelsEnabled', 'autoMemory', 'autoLearning', 'memoryWriteApproval', 'memory', 'executeCode', 'sessionSearch', 'textToolCalls', 'sounds', 'soundVolume', 'idleCompactMinutes', 'deniedMcpServers', 'disabledMcpjsonServers', 'claudeMdExcludes', 'includeGitInstructions']);
       const skipped = Object.keys(settings).filter((key) => !untrustedSafe.has(key));
       if (loosening || skipped.length) result.ignoredUntrusted.push(file);
       return;
+    }
+    // "attribution": the commit trailer and pull request text the agent adds (Claude Code key). The text
+    // reaches the prompt, so only trusted scopes may set it; managed text beats the user's own instructions.
+    if (settings.attribution === false) result.attribution = { commit: '', pr: '', managed: scope === 'managed' };
+    else if (settings.attribution && typeof settings.attribution === 'object' && !Array.isArray(settings.attribution)) {
+      const attribution = { ...(result.attribution || {}) };
+      for (const key of ['commit', 'pr']) if (typeof settings.attribution[key] === 'string') attribution[key] = settings.attribution[key].slice(0, 2000);
+      if (scope === 'managed' && (typeof settings.attribution.commit === 'string' || typeof settings.attribution.pr === 'string')) attribution.managed = true;
+      result.attribution = attribution;
     }
     // "disableBypassPermissionsMode": "disable" only tightens; honor it from any trusted scope.
     if (permissions.disableBypassPermissionsMode === 'disable') result.permissions.disableBypassPermissionsMode = true;
