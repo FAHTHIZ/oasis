@@ -31,6 +31,7 @@ User-facing change history grouped by package version. A version heading does no
 - Settings → Apps has a search box, lists connected apps first, and connects any other app from a pasted MCP server URL.
 - 13 more apps, each checked for OAuth dynamic client registration: PostHog, Netlify, Prisma, Semgrep, Jam, Wix, Supermemory, Apify, Tavily, Close, Attio and Todoist, plus Context7 (no sign-in).
 - `/disconnect NAME` in the terminal signs out of an app and removes the server OASIS added (Tab completes app names).
+- Settings → Apps and `/connect` flag a sign-in that expired with no refresh token, with a one-click Reconnect.
 - A connected card has "Show tools" listing what the app added.
 - Lazy sign-in, as in Claude's connectors: when a connected app's tool is refused because the sign-in expired or was revoked, the Connect card appears and the same call runs again once you connect. No model round trip, no lost context.
 - Brand marks come from Simple Icons (CC0) and are bundled, so the strict app CSP stays unchanged.

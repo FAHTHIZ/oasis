@@ -2043,7 +2043,7 @@ async function connectShortcut(message, { reason = '', keepInput = false } = {})
     scrollDown(true);
     return true;
   }
-  if (known && (known.live || known.connected)) { toast(known.name + ' is already connected. Disconnect it in Settings → Apps.'); return true; }
+  if (known && (known.live || (known.connected && !known.expired))) { toast(known.name + ' is already connected. Disconnect it in Settings → Apps.'); return true; }
   let view;
   try { view = await RT.client.api('/api/connectors', { method: 'POST', body: { service: known ? known.id : intent.service, reason } }); }
   catch (error) { toast(String(error && error.message || error).replace(/^Error:\s*/, '')); return true; }
@@ -2072,14 +2072,15 @@ async function renderApps() {
     const name = document.createElement('strong');
     name.textContent = app.name;
     const sub = document.createElement('span');
-    sub.textContent = on ? 'Connected' : app.description;
+    sub.textContent = app.expired && !app.live ? 'Sign-in expired' : on ? 'Connected' : app.description;
+    if (app.expired && !app.live) row.classList.add('expired');
     text.append(name, sub);
     row.appendChild(text);
-    if (!on) {
+    if (!on || (app.expired && !app.live)) {
       const button = document.createElement('button');
       button.type = 'button';
       button.className = 'btn small';
-      button.textContent = 'Connect';
+      button.textContent = on ? 'Reconnect' : 'Connect';
       button.addEventListener('click', () => { closeSheet('settingsSheet'); void connectShortcut('/connect ' + app.id); });
       row.appendChild(button);
     } else {
