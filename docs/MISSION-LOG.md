@@ -10,6 +10,11 @@ weaknesses. Newest first. Detailed user-facing notes go in the CHANGELOG.
 
 ## 2026-11-11 (frontier-platform cycle: competitor gaps)
 
+### Shared archive state; parallel workstreams
+- Owner asked for breadth over Codex-only work. Started three parallel agents in separate clones, each pushing to main: README redesign, Claude Code parity, and Cursor/Windsurf/Antigravity/OpenHands/Devin parity.
+- Gap found: App Server `thread/archive` only affected `thread/list`; the web app, `/resume`, `--continue`, the recent-sessions menu and ACP `session/list` still showed archived sessions. All now hide them, with `oasis sessions archive|unarchive|list --archived` and `POST /api/sessions/:id/archive|unarchive`. Tests: test/commands.test.mjs, test/web.test.mjs, test/acp.test.mjs.
+- Also added App Server `fuzzyFileSearch` and `thread/turns/list`.
+
 ### App Server skills, MCP status and signed tokens
 - Added `skills/list` and `mcpServerStatus/list`. OASIS starts MCP servers per thread, not per process as Codex does, so the status list needs a loaded thread's `threadId` (or exactly one loaded thread).
 - Added `--ws-auth signed-bearer-token`, following the checks in Codex's `codex-rs/websocket-auth/src/lib.rs`: HS256 only, `exp` required, `nbf` honoured, optional issuer and audience, 30 seconds of default clock skew, and a secret of at least 32 bytes. Verified with Node's `crypto` (HMAC and constant-time compare), so there is no new dependency. The test signs tokens and checks the reasons for refusal, plus a real WebSocket handshake: 401 for expired or wrongly signed tokens, open for a good one.

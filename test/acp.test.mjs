@@ -280,6 +280,12 @@ test('ACP session lifecycle: list, resume, config options, usage and title updat
   const listed = await client.call('session/list', { cwd: root });
   assert.ok(listed.result.sessions.some((item) => item.sessionId === sessionId && item.cwd === root && /Explain the build setup/.test(item.title || '')), JSON.stringify(listed));
   assert.equal(listed.result.nextCursor, null);
+  // Archiving (App Server thread/archive, oasis sessions archive) hides it here too.
+  const { setSessionArchived } = await import('../src/sessions.mjs');
+  const sessionEnv = { ...process.env, HOME: home, OASIS_CONFIG_DIR: path.join(home, 'cfg') };
+  await setSessionArchived(root, sessionId, true, { env: sessionEnv });
+  assert.equal((await client.call('session/list', { cwd: root })).result.sessions.some((item) => item.sessionId === sessionId), false);
+  await setSessionArchived(root, sessionId, false, { env: sessionEnv });
 
   const closed = await client.call('session/close', { sessionId });
   assert.deepEqual(closed.result, {});

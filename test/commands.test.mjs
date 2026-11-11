@@ -171,6 +171,47 @@ test('/resume lists saved sessions and picks one by number or id prefix', async 
   assert.equal((await runBuiltinCommand('resume', '12345678', state)).resume, numeric.id);
 });
 
+test('/resume and oasis sessions list hide archived sessions but still resume them by id', async (t) => {
+  const { root, env } = await workspace();
+  const { saveSession, setSessionArchived } = await import('../src/sessions.mjs');
+  const kept = await saveSession({ root, config: { model: 'm' }, messages: [{ role: 'system', content: 's' }, { role: 'user', content: 'keep me' }] }, { env });
+  const old = await saveSession({ root, config: { model: 'm' }, messages: [{ role: 'system', content: 's' }, { role: 'user', content: 'old work' }] }, { env });
+  await setSessionArchived(root, old.id, true, { env });
+  const state = { root, env, session: null };
+  const listing = (await runBuiltinCommand('resume', '', state)).output;
+  assert.match(listing, new RegExp('1\\. ' + kept.id));
+  assert.doesNotMatch(listing, new RegExp(old.id));
+  assert.equal((await runBuiltinCommand('resume', '1', state)).resume, kept.id);
+  assert.equal((await runBuiltinCommand('resume', old.id, state)).resume, old.id, 'an archived session resumes by full id');
+  assert.equal((await runBuiltinCommand('resume', old.id.slice(0, 8), state)).resume, old.id, 'and by id prefix');
+  await setSessionArchived(root, kept.id, true, { env });
+  assert.match((await runBuiltinCommand('resume', '', state)).output, /All saved sessions in this workspace are archived/);
+
+  // oasis sessions list / archive / unarchive (writes to stdout).
+  const { manageSessions } = await import('../src/cli-sessions.mjs');
+  const saveEnv = { ...process.env };
+  Object.assign(process.env, env);
+  t.after(() => { for (const key of Object.keys(env)) { if (key in saveEnv) process.env[key] = saveEnv[key]; else delete process.env[key]; } });
+  const output = [];
+  const write = process.stdout.write;
+  process.stdout.write = (chunk) => { output.push(String(chunk)); return true; };
+  try {
+    await manageSessions(root, ['unarchive', kept.id]);
+    await manageSessions(root, ['list']);
+    await manageSessions(root, ['list', '--archived']);
+    await manageSessions(root, ['archive', kept.id]);
+  } finally { process.stdout.write = write; }
+  const text = output.join('');
+  assert.match(text, new RegExp('Unarchived ' + kept.id));
+  const [plain, archivedList] = text.split('Archived sessions for ');
+  assert.match(plain, new RegExp(kept.id));
+  assert.match(plain, /1 archived; oasis sessions list --archived shows them/);
+  assert.match(archivedList, new RegExp(old.id));
+  assert.doesNotMatch(archivedList.split('\n').slice(0, 2).join('\n'), new RegExp(kept.id));
+  assert.match(text, new RegExp('Archived ' + kept.id + '\\. It is hidden'));
+  await assert.rejects(manageSessions(root, ['archive']), /Usage: oasis sessions archive/);
+});
+
 test('@mentions with line ranges attach just those numbered lines', async () => {
   const { root } = await workspace();
   await mkdir(path.join(root, 'src'));

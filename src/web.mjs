@@ -14,7 +14,7 @@ import { startIdleCompaction, idleCompactMinutes } from './idle-compaction.mjs';
 import { loadConfig, saveConfig, getProviderSummary, validateProtocol, validateBaseUrl, isLoopbackUrl, getBaseConfigDirectory } from './config.mjs';
 import { cachedUpdateCheck, updateChecksDisabled, readUpdateState, writeUpdateState, RELEASES_PAGE } from './app-update.mjs';
 import { oasisVersion } from './version.mjs';
-import { saveSession, loadSession, listSessions, deleteSession, saveMidTurn, settleMidTurnSave } from './sessions.mjs';
+import { saveSession, loadSession, listSessions, deleteSession, saveMidTurn, settleMidTurnSave, setSessionArchived } from './sessions.mjs';
 import { executeTool, resolveWorkspacePath, sensitivePath } from './tools.mjs';
 import { inspectGitHubExtension, inspectGitHubMcpServers, selectReviewedMcpServers, resolveImportedSlashCommand, installGitHubExtension, updateGitHubExtension, rollbackGitHubExtension, listInstalledExtensions, removeGitHubExtension } from './extensions.mjs';
 import { loadMcpServers, saveMcpServers } from './mcp.mjs';
@@ -2291,7 +2291,10 @@ export function createOasisWebServer(options = {}) {
         if (!['running', 'waiting_approval', 'waiting_input'].includes(job.status) || !job.sessionId) continue;
         liveJobs.set(String(job.sessionId).toLowerCase(), job);
       }
-      const sessions = (await listSessions(activeRoot, { env })).map((item) => {
+      // Archived sessions (from the App Server or `oasis sessions archive`) stay
+      // out of the list unless ?archived=1 asks for them; running ones always show.
+      const wantArchived = /^(1|true)$/i.test(parsedUrl.searchParams.get('archived') || '');
+      const sessions = (await listSessions(activeRoot, { env })).filter((item) => Boolean(item.archived) === wantArchived || busySessions.has(String(item.id).toLowerCase())).map((item) => {
         const id = String(item.id).toLowerCase();
         if (!busySessions.has(id)) return item;
         const job = liveJobs.get(id);
@@ -2333,6 +2336,13 @@ export function createOasisWebServer(options = {}) {
       const html = conversationHtml({ root: activeRoot, config: { model: model || 'unknown' }, messages: saved.messages });
       res.writeHead(200, { 'content-type': 'text/html; charset=utf-8', 'content-disposition': 'attachment; filename="oasis-chat-' + exportMatch[1].slice(0, 8) + '.html"', 'cache-control': 'no-store', 'x-content-type-options': 'nosniff', 'content-security-policy': "default-src 'none'; style-src 'unsafe-inline'; img-src data:" });
       res.end(html);
+      return;
+    }
+
+    const archiveMatch = pathname.match(/^\/api\/sessions\/([a-f0-9-]{20,80})\/(archive|unarchive)$/i);
+    if (req.method === 'POST' && archiveMatch) {
+      try { json(res, 200, await setSessionArchived(activeRoot, archiveMatch[1].toLowerCase(), archiveMatch[2].toLowerCase() === 'archive', { env })); }
+      catch (error) { json(res, error && error.code === 'ENOENT' ? 404 : 400, { error: 'Could not update that chat: ' + (error && error.message || 'unknown error') }); }
       return;
     }
 
