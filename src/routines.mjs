@@ -52,10 +52,57 @@ function parseDuration(text) {
 }
 
 // Returns { type: 'cron'|'interval'|'once', ... } or throws a readable error.
+const DAY_NUMBERS = { sun: 0, mon: 1, tue: 2, wed: 3, thu: 4, fri: 5, sat: 6 };
+
+function clockTime(text) {
+  const match = /^(\d{1,2})(?::(\d{2}))?\s*(am|pm)?$/i.exec(text.trim());
+  if (!match) return null;
+  let hour = Number(match[1]);
+  const minute = Number(match[2] || 0);
+  const half = match[3]?.toLowerCase();
+  if (half) {
+    if (hour < 1 || hour > 12) return null;
+    hour = (hour % 12) + (half === 'pm' ? 12 : 0);
+  } else if (!match[2]) return null; // a bare "9" is ambiguous; ask for 9am or 09:00
+  if (hour > 23 || minute > 59) return null;
+  return { hour, minute };
+}
+
+function dayList(text) {
+  const days = [];
+  for (const raw of text.toLowerCase().split(/\s*(?:,|\band\b|&)\s*/).filter(Boolean)) {
+    const name = raw.replace(/s$/, '').slice(0, 3);
+    if (!(name in DAY_NUMBERS) || !raw.startsWith(name)) return null;
+    days.push(DAY_NUMBERS[name]);
+  }
+  return days.length ? [...new Set(days)].sort((a, b) => a - b).join(',') : null;
+}
+
+// Plain calendar phrases compiled to cron: "daily at 09:00", "every day at 9am",
+// "weekdays at 8:30", "weekends at 10am", "every monday at 14:00",
+// "weekly on mon, wed at 9:15pm". Times use the routine's time zone.
+export function plainCalendarCron(input) {
+  const text = String(input || '').trim().replace(/\s+/g, ' ');
+  const match = /^(?:every )?(.+?) at (.+)$/i.exec(text);
+  if (!match) return null;
+  const time = clockTime(match[2]);
+  if (!time) return null;
+  const when = match[1].toLowerCase().replace(/^weekly on /, '').replace(/^on /, '');
+  let days;
+  if (/^(daily|day|everyday)$/.test(when)) days = '*';
+  else if (/^(weekdays?|workdays?)$/.test(when)) days = '1-5';
+  else if (/^weekends?$/.test(when)) days = '0,6';
+  else days = dayList(when);
+  if (!days) return null;
+  return time.minute + ' ' + time.hour + ' * * ' + days;
+}
+
 export function parseSchedule(input, { now = new Date(), timezone } = {}) {
   const text = String(input || '').trim();
-  if (!text) throw new Error('A routine needs a schedule, for example "0 9 * * 1-5", "every 2h", "in 30m" or 2026-12-01T09:00.');
+  if (!text) throw new Error('A routine needs a schedule, for example "weekdays at 9am", "0 9 * * 1-5", "every 2h", "in 30m" or 2026-12-01T09:00.');
   if (/^(on\s+)?webhook$/i.test(text)) return { type: 'event', source: 'webhook', display: 'on webhook' };
+  const plain = plainCalendarCron(text);
+  if (plain) return { type: 'cron', expr: plain, display: text };
   const every = /^every\s+(.+)$/i.exec(text);
   if (every) {
     const ms = parseDuration(every[1]);
@@ -79,7 +126,7 @@ export function parseSchedule(input, { now = new Date(), timezone } = {}) {
     if (!cron.nextRun(now)) throw new Error('never runs');
     return { type: 'cron', expr: text, display: text };
   } catch (error) {
-    throw new Error('Could not read the schedule "' + text + '": ' + (error.message || error) + '. Use a 5-field cron expression, every 2h, in 30m or an ISO date.');
+    throw new Error('Could not read the schedule "' + text + '": ' + (error.message || error) + '. Use daily at 09:00, weekdays at 9am, every monday at 14:00, a 5-field cron expression, every 2h, in 30m or an ISO date.');
   }
 }
 

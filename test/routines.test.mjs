@@ -344,3 +344,27 @@ test('run history is bounded, stale edits conflict, and prune removes finished o
   assert.deepEqual(await removeFinished({ env }), [once.id]);
   assert.deepEqual((await readJobs(env)).map((j) => j.id), [job.id]);
 });
+
+test('plain calendar phrases compile to cron in the routine time zone', async () => {
+  const { plainCalendarCron, parseSchedule, nextOccurrence } = await import('../src/routines.mjs');
+  const cases = {
+    'daily at 09:00': '0 9 * * *',
+    'every day at 9am': '0 9 * * *',
+    'weekdays at 8:30': '30 8 * * 1-5',
+    'weekends at 10am': '0 10 * * 0,6',
+    'every monday at 14:00': '0 14 * * 1',
+    'weekly on mon, wed and fri at 9:15pm': '15 21 * * 1,3,5',
+    'every Tuesdays at 12am': '0 0 * * 2',
+    'on sat at 12pm': '0 12 * * 6',
+  };
+  for (const [phrase, cron] of Object.entries(cases)) assert.equal(plainCalendarCron(phrase), cron, phrase);
+  for (const bad of ['daily at 9', 'daily at 25:00', 'every funday at 9am', 'at 9am', 'every 2h', '0 9 * * *', 'daily at 13pm']) {
+    assert.equal(plainCalendarCron(bad), null, bad);
+  }
+  const parsed = parseSchedule('weekdays at 9am');
+  assert.deepEqual(parsed, { type: 'cron', expr: '0 9 * * 1-5', display: 'weekdays at 9am' });
+  // Friday 2026-11-13 12:00 UTC: the next weekday 09:00 in Asia/Dhaka (UTC+6) is Monday 03:00 UTC.
+  const next = nextOccurrence({ schedule: parsed, timezone: 'Asia/Dhaka' }, new Date('2026-11-13T12:00:00Z'));
+  assert.equal(next, '2026-11-16T03:00:00.000Z');
+  assert.throws(() => parseSchedule('daily at 9'), /weekdays at 9am/);
+});
