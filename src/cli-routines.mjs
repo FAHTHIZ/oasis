@@ -21,7 +21,7 @@ Start the scheduler with "oasis schedule daemon" (or run "oasis schedule tick" f
   oasis schedule tick                            one scheduler pass, then exit
   oasis schedule daemon [--interval SECONDS]     keep running and fire routines
 
-SCHEDULE: "0 9 * * 1-5" (cron), "every 2h", "in 30m", 2026-12-01T09:00, or
+SCHEDULE: "weekdays at 9am", "daily at 18:30", "every monday at 14:00", "0 9 * * 1-5" (cron), "every 2h", "in 30m", 2026-12-01T09:00, or
           "webhook" (runs when oasis web receives a signed POST; see show)
 Options:
   --name NAME              a name you can use instead of the id
