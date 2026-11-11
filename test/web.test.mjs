@@ -1134,6 +1134,16 @@ test('browser chat supports built-in slash commands, @file mentions, tool detail
 
   const listing = await (await fetch(base + '/api/sessions', { headers })).json();
   assert.match(listing.sessions[0].title, /^Check node and read @NOTES\.md/);
+  const sessionId = snapshot.result.sessionId;
+  const archived = await fetch(base + '/api/sessions/' + sessionId + '/archive', { method: 'POST', headers });
+  assert.equal((await archived.json()).archived, true);
+  const hidden = await (await fetch(base + '/api/sessions', { headers })).json();
+  assert.equal(hidden.sessions.some((item) => item.id === sessionId), false, 'archived sessions leave the list');
+  const shown = await (await fetch(base + '/api/sessions?archived=1', { headers })).json();
+  assert.deepEqual(shown.sessions.map((item) => item.id), [sessionId]);
+  assert.equal((await (await fetch(base + '/api/sessions/' + sessionId + '/unarchive', { method: 'POST', headers })).json()).archived, false);
+  assert.ok((await (await fetch(base + '/api/sessions', { headers })).json()).sessions.some((item) => item.id === sessionId));
+  assert.equal((await fetch(base + '/api/sessions/' + '0'.repeat(32) + '/archive', { method: 'POST', headers })).status, 404);
   const plan = await start('/mode plan', snapshot.result.sessionId);
   snapshot = await waitFor(plan.jobId, done);
   assert.equal(snapshot.events.find((e) => e.type === 'session_state').data.mode, 'plan');
