@@ -2752,6 +2752,11 @@ function renderRoutines(data, problem = '') {
     const what = document.createElement('span');
     what.textContent = (job.kind === 'script' ? '$ ' : '') + job.prompt.slice(0, 160) + (job.deliver && job.deliver !== 'local' ? ' → ' + job.deliver : '');
     info.append(title, when, what);
+    if (job.webhookPath) {
+      const hook = document.createElement('span');
+      hook.textContent = 'POST ' + location.origin + job.webhookPath + ' · sign with secret ' + job.webhookSecret + (job.pendingEvents ? ' · ' + job.pendingEvents + ' waiting' : '');
+      info.append(hook);
+    }
     if (job.pausedReason || job.lastProblem) { const note = document.createElement('span'); note.textContent = job.lastProblem || job.pausedReason; info.append(note); }
     const actions = document.createElement('div');
     actions.className = 'row';

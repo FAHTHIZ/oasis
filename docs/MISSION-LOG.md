@@ -5,6 +5,10 @@ weaknesses. Newest first. Detailed user-facing notes go in the CHANGELOG.
 
 ## 2026-11-11 (frontier-platform cycle: competitor gaps)
 
+### Webhook-triggered routines
+- Hermes has webhook subscriptions and Claude Code routines can be triggered by API/GitHub events; OASIS routines were clock-only. New schedule type `event` (`webhook`): `receiveWebhook()` checks an HMAC-SHA256 signature over the raw body with timing-safe comparison, queues the payload, and `tick()` launches one run per event. Events wait behind an active run (cron slots are skipped instead, since a missed slot comes back; a missed event does not). Payload goes to a 0600 file plus a fenced `<webhook_payload>` block with closing tags stripped and an untrusted-data notice.
+- Endpoint `/hooks/routines/rt-XXXXXXXX` in `src/web.mjs` sits before the access-key check, but the host check and failed-auth lockout still apply.
+
 ### Hosted scheduler and browser panel
 - `hostScheduler()` runs `runDaemon` in-process for `oasis web` and `oasis gateway` unless another live scheduler owns `<config>/schedules/daemon.pid` or `OASIS_ROUTINES=off`. Ticks are serialized by the existing file lock, so the pid check is a courtesy, not the correctness guarantee.
 - `GET/POST /api/routines` (token-authenticated, like `/api/mcp`) and a Settings → Routines section in `app/`. Script routines ask for browser confirmation before saving.
