@@ -289,6 +289,7 @@ function runPaletteCommand(id) {
     'open-files': () => toggleFiles(true),
     'open-plugins': () => { renderPluginGrid(); openSheet('pluginsSheet'); },
     'open-settings': () => openSettings(),
+    'connect-app': () => { openSettings(); requestAnimationFrame(() => { const apps = $('appSettings'); if (apps && !apps.hidden) apps.scrollIntoView({ block: 'start', behavior: 'smooth' }); }); },
     'approval-mode': () => $('modeChip').click(),
     'focus-composer': () => $('input').focus(),
     'keyboard-help': () => requestAnimationFrame(() => openNativeDialog('shortcutsDialog')),
@@ -2318,6 +2319,11 @@ function renderSuggest() {
       detail.textContent = item.description || '';
       if (item.kind && item.kind !== 'builtin') { const tag = document.createElement('span'); tag.className = 'suggest-kind'; tag.textContent = item.kind === 'skill' ? 'skill' : 'custom'; row.append(name, tag, detail); }
       else row.append(name, detail);
+    } else if (suggest.token.kind === 'app') {
+      name.textContent = item.name;
+      detail.textContent = item.live || item.connected ? 'Connected' : item.description || '';
+      row.append(brandMark(item), name, detail);
+      row.classList.add('suggest-app');
     } else {
       const slash = item.lastIndexOf('/');
       name.textContent = item.slice(slash + 1);
@@ -2340,6 +2346,7 @@ async function updateSuggest() {
   if (!token) { closeSuggest(); return; }
   const items = token.kind === '/'
     ? rankSuggestions(await slashCommandList(), token.query, (item) => item.name, 8)
+    : token.kind === 'app' ? (RT && !RT.needsToken ? rankSuggestions(await knownConnectors(), token.query, (item) => item.id, 8) : [])
     : rankSuggestions(await filePathList(), token.query, (item) => item, 8);
   if (seq !== suggest.seq) return;
   const same = suggest.token && suggest.token.kind === token.kind && suggest.token.query === token.query;
@@ -2351,7 +2358,7 @@ function acceptSuggest() {
   const item = suggest.items[suggest.index];
   if (!item || !suggest.token) return;
   const input = $('input');
-  const next = applySuggestion(input.value, suggest.token, suggest.token.kind === '/' ? item.name : item);
+  const next = applySuggestion(input.value, suggest.token, suggest.token.kind === '/' ? item.name : suggest.token.kind === 'app' ? item.id : item);
   input.value = next.value;
   input.setSelectionRange(next.caret, next.caret);
   closeSuggest();
@@ -2373,7 +2380,7 @@ $('composer').addEventListener('keydown', (event) => {
   else if (event.key === 'Tab' || (event.key === 'Enter' && !event.shiftKey)) {
     const item = suggest.items[suggest.index];
     // Enter on a command that is already typed in full sends it.
-    if (event.key === 'Enter' && suggest.token.kind === '/' && item && item.name.toLowerCase() === suggest.token.query.toLowerCase()) { closeSuggest(); return; }
+    if (event.key === 'Enter' && item && ((suggest.token.kind === '/' && item.name.toLowerCase() === suggest.token.query.toLowerCase()) || (suggest.token.kind === 'app' && item.id === suggest.token.query.toLowerCase()))) { closeSuggest(); return; }
     acceptSuggest();
   } else return;
   event.preventDefault();

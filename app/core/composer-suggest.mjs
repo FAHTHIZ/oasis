@@ -10,6 +10,9 @@ export function suggestToken(value, caret = String(value || '').length) {
   const text = String(value || '');
   const end = Math.max(0, Math.min(Number(caret) || 0, text.length));
   const before = text.slice(0, end);
+  // "/connect gi" suggests apps to connect.
+  const app = /^\/connect\s+(\S*)$/i.exec(before);
+  if (app) return { kind: 'app', query: app[1], start: end - app[1].length, end };
   if (before.startsWith('/') && !/\s/.test(before)) {
     return { kind: '/', query: before.slice(1), start: 0, end };
   }
@@ -59,7 +62,7 @@ export function rankSuggestions(items, query, key = (item) => String(item), limi
 export function applySuggestion(value, token, completion) {
   const text = String(value || '');
   const rest = text.slice(token.end);
-  const insert = token.kind + String(completion || '') + (rest.startsWith(' ') ? '' : ' ');
+  const insert = (token.kind === 'app' ? '' : token.kind) + String(completion || '') + (rest.startsWith(' ') ? '' : ' ');
   const next = text.slice(0, token.start) + insert + rest;
   return { value: next, caret: token.start + insert.length };
 }
