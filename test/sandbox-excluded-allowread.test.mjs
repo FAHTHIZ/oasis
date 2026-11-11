@@ -89,3 +89,15 @@ test('an excluded run_shell call runs outside bubblewrap and asks for approval',
   assert.ok(prompts.length >= 1, 'the excluded command went through approval');
   assert.equal(await readFile(target, 'utf8'), '');
 });
+
+test('allowRead never re-opens a built-in secret mask such as ~/.ssh', async (t) => {
+  const root = await tmp(t);
+  const home = await tmp(t);
+  await mkdir(path.join(home, '.ssh'), { recursive: true });
+  await mkdir(path.join(home, 'docs'), { recursive: true });
+  const saved = process.env.HOME;
+  process.env.HOME = home;
+  t.after(() => { process.env.HOME = saved; });
+  const sandbox = resolveSandbox({ sandbox: { enabled: true, writableCaches: false, denyRead: [home], allowRead: [path.join(home, '.ssh'), path.join(home, 'docs')] } }, root, true);
+  assert.deepEqual(sandbox.reopenedPaths.map((item) => item.path), [path.join(home, 'docs')]);
+});
