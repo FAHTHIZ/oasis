@@ -295,6 +295,9 @@ export async function loadSettings(root, options = {}) {
     result.permissions.ask.push(...stringList(permissions.ask));
     // "denyInsteadOfPrompting" only tightens (a prompt becomes a denial), so any scope may set it.
     if (permissions.denyInsteadOfPrompting === true) result.permissions.denyInsteadOfPrompting = true;
+    // Claude Code's block keys only tighten, so a true in any file applies (OASIS file tools already
+    // stay inside the working directories; see agent.mjs for what else they change).
+    for (const key of ['blockReadsOutsideWorkingDirectories', 'blockWritesOutsideWorkingDirectories']) if (permissions[key] === true) result.permissions[key] = true;
     if (typeof settings.outputStyle === 'string' && settings.outputStyle.trim()) result.outputStyle = settings.outputStyle.trim().toLowerCase();
     if (settings.editorMode === 'vim' || settings.editorMode === 'normal') result.editorMode = settings.editorMode;
     // Reply language (Claude Code's "language" setting). Only plain language names are accepted.
@@ -383,6 +386,8 @@ export async function loadSettings(root, options = {}) {
     }
     result.permissions.allow.push(...stringList(permissions.allow));
     result.permissions.additionalDirectories.push(...stringList(permissions.additionalDirectories));
+    // Folders a repository's own settings add do not count as working directories under the block keys.
+    if (scope === 'project') (result.permissions.repoAdditionalDirectories ||= []).push(...stringList(permissions.additionalDirectories));
     const configuredMode = normalizePermissionMode(permissions.defaultMode);
     if (configuredMode) result.permissions.defaultMode = configuredMode;
     mergeHooks(result.hooks, normalizeHooks(settings.hooks), scope, file);
