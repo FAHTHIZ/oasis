@@ -307,6 +307,7 @@ $('commandPaletteClose').addEventListener('click', () => closeNativeDialog('comm
 $('shortcutsClose').addEventListener('click', () => closeNativeDialog('shortcutsDialog'));
 $('commandPaletteInput').addEventListener('input', renderCommandPalette);
 $('shortcutsFilter').addEventListener('input', renderShortcutGuide);
+$('appFilter').addEventListener('input', filterApps);
 $('transcript').addEventListener('click', onTranscriptClick);
 $('commandPaletteInput').addEventListener('keydown', (event) => {
   const buttons = $('commandPaletteResults').querySelectorAll('.command-result');
@@ -2038,12 +2039,14 @@ async function connectShortcut(message, { reason = '' } = {}) {
 async function renderApps() {
   const list = $('appList');
   connectorList = null;
-  const apps = await knownConnectors();
+  // Connected apps first, then the catalog order.
+  const apps = (await knownConnectors()).map((app, index) => ({ app, index })).sort((a, b) => Number(Boolean(b.app.live || b.app.connected)) - Number(Boolean(a.app.live || a.app.connected)) || a.index - b.index).map((item) => item.app);
   list.replaceChildren();
   for (const app of apps) {
     const row = document.createElement('li');
     const on = app.live || app.connected;
     row.className = 'app-tile' + (on ? ' on' : '');
+    row.dataset.search = [app.id, app.name, app.description, ...(app.aliases || [])].join(' ').toLowerCase();
     row.appendChild(brandMark(app));
     const text = document.createElement('div');
     text.className = 'app-text';
@@ -2077,6 +2080,26 @@ async function renderApps() {
     list.appendChild(row);
   }
   if (!apps.length) { const empty = document.createElement('li'); empty.className = 'hint'; empty.textContent = 'Could not load the app list from this computer.'; list.appendChild(empty); }
+  filterApps();
+}
+
+/** Settings → Apps search: every word must match the name, id or description. */
+function filterApps() {
+  const input = $('appFilter');
+  const list = $('appList');
+  if (!input || !list) return;
+  const words = input.value.toLowerCase().split(/\s+/).filter(Boolean);
+  let shown = 0;
+  for (const row of list.querySelectorAll('.app-tile')) {
+    const match = words.every((word) => row.dataset.search.includes(word));
+    row.hidden = !match;
+    if (match) shown += 1;
+  }
+  let none = list.querySelector('.app-none');
+  if (!shown && words.length) {
+    if (!none) { none = document.createElement('li'); none.className = 'hint app-none'; list.appendChild(none); }
+    none.textContent = 'No app matches. Paste its MCP server URL in the message box: /connect https://…';
+  } else if (none) none.remove();
 }
 
 /* ---------- Approvals ---------- */
