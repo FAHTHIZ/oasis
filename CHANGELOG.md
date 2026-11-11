@@ -69,6 +69,7 @@ User-facing change history grouped by package version. A version heading does no
 - An automatic `fallbackModel` switch, and the return to the main model after the cooldown, run PostModelSwitch hooks with `source: "auto"` and `requested_model: null`, as Claude Code does.
 - Command and skill files run ```` ```! ```` fenced blocks as one multi-line script, with the same trust, permission-rule and `disableSkillShellExecution` checks as inline `` !`cmd` ``. Inline `` !`cmd` `` now runs only at the start of a line or after whitespace, so `` KEY=!`cmd` `` stays literal text, as in Claude Code.
 - `spinnerVerbs` (`{ "mode": "append" | "replace", "verbs": [...] }`, any settings file) supplies the words for the terminal's live "Thinking…" line. One word is picked per wait. Informative labels such as "Rate limited" or "Local model is reading the prompt" still win, and an empty `replace` list keeps the built-in words.
+- `fileSuggestion` (`{ "type": "command", "command": ... }`) supplies the terminal's `@` path completions. The command gets `{"query": ...}` on stdin and prints newline-separated paths; at most 15 are shown and it has five seconds. It follows the status line gates: trusted files only, managed values only under `allowManagedHooksOnly`, off under a managed `disableAllHooks` and in `--bare`. If the command fails, the built-in suggestion is used.
 
 ### Crash-safe task progress
 

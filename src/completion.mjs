@@ -63,7 +63,17 @@ export function fuzzyScore(file, query) {
   return { score, indices };
 }
 
-export function createCompleter({ root, commands = async () => [] }) {
+// Claude Code's fileSuggestion command: {"query"} on stdin, newline-separated paths on
+// stdout, at most 15 shown, five-second limit. null means "use the built-in suggestion".
+export async function suggestFilesWithCommand(setting, query, { root, env = process.env } = {}) {
+  if (!setting || setting.type !== 'command' || !setting.command) return null;
+  const { runHookCommand } = await import('./hooks.mjs');
+  const result = await runHookCommand(setting.command, { query }, { root, env, timeout: 5 }).catch(() => null);
+  if (!result || result.exitCode !== 0 || result.timedOut) return null;
+  return String(result.stdout || '').split(/\r?\n/).map((line) => line.replace(/[\x00-\x1f\x7f]/g, '').trim()).filter(Boolean).slice(0, 15);
+}
+
+export function createCompleter({ root, commands = async () => [], fileSuggestion = () => null, env = process.env }) {
   let fileCache = null;
   let fileCacheAt = 0;
   const projectFiles = async () => {
@@ -77,6 +87,8 @@ export function createCompleter({ root, commands = async () => [] }) {
 
   const completeFile = async (token, start, end) => {
     const query = token.slice(1);
+    const custom = await suggestFilesWithCommand(typeof fileSuggestion === 'function' ? fileSuggestion() : fileSuggestion, query, { root, env });
+    if (custom) return { start, end, candidates: custom.map((file) => ({ value: '@' + file, display: '@' + file })) };
     const slash = query.lastIndexOf('/');
     const dirPart = slash >= 0 ? query.slice(0, slash + 1) : '';
     const base = slash >= 0 ? query.slice(slash + 1) : query;

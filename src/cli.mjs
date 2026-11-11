@@ -2237,7 +2237,7 @@ async function interactive(root, autoApprove, persistence = {}) {
     const definition = (await loadAgentDefinitions(root).catch(() => ({})))[String(mainAgentName).toLowerCase()];
     if (definition && definition.initialPrompt) { QUEUED_INPUT.push(definition.initialPrompt); SESSION_OPTIONS.agentInitialPromptSent = true; }
   }
-  const inputState = { history: await loadHistory(root).catch(() => []), completer: createCompleter({ root, commands: () => interactiveCommandList(root) }) };
+  const inputState = { history: await loadHistory(root).catch(() => []), completer: createCompleter({ root, commands: () => interactiveCommandList(root), fileSuggestion: () => (session && session.settings || startupSettings || {}).fileSuggestion || null }) };
   const pendingShell = [];
   while (true) {
     let input;
