@@ -97,3 +97,21 @@ test('legacy .windsurf/global_rules.md loads when there is no .devin one', async
   const { root, env, home } = await workspace(t, { '.windsurf/global_rules.md': 'WINDSURF-GLOBAL body.' });
   assert.match(await loadMemory(root, { env, home }), /WINDSURF-GLOBAL/);
 });
+
+test('Antigravity CLI global rules and plugin rules load as user rules', async (t) => {
+  const { root, env, home } = await workspace(t, { 'README.md': 'demo' });
+  const write = async (rel, text) => { await mkdir(path.dirname(path.join(home, rel)), { recursive: true }); await writeFile(path.join(home, rel), text); };
+  await write('.gemini/antigravity-cli/rules/testing-style.md', '---\ntrigger: always_on\n---\nAG-CLI-ALWAYS body.');
+  await write('.gemini/antigravity-cli/rules/py.md', '---\ntrigger: glob\nglobs: "**/*.py"\n---\nAG-CLI-SCOPED body.');
+  await write('.gemini/antigravity-cli/plugins/lint/rules/lint.md', 'AG-PLUGIN-ALWAYS body.');
+  const text = await loadMemory(root, { env, home });
+  assert.match(text, /AG-CLI-ALWAYS/);
+  assert.match(text, /AG-PLUGIN-ALWAYS/);
+  assert.doesNotMatch(text, /AG-CLI-SCOPED/);
+  const rules = await projectRules(root, { env, home });
+  assert.equal(rules.find((rule) => rule.label === '~/.gemini/antigravity-cli/rules/testing-style.md').scope, 'user');
+  const nested = await nestedMemoryFor(root, path.join(root, 'tool.py'), new Set(), { env, home });
+  assert.ok(nested.some((item) => item.text.includes('AG-CLI-SCOPED')));
+  const off = await loadMemory(root, { env: { ...env, OASIS_OTHER_AGENT_RULES: '0' }, home });
+  assert.doesNotMatch(off, /AG-CLI-ALWAYS/);
+});
