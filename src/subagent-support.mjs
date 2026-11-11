@@ -45,7 +45,7 @@ export async function connectAgentMcp(child, env = process.env) {
   const { connectMcpServers, mcpToolDefinitions } = await import('./mcp.mjs');
   const parsed = parseMcpServerEntries({ mcpServers: child.agentMcpSpec }, env, 'agent');
   const servers = parsed.servers.filter((server) => !child.mcpClients.has(server.name)).map((server) => ({ ...server, source: 'agent' }));
-  const { clients, failures } = servers.length ? await connectMcpServers({ root: child.root, env, skipUser: true, extraServers: servers }) : { clients: new Map(), failures: [] };
+  const { clients, failures } = servers.length ? await connectMcpServers({ root: child.root, env, policy: child.settings && child.settings.mcpPolicy, skipUser: true, extraServers: servers }) : { clients: new Map(), failures: [] };
   child.agentMcpClients = clients;
   for (const [name, client] of clients) child.mcpClients.set(name, client);
   const { definitions, map } = mcpToolDefinitions(clients);

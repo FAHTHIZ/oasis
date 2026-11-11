@@ -450,8 +450,21 @@ export async function createSession({ root, config, restore = null, permissionMo
   // Project .mcp.json servers start third-party code, so they need a trusted workspace.
   let project = { servers: [], failures: [] };
   if (bare) project = { servers: [], failures: [] };
-  else if (loadedSettings.trusted) project = await loadProjectMcpServers(root, { env });
-  else if (await pathExists(path.join(root, '.mcp.json'))) project.failures.push({ name: '.mcp.json', error: 'ignored because this workspace is not trusted. Run oasis trust to enable its MCP servers.' });
+  else {
+    // Claude Code's enableAllProjectMcpServers / enabledMcpjsonServers (from your own settings) approve
+    // .mcp.json servers in an untrusted workspace; disabledMcpjsonServers rejects them from any file.
+    const mcpPolicy = loadedSettings.mcpPolicy;
+    const approvals = mcpPolicy && (mcpPolicy.approvedAll === true || mcpPolicy.approved.length);
+    if (loadedSettings.trusted || approvals || (mcpPolicy && mcpPolicy.rejected.length)) {
+      if (loadedSettings.trusted || approvals) project = await loadProjectMcpServers(root, { env });
+      const { approvedProjectServers } = await import('./mcp-policy.mjs');
+      const total = project.servers.length;
+      const approved = approvedProjectServers(project.servers, mcpPolicy, { trusted: loadedSettings.trusted });
+      project.servers = approved.servers;
+      if (!loadedSettings.trusted && approved.servers.length + approved.rejected.length < total) project.failures.push({ name: '.mcp.json', error: (total - approved.servers.length - approved.rejected.length) + ' server(s) ignored because this workspace is not trusted and they are not in enabledMcpjsonServers. Run oasis trust to enable them.' });
+    }
+    if (!loadedSettings.trusted && !approvals && await pathExists(path.join(root, '.mcp.json'))) project.failures.push({ name: '.mcp.json', error: 'ignored because this workspace is not trusted. Run oasis trust to enable its MCP servers.' });
+  }
   // MCP servers bundled with enabled Claude Code plugins (user-installed, so no workspace trust needed).
   if (!bare && !strictMcpConfig && Array.isArray(loadedSettings.plugins) && loadedSettings.plugins.length) {
     try {
@@ -480,13 +493,13 @@ export async function createSession({ root, config, restore = null, permissionMo
   // MCP_CONNECTION_NONBLOCKING=true / OASIS_MCP_NONBLOCKING=1 / "mcpNonBlocking": servers connect in the
   // background; their tools appear when ready and wait_for_mcp_servers blocks on them.
   const mcpNonBlocking = !(bare && !flagServers.length) && (/^(1|true|yes)$/i.test(String(env.OASIS_MCP_NONBLOCKING || env.MCP_CONNECTION_NONBLOCKING || '')) || loadedSettings.mcpNonBlocking === true);
-  const mcpOptions = { root, env, host: mcpHost, skipUser: Boolean(strictMcpConfig || bare), extraServers: strictMcpConfig || bare ? flagServers : [...flagServers, ...project.servers], extraFailures: strictMcpConfig || bare ? [] : project.failures };
+  const mcpOptions = { root, env, host: mcpHost, policy: loadedSettings.mcpPolicy, skipUser: Boolean(strictMcpConfig || bare), extraServers: strictMcpConfig || bare ? flagServers : [...flagServers, ...project.servers], extraFailures: strictMcpConfig || bare ? [] : project.failures };
   // Background servers start once createSession has returned (see the end of this function),
   // so loading and compiling the MCP SDK never delays the session itself.
   let startMcpBackground = null;
   const mcpBackground = mcpNonBlocking ? new Promise((resolve) => { startMcpBackground = resolve; }).then(() => connectMcpServers(mcpOptions)).catch((error) => ({ clients: new Map(), failures: [{ name: 'mcp', error: error.message }] })) : null;
   const mcp = bare && !flagServers.length || mcpNonBlocking ? { clients: new Map(), failures: [] }
-    : await connectMcpServers({ root, env, host: mcpHost, skipUser: Boolean(strictMcpConfig || bare), extraServers: strictMcpConfig || bare ? flagServers : [...flagServers, ...project.servers], extraFailures: strictMcpConfig || bare ? [] : project.failures });
+    : await connectMcpServers({ root, env, host: mcpHost, policy: loadedSettings.mcpPolicy, skipUser: Boolean(strictMcpConfig || bare), extraServers: strictMcpConfig || bare ? flagServers : [...flagServers, ...project.servers], extraFailures: strictMcpConfig || bare ? [] : project.failures });
   const mcpPins = loadPins(env);
   const dynamic = mcpToolDefinitions(mcp.clients, { pins: mcpPins });
   if (mcpPins && mcpPins.dirty) { delete mcpPins.dirty; savePins(mcpPins, env); }

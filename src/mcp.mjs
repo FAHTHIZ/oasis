@@ -305,6 +305,14 @@ export async function connectMcpServers(options = {}) {
     names.add(config.name);
     all.push({ config, source: config.source || 'project' });
   }
+  // allowedMcpServers / deniedMcpServers (Claude Code MCP policy settings) apply to every source.
+  if (options.policy) {
+    const { mcpServerBlocked } = await import('./mcp-policy.mjs');
+    for (let index = all.length - 1; index >= 0; index -= 1) {
+      const reason = mcpServerBlocked(all[index].config, options.policy);
+      if (reason) { failures.push({ name: all[index].config.name, error: reason }); all.splice(index, 1); }
+    }
+  }
   await Promise.all(all.map(async ({ config, source }) => {
     let client;
     try {
