@@ -40,6 +40,12 @@ export const CONNECTOR_CATALOG = Object.freeze([
   { id: 'huggingface', name: 'Hugging Face', url: 'https://huggingface.co/mcp', auth: 'oauth', aliases: ['hf', 'hugging face'], description: 'Models, datasets, Spaces and papers on the Hub.', docs: 'https://huggingface.co/docs/hub/en/agents-mcp' },
   { id: 'monday', name: 'monday.com', url: 'https://mcp.monday.com/mcp', auth: 'oauth', aliases: ['monday.com'], description: 'Boards, items and updates.', docs: 'https://developer.monday.com/api-reference/docs/integrate-with-monday-mcp' },
   { id: 'intercom', name: 'Intercom', url: 'https://mcp.intercom.com/mcp', auth: 'oauth', aliases: [], description: 'Conversations, contacts and help-center content (US workspaces).', docs: 'https://developers.intercom.com/docs/guides/mcp' },
+  { id: 'airtable', name: 'Airtable', url: 'https://mcp.airtable.com/mcp', auth: 'oauth', aliases: [], description: 'Bases, tables and records.', docs: 'https://airtable.com/developers/agents/mcp/getting-started' },
+  { id: 'square', name: 'Square', url: 'https://mcp.squareup.com/mcp', auth: 'oauth', aliases: [], description: 'Payments, orders, catalog and customers.', docs: 'https://developer.squareup.com/docs/mcp' },
+  { id: 'webflow', name: 'Webflow', url: 'https://mcp.webflow.com/mcp', auth: 'oauth', aliases: [], description: 'Sites, pages, CMS collections and components.', docs: 'https://developers.webflow.com/mcp/reference/getting-started' },
+  { id: 'granola', name: 'Granola', url: 'https://mcp.granola.ai/mcp', auth: 'oauth', aliases: [], description: 'Meeting notes and transcripts.', docs: 'https://docs.granola.ai/help-center/sharing/integrations/mcp' },
+  { id: 'deepwiki', name: 'DeepWiki', url: 'https://mcp.deepwiki.com/mcp', auth: 'none', aliases: ['deep wiki'], description: 'Ask questions about any public GitHub repository.', docs: 'https://docs.devin.ai/work-with-devin/deepwiki-mcp' },
+  { id: 'exa', name: 'Exa', url: 'https://mcp.exa.ai/mcp', auth: 'none', aliases: ['exa search'], description: 'Web and code search.', docs: 'https://exa.ai/docs/get-started/exa-mcp' },
   { id: 'paypal', name: 'PayPal', url: 'https://mcp.paypal.com/mcp', auth: 'oauth', aliases: [], description: 'Invoices, orders, disputes and transactions.', docs: 'https://developer.paypal.com/ai-tools/mcp-server' }
 ]);
 
