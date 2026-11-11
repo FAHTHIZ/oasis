@@ -126,7 +126,7 @@ export const BUILTIN_COMMANDS = {
   verify: 'Build and run the app to confirm a change really works (/verify [what to check])',
   test: 'Run the tests and hand any failure to Oasis to fix (/test [COMMAND]; defaults to the autoTest setting or npm test)',
   batch: 'Plan a large change as independent units and run them in parallel worktree subagents (/batch INSTRUCTION)',
-  schedule: 'Schedule a prompt in this session (/schedule CRON PROMPT, /schedule list, /schedule delete ID)',
+  schedule: 'Schedule a prompt in this session (/schedule CRON PROMPT, /schedule list, /schedule delete ID), or a durable routine (/schedule durable DESCRIPTION, /schedule routines)',
   'fewer-permission-prompts': 'Find safe read-only commands you approve often and add them to the project allowlist',
   keys: 'Show the keyboard shortcut cheat sheet (/keys; alias /keybindings)',
   tips: 'Show a rotating setup and workflow tip (/tips)',
@@ -1237,9 +1237,20 @@ export async function runBuiltinCommand(name, argument, state) {
       return { output: '[batch] Planning parallel work.', prompt: 'Carry out this large change in parallel: ' + argument + '\n\nSteps: (1) Call enter_plan_mode, then research the codebase read-only and split the work into 5 to 30 independent units that touch disjoint files. (2) Call exit_plan_mode with the list of units and how each will be verified, and wait for approval. (3) After approval, run one task subagent per unit with isolation "worktree" so each works on its own branch; run up to six at a time in parallel. Each unit must make its change, run the relevant tests, and commit. (4) When all finish, list each unit with its branch, result and test outcome, and tell the user to review them with /worktrees.' };
     }
     case 'schedule': {
+      const [sub, ...rest] = argument.split(/\s+/);
+      // Durable routines (src/routines.mjs) outlive this session; see `oasis schedule`.
+      if (sub === 'routines' || sub === 'durable-list') {
+        const { readJobs, describeJob } = await import('./routines.mjs');
+        const jobs = await readJobs(env);
+        return { output: jobs.length ? jobs.map(describeJob).join('\n') + '\nManage them with oasis schedule, or ask me.' : 'No routines yet. /schedule durable DESCRIPTION creates one, for example /schedule durable check CI every weekday at 9 and post to Slack #dev' };
+      }
+      if (sub === 'durable') {
+        const request = rest.join(' ').trim();
+        if (!request) return { output: 'Usage: /schedule durable DESCRIPTION, for example /schedule durable summarize new issues every morning at 9 Asia/Dhaka' };
+        return { output: '[routines] Setting up a routine; you will be asked to approve it.', prompt: 'Create a durable routine with the routine_manage tool (action create) for this request: ' + request + '\nPick the schedule (cron with a time zone if a time of day is given, every N, in N, an ISO date, or webhook), a short name, a self-contained prompt that will make sense with no chat history, and a delivery target only if I named one. Then tell me what was created and that it runs while oasis schedule daemon, oasis web or oasis gateway is running.' };
+      }
       if (!session) return { output: 'Start a conversation first; scheduled prompts run inside this session.' };
       const tools = await import('./session-tools.mjs');
-      const [sub, ...rest] = argument.split(/\s+/);
       if (!argument || sub === 'list') {
         const jobs = tools.listCronJobs(session).jobs;
         return { output: jobs.length ? jobs.map((job) => job.id + '  ' + job.cron + '  ' + (job.recurring ? 'every match' : 'once') + '  next ' + (job.next_run || '-') + '\n    ' + job.prompt).join('\n') : 'No scheduled prompts. Usage: /schedule "*/30 * * * *" check CI and fix failures' };
@@ -1252,7 +1263,7 @@ export async function runBuiltinCommand(name, argument, state) {
       const prompt = quoted ? quoted[2] : parts.slice(fieldCount).join(' ');
       try {
         const job = tools.createCronJob(session, { cron, prompt });
-        return { output: 'Scheduled ' + job.id + ' (' + job.cron + '), next run ' + job.next_run + '. It runs while this session stays open.' };
+        return { output: 'Scheduled ' + job.id + ' (' + job.cron + '), next run ' + job.next_run + '. It runs while this session stays open. For one that keeps running after you close this, use /schedule durable DESCRIPTION.' };
       } catch (error) { return { output: error.message + '\nUsage: /schedule CRON PROMPT, for example /schedule "0 9 * * 1-5" summarize open PRs' }; }
     }
     case 'fewer-permission-prompts':
