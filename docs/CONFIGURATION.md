@@ -354,3 +354,17 @@ and git remotes to suggest the apps a project uses. Nothing is executed.
 | --- | --- |
 | `OASIS_NO_APP_HINTS=1` | Leave the "apps this project uses that are not connected" line out of the system prompt. |
 | `OASIS_TIP=off` | No start-up tip in the terminal, including the project-apps tip. |
+
+## Telemetry (OpenTelemetry)
+
+Telemetry is off unless `OASIS_ENABLE_TELEMETRY=1`. OASIS then sends metrics, log events and traces over OTLP/HTTP JSON to `OTEL_EXPORTER_OTLP_ENDPOINT` (per-signal `OTEL_EXPORTER_OTLP_{METRICS,LOGS,TRACES}_ENDPOINT` and `_HEADERS` work too). `OTEL_{METRICS,LOGS,TRACES}_EXPORTER` takes `otlp`, `console` or `none`.
+
+| Variable | Effect |
+| --- | --- |
+| `OTEL_LOG_USER_PROMPTS=1` | Include prompt text in the `oasis.user_prompt` event. Off by default; only the length is sent. |
+| `OTEL_LOG_TOOL_DETAILS=1` | Include tool arguments in tool events. Off by default. |
+| `OTEL_SEMCONV_STABILITY_OPT_IN=gen_ai_latest_experimental` | Name spans as the [GenAI semantic conventions](https://github.com/open-telemetry/semantic-conventions-genai/blob/main/docs/gen-ai/gen-ai-spans.md) do: `invoke_agent oasis`, `chat MODEL`, `execute_tool TOOL`. Without it span names stay `oasis.turn`, `oasis.llm_request` and `oasis.tool`, so existing dashboards keep working. |
+| `OTEL_SERVICE_NAME`, `OTEL_RESOURCE_ATTRIBUTES`, `OTEL_HOST_NAME=1` | Resource attributes. |
+| `OASIS_OTEL_NO_BRANCH=1` | Leave the git branch out of event attributes. |
+
+Spans always carry the GenAI attributes (`gen_ai.operation.name`, `gen_ai.provider.name`, `gen_ai.request.model`, `gen_ai.response.finish_reasons` as a string array, `gen_ai.usage.*` including cache and reasoning tokens, `server.address`/`server.port`, `error.type` on failure). Alongside the `oasis.*` metrics, OASIS records the standard `gen_ai.client.inference.duration` (seconds), `gen_ai.client.inference.operation.input_tokens` / `output_tokens` histograms with the recommended bucket boundaries, and `gen_ai.execute_tool.duration`. These GenAI metrics carry no session id so they stay low-cardinality.

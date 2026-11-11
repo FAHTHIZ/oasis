@@ -23,6 +23,10 @@ weaknesses. Newest first. Detailed user-facing notes go in the CHANGELOG.
 
 ## 2026-11-11 (frontier-platform cycle: competitor gaps)
 
+### OpenTelemetry GenAI conventions
+
+Aligned model, tool and turn telemetry with the OpenTelemetry GenAI semantic conventions (client inference, execute_tool, invoke_agent, token metrics): standard metrics with recommended buckets, `finish_reasons` as an array, `server.*`, `error.type`, reasoning and cache-write tokens. Standard span names are behind `OTEL_SEMCONV_STABILITY_OPT_IN=gen_ai_latest_experimental` so existing `oasis.*` dashboards keep working. Telemetry is now documented in docs/CONFIGURATION.md. Tests: test/telemetry.test.mjs (9 pass).
+
 ### Shared archive state; parallel workstreams
 - Owner asked for breadth over Codex-only work. Started three parallel agents in separate clones, each pushing to main: README redesign, Claude Code parity, and Cursor/Windsurf/Antigravity/OpenHands/Devin parity.
 - Gap found: App Server `thread/archive` only affected `thread/list`; the web app, `/resume`, `--continue`, the recent-sessions menu and ACP `session/list` still showed archived sessions. All now hide them, with `oasis sessions archive|unarchive|list --archived` and `POST /api/sessions/:id/archive|unarchive`. Tests: test/commands.test.mjs, test/web.test.mjs, test/acp.test.mjs.

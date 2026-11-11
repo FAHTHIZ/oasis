@@ -34,5 +34,9 @@ export function normalizeUsage(usage = {}) {
   if (cacheRead || cachedOpenAI) out.cacheReadTokens = Number(cacheRead || cachedOpenAI);
   if (cacheTokens || openaiWrites) out.cacheCreationTokens = Number(cacheTokens || openaiWrites);
   if (!cacheTokens && openaiLongWrites) out.cacheWriteLongTokens = Math.min(openaiLongWrites, openaiWrites || openaiLongWrites);
+  // Reasoning tokens are already part of outputTokens; kept for telemetry.
+  const outDetails = usage.completion_tokens_details || usage.output_tokens_details || {};
+  const reasoning = Number(outDetails.reasoning_tokens || usage.reasoning_tokens || 0) || 0;
+  if (reasoning > 0) out.reasoningTokens = reasoning;
   return out;
 }

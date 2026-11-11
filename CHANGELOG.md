@@ -4,6 +4,12 @@ User-facing change history grouped by package version. A version heading does no
 
 ## Unreleased
 
+### OpenTelemetry GenAI conventions
+
+- Model-call spans now carry `server.address`/`server.port`, `gen_ai.request.stream`, reasoning level, reasoning and cache-write token counts, and `gen_ai.response.finish_reasons` as a string array (it was a single string). Failures set `error.type` (HTTP status, `cancelled`, Node error code or class).
+- New standard metrics: `gen_ai.client.inference.duration`, `gen_ai.client.inference.operation.input_tokens` and `output_tokens` with the recommended buckets, and `gen_ai.execute_tool.duration`.
+- `OTEL_SEMCONV_STABILITY_OPT_IN=gen_ai_latest_experimental` switches span names to `invoke_agent oasis`, `chat MODEL` and `execute_tool TOOL`; the `oasis.*` names stay the default. Telemetry is documented in [docs/CONFIGURATION.md](docs/CONFIGURATION.md#telemetry-opentelemetry).
+
 ### Rules and workflows from IDE agents
 
 - Devin Desktop (the new name of Windsurf) rule locations are read as they are: `.devin/rules/*.md` with their `trigger:` front matter (`always_on`, `glob`, `model_decision`, `manual`), the always-on `.devin/global_rules.md` (or the legacy `.windsurf/global_rules.md` when there is no `.devin` one, as Devin Desktop does), personal `~/.devin/rules/*.md` and `~/.devin/global_rules.md`, and the legacy Windsurf global rules at `~/.codeium/windsurf/memories/global_rules.md`. `AGENT.md` and `AGENTS.local.md` load like `AGENTS.md`, in the project and per folder. `OASIS_OTHER_AGENT_RULES=0` turns them off with the other agents' files.
