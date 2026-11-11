@@ -9,7 +9,10 @@ weaknesses. Newest first. Detailed user-facing notes go in the CHANGELOG.
 - Manual check with the published `@openai/codex-sdk` 0.167.1 and a scripted model: `thread.run` returned the command, file change and final message items with usage; `runStreamed` with `outputSchema` returned the JSON document; `resumeThread` kept the thread id. The SDK needs an executable path, so point `codexPathOverride` at the installed `oasis` binary (or a wrapper script).
 - Known difference: OASIS's inline-code check declines `node -e`-style commands even under danger-full-access + never; they show as failed `command_execution` items.
 
-: Gemini CLI, OpenCode, Goose, Aider, Roo/Kilo)
+## 2026-11-11 (terminal-agent interoperability: Gemini CLI, OpenCode, Goose, Aider, Roo/Kilo)
+
+### Goose hints and recipes
+- `.goosehints` now loads like Goose does (global file, git root down to the workspace, nested folders), from the [goosehints guide](https://block.github.io/goose/docs/guides/context-engineering/using-goosehints). `/recipe` runs Goose YAML/JSON recipes per the [recipe reference](https://block.github.io/goose/docs/guides/recipes/recipe-reference) with parameter checks and templating; unsupported recipe parts are reported, not faked. Tests: `test/goose.test.mjs`. (Also restored this section's heading, which a merge had cut.)
 
 ### Roo Code and Kilo Code modes, rules and commands
 - From the Roo docs ([custom modes](https://docs.roocode.com/features/custom-modes), [custom instructions](https://docs.roocode.com/features/custom-instructions), [slash commands](https://docs.roocode.com/features/slash-commands)) and Kilo's ([custom modes](https://kilo.ai/docs/customize/custom-modes), [custom rules](https://kilo.ai/docs/customize/custom-rules)). Kilo has moved to OpenCode-style agent files and migrates `.kilocodemodes` on startup, so both formats are read. Tool groups are enforced by removing tools; `fileRegex` is an instruction only, because OASIS has no per-agent path limit for edits. Tests: test/roo-kilo.test.mjs (2); rule, command, agent and memory tests 48 pass, 0 fail.

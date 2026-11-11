@@ -98,6 +98,8 @@ Files from these tools that OASIS reads where they are (no `oasis import` step).
 | `.roomodes`, `.kilocodemodes` (with `.roo/rules-{slug}/`, `.roorules-{slug}`, `.clinerules-{slug}`, `.kilocode/rules-{slug}/`) | Roo Code, Kilo Code | Each mode is an agent (`oasis --agent SLUG` or the task tool). Missing `read`/`edit`/`command` groups remove those tools; `fileRegex` is an instruction only; `mcp`/`browser` groups and global `custom_modes.yaml` are not handled. Roo switches the whole session's mode; OASIS runs a mode as the main agent or as a subagent |
 | `.kilo/agents`, `.kilo/agent`, `.kilocode/agents`, `~/.config/kilo/agent` | Kilo Code | Read like OpenCode agents |
 | `~/.roo/rules/`, `.roorules`, `.kilocode/rules/`, `.roo/commands/`, `~/.roo/commands/` | Roo Code, Kilo Code | Always-on rules (`.roorules` only when `.roo/rules/` is empty) and slash commands; a command's `mode:` is not applied |
+| `.goosehints` (workspace, parents up to the git root, subfolders, `~/.config/goose/`) | Goose | Always-on rules, nested hints when the agent works in that folder ([goosehints](https://block.github.io/goose/docs/guides/context-engineering/using-goosehints)). `CONTEXT_FILE_NAMES` is not read |
+| Recipes (`*.yaml`, `*.json`; workspace or `GOOSE_RECIPE_PATH`) | Goose | `/recipe NAME key=value` renders instructions and prompt with parameters ([recipe reference](https://block.github.io/goose/docs/guides/recipes/recipe-reference)). Extensions, sub-recipes, retry and settings are not run; GitHub recipe repos are not fetched |
 
 ## Kimi Code CLI
 
