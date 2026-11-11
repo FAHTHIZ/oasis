@@ -17,6 +17,7 @@ Integrations connect OASIS to other tools. They are not separate interfaces:
 |---|---|---|
 | VS Code, Cursor, Windsurf | `oasis ide install` | Editor plus a connected OASIS runtime |
 | Agent Client Protocol (Zed, JetBrains) | `oasis acp` | The OASIS ACP process |
+| Codex App Server clients | `oasis app-server` | The OASIS app-server process |
 | Node.js SDK | Import `src/sdk.mjs` | Your Node.js process |
 | GitHub Action | `action.yml` in a workflow | The Actions runner |
 | Messaging gateways (Telegram, Slack, Discord) | `oasis gateway` | The gateway process |
@@ -90,6 +91,7 @@ Release tarballs and `SHA256SUMS` are on [GitHub Releases](https://github.com/FA
 
 - **Editor integration:** install the VS Code-family extension with `oasis ide install`.
 - **ACP:** start `oasis acp` from a compatible client. OASIS uses newline-delimited JSON-RPC over standard input/output.
+- **Codex App Server protocol:** `oasis app-server` speaks JSON-RPC (one message per line, `jsonrpc` field optional) on standard input/output. Supported methods: `initialize`, `thread/start`, `thread/resume`, `thread/read`, `thread/list`, `thread/name/set`, `turn/start`, `turn/steer`, `turn/interrupt` and `model/list`. OASIS sends `turn/*`, `item/*` and `thread/*` notifications and asks for approval with `item/commandExecution/requestApproval` or `item/fileChange/requestApproval`. `sandbox: "read-only"` selects Plan mode. `approvalPolicy: "never"` selects Auto mode: risky actions still ask, and the protocol cannot turn approvals off. Only the stdio transport is available; reach a remote machine over SSH (`ssh host oasis app-server`).
 - **SDK:** import the Node.js API from the package entry point or `src/sdk.mjs`. The SDK exposes session, headless, tool and hook APIs; it is not a hosted service.
 
 ## Automation integrations

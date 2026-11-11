@@ -5,6 +5,11 @@ weaknesses. Newest first. Detailed user-facing notes go in the CHANGELOG.
 
 ## 2026-11-11 (frontier-platform cycle: competitor gaps)
 
+### Codex App Server protocol (source read)
+- Read the method list at [learn.chatgpt.com/docs/app-server](https://learn.chatgpt.com/docs/app-server). Read the v2 types in `codex-rs/app-server-protocol/src/protocol/v2` (Apache-2.0): Thread, Turn, the ThreadItem variants, the approval params and decisions, and the notification payloads.
+- `src/app-server.mjs` in OASIS turned out to be a static asset server for the web app, not a protocol server. Added `src/codex-app-server.mjs` and the `oasis app-server` command, built on the same runtime calls ACP uses (createSession, runAgentTurn, saveSession and steerSession).
+- An end-to-end test drives the real CLI with a scripted model. It covers a command approval, a file diff, resuming in a fresh process and a declined approval.
+
 ### DeepSeek Harness schedule comparison (source read)
 - Read `packages/schedule` in [deepseek-harness](https://github.com/deepseek-ai/deepseek-harness) (MIT). It has: delivery targets for an existing session, one reused new session (`new_once`) or a new session per run (`new`), so OASIS's fresh / `fromSession` / `chain` cover the same ground. It also has RRULE and daily/weekly selectors, optimistic `expectedUpdatedAt` edits, receipt retention (30 days / 200 records) and `deleteInactive()`. Adopted the last three ideas (no code copied). OASIS still lacks RRULE. 5-field cron with a time zone covers the common cases.
 
