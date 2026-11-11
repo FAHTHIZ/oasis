@@ -295,9 +295,12 @@ export function resolveSandbox(settings = {}, root, force = false) {
   // Repository entries are left out while blockReadsOutsideWorkingDirectories is on.
   const blockReads = Boolean(settings.permissions && settings.permissions.blockReadsOutsideWorkingDirectories);
   const allowReadList = (Array.isArray(settings.sandbox.allowRead) ? settings.sandbox.allowRead : []).filter((item) => !(blockReads && (settings.sandbox.allowReadRepo || []).includes(item)));
-  const reopened = existing(allowReadList).filter((item) => !deniedReads.some((denied) => denied.path === item.path) && deniedReads.some((denied) => denied.type === 'directory' && denied.path !== item.path && pathContains(denied.path, item.path)));
-  const writable = [root, ...additionalWritable, ...allowWrite.filter((dir) => !pathContains(root, dir)), ...caches.filter((dir) => !pathContains(root, dir))];
   const masked = settings.sandbox.maskSensitivePaths === false ? [] : collectSensitivePaths();
+  // Never re-open a built-in secret mask (or a path inside one), such as ~/.ssh.
+  const reopened = existing(allowReadList).filter((item) => !deniedReads.some((denied) => denied.path === item.path)
+    && deniedReads.some((denied) => denied.type === 'directory' && denied.path !== item.path && pathContains(denied.path, item.path))
+    && !masked.some((secret) => pathContains(secret.path, item.path)));
+  const writable = [root, ...additionalWritable, ...allowWrite.filter((dir) => !pathContains(root, dir)), ...caches.filter((dir) => !pathContains(root, dir))];
   // A denyRead entry under a re-opened allowRead path stays masked, so keep it even when a broader mask covers it.
   for (const item of deniedReads) if (!masked.some((entry) => pathContains(entry.path, item.path)) || reopened.some((open) => open.path !== item.path && pathContains(open.path, item.path))) masked.push(item);
   return {
