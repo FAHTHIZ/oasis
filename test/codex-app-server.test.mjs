@@ -391,3 +391,36 @@ test('mcpServerStatus/list reports the thread\'s connected and failed MCP server
   const one = await client.call('mcpServerStatus/list', { threadId: result.thread.id, serverName: 'good', detail: 'toolsAndAuthOnly' });
   assert.deepEqual(one.result.data.map((row) => [row.name, row.serverInfo]), [['good', null]]);
 });
+
+test('thread/turns/list pages turns newest first by default, with summary/full/notLoaded views and reversible cursors', async (t) => {
+  const root = await tmp(t);
+  const home = await tmp(t, 'oasis-appsrv-home-');
+  const { config } = await scriptedModel(t, [{ content: 'one' }, { content: 'two' }, { content: 'three' }]);
+  const { child } = spawnServer(t, root, home, config);
+  const client = codexClient(child);
+  await client.call('initialize', { clientInfo: { name: 't' } });
+  const threadId = (await client.call('thread/start', { cwd: root })).result.thread.id;
+  for (const text of ['first', 'second', 'third']) {
+    const seen = client.notes.filter((note) => note.method === 'turn/completed').length;
+    await client.call('turn/start', { threadId, input: [{ type: 'text', text }] });
+    await client.until(() => client.notes.filter((note) => note.method === 'turn/completed').length > seen);
+  }
+  const userText = (turn) => turn.items.find((item) => item.type === 'userMessage').content[0].text;
+  const first = (await client.call('thread/turns/list', { threadId, limit: 2 })).result;
+  assert.deepEqual(first.data.map(userText), ['third', 'second']);
+  assert.equal(first.data[0].itemsView, 'summary');
+  assert.deepEqual(first.data[0].items.map((item) => item.type), ['userMessage', 'agentMessage']);
+  assert.ok(first.nextCursor && first.backwardsCursor);
+  const second = (await client.call('thread/turns/list', { threadId, limit: 2, cursor: first.nextCursor })).result;
+  assert.deepEqual(second.data.map(userText), ['first']);
+  assert.equal(second.nextCursor, null);
+  const back = (await client.call('thread/turns/list', { threadId, sortDirection: 'asc', cursor: second.backwardsCursor })).result;
+  assert.deepEqual(back.data.map(userText), ['first', 'second', 'third']);
+  const bare = (await client.call('thread/turns/list', { threadId, itemsView: 'notLoaded' })).result;
+  assert.ok(bare.data.every((turn) => turn.items.length === 0 && turn.itemsView === 'notLoaded'));
+  const full = (await client.call('thread/turns/list', { threadId, itemsView: 'full', sortDirection: 'asc' })).result;
+  assert.equal(full.data[0].itemsView, 'full');
+  assert.equal((await client.call('thread/turns/list', { threadId, cursor: 'garbage' })).error.code, -32602);
+  assert.equal((await client.call('thread/turns/list', { threadId, sortDirection: 'sideways' })).error.code, -32602);
+  assert.equal((await client.call('thread/turns/list', {})).error.code, -32602);
+});

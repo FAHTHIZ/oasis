@@ -8,7 +8,7 @@
 // thread/resume, thread/fork, thread/read, thread/list (archived, searchTerm,
 // excludedThreadIds), thread/name/set, thread/loaded/list, thread/unsubscribe,
 // thread/archive, thread/unarchive, thread/delete, thread/compact/start,
-// skills/list, mcpServerStatus/list (for a loaded thread), turn/start,
+// thread/turns/list, skills/list, mcpServerStatus/list (for a loaded thread), turn/start,
 // turn/steer, turn/interrupt, review/start (inline), model/list, and the host
 // methods in codex-app-server-host.mjs: fs/* (readFile, writeFile,
 // createDirectory, getMetadata, readDirectory, remove, copy, watch, unwatch)
@@ -584,6 +584,48 @@ export function createCodexAppServer(options = {}) {
         const saved = await loadSession(root, params.threadId, { env }).catch((error) => { throw rpcError(-32002, 'Thread not found: ' + error.message); });
         const updated = Date.parse(saved.updatedAt) ? Math.floor(Date.parse(saved.updatedAt) / 1000) : nowSeconds();
         return { thread: threadView(null, { id: saved.id, root, preview: preview(saved), name: saved.name || null, createdAt: updated, updatedAt: updated, model: saved.provider && saved.provider.model || null, turns: params.includeTurns ? historyTurns(saved.messages) : [] }) };
+      }
+      case 'thread/turns/list': {
+        if (typeof params.threadId !== 'string' || !params.threadId) throw rpcError(-32602, 'threadId is required.');
+        const direction = params.sortDirection == null ? 'desc' : params.sortDirection;
+        if (direction !== 'asc' && direction !== 'desc') throw rpcError(-32602, 'sortDirection must be "asc" or "desc".');
+        const view = params.itemsView == null ? 'summary' : params.itemsView;
+        if (!['notLoaded', 'summary', 'full'].includes(view)) throw rpcError(-32602, 'itemsView must be "notLoaded", "summary" or "full".');
+        let messages;
+        const loaded = threads.get(params.threadId);
+        if (loaded) messages = loaded.session.messages;
+        else {
+          const root = await workspace(params.cwd);
+          const { loadSession } = await load('sessions');
+          messages = (await loadSession(root, params.threadId, { env }).catch((error) => { throw rpcError(-32002, 'Thread not found: ' + error.message); })).messages;
+        }
+        const ordered = historyTurns(messages);
+        if (direction === 'desc') ordered.reverse();
+        // Cursors are opaque to clients: the anchor turn id, and whether the
+        // page starts at it (backwards cursor) or just after it (next cursor).
+        let start = 0;
+        if (params.cursor != null) {
+          let decoded = null;
+          try { decoded = JSON.parse(Buffer.from(String(params.cursor), 'base64url').toString('utf8')); } catch {}
+          if (!decoded || typeof decoded.turnId !== 'string') throw rpcError(-32602, 'cursor is not valid.');
+          const at = ordered.findIndex((turn) => turn.id === decoded.turnId);
+          if (at < 0) throw rpcError(-32602, 'cursor refers to a turn that is no longer in this thread.');
+          start = decoded.inclusive ? at : at + 1;
+        }
+        const limit = Math.min(200, Math.max(1, Number.parseInt(params.limit, 10) || 25));
+        const page = ordered.slice(start, start + limit).map((turn) => {
+          if (view === 'full') return turn;
+          if (view === 'notLoaded') return { ...turn, items: [], itemsView: 'notLoaded' };
+          const user = turn.items.find((item) => item.type === 'userMessage');
+          const answer = [...turn.items].reverse().find((item) => item.type === 'agentMessage');
+          return { ...turn, items: [user, answer].filter(Boolean), itemsView: 'summary' };
+        });
+        const cursor = (turnId, inclusive) => Buffer.from(JSON.stringify({ turnId, inclusive })).toString('base64url');
+        return {
+          data: page,
+          nextCursor: start + limit < ordered.length && page.length ? cursor(page[page.length - 1].id, false) : null,
+          backwardsCursor: page.length ? cursor(page[0].id, true) : null
+        };
       }
       case 'thread/list': {
         const root = await workspace(params.cwd);
