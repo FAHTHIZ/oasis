@@ -5,6 +5,9 @@ weaknesses. Newest first. Detailed user-facing notes go in the CHANGELOG.
 
 ## 2026-11-11 (terminal-agent interoperability: Gemini CLI, OpenCode, Goose, Aider, Roo/Kilo)
 
+### Gemini CLI and OpenCode agent files
+- Gemini CLI ([subagents doc](https://raw.githubusercontent.com/google-gemini/gemini-cli/main/docs/core/subagents.md)) and OpenCode ([agents doc](https://opencode.ai/docs/agents/)) agent Markdown files now load as OASIS agents. `foreignAgentFrontMatter` in src/subagents.mjs translates tool names and deny rules into `tools`/`disallowedTools`. OpenCode's default `primary` mode stays out of the task tool. Tests: test/foreign-agents.test.mjs (2); subagent and import tests 28 pass, 0 fail.
+
 ### Gemini CLI TOML commands
 - `oasis import gemini` already converted `.gemini/commands/*.toml`, but a migrating user had to run it again after every change. The commands now load in place, following Gemini's [custom commands doc](https://raw.githubusercontent.com/google-gemini/gemini-cli/main/docs/cli/custom-commands.md): the prompt is parsed once into text, `@{...}` and `!{...}` parts (braces balanced), so injected file content and command output are never expanded again. `{{args}}` inside `!{...}` is single-quote escaped. Shell runs only for user commands or trusted workspaces and respects deny/ask rules. Test: test/foreign-commands.test.mjs (5 tests); command, import and slash tests 64 pass, 0 fail.
 
