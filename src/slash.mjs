@@ -58,6 +58,7 @@ export const BUILTIN_COMMANDS = {
   hooks: 'List configured lifecycle hooks',
   bashes: 'List background processes',
   add: 'Add anything: a GitHub link, owner/repo[#name], plugin@marketplace, MCP server URL, npm or PyPI package, registry name, or an install command from a README (/add LINK)',
+  disconnect: 'Sign out of a connected app and remove the server OASIS added: /disconnect notion',
   connect: 'Connect an app in one step: /connect github, /connect linear, or an MCP server URL (/connect alone lists them)',
   mcp: 'Show connected MCP servers and their tools; /mcp reconnect [NAME|all] restarts failed or named servers; /mcp search QUERY searches the MCP Registry',
   ide: 'Connect to VS Code / Cursor / Windsurf (selection context, diff review, diagnostics) or show status',
@@ -1669,6 +1670,15 @@ export async function runBuiltinCommand(name, argument, state) {
         return { output: 'Connect an app with /connect NAME (or paste an MCP server URL):\n' + rows.map((row) => '  ' + (row.live ? '● ' : row.connected ? '◐ ' : '○ ') + row.id.padEnd(16) + row.name + (row.live ? ' · connected, ' + row.tools + ' tool(s)' : row.connected ? ' · connected' : '')).join('\n') };
       }
       return { connect: service };
+    }
+    case 'disconnect': {
+      const service = String(argument || '').trim();
+      if (!service) return { output: 'Usage: /disconnect NAME (for example /disconnect notion). /connect lists your apps.' };
+      try {
+        const { disconnectConnector } = await import('./connectors.mjs');
+        const result = await disconnectConnector(service, { root, env });
+        return { output: result.message + (result.signedOut || result.removed ? ' Its tools leave at your next session.' : '') };
+      } catch (error) { return { output: 'Could not disconnect ' + service + ': ' + error.message }; }
     }
     case 'mcp': {
       const mcpWords = String(argument || '').trim().split(/\s+/).filter(Boolean);

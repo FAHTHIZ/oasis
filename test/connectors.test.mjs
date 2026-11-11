@@ -254,3 +254,12 @@ test('lazy sign-in: an auth error from a live app shows the card instead of fail
   assert.equal(await connectAfterAuthError(session, mapped, Object.assign(new Error('x'), { code: 'MCP_AUTH_REQUIRED', requiredScope: 'write' }), options), false);
   assert.equal(await connectAfterAuthError(session, mapped, new Error('boom'), options), false);
 });
+
+test('/disconnect signs out from the terminal', async (t) => {
+  const { root, env } = await sandbox(t);
+  const { runBuiltinCommand } = await import('../src/slash.mjs');
+  await saveStoredToken('https://mcp.notion.com/mcp', { accessToken: 'x' }, env);
+  const result = await runBuiltinCommand('disconnect', 'notion', { root, env });
+  assert.match(result.output, /Notion: signed out/);
+  assert.match((await runBuiltinCommand('disconnect', '', { root, env })).output, /Usage: \/disconnect NAME/);
+});
