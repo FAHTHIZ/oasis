@@ -289,3 +289,48 @@ test('without experimentalApi the App Server never sends requestUserInput', asyn
   assert.ok(names.includes('read_file'), 'tools were sent');
   assert.ok(!names.includes('ask_user_question'), 'the tool is hidden when nobody can answer');
 });
+
+test('thread lifecycle: compact, loaded list, archive and unarchive (keeping the name), unsubscribe, delete', async (t) => {
+  const root = await tmp(t);
+  const home = await tmp(t, 'oasis-appsrv-home-');
+  const { config, requests } = await scriptedModel(t, [{ content: 'Hello there.' }, { content: '## Summary\nThe user said hello.' }, { content: 'More.' }]);
+  const { child, stderr } = spawnServer(t, root, home, config);
+  const client = codexClient(child);
+  await client.call('initialize', { clientInfo: { name: 't' } });
+  const { result } = await client.call('thread/start', { cwd: root });
+  const threadId = result.thread.id;
+  await client.call('turn/start', { threadId, input: [{ type: 'text', text: 'hello' }] });
+  await client.until((note) => note.method === 'turn/completed');
+  assert.deepEqual((await client.call('thread/name/set', { threadId, name: 'Greeting' })).result, {});
+  assert.deepEqual((await client.call('thread/loaded/list', {})).result, { data: [threadId], nextCursor: null });
+
+  const before = requests.length;
+  assert.deepEqual((await client.call('thread/compact/start', { threadId })).result, {});
+  const compacted = await client.until((note) => note.method === 'turn/completed' && note.params.turn.id !== client.notes.find((n) => n.method === 'turn/completed').params.turn.id);
+  assert.equal(compacted.params.turn.status, 'completed', stderr() + JSON.stringify(compacted));
+  assert.ok(client.notes.some((note) => note.method === 'item/completed' && note.params.item.type === 'contextCompaction'));
+  assert.ok(client.notes.some((note) => note.method === 'thread/compacted' && note.params.threadId === threadId));
+  assert.equal(requests.length, before + 1, 'one summary request');
+
+  assert.deepEqual((await client.call('thread/archive', { threadId })).result, {});
+  assert.ok(client.notes.some((note) => note.method === 'thread/archived' && note.params.threadId === threadId));
+  assert.deepEqual((await client.call('thread/loaded/list', {})).result.data, []);
+  assert.deepEqual((await client.call('thread/list', { cwd: root })).result.data.map((thread) => thread.id), []);
+  const archived = (await client.call('thread/list', { cwd: root, archived: true })).result.data;
+  assert.deepEqual(archived.map((thread) => [thread.id, thread.name]), [[threadId, 'Greeting']]);
+
+  const back = (await client.call('thread/unarchive', { threadId, cwd: root })).result;
+  assert.equal(back.thread.id, threadId);
+  assert.equal(back.thread.name, 'Greeting');
+  assert.deepEqual((await client.call('thread/list', { cwd: root })).result.data.map((thread) => thread.id), [threadId]);
+  assert.equal((await client.call('thread/list', { cwd: root, searchTerm: 'nothing-like-this' })).result.data.length, 0);
+
+  // Resume, then unsubscribe unloads it; a second unsubscribe reports notLoaded.
+  await client.call('thread/resume', { threadId, cwd: root });
+  assert.deepEqual((await client.call('thread/unsubscribe', { threadId })).result, { status: 'unsubscribed' });
+  assert.deepEqual((await client.call('thread/unsubscribe', { threadId })).result, { status: 'notLoaded' });
+
+  assert.deepEqual((await client.call('thread/delete', { threadId, cwd: root })).result, {});
+  assert.ok(client.notes.some((note) => note.method === 'thread/deleted' && note.params.threadId === threadId));
+  assert.equal((await client.call('thread/read', { threadId, cwd: root })).error.code, -32002);
+});

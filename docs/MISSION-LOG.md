@@ -5,6 +5,11 @@ weaknesses. Newest first. Detailed user-facing notes go in the CHANGELOG.
 
 ## 2026-11-11 (frontier-platform cycle: competitor gaps)
 
+### App Server thread management
+- Compared the client methods in Codex's `common.rs` (187) with OASIS. Most of the 162 missing ones are tied to OpenAI accounts or products: accounts, remote control, realtime voice, ChatGPT projects and plugin sharing. Added the ones that make sense for a local agent: `thread/archive`, `thread/unarchive`, `thread/delete`, `thread/unsubscribe`, `thread/loaded/list` and `thread/compact/start`, plus the `archived`, `searchTerm` and `excludedThreadIds` filters on `thread/list`. Shapes follow `v2/thread.rs`.
+- Codex dropped `delivery: "detached"` for reviews (its docs now say to start a thread and review on it), so that checklist item is closed as not needed.
+- Bug found while writing the test: `thread/name/set` set `session.name`, but saving reads `session.sessionName`, so App Server renames were lost on restart. Fixed; the archive test reads the name back from disk.
+
 ### Asking the user over ACP and the App Server
 - OASIS's `ask_user_question` tool only reached the terminal and the web app. Editors on ACP and Codex App Server clients never saw it, because the tool is hidden when nobody can answer.
 - ACP: the unstable `elicitation/create` form from the [ACP schema](https://agentclientprotocol.com/protocol/schema), sent only when `clientCapabilities.elicitation.form` is set. The choices go in an `answer` field with `oneOf` (single choice) or `anyOf` items (multi-select), plus an optional free-text `other` field. The form uses the session scope with the tool call ID. Only `accept` counts as an answer.
