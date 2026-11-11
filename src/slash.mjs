@@ -58,6 +58,7 @@ export const BUILTIN_COMMANDS = {
   hooks: 'List configured lifecycle hooks',
   bashes: 'List background processes',
   add: 'Add anything: a GitHub link, owner/repo[#name], plugin@marketplace, MCP server URL, npm or PyPI package, registry name, or an install command from a README (/add LINK)',
+  connect: 'Connect an app in one step: /connect github, /connect linear, or an MCP server URL (/connect alone lists them)',
   mcp: 'Show connected MCP servers and their tools; /mcp reconnect [NAME|all] restarts failed or named servers; /mcp search QUERY searches the MCP Registry',
   ide: 'Connect to VS Code / Cursor / Windsurf (selection context, diff review, diagnostics) or show status',
   plugin: 'Manage Claude Code plugins (/plugin [list|install NAME@MARKET|uninstall|enable|disable|update|validate|marketplace add|list|update|remove])',
@@ -1659,6 +1660,15 @@ export async function runBuiltinCommand(name, argument, state) {
         }
         return { output: (summary ? summary + '\n' : '') + result.message + started, ...(result.reload && session ? { reload: 'plugins' } : {}) };
       } catch (error) { return { output: 'Could not add ' + source + ': ' + error.message }; }
+    }
+    case 'connect': {
+      const service = String(argument || '').trim();
+      if (!service) {
+        const { listConnectors } = await import('./connectors.mjs');
+        const rows = await listConnectors({ root, env, session });
+        return { output: 'Connect an app with /connect NAME (or paste an MCP server URL):\n' + rows.map((row) => '  ' + (row.live ? '● ' : row.signedIn ? '◐ ' : '○ ') + row.id.padEnd(16) + row.name + (row.live ? ' · connected, ' + row.tools + ' tool(s)' : row.signedIn ? ' · signed in' : '')).join('\n') };
+      }
+      return { connect: service };
     }
     case 'mcp': {
       const mcpWords = String(argument || '').trim().split(/\s+/).filter(Boolean);

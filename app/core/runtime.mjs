@@ -160,11 +160,12 @@ function toolArgs(data) {
 const JOB_ID_RE = /^[a-f0-9-]{36}$/i;
 
 export class RuntimeAgent {
-  constructor({ client, onEvent = () => {}, approve = async () => false, ask = async () => '', getMode = () => 'ask', getPlugins = () => [], pollMs = 350, waitMs = 20_000 } = {}) {
+  constructor({ client, onEvent = () => {}, approve = async () => false, ask = async () => '', connect = async () => null, getMode = () => 'ask', getPlugins = () => [], pollMs = 350, waitMs = 20_000 } = {}) {
     this.client = client;
     this.onEvent = onEvent;
     this.approve = approve;
     this.ask = ask;
+    this.connect = connect;
     this.getMode = getMode;
     this.getPlugins = getPlugins;
     this.pollMs = pollMs;
@@ -400,7 +401,7 @@ export class RuntimeAgent {
         for (const event of job.events || []) {
           since = Math.max(since, event.id);
           const data = event.data || {};
-          if (['approval_resolved', 'question_answered'].includes(event.type) && String(data.approvalId || data.questionId || '') === requestId) return ELSEWHERE;
+          if (['approval_resolved', 'question_answered', 'connector_resolved'].includes(event.type) && String(data.approvalId || data.questionId || (event.type === 'connector_resolved' ? data.id : '') || '') === requestId) return ELSEWHERE;
         }
         if (['completed', 'error', 'cancelled', 'interrupted'].includes(job.status)) return ELSEWHERE;
         if (!(job.events || []).length) await pause(this.pollMs, stop.signal);
@@ -474,6 +475,7 @@ export class RuntimeAgent {
       for (const event of job.events || []) {
         const data = event.data || {};
         if (['approval_resolved', 'question_answered', 'elicitation_resolved'].includes(event.type)) resolved.add(String(data.approvalId || data.questionId || data.elicitationId || ''));
+        if (event.type === 'connector_resolved') resolved.add(String(data.id || ''));
       }
       for (const event of job.events || []) {
         after = Math.max(after, event.id);
@@ -543,6 +545,23 @@ export class RuntimeAgent {
             await this.client.api('/api/jobs/' + this.jobId + '/answer', { method: 'POST', body: { questionId: data.questionId, answer: String(answer || '') } }).catch(() => {});
             break;
           }
+          case 'connector_card': {
+            // A connect card: the page shows it and drives the sign-in through
+            // /api/connectors/:id; the job carries on once it settles anywhere.
+            const id = String(data.id || '');
+            if (!live || !id || resolved.has(id)) break;
+            const value = await this.answeredHere(this.connect(data, {
+              act: (body) => this.client.api('/api/connectors/' + encodeURIComponent(id), { method: 'POST', body }),
+              status: () => this.client.api('/api/connectors/' + encodeURIComponent(id))
+            }), id, event.id, signal);
+            if (signal.aborted) return;
+            resolved.add(id);
+            if (value === ELSEWHERE) this.emit('answered_elsewhere', { kind: 'connector' });
+            break;
+          }
+          case 'connector_resolved':
+            if (data.status === 'connected') this.emit('connector_connected', { name: data.connector?.name || '', account: data.account || '', tools: Number(data.tools) || 0 });
+            break;
           case 'elicitation':
             if (!live || resolved.has(String(data.elicitationId || ''))) break;
             // Forms from tool servers are answered in the terminal for now.

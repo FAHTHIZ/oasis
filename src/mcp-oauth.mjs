@@ -500,7 +500,10 @@ function callbackPage(text) {
 // The SDK runs the whole flow (RFC 9728/8414 discovery, CIMD or dynamic client
 // registration, PKCE, RFC 8707 resource, RFC 9207 issuer check, scope selection);
 // OASIS provides the loopback callback, the token store and the endpoint guard.
-export async function loginMcpServer(server, { env = process.env, fetch: fetchImpl = fetch, print = () => {}, open = (url) => openInBrowser(url, { env }), timeoutMs = LOGIN_TIMEOUT_MS, lookupImpl = lookup, scope = '' } = {}) {
+// onCallbackReady(deliver) hands out a function that finishes sign-in from a
+// pasted redirect address, for when the browser that approved is on another
+// device and cannot reach this computer's loopback callback.
+export async function loginMcpServer(server, { env = process.env, fetch: fetchImpl = fetch, print = () => {}, open = (url) => openInBrowser(url, { env }), timeoutMs = LOGIN_TIMEOUT_MS, lookupImpl = lookup, scope = '', onCallbackReady = null } = {}) {
   if (!server || server.type !== 'http') throw new Error('Only HTTP MCP servers use sign-in; stdio servers get credentials from environment variables.');
   const oauth = server.oauth || {};
   const oauthFetch = createOAuthFetch(server.url, { fetch: fetchImpl, lookupImpl });
@@ -510,23 +513,31 @@ export async function loginMcpServer(server, { env = process.env, fetch: fetchIm
   let fail;
   const result = new Promise((resolve, reject) => { finish = resolve; fail = reject; });
   result.catch(() => {});
+  // Only the browser round-trip we started carries our state. Anything else (a
+  // stray tab, or another local page poking this port) is answered and ignored.
+  const accept = (params) => {
+    if (params.get('state') !== state) return 'stale';
+    const error = params.get('error');
+    if (error) { fail(new Error('The server refused sign-in: ' + error + (params.get('error_description') ? ' - ' + params.get('error_description') : ''))); return 'error'; }
+    if (!params.get('code')) return 'error';
+    finish(params);
+    return 'ok';
+  };
   const callback = createServer((req, res) => {
     const url = new URL(req.url, 'http://127.0.0.1');
     if (url.pathname !== '/callback') { res.writeHead(404).end(); return; }
-    // Only the browser round-trip we started carries our state. Anything else (a
-    // stray tab, or another local page poking this port) is answered and ignored.
-    if (url.searchParams.get('state') !== state) {
-      res.writeHead(400, { 'content-type': 'text/html; charset=utf-8' });
-      res.end(callbackPage('This sign-in link is not the one Oasis is waiting for. Return to Oasis and use the latest link.'));
-      return;
-    }
-    const error = url.searchParams.get('error');
-    const ok = !error && url.searchParams.get('code');
-    res.writeHead(ok ? 200 : 400, { 'content-type': 'text/html; charset=utf-8' });
-    res.end(callbackPage(ok ? 'Signed in to ' + String(server.name).replace(/[<>&]/g, '') + '. You can close this tab and return to Oasis.' : 'Sign-in failed. Return to Oasis and try again.'));
-    if (error) fail(new Error('The server refused sign-in: ' + error + (url.searchParams.get('error_description') ? ' - ' + url.searchParams.get('error_description') : '')));
-    else if (ok) finish(url.searchParams);
+    const outcome = accept(url.searchParams);
+    res.writeHead(outcome === 'ok' ? 200 : 400, { 'content-type': 'text/html; charset=utf-8' });
+    res.end(callbackPage(outcome === 'stale' ? 'This sign-in link is not the one Oasis is waiting for. Return to Oasis and use the latest link.' : outcome === 'ok' ? 'Signed in to ' + String(server.name).replace(/[<>&]/g, '') + '. You can close this tab and return to Oasis.' : 'Sign-in failed. Return to Oasis and try again.'));
   });
+  if (typeof onCallbackReady === 'function') {
+    onCallbackReady((address) => {
+      let parsed;
+      try { parsed = new URL(String(address || '').trim()); } catch { return 'invalid'; }
+      if (parsed.pathname !== '/callback') return 'invalid';
+      return accept(parsed.searchParams);
+    });
+  }
   await new Promise((resolve, reject) => { callback.once('error', reject); callback.listen(Number(oauth.callbackPort) || 0, '127.0.0.1', resolve); });
   const timer = setTimeout(() => fail(new Error('Timed out waiting for sign-in in the browser.')), timeoutMs);
   let client = null;

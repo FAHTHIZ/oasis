@@ -649,3 +649,50 @@ html.lite .topbar{backdrop-filter:none;-webkit-backdrop-filter:none;background:v
 .routine-results { margin-top: 6px; }
 .routine-results summary { cursor: pointer; font-size: 0.85em; }
 .routine-output { max-height: 220px; overflow: auto; white-space: pre-wrap; word-break: break-word; font-size: 0.8em; padding: 8px; border-radius: 6px; background: var(--code-bg, rgba(127, 127, 127, 0.12)); }
+
+/* Connect card: inline in the conversation when the agent asks to connect an app. */
+.msg.connector{animation:rise .25s var(--ease)}
+.connector-card{max-width:520px;background:linear-gradient(180deg,color-mix(in srgb,var(--accent) 4%,var(--panel)),var(--panel));border:1px solid var(--line-strong);border-radius:var(--r-lg);padding:14px 14px 12px;box-shadow:0 10px 30px -18px #000c;display:flex;flex-direction:column;gap:10px}
+.cc-head{display:flex;align-items:center;gap:12px;min-width:0}
+.cc-mark{flex:none;width:40px;height:40px;border-radius:11px;display:grid;place-items:center;box-shadow:inset 0 0 0 1px #ffffff1f}
+.cc-mark svg{width:22px;height:22px}
+.cc-mark.letter{background:var(--raised);color:var(--text);font-weight:700;font-size:18px;box-shadow:inset 0 0 0 1px var(--line-strong)}
+.cc-titles{min-width:0;flex:1}
+.cc-title{display:flex;align-items:center;gap:8px;min-width:0}
+.cc-title strong{font-size:15px;font-weight:650;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cc-badge{flex:none;font-size:11px;font-weight:600;padding:2px 7px;border-radius:999px;border:1px solid var(--line-strong);color:var(--muted)}
+.cc-badge.ok{color:var(--accent);border-color:var(--accent-line);background:var(--accent-soft)}
+.cc-sub{color:var(--muted);font-size:13px;margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cc-reason{margin:0;color:var(--text-2);font-size:14px;line-height:1.45}
+.cc-stage:empty{display:none}
+.cc-stage{display:flex;flex-direction:column;gap:8px}
+.cc-progress{display:flex;align-items:center;gap:8px;color:var(--text-2);font-size:14px}
+.cc-progress::before{content:"";flex:none;width:14px;height:14px;border-radius:50%;border:2px solid var(--line-strong);border-top-color:var(--accent);animation:cc-spin .8s linear infinite}
+@keyframes cc-spin{to{transform:rotate(360deg)}}
+.cc-row{display:flex;flex-wrap:wrap;gap:8px}
+.cc-row:empty{display:none}
+.cc-code{display:flex;align-items:center;gap:10px;background:var(--sunken);border:1px dashed var(--line-strong);border-radius:var(--r-md);padding:10px 12px;align-self:flex-start}
+.cc-code-value{font-family:var(--mono);font-size:22px;font-weight:700;letter-spacing:.12em;user-select:all}
+.cc-form{display:flex;gap:8px}
+.cc-form input{flex:1;min-width:0;background:var(--sunken);border:1px solid var(--line-strong);border-radius:10px;padding:7px 10px;font-size:14px}
+.cc-form input:focus{outline:2px solid var(--accent-line);outline-offset:0;border-color:var(--accent)}
+.cc-other summary{cursor:pointer;color:var(--muted);font-size:13px}
+.cc-other[open] summary{margin-bottom:6px}
+.cc-other .cc-fine{display:block;margin:0 0 8px}
+.cc-result{font-size:14px;color:var(--muted);overflow-wrap:anywhere}
+.cc-result.ok{display:flex;align-items:center;gap:8px;color:var(--text)}
+.cc-result.bad{color:var(--danger)}
+.cc-check{flex:none;width:20px;height:20px;border-radius:50%;display:grid;place-items:center;background:var(--accent);color:var(--accent-ink);font-size:12px;font-weight:800}
+.cc-foot{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}
+.cc-fine{color:var(--faint);font-size:12px}
+.cc-buttons{display:flex;gap:8px;margin-left:auto}
+.cc-buttons:not(:has(:not([hidden]))){display:none}
+.connector-card[data-status="connected"]{border-color:var(--accent-line)}
+.connector-card[data-status="failed"]{border-color:color-mix(in srgb,var(--danger) 35%,transparent)}
+.msg.connector.settled .connector-card{padding:10px 12px;gap:6px}
+.msg.connector.settled .cc-sub,.msg.connector.settled .cc-foot{display:none}
+.msg.connector.settled .cc-mark{width:28px;height:28px;border-radius:8px}
+.msg.connector.settled .cc-mark svg{width:16px;height:16px}
+@media (prefers-reduced-motion:reduce){.msg.connector{animation:none}.cc-progress::before{animation:none}}
+.connector-card a.btn{text-decoration:none}
+.connector-card:is([data-status="connected"],[data-status="failed"],[data-status="skipped"]) .cc-foot{display:none}

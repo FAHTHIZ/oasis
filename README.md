@@ -188,6 +188,15 @@ oasis add owner/marketplace#plugin-name
 
 Checked on 9 November 2026: BuilderIO/skills, n8n-io/skills, DataDog/pup and NVIDIA/nvidia-kaggle installed with all 78 of their skills. Bundled MCP servers start from the plugin folder the way Codex starts them. Some Codex plugins still need their own setup first: nexu-io/codex-slides needs `pnpm install` inside the plugin, and Storybloq needs the `storybloq` program on your PATH.
 
+### Connect an app in one step
+
+Say "connect GitHub" (or `/connect linear`) in the terminal or the web app and a Connect card appears in the conversation. Click **Connect**, approve access on the service's own page, and its tools are ready in the same chat; the agent's turn carries on where it was. The agent shows the same card itself when a task needs an app you have not connected (`connect_service`).
+
+- GitHub uses your existing `gh` sign-in at once, or runs `gh auth login --web` and shows the one-time code on the card; without `gh` it takes a pasted token.
+- Linear, Notion, Sentry, Atlassian (Jira, Confluence), Stripe, Vercel, Supabase, Neon, Cloudflare, Hugging Face, monday.com, Intercom and PayPal sign in with OAuth (dynamic client registration). Any other remote MCP server works by name from the official MCP Registry or by URL.
+- Already connected? Nothing is shown. Signed in earlier? It reattaches quietly. Signing in from your phone? Paste the address the browser landed on into the card.
+- `oasis mcp connect NAME` does the same from a shell; `/connect` alone lists what can be connected.
+
 ### MCP servers
 
 ```sh

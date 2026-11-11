@@ -108,6 +108,7 @@ import { formatApiError, responseText } from './api-error.mjs';
 import { compactSystemPrompt, systemPrompt } from './system-prompt.mjs';
 import { formatLspVerificationBlocker, verificationCommandKind, verificationSummary } from './verification-summary.mjs';
 import { ASK_USER_TOOL_DEFINITION, askUserQuestion, questionBudget } from './ask-user.mjs';
+import { CONNECT_SERVICE_TOOL_DEFINITION } from './connectors.mjs';
 import { normalizeUsage, usageOrEstimate } from './usage-estimate.mjs';
 import { webAccessSites, outboundEmailHit, userEmailAddresses } from './web-access.mjs';
 import { exitPlanMode, permissionMode } from './plan-mode.mjs';
@@ -572,7 +573,7 @@ export async function createSession({ root, config, restore = null, permissionMo
       if (!spec.description) session.agents[name].description = 'Agent ' + name;
     }
   }
-  session.toolDefinitions = session.toolDefinitions.concat([taskToolDefinition(session.agents), ...AGENT_TOOL_DEFINITIONS, EXIT_PLAN_TOOL_DEFINITION, ASK_USER_TOOL_DEFINITION, ...SESSION_TOOL_DEFINITIONS]);
+  session.toolDefinitions = session.toolDefinitions.concat([taskToolDefinition(session.agents), ...AGENT_TOOL_DEFINITIONS, EXIT_PLAN_TOOL_DEFINITION, ASK_USER_TOOL_DEFINITION, CONNECT_SERVICE_TOOL_DEFINITION, ...SESSION_TOOL_DEFINITIONS]);
   session.modelEnv = env;
   if (compactPromptSwap) session.compactPromptSwap = compactPromptSwap;
   if (env.OASIS_DEBUG && env.OASIS_DEBUG !== '0' && !debugEnabled()) {
@@ -2180,7 +2181,7 @@ async function runSubagent(parent, args, context, options) {
   const definitions = [...(parent.toolDefinitions || TOOL_DEFINITIONS), ...parentDeferred.values()].filter((definition) => {
     const name = definition && definition.function && definition.function.name;
     if (name === 'task') return depth + 1 < maxDepth && !disallowed.has(name) && (!allowed || allowed.has(name));
-    if (!name || name === 'workflow' || name === 'enter_worktree' || name === 'exit_worktree' || name === 'schedule_wakeup' || name === 'run_specialist_review' || name === 'ask_user_question' || name === 'enter_plan_mode' || name === 'advisor' || name.startsWith('cron_') || name === 'memory_save' || name === 'memory_verify' || name === 'memory_delete' || name === 'skill_propose' || (AGENT_TOOL_NAMES.has(name) && name !== 'team_send_message')) return false;
+    if (!name || name === 'workflow' || name === 'enter_worktree' || name === 'exit_worktree' || name === 'schedule_wakeup' || name === 'run_specialist_review' || name === 'ask_user_question' || name === 'connect_service' || name === 'enter_plan_mode' || name === 'advisor' || name.startsWith('cron_') || name === 'memory_save' || name === 'memory_verify' || name === 'memory_delete' || name === 'skill_propose' || (AGENT_TOOL_NAMES.has(name) && name !== 'team_send_message')) return false;
     if (disallowed.has(name)) return false;
     return !allowed || allowed.has(name) || SHARED_TASK_TOOL_NAMES.has(name) || name === 'team_send_message';
   });
@@ -3349,6 +3350,8 @@ function kernelTimeoutForTool(name, args, context) {
   if (['install_package', 'generate_image', 'text_to_speech'].includes(name)) return 600_000;
   if (name === 'web_search') return 60_000;
   if (name === 'fetch_url') return 30_000;
+  // A connector card waits for the user to click Connect and finish sign-in.
+  if (name === 'connect_service') return 960_000;
   return 120_000;
 }
 
@@ -3414,6 +3417,10 @@ async function executeRegisteredToolWithKernel(session, name, args, context, opt
         return budget !== null && session.turnQuestionCount > budget
           ? { answered: false, questionBudgetExceeded: true, budget, message: 'Question limit for this turn (' + budget + ') is used up, so this question was not shown. Do not stop to ask more: choose the most reasonable option yourself, keep working, and list the assumption in one line in your final reply so the user can correct it.' }
           : await askUserQuestion(session, validatedInput, options);
+      }
+      if (name === 'connect_service') {
+        const { runConnectService } = await import('./connectors.mjs');
+        return await runConnectService(session, validatedInput, { ...options, env: runtime.env || options.env });
       }
       if (name === 'ide_get_diagnostics' || name === 'ide_open_file') {
         const { runIdeTool } = await import('./ide.mjs');
