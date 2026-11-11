@@ -215,6 +215,13 @@ function normalizeFields(fields, existing = {}, now = new Date()) {
     for (const e of events) if (!/^[a-z][a-z0-9_]{0,60}(\.[a-z][a-z0-9_]{0,60})?$/.test(e)) throw new Error('Event names look like pull_request or pull_request.opened; got ' + e + '.');
     if (events.length) job.events = events; else delete job.events;
   }
+  if (fields.fromSession !== undefined) {
+    const id = String(fields.fromSession || '').trim().toLowerCase();
+    if (id && !/^[a-f0-9-]{20,80}$/.test(id)) throw new Error('fromSession must be a saved session id (oasis sessions list shows them).');
+    if (id) job.fromSession = id; else { delete job.fromSession; delete job.chain; }
+  }
+  if (fields.chain !== undefined) { if (fields.chain) job.chain = true; else delete job.chain; }
+  if (job.chain && !job.fromSession) throw new Error('chain needs fromSession: the conversation the first run continues.');
   if (fields.deliver !== undefined) job.deliver = parseDeliver(fields.deliver);
   job.deliver = job.deliver || 'local';
   if (fields.graceMinutes !== undefined) {
@@ -437,8 +444,8 @@ async function launch(job, env, backgrounds, now, event = null) {
   const name = 'routine ' + (job.name || job.id);
   const entry = job.kind === 'script'
     ? await backgrounds.startExecJob({ root, command: job.prompt, name, env: childEnv })
-    : await backgrounds.startBackgroundSession({ root, prompt: event ? eventPrompt(job, event, eventFile) : composePrompt(job), name, model: job.model, permissionMode: job.permissionMode, env: childEnv });
-  return { fireId: randomUUID(), backgroundId: entry.id, startedAt: now.toISOString(), manual: false, ...(event ? { eventId: event.id, eventFile } : {}) };
+    : await backgrounds.startBackgroundSession({ root, prompt: event ? eventPrompt(job, event, eventFile) : composePrompt(job), name, ...(job.fromSession && job.kind !== 'script' ? { resumeId: job.fromSession, fork: true } : {}), model: job.model, permissionMode: job.permissionMode, env: childEnv });
+  return { fireId: randomUUID(), backgroundId: entry.id, startedAt: now.toISOString(), manual: false, ...(entry.sessionId ? { sessionId: entry.sessionId } : {}), ...(event ? { eventId: event.id, eventFile } : {}) };
 }
 
 // Finishes runs whose background session has ended: records the result, writes the
@@ -467,6 +474,8 @@ async function reconcile(job, env, backgrounds, options) {
   }
   await appendRun(job.id, record, env);
   job.lastStatus = status; job.lastRunAt = run.startedAt; job.lastFinishedAt = finishedAt;
+  // chain: the next run continues from this run's conversation (only after a clean run).
+  if (job.chain && status === 'ok' && run.sessionId) job.fromSession = run.sessionId;
   job.failureStreak = status === 'failed' || status === 'lost' ? (job.failureStreak || 0) + 1 : status === 'ok' ? 0 : job.failureStreak || 0;
   delete job.activeRun;
   if (status === 'interrupted' || status === 'lost') {

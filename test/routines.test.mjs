@@ -278,3 +278,35 @@ test('editing a routine can clear optional fields', async () => {
   const [saved] = await readJobs(env);
   assert.equal('timezone' in saved || 'model' in saved || 'workdir' in saved, false);
 });
+
+test('end to end: a chained routine forks a saved conversation, never changes it, and carries context forward', async (t) => {
+  const { loadSession } = await import('../src/sessions.mjs');
+  const { config, requests } = await scriptedModel(t, [{ content: 'Noted.' }, { content: 'Run one: papaya.' }, { content: 'Run two: still papaya.' }]);
+  const root = await mkdtemp(path.join(os.tmpdir(), 'oasis-rt-fork-'));
+  const env = await tempEnv({ OASIS_PROTOCOL: 'openai-compatible', OASIS_BASE_URL: config.baseURL, OASIS_MODEL: 'fixture' });
+  const original = '11111111-2222-4333-8444-555555555555';
+  // Async: the scripted model server lives in this process.
+  const { execFile } = await import('node:child_process');
+  await new Promise((resolve, reject) => execFile(process.execPath, [CLI, '-p', 'The secret word is papaya.', '--session-id', original, '--workspace', root], { env, cwd: root, timeout: 60_000 }, (error, out, err) => (error ? reject(new Error(err + out)) : resolve())));
+  const before = await loadSession(root, original, { env });
+  const job = await createJob({ schedule: 'every 1h', prompt: 'What is the secret word?', workdir: root, fromSession: original, chain: true }, { env });
+  for (const expected of [/Run one/, /Run two/]) {
+    await triggerJob(job.id, { env });
+    await tick({ env });
+    const entry = await waitForFinish(env, job.id);
+    assert.equal(entry.status, 'completed', await readFile(entry.logFile, 'utf8'));
+    await tick({ env });
+    const { runs } = await listRuns(job.id, { env });
+    assert.equal(runs.at(-1).status, 'ok');
+    assert.match(await readFile(runs.at(-1).outputFile, 'utf8'), expected);
+  }
+  // Both routine runs saw the original conversation; the second also saw the first run.
+  assert.match(JSON.stringify(requests[1].messages), /papaya/);
+  assert.match(JSON.stringify(requests[2].messages), /Run one: papaya/);
+  const after = await loadSession(root, original, { env });
+  assert.equal(after.messages.length, before.messages.length, 'the original conversation is untouched');
+  const [saved] = await readJobs(env);
+  assert.notEqual(saved.fromSession, original);
+  assert.match(saved.fromSession, /^[0-9a-f-]{36}$/);
+  await assert.rejects(createJob({ schedule: 'every 1h', prompt: 'x', chain: true }, { env }), /chain needs fromSession/);
+});
