@@ -98,6 +98,7 @@ Gaps found by checking the [hooks reference](https://code.claude.com/docs/en/hoo
 | PostModelSwitch `source: "auto"` for fallbacks | done | `test/fallback-chain.test.mjs` (1 new test); `source: "resume"` does not apply because resuming keeps the current model instead of restoring the saved one |
 | ```` ```! ```` fenced shell blocks in commands/skills | done | `test/command-fenced-shell.test.mjs` (3 tests); the `shell: powershell` frontmatter key is not honoured |
 | `spinnerVerbs` | done | `test/spinner-verbs-setting.test.mjs` (4 tests); terminal only, the web app has no spinner verb |
+| `fileSuggestion` | done | `test/file-suggestion-setting.test.mjs` (3 tests); terminal `@` completion only, not the web composer; `subagentStatusLine` is still open |
 | `sandbox.credentials`, unix-socket/proxy keys, `allowManagedReadPathsOnly`, admin-required repository locks | open | `allowUnsandboxedCommands` needs nothing: OASIS has no unsandboxed retry |
 
 ## 2e. Terminal-agent interoperability (Gemini CLI, OpenCode, Goose, Aider, Roo/Kilo/Cline)
