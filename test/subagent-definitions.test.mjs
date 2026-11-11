@@ -202,3 +202,34 @@ test('autoCompactWindow lowers the window the agent compacts against', async (t)
   assert.ok(child.config.compactThresholdChars < compactionThresholdChars(session.config, { OASIS_CONTEXT_WINDOW: '1000000' }));
   assert.equal(normalizeAgentDefinition({ autoCompactWindow: '5000' }, '', { name: 'x', source: 'user' }).autoCompactWindow, null);
 });
+
+test('Google Antigravity agent folders and front matter are understood', async (t) => {
+  const { loadAgentDefinitions, taskToolDefinition } = await import('../src/subagents.mjs');
+  const root = await mkdtemp(path.join(os.tmpdir(), 'oasis-ag-'));
+  const home = await mkdtemp(path.join(os.tmpdir(), 'oasis-ag-home-'));
+  t.after(() => Promise.all([rm(root, { recursive: true, force: true }), rm(home, { recursive: true, force: true })]));
+  await mkdir(path.join(root, '.agents', 'agents', 'code-auditor'), { recursive: true });
+  await writeFile(path.join(root, '.agents', 'agents', 'code-auditor', 'agent.md'), [
+    '---', 'name: code-auditor', 'description: Security audits', 'tools:', ' - view_file', ' - grep_search', ' - run_command',
+    'subagent: true', 'mainAgent: false', 'model: pro', 'commandExecutionPolicy: sandbox', 'skills:', ' - skills/security-checklist', '---', '# System Prompt', 'Audit only.'
+  ].join('\n'));
+  await writeFile(path.join(root, '.agents', 'agents', 'lead.md'), '---\nname: lead\ndescription: Main-only lead\nsubagent: false\ncommandExecutionPolicy: off\n---\nLead.');
+  await mkdir(path.join(home, '.gemini', 'config', 'agents'), { recursive: true });
+  await writeFile(path.join(home, '.gemini', 'config', 'agents', 'helper.md'), '---\nname: helper\ndescription: Global helper\nmodel: flash\n---\nHelp.');
+  await mkdir(path.join(root, '.oasis', 'agents'), { recursive: true });
+  await writeFile(path.join(root, '.oasis', 'agents', 'helper.md'), '---\nname: helper\ndescription: Project helper wins\n---\nProject.');
+  const env = { ...process.env, HOME: home, USERPROFILE: home, OASIS_CONFIG_DIR: path.join(home, 'cfg') };
+  const agents = await loadAgentDefinitions(root, { env });
+  const auditor = agents['code-auditor'];
+  assert.deepEqual(auditor.tools, ['read_file', 'grep', 'search_files', 'run_command']);
+  assert.equal(auditor.model, null, 'tier names inherit the session model');
+  assert.deepEqual(auditor.skills, ['security-checklist']);
+  assert.match(auditor.prompt, /Audit only/);
+  assert.match(auditor.source, /code-auditor[\\/]agent\.md$/);
+  assert.equal(agents.lead.subagentAllowed, false);
+  assert.ok(agents.lead.disallowedTools.includes('run_command'));
+  assert.equal(agents.helper.description, 'Project helper wins');
+  const definition = taskToolDefinition(agents).function;
+  assert.ok(definition.parameters.properties.subagent_type.enum.includes('code-auditor'));
+  assert.ok(!definition.parameters.properties.subagent_type.enum.includes('lead'));
+});

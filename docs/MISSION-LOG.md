@@ -5,6 +5,10 @@ weaknesses. Newest first. Detailed user-facing notes go in the CHANGELOG.
 
 ## 2026-11-11 (frontier-platform cycle: competitor gaps)
 
+### Antigravity subagents (docs read)
+- From [antigravity.google/docs/subagents](https://antigravity.google/docs/subagents/): agents are Markdown files with YAML front matter in `.agents/agents/` or `~/.gemini/config/agents/`, with Antigravity tool names, `subagent`/`mainAgent` flags, flash/pro tiers, `commandExecutionPolicy`, inherited safety settings, idle subagents woken by messages, and worktree isolation. OASIS already had parallel subagents, `send_message` wake-ups, worktree isolation and inherited permissions. The gap was reading the definition files. Added the folders and field mapping.
+- Cursor's search page ([cursor.com/docs/agent/tools/search](https://cursor.com/docs/agent/tools/search)) now describes a local regex index (Instant Grep) and an Explore subagent, and says Cursor does not store embeddings for search. OASIS has ripgrep-backed grep, local semantic search and an explore subagent, so no work was needed here.
+
 ### Codex App Server protocol (source read)
 - Read the method list at [learn.chatgpt.com/docs/app-server](https://learn.chatgpt.com/docs/app-server). Read the v2 types in `codex-rs/app-server-protocol/src/protocol/v2` (Apache-2.0): Thread, Turn, the ThreadItem variants, the approval params and decisions, and the notification payloads.
 - `src/app-server.mjs` in OASIS turned out to be a static asset server for the web app, not a protocol server. Added `src/codex-app-server.mjs` and the `oasis app-server` command, built on the same runtime calls ACP uses (createSession, runAgentTurn, saveSession and steerSession).

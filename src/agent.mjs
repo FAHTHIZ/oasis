@@ -2157,6 +2157,7 @@ async function runSubagent(parent, args, context, options) {
   const type = agents[requested] ? requested : Object.keys(agents).find((key) => key.toLowerCase() === requested.toLowerCase()) || requested;
   const agent = agents[type];
   if (!agent) throw new Error('Unknown subagent_type ' + type + '. Available: ' + Object.keys(agents).join(', '));
+  if (agent.subagentAllowed === false) throw new Error('Agent ' + type + ' is marked subagent: false; it can only run as the main agent (oasis --agent ' + type + ').');
   let prompt = String(args.prompt || '').trim();
   if (!prompt) throw new Error('Give the subagent a complete prompt.');
   if (prompt.length > 40000) throw new Error('Subagent prompts must be 40,000 characters or fewer.');
