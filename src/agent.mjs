@@ -4244,6 +4244,12 @@ async function runAgentTurnRaw(session, prompt, options = {}) {
   const thinkingConfig = session.settings && session.settings.alwaysThinkingEnabled === false ? { ...turnConfig, alwaysThinkingEnabled: false } : turnConfig;
   session.thinkingBudget = isAnthropicFamily(session.config.protocol) ? thinkingBudgetFor(request, thinkingConfig, options.env || process.env) : 0;
   session.thinkingOff = isAnthropicFamily(session.config.protocol) && thinkingTurnedOff(thinkingConfig, options.env || process.env);
+  session.turnThinking = { budget: session.thinkingBudget, off: session.thinkingOff };
+  // Agent SDK setMaxThinkingTokens() keeps its value across turns until it is reset with null.
+  if (Number.isInteger(session.thinkingOverride) && isAnthropicFamily(session.config.protocol)) {
+    session.thinkingBudget = session.thinkingOverride;
+    session.thinkingOff = session.thinkingOverride === 0;
+  }
   session.effortLevel = isAnthropicFamily(session.config.protocol) && !['0', 'off', 'false'].includes(String((options.env || process.env).OASIS_THINKING || '').toLowerCase()) ? (turnConfig.effortLevel || '') : '';
   const claudeEffort = isAnthropicFamily(session.config.protocol) ? claudeEffortFor(resolveModelAlias(session.config.model, { protocol: session.config.protocol, env: options.env || process.env }), { level: session.effortLevel, budget: session.thinkingBudget }) : '';
   if (claudeEffort) { if (typeof options.onReasoningEffort === 'function') options.onReasoningEffort(claudeEffort); }
