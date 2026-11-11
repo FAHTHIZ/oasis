@@ -13,6 +13,10 @@ User-facing change history grouped by package version. A version heading does no
 
 - Custom agents are also read from Google Antigravity's folders: `.agents/agents/<name>.md` or `<name>/agent.md` in the project, and `~/.gemini/config/agents/`. Antigravity tool names, `subagent: false`, `commandExecutionPolicy: off`, model tiers and skill paths are mapped (see docs/SUBAGENTS.md).
 
+### Agent Client Protocol (editors)
+
+- `oasis acp` now implements the rest of the stable ACP session lifecycle: `session/list`, `session/resume` (reopen without replaying), `session/close`, `session/delete` and `logout`, advertised through `sessionCapabilities`. Editors get a Mode and a Model picker through `session/set_config_option` (only models allowed by `availableModels`), a context meter through `usage_update`, and a session title through `session_info_update`.
+
 ### Codex App Server protocol
 
 - File system and command methods: `fs/readFile`, `fs/writeFile`, `fs/createDirectory`, `fs/getMetadata`, `fs/readDirectory`, `fs/remove`, `fs/copy`, `fs/watch` / `fs/unwatch` (with `fs/changed` notifications), and `command/exec` with `command/exec/write`, `command/exec/resize`, `command/exec/terminate` and streamed `command/exec/outputDelta`, including PTY mode through node-pty. Unlike Codex, paths must sit inside the server's folder, a thread's folder or `OASIS_APP_SERVER_FS_ROOTS` (symlinks resolved first), commands run through the sandbox from OASIS settings, and a server started in plan mode refuses writes and commands.

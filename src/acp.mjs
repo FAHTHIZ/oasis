@@ -5,16 +5,20 @@
 // Framing, request ids, schema validation of incoming params and error replies
 // come from the official SDK (@agentclientprotocol/sdk, Zed Industries).
 //
-// Agent methods: initialize, authenticate, session/new, session/load,
-// session/prompt, session/set_mode, session/cancel (notification).
-// Client calls made by OASIS: session/update (notification) and
-// session/request_permission (request). Diagnostics go to stderr only;
+// Agent methods: initialize, authenticate, logout, session/new, session/load,
+// session/resume, session/list, session/close, session/delete,
+// session/prompt, session/set_mode, session/set_config_option (mode, model),
+// session/cancel (notification).
+// Client calls made by OASIS: session/update (notification: message chunks,
+// tool calls, plan, current_mode_update, config_option_update,
+// session_info_update, usage_update) and session/request_permission (request). Diagnostics go to stderr only;
 // stdout carries protocol messages exclusively.
 import path from 'node:path';
 import { stat } from 'node:fs/promises';
 import { readFileSync, statSync } from 'node:fs';
 import { Readable, Writable } from 'node:stream';
 import { agent as acpAgent, methods, ndJsonStream, RequestError } from '@agentclientprotocol/sdk';
+import { contextWindowSize } from './context.mjs';
 
 export const ACP_PROTOCOL_VERSION = 1;
 
@@ -37,6 +41,7 @@ const KIND_BY_TOOL = {
 const DIFF_TOOLS = new Set(['edit_file', 'write_file', 'multi_edit', 'notebook_edit']);
 
 const TERMINAL_OUTPUT_LIMIT = 256 * 1024;
+const LIST_PAGE = 50;
 
 export function toolKind(name) {
   return KIND_BY_TOOL[name] || (String(name).startsWith('mcp_') ? 'other' : 'other');
@@ -226,9 +231,41 @@ export function createAcpServer(options = {}) {
     for (const terminalId of ids) await request('terminal/release', { sessionId: entry.session.sessionId, terminalId }).catch(() => {});
   }
 
+  function contextSize(entry) {
+    try { return contextWindowSize(entry.session.config || {}, env) || 0; } catch { return 0; }
+  }
+
   function modeState(entry) {
     const current = entry.session.permissions && entry.session.permissions.mode || 'default';
     return { currentModeId: MODE_INFO.some((mode) => mode.id === current) ? current : 'default', availableModes: MODE_INFO };
+  }
+
+  function setMode(entry, modeId) {
+    if (typeof entry.session.permissions.setMode === 'function') entry.session.permissions.setMode(modeId);
+    else entry.session.permissions.mode = modeId;
+  }
+
+  // The configured model first, then any models the settings allow
+  // (availableModels), so an editor's model picker offers only allowed ones.
+  function modelChoices(entry) {
+    const current = entry.session.config && entry.session.config.model || '';
+    const allowed = entry.session.availableModels || (entry.session.settings && entry.session.settings.availableModels) || [];
+    return [...new Set([current, ...allowed].filter((item) => typeof item === 'string' && item && !item.includes('*')))];
+  }
+
+  function configOptions(entry) {
+    const mode = modeState(entry);
+    const list = [{ id: 'mode', name: 'Mode', category: 'mode', type: 'select', currentValue: mode.currentModeId, options: MODE_INFO.map((item) => ({ value: item.id, name: item.name, description: item.description })) }];
+    const models = modelChoices(entry);
+    if (models.length) list.push({ id: 'model', name: 'Model', category: 'model', type: 'select', currentValue: entry.session.config.model || models[0], options: models.map((id) => ({ value: id, name: id })) });
+    return list;
+  }
+
+  async function closeEntry(entry, { save = true } = {}) {
+    if (entry.controller) entry.controller.abort();
+    if (save) { try { const { saveSession } = await load('sessions'); await saveSession(entry.session, { env }); } catch {} }
+    try { const { closeSession } = await load('agent'); if (closeSession) await closeSession(entry.session); } catch {}
+    sessions.delete(entry.session.sessionId);
   }
 
   async function replay(entry) {
@@ -263,10 +300,19 @@ export function createAcpServer(options = {}) {
     let counter = 0;
     let streamed = '';
     const runner = entry.session.permissions && entry.session.permissions.mode === 'plan' && typeof runAgentPlan === 'function' ? runAgentPlan : runAgentTurn;
+    const firstPrompt = !(entry.session.messages || []).some((message) => message && message.role === 'user');
     try {
       const turn = await runner(entry.session, text, {
         env,
         signal: controller.signal,
+        onUsage: (usage) => {
+          if (!usage || usage.subagent || usage.phase) return;
+          const cost = Number(usage.costUsd);
+          if (Number.isFinite(cost) && cost > 0 && usage.costKnown !== false) entry.costUsd = (entry.costUsd || 0) + cost;
+          const used = Math.max(0, Math.round(Number(usage.inputTokens || 0) + Number(usage.outputTokens || 0)));
+          const size = contextSize(entry);
+          if (used && size) update(sessionId, { sessionUpdate: 'usage_update', used, size, ...(entry.costUsd ? { cost: { amount: Math.round(entry.costUsd * 1e6) / 1e6, currency: 'USD' } } : {}) });
+        },
         ...(images.length ? { images } : {}),
         onDelta: (accumulated) => {
           const value = String(accumulated || '');
@@ -332,6 +378,10 @@ export function createAcpServer(options = {}) {
         }
       });
       try { const { saveSession } = await load('sessions'); await saveSession(entry.session, { env }); } catch {}
+      if (firstPrompt) {
+        const title = (entry.session.name || built.text || '').replace(/\s+/g, ' ').trim().slice(0, 80);
+        if (title) update(sessionId, { sessionUpdate: 'session_info_update', title, updatedAt: new Date().toISOString() });
+      }
       if (controller.signal.aborted) return { stopReason: 'cancelled' };
       if (turn && turn.limitReached) return { stopReason: 'max_turn_requests' };
       return { stopReason: 'end_turn' };
@@ -347,21 +397,72 @@ export function createAcpServer(options = {}) {
         clientCapabilities = params.clientCapabilities || {};
         return {
           protocolVersion: ACP_PROTOCOL_VERSION,
-          agentCapabilities: { loadSession: true, promptCapabilities: { image: true, audio: false, embeddedContext: true }, mcpCapabilities: { http: true, sse: true } },
+          agentCapabilities: { loadSession: true, promptCapabilities: { image: true, audio: false, embeddedContext: true }, mcpCapabilities: { http: true, sse: true }, sessionCapabilities: { list: {}, resume: {}, close: {}, delete: {} } },
           agentInfo: { name: 'oasis', title: 'OASIS', version: options.version || '' },
           authMethods: []
         };
       case 'authenticate':
+      case 'logout':
         return {};
       case 'session/new': {
         const entry = await openSession(params);
-        return { sessionId: entry.session.sessionId, modes: modeState(entry) };
+        return { sessionId: entry.session.sessionId, modes: modeState(entry), configOptions: configOptions(entry) };
       }
-      case 'session/load': {
+      case 'session/load':
+      case 'session/resume': {
         if (typeof params.sessionId !== 'string') throw rpcError(-32602, 'sessionId is required.');
-        const entry = await openSession(params, params.sessionId);
-        await replay(entry);
-        return { modes: modeState(entry) };
+        // An already open session is reused instead of opening a second copy
+        // that would race the first one when both save.
+        const open = sessions.get(params.sessionId);
+        if (open && open.controller) throw rpcError(-32000, 'That session has a prompt running.');
+        const entry = open && path.resolve(open.root) === path.resolve(String(params.cwd || '')) ? open : await openSession(params, params.sessionId);
+        // session/load replays the conversation; session/resume does not.
+        if (method === 'session/load') await replay(entry);
+        return { modes: modeState(entry), configOptions: configOptions(entry) };
+      }
+      case 'session/list': {
+        const cwd = typeof params.cwd === 'string' && params.cwd ? params.cwd : (options.cwd || process.cwd());
+        if (!path.isAbsolute(cwd)) throw rpcError(-32602, 'cwd must be an absolute path.');
+        const { listSessions } = await load('sessions');
+        const all = await listSessions(cwd, { env }).catch(() => []);
+        const start = Math.max(0, Number.parseInt(params.cursor || '0', 10) || 0);
+        const page = all.slice(start, start + LIST_PAGE);
+        return {
+          sessions: page.map((item) => ({ sessionId: item.id, cwd, title: item.title || null, updatedAt: item.updatedAt || null })),
+          nextCursor: start + LIST_PAGE < all.length ? String(start + LIST_PAGE) : null
+        };
+      }
+      case 'session/close': {
+        const entry = sessions.get(params.sessionId);
+        if (!entry) throw rpcError(-32002, 'Unknown session ' + params.sessionId);
+        await closeEntry(entry);
+        return {};
+      }
+      case 'session/delete': {
+        if (typeof params.sessionId !== 'string' || !params.sessionId) throw rpcError(-32602, 'sessionId is required.');
+        const entry = sessions.get(params.sessionId);
+        if (entry && entry.controller) throw rpcError(-32000, 'Cancel the running prompt before deleting the session.');
+        const root = entry ? entry.root : (typeof params.cwd === 'string' && path.isAbsolute(params.cwd) ? params.cwd : (options.cwd || process.cwd()));
+        if (entry) await closeEntry(entry, { save: false });
+        const { deleteSession } = await load('sessions');
+        try { await deleteSession(root, params.sessionId, { env }); }
+        catch (error) { throw rpcError(-32002, 'Session not found: ' + String(error && error.message || error)); }
+        return {};
+      }
+      case 'session/set_config_option': {
+        const entry = sessions.get(params.sessionId);
+        if (!entry) throw rpcError(-32002, 'Unknown session ' + params.sessionId);
+        const value = params.value;
+        if (params.configId === 'mode') {
+          if (!MODE_INFO.some((mode) => mode.id === value)) throw rpcError(-32602, 'Unknown mode ' + value);
+          setMode(entry, value);
+          update(params.sessionId, { sessionUpdate: 'current_mode_update', currentModeId: value });
+        } else if (params.configId === 'model') {
+          const choices = modelChoices(entry);
+          if (typeof value !== 'string' || !choices.includes(value)) throw rpcError(-32602, 'Unknown model ' + value + '. Allowed: ' + choices.join(', '));
+          entry.session.config = { ...(entry.session.config || {}), model: value };
+        } else throw rpcError(-32602, 'Unknown config option ' + params.configId);
+        return { configOptions: configOptions(entry) };
       }
       case 'session/prompt':
         return prompt(params);
@@ -369,9 +470,9 @@ export function createAcpServer(options = {}) {
         const entry = sessions.get(params.sessionId);
         if (!entry) throw rpcError(-32002, 'Unknown session ' + params.sessionId);
         if (!MODE_INFO.some((mode) => mode.id === params.modeId)) throw rpcError(-32602, 'Unknown mode ' + params.modeId);
-        if (typeof entry.session.permissions.setMode === 'function') entry.session.permissions.setMode(params.modeId);
-        else entry.session.permissions.mode = params.modeId;
+        setMode(entry, params.modeId);
         update(params.sessionId, { sessionUpdate: 'current_mode_update', currentModeId: params.modeId });
+        update(params.sessionId, { sessionUpdate: 'config_option_update', configOptions: configOptions(entry) });
         return {};
       }
       case 'session/cancel': {
@@ -388,7 +489,10 @@ export function createAcpServer(options = {}) {
   const requests = [
     [methods.agent.initialize, 'initialize'], [methods.agent.authenticate, 'authenticate'],
     [methods.agent.session.new, 'session/new'], [methods.agent.session.load, 'session/load'],
-    [methods.agent.session.prompt, 'session/prompt'], [methods.agent.session.setMode, 'session/set_mode']
+    [methods.agent.session.prompt, 'session/prompt'], [methods.agent.session.setMode, 'session/set_mode'],
+    [methods.agent.logout, 'logout'], [methods.agent.session.list, 'session/list'], [methods.agent.session.resume, 'session/resume'],
+    [methods.agent.session.close, 'session/close'], [methods.agent.session.delete, 'session/delete'],
+    [methods.agent.session.setConfigOption, 'session/set_config_option']
   ];
   for (const [method, name] of requests) app.onRequest(method, async ({ params }) => { const result = await handle(name, params || {}); return result === undefined ? null : result; });
   app.onNotification(methods.agent.session.cancel, async ({ params }) => { await handle('session/cancel', params || {}); });

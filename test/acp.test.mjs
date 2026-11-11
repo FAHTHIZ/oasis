@@ -231,3 +231,75 @@ test('ACP editor terminals (opt-in) run approved commands in the editor and embe
   assert.match(JSON.stringify(final.content), /hi from the editor/);
 });
 
+
+test('ACP session lifecycle: list, resume, config options, usage and title updates, close and delete', async (t) => {
+  const root = await tmp(t);
+  const home = await tmp(t, 'oasis-acp-home-');
+  const { config } = await scriptedModel(t, [{ content: 'First answer.' }, { content: 'Second answer.' }]);
+  const child = spawn(process.execPath, [CLI, 'acp'], {
+    cwd: root,
+    env: { ...process.env, HOME: home, OASIS_CONFIG_DIR: path.join(home, 'cfg'), OASIS_PROTOCOL: 'openai-compatible', OASIS_BASE_URL: config.baseURL, OASIS_MODEL: 'fixture', OASIS_API_KEY: '', OASIS_SANDBOX: '0', OASIS_CONTEXT_WINDOW: '100000' },
+    stdio: ['pipe', 'pipe', 'pipe']
+  });
+  t.after(() => child.kill());
+  let stderr = '';
+  child.stderr.on('data', (chunk) => { stderr += chunk; });
+  const client = editorClient(child);
+  const init = await client.call('initialize', { protocolVersion: 1, clientCapabilities: {} });
+  assert.deepEqual(init.result.agentCapabilities.sessionCapabilities, { list: {}, resume: {}, close: {}, delete: {} });
+
+  const created = await client.call('session/new', { cwd: root, mcpServers: [] });
+  assert.ok(created.result, stderr + JSON.stringify(created));
+  const sessionId = created.result.sessionId;
+  const options = created.result.configOptions;
+  const modeOption = options.find((option) => option.id === 'mode');
+  assert.equal(modeOption.category, 'mode');
+  assert.equal(modeOption.type, 'select');
+  assert.ok(modeOption.options.some((option) => option.value === 'plan'));
+  const modelOption = options.find((option) => option.id === 'model');
+  assert.equal(modelOption.currentValue, 'fixture');
+
+  const done = await client.call('session/prompt', { sessionId, prompt: [{ type: 'text', text: 'Explain the   build setup' }] });
+  assert.equal(done.result.stopReason, 'end_turn', stderr + JSON.stringify(done));
+  const usage = client.updates.find((item) => item.sessionUpdate === 'usage_update');
+  assert.ok(usage, 'expected a usage_update: ' + JSON.stringify(client.updates.map((item) => item.sessionUpdate)));
+  assert.equal(usage.size, 100000);
+  assert.ok(usage.used > 0);
+  const info = client.updates.find((item) => item.sessionUpdate === 'session_info_update');
+  assert.equal(info.title, 'Explain the build setup');
+
+  const setMode = await client.call('session/set_config_option', { sessionId, configId: 'mode', value: 'plan' });
+  assert.equal(setMode.result.configOptions.find((option) => option.id === 'mode').currentValue, 'plan');
+  assert.ok(client.updates.some((item) => item.sessionUpdate === 'current_mode_update' && item.currentModeId === 'plan'));
+  const badModel = await client.call('session/set_config_option', { sessionId, configId: 'model', value: 'not-allowed' });
+  assert.equal(badModel.error.code, -32602);
+  const badOption = await client.call('session/set_config_option', { sessionId, configId: 'nope', value: 'x' });
+  assert.equal(badOption.error.code, -32602);
+  await client.call('session/set_config_option', { sessionId, configId: 'mode', value: 'default' });
+
+  const listed = await client.call('session/list', { cwd: root });
+  assert.ok(listed.result.sessions.some((item) => item.sessionId === sessionId && item.cwd === root && /Explain the build setup/.test(item.title || '')), JSON.stringify(listed));
+  assert.equal(listed.result.nextCursor, null);
+
+  const closed = await client.call('session/close', { sessionId });
+  assert.deepEqual(closed.result, {});
+  const afterClose = await client.call('session/prompt', { sessionId, prompt: [{ type: 'text', text: 'hi' }] });
+  assert.equal(afterClose.error.code, -32002);
+
+  // resume reopens without replaying the conversation
+  const before = client.updates.length;
+  const resumed = await client.call('session/resume', { sessionId, cwd: root, mcpServers: [] });
+  assert.ok(resumed.result.configOptions, JSON.stringify(resumed));
+  await new Promise((resolve) => setTimeout(resolve, 100));
+  assert.equal(client.updates.slice(before).filter((item) => item.sessionUpdate === 'user_message_chunk').length, 0);
+  const second = await client.call('session/prompt', { sessionId, prompt: [{ type: 'text', text: 'and the tests?' }] });
+  assert.equal(second.result.stopReason, 'end_turn');
+  assert.equal(client.updates.slice(before).filter((item) => item.sessionUpdate === 'session_info_update').length, 0, 'title is only sent after the first prompt');
+
+  const deleted = await client.call('session/delete', { sessionId });
+  assert.deepEqual(deleted.result, {});
+  const relisted = await client.call('session/list', { cwd: root });
+  assert.equal(relisted.result.sessions.some((item) => item.sessionId === sessionId), false);
+  const again = await client.call('session/delete', { sessionId, cwd: root });
+  assert.equal(again.error.code, -32002);
+});
