@@ -64,7 +64,7 @@ export const CONNECTOR_CATALOG = Object.freeze([
 
 export const CONNECT_SERVICE_TOOL_DEFINITION = { type: 'function', function: {
   name: 'connect_service',
-  description: 'Connect an app or account (GitHub, Linear, Notion, Sentry, Jira, Stripe, Vercel, Supabase, ...) when the user asks to connect, link or sign in to it, or when the task needs its data. Checks whether it is already connected first; if not, shows the user a connector card with a Connect button and waits. Once connected, the service\'s tools are available in this chat. Pass a service name, an MCP Registry name or an https MCP server URL.',
+  description: 'Connect an app or account when the user asks to connect, link or sign in to it, when the task needs its data, or when the user shares a link from an app (github.com, linear.app, notion.so, sentry.io, ...) whose tools are not loaded. One-click apps: ' + CONNECTOR_CATALOG.map((item) => item.name).join(', ') + '; any other remote MCP server by registry name or URL. Checks whether it is already connected first; if not, shows the user a connector card with a Connect button and waits. Once connected, the service\'s tools are available in this chat. Pass a service name, an MCP Registry name or an https MCP server URL.',
   parameters: { type: 'object', properties: {
     service: { type: 'string', minLength: 1, maxLength: 300, description: 'What to connect, e.g. "github", "linear", "jira" or https://example.com/mcp' },
     reason: { type: 'string', maxLength: 200, description: 'One short line shown on the card: what you will use it for' }
