@@ -113,6 +113,13 @@ export function truncationRecoveryPrompt(limit, droppedCall) {
 // OASIS prompt keywords can request a larger per-turn reasoning budget.
 // MAX_THINKING_TOKENS / OASIS_THINKING_BUDGET or config.thinkingBudget set a default.
 export function thinkingBudgetFor(prompt, config = {}, env = process.env) {
+  if (thinkingTurnedOff(config, env)) return 0;
+  // Claude Code's alwaysThinkingEnabled: false turns thinking off unless MAX_THINKING_TOKENS
+  // (or OASIS_THINKING_BUDGET) asks for a positive budget for this session.
+  if (config.alwaysThinkingEnabled === false) {
+    const forced = firstPositiveConfiguredInteger(env.OASIS_THINKING_BUDGET, env.MAX_THINKING_TOKENS);
+    return forced ? Math.max(1024, Math.min(forced, 64000)) : 0;
+  }
   const text = String(prompt || '').toLowerCase();
   let budget = 0;
   // OASIS_DISABLE_THINK_KEYWORDS / CLAUDE_CODE_DISABLE_ULTRATHINK: words like "think hard" in
@@ -199,6 +206,14 @@ export function applyEffort(config = {}, level, base = {}) {
 //                   (budget_tokens still works but is deprecated);
 //   'adaptive-only' Claude 4.7 and later (Opus 5/5.5, Sonnet 5/5.5, Fable, Mythos,
 //                   Haiku 5.5): budget_tokens and forced tool_choice return 400.
+// Thinking is off for the session: OASIS_THINKING=0, MAX_THINKING_TOKENS=0, or
+// alwaysThinkingEnabled: false without a positive MAX_THINKING_TOKENS / OASIS_THINKING_BUDGET.
+export function thinkingTurnedOff(config = {}, env = process.env) {
+  if (['0', 'off', 'false'].includes(String(env.OASIS_THINKING || '').toLowerCase())) return true;
+  if (String(env.MAX_THINKING_TOKENS ?? '').trim() === '0' && !firstPositiveConfiguredInteger(env.OASIS_THINKING_BUDGET)) return true;
+  return config.alwaysThinkingEnabled === false && !firstPositiveConfiguredInteger(env.OASIS_THINKING_BUDGET, env.MAX_THINKING_TOKENS);
+}
+
 export function claudeThinkingMode(model) {
   const id = String(model || '').toLowerCase();
   if (!/claude|\b(?:opus|sonnet|haiku|fable|mythos)\b/.test(id)) return 'budget';
