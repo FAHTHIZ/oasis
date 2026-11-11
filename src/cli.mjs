@@ -2539,6 +2539,11 @@ async function startWebWorkspace(root, args) {
     stdout.write('\n');
   }
   stdout.write('Commands, package installs, file deletions and bundle installs always ask for your approval in the browser first.\n');
+  try {
+    const { hostScheduler } = await import('./routines.mjs');
+    const scheduler = await hostScheduler({ env: process.env, log: (line) => { if (process.env.OASIS_DEBUG) stderr.write('[routines] ' + line + '\n'); } });
+    if (scheduler.hosted && scheduler.routines) stdout.write('Routines: ' + scheduler.routines + ' saved; this server runs them while it is open (oasis schedule list).\n');
+  } catch (error) { stderr.write('Routines are not running: ' + error.message + '\n'); }
   if (host === '0.0.0.0' || (isIP(host) > 0 && !['127.0.0.1', '::1'].includes(host))) {
     let printedLinks = false;
     try {
@@ -3145,6 +3150,11 @@ async function main() {
   }
   if (command === 'gateway') {
     const { runGateway } = await import('./gateway-telegram.mjs');
+    try {
+      const { hostScheduler } = await import('./routines.mjs');
+      const scheduler = await hostScheduler({ env: process.env, log: (line) => stderr.write('[routines] ' + line + '\n') });
+      if (!scheduler.hosted && process.env.OASIS_DEBUG) stderr.write('[routines] not hosted: ' + scheduler.reason + '\n');
+    } catch (error) { stderr.write('Routines are not running: ' + error.message + '\n'); }
     await runGateway(rest, { root: workspace, env: process.env, permissionMode: SESSION_OPTIONS.permissionMode || null });
     return;
   }

@@ -5,6 +5,11 @@ weaknesses. Newest first. Detailed user-facing notes go in the CHANGELOG.
 
 ## 2026-11-11 (frontier-platform cycle: competitor gaps)
 
+### Hosted scheduler and browser panel
+- `hostScheduler()` runs `runDaemon` in-process for `oasis web` and `oasis gateway` unless another live scheduler owns `<config>/schedules/daemon.pid` or `OASIS_ROUTINES=off`. Ticks are serialized by the existing file lock, so the pid check is a courtesy, not the correctness guarantee.
+- `GET/POST /api/routines` (token-authenticated, like `/api/mcp`) and a Settings → Routines section in `app/`. Script routines ask for browser confirmation before saving.
+- Tests: `test/routines-hosted.test.mjs` (3).
+
 ### routine_manage tool
 - Hermes exposes one `cronjob_manage` tool so the agent can schedule from natural language. OASIS now has `routine_manage` (deferred under "Background work"), a thin layer over `src/routines.mjs`. Every action that authorizes future unattended runs (create/edit/resume/run/remove) asks with `always=true`, so `--yes` does not skip it. Subagents get no approver and are refused. Pause/cancel/list/show need no approval. Create defaults the workdir to the session root. Risk medium, write capability, so plan mode denies it.
 - Tests: `test/routine-manage-tool.test.mjs` (5).

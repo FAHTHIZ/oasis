@@ -261,6 +261,25 @@
         <div class="row"><button class="btn" type="button" id="mcpAddButton">Add server</button><span class="test-result" id="mcpStatus" role="status"></span></div>
       </details>
     </fieldset>
+    <fieldset id="routineSettings" hidden>
+      <legend>Routines</legend>
+      <p class="hint">Routines run a task or command on a schedule in a fresh background session, even when no chat is open. This server runs them while it is open, or keep <code>oasis schedule daemon</code> running.</p>
+      <p class="hint" id="routineScheduler"></p>
+      <ul class="connection-list" id="routineList" aria-live="polite"></ul>
+      <details class="manual" id="routineAdd">
+        <summary>Add a routine</summary>
+        <label for="routineName">Name</label>
+        <input id="routineName" autocapitalize="off" spellcheck="false" placeholder="for example standup" maxlength="60">
+        <label for="routineSchedule">When</label>
+        <input id="routineSchedule" autocapitalize="off" spellcheck="false" placeholder="0 9 * * 1-5, every 2h, in 30m">
+        <label for="routinePrompt">Task</label>
+        <textarea id="routinePrompt" rows="3" placeholder="Summarize yesterday's CI failures and open pull requests"></textarea>
+        <label class="check"><input type="checkbox" id="routineScript"> Run the task as a shell command (no model)</label>
+        <label for="routineDeliver">Send results to</label>
+        <input id="routineDeliver" autocapitalize="off" spellcheck="false" placeholder="local, telegram:CHAT_ID, slack:CHANNEL, webhook:https://…">
+        <div class="row"><button class="btn" type="button" id="routineAddButton">Add routine</button><span class="test-result" id="routineStatus" role="status"></span></div>
+      </details>
+    </fieldset>
     <fieldset id="githubSettings">
       <legend>GitHub</legend>
       <label for="githubToken">Personal access token</label>
