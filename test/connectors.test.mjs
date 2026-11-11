@@ -285,3 +285,21 @@ test('an expired sign-in with no refresh token shows as expired', async (t) => {
   const rows = await listConnectors({ root, env });
   assert.equal(rows.find((row) => row.id === 'linear').expired, false, 'a refresh token renews it');
 });
+
+test('apps the project already uses are suggested', async (t) => {
+  const { root, env } = await sandbox(t);
+  const fs = await import('node:fs/promises');
+  const path = await import('node:path');
+  await fs.writeFile(path.join(root, 'package.json'), JSON.stringify({ dependencies: { stripe: '1', '@sentry/node': '8' }, devDependencies: { prisma: '6' } }));
+  await fs.writeFile(path.join(root, 'vercel.json'), '{}');
+  await fs.writeFile(path.join(root, 'requirements.txt'), 'posthog==3\n');
+  const { suggestedConnectors, listConnectors } = await import('../src/connectors.mjs');
+  const found = await suggestedConnectors(root);
+  assert.equal(found.stripe, 'stripe');
+  assert.equal(found.sentry, '@sentry/node');
+  assert.equal(found.prisma, 'prisma');
+  assert.equal(found.vercel, 'vercel.json');
+  assert.equal(found.posthog, 'posthog');
+  assert.equal(found.linear, undefined);
+  assert.equal((await listConnectors({ root, env })).find((row) => row.id === 'vercel').suggested, 'vercel.json');
+});
