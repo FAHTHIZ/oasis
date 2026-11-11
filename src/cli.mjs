@@ -166,7 +166,8 @@ function helpText() {
     '  oasis diagnostics [PATH...] [--checker NAME] [--json]  Run type checkers/linters and list problems',
     '  oasis plan "task"             Inspect the workspace and produce a read-only implementation plan',
     '  oasis install pnpm            Install a tool using a detected manager',
-    '  oasis sessions list           List locally saved sessions for this workspace',
+    '  oasis sessions list [--archived]  List locally saved sessions for this workspace (archived ones are hidden unless --archived)',
+    '  oasis sessions archive|unarchive ID  Hide a session from lists (or show it again); it can still be resumed by ID',
     '  oasis sessions search QUERY [--all] [--json]  Search earlier saved conversations',
     '  oasis sessions export ID...|--all [--format sharegpt|openai] [--out FILE]  Export trajectories as JSONL',
     '  oasis batch PROMPTS.jsonl [--out FILE] [--concurrency N]  Run many prompts, one fresh session each, and save trajectories',
@@ -2031,7 +2032,7 @@ async function readMainInput(root, session, state) {
         { label: 'Keyboard shortcuts', description: 'Show the shortcut cheat sheet', value: '/keys', category: 'Settings' },
         { label: 'Appearance', description: 'Change the prompt colour', value: '/color', category: 'Settings' }
       ];
-      const recentItems = (await listSessions(root, { env: process.env }).catch(() => []))
+      const recentItems = (await listSessions(root, { env: process.env }).catch(() => [])).filter((item) => !item.archived)
         .slice(0, 12)
         .map((item) => {
           const date = Number.isFinite(Date.parse(item.updatedAt || '')) ? new Date(item.updatedAt).toLocaleString() : 'saved session';
@@ -2955,7 +2956,7 @@ async function main() {
   const rest = args.slice(1);
   const persistence = { enabled: !noPersist && (persistSession || Boolean(resumeId)), resumeId };
   if (continueSession && !resumeId) {
-    const saved = await listSessions(workspace);
+    const saved = (await listSessions(workspace)).filter((item) => !item.archived);
     persistence.resumeId = saved[0] && saved[0].id || null;
     if (!persistence.resumeId) (headless.enabled ? stderr : stdout).write('No previous session exists for this workspace; a new session will be saved after your next task.\n');
   }

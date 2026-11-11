@@ -1629,8 +1629,10 @@ export async function runBuiltinCommand(name, argument, state) {
       }
     }
     case 'resume': {
-      const saved = await listSessions(root, { env });
-      if (!saved.length) return { output: 'No saved sessions in this workspace.' };
+      const everything = await listSessions(root, { env });
+      const saved = everything.filter((item) => !item.archived);
+      if (!everything.length) return { output: 'No saved sessions in this workspace.' };
+      if (!saved.length && !String(argument || '').trim()) return { output: 'All saved sessions in this workspace are archived. Use /resume ID to continue one, or oasis sessions unarchive ID.' };
       const requested = String(argument || '').trim();
       if (!requested) {
         return { output: 'Saved sessions:\n' + saved.map((item, index) =>
@@ -1640,7 +1642,7 @@ export async function runBuiltinCommand(name, argument, state) {
       const number = Number(requested);
       const selected = Number.isInteger(number) && number >= 1 && number <= saved.length
         ? saved[number - 1]
-        : saved.find((item) => item.id === requested) || saved.find((item) => item.id.startsWith(requested));
+        : everything.find((item) => item.id === requested) || saved.find((item) => item.id.startsWith(requested)) || everything.find((item) => item.id.startsWith(requested));
       if (!selected) return { output: 'No saved session matches "' + requested + '".' };
       return { output: 'Resuming saved session ' + selected.id + '.', resume: selected.id };
     }

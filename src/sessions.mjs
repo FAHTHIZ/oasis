@@ -372,6 +372,10 @@ export async function listSessions(root, options = {}) {
   return sessions.sort((a, b) => String(b.updatedAt).localeCompare(String(a.updatedAt)));
 }
 
+// Listings meant for picking a conversation to continue hide archived ones;
+// an archived session can still be resumed by its ID.
+export const unarchivedSessions = (list) => list.filter((item) => !item.archived);
+
 // Archive or unarchive a saved session in place (atomic rewrite of the file).
 // Archived sessions stay loadable; listings that care (App Server thread/list)
 // hide them unless asked. Returns the updated listing fields.

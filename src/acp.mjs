@@ -456,7 +456,7 @@ export function createAcpServer(options = {}) {
         const cwd = typeof params.cwd === 'string' && params.cwd ? params.cwd : (options.cwd || process.cwd());
         if (!path.isAbsolute(cwd)) throw rpcError(-32602, 'cwd must be an absolute path.');
         const { listSessions } = await load('sessions');
-        const all = await listSessions(cwd, { env }).catch(() => []);
+        const all = (await listSessions(cwd, { env }).catch(() => [])).filter((item) => !item.archived);
         const start = Math.max(0, Number.parseInt(params.cursor || '0', 10) || 0);
         const page = all.slice(start, start + LIST_PAGE);
         return {

@@ -17,6 +17,9 @@ User-facing change history grouped by package version. A version heading does no
 
 - Custom agents are also read from Google Antigravity's folders: `.agents/agents/<name>.md` or `<name>/agent.md` in the project, and `~/.gemini/config/agents/`. Antigravity tool names, `subagent: false`, `commandExecutionPolicy: off`, model tiers and skill paths are mapped (see docs/SUBAGENTS.md).
 
+### Archived sessions everywhere
+- Archiving now means the same thing in every interface. A session archived from a Codex App Server client (`thread/archive`), `oasis sessions archive ID` or the web API (`POST /api/sessions/ID/archive`, `/unarchive`) leaves the web app's session list, `/resume`, the terminal's recent-sessions menu, `oasis --continue`, `oasis sessions list` and ACP `session/list`. `oasis sessions list --archived` and `GET /api/sessions?archived=1` show archived ones, and an archived session still resumes by ID.
+
 ### Agent Client Protocol (editors)
 
 - `oasis acp` now implements the rest of the stable ACP session lifecycle: `session/list`, `session/resume` (reopen without replaying), `session/close`, `session/delete` and `logout`, advertised through `sessionCapabilities`. Editors get a Mode and a Model picker through `session/set_config_option` (only models allowed by `availableModels`), a context meter through `usage_update`, and a session title through `session_info_update`.

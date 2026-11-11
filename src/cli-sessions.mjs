@@ -1,7 +1,7 @@
 import { stdout } from 'node:process';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
-import { listSessions, deleteSession, staleSessions, pruneSessions } from './sessions.mjs';
+import { listSessions, deleteSession, staleSessions, pruneSessions, setSessionArchived, unarchivedSessions } from './sessions.mjs';
 
 // `oasis sessions` and `oasis bg` (background sessions) subcommands.
 export async function backgroundCommand(rest, { approve, interactive } = {}) {
@@ -88,9 +88,21 @@ export async function manageSessions(root, rest, { approve } = {}) {
   const action = rest[0] || 'list';
   const sessions = await listSessions(root);
   if (action === 'list') {
-    stdout.write('Saved sessions for ' + path.resolve(root) + ':\n');
-    if (!sessions.length) { stdout.write('  No saved sessions. Use oasis --continue to save/resume a session.\n'); return; }
-    for (const item of sessions) stdout.write('  ' + item.id + '  ' + item.updatedAt + '  ' + item.messages + ' messages  ' + (item.model || 'unknown model') + '\n');
+    const archivedOnly = rest.includes('--archived');
+    const shown = archivedOnly ? sessions.filter((item) => item.archived) : unarchivedSessions(sessions);
+    stdout.write((archivedOnly ? 'Archived sessions for ' : 'Saved sessions for ') + path.resolve(root) + ':\n');
+    if (!shown.length) { stdout.write(archivedOnly ? '  No archived sessions.\n' : '  No saved sessions. Use oasis --continue to save/resume a session.\n'); return; }
+    for (const item of shown) stdout.write('  ' + item.id + '  ' + item.updatedAt + '  ' + item.messages + ' messages  ' + (item.model || 'unknown model') + (item.name ? '  ' + item.name : '') + '\n');
+    const hidden = sessions.length - shown.length;
+    if (!archivedOnly && hidden) stdout.write('  (' + hidden + ' archived; oasis sessions list --archived shows them)\n');
+    return;
+  }
+  if (action === 'archive' || action === 'unarchive') {
+    const id = rest[1];
+    if (!id) throw new Error('Usage: oasis sessions ' + action + ' SESSION_ID');
+    if (!sessions.some((item) => item.id === id)) throw new Error('No saved session with ID ' + id + ' exists for this workspace.');
+    await setSessionArchived(root, id, action === 'archive');
+    stdout.write((action === 'archive' ? 'Archived ' : 'Unarchived ') + id + '.' + (action === 'archive' ? ' It is hidden from session lists but can still be resumed with oasis --resume ' + id + '.' : '') + '\n');
     return;
   }
   if (action === 'clear' || action === 'delete' || action === 'remove') {
@@ -136,5 +148,5 @@ export async function manageSessions(root, rest, { approve } = {}) {
     stdout.write((json ? JSON.stringify(result, null, 2) : formatSessionSearch(result, query)) + '\n');
     return;
   }
-  throw new Error('Unknown sessions action. Use oasis sessions list, oasis sessions search QUERY, oasis sessions clear SESSION_ID, or oasis sessions prune [--older-than DAYS].');
+  throw new Error('Unknown sessions action. Use oasis sessions list [--archived], oasis sessions archive|unarchive SESSION_ID, oasis sessions search QUERY, oasis sessions clear SESSION_ID, or oasis sessions prune [--older-than DAYS].');
 }
