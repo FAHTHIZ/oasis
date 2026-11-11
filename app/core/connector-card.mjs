@@ -62,8 +62,23 @@ function hostOf(url) {
 export function connectIntent(text) {
   const slash = /^\/connect(?:\s+(.+))?$/i.exec(text.trim());
   if (slash) return { service: (slash[1] || '').trim(), explicit: true };
+  // A pasted MCP server address on its own (https://mcp.example.com/..., .../mcp, .../sse).
+  const bare = /^https:\/\/[^\s/]+(?:\/\S*)?$/i.exec(text.trim());
+  if (bare) {
+    try {
+      const url = new URL(bare[0]);
+      if (/^mcp\./i.test(url.hostname) || /\/(?:mcp|sse)\/?$/i.test(url.pathname)) return { service: url.href, explicit: true };
+    } catch {}
+  }
   const plain = /^(?:please\s+)?(?:connect|link|hook\s+up|sign\s+in\s+to|log\s+in\s+to)\s+(?:to\s+|with\s+)?(?:my\s+|the\s+)?(.{2,40}?)(?:\s+(?:account|app|workspace|connector|mcp))?\s*[.!]?$/i.exec(text.trim());
   return plain ? { service: plain[1].trim(), explicit: false } : null;
+}
+
+/** "github, linear and notion" → ['github', 'linear', 'notion']; one name → [name]. */
+export function splitServices(service) {
+  const value = String(service || '').trim();
+  if (/^https?:\/\//i.test(value)) return [value];
+  return value.split(/\s*(?:,|&|\+|\band\b)\s*/i).map((part) => part.trim()).filter(Boolean);
 }
 
 const SOURCE_LABEL = { catalog: 'Verified', registry: 'MCP Registry', url: 'Custom' };
