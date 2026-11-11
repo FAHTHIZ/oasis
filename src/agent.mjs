@@ -1139,7 +1139,10 @@ const MALFORMED_CALL_NUDGE = '<system-reminder>\nYour last tool call could not b
 async function requestCompletionWithStreamRestarts(session, options = {}) {
   for (let restart = 0; ; restart++) {
     try {
-      return await requestCompletionTraced(session, options);
+      const reply = await requestCompletionTraced(session, options);
+      // PreModelSwitch reports what re-sending this conversation would cost.
+      if (reply && reply.usage) session.lastMainUsage = { inputTokens: Number(reply.usage.inputTokens) || 0, outputTokens: Number(reply.usage.outputTokens) || 0, at: Date.now() };
+      return reply;
     } catch (error) {
       // A provider that reported overload mid-stream gets one more, slower try.
       const overloaded = Number(error && error.status) >= 500;
