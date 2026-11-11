@@ -46,7 +46,20 @@ export const CONNECTOR_CATALOG = Object.freeze([
   { id: 'granola', name: 'Granola', url: 'https://mcp.granola.ai/mcp', auth: 'oauth', aliases: [], description: 'Meeting notes and transcripts.', docs: 'https://docs.granola.ai/help-center/sharing/integrations/mcp' },
   { id: 'deepwiki', name: 'DeepWiki', url: 'https://mcp.deepwiki.com/mcp', auth: 'none', aliases: ['deep wiki'], description: 'Ask questions about any public GitHub repository.', docs: 'https://docs.devin.ai/work-with-devin/deepwiki-mcp' },
   { id: 'exa', name: 'Exa', url: 'https://mcp.exa.ai/mcp', auth: 'none', aliases: ['exa search'], description: 'Web and code search.', docs: 'https://exa.ai/docs/get-started/exa-mcp' },
-  { id: 'paypal', name: 'PayPal', url: 'https://mcp.paypal.com/mcp', auth: 'oauth', aliases: [], description: 'Invoices, orders, disputes and transactions.', docs: 'https://developer.paypal.com/ai-tools/mcp-server' }
+  { id: 'paypal', name: 'PayPal', url: 'https://mcp.paypal.com/mcp', auth: 'oauth', aliases: [], description: 'Invoices, orders, disputes and transactions.', docs: 'https://developer.paypal.com/ai-tools/mcp-server' },
+  { id: 'posthog', name: 'PostHog', url: 'https://mcp.posthog.com/mcp', auth: 'oauth', aliases: [], description: 'Product analytics, feature flags, experiments and errors.', docs: 'https://posthog.com/docs/model-context-protocol' },
+  { id: 'netlify', name: 'Netlify', url: 'https://netlify-mcp.netlify.app/mcp', auth: 'oauth', aliases: [], description: 'Sites, deploys, environment variables and forms.', docs: 'https://docs.netlify.com/build/build-with-ai/agent-setup-guides/agent-setup-overview/' },
+  { id: 'prisma', name: 'Prisma', url: 'https://mcp.prisma.io/mcp', auth: 'oauth', aliases: [], description: 'Prisma Postgres databases, backups and schema changes.', docs: 'https://www.prisma.io/docs/ai/tools/mcp-server' },
+  { id: 'semgrep', name: 'Semgrep', url: 'https://mcp.semgrep.ai/mcp', auth: 'oauth', aliases: [], description: 'Security scans and findings for your code.', docs: 'https://docs.semgrep.dev/mcp/overview' },
+  { id: 'jam', name: 'Jam', url: 'https://mcp.jam.dev/mcp', auth: 'oauth', aliases: [], description: 'Bug reports with console logs, network requests and replays.', docs: 'https://jam.dev/docs/jam-mcp' },
+  { id: 'wix', name: 'Wix', url: 'https://mcp.wix.com/mcp', auth: 'oauth', aliases: [], description: 'Wix sites, stores, bookings and content.', docs: 'https://www.wix.com/studio/developers/mcp-server' },
+  { id: 'supermemory', name: 'Supermemory', url: 'https://mcp.supermemory.ai/mcp', auth: 'oauth', aliases: [], description: 'Long-term memory shared across your AI tools.', docs: 'https://supermemory.ai/docs/supermemory-mcp/mcp' },
+  { id: 'apify', name: 'Apify', url: 'https://mcp.apify.com', auth: 'oauth', aliases: [], description: 'Thousands of ready-made web data tools (Actors).', docs: 'https://docs.apify.com/platform/integrations/mcp' },
+  { id: 'tavily', name: 'Tavily', url: 'https://mcp.tavily.com/mcp', auth: 'oauth', aliases: [], description: 'Web search and page extraction built for agents.', docs: 'https://docs.tavily.com/documentation/mcp' },
+  { id: 'close', name: 'Close', url: 'https://mcp.close.com/mcp', auth: 'oauth', aliases: [], description: 'CRM leads, contacts, opportunities and activities.', docs: 'https://developer.close.com/mcp/' },
+  { id: 'attio', name: 'Attio', url: 'https://mcp.attio.com/mcp', auth: 'oauth', aliases: [], description: 'CRM records, lists, notes and tasks.', docs: 'https://docs.attio.com/mcp/overview' },
+  { id: 'todoist', name: 'Todoist', url: 'https://ai.todoist.net/mcp', auth: 'oauth', aliases: [], description: 'Tasks, projects and due dates.', docs: 'https://www.todoist.com/help/todoist/todoist-and-ai/connect-todoist-to-an-ai-assistant-xMSzFfHng' },
+  { id: 'context7', name: 'Context7', url: 'https://mcp.context7.com/mcp', auth: 'none', aliases: [], description: 'Up-to-date library and framework docs for coding.', docs: 'https://context7.com/docs/installation' }
 ]);
 
 export const CONNECT_SERVICE_TOOL_DEFINITION = { type: 'function', function: {
