@@ -183,6 +183,7 @@ function helpText() {
     '  oasis insights [DAYS]          Write an HTML report about your recent sessions',
     '  oasis --bg "TASK"              Run a task in a background session; oasis bg list|logs|attach|stop|rm ID',
     '  oasis --bg --exec "CMD"        Run a shell command as a background job',
+    '  oasis schedule add WHEN TASK  Durable routines on a schedule (cron, every 2h, in 30m); oasis schedule daemon runs them',
     '  oasis attach|logs|stop|rm|respawn ID|NAME   Manage background sessions (respawn --all restarts every running one)',
     '  oasis auto-mode defaults|config|critique|reset   Inspect or reset the auto mode classifier rules',
     '  oasis purge [PATH] [--dry-run] [-y] [-i] [--all] [--memory]   Delete local Oasis state for a project',
@@ -2608,6 +2609,13 @@ async function main() {
       rawArgs.splice(i, arg.startsWith('--profile=') ? 1 : 2);
       i--;
     }
+  }
+  // Routines parse their own flags (--name, --model, --permission-mode mean routine fields here).
+  if (['schedule', 'cron', 'routines'].includes(rawArgs[0])) {
+    if (process.env.OASIS_PROFILE) { const { activeProfile } = await import('./config.mjs'); activeProfile(process.env); }
+    const { scheduleCommand } = await import('./cli-routines.mjs');
+    await scheduleCommand(rawArgs.slice(1), { env: process.env });
+    return;
   }
   if (subcommandHelp(rawArgs)) return;
   if (process.env.OASIS_PROFILE) { const { activeProfile } = await import('./config.mjs'); activeProfile(process.env); }

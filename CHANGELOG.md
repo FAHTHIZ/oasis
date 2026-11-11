@@ -4,6 +4,14 @@ User-facing change history grouped by package version. A version heading does no
 
 ## Unreleased
 
+### Routines (durable scheduling)
+- `oasis schedule` (aliases `oasis cron`, `oasis routines`) adds routines: prompts or shell commands that run on a schedule whether or not a terminal is open. In-session `/schedule` jobs still end with their session. Schedules are 5-field cron with an optional per-routine time zone (`--tz Asia/Dhaka`), `every 2h`, `in 30m`, or an ISO date. `oasis schedule daemon` runs them; `oasis schedule tick` does one pass for a system crontab.
+- Each fire runs in a fresh background session (the same tools, permission rules and logs as `oasis --bg`), in the routine's `--workdir`, with its own `--model`, `--permission-mode` and `--skill` list. `--script` runs a command with no model at all.
+- Lifecycle follows Hermes Agent's cron: `pause`/`resume` (a slot that came due while paused gets one catch-up run), `run` (an extra fire that leaves the schedule alone), `cancel` (stops only the current run), `remove` (also stops a live run), `--paused` to create a canary, and lookup by name with ambiguous names refused.
+- A missed cron slot runs late only inside a catch-up window (half the period, 2 minutes to 2 hours, or `--grace MINUTES`). A slot that comes due while the previous run is still going is skipped, not stacked. A run interrupted by a reboot or crash pauses the routine for review instead of running again.
+- Results are saved under `<config>/schedules/output/` and can be delivered to `telegram:CHAT_ID`, `slack:CHANNEL`, `discord:CHANNEL_ID` or an HTTPS `webhook:` with secrets redacted. Output that starts with `[SILENT]` is saved but not sent.
+- Before an agent run, missing model credentials, a missing workdir or a missing gateway token mark the routine `blocked_config` once and no model call is made. Scheduled runs cannot create or change routines.
+
 ### Desktop app
 - The desktop app is back, built on the same runtime as `oasis` and `oasis web` (it imports the web server rather than shipping a copy). Releases carry a Windows installer (x64, ARM64), macOS disk images (Apple Silicon, Intel) and Linux AppImage and `.deb` packages (x64, ARM64), all covered by `SHA256SUMS`. See [docs/DESKTOP.md](docs/DESKTOP.md).
 - The model key is encrypted with the operating system's key store (Keychain, DPAPI, libsecret/KWallet). On Linux without a keyring it is kept like the CLI keeps it, in an owner-only `config.json`. A key the CLI already saved moves into the key store on first launch.
