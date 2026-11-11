@@ -35,6 +35,34 @@ export function rankFuzzy(files, query, limit = 30) {
   return scored.slice(0, limit).map((item) => item.file);
 }
 
+// Score one path for a query, higher is better, with the matched character
+// positions (for highlighting). Same tiers as rankFuzzy: file-name prefix,
+// file-name substring, path substring, then an in-order subsequence. Returns
+// null when the query does not match.
+export function fuzzyScore(file, query) {
+  const needle = String(query || '').toLowerCase();
+  if (!needle) return null;
+  const lower = String(file).toLowerCase();
+  const baseStart = lower.lastIndexOf('/', lower.length - 2) + 1;
+  const base = lower.slice(baseStart);
+  const run = (at) => Array.from({ length: needle.length }, (_, i) => at + i);
+  let tier;
+  let indices;
+  if (base.startsWith(needle)) { tier = 3; indices = run(baseStart); }
+  else if (base.includes(needle)) { tier = 2; indices = run(baseStart + base.indexOf(needle)); }
+  else if (lower.includes(needle)) { tier = 1; indices = run(lower.lastIndexOf(needle)); }
+  else {
+    indices = [];
+    let i = 0;
+    for (let at = 0; at < lower.length && i < needle.length; at++) if (lower[at] === needle[i]) { indices.push(at); i += 1; }
+    if (i < needle.length) return null;
+    tier = 0;
+  }
+  const spread = indices[indices.length - 1] - indices[0] + 1 - needle.length;
+  const score = Math.max(1, tier * 10000 + 5000 - Math.min(spread, 2500) - Math.min(lower.length, 2499));
+  return { score, indices };
+}
+
 export function createCompleter({ root, commands = async () => [] }) {
   let fileCache = null;
   let fileCacheAt = 0;
