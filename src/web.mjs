@@ -1493,6 +1493,29 @@ export function createOasisWebServer(options = {}) {
       return;
     }
 
+    // Webhook-triggered routines authenticate with the routine's HMAC secret, not the access key.
+    const hook = /^\/hooks\/routines\/(rt-[a-f0-9]{8})$/.exec(pathname);
+    if (hook && req.method === 'POST') {
+      if (!hostAllowed(req, { allowedHosts, trustProxy })) { json(res, 421, { error: 'Unknown host.' }); return; }
+      const caller = clientAddress(req, { trustProxy });
+      const waitSeconds = authLimiter.blocked(caller);
+      if (waitSeconds) { res.setHeader('retry-after', String(waitSeconds)); json(res, 429, { error: 'Too many bad signatures. Try again in ' + waitSeconds + ' seconds.' }); return; }
+      const chunks = [];
+      let size = 0;
+      for await (const chunk of req) { size += chunk.length; if (size > 256 * 1024) { json(res, 413, { error: 'Webhook body is too large.' }); return; } chunks.push(chunk); }
+      const { receiveWebhook } = await import('./routines.mjs');
+      try {
+        const signature = req.headers['x-hub-signature-256'] || req.headers['x-oasis-signature'] || '';
+        const { queued } = await receiveWebhook(hook[1], Buffer.concat(chunks), { signature: String(signature), env });
+        authLimiter.succeed(caller);
+        json(res, 202, { accepted: true, event: queued });
+      } catch (error) {
+        if (error.statusCode === 401) authLimiter.fail(caller);
+        json(res, error.statusCode || 500, { error: String(error.message || error).slice(0, 300) });
+      }
+      return;
+    }
+
     if (!pathname.startsWith('/api/')) {
       json(res, 404, { error: 'Not found.' });
       return;
@@ -1550,7 +1573,7 @@ export function createOasisWebServer(options = {}) {
     // Routines (`oasis schedule`), for the signed-in owner of this server.
     if (pathname === '/api/routines' && (req.method === 'GET' || req.method === 'POST')) {
       const routines = await import('./routines.mjs');
-      const view = (job) => ({ id: job.id, name: job.name || '', kind: job.kind, prompt: job.prompt, schedule: job.schedule.display, timezone: job.timezone || '', enabled: job.enabled !== false, state: job.activeRun ? 'running' : job.enabled === false ? job.state || 'paused' : 'scheduled', nextRunAt: job.enabled !== false ? job.nextRunAt || null : null, lastStatus: job.lastStatus || '', lastRunAt: job.lastRunAt || null, deliver: job.deliver || 'local', workdir: job.workdir || '', pausedReason: job.pausedReason || '', lastProblem: job.lastProblem || '' });
+      const view = (job) => ({ id: job.id, name: job.name || '', kind: job.kind, prompt: job.prompt, schedule: job.schedule.display, timezone: job.timezone || '', enabled: job.enabled !== false, state: job.activeRun ? 'running' : job.enabled === false ? job.state || 'paused' : 'scheduled', nextRunAt: job.enabled !== false ? job.nextRunAt || null : null, lastStatus: job.lastStatus || '', lastRunAt: job.lastRunAt || null, deliver: job.deliver || 'local', workdir: job.workdir || '', pausedReason: job.pausedReason || '', lastProblem: job.lastProblem || '', ...(job.schedule.type === 'event' ? { webhookPath: '/hooks/routines/' + job.id, webhookSecret: job.webhookSecret, pendingEvents: (job.pendingEvents || []).length } : {}) });
       const overview = async () => ({ routines: (await routines.readJobs(env)).map(view), scheduler: (await routines.runningDaemonPid(env)) ? 'running' : 'stopped' });
       if (req.method === 'GET') { json(res, 200, await overview()); return; }
       const body = await readJsonBody(req);

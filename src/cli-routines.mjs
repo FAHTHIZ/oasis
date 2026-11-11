@@ -20,7 +20,8 @@ Start the scheduler with "oasis schedule daemon" (or run "oasis schedule tick" f
   oasis schedule tick                            one scheduler pass, then exit
   oasis schedule daemon [--interval SECONDS]     keep running and fire routines
 
-SCHEDULE: "0 9 * * 1-5" (cron), "every 2h", "in 30m", or 2026-12-01T09:00
+SCHEDULE: "0 9 * * 1-5" (cron), "every 2h", "in 30m", 2026-12-01T09:00, or
+          "webhook" (runs when oasis web receives a signed POST; see show)
 Options:
   --name NAME              a name you can use instead of the id
   --workdir DIR            run in this project folder (default: home folder)
@@ -76,6 +77,7 @@ export async function scheduleCommand(args = [], { env = process.env, write = (t
     if (!schedule || !prompt) return say(SCHEDULE_USAGE);
     const job = await createJob({ ...fields, schedule, prompt }, { env });
     say('Created ' + describeJob(job));
+    if (job.schedule.type === 'event') say('Webhook: POST /hooks/routines/' + job.id + ' on oasis web, signed with the secret from: oasis schedule show ' + job.id);
     say(job.enabled ? 'It runs while the scheduler is running: oasis schedule daemon' : 'It is paused. Resume it with: oasis schedule resume ' + job.id);
     return job;
   }
@@ -93,6 +95,10 @@ export async function scheduleCommand(args = [], { env = process.env, write = (t
     say(describeJob(job));
     say('  ' + (job.kind === 'script' ? 'command: ' : 'prompt: ') + job.prompt.split('\n')[0].slice(0, 200));
     if (job.workdir) say('  workdir: ' + job.workdir);
+    if (job.schedule.type === 'event') {
+      say('  webhook: POST <oasis web address>/hooks/routines/' + job.id + (job.pendingEvents?.length ? '  (' + job.pendingEvents.length + ' waiting)' : ''));
+      say('  secret:  ' + job.webhookSecret + '  (sign the raw body: X-Hub-Signature-256: sha256=HMAC_SHA256_HEX)');
+    }
     if (job.skills?.length) say('  skills: ' + job.skills.join(', '));
     if (job.pausedReason && job.enabled === false) say('  paused: ' + job.pausedReason);
     if (job.lastProblem) say('  blocked: ' + job.lastProblem);

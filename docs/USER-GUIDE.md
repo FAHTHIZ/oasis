@@ -78,6 +78,8 @@ oasis schedule daemon        # keep this running (or run `oasis schedule tick` f
 
 Each run is a fresh background session (`oasis bg list` shows it) with the routine's folder, model, permission mode and skills. `oasis schedule show NAME` lists recent runs and where their output was saved; `pause`, `resume`, `run`, `cancel`, `edit` and `remove` manage it. A run that starts its answer with `[SILENT]` is saved but not delivered. A routine with no usable model credentials is marked `blocked_config` once and spends no tokens. Background runs never wait for approval: only tools your permission rules allow will run, so pick `--permission-mode` deliberately.
 
+To run a routine when something happens instead of on a clock, use `webhook` as the schedule: `oasis schedule add webhook "Triage the new issue in the payload" --name triage --workdir .`. `oasis schedule show triage` prints the URL path and the secret. Point a GitHub webhook (or anything that signs with HMAC-SHA256) at `https://YOUR-OASIS/hooks/routines/ID` with that secret. Requests must reach `oasis web`, so use `--public-url` with a tunnel or proxy for outside services.
+
 `oasis web` and `oasis gateway` also run routines while they are open (one scheduler per config folder; `OASIS_ROUTINES=off` turns this off), and Settings → Routines in the browser lists and manages them.
 
 You can also ask in a session, for example "check CI every weekday at 9 and send the summary to Telegram". The agent uses its `routine_manage` tool and shows you the exact routine before saving it; you approve every create, edit, resume, extra run or removal, even with `--yes`.
