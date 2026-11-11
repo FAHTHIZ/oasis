@@ -58,6 +58,10 @@ weaknesses. Newest first. Detailed user-facing notes go in the CHANGELOG.
 
 ## 2026-11-11 (Claude Code parity cycle)
 
+### PostModelSwitch on fallback
+
+Fallback switches, both down the chain and back after the cooldown, now run PostModelSwitch with `source: "auto"`. Also fixed a race in `test/model-switch-hooks.test.mjs`, where two switches wrote one record file and the older hook sometimes finished last (it failed about 1 run in 3).
+
 ### SDK query controls
 
 `query()` returns the generator with Agent SDK style control methods. `setModel()` goes through the same model policy and model-switch hooks as `/model` (source `"sdk"`), `setPermissionMode()` changes the live permission policy, and `setMaxThinkingTokens()` holds a thinking budget across turns until it is reset with `null`. Tests: `test/sdk-controls.test.mjs` (5).
