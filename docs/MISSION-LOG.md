@@ -5,6 +5,9 @@ weaknesses. Newest first. Detailed user-facing notes go in the CHANGELOG.
 
 ## 2026-11-11 (IDE-agent interoperability: Cursor, Devin Desktop, Antigravity, OpenHands)
 
+### Skill folders from other agents
+- OASIS read `.agents/skills`, `~/.config/agents/skills` and Claude Code's folders. Added the locations documented by [Cursor](https://cursor.com/docs/context/skills), [Devin Desktop](https://docs.windsurf.com/windsurf/cascade/skills), [Antigravity](https://antigravity.google/docs/skills) and OpenHands, plus Codex's. Home-folder skills use a new `foreign-user` source that remembers its own root, so the existing containment checks for SKILL.md and `references/` still apply. Test: test/foreign-skills.test.mjs (2 tests, including a symlinked skill folder that is skipped); extension, plugin, slash and runtime tests 101 pass, 0 fail.
+
 ### OpenHands microagents
 - OASIS did not read `.openhands/`. Behaviour reimplemented from the MIT-licensed OpenHands software-agent-sdk (`openhands/sdk/skills/skill.py`, `context/agent_context.py`, `skill_knowledge_info.j2`): files without triggers are repo context, `paths:` beats `triggers:`, `inputs:` adds `/name`, keywords match as whole tokens (`(?<![a-z0-9])kw(?![a-z0-9])` on the lowercased message), and each file is added once per conversation inside `<EXTRA_INFO>`. OASIS detects "already sent" from the `Skill location:` line in earlier user messages, so it survives a resumed session. Attached `@file` contents are not searched for keywords. Test: test/openhands-microagents.test.mjs (3 tests, including a real turn against a local fixture server); memory and agent tests 73 pass, 0 fail.
 

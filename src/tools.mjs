@@ -1142,8 +1142,29 @@ function getClaudeUserSkillsDirectory(env = process.env) {
   const home = env.HOME || env.USERPROFILE || os.homedir();
   return path.join(env.CLAUDE_CONFIG_DIR || path.join(home, '.claude'), 'skills');
 }
-const PORTABLE_SKILL_SOURCES = ['portable-workspace', 'global-portable', 'claude-project', 'claude-user'];
-const ABSOLUTE_SKILL_SOURCES = { 'global-portable': getUniversalGlobalSkillsDirectory, 'claude-user': getClaudeUserSkillsDirectory };
+const PORTABLE_SKILL_SOURCES = ['portable-workspace', 'global-portable', 'claude-project', 'claude-user', 'foreign-user'];
+// 'foreign-user' skills live in another agent's home folder; each remembers its own root.
+const ABSOLUTE_SKILL_SOURCES = { 'global-portable': getUniversalGlobalSkillsDirectory, 'claude-user': getClaudeUserSkillsDirectory, 'foreign-user': (env, skill) => (skill && skill.skillsRoot) || '' };
+
+// Skill folders of other agents, read in place (SKILL.md per folder). Project
+// folders are relative to the workspace; home folders are relative to $HOME.
+// Sources: Cursor, Devin Desktop (Windsurf), Antigravity, OpenHands and Codex docs.
+export const FOREIGN_PROJECT_SKILL_DIRS = ['.cursor/skills', '.codex/skills', '.windsurf/skills', '.devin/skills', '.agent/skills', '.openhands/skills'];
+export function foreignUserSkillDirectories(env = process.env) {
+  const home = env.HOME || env.USERPROFILE || os.homedir();
+  const codexHome = env.CODEX_HOME || path.join(home, '.codex');
+  return [
+    ['~/.agents/skills', path.join(home, '.agents', 'skills')],
+    ['~/.cursor/skills', path.join(home, '.cursor', 'skills')],
+    ['$CODEX_HOME/skills', path.join(codexHome, 'skills')],
+    ['~/.config/devin/skills', path.join(env.XDG_CONFIG_HOME || path.join(home, '.config'), 'devin', 'skills')],
+    ['~/.gemini/antigravity/skills', path.join(home, '.gemini', 'antigravity', 'skills')],
+    ['~/.gemini/skills', path.join(home, '.gemini', 'skills')],
+    ['~/.gemini/antigravity-cli/skills', path.join(home, '.gemini', 'antigravity-cli', 'skills')],
+    ['~/.gemini/config/skills', path.join(home, '.gemini', 'config', 'skills')],
+    ['~/.openhands/skills', path.join(home, '.openhands', 'skills')]
+  ];
+}
 
 export function getUniversalGlobalSkillsDirectory(env = process.env) {
   const home = env.HOME || env.USERPROFILE || os.homedir();
@@ -1154,7 +1175,7 @@ export function getUniversalGlobalSkillsDirectory(env = process.env) {
 export async function listAvailableSkills(root, options = {}) {
   const env = options.env || process.env;
   const byName = new Map();
-  async function scan(directory, source, relativePrefix = '') {
+  async function scan(directory, source, relativePrefix = '', origin = '') {
     let entries;
     try { entries = await readdir(directory, { withFileTypes: true }); } catch { return; }
     for (const entry of entries.filter((item) => item.isDirectory() && !item.isSymbolicLink()).slice(0, 80)) {
@@ -1179,7 +1200,9 @@ export async function listAvailableSkills(root, options = {}) {
           relativePath: localSource ? path.posix.join(relativePrefix, entry.name, 'SKILL.md') : entry.name,
           relativeSkillDirectory: localSource ? path.posix.join(relativePrefix, entry.name) : undefined,
           absolutePath: ABSOLUTE_SKILL_SOURCES[source] ? filePath : undefined,
-          absoluteSkillDirectory: ABSOLUTE_SKILL_SOURCES[source] ? path.join(directory, entry.name) : undefined
+          absoluteSkillDirectory: ABSOLUTE_SKILL_SOURCES[source] ? path.join(directory, entry.name) : undefined,
+          ...(origin ? { origin } : {}),
+          ...(source === 'foreign-user' ? { skillsRoot: directory } : {})
         };
         byName.set(meta.name.toLowerCase(), skill);
       } catch { /* Ignore incomplete or unsafe skill files. */ }
@@ -1245,6 +1268,16 @@ export async function listAvailableSkills(root, options = {}) {
       } catch { /* Ignore malformed plugin skills. */ }
     }
   } catch { /* Plugins are optional. */ }
+  // Other agents' skill folders; OASIS's own and Claude Code locations below win on a clash.
+  if (env.OASIS_OTHER_AGENT_RULES !== '0') {
+    const seenDirs = new Set([path.resolve(getUniversalGlobalSkillsDirectory(env)), path.resolve(getClaudeUserSkillsDirectory(env))]);
+    for (const [label, dir] of foreignUserSkillDirectories(env).reverse()) {
+      if (seenDirs.has(path.resolve(dir))) continue;
+      seenDirs.add(path.resolve(dir));
+      await scan(dir, 'foreign-user', '', label);
+    }
+    for (const dir of FOREIGN_PROJECT_SKILL_DIRS) await scan(path.join(root, ...dir.split('/')), 'portable-workspace', dir, dir);
+  }
   await scan(getUniversalGlobalSkillsDirectory(env), 'global-portable');
   await scan(path.join(root, '.agents', 'skills'), 'portable-workspace', '.agents/skills');
   // Claude Code skill locations; personal skills win over project ones, as in Claude Code.
@@ -1285,7 +1318,7 @@ export async function loadSkillText(root, rawName, options = {}) {
     if (!inside(rootReal, targetReal)) throw new Error('Project skill resolves outside the workspace.');
     content = (await readFile(targetReal, 'utf8')).replace(/\$\{CLAUDE_SKILL_DIR\}/g, path.dirname(targetReal));
   } else if (ABSOLUTE_SKILL_SOURCES[skill.source]) {
-    const globalSkillsRoot = path.resolve(ABSOLUTE_SKILL_SOURCES[skill.source](options.env || process.env));
+    const globalSkillsRoot = path.resolve(ABSOLUTE_SKILL_SOURCES[skill.source](options.env || process.env, skill));
     const rootReal = await realpath(globalSkillsRoot);
     const target = path.resolve(skill.absolutePath || '');
     // Compare lexical paths with lexical paths first; macOS /var paths may realpath to /private/var.
@@ -1341,7 +1374,7 @@ export async function loadSkillResource(root, rawName, rawRelativePath, options 
   if (!skill) throw new Error('No installed external skill named "' + name + '" was found.');
   if (PORTABLE_SKILL_SOURCES.includes(skill.source)) {
     const safetyRoot = ABSOLUTE_SKILL_SOURCES[skill.source]
-      ? path.resolve(ABSOLUTE_SKILL_SOURCES[skill.source](options.env || process.env))
+      ? path.resolve(ABSOLUTE_SKILL_SOURCES[skill.source](options.env || process.env, skill))
       : workspaceRoot;
     const skillDirectory = ABSOLUTE_SKILL_SOURCES[skill.source]
       ? path.resolve(skill.absoluteSkillDirectory || '')
@@ -1409,7 +1442,7 @@ export async function loadSkillDescriptions(root, options = {}) {
   const skills = (await listAvailableSkills(root, options)).filter((item) => item.modelInvocable !== false);
   if (!skills.length) return '';
   // Built-in skills carry no tag (it would repeat on every line of every request).
-  const lines = skills.map((item) => '- ' + item.name + (item.source === 'built-in' ? '' : ' [' + (['global-extension', 'project-extension', 'portable-workspace', 'global-portable'].includes(item.source) ? 'EXTERNAL UNTRUSTED PROMPT' : item.source) + ']') + ': ' + skillCatalogueLine(item.description));
+  const lines = skills.map((item) => '- ' + item.name + (item.source === 'built-in' ? '' : ' [' + (['global-extension', 'project-extension', 'portable-workspace', 'global-portable', 'foreign-user'].includes(item.source) ? 'EXTERNAL UNTRUSTED PROMPT' : item.source) + ']') + ': ' + skillCatalogueLine(item.description));
   return fitSkillCatalogue(lines, options.maxChars ?? SKILL_CATALOGUE_CHARS);
 }
 
