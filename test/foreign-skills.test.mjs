@@ -26,6 +26,8 @@ async function fixture(t) {
   await write(path.join(home, '.config/devin/skills/devin-global/SKILL.md'), skill('devin-global', 'DEVIN-GLOBAL'));
   await write(path.join(home, '.agents/skills/agents-global/SKILL.md'), skill('agents-global', 'AGENTS-GLOBAL'));
   await write(path.join(home, '.openhands/skills/oh-global/SKILL.md'), skill('oh-global', 'OPENHANDS-GLOBAL'));
+  await write(path.join(home, '.gemini/config/plugins/agplug/skills/ag-plugin/SKILL.md'), skill('ag-plugin', 'AG-PLUGIN'));
+  await write(path.join(home, '.gemini/antigravity-cli/plugins/cliplug/skills/agcli-plugin/SKILL.md'), skill('agcli-plugin', 'AGCLI-PLUGIN'));
   await write(path.join(base, 'outside/SKILL.md'), skill('escaped', 'ESCAPED'));
   await mkdir(path.join(home, '.cursor/skills'), { recursive: true });
   await symlink(path.join(base, 'outside'), path.join(home, '.cursor/skills/escaped'));
@@ -37,7 +39,7 @@ test('skills from Cursor, Devin Desktop, Windsurf, Antigravity, OpenHands and Co
   const { root, env } = await fixture(t);
   const skills = await listAvailableSkills(root, { env });
   const byName = Object.fromEntries(skills.map((item) => [item.name, item]));
-  for (const name of ['cursor-one', 'devin-one', 'wind-one', 'oh-one', 'codex-one', 'ag-one', 'devin-global', 'agents-global', 'oh-global']) assert.ok(byName[name], name);
+  for (const name of ['cursor-one', 'devin-one', 'wind-one', 'oh-one', 'codex-one', 'ag-one', 'devin-global', 'agents-global', 'oh-global', 'ag-plugin', 'agcli-plugin']) assert.ok(byName[name], name);
   assert.ok(!byName.escaped, 'symlinked skill folders are skipped');
   assert.equal(byName['devin-one'].origin, '.devin/skills');
   assert.equal(byName['ag-one'].origin, '~/.gemini/config/skills');
