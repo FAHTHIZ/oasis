@@ -31,6 +31,17 @@ export const SESSION_TOOL_DEFINITIONS = [
   fn('cron_create', 'Schedule a prompt to run in this session on a standard 5-field cron schedule (minute hour day-of-month month day-of-week, local time; names like MON and @daily also work). Jobs end when the session ends.',
     { cron: { type: 'string' }, prompt: { type: 'string' }, recurring: { type: 'boolean', description: 'Default true. false runs once at the next match.' } }, ['cron', 'prompt']),
   fn('cron_list', 'List scheduled prompts in this session.', {}),
+  fn('routine_manage', 'Manage durable routines: prompts or shell commands that run on a schedule in fresh background sessions even when no terminal is open (unlike cron_create, which ends with this session). Actions: list, show, create, edit, pause, resume, run (one extra run now), cancel (stop the current run), remove. create/edit/resume/run/remove always ask the user first. Schedules: 5-field cron, "every 2h", "in 30m" or an ISO date. Runs only fire while `oasis schedule daemon` is running; say so when you create one.',
+    { action: { type: 'string', enum: ['list', 'show', 'create', 'edit', 'pause', 'resume', 'run', 'cancel', 'remove'] },
+      id: { type: 'string', description: 'Routine id or name (all actions except list and create).' },
+      schedule: { type: 'string' }, prompt: { type: 'string', description: 'Task for the agent, or the shell command when kind is script.' },
+      name: { type: 'string' }, kind: { type: 'string', enum: ['agent', 'script'] },
+      workdir: { type: 'string', description: 'Absolute project folder. Defaults to this workspace on create.' },
+      skills: { type: 'array', items: { type: 'string' } },
+      deliver: { type: 'string', description: 'local (default), telegram:CHAT_ID, slack:CHANNEL, discord:CHANNEL_ID or webhook:https://...' },
+      timezone: { type: 'string' }, grace_minutes: { type: 'integer', minimum: 0, maximum: 1440 },
+      permission_mode: { type: 'string', enum: ['default', 'acceptEdits', 'plan', 'auto', 'dontAsk'] },
+      paused: { type: 'boolean' }, reason: { type: 'string' } }, ['action']),
   fn('cron_delete', 'Cancel a scheduled prompt by id.', { id: { type: 'string' } }, ['id']),
   fn('enter_worktree', 'Create an isolated git worktree on a new branch and switch this session into it (files, commands and git now act there; the conversation continues). Pass path to switch into an existing worktree of this repository instead. Use exit_worktree to return.',
     { name: { type: 'string', description: 'Short label for the new worktree/branch.' }, path: { type: 'string', description: 'Existing worktree to enter instead of creating one.' } }),
@@ -289,6 +300,7 @@ export async function runSessionTool(session, name, args, options = {}) {
     case 'cron_create': return createCronJob(session, args);
     case 'cron_list': return listCronJobs(session);
     case 'cron_delete': return deleteCronJob(session, args.id);
+    case 'routine_manage': return manageRoutine(session, args, options);
     default:
       if (SHARED_TASK_TOOL_NAMES.has(name)) return runSharedTaskTool(session, name, args);
       throw new Error('Unknown session tool ' + name);
@@ -437,7 +449,7 @@ export const RARE_BUILTIN_TOOLS = Object.freeze([
   'install_extension', 'configure_provider', 'install_external_skill',
   'configure_mcp_server', 'install_plugin', 'add_extension', 'worktree_inspect', 'worktree_merge',
   'terminal_read', 'terminal_list', 'terminal_input', 'terminal_resize', 'terminal_interrupt', 'terminal_stop',
-  'cron_create', 'cron_list', 'cron_delete', 'memory_delete', 'run_specialist_review',
+  'cron_create', 'cron_list', 'cron_delete', 'routine_manage', 'memory_delete', 'run_specialist_review',
 ]);
 
 // The lean core: what nearly every coding task uses. Everything else in
@@ -459,7 +471,7 @@ export const DEFERRED_TOOL_GROUPS = Object.freeze({
   'Code intelligence': ['repo_map', 'lsp', 'diagnostics', 'search_files', 'notebook_edit', 'execute_code', 'security_scan', 'report_findings', 'run_specialist_review'],
   'Files': ['delete_file'],
   'Background work': ['command_output', 'kill_command', 'agent_status', 'neuron_network', 'agent_events', 'agent_stop', 'send_message', 'list_background', 'monitor', 'monitor_command', 'notify',
-    'terminal_read', 'terminal_list', 'terminal_input', 'terminal_resize', 'terminal_interrupt', 'terminal_stop', 'cron_create', 'cron_list', 'cron_delete'],
+    'terminal_read', 'terminal_list', 'terminal_input', 'terminal_resize', 'terminal_interrupt', 'terminal_stop', 'cron_create', 'cron_list', 'cron_delete', 'routine_manage'],
   'Task board and teams': ['task_create', 'task_list', 'task_get', 'task_update', 'task_claim', 'task_release', 'task_renew', 'task_checkpoint', 'dispatch_ready_tasks',
     'team_create', 'team_send_message', 'team_status', 'team_shutdown', 'workflow'],
   'Memory, skills and sessions': ['memory_save', 'memory_search', 'memory_read', 'memory_verify', 'memory_delete', 'list_skills', 'read_skill_resource', 'skill_propose', 'session_search', 'enter_plan_mode'],
@@ -519,4 +531,39 @@ export function loadDeferredTool(session, name) {
   const guidance = toolGuidanceFor(session, [name]);
   if (guidance) session.pendingToolGuidance = (session.pendingToolGuidance ? session.pendingToolGuidance + '\n\n' : '') + guidance;
   return true;
+}
+
+// routine_manage: the agent-facing side of `oasis schedule` (src/routines.mjs).
+// Anything that authorizes future unattended runs asks every time, even with --yes,
+// and is refused where nobody can answer (subagents, headless runs without a prompt).
+export async function manageRoutine(session, args = {}, options = {}) {
+  const routines = await import('./routines.mjs');
+  const env = options.env || process.env;
+  const action = String(args.action || '');
+  const brief = (job) => ({ id: job.id, name: job.name || null, kind: job.kind, schedule: job.schedule.display, timezone: job.timezone || null, enabled: job.enabled !== false, state: job.activeRun ? 'running' : job.state, next_run_at: job.enabled !== false ? job.nextRunAt : null, last_status: job.lastStatus || null, deliver: job.deliver, workdir: job.workdir || null });
+  if (action === 'list') return { routines: (await routines.readJobs(env)).map(brief) };
+  if (action === 'show') { const { job, runs } = await routines.listRuns(args.id, { env, limit: 10 }); return { routine: { ...brief(job), prompt: job.prompt, skills: job.skills || [], paused_reason: job.pausedReason || null, last_problem: job.lastProblem || null }, runs }; }
+  if (action === 'pause') return { paused: brief(await routines.pauseJob(args.id, args.reason || 'Paused by the agent.', { env })) };
+  if (action === 'cancel') { const { job, cancelled } = await routines.cancelRun(args.id, { env }); return { id: job.id, cancelled }; }
+  const fields = {};
+  for (const [from, to] of [['schedule', 'schedule'], ['prompt', 'prompt'], ['name', 'name'], ['kind', 'kind'], ['workdir', 'workdir'], ['skills', 'skills'], ['deliver', 'deliver'], ['timezone', 'timezone'], ['grace_minutes', 'graceMinutes'], ['permission_mode', 'permissionMode'], ['paused', 'paused']]) {
+    if (args[from] !== undefined) fields[to] = args[from];
+  }
+  if (action === 'create' && !fields.workdir) fields.workdir = session.root;
+  const describe = () => {
+    if (action === 'create') return 'Create a routine that runs ' + (fields.kind === 'script' ? 'the shell command ' : 'an agent task ') + JSON.stringify(String(fields.prompt || '').slice(0, 300)) + ' on schedule "' + fields.schedule + '"' + (fields.timezone ? ' (' + fields.timezone + ')' : '') + ' in ' + fields.workdir + ', permission mode ' + (fields.permissionMode || 'your default rules') + ', delivering to ' + (fields.deliver || 'local') + '? It runs unattended while oasis schedule daemon is running.';
+    if (action === 'edit') return 'Change routine ' + args.id + ': ' + JSON.stringify(fields) + '?';
+    return { resume: 'Resume routine ' + args.id + ' so it runs on its schedule again?', run: 'Run routine ' + args.id + ' once now (an extra unattended run)?', remove: 'Delete routine ' + args.id + ' (and stop a run in progress)?' }[action];
+  };
+  const question = describe();
+  if (!question) throw new Error('Unknown routine_manage action ' + action + '.');
+  const approve = typeof options.approval === 'function' ? options.approval : null;
+  if (!approve) throw new Error('routine_manage ' + action + ' needs the user\'s approval and nobody can answer here. Ask the user to run: oasis schedule ' + action + (args.id ? ' ' + args.id : '') + '.');
+  if (!(await approve(question, true))) return { approved: false, message: 'The user declined; nothing changed.' };
+  if (action === 'create') { const job = await routines.createJob(fields, { env }); return { created: brief(job), note: 'Routines fire only while `oasis schedule daemon` is running (or `oasis schedule tick` runs from cron).' }; }
+  if (action === 'edit') return { updated: brief(await routines.editJob(args.id, fields, { env })) };
+  if (action === 'resume') return { resumed: brief(await routines.resumeJob(args.id, { env })) };
+  if (action === 'run') return { triggered: brief(await routines.triggerJob(args.id, { env })), note: 'It starts on the next scheduler tick.' };
+  const { stopBackgroundSession } = await import('./background-sessions.mjs');
+  return { removed: brief(await routines.removeJob(args.id, { env, stop: stopBackgroundSession })) };
 }
