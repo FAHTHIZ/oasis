@@ -356,3 +356,36 @@ test('ACP elicitation: ask_user_question becomes an elicitation/create form when
   assert.equal(elicitations.length, 2);
   assert.match(toolResult(requests[3]), /did not answer/);
 });
+
+test('ACP $/cancel_request for a running prompt stops the turn with stopReason cancelled', async (t) => {
+  const root = await tmp(t);
+  const home = await tmp(t, 'oasis-acp-home-');
+  let release;
+  const held = new Promise((resolve) => { release = resolve; });
+  let reached;
+  const modelReached = new Promise((resolve) => { reached = resolve; });
+  const { config } = await scriptedModel(t, [async () => { reached(); await held; return { content: 'too late' }; }]);
+  t.after(() => release());
+  const child = spawn(process.execPath, [CLI, 'acp'], {
+    cwd: root,
+    env: { ...process.env, HOME: home, OASIS_CONFIG_DIR: path.join(home, 'cfg'), OASIS_PROTOCOL: 'openai-compatible', OASIS_BASE_URL: config.baseURL, OASIS_MODEL: 'fixture', OASIS_API_KEY: '', OASIS_SANDBOX: '0' },
+    stdio: ['pipe', 'pipe', 'pipe']
+  });
+  t.after(() => child.kill());
+  let stderr = '';
+  child.stderr.on('data', (chunk) => { stderr += chunk; });
+  const client = editorClient(child);
+  await client.call('initialize', { protocolVersion: 1, clientCapabilities: {} });
+  const created = await client.call('session/new', { cwd: root, mcpServers: [] });
+  const sessionId = created.result.sessionId;
+  const running = client.call('session/prompt', { sessionId, prompt: [{ type: 'text', text: 'wait' }] });
+  await modelReached;
+  // editorClient numbers requests from 1: initialize=1, session/new=2, session/prompt=3.
+  child.stdin.write(JSON.stringify({ jsonrpc: '2.0', method: '$/cancel_request', params: { requestId: 3 } }) + '\n');
+  const done = await running;
+  assert.equal(done.result && done.result.stopReason, 'cancelled', stderr + JSON.stringify(done));
+  // The session is free for the next prompt.
+  release();
+  const again = await client.call('session/prompt', { sessionId, prompt: [{ type: 'text', text: 'again' }] });
+  assert.ok(again.result, stderr + JSON.stringify(again));
+});
