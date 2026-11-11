@@ -618,7 +618,10 @@ async function runShell(root, args, context, flavor = 'sh') {
   }
   const requestedSandbox = context.sandbox && context.sandbox.enabled ? context.sandbox : null;
   assertSandboxAvailable(requestedSandbox);
-  const sandbox = requestedSandbox;
+  // sandbox.excludedCommands: a call made only of excluded commands runs outside the OS
+  // sandbox and goes through the normal approval flow instead of sandbox auto-approval.
+  const sandbox = requestedSandbox && flavor === 'sh' && requestedSandbox.backend === 'os' && (requestedSandbox.excludedCommands || []).length
+    && (await import('./sandbox-exclusions.mjs')).shellLineExcluded(command, requestedSandbox.excludedCommands) ? null : requestedSandbox;
   const commitCall = gitSafety.gitCommitInvocation(command);
   {
     const { rawBranchRuleBlock } = await import('./git-tools.mjs');

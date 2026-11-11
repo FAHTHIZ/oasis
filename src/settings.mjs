@@ -447,13 +447,16 @@ export async function loadSettings(root, options = {}) {
       // sandbox.filesystem.{allowWrite,denyWrite,denyRead}: path lists merged across scopes.
       const filesystem = settings.sandbox.filesystem && typeof settings.sandbox.filesystem === 'object' && !Array.isArray(settings.sandbox.filesystem) ? settings.sandbox.filesystem : null;
       if (filesystem) {
-        for (const key of ['allowWrite', 'denyWrite', 'denyRead']) {
+        for (const key of ['allowWrite', 'denyWrite', 'denyRead', 'allowRead']) {
           if (!Array.isArray(filesystem[key])) continue;
           const resolved = filesystem[key].slice(0, 200).map((entry) => resolveSandboxSettingPath(entry, scope, path.resolve(root), env)).filter(Boolean);
           result.sandbox[key] = [...new Set([...(result.sandbox[key] || []), ...resolved])].slice(0, 500);
+          if (key === 'allowRead' && (scope === 'project' || scope === 'local')) result.sandbox.allowReadRepo = [...new Set([...(result.sandbox.allowReadRepo || []), ...resolved])].slice(0, 500);
         }
       }
       if (typeof settings.sandbox.autoAllowCommands === 'boolean') result.sandbox.autoAllowCommands = settings.sandbox.autoAllowCommands;
+      // sandbox.excludedCommands: Bash(...) rule contents run outside the sandbox; merged across trusted files.
+      if (Array.isArray(settings.sandbox.excludedCommands)) result.sandbox.excludedCommands = [...new Set([...(result.sandbox.excludedCommands || []), ...settings.sandbox.excludedCommands.filter((item) => typeof item === 'string' && item.trim() && item.length <= 500 && !/[\r\n\0]/.test(item)).map((item) => item.trim())])].slice(0, 200);
       if (typeof settings.sandbox.maskSensitivePaths === 'boolean') result.sandbox.maskSensitivePaths = settings.sandbox.maskSensitivePaths;
       if (typeof settings.sandbox.autoAllowShellCommands === 'boolean') result.sandbox.autoAllowShellCommands = settings.sandbox.autoAllowShellCommands;
       if (typeof settings.sandbox.writableCaches === 'boolean') result.sandbox.writableCaches = settings.sandbox.writableCaches;
