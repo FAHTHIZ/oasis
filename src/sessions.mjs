@@ -265,6 +265,7 @@ export async function saveSession(session, options = {}) {
       model: session.config && session.config.model || ''
     },
     ...(session.sessionName ? { name: String(session.sessionName).slice(0, 120) } : {}),
+    ...(session.archived === true ? { archived: true } : {}),
     messages,
     pendingSteering: Array.isArray(session.pendingSteering)
       ? session.pendingSteering.filter((note) => typeof note === 'string').map((note) => safePersistedText(note.trim(), 20000)).filter(Boolean).slice(-20)
@@ -328,6 +329,7 @@ export async function loadSession(root, id, options = {}) {
     updatedAt: String(payload.updatedAt || ''),
     provider: payload.provider || {},
     name: typeof payload.name === 'string' ? payload.name.slice(0, 120) : '',
+    archived: payload.archived === true,
     messages: validateMessages(payload.messages),
     pendingSteering: Array.isArray(payload.pendingSteering)
       ? payload.pendingSteering.filter((note) => typeof note === 'string').map((note) => safePersistedText(note.trim(), 20000)).filter(Boolean).slice(-20)
@@ -363,11 +365,26 @@ export async function listSessions(root, options = {}) {
       if (data && data.schemaVersion === 1 && path.resolve(data.workspaceRoot || '') === path.resolve(root)) {
         const firstUser = Array.isArray(data.messages) ? data.messages.find((item) => item && item.role === 'user' && typeof item.content === 'string') : null;
         const title = firstUser ? firstUser.content.replace(/<[a-z-]+>[\s\S]*?<\/[a-z-]+>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 80) : '';
-        sessions.push({ id: data.id, updatedAt: data.updatedAt, model: data.provider && data.provider.model || '', messages: Array.isArray(data.messages) ? data.messages.length : 0, title: typeof data.name === 'string' && data.name ? data.name : title, ...(typeof data.name === 'string' && data.name ? { name: data.name } : {}) });
+        sessions.push({ id: data.id, updatedAt: data.updatedAt, model: data.provider && data.provider.model || '', messages: Array.isArray(data.messages) ? data.messages.length : 0, title: typeof data.name === 'string' && data.name ? data.name : title, ...(typeof data.name === 'string' && data.name ? { name: data.name } : {}), ...(data.archived === true ? { archived: true } : {}) });
       }
     } catch { /* Ignore corrupt session files in listings. */ }
   }
   return sessions.sort((a, b) => String(b.updatedAt).localeCompare(String(a.updatedAt)));
+}
+
+// Archive or unarchive a saved session in place (atomic rewrite of the file).
+// Archived sessions stay loadable; listings that care (App Server thread/list)
+// hide them unless asked. Returns the updated listing fields.
+export async function setSessionArchived(root, id, archived, options = {}) {
+  const env = options.env || process.env;
+  const target = sessionPath(root, id, env);
+  const payload = JSON.parse(await readBoundedRegularFile(target, MAX_SESSION_BYTES, { label: 'Saved session', tooLargeMessage: 'Stored session is too large.' }));
+  if (!payload || payload.schemaVersion !== 1 || payload.id !== id || path.resolve(payload.workspaceRoot || '') !== path.resolve(root)) throw new Error('That saved session does not belong to this workspace or uses an unsupported format.');
+  if (archived) payload.archived = true; else delete payload.archived;
+  const temp = target + '.' + randomUUID() + '.tmp';
+  await writeFile(temp, JSON.stringify(payload, null, 2) + '\n', { encoding: 'utf8', mode: 0o600, flag: 'wx' });
+  try { await rename(temp, target); } catch (error) { try { await unlink(temp); } catch {} throw error; }
+  return { id, archived: Boolean(archived), updatedAt: String(payload.updatedAt || ''), name: typeof payload.name === 'string' ? payload.name : '' };
 }
 
 export async function deleteSession(root, id, options = {}) {
