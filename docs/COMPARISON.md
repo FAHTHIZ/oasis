@@ -13,7 +13,7 @@ Last reviewed November 2026. Sources are linked in each section. Where a page di
 | Terminal UI | Yes | Yes | Yes | Yes | Yes | Yes |
 | Web interface | Yes, self-hosted and remote-ready (HTTPS, access key, reconnects to running tasks) | Cloud sessions | Codex Web (cloud) | No | Yes, local (`opencode web`) | No |
 | Desktop app | Yes (Windows, macOS, Linux; unsigned, same runtime as `oasis web`) | Yes | Yes | No | Beta | Yes |
-| Unattended scheduled tasks | Yes, on your own machine or server: cron, intervals, one-offs and signed webhooks, run by `oasis schedule daemon`, `oasis web` or `oasis gateway`; the agent can create them with approval | Yes: cloud tasks (schedule, API, GitHub events) and local Desktop tasks | Yes: Codex app automations | Not found in the docs reviewed | Not found in the docs reviewed | Not found in the docs reviewed |
+| Unattended scheduled tasks | Yes, on your own machine or server: cron, RFC 5545 RRULEs, intervals, one-offs and signed webhooks, run by `oasis schedule daemon`, `oasis web` or `oasis gateway`; the agent can create them with approval | Yes: cloud tasks (schedule, API, GitHub events) and local Desktop tasks | Yes: Codex app automations | Not found in the docs reviewed | Not found in the docs reviewed | Not found in the docs reviewed |
 | MCP | Yes, including MCP Tasks | Yes | Yes | Yes | Yes | Yes |
 | Subagents | Yes: parallel, background, resumable, teams, worktrees | Yes | Agent command center | Yes: built-in and custom, parallel | `general` subagent | No |
 | Claude Code plugins | Yes, from any marketplace, with a one-click installer in the web app; Codex plugins and Gemini CLI extensions are converted on install | Yes | No (own plugin format) | No (own extensions) | No (own plugins) | No |
