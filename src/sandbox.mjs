@@ -291,9 +291,15 @@ export function resolveSandbox(settings = {}, root, force = false) {
   const allowWrite = existing(settings.sandbox.allowWrite).filter((item) => item.type === 'directory' || item.type === 'file').map((item) => item.path);
   const readOnlyPaths = existing(settings.sandbox.denyWrite);
   const deniedReads = existing(settings.sandbox.denyRead);
+  // allowRead re-opens paths inside a denyRead folder (OASIS's built-in secret masks stay).
+  // Repository entries are left out while blockReadsOutsideWorkingDirectories is on.
+  const blockReads = Boolean(settings.permissions && settings.permissions.blockReadsOutsideWorkingDirectories);
+  const allowReadList = (Array.isArray(settings.sandbox.allowRead) ? settings.sandbox.allowRead : []).filter((item) => !(blockReads && (settings.sandbox.allowReadRepo || []).includes(item)));
+  const reopened = existing(allowReadList).filter((item) => !deniedReads.some((denied) => denied.path === item.path) && deniedReads.some((denied) => denied.type === 'directory' && denied.path !== item.path && pathContains(denied.path, item.path)));
   const writable = [root, ...additionalWritable, ...allowWrite.filter((dir) => !pathContains(root, dir)), ...caches.filter((dir) => !pathContains(root, dir))];
   const masked = settings.sandbox.maskSensitivePaths === false ? [] : collectSensitivePaths();
-  for (const item of deniedReads) if (!masked.some((entry) => pathContains(entry.path, item.path))) masked.push(item);
+  // A denyRead entry under a re-opened allowRead path stays masked, so keep it even when a broader mask covers it.
+  for (const item of deniedReads) if (!masked.some((entry) => pathContains(entry.path, item.path)) || reopened.some((open) => open.path !== item.path && pathContains(open.path, item.path))) masked.push(item);
   return {
     enabled: true,
     available: probe.available,
@@ -306,6 +312,8 @@ export function resolveSandbox(settings = {}, root, force = false) {
     maskSensitivePaths: settings.sandbox.maskSensitivePaths !== false,
     maskedPaths: masked,
     readOnlyPaths,
+    reopenedPaths: reopened,
+    excludedCommands: Array.isArray(settings.sandbox.excludedCommands) ? settings.sandbox.excludedCommands.slice(0, 200) : [],
     failIfUnavailable: settings.sandbox.failIfUnavailable === true,
     writable: backend === 'os' ? writable : [root, ...additionalWritable, ...allowWrite.filter((dir) => !pathContains(root, dir))],
     protectedRoots: settings.sandbox.protectProjectConfig === false ? [] : [root, ...additionalWritable],
@@ -354,6 +362,9 @@ export function macProfile(sandbox) {
     '(allow default)',
     '(deny file-write*)',
     ...((sandbox.maskedPaths || []).map((item) => '(deny file-read* (' + (item.type === 'directory' ? 'subpath ' : 'literal ') + seatbeltString(item.path) + '))')),
+    // allowRead: later rules win, so re-allow the path and then deny again what lies inside it.
+    ...((sandbox.reopenedPaths || []).flatMap((item) => ['(allow file-read* (' + (item.type === 'directory' ? 'subpath ' : 'literal ') + seatbeltString(item.path) + '))',
+      ...(sandbox.maskedPaths || []).filter((inner) => inner.path !== item.path && pathContains(item.path, inner.path)).map((inner) => '(deny file-read* (' + (inner.type === 'directory' ? 'subpath ' : 'literal ') + seatbeltString(inner.path) + '))')])),
     '(allow file-write* ' + writable.map((dir) => '(subpath ' + seatbeltString(dir) + ')').join(' ') + ' (literal "/dev/null") (literal "/dev/stdout") (literal "/dev/stderr") (regex #"^/dev/tty"))',
     ...protectedSeatbeltRules(sandbox.protectedRoots || []),
     ...((sandbox.readOnlyPaths || []).map((item) => '(deny file-write* (' + (item.type === 'directory' ? 'subpath ' : 'literal ') + seatbeltString(item.path) + '))')),
@@ -402,6 +413,15 @@ export function wrapCommand(command, args, sandbox, cwd, options = {}) {
     for (const item of sandbox.maskedPaths || []) {
       if (item.type === 'directory') wrapped.push('--tmpfs', item.path);
       else if (item.type === 'file') wrapped.push('--ro-bind', '/dev/null', item.path);
+    }
+    // allowRead: mount the re-opened path back, then mask again what is denied inside it.
+    for (const item of sandbox.reopenedPaths || []) {
+      wrapped.push((sandbox.writable || []).some((dir) => pathContains(dir, item.path)) ? '--bind' : '--ro-bind', item.path, item.path);
+      for (const inner of sandbox.maskedPaths || []) {
+        if (inner.path === item.path || !pathContains(item.path, inner.path)) continue;
+        if (inner.type === 'directory') wrapped.push('--tmpfs', inner.path);
+        else if (inner.type === 'file') wrapped.push('--ro-bind', '/dev/null', inner.path);
+      }
     }
     const guarded = protectedWritePaths(sandbox.protectedRoots || []);
     for (const item of guarded.existing) wrapped.push('--ro-bind', item.path, item.path);

@@ -37,7 +37,7 @@ Claude Code is the reference point for agent behaviour, and OASIS reads its conf
 | Nested delegation | Up to 3 layers, `CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH` | Same default and variable; read-only agents stay leaves |
 | Hooks | Full lifecycle hook set | Same event names, including `SubagentStart`, `SubagentStop`, `PreModelSwitch`, `PostModelSwitch` and `DirectoryAdded` |
 | Instructions, skills, commands, plugins, MCP | `CLAUDE.md`, `.claude/*`, `.mcp.json` | Reads all of these without conversion |
-| Sandbox settings | `sandbox.network.*`, `sandbox.filesystem.*`, `excludedCommands` | Domain lists, `allowWrite`, `denyWrite`, `denyRead`, `failIfUnavailable` honoured; no `excludedCommands` or `allowRead` yet |
+| Sandbox settings | `sandbox.network.*`, `sandbox.filesystem.*`, `excludedCommands` | Domain lists, `allowWrite`, `denyWrite`, `denyRead`, `allowRead`, `excludedCommands`, `failIfUnavailable` honoured; no `credentials` or admin-required repository locks |
 | Git context and attribution | `includeGitInstructions`, `attribution` | Honoured; OASIS adds no attribution unless `attribution` sets it |
 | Instruction exclusions | `claudeMdExcludes` | Honoured, for instruction files, rules and nested CLAUDE.md |
 | Model policy | `availableModels`, `deniedModels`, `availableModelsMatch`, `modelOverrides` | Honoured |

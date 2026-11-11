@@ -658,8 +658,11 @@ export async function runWorkspaceCommand(root, command, args = [], options = {}
   if (options.signal && options.signal.aborted) return { command, args, approved: false, cancelled: true, message: 'Task was cancelled before approval or execution.' };
   const timeoutSeconds = Math.max(5, Math.min(600, Number.parseInt(options.timeoutSeconds, 10) || 120));
   const approval = options.approval;
-  const sandbox = options.sandbox && options.sandbox.enabled ? options.sandbox : null;
-  assertSandboxAvailable(sandbox);
+  const requestedSandbox = options.sandbox && options.sandbox.enabled ? options.sandbox : null;
+  assertSandboxAvailable(requestedSandbox);
+  // sandbox.excludedCommands (see sandbox-exclusions.mjs): run outside the sandbox, with approval.
+  const sandbox = requestedSandbox && requestedSandbox.backend === 'os' && (requestedSandbox.excludedCommands || []).length
+    && (await import('./sandbox-exclusions.mjs')).argvExcluded(command, args, requestedSandbox.excludedCommands) ? null : requestedSandbox;
   // An explicit allow rule is the user's own decision. Otherwise high-risk commands
   // (inline code, wrappers, find -exec, ...) always need an interactive answer.
   const configRisk = options.bypassPermissions || protectedEditsAllowed(options.env || process.env) ? null

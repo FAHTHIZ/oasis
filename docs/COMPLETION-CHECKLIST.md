@@ -93,7 +93,8 @@ Gaps found by checking the [hooks reference](https://code.claude.com/docs/en/hoo
 | `plansDirectory` (plan files from `exit_plan_mode`) | done | `test/plans-directory.test.mjs` (3 tests); trusted files only, and no plan file is written when unset |
 | `worktree.symlinkDirectories`, `worktree.sparsePaths`, `worktree.baseRef` | done | `test/worktree-claude-settings.test.mjs` (4 tests, real git); OASIS keeps `head` as the default base |
 | `skillOverrides`, `disableBundledSkills` / `CLAUDE_CODE_DISABLE_BUNDLED_SKILLS`, `disableSkillShellExecution` | done | `test/skill-overrides-settings.test.mjs` (3 tests); OASIS skills have no inline shell, so the shell switch covers command files; ```` ```! ```` blocks are not supported |
-| `sandbox.excludedCommands`, `filesystem.allowRead`, `credentials`, unix-socket/proxy keys | open | `allowUnsandboxedCommands` needs nothing: OASIS has no unsandboxed retry |
+| `sandbox.excludedCommands`, `sandbox.filesystem.allowRead` | done | `test/sandbox-excluded-allowread.test.mjs` (4 tests, real bubblewrap); OS backend only, not containers or SSH |
+| `sandbox.credentials`, unix-socket/proxy keys, `allowManagedReadPathsOnly`, admin-required repository locks | open | `allowUnsandboxedCommands` needs nothing: OASIS has no unsandboxed retry |
 
 ## 2e. Terminal-agent interoperability (Gemini CLI, OpenCode, Goose, Aider, Roo/Kilo/Cline)
 

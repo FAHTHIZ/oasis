@@ -30,6 +30,7 @@ export function srtConfig(sandbox) {
     network: { allowedDomains: sandbox.allowedDomains || [], deniedDomains: sandbox.deniedDomains || [] },
     filesystem: {
       denyRead: (sandbox.maskedPaths || []).map((item) => item.path),
+      ...((sandbox.reopenedPaths || []).length ? { allowRead: sandbox.reopenedPaths.map((item) => item.path) } : {}),
       allowWrite: sandbox.writable || [],
       denyWrite: [...guarded.existing, ...(sandbox.readOnlyPaths || [])].map((item) => item.path)
     },
