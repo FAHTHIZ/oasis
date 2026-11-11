@@ -5,7 +5,7 @@
 // line; the "jsonrpc" field may be omitted, as in Codex.
 //
 // Implemented methods: initialize (+ initialized notification), thread/start,
-// thread/resume, thread/read, thread/list, thread/name/set, turn/start,
+// thread/resume, thread/fork, thread/read, thread/list, thread/name/set, turn/start,
 // turn/steer, turn/interrupt, model/list.
 // Notifications sent: thread/started, thread/status/changed, thread/name/updated,
 // turn/started, turn/completed, turn/plan/updated, item/started, item/completed,
@@ -188,7 +188,7 @@ export function createCodexAppServer(options = {}) {
     const session = entry && entry.session;
     const threadId = id || session.sessionId;
     return {
-      id: threadId, sessionId: threadId, forkedFromId: null, parentThreadId: null, preview, ephemeral: false, section: null, sectionEnteredAt: null, projectId: null,
+      id: threadId, sessionId: threadId, forkedFromId: (entry && entry.forkedFromId) || null, parentThreadId: null, preview, ephemeral: false, section: null, sectionEnteredAt: null, projectId: null,
       historyMode: 'standard', modelProvider: (entry && entry.config && entry.config.protocol) || 'oasis', model: model || (entry && entry.config && entry.config.model) || null, reasoningEffort: null,
       createdAt: createdAt || (entry && entry.createdAt) || nowSeconds(), updatedAt: updatedAt || nowSeconds(), recencyAt: null,
       status: threadStatus(entry), path: null, cwd: root || entry.root, cliVersion: options.version || '', originator: 'oasis', source: 'appServer',
@@ -202,7 +202,7 @@ export function createCodexAppServer(options = {}) {
     return first ? first.content.replace(/\s+/g, ' ').trim().slice(0, 120) : '';
   }
 
-  async function openThread(params, restoreId = null) {
+  async function openThread(params, restoreId = null, { fork = null } = {}) {
     const root = await workspace(params.cwd);
     const { createSession } = await load('agent');
     const { loadConfig } = await load('config');
@@ -213,6 +213,7 @@ export function createCodexAppServer(options = {}) {
     if (restoreId) {
       const { loadSession } = await load('sessions');
       restore = await loadSession(root, restoreId, { env }).catch((error) => { throw rpcError(-32002, 'Thread not found: ' + error.message); });
+      if (fork) restore = { ...restore, id: null, name: '', messages: fork.trim(restore.messages), checkpointsDir: undefined };
     }
     const permissionMode = permissionModeFor(params, options.permissionMode || null);
     const session = await createSession({ root, config, restore, env, permissionMode });
@@ -221,7 +222,7 @@ export function createCodexAppServer(options = {}) {
     if (!session.sessionId) {
       try { const { saveSession } = await load('sessions'); session.sessionId = (await saveSession(session, { env })).id; } catch { session.sessionId = randomUUID(); }
     }
-    const entry = { session, root, config, turn: null, controller: null, waiting: false, createdAt: nowSeconds() };
+    const entry = { session, root, config, turn: null, controller: null, waiting: false, createdAt: nowSeconds(), forkedFromId: fork ? restoreId : null };
     threads.set(session.sessionId, entry);
     return entry;
   }
@@ -415,6 +416,25 @@ export function createCodexAppServer(options = {}) {
         const loaded = threads.get(params.threadId);
         const entry = loaded || await openThread(params, params.threadId);
         return threadResponse(entry, historyTurns(entry.session.messages));
+      }
+      case 'thread/fork': {
+        if (typeof params.threadId !== 'string' || !params.threadId) throw rpcError(-32602, 'threadId is required.');
+        const source = threads.get(params.threadId);
+        if (source && source.turn) throw rpcError(-32000, 'Wait for the running turn to finish (or interrupt it) before forking.');
+        if (source) { try { const { saveSession } = await load('sessions'); await saveSession(source.session, { env }); } catch {} }
+        // lastTurnId uses the turn ids from thread/resume and thread/read ("turn-N"): keep turns 1..N.
+        const match = typeof params.lastTurnId === 'string' ? /^turn-(\d+)$/.exec(params.lastTurnId) : null;
+        if (params.lastTurnId && !match) throw rpcError(-32602, 'lastTurnId must be a turn id from thread/read or thread/resume (turn-N).');
+        const keep = match ? Number(match[1]) : Infinity;
+        const trim = (messages = []) => {
+          let users = 0;
+          const index = messages.findIndex((message) => message && message.role === 'user' && typeof message.content === 'string' && message.content && ++users > keep);
+          return index < 0 ? messages : messages.slice(0, index);
+        };
+        const entry = await openThread({ ...params, cwd: params.cwd || (source && source.root) }, params.threadId, { fork: { trim } });
+        const response = threadResponse(entry, historyTurns(entry.session.messages));
+        notify('thread/started', { thread: response.thread });
+        return response;
       }
       case 'thread/read': {
         if (typeof params.threadId !== 'string' || !params.threadId) throw rpcError(-32602, 'threadId is required.');
