@@ -186,3 +186,39 @@ test('protocol helpers map Codex inputs, commands and policies', async () => {
   assert.equal(out[2].error.code, -32002);
   await server.close();
 });
+
+test('thread/fork copies history into a new thread, optionally up to lastTurnId', async (t) => {
+  const root = await tmp(t);
+  const home = await tmp(t, 'oasis-appsrv-home-');
+  const { config } = await scriptedModel(t, [(payload) => {
+    const lastUser = [...payload.messages].reverse().find((message) => message.role === 'user');
+    return { content: 'reply to ' + (typeof lastUser.content === 'string' ? lastUser.content : JSON.stringify(lastUser.content)).slice(-20) };
+  }]);
+  const { child, stderr } = spawnServer(t, root, home, config);
+  const client = codexClient(child);
+  await client.call('initialize', { clientInfo: { name: 't' } });
+  const { result } = await client.call('thread/start', { cwd: root });
+  const threadId = result.thread.id;
+  for (const text of ['first question', 'second question']) {
+    const before = client.notes.filter((note) => note.method === 'turn/completed').length;
+    await client.call('turn/start', { threadId, input: [{ type: 'text', text }] });
+    await client.until(() => client.notes.filter((note) => note.method === 'turn/completed').length > before);
+  }
+  const full = await client.call('thread/fork', { threadId });
+  assert.ok(full.result, stderr() + JSON.stringify(full));
+  assert.notEqual(full.result.thread.id, threadId);
+  assert.equal(full.result.thread.forkedFromId, threadId);
+  assert.equal(full.result.thread.turns.length, 2);
+  const partial = await client.call('thread/fork', { threadId, lastTurnId: 'turn-1' });
+  assert.equal(partial.result.thread.turns.length, 1);
+  assert.match(JSON.stringify(partial.result.thread.turns), /first question/);
+  assert.doesNotMatch(JSON.stringify(partial.result.thread.turns), /second question/);
+  // The fork is its own saved thread; the original keeps both turns.
+  const forkId = partial.result.thread.id;
+  await client.call('turn/start', { threadId: forkId, input: [{ type: 'text', text: 'fork only' }] });
+  await client.until((note) => note.method === 'turn/completed' && note.params.threadId === forkId);
+  const original = await client.call('thread/read', { threadId, includeTurns: true });
+  assert.equal(original.result.thread.turns.length, 2);
+  assert.doesNotMatch(JSON.stringify(original.result.thread.turns), /fork only/);
+  assert.equal((await client.call('thread/fork', { threadId, lastTurnId: 'abc' })).error.code, -32602);
+});
