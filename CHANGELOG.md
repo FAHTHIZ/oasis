@@ -4,6 +4,7 @@ User-facing change history grouped by package version. A version heading does no
 
 ## Unreleased
 
+- Security: Bash allow rules no longer look past variable assignments that change what a command runs. `Bash(ls:*)` used to auto-approve `LD_PRELOAD=x.so ls`, `PATH=. ls` and `PATH=.; ls`, and `Bash(npm test:*)` approved `NODE_OPTIONS=--require=./x.js npm test`. Only well-known harmless variables (`NODE_ENV`, `CI`, `LC_*`, `TZ`, `NO_COLOR`, `FORCE_COLOR`, `RUST_LOG`, ...) are skipped; otherwise the command asks unless a rule names the assignment. Deny rules also see through `chroot NEWROOT CMD` and `script -c CMD`.
 - Security: commands that run without a prompt as read-only now ask when grouped short flags write a file (`sort -uo FILE`, `tree -fo FILE`, `file -bC`, `date -us`) or `ag --pager` would run a program, and `yarn`/`pnpm`/`cargo`/`rustc` (including `--version`) ask in a project with `.yarnrc(.yml)`, a pnpmfile or a `rust-toolchain` file, which can make them run the repository's own code.
 - Keyless web search keeps working when DuckDuckGo refuses the query (its HTTP 202 bot check, common on servers and VPSes): OASIS asks Bing instead, unwraps its redirect links and says where the results came from. The first search asks once for both sites; `OASIS_SEARCH_KEYLESS_FALLBACK=0` keeps it on DuckDuckGo only.
 - Terminal: web searches and page fetches leave a result line ("6 results · open-meteo.com, github.com", "Read Geocoding API · 23 KB", "No results · rate limited") instead of nothing.
