@@ -1,4 +1,6 @@
 #!/usr/bin/env node
+import stringWidth from 'string-width';
+import stripAnsi from 'strip-ansi';
 import { notifyAttention } from './attention.mjs';
 import { createTerminalProgress } from './terminal-progress.mjs';
 import { playSound, configureSounds, completedTodoCount, DONE_SOUND_AFTER_MS } from './sounds.mjs';
@@ -577,6 +579,19 @@ async function askApproval(prompt, forceInteractive, meta) {
   } finally { relay.cancel(); }
 }
 
+// Terminal rows a block of text occupies once wrapped at `columns`.
+export function approvalRows(text, columns) {
+  const width = Number(columns) > 0 ? Number(columns) : 80;
+  return String(text).split('\n').reduce((rows, line) => rows + Math.max(1, Math.ceil(stringWidth(stripAnsi(line)) / width)), 0);
+}
+
+// The one line an answered approval leaves behind.
+export function approvalSummary(chosen, meta = {}) {
+  if (!chosen) return '  ⎿ Denied';
+  if (chosen.value === 'always') return '  ⎿ Allowed for this session' + (meta && meta.suggestion ? ': ' + meta.suggestion : '');
+  return chosen.value === true ? '  ⎿ Allowed once' : '  ⎿ Denied';
+}
+
 async function askApprovalLocal(prompt, forceInteractive, meta, signal = null) {
   const approval = formatApprovalMessage(prompt, meta || {});
   if (process.env.OASIS_PERMISSION_PROMPTS === 'none') { stdout.write('\n[permissions] Denied without asking (--permission-prompts none): ' + approval.message.split('\n').filter(Boolean)[0] + '\n'); return false; }
@@ -595,7 +610,10 @@ async function askApprovalLocal(prompt, forceInteractive, meta, signal = null) {
       stdout.write('Do you want to proceed?\n');
       const paused = turnKeys;
       if (paused) paused.suspend();
-      try { return await selectDialog({ input: stdin, output: stdout, options, color: colorEnabled(stdout), signal }); }
+      // Rows printed above the options: the blank line, the message (wrapped
+      // at the terminal width) and the question.
+      const collapse = { rows: approvalRows('\n' + approval.message + '\nDo you want to proceed?', stdout.columns), summary: (chosen) => approvalSummary(chosen, meta) };
+      try { return await selectDialog({ input: stdin, output: stdout, options, color: colorEnabled(stdout), signal, collapse }); }
       finally { if (paused && turnKeys === paused) paused.resume(); }
     }
     const answer = (await askLine(offerAlways ? 'Allow once [y] / [N]o / [a]lways allow ' + meta.suggestion + ' this session: ' : 'Allow once? [y/N] ', signal)).trim().toLowerCase();

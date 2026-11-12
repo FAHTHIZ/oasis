@@ -84,3 +84,33 @@ test('rewind pickers offer turns and what to restore', async () => {
   const modes = await pickerFor('rewind-mode');
   assert.deepEqual(modes.options.map((option) => option.value), ['', 'chat', 'code', null]);
 });
+
+test('an answered approval collapses to one summary line when it fits on screen', async () => {
+  const run = async (rows, key = '2') => {
+    const t = tty();
+    t.output.rows = rows;
+    const done = selectDialog({ input: t.input, output: t.output, options: OPTIONS, env: envWith(), color: false, collapse: { rows: 4, summary: (chosen) => '  ⎿ Picked ' + chosen.label } });
+    await tick(); t.input.write(key);
+    return { value: await done, rendered: t.rendered() };
+  };
+  const fits = await run(30);
+  assert.equal(fits.value, 'always');
+  // Up over 3 option rows and the 4 question rows, then clear below.
+  assert.ok(fits.rendered.includes('\x1b[7A\x1b[J  ⎿ Picked Always'), JSON.stringify(fits.rendered.slice(-80)));
+  assert.doesNotMatch(fits.rendered, /→ Always/);
+  // Too tall for the screen: keep the old one-line answer instead of a broken redraw.
+  const tall = await run(6);
+  assert.match(tall.rendered, /→ Always/);
+  assert.doesNotMatch(tall.rendered, /Picked/);
+});
+
+test('approval summaries and wrapped row counts', async () => {
+  const { approvalRows, approvalSummary } = await import('../src/cli.mjs');
+  assert.equal(approvalRows('\nOASIS wants to run this command:\n  npm test\nDo you want to proceed?', 80), 4);
+  assert.equal(approvalRows('x'.repeat(81), 80), 2);
+  assert.equal(approvalRows('\x1b[1mbold\x1b[22m', 80), 1);
+  assert.equal(approvalSummary({ value: true }), '  ⎿ Allowed once');
+  assert.equal(approvalSummary({ value: 'always' }, { suggestion: 'run_command(npm test:*)' }), '  ⎿ Allowed for this session: run_command(npm test:*)');
+  assert.equal(approvalSummary({ value: false }), '  ⎿ Denied');
+  assert.equal(approvalSummary(undefined), '  ⎿ Denied');
+});
