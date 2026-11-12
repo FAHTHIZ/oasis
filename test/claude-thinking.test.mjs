@@ -36,10 +36,10 @@ async function captureAnthropicBody(model, sessionExtra = {}, options = {}) {
 
 test('Claude 4.7+ gets adaptive thinking with effort instead of a rejected budget_tokens', async () => {
   const body = await captureAnthropicBody('claude-opus-5-5', { thinkingBudget: 31999, effortLevel: '' });
-  assert.deepEqual(body.thinking, { type: 'adaptive' });
+  assert.deepEqual(body.thinking, { type: 'adaptive', display: 'summarized' });
   assert.deepEqual(body.output_config, { effort: 'xhigh' });
   const legacy = await captureAnthropicBody('claude-sonnet-4-5', { thinkingBudget: 10000 });
-  assert.deepEqual(legacy.thinking, { type: 'enabled', budget_tokens: 10000 });
+  assert.deepEqual(legacy.thinking, { type: 'enabled', budget_tokens: 10000, display: 'summarized' });
   assert.equal(legacy.output_config, undefined);
   const plain = await captureAnthropicBody('claude-opus-5-5', {});
   assert.equal(plain.thinking, undefined, 'no thinking field keeps the model default');

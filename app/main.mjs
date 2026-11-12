@@ -7,7 +7,7 @@ import { SUBAGENT_STATUS_TEXT } from './core/subagents.mjs';
 import { createConnectorCard, connectIntent, splitServices, brandMark } from './core/connector-card.mjs';
 import { createSoundPlayer } from './core/sound.mjs';
 import { ambientField } from './core/ambient.mjs';
-import { stepOutcome, stepRan, stepLabel, summarizeArgs, toolKind, groupTitle, groupStats, formatDuration, thinkingLabel, splitTextToolCall, elapsedSince, describeInput, buildTimeline } from './core/timeline.mjs';
+import { stepOutcome, stepRan, stepLabel, summarizeArgs, toolKind, groupTitle, groupStats, formatDuration, thinkingLabel, thoughtLabel, splitTextToolCall, elapsedSince, describeInput, buildTimeline } from './core/timeline.mjs';
 import { IndexedDBStore, Workspace, lineDiff } from './core/workspace.mjs';
 import { Agent, textOf } from './core/agent.mjs';
 import { FrameSandbox } from './core/sandbox.mjs';
@@ -1477,7 +1477,7 @@ function clearCursor() { for (const body of document.querySelectorAll('#transcri
 function startStep() {
   clearCursor();
   // Drop the previous step if it ended with nothing to show.
-  if (currentTurn && !currentTurn.text.trim() && !currentTurn.entry.tools.length && !currentTurn.entry.subagents) {
+  if (currentTurn && !currentTurn.text.trim() && !currentTurn.entry.tools.length && !currentTurn.entry.subagents && !currentTurn.entry.reasoning) {
     if (currentTurn.wrap) currentTurn.wrap.remove();
     const index = display.indexOf(currentTurn.entry);
     if (index >= 0) display.splice(index, 1);
@@ -1514,31 +1514,105 @@ function ensureGroup() {
   }
   return activeGroup;
 }
+// The live "Thinking · 12s" block. It shows whenever the model is working
+// and nothing else is on screen. When the provider streams a reasoning
+// summary it appears inside, live; when the model starts writing or running
+// a step the block settles into a collapsed "Thought for 12s" (kept with the
+// step, so a reload shows it again) or, with no reasoning text, goes away.
 function removeThinking() {
-  for (const t of document.querySelectorAll('#transcript .thinking')) { clearInterval(t._clock); t.remove(); }
+  for (const t of document.querySelectorAll('#transcript .thinking.live')) settleThinking(t);
+}
+function settleThinking(block) {
+  clearInterval(block._clock);
+  const text = String(block._text || '').trim();
+  if (!text) { block.remove(); return; }
+  const ms = Date.now() - block._started;
+  if (block._entry) block._entry.reasoning = { text, ms };
+  block.replaceWith(thoughtBlock(text, ms));
+}
+function thinkingShell(open) {
+  const block = document.createElement('div');
+  block.className = 'thinking';
+  const head = document.createElement('button');
+  head.type = 'button';
+  head.className = 'thinking-head';
+  head.innerHTML = '<span class="thinking-orb" aria-hidden="true"></span><span class="thinking-label"></span><span class="thinking-chev" aria-hidden="true"></span>';
+  const body = document.createElement('div');
+  body.className = 'thinking-text';
+  body.hidden = !open;
+  head.setAttribute('aria-expanded', String(open));
+  head.addEventListener('click', () => {
+    const next = body.hidden;
+    body.hidden = !next;
+    head.setAttribute('aria-expanded', String(next));
+    block.dataset.userToggled = '1';
+  });
+  block.append(head, body);
+  return block;
+}
+function thoughtBlock(text, ms) {
+  const block = thinkingShell(false);
+  block.classList.add('thought');
+  block.querySelector('.thinking-label').textContent = thoughtLabel(ms);
+  block.querySelector('.thinking-text').innerHTML = renderMarkdown(text);
+  return block;
+}
+function liveThinking() {
+  return document.querySelector('#transcript .thinking.live');
 }
 function showThinking() {
-  removeThinking();
-  if (activeGroup && activeGroup.live && $('transcript').lastElementChild === activeGroup.el) {
-    activeGroup.thinking = true;
-    updateGroupHead(activeGroup);
-    return;
+  // Already thinking: keep the clock running instead of starting it over
+  // (a new step took over, so its entry now owns the reasoning).
+  const live = liveThinking();
+  if (live) {
+    if (currentTurn && live._entry !== currentTurn.entry) {
+      if (live._entry && live._entry.reasoning) { currentTurn.entry.reasoning = live._entry.reasoning; delete live._entry.reasoning; }
+      live._entry = currentTurn.entry;
+    }
+    return live;
   }
-  const dots = document.createElement('div');
-  dots.className = 'thinking';
-  dots.setAttribute('role', 'status');
-  dots.innerHTML = '<span class="thinking-orb" aria-hidden="true"></span><span class="thinking-label">Thinking</span>';
+  if (activeGroup && activeGroup.thinking) { activeGroup.thinking = false; updateGroupHead(activeGroup); }
+  const block = thinkingShell(false);
+  block.classList.add('live');
+  block.setAttribute('role', 'status');
+  block.setAttribute('aria-label', 'Thinking');
+  block.querySelector('.thinking-head').disabled = true;
   const started = Date.now();
-  const label = dots.querySelector('.thinking-label');
+  block._started = started;
+  block._text = '';
+  block._entry = currentTurn ? currentTurn.entry : null;
+  const label = block.querySelector('.thinking-label');
   // Only the visible text changes; the status role is not re-announced every second.
   label.setAttribute('aria-hidden', 'true');
-  dots.setAttribute('aria-label', 'Thinking');
-  dots._clock = setInterval(() => {
-    if (!dots.isConnected) { clearInterval(dots._clock); return; }
-    label.textContent = thinkingLabel(Date.now() - started);
+  label.textContent = thinkingLabel(0);
+  block._clock = setInterval(() => {
+    if (!block.isConnected) { clearInterval(block._clock); return; }
+    const next = thinkingLabel(Date.now() - started);
+    if (label.textContent !== next) label.textContent = next;
   }, 1000);
-  $('transcript').appendChild(dots);
+  $('transcript').appendChild(block);
   $('welcome').hidden = true;
+  return block;
+}
+// A reasoning summary streaming in: it fills the live block, opened unless
+// the person closed it. Rendered at most once a frame.
+function addReasoning(delta, reset) {
+  if (!currentTurn) startStep();
+  const block = showThinking();
+  block._text = (reset ? '' : block._text) + String(delta || '');
+  if (block._entry) block._entry.reasoning = { text: block._text, ms: 0 };
+  const head = block.querySelector('.thinking-head');
+  head.disabled = false;
+  const body = block.querySelector('.thinking-text');
+  if (!block.dataset.userToggled && body.hidden) { body.hidden = false; head.setAttribute('aria-expanded', 'true'); }
+  if (block._frame) return;
+  block._frame = requestAnimationFrame(() => {
+    block._frame = 0;
+    body.innerHTML = renderMarkdown(block._text);
+    body.scrollTop = body.scrollHeight;
+    body.classList.toggle('overflow', body.scrollHeight > body.clientHeight + 2);
+    follow.pin();
+  });
 }
 // Steps created by a live tool_start on this page (see the tool_start case).
 const liveStartedSteps = new WeakSet();
@@ -1569,7 +1643,7 @@ function endTurn(reason) {
   settleGroup(activeGroup);
   activeGroup = null;
   if (currentTurn && currentTurn.wrap) messageSource.set(currentTurn.wrap, currentTurn.text);
-  if (currentTurn && !currentTurn.text.trim() && !currentTurn.entry.tools.length && !currentTurn.entry.subagents) {
+  if (currentTurn && !currentTurn.text.trim() && !currentTurn.entry.tools.length && !currentTurn.entry.subagents && !currentTurn.entry.reasoning) {
     const index = display.indexOf(currentTurn.entry);
     if (index >= 0) display.splice(index, 1);
   }
@@ -1584,7 +1658,7 @@ function breakTurn() {
   settleGroup(activeGroup);
   activeGroup = null;
   if (currentTurn && currentTurn.wrap) messageSource.set(currentTurn.wrap, currentTurn.text);
-  if (currentTurn && !currentTurn.text.trim() && !currentTurn.entry.tools.length && !currentTurn.entry.subagents) {
+  if (currentTurn && !currentTurn.text.trim() && !currentTurn.entry.tools.length && !currentTurn.entry.subagents && !currentTurn.entry.reasoning) {
     const index = display.indexOf(currentTurn.entry);
     if (index >= 0) display.splice(index, 1);
     if (currentTurn.wrap) currentTurn.wrap.remove();
@@ -1755,6 +1829,9 @@ function handleEvent(event) {
       startStep();
       showThinking();
       scrollDown();
+      break;
+    case 'reasoning':
+      addReasoning(event.delta, event.reset);
       break;
     case 'delta':
       if (!currentTurn) startStep();
@@ -1968,6 +2045,10 @@ function renderSavedDisplay(entries) {
       continue;
     }
     const entry = block.entry;
+    if (block.type === 'reasoning') {
+      $('transcript').appendChild(thoughtBlock(String(entry.reasoning.text), Number(entry.reasoning.ms)));
+      continue;
+    }
     // A tool call the model wrote as JSON text ran as the steps that follow, so show
     // only the prose before it (chats saved before the live view dropped it).
     let content = entry.content;

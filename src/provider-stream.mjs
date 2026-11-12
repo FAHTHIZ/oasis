@@ -117,7 +117,11 @@ export function strayStreamError(text) {
   return { message: message.slice(0, 400), status: Number(error.code) || 0 };
 }
 
-export async function readProviderStream(response, protocol, onDelta, onProgress) {
+// onReasoning(chunk), when given, receives the provider's own reasoning as it
+// streams (Anthropic thinking summaries, Responses reasoning summaries,
+// reasoning_content). Nothing is shown for a model that sends none.
+export async function readProviderStream(response, protocol, onDelta, onProgress, onReasoning) {
+  const reason = (chunk) => { if (chunk && typeof onReasoning === 'function') { try { onReasoning(chunk); } catch {} } };
   if (isAnthropicFamily(protocol)) {
     const blocks = new Map();
     const usage = { input_tokens: 0, output_tokens: 0 };
@@ -153,6 +157,7 @@ export async function readProviderStream(response, protocol, onDelta, onProgress
           block.partialJson += delta.partial_json;
         } else if (delta.type === 'thinking_delta' && typeof delta.thinking === 'string') {
           block.thinking = String(block.thinking || '') + delta.thinking;
+          reason(delta.thinking);
         } else if (delta.type === 'signature_delta' && typeof delta.signature === 'string') {
           block.signature = String(block.signature || '') + delta.signature;
         }
@@ -192,6 +197,10 @@ export async function readProviderStream(response, protocol, onDelta, onProgress
       const type = event.type || eventName || '';
       if (type === 'response.output_text.delta' && typeof event.delta === 'string') {
         onDelta(event.delta);
+      } else if ((type === 'response.reasoning_summary_text.delta' || type === 'response.reasoning_text.delta') && typeof event.delta === 'string') {
+        reason(event.delta);
+      } else if (type === 'response.reasoning_summary_part.added' && Number(event.summary_index) > 0) {
+        reason('\n\n');
       } else if (type === 'response.completed' || type === 'response.incomplete') {
         finalResponse = event.response || event;
       } else if (type === 'response.failed' || type === 'error') {
@@ -222,10 +231,10 @@ export async function readProviderStream(response, protocol, onDelta, onProgress
       // Reasoning is not the answer: DeepSeek/vLLM send reasoning_content,
       // OpenRouter-style gateways send reasoning, and Google's endpoint marks
       // thought chunks with extra_content.google.thought.
-      if (typeof delta.reasoning_content === 'string') reasoning += delta.reasoning_content;
-      else if (typeof delta.reasoning === 'string') reasoning += delta.reasoning;
+      if (typeof delta.reasoning_content === 'string') { reasoning += delta.reasoning_content; reason(delta.reasoning_content); }
+      else if (typeof delta.reasoning === 'string') { reasoning += delta.reasoning; reason(delta.reasoning); }
       if (typeof delta.content === 'string') {
-        if (delta.extra_content && delta.extra_content.google && delta.extra_content.google.thought === true) reasoning += delta.content;
+        if (delta.extra_content && delta.extra_content.google && delta.extra_content.google.thought === true) { reasoning += delta.content; reason(delta.content); }
         else {
           content += delta.content;
           onDelta(delta.content);

@@ -134,6 +134,8 @@ export { announcesNextStep, appendLspUnavailableNotice, asksForAction, asksForNe
 export { formatWait, isHardQuotaError, isMalformedGenerationError, providerRetryDelayMs, providerRetryLimit, rateLimitResetMs, rateLimitWaitMs, shortRateLimitMs } from './provider-retry.mjs';
 
 const MAX_REPLY_CHARS = 24000;
+// Reasoning shown on the page for one model step (characters).
+const MAX_REASONING_SHOWN = 8000;
 
 
 export async function compactHistoryIfNeeded(session, options = {}) {
@@ -1432,9 +1434,12 @@ async function requestCompletionRaw(session, options = {}) {
       if (effort === 'xhigh' || effort === 'max') effort = 'high';
     }
     let thinkingFields = {};
-    if (!adaptive && thinkingBudget) thinkingFields = { thinking: { type: 'enabled', budget_tokens: thinkingBudget } };
+    // Opus 4.7+ and Claude 5 return empty thinking blocks unless asked for the
+    // summary; it is what the page shows while the model reasons.
+    const thinkingDisplay = /^(omitted|off|0)$/i.test(String(providerEnv.OASIS_THINKING_DISPLAY || '')) ? {} : { display: 'summarized' };
+    if (!adaptive && thinkingBudget) thinkingFields = { thinking: { type: 'enabled', budget_tokens: thinkingBudget, ...thinkingDisplay } };
     else if (thinkingMode === 'adaptive' && session.thinkingOff && effort) thinkingFields = { output_config: { effort } };
-    else if (adaptive && (thinkingBudget || effort)) thinkingFields = { thinking: { type: 'adaptive' }, ...(effort ? { output_config: { effort } } : {}) };
+    else if (adaptive && (thinkingBudget || effort)) thinkingFields = { thinking: { type: 'adaptive', ...thinkingDisplay }, ...(effort ? { output_config: { effort } } : {}) };
     // Claude 4.7+ rejects forced tool_choice (thinking is on); the probe prompt asks for the call instead.
     const forcedChoice = options.forceTool && thinkingMode !== 'adaptive-only' ? { type: 'tool', name: options.forceTool } : { type: 'auto' };
     bodyObject = {
@@ -1464,7 +1469,13 @@ async function requestCompletionRaw(session, options = {}) {
       })), tool_choice: options.forceTool ? { type: 'function', name: options.forceTool } : 'auto' } : {}),
       parallel_tool_calls: parallelToolCalls(config, providerEnv),
       max_output_tokens: (outputLimit = session.outputTokenCap || maxOutputTokensFor(config, providerEnv)),
-      ...(session.reasoningEffort && !options.forceTool ? { reasoning: { effort: session.reasoningEffort } } : {}),
+      ...(() => {
+        // Reasoning models stream a readable summary only when asked for it.
+        const summary = !options.forceTool && session.reasoningEffort !== 'none' && !/^(off|0|none)$/i.test(String(providerEnv.OASIS_REASONING_SUMMARY || ''))
+          && (session.reasoningEffort || /^(?:[\w.-]+\/)?(?:o\d|gpt-[5-9]|codex)/i.test(String(config.model || '')));
+        const effort = session.reasoningEffort && !options.forceTool ? { effort: session.reasoningEffort } : {};
+        return summary || effort.effort ? { reasoning: { ...effort, ...(summary ? { summary: 'auto' } : {}) } } : {};
+      })(),
       ...(typeof options.onDelta === 'function' ? { stream: true } : {}),
       // The runtime owns state and replays response items locally, including reasoning items.
       store: false,
@@ -1667,7 +1678,7 @@ async function requestCompletionRaw(session, options = {}) {
       const watched = response.body && typeof response.body.pipeThrough === 'function'
         ? new Response(response.body.pipeThrough(new TransformStream({ transform(chunk, sink) { armIdle(); sink.enqueue(chunk); } })), { status: response.status, headers: response.headers })
         : response;
-      data = await readProviderStream(watched, config.protocol, options.onDelta, options.onPromptProgress);
+      data = await readProviderStream(watched, config.protocol, options.onDelta, options.onPromptProgress, options.onReasoning);
     } else {
       const body = await response.text();
       try { data = JSON.parse(body); } catch {
@@ -1685,6 +1696,7 @@ async function requestCompletionRaw(session, options = {}) {
       if (typeof options.onDelta === 'function' && !streamed && text) options.onDelta(text);
       const thinkingBlocks = data.content.filter((block) => block.type === 'thinking' || block.type === 'redacted_thinking');
       if (thinkingBlocks.length && typeof options.onThinking === 'function') options.onThinking(thinkingBlocks.map((block) => block.thinking || '').join('\n'));
+      if (!streamed && typeof options.onReasoning === 'function') { const said = thinkingBlocks.map((block) => block.thinking || '').filter(Boolean).join('\n\n'); if (said) options.onReasoning(said); }
       const truncated = data.stop_reason === 'max_tokens';
       const incompleteIds = data.content.filter((block) => block.type === 'tool_use' && block.incomplete).map((block) => block.id);
       return { role: 'assistant', content: text, tool_calls: toolCalls, usage: normalizeUsage(data.usage), ...(data.stop_reason === 'refusal' ? { providerStop: 'refusal' } : {}), ...(thinkingBlocks.length ? { thinkingBlocks } : {}), ...(truncated ? { truncated: true, outputLimit, incompleteToolCallIds: incompleteIds } : {}) };
@@ -1703,6 +1715,10 @@ async function requestCompletionRaw(session, options = {}) {
         function: { name: item.name, arguments: typeof item.arguments === 'string' ? item.arguments : JSON.stringify(item.arguments || {}) }
       }));
       const text = responseText(data.output);
+      if (!streamed && typeof options.onReasoning === 'function') {
+        const said = data.output.filter((item) => item && item.type === 'reasoning').flatMap((item) => Array.isArray(item.summary) ? item.summary : []).map((part) => part && part.text || '').filter(Boolean).join('\n\n');
+        if (said) options.onReasoning(said);
+      }
       if (typeof options.onDelta === 'function' && !streamed && text) options.onDelta(text);
       return { role: 'assistant', content: text, tool_calls: toolCalls, responseItems: data.output, usage: normalizeUsage(data.usage), ...(responsesTruncated ? { truncated: true, outputLimit } : {}) };
     }
@@ -1715,6 +1731,7 @@ async function requestCompletionRaw(session, options = {}) {
     if (/MALFORMED_FUNCTION_CALL/i.test(String(data.choices[0].finish_reason || '')) && !(typeof message.content === 'string' && message.content.trim()) && !(Array.isArray(message.tool_calls) && message.tool_calls.length)) {
       throw Object.assign(new Error('The model stream was interrupted: the model produced a malformed tool call (' + data.choices[0].finish_reason + ').'), { code: 'OASIS_STREAM_INTERRUPTED', malformedCall: true });
     }
+    if (!streamed && typeof options.onReasoning === 'function') { const said = typeof message.reasoning_content === 'string' ? message.reasoning_content : typeof message.reasoning === 'string' ? message.reasoning : ''; if (said) options.onReasoning(said); }
     if (typeof options.onDelta === 'function' && !streamed && typeof message.content === 'string' && message.content) options.onDelta(message.content);
     const chatTruncated = data.choices[0].finish_reason === 'length';
     const chatStop = String(data.choices[0].finish_reason || '');
@@ -4400,6 +4417,20 @@ async function runAgentTurnRaw(session, prompt, options = {}) {
       }
     }
     let streamedText = '';
+    // What the model said while reasoning on this step: the provider's own
+    // summary or reasoning stream, then any leading <think> block. Secrets are
+    // redacted and the size capped before it is shown.
+    let providerReasoning = '';
+    let shownReasoning = '';
+    const reasoningHook = typeof options.onReasoning === 'function' ? options.onReasoning : null;
+    const showReasoning = () => {
+      if (!reasoningHook) return;
+      const tagged = splitThinking(streamedText).reasoning;
+      const text = redactSecretText([providerReasoning.trim(), tagged].filter(Boolean).join('\n\n')).slice(0, MAX_REASONING_SHOWN);
+      if (text === shownReasoning) return;
+      shownReasoning = text;
+      try { reasoningHook(text); } catch {}
+    };
     flushAsyncHookFeedback(session);
     let assistant;
     const waitHook = typeof options.onModelWait === 'function' ? options.onModelWait : null;
@@ -4413,8 +4444,13 @@ async function runAgentTurnRaw(session, prompt, options = {}) {
         ...(typeof options.onRateLimitWait === 'function' ? { onRateLimitWait: options.onRateLimitWait } : {}),
         ...(typeof options.onProviderRetry === 'function' ? { onProviderRetry: options.onProviderRetry } : {}),
         ...(typeof options.fetchImpl === 'function' ? { fetchImpl: options.fetchImpl } : {}),
+        ...(reasoningHook ? { onReasoning: (chunk) => {
+          if (providerReasoning.length < MAX_REASONING_SHOWN * 2) providerReasoning += String(chunk || '');
+          showReasoning();
+        } } : {}),
         ...(typeof options.onDelta === 'function' ? { onDelta: (delta) => {
           streamedText = (streamedText + String(delta || '')).slice(0, MAX_REPLY_CHARS);
+          if (reasoningHook && /^\s*</.test(streamedText)) showReasoning();
           options.onDelta(visibleReply(streamedText));
         } } : Number(session.subagentDepth) > 0 && (session.providerEnv || process.env).OASIS_SUBAGENT_STREAM !== '0' ? {
           // Subagents have no display, but streaming still arms the idle
@@ -4433,6 +4469,7 @@ async function runAgentTurnRaw(session, prompt, options = {}) {
           // call an earlier, finished answer "discarded".
           const partialShown = Boolean(visibleReply(streamedText).trim());
           streamedText = '';
+          providerReasoning = '';
           if (typeof options.onDelta === 'function') options.onDelta('');
           if (typeof options.onStreamRestart === 'function') options.onStreamRestart({ ...event, partialShown });
         }

@@ -49,7 +49,7 @@ test('Anthropic extended thinking: budget sent, thinking blocks replayed with si
   const result = await runAgentTurn(session, 'think hard: what does the README say?', { autoApprove: true, env, approval: async () => true, onThinkingBudget: (b) => budgets.push(b) });
   assert.equal(result.text, 'It says hello.');
   assert.deepEqual(budgets, [10000]);
-  assert.deepEqual(requests[0].thinking, { type: 'enabled', budget_tokens: 10000 });
+  assert.deepEqual(requests[0].thinking, { type: 'enabled', budget_tokens: 10000, display: 'summarized' });
   assert.equal(requests[0].max_tokens, 42000);
   const replayed = requests[1].messages.find((message) => message.role === 'assistant');
   assert.deepEqual(replayed.content[0], { type: 'thinking', thinking: 'I should read the README.', signature: 'sig-abc' });
