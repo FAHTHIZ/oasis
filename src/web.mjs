@@ -313,6 +313,24 @@ export function validateWebImages(value, { config = {}, env = process.env } = {}
 const MAX_FILE_PREVIEW_BYTES = 256 * 1024;
 const MAX_JOBS = 20;
 const MAX_EVENTS_PER_JOB = 120;
+// Streamed text arrives as many small assistant_delta events. Before dropping old events,
+// merge runs of old deltas into one (keeping the run's last id, so `?after=` stays
+// correct): otherwise a long reply pushes the task's earlier steps out, and reopening the
+// page mid-task rebuilds only the last few lines. The newest events are left as they are.
+export function compactJobEvents(events, max = MAX_EVENTS_PER_JOB, keepRecent = 20) {
+  const settled = Math.max(0, events.length - keepRecent);
+  const merged = [];
+  for (let index = 0; index < events.length; index += 1) {
+    const event = events[index];
+    const last = merged[merged.length - 1];
+    if (index < settled && last && last.type === 'assistant_delta' && event.type === 'assistant_delta' && merged.length - 1 < settled) {
+      merged[merged.length - 1] = { ...event, data: { ...event.data, text: String(last.data?.text || '') + String(event.data?.text || '') } };
+    } else merged.push(event);
+  }
+  if (merged.length > max) merged.splice(0, merged.length - max);
+  events.splice(0, events.length, ...merged);
+  return events;
+}
 const SESSION_ID_PATTERN = /^[a-f0-9-]{20,80}$/i;
 // `/` opens the app (app/). The old single-page workspace was retired in
 // 1.2; its addresses redirect to the app so bookmarks keep working, and sw.js
@@ -610,7 +628,7 @@ export function createOasisWebServer(options = {}) {
   function emit(job, type, data = {}) {
     const event = { id: job.nextEventId++, type, data, at: new Date().toISOString() };
     job.events.push(event);
-    if (job.events.length > MAX_EVENTS_PER_JOB) job.events.splice(0, job.events.length - MAX_EVENTS_PER_JOB);
+    if (job.events.length > MAX_EVENTS_PER_JOB) compactJobEvents(job.events);
     taskStore.schedule(job, 250);
     for (const listener of jobListeners) { try { listener(job, event); } catch { /* an observer never breaks a job */ } }
     wakeJobWaiters(job.id);
