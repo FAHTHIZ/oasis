@@ -123,6 +123,50 @@ async function probeOllama(origin, model, fetchImpl) {
   return { contextLength: 0, source: 'unknown', loaded: Boolean(running), nativeContext };
 }
 
+// Ollama's OpenAI-compatible API cannot set the window per request, and a
+// request reloads the model at the server default (often 4,096 tokens). A model
+// created FROM the original with num_ctx set shares its weights (no download, no
+// extra disk) and always loads with that window, so `oasis connect` makes one.
+export function ollamaWideModelName(model) {
+  const value = String(model || '').trim();
+  if (!value) return '';
+  const colon = value.lastIndexOf(':');
+  const slash = value.lastIndexOf('/');
+  const hasTag = colon > slash;
+  return hasTag ? value + '-oasis' : value + ':latest-oasis';
+}
+
+export async function widenOllamaContext(config = {}, { fetchImpl = globalThis.fetch, target = RECOMMENDED_LOCAL_CONTEXT, onStatus = () => {} } = {}) {
+  if (typeof fetchImpl !== 'function' || !config.model || !isOllamaEndpoint(config, {})) return null;
+  if (/-oasis$/i.test(String(config.model))) return null;
+  let origin;
+  try { origin = ollamaOrigin(config.baseURL); } catch { return null; }
+  const probe = await probeOllama(origin, config.model, fetchImpl);
+  if (!probe) return null;
+  // Already wide enough: a Modelfile num_ctx or a server started with a large OLLAMA_CONTEXT_LENGTH.
+  if (probe.contextLength >= target) return null;
+  const size = Math.min(target, probe.nativeContext || target);
+  if (size < SMALL_CONTEXT_TOKENS || size <= probe.contextLength) return null;
+  const wide = ollamaWideModelName(config.model);
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 30_000);
+  try {
+    const response = await fetchImpl(origin + '/api/create', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ model: wide, from: config.model, parameters: { num_ctx: size }, stream: false }),
+      signal: controller.signal
+    });
+    if (!response.ok) return null;
+    const body = await response.json().catch(() => ({}));
+    if (body && body.error) return null;
+  } catch { return null; } finally { clearTimeout(timer); }
+  probeCache.clear();
+  const before = probe.contextLength ? probe.contextLength.toLocaleString('en-US') + '-token' : 'small default';
+  onStatus({ step: 'context', text: 'Ollama loads ' + config.model + ' with a ' + before + ' window, too small for agent work. Created ' + wide + ': the same model and weights with a ' + size.toLocaleString('en-US') + '-token window.' });
+  return { model: wide, contextLength: size, from: config.model };
+}
+
 export function localContextAdvice(model, contextLength, server = 'ollama') {
   const size = Number(contextLength).toLocaleString('en-US');
   const want = RECOMMENDED_LOCAL_CONTEXT;
@@ -130,7 +174,7 @@ export function localContextAdvice(model, contextLength, server = 'ollama') {
     ? 'Reload it with a larger context length (lms load ' + model + ' --context-length ' + want + ', or the Context Length slider in LM Studio).'
     : server === 'llama.cpp'
       ? 'Restart llama-server with --ctx-size ' + want + ' (with --parallel N, each slot gets ctx-size / N).'
-      : 'Restart Ollama with OLLAMA_CONTEXT_LENGTH=' + want + ' (or add "PARAMETER num_ctx ' + want + '" to a Modelfile).';
+      : 'Run oasis connect http://localhost:11434 to let OASIS create a ' + want.toLocaleString('en-US') + '-token variant of the model (same weights, no download), or restart Ollama with OLLAMA_CONTEXT_LENGTH=' + want + '.';
   const name = server === 'lmstudio' ? 'LM Studio' : server === 'llama.cpp' ? 'llama-server' : 'Ollama';
   return name + ' is serving ' + model + ' with a ' + size + '-token context window, which is too small for reliable agent work (' +
     want.toLocaleString('en-US') + '+ recommended). ' + fix + ' OASIS will compact early and send a smaller tool set until then.';
