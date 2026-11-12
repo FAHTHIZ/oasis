@@ -1,5 +1,13 @@
 import { probeLocalContext, isLocalModelEndpoint, localContextAdvice, SMALL_CONTEXT_TOKENS, RECOMMENDED_LOCAL_CONTEXT } from './local-context.mjs';
-import { stdout, stderr } from 'node:process';
+import { stdout as processStdout, stderr } from 'node:process';
+import { wrapTerminalText } from './term-wrap.mjs';
+
+// Reports wrap between words on a terminal; piped output is left as is.
+const stdout = {
+  get isTTY() { return processStdout.isTTY; },
+  get columns() { return processStdout.columns; },
+  write: (text) => processStdout.write(processStdout.isTTY ? wrapTerminalText(String(text), (processStdout.columns || 80) - 1) : text)
+};
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { loadConfig, getProviderSummary, isLoopbackUrl, isNodeVersionSupported, MIN_NODE_VERSION } from './config.mjs';
