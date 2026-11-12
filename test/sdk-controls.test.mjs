@@ -117,7 +117,7 @@ test('setMaxThinkingTokens() sets a thinking budget on Anthropic requests and nu
   for await (const event of q) void event;
   assert.equal(bodies.length, 3);
   assert.equal(bodies[0].thinking, undefined);
-  assert.deepEqual(bodies[1].thinking, { type: 'enabled', budget_tokens: 4096 });
+  assert.deepEqual(bodies[1].thinking, { type: 'enabled', budget_tokens: 4096, display: 'summarized' });
   assert.equal(bodies[2].thinking, undefined);
   await assert.rejects(q.setMaxThinkingTokens(-1), /whole number/);
 });

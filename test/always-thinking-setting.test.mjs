@@ -38,9 +38,9 @@ test('with thinking off, a 4.6 model gets no thinking field and effort capped at
   assert.equal(off.thinking, undefined);
   assert.deepEqual(off.output_config, { effort: 'high' });
   const on = await body('claude-opus-4-6', { thinkingBudget: 0, effortLevel: 'max' });
-  assert.deepEqual(on.thinking, { type: 'adaptive' });
+  assert.deepEqual(on.thinking, { type: 'adaptive', display: 'summarized' });
   const always = await body('claude-opus-5-5', { thinkingOff: true, thinkingBudget: 0, effortLevel: 'high' });
-  assert.deepEqual(always.thinking, { type: 'adaptive' });
+  assert.deepEqual(always.thinking, { type: 'adaptive', display: 'summarized' });
 });
 
 test('alwaysThinkingEnabled is read from any settings file, an untrusted repository too', async () => {

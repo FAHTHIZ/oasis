@@ -513,6 +513,13 @@ export class RuntimeAgent {
           case 'agent_activity': if (subagents.update(data)) this.emit('subagents', { workers: subagents.list() }); break;
           case 'assistant_delta': if (data.text) addText(String(data.text), false); break;
           case 'assistant_text': if (data.text) addText(String(data.text), true); break;
+          // The model's reasoning summary, streamed while it works (nothing for
+          // a model that does not expose one). It opens the next step.
+          case 'reasoning_delta':
+            if (!data.text) break;
+            if (stepHasTools || stepTextFinal) newStepIfNeeded();
+            this.emit('reasoning', { delta: String(data.text), ...(data.reset ? { reset: true } : {}) });
+            break;
           case 'command_output': if (data.text) addText(String(data.text), true); break;
           // The runtime keeps working after a streamed reply to check its
           // edits. End that bubble so the next reply does not run into it.
