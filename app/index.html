@@ -311,7 +311,7 @@
         <label for="routineSchedule">When</label>
         <input id="routineSchedule" autocapitalize="off" spellcheck="false" placeholder="weekdays at 9am, 0 9 * * 1-5, RRULE:FREQ=MONTHLY;BYDAY=-1FR, every 2h, in 30m, webhook">
         <label for="routinePrompt">Task</label>
-        <textarea id="routinePrompt" rows="3" placeholder="Summarize yesterday's CI failures and open pull requests"></textarea>
+        <textarea class="field" id="routinePrompt" rows="3" placeholder="Summarize yesterday's CI failures and open pull requests"></textarea>
         <label class="check"><input type="checkbox" id="routineScript"> Run the task as a shell command (no model)</label>
         <label for="routineDeliver">Send results to</label>
         <input id="routineDeliver" autocapitalize="off" spellcheck="false" placeholder="local, telegram:CHAT_ID, slack:CHANNEL, webhook:https://…">
