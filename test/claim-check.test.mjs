@@ -8,8 +8,8 @@ import { claimsPassing, newClaimState, recordCheck, recordEdit, claimIssue } fro
 import { createSession, runAgentTurn } from '../src/agent.mjs';
 
 test('detects success claims and ignores honest failure reports', () => {
-  for (const text of ['All tests pass now.', 'The test suite is green.', 'Build succeeded and tests are passing.', 'all 42 tests pass', '12 passed, 0 failed', '✅ Tests']) assert.ok(claimsPassing(text), text);
-  for (const text of ['Two tests still fail.', 'The tests do not pass yet.', 'I could not run the tests.', 'I updated the README.', '']) assert.ok(!claimsPassing(text), text);
+  for (const text of ['All tests pass now.', 'The test suite is green.', 'Build succeeded and tests are passing.', 'all 42 tests pass', '12 passed, 0 failed', '✅ Tests', 'The `test` command was run to verify the `add` function, and it passed.', 'I ran npm test and everything passed.']) assert.ok(claimsPassing(text), text);
+  for (const text of ['Two tests still fail.', 'The tests do not pass yet.', 'I could not run the tests.', 'I updated the README.', 'I ran the tests and they failed with a ReferenceError.', 'The ticket passed review.', '']) assert.ok(!claimsPassing(text), text);
 });
 
 test('claimIssue flags failed, piped and stale checks once', () => {
@@ -82,6 +82,8 @@ test('appendUnverifiedNotice says plainly what was not checked', async () => {
   const failed = newClaimState();
   recordCheck(failed, { command: 'npm test', exitCode: 1 });
   assert.match(appendUnverifiedNotice('Fixed.', issue, {}, failed), /Not verified: the last check \(`npm test`\) failed with exit code 1\.$/);
+  // A reply that reports a pass after a failing run is called out, not just footnoted.
+  assert.match(appendUnverifiedNotice('Fixed add(). I ran npm test and it passed.', issue, {}, failed), /failed with exit code 1\. The reply above says it passed; OASIS saw it fail\.$/);
   assert.equal(appendUnverifiedNotice('Fixed.', ['the changed-file diff has not been reviewed (a.js)'], {}, newClaimState()), 'Fixed.', 'diff review alone adds no note');
   assert.equal(appendUnverifiedNotice(denied, issue, { deniedCheck: 'npm test' }, newClaimState()), denied, 'never added twice');
 });
