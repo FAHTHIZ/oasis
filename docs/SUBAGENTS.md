@@ -28,7 +28,7 @@ Create a Markdown file with front matter. Later locations override earlier ones:
 6. `<project>/.oasis/agents/`
 7. Enabled Claude Code plugins (named `plugin:agent`)
 
-The Antigravity folders accept `<name>.md` or `<name>/agent.md`. Antigravity tool names map to OASIS tools: `view_file` and `view_code_item` to `read_file`, `replace_file_content` to `edit_file`, `grep_search` to `grep` and `search_files`, `find_by_name` to `glob_files`, `list_dir` to `list_files`, and `codebase_search` to `semantic_search`. `model: flash` and `model: pro` inherit the session model, because those tier names do not identify a model on other providers. `subagent: false` keeps an agent out of the `task` tool; it can still run as the main agent with `--agent`. `commandExecutionPolicy: off` removes the shell tools. Skill paths such as `skills/security-checklist` load the skill of that name.
+The Antigravity folders accept `<name>.md` or `<name>/agent.md`. Antigravity tool names map to OASIS tools: `view_file` and `view_code_item` to `read_file`, `replace_file_content` to `edit_file`, `grep_search` to `grep` and `search_files`, `find_by_name` to `glob_files`, `list_dir` to `list_files`, and `codebase_search` to `grep`, `search_files` and `repo_map`. `model: flash` and `model: pro` inherit the session model, because those tier names do not identify a model on other providers. `subagent: false` keeps an agent out of the `task` tool; it can still run as the main agent with `--agent`. `commandExecutionPolicy: off` removes the shell tools. Skill paths such as `skills/security-checklist` load the skill of that name.
 
 You can also pass agents for one session as JSON with `--agents`.
 

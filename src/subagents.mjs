@@ -45,7 +45,7 @@ const CLAUDE_TO_OASIS = {
   // Google Antigravity tool names (.agents/agents/*.md).
   view_file: ['read_file'], view_code_item: ['read_file'], replace_file_content: ['edit_file'], multi_replace_file_content: ['multi_edit'],
   write_to_file: ['write_file'], grep_search: ['grep', 'search_files'], find_by_name: ['glob_files'], list_dir: ['list_files'],
-  codebase_search: ['semantic_search'], read_url_content: ['fetch_url'], search_web: ['web_search'], command_status: ['command_output'],
+  codebase_search: ['grep', 'search_files', 'repo_map'], read_url_content: ['fetch_url'], search_web: ['web_search'], command_status: ['command_output'],
   invoke_subagent: ['task']
 };
 
@@ -287,7 +287,7 @@ export function foreignAgentFrontMatter(flavor, raw = {}) {
 // (read, edit, command); an edit `fileRegex` is passed on as an instruction only, and the mcp
 // and browser groups are not enforced. Global custom_modes.yaml in VS Code storage is not read.
 const ROO_GROUP_TOOLS = {
-  read: ['read_file', 'list_files', 'glob_files', 'search_files', 'grep', 'ast_grep', 'repo_map', 'lsp', 'semantic_search'],
+  read: ['read_file', 'list_files', 'glob_files', 'search_files', 'grep', 'ast_grep', 'repo_map', 'lsp'],
   edit: ['write_file', 'edit_file', 'multi_edit', 'apply_patch', 'notebook_edit'],
   command: CLAUDE_TO_OASIS.bash
 };
