@@ -280,7 +280,9 @@ Known rough edges: free endpoints are slow (35–140 s per request), and with sm
 
 ## Benchmarks
 
-There are no head-to-head benchmark results yet. A proper same-model comparison against other agents has not been run, because it needs a paid model key. What exists is one smoke run of `scripts/bench-live.mjs` through OmniRoute with a free `nemotron-3-ultra-550b` tier: two tasks, one trial each, with OASIS and Claude Code both passing the small task and both failing the medium one. That cannot rank agents, and OASIS does not guarantee that every model will solve every task: results depend heavily on the model. Raw results: [bench/results/live-2026-11-08-omniroute](bench/results/live-2026-11-08-omniroute/README.md). Method: [docs/BENCHMARKS.md](docs/BENCHMARKS.md).
+Model-free harness results from 12 November 2026: malformed tool calls recovered 26/26 (3/26 without OASIS), edits applied 14/14 (4/14), risky commands stopped 49/49 under auto-approve, and secrets caught 10/10 before commit, with matching scores on the held-out sets. Tables, token counts and raw files are in [docs/BENCHMARKS.md](docs/BENCHMARKS.md#latest-results-12-november-2026).
+
+There are no head-to-head model results yet. A fair same-model comparison against other agents needs a paid model key. One smoke run through OmniRoute ([raw results](bench/results/live-2026-11-08-omniroute/README.md)) had OASIS and Claude Code both pass the small task and both fail the medium one. A local 3B model on a 2-core CPU timed out on a small task after 30 minutes. Neither can rank agents, and OASIS does not guarantee that every model will solve every task: on a given task the model matters more than the harness.
 
 ## How it compares
 

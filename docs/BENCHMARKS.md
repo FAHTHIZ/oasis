@@ -78,6 +78,44 @@ When recording a live result, include at least:
 
 Compare systems using the same model, task set, provider settings and environment wherever possible. Report repetitions and variance when the benchmark is nondeterministic.
 
+## Latest results (12 November 2026)
+
+Measured on commit `c1396e7b`, Node 22, a 2-core Linux machine. Raw files are in [bench/results](../bench/results).
+
+### Harness (model-free)
+
+`npm run bench:harness`, file [harness-2026-11-12.json](../bench/results/harness-2026-11-12.json). Baseline is the same input without the OASIS guard.
+
+| Track | Development set | Held-out v1 | Held-out v3 |
+| --- | --- | --- | --- |
+| Malformed tool-call recovery | 26/26 (baseline 3/26) | 11/11 (baseline 1/11) | 13/13 (baseline 0/13) |
+| Edit application | 14/14 (baseline 4/14), 5/5 bad edits refused | 7/7 (baseline 1/7), 3/3 refused | 5/5 (baseline 0/5), 3/3 refused |
+| Risky commands stopped under auto-approve | 49/49, everyday commands usable 32/32 | 15/15, 10/10 usable | 54/54, 22/22 usable |
+| Placeholder (elided code) guard | 12/12, 0/8 false alarms | 4/4, 0/2 | 6/6, 0/4 |
+| Weakened-test detection | 8/8, 0/4 false alarms | 3/3, 0/1 | 7/7, 0/3 |
+| Secret scanning before commit | 10/10, 0/8 false alarms | 5/5, 0/3 | 8/8, 0/5 |
+
+Held-out v2 still misses one secret pattern (4/5); it is kept as measured. First request with the default tool set: 17 tools, about 5,282 tokens (system 2,508, schemas 2,774); the 16K small-context profile sends 11 tools and about 3,228 tokens.
+
+### Tokens (scripted provider)
+
+`npm run bench:tokens`, file [tokens-2026-11-12.json](../bench/results/tokens-2026-11-12.json). Both fixed tasks pass their verifiers; usage accounting matches.
+
+| Task | Requests | Input tokens | Uncached | First / last request |
+| --- | ---: | ---: | ---: | --- |
+| `taskflow-search` (gpt-oss-20b profile) | 18 | ~162,628 | ~13,561 | ~5,173 / ~13,541 |
+| `normalize-token-usage` (gpt-4o profile) | 18 | ~257,444 | ~20,323 | ~5,645 / ~20,306 |
+
+### Live, local model on CPU
+
+`npm run bench:live -- --agents oasis --model qwen2.5-coder:3b-oasis --router http://localhost:11434/v1 --task clamp-integer --timeout-seconds 1800`, files in [live-2026-11-12-ollama](../bench/results/live-2026-11-12-ollama/SUMMARY.md). Ollama on 2 CPU cores, no GPU.
+
+| Task | Model | Result |
+| --- | --- | --- |
+| `clamp-integer` (small) | qwen2.5-coder 3B, 32K window | Timed out at 1,800 s after 17,210 tokens, before verification |
+
+This shows the hardware, not the harness: a 3B model on two CPU cores generates a few tokens per second, so one small task does not fit in 30 minutes. The earlier same-gateway run against Claude Code is in [live-2026-11-08-omniroute](../bench/results/live-2026-11-08-omniroute/README.md). SWE-bench and Terminal-Bench scores (the adapter is in `bench/harbor`) need a capable hosted model and a paid budget, so none are published yet.
+
 ## Normal-user runs
 
 Separate from scored benchmarks, OASIS is used the way a person would: type a request, approve steps, read the answer. These runs use real providers and no scripted model, so they show speed, wording and rough edges a harness does not.
