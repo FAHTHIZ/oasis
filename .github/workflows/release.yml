@@ -118,10 +118,31 @@ jobs:
         working-directory: desktop
         shell: bash
         env:
-          # No Apple or Windows certificates are configured: macOS builds are
-          # signed ad hoc and Windows builds are unsigned (see docs/DESKTOP.md).
-          CSC_IDENTITY_AUTO_DISCOVERY: "false"
-        run: node scripts/build.mjs ${{ matrix.target }}
+          # Optional signing secrets (docs/RELEASING.md). Without them macOS
+          # builds are signed ad hoc and Windows builds are unsigned.
+          MACOS_CERTIFICATE: ${{ secrets.MACOS_CERTIFICATE }}
+          MACOS_CERTIFICATE_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          WINDOWS_CERTIFICATE: ${{ secrets.WINDOWS_CERTIFICATE }}
+          WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
+        run: |
+          set -euo pipefail
+          if [ "$RUNNER_OS" = "macOS" ] && [ -n "$MACOS_CERTIFICATE" ]; then
+            # A base64 .p12 Developer ID Application certificate; notarized when APPLE_* are set.
+            export CSC_LINK="$MACOS_CERTIFICATE" CSC_KEY_PASSWORD="$MACOS_CERTIFICATE_PASSWORD"
+            if [ -z "$APPLE_ID" ]; then unset APPLE_ID APPLE_APP_SPECIFIC_PASSWORD APPLE_TEAM_ID; fi
+            echo "Signing the macOS build with the Developer ID certificate."
+          elif [ "$RUNNER_OS" = "Windows" ] && [ -n "$WINDOWS_CERTIFICATE" ]; then
+            export WIN_CSC_LINK="$WINDOWS_CERTIFICATE" WIN_CSC_KEY_PASSWORD="$WINDOWS_CERTIFICATE_PASSWORD"
+            echo "Signing the Windows build with the code-signing certificate."
+          else
+            export CSC_IDENTITY_AUTO_DISCOVERY=false
+            unset APPLE_ID APPLE_APP_SPECIFIC_PASSWORD APPLE_TEAM_ID
+          fi
+          unset MACOS_CERTIFICATE MACOS_CERTIFICATE_PASSWORD WINDOWS_CERTIFICATE WINDOWS_CERTIFICATE_PASSWORD
+          node scripts/build.mjs ${{ matrix.target }}
       - name: Launch the packaged app and check its workspace answers
         shell: bash
         run: |
@@ -165,6 +186,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
+      id-token: write # npm provenance
     steps:
       - name: Check out the exact release source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -291,6 +313,34 @@ jobs:
           fail_on_unmatched_files: true
           draft: false
           files: release-assets/*
+      - name: Set up Node.js for npm publishing
+        if: steps.release-version.outputs.publish == 'true'
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+          registry-url: https://registry.npmjs.org
+      - name: Publish the tarball to npm (when NPM_TOKEN is set)
+        # Publishes the exact tarball attached to the release, with provenance.
+        # Skipped, with a notice, until the NPM_TOKEN secret exists.
+        if: steps.release-version.outputs.publish == 'true'
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+          NPM_TAG: ${{ steps.release-version.outputs.prerelease == 'true' && 'next' || 'latest' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -z "$NODE_AUTH_TOKEN" ]; then
+            echo "::notice::NPM_TOKEN is not set; skipping npm publish. Add an npm automation token as the NPM_TOKEN secret to publish."
+            exit 0
+          fi
+          name="$(node -p "require('./package.json').name")"
+          version="$(node -p "require('./package.json').version")"
+          if npm view "$name@$version" version > /dev/null 2>&1; then
+            echo "::notice::$name@$version is already on npm."
+            exit 0
+          fi
+          tarball="$(ls release-assets/*.tgz | head -1)"
+          npm publish "$tarball" --access public --provenance --tag "$NPM_TAG"
       - name: Refresh the Homebrew formula on main
         # Formula/oasis-cli.rb pins the tag's source tarball. Pushes made with
         # the workflow token do not start other workflows, so this cannot loop.

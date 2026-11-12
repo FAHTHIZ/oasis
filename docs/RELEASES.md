@@ -44,3 +44,17 @@ Only install files attached to a GitHub Release. Temporary GitHub Actions artifa
 6. For stable releases, refreshes `Formula/oasis-cli.rb` on `main`.
 
 The package version and release tag must match, and `package.json` `oasisRelease.channel` must be `stable`.
+7. Publishes the same tarball to npm as `oasis-oss`, with [provenance](https://docs.npmjs.com/generating-provenance-statements), when the `NPM_TOKEN` secret exists. Without it the step is skipped with a notice. Release candidates go to the `next` tag.
+
+## Turning on npm and code signing
+
+Everything is wired; each piece switches on when its repository secret exists (Settings → Secrets and variables → Actions, or `gh secret set NAME`). Nothing is signed or published with placeholder credentials.
+
+| Secret | What it enables |
+| --- | --- |
+| `NPM_TOKEN` | An npm automation token for an account that owns (or can create) `oasis-oss`. After the first publish, `npm install -g oasis-oss` works. |
+| `MACOS_CERTIFICATE`, `MACOS_CERTIFICATE_PASSWORD` | A base64-encoded Developer ID Application `.p12` (`base64 -i cert.p12 \| pbcopy`) and its password. macOS builds are then signed with the hardened runtime instead of ad hoc. |
+| `APPLE_ID`, `APPLE_APP_SPECIFIC_PASSWORD`, `APPLE_TEAM_ID` | Notarization with an app-specific password from appleid.apple.com. With these, Gatekeeper opens the app without the `xattr` step in [DESKTOP.md](DESKTOP.md). |
+| `WINDOWS_CERTIFICATE`, `WINDOWS_CERTIFICATE_PASSWORD` | A base64-encoded `.pfx` code-signing certificate. Signed installers build SmartScreen reputation instead of showing "Windows protected your PC". |
+
+The certificates are passed to electron-builder only on their own platform's runner, and the raw secret variables are unset before the build runs.
