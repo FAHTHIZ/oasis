@@ -26,7 +26,7 @@ import { resolveSandbox } from './sandbox.mjs';
 import { estimateTokens, contextWindowSize, contextTokens as contextTokensFor } from './context.mjs';
 import { PtySessionManager } from './pty-sessions.mjs';
 import { createTaskHistoryStore } from './task-history-store.mjs';
-import { createWorktree, finishWorktree, removeWorktree, readWorktreeDiff, readWorktreeWorkingDiff, readWorkspaceDiff, inspectWorktree, mergeWorktree, isCommitIntegrated } from './worktrees.mjs';
+import { createWorktree, finishWorktree, removeWorktree, readWorktreeDiff, readWorktreeWorkingDiff, readWorkspaceDiff, headFileVersion, inspectWorktree, mergeWorktree, isCommitIntegrated } from './worktrees.mjs';
 import { createAppResolver, skillsIndex } from './app-server.mjs';
 import { listWorkspaceFiles } from './workspace-files.mjs';
 import { createPreviewHandler } from './web-preview.mjs';
@@ -2501,6 +2501,35 @@ export function createOasisWebServer(options = {}) {
         written.push(item.rel);
       }
       json(res, 200, { written, refused });
+      return;
+    }
+
+    // "Discard changes" in the Changes panel: put one tracked file back to its
+    // last-commit version. Same boundaries as uploads (inside the workspace, no
+    // symlinks, not .git, not while an agent works). Untracked files are left
+    // alone: there is no committed version to go back to.
+    if (req.method === 'POST' && pathname === '/api/workspace/discard') {
+      if ([...jobs.values()].some((job) => job.status === 'running' || job.status === 'waiting_approval') || busySessions.size || workspaceIsBusy(path.resolve(activeRoot))) {
+        json(res, 409, { error: 'Wait until the current agent task finishes before discarding changes.' });
+        return;
+      }
+      const body = await readJsonBody(req, 4096).catch(() => ({}));
+      const relative = String(body && body.path || '').replace(/\\/g, '/').replace(/^\/+/, '');
+      if (!relative || relative.length > 500) { json(res, 400, { error: 'Choose a changed file to discard.' }); return; }
+      let target;
+      try { target = await resolveWorkspacePath(activeRoot, relative, { rejectSymlinks: true, workspaceOnly: true, allowIgnored: true }); }
+      catch { json(res, 403, { error: 'This path is protected or outside the workspace.' }); return; }
+      const rel = target.relative.split(path.sep).join('/');
+      if (/^\.git(\/|$)/.test(rel)) { json(res, 403, { error: 'This path is protected or outside the workspace.' }); return; }
+      const present = await lstat(target.absolute).then((info) => info, () => null);
+      if (present && (!present.isFile() || present.isSymbolicLink() || present.nlink > 1)) { json(res, 400, { error: 'Only regular files can be restored here.' }); return; }
+      let version;
+      try { version = await headFileVersion(activeRoot, rel, { env }); }
+      catch (error) { json(res, 400, { error: error.code === 'EUNSUPPORTED' ? error.message : 'Could not read the last commit.' }); return; }
+      if (!version) { json(res, 404, { error: rel + ' is not in the last commit, so there is no version to go back to. Delete it from the Files tab if you do not want it.' }); return; }
+      await mkdir(path.dirname(target.absolute), { recursive: true });
+      await atomicWriteFile(target.absolute, version.content, { encoding: null, mode: version.mode });
+      json(res, 200, { path: rel, restored: true });
       return;
     }
 
