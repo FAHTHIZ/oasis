@@ -111,3 +111,22 @@ test('a rate-limit wait counts down in the spinner, then falls back to the usual
   assert.equal(waitLabel({ rateLimitMs: 13000 }, 14000), 'Thinking');
   assert.match(describeWait({ rateLimitMs: 13000 }, 14000), /^Thinking… · 14s/);
 });
+
+test('the status line follows the clock, skips identical frames and echoes type-ahead', () => {
+  const writes = [];
+  let clock = 0;
+  let tick = null;
+  const stream = { isTTY: true, columns: 120, write: (chunk) => writes.push(chunk) };
+  const indicator = createActivityIndicator({ stream, env: { OASIS_MOTION: 'lite' }, color: false, now: () => clock, timers: { setInterval: (fn) => { tick = fn; return 1; }, clearInterval: () => {} } });
+  indicator.start({});
+  const first = writes.length;
+  tick(); tick();
+  assert.equal(writes.length, first, 'no new write while nothing on the line changed');
+  clock = 1600;
+  tick();
+  assert.equal(writes.length, first + 1, 'a late tick jumps to the current frame in one write');
+  indicator.update({ draft: 'also update the README' });
+  assert.match(writes.at(-1), /› also update the README/, 'typed text shows at once');
+  assert.doesNotMatch(writes.at(-1), /esc to stop/);
+  indicator.stop();
+});
