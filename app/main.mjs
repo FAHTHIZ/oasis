@@ -7,14 +7,14 @@ import { SUBAGENT_STATUS_TEXT } from './core/subagents.mjs';
 import { createConnectorCard, connectIntent, splitServices, brandMark } from './core/connector-card.mjs';
 import { createSoundPlayer } from './core/sound.mjs';
 import { ambientField } from './core/ambient.mjs';
-import { activityLabel, liveLabel, summarizeArgs, toolKind, groupTitle, groupStats, formatDuration, thinkingLabel, splitTextToolCall, elapsedSince, describeInput, buildTimeline } from './core/timeline.mjs';
+import { stepOutcome, stepRan, stepLabel, summarizeArgs, toolKind, groupTitle, groupStats, formatDuration, thinkingLabel, splitTextToolCall, elapsedSince, describeInput, buildTimeline } from './core/timeline.mjs';
 import { IndexedDBStore, Workspace, lineDiff } from './core/workspace.mjs';
 import { Agent, textOf } from './core/agent.mjs';
 import { FrameSandbox } from './core/sandbox.mjs';
 import { SkillLibrary } from './core/skills.mjs';
 import { GitHub, parseRepo } from './core/github.mjs';
 import { createZip, readZip } from './core/zip.mjs';
-import { renderMarkdown } from './markdown.mjs';
+import { renderMarkdown, splitStableMarkdown } from './markdown.mjs';
 import { smartConnect, looksLikeConnection, parsePaste, scanLocal, buildChain, nextInChain, configFor, classifyFailure, maskSecret, isGitHubToken } from './core/connect.mjs';
 import { PLUGINS, getPlugin, pluginsFor, suggestPlugins } from './core/plugins.mjs';
 import { detectRuntime, RuntimeAgent, RuntimeWorkspace, tokenFromPaste, saveRuntimeToken, forgetRuntimeToken, deviceRemembered } from './core/runtime.mjs';
@@ -320,6 +320,8 @@ function connectCustomApp() {
 $('appCustomConnect').addEventListener('click', connectCustomApp);
 $('appCustomUrl').addEventListener('keydown', (event) => { if (event.key === 'Enter') { event.preventDefault(); connectCustomApp(); } });
 $('transcript').addEventListener('click', onTranscriptClick);
+// Opening a step or group above the newest output keeps it where it is.
+$('transcript').addEventListener('click', (event) => { const toggle = event.target.closest && event.target.closest('summary, .steps-head, .run-head'); if (toggle) follow.keepInPlace(toggle); }, true);
 $('commandPaletteInput').addEventListener('keydown', (event) => {
   const buttons = $('commandPaletteResults').querySelectorAll('.command-result');
   if (event.key === 'ArrowDown' && buttons.length) { event.preventDefault(); commandPaletteSelected = (commandPaletteSelected + 1) % buttons.length; updatePaletteSelection(); }
@@ -428,6 +430,8 @@ document.addEventListener('keydown', (event) => {
     const top = openSheets[openSheets.length - 1];
     if (top) closeSheet(top);
     else if (!$('filesPanel').hidden && innerWidth < 1024) toggleFiles(false);
+    // Nothing else open: Esc stops the running task (finished work stays).
+    else if (agent.busy && $('composerSuggest').hidden && !(talk && talk.on)) agent.stop();
   }
 });
 
@@ -535,6 +539,7 @@ async function send(text) {
     setBusy(false);
     if (!agent.detached) { persistChat(); attention('done', message); }
     refreshFiles(); refreshPreviewIfOpen(); settle(); if (RT) refreshRuntimeStatus().then(updateProjectUI).catch(() => {});
+    setTimeout(flushPendingInputs, 0);
   }
 }
 
@@ -831,9 +836,18 @@ const KIND_ICONS = {
 function iconSvg(path) {
   return '<svg viewBox="0 0 20 20" aria-hidden="true"><path d="' + path + '" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>';
 }
+const OUTCOME_WORDS = { ok: 'Done', failed: 'Failed', timed_out: 'Timed out', declined: 'Declined', blocked: 'Blocked', cancelled: 'Stopped' };
 function stepStatus(tool) {
-  if (tool.ok === undefined) return tool.waiting ? 'Waiting for you' : 'Working';
-  return tool.ok ? 'Done' : 'Failed';
+  const outcome = stepOutcome(tool);
+  if (outcome === 'running') return tool.waiting ? 'Waiting for you' : 'Working';
+  return OUTCOME_WORDS[outcome] || 'Done';
+}
+// Row state class: ok, fail (it ran and failed) or skip (it never ran).
+function stepState(tool) {
+  const outcome = stepOutcome(tool);
+  if (outcome === 'running') return 'running';
+  if (outcome === 'ok') return 'ok';
+  return stepRan(tool) ? 'fail' : 'skip';
 }
 function stepDuration(tool) {
   if (Number.isFinite(Number(tool.durationMs))) return formatDuration(tool.durationMs);
@@ -883,44 +897,110 @@ function fillInspector(box, tool) {
     }
   }
   const out = document.createElement('pre');
-  out.className = 'inspect-pre output' + (tool.ok === false ? ' failed' : '');
-  out.textContent = tool.content || (tool.ok === undefined ? (tool.waiting ? 'Waiting for your approval…' : 'Running…') : 'No output was returned.');
-  section(tool.ok === false ? 'Error' : 'Output', out, tool.content ? () => copyText(tool.content) : null);
+  out.className = 'inspect-pre output' + (stepState(tool) === 'fail' ? ' failed' : '');
+  out.textContent = inspectorOutput(tool);
+  section(stepState(tool) === 'fail' ? 'Error' : 'Output', out, () => copyText(tool.fullContent || tool.content || tool.live || ''));
+  // Long results were cut for the transcript; the whole output stays on the
+  // computer and loads on request.
+  if (tool.more && !tool.fullContent && RT && agent && typeof agent.fetchToolOutput === 'function') {
+    const more = document.createElement('button');
+    more.type = 'button';
+    more.className = 'link-button show-full';
+    more.textContent = 'Show full output';
+    more.addEventListener('click', async (event) => {
+      event.stopPropagation();
+      more.disabled = true;
+      more.textContent = 'Loading…';
+      try {
+        const full = await agent.fetchToolOutput(tool.id);
+        tool.fullContent = String(full && full.text || '');
+        out.textContent = tool.fullContent || out.textContent;
+        more.remove();
+        if (full && full.truncated) toast('Showing the first megabyte of output.');
+      } catch {
+        more.disabled = false;
+        more.textContent = 'Show full output';
+        toast('The full output is no longer on the computer.');
+      }
+    });
+    frag.lastChild.appendChild(more);
+  }
   box.replaceChildren(frag);
 }
+function inspectorOutput(tool) {
+  if (tool.fullContent) return tool.fullContent;
+  if (tool.ok === undefined) return tool.live ? tool.live : tool.waiting ? 'Waiting for your approval…' : 'Running…';
+  return tool.content || 'No output was returned.';
+}
 
-function stepRow(tool) {
+// A step row is built once and then patched in place as the step moves
+// from running to its outcome: no re-mount, no re-played animation, an open
+// inspector and text selection survive.
+function stepRow(tool, { enter = false } = {}) {
   const item = document.createElement('li');
-  const state = tool.ok === undefined ? 'running' : tool.ok ? 'ok' : 'fail';
-  item.className = 'tool ' + state + (tool.waiting ? ' waiting' : '');
   item.dataset.id = tool.id;
   item.dataset.name = tool.name || '';
   item.dataset.kind = toolKind(tool.name);
   const details = document.createElement('details');
   const summary = document.createElement('summary');
   summary.innerHTML = '<span class="state" aria-hidden="true"></span><span class="kind-icon">' + iconSvg(KIND_ICONS[toolKind(tool.name)] || KIND_ICONS.tool) + '</span><span class="name"></span><span class="arg"></span><span class="tool-status"></span><span class="dur"></span><span class="chevron" aria-hidden="true">›</span>';
-  const label = tool.ok === undefined ? liveLabel(tool) : (tool.label && !/^Used /.test(tool.label) ? tool.label : activityLabel(tool));
-  summary.querySelector('.name').textContent = label;
-  const argText = summarizeArgs(tool.name, tool.args);
-  summary.querySelector('.arg').textContent = argText && label.toLowerCase().includes(argText.toLowerCase()) ? '' : argText;
-  summary.querySelector('.tool-status').textContent = stepStatus(tool);
-  summary.querySelector('.dur').textContent = stepDuration(tool);
-  summary.setAttribute('aria-label', label + ', ' + stepStatus(tool).toLowerCase() + '. Expand to inspect input and output.');
   const box = document.createElement('div');
   box.className = 'inspect';
+  const tail = document.createElement('pre');
+  tail.className = 'step-tail';
+  tail.hidden = true;
+  tail.setAttribute('aria-hidden', 'true');
   details.append(summary, box);
-  details.addEventListener('toggle', () => { if (details.open) fillInspector(box, tool); });
-  // A command the user typed (`!npm test`) shows its output straight away.
-  if (tool.open && tool.ok !== undefined) { details.open = true; fillInspector(box, tool); }
-  item.appendChild(details);
+  details.addEventListener('toggle', () => { if (details.open) fillInspector(box, item._tool || tool); });
+  item.append(details, tail);
+  patchStepRow(item, tool);
+  if (enter) item.classList.add('enter');
   return item;
+}
+function patchStepRow(item, tool) {
+  item._tool = tool;
+  const state = stepState(tool);
+  // The entrance animation plays once, on a live mount; any later patch drops it.
+  item.className = 'tool ' + state + (tool.waiting ? ' waiting' : '');
+  const summary = item.querySelector('summary');
+  const label = stepLabel(tool);
+  const set = (selector, text) => { const el = summary.querySelector(selector); if (el.textContent !== text) el.textContent = text; };
+  set('.name', label);
+  const argText = summarizeArgs(tool.name, tool.args);
+  set('.arg', argText && label.toLowerCase().includes(argText.toLowerCase()) ? '' : argText);
+  set('.tool-status', stepStatus(tool));
+  set('.dur', stepDuration(tool));
+  summary.setAttribute('aria-label', label + ', ' + stepStatus(tool).toLowerCase() + '. Expand to inspect input and output.');
+  patchStepTail(item, tool);
+  const details = item.querySelector('details');
+  // A command the user typed (`!npm test`) opens on its output once, when it finishes.
+  if (tool.open && tool.ok !== undefined && !item._autoOpened) { item._autoOpened = true; details.open = true; }
+  if (details.open) {
+    const out = item.querySelector('.inspect-pre.output');
+    // While running only the output changes; refill fully once it settles.
+    if (out && tool.ok === undefined) out.textContent = inspectorOutput(tool);
+    else fillInspector(item.querySelector('.inspect'), tool);
+  }
+}
+// The last few lines of a running command, under its row. It goes away
+// when the step finishes; the inspector keeps the whole output.
+const TAIL_LINES = 5;
+function patchStepTail(item, tool) {
+  const tail = item.querySelector('.step-tail');
+  if (!tail) return;
+  const show = tool.ok === undefined && Boolean(tool.live && tool.live.trim()) && !item.querySelector('details').open;
+  tail.hidden = !show;
+  if (!show) { if (tail.textContent) tail.textContent = ''; return; }
+  const lines = tool.live.replace(/\s+$/, '').split('\n').slice(-TAIL_LINES).map((line) => line.length > 200 ? line.slice(0, 199) + '…' : line);
+  const text = lines.join('\n');
+  if (tail.textContent !== text) tail.textContent = text;
 }
 
 // One execution group. `steps` is the live array of tool records; the group
 // re-renders its header from it and swaps single rows as they change.
 function createGroup(steps = [], { live = false } = {}) {
   const el = document.createElement('section');
-  el.className = 'steps';
+  el.className = 'steps' + (live ? ' enter' : '');
   const head = document.createElement('button');
   head.type = 'button';
   head.className = 'steps-head';
@@ -960,6 +1040,9 @@ function updateGroupHead(group) {
   const meta = [];
   meta.push(stats.total + (stats.total === 1 ? ' step' : ' steps'));
   if (stats.failed) meta.push(stats.failed + ' failed');
+  if (stats.declined) meta.push(stats.declined + ' declined');
+  if (stats.blocked) meta.push(stats.blocked + ' blocked');
+  if (stats.stopped) meta.push(stats.stopped + ' stopped');
   if (group.subagents.length) meta.push(group.subagents.length + (group.subagents.length === 1 ? ' subagent' : ' subagents'));
   const time = running || waiting ? elapsedSince(group.startedAt) : formatDuration(stats.durationMs);
   if (time) meta.push(time);
@@ -968,12 +1051,8 @@ function updateGroupHead(group) {
 }
 function updateStepRow(group, tool) {
   const row = group.list.querySelector('[data-id="' + CSS.escape(tool.id) + '"]');
-  const next = stepRow(tool);
-  if (row) {
-    const wasOpen = row.querySelector('details').open;
-    if (wasOpen) { next.querySelector('details').open = true; fillInspector(next.querySelector('.inspect'), tool); }
-    row.replaceWith(next);
-  } else group.list.appendChild(next);
+  if (row) patchStepRow(row, tool);
+  else group.list.appendChild(stepRow(tool, { enter: group.live }));
   updateGroupHead(group);
 }
 // A group stops being live when the agent speaks again or the turn ends; it
@@ -982,9 +1061,11 @@ function settleGroup(group) {
   if (!group || !group.live) return;
   group.live = false;
   group.thinking = false;
-  if (!group.touched) setGroupOpen(group, false);
+  // Verbose keeps every step list open; Normal folds finished work to one line.
+  if (!group.touched && !verboseSteps()) setGroupOpen(group, false);
   updateGroupHead(group);
 }
+function verboseSteps() { return Boolean(settings && settings.density === 'verbose'); }
 
 // Subagents started in a group, with their live status (running, done, failed).
 function renderSubagents(group, workers = []) {
@@ -1196,40 +1277,134 @@ function onTranscriptClick(event) {
   }
 }
 
+// Follow mode, as in Codex, Cline and Goose: the view stays pinned to the
+// newest output until the user scrolls up (wheel, keys, touch or the
+// scrollbar), and pins again when they come back to the bottom or press
+// "Jump to latest". Pinning is instant, never smooth (smooth scrolls that
+// overlap while text streams are what made the view shake), and a
+// ResizeObserver re-pins whenever content grows, so no event has to.
+const follow = (() => {
+  let following = true;
+  let pinned = 0;          // scrollTop we last set, to tell our scrolls from the user's
+  let frame = 0;
+  const chat = () => $('chat');
+  const atBottom = (el) => el.scrollHeight - el.scrollTop - el.clientHeight <= 4;
+  const showPill = () => {
+    const el = chat();
+    const pill = $('jumpLatest');
+    const away = !following && el.scrollHeight - el.scrollTop - el.clientHeight > 80;
+    if (pill.hidden === !away) return;
+    pill.hidden = !away;
+    $('jumpLatestText').textContent = document.body.classList.contains('busy') ? 'New activity below' : 'Jump to latest';
+  };
+  const apply = () => {
+    frame = 0;
+    const el = chat();
+    if (following) { el.scrollTop = el.scrollHeight; pinned = el.scrollTop; }
+    showPill();
+  };
+  const pin = () => { if (following && !frame) frame = requestAnimationFrame(apply); else if (!following) showPill(); };
+  const release = () => { if (following) { following = false; showPill(); } };
+  const jump = () => { following = true; if (frame) { cancelAnimationFrame(frame); frame = 0; } apply(); };
+  return {
+    pin, jump, release,
+    get following() { return following; },
+    // Toggling a step or group the user is not at the bottom of keeps it
+    // under the pointer instead of pulling the view down.
+    keepInPlace(node) { if (!node || !node.isConnected) return; if (node.closest('#transcript > :last-child') === null) release(); },
+    init() {
+      const el = chat();
+      el.addEventListener('wheel', (event) => { if (event.deltaY < 0) release(); }, { passive: true });
+      el.addEventListener('touchmove', () => { if (!atBottom(el)) release(); }, { passive: true });
+      el.addEventListener('keydown', (event) => { if (['PageUp', 'ArrowUp', 'Home'].includes(event.key)) release(); });
+      el.addEventListener('scroll', () => {
+        if (atBottom(el)) { if (!following) { following = true; showPill(); } return; }
+        // Moved up by something other than our own pinning (the scrollbar).
+        if (following && el.scrollTop < pinned - 2) release();
+        else showPill();
+      }, { passive: true });
+      const observer = new ResizeObserver(() => pin());
+      observer.observe($('transcript'));
+      observer.observe(el);
+      $('jumpLatest').addEventListener('click', () => { jump(); $('input').focus({ preventScroll: true }); });
+    }
+  };
+})();
 function scrollDown(force = false) {
-  const chat = $('chat');
-  if (force || chat.scrollHeight - chat.scrollTop - chat.clientHeight < 220) chat.scrollTop = chat.scrollHeight;
+  if (force) follow.jump(); else follow.pin();
 }
 
+// Streaming replies: finished blocks (a paragraph, a list, a code block)
+// render once and stay in place; only the block still being written is
+// re-rendered. Selections and copy buttons in earlier blocks survive, and
+// the work per frame stays small however long the reply gets.
 let renderQueued = false;
-let lastRender = 0;
-function queueRender() {
-  if (renderQueued) return;
-  renderQueued = true;
-  // Re-rendering Markdown is the costliest thing while streaming; space it
-  // out on slow devices and for long replies.
-  const gap = LITE ? 220 : currentTurn && currentTurn.text.length > 12000 ? 160 : 0;
-  const wait = Math.max(0, gap - (performance.now() - lastRender));
-  const run = () => requestAnimationFrame(() => {
-    renderQueued = false;
-    lastRender = performance.now();
-    if (!currentTurn || !currentTurn.body) return;
-    const pending = splitTextToolCall(currentTurn.text);
-    currentTurn.body.innerHTML = renderMarkdown(pending.text);
+function resetStream(turn) {
+  if (!turn) return;
+  turn.md = { len: 0, count: 0, html: '', tail: null, source: '' };
+  if (turn.body) turn.body.replaceChildren();
+}
+function renderStream(turn) {
+  if (!turn || !turn.body) return;
+  const pending = splitTextToolCall(turn.text);
+  const source = pending.text;
+  if (!turn.md || !source.startsWith(turn.md.source.slice(0, turn.md.len))) resetStream(turn);
+  const md = turn.md;
+  const { stable } = splitStableMarkdown(source.slice(md.len));
+  const body = turn.body;
+  if (stable) {
+    // Drop the old tail, freeze the newly finished blocks, then draw the tail.
+    while (body.childNodes.length > md.count) body.lastChild.remove();
+    const html = renderMarkdown(stable);
+    body.insertAdjacentHTML('beforeend', html);
+    md.html += html;
+    md.len += stable.length;
+    md.count = body.childNodes.length;
+    md.tail = null;
+  }
+  md.source = source;
+  const tail = source.slice(md.len);
+  const tailKey = tail + '\u0000' + pending.tool;
+  if (md.tail !== tailKey) {
+    while (body.childNodes.length > md.count) body.lastChild.remove();
+    if (tail) body.insertAdjacentHTML('beforeend', renderMarkdown(tail));
     if (pending.tool) {
       const note = document.createElement('p');
       note.className = 'pending-tool-call';
       note.append('Preparing ', Object.assign(document.createElement('code'), { textContent: pending.tool }), '…');
-      currentTurn.body.append(note);
+      body.append(note);
     }
-    currentTurn.body.hidden = !currentTurn.text.trim();
-    scrollDown();
-  });
-  if (wait) setTimeout(run, wait); else run();
+    md.tail = tailKey;
+  }
+  body.hidden = !turn.text.trim();
 }
+// The final text of a step: keep the streamed DOM when it already shows
+// exactly this text, so the end of a reply does not redraw it.
+function settleStream(turn, text) {
+  if (!turn || !turn.body) return;
+  const md = turn.md;
+  const same = md && md.source === text && !splitTextToolCall(text).tool
+    && md.html + renderMarkdown(text.slice(md.len)) === renderMarkdown(text);
+  if (same) { turn.text = text; renderStream(turn); return; }
+  turn.body.innerHTML = renderMarkdown(text);
+  turn.md = { len: text.length, count: turn.body.childNodes.length, html: turn.body.innerHTML, tail: '\u0000', source: text };
+}
+function queueRender() {
+  if (renderQueued) return;
+  renderQueued = true;
+  requestAnimationFrame(() => {
+    renderQueued = false;
+    if (!currentTurn || !currentTurn.body) return;
+    renderStream(currentTurn);
+    follow.pin();
+  });
+}
+// Long chats stay complete: old messages are skipped by layout and paint
+// (content-visibility in app.css) instead of being removed from the page.
+// Only extremely long chats on slow devices drop their oldest nodes.
 function trimTranscript() {
   const transcript = $('transcript');
-  const limit = LITE ? 80 : 240;
+  const limit = LITE ? 600 : 3000;
   while (transcript.childElementCount > limit) transcript.firstElementChild.remove();
 }
 
@@ -1323,7 +1498,9 @@ function endTurn(reason) {
     for (const tool of activeGroup.steps) {
       if (tool.ok !== undefined) continue;
       tool.ok = false; tool.waiting = false; tool.endedAt = Date.now();
-      tool.content = tool.content || (reason === 'stopped' ? 'Stopped before it finished.' : 'Did not finish.');
+      if (reason === 'stopped') tool.outcome = 'cancelled';
+      tool.content = tool.content || tool.live || (reason === 'stopped' ? 'Stopped before it finished.' : 'Did not finish.');
+      delete tool.live;
       updateStepRow(activeGroup, tool);
     }
   }
@@ -1337,11 +1514,157 @@ function endTurn(reason) {
   currentTurn = null;
 }
 
+// The agent read a steering note between steps: close the step it was on
+// (nothing is running then) so the work after the note reads as new work.
+function breakTurn() {
+  removeThinking();
+  clearCursor();
+  settleGroup(activeGroup);
+  activeGroup = null;
+  if (currentTurn && currentTurn.wrap) messageSource.set(currentTurn.wrap, currentTurn.text);
+  if (currentTurn && !currentTurn.text.trim() && !currentTurn.entry.tools.length && !currentTurn.entry.subagents) {
+    const index = display.indexOf(currentTurn.entry);
+    if (index >= 0) display.splice(index, 1);
+    if (currentTurn.wrap) currentTurn.wrap.remove();
+  }
+  currentTurn = null;
+}
+function showSteer(note) {
+  const at = Date.now();
+  display.push({ role: 'user', content: note, at, steer: true });
+  const el = addMessage('user', note, at);
+  el.classList.add('steer');
+  scrollDown();
+}
+const LIVE_KEEP = 16_000; // characters of live output kept per running step
+
+// One clock for the whole run, started from the server's start time when
+// there is one, so a reload or another device shows the same "Working 42s".
+// It ticks once a second and writes only when the text changes.
+const runClock = {
+  startedAt: 0,
+  timer: 0,
+  start(at) {
+    const value = Number(at);
+    if (!Number.isFinite(value) || value <= 0) return;
+    // A server time only moves the start earlier (a resumed run), never later.
+    this.startedAt = this.startedAt && this.timer ? Math.min(this.startedAt, value) : value;
+    if (!this.timer) this.timer = setInterval(() => this.tick(), 1000);
+    this.tick();
+  },
+  tick() {
+    const el = $('runStatus');
+    if (!el) return;
+    if (!document.body.classList.contains('busy') || !this.startedAt) { if (!el.hidden) el.hidden = true; return; }
+    const waiting = !$('approvalSheet').hidden;
+    const text = (waiting ? 'Waiting for you' : 'Working') + ' · ' + elapsedSince(this.startedAt) + ' · Esc to stop';
+    const label = el.querySelector('.run-status-text');
+    if (label.textContent !== text) label.textContent = text;
+    el.classList.toggle('waiting', waiting);
+    if (el.hidden) el.hidden = false;
+  },
+  stop() {
+    clearInterval(this.timer);
+    this.timer = 0;
+    const ms = this.startedAt ? Date.now() - this.startedAt : 0;
+    this.startedAt = 0;
+    const el = $('runStatus');
+    if (el) el.hidden = true;
+    return ms;
+  }
+};
+// The end of a run: one quiet line says how long it took, and notes the
+// agent never got to read are shown (the computer keeps them for the next
+// message).
+function finishRun(prefix) {
+  const ms = runClock.stop();
+  for (const note of pendingInputs.take('steer')) showSteer(note);
+  if (prefix && ms >= 1000) {
+    const content = prefix + ' ' + formatDuration(ms);
+    display.push({ role: 'worked', content });
+    addMessage('worked', content);
+  }
+}
+
+// Messages typed while OASIS works, shown as chips above the message box:
+// a note (read at the next step), a queued message (sent when the run
+// ends) or an interrupt (sent once the run has stopped).
+const pendingInputs = {
+  items: [],
+  seq: 0,
+  add(kind, content) {
+    this.items.push({ id: ++this.seq, kind, content });
+    this.render();
+  },
+  take(kind, count = Infinity) {
+    const taken = [];
+    this.items = this.items.filter((item) => {
+      if (item.kind !== kind || taken.length >= count) return true;
+      taken.push(item.content);
+      return false;
+    });
+    this.render();
+    return taken;
+  },
+  remove(id) {
+    this.items = this.items.filter((item) => item.id !== id);
+    this.render();
+  },
+  render() {
+    const box = $('pendingInputs');
+    if (!box) return;
+    const LABELS = { steer: 'Read at the next step', queued: 'Sends when this finishes', interrupt: 'Sends once stopped' };
+    box.replaceChildren(...this.items.map((item) => {
+      const chip = document.createElement('div');
+      chip.className = 'pending-input ' + item.kind;
+      chip.setAttribute('role', 'listitem');
+      const kind = document.createElement('span');
+      kind.className = 'pending-kind';
+      kind.textContent = LABELS[item.kind];
+      const text = document.createElement('span');
+      text.className = 'pending-text';
+      text.textContent = item.content.length > 140 ? item.content.slice(0, 139) + '…' : item.content;
+      text.title = item.content;
+      chip.append(kind, text);
+      if (item.kind !== 'steer') {
+        const drop = document.createElement('button');
+        drop.type = 'button';
+        drop.className = 'pending-drop';
+        drop.setAttribute('aria-label', 'Remove this queued message');
+        drop.textContent = '×';
+        drop.addEventListener('click', () => {
+          this.remove(item.id);
+          if (!$('input').value.trim()) { $('input').value = item.content; autosize(); updateSteering(); }
+          $('input').focus();
+        });
+        chip.appendChild(drop);
+      }
+      return chip;
+    }));
+    box.hidden = !this.items.length;
+  },
+  // After a run: send an interrupt first, else the oldest queued message.
+  next() {
+    const pick = this.items.find((item) => item.kind === 'interrupt') || this.items.find((item) => item.kind === 'queued');
+    if (!pick) return null;
+    this.remove(pick.id);
+    return pick.content;
+  }
+};
+function flushPendingInputs() {
+  if (agent.busy || agent.detached) return;
+  const next = pendingInputs.next();
+  if (next) void send(next);
+}
+
 function handleEvent(event) {
   switch (event.type) {
     case 'user': {
+      // Older runtimes sent a steering note as a 'user' event; it is not a new turn.
+      if (event.steer) { handleEvent({ type: 'steer', content: event.content }); break; }
       endTurn('');
       lastTaskGroup = null;
+      runClock.start(Date.now());
       const at = Date.now();
       display.push({ role: 'user', content: event.content, at, ...(event.images ? { images: event.images } : {}) });
       const el = addMessage('user', event.content, at);
@@ -1360,15 +1683,16 @@ function handleEvent(event) {
       ensureProse();
       currentTurn.text += event.delta;
       queueRender();
+      removeThinking();
       break;
     case 'retry':
       // A retried request starts its reply over; drop any half-streamed text.
-      if (currentTurn) { currentTurn.text = ''; if (currentTurn.body) currentTurn.body.innerHTML = ''; }
+      if (currentTurn) { currentTurn.text = ''; resetStream(currentTurn); }
       toast(event.waitMs ? 'Rate limited for a moment; retrying in ' + Math.ceil(event.waitMs / 1000) + 's…' : 'Provider busy, retrying (' + event.attempt + ')…');
       break;
     case 'model_switch': {
       const kind = classifyFailure({ message: event.reason, status: Number((String(event.reason).match(/\((\d{3})\)/) || [])[1] || 0) });
-      if (currentTurn) { currentTurn.text = ''; if (currentTurn.body) currentTurn.body.innerHTML = ''; }
+      if (currentTurn) { currentTurn.text = ''; resetStream(currentTurn); }
       const line = event.from + ' ' + (SWITCH_REASONS[kind] || 'failed') + '. Switched to ' + event.to + ' and carried on.';
       display.push({ role: 'note', content: line });
       addMessage('note', line);
@@ -1383,7 +1707,7 @@ function handleEvent(event) {
         ensureProse();
         removeThinking();
         messageSource.set(currentTurn.wrap, text);
-        currentTurn.body.innerHTML = renderMarkdown(text);
+        settleStream(currentTurn, text);
         currentTurn.body.hidden = false;
         if (!(event.toolCalls && event.toolCalls.length)) currentTurn.body.classList.add('cursor');
         else currentTurn.body.classList.remove('cursor');
@@ -1418,6 +1742,9 @@ function handleEvent(event) {
       }
       const { tool, group } = found;
       tool.ok = event.ok;
+      if (event.outcome) tool.outcome = event.outcome;
+      if (event.more) tool.more = true;
+      delete tool.live;
       tool.waiting = false;
       tool.endedAt = Date.now();
       if (Number.isFinite(Number(event.durationMs))) tool.durationMs = Number(event.durationMs);
@@ -1425,11 +1752,41 @@ function handleEvent(event) {
       if (event.ok !== false && /write|edit|patch|delete|move|rename|notebook/i.test(String(event.name || tool.name || ''))) turnEdited = true;
       if (RT && /^(write_file|edit_file|multi_edit|delete_file|notebook_edit|run_command|git_commit)$/.test(event.name || tool.name)) refreshFiles();
       const content = String(event.content || '');
+      if (content.length > 6000) tool.more = true;
       tool.content = content.length > 6000 ? content.slice(0, 6000) + '\n…' : content;
       updateStepRow(group, tool);
-      if (event.ok === false) sound('fail');
+      if (stepState(tool) === 'fail') sound('fail');
       break;
     }
+    case 'tool_output': {
+      // Live output of a running command: the last lines show under its row.
+      const found = findStep(event.id);
+      if (!found || found.tool.ok !== undefined) break;
+      const tool = found.tool;
+      const next = (tool.live || '') + event.text;
+      tool.live = next.length > LIVE_KEEP ? next.slice(next.length - LIVE_KEEP) : next;
+      const row = found.group.list.querySelector('[data-id="' + CSS.escape(tool.id) + '"]');
+      if (row) patchStepRow(row, tool);
+      follow.pin();
+      break;
+    }
+    case 'steer':
+      pendingInputs.add('steer', event.content);
+      break;
+    case 'steered':
+      // The agent read these notes: they join the transcript where it read them.
+      breakTurn();
+      for (const note of pendingInputs.take('steer', event.delivered || 1)) showSteer(note);
+      break;
+    case 'run_clock':
+      runClock.start(event.startedAt);
+      break;
+    case 'approval_waiting':
+      markWaitingTools(true);
+      break;
+    case 'approval_answered':
+      markWaitingTools(false);
+      break;
     case 'subagents': {
       const group = lastTaskGroup || ensureGroup();
       const owner = group.taskEntry || (currentTurn && currentTurn.entry);
@@ -1454,10 +1811,12 @@ function handleEvent(event) {
     case 'compacted': addMessage('note', event.mode === 'summary' ? 'Earlier conversation summarised to save context.' : 'Older tool output trimmed to save context.'); break;
     case 'stopped':
       endTurn('stopped');
+      finishRun('Stopped after');
       addMessage('note', 'Stopped.');
       break;
     case 'error': {
       endTurn('error');
+      finishRun('');
       display.push({ role: 'error', content: event.message });
       const card = addMessage('error', event.message);
       if (event.activeJob) busyFolderActions(card, event.activeJob, event.request || '');
@@ -1495,6 +1854,7 @@ function handleEvent(event) {
       break;
     case 'done':
       endTurn('');
+      finishRun('Worked for');
       offerUndo();
       trimTranscript();
       sound('done');
@@ -1509,6 +1869,7 @@ function renderSavedDisplay(entries) {
   for (const [index, block] of blocks.entries()) {
     if (block.type === 'group') {
       const group = createGroup(block.steps, { live: false });
+      if (verboseSteps()) setGroupOpen(group, true);
       groupOf.set(group.el, group);
       $('transcript').appendChild(group.el);
       if (block.subagents.length) renderSubagents(group, block.subagents);
@@ -1747,6 +2108,60 @@ async function openChats() {
   }
   if ($('chatsSheet').hidden) openSheet('chatsSheet');
   void renderRuntimeSessions();
+  void renderRunMonitor();
+}
+// Recent agent runs on the computer (from any chat, browser or the
+// terminal): what state each is in, its workers and open approvals. Only
+// lifecycle facts come back from the server, never prompts or output.
+const RUN_STATES = { queued: 'Queued', running: 'Working', waiting_approval: 'Waiting for you', completed: 'Done', failed: 'Failed', cancelled: 'Stopped', interrupted: 'Interrupted' };
+async function renderRunMonitor() {
+  const list = $('runMonitorList');
+  const label = $('runMonitorLabel');
+  if (!RT || RT.needsToken) { list.hidden = label.hidden = true; return; }
+  let runs = [];
+  try { runs = (await RT.client.api('/api/agent-monitor')).runs || []; } catch { list.hidden = label.hidden = true; return; }
+  runs = runs.slice(0, 12);
+  list.hidden = label.hidden = !runs.length;
+  list.replaceChildren(...runs.map((run) => {
+    const li = document.createElement('li');
+    const live = LIVE_JOB.has(run.status);
+    li.className = 'run-item ' + String(run.status || '').replace(/[^a-z_]/g, '');
+    const title = document.createElement('strong');
+    title.textContent = run.title || 'Coding task';
+    const meta = document.createElement('span');
+    meta.className = 'run-meta';
+    const parts = [RUN_STATES[run.status] || run.status];
+    if (run.runningWorkers) parts.push(run.runningWorkers + ' of ' + run.workerCount + ' workers running');
+    else if (run.workerCount) parts.push(run.workerCount + (run.workerCount === 1 ? ' worker' : ' workers'));
+    if (run.approvals && run.approvals.pending) parts.push(run.approvals.pending + ' approval' + (run.approvals.pending === 1 ? '' : 's') + ' open');
+    if (run.branch) parts.push(run.branch);
+    const when = Date.parse(run.updatedAt || run.createdAt || '');
+    if (Number.isFinite(when)) parts.push(live ? 'started ' + elapsedSince(Date.parse(run.createdAt || run.updatedAt)) + ' ago' : new Date(when).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' }));
+    meta.textContent = parts.filter(Boolean).join(' · ');
+    const text = document.createElement('div');
+    text.className = 'run-text';
+    text.append(title, meta);
+    if (run.error) { const err = document.createElement('span'); err.className = 'run-error'; err.textContent = run.error; text.appendChild(err); }
+    const dot = document.createElement('span');
+    dot.className = 'run-dot';
+    dot.setAttribute('aria-hidden', 'true');
+    li.append(dot, text);
+    if (live && run.id !== agent.jobId) {
+      const stop = document.createElement('button');
+      stop.type = 'button';
+      stop.className = 'btn small ghost';
+      stop.textContent = 'Stop';
+      stop.setAttribute('aria-label', 'Stop ' + (run.title || 'this run'));
+      stop.addEventListener('click', async () => {
+        stop.disabled = true;
+        try { await RT.client.api('/api/jobs/' + run.id + '/cancel', { method: 'POST', body: {} }); toast('Stopping that run. Finished work stays.'); }
+        catch { toast('Could not stop that run.'); }
+        void renderRunMonitor();
+      });
+      li.appendChild(stop);
+    }
+    return li;
+  }));
 }
 // Sessions saved by OASIS on this computer (terminal runs included) that this
 // browser has no chat for yet. Opening one continues it with its history.
@@ -2273,6 +2688,8 @@ async function requestApproval({ name, args, runtime = false }) {
     summary.textContent = 'Run ' + name;
     detail.textContent = JSON.stringify(args, null, 2);
   }
+  $('approvalInstead').value = '';
+  $('denyButton').textContent = 'Deny';
   openSheet('approvalSheet');
   if (navigator.vibrate) try { navigator.vibrate(12); } catch { /* not supported */ }
   return new Promise((resolve) => { approvalResolve = resolve; });
@@ -2297,7 +2714,16 @@ function answerApproval(value) {
   if (resolve) resolve(value);
 }
 $('allowButton').addEventListener('click', () => answerApproval(true));
-$('denyButton').addEventListener('click', () => answerApproval(false));
+// Deny with a reason: the reason goes to the running task as a note, so the
+// agent changes course instead of guessing why it was stopped.
+$('denyButton').addEventListener('click', () => {
+  const instead = $('approvalInstead').value.trim();
+  $('approvalInstead').value = '';
+  answerApproval(false);
+  if (instead && agent.busy && typeof agent.steer === 'function') void agent.steer(instead);
+});
+$('approvalInstead').addEventListener('keydown', (event) => { if (event.key === 'Enter' && !event.isComposing) { event.preventDefault(); $('denyButton').click(); } });
+$('approvalInstead').addEventListener('input', () => { $('denyButton').textContent = $('approvalInstead').value.trim() ? 'Deny and send' : 'Deny'; });
 $('allowAllButton').addEventListener('click', () => {
   if (approvalAlways) { answerApproval(approvalAlways); return; }
   allowEditsThisSession = true; updateModeUI(); answerApproval(true);
@@ -2382,6 +2808,19 @@ $('settingsConnectInput').addEventListener('keydown', (event) => { if (event.key
 $('input').addEventListener('keydown', (event) => {
   // Shift+Tab cycles the permission mode, as in the terminal.
   if (event.key === 'Tab' && event.shiftKey && !event.ctrlKey && !event.metaKey && !event.altKey) { event.preventDefault(); cycleMode(); return; }
+  // While OASIS works: Enter adds a note it reads at the next step,
+  // Alt+Enter queues a message for when it finishes, Ctrl/Cmd+Enter stops
+  // it and sends straight after, Esc stops (finished work stays).
+  if (agent.busy && event.key === 'Enter' && !event.shiftKey && !event.isComposing && (event.altKey || event.ctrlKey || event.metaKey)) {
+    event.preventDefault();
+    const text = $('input').value.trim();
+    if (!text) return;
+    $('input').value = ''; autosize(); updateSteering();
+    if (event.altKey) { pendingInputs.add('queued', text); return; }
+    pendingInputs.add('interrupt', text);
+    agent.stop();
+    return;
+  }
   if (event.key === 'Enter' && !event.shiftKey && !event.isComposing && matchMedia('(pointer:fine)').matches) {
     event.preventDefault();
     $('composer').requestSubmit();
@@ -3117,6 +3556,7 @@ function openSettings() {
   $('notifyInput').checked = Boolean(settings.notify) && typeof Notification !== 'undefined' && Notification.permission === 'granted';
   $('notifyInput').closest('label').hidden = typeof Notification === 'undefined';
   $('soundInput').checked = Boolean(settings.sounds);
+  $('densityVerbose').checked = settings.density === 'verbose';
   $('effectsInput').checked = settings.effects !== false;
   $('githubToken').value = settings.githubToken;
   $('testResult').textContent = '';
@@ -3161,6 +3601,7 @@ function formSettings() {
     notify: $('notifyInput').checked,
     sounds: $('soundInput').checked,
     effects: $('effectsInput').checked,
+    density: $('densityVerbose').checked ? 'verbose' : 'normal',
     githubToken: $('githubToken').value.trim()
   };
 }
@@ -4308,6 +4749,7 @@ window.addEventListener('hashchange', () => {
 });
 
 async function boot() {
+  follow.init();
   applyTheme();
   applySidebar();
   $('sideSearchKey').textContent = displayShortcut('MOD+K');

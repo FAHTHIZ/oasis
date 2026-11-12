@@ -140,6 +140,10 @@ function normalizePendingShell(items) {
 }
 
 const ELSEWHERE = Symbol('answered elsewhere');
+// Step outcomes from the runtime (see src/tool-activity.mjs toolActivityOutcome).
+const TOOL_OUTCOMES = new Set(['ok', 'failed', 'declined', 'blocked', 'cancelled', 'timed_out']);
+// A step's result shown inline; the full text loads on demand (fetchToolOutput).
+const MAX_RESULT_PREVIEW_CHARS = 4000;
 
 function pause(ms, signal) {
   return new Promise((resolve) => {
@@ -178,6 +182,7 @@ export class RuntimeAgent {
     this.usage = { input: 0, output: 0 };
     this.sessionId = '';
     this.jobId = '';
+    this.lastJobId = '';
     this.jobKind = '';
     this.resumeJobId = '';
     this.controller = null;
@@ -222,6 +227,7 @@ export class RuntimeAgent {
     this.controller = new AbortController();
     const signal = this.controller.signal;
     this.jobId = jobId;
+    this.lastJobId = jobId;
     this.jobKind = 'agent';
     this.resumeJobId = '';
     try {
@@ -248,9 +254,18 @@ export class RuntimeAgent {
     if (!this.busy || !this.jobId || !note) return false;
     try {
       await this.client.api('/api/jobs/' + this.jobId + '/steer', { method: 'POST', body: { message: note } });
-      this.emit('user', { content: note, steer: true });
+      // Not a new turn: the note joins the running one at its next step
+      // ('steered' from the runtime says it was read).
+      this.emit('steer', { content: note });
       return true;
     } catch { return false; }
+  }
+
+  /** The full output of a finished step (the inline result is a preview). */
+  async fetchToolOutput(callId, jobId = this.lastJobId) {
+    if (!callId || !jobId) throw new Error('This step\'s full output is not available.');
+    const data = await this.client.api('/api/jobs/' + jobId + '/tool-output?callId=' + encodeURIComponent(callId));
+    return { text: String(data && data.text || ''), truncated: Boolean(data && data.truncated) };
   }
 
   /**
@@ -361,6 +376,7 @@ export class RuntimeAgent {
         body: { message, ...(pictures.length ? { images: pictures } : {}), ...(this.sessionId ? { sessionId: this.sessionId } : {}), permissionMode: APP_TO_RUNTIME_MODE[this.getMode()] || 'default' }
       });
       this.jobId = started.jobId;
+      this.lastJobId = started.jobId;
       this.jobKind = 'agent';
       if (started.sessionId) this.sessionId = started.sessionId;
       // The runtime accepted this prompt, so the terminal context is represented
@@ -390,7 +406,7 @@ export class RuntimeAgent {
    * Waits for the user's answer here, unless another device (or the terminal)
    * answers first or the task ends: then ELSEWHERE, and nothing is posted.
    */
-  async answeredHere(local, requestId, after, signal) {
+  async answeredHere(local, requestId, after, signal, jobId = this.jobId) {
     const stop = new AbortController();
     const onAbort = () => stop.abort();
     signal.addEventListener('abort', onAbort, { once: true });
@@ -398,7 +414,7 @@ export class RuntimeAgent {
       let since = after;
       while (!stop.signal.aborted) {
         let job;
-        try { job = await this.client.api('/api/jobs/' + this.jobId + '?after=' + since + '&wait=' + (this.waitMs || 20_000), { signal: stop.signal }); }
+        try { job = await this.client.api('/api/jobs/' + jobId + '?after=' + since + '&wait=' + (this.waitMs || 20_000), { signal: stop.signal }); }
         catch { if (stop.signal.aborted) return new Promise(() => {}); await pause(Math.max(1000, this.pollMs), stop.signal); continue; }
         for (const event of job.events || []) {
           since = Math.max(since, event.id);
@@ -448,6 +464,9 @@ export class RuntimeAgent {
     // Approvals, questions and forms answered earlier (before a reload) are
     // known from their resolution events and never asked twice.
     const resolved = new Set();
+    const asking = new Set();
+    let approvals = Promise.resolve();
+    let clockSent = false;
     let after = 0;
     let done = false;
     let idle = 0;
@@ -472,6 +491,13 @@ export class RuntimeAgent {
       }
       if (idle >= 3) this.emit('reconnected');
       idle = 0;
+      // The run's start by the computer's clock, so elapsed time survives a
+      // reload or a reconnect and does not depend on this device's clock.
+      if (!clockSent && job.createdAt && job.now) {
+        const started = Date.parse(job.createdAt);
+        const skew = Date.parse(job.now) - Date.now();
+        if (Number.isFinite(started) && Number.isFinite(skew)) { clockSent = true; this.emit('run_clock', { startedAt: started - skew }); }
+      }
       // A finished task's open approvals can no longer be answered.
       const live = !['completed', 'error', 'cancelled', 'interrupted'].includes(job.status);
       for (const event of job.events || []) {
@@ -507,9 +533,15 @@ export class RuntimeAgent {
             this.emit('tool_start', { id, name: data.name, args: call.args, ...(data.label ? { label: String(data.label).slice(0, 160) } : {}) });
             break;
           }
+          case 'tool_output':
+            if (data.callId && data.text) this.emit('tool_output', { id: String(data.callId), stream: data.stream === 'stderr' ? 'stderr' : 'stdout', text: String(data.text), ...(data.capped ? { capped: true } : {}) });
+            break;
+          case 'steer_queued': this.emit('steer_queued', {}); break;
+          case 'steered': this.emit('steered', { delivered: Math.max(0, Number(data.delivered) || 0) }); break;
           case 'tool_result': {
             if (data.subagent) break;
-            const ok = !/^(error|failed|denied|blocked)$/i.test(String(data.status || ''));
+            const outcome = TOOL_OUTCOMES.has(String(data.outcome || '')) ? String(data.outcome) : '';
+            const ok = outcome ? outcome === 'ok' : !/^(error|failed|denied|blocked)$/i.test(String(data.status || ''));
             const content = [data.result, data.warning].filter(Boolean).join('\n');
             if (data.name === 'todo_write') {
               const todos = extractRuntimeTodos(data.args && data.args.todos)
@@ -519,7 +551,8 @@ export class RuntimeAgent {
                 ?? extractRuntimeTodos(data);
               if (todos !== null) { this.todos = todos; this.emit('todos', { todos }); }
             }
-            this.emit('tool_result', { id: data.callId || '', name: data.name, ok, content: String(content || data.label || '').slice(0, 4000), ...(Number.isFinite(Number(data.durationMs)) ? { durationMs: Number(data.durationMs) } : {}) });
+            const text = String(content || data.label || '');
+            this.emit('tool_result', { id: data.callId || '', name: data.name, ok, ...(outcome ? { outcome } : {}), content: text.slice(0, MAX_RESULT_PREVIEW_CHARS), ...(text.length > MAX_RESULT_PREVIEW_CHARS || /… \[truncated\]$/.test(text) ? { more: true } : {}), ...(Number.isFinite(Number(data.durationMs)) ? { durationMs: Number(data.durationMs) } : {}) });
             break;
           }
           case 'plan':
@@ -529,15 +562,27 @@ export class RuntimeAgent {
             break;
           }
           case 'approval_required': {
-            if (!live || resolved.has(String(data.approvalId || ''))) break;
-            const value = await this.answeredHere(this.approve({ name: data.tool || 'runtime', args: { prompt: data.prompt, diff: data.diff, suggestion: data.suggestion, risky: data.risky }, runtime: true }), String(data.approvalId || ''), event.id, signal);
-            // Left for another chat or device while the sheet was open: the
-            // question stays open on the computer for whoever looks next.
-            if (signal.aborted) return;
-            // Answered on another device: the next poll brings its result.
-            if (value === ELSEWHERE) { resolved.add(String(data.approvalId || '')); this.emit('answered_elsewhere', { kind: 'approval' }); break; }
-            const approved = value === 'always' || value === true;
-            await this.client.api('/api/jobs/' + this.jobId + '/approval', { method: 'POST', body: { approvalId: data.approvalId, approved, always: value === 'always' } }).catch(() => {});
+            const approvalId = String(data.approvalId || '');
+            if (!live || resolved.has(approvalId) || asking.has(approvalId)) break;
+            asking.add(approvalId);
+            // Asked without holding up the feed: other steps' output and
+            // events keep arriving while the approval is open. Approvals
+            // still open one at a time, in the order they were asked.
+            const jobId = this.jobId;
+            approvals = approvals.then(async () => {
+              if (signal.aborted || resolved.has(approvalId)) return;
+              this.emit('approval_waiting', { approvalId, tool: data.tool || '' });
+              const value = await this.answeredHere(this.approve({ name: data.tool || 'runtime', args: { prompt: data.prompt, diff: data.diff, suggestion: data.suggestion, risky: data.risky }, runtime: true }), approvalId, event.id, signal, jobId);
+              // Left for another chat or device while it was open: the
+              // question stays open on the computer for whoever looks next.
+              if (signal.aborted) return;
+              resolved.add(approvalId);
+              // Answered on another device: the next poll brings its result.
+              if (value === ELSEWHERE) { this.emit('answered_elsewhere', { kind: 'approval' }); return; }
+              const approved = value === 'always' || value === true;
+              this.emit('approval_answered', { approvalId, approved });
+              await this.client.api('/api/jobs/' + jobId + '/approval', { method: 'POST', body: { approvalId: data.approvalId, approved, always: value === 'always' } }).catch(() => {});
+            }).catch(() => {});
             break;
           }
           case 'question': {
@@ -601,6 +646,8 @@ export class RuntimeAgent {
         if (job.status === 'cancelled') this.emit('stopped');
         done = true;
       }
+      // A finished task settles any approval still open before follow returns.
+      if (done) await approvals;
       // An answer with events, or a long poll that waited, goes straight on.
       // A quick empty answer (an older server without wait=) is paced.
       if (!done && !(job.events || []).length && Date.now() - asked < this.pollMs) await pause(this.pollMs, signal);

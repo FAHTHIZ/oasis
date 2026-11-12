@@ -74,7 +74,7 @@ svg{width:20px;height:20px;flex:none}
 .update-bar[hidden]{display:none}
 .update-text{flex:1 1 220px;min-width:0;color:var(--muted)}
 .update-text b{color:var(--text);font-weight:600}
-.chat{flex:1;min-height:0;overflow-y:auto;overscroll-behavior:contain;padding:18px 14px 24px;scroll-behavior:smooth}
+.chat{flex:1;min-height:0;overflow-y:auto;overscroll-behavior:contain;padding:18px 14px 24px;overflow-anchor:none}
 .transcript,.welcome{max-width:var(--chat-w);margin:0 auto}
 
 /* Welcome */
@@ -102,7 +102,6 @@ svg{width:20px;height:20px;flex:none}
 .suggestion{display:flex;align-items:flex-start;gap:10px;padding:13px 14px;border:1px solid var(--line);border-radius:var(--r-lg);background:color-mix(in srgb,var(--panel) 78%,transparent);color:var(--text-2);font-size:13.5px;line-height:1.4;text-align:left;transition:border-color .18s,transform .18s var(--ease),background .18s,color .18s;animation:rise .4s var(--ease) both;animation-delay:calc(var(--i,0) * 60ms)}
 .suggestion svg{width:18px;height:18px;color:var(--accent-2);margin-top:1px}
 .suggestion:hover{border-color:var(--accent-line);color:var(--text);background:color-mix(in srgb,var(--accent) 6%,var(--panel));transform:translateY(-2px)}
-.suggestion:hover svg{animation:jitter .32s steps(3) 1}
 
 /* Messages */
 .msg{margin:0 0 18px}
@@ -130,7 +129,8 @@ svg{width:20px;height:20px;flex:none}
 @keyframes blink{50%{opacity:0}}
 
 /* Timeline: execution groups and steps */
-.steps{position:relative;margin:2px 0 16px;border:1px solid var(--line);border-radius:var(--r-lg);background:color-mix(in srgb,var(--panel) 86%,transparent);overflow:hidden;transition:border-color .2s var(--ease),box-shadow .3s var(--ease);animation:rise .28s var(--ease) both}
+.steps{position:relative;margin:2px 0 16px;border:1px solid var(--line);border-radius:var(--r-lg);background:color-mix(in srgb,var(--panel) 86%,transparent);overflow:hidden;transition:border-color .2s var(--ease),box-shadow .3s var(--ease)}
+.steps.enter{animation:rise .2s var(--ease) both}
 .steps.running{border-color:var(--accent-line);box-shadow:0 0 0 1px var(--accent-soft),0 14px 40px -28px color-mix(in srgb,var(--accent) 60%,transparent)}
 .steps.waiting{border-color:color-mix(in srgb,var(--warn) 45%,transparent)}
 .steps.running::before{content:"";position:absolute;inset:0 0 auto 0;height:2px;background:linear-gradient(90deg,transparent,var(--accent),transparent);background-size:40% 100%;background-repeat:no-repeat;animation:scan 1.6s linear infinite}
@@ -146,15 +146,15 @@ svg{width:20px;height:20px;flex:none}
 .steps.waiting .steps-orb::before{background:var(--warn)}
 @keyframes ping{from{transform:scale(.5);opacity:.8}to{transform:scale(1.35);opacity:0}}
 .steps-title{flex:0 1 auto;min-width:0;font-weight:600;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.steps.running .steps-title{background:linear-gradient(90deg,var(--text) 0%,var(--text) 40%,var(--accent) 50%,var(--text) 60%,var(--text) 100%);background-size:250% 100%;-webkit-background-clip:text;background-clip:text;color:transparent;animation:shimmer 2.4s linear infinite}
-@keyframes shimmer{from{background-position:100% 0}to{background-position:-150% 0}}
+.steps.running .steps-title{color:var(--text)}
 .steps-meta{flex:none;margin-left:auto;font:11.5px/1.4 var(--mono);color:var(--faint);font-variant-numeric:tabular-nums;white-space:nowrap}
 .steps-head .chevron,.tool .chevron{flex:none;color:var(--faint);font-size:18px;line-height:1;transition:transform .18s var(--ease)}
 .steps.open>.steps-head .chevron{transform:rotate(90deg)}
 .steps-body{border-top:1px solid var(--line);padding:6px 6px 8px}
 .step-list{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:1px;position:relative}
 .step-list::before{content:"";position:absolute;left:19px;top:14px;bottom:14px;width:1px;background:linear-gradient(var(--line-strong),var(--line))}
-.tool{position:relative;border-radius:var(--r-md);animation:rise .22s var(--ease) both}
+.tool{position:relative;border-radius:var(--r-md)}
+.tool.enter{animation:rise .18s var(--ease) both}
 .tool>details>summary{list-style:none;display:flex;align-items:center;gap:9px;padding:6px 8px;cursor:pointer;font-size:13px;min-height:34px;border-radius:var(--r-md)}
 .tool>details>summary::-webkit-details-marker{display:none}
 .tool>details>summary:hover{background:var(--raised)}
@@ -165,9 +165,8 @@ svg{width:20px;height:20px;flex:none}
 .tool .kind-icon svg{width:14px;height:14px}
 .tool.ok .kind-icon{color:var(--accent-2)}
 .tool.fail .kind-icon{color:var(--danger);border-color:color-mix(in srgb,var(--danger) 35%,transparent);background:var(--danger-soft)}
-.tool.running .kind-icon{color:var(--accent);border-color:var(--accent-line);background:var(--accent-soft);animation:jitter 2.2s ease-in-out infinite}
-.tool.waiting .kind-icon{color:var(--warn);border-color:color-mix(in srgb,var(--warn) 40%,transparent);background:var(--warn-soft);animation:none}
-@keyframes jitter{0%,100%{transform:translate(0,0)}20%{transform:translate(.4px,-.3px)}40%{transform:translate(-.3px,.4px)}60%{transform:translate(.3px,.2px)}80%{transform:translate(-.2px,-.4px)}}
+.tool.running .kind-icon{color:var(--accent);border-color:var(--accent-line);background:var(--accent-soft)}
+.tool.waiting .kind-icon{color:var(--warn);border-color:color-mix(in srgb,var(--warn) 40%,transparent);background:var(--warn-soft)}
 .tool .name{font-weight:550;color:var(--text-2);flex:0 1 auto;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .tool .arg{font-family:var(--mono);font-size:12px;color:var(--faint);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0;flex:1 1 0}
 .tool-status{flex:none;font-size:11px;font-weight:600;padding:1px 7px;border-radius:999px;border:1px solid var(--line);color:var(--muted);margin-left:auto}
@@ -191,7 +190,7 @@ code.inspect-text{font:12px var(--mono)}
 .inspect-diff{max-height:340px;overflow:auto;border:0;border-radius:0}
 .subagents{margin:4px 6px 4px 40px;border:1px solid var(--line);border-radius:var(--r-md);background:var(--sunken);padding:8px 10px}
 .thinking{display:inline-flex;align-items:center;gap:9px;color:var(--muted);font-size:13.5px;margin:2px 0 16px;padding:7px 12px 7px 10px;border-radius:999px;border:1px solid var(--line);background:color-mix(in srgb,var(--panel) 80%,transparent);animation:rise .2s var(--ease) both}
-.thinking span:last-child{background:linear-gradient(90deg,var(--muted) 0%,var(--muted) 40%,var(--text) 50%,var(--muted) 60%,var(--muted) 100%);background-size:250% 100%;-webkit-background-clip:text;background-clip:text;color:transparent;animation:shimmer 2s linear infinite}
+.thinking span:last-child{color:var(--muted)}
 .thinking-orb{width:9px;height:9px;border-radius:50%;background:var(--accent);box-shadow:0 0 12px var(--accent);animation:breathe 1.2s ease-in-out infinite}
 @keyframes breathe{50%{transform:scale(.6);opacity:.55}}
 @keyframes rise{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
@@ -209,8 +208,7 @@ code.inspect-text{font:12px var(--mono)}
 /* While a task runs, a slow light travels around the composer's edge. */
 @property --sweep{syntax:"<angle>";inherits:false;initial-value:0deg}
 .composer::before{content:"";position:absolute;inset:-1px;border-radius:inherit;padding:1px;background:conic-gradient(from var(--sweep),transparent 0 72%,var(--accent) 86%,var(--accent-2) 92%,transparent);-webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);-webkit-mask-composite:xor;mask-composite:exclude;opacity:0;transition:opacity .3s;pointer-events:none}
-.busy .composer::before{opacity:1;animation:sweep 3.2s linear infinite}
-@keyframes sweep{to{--sweep:360deg}}
+.busy .composer::before{opacity:.55;--sweep:200deg}
 :root.lite .busy .composer::before{animation:none;opacity:.5}
 .composer textarea{display:block;width:100%;resize:none;border:0;outline:0;background:none;padding:6px 0 4px;max-height:40vh;min-height:26px;line-height:1.45;font-size:16px}
 .composer textarea::placeholder{color:var(--faint)}
@@ -281,11 +279,6 @@ code.inspect-text{font:12px var(--mono)}
 .task-progress-step.completed .task-progress-label{color:var(--faint)}
 .task-progress-state{flex:none;color:var(--faint);font-size:10.5px;white-space:nowrap}
 .task-progress-step.in_progress .task-progress-state{color:var(--accent-2);font-weight:700}
-.tool-status{flex:none;padding:2px 7px;border:1px solid var(--line);border-radius:999px;color:var(--muted);font-size:10px;font-weight:600;line-height:1.4;white-space:nowrap}
-.tool.running .tool-status{border-color:var(--warn);color:var(--warn)}
-.tool.waiting .tool-status{border-color:var(--accent);color:var(--accent)}
-.tool.ok .tool-status{border-color:color-mix(in srgb,var(--accent-2) 35%,var(--line));color:var(--accent-2)}
-.tool.fail .tool-status{border-color:color-mix(in srgb,var(--danger) 35%,var(--line));color:var(--danger)}
 
 /* Files panel: overlay on phones, column on wide screens */
 .panel{position:fixed;inset:calc(var(--topbar) + var(--safe-top)) 0 0 auto;width:min(100vw,420px);background:var(--panel);border-left:1px solid var(--line);display:flex;flex-direction:column;z-index:20;box-shadow:var(--shadow);padding-bottom:var(--safe-bottom)}
@@ -463,7 +456,34 @@ details.manual fieldset{margin:0}
 
 
 /* Long chats stay fast: the browser skips work for messages off screen */
-.msg{content-visibility:auto;contain-intrinsic-size:auto 120px}
+.msg,.steps.done:not(.open){content-visibility:auto;contain-intrinsic-size:auto 120px}
+
+/* A step that never ran (declined, blocked, stopped first) */
+.tool.skip .kind-icon{color:var(--faint);border-style:dashed}
+.tool.skip .name{color:var(--muted)}
+.tool.skip .tool-status{color:var(--muted);border-style:dashed}
+/* Last lines of a running command, under its row */
+.step-tail{margin:0 8px 6px 41px;padding:6px 10px;border-left:2px solid var(--accent-line);font:11.5px/1.5 var(--mono);color:var(--muted);white-space:pre-wrap;overflow-wrap:anywhere;max-height:calc(5 * 1.5em + 12px);overflow:hidden;contain:content}
+.show-full{display:block;margin:0;padding:7px 11px;border:0;border-top:1px solid var(--line);background:none;color:var(--accent);font-size:12px;font-weight:600;cursor:pointer;width:100%;text-align:left}
+.show-full:hover{background:var(--raised)}
+.show-full:disabled{color:var(--faint);cursor:progress}
+/* A note sent while OASIS worked, placed where it was read */
+.msg.user.steer .bubble{background:var(--panel-2);border-style:dashed;font-size:14px}
+.msg.user.steer::before{content:"Note while working";order:-2;font-size:11px;color:var(--faint);white-space:nowrap}
+/* How long a run took: one quiet line after it */
+.msg.worked{display:flex;align-items:center;gap:10px;color:var(--faint);font:11.5px var(--mono);font-variant-numeric:tabular-nums;margin:-6px 0 18px}
+.msg.worked::before,.msg.worked::after{content:"";flex:1;height:1px;background:var(--line)}
+/* The run clock and waiting messages, just above the message box */
+.run-status{max-width:var(--chat-w);margin:0 auto 6px;padding:0 6px;display:flex;align-items:center;gap:8px;font:12px var(--mono);color:var(--muted);font-variant-numeric:tabular-nums}
+.run-status-dot{width:7px;height:7px;border-radius:50%;background:var(--accent);flex:none}
+.run-status.waiting .run-status-dot{background:var(--warn)}
+.pending-inputs{max-width:var(--chat-w);margin:0 auto 6px;display:flex;flex-direction:column;gap:4px}
+.pending-input{display:flex;align-items:center;gap:8px;padding:5px 6px 5px 10px;border:1px dashed var(--line-strong);border-radius:var(--r-md);background:var(--panel);font-size:13px;min-width:0}
+.pending-kind{flex:none;font-size:10.5px;font-weight:650;letter-spacing:.04em;text-transform:uppercase;color:var(--faint)}
+.pending-input.interrupt .pending-kind{color:var(--warn)}
+.pending-text{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--text-2)}
+.pending-drop{flex:none;width:24px;height:24px;border:0;border-radius:6px;background:none;color:var(--muted);font-size:16px;line-height:1;cursor:pointer}
+.pending-drop:hover{background:var(--raised);color:var(--text)}
 
 /* Lite mode for old phones and low-end computers */
 html.lite *{animation:none!important;transition:none!important}
@@ -775,3 +795,25 @@ html.lite .topbar{backdrop-filter:none;-webkit-backdrop-filter:none;background:v
 @keyframes talk-pulse { 0%, 100% { opacity: .3; } 50% { opacity: .9; } }
 #talkButton.listening { color: var(--accent, #1f8a5b); }
 @media (prefers-reduced-motion: reduce) { .talk-orb i { animation: none !important; } }
+
+/* Follow mode: scrolled up while OASIS works, a pill brings you back */
+.jump-latest{position:absolute;left:50%;bottom:calc(100% + 6px);transform:translateX(-50%);display:inline-flex;align-items:center;gap:6px;padding:6px 12px 6px 9px;border:1px solid var(--line-strong);border-radius:999px;background:var(--panel);color:var(--text-2);font-size:12.5px;font-weight:600;box-shadow:0 8px 24px -12px #000c;cursor:pointer;animation:fade-in .16s var(--ease) both}
+@keyframes fade-in{from{opacity:0}}
+.jump-latest svg{width:14px;height:14px}
+.jump-latest:hover{color:var(--text);border-color:var(--accent-line)}
+.jump-latest[hidden]{display:none}
+
+/* Run monitor: recent agent runs on the computer */
+.run-list{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:4px}
+.run-item{display:flex;align-items:center;gap:10px;padding:8px 10px;border:1px solid var(--line);border-radius:var(--r-md);background:var(--panel)}
+.run-dot{width:8px;height:8px;border-radius:50%;flex:none;background:var(--faint)}
+.run-item.running .run-dot,.run-item.queued .run-dot{background:var(--accent)}
+.run-item.waiting_approval .run-dot{background:var(--warn)}
+.run-item.completed .run-dot{background:var(--accent-2)}
+.run-item.failed .run-dot{background:var(--danger)}
+.run-text{flex:1;min-width:0;display:flex;flex-direction:column;gap:1px}
+.run-text strong{font-size:13.5px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.run-meta{font-size:12px;color:var(--muted);font-variant-numeric:tabular-nums}
+.run-error{font-size:12px;color:var(--danger);overflow-wrap:anywhere}
+.approval-instead{width:100%;margin:10px 0 0;padding:8px 11px;border:1px solid var(--line);border-radius:var(--r-md);background:var(--sunken);color:var(--text);font:inherit;font-size:13.5px}
+.approval-instead:focus{outline:none;border-color:var(--accent-line)}
