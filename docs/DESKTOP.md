@@ -63,8 +63,8 @@ again unless macOS quarantines the new disk image.
 2. Paste a model key, a model page link or a local server address (for
    example `http://localhost:11434` for Ollama) into **Paste a key to start**.
    OASIS checks that the model can call tools before saving it.
-3. Describe a task. Edits and commands ask first, as in the browser and
-   terminal.
+3. Describe a task. As in the browser and terminal, commands and network
+   access ask first; file edits are checkpointed, so **Undo** reverts them.
 
 ## Where your key is stored
 
