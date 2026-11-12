@@ -6,7 +6,7 @@
 
 import { SubagentTracker } from './subagents.mjs';
 import { extractRuntimeTodos } from './task-progress.mjs';
-import { streamingTextToolCall } from './timeline.mjs';
+import { splitTextToolCall } from './timeline.mjs';
 
 const TOKEN_KEY = 'oasis.web.token';
 // Opt-in: "Remember this device" keeps the access key in localStorage so a
@@ -503,7 +503,7 @@ export class RuntimeAgent {
               if (todos !== null) { this.todos = todos; this.emit('todos', { todos }); }
             }
             // A tool call the model wrote as JSON text became this real call: drop the JSON.
-            if (!stepHasTools) { this.emit('assistant', { content: streamingTextToolCall(stepText) ? '' : stepText, toolCalls: [call] }); stepHasTools = true; }
+            if (!stepHasTools) { this.emit('assistant', { content: splitTextToolCall(stepText).text, toolCalls: [call] }); stepHasTools = true; }
             this.emit('tool_start', { id, name: data.name, args: call.args, ...(data.label ? { label: String(data.label).slice(0, 160) } : {}) });
             break;
           }

@@ -203,13 +203,22 @@ export function thinkingLabel(elapsedMs) {
   return Number.isFinite(value) && value >= 5000 ? 'Thinking · ' + formatDuration(value) : 'Thinking';
 }
 
-// Small local models often write a tool call as JSON text instead of a native call.
-// OASIS turns it into a real call when the reply ends; while it streams, show which
-// tool is being prepared instead of a wall of escaped JSON. Returns the tool name or ''.
-const TEXT_TOOL_CALL = /^\s*(?:```(?:json)?\s*)?(?:<tool_call>\s*)?\[?\s*\{\s*"(?:name|tool)"\s*:\s*"([A-Za-z_][\w.-]{0,63})"\s*,\s*"(?:arguments|parameters|args|input)"\s*:/;
+// Small local models often write a tool call as JSON text instead of a native call,
+// sometimes after a sentence of prose. OASIS turns it into a real call when the reply
+// ends; while it streams, show the prose and which tool is being prepared instead of a
+// wall of escaped JSON. Returns { text, tool }: the prose before the call, and the
+// tool name ('' when the text holds no call).
+const TEXT_TOOL_CALL = /(?:```(?:json)?\s*)?(?:<tool_call>\s*)?\[?\s*\{\s*"(?:name|tool)"\s*:\s*"([A-Za-z_][\w.-]{0,63})"\s*,\s*"(?:arguments|parameters|args|input)"\s*:/;
+export function splitTextToolCall(text) {
+  const value = String(text || '');
+  const match = TEXT_TOOL_CALL.exec(value);
+  // A JSON value that is the whole answer (asked for by the user) has no prose before it
+  // and no tool-call shape; only the name-plus-arguments shape counts.
+  if (!match) return { text: value, tool: '' };
+  return { text: value.slice(0, match.index).trimEnd(), tool: match[1] };
+}
 export function streamingTextToolCall(text) {
-  const match = TEXT_TOOL_CALL.exec(String(text || '').slice(0, 400));
-  return match ? match[1] : '';
+  return splitTextToolCall(text).tool;
 }
 
 export function formatDuration(ms) {

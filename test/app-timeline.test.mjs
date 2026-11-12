@@ -145,3 +145,10 @@ test('a tool call streamed as JSON text is recognised while it streams', async (
   assert.equal(streamingTextToolCall('{"name": "Ada", "age": 3}'), '');
   assert.equal(streamingTextToolCall(''), '');
 });
+
+test('prose before a JSON tool call is kept and the call is split off', async () => {
+  const { splitTextToolCall } = await import('../app/core/timeline.mjs');
+  assert.deepEqual(splitTextToolCall('File src/index.html created.{"name": "delete_file", "arguments": {"path":"src/index.html"}}'), { text: 'File src/index.html created.', tool: 'delete_file' });
+  assert.deepEqual(splitTextToolCall('Plain answer.'), { text: 'Plain answer.', tool: '' });
+  assert.deepEqual(splitTextToolCall('Now:\n```json\n{"name": "run_command", "arguments": {'), { text: 'Now:', tool: 'run_command' });
+});
