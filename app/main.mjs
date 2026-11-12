@@ -27,7 +27,7 @@ import { speakable, isStopPhrase, turnDetector, rmsLevel, lastReply } from './co
 import { previewTarget } from './core/preview.mjs';
 import { searchMarketplace, marketplaceCount, OFFICIAL_MARKETPLACE } from './core/claude-plugins.mjs';
 // Composer autocomplete state (declared early: refreshFiles clears the file cache).
-const suggest = { token: null, items: [], index: 0, commands: null, files: null, seq: 0 };
+const suggest = { token: null, items: [], index: 0, commands: null, files: null, noFileCommand: false, seq: 0 };
 
 const APP_VERSION = '1.3.0';
 const $ = (id) => document.getElementById(id);
@@ -3073,6 +3073,17 @@ async function filePathList() {
   if (!suggest.files) suggest.files = workspace.paths().catch(() => []);
   return suggest.files;
 }
+// A fileSuggestion command in the runtime's settings (as in the terminal) supplies "@" paths;
+// null falls back to the file list. A runtime without the setting is asked only once.
+async function commandFileSuggestions(query, seq) {
+  if (!RT || RT.needsToken || suggest.noFileCommand) return null;
+  // Typing fast should not start one command per key.
+  await new Promise((resolve) => setTimeout(resolve, 150));
+  if (seq !== suggest.seq) return null;
+  const body = await RT.client.api('/api/file-suggestions?q=' + encodeURIComponent(query)).catch(() => null);
+  if (!body || !Array.isArray(body.paths)) { if (body && body.paths === null) suggest.noFileCommand = true; return null; }
+  return body.paths.filter((item) => typeof item === 'string').slice(0, 15);
+}
 function closeSuggest() {
   suggest.token = null; suggest.items = []; suggest.index = 0;
   $('composerSuggest').hidden = true;
@@ -3127,7 +3138,7 @@ async function updateSuggest() {
   const items = token.kind === '/'
     ? rankSuggestions(await slashCommandList(), token.query, (item) => item.name, 8)
     : token.kind === 'app' ? (RT && !RT.needsToken ? rankSuggestions(await knownConnectors().then((list) => token.query ? list : [...list].sort((a, b) => Number(Boolean(b.suggested && !b.connected)) - Number(Boolean(a.suggested && !a.connected)))), token.query, (item) => item.id, 8) : [])
-    : rankSuggestions(await filePathList(), token.query, (item) => item, 8);
+    : (await commandFileSuggestions(token.query, seq)) || rankSuggestions(await filePathList(), token.query, (item) => item, 8);
   if (seq !== suggest.seq) return;
   const same = suggest.token && suggest.token.kind === token.kind && suggest.token.query === token.query;
   suggest.token = token; suggest.items = items;
@@ -4425,6 +4436,7 @@ function refreshFiles() {
   if (refreshQueued) return;
   refreshQueued = true;
   suggest.files = null;
+  suggest.noFileCommand = false;
   setTimeout(async () => {
     refreshQueued = false;
     const changes = workspace ? await workspace.changes() : [];

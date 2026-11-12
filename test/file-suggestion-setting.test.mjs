@@ -5,6 +5,7 @@ import path from 'node:path';
 import { mkdtemp, mkdir, writeFile, rm } from 'node:fs/promises';
 import { createCompleter, suggestFilesWithCommand } from '../src/completion.mjs';
 import { loadSettings } from '../src/settings.mjs';
+import { startOasisWebServer } from '../src/web.mjs';
 
 async function tmp(t) {
   const dir = await mkdtemp(path.join(os.tmpdir(), 'oasis-filesuggest-'));
@@ -51,4 +52,24 @@ test('fileSuggestion follows the status line gates: trusted files only, managed-
   await writeFile(managed, JSON.stringify({ allowManagedHooksOnly: true, fileSuggestion: { type: 'command', command: 'managed-index' } }));
   const kept = await loadSettings(root, { env: { ...base, OASIS_TRUST_WORKSPACE: '1', OASIS_MANAGED_SETTINGS: managed } });
   assert.deepEqual(kept.fileSuggestion, { type: 'command', command: 'managed-index' });
+});
+
+test('the web composer gets the same fileSuggestion paths from /api/file-suggestions, behind the token', async (t) => {
+  const home = await tmp(t);
+  const root = path.join(home, 'repo');
+  await mkdir(root, { recursive: true });
+  const config = path.join(home, 'cfg');
+  await mkdir(config, { recursive: true });
+  const env = { ...process.env, HOME: home, OASIS_CONFIG_DIR: config, CLAUDE_CONFIG_DIR: path.join(home, 'claude'), OASIS_MANAGED_SETTINGS: '', OASIS_IGNORE_CLAUDE_SETTINGS: '1' };
+  const token = 'test-runtime-token-0123456789';
+  const app = await startOasisWebServer({ root, host: '127.0.0.1', port: 0, env, token });
+  t.after(() => app.close());
+  const url = 'http://127.0.0.1:' + app.port + '/api/file-suggestions?q=' + encodeURIComponent('src/comp');
+  const get = async () => (await fetch(url, { headers: { authorization: 'Bearer ' + token } })).json();
+  assert.equal((await fetch(url)).status, 401);
+  assert.deepEqual(await get(), { paths: null }, 'no setting: the app uses its own file list');
+  await writeFile(path.join(config, 'settings.json'), JSON.stringify({ fileSuggestion: { type: 'command', command: indexer } }));
+  const body = await get();
+  assert.equal(body.paths.length, 15);
+  assert.equal(body.paths[0], 'src/comp/file0.ts');
 });
