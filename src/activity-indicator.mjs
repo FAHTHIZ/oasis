@@ -120,7 +120,10 @@ export function describeWait(info = {}, elapsedMs = 0) {
   if (reading) parts.push(reading);
   else if (Number(info.inputTokens) > 0) parts.push(formatTokens(info.inputTokens) + ' tokens sent');
   if (info.step && Number(info.step) > 1) parts.push('step ' + info.step);
-  parts.push('esc to stop');
+  // What you are typing while it works stays visible (Enter sends it to the
+  // running task, Tab queues it for after the turn).
+  const draft = String(info.draft || '').replace(/\s+/g, ' ').trim();
+  parts.push(draft ? '› ' + (draft.length > 48 ? '…' + draft.slice(-47) : draft) : 'esc to stop');
   return parts.join(' · ');
 }
 
@@ -146,6 +149,7 @@ export function createActivityIndicator({ stream = process.stdout, env = process
   let startedAt = 0;
   let info = {};
   let frame = 0;
+  let lastLine = '';
   let visible = false;
   let lastWidth = 0;
   let progressAt = 0;
@@ -164,6 +168,9 @@ export function createActivityIndicator({ stream = process.stdout, env = process
     const label = waitLabel(shown, elapsed) + '…';
     const rest = clip(plain).slice(label.length);
     let line;
+    // Frames follow the clock, not the timer count: a late tick (a busy
+    // event loop) skips ahead instead of slowing or stuttering the spinner.
+    frame = Math.max(0, Math.floor(elapsed / (level === 'full' ? FULL_INTERVAL_MS : LITE_INTERVAL_MS)));
     if (level === 'full') {
       const glyph = FULL_FRAMES[frame % FULL_FRAMES.length];
       line = color ? '\x1b[36m' + glyph + '\x1b[0m ' + shimmer(label, frame) + '\x1b[2m' + rest + '\x1b[0m' : glyph + ' ' + clip(plain);
@@ -171,7 +178,9 @@ export function createActivityIndicator({ stream = process.stdout, env = process
       const dots = LITE_FRAMES[frame % LITE_FRAMES.length];
       line = color ? '\x1b[36m' + label + '\x1b[0m\x1b[2m' + rest + ' ' + dots + '\x1b[0m' : clip(plain) + ' ' + dots;
     }
-    frame += 1;
+    // Nothing changed since the last frame (the lite dots, a paused clock): no write.
+    if (visible && line === lastLine) return;
+    lastLine = line;
     try { stream.write('\r\x1b[2K' + line + '\x1b[?25l'); visible = true; lastWidth = plain.length; } catch {}
   }
 
@@ -195,13 +204,17 @@ export function createActivityIndicator({ stream = process.stdout, env = process
     },
     update(next = {}) {
       if (next.promptProgress) progressAt = now();
+      const draftChanged = 'draft' in next && next.draft !== info.draft;
       info = { ...info, ...next };
+      // Typed characters show at once rather than at the next frame.
+      if (draftChanged && handle) render();
     },
     stop() {
       if (handle) { timers.clearInterval(handle); handle = null; }
       if (visible) {
         try { stream.write('\r\x1b[2K\x1b[?25h'); } catch {}
         visible = false;
+        lastLine = '';
       }
       return lastWidth;
     }

@@ -15,6 +15,17 @@ import { mkdtempSync, readFileSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join as joinPath } from 'node:path';
 
+// Synchronized output (DEC private mode 2026): supported by kitty, WezTerm,
+// iTerm2, Ghostty, Alacritty, foot, Windows Terminal and others; ignored
+// elsewhere. OASIS_SYNC_OUTPUT=0 turns it off.
+export const SYNC_BEGIN = '\x1b[?2026h';
+export const SYNC_END = '\x1b[?2026l';
+export function synchronizedOutputEnabled(env = process.env) {
+  if (/^(?:0|false|no|off)$/i.test(String(env.OASIS_SYNC_OUTPUT || ''))) return false;
+  return !['dumb', 'linux'].includes(String(env.TERM || ''));
+}
+const SYNC_OUTPUT = synchronizedOutputEnabled();
+
 // Display width follows string-width (graphemes, East Asian Width, RGI emoji);
 // plain printable ASCII, the common case, skips it.
 const PRINTABLE_ASCII = /^[\x20-\x7e]*$/;
@@ -505,7 +516,11 @@ export function readInput(options = {}) {
       if (up > 0) s += '\x1b[' + up + 'A';
       s += '\r';
       if (frame.cursorCol > 0) s += '\x1b[' + frame.cursorCol + 'C';
-      output.write(s);
+      // A redraw that moves up and rewrites several rows is shown in one
+      // piece (DEC mode 2026, synchronized output) so the box never flickers
+      // half-drawn. Terminals without it ignore the two codes.
+      const multi = previousCursorRow > 0 || frame.endRow > 0;
+      output.write(multi && SYNC_OUTPUT ? SYNC_BEGIN + s + SYNC_END : s);
       previousCursorRow = frame.cursorRow;
     };
 
