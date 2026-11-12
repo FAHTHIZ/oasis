@@ -4,6 +4,7 @@ User-facing change history grouped by package version. A version heading does no
 
 ## Unreleased
 
+- `oasis doctor` wraps long report lines between words with a hanging indent on a terminal (piped output is unchanged), instead of the terminal splitting words such as "openai-comp/atible".
 - Shell deny rules now see commands run through GNU `parallel` (`parallel rm ::: x`, `parallel ::: "rm x"`) and through inline git aliases (`git -c alias.y='!rm x' y`); an inline alias that runs a shell command is also always high risk, so `--yes` and broad allow rules still ask.
 - The secret shield now keeps «secret:ID» placeholders in `generate_image`, `text_to_speech` and `create_pull_request` arguments instead of swapping in the real value, so a prompt-injected model cannot send a hidden credential to an image or speech provider or publish it in a pull request.
 - Read-only command auto-approval no longer covers `jq` filters that use `env`, `$ENV` or `$__prog_args`; they printed every environment variable (API keys included) without asking, while `printenv` and `env` already asked.
