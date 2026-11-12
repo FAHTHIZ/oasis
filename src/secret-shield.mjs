@@ -155,7 +155,9 @@ export function unmaskSecrets(session, value) {
 // Tools that hand text to another model (subagents, teammates, the advisor)
 // keep placeholders too; the child shares the vault, so its own tool calls
 // still receive the real value.
-const NO_UNMASK_TOOLS = new Set(['fetch_url', 'web_search', 'browser', 'task', 'send_message', 'team_send_message', 'team_create', 'workflow', 'advisor', 'run_specialist_review']);
+// Image and speech prompts go to a third-party provider, and a pull request's
+// title and body are published, so those keep placeholders as well.
+const NO_UNMASK_TOOLS = new Set(['fetch_url', 'web_search', 'browser', 'task', 'send_message', 'team_send_message', 'team_create', 'workflow', 'advisor', 'run_specialist_review', 'generate_image', 'text_to_speech', 'create_pull_request']);
 
 /** Lets a subagent resolve the parent's placeholders without seeing the values. */
 export function shareSecretVault(parent, child) {
