@@ -145,15 +145,39 @@ Gemini CLI is now for Gemini Code Assist enterprise users. Free and Google AI Pr
 | --- | --- | --- |
 | Model tuning | Claude Code's prompts and tool schemas are tuned for Claude models, and much of its reliability comes from that tuning. | OASIS works across many model families, so it can't tune for one the same way. |
 | Hosted cloud execution | Codex Web and Claude Code cloud sessions (including cloud scheduled tasks) run without your computer being on. OASIS routines need an OASIS process running on a machine you control. | OASIS runs only where you install it. Remote access from any browser goes through your own computer or server. |
-| Field maturity | Claude Code and Codex are used by very large populations, so their edge cases get found quickly. | OASIS has about 2,350 automated tests and adversarial suites, but far fewer real-world hours. |
+| Field maturity | Claude Code and Codex are used by very large populations, so their edge cases get found quickly. | OASIS has about 2,680 automated tests and adversarial suites, but far fewer real-world hours. |
 | Edits in default mode | Claude Code asks before every edit in `default` mode. OASIS applies edits inside the workspace without asking (they are checkpointed and can be rewound, and protected config paths still prompt). | A deliberate choice for speed. Use `plan` mode or `ask` rules for `edit_file` to get Claude Code's behaviour. |
 | Code signing | macOS warns on first launch of unsigned apps. | OASIS macOS packages are not code-signed yet. |
 | Plugin cost | Each enabled plugin adds tools and prompt text. With 16 on, tool schemas fell from 36.5k to 16.5k characters once large MCP servers moved behind `tool_search`. | Plugin prompt text (skills, hook output) is still loaded eagerly. |
 | Core size | `src/agent.mjs` is about 5,500 lines, down from 6,800, and the turn loop alone is about 1,000 lines. | Splitting continues. Provider retry, request shaping, model budgets, turn guards, compaction, tool results and steering are already separate modules, and the doctor, update, uninstall, mcp, extensions, sessions, background and provider-setup commands moved out of `src/cli.mjs` (now about 3,100 lines, from 4,100). |
 
+## What the leaders shipped in late 2026
+
+The products that set expectations moved fast in the second half of 2026. Each item below is something OASIS does not have yet, with the vendor's own page as the source.
+
+| Capability | Who ships it | OASIS today |
+| --- | --- | --- |
+| A model co-trained with the harness | Cursor's Composer 2 ([Cursor 3](https://cursor.com/blog/cursor-3)); Antigravity's harness trained together with Gemini ([Antigravity docs](https://antigravity.google/docs/overview/)); Codex Ultrafast at about 300 tokens per second ([DevDay 2026](https://openai.com/index/devday-2026-recap/)) | None. OASIS drives other people's models, so its prompts and tools can't be tuned in training. |
+| Hosted cloud agents with local handoff | Cursor 3 Agents Window ([Cursor 3](https://cursor.com/blog/cursor-3)); Codex in the cloud ([DevDay 2026](https://openai.com/index/devday-2026-recap/)); Claude Code self-hosted cloud environments and sessions that message each other ([Claude Code week 32](https://code.claude.com/docs/en/whats-new/2026-w32)); Google managed agents ([Google I/O 2026](https://blog.google/innovation-and-ai/technology/developers-tools/google-io-2026-developer-highlights/)) | Runs only where you install it; the web app reaches that machine remotely. |
+| Live previews and deployed apps | Claude Code Artifacts as live pages ([week 25](https://code.claude.com/docs/en/whats-new/2026-w25)); Cursor Build Live Apps ([Cursor changelog](https://cursor.com/changelog)) | Files and Changes panels and a terminal; no hosted preview or deploy. |
+| Voice conversations with the agent | Cursor voice chat with agents ([Cursor changelog](https://cursor.com/changelog)); Codex voice ([DevDay 2026](https://openai.com/index/devday-2026-recap/)); Antigravity live voice transcription ([Antigravity 2.0](https://antigravity.google/blog/introducing-google-antigravity-2)) | Dictation into the message box only. |
+| Background computer use and design canvases | Claude Code background computer use and live diff panel ([week 36](https://code.claude.com/docs/en/whats-new/2026-w36)); `/design` artboards ([week 34](https://code.claude.com/docs/en/whats-new/2026-w34)); Antigravity browser recordings as artifacts ([Antigravity docs](https://antigravity.google/docs/overview/)) | Browser tools through MCP plugins such as Playwright; no built-in recorded browser. |
+| Published benchmark results | Vendors publish SWE-bench and Terminal-Bench numbers for their agent and model pairs. | None yet: see [Benchmarks](BENCHMARKS.md). |
+| An editor with tab completion | Cursor and Antigravity are editors. | OASIS plugs into editors through ACP and its extension; it has no completion model. |
+
+### Found while using OASIS as a new user (November 2026)
+
+These came from running OASIS with small local models on a 2-core CPU machine through Ollama. The fixes are on `main`.
+
+- **Local models lost their instructions.** Ollama's OpenAI-compatible endpoint serves a 4,096-token window and ignores `num_ctx`, so the system prompt and tool list were silently cut. `oasis connect http://localhost:11434` now creates a `<model>-oasis` copy with a 32K window and switches to it, and the small-window warning appears in `-p` runs and in the web app, not only in the terminal UI.
+- **A false "it passed" got through.** A reply that said "I ran the tests and it passed" after a failing run was not flagged. The claim check now catches that phrasing and says the check failed.
+- **The web app looked frozen during long thinking.** The thinking indicator now shows the elapsed time.
+- **A restarted server broke open tabs.** Every message failed with a token error until the tab was reloaded by hand. A new link now reloads the page and a stale key returns to the sign-in screen.
+- **CI was red from a race.** The background model-catalog refresh could write after the web server closed. `close()` now aborts and awaits it.
+
 ## How to check these claims
 
-- `npm test` runs the full suite (about 2,350 tests).
+- `npm test` runs the full suite (about 2,680 tests).
 - `node --test test/subagent-definitions.test.mjs` covers front matter, memory, `output_schema` and the stall monitor.
 - `node --test test/mcp-tasks.test.mjs` covers MCP Tasks, background tasks and `/tasks`.
 - `oasis doctor --test-provider` runs a live tool-call check against your own model.
