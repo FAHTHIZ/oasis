@@ -173,12 +173,12 @@ test('runtime engine end to end: app at /, paste to connect, approve a real edit
   assert.match(await evaluate(page, `document.querySelector('#approvalSummary .approval-command').textContent`), /^node -e/);
   assert.equal(await evaluate(page, `document.querySelector('#approvalSummary .risk-badge') ? 'risky' : 'plain'`), 'risky');
   await shot('3-approval');
-  // The run clock says it is waiting and holds still: approval time is not work.
+  // The run clock says it is waiting and keeps counting wall time, the same
+  // clock the step groups use, so the header and groups never disagree.
   const clockText = `document.querySelector('#runStatus .run-status-text').textContent`;
   await waitFor(page, `/^Waiting for you/.test(${clockText})`, { label: 'run clock shows waiting', timeout: 5000 });
   const frozen = await evaluate(page, clockText);
-  await new Promise((resolve) => setTimeout(resolve, 2200));
-  assert.equal(await evaluate(page, clockText), frozen, 'the clock pauses while waiting for approval');
+  await waitFor(page, `${clockText} !== ${JSON.stringify(frozen)}`, { label: 'the clock keeps counting while waiting', timeout: 4000 });
   await evaluate(page, `document.getElementById('allowButton').click(); true`);
   await waitFor(page, `!${busy} && /Done\\. I built the counter/.test(document.getElementById('transcript').textContent)`, { label: 'runtime task finished', timeout: 40000 });
   assert.match(await readFile(path.join(root, 'index.html'), 'utf8'), /Counter/, 'the file was written on disk');

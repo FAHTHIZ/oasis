@@ -508,6 +508,10 @@ export class RuntimeAgent {
       for (const event of job.events || []) {
         after = Math.max(after, event.id);
         const data = event.data || {};
+        // When the server saw this event, on this page's clock. Steps, groups
+        // and the header all measure from these stamps, so they agree.
+        const stamp = Date.parse(event.at || '');
+        const at = Number.isFinite(stamp) ? { at: stamp - (this.clockSkew || 0) } : {};
         switch (event.type) {
           case 'started': if (data.sessionId) this.sessionId = data.sessionId; break;
           case 'agent_activity': if (subagents.update(data)) this.emit('subagents', { workers: subagents.list() }); break;
@@ -545,7 +549,7 @@ export class RuntimeAgent {
             }
             // A tool call the model wrote as JSON text became this real call: drop the JSON.
             if (!stepHasTools) { this.emit('assistant', { content: splitTextToolCall(stepText).text, toolCalls: [call] }); stepHasTools = true; }
-            this.emit('tool_start', { id, name: data.name, args: call.args, ...(data.label ? { label: String(data.label).slice(0, 160) } : {}) });
+            this.emit('tool_start', { id, name: data.name, args: call.args, ...at, ...(data.label ? { label: String(data.label).slice(0, 160) } : {}) });
             break;
           }
           case 'tool_output':
@@ -553,6 +557,8 @@ export class RuntimeAgent {
             break;
           case 'steer_queued': this.emit('steer_queued', {}); break;
           case 'steered': this.emit('steered', { delivered: Math.max(0, Number(data.delivered) || 0) }); break;
+          // Where each model request's time went (debug timing).
+          case 'model_timing': this.emit('model_timing', { ...data }); break;
           case 'tool_result': {
             if (data.subagent) break;
             const outcome = TOOL_OUTCOMES.has(String(data.outcome || '')) ? String(data.outcome) : '';
@@ -567,7 +573,7 @@ export class RuntimeAgent {
               if (todos !== null) { this.todos = todos; this.emit('todos', { todos }); }
             }
             const text = String(content || data.label || '');
-            this.emit('tool_result', { id: data.callId || '', name: data.name, ok, ...(outcome ? { outcome } : {}), content: text.slice(0, MAX_RESULT_PREVIEW_CHARS), ...(text.length > MAX_RESULT_PREVIEW_CHARS || /… \[truncated\]$/.test(text) ? { more: true } : {}), ...(Number.isFinite(Number(data.durationMs)) ? { durationMs: Number(data.durationMs) } : {}) });
+            this.emit('tool_result', { id: data.callId || '', name: data.name, ok, ...(outcome ? { outcome } : {}), content: text.slice(0, MAX_RESULT_PREVIEW_CHARS), ...(text.length > MAX_RESULT_PREVIEW_CHARS || /… \[truncated\]$/.test(text) ? { more: true } : {}), ...(Number.isFinite(Number(data.durationMs)) ? { durationMs: Number(data.durationMs) } : {}), ...at });
             break;
           }
           case 'plan':

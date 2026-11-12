@@ -1158,6 +1158,7 @@ export function createOasisWebServer(options = {}) {
           onText: (text) => { reasoningBuffer = ''; emit(job, 'assistant_text', { text: String(text || '').slice(0, 24000) }); },
           // The model's reasoning summary as it streams (already redacted and
           // capped by the agent). A step's text replaces the one before.
+          onModelTiming: (record) => emit(job, 'model_timing', record),
           onReasoning: (text) => {
             const current = String(text || '').slice(0, 8000);
             const grows = reasoningBuffer && current.startsWith(reasoningBuffer);

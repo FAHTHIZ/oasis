@@ -1034,6 +1034,34 @@ export function stopFailureType(error) {
 
 // MessageDisplay hooks rewrite assistant text on screen only (displayContent); the transcript
 // and what the model sees are unchanged. Each message is one batch (index 0, final true).
+// One line per model request: how long until the first byte and the first
+// text, the whole request, the silent tail before tools could start, and
+// the tokens in and out. Sent to onModelTiming (the web app's debug view)
+// and to the debug log (OASIS_DEBUG=timing).
+function reportModelTiming(session, options, { step, started, ended, timing, usage, assistant, reasoningChars }) {
+  const since = (at) => (at ? at - started : null);
+  const record = {
+    step,
+    model: String(session.config && session.config.model || ''),
+    effort: String(session.reasoningEffort || session.effortLevel || ''),
+    thinkingBudget: Number(session.thinkingBudget) || 0,
+    ttftMs: since(timing.firstAt),
+    firstTextMs: since(timing.firstTextAt),
+    totalMs: ended - started,
+    silentTailMs: timing.lastVisibleAt ? ended - timing.lastVisibleAt : ended - started,
+    inputTokens: Number(usage.inputTokens) || 0,
+    inputEstimate: Number(timing.inputEstimate) || 0,
+    cachedTokens: Number(usage.cacheReadTokens) || 0,
+    outputTokens: Number(usage.outputTokens) || 0,
+    reasoningTokens: Number(usage.reasoningTokens) || 0,
+    reasoningChars: Number(reasoningChars) || 0,
+    toolCalls: Array.isArray(assistant.tool_calls) ? assistant.tool_calls.length : 0
+  };
+  if (debugEnabled('timing') || debugEnabled('api')) debugLog('timing', JSON.stringify(record));
+  if (typeof options.onModelTiming === 'function') { try { options.onModelTiming(record); } catch {} }
+  return record;
+}
+
 async function emitDisplayText(session, options, text) {
   if (!options.onText) return;
   let shown = text;
@@ -4438,6 +4466,11 @@ async function runAgentTurnRaw(session, prompt, options = {}) {
       try { waitHook({ phase: 'start', step: step + 1, inputTokens: estimateTokens(session.messages || []) + countJsonTokens(session.toolDefinitions || TOOL_DEFINITIONS), model: session.config && session.config.model, local: isLoopbackProvider(session.config) && !cloudModelBehindGateway(session.config && session.config.model, session.config) }); } catch {}
     }
     const modelStarted = Date.now();
+    // Where a model request's time goes: first byte of reasoning or text,
+    // the last visible byte, and the silent tail after it (tool-call
+    // arguments or hidden reasoning; tools start only once the reply is whole).
+    const timing = { firstAt: 0, firstTextAt: 0, lastVisibleAt: 0, inputEstimate: estimateTokens(session.messages || []) };
+    const seen = (text) => { const now = Date.now(); if (!timing.firstAt) timing.firstAt = now; if (text && !timing.firstTextAt) timing.firstTextAt = now; timing.lastVisibleAt = now; };
     try {
       assistant = await requestCompletion(session, {
         ...(options.signal ? { signal: options.signal } : {}),
@@ -4445,11 +4478,13 @@ async function runAgentTurnRaw(session, prompt, options = {}) {
         ...(typeof options.onProviderRetry === 'function' ? { onProviderRetry: options.onProviderRetry } : {}),
         ...(typeof options.fetchImpl === 'function' ? { fetchImpl: options.fetchImpl } : {}),
         ...(reasoningHook ? { onReasoning: (chunk) => {
+          seen(false);
           if (providerReasoning.length < MAX_REASONING_SHOWN * 2) providerReasoning += String(chunk || '');
           showReasoning();
         } } : {}),
         ...(typeof options.onDelta === 'function' ? { onDelta: (delta) => {
           streamedText = (streamedText + String(delta || '')).slice(0, MAX_REPLY_CHARS);
+          if (delta) seen(true);
           if (reasoningHook && /^\s*</.test(streamedText)) showReasoning();
           options.onDelta(visibleReply(streamedText));
         } } : Number(session.subagentDepth) > 0 && (session.providerEnv || process.env).OASIS_SUBAGENT_STREAM !== '0' ? {
@@ -4510,6 +4545,7 @@ async function runAgentTurnRaw(session, prompt, options = {}) {
     // (the auto-mode classifier) get a time limit the provider can meet.
     session.modelLatencyMs = Math.round(session.modelLatencyMs ? session.modelLatencyMs * 0.6 + (Date.now() - modelStarted) * 0.4 : Date.now() - modelStarted);
     const usage = assistant.usage || { inputTokens: 0, outputTokens: 0, totalTokens: 0 };
+    reportModelTiming(session, options, { step: step + 1, started: modelStarted, ended: Date.now(), timing, usage, assistant, reasoningChars: shownReasoning.length });
     tokensUsed += Number(usage.totalTokens || 0);
     const pricedModel = resolveModelAlias(session.config && session.config.model, {
       protocol: session.config && session.config.protocol,
