@@ -3080,7 +3080,7 @@ async function authorizeCall(session, name, args, context, options) {
   if (mode === 'bypassPermissions') overlay.autoApprove = true;
   const baseApproval = context.approval;
   // Approval wrapper: an answer of "always" remembers a reusable rule for this session.
-  overlay.approval = async (message, force = false) => {
+  overlay.approval = async (message, force = false, extra = null) => {
     // Args may already have been unmasked for local execution. Human approval
     // UI and permission classifiers receive a redacted copy, never credentials.
     const safeArgs = redactAuditValue(args);
@@ -3151,7 +3151,7 @@ async function authorizeCall(session, name, args, context, options) {
     }
     const nearMiss = policy && typeof policy.allowNearMiss === 'function' ? policy.allowNearMiss(name, args) : '';
     if (nearMiss && !String(safeMessage || '').includes('Why this asks:')) safeMessage = String(safeMessage || '') + '\n' + String(redactAuditValue(nearMiss));
-    const answer = await baseApproval(safeMessage, force, { tool: name, suggestion, input: safeArgs });
+    const answer = await baseApproval(safeMessage, force, { tool: name, suggestion, input: safeArgs, ...(extra || {}) });
     if (answer === 'always' && suggestion && policy) policy.rememberForSession(suggestion);
     return Boolean(answer);
   };
@@ -3159,15 +3159,18 @@ async function authorizeCall(session, name, args, context, options) {
   let siteApprovalHandled = false;
   if (sites.length) {
     session.webAccessApprovals ||= new Set();
-    for (const host of sites) {
-      const key = 'site:' + host;
-      if (session.webAccessApprovals.has(key)) continue;
+    // Every new site this call reaches is asked about in one prompt (a keyless
+    // search names DuckDuckGo and its Bing fallback; federated search names
+    // each provider), and the answer holds for the rest of the session.
+    const pending = sites.filter((host) => !session.webAccessApprovals.has('site:' + host));
+    if (pending.length) {
+      const hosts = pending.length === 1 ? pending[0] : pending.slice(0, -1).join(', ') + ' and ' + pending.at(-1);
       const message = name === 'web_search'
-        ? 'Allow web_search to send this query to ' + host + ' for the rest of this session? Search results may refer to other websites; fetching any result page will ask separately.'
-        : 'Allow fetch_url to retrieve a public page from ' + host + ' for the rest of this session?';
-      const ok = await overlay.approval(message, true);
-      if (!ok) return { deniedReason: overlay.permissionHookDenial || 'The user did not approve web access to ' + host + '.' };
-      session.webAccessApprovals.add(key);
+        ? 'Allow web_search to send this query to ' + hosts + ' for the rest of this session? Search results may refer to other websites; fetching any result page will ask separately.'
+        : 'Allow fetch_url to retrieve public pages from ' + hosts + ' for the rest of this session?';
+      const ok = await overlay.approval(message, true, { scope: 'session', sites: pending });
+      if (!ok) return { deniedReason: overlay.permissionHookDenial || 'The user did not approve web access to ' + hosts + '.' };
+      for (const host of pending) session.webAccessApprovals.add('site:' + host);
       siteApprovalHandled = true;
     }
   }

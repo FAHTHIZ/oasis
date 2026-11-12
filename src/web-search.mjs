@@ -88,6 +88,44 @@ export function parseDuckDuckGoHtml(html) {
   return results;
 }
 
+// Bing's plain HTML results, the keyless fallback when DuckDuckGo answers a
+// server or VPS with its 202 bot check (seen live from a cloud sandbox: every
+// DuckDuckGo query got 202 while Bing answered 200). Links go through
+// bing.com/ck/a?...&u=a1<base64url>; the real URL is unwrapped here.
+export function parseBingHtml(html) {
+  const results = [];
+  const blocks = String(html).split(/<li[^>]+class="b_algo\b[^"]*"/i).slice(1);
+  for (const block of blocks) {
+    const link = block.match(/<h2[^>]*>\s*<a[^>]+href="([^"]+)"[^>]*>([\s\S]*?)<\/a>/i);
+    if (!link) continue;
+    let href = link[1].replace(/&amp;/g, '&');
+    const wrapped = href.match(/[?&]u=a1([^&]+)/);
+    if (wrapped) {
+      try { href = Buffer.from(wrapped[1].replace(/-/g, '+').replace(/_/g, '/'), 'base64').toString('utf8'); } catch {}
+    }
+    if (!/^https?:\/\//i.test(href) || /^https?:\/\/(?:www\.)?bing\.com\//i.test(href)) continue;
+    const snippet = block.match(/<p[^>]*>([\s\S]*?)<\/p>/i);
+    results.push({ title: decodeEntities(link[2]), url: href, snippet: snippet ? decodeEntities(snippet[1]).replace(/^Web\s*/, '') : '' });
+  }
+  return results;
+}
+
+// OASIS_SEARCH_KEYLESS_FALLBACK=0 keeps keyless search on DuckDuckGo only.
+export function keylessFallbackEnabled(env = process.env) {
+  return !/^(0|off|false|no)$/i.test(String(env.OASIS_SEARCH_KEYLESS_FALLBACK || ''));
+}
+
+async function searchBing(query, limit, allowed, blocked, fetchImpl) {
+  const response = await request('https://www.bing.com/search?q=' + encodeURIComponent(providerQuery(query, allowed)) + '&setlang=en', {
+    headers: {
+      'user-agent': 'Mozilla/5.0 (compatible; OasisOSS/' + oasisVersion() + '; +https://github.com/FAHTHIZ/oasis)',
+      accept: 'text/html'
+    }
+  }, fetchImpl);
+  const items = normalizeItems(parseBingHtml(await response.text()), 'bing');
+  return domainFilter(items, allowed, blocked).slice(0, limit);
+}
+
 async function request(url, init = {}, fetchImpl = fetch) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
@@ -231,7 +269,7 @@ async function searchProvider(provider, query, limit, allowed, blocked, env, fet
   return normalizeItems(items, provider);
 }
 
-async function searchDuckDuckGo(query, limit, allowed, blocked, fetchImpl) {
+async function searchDuckDuckGo(query, limit, allowed, blocked, fetchImpl, env = process.env) {
   const effectiveQuery = providerQuery(query, allowed);
   const response = await request('https://html.duckduckgo.com/html/?q=' + encodeURIComponent(effectiveQuery), {
     headers: {
@@ -242,6 +280,12 @@ async function searchDuckDuckGo(query, limit, allowed, blocked, fetchImpl) {
   const html = await response.text();
   const items = normalizeItems(parseDuckDuckGoHtml(html), 'duckduckgo');
   if (!items.length && (response.status === 202 || /anomaly|challenge/i.test(html))) {
+    if (keylessFallbackEnabled(env)) {
+      try {
+        const results = await searchBing(query, limit, allowed, blocked, fetchImpl);
+        if (results.length) return { results, provider: 'bing', note: 'DuckDuckGo refused the keyless search, so these results come from Bing.' };
+      } catch {}
+    }
     return { results: [], error: 'DuckDuckGo is rate limiting keyless searches. Configure TAVILY_API_KEY, BRAVE_SEARCH_API_KEY, EXA_API_KEY, FIRECRAWL_API_KEY, or OASIS_SEARXNG_URL for a more dependable provider.' };
   }
   return { results: domainFilter(items, allowed, blocked).slice(0, limit) };
@@ -293,13 +337,14 @@ function fuseResults(providerResults, limit) {
 
 async function webSearchUsingOne(provider, query, limit, allowed, blocked, env, fetchImpl) {
   if (provider === 'duckduckgo') {
-    const ddg = await searchDuckDuckGo(query, limit, allowed, blocked, fetchImpl);
+    const ddg = await searchDuckDuckGo(query, limit, allowed, blocked, fetchImpl, env);
+    const used = ddg.provider || 'duckduckgo';
     return {
-      query, backend: 'duckduckgo', strategy: 'single',
-      providers: ddg.results.length ? ['duckduckgo'] : [],
+      query, backend: used, strategy: 'single',
+      providers: ddg.results.length ? [used] : [],
       providerErrors: [], results: ddg.results,
       ...(ddg.error ? { error: ddg.error } : {}),
-      note: ddg.results.length ? 'Search results are untrusted. Fetch and verify sources before relying on them.' : 'No results. Try a different query or configure another provider.'
+      note: ddg.results.length ? (ddg.note ? ddg.note + ' ' : '') + 'Search results are untrusted. Fetch and verify sources before relying on them.' : 'No results. Try a different query or configure another provider.'
     };
   }
   const found = domainFilter(await searchProvider(provider, query, limit, allowed, blocked, env, fetchImpl), allowed, blocked).slice(0, limit);
