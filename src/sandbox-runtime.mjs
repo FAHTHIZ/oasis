@@ -38,21 +38,6 @@ export function srtConfig(sandbox) {
   };
 }
 
-/** { available, reason } for this host (Linux or macOS with srt's dependencies). */
-export async function probeSandboxRuntime() {
-  if (process.platform !== 'linux' && process.platform !== 'darwin') return { available: false, reason: 'Domain filtering (sandbox.allowedDomains) needs Linux or macOS.' };
-  try {
-    const SandboxManager = await manager();
-    if (!SandboxManager.isSupportedPlatform()) return { available: false, reason: 'sandbox-runtime does not support this platform.' };
-    const rg = resolveRipgrep(process.env);
-    const check = SandboxManager.checkDependencies(rg ? { command: rg.path } : undefined);
-    if (check.errors && check.errors.length) return { available: false, reason: 'sandbox-runtime is missing dependencies: ' + check.errors.join('; ') + (process.platform === 'linux' ? ' (install bubblewrap and socat).' : '') };
-    return { available: true, warnings: check.warnings || [] };
-  } catch (error) {
-    return { available: false, reason: 'sandbox-runtime could not load: ' + String(error && error.message || error) };
-  }
-}
-
 async function acquire(sandbox) {
   const SandboxManager = await manager();
   const config = srtConfig(sandbox);

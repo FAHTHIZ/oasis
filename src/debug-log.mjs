@@ -8,7 +8,6 @@ import { getConfigDirectory } from './config.mjs';
 import { redactSecretText } from './secret-shield.mjs';
 import { redactAuditValue } from './tool-kernel.mjs';
 
-export const DEBUG_CATEGORIES = ['api', 'tools', 'hooks', 'mcp', 'permissions', 'session'];
 let state = { enabled: false, include: null, exclude: new Set(), file: null };
 
 export function parseDebugCategories(spec) {

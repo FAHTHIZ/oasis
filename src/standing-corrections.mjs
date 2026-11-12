@@ -74,14 +74,6 @@ export function addCorrections(session, phrases) {
   return added;
 }
 
-export function removeCorrection(session, phrase) {
-  const list = (session && session.standingCorrections) || [];
-  const index = list.findIndex((item) => item.toLowerCase() === normalizePhrase(phrase).toLowerCase());
-  if (index < 0) return false;
-  list.splice(index, 1);
-  return true;
-}
-
 export function correctionsReminder(corrections) {
   if (!Array.isArray(corrections) || !corrections.length) return '';
   return '<standing-corrections>\nThe user has asked you never to use these words or phrases in your replies: ' +
