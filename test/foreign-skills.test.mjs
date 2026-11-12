@@ -61,3 +61,32 @@ test('OASIS_OTHER_AGENT_RULES=0 hides other agents\' skill folders', async (t) =
   for (const name of ['cursor-one', 'devin-one', 'ag-one', 'oh-global']) assert.ok(!names.includes(name), name);
   assert.ok(names.includes('shared'));
 });
+
+test('.agents/skills in folders above the workspace load up to the git root, nearer folders winning', async (t) => {
+  const base = await mkdtemp(path.join(os.tmpdir(), 'oasis-parent-skills-'));
+  t.after(() => rm(base, { recursive: true, force: true }));
+  const repo = path.join(base, 'repo');
+  const root = path.join(repo, 'packages', 'app');
+  const write = async (file, text) => { await mkdir(path.dirname(file), { recursive: true }); await writeFile(file, text); };
+  await mkdir(path.join(repo, '.git'), { recursive: true });
+  await write(path.join(base, '.agents/skills/above-git/SKILL.md'), skill('above-git', 'ABOVE'));
+  await write(path.join(repo, '.agents/skills/repo-skill/SKILL.md'), skill('repo-skill', 'REPO-ROOT'));
+  await write(path.join(repo, '.agents/skills/repo-skill/references/r.md'), 'REPO-REF');
+  await write(path.join(repo, '.agents/skills/shared/SKILL.md'), skill('shared', 'FROM-REPO'));
+  await write(path.join(repo, 'packages/.agents/skills/shared/SKILL.md'), skill('shared', 'FROM-PACKAGES'));
+  await write(path.join(root, '.agents/skills/own/SKILL.md'), skill('own', 'OWN'));
+  const env = { ...process.env, HOME: path.join(base, 'home'), XDG_CONFIG_HOME: path.join(base, 'home/.config'), CLAUDE_CONFIG_DIR: path.join(base, 'claude'), OASIS_CONFIG_DIR: path.join(base, 'cfg'), CODEX_HOME: path.join(base, 'codex'), OASIS_OTHER_AGENT_RULES: '' };
+  const skills = await listAvailableSkills(root, { env });
+  const byName = Object.fromEntries(skills.map((item) => [item.name, item]));
+  assert.ok(byName.own && byName['repo-skill'] && byName.shared);
+  assert.ok(!byName['above-git'], 'stops at the git root');
+  assert.equal(byName['repo-skill'].source, 'parent-portable');
+  assert.equal(byName['repo-skill'].origin, '../../.agents/skills');
+  assert.match((await loadSkillText(root, 'shared', { env })).content, /FROM-PACKAGES/);
+  assert.match((await loadSkillText(root, 'repo-skill', { env })).content, /REPO-ROOT/);
+  assert.match((await loadSkillResource(root, 'repo-skill', 'references/r.md', { env })).content, /REPO-REF/);
+  assert.equal(skillLocation(root, byName['repo-skill']).scope, 'repo');
+  // Without a git root, only the workspace's own folder counts.
+  await rm(path.join(repo, '.git'), { recursive: true });
+  assert.ok(!(await listAvailableSkills(root, { env })).some((item) => item.name === 'repo-skill'));
+});

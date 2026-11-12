@@ -1188,6 +1188,7 @@ async function listSkills(root) {
     'built-in': 'bundled',
     workspace: '.oasis/skills',
     'portable-workspace': '.agents/skills',
+    'parent-portable': '.agents/skills above the workspace',
     'global-portable': 'global universal skills',
     'claude-project': '.claude/skills',
     'claude-user': '~/.claude/skills',
