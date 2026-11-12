@@ -579,6 +579,7 @@ export class RuntimeAgent {
             if (Number(data.costUsd) > 0) this.emit('cost', { usd: Number(data.costUsd), partial: Boolean(data.costPartial) });
             break;
           case 'mcp_failures': if (Array.isArray(data.servers) && data.servers.length) this.emit('mcp_failures', { servers: data.servers }); break;
+          case 'notices': if (Array.isArray(data.notices) && data.notices.length) this.emit('notices', { notices: data.notices.map(String) }); break;
           case 'compaction_completed': this.emit('compacted', { mode: data.usedModelSummary ? 'summary' : 'trim' }); break;
           case 'completed':
             if (data.sessionId) this.sessionId = data.sessionId;

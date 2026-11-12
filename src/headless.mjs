@@ -196,6 +196,8 @@ export async function runHeadless(options) {
     const hookObserver = outputFormat === 'stream-json' || onEvent ? (event) => { if (includeHookEvents || ['SessionStart', 'Setup'].includes(event.hook_event)) emit({ type: 'system', ...event, session_id: session && session.sessionId || null }); } : null;
     session = await createSession({ root, config, restore: restored, env, ...sessionOptions, ...(hookObserver ? { onHookEvent: hookObserver } : {}) });
     session.headless = true;
+    // Text mode only: stream-json consumers get exactly the events they expect.
+    if (outputFormat === 'text' && env.OASIS_PROGRESS !== '0') for (const note of session.localContextNotices || []) { try { process.stderr.write('[local model] ' + note + '\n'); } catch {} }
     // Hook lifecycle events: SessionStart/Setup always (Claude Code), the rest with --include-hook-events.
     if (onSession) await onSession(session);
     // Launched by the IDE (chat panel or an integrated terminal): connect to its bridge.
