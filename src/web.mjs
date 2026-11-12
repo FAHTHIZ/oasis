@@ -2111,8 +2111,11 @@ export function createOasisWebServer(options = {}) {
         setupHint = error.message || 'Run oasis setup in the terminal.';
       }
       const branch = await import('./git-tools.mjs').then((mod) => mod.workspaceBranch(activeRoot, env)).catch(() => null);
+      // An empty folder gets new-project suggestions on the welcome screen.
+      const workspaceEmpty = await import('./agent.mjs').then((mod) => mod.workspaceIsEmpty(activeRoot)).catch(() => false);
       json(res, 200, {
         connected: true,
+        workspaceEmpty,
         providerConfigured,
         provider: provider ? { provider: provider.provider, protocol: provider.protocol, model: provider.model, baseURL: provider.baseURL, authentication: provider.authentication } : null,
         fallbacks,

@@ -523,6 +523,7 @@ export function describeToolResult(name, result, { color = true } = {}) {
     const via = result.backend && !['federated', 'duckduckgo'].includes(result.backend) ? ' via ' + result.backend : '';
     return '  ⎿ ' + dim + count + ' result' + (count === 1 ? '' : 's') + via + (hosts.length ? ' · ' + clip(hosts.slice(0, 3).join(', '), 90) : '') + off;
   }
+  if (name === 'delete_file' && result.deleted) return '  ⎿ ' + dim + 'Deleted ' + result.path + (result.backupCreated ? ' (backup kept; /rewind restores it)' : '') + off;
   if (name === 'fetch_url') {
     if (result.redirect) return '  ⎿ ' + dim + 'Redirects to ' + clip(result.redirect, 110) + off;
     if (typeof result.content === 'string') {

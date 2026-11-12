@@ -25,3 +25,16 @@ test('the prompt asks for built-in tools only when the workspace is new', () => 
   assert.ok(!systemPrompt('/w', '', '', 'Platform: linux\nGit repository: no').includes('starting a new project'));
   assert.ok(!compactSystemPrompt('/w', '', '', 'Platform: linux').includes('starting a new project'));
 });
+
+test('the web status says when the folder is empty, so the welcome screen offers new-project ideas', async (t) => {
+  const { startOasisWebServer } = await import('../src/web.mjs');
+  const root = await mkdtemp(path.join(os.tmpdir(), 'oasis-new-web-'));
+  const workspace = path.join(root, 'work');
+  await mkdir(workspace);
+  const app = await startOasisWebServer({ root: workspace, host: '127.0.0.1', port: 0, env: { OASIS_CONFIG_DIR: path.join(root, 'config'), HOME: root }, token: 'test-runtime-token-0123456789' });
+  t.after(async () => { await app.close(); await rm(root, { recursive: true, force: true }); });
+  const status = async () => (await fetch('http://127.0.0.1:' + app.port + '/api/status', { headers: { authorization: 'Bearer ' + app.token } })).json();
+  assert.equal((await status()).workspaceEmpty, true);
+  await writeFile(path.join(workspace, 'main.py'), 'print(1)\n');
+  assert.equal((await status()).workspaceEmpty, false);
+});
