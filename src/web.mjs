@@ -27,7 +27,7 @@ import { estimateTokens, contextWindowSize, contextTokens as contextTokensFor } 
 import { PtySessionManager } from './pty-sessions.mjs';
 import { createTaskHistoryStore } from './task-history-store.mjs';
 import { createWorktree, finishWorktree, removeWorktree, readWorktreeDiff, readWorktreeWorkingDiff, readWorkspaceDiff, inspectWorktree, mergeWorktree, isCommitIntegrated } from './worktrees.mjs';
-import { appModuleGraph, resolveAppPath, skillsIndex } from './app-server.mjs';
+import { createAppResolver, skillsIndex } from './app-server.mjs';
 import { listWorkspaceFiles } from './workspace-files.mjs';
 import { createPreviewHandler } from './web-preview.mjs';
 import { atomicWriteFile } from './atomic-write.mjs';
@@ -1627,18 +1627,12 @@ export function createOasisWebServer(options = {}) {
 
   // The universal app (app/) served from this runtime: same files as
   // `oasis app`, but here it drives this computer's agent through the API.
-  let appShared = null;
-  let appPackages = null;
+  const resolveApp = createAppResolver(assetRoot);
   let appSkillsIndex = null;
   async function serveApp(req, res, pathname) {
     const headers = { 'x-content-type-options': 'nosniff', 'referrer-policy': 'no-referrer', 'cache-control': 'no-cache', 'x-frame-options': 'SAMEORIGIN' };
     try {
-      if (!appShared) {
-        const graph = await appModuleGraph(assetRoot);
-        appShared = new Set(graph.modules);
-        appPackages = new Set(graph.packages);
-      }
-      const target = resolveAppPath(assetRoot, pathname, appShared, appPackages);
+      const target = await resolveApp(pathname);
       if (!target) throw Object.assign(new Error('missing'), { code: 'ENOENT' });
       if (target.redirect) { res.writeHead(302, { ...headers, location: target.redirect }); res.end(); return; }
       if (target.index) {

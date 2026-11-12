@@ -73,6 +73,30 @@ export async function appModuleGraph(root) {
   return { modules: [...needed].sort(), packages: [...packages].sort() };
 }
 
+/**
+ * Resolver over the app's import graph that notices updates on disk. The graph
+ * used to be built once, so after a `git pull` that added a shared module the
+ * running server answered 404 for it and the page hung on "Connecting…" until
+ * a restart. A /src/ or /vendor/ miss now rebuilds the graph (at most every
+ * refreshMs); the allowlist is still exactly what app/ imports.
+ */
+export function createAppResolver(root, { refreshMs = 2000, now = Date.now } = {}) {
+  let graph = null;
+  let builtAt = -Infinity;
+  const build = async () => {
+    const next = await appModuleGraph(root);
+    graph = { shared: new Set(next.modules), packages: new Set(next.packages) };
+    builtAt = now();
+  };
+  return async function resolve(urlPath) {
+    if (!graph) await build();
+    const target = resolveAppPath(root, urlPath, graph.shared, graph.packages);
+    if (target || !/^\/(src|vendor)\//.test(String(urlPath)) || now() - builtAt < refreshMs) return target;
+    await build();
+    return resolveAppPath(root, urlPath, graph.shared, graph.packages);
+  };
+}
+
 export async function appSharedModules(root) {
   return (await appModuleGraph(root)).modules;
 }
@@ -141,14 +165,14 @@ export function resolveAppPath(root, urlPath, shared, packages = null) {
 }
 
 export async function startAppServer({ root, host = '127.0.0.1', port = 3920 } = {}) {
-  const graph = await appModuleGraph(root);
-  const shared = new Set(graph.modules);
-  const packages = new Set(graph.packages);
+  const resolve = createAppResolver(root);
+  await resolve('/app/');
   let indexCache = null;
   const server = createServer(async (req, res) => {
     const headers = { 'X-Content-Type-Options': 'nosniff', 'Referrer-Policy': 'no-referrer', 'Cache-Control': 'no-cache' };
     if (req.method !== 'GET' && req.method !== 'HEAD') { res.writeHead(405, headers); res.end(); return; }
-    const target = resolveAppPath(root, req.url || '/', shared, packages);
+    let target;
+    try { target = await resolve(req.url || '/'); } catch { target = null; }
     if (!target) { res.writeHead(404, { ...headers, 'Content-Type': 'text/plain' }); res.end('Not found'); return; }
     if (target.redirect) { res.writeHead(302, { ...headers, Location: target.redirect }); res.end(); return; }
     try {
