@@ -3487,7 +3487,7 @@ function showPanelTab(name) {
 for (const tab of document.querySelectorAll('#filesPanel .tab')) tab.addEventListener('click', () => showPanelTab(tab.dataset.tab));
 
 /* ---------- Preview (project files or a dev server, sandboxed) ---------- */
-const preview = { base: '', address: localStorage.getItem('oasis.previewAddress') || '', recordings: [], loaded: false };
+const preview = { base: '', address: localStorage.getItem('oasis.previewAddress') || '', recordings: [], designs: [], loaded: false };
 function previewUrl(address, { direct = false } = {}) {
   const target = previewTarget(address);
   // Opened in its own tab on this computer, a dev server is reached directly (live reload works).
@@ -3503,6 +3503,15 @@ async function guessPreviewAddress() {
 function renderPreviewChips() {
   const chips = $('previewChips');
   chips.replaceChildren();
+  for (const design of preview.designs.slice(0, 4)) {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.textContent = 'Artboards: ' + design.name;
+    button.title = 'Compare ' + design.files.length + ' variants in design/' + design.name + ' side by side';
+    button.classList.toggle('active', designName(preview.address) === design.name);
+    button.addEventListener('click', () => loadPreview('design:' + design.name));
+    chips.append(button);
+  }
   for (const file of preview.recordings.slice(0, 3)) {
     const button = document.createElement('button');
     button.type = 'button';
@@ -3514,12 +3523,80 @@ function renderPreviewChips() {
     chips.append(button);
   }
 }
+// "design:NAME" (or the folder design/NAME/) shows that exploration's variants as artboards.
+function designName(address) {
+  const match = /^(?:design:|design\/)([\w.-]+)\/?$/.exec(String(address || '').trim());
+  return match ? match[1] : '';
+}
+function fitArtboards() {
+  for (const view of document.querySelectorAll('#previewBoards .artboard-view')) {
+    const frame = view.querySelector('iframe');
+    if (frame) frame.style.transform = 'scale(' + (view.clientWidth / 1280) + ')';
+  }
+}
+function renderArtboards(name) {
+  const boards = $('previewBoards');
+  boards.replaceChildren();
+  const design = preview.designs.find((entry) => entry.name === name);
+  if (!design) {
+    const note = document.createElement('p');
+    note.className = 'muted';
+    note.textContent = 'No variants in design/' + name + '/ yet. Ask OASIS: /design ' + name.replace(/-/g, ' ');
+    boards.append(note);
+    return;
+  }
+  for (const file of design.files) {
+    const label = file.split('/').pop().replace(/\.html?$/i, '');
+    const card = document.createElement('section');
+    card.className = 'artboard';
+    const head = document.createElement('div');
+    head.className = 'artboard-head';
+    const title = document.createElement('strong');
+    title.textContent = label;
+    title.title = file;
+    const open = document.createElement('button');
+    open.type = 'button';
+    open.textContent = 'Open';
+    open.title = 'Open ' + file + ' full size';
+    open.addEventListener('click', () => loadPreview(file));
+    const use = document.createElement('button');
+    use.type = 'button';
+    use.textContent = 'Use this';
+    use.title = 'Ask OASIS to build this variant';
+    use.addEventListener('click', () => {
+      const input = $('input');
+      input.value = 'Use the ' + label + ' variant (' + file + ') from the ' + design.name + ' design exploration. Implement it in the real codebase with the project\'s existing framework and components.';
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+      input.focus();
+    });
+    head.append(title, open, use);
+    const view = document.createElement('div');
+    view.className = 'artboard-view';
+    const frame = document.createElement('iframe');
+    frame.title = 'Variant ' + label;
+    frame.loading = 'lazy';
+    frame.setAttribute('sandbox', 'allow-scripts');
+    frame.tabIndex = -1;
+    frame.src = previewUrl(file);
+    view.append(frame);
+    card.append(head, view);
+    boards.append(card);
+  }
+  requestAnimationFrame(fitArtboards);
+}
+if (typeof ResizeObserver === 'function') new ResizeObserver(() => fitArtboards()).observe($('previewBoards'));
 function loadPreview(address) {
   preview.address = String(address || '').trim();
   localStorage.setItem('oasis.previewAddress', preview.address);
   $('previewAddress').value = preview.address;
-  const url = previewUrl(preview.address);
-  if (url) $('previewFrame').src = url;
+  const name = designName(preview.address);
+  $('previewBoards').hidden = !name;
+  $('previewFrame').hidden = Boolean(name);
+  if (name) renderArtboards(name);
+  else {
+    const url = previewUrl(preview.address);
+    if (url) $('previewFrame').src = url;
+  }
   renderPreviewChips();
 }
 async function openPreview() {
@@ -3528,11 +3605,13 @@ async function openPreview() {
     const info = await RT.client.api('/api/preview');
     preview.base = info.base;
     preview.recordings = info.recordings || [];
+    preview.designs = info.designs || [];
   } catch (error) { toast('Preview is not available: ' + (error.message || error)); return; }
   if (!preview.loaded) { preview.loaded = true; loadPreview(preview.address || await guessPreviewAddress()); }
   else renderPreviewChips();
 }
 function reloadPreview() {
+  if (designName(preview.address)) { renderArtboards(designName(preview.address)); return; }
   const frame = $('previewFrame');
   if (!frame.src) return;
   // A sandboxed page has its own origin, so reload by setting the address again.
@@ -3546,7 +3625,7 @@ function refreshPreviewIfOpen() {
 }
 $('previewForm').addEventListener('submit', (event) => { event.preventDefault(); loadPreview($('previewAddress').value); });
 $('previewReload').addEventListener('click', reloadPreview);
-$('previewPopout').addEventListener('click', () => { const url = previewUrl(preview.address, { direct: true }); if (url) window.open(url, '_blank', 'noopener'); });
+$('previewPopout').addEventListener('click', () => { if (designName(preview.address)) return; const url = previewUrl(preview.address, { direct: true }); if (url) window.open(url, '_blank', 'noopener'); });
 
 /* ---------- Terminal (connected to OASIS on a computer) ---------- */
 let terminal = null;
