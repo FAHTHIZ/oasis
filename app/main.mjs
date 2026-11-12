@@ -363,7 +363,7 @@ function openSheet(id) {
   try { history.pushState({ sheet: id }, ''); } catch { /* sandboxed frames */ }
   const focusable = el.querySelector('input,select,textarea,button:not([data-close])');
   if (focusable && matchMedia('(pointer:fine)').matches) focusable.focus();
-  if (id === 'approvalSheet') runClock.tick();
+  if (id === 'approvalSheet') { runClock.tick(); refreshWaitingRows(); }
 }
 let ignorePop = false;
 function closeSheet(id, { fromHistory = false } = {}) {
@@ -973,6 +973,7 @@ function patchStepRow(item, tool) {
   set('.dur', stepDuration(tool));
   summary.setAttribute('aria-label', label + ', ' + stepStatus(tool).toLowerCase() + '. Expand to inspect input and output.');
   patchStepTail(item, tool);
+  patchStepAsk(item, tool);
   const details = item.querySelector('details');
   // A command the user typed (`!npm test`) opens on its output once, when it finishes.
   if (tool.open && tool.ok !== undefined && !item._autoOpened) { item._autoOpened = true; details.open = true; }
@@ -982,6 +983,29 @@ function patchStepRow(item, tool) {
     if (out && tool.ok === undefined) out.textContent = inspectorOutput(tool);
     else fillInspector(item.querySelector('.inspect'), tool);
   }
+}
+// A step waiting for approval answers right in its row: Allow and Deny run
+// the same path as the approval sheet, which stays open for the full detail
+// and the "what to do instead" note.
+function patchStepAsk(item, tool) {
+  let ask = item.querySelector('.step-ask');
+  const show = Boolean(tool.waiting) && tool.ok === undefined && !$('approvalSheet').hidden;
+  if (!show) { if (ask) ask.remove(); return; }
+  if (ask) return;
+  ask = document.createElement('div');
+  ask.className = 'step-ask';
+  ask.setAttribute('role', 'group');
+  ask.setAttribute('aria-label', 'Approve this step');
+  const button = (text, cls, target) => {
+    const el = document.createElement('button');
+    el.type = 'button';
+    el.className = 'btn ' + cls;
+    el.textContent = text;
+    el.addEventListener('click', () => $(target).click());
+    return el;
+  };
+  ask.append(button('Deny', 'step-deny', 'denyButton'), button('Allow', 'primary step-allow', 'allowButton'));
+  item.appendChild(ask);
 }
 // The last few lines of a running command, under its row. It goes away
 // when the step finishes; the inspector keeps the whole output.
@@ -2713,6 +2737,11 @@ async function requestApproval({ name, args, runtime = false }) {
   return new Promise((resolve) => { approvalResolve = resolve; });
 }
 // While an approval is open, the step behind it is waiting on the user, not working.
+function refreshWaitingRows() {
+  const group = activeGroup;
+  if (!group) return;
+  for (const tool of group.steps) if (tool.waiting) updateStepRow(group, tool);
+}
 function markWaitingTools(waiting) {
   const group = activeGroup;
   if (!group) return;
