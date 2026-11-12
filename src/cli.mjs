@@ -186,6 +186,7 @@ function helpText() {
     '  oasis --bg "TASK"              Run a task in a background session; oasis bg list|logs|attach|stop|rm ID',
     '  oasis --bg --exec "CMD"        Run a shell command as a background job',
     '  oasis schedule add WHEN TASK  Durable routines on a schedule (cron, every 2h, in 30m); oasis schedule daemon runs them',
+    '  oasis deploy [DIR]            Build and publish a static site to GitHub Pages (gh-pages branch)',
     '  oasis diff --watch            Live view of uncommitted changes that redraws as files change (/diff --watch in a session)',
     '  oasis cloud run "TASK"        Run an agent on GitHub Actions; --here hands off this branch; oasis cloud pull ID brings it back',
     '  oasis attach|logs|stop|rm|respawn ID|NAME   Manage background sessions (respawn --all restarts every running one)',
@@ -2700,6 +2701,12 @@ async function main() {
     const { cloudCommand } = await import('./cloud.mjs');
     try { process.exitCode = await cloudCommand(rawArgs.slice(1), { env: process.env }); }
     catch (error) { process.stderr.write('oasis cloud: ' + error.message + '\n'); process.exitCode = 1; }
+    return;
+  }
+  if (rawArgs[0] === 'deploy') {
+    const { deployCommand } = await import('./deploy.mjs');
+    try { process.exitCode = await deployCommand(rawArgs.slice(1), { env: process.env }); }
+    catch (error) { process.stderr.write('oasis deploy: ' + error.message + '\n'); process.exitCode = 1; }
     return;
   }
   // `oasis diff [--watch]`: uncommitted changes, optionally as a live full-screen view.
