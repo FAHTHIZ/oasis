@@ -279,3 +279,11 @@ test('the terminal shows what a web search and a page fetch returned', async () 
   assert.equal(describeToolResult('fetch_url', { redirect: 'https://a.dev/b' }, { color: false }), '  ⎿ Redirects to https://a.dev/b');
   assert.equal(describeToolResult('delete_file', { path: 'jest.config.js', deleted: true, backupCreated: true }, { color: false }), '  ⎿ Deleted jest.config.js (backup kept; /rewind restores it)');
 });
+
+test('result parsers do not depend on attribute order or quote style', async () => {
+  const { parseBingHtml } = await import('../src/web-search.mjs');
+  const ddg = `<div data-nrn='result' class='result results_links web-result'><h2><a href="//duckduckgo.com/l/?uddg=https%3A%2F%2Fnodejs.org%2Fapi%2Fstream.html&amp;rut=x" rel=nofollow class="result__a">Stream &amp; Node</a></h2><div class="result__body"><a href="x" class='result__snippet'>Readable <b>streams</b>.</a></div></div>`;
+  assert.deepEqual(parseDuckDuckGoHtml(ddg), [{ title: 'Stream & Node', url: 'https://nodejs.org/api/stream.html', snippet: 'Readable streams.' }]);
+  const bing = `<li data-id="1" class='b_algo'><div class="b_tpcn"><a class="tilk" href="https://ignored.example/">site</a></div><h2 class="x"><a data-h="ID=1" href='https://a.example/doc?x=1&amp;y=2'>Doc</a></h2><div class="b_caption"><p>About <strong>it</strong></p></div></li>`;
+  assert.deepEqual(parseBingHtml(bing), [{ title: 'Doc', url: 'https://a.example/doc?x=1&y=2', snippet: 'About it' }]);
+});
