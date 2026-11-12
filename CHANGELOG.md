@@ -7,6 +7,8 @@ User-facing change history grouped by package version. A version heading does no
 - Keyless web search keeps working when DuckDuckGo refuses the query (its HTTP 202 bot check, common on servers and VPSes): OASIS asks Bing instead, unwraps its redirect links and says where the results came from. The first search asks once for both sites; `OASIS_SEARCH_KEYLESS_FALLBACK=0` keeps it on DuckDuckGo only.
 - Terminal: web searches and page fetches leave a result line ("6 results · open-meteo.com, github.com", "Read Geocoding API · 23 KB", "No results · rate limited") instead of nothing.
 - Terminal: a failed command's result line names the actual error. Jest's bad-flag output used to show only its trailing docs link ("exit 1 · https://jestjs.io/docs/cli"); it now reads "Unrecognized CLI Parameter: Unrecognized option …". `command not found`, `Cannot find module` and similar lines are recognised too.
+- New projects start simpler. In an empty folder the agent is told to prefer built-in tools (`node:test`, global `fetch`, `unittest`) over new frameworks and config files, then run the program and its tests. A live gpt-oss-20b run in an empty folder lost several turns to Jest's ESM flags before this.
+- `move_file`, `rename_file` and `copy_file` calls (which models ask for, but no such tool exists) run as the matching `mv`/`cp` command (`move`/`copy` on Windows), with the usual approval, instead of failing with "Unknown tool".
 - Site approvals for web access say what they do: the button reads "Allow for this session" (it always held for the session, but was labelled "Allow once"), and a search that reaches several sites asks once instead of once per site.
 
 ## [1.3.0] - 2026-11-12
