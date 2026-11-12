@@ -4299,7 +4299,11 @@ async function runAgentTurnRaw(session, prompt, options = {}) {
   // reads, or re-issuing the same batch of calls every step.
   const recentOutcomes = new Map();
   let loopBreakMessage = '';
-  const verification = { changedPaths: new Set(), diffReviewedPaths: new Set(), diffReviewedAll: false, lastVerificationExitCode: null, lastVerificationKind: null, lspVerificationByPath: new Map(), nudgeUsed: false };
+  // overwrittenPaths starts empty (not missing): an absent set means "not
+  // tracked" to diffReviewComplete, which then wants every targeted edit
+  // reread even after a passing check. That cost every successful turn an
+  // extra model round trip and a second summary.
+  const verification = { changedPaths: new Set(), diffReviewedPaths: new Set(), diffReviewedAll: false, overwrittenPaths: new Set(), lastVerificationExitCode: null, lastVerificationKind: null, lspVerificationByPath: new Map(), nudgeUsed: false };
   // "...and add tests": finishing with no test file touched is a miss that
   // every agent made in the live benchmark (taskflow-search), so it is gated.
   verification.testsRequested = asksForNewTests(request);
