@@ -4,6 +4,7 @@ User-facing change history grouped by package version. A version heading does no
 
 ## Unreleased
 
+- `oasis web` / `oasis app`: after an update on disk adds a shared module (for example a `git pull` while the server is running), the server rebuilds its list of app files instead of answering 404, which left the page stuck on "Connecting…" until a restart. Rebuilds happen at most every 2 seconds, and only files the app imports are served.
 - Web app: Settings names well-known local model servers ("Ollama (this device)", "LM Studio (this device)", "llama.cpp (this device)") instead of showing a raw `127.0.0.1:11434`.
 - Web app: diffs (edit approvals, tool cards, the file diff view) now highlight the words that changed inside similar changed lines, as the terminal already did. Both use the same jsdiff-based code, now in `src/word-diff.mjs`.
 - Docs: `docs/ARCHITECTURE-ALTERNATIVES.md` no longer lists the removed `src/cloud-task-store.mjs`, and a new test fails when current docs name a repository file that does not exist.
