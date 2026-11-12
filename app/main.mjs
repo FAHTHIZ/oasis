@@ -1434,10 +1434,39 @@ function queueRender() {
 // Long chats stay complete: old messages are skipped by layout and paint
 // (content-visibility in app.css) instead of being removed from the page.
 // Only extremely long chats on slow devices drop their oldest nodes.
+// Very long chats keep the page fast by dropping the oldest rendered items
+// (the saved chat keeps everything). A note at the top says so and can bring
+// them back; once the person asks for everything, this chat stops trimming.
+let showWholeChat = false;
 function trimTranscript() {
+  if (showWholeChat) return;
   const transcript = $('transcript');
   const limit = LITE ? 600 : 3000;
-  while (transcript.childElementCount > limit) transcript.firstElementChild.remove();
+  let note = transcript.querySelector(':scope > .trim-note');
+  const count = () => transcript.childElementCount - (note ? 1 : 0);
+  let removed = 0;
+  while (count() > limit) {
+    const first = note ? note.nextElementSibling : transcript.firstElementChild;
+    if (!first) break;
+    first.remove();
+    removed++;
+  }
+  if (!removed) return;
+  if (!note) {
+    note = document.createElement('div');
+    note.className = 'trim-note';
+    note.innerHTML = '<span></span><button type="button" class="btn small ghost">Show all</button>';
+    note.querySelector('button').addEventListener('click', showAllMessages);
+    transcript.prepend(note);
+  }
+  note.firstElementChild.textContent = 'Older messages are hidden to keep this chat fast.';
+}
+function showAllMessages() {
+  if (document.body.classList.contains('busy')) { toast('Wait for OASIS to finish, or stop it first.'); return; }
+  showWholeChat = true;
+  $('transcript').replaceChildren();
+  renderSavedDisplay(display);
+  $('chat').scrollTop = 0;
 }
 
 // Live turn state. Each model step gets a display entry; its prose becomes a
@@ -2504,6 +2533,7 @@ $('newChatButton').addEventListener('click', async () => { closeSheet('chatsShee
 
 async function restoreChat({ keepChat = false } = {}) {
   $('transcript').replaceChildren();
+  showWholeChat = false;
   display = [];
   agent.reset();
   renderTodos([]);
