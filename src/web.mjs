@@ -1,11 +1,11 @@
 import { createServer as createHttpServer } from 'node:http';
 import { createServer as createHttpsServer } from 'node:https';
-import { readFileSync, statSync } from 'node:fs';
+import { constants as fsConstants, readFileSync, statSync } from 'node:fs';
 import { formatApprovalMessage, redactApprovalSecrets } from './approval-language.mjs';
 import { labelToolActivity, safeToolActivityArgs, toolActivityArtifacts, toolActivityCategory, toolActivityOutcome, toolActivityStatus, toolActivityWarning } from './tool-activity.mjs';
 import { createHash, randomBytes, randomUUID, timingSafeEqual } from 'node:crypto';
 import { clientAddress, createAuthLimiter, hostAllowed, isLoopbackAddress, parseAllowedHosts, requestIsSecure } from './remote-access.mjs';
-import { access, lstat, mkdir, readFile, realpath, rename, rm } from 'node:fs/promises';
+import { access, lstat, mkdir, open, readFile, realpath, rename, rm } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { isIP } from 'node:net';
@@ -2381,7 +2381,14 @@ export function createOasisWebServer(options = {}) {
           json(res, 413, { error: 'This file is too large for an inline preview (256 KiB limit). Use the project editor or Changes panel to inspect it.' });
           return;
         }
-        const buffer = await readFile(target.absolute);
+        // Read through a handle opened without following a final symlink, and
+        // re-check it, so a file swapped for a symlink or FIFO after the lstat
+        // above cannot be read or hang the request.
+        const buffer = await readRegularFileNoFollow(target.absolute, MAX_FILE_PREVIEW_BYTES);
+        if (!buffer) {
+          json(res, 400, { error: 'Only regular text files can be previewed here.' });
+          return;
+        }
         if (buffer.includes(0)) {
           json(res, 415, { error: 'This file appears to be binary and cannot be shown as text.' });
           return;
@@ -2397,8 +2404,12 @@ export function createOasisWebServer(options = {}) {
           modifiedAt: info.mtime.toISOString()
         });
       } catch (error) {
+        if (error && error.code === 'ENOENT') {
+          json(res, 404, { error: 'No file named ' + requestedPath.slice(0, 200) + ' in this workspace.' });
+          return;
+        }
         const message = String(error && error.message || error || 'Could not preview this file.');
-        const status = error && error.code === 'ENOENT' ? 404 :
+        const status = error && error.code === 'ELOOP' ? 403 :
           (/sensitive|outside the workspace|symbolic link|resolves outside/i.test(message) ? 403 : 400);
         json(res, status, { error: status === 403 ? 'This path is protected or outside the task workspace.' : message.slice(0, 500) });
       }
@@ -3214,4 +3225,18 @@ export function elicitationSchemaForPage(schema) {
   }
   if (schema && Array.isArray(schema.required)) out.required = schema.required.filter((k) => typeof k === 'string' && out.properties[k]);
   return out;
+}
+
+// Returns the file's bytes, or null when the path is no longer a regular file
+// (or grew past maxBytes) once opened. O_NOFOLLOW refuses a final symlink.
+export async function readRegularFileNoFollow(file, maxBytes) {
+  const flags = fsConstants.O_RDONLY | (fsConstants.O_NOFOLLOW || 0) | (fsConstants.O_NONBLOCK || 0);
+  const handle = await open(file, flags);
+  try {
+    const info = await handle.stat();
+    if (!info.isFile() || info.size > maxBytes) return null;
+    return await handle.readFile();
+  } finally {
+    await handle.close();
+  }
 }

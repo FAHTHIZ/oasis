@@ -4,6 +4,7 @@ User-facing change history grouped by package version. A version heading does no
 
 ## Unreleased
 
+- Web file preview: a missing file now gets "No file named … in this workspace" instead of the raw ENOENT error with the absolute path. The file is read through a handle opened without following a final symlink and re-checked, so a file swapped for a symlink or FIFO after the check cannot be read and cannot hang the request.
 - Protected paths: agent edits to project command files (`.oasis/commands/`, `.claude/commands/`, `.gemini/commands/`, `.opencode/commands/`, `opencode.json`) now ask first. In a trusted workspace these commands run their inline shell and grant their `allowed-tools` when you type them, so a prompt-injected edit could otherwise plant a command that runs later without approval.
 - Approvals: general prompts (opening the browser terminal, starting an MCP server, leaving plan mode with a plan and others) keep their line breaks, and indented command lines still show as code. They used to be squeezed into one run-on paragraph.
 - Routines: the browser workspace now says "The scheduler is running" while `oasis web` hosts the scheduler itself. It used to say the scheduler was not running, because the check skipped this process. A second routine with the same name (case-insensitive) is now refused with the id of the existing one (HTTP 409 in the browser), because duplicate names made `oasis schedule pause NAME` and other name lookups fail as ambiguous.
