@@ -25,7 +25,7 @@ The highest-leverage direction is to **reduce the number of hand-maintained poli
 | Tool authorization and shell policy | `src/permissions.mjs`, `src/permission-modes.mjs`, `src/shell-ast.mjs`, `src/unbash-shell-ast.mjs`, `src/shell-risk.mjs` |
 | Execution isolation | `src/sandbox.mjs`, `src/sandbox-runtime.mjs`, `src/ssh-backend.mjs` |
 | Workspace and code search | `src/tools.mjs`, `src/workspace-files.mjs`, `src/ripgrep.mjs`, tree-sitter integrations and Git worktrees |
-| Session / workflow recovery | `src/sessions.mjs`, `src/checkpoints.mjs`, `src/workflows.mjs`, `src/workflow-sandbox.mjs`, `src/cloud-task-store.mjs` |
+| Session / workflow recovery | `src/sessions.mjs`, `src/checkpoints.mjs`, `src/workflows.mjs`, `src/workflow-sandbox.mjs` |
 | Memory | `src/memory.mjs`, `src/auto-memory.mjs`, MiniSearch and Porter2 stemming |
 | Verification and tests | `src/claim-check.mjs`, `src/diagnostics.mjs`, `src/change-guard.mjs`, `src/test-tamper.mjs`, `test/`, `evals/`, `bench/` |
 | Integrations / telemetry | MCP and ACP SDKs, `src/plugins.mjs`, `src/hooks.mjs`, `src/telemetry.mjs` using OpenTelemetry |
