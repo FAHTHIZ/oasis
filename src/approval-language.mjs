@@ -107,7 +107,13 @@ export function formatApprovalMessage(prompt, meta = {}) {
     message = 'OASIS wants to install or update project software. This changes files or dependencies and may run code. Review the source and the requested action before approving it.';
     risky = true;
   } else {
-    const normalized = original.replace(/\s+/g, ' ').slice(0, 1800);
+    // Keep the prompt's lines: an MCP server summary, a plan or a terminal
+    // command collapsed into one run-on sentence. Lines indented two or more
+    // spaces stay indented (the apps show those as code).
+    const normalized = original.split(/\r?\n/).map((line) => {
+      const body = line.trim().replace(/[ \t\f\v]+/g, ' ');
+      return body && /^[ \t]{2,}\S/.test(line) ? '  ' + body : body;
+    }).join('\n').replace(/\n{3,}/g, '\n\n').slice(0, 1800);
     message = 'OASIS is asking permission to take this action:\n' + (normalized || 'The action details were not provided.');
     risky = /\b(?:delete|remove|install|uninstall|overwrite|cannot be undone|high risk|format|drop database|sudo|rm\s+-rf|start the local.*gateway|detached background process|expose the local api)\b/i.test(original);
   }
