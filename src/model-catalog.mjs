@@ -275,7 +275,7 @@ export function catalogRefreshDisabled(env = process.env) {
 
 // Download models.dev into the user cache when the cached copy is over a day old.
 // Never throws; resolves to true when a new catalog was written.
-export async function refreshModelCatalog({ env = process.env, fetchImpl = globalThis.fetch, force = false, now = Date.now() } = {}) {
+export async function refreshModelCatalog({ env = process.env, fetchImpl = globalThis.fetch, force = false, now = Date.now(), signal } = {}) {
   if (!force && catalogRefreshDisabled(env)) return false;
   if (typeof fetchImpl !== 'function') return false;
   let file;
@@ -286,10 +286,13 @@ export async function refreshModelCatalog({ env = process.env, fetchImpl = globa
     if (!force && age < REFRESH_MS && cache && cache.schemaVersion >= CACHE_SCHEMA_VERSION) return false;
   } catch {}
   try {
-    const response = await fetchImpl(MODEL_CATALOG_URL, { signal: AbortSignal.timeout(15_000), headers: { accept: 'application/json' } });
+    const timeout = AbortSignal.timeout(15_000);
+    const response = await fetchImpl(MODEL_CATALOG_URL, { signal: signal ? AbortSignal.any([signal, timeout]) : timeout, headers: { accept: 'application/json' } });
     if (!response.ok) return false;
     const providers = trimCatalog(await response.json());
     if (Object.keys(providers).length < 5) return false;
+    // A caller that stopped waiting (a closing server) must not find a new file afterwards.
+    if (signal && signal.aborted) return false;
     fs.mkdirSync(path.dirname(file), { recursive: true });
     const temp = file + '.' + process.pid + '.tmp';
     fs.writeFileSync(temp, JSON.stringify({
