@@ -3,11 +3,14 @@
 // partial line is shown raw and replaced by its rendered form once complete.
 import { Lexer } from 'marked';
 import { createRequire } from 'node:module';
-import { diffArrays, diffWordsWithSpace } from 'diff';
+import { diffArrays } from 'diff';
+import { wordHighlights } from './word-diff.mjs';
 import wrapAnsi from 'wrap-ansi';
 import stripAnsi from 'strip-ansi';
 import { stringWidth } from './line-editor.mjs';
 import { renderMermaid } from './mermaid-ascii.mjs';
+
+export { wordHighlights };
 
 const C = {
   reset: '\x1b[0m', bold: '\x1b[1m', dim: '\x1b[2m', italic: '\x1b[3m', underline: '\x1b[4m',
@@ -294,34 +297,6 @@ export function lineDiff(before, after) {
 
 function diffStats(ops) {
   return { added: ops.filter((op) => op.op === '+').length, removed: ops.filter((op) => op.op === '-').length };
-}
-
-// Word-level highlights for a changed line: pairs the i-th removed line of a
-// change block with the i-th added line and marks the words that differ, when
-// the two lines are similar enough that the highlight helps (Claude Code and
-// Cursor show the same). Returns Map(index -> [{ text, changed }]).
-const WORD_DIFF_MAX = 400;
-export function wordHighlights(ops) {
-  const out = new Map();
-  let index = 0;
-  while (index < ops.length) {
-    if (ops[index].op !== '-') { index += 1; continue; }
-    const removed = [];
-    while (index < ops.length && ops[index].op === '-') removed.push(index++);
-    const added = [];
-    while (index < ops.length && ops[index].op === '+') added.push(index++);
-    for (let k = 0; k < Math.min(removed.length, added.length); k += 1) {
-      const a = ops[removed[k]].line;
-      const b = ops[added[k]].line;
-      if (!a.trim() || !b.trim() || a.length > WORD_DIFF_MAX || b.length > WORD_DIFF_MAX) continue;
-      const parts = diffWordsWithSpace(a, b);
-      const same = parts.filter((part) => !part.added && !part.removed).reduce((sum, part) => sum + part.value.trim().length, 0);
-      if (same < 0.4 * Math.max(a.trim().length, b.trim().length)) continue;
-      out.set(removed[k], parts.filter((part) => !part.added).map((part) => ({ text: part.value, changed: Boolean(part.removed) })));
-      out.set(added[k], parts.filter((part) => !part.removed).map((part) => ({ text: part.value, changed: Boolean(part.added) })));
-    }
-  }
-  return out;
 }
 
 function highlightedLine(segments, lineBg, wordBg) {

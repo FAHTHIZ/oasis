@@ -9,6 +9,7 @@ import { createSoundPlayer } from './core/sound.mjs';
 import { ambientField } from './core/ambient.mjs';
 import { stepOutcome, stepRan, stepLabel, summarizeArgs, toolKind, groupTitle, groupStats, formatDuration, thinkingLabel, thoughtLabel, splitTextToolCall, elapsedSince, describeInput, buildTimeline, groupTiming, runElapsed, timingSplit } from './core/timeline.mjs';
 import { IndexedDBStore, Workspace, lineDiff } from './core/workspace.mjs';
+import { wordHighlights } from '../src/word-diff.mjs';
 import { Agent, textOf } from './core/agent.mjs';
 import { FrameSandbox } from './core/sandbox.mjs';
 import { SkillLibrary } from './core/skills.mjs';
@@ -2986,12 +2987,26 @@ $('questionForm').addEventListener('submit', (event) => { event.preventDefault()
 
 function renderDiff(container, diff) {
   const frag = document.createDocumentFragment();
-  for (const line of diff.slice(0, 1500)) {
+  const shown = diff.slice(0, 1500);
+  // Similar changed lines mark just the words that differ, as in the terminal.
+  const words = wordHighlights(shown);
+  shown.forEach((line, index) => {
     const div = document.createElement('div');
     div.className = line.type;
-    div.textContent = (line.type === 'add' ? '+ ' : line.type === 'del' ? '− ' : line.type === 'same' ? '  ' : '') + line.text;
+    const prefix = line.type === 'add' ? '+ ' : line.type === 'del' ? '− ' : line.type === 'same' ? '  ' : '';
+    const segments = words.get(index);
+    if (!segments) div.textContent = prefix + line.text;
+    else {
+      div.append(prefix);
+      for (const segment of segments) {
+        if (!segment.changed) { div.append(segment.text); continue; }
+        const mark = document.createElement('mark');
+        mark.textContent = segment.text;
+        div.appendChild(mark);
+      }
+    }
     frag.appendChild(div);
-  }
+  });
   if (diff.length > 1500) { const more = document.createElement('div'); more.className = 'note'; more.textContent = '… ' + (diff.length - 1500) + ' more lines'; frag.appendChild(more); }
   container.replaceChildren(frag);
 }

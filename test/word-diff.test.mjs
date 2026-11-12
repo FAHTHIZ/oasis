@@ -25,3 +25,16 @@ test('colored diff marks changed words with the word background; plain text is u
   assert.equal(plain.added, 1);
   assert.equal(plain.removed, 1);
 });
+
+test('the web app diff view shares the word highlights: its ops shape works and the module ships in the app', async () => {
+  const { lineDiff: appLineDiff } = await import('../app/core/workspace.mjs');
+  const { wordHighlights: shared } = await import('../src/word-diff.mjs');
+  const ops = appLineDiff('a\nconst answer = 41;\nb', 'a\nconst answer = 42;\nb');
+  const highlights = shared(ops);
+  const changed = [...highlights.entries()].map(([index, parts]) => [ops[index].type, parts.filter((part) => part.changed).map((part) => part.text)]);
+  assert.deepEqual(changed, [['del', ['41']], ['add', ['42']]]);
+  const { appModuleGraph } = await import('../src/app-server.mjs');
+  const graph = await appModuleGraph(new URL('..', import.meta.url).pathname);
+  assert.ok(graph.modules.some((file) => file.endsWith('src/word-diff.mjs')));
+  assert.ok(graph.packages.includes('diff'));
+});
