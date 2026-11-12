@@ -50,7 +50,7 @@ export const BUILTIN_COMMANDS = {
   'install-github-app': 'Set up the Oasis GitHub Action for this repo: writes .github/workflows/oasis.yml (/install-github-app [@trigger] [force] [save])',
   'auto-commit': 'Commit each turn\'s file changes to Git automatically, Aider-style (/auto-commit [on|off])',
   fast: 'Toggle fast mode: faster output on Opus 5.5 / 5 / 4.8 via the Anthropic API, at a higher price (/fast [on|off])',
-  model: 'Show or switch the model for this session (/model [id])',
+  model: 'Show or switch the model for this session (/model [id] [effort])',
   routing: 'Route clearly easy read-only tasks to a cheaper model (/routing easy MODEL, strong MODEL, on|off|status|reset)',
   mode: 'Show or switch the permission mode (/mode ' + PERMISSION_MODES.join('|') + '; aliases: manual, accept-edits)',
   permissions: 'Show permission rules, mode, and sandbox',
@@ -308,17 +308,31 @@ export async function runBuiltinCommand(name, argument, state) {
         const hidden = listed.models.length - usable.length;
         return { output: ['Model: ' + current, 'The provider serves ' + listed.models.length + ' model' + (listed.models.length === 1 ? '' : 's') + (hidden ? ' (' + hidden + ' hidden by availableModels)' : '') + ':', ...usable.map((name) => (name === current ? '* ' : '  ') + name), 'Switch with /model <name>.'].join('\n') };
       }
-      const selected = String(argument).trim();
+      // `/model NAME EFFORT` also sets reasoning effort (Codex-style inline argument).
+      let selected = String(argument).trim();
+      let inlineEffort = null;
+      const parts = selected.split(/\s+/);
+      if (parts.length === 2) {
+        const { EFFORT_LEVELS } = await import('./agent.mjs');
+        if (EFFORT_LEVELS.includes(parts[1].toLowerCase())) { selected = parts[0]; inlineEffort = parts[1].toLowerCase(); }
+      }
+      const applyInlineEffort = async () => {
+        if (!inlineEffort) return '';
+        const { applyEffort } = await import('./agent.mjs');
+        sessionOptions.effort = inlineEffort === 'auto' ? null : inlineEffort;
+        session.config = applyEffort(session.config, sessionOptions.effort, session.baseEffortConfig || (session.baseEffortConfig = { reasoningEffort: session.config.reasoningEffort, thinkingBudget: session.config.thinkingBudget }));
+        return ' Reasoning effort: ' + inlineEffort + '.';
+      };
       if (!modelAllowed(selected, available, { env, protocol: session.config && session.config.protocol, ...(session.modelPolicy || {}) })) {
         return { output: modelRestrictionMessage(selected, available, { env, ...(session.modelPolicy || {}) }) };
       }
       if (!session.config) session.config = {};
-      if ((session.config.model || '') === selected) return { output: 'Model is already ' + selected + '.' };
+      if ((session.config.model || '') === selected) return { output: 'Model is already ' + selected + '.' + await applyInlineEffort() };
       // PreModelSwitch hooks may block or ask; PostModelSwitch context joins the next request.
       const switched = await switchSessionModel(session, { to: selected, requested: selected, source: 'command', env, confirm: typeof state.confirm === 'function' ? state.confirm : null, apply: (model) => { session.config.model = model; sessionOptions.model = model; } });
       const notes = switched.messages.length ? '\n' + switched.messages.join('\n') : '';
       if (!switched.ok) return { output: 'Model unchanged (' + current + '): ' + switched.reason + notes };
-      return { output: 'Model set to ' + selected + '.' + notes };
+      return { output: 'Model set to ' + selected + '.' + await applyInlineEffort() + notes };
     }
     case 'agents': {
       const definitions = await loadAgentDefinitions(root, { env });
