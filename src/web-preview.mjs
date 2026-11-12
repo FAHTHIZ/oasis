@@ -118,11 +118,23 @@ export function createPreviewHandler({ getRoot, loopbackOnly = true, ownPort = (
     }
   }
 
+  function fromSamePort(req, port) {
+    try {
+      const from = parsePreviewPath(new URL(String(req.headers.referer || '')).pathname);
+      return Boolean(from && from.key === key && from.port === port);
+    } catch { return false; }
+  }
+
   function proxy(req, res, port, rest, search) {
     const headers = baseHeaders(loopbackOnly);
     if (port < 1024 || port > 65535 || port === ownPort()) { res.writeHead(400, { ...headers, 'content-type': 'text/plain; charset=utf-8' }); res.end('Choose a dev server port between 1024 and 65535 (not the OASIS port).'); return; }
     const forward = { ...req.headers, host: '127.0.0.1:' + port, 'accept-encoding': 'identity' };
     for (const name of ['authorization', 'cookie', 'origin', 'referer', 'x-forwarded-for', 'x-forwarded-host', 'x-forwarded-proto']) delete forward[name];
+    // A dev app posting to its own server keeps working without an Origin, but a
+    // page from another preview (an untrusted repo's HTML file, another port) must
+    // not reach other local services (Ollama, Jupyter…) with their Origin check
+    // removed: those requests keep the opaque `Origin: null` the browser sent.
+    if (!['GET', 'HEAD', 'OPTIONS'].includes(String(req.method).toUpperCase()) && !fromSamePort(req, port)) forward.origin = 'null';
     const upstream = http.request({ host: '127.0.0.1', port, method: req.method, path: '/' + rest + (search || ''), headers: forward }, (answer) => {
       const out = { ...answer.headers };
       for (const name of ['content-security-policy', 'content-security-policy-report-only', 'x-frame-options', 'set-cookie', 'strict-transport-security']) delete out[name];
