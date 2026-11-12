@@ -72,6 +72,10 @@ Subagents you or OASIS start show up in `/tasks`: running ones first, finished o
 
 `/diff --watch` opens a live diff beside the session: inside tmux it splits the window, otherwise run `oasis diff --watch` in a second terminal. The view redraws within a second of any edit and shows every changed and untracked file with a running +/- count. Keys: `j`/`k` scroll, space/`b` page, `n`/`p` jump between files, `s` toggles a per-file summary, `w` pauses and `q` closes it. `oasis diff --stat` prints the summary once.
 
+### Deploy a static site
+
+`oasis deploy` publishes to GitHub Pages: it runs `npm run build` when `package.json` has one, takes the first of `dist`, `build`, `out`, `_site`, `public` or `site` that contains an `index.html` (or the project root, minus Git-ignored files), commits it to the `gh-pages` branch from a scratch index and pushes it. Your branch, working tree and staging area stay as they are, and secret-looking files such as `.env` and private keys are never published. It then turns Pages on through the GitHub CLI and prints the address. `oasis deploy DIR` picks the folder, `--dry-run` lists what would be published, `--no-build` skips the build and `--branch NAME` publishes elsewhere. Pages on private repositories needs a paid GitHub plan.
+
 ### Cloud agents on GitHub Actions
 
 Run a task on a GitHub runner while your computer is off, then pick it up locally. It uses your GitHub CLI sign-in and your own model key:
