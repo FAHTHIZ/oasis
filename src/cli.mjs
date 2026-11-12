@@ -597,6 +597,35 @@ export function approvalRows(text, columns) {
   return String(text).split('\n').reduce((rows, line) => rows + Math.max(1, Math.ceil(stringWidth(stripAnsi(line)) / width)), 0);
 }
 
+// The approval as printed in the terminal: a risk warning in red, the command
+// in the accent color, the explanation dim, and for edits the proposed diff
+// (capped, colored) so the change is visible before it is allowed.
+export function renderApprovalText(approval, { color = false, columns = 80, maxDiffLines = 40 } = {}) {
+  const paint = (code, text) => color ? '\x1b[' + code + 'm' + text + '\x1b[0m' : text;
+  const lines = [];
+  for (const line of String(approval && approval.message || '').split('\n')) {
+    if (/^WARNING — RISKY ACTION$/.test(line)) lines.push(color ? paint('1;31', '⚠ Risky action') : line);
+    else if (/^OASIS (?:wants|is asking)/.test(line)) lines.push(paint('1', line));
+    else if (/^ {2}\S/.test(line)) lines.push(paint('36', line));
+    else lines.push(paint('2', line));
+  }
+  const diff = String(approval && approval.diff || '').replace(/\s+$/, '');
+  if (diff) {
+    const width = Math.max(20, Number(columns) > 0 ? Number(columns) - 4 : 76);
+    const rows = diff.split('\n');
+    for (const row of rows.slice(0, maxDiffLines)) {
+      const text = '  ' + (stringWidth(row) > width ? row.slice(0, width - 1) + '…' : row);
+      if (/^(?:\+\+\+|---) /.test(row)) lines.push(paint('1', text));
+      else if (row.startsWith('@@')) lines.push(paint('36', text));
+      else if (row.startsWith('+')) lines.push(paint('32', text));
+      else if (row.startsWith('-')) lines.push(paint('31', text));
+      else lines.push(paint('2', text));
+    }
+    if (rows.length > maxDiffLines) lines.push(paint('2', '  … ' + (rows.length - maxDiffLines) + ' more lines'));
+  }
+  return lines.join('\n');
+}
+
 // The one line an answered approval leaves behind.
 export function approvalSummary(chosen, meta = {}) {
   if (!chosen) return '  ⎿ Denied';
@@ -608,7 +637,8 @@ async function askApprovalLocal(prompt, forceInteractive, meta, signal = null) {
   const approval = formatApprovalMessage(prompt, meta || {});
   if (process.env.OASIS_PERMISSION_PROMPTS === 'none') { stdout.write('\n[permissions] Denied without asking (--permission-prompts none): ' + approval.message.split('\n').filter(Boolean)[0] + '\n'); return false; }
   try {
-    stdout.write('\n' + approval.message + '\n');
+    const shown = renderApprovalText(approval, { color: richOutput(), columns: stdout.columns, maxDiffLines: Math.max(6, Math.min(40, (Number(stdout.rows) || 40) - 14)) });
+    stdout.write('\n' + shown + '\n');
     const approvalSound = playSound('attention', { stream: stdout });
     if (CURRENT_TURN_STARTED_AT) notifyAttention('OASIS needs your approval: ' + approval.message.split('\n').filter(Boolean)[0], { elapsedMs: Date.now() - CURRENT_TURN_STARTED_AT, soundPlayed: approvalSound, stream: stdout });
     const offerAlways = meta && meta.suggestion && !forceInteractive;
@@ -619,12 +649,12 @@ async function askApprovalLocal(prompt, forceInteractive, meta, signal = null) {
       const options = [{ label: 'Allow once', value: true, hotkey: 'yes' }];
       if (offerAlways) options.push({ label: 'Always allow this session for ' + meta.suggestion, value: 'always', hotkey: 'always' });
       options.push({ label: 'No', value: false, hotkey: 'no' });
-      stdout.write('Do you want to proceed?\n');
+      stdout.write((richOutput() ? '\x1b[1mDo you want to proceed?\x1b[22m' : 'Do you want to proceed?') + '\n');
       const paused = turnKeys;
       if (paused) paused.suspend();
       // Rows printed above the options: the blank line, the message (wrapped
       // at the terminal width) and the question.
-      const collapse = { rows: approvalRows('\n' + approval.message + '\nDo you want to proceed?', stdout.columns), summary: (chosen) => approvalSummary(chosen, meta) };
+      const collapse = { rows: approvalRows('\n' + shown + '\nDo you want to proceed?', stdout.columns), summary: (chosen) => approvalSummary(chosen, meta) };
       try { return await selectDialog({ input: stdin, output: stdout, options, color: colorEnabled(stdout), signal, collapse }); }
       finally { if (paused && turnKeys === paused) paused.resume(); }
     }
