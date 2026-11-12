@@ -238,6 +238,12 @@ export function thinkingLabel(elapsedMs) {
   return Number.isFinite(value) && value >= 5000 ? 'Thinking · ' + formatDuration(value) : 'Thinking';
 }
 
+// The settled reasoning block: "Thought for 12s" ("Thought" when the time is unknown).
+export function thoughtLabel(elapsedMs) {
+  const value = Number(elapsedMs);
+  return Number.isFinite(value) && value >= 1000 ? 'Thought for ' + formatDuration(value) : 'Thought';
+}
+
 // Small local models often write a tool call as JSON text instead of a native call,
 // sometimes after a sentence of prose. OASIS turns it into a real call when the reply
 // ends; while it streams, show the prose and which tool is being prepared instead of a
@@ -317,6 +323,12 @@ export function buildTimeline(entries = []) {
       group = null;
       blocks.push({ type: entry.role || 'note', entry });
       continue;
+    }
+    // What the model said while reasoning before this step (a provider
+    // summary) sits between the work before and after it.
+    if (entry.reasoning && String(entry.reasoning.text || '').trim()) {
+      group = null;
+      blocks.push({ type: 'reasoning', entry });
     }
     const text = String(entry.content || '').trim();
     if (text) {

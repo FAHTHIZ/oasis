@@ -335,6 +335,8 @@ export function compactJobEvents(events, max = MAX_EVENTS_PER_JOB, keepRecent = 
     if (old && event.type === 'model_wait' && last && last.type === 'model_wait') { merged[merged.length - 1] = event; continue; }
     if (old && last && last.type === 'assistant_delta' && event.type === 'assistant_delta' && merged.length - 1 < settled) {
       merged[merged.length - 1] = { ...event, data: { ...event.data, text: String(last.data?.text || '') + String(event.data?.text || '') } };
+    } else if (old && last && last.type === 'reasoning_delta' && event.type === 'reasoning_delta' && !event.data?.reset && merged.length - 1 < settled) {
+      merged[merged.length - 1] = { ...event, data: { ...last.data, text: String(last.data?.text || '') + String(event.data?.text || '') } };
     } else merged.push(event);
   }
   // Still too long: drop the oldest foldable events first, then the oldest of any kind.
@@ -1127,6 +1129,7 @@ export function createOasisWebServer(options = {}) {
         const toolActivityArgsByCallId = new Map();
         const liveOutput = createLiveOutputRelay((data) => emit(job, 'tool_output', data));
         let assistantDeltaBuffer = '';
+        let reasoningBuffer = '';
         job.steerTarget = session;
         // MCP forms go to whichever browser job is running when the server asks.
         session.elicit = (request) => elicitationFor(job, request);
@@ -1149,7 +1152,16 @@ export function createOasisWebServer(options = {}) {
           },
           onThinkingBudget: (budget) => emit(job, 'thinking', { budget }),
           onReasoningEffort: (effort) => emit(job, 'thinking', { effort }),
-          onText: (text) => emit(job, 'assistant_text', { text: String(text || '').slice(0, 24000) }),
+          onText: (text) => { reasoningBuffer = ''; emit(job, 'assistant_text', { text: String(text || '').slice(0, 24000) }); },
+          // The model's reasoning summary as it streams (already redacted and
+          // capped by the agent). A step's text replaces the one before.
+          onReasoning: (text) => {
+            const current = String(text || '').slice(0, 8000);
+            const grows = reasoningBuffer && current.startsWith(reasoningBuffer);
+            const delta = grows ? current.slice(reasoningBuffer.length) : current;
+            reasoningBuffer = current;
+            if (delta) emit(job, 'reasoning_delta', { text: delta, ...(grows ? {} : { reset: true }) });
+          },
           onDelta: (text) => {
             const current = String(text || '').slice(0, 24000);
             const delta = current.startsWith(assistantDeltaBuffer) ? current.slice(assistantDeltaBuffer.length) : current;
@@ -1162,6 +1174,7 @@ export function createOasisWebServer(options = {}) {
           },
           onToolStart: ({ name, args, call, subagent }) => {
             assistantDeltaBuffer = '';
+            if (!subagent) reasoningBuffer = '';
             const safeArgs = safeToolActivityArgs(args);
             const callId = call && call.id ? String(call.id).slice(0, 160) : '';
             if (callId) toolActivityArgsByCallId.set(callId, { args: safeArgs, startedAt: Date.now() });
