@@ -670,7 +670,9 @@ export async function runWorkspaceCommand(root, command, args = [], options = {}
   const highRisk = configRisk || (analysis.highRisk && !options.ruleAllowed ? analysis.highRisk : null) || (options.injectionHold ? 'needs a person because ' + options.injectionHold : null);
   const sandboxAutoAllowed = sandbox && sandbox.available && sandbox.autoAllowCommands !== false && !highRisk;
   // ls, cat, grep, git status/diff/log and friends: read-only, inside the workspace.
-  const readOnly = !highRisk && !options.interactive && options.readOnlyCommands !== false && readOnlyCommandsEnabled(options.env || process.env) && readOnlyArgv(command, args, { root: path.resolve(root) });
+  // A command that leaves the sandbox (sandbox.excludedCommands) always asks, read-only or not.
+  const leftSandbox = Boolean(requestedSandbox) && !sandbox;
+  const readOnly = !leftSandbox && !highRisk && !options.interactive && options.readOnlyCommands !== false && readOnlyCommandsEnabled(options.env || process.env) && readOnlyArgv(command, args, { root: path.resolve(root) });
   if (readOnly && command === 'git') options = { ...options, env: readOnlyGitEnv(options.env || process.env) };
   const needsApproval = highRisk ? true : !(options.autoApprove || options.ruleAllowed || sandboxAutoAllowed || readOnly);
   if (needsApproval) {
