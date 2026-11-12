@@ -1149,9 +1149,10 @@ function getClaudeUserSkillsDirectory(env = process.env) {
   const home = env.HOME || env.USERPROFILE || os.homedir();
   return path.join(env.CLAUDE_CONFIG_DIR || path.join(home, '.claude'), 'skills');
 }
-const PORTABLE_SKILL_SOURCES = ['portable-workspace', 'global-portable', 'claude-project', 'claude-user', 'foreign-user'];
+const PORTABLE_SKILL_SOURCES = ['portable-workspace', 'global-portable', 'claude-project', 'claude-user', 'foreign-user', 'parent-portable'];
 // 'foreign-user' skills live in another agent's home folder; each remembers its own root.
-const ABSOLUTE_SKILL_SOURCES = { 'global-portable': getUniversalGlobalSkillsDirectory, 'claude-user': getClaudeUserSkillsDirectory, 'foreign-user': (env, skill) => (skill && skill.skillsRoot) || '' };
+// 'parent-portable' skills sit in .agents/skills of a folder above the workspace (up to the git root).
+const ABSOLUTE_SKILL_SOURCES = { 'global-portable': getUniversalGlobalSkillsDirectory, 'claude-user': getClaudeUserSkillsDirectory, 'foreign-user': (env, skill) => (skill && skill.skillsRoot) || '', 'parent-portable': (env, skill) => (skill && skill.skillsRoot) || '' };
 
 // Skill folders of other agents, read in place (SKILL.md per folder). Project
 // folders are relative to the workspace; home folders are relative to $HOME.
@@ -1216,7 +1217,7 @@ export async function listAvailableSkills(root, options = {}) {
           absolutePath: ABSOLUTE_SKILL_SOURCES[source] ? filePath : undefined,
           absoluteSkillDirectory: ABSOLUTE_SKILL_SOURCES[source] ? path.join(directory, entry.name) : undefined,
           ...(origin ? { origin } : {}),
-          ...(source === 'foreign-user' ? { skillsRoot: directory } : {})
+          ...(source === 'foreign-user' || source === 'parent-portable' ? { skillsRoot: directory } : {})
         };
         byName.set(meta.name.toLowerCase(), skill);
       } catch { /* Ignore incomplete or unsafe skill files. */ }
@@ -1293,6 +1294,9 @@ export async function listAvailableSkills(root, options = {}) {
     for (const dir of FOREIGN_PROJECT_SKILL_DIRS) await scan(path.join(root, ...dir.split('/')), 'portable-workspace', dir, dir);
   }
   await scan(getUniversalGlobalSkillsDirectory(env), 'global-portable');
+  // Antigravity and Codex also read .agents/skills in the folders above the workspace up to
+  // the git root; nearer folders win and the workspace's own folder wins over all of them.
+  for (const dir of await parentSkillFolders(root)) await scan(path.join(dir, '.agents', 'skills'), 'parent-portable', '', path.relative(root, path.join(dir, '.agents', 'skills')).split(path.sep).join('/'));
   await scan(path.join(root, '.agents', 'skills'), 'portable-workspace', '.agents/skills');
   // Claude Code skill locations; personal skills win over project ones, as in Claude Code.
   await scan(path.join(root, '.claude', 'skills'), 'claude-project', '.claude/skills');
@@ -1301,6 +1305,21 @@ export async function listAvailableSkills(root, options = {}) {
   await scanImportedExtensions(path.join(root, '.oasis', 'extensions'), 'project-extension', '.oasis/extensions');
   const policy = options.skillPolicy || await skillPolicyFor(root, env);
   return applySkillPolicy([...byName.values()], policy).sort((a, b) => a.name.localeCompare(b.name)).slice(0, 240);
+}
+
+// Folders above the workspace up to its git root, farthest first. Nothing when the
+// workspace is itself the git root or no git root is found within 20 levels.
+async function parentSkillFolders(root) {
+  const workspace = path.resolve(root);
+  const chain = [];
+  for (let dir = workspace, i = 0; i < 20; i++) {
+    try { await lstat(path.join(dir, '.git')); return chain.reverse(); } catch {}
+    const parent = path.dirname(dir);
+    if (parent === dir) break;
+    dir = parent;
+    chain.push(dir);
+  }
+  return [];
 }
 
 // Claude Code's disableBundledSkills (or CLAUDE_CODE_DISABLE_BUNDLED_SKILLS=1) and skillOverrides.
@@ -1335,7 +1354,7 @@ export function applySkillPolicy(skills, policy = {}) {
 
 // Where a listed skill's SKILL.md lives, and whether it belongs to the
 // repository, the user or OASIS itself (Codex skills/list scopes).
-const REPO_SKILL_SOURCES = new Set(['workspace', 'portable-workspace', 'claude-project', 'project-extension']);
+const REPO_SKILL_SOURCES = new Set(['workspace', 'portable-workspace', 'claude-project', 'project-extension', 'parent-portable']);
 export function skillLocation(root, item) {
   const scope = item.source === 'built-in' ? 'system' : REPO_SKILL_SOURCES.has(item.source) ? 'repo' : 'user';
   let file = item.absolutePath || null;
@@ -1487,7 +1506,7 @@ export async function loadSkillDescriptions(root, options = {}) {
   const skills = (await listAvailableSkills(root, options)).filter((item) => item.modelInvocable !== false);
   if (!skills.length) return '';
   // Built-in skills carry no tag (it would repeat on every line of every request).
-  const lines = skills.map((item) => '- ' + item.name + (item.source === 'built-in' ? '' : ' [' + (['global-extension', 'project-extension', 'portable-workspace', 'global-portable', 'foreign-user'].includes(item.source) ? 'EXTERNAL UNTRUSTED PROMPT' : item.source) + ']') + (item.nameOnly ? '' : ': ' + skillCatalogueLine(item.description)));
+  const lines = skills.map((item) => '- ' + item.name + (item.source === 'built-in' ? '' : ' [' + (['global-extension', 'project-extension', 'portable-workspace', 'global-portable', 'foreign-user', 'parent-portable'].includes(item.source) ? 'EXTERNAL UNTRUSTED PROMPT' : item.source) + ']') + (item.nameOnly ? '' : ': ' + skillCatalogueLine(item.description)));
   return fitSkillCatalogue(lines, options.maxChars ?? SKILL_CATALOGUE_CHARS);
 }
 
