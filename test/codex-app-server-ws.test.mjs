@@ -250,3 +250,10 @@ test('--listen unix://: private socket, Codex-style default path, stale socket c
   await assert.rejects(startCodexAppServerWebSocket({ socketPath: filePath, env: process.env }), /not a socket/);
   assert.equal((await stat(filePath)).isFile(), true);
 });
+
+test('the unauthenticated loopback startup line warns about other local users', async () => {
+  const { appServerListenNotice } = await import('../src/codex-app-server-ws.mjs');
+  assert.match(appServerListenNotice('ws://127.0.0.1:4500', 'ws', false), /no auth: any local user or process can connect; on a shared machine use --listen unix:\/\/ or --ws-auth capability-token/);
+  assert.match(appServerListenNotice('ws://127.0.0.1:4500', 'ws', true), /\(bearer token required\); health/);
+  assert.match(appServerListenNotice('unix:///tmp/x.sock', 'unix', false), /\(this user only\)/);
+});
