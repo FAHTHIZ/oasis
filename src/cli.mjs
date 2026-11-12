@@ -379,6 +379,7 @@ export function rateLimitNotice(event = {}, color = false) {
   return color ? '\x1b[2m' + text + '\x1b[22m' : text;
 }
 let queuedDraft = '';
+let turnDraft = ''; // what is typed while a turn runs, echoed in the status line
 let turnKeys = null;
 // A line printed between keystrokes while a turn runs: inside a streaming
 // reply it goes above the partial line instead of splitting the reply.
@@ -396,8 +397,8 @@ function startTurnKeys(onInterrupt, onSteer = null) {
     for (const key of decoder.feed(chunk.toString('utf8'))) {
       if (key.name === 'escape') onInterrupt('escape');
       else if (key.name === 'ctrlC') onInterrupt('ctrlC');
-      else if (key.name === 'char' || key.name === 'paste') buffer += key.text;
-      else if (key.name === 'backspace') buffer = buffer.slice(0, -1);
+      else if (key.name === 'char' || key.name === 'paste') { buffer += key.text; showDraft(); }
+      else if (key.name === 'backspace') { buffer = buffer.slice(0, -1); showDraft(); }
       else if ((key.name === 'enter' || key.name === 'tab') && buffer.trim()) {
         const preview = buffer.replace(/\s+/g, ' ').slice(0, 90);
         if (key.name === 'enter' && onSteer && onSteer(buffer)) {
@@ -407,13 +408,17 @@ function startTurnKeys(onInterrupt, onSteer = null) {
           noticeLine(dim('  ↳ queued for after this turn: ' + preview));
         }
         buffer = '';
+        showDraft();
       }
     }
   };
+  // Type-ahead is echoed in the live status line, so typing while Oasis
+  // works never feels like the keys went nowhere.
+  const showDraft = () => { turnDraft = buffer; if (waitIndicator && waitIndicator.active) waitIndicator.update({ draft: buffer }); };
   const handle = {
     resume() { if (active) return; active = true; try { stdin.setRawMode(true); } catch {} stdin.setEncoding('utf8'); stdin.resume(); stdin.on('data', onData); },
     suspend() { if (!active) return; active = false; stdin.off('data', onData); try { stdin.setRawMode(false); } catch {} stdin.pause(); },
-    stop() { handle.suspend(); if (buffer.trim()) queuedDraft = buffer; buffer = ''; }
+    stop() { handle.suspend(); if (buffer.trim()) queuedDraft = buffer; buffer = ''; turnDraft = ''; }
   };
   handle.resume();
   return handle;
@@ -638,7 +643,7 @@ function onModelWait(event = {}) {
   if (event.phase !== 'start') { stopWaitIndicator(); return; }
   flushExploration();
   if (!waitIndicator) waitIndicator = createActivityIndicator({ stream: stdout, env: process.env, color: richOutput(), verbs: () => spinnerVerbsSetting });
-  waitIndicator.start(event);
+  waitIndicator.start(turnDraft ? { ...event, draft: turnDraft } : event);
 }
 // The first rate-limit wait in a turn gets a dim line; later ones count down in
 // the spinner instead of stacking "Rate limited" lines. Without a live
