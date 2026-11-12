@@ -1,8 +1,8 @@
 {
   "name": "oasis-vscode",
   "displayName": "OASIS",
-  "description": "Run the OASIS coding agent in VS Code: a chat panel, selection context, native diff review for edits, and editor diagnostics.",
-  "version": "0.2.0",
+  "description": "Run the OASIS coding agent in VS Code: a chat panel, tab completion, selection context, native diff review for edits, and editor diagnostics.",
+  "version": "0.3.0",
   "publisher": "fahthiz",
   "license": "Apache-2.0",
   "repository": {
@@ -57,6 +57,10 @@
       {
         "command": "oasis.rejectAllDiffs",
         "title": "OASIS: Close Proposed Diffs"
+      },
+      {
+        "command": "oasis.toggleCompletions",
+        "title": "OASIS: Turn Tab Completion On or Off"
       }
     ],
     "keybindings": [
@@ -117,6 +121,42 @@
           "type": "boolean",
           "default": false,
           "description": "Open the OASIS terminal in an editor tab beside your code."
+        },
+        "oasis.completions.enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show inline suggestions (ghost text) as you type. Press Tab to accept."
+        },
+        "oasis.completions.model": {
+          "type": "string",
+          "default": "",
+          "description": "Model for completions. Empty uses completionModel or model from your OASIS config. A small fill-in-the-middle model such as qwen2.5-coder:1.5b on Ollama is fastest."
+        },
+        "oasis.completions.baseUrl": {
+          "type": "string",
+          "default": "",
+          "description": "Endpoint for completions, such as http://localhost:11434 for Ollama. Empty uses your OASIS config."
+        },
+        "oasis.completions.protocol": {
+          "type": "string",
+          "enum": [
+            "",
+            "ollama",
+            "openai-compatible",
+            "anthropic"
+          ],
+          "default": "",
+          "description": "How to talk to the endpoint. Empty picks it from the URL."
+        },
+        "oasis.completions.apiKey": {
+          "type": "string",
+          "default": "",
+          "description": "API key for a custom completions endpoint. Empty uses your OASIS config or OPENAI_API_KEY."
+        },
+        "oasis.completions.debounceMs": {
+          "type": "number",
+          "default": 250,
+          "description": "Wait this long after you stop typing before asking for a suggestion."
         }
       }
     },
