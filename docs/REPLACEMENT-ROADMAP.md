@@ -169,7 +169,8 @@ Rule: replace a home-grown part only when a maintained, permissively licensed li
 | `src/tokens.mjs` | [gpt-tokenizer](https://github.com/niieani/gpt-tokenizer) | |
 | `src/proxy.mjs` | [undici](https://github.com/nodejs/undici) `ProxyAgent` | |
 | `src/tool-call-repair.mjs` | [jsonrepair](https://github.com/josdejong/jsonrepair) | |
-| `src/session-search.mjs`, memory | [MiniSearch](https://github.com/lucaong/minisearch) + Porter2 | |
+| `src/session-search.mjs` | SQLite FTS5 via built-in `node:sqlite` | |
+| memory | [MiniSearch](https://github.com/lucaong/minisearch) + Porter2 | |
 | `app/markdown.mjs`, `app/core/zip.mjs`, `app/core/workspace.mjs` diff | marked, [fflate](https://github.com/101arrowz/fflate), jsdiff (vendored via import map) | |
 | routines cron | [croner](https://github.com/Hexagon/croner) | |
 
