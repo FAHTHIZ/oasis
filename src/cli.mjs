@@ -397,12 +397,15 @@ function startTurnKeys(onInterrupt, onSteer = null) {
     for (const key of decoder.feed(chunk.toString('utf8'))) {
       if (key.name === 'escape') onInterrupt('escape');
       else if (key.name === 'ctrlC') onInterrupt('ctrlC');
+      // Ctrl+O mid-turn expands the newest tool result in place (at the
+      // prompt it opens the full transcript pager).
+      else if (key.name === 'ctrlO') expandLastToolResult();
       else if (key.name === 'char' || key.name === 'paste') { buffer += key.text; showDraft(); }
       else if (key.name === 'backspace') { buffer = buffer.slice(0, -1); showDraft(); }
       else if ((key.name === 'enter' || key.name === 'tab') && buffer.trim()) {
         const preview = buffer.replace(/\s+/g, ' ').slice(0, 90);
         if (key.name === 'enter' && onSteer && onSteer(buffer)) {
-          noticeLine(dim('  ↳ sent: ' + preview + ' · Oasis reads it at the next step (Tab queues for after the turn)'));
+          noticeLine(dim('  ↳ sent: ' + preview + ' · Oasis reads it at the next step (Tab queues for after the turn, Ctrl+O expands the last output)'));
         } else {
           QUEUED_INPUT.push(buffer);
           noticeLine(dim('  ↳ queued for after this turn: ' + preview));
@@ -661,6 +664,13 @@ function stopWaitIndicator() { flushExploration(); toolStatusCall = null; if (wa
 // The status line while a command runs (started by its first output, which
 // comes only after any approval). Shows the newest output line.
 let toolStatusCall = null;
+let lastToolResult = null;
+function expandLastToolResult() {
+  const last = lastToolResult;
+  if (!last) { noticeLine((colorEnabled(stdout) ? '\x1b[2m' : '') + '  ↳ No tool output to expand yet.' + (colorEnabled(stdout) ? '\x1b[22m' : '')); return; }
+  const shown = verboseToolOutput(last.name, last.result, { color: colorEnabled(stdout), maxLines: 400 });
+  noticeLine((colorEnabled(stdout) ? '\x1b[2m' : '') + '  ↳ Full output of ' + last.name + ':' + (colorEnabled(stdout) ? '\x1b[22m' : '') + '\n' + (shown || '  ⎿ (no output)'));
+}
 export function lastOutputLine(text, max = 60) {
   const lines = stripAnsi(String(text || '')).split(/\r?\n|\r/).map((line) => line.trim()).filter(Boolean);
   const line = lines.at(-1) || '';
@@ -1482,6 +1492,7 @@ async function runPrompt(prompt, root, autoApprove, session = null, persistence 
       ...(stdout.isTTY ? { onToolOutput: (event) => liveToolStatus(event) } : {}),
       onToolResult: ({ name, result, call }) => {
         stopToolStatus(call);
+        lastToolResult = { name, result };
         if (persistence.enabled) saveMidTurn(session);
         if (exploredResult(call, result)) return;
         if (name === 'todo_write' && result && !result.error) { const done = completedTodoCount(Array.isArray(result.todos) ? result.todos : session.todos); if (done > todosDone) playSound('task', { stream: stdout }); todosDone = done; }

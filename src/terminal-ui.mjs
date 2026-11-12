@@ -557,7 +557,7 @@ export function verboseToolOutput(name, result, { color = false, maxLines = 400 
   if (!text) return '';
   const lines = text.split('\n');
   const shown = lines.slice(0, maxLines).map((line) => '  ⎿ ' + line.slice(0, 2000));
-  if (lines.length > maxLines) shown.push('  ⎿ … ' + (lines.length - maxLines) + ' more lines (Ctrl+O shows the full transcript)');
+  if (lines.length > maxLines) shown.push('  ⎿ … ' + (lines.length - maxLines) + ' more lines (Ctrl+O shows the full transcript; during a turn it expands the last output)');
   const body = shown.join('\n');
   return color ? '\x1b[2m' + body + '\x1b[22m' : body;
 }
