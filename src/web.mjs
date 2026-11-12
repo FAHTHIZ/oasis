@@ -2,7 +2,7 @@ import { createServer as createHttpServer } from 'node:http';
 import { createServer as createHttpsServer } from 'node:https';
 import { readFileSync, statSync } from 'node:fs';
 import { formatApprovalMessage, redactApprovalSecrets } from './approval-language.mjs';
-import { labelToolActivity, safeToolActivityArgs, toolActivityArtifacts, toolActivityCategory, toolActivityStatus, toolActivityWarning } from './tool-activity.mjs';
+import { labelToolActivity, safeToolActivityArgs, toolActivityArtifacts, toolActivityCategory, toolActivityOutcome, toolActivityStatus, toolActivityWarning } from './tool-activity.mjs';
 import { createHash, randomBytes, randomUUID, timingSafeEqual } from 'node:crypto';
 import { clientAddress, createAuthLimiter, hostAllowed, isLoopbackAddress, parseAllowedHosts, requestIsSecure } from './remote-access.mjs';
 import { access, lstat, mkdir, readFile, realpath, rename, rm } from 'node:fs/promises';
@@ -313,24 +313,55 @@ export function validateWebImages(value, { config = {}, env = process.env } = {}
 }
 const MAX_FILE_PREVIEW_BYTES = 256 * 1024;
 const MAX_JOBS = 20;
-const MAX_EVENTS_PER_JOB = 120;
-// Streamed text arrives as many small assistant_delta events. Before dropping old events,
-// merge runs of old deltas into one (keeping the run's last id, so `?after=` stays
-// correct): otherwise a long reply pushes the task's earlier steps out, and reopening the
-// page mid-task rebuilds only the last few lines. The newest events are left as they are.
+// A run keeps its whole event log in memory, so reopening the page mid-task
+// replays every step (`?after=` resumes from any id). Only bulky, replaceable
+// events are folded: runs of streamed text merge into one event, and live
+// command output for a step that has finished is dropped (its result holds
+// the output, and the full text stays readable at /tool-output).
+const MAX_EVENTS_PER_JOB = 4000;
+const FOLDABLE_EVENTS = new Set(['assistant_delta', 'tool_output', 'model_wait']);
+// Merge runs of old deltas into one (keeping the run's last id, so `?after=`
+// stays correct). The newest events are left as they are.
 export function compactJobEvents(events, max = MAX_EVENTS_PER_JOB, keepRecent = 20) {
   const settled = Math.max(0, events.length - keepRecent);
+  const finished = new Set();
+  for (const event of events) if (event.type === 'tool_result' && event.data && event.data.callId) finished.add(String(event.data.callId));
   const merged = [];
   for (let index = 0; index < events.length; index += 1) {
     const event = events[index];
     const last = merged[merged.length - 1];
-    if (index < settled && last && last.type === 'assistant_delta' && event.type === 'assistant_delta' && merged.length - 1 < settled) {
+    const old = index < settled;
+    if (old && event.type === 'tool_output' && finished.has(String(event.data?.callId || ''))) continue;
+    if (old && event.type === 'model_wait' && last && last.type === 'model_wait') { merged[merged.length - 1] = event; continue; }
+    if (old && last && last.type === 'assistant_delta' && event.type === 'assistant_delta' && merged.length - 1 < settled) {
       merged[merged.length - 1] = { ...event, data: { ...event.data, text: String(last.data?.text || '') + String(event.data?.text || '') } };
     } else merged.push(event);
+  }
+  // Still too long: drop the oldest foldable events first, then the oldest of any kind.
+  let excess = merged.length - max;
+  for (let index = 0; excess > 0 && index < merged.length - keepRecent; index += 1) {
+    if (FOLDABLE_EVENTS.has(merged[index].type)) { merged.splice(index, 1); index -= 1; excess -= 1; }
   }
   if (merged.length > max) merged.splice(0, merged.length - max);
   events.splice(0, events.length, ...merged);
   return events;
+}
+
+// The readable text of a finished tool result, for "Show full output".
+// Commands give their output; anything else gives its JSON. Secrets are
+// redacted as in the event log; at most 1 MB is kept per step.
+const MAX_TOOL_OUTPUT_CHARS = 1_000_000;
+const MAX_TOOL_OUTPUTS_PER_JOB = 400;
+export function fullToolOutputText(result) {
+  let text = '';
+  if (result && typeof result === 'object' && (typeof result.stdout === 'string' || typeof result.stderr === 'string')) {
+    text = [result.stdout, result.stderr].filter((part) => typeof part === 'string' && part).join(result.stdout && result.stderr ? '\n' : '');
+    if (typeof result.exitCode === 'number' && result.exitCode !== 0) text += (text ? '\n' : '') + '[exit ' + result.exitCode + ']';
+    if (!text) text = '(no output)';
+  } else if (typeof result === 'string') text = result;
+  else { try { text = JSON.stringify(result, null, 2); } catch { text = String(result); } }
+  text = redactApprovalSecrets(String(text ?? ''));
+  return text.length > MAX_TOOL_OUTPUT_CHARS ? { text: text.slice(0, MAX_TOOL_OUTPUT_CHARS / 2) + '\n… [' + (text.length - MAX_TOOL_OUTPUT_CHARS) + ' characters left out] …\n' + text.slice(-MAX_TOOL_OUTPUT_CHARS / 2), truncated: true } : { text, truncated: false };
 }
 const SESSION_ID_PATTERN = /^[a-f0-9-]{20,80}$/i;
 // `/` opens the app (app/). The old single-page workspace was retired in
@@ -532,7 +563,49 @@ export function summarizeToolResult(result) {
 }
 
 function newJob() {
-  return { id: randomUUID(), status: 'running', createdAt: new Date().toISOString(), events: [], nextEventId: 1, pendingApprovals: new Map(), controller: new AbortController(), cancelRequested: false, result: null, error: null };
+  return { id: randomUUID(), status: 'running', createdAt: new Date().toISOString(), events: [], nextEventId: 1, toolOutputs: new Map(), pendingApprovals: new Map(), controller: new AbortController(), cancelRequested: false, result: null, error: null };
+}
+
+// Live command output, coalesced per step: one tool_output event at most
+// every 80 ms per running command, and at most 256 KB streamed per step (the
+// finished result and /tool-output carry the rest). Secrets are redacted.
+const LIVE_OUTPUT_INTERVAL_MS = 80;
+const LIVE_OUTPUT_MAX_CHARS = 256 * 1024;
+export function createLiveOutputRelay(send, { intervalMs = LIVE_OUTPUT_INTERVAL_MS, maxChars = LIVE_OUTPUT_MAX_CHARS } = {}) {
+  const calls = new Map();
+  const flush = (callId) => {
+    const entry = calls.get(callId);
+    if (!entry) return;
+    clearTimeout(entry.timer); entry.timer = null;
+    for (const stream of ['stdout', 'stderr']) {
+      if (!entry.pending[stream]) continue;
+      const text = redactApprovalSecrets(entry.pending[stream]);
+      entry.pending[stream] = '';
+      send({ callId, stream, text, ...(entry.capped && !entry.toldCap ? { capped: true } : {}) });
+      if (entry.capped) entry.toldCap = true;
+    }
+  };
+  return {
+    push(callId, stream, text) {
+      let entry = calls.get(callId);
+      if (!entry) { entry = { pending: { stdout: '', stderr: '' }, sent: 0, capped: false, toldCap: false, timer: null }; calls.set(callId, entry); }
+      if (entry.capped) return;
+      const room = maxChars - entry.sent;
+      const piece = text.length > room ? text.slice(0, room) : text;
+      entry.sent += piece.length;
+      if (entry.sent >= maxChars) entry.capped = true;
+      entry.pending[stream] += piece;
+      if (!entry.timer) { entry.timer = setTimeout(() => flush(callId), intervalMs); entry.timer.unref?.(); }
+    },
+    finish(callId) { flush(callId); calls.delete(callId); },
+    size: () => calls.size
+  };
+}
+
+function rememberToolOutput(job, callId, result) {
+  if (!job.toolOutputs) job.toolOutputs = new Map();
+  job.toolOutputs.set(callId, fullToolOutputText(result));
+  while (job.toolOutputs.size > MAX_TOOL_OUTPUTS_PER_JOB) job.toolOutputs.delete(job.toolOutputs.keys().next().value);
 }
 
 export function createOasisWebServer(options = {}) {
@@ -1052,6 +1125,7 @@ export function createOasisWebServer(options = {}) {
           }
         }
         const toolActivityArgsByCallId = new Map();
+        const liveOutput = createLiveOutputRelay((data) => emit(job, 'tool_output', data));
         let assistantDeltaBuffer = '';
         job.steerTarget = session;
         // MCP forms go to whichever browser job is running when the server asks.
@@ -1082,6 +1156,10 @@ export function createOasisWebServer(options = {}) {
             assistantDeltaBuffer = current;
             if (delta) emit(job, 'assistant_delta', { text: delta });
           },
+          onToolOutput: ({ call, stream, text }) => {
+            const callId = call && call.id ? String(call.id).slice(0, 160) : '';
+            if (callId && text) liveOutput.push(callId, stream === 'stderr' ? 'stderr' : 'stdout', String(text));
+          },
           onToolStart: ({ name, args, call, subagent }) => {
             assistantDeltaBuffer = '';
             const safeArgs = safeToolActivityArgs(args);
@@ -1106,6 +1184,7 @@ export function createOasisWebServer(options = {}) {
             const args = tracked && tracked.args ? tracked.args : {};
             if (callId) toolActivityArgsByCallId.delete(callId);
             const artifacts = toolActivityArtifacts(name, args, value);
+            if (callId) { liveOutput.finish(callId); rememberToolOutput(job, callId, value); }
             emit(job, 'tool_result', {
               name: String(name || 'tool').slice(0, 100),
               callId,
@@ -1113,6 +1192,7 @@ export function createOasisWebServer(options = {}) {
               label: labelToolActivity(name, args, value),
               category: toolActivityCategory(name),
               status: toolActivityStatus(value),
+              outcome: toolActivityOutcome(value),
               ...(tracked && Number.isFinite(tracked.startedAt) ? { durationMs: Math.max(0, Date.now() - tracked.startedAt) } : {}),
               result: summarizeToolResult(value),
               warning: toolActivityWarning(value),
@@ -2795,6 +2875,17 @@ export function createOasisWebServer(options = {}) {
       return;
     }
 
+    // The full output of one finished step ("Show full output" in the app).
+    const toolOutputMatch = pathname.match(/^\/api\/jobs\/([a-f0-9-]{36})\/tool-output$/i);
+    if (req.method === 'GET' && toolOutputMatch) {
+      const job = jobs.get(toolOutputMatch[1]);
+      const callId = String(parsedUrl.searchParams.get('callId') || '').slice(0, 160);
+      const stored = job && callId && job.toolOutputs ? job.toolOutputs.get(callId) : null;
+      if (!stored) { json(res, 404, { error: 'That step\'s full output is no longer kept. It is kept while the task is in memory on this computer.' }); return; }
+      json(res, 200, { callId, text: stored.text, truncated: stored.truncated });
+      return;
+    }
+
     const jobMatch = pathname.match(/^\/api\/jobs\/([a-f0-9-]{36})$/i);
     if (req.method === 'GET' && jobMatch) {
       const after = Math.max(0, Number.parseInt(parsedUrl.searchParams.get('after') || '0', 10) || 0);
@@ -2804,12 +2895,17 @@ export function createOasisWebServer(options = {}) {
       const wait = Math.min(25_000, Math.max(0, Number.parseInt(parsedUrl.searchParams.get('wait') || '0', 10) || 0));
       if (job && wait && !TERMINAL_JOB_STATUSES.has(job.status) && !job.events.some((event) => event.id > after)) {
         await waitForJobEvent(job.id, wait, req);
+        // Events come in bursts (a step's start, its output, its result):
+        // wait one frame so a burst goes out as one answer.
+        if (!TERMINAL_JOB_STATUSES.has(job.status)) await new Promise((resolve) => setTimeout(resolve, 16));
         if (res.destroyed || res.writableEnded) return;
       }
       if (job) {
         json(res, 200, {
           id: job.id,
           status: job.status,
+          createdAt: job.createdAt,
+          now: new Date().toISOString(),
           events: job.events.filter((event) => event.id > after),
           nextEventId: job.nextEventId,
           result: job.result,

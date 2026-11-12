@@ -734,7 +734,9 @@ export async function runWorkspaceCommand(root, command, args = [], options = {}
     let terminationRequested = false;
     const child = spawn(launch.command, launch.args, { cwd: root, env, shell: false, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'], ...processTreeSpawnOptions() });
     if (typeof launch.release === 'function') { child.once('close', launch.release); child.once('error', launch.release); }
+    const live = typeof options.onOutput === 'function' ? options.onOutput : null;
     const append = (target, chunk) => {
+      if (live) { try { live(target, String(chunk)); } catch { /* a viewer never breaks a command */ } }
       if (outputLog) outputLog.append(target, chunk);
       const text = condensers ? condensers[target].push(chunk) : chunk;
       if (text.length) (target === 'stdout' ? stdoutBuffer : stderrBuffer).append(text);
@@ -1977,7 +1979,8 @@ async function executeToolUnlocked(name, args = {}, context = {}) {
         adoptOnStuck: context.session ? backgroundStuckNotifier(context.session) : undefined,
         maxSeconds: args.max_seconds,
         injectionHold: injectionHoldReason(context.session),
-        clientTerminal: context.session && typeof context.session.clientTerminal === 'function' ? context.session.clientTerminal : undefined
+        clientTerminal: context.session && typeof context.session.clientTerminal === 'function' ? context.session.clientTerminal : undefined,
+        ...(typeof context.onOutput === 'function' && args.run_in_background !== true && args.interactive !== true ? { onOutput: context.onOutput } : {})
       }).catch(async (error) => { await gitSafety.dropSnapshot(snapshot); throw error; });
       if (install.warnings && commandResult && typeof commandResult === 'object') commandResult.packageWarnings = install.warnings;
       if (commandResult && typeof commandResult === 'object' && typeof commandResult.exitCode === 'number') {

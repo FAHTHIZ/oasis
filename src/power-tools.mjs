@@ -726,8 +726,10 @@ async function runShell(root, args, context, flavor = 'sh') {
       if (context.signal.aborted) onAbort();
       else context.signal.addEventListener('abort', onAbort, { once: true });
     }
-    child.stdout.on('data', (chunk) => { stdout = (stdout + (condensers ? condensers.stdout.push(chunk) : chunk)).slice(-MAX_OUTPUT); });
-    child.stderr.on('data', (chunk) => { stderr = (stderr + (condensers ? condensers.stderr.push(chunk) : chunk)).slice(-MAX_OUTPUT); });
+    const live = typeof context.onOutput === 'function' ? context.onOutput : null;
+    const tell = (stream, chunk) => { if (live) { try { live(stream, String(chunk)); } catch { /* a viewer never breaks a command */ } } };
+    child.stdout.on('data', (chunk) => { tell('stdout', chunk); stdout = (stdout + (condensers ? condensers.stdout.push(chunk) : chunk)).slice(-MAX_OUTPUT); });
+    child.stderr.on('data', (chunk) => { tell('stderr', chunk); stderr = (stderr + (condensers ? condensers.stderr.push(chunk) : chunk)).slice(-MAX_OUTPUT); });
     child.on('error', (error) => {
       if (settled) return;
       settled = true;

@@ -2181,7 +2181,7 @@ async function runWorkflowTool(session, args, context, options) {
   const persist = async (state) => { await atomicWriteFile(path.join(dir, id + '.state.json'), JSON.stringify({ id, name, scriptPath, status: run.status, calls: state.calls }, null, 2)).catch(() => {}); };
   const runAgent = async ({ prompt, label, agentType, model, isolation, signal }) => {
     if (signal && signal.aborted) return null;
-    const subOptions = background ? { ...options, approval: async () => false, signal, onToolStart: undefined, onToolResult: undefined, onDelta: undefined } : { ...options, signal };
+    const subOptions = background ? { ...options, approval: async () => false, signal, onToolStart: undefined, onToolResult: undefined, onToolOutput: undefined, onDelta: undefined } : { ...options, signal };
     // In auto mode, a script-computed prompt is not the user's request.
     const outcome = await runSubagent(session, { prompt, description: label, subagent_type: agentType || 'general-purpose', ...(isolation ? { isolation } : {}), ...(model ? { model } : {}) }, context, subOptions);
     if (outcome && outcome.id) run.agentIds.push(outcome.id);
@@ -2212,6 +2212,7 @@ async function runWorkflowTool(session, args, context, options) {
   return out;
 }
 
+const LIVE_OUTPUT_TOOLS = new Set(['run_command', 'run_shell', 'powershell']);
 export const RESTRICTED_TOOL_NAMES = new Set(['run_command', 'powershell', 'monitor', 'command_output', 'kill_command', 'list_background', 'fetch_url', 'web_search', 'browser', 'install_package', 'install_extension', 'install_plugin', 'add_extension', 'install_external_skill', 'configure_mcp_server', 'git_push', 'create_pull_request']);
 
 // The step cap for one subagent run: its definition's maxTurns, bounded by the
@@ -2578,7 +2579,7 @@ function startBackgroundRun(parent, record, prompt, options) {
   record.controller = new AbortController();
   recordAgentEvent(parent, record.runs > 1 ? 'agent.resumed' : 'agent.background_started', { agentId: record.id, teamId: record.teamId || undefined, description: record.description });
   // Detach from the parent turn: its cancellation must not kill the agent.
-  const detached = { ...options, signal: undefined, onToolStart: undefined, onToolResult: undefined, onUsage: undefined, onDelta: undefined };
+  const detached = { ...options, signal: undefined, onToolStart: undefined, onToolResult: undefined, onToolOutput: undefined, onUsage: undefined, onDelta: undefined };
   const stopWatch = watchForStall(parent, record, options.env || process.env);
   record.promise = runChildTurn(parent, record, prompt, detached, { foreground: false }).finally(stopWatch).then(async (result) => {
     const parts = ['Background agent ' + record.id + ' ("' + record.description + '") finished.'];
@@ -2669,6 +2670,7 @@ async function advanceAutoDispatch(session, record = null) {
       signal: undefined,
       onToolStart: undefined,
       onToolResult: undefined,
+      onToolOutput: undefined,
       onUsage: undefined,
       onDelta: undefined,
       autoDispatchContinuation: true
@@ -2757,6 +2759,7 @@ async function dispatchReadyTasksUnlocked(session, args = {}, context = {}, opti
       signal: undefined,
       onToolStart: undefined,
       onToolResult: undefined,
+      onToolOutput: undefined,
       onUsage: undefined,
       onDelta: undefined,
       autoDispatchContinuation: true
@@ -3891,6 +3894,11 @@ async function executeOneCallRaw(session, call, context, options) {
           attemptedArgs = args;
         },
         prepare: async ({ input: authorizedArgs, context: authorizedContext }) => {
+          // Live command output for viewers (the web app's step tail); the
+          // model still gets the finished result as before.
+          if (typeof options.onToolOutput === 'function' && authorizedContext && LIVE_OUTPUT_TOOLS.has(name)) {
+            authorizedContext.onOutput = (stream, text) => options.onToolOutput({ name, call, stream, text });
+          }
           if (AUTO_LSP_EDIT_TOOLS.has(name) && typeof authorizedArgs.path === 'string' && serverForFile(authorizedArgs.path, session.settings || {})) {
             lspVerificationPath = authorizedArgs.path;
             lspBaselineDiagnostics = await activeLspBaseline(session, lspVerificationPath, authorizedContext, options);
