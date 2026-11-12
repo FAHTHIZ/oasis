@@ -45,7 +45,7 @@ const MAX_BACKGROUND_BUFFER = 512 * 1024;
 const MAX_BACKGROUND_PROCESSES = 8;
 const MAX_BACKGROUND_HISTORY = 24;
 
-export { NOTEBOOK_EDIT_DEFINITION, POWER_TOOL_DEFINITIONS, SHELL_TOOL_DEFINITION, POWERSHELL_TOOL_DEFINITION, POWER_TOOL_NAMES } from './power-tool-definitions.mjs';
+export { SHELL_TOOL_DEFINITION, POWERSHELL_TOOL_DEFINITION } from './power-tool-definitions.mjs';
 import { resolveRipgrep } from './ripgrep.mjs';
 
 // PowerShell is enabled by default on Windows (CLAUDE_CODE_USE_POWERSHELL_TOOL=0 turns it off),

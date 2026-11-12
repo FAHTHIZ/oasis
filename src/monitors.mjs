@@ -25,8 +25,6 @@ const MAX_LINES_PER_EVENT = 40;
 const MAX_EVENT_CHARS = 4000;
 const MAX_LINE_CHARS = 1000;
 
-export { MONITOR_TOOL_DEFINITION } from './monitor-definition.mjs';
-
 // ---------------------------------------------------------------- events
 
 export function pushBackgroundEvent(session, text, meta = {}) {
