@@ -26,6 +26,7 @@ import { mcpServerFromForm, describeMcpServer } from './core/mcp.mjs';
 import { speakable, isStopPhrase, turnDetector, rmsLevel, lastReply } from './core/voice-mode.mjs';
 import { previewTarget } from './core/preview.mjs';
 import { searchMarketplace, marketplaceCount, OFFICIAL_MARKETPLACE } from './core/claude-plugins.mjs';
+import { syncBrowserChats } from './core/chat-sync.mjs';
 // Composer autocomplete state (declared early: refreshFiles clears the file cache).
 const suggest = { token: null, items: [], index: 0, commands: null, files: null, noFileCommand: false, seq: 0 };
 
@@ -4638,6 +4639,19 @@ async function startRuntime(found) {
   updateModeUI();
   updateProjectUI();
   await restoreChat();
+  void syncBrowserOnlyChats();
+}
+
+// Browser-only chats are copied to the computer's session store once connected (core/chat-sync.mjs).
+async function syncBrowserOnlyChats() {
+  if (!RT || RT.needsToken || RT.chatsSyncing) return 0;
+  RT.chatsSyncing = true;
+  let result = { copied: 0 };
+  try { result = await syncBrowserChats({ store, api: (path, options) => RT.client.api(path, options), chatIndex, chatKey }); }
+  catch { /* tried again on the next connection */ }
+  finally { if (RT) RT.chatsSyncing = false; }
+  if (result.copied) { toast(result.copied === 1 ? 'Copied 1 browser-only chat to this computer.' : 'Copied ' + result.copied + ' browser-only chats to this computer.'); renderSidebar(); }
+  return result.copied;
 }
 
 /* ---------- Updates ---------- */
