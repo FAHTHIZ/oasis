@@ -630,6 +630,7 @@ export function renderApprovalText(approval, { color = false, columns = 80, maxD
 export function approvalSummary(chosen, meta = {}) {
   if (!chosen) return '  ⎿ Denied';
   if (chosen.value === 'always') return '  ⎿ Allowed for this session' + (meta && meta.suggestion ? ': ' + meta.suggestion : '');
+  if (chosen.value === true && meta && meta.scope === 'session') return '  ⎿ Allowed for this session' + (Array.isArray(meta.sites) && meta.sites.length ? ': ' + meta.sites.join(', ') : '');
   return chosen.value === true ? '  ⎿ Allowed once' : '  ⎿ Denied';
 }
 
@@ -646,7 +647,8 @@ async function askApprovalLocal(prompt, forceInteractive, meta, signal = null) {
     if (stdin.isTTY && stdout.isTTY && typeof stdin.setRawMode === 'function' && process.env.OASIS_LINE_APPROVALS !== '1') {
       // Claude Code-style dialog: arrows/j/k + Enter, 1-3, y/n/a, Esc; rebindable via the Confirmation context.
       const { selectDialog } = await import('./select-dialog.mjs');
-      const options = [{ label: 'Allow once', value: true, hotkey: 'yes' }];
+      // A site approval holds for the session, so its button says so.
+      const options = [{ label: meta && meta.scope === 'session' ? 'Allow for this session' : 'Allow once', value: true, hotkey: 'yes' }];
       if (offerAlways) options.push({ label: 'Always allow this session for ' + meta.suggestion, value: 'always', hotkey: 'always' });
       options.push({ label: 'No', value: false, hotkey: 'no' });
       stdout.write((richOutput() ? '\x1b[1mDo you want to proceed?\x1b[22m' : 'Do you want to proceed?') + '\n');
@@ -658,7 +660,7 @@ async function askApprovalLocal(prompt, forceInteractive, meta, signal = null) {
       try { return await selectDialog({ input: stdin, output: stdout, options, color: colorEnabled(stdout), signal, collapse }); }
       finally { if (paused && turnKeys === paused) paused.resume(); }
     }
-    const answer = (await askLine(offerAlways ? 'Allow once [y] / [N]o / [a]lways allow ' + meta.suggestion + ' this session: ' : 'Allow once? [y/N] ', signal)).trim().toLowerCase();
+    const answer = (await askLine(offerAlways ? 'Allow once [y] / [N]o / [a]lways allow ' + meta.suggestion + ' this session: ' : (meta && meta.scope === 'session' ? 'Allow for this session? [y/N] ' : 'Allow once? [y/N] '), signal)).trim().toLowerCase();
     if (offerAlways && ['a', 'always'].includes(answer)) return 'always';
     return ['y', 'yes'].includes(answer);
   } catch {

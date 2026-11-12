@@ -500,6 +500,26 @@ export function describeToolResult(name, result, { color = true } = {}) {
     const removed = (result.stdout.match(/^-(?!--)/gm) || []).length;
     return '  ⎿ ' + dim + (files ? files + ' file' + (files === 1 ? '' : 's') + ' changed, ' + green + '+' + added + off + dim + ' ' + red + '-' + removed + off : 'No changes') + off;
   }
+  // Web lookups used to leave no line at all, so a search that came back
+  // empty (a keyless provider refusing the query) looked like it worked.
+  if (name === 'web_search' && Array.isArray(result.results)) {
+    const count = result.results.length;
+    if (!count) {
+      const why = result.error || (Array.isArray(result.providerErrors) && result.providerErrors[0] && result.providerErrors[0].error) || '';
+      return '  ⎿ ' + red + 'No results' + (why ? ' · ' + clip(why, 140) : '') + off;
+    }
+    const hosts = [...new Set(result.results.map((item) => { try { return new URL(item.url).hostname.replace(/^www\./, ''); } catch { return ''; } }).filter(Boolean))];
+    const via = result.backend && !['federated', 'duckduckgo'].includes(result.backend) ? ' via ' + result.backend : '';
+    return '  ⎿ ' + dim + count + ' result' + (count === 1 ? '' : 's') + via + (hosts.length ? ' · ' + clip(hosts.slice(0, 3).join(', '), 90) : '') + off;
+  }
+  if (name === 'fetch_url') {
+    if (result.redirect) return '  ⎿ ' + dim + 'Redirects to ' + clip(result.redirect, 110) + off;
+    if (typeof result.content === 'string') {
+      const size = result.totalLength || result.content.length;
+      const kb = size >= 1024 ? Math.round(size / 1024) + ' KB' : size + ' chars';
+      return '  ⎿ ' + dim + 'Read ' + (result.title ? clip(result.title, 70) + ' · ' : '') + kb + (result.truncated ? ' (more available)' : '') + off;
+    }
+  }
   return '';
 }
 
