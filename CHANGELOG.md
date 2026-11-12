@@ -4,6 +4,10 @@ User-facing change history grouped by package version. A version heading does no
 
 ## Unreleased
 
+### `/model NAME EFFORT`
+
+- `/model gpt-5-mini high` switches the model and sets reasoning effort in one command, like Codex's inline `/model` argument. The effort word is one of `low`, `medium`, `high`, `max` or `auto`; anything else stays part of the model name.
+
 ### Fixes from real-model testing
 
 - Targeted edits that pass a check no longer trigger an extra "review the diff" round trip and a duplicate summary. The verification gate meant to skip this only did so after a whole-file overwrite had happened earlier in the turn. Whole-file overwrites of existing files are still reviewed.
