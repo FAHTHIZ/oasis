@@ -89,12 +89,27 @@ for (const [protocol, provider] of Object.entries(PROVIDERS)) {
     t.after(async () => { closeSession(session); await rm(root, { recursive: true, force: true }); });
 
     let shown = '';
+    const timings = [];
     const result = await runAgentTurn(session, 'what do the notes say?', {
+      onModelTiming: (record) => timings.push(record),
       onDelta: (text) => { if (text && text !== shown) { log.push({ type: 'delta', text }); shown = text; } },
       onToolStart: ({ name }) => { shown = ''; log.push({ type: 'tool_start', name }); },
       onToolResult: ({ name }) => log.push({ type: 'tool_result', name })
     });
     assert.equal(result.text, 'The notes say hello.');
+    // Per-request timing: first byte, total, and the silent tail after the
+    // narration while the model wrote the tool call (the server waits 150ms).
+    assert.equal(timings.length, 3, 'one timing record per model request');
+    assert.deepEqual(timings.map((r) => r.step), [1, 2, 3]);
+    for (const record of timings) {
+      assert.ok(record.ttftMs >= 0 && record.ttftMs <= record.totalMs, 'first token comes within the request');
+      assert.ok(record.firstTextMs >= record.ttftMs);
+      assert.equal(record.model, 'fixture');
+      assert.ok(record.inputEstimate > 0, 'context size is estimated');
+    }
+    assert.ok(timings[0].silentTailMs >= 120, 'the wait for the tool call after the narration is measured');
+    assert.equal(timings[0].toolCalls, 1);
+    assert.equal(timings[2].toolCalls, 0);
     assert.ok(systems.every((system) => /Before each batch of tool calls/.test(system)), 'every request carries the narration instruction');
 
     for (let index = 0; index < NARRATION.length; index++) {

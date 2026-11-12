@@ -227,8 +227,50 @@ export function groupStats(steps = []) {
   const running = count('running');
   const starts = steps.map((step) => Number(step.startedAt)).filter(Number.isFinite);
   const ends = steps.map((step) => Number(step.endedAt)).filter(Number.isFinite);
-  const durationMs = starts.length && ends.length && !running ? Math.max(0, Math.max(...ends) - Math.min(...starts)) : null;
+  const timing = !running && starts.length && ends.length ? groupTiming(steps) : null;
+  const durationMs = timing ? timing.spanMs : null;
   return { total: steps.length, failed: count('failed', 'timed_out'), declined: count('declined'), blocked: count('blocked'), stopped: count('cancelled'), running, durationMs };
+}
+
+// One definition of time for the transcript, all on the server's clock:
+//   header  = run start to now (or to the run's end)
+//   group   = first step start to last step end (to now while a step runs)
+//   tools   = time when at least one step of the group was running
+//   thinking = the rest of the group's span: the model working between steps
+// Steps that started but never ended count to `now`. Returns null for a
+// group with no timed steps.
+export function groupTiming(steps = [], now = Date.now()) {
+  const spans = [];
+  for (const step of steps) {
+    const start = Number(step && step.startedAt);
+    if (!Number.isFinite(start) || start <= 0) continue;
+    let end = Number(step.endedAt);
+    if (!Number.isFinite(end) && Number.isFinite(Number(step.durationMs))) end = start + Number(step.durationMs);
+    if (!Number.isFinite(end)) end = step.ok === undefined ? now : start;
+    spans.push([start, Math.max(start, end)]);
+  }
+  if (!spans.length) return null;
+  spans.sort((a, b) => a[0] - b[0]);
+  let toolMs = 0;
+  let [from, to] = spans[0];
+  for (const [start, end] of spans.slice(1)) {
+    if (start > to) { toolMs += to - from; from = start; to = end; } else to = Math.max(to, end);
+  }
+  toolMs += to - from;
+  const spanMs = Math.max(...spans.map((span) => span[1])) - spans[0][0];
+  return { startedAt: spans[0][0], endedAt: spans[0][0] + spanMs, spanMs, toolMs, thinkingMs: Math.max(0, spanMs - toolMs) };
+}
+
+// The header's elapsed time: run start to now (or to the end once finished).
+export function runElapsed(startedAt, now = Date.now()) {
+  const start = Number(startedAt);
+  return Number.isFinite(start) && start > 0 ? Math.max(0, Number(now) - start) : 0;
+}
+
+// The split shown inside an expanded group: "tools 2s · thinking 43s".
+export function timingSplit(timing) {
+  if (!timing || !(timing.spanMs > 0)) return '';
+  return 'tools ' + (formatDuration(timing.toolMs) || '<0.1s') + ' · thinking ' + (formatDuration(timing.thinkingMs) || '<0.1s');
 }
 
 // The waiting chip: it counts how long the model has been working, so a slow
