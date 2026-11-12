@@ -181,9 +181,22 @@ export async function showStartupBanner({ root, model = '', provider = '', mode 
     ['mode', mode]
   ];
   for (const [label, value] of rows) output.write('  ' + dim(label.padEnd(10)) + value + '\n');
-  output.write('  ' + dim('? shortcuts · / commands · @ files · ! shell · # memory · Shift+Tab modes') + '\n');
+  // Split the hint row between items rather than letting the terminal break "Shift+Tab modes".
+  for (const hint of hintRows(['? shortcuts', '/ commands', '@ files', '! shell', '# memory', 'Shift+Tab modes'], (output.columns || 100) - 2)) output.write('  ' + dim(hint) + '\n');
   const tip = (await appTip(root, env).catch(() => '')) || startupTip(env);
   if (tip) output.write('  Tip: ' + tip + '\n');
+}
+
+/** Joins items with " · " into rows no wider than width, breaking only between items. */
+export function hintRows(items, width) {
+  const rows = [];
+  let row = '';
+  for (const item of items) {
+    if (row && row.length + 3 + item.length > width) { rows.push(row); row = item; }
+    else row = row ? row + ' · ' + item : item;
+  }
+  if (row) rows.push(row);
+  return rows;
 }
 
 /** "This project uses Vercel and Stripe: /connect vercel stripe" when they are not connected yet. */

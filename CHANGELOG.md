@@ -4,6 +4,7 @@ User-facing change history grouped by package version. A version heading does no
 
 ## Unreleased
 
+- `/help` now word-wraps descriptions under the description column at the terminal width, and the startup hint row breaks between items, so narrow terminals no longer split words such as "lo/sing" or "Shift+Tab/modes".
 - Project agent files (`.oasis/agents/`, `.claude/agents/`, `.agents/agents/`, `.gemini/agents/`) are now protected paths: editing them always asks with a warning, because their `hooks` and inline `mcpServers` run when the agent is launched in a trusted workspace.
 - Auto-test runs (the `autoTest` setting and `/test`) now run inside the OS sandbox when it is enabled, like `run_shell`; before, they were spawned directly, so agent-written test code could write outside the workspace even with the sandbox on.
 - "Could not reach the model provider" now names the host it tried (`at 127.0.0.1:11434`; never credentials or the path), and for a local Ollama port it suggests `ollama serve`.
