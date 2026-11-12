@@ -14,6 +14,11 @@
 // so a repository's root file covers everything in it and a sub-folder can add
 // its own. Each file is matched on its own: a "!" line re-includes paths only
 // for the file it is in. OASIS_AGENT_IGNORE=0 turns the feature off.
+//
+// Pattern matching is node-ignore (MIT, https://github.com/kaelzhang/node-ignore),
+// the .gitignore implementation ESLint and Prettier use, which follows git's own
+// rules (checked against `git check-ignore` in test/agent-ignore.test.mjs).
+import ignore from 'ignore';
 import { lstat, readFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
@@ -34,78 +39,23 @@ export function agentIgnoreEnabled(env = process.env) {
   return !/^(0|false|no|off)$/i.test(String(env.OASIS_AGENT_IGNORE || '').trim());
 }
 
-// One .gitignore line as { regex, negate, dirOnly, pattern }, or null.
-export function parseIgnoreLine(line) {
-  let text = String(line).replace(/\r$/, '');
-  // Trailing spaces are dropped unless escaped with a backslash.
-  text = text.replace(/(?<!\\)\s+$/, '').replace(/\\(\s)$/, '$1');
-  if (!text || text.startsWith('#')) return null;
-  let negate = false;
-  if (text.startsWith('!')) { negate = true; text = text.slice(1); }
-  else if (text.startsWith('\\!') || text.startsWith('\\#')) text = text.slice(1);
-  let dirOnly = false;
-  if (text.endsWith('/')) { dirOnly = true; text = text.replace(/\/+$/, ''); }
-  if (!text) return null;
-  const anchored = text.includes('/');
-  text = text.replace(/^\/+/, '');
-  if (!text) return null;
-  let source = '';
-  for (let i = 0; i < text.length; i++) {
-    const char = text[i];
-    if (char === '*' && text[i + 1] === '*') {
-      const atStart = i === 0 || text[i - 1] === '/';
-      let j = i + 2;
-      if (atStart && text[j] === '/') { source += '(?:.*/)?'; i = j; continue; }
-      if (atStart && j === text.length) { source += '.*'; i = j; continue; }
-      source += '[^/]*';
-      i = j - 1;
-    } else if (char === '*') source += '[^/]*';
-    else if (char === '?') source += '[^/]';
-    else if (char === '\\' && i + 1 < text.length) { i++; source += escapeRegex(text[i]); }
-    else if (char === '[') {
-      const end = text.indexOf(']', i + 2);
-      if (end === -1) { source += '\\['; continue; }
-      let body = text.slice(i + 1, end);
-      if (body.startsWith('!')) body = '^' + body.slice(1);
-      source += '[' + body.replace(/\\/g, '\\\\') + ']';
-      i = end;
-    } else source += escapeRegex(char);
-  }
-  try {
-    return { regex: new RegExp((anchored ? '^' : '^(?:.*/)?') + source + '$'), negate, dirOnly, pattern: String(line).trim() };
-  } catch { return null; }
-}
+const isPattern = (line) => { const text = line.replace(/\r$/, '').trim(); return Boolean(text) && !text.startsWith('#'); };
 
-function escapeRegex(char) {
-  return '^$+?.()|[]{}*\\/'.includes(char) ? '\\' + char : char;
-}
-
+/** The rules of one ignore file: { length, patterns, matcher }. At most 2,000 pattern lines are read. */
 export function parseIgnoreFile(text) {
-  const rules = [];
-  for (const line of String(text || '').split('\n')) {
-    const rule = parseIgnoreLine(line);
-    if (rule) rules.push(rule);
-    if (rules.length >= MAX_RULES) break;
-  }
-  return rules;
+  const patterns = String(text || '').split('\n').map((line) => line.replace(/\r$/, '')).filter(isPattern).slice(0, MAX_RULES);
+  return { length: patterns.length, patterns, matcher: ignore({ allowRelativePaths: false }).add(patterns) };
 }
 
 // .gitignore semantics: the last matching line wins, and a path inside an
-// ignored folder stays ignored (a "!" line cannot re-include it).
+// ignored folder stays ignored (a "!" line cannot re-include it). Returns
+// { pattern } for the line that excludes the path, or null.
 export function ignoredByRules(rules, relativePath, isDir = false) {
-  const parts = String(relativePath || '').split('/').filter(Boolean);
-  if (!parts.length || !rules.length) return null;
-  for (let i = 1; i <= parts.length; i++) {
-    const sub = parts.slice(0, i).join('/');
-    const dir = i < parts.length || isDir;
-    let hit = null;
-    for (const rule of rules) {
-      if (rule.dirOnly && !dir) continue;
-      if (rule.regex.test(sub)) hit = rule.negate ? null : rule;
-    }
-    if (hit) return hit;
-  }
-  return null;
+  const relative = String(relativePath || '').split('/').filter(Boolean).join('/');
+  if (!relative || !rules || !rules.length) return null;
+  let result;
+  try { result = rules.matcher.test(isDir ? relative + '/' : relative); } catch { return null; }
+  return result.ignored ? { pattern: String(result.rule?.pattern ?? '').trim() } : null;
 }
 
 const dirCache = new Map();

@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { mkdtemp, mkdir, writeFile, rm } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import { execFileSync } from 'node:child_process';
+import { execFileSync, spawnSync } from 'node:child_process';
 import { parseIgnoreFile, ignoredByRules, agentIgnoreMatch, filterAgentIgnored, AGENT_IGNORE_FILES } from '../src/agent-ignore.mjs';
 import { executeTool, walkFiles } from '../src/tools.mjs';
 import { grepWorkspace } from '../src/power-tools.mjs';
@@ -134,4 +134,32 @@ test('ignore files above the git root are not consulted', async () => {
     await writeFile(path.join(fx.base, '.cursorignore'), '*.txt\n');
     assert.equal(await agentIgnoreMatch(path.join(fx.root, 'a.txt'), { home: fx.home, env: { HOME: fx.home } }), null);
   } finally { await fx.cleanup(); }
+});
+
+test('ignore-file matching agrees with git check-ignore', async (t) => {
+  try { execFileSync('git', ['--version'], { stdio: 'ignore' }); } catch { t.skip('git is not installed'); return; }
+  const dir = await mkdtemp(path.join(os.tmpdir(), 'oasis-ignore-parity-'));
+  t.after(() => rm(dir, { recursive: true, force: true }));
+  execFileSync('git', ['init', '-q'], { cwd: dir });
+  const sets = [
+    ['*.log', '!important.log'], ['/build'], ['build/'], ['doc/**/*.pdf'], ['**/foo'], ['foo/**'], ['a/**/b'], ['logs/', '!logs/keep.log'],
+    ['\\#hash', '\\!bang'], ['[abc].txt', '[!a]x'], ['?.md'], ['.env*', '!.env.example'], ['secret/*', '!secret/ok'], ['a[b'],
+    ['/*.js', '!/keep.js'], ['x/*/y'], ['*/'], ['**/*.[jt]s'], ['*.txt', '!/sub/*.txt'], ['nested/**/deep', '!nested/x/deep']
+  ];
+  const paths = ['a.log', 'x/important.log', 'build', 'build/x.js', 'src/build', 'doc/x/y/a.pdf', 'doc/a.pdf', 'x/foo', 'foo/bar/baz', 'a/x/y/b',
+    'logs/keep.log', '#hash', '!bang', 'b.txt', 'ax', 'bx', 'a.md', 'ab.md', '.env.local', '.env.example', 'secret/ok', 'secret/no', 'a[b',
+    'keep.js', 'sub/keep.js', 'x/q/y', 'x/q/r/y', 'a/f', 'x/y.ts', 'sub/a.txt', 'top.txt', 'nested/a/deep', 'nested/x/deep'];
+  for (const set of sets) {
+    await writeFile(path.join(dir, '.gitignore'), set.join('\n') + '\n');
+    // Exit status 1 only means that nothing was ignored.
+    const out = spawnSync('git', ['check-ignore', '--no-index', '--stdin', '-v', '-n'], { cwd: dir, input: paths.join('\n') + '\n', encoding: 'utf8' }).stdout.trim().split('\n');
+    assert.equal(out.length, paths.length);
+    const rules = parseIgnoreFile(set.join('\n'));
+    for (const line of out) {
+      const [source, file] = line.split('\t');
+      const pattern = source.split(':').slice(2).join(':');
+      const expected = Boolean(pattern) && !pattern.startsWith('!');
+      assert.equal(Boolean(ignoredByRules(rules, file)), expected, set.join(' | ') + ' :: ' + file);
+    }
+  }
 });
