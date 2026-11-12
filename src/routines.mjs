@@ -296,6 +296,15 @@ function normalizeFields(fields, existing = {}, now = new Date()) {
   return job;
 }
 
+// Names are how people (and `oasis schedule pause standup`) refer to
+// routines; a second "standup" made every name lookup fail as ambiguous.
+function refuseDuplicateName(jobs, job) {
+  const name = String(job.name || '').trim().toLowerCase();
+  if (!name) return;
+  const other = jobs.find((existing) => existing.id !== job.id && String(existing.name || '').trim().toLowerCase() === name);
+  if (other) throw Object.assign(new Error('A routine named "' + other.name + '" already exists (' + other.id + '). Edit that one or choose another name.'), { statusCode: 409 });
+}
+
 export async function createJob(fields = {}, { env = process.env, now = new Date() } = {}) {
   guardScheduledRun(env);
   return mutate(env, (jobs) => {
@@ -304,6 +313,7 @@ export async function createJob(fields = {}, { env = process.env, now = new Date
     const paused = Boolean(fields.paused);
     const job = normalizeFields({ ...fields, schedule: fields.schedule ?? '' }, { id, createdAt: now.toISOString(), enabled: !paused, state: paused ? 'paused' : 'scheduled' }, now);
     if (paused) { job.nextRunAt = null; job.pausedReason = String(fields.pausedReason || 'Created paused; awaiting review.'); }
+    refuseDuplicateName(jobs, job);
     jobs.push(job);
     return job;
   });
@@ -318,6 +328,7 @@ export async function editJob(ref, fields = {}, { env = process.env, now = new D
       throw Object.assign(new Error(job.id + ' changed since you loaded it (updated ' + (job.updatedAt || 'never') + '). Reload and try again.'), { code: 'ROUTINE_CONFLICT', statusCode: 409 });
     }
     const next = normalizeFields(fields, job, now);
+    refuseDuplicateName(jobs, { ...next, id: job.id });
     // Fields cleared by normalizeFields (timezone, model, workdir, events...) must go too.
     for (const key of Object.keys(job)) if (!(key in next)) delete job[key];
     Object.assign(job, next, { updatedAt: now.toISOString() });
@@ -667,6 +678,17 @@ export async function runningDaemonPid(env = process.env) {
   try { other = Number((await readFile(path.join(schedulesDirectory(env), 'daemon.pid'), 'utf8')).trim()); } catch (error) { if (error.code !== 'ENOENT') throw error; }
   if (!other || other === process.pid) return 0;
   try { process.kill(other, 0); return other; } catch (error) { return error.code === 'EPERM' ? other : 0; }
+}
+
+// Is any scheduler (this process included) running for this config folder?
+// runningDaemonPid skips this process on purpose (it guards against starting a
+// second loop), so a status report that used it said "not running" while
+// `oasis web` itself hosted the scheduler.
+export async function schedulerRunning(env = process.env) {
+  try {
+    if (Number((await readFile(path.join(schedulesDirectory(env), 'daemon.pid'), 'utf8')).trim()) === process.pid) return true;
+  } catch (error) { if (error.code !== 'ENOENT') throw error; }
+  return Boolean(await runningDaemonPid(env));
 }
 
 // `oasis web` and `oasis gateway` run the scheduler in-process (as Hermes' gateway does)
