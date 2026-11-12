@@ -689,7 +689,10 @@ function liveToolStatus(event = {}) {
     toolStatusCall = event.call.id;
     const args = safeArgs(event.call);
     const detail = String(event.name === 'run_command' ? [args.command, ...(Array.isArray(args.args) ? args.args : [])].filter(Boolean).join(' ') : args.command || '').replace(/\s+/g, ' ').trim();
-    waitIndicator.start({ label: 'Running ' + (detail.length > 50 ? detail.slice(0, 49) + '…' : detail || event.name), detail: line, ...(turnDraft ? { draft: turnDraft } : {}) });
+    // The step header right above already shows the whole command; the
+    // status names only a short one ("Running npm test") so the line keeps
+    // room for the clock and the newest output.
+    waitIndicator.start({ label: detail && detail.length <= 24 ? 'Running ' + detail : 'Running command', detail: line, ...(turnDraft ? { draft: turnDraft } : {}) });
   } else if (line) waitIndicator.update({ detail: line });
 }
 function safeArgs(call) { try { return JSON.parse(call.function && call.function.arguments || '{}'); } catch { return {}; } }
