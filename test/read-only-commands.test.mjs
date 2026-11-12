@@ -219,3 +219,30 @@ test('read-only git asks when a checked-out submodule config names a filter', { 
   await executeTool('git_status', {}, { root, env, approval: async () => false });
   assert.equal(existsSync(marker), false, 'git_status ran the submodule filter');
 });
+
+test('grouped short flags that write files, and ag --pager, ask', async (t) => {
+  // Regression: `sort -uo FILE` and `tree -fo FILE` overwrote files and
+  // `ag --pager CMD` ran a program, all without a prompt.
+  const root = await workspace(t);
+  for (const line of ['sort -uo src/a.js src/a.js', 'sort -ro src/a.js src/a.js', 'tree -fo out.txt', 'tree -aR', 'ag --pager touch foo', 'ag --pager=touch foo', 'file -bC -m x', 'date -us 2020-01-01']) {
+    assert.equal(readOnlyShellLine(line, { root }), false, line);
+  }
+  for (const line of ['sort -u src/a.js', 'sort -rn src/a.js', 'tree -fa', 'ag foo src']) {
+    assert.equal(readOnlyShellLine(line, { root }), true, line);
+  }
+});
+
+test('package managers and toolchains ask when the repository picks their code', async (t) => {
+  // Regression: `yarn --version` ran a repository's yarnPath script, and
+  // `cargo --version` a rust-toolchain.toml `path =` toolchain, with no prompt.
+  const root = await workspace(t);
+  assert.equal(readOnlyShellLine('yarn --version', { root }), true);
+  assert.equal(readOnlyShellLine('cargo --version', { root }), true);
+  await writeFile(path.join(root, '.yarnrc.yml'), 'yarnPath: ./evil.cjs\n');
+  await writeFile(path.join(root, 'rust-toolchain.toml'), '[toolchain]\npath = "./evil"\n');
+  await writeFile(path.join(root, '.pnpmfile.cjs'), 'module.exports = {}\n');
+  for (const line of ['yarn --version', 'yarn info react', 'cd src && yarn why x', 'cargo --version', 'rustc -V', 'pnpm ls']) {
+    assert.equal(readOnlyShellLine(line, { root }), false, line);
+  }
+  assert.equal(readOnlyShellLine('npm --version', { root }), true);
+});
