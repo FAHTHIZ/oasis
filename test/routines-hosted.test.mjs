@@ -5,7 +5,7 @@ import path from 'node:path';
 import { mkdtemp, readFile, rm, writeFile, mkdir } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { startOasisWebServer } from '../src/web.mjs';
-import { hostScheduler, runningDaemonPid, createJob, schedulesDirectory } from '../src/routines.mjs';
+import { hostScheduler, runningDaemonPid, createJob, editJob, schedulesDirectory } from '../src/routines.mjs';
 
 const APP = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'app');
 
@@ -190,4 +190,32 @@ test('oasis web exits on SIGTERM while hosting the routine scheduler', async (t)
   if (result === 'timeout') child.kill('SIGKILL');
   assert.notEqual(result, 'timeout', 'oasis web must exit after SIGTERM');
   assert.equal(await runningDaemonPid(env), 0, 'the scheduler pid file is cleaned up');
+});
+
+test('/api/routines reports the scheduler as running while this server hosts it', async (t) => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'oasis-rs-'));
+  const env = { ...process.env, HOME: root, OASIS_CONFIG_DIR: path.join(root, 'config'), OASIS_SCHEDULED_RUN: '', OASIS_ROUTINES: '' };
+  const app = await startOasisWebServer({ root, host: '127.0.0.1', port: 0, env, token: 'test-runtime-token-0123456789', refreshModelCatalog: false });
+  const hosted = await hostScheduler({ env, intervalMs: 60_000 });
+  t.after(async () => { await hosted.stop(); await app.close(); await rm(root, { recursive: true, force: true }); });
+  assert.equal(hosted.hosted, true);
+  // hostScheduler returns before the loop has written its pid file.
+  const pidFile = path.join(schedulesDirectory(env), 'daemon.pid');
+  for (let i = 0; i < 100 && !(await readFile(pidFile, 'utf8').catch(() => '')); i++) await new Promise((resolve) => setTimeout(resolve, 20));
+  assert.equal(await runningDaemonPid(env), 0, 'this process is not "another" scheduler');
+  const view = await (await fetch('http://127.0.0.1:' + app.port + '/api/routines', { headers: { authorization: 'Bearer ' + app.token } })).json();
+  assert.equal(view.scheduler, 'running');
+});
+
+test('a second routine with the same name is refused (create and rename)', async (t) => {
+  const home = await mkdtemp(path.join(os.tmpdir(), 'oasis-rdup-'));
+  t.after(() => rm(home, { recursive: true, force: true }));
+  const env = { ...process.env, HOME: home, OASIS_CONFIG_DIR: path.join(home, 'cfg'), OASIS_SCHEDULED_RUN: '' };
+  const first = await createJob({ name: 'standup', schedule: 'every 1h', prompt: 'x' }, { env });
+  await assert.rejects(createJob({ name: ' Standup ', schedule: 'every 2h', prompt: 'y' }, { env }), (error) => error.statusCode === 409 && error.message.includes(first.id));
+  const other = await createJob({ name: 'nightly', schedule: 'every 1d', prompt: 'z' }, { env });
+  await assert.rejects(editJob(other.id, { name: 'STANDUP' }, { env }), /already exists/);
+  await editJob(first.id, { name: 'standup', prompt: 'changed' }, { env });
+  assert.equal((await createJob({ schedule: 'every 3h', prompt: 'unnamed' }, { env })).name || '', '');
+  await createJob({ schedule: 'every 4h', prompt: 'unnamed too' }, { env });
 });

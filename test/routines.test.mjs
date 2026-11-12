@@ -75,7 +75,8 @@ test('lifecycle: create, find by name, edit, pause, resume, remove; ambiguity is
   assert.equal(a.nextRunAt, '2026-11-11T11:00:00.000Z');
   assert.equal(findJob(await readJobs(env), 'CI').id, a.id);
   await createJob({ schedule: 'every 1h', prompt: 'other', name: 'dup' }, { env, now });
-  await createJob({ schedule: 'every 1h', prompt: 'other', name: 'dup' }, { env, now });
+  await assert.rejects(createJob({ schedule: 'every 1h', prompt: 'other', name: 'dup' }, { env, now }), /already exists/);
+  // Stores written before duplicate names were refused can still hold two.
   assert.throws(() => findJob([{ id: 'rt-1', name: 'dup' }, { id: 'rt-2', name: 'dup' }], 'dup'), /matches several/);
   const edited = await editJob('ci', { schedule: '0 9 * * *', timezone: 'Asia/Dhaka', skills: ['debugging'] }, { env, now });
   assert.equal(edited.nextRunAt, '2026-11-12T03:00:00.000Z');
@@ -85,7 +86,7 @@ test('lifecycle: create, find by name, edit, pause, resume, remove; ambiguity is
   assert.equal((await pauseJob('ci', 'holiday', { env, now })).pausedReason, 'holiday');
   assert.equal((await resumeJob('ci', { env, now })).enabled, true);
   await removeJob('ci', { env });
-  assert.equal((await readJobs(env)).length, 2);
+  assert.equal((await readJobs(env)).length, 1);
   const paused = await createJob({ schedule: 'every 1h', prompt: 'canary', paused: true }, { env, now });
   assert.equal(paused.nextRunAt, null);
   assert.equal(paused.enabled, false);

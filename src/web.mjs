@@ -1838,7 +1838,7 @@ export function createOasisWebServer(options = {}) {
     if (pathname === '/api/routines' && (req.method === 'GET' || req.method === 'POST')) {
       const routines = await import('./routines.mjs');
       const view = (job) => ({ id: job.id, name: job.name || '', kind: job.kind, prompt: job.prompt, schedule: job.schedule.display, timezone: job.timezone || '', enabled: job.enabled !== false, state: job.activeRun ? 'running' : job.enabled === false ? job.state || 'paused' : 'scheduled', nextRunAt: job.enabled !== false ? job.nextRunAt || null : null, lastStatus: job.lastStatus || '', lastRunAt: job.lastRunAt || null, deliver: job.deliver || 'local', workdir: job.workdir || '', pausedReason: job.pausedReason || '', lastProblem: job.lastProblem || '', updatedAt: job.updatedAt || null, ...(job.schedule.type === 'event' ? { webhookPath: '/hooks/routines/' + job.id, webhookSecret: job.webhookSecret, pendingEvents: (job.pendingEvents || []).length } : {}) });
-      const overview = async () => ({ routines: (await routines.readJobs(env)).map(view), scheduler: (await routines.runningDaemonPid(env)) ? 'running' : 'stopped' });
+      const overview = async () => ({ routines: (await routines.readJobs(env)).map(view), scheduler: (await routines.schedulerRunning(env)) ? 'running' : 'stopped' });
       if (req.method === 'GET' && parsedUrl.searchParams.get('runs')) {
         try {
           const { job, runs } = await routines.listRuns(parsedUrl.searchParams.get('runs'), { env, limit: 10 });
