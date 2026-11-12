@@ -206,10 +206,8 @@ code.inspect-text{font:12px var(--mono)}
 .composer{position:relative;max-width:var(--chat-w);margin:0 auto;border:1px solid var(--line-strong);border-radius:var(--r-xl);background:color-mix(in srgb,var(--panel) 80%,transparent);backdrop-filter:blur(18px) saturate(1.2);-webkit-backdrop-filter:blur(18px) saturate(1.2);padding:8px 8px 8px 14px;box-shadow:0 18px 44px -22px #000d,inset 0 1px 0 color-mix(in srgb,var(--text) 5%,transparent);transition:border-color .2s,box-shadow .2s}
 .composer:focus-within{border-color:var(--accent-line);box-shadow:0 18px 44px -22px #000d,0 0 0 4px var(--accent-soft),0 0 40px -12px color-mix(in srgb,var(--accent) 35%,transparent)}
 /* While a task runs, a slow light travels around the composer's edge. */
-@property --sweep{syntax:"<angle>";inherits:false;initial-value:0deg}
-.composer::before{content:"";position:absolute;inset:-1px;border-radius:inherit;padding:1px;background:conic-gradient(from var(--sweep),transparent 0 72%,var(--accent) 86%,var(--accent-2) 92%,transparent);-webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);-webkit-mask-composite:xor;mask-composite:exclude;opacity:0;transition:opacity .3s;pointer-events:none}
-.busy .composer::before{opacity:.55;--sweep:200deg}
-:root.lite .busy .composer::before{animation:none;opacity:.5}
+.composer::before{content:"";position:absolute;inset:-1px;border-radius:inherit;padding:1px;background:conic-gradient(from 200deg,transparent 0 72%,var(--accent) 86%,var(--accent-2) 92%,transparent);-webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);-webkit-mask-composite:xor;mask-composite:exclude;opacity:0;transition:opacity .3s;pointer-events:none}
+.busy .composer::before{opacity:.55}
 .composer textarea{display:block;width:100%;resize:none;border:0;outline:0;background:none;padding:6px 0 4px;max-height:40vh;min-height:26px;line-height:1.45;font-size:16px}
 .composer textarea::placeholder{color:var(--faint)}
 .composer-row{display:flex;align-items:center;gap:6px;margin-top:4px}
@@ -509,8 +507,6 @@ html.lite .topbar{backdrop-filter:none;-webkit-backdrop-filter:none;background:v
 .approval-summary .approval-command{display:block;margin:8px 0;padding:8px 10px;border-radius:8px;background:var(--sunken);font-size:13px;white-space:pre-wrap;word-break:break-word}
 .risk-badge{display:inline-block;margin-bottom:6px;padding:2px 8px;border-radius:999px;background:var(--danger-soft);color:var(--danger);font-size:12px;font-weight:600}
 
-.error-text{color:var(--danger)}
-.error-text:empty{display:none}
 
 .attachments{display:flex;gap:8px;flex-wrap:wrap;padding:4px 0 6px}
 .attachment{position:relative;width:56px;height:56px;border-radius:10px;overflow:hidden;border:1px solid var(--line);background:var(--sunken)}
@@ -686,7 +682,7 @@ html.lite .topbar{backdrop-filter:none;-webkit-backdrop-filter:none;background:v
 .side-status{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--faint);font-family:var(--mono);min-width:0}
 .side-status span:last-child{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .side-status.ok .side-dot{background:var(--accent-2);box-shadow:0 0 8px var(--accent-2)}
-@media (prefers-reduced-motion:reduce){.welcome-mark,.fen .fen-blink,.side-task .side-dot,.suggestion{animation:none!important}.busy .composer::before{animation:none}}
+@media (prefers-reduced-motion:reduce){.welcome-mark,.fen .fen-blink,.side-task .side-dot,.suggestion{animation:none!important}}
 
 .remember-device { display: flex; align-items: center; gap: 8px; margin-top: 10px; font-size: 13px; color: var(--muted); cursor: pointer; user-select: none; }
 .remember-device input { accent-color: var(--accent); width: 16px; height: 16px; margin: 0; }
@@ -768,7 +764,6 @@ html.lite .topbar{backdrop-filter:none;-webkit-backdrop-filter:none;background:v
 .app-text strong{font-size:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .app-text span{font-size:12px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .app-tile.on .app-text span{color:var(--accent)}
-.app-dot{flex:none;width:8px;height:8px;border-radius:50%;background:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
 .app-tile .app-off{color:var(--muted)}
 .app-tile .app-off:hover{color:var(--danger);border-color:color-mix(in srgb,var(--danger) 40%,transparent)}
 .suggest-row.suggest-app .cc-mark{width:22px;height:22px;border-radius:6px}
