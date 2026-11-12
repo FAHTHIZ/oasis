@@ -80,7 +80,10 @@ export class RuntimeClient {
     let data = {};
     try { data = await response.json(); } catch { /* empty body */ }
     if (response.status === 401 && typeof this.onUnauthorized === 'function') { try { this.onUnauthorized(); } catch { /* sign-in screen is best effort */ } }
-    if (!response.ok) throw Object.assign(new Error(data.error || 'OASIS runtime error ' + response.status), { status: response.status, data });
+    if (!response.ok) {
+      const retryAfter = Number.parseInt(response.headers && typeof response.headers.get === 'function' ? response.headers.get('retry-after') : '', 10);
+      throw Object.assign(new Error(data.error || 'OASIS runtime error ' + response.status), { status: response.status, data, ...(retryAfter > 0 ? { retryAfter } : {}) });
+    }
     return data;
   }
 
@@ -100,6 +103,7 @@ export class RuntimeClient {
  * Is this page served by a local OASIS runtime? Returns
  *   { available: false } for the plain web app,
  *   { available: true, needsToken: true } when the runtime is there but this tab has no token,
+ *   { available: true, needsToken: true, rateLimited: seconds } while sign-ins are paused,
  *   { available: true, client, status } when connected.
  */
 export async function detectRuntime({ win = globalThis, fetchImpl = globalThis.fetch && globalThis.fetch.bind(globalThis) } = {}) {
@@ -117,6 +121,10 @@ export async function detectRuntime({ win = globalThis, fetchImpl = globalThis.f
       if (token) forgetRuntimeToken(win);
       return { available: true, needsToken: true, staleToken: Boolean(token) };
     }
+    // Sign-ins are paused after too many wrong keys. The runtime is still
+    // there, so this must not fall back to the browser-only app; the saved key
+    // is kept because it may be the right one.
+    if (error.status === 429) return { available: true, needsToken: true, rateLimited: Math.min(error.retryAfter || 60, 3600) };
     return { available: false };
   }
 }

@@ -3309,7 +3309,8 @@ function renderWelcome() {
   $('rememberRow').hidden = !(RT && RT.needsToken);
   if (RT && RT.needsToken) $('rememberDevice').checked = deviceRemembered();
   $('welcomeLede').textContent = RT && RT.needsToken
-    ? (RT.staleToken ? 'The saved access key no longer works; it may have been rotated. ' : 'OASIS is running on ' + location.host + '. ') + 'Paste the link or access key it printed (run oasis web key on that computer to see it again).'
+    ? RT.rateLimited ? 'Too many wrong access keys were tried from this computer, so OASIS paused sign-ins for about ' + Math.ceil(RT.rateLimited / 60) + ' minute' + (RT.rateLimited > 60 ? 's' : '') + '. This page reloads by itself when the pause ends.'
+    : (RT.staleToken ? 'The saved access key no longer works; it may have been rotated. ' : 'OASIS is running on ' + location.host + '. ') + 'Paste the link or access key it printed (run oasis web key on that computer to see it again).'
     : ready
       ? (RT ? 'Working in ' + (RT.status.workspaceName || 'this folder') + ' with ' + entry.model + '. Describe what you want in plain words.' : 'Using ' + entry.model + ' on ' + entry.connection.label + '. Describe what you want in plain words.')
       : RT
@@ -4623,8 +4624,9 @@ $('pushForm').addEventListener('submit', async (event) => {
 /* ---------- Boot ---------- */
 async function startRuntime(found) {
   document.documentElement.classList.add('runtime');
-  RT = { client: found.client, status: found.status || null, needsToken: Boolean(found.needsToken), staleToken: Boolean(found.staleToken), entry: null, models: [], label: '' };
+  RT = { client: found.client, status: found.status || null, needsToken: Boolean(found.needsToken), staleToken: Boolean(found.staleToken), rateLimited: Number(found.rateLimited) || 0, entry: null, models: [], label: '' };
   if (RT.needsToken) {
+    if (RT.rateLimited) setTimeout(() => location.reload(), (RT.rateLimited + 1) * 1000);
     updateProjectUI();
     updateModeUI();
     await restoreChat();

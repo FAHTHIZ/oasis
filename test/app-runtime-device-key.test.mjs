@@ -58,3 +58,16 @@ test('a key that stops working mid-session tells the app once per request, then 
   assert.deepEqual(await ok.api('/api/status'), { fine: true });
   assert.equal(calls, 1);
 });
+
+test('paused sign-ins (429) keep the runtime and the saved key instead of falling back to browser-only mode', async () => {
+  const w = win();
+  saveRuntimeToken(KEY, w, { remember: true });
+  const fetchImpl = async () => ({ ok: false, status: 429, headers: { get: (name) => name === 'retry-after' ? '273' : null }, json: async () => ({ error: 'Too many wrong access keys. Try again in 273 seconds.' }) });
+  const found = await detectRuntime({ win: w, fetchImpl });
+  assert.equal(found.available, true);
+  assert.equal(found.needsToken, true);
+  assert.equal(found.rateLimited, 273);
+  assert.equal(runtimeToken(w), KEY, 'the key may be right; it is not forgotten');
+  const noHeader = await detectRuntime({ win: win(), fetchImpl: async () => ({ ok: false, status: 429, json: async () => ({}) }) });
+  assert.equal(noHeader.rateLimited, 60);
+});
