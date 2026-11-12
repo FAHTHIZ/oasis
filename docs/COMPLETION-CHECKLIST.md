@@ -60,6 +60,7 @@ Status: **done** (tested and pushed) · **doing** · **open** · **blocked**
 | Codex App Server `fuzzyFileSearch`, `thread/turns/list` | done | `test/codex-app-server.test.mjs` |
 | Codex App Server `thread/shellCommand`, `gitDiffToRemote`, `config/read`, `hooks/list`, `account/read` | done | `test/codex-app-server.test.mjs` (shell turn, failure, timeout, next-turn context, plan refusal; config shape and redaction), `test/codex-app-server-host.test.mjs` (diff applies cleanly to a clone) |
 | Archived sessions hidden from every resume surface (CLI, web, ACP, App Server) | done | `test/commands.test.mjs`, `test/web.test.mjs`, `test/acp.test.mjs` |
+| Browser-only web chats copied into the server session store on connect (`POST /api/sessions/import`, one copy per chat, text turns only) | done | `test/web-import-browser-chats.test.mjs` (3 tests). Not done: copying the browser's tool steps |
 
 ## 2c. IDE-agent interoperability (Cursor, Devin Desktop/Windsurf, Antigravity, OpenHands)
 
