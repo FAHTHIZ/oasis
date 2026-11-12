@@ -4646,7 +4646,7 @@ async function runAgentTurnRaw(session, prompt, options = {}) {
           verification.autoTestAttempts = (verification.autoTestAttempts || 0) + 1;
           const call = { id: 'auto_test_' + verification.autoTestAttempts, type: 'function', function: { name: 'auto_test', arguments: JSON.stringify({ command: autoTest.command }) } };
           if (options.onToolStart) options.onToolStart({ name: 'auto_test', call, args: { command: autoTest.command } });
-          const outcome = await runAutoTest(session.root, autoTest.command, { timeoutMs: autoTest.timeoutMs, signal: options.signal, env: { ...process.env, ...(session.settings && session.settings.env || {}) } });
+          const outcome = await runAutoTest(session.root, autoTest.command, { timeoutMs: autoTest.timeoutMs, signal: options.signal, env: { ...process.env, ...(session.settings && session.settings.env || {}) }, sandbox: session.sandbox });
           if (options.onToolResult) options.onToolResult({ name: 'auto_test', call, result: { command: outcome.command, exitCode: outcome.exitCode, passed: outcome.passed, timedOut: outcome.timedOut, durationMs: outcome.durationMs, output: outcome.output.slice(-2000) } });
           recordClaimCheck(claimState, { command: autoTest.command, exitCode: outcome.exitCode });
           verification.lastVerificationExitCode = outcome.passed ? 0 : outcome.exitCode || 1;

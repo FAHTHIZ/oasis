@@ -104,3 +104,23 @@ test('auto-test stops retrying after maxAttempts', async (t) => {
   assert.equal(runs, 2);
   assert.equal(result.verification.autoTest.passed, false);
 });
+
+test('runAutoTest runs inside the OS sandbox when the session has one enabled', async (t) => {
+  const { resolveSandbox } = await import('../src/sandbox.mjs');
+  const base = await mkdtemp(path.join(os.tmpdir(), 'oasis-autotest-sbx-'));
+  t.after(() => rm(base, { recursive: true, force: true }));
+  const root = path.join(base, 'ws');
+  const outside = path.join(base, 'outside');
+  await mkdir(root); await mkdir(outside);
+  const sandbox = resolveSandbox({ sandbox: { enabled: true } }, root);
+  if (process.platform === 'win32' || !sandbox.available) { t.skip('no OS sandbox on this machine'); return; }
+  const target = path.join(outside, 'escaped.txt');
+  const result = await runAutoTest(root, 'echo in > inside.txt; echo out > ' + JSON.stringify(target) + '; true', { sandbox, timeoutMs: 30000 });
+  assert.equal(result.passed, true, result.output);
+  assert.equal(await readFile(path.join(root, 'inside.txt'), 'utf8'), 'in\n');
+  await assert.rejects(readFile(target, 'utf8'), 'auto-test escaped the sandbox');
+  // A disabled sandbox keeps the old direct spawn.
+  const plain = await runAutoTest(root, 'echo out > ' + JSON.stringify(target), { sandbox: { ...sandbox, enabled: false }, timeoutMs: 30000 });
+  assert.equal(plain.passed, true, plain.output);
+  assert.equal(await readFile(target, 'utf8'), 'out\n');
+});

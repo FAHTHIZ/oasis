@@ -4,6 +4,7 @@ User-facing change history grouped by package version. A version heading does no
 
 ## Unreleased
 
+- Auto-test runs (the `autoTest` setting and `/test`) now run inside the OS sandbox when it is enabled, like `run_shell`; before, they were spawned directly, so agent-written test code could write outside the workspace even with the sandbox on.
 - "Could not reach the model provider" now names the host it tried (`at 127.0.0.1:11434`; never credentials or the path), and for a local Ollama port it suggests `ollama serve`.
 - Web app: the diff for a changed file now has **Discard**, which, after a confirmation, puts a tracked file back to its last committed version (including a deleted one), like the per-file revert in the Codex app and Cursor. It reads the committed version with `git ls-tree`/`cat-file`, so the repository's filters and hooks never run. It refuses untracked files, symlinks, `.git` and paths outside the workspace, and waits while an agent task is running (`POST /api/workspace/discard`).
 - `oasis app-server --listen ws://127.0.0.1:PORT` without `--ws-auth` now says at startup that any local user or process can connect, and suggests `--listen unix://` or `--ws-auth capability-token` for shared machines.
