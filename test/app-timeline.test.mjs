@@ -130,7 +130,8 @@ test('the particle field stays small on any screen', () => {
 test('the thinking chip shows elapsed time after five seconds', async () => {
   const { thinkingLabel } = await import('../app/core/timeline.mjs');
   assert.equal(thinkingLabel(0), 'Thinking');
-  assert.equal(thinkingLabel(4999), 'Thinking');
+  assert.equal(thinkingLabel(999), 'Thinking');
+  assert.equal(thinkingLabel(4999), 'Thinking · 5s');
   assert.equal(thinkingLabel(12_000), 'Thinking · 12s');
   assert.equal(thinkingLabel(125_000), 'Thinking · 2m 05s');
   assert.equal(thinkingLabel(Number.NaN), 'Thinking');
