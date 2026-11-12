@@ -22,10 +22,17 @@ export const APP_PACKAGES = Object.freeze({
   fflate: 'esm/browser.js',
   diff: 'libesm/index.js',
   marked: 'lib/marked.esm.js',
+  'highlight.js': 'es/highlight.min.js',
+  dompurify: 'dist/purify.es.mjs',
   'eventsource-parser': 'dist/index.js',
   turndown: 'lib/turndown.browser.es.js',
   'turndown-plugin-gfm': 'lib/turndown-plugin-gfm.browser.es.js'
 });
+
+// Bare names whose browser build ships in another npm package. highlight.js's own
+// es/ entries wrap CommonJS; its pre-built ES module (common languages) is in
+// @highlightjs/cdn-assets. Node keeps resolving the real highlight.js package.
+const APP_PACKAGE_SOURCES = Object.freeze({ 'highlight.js': '@highlightjs/cdn-assets' });
 
 /** Shared src modules and npm packages the app imports (transitively); refuses Node-only ones. */
 export async function appModuleGraph(root) {
@@ -71,7 +78,7 @@ export async function appSharedModules(root) {
 
 /** Folder of a browser package that may be served, e.g. node_modules/yaml/browser. */
 export function appPackageDir(root, name) {
-  return path.join(root, 'node_modules', name, path.dirname(APP_PACKAGES[name]));
+  return path.join(root, 'node_modules', APP_PACKAGE_SOURCES[name] || name, path.dirname(APP_PACKAGES[name]));
 }
 
 export async function skillsIndex(root) {

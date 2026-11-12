@@ -121,6 +121,18 @@ svg{width:20px;height:20px;flex:none}
 .body code{font:13px var(--mono);background:var(--raised);border:1px solid var(--line);border-radius:5px;padding:.08em .35em}
 .body pre{position:relative;margin:.6em 0 .9em;background:var(--sunken);border:1px solid var(--line);border-radius:var(--r-md);overflow:auto;max-height:420px}
 .body pre code{display:block;border:0;background:none;padding:12px 14px;font-size:12.5px;line-height:1.55;white-space:pre}
+/* highlight.js token colours (class="hljs" code blocks), from the theme palette */
+:root{--hl-keyword:#C792EA;--hl-string:#C3E88D;--hl-number:#F78C6C;--hl-title:#82AAFF;--hl-type:#FFCB6B;--hl-comment:var(--faint);--hl-attr:#89DDFF;--hl-meta:#F07178}
+:root.light{--hl-keyword:#7A3E9D;--hl-string:#3A6E0F;--hl-number:#A6460F;--hl-title:#1F5BB5;--hl-type:#8A5F00;--hl-attr:#0B6F8A;--hl-meta:#B32D3A}
+.hljs-keyword,.hljs-selector-tag,.hljs-literal,.hljs-built_in,.hljs-doctag{color:var(--hl-keyword)}
+.hljs-string,.hljs-regexp,.hljs-addition,.hljs-template-tag,.hljs-template-variable{color:var(--hl-string)}
+.hljs-number,.hljs-symbol,.hljs-bullet,.hljs-link{color:var(--hl-number)}
+.hljs-title,.hljs-section,.hljs-function .hljs-title,.hljs-title.function_{color:var(--hl-title)}
+.hljs-type,.hljs-class .hljs-title,.hljs-title.class_,.hljs-variable.language_{color:var(--hl-type)}
+.hljs-attr,.hljs-attribute,.hljs-property,.hljs-selector-class,.hljs-selector-id,.hljs-name,.hljs-tag{color:var(--hl-attr)}
+.hljs-meta,.hljs-deletion,.hljs-subst{color:var(--hl-meta)}
+.hljs-comment,.hljs-quote{color:var(--hl-comment);font-style:italic}
+.hljs-emphasis{font-style:italic}.hljs-strong{font-weight:700}
 .body pre .copy{position:absolute;top:6px;right:6px;font-size:11.5px;padding:3px 8px;border-radius:6px;background:var(--raised);color:var(--muted);border:1px solid var(--line)}
 .body blockquote{margin:.4em 0;padding-left:12px;border-left:3px solid var(--line-strong);color:var(--muted)}
 .body table{border-collapse:collapse;font-size:13.5px;margin:.4em 0 .9em;display:block;overflow-x:auto}
