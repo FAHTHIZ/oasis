@@ -4,7 +4,7 @@
 // browser with a throwaway profile, or attaches to yours (OASIS_CHROME_PORT) so it can use
 // pages you are signed in to. Visiting a new site and running page JavaScript ask first
 // unless the call is auto-approved.
-import { Browser, findChrome } from './cdp.mjs';
+import { Browser } from './cdp.mjs';
 import { RECORDED_ACTIONS, addFrame, capturePage, newRecording, recordingEnabled, saveRecording, stepCaption } from './browser-recording.mjs';
 import { isNonPublicIpAddress } from './network-safety.mjs';
 import { isIP } from 'node:net';
@@ -37,10 +37,6 @@ export const BROWSER_TOOL_DEFINITION = {
     }
   }
 };
-
-export function browserAvailable(env = process.env) {
-  return Boolean(env.OASIS_CHROME_PORT || findChrome(env));
-}
 
 const MAX_BROWSER_NAVIGATION_URL = 32 * 1024;
 

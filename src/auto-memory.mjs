@@ -513,8 +513,6 @@ export const MEMORY_TOOL_DEFINITIONS = [
   }
 ];
 
-export const MEMORY_TOOL_NAMES = new Set(MEMORY_TOOL_DEFINITIONS.map((tool) => tool.function.name));
-
 // ---------- write approval (Hermes-style memory.write_approval) ----------
 // "memoryWriteApproval": "ask" shows each model-initiated memory_save / memory_delete
 // for approval; "queue" stores them as pending until /memory approve. User commands

@@ -14,8 +14,6 @@
 
 import os from 'node:os';
 
-export const MOTION_LEVELS = ['full', 'lite', 'off'];
-
 const FULL_FRAMES = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
 const LITE_FRAMES = ['·  ', '·· ', '···', ' ··', '  ·', '   '];
 const FULL_INTERVAL_MS = 80;

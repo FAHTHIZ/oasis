@@ -116,7 +116,3 @@ export function detectTestTampering(root, paths, { timeoutMs = 15000 } = {}) {
     });
   });
 }
-
-export function formatTestTampering(findings) {
-  return findings.map((item) => item.file + ': ' + item.reason + (item.line ? ' (`' + item.line + '`)' : '')).join('; ');
-}

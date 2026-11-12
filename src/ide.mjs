@@ -8,7 +8,7 @@
 //   - shows proposed file edits in the IDE's diff view for Accept/Reject,
 //   - exposes ide_get_diagnostics and ide_open_file tools to the agent.
 import { spawnSync } from 'node:child_process';
-import { readFile, readdir, writeFile, mkdir, stat } from 'node:fs/promises';
+import { readFile, readdir, writeFile, mkdir } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { deflateRawSync } from 'node:zlib';
@@ -91,7 +91,6 @@ export const IDE_TOOL_DEFINITIONS = [
   { type: 'function', function: { name: 'ide_get_diagnostics', description: 'Get errors and warnings from the user\'s IDE (language servers, linters, type checkers) for one file or the whole workspace. Use after edits to verify them, and before guessing at build errors.', parameters: { type: 'object', properties: { path: { type: 'string', description: 'Workspace-relative or absolute file path. Omit for all files with diagnostics.' } }, additionalProperties: false } } },
   { type: 'function', function: { name: 'ide_open_file', description: 'Open a file in the user\'s IDE at a line, to show them code you are discussing.', parameters: { type: 'object', properties: { path: { type: 'string' }, line: { type: 'integer', minimum: 1 } }, required: ['path'], additionalProperties: false } } }
 ];
-export const IDE_TOOL_NAMES = new Set(IDE_TOOL_DEFINITIONS.map((tool) => tool.function.name));
 
 export function attachIde(session, client) {
   session.ide = client;
@@ -257,8 +256,4 @@ export async function ideCli(root, args = [], options = {}) {
   out(client ? 'Connected IDE available: ' + client.ideName + ' (port ' + client.port + ')\n' : 'No IDE bridge found for ' + root + '.\n');
   if (!client && locks.length) out('Running IDE bridges: ' + locks.map((lock) => (lock.ideName || 'IDE') + ' [' + (lock.workspaceFolders || []).join(', ') + ']').join('; ') + '\n');
   if (!client) out('Install the extension with: oasis ide install\n');
-}
-
-export async function extensionFilesExist() {
-  try { await stat(path.join(EXTENSION_DIR, 'src', 'extension.js')); return true; } catch { return false; }
 }

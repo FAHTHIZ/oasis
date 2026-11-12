@@ -6,8 +6,6 @@ import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { mkdirSync, appendFileSync, writeFileSync } from 'node:fs';
 
-export const TEAMMATE_MODES = ['auto', 'in-process', 'tmux'];
-
 // auto (the default) uses tmux panes only when this session is already inside tmux.
 export function resolveTeammateMode(value, env = process.env) {
   const mode = String(value || 'auto').toLowerCase();

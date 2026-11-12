@@ -87,7 +87,6 @@ export function benignExitNote(command, exitCode) {
   if (/^robocopy\b/.test(first)) return 'robocopy exit codes 1-7 report success.';
   return null;
 }
-export const POWER_READ_ONLY_TOOLS = new Set(['grep', 'command_output', 'list_background']);
 
 export function commandLineText(command, args) {
   return [command, ...args.map((arg) => /^[A-Za-z0-9_./:=@+-]+$/.test(arg) ? arg : JSON.stringify(arg))].join(' ');

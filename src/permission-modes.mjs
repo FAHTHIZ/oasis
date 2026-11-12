@@ -19,11 +19,3 @@ export function normalizePermissionMode(value) {
   if (PERMISSION_MODES.includes(requested)) return requested;
   return MODE_ALIASES.get(requested.toLowerCase()) || null;
 }
-
-export function describePermissionModeAlias(value) {
-  const requested = typeof value === 'string' ? value.trim() : '';
-  const normalized = normalizePermissionMode(requested);
-  return normalized && normalized !== requested
-    ? { requested, canonical: normalized }
-    : null;
-}

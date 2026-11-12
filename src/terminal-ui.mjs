@@ -8,7 +8,6 @@ import { scrubEnvironment } from './tools.mjs';
 import { motionLevel } from './activity-indicator.mjs';
 import { ANSI, colorEnabled, renderDiff } from './markdown.mjs';
 import { currentTheme, themeFg } from './themes.mjs';
-import { stringWidth, stripAnsi } from './line-editor.mjs';
 import { fenLines, FEN_COLUMNS } from './mascot.mjs';
 
 const LOGO = [
@@ -529,8 +528,6 @@ export function describeEdit({ name, args = {}, result = {} }, { color = true } 
   const summary = '  ⎿ ' + (color ? ANSI.dim : '') + 'Updated ' + (args.path || 'file') + ' with ' + changeCounts(added, removed) + (color ? ANSI.noBold : '');
   return summary + '\n' + bodies.join('\n');
 }
-
-export function visibleWidth(text) { return stringWidth(stripAnsi(text)); }
 
 // --verbose: the tool's output under its call line, dimmed and indented (Claude Code's verbose
 // transcript). Long output is capped; Ctrl+O still shows the whole transcript.

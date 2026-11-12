@@ -81,9 +81,3 @@ export function secureSet(account, value, env = process.env, backend = secureSto
   }
   return { ok: false, backend: null, error: 'No OS secure storage on this platform.' };
 }
-
-export function secureDelete(account, env = process.env, backend = secureStoreBackend(env)) {
-  if (backend === 'keychain') return run('security', ['delete-generic-password', '-s', SERVICE, '-a', account], { env }).ok;
-  if (backend === 'libsecret') return run('secret-tool', ['clear', 'service', SERVICE, 'account', account], { env }).ok;
-  return false;
-}

@@ -130,14 +130,6 @@ export function safeEnvironment(server, source = process.env, extra = {}) {
   return env;
 }
 
-export function filterTools(tools) {
-  return (Array.isArray(tools) ? tools : []).filter((tool) =>
-    tool && typeof tool.name === 'string' &&
-    /^[a-zA-Z0-9_.-]{1,80}$/.test(tool.name) &&
-    tool.name !== '__proto__'
-  ).slice(0, 80);
-}
-
 /** Rebuilds a session's MCP tool definitions after a server's tool list changed. */
 export function refreshSessionMcpTools(session) {
   const oldNames = new Set(session.mcpToolMap ? session.mcpToolMap.keys() : []);
