@@ -7,7 +7,7 @@ import { SUBAGENT_STATUS_TEXT } from './core/subagents.mjs';
 import { createConnectorCard, connectIntent, splitServices, brandMark } from './core/connector-card.mjs';
 import { createSoundPlayer } from './core/sound.mjs';
 import { ambientField } from './core/ambient.mjs';
-import { activityLabel, liveLabel, summarizeArgs, toolKind, groupTitle, groupStats, formatDuration, thinkingLabel, elapsedSince, describeInput, buildTimeline } from './core/timeline.mjs';
+import { activityLabel, liveLabel, summarizeArgs, toolKind, groupTitle, groupStats, formatDuration, thinkingLabel, streamingTextToolCall, elapsedSince, describeInput, buildTimeline } from './core/timeline.mjs';
 import { IndexedDBStore, Workspace, lineDiff } from './core/workspace.mjs';
 import { Agent, textOf } from './core/agent.mjs';
 import { FrameSandbox } from './core/sandbox.mjs';
@@ -1211,7 +1211,13 @@ function queueRender() {
     renderQueued = false;
     lastRender = performance.now();
     if (!currentTurn || !currentTurn.body) return;
-    currentTurn.body.innerHTML = renderMarkdown(currentTurn.text);
+    const pendingTool = streamingTextToolCall(currentTurn.text);
+    if (pendingTool) {
+      const note = document.createElement('p');
+      note.className = 'pending-tool-call';
+      note.append('Preparing ', Object.assign(document.createElement('code'), { textContent: pendingTool }), '…');
+      currentTurn.body.replaceChildren(note);
+    } else currentTurn.body.innerHTML = renderMarkdown(currentTurn.text);
     currentTurn.body.hidden = !currentTurn.text.trim();
     scrollDown();
   });
