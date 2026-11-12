@@ -363,6 +363,7 @@ function openSheet(id) {
   try { history.pushState({ sheet: id }, ''); } catch { /* sandboxed frames */ }
   const focusable = el.querySelector('input,select,textarea,button:not([data-close])');
   if (focusable && matchMedia('(pointer:fine)').matches) focusable.focus();
+  if (id === 'approvalSheet') runClock.tick();
 }
 let ignorePop = false;
 function closeSheet(id, { fromHistory = false } = {}) {
@@ -373,7 +374,7 @@ function closeSheet(id, { fromHistory = false } = {}) {
   if (!fromHistory && history.state && history.state.sheet === id) { ignorePop = true; history.back(); }
   openSheets.splice(openSheets.indexOf(id), 1);
   if (!openSheets.some((open) => !$(open).classList.contains('docked'))) $('backdrop').hidden = true;
-  if (id === 'approvalSheet') markWaitingTools(false);
+  if (id === 'approvalSheet') { markWaitingTools(false); runClock.tick(); }
   if (id === 'approvalSheet' && approvalResolve) { approvalResolve(false); approvalResolve = null; }
   if (id === 'questionSheet' && questionResolve) { questionResolve(''); questionResolve = null; }
 }
@@ -1540,24 +1541,38 @@ const LIVE_KEEP = 16_000; // characters of live output kept per running step
 
 // One clock for the whole run, started from the server's start time when
 // there is one, so a reload or another device shows the same "Working 42s".
-// It ticks once a second and writes only when the text changes.
+// It ticks once a second and writes only when the text changes. Time spent
+// waiting for the person's approval is not work, so the clock holds still
+// while the approval sheet is open and the "Worked for" line leaves it out.
 const runClock = {
   startedAt: 0,
   timer: 0,
+  waitedMs: 0,
+  waitStart: 0,
   start(at) {
     const value = Number(at);
     if (!Number.isFinite(value) || value <= 0) return;
+    const fresh = !(this.startedAt && this.timer);
     // A server time only moves the start earlier (a resumed run), never later.
-    this.startedAt = this.startedAt && this.timer ? Math.min(this.startedAt, value) : value;
+    this.startedAt = fresh ? value : Math.min(this.startedAt, value);
+    if (fresh) { this.waitedMs = 0; this.waitStart = 0; }
     if (!this.timer) this.timer = setInterval(() => this.tick(), 1000);
     this.tick();
+  },
+  worked(now = Date.now()) {
+    if (!this.startedAt) return 0;
+    const waiting = this.waitStart ? now - this.waitStart : 0;
+    return Math.max(0, now - this.startedAt - this.waitedMs - waiting);
   },
   tick() {
     const el = $('runStatus');
     if (!el) return;
     if (!document.body.classList.contains('busy') || !this.startedAt) { if (!el.hidden) el.hidden = true; return; }
     const waiting = !$('approvalSheet').hidden;
-    const text = (waiting ? 'Waiting for you' : 'Working') + ' · ' + elapsedSince(this.startedAt) + ' · Esc to stop';
+    const now = Date.now();
+    if (waiting && !this.waitStart) this.waitStart = now;
+    if (!waiting && this.waitStart) { this.waitedMs += now - this.waitStart; this.waitStart = 0; }
+    const text = (waiting ? 'Waiting for you' : 'Working') + ' · ' + formatDuration(this.worked(now)) + ' · Esc to stop';
     const label = el.querySelector('.run-status-text');
     if (label.textContent !== text) label.textContent = text;
     el.classList.toggle('waiting', waiting);
@@ -1566,8 +1581,10 @@ const runClock = {
   stop() {
     clearInterval(this.timer);
     this.timer = 0;
-    const ms = this.startedAt ? Date.now() - this.startedAt : 0;
+    const ms = this.worked();
     this.startedAt = 0;
+    this.waitedMs = 0;
+    this.waitStart = 0;
     const el = $('runStatus');
     if (el) el.hidden = true;
     return ms;
