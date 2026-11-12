@@ -443,7 +443,8 @@ test('agent reads a note typed while it works before its next step, even after a
   assert.equal(seen.length, 3);
   assert.ok(seen[1].some((m) => m.role === 'user' && m.content === 'keep it short'), 'a note after a tool reaches the next step');
   assert.ok(seen[2].some((m) => m.role === 'user' && m.content === 'and count the letters'), 'a note during the final answer keeps the turn going');
-  assert.ok(events.some((e) => e.type === 'user' && e.steer));
+  assert.ok(events.some((e) => e.type === 'steer' && e.content === 'keep it short'), 'a steer is its own event, not a new user turn');
+  assert.ok(events.some((e) => e.type === 'steered' && e.delivered >= 1), 'the agent says when it read the note');
   assert.equal(agent.steer('too late'), false);
 });
 

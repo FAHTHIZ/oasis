@@ -67,7 +67,7 @@
       <button type="button" class="btn small ghost" id="updateNotes">What's new</button>
       <button type="button" class="icon-btn small" id="updateLater" title="Not now" aria-label="Not now"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M5 5l10 10M15 5L5 15" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg></button>
     </div>
-    <section class="chat" id="chat" aria-live="polite">
+    <section class="chat" id="chat">
       <div class="welcome booting" id="welcome">
         <div class="welcome-mark fen" aria-hidden="true" title="Fen, the OASIS fennec fox"><img src="icons/fen.svg" alt="" width="84" height="66"><img src="icons/fen-blink.svg" alt="" width="84" height="66" class="fen-blink"></div>
         <h1 id="welcomeTitle">Paste a key to start.</h1>
@@ -94,6 +94,10 @@
     </div>
     <div class="todos" id="todos" role="region" aria-label="Task progress" aria-live="polite" aria-atomic="false" hidden></div>
     <div class="plugin-suggest" id="pluginSuggest" hidden></div>
+    <button type="button" class="jump-latest" id="jumpLatest" hidden><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M10 4v12m0 0l-5-5m5 5l5-5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg><span id="jumpLatestText">Jump to latest</span></button>
+    <div class="run-status" id="runStatus" hidden><span class="run-status-dot" aria-hidden="true"></span><span class="run-status-text">Working</span></div>
+    <div class="pending-inputs" id="pendingInputs" role="list" aria-label="Messages waiting for OASIS" hidden></div>
+    <p class="sr-only" id="liveStatus" role="status" aria-live="polite"></p>
     <form class="composer" id="composer" autocomplete="off">
       <div class="composer-suggest" id="composerSuggest" role="listbox" aria-label="Suggestions" hidden></div>
       <div class="attachments" id="attachments" hidden></div>
@@ -265,6 +269,7 @@
       <label for="themeSelect">Theme</label>
       <select id="themeSelect"><option value="system">Match device</option><option value="dark">Dark</option><option value="light">Light</option></select>
       <label class="check"><input type="checkbox" id="notifyInput"> Notify me when a task finishes or needs me while this tab is in the background</label>
+      <label class="check"><input type="checkbox" id="densityVerbose"> Keep every step list open (verbose); otherwise finished work folds into one line</label>
       <label class="check"><input type="checkbox" id="soundInput"> Play soft sounds when a task finishes, fails or needs me</label>
       <label class="check"><input type="checkbox" id="effectsInput"> Ambient particle effects (off automatically with reduced motion or on low-power devices)</label>
     </fieldset>
@@ -378,6 +383,7 @@
   <div class="sheet-body">
     <p class="approval-summary" id="approvalSummary"></p>
     <div class="diff compact" id="approvalDetail"></div>
+    <input type="text" class="approval-instead" id="approvalInstead" placeholder="Or tell OASIS what to do instead (sent with Deny)" aria-label="What OASIS should do instead" autocomplete="off" maxlength="2000">
     <div class="row approval-actions">
       <button class="btn" id="denyButton">Deny</button>
       <button class="btn" id="allowAllButton">Allow all edits</button>
@@ -405,6 +411,8 @@
     <h3 class="section-label" id="runtimeSessionsLabel" hidden>Earlier on this computer</h3>
     <p class="hint" id="runtimeSessionsHint" hidden>Conversations from the terminal or earlier browser tabs. Open one to continue it here with its full history.</p>
     <ul class="project-list" id="runtimeSessionList" hidden></ul>
+    <h3 class="section-label" id="runMonitorLabel" hidden>Runs on this computer</h3>
+    <ul class="run-list" id="runMonitorList" hidden></ul>
   </div>
 </section>
 

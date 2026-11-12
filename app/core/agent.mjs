@@ -205,7 +205,7 @@ export class Agent {
     const note = String(text || '').trim();
     if (!this.running || !note || note.length > MAX_STEERING_NOTE_CHARS || this.steering.length >= MAX_STEERING_MESSAGES) return false;
     this.steering.push(note);
-    this.onEvent({ type: 'user', content: note, steer: true });
+    this.onEvent({ type: 'steer', content: note });
     return true;
   }
 
@@ -229,7 +229,9 @@ export class Agent {
         const config = this.getConfig();
         const ctx = { ...this.getContext(), signal, onTodos: (todos) => { this.todos = todos; this.onEvent({ type: 'todos', todos }); } };
         // Notes typed while OASIS works join the conversation before the next model call.
-        while (this.steering.length) this.messages.push({ role: 'user', content: this.steering.shift() });
+        let delivered = 0;
+        while (this.steering.length) { this.messages.push({ role: 'user', content: this.steering.shift() }); delivered++; }
+        if (delivered) this.onEvent({ type: 'steered', delivered });
         await this.compact(config, signal);
         // The prompt lists the project's files, so rebuild it only after the
         // file set may have changed (keeps slow phones responsive).
