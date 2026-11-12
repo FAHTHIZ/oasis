@@ -5,6 +5,7 @@
 // pages you are signed in to. Visiting a new site and running page JavaScript ask first
 // unless the call is auto-approved.
 import { Browser, findChrome } from './cdp.mjs';
+import { RECORDED_ACTIONS, addFrame, capturePage, newRecording, recordingEnabled, saveRecording, stepCaption } from './browser-recording.mjs';
 import { isNonPublicIpAddress } from './network-safety.mjs';
 import { isIP } from 'node:net';
 import { lookup } from 'node:dns/promises';
@@ -13,11 +14,11 @@ export const BROWSER_TOOL_DEFINITION = {
   type: 'function',
   function: {
     name: 'browser',
-    description: 'Drive a real Chrome browser. Actions: navigate {url}; snapshot (page text plus numbered interactive elements; use their ref in later calls); click {ref|selector|text}; type {ref|selector, text, clear?, submit?}; press {key, e.g. Enter, Tab, Escape, ArrowDown}; scroll {direction: up|down, amount?}; wait {text?|ms?}; screenshot {full_page?} (you see the image); evaluate {expression} (page JavaScript); console (recent console messages and errors); network (recent requests, failures first); tabs; new_tab {url?}; switch_tab {index}; close_tab; close. Take a snapshot after navigating or after the page changes, then act on refs. Use it to check web UIs you build, reproduce bugs and read pages that need JavaScript.',
+    description: 'Drive a real Chrome browser. Actions: navigate {url}; snapshot (page text plus numbered interactive elements; use their ref in later calls); click {ref|selector|text}; type {ref|selector, text, clear?, submit?}; press {key, e.g. Enter, Tab, Escape, ArrowDown}; scroll {direction: up|down, amount?}; wait {text?|ms?}; screenshot {full_page?} (you see the image); evaluate {expression} (page JavaScript); recording (save a replayable recording of the steps so far to .oasis/recordings and return its path; frames are kept after each navigate/click/type/press/scroll); console (recent console messages and errors); network (recent requests, failures first); tabs; new_tab {url?}; switch_tab {index}; close_tab; close. Take a snapshot after navigating or after the page changes, then act on refs. Use it to check web UIs you build, reproduce bugs and read pages that need JavaScript.',
     parameters: {
       type: 'object',
       properties: {
-        action: { type: 'string', enum: ['navigate', 'snapshot', 'click', 'type', 'press', 'scroll', 'wait', 'screenshot', 'evaluate', 'console', 'network', 'tabs', 'new_tab', 'switch_tab', 'close_tab', 'close'] },
+        action: { type: 'string', enum: ['navigate', 'snapshot', 'click', 'type', 'press', 'scroll', 'wait', 'screenshot', 'evaluate', 'recording', 'console', 'network', 'tabs', 'new_tab', 'switch_tab', 'close_tab', 'close'] },
         url: { type: 'string' },
         ref: { type: 'integer', description: 'Element number from the latest snapshot' },
         selector: { type: 'string', description: 'CSS selector, as an alternative to ref' },
@@ -234,7 +235,7 @@ async function ensureBrowser(session, env, context) {
   const port = Number(env.OASIS_CHROME_PORT || 0);
   const headless = env.OASIS_CHROME_HEADLESS ? env.OASIS_CHROME_HEADLESS !== '0' : !(process.platform === 'darwin' || process.platform === 'win32' || env.DISPLAY || env.WAYLAND_DISPLAY);
   const browser = port ? await Browser.attach(port) : await Browser.launch({ env, headless });
-  const state = { browser, tabs: [], active: 0, approvedNavigations: new Set(), evalApproved: false, attached: Boolean(port) };
+  const state = { browser, tabs: [], active: 0, approvedNavigations: new Set(), evalApproved: false, attached: Boolean(port), recording: recordingEnabled(env) ? newRecording() : null };
   session.browserState = state;
   let target = null;
   if (!port) target = (await browser.pages())[0] || null;
@@ -245,10 +246,17 @@ async function ensureBrowser(session, env, context) {
 
 export async function closeBrowser(session) {
   const state = session && session.browserState;
-  if (!state) return;
+  if (!state) return '';
   session.browserState = null;
+  // Keep what the agent did: closing the browser saves the steps not saved yet.
+  let saved = '';
+  if (state.recording && state.recording.frames.length && session.root) {
+    saved = await saveRecording(session.root, state.recording).catch(() => '');
+    if (saved) session.lastBrowserRecording = saved;
+  }
   for (const tab of state.tabs) { try { tab.page.close(); } catch {} }
   if (!state.attached) await state.browser.close().catch(() => {});
+  return saved;
 }
 
 async function approve(context, message, meta) {
@@ -302,9 +310,28 @@ async function waitForNavigationApprovals(tab) {
 
 export async function executeBrowserTool(args, context = {}) {
   const session = context.session || context;
-  const env = context.env || process.env;
   const action = String(args.action || '');
-  if (action === 'close') { await closeBrowser(session); return { closed: true }; }
+  if (action === 'close') { const recording = await closeBrowser(session); return { closed: true, ...(recording ? { recording } : {}) }; }
+  if (action === 'recording') {
+    const state = session.browserState;
+    if (!state || !state.recording) return { error: recordingEnabled(context.env || process.env) ? 'Nothing recorded yet: open a page first.' : 'Recording is off (OASIS_BROWSER_RECORD=0).' };
+    if (!state.recording.frames.length) return { error: 'No new steps since the last saved recording.' };
+    const saved = await saveRecording(session.root || context.root, state.recording);
+    if (!saved) return { error: 'Could not save the recording (no workspace folder).' };
+    session.lastBrowserRecording = saved;
+    return { recording: saved, hint: 'A self-contained HTML player. Open it in a browser to replay each step.' };
+  }
+  const result = await runBrowserAction(args, context, session, action);
+  const state = session.browserState;
+  if (state && state.recording && RECORDED_ACTIONS.has(action) && result && !result.error) {
+    const tab = state.tabs[state.active];
+    if (tab && !tab.page.closed) await addFrame(state.recording, stepCaption(action, args, result), () => capturePage(tab.page, evaluate));
+  }
+  return result;
+}
+
+async function runBrowserAction(args, context, session, action) {
+  const env = context.env || process.env;
   const state = await ensureBrowser(session, env, context);
   let tab = state.tabs[state.active];
   const page = tab.page;
@@ -431,7 +458,7 @@ export async function executeBrowserTool(args, context = {}) {
       const created = await state.browser.newPage('about:blank');
       state.tabs.push(await setupPage(state, created, context));
       state.active = state.tabs.length - 1;
-      if (args.url) return executeBrowserTool({ action: 'navigate', url: args.url }, context);
+      if (args.url) return runBrowserAction({ action: 'navigate', url: args.url }, context, session, 'navigate');
       return { index: state.active };
     }
     case 'switch_tab': {

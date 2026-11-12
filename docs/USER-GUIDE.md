@@ -91,6 +91,10 @@ To keep a conversation's context, add `--from-session ID` (from `oasis sessions 
 
 You can also ask in a session, for example "check CI every weekday at 9 and send the summary to Telegram". The agent uses its `routine_manage` tool and shows you the exact routine before saving it; you approve every create, edit, resume, extra run or removal, even with `--yes`.
 
+### Built-in browser and recordings
+
+`oasis --chrome` (or `/chrome on`) gives the agent a real Chrome through the DevTools Protocol: it opens pages, reads them, clicks, types, takes screenshots and checks the console and network. While it works, OASIS keeps a small screenshot after each step that changes the page, with a caption. Typed text is never written into captions, only its length. Ask for a recording (the `recording` browser action), or just close the browser or end the session, and the steps are saved as one self-contained HTML player in `.oasis/recordings/`. Open it in any browser to step through or play back what the agent saw. `OASIS_BROWSER_RECORD=0` turns recording off.
+
 ## 5. Browser workspace
 
 ### Start it
