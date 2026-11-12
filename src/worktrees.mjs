@@ -8,6 +8,7 @@ import { processTreeSpawnOptions, signalProcessTree } from './process-tree.mjs';
 import { randomBytes } from 'node:crypto';
 import { appendFile, lstat, mkdir, readFile, readlink, realpath, rm, stat, symlink, unlink } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
+import os from 'node:os';
 import { runHooks, hasHooks } from './hooks.mjs';
 import { normalizeBranchPrefix } from './branch-names.mjs';
 export { normalizeBranchPrefix } from './branch-names.mjs';
@@ -145,6 +146,19 @@ async function ensureWorktreeParent(root) {
 
 function gitEnv(env = process.env) {
   return { PATH: env.PATH || process.env.PATH, HOME: env.HOME || process.env.HOME, GIT_TERMINAL_PROMPT: '0', LANG: 'C' };
+}
+
+// Creating a worktree checks files out, which runs the repository's
+// post-checkout hook, its fsmonitor program and any clean/smudge filters its
+// own .git/config names. In a workspace the user has not trusted (`oasis
+// trust`) that is repository code running outside the sandbox with no prompt,
+// so those are switched off for the checkout. Filters from the user's own
+// global config (git-lfs) still run.
+async function checkoutSafetyArgs(root, env) {
+  const { isWorkspaceTrusted } = await import('./settings.mjs');
+  if (await isWorkspaceTrusted(root, env).catch(() => false)) return [];
+  const { repoFilterOverrides } = await import('./read-only-commands.mjs');
+  return ['-c', 'core.hooksPath=' + os.devNull, '-c', 'core.fsmonitor=false', ...repoFilterOverrides(root, gitEnv(env))];
 }
 
 async function git(cwd, args, env, timeout = 20000) {
@@ -317,11 +331,12 @@ export async function createWorktree(root, label, options = {}) {
   const configured = options.worktreeSettings || await worktreeSettings(root, env);
   const startRef = await worktreeBaseRef(root, configured.baseRef, env);
   const sparse = [...new Set((Array.isArray(configured.sparsePaths) ? configured.sparsePaths : []).map(relativeInside).filter(Boolean))].slice(0, 200);
-  await withRepoWorktreeLock(commonDir, () => retryOnGitLock(() => git(root, ['worktree', 'add', ...(sparse.length ? ['--no-checkout'] : []), '-b', branch, absolute, startRef], env, 60000)));
+  const safety = await checkoutSafetyArgs(root, env);
+  await withRepoWorktreeLock(commonDir, () => retryOnGitLock(() => git(root, [...safety, 'worktree', 'add', ...(sparse.length ? ['--no-checkout'] : []), '-b', branch, absolute, startRef], env, 60000)));
   if (sparse.length) {
     // Cone-mode sparse checkout: the listed directories plus root-level files.
-    await git(absolute, ['sparse-checkout', 'set', '--cone', '--', ...sparse], env, 60000);
-    await git(absolute, ['checkout', '-q'], env, 60000).catch(() => git(absolute, ['read-tree', '-mu', 'HEAD'], env, 60000));
+    await git(absolute, [...safety, 'sparse-checkout', 'set', '--cone', '--', ...sparse], env, 60000);
+    await git(absolute, [...safety, 'checkout', '-q'], env, 60000).catch(() => git(absolute, [...safety, 'read-tree', '-mu', 'HEAD'], env, 60000));
   }
   const symlinks = await linkSharedDirectories(root, absolute, configured.symlinkDirectories);
   const base = await git(absolute, ['rev-parse', 'HEAD'], env);
