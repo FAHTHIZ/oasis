@@ -1,23 +1,27 @@
-// A bounded RFC 5545 recurrence profile for routines: one DTSTART line and one
-// RRULE line, evaluated in the DTSTART time zone (TZID), in UTC (a trailing Z),
-// or in the routine's own zone (floating time).
+// RFC 5545 recurrence rules for routines: one DTSTART line and one RRULE line,
+// evaluated in the DTSTART time zone (TZID), in UTC (a trailing Z), or in the
+// routine's own zone (floating time).
+//
+// Calendar expansion is done by rrule-temporal (MIT,
+// https://github.com/ggaabe/rrule-temporal), a Temporal-based RFC 5545 engine.
+// This module keeps the routine profile around it: readable errors, a
+// normalized rule text, no sub-daily frequencies (FREQ=HOURLY and finer, and
+// BYSECOND, are refused with a hint) and a one-minute floor.
 //
 // Supported: FREQ=DAILY|WEEKLY|MONTHLY|YEARLY, INTERVAL, COUNT, UNTIL, BYDAY
 // (with +n/-n ordinals for MONTHLY and YEARLY), BYMONTHDAY (negative counts
-// from the month end), BYMONTH, BYHOUR, BYMINUTE and WKST. Sub-daily
-// frequencies, BYSETPOS, BYYEARDAY, BYWEEKNO and BYSECOND are refused with a
-// clear reason. Occurrences have a one-minute floor (seconds are dropped).
-// Local times that fall in a daylight-saving gap move forward by the gap;
-// times that occur twice take the first.
+// from the month end), BYMONTH, BYYEARDAY, BYWEEKNO, BYSETPOS, BYHOUR,
+// BYMINUTE and WKST.
 //
-// The profile follows the shape DeepSeek Harness exposes for schedules
-// (https://github.com/deepseek-ai/deepseek-harness, MIT); this is an
-// independent implementation with no runtime dependency.
+// Daylight saving: the rule is expanded on wall-clock times and each one is
+// then placed in the zone, so a local time that falls in a daylight-saving
+// gap moves forward by the gap and a time that occurs twice takes the first,
+// the same as croner does for cron routines.
+import { createRequire } from 'node:module';
 
 const DAYS = ['MO', 'TU', 'WE', 'TH', 'FR', 'SA', 'SU'];
 const FREQS = new Set(['DAILY', 'WEEKLY', 'MONTHLY', 'YEARLY']);
 const DAY_MS = 86_400_000;
-const MAX_SCAN_DAYS = 366 * 30; // covers Feb 29 rules and long intervals
 const MAX_COUNT = 10_000;
 
 function fail(message) { throw new Error('RRULE: ' + message); }
@@ -116,7 +120,7 @@ export function parseRRule(input, { timezone, now = new Date() } = {}) {
     start = { y: f.y, mo: f.mo, d: f.d, h: f.h, mi: f.mi };
   }
   if (!tz) tz = systemZone();
-  const rule = { interval: 1, count: null, until: null, byday: null, bymonthday: null, bymonth: null, byhour: null, byminute: null, wkst: 0 };
+  const rule = { interval: 1, count: null, until: null, byday: null, bymonthday: null, bymonth: null, byyearday: null, byweekno: null, bysetpos: null, byhour: null, byminute: null, wkst: 0 };
   const seen = new Set();
   for (const part of rrule.slice(6).split(';').map((p) => p.trim()).filter(Boolean)) {
     const eq = part.indexOf('=');
@@ -145,13 +149,19 @@ export function parseRRule(input, { timezone, now = new Date() } = {}) {
     else if (key === 'BYHOUR') rule.byhour = intList(value, key, 0, 23);
     else if (key === 'BYMINUTE') rule.byminute = intList(value, key, 0, 59);
     else if (key === 'WKST') { const i = DAYS.indexOf(value); if (i < 0) fail('WKST must be a day such as MO.'); rule.wkst = i; }
-    else if (['BYSETPOS', 'BYYEARDAY', 'BYWEEKNO', 'BYSECOND'].includes(key)) fail(key + ' is not supported in routine schedules.');
+    else if (key === 'BYSETPOS') rule.bysetpos = intList(value, key, -366, 366, { nonZero: true });
+    else if (key === 'BYYEARDAY') rule.byyearday = intList(value, key, -366, 366, { nonZero: true });
+    else if (key === 'BYWEEKNO') rule.byweekno = intList(value, key, -53, 53, { nonZero: true });
+    else if (key === 'BYSECOND') fail('BYSECOND is not supported; routine schedules have a one-minute floor.');
     else fail('unknown part ' + key + '.');
   }
   if (!rule.freq) fail('FREQ is required.');
   if (rule.count && rule.untilRaw) fail('use COUNT or UNTIL, not both.');
   if (rule.byday && rule.byday.some((d) => d.n) && !['MONTHLY', 'YEARLY'].includes(rule.freq)) fail('BYDAY ordinals such as 1MO only work with FREQ=MONTHLY or FREQ=YEARLY.');
   if (rule.bymonthday && rule.freq === 'WEEKLY') fail('BYMONTHDAY cannot be used with FREQ=WEEKLY.');
+  if (rule.byweekno && rule.freq !== 'YEARLY') fail('BYWEEKNO only works with FREQ=YEARLY.');
+  if (rule.byyearday && ['DAILY', 'WEEKLY', 'MONTHLY'].includes(rule.freq)) fail('BYYEARDAY only works with FREQ=YEARLY.');
+  if (rule.bysetpos && !(rule.byday || rule.bymonthday || rule.bymonth || rule.byyearday || rule.byweekno || rule.byhour || rule.byminute)) fail('BYSETPOS needs another BY* part to pick from, for example BYDAY=MO,TU,WE,TH,FR;BYSETPOS=-1.');
   if (rule.byday && rule.byday.some((d) => d.n && Math.abs(d.n) > 5) && (rule.freq === 'MONTHLY' || rule.bymonth)) fail('a monthly BYDAY ordinal must be between -5 and 5.');
   const zone = tz;
   if (rule.untilRaw) {
@@ -163,95 +173,63 @@ export function parseRRule(input, { timezone, now = new Date() } = {}) {
   if (rule.count) parts.push('COUNT=' + rule.count);
   if (rule.untilRaw) parts.push('UNTIL=' + new Date(rule.until).toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, ''));
   if (rule.bymonth) parts.push('BYMONTH=' + rule.bymonth.join(','));
+  if (rule.byweekno) parts.push('BYWEEKNO=' + rule.byweekno.join(','));
+  if (rule.byyearday) parts.push('BYYEARDAY=' + rule.byyearday.join(','));
   if (rule.bymonthday) parts.push('BYMONTHDAY=' + rule.bymonthday.join(','));
   if (rule.byday) parts.push('BYDAY=' + rule.byday.map((d) => (d.n ? String(d.n) : '') + DAYS[d.day]).join(','));
   if (rule.byhour) parts.push('BYHOUR=' + rule.byhour.join(','));
   if (rule.byminute) parts.push('BYMINUTE=' + rule.byminute.join(','));
+  if (rule.bysetpos) parts.push('BYSETPOS=' + rule.bysetpos.join(','));
   if (rule.wkst) parts.push('WKST=' + DAYS[rule.wkst]);
   const head = floating ? 'DTSTART:' + stamp(start) : zone === 'UTC' ? 'DTSTART:' + stamp(start) + 'Z' : 'DTSTART;TZID=' + zone + ':' + stamp(start);
   delete rule.untilRaw;
   return { ...rule, start, tz: zone, floating, text: head + '\nRRULE:' + parts.join(';') };
 }
 
-// Calendar helpers on plain dates (no time zone involved).
-const dayNumber = (y, mo, d) => Math.floor(Date.UTC(y, mo - 1, d) / DAY_MS);
-const weekday = (n) => (((n + 3) % 7) + 7) % 7; // day 0 (1970-01-01) was a Thursday; 0 = MO
-const fromDayNumber = (n) => { const date = new Date(n * DAY_MS); return { y: date.getUTCFullYear(), mo: date.getUTCMonth() + 1, d: date.getUTCDate() }; };
-const daysInMonth = (y, mo) => new Date(Date.UTC(y, mo, 0)).getUTCDate();
-const isLeap = (y) => (y % 4 === 0 && y % 100 !== 0) || y % 400 === 0;
+// rrule-temporal (and its bundled Temporal polyfill) loads with the first
+// RRULE routine, not with every OASIS start.
+const require = createRequire(import.meta.url);
+let RRuleTemporal = null;
+const MAX_ITERATIONS = 20_000;
+const compiled = new Map();
 
-function dayMatches(rule, n) {
-  const { y, mo, d } = fromDayNumber(n);
-  const s = rule.start;
-  const w = weekday(n);
-  const startN = dayNumber(s.y, s.mo, s.d);
-  if (rule.freq === 'DAILY' && (n - startN) % rule.interval !== 0) return false;
-  if (rule.freq === 'WEEKLY') {
-    const weekOf = (k) => Math.floor((k - ((weekday(k) - rule.wkst + 7) % 7) + 4) / 7);
-    if ((weekOf(n) - weekOf(startN)) % rule.interval !== 0) return false;
+// The same rule on wall-clock time: DTSTART as a UTC stamp and no UNTIL (UNTIL
+// is an instant, checked after each wall time is placed in the zone).
+function wallRule(rule) {
+  const key = rule.text;
+  let engine = compiled.get(key);
+  if (!engine) {
+    RRuleTemporal ||= require('rrule-temporal').RRuleTemporal;
+    const parts = rule.text.slice(rule.text.indexOf('RRULE:') + 6).split(';').filter((part) => !part.startsWith('UNTIL='));
+    engine = new RRuleTemporal({ rruleString: 'DTSTART:' + stamp(rule.start) + 'Z\nRRULE:' + parts.join(';'), maxIterations: MAX_ITERATIONS });
+    if (compiled.size >= 64) compiled.delete(compiled.keys().next().value);
+    compiled.set(key, engine);
   }
-  if (rule.freq === 'MONTHLY' && ((y - s.y) * 12 + (mo - s.mo)) % rule.interval !== 0) return false;
-  if (rule.freq === 'YEARLY' && (y - s.y) % rule.interval !== 0) return false;
-  if (rule.bymonth && !rule.bymonth.includes(mo)) return false;
-  const dim = daysInMonth(y, mo);
-  const monthDayOk = () => rule.bymonthday.some((v) => (v > 0 ? v : dim + v + 1) === d);
-  const dayOk = (scope) => rule.byday.some((entry) => {
-    if (entry.day !== w) return false;
-    if (!entry.n) return true;
-    if (scope === 'year') {
-      const dayOfYear = n - dayNumber(y, 1, 1) + 1;
-      const length = isLeap(y) ? 366 : 365;
-      return entry.n > 0 ? Math.floor((dayOfYear - 1) / 7) + 1 === entry.n : Math.floor((length - dayOfYear) / 7) + 1 === -entry.n;
-    }
-    return entry.n > 0 ? Math.floor((d - 1) / 7) + 1 === entry.n : Math.floor((dim - d) / 7) + 1 === -entry.n;
-  });
-  if (rule.freq === 'DAILY') return (!rule.bymonthday || monthDayOk()) && (!rule.byday || dayOk('month'));
-  if (rule.freq === 'WEEKLY') return rule.byday ? dayOk('month') : w === weekday(startN);
-  if (rule.freq === 'MONTHLY') {
-    if (!rule.byday && !rule.bymonthday) return d === s.d;
-    return (!rule.bymonthday || monthDayOk()) && (!rule.byday || dayOk('month'));
-  }
-  // YEARLY
-  if (!rule.byday && !rule.bymonthday) return (rule.bymonth ? true : mo === s.mo) && d === s.d;
-  return (!rule.bymonthday || monthDayOk()) && (!rule.byday || dayOk(rule.bymonth ? 'month' : 'year'));
+  return engine;
 }
 
-function times(rule) {
-  const hours = rule.byhour ? [...new Set(rule.byhour)].sort((a, b) => a - b) : [rule.start.h];
-  const minutes = rule.byminute ? [...new Set(rule.byminute)].sort((a, b) => a - b) : [rule.start.mi];
-  return hours.flatMap((h) => minutes.map((mi) => [h, mi]));
-}
+const HOUR_MS = 3_600_000;
 
 // Occurrences strictly after `after`, at most `limit` of them.
 export function rruleOccurrences(ruleOrText, after = new Date(), { limit = 1, timezone } = {}) {
   const rule = typeof ruleOrText === 'string' ? parseRRule(ruleOrText, { timezone }) : ruleOrText;
   const tz = rule.floating && timezone ? checkZone(timezone) : rule.tz;
   const afterMs = after.getTime();
-  const s = rule.start;
-  const startMs = zonedInstant(s.y, s.mo, s.d, s.h, s.mi, tz);
-  const startN = dayNumber(s.y, s.mo, s.d);
-  // Without COUNT the scan can begin near `after`; the period checks are
-  // anchored to DTSTART, so skipping ahead does not shift them.
-  let n = startN;
-  if (!rule.count) {
-    const local = localFields(Math.max(afterMs, startMs), tz);
-    n = Math.max(startN, dayNumber(local.y, local.mo, local.d) - 1);
-  }
-  const slots = times(rule);
+  const engine = wallRule(rule);
+  // Start a little before `after` on the wall clock: around a daylight-saving
+  // change the wall clock and the instant can be up to a few hours apart.
+  let cursor = new Date(afterMs + offsetAt(afterMs, tz) - 3 * HOUR_MS);
   const found = [];
-  let counted = 0;
-  const last = n + MAX_SCAN_DAYS + (rule.count ? Math.max(0, Math.ceil((afterMs - startMs) / DAY_MS)) : 0);
-  for (; n <= last; n++) {
-    if (!dayMatches(rule, n)) continue;
-    const { y, mo, d } = fromDayNumber(n);
-    for (const [h, mi] of slots) {
-      const ms = zonedInstant(y, mo, d, h, mi, tz);
-      if (ms < startMs) continue;
-      if (rule.until != null && ms > rule.until) return found;
-      counted++;
-      if (rule.count && counted > rule.count) return found;
-      if (ms > afterMs) { found.push(new Date(ms)); if (found.length >= limit) return found; }
-    }
+  let last = -Infinity;
+  while (found.length < limit) {
+    let next;
+    try { next = engine.next(cursor, false); } catch { break; } // no occurrence within the iteration bound
+    if (!next) break;
+    const wall = new Date(next.epochMilliseconds);
+    const ms = zonedInstant(wall.getUTCFullYear(), wall.getUTCMonth() + 1, wall.getUTCDate(), wall.getUTCHours(), wall.getUTCMinutes(), tz);
+    if (rule.until != null && ms > rule.until) break;
+    if (ms > afterMs && ms > last) { found.push(new Date(ms)); last = ms; }
+    cursor = wall;
   }
   return found;
 }
