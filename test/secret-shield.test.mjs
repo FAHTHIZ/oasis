@@ -183,3 +183,12 @@ test('a subagent prompt keeps placeholders and the subagent still resolves them 
   assert.equal(JSON.stringify(requests).includes(OPENAI), false, 'the real key reached a model request');
   assert.equal(await readFile(path.join(root, 'out.env.txt'), 'utf8'), 'KEY=' + OPENAI + '\n', 'the subagent tool call got the real value');
 });
+
+test('web search provider keys (Tavily, Firecrawl) are redacted', () => {
+  // Regression: tvly- keys were printed as is in transcripts and logs.
+  const redact = redactSecretText;
+  for (const key of ['tvly-' + 'Ab3'.repeat(11), 'tvly-dev-' + 'x9Y'.repeat(10), 'fc-' + '0a1b2c3d'.repeat(4)]) {
+    assert.equal(redact('TAVILY ' + key + ' end').includes(key), false, key);
+  }
+  assert.equal(redact('tvly-short'), 'tvly-short');
+});
