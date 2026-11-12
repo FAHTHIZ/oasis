@@ -71,18 +71,20 @@ The terminal and the web app run on the same runtime, sessions and settings. Sta
     <th width="50%">Web app · <code>oasis web --open</code></th>
   </tr>
   <tr>
-    <td><a href="assets/demo/oasis-real-model-demo.mp4"><img src="assets/demo/oasis-real-model-demo.gif" alt="Unscripted OASIS terminal run with gpt-oss-20b on 12 November 2026: the agent reads slug.mjs, fixes slugify, writes a test, runs npm test after each approval, fixes its own wrong assert import twice, and finishes with a passing check."></a></td>
-    <td><a href="assets/demo/oasis-web-demo.mp4"><img src="assets/demo/oasis-web-demo.gif" alt="The OASIS web app fixing a date bug: the request, a steering note sent while it works, grouped steps for search, read, edit and test, an approval answered inline, a summary table, and the Changes panel listing the two changed files."></a></td>
+    <td><a href="assets/demo/oasis-real-model-demo.mp4"><img src="assets/demo/oasis-real-model-demo.gif" alt="Unscripted OASIS 1.3.0 terminal run with gpt-oss-20b on 12 November 2026: the agent runs npm test and sees one failure, reads cart.mjs, fixes the percentage discount in applyDiscount, reruns npm test after approval and finishes with 2 passed and a Checked line."></a></td>
+    <td><a href="assets/demo/oasis-web-real-model-demo.mp4"><img src="assets/demo/oasis-web-real-model-demo.gif" alt="Unscripted OASIS 1.3.0 web app run with gpt-oss-20b: the request is typed, a note asking to also handle tabs and newlines is sent while it works, approvals are answered in the waiting step, the model edits stats.mjs and the test file, runs npm test, reviews the diff and the Changes panel lists both files."></a></td>
   </tr>
   <tr>
-    <td valign="top"><sub>Unscripted, with the free gpt-oss-20b. The model gets its test import wrong twice and fixes it from the failing output. Waits are shortened.</sub></td>
-    <td valign="top"><sub>Real runtime, files and tests with a scripted model so the run is reproducible (<code>scripts/demo/record-web-demo.mjs</code>). Shows steering mid-task.</sub></td>
+    <td valign="top"><sub>Unscripted, OASIS 1.3.0 with the free gpt-oss-20b. It runs the tests, finds the discount bug in <code>cart.mjs</code>, fixes it and proves it with a second run (2 passed). Model waits are shortened.</sub></td>
+    <td valign="top"><sub>Unscripted, OASIS 1.3.0 with the free gpt-oss-20b. A note sent mid-task widens the fix, approvals are answered in the waiting step, and 3 tests pass. Frames where nothing changed (model waits) are cut. Recorded with <code>scripts/demo/record-web-real-demo.mjs</code>.</sub></td>
   </tr>
   <tr>
     <td valign="top">A live status line with the running step and clock, streaming diffs with word highlights, type-ahead while it works, colored diffs in approvals, <code>/tasks</code>, <code>/rewind</code> and <code>/export</code>, and <code>oasis -p</code> or <code>oasis exec</code> for scripts.</td>
     <td valign="top">A live timeline with expandable steps and command output, approvals answered inline, a task sidebar, Files and Changes panels, a real terminal (<kbd>Ctrl</kbd>+<kbd>&#96;</kbd>), a sandboxed Preview of your pages, talk mode, plan mode, Undo, cost and context meters, and one-click Claude Code plugins.</td>
   </tr>
 </table>
+
+The web app runs on a computer or server you control, not a hosted service, and opens in any modern browser. An optional [desktop app](docs/DESKTOP.md) shows the same workspace in its own window; there is no separate mobile app.
 
 <details>
 <summary><b>More places OASIS runs</b></summary>
@@ -227,7 +229,9 @@ OASIS is checked the way a person uses it: real providers, no scripted model, ap
 
 | What we asked | Where | Result |
 | --- | --- | --- |
-| Fix `slugify()`, add a test, run the tests | Terminal, gpt-oss-20b | Fixed and passing after the model corrected its own import twice ([video](assets/demo/oasis-real-model-demo.mp4)) |
+| Find and fix the bug that makes `npm test` fail | Terminal, OASIS 1.3.0, gpt-oss-20b | Fixed, 2 of 2 passing, 3 m 04 s ([video](assets/demo/oasis-real-model-demo.mp4)) |
+| Fix `wordCount()` with a note sent mid-task, add a regression test | Web app, OASIS 1.3.0, gpt-oss-20b | Fixed, note followed, 3 of 3 passing, 6 m 47 s ([video](assets/demo/oasis-web-real-model-demo.mp4)) |
+| Fix `slugify()`, add a test, run the tests | Terminal, gpt-oss-20b | Fixed and passing after the model corrected its own import twice |
 | Build a to-do web app saved in localStorage | Web app, gpt-oss-20b | Working app, existing tests still passing, 231 s |
 | Read an uploaded PDF | Web app, gpt-oss-20b | Passed in 49 s |
 | Install 16 Claude Code plugins and use them | Web app and terminal | All installed; hooks, skills and MCP servers ran |
