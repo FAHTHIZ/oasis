@@ -1011,7 +1011,19 @@ export function createOasisWebServer(options = {}) {
               emit(job, 'context_files', { files: expanded.files.slice(0, 50) });
             }
           }
-          const handled = slashName === 'sounds' || slashName === 'sound' ? { output: 'In the browser, sound effects play here in the page: turn them on or off and set the volume under Settings → Sound effects. /sounds in the terminal (oasis) controls terminal sounds.' } : terminalOnly && slashName === 'test' ? { output: '/test runs in the terminal (oasis). In the browser, type !npm test (or your test command): it asks for approval, and the output goes to Oasis with your next message.' } : terminalOnly ? { output: '/' + slashName + ' is available in the terminal (oasis). In the browser, copy replies from the chat and change workspaces from the workspace picker.' } : blockedBypass ? { output: 'bypassPermissions is available only in the terminal (oasis --permission-mode bypassPermissions). The browser always keeps approvals on.' } : await runBuiltinCommand(slashName, commandArgument, { root: taskRoot, session, env, usage: session.webUsage, sessionOptions: session.webOptions, confirm: (question) => approvalFor(job, question, true) });
+          let handled = slashName === 'sounds' || slashName === 'sound' ? { output: 'In the browser, sound effects play here in the page: turn them on or off and set the volume under Settings → Sound effects. /sounds in the terminal (oasis) controls terminal sounds.' } : terminalOnly && slashName === 'test' ? { output: '/test runs in the terminal (oasis). In the browser, type !npm test (or your test command): it asks for approval, and the output goes to Oasis with your next message.' } : terminalOnly ? { output: '/' + slashName + ' is available in the terminal (oasis). In the browser, copy replies from the chat and change workspaces from the workspace picker.' } : blockedBypass ? { output: 'bypassPermissions is available only in the terminal (oasis --permission-mode bypassPermissions). The browser always keeps approvals on.' } : await runBuiltinCommand(slashName, commandArgument, { root: taskRoot, session, env, usage: session.webUsage, sessionOptions: session.webOptions, confirm: (question) => approvalFor(job, question, true) });
+          // /presets N: a saved prompt becomes this turn; a saved built-in
+          // /command runs once here.
+          if (handled && handled.queue) {
+            const queued = String(handled.queue);
+            const inner = queued.match(/^\/([a-z0-9][a-z0-9:_-]*)(?:\s+([\s\S]*))?$/i);
+            const innerName = inner ? inner[1].toLowerCase() : '';
+            if (!inner) handled = { output: handled.output, prompt: queued };
+            else if (Object.hasOwn(BUILTIN_COMMANDS, innerName) && !WEB_UNSUPPORTED_COMMANDS.has(innerName) && !['copy', 'sandbox', 'loop', 'cd', 'test', 'presets', 'mode'].includes(innerName)) {
+              const ran = await runBuiltinCommand(innerName, String(inner[2] || '').trim(), { root: taskRoot, session, env, usage: session.webUsage, sessionOptions: session.webOptions, confirm: (question) => approvalFor(job, question, true) });
+              handled = { ...(ran || {}), output: [handled.output, ran && ran.output].filter(Boolean).join('\n\n') };
+            } else handled = { output: handled.output + '\n\n/' + innerName + ' cannot run from a preset in the browser. Use the terminal (oasis), or type it here.' };
+          }
           if (handled) {
             emit(job, 'command_output', { command: slash[1].toLowerCase(), text: String(handled.output || '').slice(0, 24000) });
             if (!handled.prompt) {

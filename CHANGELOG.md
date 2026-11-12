@@ -4,7 +4,7 @@ User-facing change history grouped by package version. A version heading does no
 
 ## Unreleased
 
-- `/presets`: ten numbered slots (1-10; `0` is 10) for prompts and `/commands` you send often, like Codex's `/presets`. `/presets save N TEXT` saves (no TEXT keeps your last message), `/presets N` sends it, `/presets clear N|all` empties slots, and bare `/presets` in a terminal opens a picker. Saved per user in `presets.json` (private file mode) next to `config.json`.
+- `/presets`: ten numbered slots (1-10; `0` is 10) for prompts and `/commands` you send often, like Codex's `/presets`. `/presets save N TEXT` saves (no TEXT keeps your last message), `/presets N` sends it, `/presets clear N|all` empties slots, and bare `/presets` in a terminal opens a picker. Saved per user in `presets.json` (private file mode) next to `config.json`, and `/presets N` works in the web app too.
 - Web app sidebar: a task left running in another chat shows "Needs you" when it is waiting on an approval or question, and "Done" in bold once it finishes, until you open it (like the unread markers in Codex's and Claude Code's task lists). `/api/sessions` marks a running session that is waiting with `waiting: true`.
 - Piping OASIS into a reader that stops early (`oasis doctor | head`) no longer ends with an unhandled `EPIPE` stack trace; the CLI exits quietly like other Unix tools.
 - Web app: opening a running task from the "folder is busy" note (or from another device) always shows the request it is working on, and its steps no longer appear twice when the session was saved mid-turn.
