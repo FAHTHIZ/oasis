@@ -816,3 +816,4 @@ html.lite .topbar{backdrop-filter:none;-webkit-backdrop-filter:none;background:v
 .step-ask .btn{min-height:28px;padding:3px 12px;font-size:12.5px}
 /* A note sent while working was read mid-run; "edit and resend" would start an unrelated new turn. */
 .msg.user.steer .msg-actions [data-action="edit"]{display:none}
+.trim-note{display:flex;align-items:center;justify-content:center;gap:10px;margin:0 auto 18px;max-width:var(--chat-w);color:var(--faint);font-size:12.5px}
