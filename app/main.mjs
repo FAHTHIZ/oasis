@@ -16,7 +16,7 @@ import { SkillLibrary } from './core/skills.mjs';
 import { GitHub, parseRepo } from './core/github.mjs';
 import { createZip, readZip } from './core/zip.mjs';
 import { renderMarkdown, splitStableMarkdown } from './markdown.mjs';
-import { smartConnect, looksLikeConnection, parsePaste, scanLocal, buildChain, nextInChain, configFor, classifyFailure, maskSecret, isGitHubToken } from './core/connect.mjs';
+import { smartConnect, looksLikeConnection, parsePaste, scanLocal, buildChain, nextInChain, configFor, classifyFailure, maskSecret, isGitHubToken, serverLabel } from './core/connect.mjs';
 import { PLUGINS, getPlugin, pluginsFor, suggestPlugins } from './core/plugins.mjs';
 import { detectRuntime, RuntimeAgent, RuntimeWorkspace, tokenFromPaste, saveRuntimeToken, forgetRuntimeToken, deviceRemembered } from './core/runtime.mjs';
 import { APP_KEYBOARD_SHORTCUTS, searchAppCommands } from './core/command-palette.mjs';
@@ -659,11 +659,11 @@ function runtimeEntryFrom(status) {
   try { host = new URL(provider.baseURL).host; } catch { host = provider.provider || 'model'; }
   const known = RT && RT.models && RT.models.length ? RT.models : [];
   const models = [...new Set([provider.model, ...(status.fallbacks || []), ...known])];
-  return { connection: { id: 'runtime', provider: provider.provider || '', label: RT && RT.label || labelForHost(host), baseURL: provider.baseURL, apiKey: '', models, local: /localhost|127\.0\.0\.1/.test(provider.baseURL) }, model: provider.model };
+  return { connection: { id: 'runtime', provider: provider.provider || '', label: RT && RT.label || labelForHost(host, provider.baseURL), baseURL: provider.baseURL, apiKey: '', models, local: /localhost|127\.0\.0\.1/.test(provider.baseURL) }, model: provider.model };
 }
-function labelForHost(host) {
+function labelForHost(host, baseURL = '') {
   const known = Object.values(PRESETS).find((preset) => preset.baseURL && preset.baseURL.includes(host));
-  return known ? known.label : host;
+  return known ? known.label : serverLabel(baseURL) || host;
 }
 async function refreshRuntimeStatus() {
   if (!RT || RT.needsToken) return;

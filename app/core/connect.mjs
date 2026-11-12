@@ -41,6 +41,22 @@ const LOCAL_SERVERS = [
   { provider: 'custom', origin: 'http://localhost:8000' }
 ];
 
+const LOCAL_SERVER_NAMES = { 11434: 'Ollama', 1234: 'LM Studio', 8080: 'llama.cpp' };
+
+/**
+ * A readable name for a model server address: "Ollama (this device)" for
+ * 127.0.0.1:11434 rather than the raw host, the host name for remote servers.
+ */
+export function serverLabel(baseURL) {
+  let url;
+  try { url = new URL(baseURL); } catch { return ''; }
+  const loopback = /^(localhost|127\.\d+\.\d+\.\d+|\[::1\])$/i.test(url.hostname);
+  const name = LOCAL_SERVER_NAMES[url.port];
+  if (loopback) return (name || 'Local server :' + (url.port || (url.protocol === 'https:' ? 443 : 80))) + ' (this device)';
+  if (name && LOCAL_HOST.test(url.hostname)) return name + ' (' + url.host + ')';
+  return url.host;
+}
+
 /** Which providers a key could belong to, in probe order. [] when it is not a key. */
 export function detectKey(value) {
   const key = String(value || '').trim();
