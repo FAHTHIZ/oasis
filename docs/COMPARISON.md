@@ -128,7 +128,7 @@ Gemini CLI is now for Gemini Code Assist enterprise users. Free and Google AI Pr
 
 ## Pi and Hermes Agent
 
-[Pi](https://mariozechner.at/posts/2025-11-30-pi-coding-agent/) is deliberately minimal and shaped some features OASIS has adopted: HTML session export (`/export FILE.html`, and **Download this chat** in the browser) and a footer that shows cost and context. From [Hermes Agent](https://hermes-agent.nousresearch.com/docs/user-guide/features/delegation), OASIS adopted structured subagent output (`output_schema` with one correction turn) and the stall monitor, which stops background agents that go silent and keeps their partial report.
+[Pi](https://mariozechner.at/posts/2025-11-30-pi-coding-agent/) is deliberately minimal and shaped some features OASIS has adopted: HTML session export (`/export FILE.html`, and **Download this chat** in the browser) and a footer that shows cost and context. From [Hermes Agent](https://hermes-agent.nousresearch.com/docs/user-guide/features/delegation), OASIS adopted structured subagent output (`output_schema` with one correction turn) and the stall monitor, which stops background agents that go silent and keeps their partial report. Hermes v0.23's [`/rewind fork`](https://github.com/NousResearch/hermes-agent/releases/tag/v0.23.0) has an OASIS equivalent: `/rewind N fork` keeps the full conversation saved and continues from N turns back in a copy. From [Codex 0.167](https://developers.openai.com/codex/changelog), OASIS took the inline effort argument: `/model NAME high`.
 
 ## Where OASIS goes further
 
