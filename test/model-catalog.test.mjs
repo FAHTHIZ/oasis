@@ -123,6 +123,17 @@ test('refresh downloads models.dev into the user cache once a day and the newer 
   assert.ok((await stat(catalogCachePath(env))).size > 0, 'failed refresh keeps the old cache');
 });
 
+test('a refresh aborted while the download is in flight writes nothing', async (t) => {
+  const dir = await mkdtemp(path.join(os.tmpdir(), 'oasis-catalog-abort-'));
+  t.after(() => { rm(dir, { recursive: true, force: true }); resetModelCatalogForTest(); });
+  const env = { OASIS_CONFIG_DIR: dir };
+  const controller = new AbortController();
+  // The body arrives after the caller has stopped waiting, as with a server that closed mid-download.
+  const fetchImpl = async () => { controller.abort(); return new Response(JSON.stringify(RAW)); };
+  assert.equal(await refreshModelCatalog({ env, fetchImpl, signal: controller.signal, now: Date.now() + 365 * 864e5 }), false);
+  await assert.rejects(stat(catalogCachePath(env)), { code: 'ENOENT' });
+});
+
 test('a fresh legacy cache is upgraded once when the catalog schema advances', async (t) => {
   const dir = await mkdtemp(path.join(os.tmpdir(), 'oasis-catalog-upgrade-'));
   t.after(() => { rm(dir, { recursive: true, force: true }); resetModelCatalogForTest(); });

@@ -2923,9 +2923,22 @@ export async function startOasisWebServer(options = {}) {
     app.server.listen(port, host);
   });
   // The server's env, not process.env: OASIS_CONFIG_DIR passed to the server decides where the cache goes.
-  if (options.refreshModelCatalog !== false) import('./model-catalog.mjs').then(({ refreshModelCatalog }) => refreshModelCatalog({ env: options.env || process.env })).catch(() => {});
+  // close() aborts and awaits it, so the cache is never written after the server has closed.
+  const catalogAbort = new AbortController();
+  const catalogRefresh = options.refreshModelCatalog === false
+    ? Promise.resolve()
+    : import('./model-catalog.mjs').then(({ refreshModelCatalog }) => refreshModelCatalog({ env: options.env || process.env, signal: catalogAbort.signal })).catch(() => {});
   const address = app.server.address();
-  return { ...app, host, port: address && typeof address === 'object' ? address.port : port };
+  const closeApp = app.close;
+  return {
+    ...app,
+    host,
+    port: address && typeof address === 'object' ? address.port : port,
+    async close() {
+      catalogAbort.abort();
+      try { await closeApp(); } finally { await catalogRefresh; }
+    }
+  };
 }
 
 // Only the flat, primitive schema MCP allows for forms is passed to the page, with
