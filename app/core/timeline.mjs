@@ -160,17 +160,46 @@ const KIND_PHRASES = {
 
 function sentence(text) { return text ? text[0].toUpperCase() + text.slice(1) : text; }
 
+// What happened to a step, honestly: 'running', 'ok', 'failed',
+// 'declined' (you said no), 'blocked' (a rule stopped it), 'cancelled'
+// (the task was stopped first) or 'timed_out'. Older saved steps only
+// have ok: true/false.
+const OUTCOMES = new Set(['ok', 'failed', 'declined', 'blocked', 'cancelled', 'timed_out']);
+export function stepOutcome(step = {}) {
+  if (step.ok === undefined) return 'running';
+  if (OUTCOMES.has(step.outcome)) return step.outcome;
+  return step.ok ? 'ok' : 'failed';
+}
+// Steps that never ran: a summary must not say they did.
+const NOT_RUN = new Set(['declined', 'blocked', 'cancelled']);
+export function stepRan(step) { return !NOT_RUN.has(stepOutcome(step)); }
+const NOT_RUN_LABELS = { declined: 'You declined', blocked: 'Blocked', cancelled: 'Stopped before it ran' };
+// The label of one step, in the tense and outcome it actually had.
+export function stepLabel(step = {}) {
+  const outcome = stepOutcome(step);
+  if (outcome === 'running') return liveLabel(step);
+  if (NOT_RUN.has(outcome)) {
+    const what = summarizeArgs(step.name, step.args) || liveLabel(step).replace(/^\w+ing /, '').trim() || 'this step';
+    return NOT_RUN_LABELS[outcome] + ': ' + (what.length > 70 ? what.slice(0, 67) + '…' : what);
+  }
+  return step.label && !/^Used /.test(step.label) ? step.label : activityLabel(step);
+}
+
 // One line for a finished group: one step is named exactly ("Edited
 // math.mjs"); more steps are summed up by kind ("Read 2 files, edited a
-// file and ran the tests").
+// file and ran the tests"), at most three kinds and then "and N more".
+// Steps that did not run (declined, blocked, stopped) are never counted as
+// work done; groupStats counts them for the header instead.
 export function groupTitle(steps = []) {
   if (!steps.length) return 'Working';
   const running = steps.find((step) => step.ok === undefined);
   if (running) return liveLabel(running);
-  if (steps.length === 1) return activityLabel(steps[0]);
+  const ran = steps.filter(stepRan);
+  if (!ran.length) return steps.length === 1 ? stepLabel(steps[0]) : 'Nothing ran: ' + notRunPhrase(steps);
+  if (ran.length === 1) return stepLabel(ran[0]);
   // Kinds in the order the work happened; a kind done once is named exactly.
   const byKind = new Map();
-  for (const step of steps) {
+  for (const step of ran) {
     const kind = toolKind(step.name) === 'shell' && activityLabel(step) === 'Ran the tests' ? 'tests' : toolKind(step.name);
     if (!byKind.has(kind)) byKind.set(kind, []);
     byKind.get(kind).push(step);
@@ -178,22 +207,28 @@ export function groupTitle(steps = []) {
   const lower = (text) => text ? text[0].toLowerCase() + text.slice(1) : text;
   const parts = [];
   for (const [kind, list] of byKind) {
-    if (kind === 'tests') { parts.push('ran the tests'); continue; }
+    if (kind === 'tests') { parts.push(list.length === 1 ? 'ran the tests' : 'ran the tests ' + list.length + ' times'); continue; }
     // Files touched: count distinct paths, so three edits to one file read as one.
     const n = kind === 'read' || kind === 'edit' ? new Set(list.map((step) => baseName(step.args) || step.id)).size : list.length;
     parts.push(n === 1 ? lower(activityLabel(list[0])) : KIND_PHRASES[kind](n));
   }
-  const list = parts.length > 1 ? parts.slice(0, -1).join(', ') + ' and ' + parts.at(-1) : parts[0];
+  const shown = parts.length > 3 ? parts.slice(0, 3).concat(parts.length - 3 + ' more') : parts;
+  const list = shown.length > 1 ? shown.slice(0, -1).join(', ') + ' and ' + shown.at(-1) : shown[0];
   return sentence(list);
+}
+function notRunPhrase(steps) {
+  const counts = groupStats(steps);
+  return [counts.declined && counts.declined + ' declined', counts.blocked && counts.blocked + ' blocked', counts.stopped && counts.stopped + ' stopped'].filter(Boolean).join(', ');
 }
 
 export function groupStats(steps = []) {
-  const failed = steps.filter((step) => step.ok === false).length;
-  const running = steps.filter((step) => step.ok === undefined).length;
+  const outcomes = steps.map(stepOutcome);
+  const count = (...kinds) => outcomes.filter((outcome) => kinds.includes(outcome)).length;
+  const running = count('running');
   const starts = steps.map((step) => Number(step.startedAt)).filter(Number.isFinite);
   const ends = steps.map((step) => Number(step.endedAt)).filter(Number.isFinite);
   const durationMs = starts.length && ends.length && !running ? Math.max(0, Math.max(...ends) - Math.min(...starts)) : null;
-  return { total: steps.length, failed, running, durationMs };
+  return { total: steps.length, failed: count('failed', 'timed_out'), declined: count('declined'), blocked: count('blocked'), stopped: count('cancelled'), running, durationMs };
 }
 
 // The waiting chip: after a few seconds it shows how long the model has been
