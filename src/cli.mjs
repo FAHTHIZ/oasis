@@ -2719,6 +2719,12 @@ async function startWebWorkspace(root, args) {
     stdout.write('\n');
   }
   stdout.write('Commands, package installs, file deletions and bundle installs always ask for your approval in the browser first.\n');
+  try {
+    const { missingAppPackages } = await import('./app-server.mjs');
+    const appRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+    const missing = missingAppPackages(appRoot);
+    if (missing.length) stderr.write('\nThe web app is missing ' + missing.join(', ') + ', so the page will not finish loading. Run npm install in ' + appRoot + ', then restart oasis web.\n');
+  } catch { /* the check is advisory */ }
   let scheduler = null;
   try {
     const { hostScheduler } = await import('./routines.mjs');

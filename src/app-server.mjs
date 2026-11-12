@@ -1,6 +1,7 @@
 // Shared browser-safe module graph and path resolver for the host-connected
 // workspace. The static server below remains a test harness; the standalone
 // browser-app CLI command and public PWA deployment have been retired.
+import { existsSync } from 'node:fs';
 import { createServer } from 'node:http';
 import { readdir, readFile, stat } from 'node:fs/promises';
 import path from 'node:path';
@@ -79,6 +80,15 @@ export async function appSharedModules(root) {
 /** Folder of a browser package that may be served, e.g. node_modules/yaml/browser. */
 function appPackageDir(root, name) {
   return path.join(root, 'node_modules', APP_PACKAGE_SOURCES[name] || name, path.dirname(APP_PACKAGES[name]));
+}
+
+/**
+ * Browser packages whose entry file is missing. A source checkout updated with
+ * git pull but not npm install serves the app without them, and the page then
+ * stays on "Connecting…" with no hint why.
+ */
+export function missingAppPackages(root) {
+  return Object.keys(APP_PACKAGES).filter((name) => !existsSync(path.join(appPackageDir(root, name), path.basename(APP_PACKAGES[name]))));
 }
 
 export async function skillsIndex(root) {
