@@ -383,7 +383,10 @@ test('markdown renderer escapes HTML and only links http(s)', async () => {
   assert.ok(!/href="javascript/i.test(html));
   assert.match(html, /<strong>b<\/strong>/);
   assert.match(html, /href="https:\/\/a\.b\/c\?d=1&amp;e=2"/);
-  assert.match(html, /<code data-lang="js">&lt;b&gt;<\/code>/);
+  assert.match(html, /<code data-lang="js" class="hljs">&lt;b&gt;<\/code>/);
+  // highlight.js colours known languages; unknown ones stay plain escaped text.
+  assert.match(renderMarkdown('```js\nconst a = "<i>";\n```'), /<span class="hljs-keyword">const<\/span> a = <span class="hljs-string">&quot;&lt;i&gt;&quot;<\/span>/);
+  assert.match(renderMarkdown('```nosuchlang\n<b>\n```'), /<code data-lang="nosuchlang">&lt;b&gt;<\/code>/);
   assert.match(html, /<table>/);
   // CommonMark/GFM structure from marked: nesting, links with parentheses, images never load.
   const rich = renderMarkdown('- a\n  - b\n\n[wiki](https://en.wikipedia.org/wiki/Foo_(bar)) ![p](https://t.example/x.png) ![q](javascript:alert(1)) <a href="javascript:1">a</a>');

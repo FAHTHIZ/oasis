@@ -1,8 +1,33 @@
 // Markdown renderer for agent replies: marked (MIT) parses CommonMark + GFM;
 // the renderer below keeps the output safe. Raw HTML is shown as text, links
 // must be http(s) or mailto, and images become links (no remote loads).
+// Fenced code with a known language is coloured by highlight.js (BSD-3-Clause,
+// the common-languages build in the browser). In the browser the finished HTML
+// also goes through DOMPurify (Apache-2.0) with an allowlist of the tags and
+// attributes this renderer emits, so a renderer or marked bug cannot let markup
+// through.
 
 import { Marked } from 'marked';
+import hljs from 'highlight.js';
+import DOMPurify from 'dompurify';
+
+const MAX_HIGHLIGHT_CHARS = 200_000;
+const ALLOWED_TAGS = ['p', 'br', 'hr', 'a', 'strong', 'em', 'del', 'code', 'pre', 'button', 'span', 'h2', 'h3', 'h4', 'ul', 'ol', 'li', 'blockquote', 'table', 'thead', 'tbody', 'tr', 'th', 'td'];
+const ALLOWED_ATTR = ['href', 'target', 'rel', 'class', 'data-lang', 'type', 'align', 'start'];
+// DOMPurify needs a DOM; under Node (tests, tooling) the renderer output is returned as is.
+const purifier = DOMPurify && typeof DOMPurify.sanitize === 'function' && DOMPurify.isSupported ? DOMPurify : null;
+if (purifier) {
+  purifier.addHook('afterSanitizeAttributes', (node) => {
+    if (node.tagName === 'A') { node.setAttribute('target', '_blank'); node.setAttribute('rel', 'noopener noreferrer'); }
+  });
+}
+// href is the only URL attribute; the others are exempt from the URL check.
+const SANITIZE = { ALLOWED_TAGS, ALLOWED_ATTR, ALLOWED_URI_REGEXP: /^(?:https?:|mailto:)/i, ADD_URI_SAFE_ATTR: ['align', 'start', 'type', 'data-lang'], ALLOW_DATA_ATTR: false };
+
+function highlight(text, language) {
+  if (!language || text.length > MAX_HIGHLIGHT_CHARS || !hljs.getLanguage(language)) return null;
+  try { return hljs.highlight(text, { language, ignoreIllegals: true }).value; } catch { return null; }
+}
 
 function escapeHtml(text) {
   return String(text).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -33,14 +58,17 @@ const marked = new Marked({
     },
     code({ text, lang }) {
       const language = String(lang || '').match(/^[\w+#.-]*/)[0];
-      return '<pre><button class="copy" type="button">Copy</button><code' + (language ? ' data-lang="' + escapeHtml(language) + '"' : '') + '>' + escapeHtml(text) + '</code></pre>';
+      const colored = highlight(text, language);
+      const attrs = (language ? ' data-lang="' + escapeHtml(language) + '"' : '') + (colored !== null ? ' class="hljs"' : '');
+      return '<pre><button class="copy" type="button">Copy</button><code' + attrs + '>' + (colored !== null ? colored : escapeHtml(text)) + '</code></pre>';
     },
     checkbox({ checked }) { return checked ? '☑ ' : '☐ '; }
   }
 });
 
 export function renderMarkdown(source) {
-  return marked.parse(String(source || '').replace(/\r\n/g, '\n'), { async: false });
+  const html = marked.parse(String(source || '').replace(/\r\n/g, '\n'), { async: false });
+  return purifier ? purifier.sanitize(html, SANITIZE) : html;
 }
 
 /**
