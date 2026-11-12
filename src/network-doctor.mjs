@@ -125,3 +125,20 @@ export function formatNetworkReport(results, env = process.env) {
   if (!results.length) lines.push('  Nothing to check: no remote provider or MCP server is configured.');
   return lines.join('\n') + '\n';
 }
+
+/**
+ * "Could not reach the model provider at HOST: …". Names only the host and
+ * port (never credentials or the path) so the user can tell which server is
+ * down; a local Ollama port also gets the command that starts it.
+ */
+export function unreachableProviderMessage(rawUrl, detail) {
+  let where = '';
+  let hint = '';
+  try {
+    const url = new URL(String(rawUrl));
+    where = ' at ' + url.host;
+    const local = /^(localhost|127\.0\.0\.1|\[::1\])$/i.test(url.hostname);
+    if (local && url.port === '11434') hint = ' If you use Ollama, start it with `ollama serve`.';
+  } catch {}
+  return 'Could not reach the model provider' + where + ': ' + detail + hint + ' Run `oasis doctor --network` for a full check.';
+}

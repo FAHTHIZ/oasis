@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import http from 'node:http';
-import { checkTarget, explainNetworkError, formatNetworkReport, networkTargets } from '../src/network-doctor.mjs';
+import { checkTarget, explainNetworkError, formatNetworkReport, networkTargets, unreachableProviderMessage } from '../src/network-doctor.mjs';
 
 test('targets are reduced to origins and deduplicated', () => {
   const targets = networkTargets({ config: { protocol: 'anthropic', baseURL: 'https://api.anthropic.com/v1' }, mcpServers: [{ name: 'docs', url: 'https://mcp.example.com/mcp?token=SECRET' }, { name: 'local', command: 'x' }] });
@@ -59,7 +59,7 @@ test('a model request that cannot connect says why (refused, untrusted certifica
   const closedPort = closed.address().port;
   await new Promise((resolve) => closed.close(resolve));
   const config = (baseURL) => ({ protocol: 'openai-compatible', baseURL, model: 'test-model', apiKey: 'sk-test-network-key-123456' });
-  await assert.rejects(testProviderConnection(config('https://127.0.0.1:' + closedPort + '/v1')), /Could not reach the model provider: The connection was refused.*oasis doctor --network/);
+  await assert.rejects(testProviderConnection(config('https://127.0.0.1:' + closedPort + '/v1')), new RegExp('Could not reach the model provider at 127\\.0\\.0\\.1:' + closedPort + ': The connection was refused.*oasis doctor --network'));
   const dir = await mkdtemp(path.join(os.tmpdir(), 'oasis-tlsfail-'));
   t.after(() => rm(dir, { recursive: true, force: true }));
   try {
@@ -69,4 +69,12 @@ test('a model request that cannot connect says why (refused, untrusted certifica
   await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
   t.after(() => server.close());
   await assert.rejects(testProviderConnection(config('https://127.0.0.1:' + server.address().port + '/v1')), /server certificate is not trusted \(DEPTH_ZERO_SELF_SIGNED_CERT\).*NODE_EXTRA_CA_CERTS/);
+});
+
+test('the unreachable-provider message names the host and suggests ollama serve for local Ollama', () => {
+  assert.equal(unreachableProviderMessage('http://127.0.0.1:11434/v1/chat/completions', 'The connection was refused.'),
+    'Could not reach the model provider at 127.0.0.1:11434: The connection was refused. If you use Ollama, start it with `ollama serve`. Run `oasis doctor --network` for a full check.');
+  assert.doesNotMatch(unreachableProviderMessage('https://api.example.com/v1', 'x.'), /ollama|\/v1/);
+  assert.match(unreachableProviderMessage('https://api.example.com/v1', 'x.'), /provider at api\.example\.com: x\./);
+  assert.match(unreachableProviderMessage('not a url', 'x.'), /^Could not reach the model provider: x\./);
 });

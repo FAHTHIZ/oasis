@@ -2,7 +2,7 @@ import { briefFailure } from './provider-errors.mjs';
 import { splitThinking, visibleReply } from './think-tags.mjs';
 import { atomicWriteFile } from './atomic-write.mjs';
 import { sessionKeyPool, ROTATE_STATUSES } from './key-pool.mjs';
-import { explainNetworkError } from './network-doctor.mjs';
+import { explainNetworkError, unreachableProviderMessage } from './network-doctor.mjs';
 import { proxyForUrl } from './proxy.mjs';
 import { loadAgentTranscript } from './sessions.mjs';
 import { randomUUID } from 'node:crypto';
@@ -1789,7 +1789,7 @@ async function requestCompletionRaw(session, options = {}) {
       try { proxied = Boolean(proxyForUrl(String(endpoint && endpoint.url || endpoint))); } catch {}
       const why = explainNetworkError(error, { proxied });
       const detail = why.kind === 'error' && /^(fetch failed)?$/i.test(why.detail.trim()) ? 'Check the network and provider base URL.' : why.detail;
-      throw Object.assign(new Error('Could not reach the model provider: ' + detail + ' Run `oasis doctor --network` for a full check.'), { code: 'OASIS_NETWORK', networkKind: why.kind, cause: error });
+      throw Object.assign(new Error(unreachableProviderMessage(String(endpoint && endpoint.url || endpoint), detail)), { code: 'OASIS_NETWORK', networkKind: why.kind, cause: error });
     }
     throw error;
   } finally {
