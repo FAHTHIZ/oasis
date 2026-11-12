@@ -733,3 +733,6 @@ html.lite .topbar{backdrop-filter:none;-webkit-backdrop-filter:none;background:v
 .suggest-row.suggest-app .cc-mark{width:22px;height:22px;border-radius:6px}
 .suggest-row.suggest-app .cc-mark svg{width:13px;height:13px}
 .suggest-row.suggest-app .cc-mark.letter{font-size:11px}
+
+/* Before the first status: only Fen, no setup text that may not apply. */
+.welcome.booting > :not(.welcome-mark) { visibility: hidden; }

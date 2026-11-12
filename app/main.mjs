@@ -1502,7 +1502,8 @@ function handleEvent(event) {
 
 // Saved chats render through the same grouping as the live view.
 function renderSavedDisplay(entries) {
-  for (const block of buildTimeline(entries)) {
+  const blocks = buildTimeline(entries);
+  for (const [index, block] of blocks.entries()) {
     if (block.type === 'group') {
       const group = createGroup(block.steps, { live: false });
       groupOf.set(group.el, group);
@@ -1511,7 +1512,14 @@ function renderSavedDisplay(entries) {
       continue;
     }
     const entry = block.entry;
-    const el = addMessage(block.type === 'text' ? 'assistant' : entry.role, entry.content, Number(entry.at) || 0);
+    // A tool call the model wrote as JSON text ran as the steps that follow, so show
+    // only the prose before it (chats saved before the live view dropped it).
+    let content = entry.content;
+    if (block.type === 'text' && blocks[index + 1] && blocks[index + 1].type === 'group') {
+      const split = splitTextToolCall(content);
+      if (split.tool) { if (!split.text.trim()) continue; content = split.text; }
+    }
+    const el = addMessage(block.type === 'text' ? 'assistant' : entry.role, content, Number(entry.at) || 0);
     if (entry.role === 'user' && entry.images) addImageNote(el, entry.images, []);
   }
 }
@@ -2561,6 +2569,8 @@ const SUGGESTIONS = [
   'Build a small to-do web app in index.html'
 ];
 function renderWelcome() {
+  // Until the first status arrives only Fen shows, so "Paste a key" doesn't flash on a connected setup.
+  $('welcome').classList.remove('booting');
   const ready = modelReady();
   const entry = activeEntry();
   $('connectForm').hidden = ready;
@@ -3959,7 +3969,7 @@ async function boot() {
   if (!modelReady() && !workspace) $('connectInput').focus({ preventScroll: true });
 }
 // data-ready tells automation (and tests) that boot finished on this page load.
-boot().catch((error) => toast(error.message, 'error')).finally(() => { document.documentElement.dataset.ready = '1'; });
+boot().catch((error) => toast(error.message, 'error')).finally(() => { document.documentElement.dataset.ready = '1'; $('welcome').classList.remove('booting'); });
 
 // Images: paste, drop or attach (up to 4). Large photos are scaled down on the
 // device first, which keeps uploads small on slow connections and old phones.
