@@ -17,5 +17,13 @@ if (argv.length === 1 && (argv[0] === '--version' || argv[0] === '-v')) {
 if (!process.env.OASIS_NO_COMPILE_CACHE && typeof module.enableCompileCache === 'function') {
   try { module.enableCompileCache(); } catch {}
 }
+// `oasis doctor | head` closes the pipe early. Like other Unix tools, stop
+// quietly instead of printing an unhandled EPIPE stack trace.
+for (const stream of [process.stdout, process.stderr]) {
+  stream.on('error', (error) => {
+    if (error && error.code === 'EPIPE') process.exit(0);
+    throw error;
+  });
+}
 globalThis.__OASIS_CLI_ENTRY = true;
 await import('./cli.mjs');
