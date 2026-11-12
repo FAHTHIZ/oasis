@@ -2399,13 +2399,13 @@ export function createOasisWebServer(options = {}) {
         const id = String(item.id).toLowerCase();
         if (!busySessions.has(id)) return item;
         const job = liveJobs.get(id);
-        return { ...item, running: true, ...(job ? { jobId: job.id, prompt: job.prompt || job.title || '' } : {}) };
+        return { ...item, running: true, ...(job ? { jobId: job.id, prompt: job.prompt || job.title || '', ...(job.status === 'running' ? {} : { waiting: true }) } : {}) };
       });
       // A brand-new conversation is written to disk after its first turn; list it while it runs.
       const listed = new Set(sessions.map((item) => String(item.id).toLowerCase()));
       for (const [id, job] of liveJobs) {
         if (listed.has(id)) continue;
-        sessions.unshift({ id: job.sessionId, title: job.title || 'Coding task', updatedAt: job.events.at(-1)?.at || job.createdAt, messages: 0, unsaved: true, running: true, jobId: job.id, prompt: job.prompt || job.title || '' });
+        sessions.unshift({ id: job.sessionId, title: job.title || 'Coding task', updatedAt: job.events.at(-1)?.at || job.createdAt, messages: 0, unsaved: true, running: true, jobId: job.id, prompt: job.prompt || job.title || '', ...(job.status === 'running' ? {} : { waiting: true }) });
       }
       json(res, 200, { sessions });
       return;

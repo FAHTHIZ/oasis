@@ -4,6 +4,7 @@ User-facing change history grouped by package version. A version heading does no
 
 ## Unreleased
 
+- Web app sidebar: a task left running in another chat shows "Needs you" when it is waiting on an approval or question, and "Done" in bold once it finishes, until you open it (like the unread markers in Codex's and Claude Code's task lists). `/api/sessions` marks a running session that is waiting with `waiting: true`.
 - Piping OASIS into a reader that stops early (`oasis doctor | head`) no longer ends with an unhandled `EPIPE` stack trace; the CLI exits quietly like other Unix tools.
 - Web app: opening a running task from the "folder is busy" note (or from another device) always shows the request it is working on, and its steps no longer appear twice when the session was saved mid-turn.
 
