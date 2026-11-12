@@ -276,6 +276,8 @@ export function toolDetail(name, args = {}) {
 
 const APP_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const MAX_BODY_BYTES = 32 * 1024;
+// Browser chats copied into the session store (POST /api/sessions/import).
+const MAX_IMPORT_BYTES = 4 * 1024 * 1024;
 const TERMINAL_JOB_STATUSES = new Set(['completed', 'error', 'cancelled', 'interrupted']);
 const MAX_UPLOAD_FILE_BYTES = 10 * 1024 * 1024;
 const MAX_UPLOAD_BODY_BYTES = 30 * 1024 * 1024;
@@ -2532,6 +2534,32 @@ export function createOasisWebServer(options = {}) {
         sessions.unshift({ id: job.sessionId, title: job.title || 'Coding task', updatedAt: job.events.at(-1)?.at || job.createdAt, messages: 0, unsaved: true, running: true, jobId: job.id, prompt: job.prompt || job.title || '', ...(job.status === 'running' ? {} : { waiting: true }) });
       }
       json(res, 200, { sessions });
+      return;
+    }
+
+    // Chats the app kept only in a browser (made without this server) are copied here when
+    // the app connects, so the session store holds them and other devices can open them.
+    // The key (the browser's project and chat id) maps to a fixed session id: sending the
+    // same chat again updates its copy instead of adding another. Only text turns are kept.
+    if (req.method === 'POST' && pathname === '/api/sessions/import') {
+      let body;
+      try { body = await readJsonBody(req, MAX_IMPORT_BYTES); } catch (error) { json(res, 400, { error: error.message }); return; }
+      const key = typeof body.key === 'string' ? body.key.trim() : '';
+      if (!key || key.length > 200) { json(res, 400, { error: 'An imported chat needs a key of up to 200 characters.' }); return; }
+      const turns = (Array.isArray(body.messages) ? body.messages : []).slice(-300)
+        .filter((item) => item && (item.role === 'user' || item.role === 'assistant') && typeof item.content === 'string' && item.content.trim() && !item.content.includes('\0'))
+        .map((item) => ({ role: item.role, content: item.content.slice(0, 24000) }));
+      if (!turns.some((item) => item.role === 'user')) { json(res, 400, { error: 'An imported chat needs at least one message from you.' }); return; }
+      const digest = createHash('sha256').update(path.resolve(activeRoot) + '\0' + key).digest('hex');
+      const id = [digest.slice(0, 8), digest.slice(8, 12), '4' + digest.slice(13, 16), '8' + digest.slice(17, 20), digest.slice(20, 32)].join('-');
+      const project = typeof body.project === 'string' ? body.project.replace(/[\r\n\0]+/g, ' ').trim().slice(0, 60) : '';
+      const title = typeof body.title === 'string' ? body.title.replace(/[\r\n\0]+/g, ' ').trim().slice(0, 80) : '';
+      if (busySessions.has(id)) { json(res, 409, { error: 'That chat is running here right now.' }); return; }
+      try {
+        const saved = await saveSession({ root: activeRoot, sessionId: id, config: { protocol: 'browser', model: typeof body.model === 'string' ? body.model.slice(0, 120) : '' }, sessionName: ((project ? project + ': ' : '') + (title || 'Browser chat')).slice(0, 120), messages: [{ role: 'system', content: 'Chat copied from the OASIS browser app.' }, ...turns], todos: [] }, { env, checkpoints: false });
+        activeSessions.delete(id);
+        json(res, 200, { id: saved.id, updatedAt: saved.updatedAt, messages: turns.length });
+      } catch (error) { json(res, 400, { error: 'Could not save that chat: ' + (error && error.message || 'unknown error') }); }
       return;
     }
 

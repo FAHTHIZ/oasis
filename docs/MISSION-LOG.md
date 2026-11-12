@@ -3,6 +3,11 @@
 A short, dated record of changes, tests, benchmark results, blockers and known
 weaknesses. Newest first. Detailed user-facing notes go in the CHANGELOG.
 
+## 2026-11-12 (browser-only chats in the session store)
+
+- Browser-only chats (IndexedDB) are copied to the computer's session store when the app connects to `oasis web`: `app/core/chat-sync.mjs` sends each changed chat to the new `POST /api/sessions/import`, which keeps one session per browser chat (fixed id from the workspace and the chat key) and only its text turns. They then show under "Other devices and terminal" everywhere. Tests: `test/web-import-browser-chats.test.mjs` (real server with token; sync logic with a fake store).
+- Known gap: tool steps of browser-only chats are not copied; the browser's own copy keeps them.
+
 ## 2026-11-11 (Codex SDK drop-in)
 
 - Read the Codex TypeScript SDK source ([exec.ts](https://raw.githubusercontent.com/openai/codex/main/sdk/typescript/src/exec.ts), events.ts, items.ts, thread.ts). It spawns `codex exec --experimental-json` with flags, then `resume ID`, and writes the prompt to stdin. `oasis exec --json` now emits that event stream (new src/codex-exec-json.mjs; raw tool callbacks via a `toolObserver` option on runHeadless; `images` option for `--image`). Test: test/codex-exec-json.test.mjs (5 pass) mirrors the SDK argv and Thread.run aggregation; headless, flags, exec-alias and App Server tests 95 pass, 0 fail.
@@ -332,7 +337,7 @@ Aligned model, tool and turn telemetry with the OpenTelemetry GenAI semantic con
 
 ### Blockers and remaining issues
 - No real-model run of the new interface yet: no provider key is available to the agent, and the user's personal credentials are deliberately not used. Screenshots come from the scripted-model e2e.
-- Chat history still lives in browser IndexedDB per device; the server session store should become the source of truth so a second device sees the same chats.
+- Chat history still lives in browser IndexedDB per device; the server session store should become the source of truth so a second device sees the same chats. (Done on 2026-11-12: browser-only chats are copied to the session store on connect; see the 2026-11-12 entry.)
 - The job stream is 350 ms polling; SSE would cut latency and requests.
 - Approvals still use the modal sheet rather than inline timeline cards.
 
