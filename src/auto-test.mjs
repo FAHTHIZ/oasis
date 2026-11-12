@@ -33,14 +33,24 @@ function tail(text) {
   return text.length > MAX_OUTPUT ? '[... ' + (text.length - MAX_OUTPUT) + ' earlier characters omitted ...]\n' + text.slice(-MAX_OUTPUT) : text;
 }
 
-export function runAutoTest(root, command, { timeoutMs = 600000, signal, env = process.env } = {}) {
+// The test command runs code the agent just wrote, so when the session's OS
+// sandbox is on it runs inside it, like run_shell. It used to be spawned
+// directly, so enabling the sandbox did not contain auto-test runs.
+export async function runAutoTest(root, command, { timeoutMs = 600000, signal, env = process.env, sandbox = null } = {}) {
+  const windows = process.platform === 'win32';
+  let launch = null;
+  if (!windows && sandbox && sandbox.enabled && sandbox.available) {
+    const { launchCommand } = await import('./sandbox.mjs');
+    launch = await launchCommand('/bin/sh', ['-c', command], sandbox, root);
+  }
   return new Promise((resolve) => {
     const started = Date.now();
-    const windows = process.platform === 'win32';
+    const childEnv = { ...env, CI: env.CI || '1', FORCE_COLOR: '0' };
     // shell: true gives cmd.exe the verbatim quoting it expects on Windows and /bin/sh -c elsewhere.
-    const child = spawn(command, [], {
-      cwd: root, env: { ...env, CI: env.CI || '1', FORCE_COLOR: '0' }, shell: true, detached: !windows, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe']
-    });
+    const child = launch
+      ? spawn(launch.command, launch.args, { cwd: root, env: childEnv, shell: false, detached: true, stdio: ['ignore', 'pipe', 'pipe'] })
+      : spawn(command, [], { cwd: root, env: childEnv, shell: true, detached: !windows, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'] });
+    if (launch && typeof launch.release === 'function') { child.once('close', launch.release); child.once('error', launch.release); }
     let output = '';
     let timedOut = false;
     let cancelled = false;
