@@ -1025,7 +1025,7 @@ export async function runBuiltinCommand(name, argument, state) {
         if (!recipes.length) return { output: 'No Goose recipes found. Put NAME.yaml in the workspace or a GOOSE_RECIPE_PATH folder, then run /recipe NAME key=value.' };
         return { output: ['Goose recipes:', ...recipes.map((item) => '  ' + item.name.padEnd(24) + ' ' + item.title + (item.description ? ' - ' + item.description : ''))].join('\n') };
       }
-      const result = await recipePrompt(root, argument, env);
+      const result = await recipePrompt(root, argument, env, { ask: typeof state.askUser === 'function' ? state.askUser : null });
       if (result.error) return { output: result.error };
       return { output: result.output, prompt: result.prompt };
     }

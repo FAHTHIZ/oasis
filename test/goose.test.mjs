@@ -74,3 +74,25 @@ test('recipe templates, arguments and lookup', async (t) => {
   const run = await runBuiltinCommand('recipe', 'review lang=rust', { root, env });
   assert.match(run.prompt, /Review the rust code/);
 });
+
+test('recipe user_prompt and required parameters are asked for when a user can answer', async (t) => {
+  const { root, env } = await fixture(t);
+  await writeFile(path.join(root, 'ship.yaml'), 'title: Ship\ndescription: Ship a release\nprompt: Ship {{ version }} to {{ target }} ({{ note }}).\nparameters:\n  - key: version\n    input_type: string\n    requirement: user_prompt\n    description: release version\n  - key: target\n    input_type: select\n    requirement: required\n    options: [staging, prod]\n  - key: note\n    input_type: string\n    requirement: user_prompt\n    default: none\n');
+  const asked = [];
+  const answers = { version: '1.2.3', target: 'prod', note: '' };
+  const ask = async (question) => { asked.push(question); return answers[question.header]; };
+  const result = await recipePrompt(root, 'ship', env, { ask });
+  assert.match(result.prompt, /Ship 1\.2\.3 to prod \(none\)\./);
+  assert.deepEqual(asked.map((item) => item.header), ['version', 'target', 'note']);
+  assert.match(asked[0].question, /release version/);
+  assert.deepEqual(asked[1].options.map((item) => item.label), ['staging', 'prod']);
+  assert.match(asked[2].question, /Leave empty for none/);
+  // Values passed on the command line are not asked again; an unanswered required value is reported.
+  asked.length = 0;
+  const partial = await recipePrompt(root, 'ship version=2.0', env, { ask: async (question) => { asked.push(question.header); return ''; } });
+  assert.deepEqual(asked, ['target', 'note']);
+  assert.match(partial.error, /needs: target/);
+  // The slash command passes the surface's question prompt through.
+  const ran = await runBuiltinCommand('recipe', 'ship target=staging', { root, env, askUser: async (question) => question.header === 'version' ? '3.0' : '' });
+  assert.match(ran.prompt, /Ship 3\.0 to staging \(none\)/);
+});
