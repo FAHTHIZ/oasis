@@ -156,6 +156,10 @@ export async function runHeadless(options) {
     // reviewer's reason, up to goalMaxTurns turns. Same loop as /goal.
     goal = null,
     goalMaxTurns = 10,
+    // --require-verified (or OASIS_REQUIRE_VERIFIED=1): a run whose changes OASIS could
+    // not verify (no passing check, unreviewed diff, failing test) exits 1 with
+    // subtype error_not_verified, so CI and scripts don't treat "Not verified" as success.
+    requireVerified = false,
     // Text mode: one short line per step on stderr, so `oasis -p` is not
     // silent for minutes. On by default only when stderr is a terminal;
     // OASIS_PROGRESS=1 forces it on, OASIS_PROGRESS=0 turns it off.
@@ -493,8 +497,10 @@ export async function runHeadless(options) {
   // The budget ledger also holds subagent, review and side-request spend.
   if (session && session.budgetLedger && Number(session.budgetLedger.spentUsd) > costUsd) costUsd = Number(session.budgetLedger.spentUsd);
   if (session) closeSession(session);
-  const isError = Boolean(error) || !result || result.blockedByHook === true || Boolean(schemaErrors) || Boolean(goalState && !goalState.met);
-  const subtype = error && error.code === 'BUDGET_EXCEEDED' ? 'error_max_budget_usd' : error ? 'error_during_execution' : schemaErrors ? 'error_max_structured_output_retries' : goalState && !goalState.met ? 'error_goal_not_met' : result && result.limitReached ? 'error_max_turns' : result && result.finished === false && !result.verificationIncomplete ? 'error_max_turns' : 'success';
+  const mustVerify = requireVerified || env.OASIS_REQUIRE_VERIFIED === '1';
+  const notVerified = mustVerify && !error && Boolean(result && result.verificationIncomplete);
+  const isError = Boolean(error) || !result || result.blockedByHook === true || Boolean(schemaErrors) || Boolean(goalState && !goalState.met) || notVerified;
+  const subtype = error && error.code === 'BUDGET_EXCEEDED' ? 'error_max_budget_usd' : error ? 'error_during_execution' : schemaErrors ? 'error_max_structured_output_retries' : goalState && !goalState.met ? 'error_goal_not_met' : notVerified ? 'error_not_verified' : result && result.limitReached ? 'error_max_turns' : result && result.finished === false && !result.verificationIncomplete ? 'error_max_turns' : 'success';
   const summary = {
     type: 'result',
     subtype,
@@ -521,6 +527,9 @@ export async function runHeadless(options) {
   // Nobody can approve anything in -p, so say what was skipped and how to allow it next time.
   if (outputFormat === 'text' && denied.length && env.OASIS_PROGRESS !== '0') {
     try { process.stderr.write(deniedHint(denied)); } catch {}
+  }
+  if (outputFormat === 'text' && notVerified && env.OASIS_PROGRESS !== '0') {
+    try { process.stderr.write('\n[oasis] Exiting 1: --require-verified is on and OASIS could not verify these changes.\n'); } catch {}
   }
   if (outputFormat === 'text' && savedAfterError && sessionId && env.OASIS_PROGRESS !== '0') {
     try { process.stderr.write('\nThe work so far is saved. Continue it with: oasis --resume ' + sessionId + '\n'); } catch {}
