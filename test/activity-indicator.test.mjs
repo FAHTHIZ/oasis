@@ -130,3 +130,11 @@ test('the status line follows the clock, skips identical frames and echoes type-
   assert.doesNotMatch(writes.at(-1), /esc to stop/);
   indicator.stop();
 });
+
+test('a running command shows its newest output line in the status line', async () => {
+  const { lastOutputLine } = await import('../src/cli.mjs');
+  assert.equal(lastOutputLine('building\n\x1b[32m  step 2 of 3  \x1b[0m\n\n'), 'step 2 of 3');
+  assert.equal(lastOutputLine('50%\r75%\r'), '75%', 'carriage-return progress shows its latest state');
+  assert.equal(lastOutputLine('x'.repeat(100), 10), 'xxxxxxxxx…');
+  assert.match(describeWait({ label: 'Running npm test', detail: 'ok 12 - parses' }, 3000), /^Running npm test… · 3s · ok 12 - parses · esc to stop$/);
+});
