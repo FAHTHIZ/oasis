@@ -33,12 +33,23 @@ export function cloudModelBehindGateway(model, config = {}) {
   } catch { return false; }
 }
 
+// A remote endpoint saved as keyless and called with no key, key helper or
+// auth header cannot bill anyone (a free public endpoint). The footer used to
+// say "cost unknown" for it. Local gateways that hold keys are loopback and
+// keep their own rule above.
+function keylessRemote(config = {}) {
+  if (!config || config.keyless !== true || config.apiKey || config.apiKeyHelper || isLocalProvider(config)) return false;
+  const headers = config.customHeaders && typeof config.customHeaders === 'object' ? Object.keys(config.customHeaders) : [];
+  return !headers.some((key) => /^(?:authorization|x-api-key|api-key|proxy-authorization)$/i.test(key));
+}
+
 export function priceFor(model, { config = {}, overrides = {}, env = process.env } = {}) {
   const name = String(model || '');
   if (env.OASIS_PRICE_INPUT || env.OASIS_PRICE_OUTPUT) {
     return { input: Number(env.OASIS_PRICE_INPUT) || 0, output: Number(env.OASIS_PRICE_OUTPUT) || 0, cacheRead: Number(env.OASIS_PRICE_CACHE_READ) || 0, cacheWrite: 0, custom: true };
   }
   if (isLocalProvider(config) && !cloudModelBehindGateway(name, config)) return { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, local: true };
+  if (keylessRemote(config)) return { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, keyless: true };
   if (overrides && typeof overrides === 'object') {
     for (const [key, value] of Object.entries(overrides)) {
       if (value && typeof value === 'object' && name.toLowerCase().includes(key.toLowerCase())) {
