@@ -4,6 +4,7 @@ User-facing change history grouped by package version. A version heading does no
 
 ## Unreleased
 
+- Approvals: general prompts (opening the browser terminal, starting an MCP server, leaving plan mode with a plan and others) keep their line breaks, and indented command lines still show as code. They used to be squeezed into one run-on paragraph.
 - Routines: the browser workspace now says "The scheduler is running" while `oasis web` hosts the scheduler itself. It used to say the scheduler was not running, because the check skipped this process. A second routine with the same name (case-insensitive) is now refused with the id of the existing one (HTTP 409 in the browser), because duplicate names made `oasis schedule pause NAME` and other name lookups fail as ambiguous.
 - Web app: the Task box in Settings → Routines → Add a routine is a full-width field again; it rendered as a small inline box with its label pushed below it.
 - `oasis doctor`: the provider line names local servers ("Ollama (this device) at 127.0.0.1:11434"), and a missing `ollama` command no longer reads "not found" next to a working Ollama server: it says the command is only needed to pull models.

@@ -111,3 +111,11 @@ test('command approval metadata preserves the exact executable argument boundari
   const spaced = formatApprovalMessage('Run this command in the workspace?', { tool: 'run_command', input: { command: 'git', args: ['commit', '-m', 'two words', ''] } });
   assert.match(spaced.message, /git commit -m "two words" ""/, 'arguments with spaces or empty arguments stay quoted');
 });
+
+test('generic approval prompts keep their lines and indented command lines', async () => {
+  const { formatApprovalMessage } = await import('../src/approval-language.mjs');
+  const { message } = formatApprovalMessage('Open an interactive terminal in the workspace?\n  /bin/bash  (in /tmp/p)\nYou type into it directly.');
+  assert.equal(message, 'OASIS is asking permission to take this action:\nOpen an interactive terminal in the workspace?\n  /bin/bash (in /tmp/p)\nYou type into it directly.');
+  const mcp = formatApprovalMessage('Configure and start this stdio MCP server now?\nName: gh\nExecutable: npx\n\n\n\nArguments: ["-y"]').message;
+  assert.match(mcp, /now\?\nName: gh\nExecutable: npx\n\nArguments/);
+});
