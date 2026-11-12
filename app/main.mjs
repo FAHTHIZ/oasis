@@ -1885,6 +1885,7 @@ function renderSavedDisplay(entries) {
     }
     const el = addMessage(block.type === 'text' ? 'assistant' : entry.role, content, Number(entry.at) || 0);
     if (entry.role === 'user' && entry.images) addImageNote(el, entry.images, []);
+    if (entry.role === 'user' && entry.steer) el.classList.add('steer');
   }
 }
 
