@@ -19,7 +19,7 @@
 // approvals. Enable with settings { "sandbox": { "enabled": true } } or OASIS_SANDBOX=1.
 import { normalizeSshSettings, detectSshRuntime, sshWrap } from './ssh-backend.mjs';
 import { spawnSync } from 'node:child_process';
-import { realpathSync, statSync, lstatSync, rmdirSync, unlinkSync } from 'node:fs';
+import { realpathSync, statSync, lstatSync, rmdirSync, unlinkSync, readFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
@@ -57,6 +57,67 @@ export function collectSensitivePaths(env = process.env) {
     masked.push({ path: real, type });
   }
   return masked;
+}
+
+// permissions.blockReadsOutsideWorkingDirectories with the OS sandbox on (Claude Code): sandboxed
+// commands lose read access to the home folder and the other roots that hold user files, then get
+// back the working directories (every writable mount), the folders on PATH below those roots (so
+// toolchains such as ~/.nvm keep working), ~/.agents/skills, the global git configuration files and,
+// in a linked worktree, the repository's common .git folder (readable and writable, so git works).
+// ~/.git-credentials and OASIS's other secret masks stay hidden. Not applied when the start folder
+// has a glob character or managed allowManagedReadPathsOnly is on, as in Claude Code.
+const USER_FILE_ROOTS = ['/Users', '/home', '/root', '/Volumes', '/mnt', '/media', '/run/media', '/srv'];
+
+function existingEntry(candidate, { writable = false } = {}) {
+  try {
+    const real = realpathSync(candidate);
+    const info = statSync(real);
+    const type = info.isDirectory() ? 'directory' : info.isFile() ? 'file' : null;
+    return type ? { path: real, type, ...(writable ? { writable: true } : {}) } : null;
+  } catch { return null; }
+}
+
+function linkedWorktreeCommonDir(root) {
+  try {
+    const dotGit = path.join(root, '.git');
+    if (!lstatSync(dotGit).isFile()) return null;
+    const match = /^gitdir:\s*(.+)$/m.exec(readFileSync(dotGit, 'utf8'));
+    if (!match) return null;
+    const gitDir = path.resolve(root, match[1].trim());
+    let common = gitDir;
+    try { common = path.resolve(gitDir, readFileSync(path.join(gitDir, 'commondir'), 'utf8').trim()); } catch { /* not a linked worktree */ }
+    return common;
+  } catch { return null; }
+}
+
+export function sandboxReadBlock(root, env = process.env) {
+  const home = path.resolve(env.HOME || os.homedir());
+  const hidden = [];
+  for (const candidate of [home, ...USER_FILE_ROOTS]) {
+    const entry = existingEntry(candidate);
+    if (!entry || entry.type !== 'directory' || entry.path === '/' || hidden.some((item) => pathContains(item.path, entry.path))) continue;
+    for (let i = hidden.length - 1; i >= 0; i -= 1) if (pathContains(entry.path, hidden[i].path)) hidden.splice(i, 1);
+    hidden.push(entry);
+  }
+  const under = (item) => item && hidden.some((root) => pathContains(root.path, item.path));
+  const xdg = path.resolve(env.XDG_CONFIG_HOME || path.join(home, '.config'));
+  const reopen = [];
+  const add = (item) => { if (under(item) && !reopen.some((entry) => entry.path === item.path)) reopen.push(item); };
+  // A toolchain's prefix (~/.nvm/versions/node/v22 for its bin folder), but only the bin folder
+  // itself when the prefix sits directly in a hidden root (~/.local/bin, not all of ~/.local).
+  for (const dir of String(env.PATH || '').split(path.delimiter)) {
+    if (!dir || !path.isAbsolute(dir)) continue;
+    const prefix = toolchainPrefix(path.resolve(dir));
+    add(existingEntry(hidden.some((item) => path.dirname(prefix) === item.path || prefix === item.path) ? dir : prefix));
+  }
+  add(existingEntry(path.join(home, '.agents', 'skills')));
+  for (const file of [path.join(home, '.gitconfig'), path.join(xdg, 'git', 'config'), path.join(xdg, 'git', 'ignore'), path.join(xdg, 'git', 'attributes')]) {
+    const entry = existingEntry(file);
+    if (entry && entry.type === 'file') add(entry);
+  }
+  const common = linkedWorktreeCommonDir(root);
+  if (common) add(existingEntry(common, { writable: true }));
+  return { hidden, reopen };
 }
 
 export const PROTECTED_FILES = ['.bashrc', '.bash_profile', '.zshrc', '.zprofile', '.profile', '.gitconfig', '.gitmodules', '.ripgreprc', '.mcp.json',
@@ -288,7 +349,9 @@ export function resolveSandbox(settings = {}, root, force = false) {
   // sandbox.filesystem (Claude Code): extra writable paths, read-only paths inside writable ones,
   // and paths hidden from reads. Only paths that exist can be mounted.
   const existing = (list) => (Array.isArray(list) ? list : []).map((item) => { try { const real = realpathSync(item); const info = statSync(real); return { path: real, type: info.isDirectory() ? 'directory' : info.isFile() ? 'file' : null }; } catch { return null; } }).filter((item) => item && item.type);
-  const allowWrite = existing(settings.sandbox.allowWrite).filter((item) => item.type === 'directory' || item.type === 'file').map((item) => item.path);
+  // Under the read block, allowWrite entries from repository settings do not count (Claude Code).
+  const blockingReads = Boolean(settings.permissions && settings.permissions.blockReadsOutsideWorkingDirectories);
+  const allowWrite = existing((Array.isArray(settings.sandbox.allowWrite) ? settings.sandbox.allowWrite : []).filter((item) => !(blockingReads && (settings.sandbox.allowWriteRepo || []).includes(item)))).filter((item) => item.type === 'directory' || item.type === 'file').map((item) => item.path);
   const readOnlyPaths = existing(settings.sandbox.denyWrite);
   // sandbox.credentials "deny" files are read-blocked like denyRead; allowRead cannot re-open them.
   const credentialFiles = existing(settings.sandbox.credentialFiles);
@@ -307,6 +370,7 @@ export function resolveSandbox(settings = {}, root, force = false) {
     && !masked.some((secret) => pathContains(secret.path, item.path))
     && !credentialFiles.some((secret) => pathContains(secret.path, item.path)));
   const writable = [root, ...additionalWritable, ...allowWrite.filter((dir) => !pathContains(root, dir)), ...caches.filter((dir) => !pathContains(root, dir))];
+  const readBlock = blockReads && backend === 'os' && !settings.sandbox.allowManagedReadPathsOnly && !/[*?[]/.test(root) ? sandboxReadBlock(root) : null;
   // A denyRead entry under a re-opened allowRead path stays masked, so keep it even when a broader mask covers it.
   for (const item of deniedReads) if (!masked.some((entry) => pathContains(entry.path, item.path)) || reopened.some((open) => open.path !== item.path && pathContains(open.path, item.path))) masked.push(item);
   return {
@@ -322,6 +386,7 @@ export function resolveSandbox(settings = {}, root, force = false) {
     maskedPaths: masked,
     readOnlyPaths,
     reopenedPaths: reopened,
+    ...(readBlock ? { readBlock } : {}),
     // sandbox.credentials "deny" variables: unset inside the OS sandbox (containers and SSH never get the host environment).
     deniedEnv: (Array.isArray(settings.sandbox.credentialEnv) ? settings.sandbox.credentialEnv : []).filter((name) => /^[A-Za-z_][A-Za-z0-9_]*$/.test(name)).slice(0, 500),
     excludedCommands: Array.isArray(settings.sandbox.excludedCommands) ? settings.sandbox.excludedCommands.slice(0, 200) : [],
@@ -367,11 +432,15 @@ function protectedSeatbeltRules(roots) {
 }
 
 export function macProfile(sandbox) {
-  const writable = [...sandbox.writable, os.tmpdir(), '/private/tmp', '/private/var/folders'];
+  const writable = [...sandbox.writable, ...(sandbox.readBlock ? sandbox.readBlock.reopen.filter((item) => item.writable).map((item) => item.path) : []), os.tmpdir(), '/private/tmp', '/private/var/folders'];
   return [
     '(version 1)',
     '(allow default)',
     '(deny file-write*)',
+    ...(sandbox.readBlock ? [
+      ...sandbox.readBlock.hidden.map((item) => '(deny file-read* (subpath ' + seatbeltString(item.path) + '))'),
+      ...[...sandbox.writable.map((dir) => ({ path: dir, type: 'directory' })), ...sandbox.readBlock.reopen].map((item) => '(allow file-read* (' + (item.type === 'directory' ? 'subpath ' : 'literal ') + seatbeltString(item.path) + '))')
+    ] : []),
     ...((sandbox.maskedPaths || []).map((item) => '(deny file-read* (' + (item.type === 'directory' ? 'subpath ' : 'literal ') + seatbeltString(item.path) + '))')),
     // allowRead: later rules win, so re-allow the path and then deny again what lies inside it.
     ...((sandbox.reopenedPaths || []).flatMap((item) => ['(allow file-read* (' + (item.type === 'directory' ? 'subpath ' : 'literal ') + seatbeltString(item.path) + '))',
@@ -425,9 +494,18 @@ export function wrapCommand(command, args, sandbox, cwd, options = {}) {
   if (sandbox.kind === 'bubblewrap') {
     const wrapped = ['--ro-bind', '/', '/', '--dev', '/dev', '--proc', '/proc', '--tmpfs', '/tmp', '--unshare-pid', '--die-with-parent', '--new-session'];
     for (const dir of tmpToolchainMounts(command)) wrapped.push('--ro-bind', dir, dir);
+    // Read block: hide the user-file roots first; the writable mounts below bring the working folders back.
+    if (sandbox.readBlock) {
+      for (const item of sandbox.readBlock.hidden) wrapped.push('--tmpfs', item.path);
+      for (const item of sandbox.readBlock.reopen) wrapped.push(item.writable ? '--bind' : '--ro-bind', item.path, item.path);
+    }
     for (const dir of sandbox.writable) wrapped.push('--bind', dir, dir);
-    for (const item of sandbox.readOnlyPaths || []) wrapped.push('--ro-bind', item.path, item.path);
+    // Under the read block, a denyWrite path outside the visible folders stays hidden (no re-bind).
+    const visible = (item) => !sandbox.readBlock || !sandbox.readBlock.hidden.some((root) => pathContains(root.path, item.path))
+      || [...sandbox.writable, ...sandbox.readBlock.reopen.map((entry) => entry.path)].some((dir) => pathContains(dir, item.path));
+    for (const item of sandbox.readOnlyPaths || []) if (visible(item)) wrapped.push('--ro-bind', item.path, item.path);
     for (const item of sandbox.maskedPaths || []) {
+      if (!visible(item)) continue;
       if (item.type === 'directory') wrapped.push('--tmpfs', item.path);
       else if (item.type === 'file') wrapped.push('--ro-bind', '/dev/null', item.path);
     }
