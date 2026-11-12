@@ -2090,6 +2090,18 @@ export function createOasisWebServer(options = {}) {
       return;
     }
 
+    // Claude Code's fileSuggestion for the web composer's "@": the same command the terminal runs,
+    // with the same trust and hook gates. { paths: null } means "use the built-in file list".
+    if (req.method === 'GET' && pathname === '/api/file-suggestions') {
+      const query = String(parsedUrl.searchParams.get('q') || '').slice(0, 200);
+      const settings = await loadSettings(activeRoot, { env }).catch(() => null);
+      const setting = settings && settings.fileSuggestion;
+      if (!setting) { json(res, 200, { paths: null }); return; }
+      const { suggestFilesWithCommand } = await import('./completion.mjs');
+      json(res, 200, { paths: await suggestFilesWithCommand(setting, query, { root: activeRoot, env }) });
+      return;
+    }
+
     if (req.method === 'GET' && pathname === '/api/slash-commands') {
       json(res, 200, { commands: await webSlashCommands(activeRoot, env) });
       return;
