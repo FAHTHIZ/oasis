@@ -44,7 +44,7 @@ test('a finished group sums up its steps; a live group names the running step', 
   ];
   assert.equal(groupTitle(steps), 'Read 2 files, edited a.mjs and ran the tests');
   assert.equal(groupTitle([{ id: 't', name: 'task', args: { subagent_type: 'explore' }, ok: true }, steps[0]]), 'Ran the explore agent and read a.mjs');
-  assert.deepEqual(groupStats(steps), { total: 5, failed: 1, running: 0, durationMs: 12600 });
+  assert.deepEqual(groupStats(steps), { total: 5, failed: 1, declined: 0, blocked: 0, stopped: 0, running: 0, durationMs: 12600 });
   assert.equal(groupTitle([steps[0]]), 'Read a.mjs');
   assert.equal(groupTitle([...steps.slice(0, 2), { id: '6', name: 'write_file', args: { path: 'c.mjs' } }]), 'Writing c.mjs');
   assert.equal(groupStats([{ id: 'x', name: 'grep', startedAt: 1 }]).durationMs, null, 'no total while a step runs');
@@ -151,4 +151,30 @@ test('prose before a JSON tool call is kept and the call is split off', async ()
   assert.deepEqual(splitTextToolCall('File src/index.html created.{"name": "delete_file", "arguments": {"path":"src/index.html"}}'), { text: 'File src/index.html created.', tool: 'delete_file' });
   assert.deepEqual(splitTextToolCall('Plain answer.'), { text: 'Plain answer.', tool: '' });
   assert.deepEqual(splitTextToolCall('Now:\n```json\n{"name": "run_command", "arguments": {'), { text: 'Now:', tool: 'run_command' });
+});
+
+test('summaries stay honest: declined, blocked and stopped steps are never counted as work done', async () => {
+  const { stepOutcome, stepLabel } = await import('../app/core/timeline.mjs');
+  const declined = { id: 'a', name: 'run_command', args: { command: 'npm', args: ['install'] }, ok: false, outcome: 'declined' };
+  const read = { id: 'b', name: 'read_file', args: { path: 'src/a.mjs' }, ok: true, outcome: 'ok', startedAt: 1, endedAt: 2 };
+  assert.equal(stepOutcome(declined), 'declined');
+  assert.equal(stepOutcome({ ok: false }), 'failed', 'older saved steps keep ok/failed');
+  assert.equal(stepOutcome({}), 'running');
+  assert.equal(stepLabel(declined), 'You declined: npm install');
+  assert.equal(groupTitle([declined]), 'You declined: npm install', 'a declined command never reads "Ran a command"');
+  assert.equal(groupTitle([read, declined]), 'Read a.mjs');
+  const stats = groupStats([read, declined, { id: 'c', name: 'grep', ok: false, outcome: 'blocked' }]);
+  assert.deepEqual({ failed: stats.failed, declined: stats.declined, blocked: stats.blocked }, { failed: 0, declined: 1, blocked: 1 });
+  assert.equal(groupTitle([{ ...declined, id: 'x' }, { id: 'y', name: 'grep', args: { pattern: 'x' }, ok: false, outcome: 'blocked' }]), 'Nothing ran: 1 declined, 1 blocked');
+});
+
+test('a group title names at most three kinds of work, then how many more', () => {
+  const steps = [
+    { id: '1', name: 'read_file', args: { path: 'a' }, ok: true },
+    { id: '2', name: 'edit_file', args: { path: 'b' }, ok: true },
+    { id: '3', name: 'web_search', args: { query: 'q' }, ok: true },
+    { id: '4', name: 'git_status', args: {}, ok: true },
+    { id: '5', name: 'todo_write', args: {}, ok: true }
+  ];
+  assert.equal(groupTitle(steps), 'Read a, edited b, searched the web and 2 more');
 });
