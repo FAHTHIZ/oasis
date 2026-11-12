@@ -135,3 +135,13 @@ test('the thinking chip shows elapsed time after five seconds', async () => {
   assert.equal(thinkingLabel(125_000), 'Thinking · 2m 05s');
   assert.equal(thinkingLabel(Number.NaN), 'Thinking');
 });
+
+test('a tool call streamed as JSON text is recognised while it streams', async () => {
+  const { streamingTextToolCall } = await import('../app/core/timeline.mjs');
+  assert.equal(streamingTextToolCall('{\n  "name": "write_file",\n  "arguments": {\n    "path": "src/index.html"'), 'write_file');
+  assert.equal(streamingTextToolCall('```json\n{"name": "run_command", "parameters": {"command": "npm test"'), 'run_command');
+  assert.equal(streamingTextToolCall('<tool_call>\n{"name":"read_file","arguments":{'), 'read_file');
+  assert.equal(streamingTextToolCall('Here is the plan: {"name": "x"}'), '');
+  assert.equal(streamingTextToolCall('{"name": "Ada", "age": 3}'), '');
+  assert.equal(streamingTextToolCall(''), '');
+});

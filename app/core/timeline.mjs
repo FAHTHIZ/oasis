@@ -203,6 +203,15 @@ export function thinkingLabel(elapsedMs) {
   return Number.isFinite(value) && value >= 5000 ? 'Thinking · ' + formatDuration(value) : 'Thinking';
 }
 
+// Small local models often write a tool call as JSON text instead of a native call.
+// OASIS turns it into a real call when the reply ends; while it streams, show which
+// tool is being prepared instead of a wall of escaped JSON. Returns the tool name or ''.
+const TEXT_TOOL_CALL = /^\s*(?:```(?:json)?\s*)?(?:<tool_call>\s*)?\[?\s*\{\s*"(?:name|tool)"\s*:\s*"([A-Za-z_][\w.-]{0,63})"\s*,\s*"(?:arguments|parameters|args|input)"\s*:/;
+export function streamingTextToolCall(text) {
+  const match = TEXT_TOOL_CALL.exec(String(text || '').slice(0, 400));
+  return match ? match[1] : '';
+}
+
 export function formatDuration(ms) {
   // Unknown (a step reopened from a saved session) shows nothing, not "<0.1s".
   if (ms === null || ms === undefined || ms === '') return '';

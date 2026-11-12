@@ -81,6 +81,7 @@ svg{width:20px;height:20px;flex:none}
 .welcome{padding:7vh 4px 8px;display:flex;flex-direction:column;align-items:flex-start;gap:14px}
 .welcome-mark{display:block;filter:drop-shadow(0 0 22px color-mix(in srgb,var(--accent) 45%,transparent));animation:mark-float 7s ease-in-out infinite}
 @keyframes mark-float{50%{transform:translateY(-4px)}}
+.pending-tool-call{color:var(--muted);margin:0}
 .fen{position:relative;width:84px;height:66px}
 .fen img{display:block;image-rendering:pixelated}
 :root.light .welcome-mark.fen{filter:drop-shadow(1px 0 0 #0A7846) drop-shadow(-1px 0 0 #0A7846) drop-shadow(0 1px 0 #0A7846) drop-shadow(0 -1px 0 #0A7846)}
