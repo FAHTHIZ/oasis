@@ -277,4 +277,5 @@ test('the terminal shows what a web search and a page fetch returned', async () 
   assert.equal(describeToolResult('web_search', { results: [], providerErrors: [{ provider: 'tavily', error: 'rate limited' }] }, { color: false }), '  ⎿ No results · rate limited');
   assert.equal(describeToolResult('fetch_url', { title: 'Docs', content: 'x'.repeat(4096), truncated: true, totalLength: 9000 }, { color: false }), '  ⎿ Read Docs · 9 KB (more available)');
   assert.equal(describeToolResult('fetch_url', { redirect: 'https://a.dev/b' }, { color: false }), '  ⎿ Redirects to https://a.dev/b');
+  assert.equal(describeToolResult('delete_file', { path: 'jest.config.js', deleted: true, backupCreated: true }, { color: false }), '  ⎿ Deleted jest.config.js (backup kept; /rewind restores it)');
 });

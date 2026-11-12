@@ -3263,6 +3263,13 @@ const SUGGESTIONS = [
   'Write tests for the main module and run them',
   'Build a small to-do web app in index.html'
 ];
+// An empty folder has nothing to explain or fix yet: offer things to start.
+const NEW_PROJECT_SUGGESTIONS = [
+  'Build a small to-do web app in index.html, saved in localStorage',
+  'Make a Node.js command-line tool with a test, using only built-ins',
+  'Create a one-page portfolio site with a dark mode toggle',
+  'Write a Python script that renames photos by the date they were taken'
+];
 function renderWelcome() {
   // Until the first status arrives only Fen shows, so "Paste a key" doesn't flash on a connected setup.
   $('welcome').classList.remove('booting');
@@ -3300,8 +3307,9 @@ function renderWelcome() {
   });
   const box = $('suggestions');
   box.replaceChildren();
-  const SUGGESTION_ICONS = ['eye', 'bug', 'check', 'globe'];
-  if (ready) for (const [i, text] of SUGGESTIONS.entries()) {
+  const fresh = Boolean(RT && RT.status && RT.status.workspaceEmpty);
+  const SUGGESTION_ICONS = fresh ? ['check', 'plug', 'globe', 'book'] : ['eye', 'bug', 'check', 'globe'];
+  if (ready) for (const [i, text] of (fresh ? NEW_PROJECT_SUGGESTIONS : SUGGESTIONS).entries()) {
     const chip = document.createElement('button');
     chip.className = 'suggestion';
     chip.style.setProperty('--i', String(i));
