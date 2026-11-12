@@ -544,6 +544,7 @@ function terminalProgress() {
 
 function approve(prompt, forceInteractive = false, autoApprove = false, meta = {}) {
   if (autoApprove && !forceInteractive) return Promise.resolve(true);
+  stopToolStatus();
   const progress = terminalProgress();
   const resumeState = progress.state;
   if (resumeState === 'busy') progress.set('paused');
@@ -656,7 +657,30 @@ function onRateLimitWait(event = {}) {
   if (!live || rateLimitWaitsThisTurn++ === 0 || (event.compactTools && !compactToolsNoticeShown)) process.stderr.write(rateLimitNotice(event, colorEnabled(process.stderr)) + '\n');
   if (live) waitIndicator.start({ rateLimitMs: Number(event.waitMs) || 0 });
 }
-function stopWaitIndicator() { flushExploration(); if (waitIndicator) waitIndicator.stop(); }
+function stopWaitIndicator() { flushExploration(); toolStatusCall = null; if (waitIndicator) waitIndicator.stop(); }
+// The status line while a command runs (started by its first output, which
+// comes only after any approval). Shows the newest output line.
+let toolStatusCall = null;
+export function lastOutputLine(text, max = 60) {
+  const lines = stripAnsi(String(text || '')).split(/\r?\n|\r/).map((line) => line.trim()).filter(Boolean);
+  const line = lines.at(-1) || '';
+  return line.length > max ? line.slice(0, max - 1) + '…' : line;
+}
+function liveToolStatus(event = {}) {
+  if (!event.call) return;
+  if (!waitIndicator) waitIndicator = createActivityIndicator({ stream: stdout, env: process.env, color: richOutput(), verbs: () => spinnerVerbsSetting });
+  if (waitIndicator.level === 'off') return;
+  const line = lastOutputLine(event.text);
+  if (toolStatusCall !== event.call.id || !waitIndicator.active) {
+    endText();
+    toolStatusCall = event.call.id;
+    const args = safeArgs(event.call);
+    const detail = String(event.name === 'run_command' ? [args.command, ...(Array.isArray(args.args) ? args.args : [])].filter(Boolean).join(' ') : args.command || '').replace(/\s+/g, ' ').trim();
+    waitIndicator.start({ label: 'Running ' + (detail.length > 50 ? detail.slice(0, 49) + '…' : detail || event.name), detail: line, ...(turnDraft ? { draft: turnDraft } : {}) });
+  } else if (line) waitIndicator.update({ detail: line });
+}
+function safeArgs(call) { try { return JSON.parse(call.function && call.function.arguments || '{}'); } catch { return {}; } }
+function stopToolStatus(call) { if (toolStatusCall && (!call || call.id === toolStatusCall)) { toolStatusCall = null; if (waitIndicator) waitIndicator.stop(); } }
 // Read-only lookups (reads, searches, listings) are held until the batch ends,
 // then shown as one "Read 3 files, searched 1 pattern" line. Failures, and a
 // lone lookup, keep the usual header and result lines.
@@ -1453,7 +1477,11 @@ async function runPrompt(prompt, root, autoApprove, session = null, persistence 
       onCompaction: (info) => stdout.write('\n[context] ' + String(info.note || 'Compacted older conversation history.') + (info.notesSaved ? ' Continuity note saved in .oasis/session-notes.md.' : ' Continuity note was not saved.') + '\n'),
       // MessageDisplay hooks see whole messages, so streaming is off while any are configured.
       ...(stdout.isTTY && process.env.OASIS_NO_STREAM !== '1' && !hasConfiguredHooks(session.hooks || {}, 'MessageDisplay') ? { onDelta: streamDelta } : {}),
+      // A running command keeps a live status line: what runs, for how long,
+      // and its latest output line, so a long build never looks frozen.
+      ...(stdout.isTTY ? { onToolOutput: (event) => liveToolStatus(event) } : {}),
       onToolResult: ({ name, result, call }) => {
+        stopToolStatus(call);
         if (persistence.enabled) saveMidTurn(session);
         if (exploredResult(call, result)) return;
         if (name === 'todo_write' && result && !result.error) { const done = completedTodoCount(Array.isArray(result.todos) ? result.todos : session.todos); if (done > todosDone) playSound('task', { stream: stdout }); todosDone = done; }
