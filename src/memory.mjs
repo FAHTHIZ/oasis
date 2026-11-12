@@ -426,9 +426,9 @@ async function loadRules(dir, scope, workspace = null, notices = null, { ext = [
           }
           const text = await readFile(real, 'utf8');
           if (!text.trim() || text.includes('\0')) continue;
-          const { paths, body, mode, description, triggers } = splitRuleFrontMatter(text, path.basename(entry.name, path.extname(entry.name)));
+          const { paths, body, mode, description, triggers, inputs } = splitRuleFrontMatter(text, path.basename(entry.name, path.extname(entry.name)));
           const name = path.relative(dir, full).split(path.sep).join('/');
-          out.push({ scope, real, file: full, name, label: (prefix || (scope === 'user' ? '~/.claude/rules/' : '.claude/rules/')) + name, paths, mode, description, ...(triggers ? { triggers } : {}), body: workspace ? await readImports(workspace, body) : body });
+          out.push({ scope, real, file: full, name, label: (prefix || (scope === 'user' ? '~/.claude/rules/' : '.claude/rules/')) + name, paths, mode, description, ...(triggers ? { triggers } : {}), ...(inputs && inputs.length ? { inputs } : {}), body: workspace ? await readImports(workspace, body) : body });
         } catch {}
       }
     }
@@ -438,6 +438,22 @@ async function loadRules(dir, scope, workspace = null, notices = null, { ext = [
 }
 
 const listOf = (value) => (Array.isArray(value) ? value : typeof value === 'string' ? value.split(',') : []).map((item) => String(item).trim()).filter(Boolean);
+
+// OpenHands task microagents: `inputs: [{ name, description }]` plus any ${VAR} in the
+// body. OpenHands appends a request to ask for them; OASIS lists them as well.
+function taskInputs(declared, body) {
+  const out = [];
+  const add = (name, description = '') => {
+    const key = String(name || '').trim();
+    if (/^[A-Za-z_][\w-]{0,63}$/.test(key) && !out.some((item) => item.name === key) && out.length < 20) out.push({ name: key, description: String(description || '').trim().slice(0, 300) });
+  };
+  for (const item of Array.isArray(declared) ? declared : []) {
+    if (item && typeof item === 'object') add(item.name, item.description);
+    else add(item);
+  }
+  for (const match of String(body || '').matchAll(/\$\{([A-Za-z_][A-Za-z0-9_]*)\}/g)) add(match[1]);
+  return out;
+}
 
 // Front matter of Claude (paths), Cursor (alwaysApply, globs, description), Windsurf and
 // Antigravity (trigger: always_on | glob | model_decision | manual, globs), Copilot
@@ -460,7 +476,7 @@ function splitRuleFrontMatter(text, stem = '') {
       const slash = '/' + (typeof f.name === 'string' && f.name.trim() ? f.name.trim() : stem);
       if (!triggers.includes(slash)) triggers.push(slash);
     }
-    return { paths: [], body, mode: 'keyword', description, triggers };
+    return { paths: [], body, mode: 'keyword', description, triggers, inputs: taskInputs(f.inputs, body) };
   }
   else if (String(f.alwaysapply).toLowerCase() === 'false') mode = description ? 'requested' : 'manual';
   else mode = 'always';
@@ -579,8 +595,12 @@ export async function keywordRulesFor(root, message, options = {}) {
     if (rule.mode !== 'keyword' || labels.includes(rule.label) || alreadyLoaded(rule.label)) continue;
     const trigger = rule.triggers.find((keyword) => keywordMatches(keyword, text));
     if (!trigger) continue;
-    const body = cleanInstructionText('rule ' + rule.label, rule.body, null).slice(0, Math.min(PER_FILE_LIMIT, budget));
+    let body = cleanInstructionText('rule ' + rule.label, rule.body, null).slice(0, Math.min(PER_FILE_LIMIT, budget));
     if (!body.trim()) continue;
+    if (rule.inputs && rule.inputs.length) {
+      body = body.trimEnd() + '\n\nInputs this task needs:\n' + rule.inputs.map((item) => '- ' + item.name + (item.description ? ': ' + item.description : '')).join('\n') +
+        "\n\nIf the user didn't provide any of these variables, ask the user to provide them first (with ask_user_question when it is available) before the agent can proceed with the task.";
+    }
     budget -= body.length;
     labels.push(rule.label);
     blocks.push('<EXTRA_INFO>\nThe following information has been included based on a keyword match for "' + trigger + '".\nIt may or may not be relevant to the user\'s request.\nSkill location: ' + rule.label + '\n\n' + body.trim() + '\n</EXTRA_INFO>');
