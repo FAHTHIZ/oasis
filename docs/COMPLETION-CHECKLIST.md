@@ -25,7 +25,7 @@ Status: **done** (tested and pushed) · **doing** · **open** · **blocked**
 | --- | --- | --- |
 | Reproducible bugs found while using the product | doing | Busy folder 409 dead end: fixed. Tests touching the real home folder (stale catalog, 155 leaked backups): fixed |
 | Dependency refresh (patch/minor) | done | `859163c5`; undici 8 (major) deferred |
-| Dead-code removal (knip across src/, app/, ide/, desktop/, scripts/; each removal checked with `rg` for dynamic imports and string references) | doing | Unused exports and re-exports removed, and 231 module-internal helpers un-exported: `test/dead-exports.test.mjs`. Stale doc references to removed files: `test/docs-file-references.test.mjs`. The five "unused" dependencies knip lists are loaded dynamically (`@highlightjs/cdn-assets`, `lowlight`, `@vscode/ripgrep`, `@xterm/*` via `scripts/vendor-terminal.mjs`) and stay |
+| Dead-code removal (knip across src/, app/, ide/, desktop/, scripts/; each removal checked with `rg` for dynamic imports and string references) | done | Unused exports and re-exports removed, and 231 module-internal helpers un-exported: `test/dead-exports.test.mjs`. Stale doc references to removed files: `test/docs-file-references.test.mjs`. The five "unused" dependencies knip lists are loaded dynamically (`@highlightjs/cdn-assets`, `lowlight`, `@vscode/ripgrep`, `@xterm/*` via `scripts/vendor-terminal.mjs`) and stay |
 | Continue `src/agent.mjs` (5,105 lines) and `src/cli.mjs` (3,213) decomposition | open | Only with characterization tests first |
 
 ## 2b. Frontier-platform gaps (2026-11-11 cycle)
