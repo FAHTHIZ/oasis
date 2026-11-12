@@ -186,6 +186,7 @@ function helpText() {
     '  oasis --bg "TASK"              Run a task in a background session; oasis bg list|logs|attach|stop|rm ID',
     '  oasis --bg --exec "CMD"        Run a shell command as a background job',
     '  oasis schedule add WHEN TASK  Durable routines on a schedule (cron, every 2h, in 30m); oasis schedule daemon runs them',
+    '  oasis diff --watch            Live view of uncommitted changes that redraws as files change (/diff --watch in a session)',
     '  oasis cloud run "TASK"        Run an agent on GitHub Actions; --here hands off this branch; oasis cloud pull ID brings it back',
     '  oasis attach|logs|stop|rm|respawn ID|NAME   Manage background sessions (respawn --all restarts every running one)',
     '  oasis auto-mode defaults|config|critique|reset   Inspect or reset the auto mode classifier rules',
@@ -2699,6 +2700,13 @@ async function main() {
     const { cloudCommand } = await import('./cloud.mjs');
     try { process.exitCode = await cloudCommand(rawArgs.slice(1), { env: process.env }); }
     catch (error) { process.stderr.write('oasis cloud: ' + error.message + '\n'); process.exitCode = 1; }
+    return;
+  }
+  // `oasis diff [--watch]`: uncommitted changes, optionally as a live full-screen view.
+  if (rawArgs[0] === 'diff') {
+    const { diffCommand } = await import('./live-diff.mjs');
+    try { process.exitCode = await diffCommand(rawArgs.slice(1), { env: process.env }); }
+    catch (error) { process.stderr.write('oasis diff: ' + error.message + '\n'); process.exitCode = 1; }
     return;
   }
   if (subcommandHelp(rawArgs)) return;
