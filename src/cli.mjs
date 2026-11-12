@@ -186,6 +186,7 @@ function helpText() {
     '  oasis --bg "TASK"              Run a task in a background session; oasis bg list|logs|attach|stop|rm ID',
     '  oasis --bg --exec "CMD"        Run a shell command as a background job',
     '  oasis schedule add WHEN TASK  Durable routines on a schedule (cron, every 2h, in 30m); oasis schedule daemon runs them',
+    '  oasis cloud run "TASK"        Run an agent on GitHub Actions; --here hands off this branch; oasis cloud pull ID brings it back',
     '  oasis attach|logs|stop|rm|respawn ID|NAME   Manage background sessions (respawn --all restarts every running one)',
     '  oasis auto-mode defaults|config|critique|reset   Inspect or reset the auto mode classifier rules',
     '  oasis purge [PATH] [--dry-run] [-y] [-i] [--all] [--memory]   Delete local Oasis state for a project',
@@ -2691,6 +2692,13 @@ async function main() {
     if (process.env.OASIS_PROFILE) { const { activeProfile } = await import('./config.mjs'); activeProfile(process.env); }
     const { scheduleCommand } = await import('./cli-routines.mjs');
     await scheduleCommand(rawArgs.slice(1), { env: process.env });
+    return;
+  }
+  // Cloud agents parse their own flags (--model, --here, --pr).
+  if (rawArgs[0] === 'cloud') {
+    const { cloudCommand } = await import('./cloud.mjs');
+    try { process.exitCode = await cloudCommand(rawArgs.slice(1), { env: process.env }); }
+    catch (error) { process.stderr.write('oasis cloud: ' + error.message + '\n'); process.exitCode = 1; }
     return;
   }
   if (subcommandHelp(rawArgs)) return;
