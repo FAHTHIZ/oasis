@@ -27,6 +27,9 @@ const PROTECTED = [
   /^\.gemini\/commands\//,
   /^\.opencode\/commands?\//,
   /^opencode\.jsonc?$/,
+  // Project agent files can declare hooks and inline MCP servers that run when
+  // the agent is launched in a trusted workspace.
+  /^\.(?:oasis|claude|agents|gemini)\/agents\//,
   // MCP servers start processes on the next run.
   /^\.mcp\.json$/,
   /^\.(?:oasis|claude)\/mcp\.json$/,
@@ -60,6 +63,7 @@ const PROTECTED = [
 ];
 
 const REASONS = [
+  [/^\.(?:oasis|claude|agents|gemini)\/agents\//, 'project agent files can declare hooks and MCP servers that run when the agent is launched in a trusted workspace'],
   [/commands?\/|opencode\.jsonc?$/, 'custom commands in a trusted project run their inline shell and grant their allowed-tools when you type the command'],
   [/^\.(?:cursor|gemini|codex|continue)\/|^\.aider\.conf/, 'another coding agent loads this configuration (MCP servers, hooks, rules) automatically'],
   [/^\.vscode\/|\.code-workspace$/, 'the editor can run tasks on folder open and use settings that name executables or auto-approve agent tools'],

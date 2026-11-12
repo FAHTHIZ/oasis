@@ -202,3 +202,13 @@ test('project command files that can run inline shell are protected with a reaso
   }
   assert.equal(protectedConfigPath('/work/repo', 'docs/commands/x.md'), null);
 });
+
+test('project agent files that can declare hooks and MCP servers are protected with a reason', () => {
+  for (const file of ['.oasis/agents/x.md', '.claude/agents/reviewer.md', '.agents/agents/a/agent.md', '.gemini/agents/b.md']) {
+    const hit = protectedConfigPath('/work/repo', file);
+    assert.ok(hit, file);
+    assert.match(hit.reason, /agent files can declare hooks and MCP servers/);
+  }
+  assert.equal(protectedConfigPath('/work/repo', 'src/agents/x.md'), null);
+  assert.equal(protectedConfigPath('/work/repo', 'docs/agents.md'), null);
+});
