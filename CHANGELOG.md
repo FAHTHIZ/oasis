@@ -4,6 +4,7 @@ User-facing change history grouped by package version. A version heading does no
 
 ## Unreleased
 
+- `oasis doctor`: the provider line names local servers ("Ollama (this device) at 127.0.0.1:11434"), and a missing `ollama` command no longer reads "not found" next to a working Ollama server: it says the command is only needed to pull models.
 - Web app: while `oasis web` pauses sign-ins after too many wrong access keys, the page now says so, keeps the saved key and reloads when the pause ends. It used to fall back silently to the browser-only app ("This browser only", "Paste a key to start"), as if OASIS were not running.
 - `oasis web` / `oasis app`: after an update on disk adds a shared module (for example a `git pull` while the server is running), the server rebuilds its list of app files instead of answering 404, which left the page stuck on "Connecting…" until a restart. Rebuilds happen at most every 2 seconds, and only files the app imports are served.
 - Web app: Settings names well-known local model servers ("Ollama (this device)", "LM Studio (this device)", "llama.cpp (this device)") instead of showing a raw `127.0.0.1:11434`.

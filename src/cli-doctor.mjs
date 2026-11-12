@@ -18,9 +18,28 @@ import { colorEnabled } from './markdown.mjs';
 import { commandAvailable } from './command-lookup.mjs';
 import { currentProxy } from './proxy.mjs';
 import { describeRipgrep } from './ripgrep.mjs';
+import { bannerProviderLabel } from './terminal-ui.mjs';
 
 // `oasis doctor`, `oasis update` and `oasis uninstall`.
 const APP_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+
+/** "Ollama (this device) at 127.0.0.1:11434 (openai-compatible)" rather than a bare host:port. */
+export function doctorProviderLine(summary = {}, config = {}) {
+  const label = bannerProviderLabel(config);
+  const named = label && label !== summary.protocol && label !== summary.provider;
+  return (named ? label + ' at ' : '') + summary.provider + ' (' + summary.protocol + ')';
+}
+
+/**
+ * One tool probe line. A missing ollama command used to read "not found" next
+ * to "Local model server: Ollama"; OASIS talks to the server over HTTP and
+ * only needs the command to pull models.
+ */
+export function doctorToolLine(name, available, config = {}) {
+  if (available) return name + ': available';
+  if (name === 'ollama' && /Ollama/.test(bannerProviderLabel(config))) return 'ollama: command not on PATH (fine: OASIS uses the Ollama server over HTTP; the command is only needed to pull models)';
+  return name + ': not found';
+}
 
 export async function doctor(args = [], root = process.cwd(), { fallbackModel = '' } = {}) {
   if (args.includes('--network') || args.includes('--network-only')) {
@@ -54,12 +73,14 @@ export async function doctor(args = [], root = process.cwd(), { fallbackModel = 
   const statusLabel = (ok) => colorEnabled(stdout)
     ? (ok ? '\x1b[32mOK\x1b[0m' : '\x1b[31mCHECK\x1b[0m')
     : (ok ? 'OK' : 'CHECK');
-  for (const item of probes) detail('  ' + item + ': ' + (commandAvailable(item) ? 'available' : 'not found') + '\n');
+  let config = {};
+  try { config = await loadConfig(); } catch {}
+  for (const item of probes) detail('  ' + doctorToolLine(item, commandAvailable(item), config) + '\n');
   try {
-    const config = await loadConfig();
+    config = await loadConfig();
     modelConfigured = Boolean(config.configured);
     const summary = getProviderSummary(config);
-    detail('  Model provider: ' + (modelConfigured ? summary.provider + ' (' + summary.protocol + ')' : 'not set yet — run oasis setup') + '\n');
+    detail('  Model provider: ' + (modelConfigured ? doctorProviderLine(summary, config) : 'not set yet — run oasis setup') + '\n');
     detail('  Model: ' + (modelConfigured ? summary.model : 'not set yet') + '\n');
     detail('  Authentication: ' + summary.authentication + '\n');
     detail('  Config: ' + summary.configPath + '\n');
