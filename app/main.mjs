@@ -1045,7 +1045,7 @@ function createGroup(steps = [], { live = false } = {}) {
   list.className = 'step-list';
   body.appendChild(list);
   el.append(head, body);
-  const group = { el, head, body, list, steps, subagents: [], live, touched: false, thinking: false, startedAt: Date.now() };
+  const group = { el, head, body, list, steps, subagents: [], live, touched: false, startedAt: Date.now() };
   head.addEventListener('click', () => { group.touched = true; setGroupOpen(group, !el.classList.contains('open')); });
   for (const tool of steps) list.appendChild(stepRow(tool));
   setGroupOpen(group, live);
@@ -1060,14 +1060,13 @@ function setGroupOpen(group, open) {
 function updateGroupHead(group) {
   const stats = groupStats(group.steps);
   const waiting = group.steps.some((step) => step.ok === undefined && step.waiting);
-  const running = group.live && (stats.running > 0 || group.thinking);
+  const running = group.live && stats.running > 0;
   group.el.classList.toggle('running', running && !waiting);
   group.el.classList.toggle('waiting', waiting);
   group.el.classList.toggle('failed', !running && stats.failed > 0);
   group.el.classList.toggle('done', !running && !waiting);
   let title = groupTitle(group.steps);
   if (waiting) title = 'Waiting for your approval';
-  else if (group.live && !stats.running && group.thinking) title = 'Thinking about the next step';
   group.head.querySelector('.steps-title').textContent = title;
   const meta = [];
   meta.push(stats.total + (stats.total === 1 ? ' step' : ' steps'));
@@ -1092,7 +1091,6 @@ function updateStepRow(group, tool) {
 function settleGroup(group) {
   if (!group || !group.live) return;
   group.live = false;
-  group.thinking = false;
   // Verbose keeps every step list open; Normal folds finished work to one line.
   if (!group.touched && !verboseSteps()) setGroupOpen(group, false);
   updateGroupHead(group);
@@ -1560,7 +1558,7 @@ function thoughtBlock(text, ms) {
 function liveThinking() {
   return document.querySelector('#transcript .thinking.live');
 }
-function showThinking() {
+function showThinking(at) {
   // Already thinking: keep the clock running instead of starting it over
   // (a new step took over, so its entry now owns the reasoning).
   const live = liveThinking();
@@ -1571,20 +1569,20 @@ function showThinking() {
     }
     return live;
   }
-  if (activeGroup && activeGroup.thinking) { activeGroup.thinking = false; updateGroupHead(activeGroup); }
   const block = thinkingShell(false);
   block.classList.add('live');
   block.setAttribute('role', 'status');
   block.setAttribute('aria-label', 'Thinking');
   block.querySelector('.thinking-head').disabled = true;
-  const started = Date.now();
+  // From the server's clock when known (the model request went out then).
+  const started = Number.isFinite(Number(at)) && Number(at) > 0 ? Math.min(Date.now(), Number(at)) : Date.now();
   block._started = started;
   block._text = '';
   block._entry = currentTurn ? currentTurn.entry : null;
   const label = block.querySelector('.thinking-label');
   // Only the visible text changes; the status role is not re-announced every second.
   label.setAttribute('aria-hidden', 'true');
-  label.textContent = thinkingLabel(0);
+  label.textContent = thinkingLabel(Date.now() - started);
   block._clock = setInterval(() => {
     if (!block.isConnected) { clearInterval(block._clock); return; }
     const next = thinkingLabel(Date.now() - started);
@@ -1707,6 +1705,9 @@ const runClock = {
     const now = Date.now();
     if (waiting && !this.waitStart) this.waitStart = now;
     if (!waiting && this.waitStart) { this.waitedMs += now - this.waitStart; this.waitStart = 0; }
+    // Nothing running, nothing streaming for a moment: show Thinking, so the
+    // page never sits blank while the model works.
+    if (!waiting && !agent.detached && now - lastActivity >= IDLE_THINKING_MS && !liveThinking() && !stepsRunning() && $('questionSheet').hidden) showThinking(lastActivity);
     const text = (waiting ? 'Waiting for you' : 'Working') + ' · ' + formatDuration(this.worked(now)) + ' · Esc to stop';
     const label = el.querySelector('.run-status-text');
     if (label.textContent !== text) label.textContent = text;
@@ -1809,7 +1810,15 @@ function flushPendingInputs() {
   if (next) void send(next);
 }
 
+// When the page last showed something new from the run (text, a step, output).
+let lastActivity = Date.now();
+const IDLE_THINKING_MS = 1000;
+const QUIET_EVENTS = new Set(['usage', 'context', 'cost', 'model_end', 'run_clock', 'todos']);
+function stepsRunning() {
+  return Boolean(activeGroup && activeGroup.live && activeGroup.steps.some((step) => step.ok === undefined));
+}
 function handleEvent(event) {
+  if (!QUIET_EVENTS.has(event.type)) lastActivity = Date.now();
   switch (event.type) {
     case 'user': {
       // Older runtimes sent a steering note as a 'user' event; it is not a new turn.
@@ -1833,6 +1842,11 @@ function handleEvent(event) {
     case 'reasoning':
       addReasoning(event.delta, event.reset);
       break;
+    case 'model_start':
+      // The model is working and nothing runs or streams: say so at once.
+      if (!stepsRunning()) { showThinking(event.startedAt); scrollDown(); }
+      break;
+    case 'model_end': break;
     case 'delta':
       if (!currentTurn) startStep();
       ensureProse();
@@ -1888,7 +1902,6 @@ function handleEvent(event) {
       removeThinking();
       clearCursor();
       const group = ensureGroup();
-      group.thinking = false;
       const tool = { id: event.id, name: event.name, args: event.args || {}, startedAt: Date.now(), ...(event.label ? { label: event.label } : {}), ...(event.open ? { open: true } : {}) };
       liveStartedSteps.add(tool);
       currentTurn.entry.tools.push(tool);

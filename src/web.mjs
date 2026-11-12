@@ -1146,6 +1146,9 @@ export function createOasisWebServer(options = {}) {
           connectorCard: (flow) => connectorCardFor(job, flow),
           onUsage: (usage) => { if (session.webUsage) recordUsage(session.webUsage, usage); emit(job, 'usage', usage); },
           onModelWait: (event) => {
+            // Start and end of each model request: the page shows "Thinking"
+            // from the moment the request goes out, not only once text arrives.
+            if (event && (event.phase === 'start' || event.phase === 'end')) { emit(job, 'model_wait', { phase: event.phase, step: Number(event.step) || 1 }); return; }
             if (!event || event.phase !== 'progress' || !event.promptProgress) return;
             const p = event.promptProgress;
             emit(job, 'model_wait', { phase: 'progress', step: Number(event.step) || 1, promptProgress: { total: Number(p.total) || 0, cache: Number(p.cache) || 0, processed: Number(p.processed) || 0, time_ms: Number(p.time_ms) || 0 } });

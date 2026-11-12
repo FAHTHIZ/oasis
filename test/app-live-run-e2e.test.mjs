@@ -60,6 +60,25 @@ const type = (value) => `(() => { const el = document.getElementById('input'); e
 const submit = `(() => { document.getElementById('composer').requestSubmit(); return true; })()`;
 const busy = `document.body.classList.contains('busy')`;
 
+// Samples the page every 100 ms while a run is busy: is anything live on
+// screen (a running step, the Thinking block, or text that grew in the last
+// second)? The longest stretch with none of these is the silent gap.
+export const SAMPLER = `(() => {
+  const state = window.__live = { longestGap: 0, gapStart: 0, lastText: '', lastGrow: 0, samples: 0, firstNarration: 0, started: Date.now() };
+  const tick = () => {
+    const now = Date.now();
+    const busy = document.body.classList.contains('busy');
+    const text = [...document.querySelectorAll('#transcript .msg.assistant .body')].map((el) => el.textContent).join('|');
+    if (text !== state.lastText) { state.lastText = text; state.lastGrow = now; if (!state.firstNarration && text.trim()) state.firstNarration = now - state.started; }
+    const live = Boolean(document.querySelector('#transcript .thinking.live, #transcript .steps.running, #transcript .tool.running, #transcript .tool.waiting')) || now - state.lastGrow < 1000;
+    if (busy && !live) { if (!state.gapStart) state.gapStart = now; state.longestGap = Math.max(state.longestGap, now - state.gapStart); }
+    else state.gapStart = 0;
+    state.samples++;
+  };
+  setInterval(tick, 100);
+  return true;
+})()`;
+
 export async function openApp(t, script, { settings = {} } = {}) {
   const provider = await streamingProvider(script);
   const root = await mkdtemp(path.join(os.tmpdir(), 'oasis-live-run-'));
@@ -96,6 +115,7 @@ test('a live run streams reasoning into a Thinking block that settles and surviv
     [{ wait: 1500, text: 'I\u2019ll read it again to check the second line.' }, { wait: 200, tool: 'read_file', args: { path: 'notes.txt' } }],
     [{ wait: 200, text: 'The notes say hello.' }]
   ]);
+  await evaluate(page, SAMPLER);
   await evaluate(page, type('What do the notes say?'));
   await evaluate(page, submit);
   // The reasoning summary streams into the live block, opened.
@@ -103,7 +123,12 @@ test('a live run streams reasoning into a Thinking block that settles and surviv
   await shot('reasoning-live');
   // When the model starts writing, the block settles into a collapsed "Thought for".
   await waitFor(page, `(() => { const b = document.querySelector('#transcript .thinking.thought'); return b && /^Thought/.test(b.querySelector('.thinking-label').textContent) && b.querySelector('.thinking-text').hidden; })()`, { label: 'settled into Thought for Ns' });
+  // Step 2 waits 1.5 s with no reasoning: the Thinking timer shows right after the step ends.
+  await waitFor(page, `document.querySelectorAll('#transcript .tool.ok').length === 1 && Boolean(document.querySelector('#transcript .thinking.live'))`, { label: 'Thinking shows while the model works with nothing streaming' });
   await waitFor(page, `!${busy} && /The notes say hello/.test(document.getElementById('transcript').textContent)`, { label: 'answer shown' });
+  const live = await evaluate(page, `JSON.stringify(window.__live)`).then(JSON.parse);
+  assert.ok(live.samples > 10);
+  assert.ok(live.longestGap < 1500, 'never blank for long while the model works (longest gap ' + live.longestGap + ' ms)');
   // Narration sits between the two groups as prose.
   const order = await evaluate(page, `[...document.getElementById('transcript').children].map((el) => el.classList.contains('steps') ? 'group' : el.classList.contains('thought') ? 'thought' : el.classList.contains('assistant') ? 'text' : el.classList.contains('user') ? 'user' : '').filter(Boolean).join(' ')`);
   assert.equal(order, 'user thought text group text group text');
