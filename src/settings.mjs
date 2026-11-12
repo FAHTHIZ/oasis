@@ -503,6 +503,7 @@ export async function loadSettings(root, options = {}) {
           const resolved = filesystem[key].slice(0, 200).map((entry) => resolveSandboxSettingPath(entry, scope, path.resolve(root), env)).filter(Boolean);
           result.sandbox[key] = [...new Set([...(result.sandbox[key] || []), ...resolved])].slice(0, 500);
           if (key === 'allowRead' && (scope === 'project' || scope === 'local')) result.sandbox.allowReadRepo = [...new Set([...(result.sandbox.allowReadRepo || []), ...resolved])].slice(0, 500);
+          if (key === 'allowWrite' && (scope === 'project' || scope === 'local')) result.sandbox.allowWriteRepo = [...new Set([...(result.sandbox.allowWriteRepo || []), ...resolved])].slice(0, 500);
           if (key === 'allowRead' && scope === 'managed') result.sandbox.managedAllowRead = [...new Set([...(result.sandbox.managedAllowRead || []), ...resolved])].slice(0, 500);
         }
         // allowManagedReadPathsOnly (managed): only managed allowRead entries re-open reads; denyRead still merges.
