@@ -113,6 +113,14 @@ export async function pickerFor(command, { session = null, env = process.env, se
     const options = names.map((name) => ({ label: name + (name === current ? ' (current)' : ''), value: name }));
     return { context: 'ModelPicker', options: [...options, cancel], initial: Math.max(0, names.indexOf(current)) };
   }
+  if (command === 'presets') {
+    // Bare /presets in a terminal: pick a saved slot to send (1-9, 0 for 10).
+    const { loadPresets } = await import('./presets.mjs');
+    const slots = await loadPresets(env);
+    const options = slots.map((text, index) => (text ? { label: String(index + 1).padStart(2) + '  ' + text.replace(/\s+/g, ' ').trim().slice(0, 70), value: String(index + 1) } : null)).filter(Boolean);
+    if (!options.length) return null;
+    return { context: 'PresetPicker', options: [...options, cancel], initial: 0 };
+  }
   if (command === 'theme') {
     const themes = await import('./themes.mjs');
     const list = themes.listThemes({ env, plugins: (settings && settings.pluginThemeSources) || [] });
