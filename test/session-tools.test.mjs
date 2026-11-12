@@ -100,6 +100,23 @@ test('monitor_command returns when the pattern matches or the process exits', as
   await assert.rejects(() => monitorCommand(session, { id: 'missing' }), /No background command/);
 });
 
+test('monitor_command: a catastrophic pattern is cut off instead of freezing the process', async () => {
+  // Regression: the pattern ran on the main thread every 200 ms, so (a|a)*$ on
+  // a long run of "a"s froze the TUI, the web server and Esc.
+  const entry = { id: 'bg_2', status: 'running', exitCode: null, output: 'a'.repeat(40) + 'b', readOffset: 0 };
+  const session = { background: new Map([['bg_2', entry]]) };
+  let ticks = 0;
+  const timer = setInterval(() => { ticks += 1; }, 20);
+  const started = Date.now();
+  const result = await monitorCommand(session, { id: 'bg_2', pattern: '(a|a)*$', timeout_seconds: 5 });
+  clearInterval(timer);
+  assert.equal(result.reason, 'pattern_error');
+  assert.match(result.error, /time limit/);
+  assert.ok(Date.now() - started < 4000);
+  assert.ok(ticks > 3, 'the event loop kept running');
+  await assert.rejects(() => monitorCommand(session, { id: 'bg_2', pattern: '(' }), /Invalid pattern/);
+});
+
 test('enter_plan_mode switches the permission mode', () => {
   const session = { permissions: { mode: 'acceptEdits' } };
   assert.equal(enterPlanMode(session, { reason: 'risky' }).mode, 'plan');

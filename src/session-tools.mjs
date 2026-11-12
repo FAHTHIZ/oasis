@@ -2,6 +2,7 @@
 // entering plan mode, desktop notifications, and in-session scheduled prompts.
 import { Cron } from 'croner';
 import { spawn } from 'node:child_process';
+import { createBoundedRegexMatcher } from './safe-regex.mjs';
 import { SHARED_TASK_TOOL_DEFINITIONS, SHARED_TASK_TOOL_NAMES, SHARED_TASK_READ_ONLY_TOOL_NAMES, runSharedTaskTool } from './shared-tasks.mjs';
 
 const fn = (name, description, properties, required = []) => ({ type: 'function', function: { name, description, parameters: { type: 'object', properties, required, additionalProperties: false } } });
@@ -133,22 +134,36 @@ export async function monitorCommand(session, args = {}, { signal } = {}) {
   if (!entry) throw new Error('No background command with id ' + args.id + '. Use list_background to see ids.');
   let pattern = null;
   if (args.pattern) {
-    try { pattern = new RegExp(String(args.pattern).slice(0, 500), 'm'); } catch (error) { throw new Error('Invalid pattern: ' + error.message); }
+    const source = String(args.pattern).slice(0, 500);
+    try { new RegExp(source, 'm'); } catch (error) { throw new Error('Invalid pattern: ' + error.message); }
+    // Matching runs in a worker with a time limit: a catastrophic pattern such
+    // as (a|a)*$ on growing output would otherwise freeze the whole process.
+    pattern = createBoundedRegexMatcher(source, 'm', { timeoutMs: 250 });
   }
   const timeoutMs = Math.min(600, Math.max(1, Number(args.timeout_seconds) || 60)) * 1000;
   const started = Date.now();
   const startOffset = entry.readOffset;
   let reason = 'timeout';
-  while (Date.now() - started < timeoutMs) {
-    if (signal && signal.aborted) { reason = 'interrupted'; break; }
-    const fresh = entry.output.slice(Math.min(startOffset, entry.output.length));
-    if (pattern && pattern.test(fresh)) { reason = 'matched'; break; }
-    if (entry.status !== 'running') { reason = 'exited'; break; }
-    await new Promise((resolve) => setTimeout(resolve, 200));
-  }
+  let patternError = '';
+  let tested = -1;
+  try {
+    while (Date.now() - started < timeoutMs) {
+      if (signal && signal.aborted) { reason = 'interrupted'; break; }
+      const fresh = entry.output.slice(Math.min(startOffset, entry.output.length));
+      if (pattern && fresh.length !== tested) {
+        tested = fresh.length;
+        let hit = false;
+        try { hit = await pattern.test(fresh); }
+        catch (error) { reason = 'pattern_error'; patternError = String(error && error.message || error); break; }
+        if (hit) { reason = 'matched'; break; }
+      }
+      if (entry.status !== 'running') { reason = 'exited'; break; }
+      await new Promise((resolve) => setTimeout(resolve, 200));
+    }
+  } finally { if (pattern) await pattern.close().catch(() => {}); }
   const text = entry.output.slice(Math.min(startOffset, entry.output.length));
   entry.readOffset = entry.output.length;
-  return { id: entry.id, reason, status: entry.status, exitCode: entry.exitCode, waited_ms: Date.now() - started, output: text.length > 20000 ? '…' + text.slice(-20000) : text };
+  return { id: entry.id, reason, ...(patternError ? { error: patternError + ' Use a simpler pattern.' } : {}), status: entry.status, exitCode: entry.exitCode, waited_ms: Date.now() - started, output: text.length > 20000 ? '…' + text.slice(-20000) : text };
 }
 
 export function enterPlanMode(session, args = {}) {
