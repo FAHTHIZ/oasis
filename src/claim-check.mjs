@@ -9,7 +9,9 @@ const POSITIVE = [
   /\ball\s+\d+\s+tests?\s+pass/i,
   /\b\d+\s+(?:tests?\s+)?pass(?:ed|ing)?,?\s+0\s+fail/i,
   /\bbuild (?:is )?(?:successful|succeeds|succeeded)\b/i,
-  /✅\s*(?:all )?tests?/i
+  /✅\s*(?:all )?tests?/i,
+  // "The `test` command was run to verify add(), and it passed." (seen from a small local model after a failing run)
+  /\b(?:tests?|specs?|checks?|builds?|test suite|npm test|pytest|cargo test|go test)\b[^.\n]{0,120}?\b(?:and|so|which|where)\s+(?:it|they|everything)\s+(?:all\s+)?(?:pass(?:es|ed)?|succeed(?:s|ed)?|work(?:s|ed)?)\b/i
 ];
 const NEGATION = /\b(?:fail(?:s|ed|ing|ures?)?|not (?:all )?pass|don'?t pass|doesn'?t pass|didn'?t pass|could ?n[o']t (?:run|verify)|unable to (?:run|verify)|broken|still red|errors? remain)\b/i;
 
@@ -82,9 +84,11 @@ export function appendUnverifiedNotice(text, issues, verification = {}, state = 
   else if (stale) reason = 'files changed after the last check (`' + state.lastCommand + '`) ran';
   else if (denied) reason = '`' + denied + '` was not approved, so no check ran';
   else reason = 'no test or check command ran after the last edit';
-  const claimed = claimsPassing(value) && !failed;
+  const claimed = claimsPassing(value);
   const command = denied || (state && state.lastCommand) || '';
-  const note = 'Not verified: ' + reason + '.' + (claimed ? ' Any passing test results described above were not observed by OASIS.' : '') + (command && !failed ? ' Run `' + command + '` to confirm.' : '');
+  // A reply that reports a pass after OASIS saw the check fail is the case users most need flagged.
+  const contradiction = claimed ? (failed ? ' The reply above says it passed; OASIS saw it fail.' : ' Any passing test results described above were not observed by OASIS.') : '';
+  const note = 'Not verified: ' + reason + '.' + contradiction + (command && !failed ? ' Run `' + command + '` to confirm.' : '');
   if (value.includes('Not verified: ')) return value;
   // The answer already admits the check did not run and makes no passing claim: no need to repeat it.
   if (!claimed && !failed && !stale && ADMITS_UNVERIFIED.test(value)) return value;
