@@ -269,12 +269,6 @@ async function writePluginSecrets(env, secrets) {
   return 'file';
 }
 
-/** Where sensitive plugin options are stored: "keychain", "libsecret" or "file". */
-export async function pluginSecretsStorage(env = process.env) {
-  const file = (await readJson(secretsFile(env), {})) || {};
-  return file.__storage || 'file';
-}
-
 /** pluginConfigs from Claude Code user settings, OASIS user settings, and the 0600 secrets file. */
 export async function readPluginConfigs(env = process.env) {
   const { userSettingsPath } = await import('./settings.mjs');
@@ -624,13 +618,6 @@ export async function pluginDefaultSettings(plugins) {
     }
   }
   return out;
-}
-
-/** Prepend plugin bin/ directories to PATH in a command environment. */
-export function withPluginPath(env, dirs) {
-  if (!Array.isArray(dirs) || !dirs.length) return env;
-  const key = Object.keys(env).find((name) => name.toUpperCase() === 'PATH') || 'PATH';
-  return { ...env, [key]: [...dirs, env[key] || ''].filter(Boolean).join(path.delimiter) };
 }
 
 // ---------- marketplaces ----------

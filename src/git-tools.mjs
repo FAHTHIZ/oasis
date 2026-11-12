@@ -44,8 +44,6 @@ export const GIT_TOOL_DEFINITIONS = [
   }, required: ['title', 'body'] } } }
 ];
 
-export const GIT_TOOL_NAMES = GIT_TOOL_DEFINITIONS.map((tool) => tool.function.name);
-
 // Network operations (push, gh) keep the variables those tools authenticate with.
 const AUTH_ENV = ['GH_TOKEN', 'GITHUB_TOKEN', 'GH_HOST', 'GH_ENTERPRISE_TOKEN', 'GITHUB_ENTERPRISE_TOKEN', 'GIT_ASKPASS', 'SSH_AUTH_SOCK', 'SSH_AGENT_PID', 'GIT_SSH_COMMAND', 'GIT_SSH'];
 

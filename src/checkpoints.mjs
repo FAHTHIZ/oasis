@@ -4,7 +4,7 @@
 // conversation back to before that turn. Changes made by shell commands are not
 // tracked, matching Claude Code's checkpoint behaviour.
 import { createHash } from 'node:crypto';
-import { lstat, mkdir, readdir, readFile, rm, unlink, writeFile } from 'node:fs/promises';
+import { lstat, mkdir, readdir, readFile, unlink, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { resolveWorkspacePath } from './tools.mjs';
 
@@ -134,10 +134,6 @@ export async function loadCheckpoints(directory) {
     store.turns.push({ userMessage: user === null ? null : { role: 'user', content: user, restoredMarker: true }, prompt: String(raw.prompt || '').slice(0, 200), createdAt: String(raw.createdAt || ''), files });
   }
   return store;
-}
-
-export async function deleteCheckpoints(directory) {
-  await rm(directory, { recursive: true, force: true }).catch(() => {});
 }
 
 // Undo the last `count` turns. mode: 'both' (default), 'code', or 'conversation'.

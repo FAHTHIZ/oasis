@@ -8,7 +8,6 @@ import { catalogImageInput } from './model-catalog.mjs';
 export const IMAGE_TYPES = { '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.gif': 'image/gif', '.webp': 'image/webp' };
 export const MAX_IMAGE_BYTES = 3_750_000; // ~5 MB once base64-encoded (Anthropic's per-image limit).
 export const MAX_IMAGES_IN_REQUEST = 4;
-export const IMAGE_TOKEN_ESTIMATE = 1600;
 // Larger sources are accepted and downscaled with sharp (libvips) before upload.
 export const MAX_SOURCE_IMAGE_BYTES = 50 * 1024 * 1024;
 // Long-edge cap applied before upload. Claude Code downscales to 2000 px and

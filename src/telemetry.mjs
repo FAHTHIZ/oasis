@@ -276,8 +276,6 @@ export async function shutdownTelemetry() {
   await current.shutdown();
 }
 
-export function currentSpan() { return spanContext.getStore() || null; }
-
 // Rough line counts for file-changing tools, for oasis.lines_of_code.count.
 export function lineChanges(name, args = {}) {
   const lines = (text) => (typeof text === 'string' && text.length ? text.split('\n').length : 0);

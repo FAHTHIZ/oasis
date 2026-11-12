@@ -41,10 +41,6 @@ export function stringWidth(text) {
   return stringWidthText(value);
 }
 
-export function charWidth(codePoint) {
-  return stringWidth(String.fromCodePoint(codePoint));
-}
-
 export function truncateToWidth(text, max) {
   const plain = stripAnsi(text);
   if (stringWidth(plain) <= max) return text;

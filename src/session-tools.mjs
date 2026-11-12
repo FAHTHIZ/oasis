@@ -194,12 +194,6 @@ export function parseCron(expression) {
   }
 }
 
-export function cronMatches(cron, date) {
-  const minute = new Date(date.getTime());
-  minute.setSeconds(0, 0);
-  return cron.match(minute);
-}
-
 // The next matching minute strictly after from (seconds ignored), or null if the pattern never fires again.
 export function nextCronRun(cron, from = new Date()) {
   return cron.nextRun(from);
@@ -455,20 +449,11 @@ export const RARE_BUILTIN_TOOLS = Object.freeze([
   'cron_create', 'cron_list', 'cron_delete', 'routine_manage', 'memory_delete', 'run_specialist_review',
 ]);
 
-// The lean core: what nearly every coding task uses. Everything else in
-// DEFERRED_BUILTIN_TOOLS stays one call away (named by purpose in the system
-// prompt, loaded by tool_search or on first direct call). Measured on the
-// same model, harnesses with small prompts do as well or better than heavy
-// ones and cost less (docs/BENCHMARKS.md, "Context overhead").
-// OASIS_LEAN_TOOLS=0 or "leanTools": false sends every tool up front.
-export const CORE_TOOL_NAMES = Object.freeze([
-  'read_file', 'list_files', 'glob_files', 'grep', 'edit_file', 'multi_edit', 'write_file',
-  'run_command', 'run_shell', 'powershell',
-  'todo_write', 'task', 'web_search', 'fetch_url', 'ask_user_question',
-  'git_status', 'git_diff', 'load_skill', 'exit_plan_mode', 'tool_search'
-]);
-
-// Built-in tools that wait until they are needed, grouped for the prompt.
+// Built-in tools that wait until they are needed, grouped for the prompt. The
+// rest (read, edit, shell, todo, task, web, git status/diff) is the lean core every
+// coding task uses; harnesses with small prompts do as well and cost less
+// (docs/BENCHMARKS.md, "Context overhead"). OASIS_LEAN_TOOLS=0 or "leanTools":
+// false sends every tool up front.
 export const DEFERRED_TOOL_GROUPS = Object.freeze({
   'Git and GitHub': ['git_commit', 'git_branch', 'git_log', 'git_push', 'create_pull_request', 'enter_worktree', 'exit_worktree', 'worktree_inspect', 'worktree_merge'],
   'Code intelligence': ['repo_map', 'lsp', 'diagnostics', 'search_files', 'notebook_edit', 'execute_code', 'security_scan', 'report_findings', 'run_specialist_review'],
