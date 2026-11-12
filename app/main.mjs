@@ -7,7 +7,7 @@ import { SUBAGENT_STATUS_TEXT } from './core/subagents.mjs';
 import { createConnectorCard, connectIntent, splitServices, brandMark } from './core/connector-card.mjs';
 import { createSoundPlayer } from './core/sound.mjs';
 import { ambientField } from './core/ambient.mjs';
-import { stepOutcome, stepRan, stepLabel, summarizeArgs, toolKind, groupTitle, groupStats, formatDuration, thinkingLabel, thoughtLabel, splitTextToolCall, elapsedSince, describeInput, buildTimeline } from './core/timeline.mjs';
+import { stepOutcome, stepRan, stepLabel, summarizeArgs, toolKind, groupTitle, groupStats, formatDuration, thinkingLabel, thoughtLabel, splitTextToolCall, elapsedSince, describeInput, buildTimeline, groupTiming, runElapsed, timingSplit } from './core/timeline.mjs';
 import { IndexedDBStore, Workspace, lineDiff } from './core/workspace.mjs';
 import { Agent, textOf } from './core/agent.mjs';
 import { FrameSandbox } from './core/sandbox.mjs';
@@ -1075,9 +1075,16 @@ function updateGroupHead(group) {
   if (stats.blocked) meta.push(stats.blocked + ' blocked');
   if (stats.stopped) meta.push(stats.stopped + ' stopped');
   if (group.subagents.length) meta.push(group.subagents.length + (group.subagents.length === 1 ? ' subagent' : ' subagents'));
-  const time = running || waiting ? elapsedSince(group.startedAt) : formatDuration(stats.durationMs);
+  const timing = groupTiming(group.steps);
+  const time = running || waiting ? formatDuration(timing ? timing.spanMs : 0) || elapsedSince(group.startedAt) : formatDuration(stats.durationMs);
   if (time) meta.push(time);
   group.head.querySelector('.steps-meta').textContent = meta.join(' · ');
+  // Inside the open group: how much of that time was tools and how much was
+  // the model working between them.
+  const split = !running && !waiting && timing && timing.spanMs >= 1000 ? timingSplit(timing) : '';
+  let foot = group.body.querySelector('.steps-timing');
+  if (split && !foot) { foot = document.createElement('div'); foot.className = 'steps-timing'; group.body.appendChild(foot); }
+  if (foot) { if (!split) foot.remove(); else if (foot.textContent !== split) foot.textContent = split; }
   group.head.setAttribute('aria-label', title + ', ' + meta.join(', ') + '. ' + (group.el.classList.contains('open') ? 'Collapse' : 'Expand') + ' steps.');
 }
 function updateStepRow(group, tool) {
@@ -1674,28 +1681,28 @@ const LIVE_KEEP = 16_000; // characters of live output kept per running step
 
 // One clock for the whole run, started from the server's start time when
 // there is one, so a reload or another device shows the same "Working 42s".
-// It ticks once a second and writes only when the text changes. Time spent
-// waiting for the person's approval is not work, so the clock holds still
-// while the approval sheet is open and the "Worked for" line leaves it out.
+// It ticks once a second and writes only when the text changes. The header
+// is run start to now, wall time, and groups measure on the same clock (see
+// groupTiming), so a group can never claim more time than the header.
+// An event's server time on this page's clock, or now when it has none.
+function serverTime(at) {
+  const value = Number(at);
+  return Number.isFinite(value) && value > 0 ? Math.min(value, Date.now()) : Date.now();
+}
 const runClock = {
   startedAt: 0,
   timer: 0,
-  waitedMs: 0,
-  waitStart: 0,
   start(at) {
     const value = Number(at);
     if (!Number.isFinite(value) || value <= 0) return;
     const fresh = !(this.startedAt && this.timer);
     // A server time only moves the start earlier (a resumed run), never later.
     this.startedAt = fresh ? value : Math.min(this.startedAt, value);
-    if (fresh) { this.waitedMs = 0; this.waitStart = 0; }
     if (!this.timer) this.timer = setInterval(() => this.tick(), 1000);
     this.tick();
   },
   worked(now = Date.now()) {
-    if (!this.startedAt) return 0;
-    const waiting = this.waitStart ? now - this.waitStart : 0;
-    return Math.max(0, now - this.startedAt - this.waitedMs - waiting);
+    return runElapsed(this.startedAt, now);
   },
   tick() {
     const el = $('runStatus');
@@ -1703,8 +1710,6 @@ const runClock = {
     if (!document.body.classList.contains('busy') || !this.startedAt) { if (!el.hidden) el.hidden = true; return; }
     const waiting = !$('approvalSheet').hidden;
     const now = Date.now();
-    if (waiting && !this.waitStart) this.waitStart = now;
-    if (!waiting && this.waitStart) { this.waitedMs += now - this.waitStart; this.waitStart = 0; }
     // Nothing running, nothing streaming for a moment: show Thinking, so the
     // page never sits blank while the model works.
     if (!waiting && !agent.detached && now - lastActivity >= IDLE_THINKING_MS && !liveThinking() && !stepsRunning() && $('questionSheet').hidden) showThinking(lastActivity);
@@ -1719,8 +1724,6 @@ const runClock = {
     this.timer = 0;
     const ms = this.worked();
     this.startedAt = 0;
-    this.waitedMs = 0;
-    this.waitStart = 0;
     const el = $('runStatus');
     if (el) el.hidden = true;
     return ms;
@@ -1729,13 +1732,24 @@ const runClock = {
 // The end of a run: one quiet line says how long it took, and notes the
 // agent never got to read are shown (the computer keeps them for the next
 // message).
+// Where the model's time went in this run, one record per request (time to
+// first token, total, tokens). Hover the "Worked for" line to see it.
+let runTimings = [];
+function timingSummary(records = []) {
+  if (!records.length) return '';
+  const sec = (ms) => (Number(ms) >= 0 ? (ms / 1000).toFixed(1) + 's' : '–');
+  return records.map((r) => 'Model call ' + r.step + ': first token ' + sec(r.ttftMs) + ', total ' + sec(r.totalMs) + ', silent tail ' + sec(r.silentTailMs) + ', ' + (r.inputTokens || r.inputEstimate || 0) + ' in / ' + (r.outputTokens || 0) + ' out' + (r.toolCalls ? ', ' + r.toolCalls + ' tool call' + (r.toolCalls === 1 ? '' : 's') : '')).join('\n');
+}
 function finishRun(prefix) {
   const ms = runClock.stop();
+  const timings = runTimings;
+  runTimings = [];
   for (const note of pendingInputs.take('steer')) showSteer(note);
   if (prefix && ms >= 1000) {
     const content = prefix + ' ' + formatDuration(ms);
-    display.push({ role: 'worked', content });
-    addMessage('worked', content);
+    display.push({ role: 'worked', content, ...(timings.length ? { timings } : {}) });
+    const line = addMessage('worked', content);
+    if (timings.length) line.title = timingSummary(timings);
   }
 }
 
@@ -1813,7 +1827,7 @@ function flushPendingInputs() {
 // When the page last showed something new from the run (text, a step, output).
 let lastActivity = Date.now();
 const IDLE_THINKING_MS = 1000;
-const QUIET_EVENTS = new Set(['usage', 'context', 'cost', 'model_end', 'run_clock', 'todos']);
+const QUIET_EVENTS = new Set(['usage', 'context', 'cost', 'model_end', 'run_clock', 'todos', 'model_timing']);
 function stepsRunning() {
   return Boolean(activeGroup && activeGroup.live && activeGroup.steps.some((step) => step.ok === undefined));
 }
@@ -1902,7 +1916,7 @@ function handleEvent(event) {
       removeThinking();
       clearCursor();
       const group = ensureGroup();
-      const tool = { id: event.id, name: event.name, args: event.args || {}, startedAt: Date.now(), ...(event.label ? { label: event.label } : {}), ...(event.open ? { open: true } : {}) };
+      const tool = { id: event.id, name: event.name, args: event.args || {}, startedAt: serverTime(event.at), ...(event.label ? { label: event.label } : {}), ...(event.open ? { open: true } : {}) };
       liveStartedSteps.add(tool);
       currentTurn.entry.tools.push(tool);
       group.steps.push(tool);
@@ -1928,7 +1942,7 @@ function handleEvent(event) {
       if (event.more) tool.more = true;
       delete tool.live;
       tool.waiting = false;
-      tool.endedAt = Date.now();
+      tool.endedAt = Math.max(Number(tool.startedAt) || 0, serverTime(event.at));
       if (Number.isFinite(Number(event.durationMs))) tool.durationMs = Number(event.durationMs);
       if (event.label) tool.label = event.label;
       if (event.ok !== false && /write|edit|patch|delete|move|rename|notebook/i.test(String(event.name || tool.name || ''))) turnEdited = true;
@@ -1962,6 +1976,9 @@ function handleEvent(event) {
       break;
     case 'run_clock':
       runClock.start(event.startedAt);
+      break;
+    case 'model_timing':
+      if (runTimings.length < 200) runTimings.push(event);
       break;
     case 'approval_waiting':
       markWaitingTools(true);
@@ -2072,6 +2089,7 @@ function renderSavedDisplay(entries) {
     const el = addMessage(block.type === 'text' ? 'assistant' : entry.role, content, Number(entry.at) || 0);
     if (entry.role === 'user' && entry.images) addImageNote(el, entry.images, []);
     if (entry.role === 'user' && entry.steer) el.classList.add('steer');
+    if (entry.role === 'worked' && Array.isArray(entry.timings)) el.title = timingSummary(entry.timings);
   }
 }
 
