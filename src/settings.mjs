@@ -219,6 +219,7 @@ export function applyHookPolicy(result) {
   if (policy.disableAllManaged) {
     result.hooks = {};
     result.statusLine = null;
+    result.subagentStatusLine = null;
     result.fileSuggestion = null;
     result.hooksDisabled = 'managed';
     return result;
@@ -231,6 +232,7 @@ export function applyHookPolicy(result) {
     }
     result.hooks = kept;
     if (result.statusLine && result.statusLineSource !== 'managed') result.statusLine = null;
+    if (result.subagentStatusLine && result.subagentStatusLineSource !== 'managed') result.subagentStatusLine = null;
     if (result.fileSuggestion && result.fileSuggestionSource !== 'managed') result.fileSuggestion = null;
     result.hooksDisabled = policy.disableAll ? 'settings' : 'managed-only';
   }
@@ -322,6 +324,7 @@ export async function loadSettings(root, options = {}) {
     editorMode: null,
     theme: null,
     statusLine: null,
+    subagentStatusLine: null,
     fileSuggestion: null,
     lspServers: {},
     modelRouting: { enabled: false, easyModel: '', strongModel: '' },
@@ -423,7 +426,7 @@ export async function loadSettings(root, options = {}) {
     if (Array.isArray(settings.claudeMdExcludes)) result.claudeMdExcludes = [...(result.claudeMdExcludes || []), ...settings.claudeMdExcludes.filter((item) => typeof item === 'string' && item.trim()).map((item) => item.trim().slice(0, 1000)).slice(0, 200)];
     if (!trusted) {
       const routingEnabled = settings.modelRouting && typeof settings.modelRouting === 'object' && (settings.modelRouting.enabled === true || Boolean(String(settings.modelRouting.easyModel || '').trim()) || Boolean(String(settings.modelRouting.strongModel || '').trim()));
-      const loosening = stringList(permissions.allow).length || settings.hooks || permissions.defaultMode || settings.sandbox || settings.shell || settings.statusLine || settings.fileSuggestion || settings.lspServers || settings.autoMode || routingEnabled || settings.env || settings.apiKeyHelper || settings.customHeadersHelper || settings.autoTest;
+      const loosening = stringList(permissions.allow).length || settings.hooks || permissions.defaultMode || settings.sandbox || settings.shell || settings.statusLine || settings.subagentStatusLine || settings.fileSuggestion || settings.lspServers || settings.autoMode || routingEnabled || settings.env || settings.apiKeyHelper || settings.customHeadersHelper || settings.autoTest;
       // Any other key is also skipped until trust; say so instead of dropping it silently.
       const untrustedSafe = new Set(['$schema', 'permissions', 'outputStyle', 'editorMode', 'language', 'worktree', 'avoidPhrases', 'codeComments', 'theme', 'agent', 'channelsEnabled', 'autoMemory', 'autoLearning', 'memoryWriteApproval', 'memory', 'executeCode', 'sessionSearch', 'textToolCalls', 'sounds', 'soundVolume', 'idleCompactMinutes', 'deniedMcpServers', 'disabledMcpjsonServers', 'claudeMdExcludes', 'includeGitInstructions', 'alwaysThinkingEnabled', 'skillOverrides', 'disableBundledSkills', 'disableSkillShellExecution', 'spinnerVerbs']);
       const skipped = Object.keys(settings).filter((key) => !untrustedSafe.has(key));
@@ -624,6 +627,8 @@ export async function loadSettings(root, options = {}) {
     if (settings.autoTest === false) result.autoTest = null;
     else if (settings.autoTest) { const autoTest = normalizeAutoTestSetting(settings.autoTest); if (autoTest) result.autoTest = autoTest; }
     if (settings.statusLine && typeof settings.statusLine === 'object' && settings.statusLine.type === 'command' && typeof settings.statusLine.command === 'string' && settings.statusLine.command.trim()) { result.statusLine = { type: 'command', command: settings.statusLine.command.trim() }; result.statusLineSource = scope; }
+    // subagentStatusLine: { type: "command", command } renders the row of each subagent (status-line.mjs); same gates as statusLine.
+    if (settings.subagentStatusLine && typeof settings.subagentStatusLine === 'object' && settings.subagentStatusLine.type === 'command' && typeof settings.subagentStatusLine.command === 'string' && settings.subagentStatusLine.command.trim()) { result.subagentStatusLine = { type: 'command', command: settings.subagentStatusLine.command.trim() }; result.subagentStatusLineSource = scope; }
     // fileSuggestion: { type: "command", command } supplies @ path completions; same gates as statusLine.
     if (settings.fileSuggestion && typeof settings.fileSuggestion === 'object' && settings.fileSuggestion.type === 'command' && typeof settings.fileSuggestion.command === 'string' && settings.fileSuggestion.command.trim()) { result.fileSuggestion = { type: 'command', command: settings.fileSuggestion.command.trim() }; result.fileSuggestionSource = scope; }
   };
