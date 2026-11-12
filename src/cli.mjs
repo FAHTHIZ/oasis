@@ -44,7 +44,7 @@ import { createCompleter } from './completion.mjs';
 import { MarkdownStream, colorEnabled, wrapRendered } from './markdown.mjs';
 import { createActivityIndicator } from './activity-indicator.mjs';
 import { formatApprovalMessage, redactApprovalSecrets } from './approval-language.mjs';
-import { formatTurnSummary, showStartupBanner, promptFor, footerFor, nextMode, runShellPassthrough, shellContextBlock, describeTool, describeEdit, describeToolResult, verboseToolOutput, describeExploration, EXPLORE_TOOLS } from './terminal-ui.mjs';
+import { formatTurnSummary, showStartupBanner, bannerProviderLabel, promptFor, footerFor, nextMode, runShellPassthrough, shellContextBlock, describeTool, describeEdit, describeToolResult, verboseToolOutput, describeExploration, EXPLORE_TOOLS } from './terminal-ui.mjs';
 import { estimateTokens, contextWindowSize, contextTokens } from './context.mjs';
 import { formatUsd, priceFor } from './pricing.mjs';
 import { commandAvailable } from './command-lookup.mjs';
@@ -2292,7 +2292,7 @@ async function interactive(root, autoApprove, persistence = {}) {
   if (stdout.isTTY && process.env.OASIS_DISABLE_THEME_RELOAD !== '1') {
     import('./themes.mjs').then(({ watchThemes }) => watchThemes({ env: process.env, plugins: (startupSettings && startupSettings.pluginThemeSources) || [], onReload: (theme) => stdout.write('\n[theme] reloaded ' + theme.name + '\n') })).catch(() => {});
   }
-  if (stdout.isTTY) await showStartupBanner({ root, model: SESSION_OPTIONS.model || (bannerConfig.configured === false ? 'not set up yet · exit and run oasis setup' : bannerConfig.model) || '', provider: bannerConfig.configured === false ? '' : (bannerConfig.protocol || ''), mode: SESSION_OPTIONS.permissionMode || 'default' }).catch(() => {});
+  if (stdout.isTTY) await showStartupBanner({ root, model: SESSION_OPTIONS.model || (bannerConfig.configured === false ? 'not set up yet · exit and run oasis setup' : bannerConfig.model) || '', provider: bannerConfig.configured === false ? '' : bannerProviderLabel(bannerConfig), mode: SESSION_OPTIONS.permissionMode || 'default' }).catch(() => {});
   else stdout.write('\nOASIS — coding agent\nWorkspace: ' + root + '\nType your task in plain English. Use /help or /exit. Commands run locally; review permissions carefully.\n');
   if (stdout.isTTY) {
     try {
