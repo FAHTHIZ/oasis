@@ -4,6 +4,7 @@ User-facing change history grouped by package version. A version heading does no
 
 ## Unreleased
 
+- TUI: input taller than the terminal (for example a 400-line paste) now shows a window around the cursor with "[N more lines above/below]" markers. Before, it filled the screen, and because the frame could not be redrawn in place, every keystroke reprinted it into the scrollback. The text you send is unchanged.
 - Permissions: rule and edit-scope globs are now matched by a linear-time matcher instead of a backtracking RegExp. A rule such as `Bash(*a*a*a*a*a*a*a*a*b)` took 3 s on a 40-character command, and grew exponentially with length, so a long model-written command could hang the agent. It now takes milliseconds, and matches are unchanged (checked against the old RegExp on 300,000 random cases).
 - CLI: an unknown top-level flag (for example `oasis --modle x -p hi`) now exits with "Unknown option --modle. Did you mean --model?" instead of being sent to the model as the task. Without a terminal, `oasis --bogus` used to hang silently. To send a task that starts with a dash, put `--` before it (`oasis -- "-x is broken"`).
 - Web file preview: a missing file now gets "No file named … in this workspace" instead of the raw ENOENT error with the absolute path. The file is read through a handle opened without following a final symlink and re-checked, so a file swapped for a symlink or FIFO after the check cannot be read and cannot hang the request.

@@ -411,14 +411,33 @@ export function commonPrefix(values) {
 // Layout: computes the frame to draw and where the cursor sits, accounting for
 // wrapping at the terminal width.
 
-export function layoutFrame({ prompt, continuation, text, cursor, hints = [], columns = 80 }) {
+// maxLines caps how many input lines are drawn. A frame taller than the
+// terminal cannot be redrawn in place (cursor-up stops at the top row), so a
+// 400-line paste used to fill the screen and be reprinted into the scrollback
+// on every keystroke. Longer input shows a window around the cursor with
+// "N more lines above/below" markers; the text itself is unchanged.
+export function layoutFrame({ prompt, continuation, text, cursor, hints = [], columns = 80, maxLines = Infinity }) {
   const cols = Math.max(10, columns || 80);
-  const lines = text.split('\n');
+  const allLines = text.split('\n');
   const before = text.slice(0, cursor).split('\n');
-  const cursorLine = before.length - 1;
+  let cursorLine = before.length - 1;
   const cursorText = before[cursorLine];
+  let bodies = allLines.map((body, index) => ({ prefix: index ? continuation : prompt, body }));
+  const limit = Math.max(3, Math.floor(maxLines));
+  if (allLines.length > limit) {
+    const shown = limit - 2;
+    const start = Math.max(0, Math.min(cursorLine - Math.floor(shown / 2), allLines.length - shown));
+    const end = start + shown;
+    const marker = (count, where) => ({ prefix: continuation, body: '[' + count + ' more line' + (count === 1 ? '' : 's') + ' ' + where + ']' });
+    bodies = [
+      ...(start > 0 ? [{ ...marker(start, 'above'), prefix: prompt }] : []),
+      ...bodies.slice(start, end),
+      ...(end < allLines.length ? [marker(allLines.length - end, 'below')] : [])
+    ];
+    if (start > 0) cursorLine = cursorLine - start + 1;
+  }
   const segments = [
-    ...lines.map((body, index) => ({ prefix: index ? continuation : prompt, body })),
+    ...bodies,
     ...hints.map((hint) => ({ prefix: '', body: truncateToWidth(hint, cols - 1) }))
   ];
   let out = '';
@@ -504,7 +523,7 @@ export function readInput(options = {}) {
         if (state.search) rows = [DIM('(reverse-i-search) ', color) + state.search.query + (state.search.match < 0 && state.search.query ? DIM('  (no match)', color) : '')];
         else rows = [...hints, ...(state.vim ? [DIM(vimModeLabel(state), color)] : []), ...footer()];
       }
-      const frame = layoutFrame({ prompt: promptText(), continuation: continuation(), text: state.text, cursor: final ? state.text.length : state.cursor, hints: rows, columns: columns() });
+      const frame = layoutFrame({ prompt: promptText(), continuation: continuation(), text: state.text, cursor: final ? state.text.length : state.cursor, hints: rows, columns: columns(), maxLines: Math.max(3, (output.rows || 24) - rows.length - 3) });
       let s = '';
       if (previousCursorRow > 0) s += '\x1b[' + previousCursorRow + 'A';
       s += '\r\x1b[J' + frame.out;
