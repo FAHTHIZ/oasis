@@ -211,6 +211,19 @@ export function recordUsage(tracker, usage = {}) {
 
 
 
+// Custom subagent rows from settings.subagentStatusLine; an empty map when it is not set.
+export async function subagentRows(state, records) {
+  const { session, root, env = process.env } = state;
+  const setting = session && session.settings && session.settings.subagentStatusLine;
+  if (!setting || !records.length) return new Map();
+  try {
+    const { subagentStatusLinePayload, renderSubagentStatusLines } = await import('./status-line.mjs');
+    const { contextWindowSize, contextTokens } = await import('./context.mjs');
+    const payload = subagentStatusLinePayload({ root, session, records, columns: Math.max(20, (Number(state.width) || 100) - 2), env, contextWindowSize, contextTokens });
+    return await renderSubagentStatusLines(setting, payload, { root, env, keepColor: Boolean(state.color) });
+  } catch { return new Map(); }
+}
+
 export async function runBuiltinCommand(name, argument, state) {
   if (name === 'ultrareview') { name = 'review'; argument = 'ultra ' + String(argument || '').trim(); }
   if (Object.hasOwn(COMMAND_ALIASES, name) && !Object.hasOwn(BUILTIN_COMMANDS, name)) name = COMMAND_ALIASES[name];
@@ -1866,12 +1879,16 @@ export async function runBuiltinCommand(name, argument, state) {
       const agentLine = (agent) => '  ' + agent.id.padEnd(9) + ' ' + agent.status.padEnd(10) + ' ' + (agent.background ? 'bg ' : 'fg ') + agent.agent + ': ' + agent.description + '  (' + agent.elapsed + ', ' + agent.toolCalls + ' tool calls' + (agent.status === 'running' && agent.recentTools ? ', now: ' + agent.recentTools[agent.recentTools.length - 1] : '') + ')';
       const running = agents.filter((agent) => agent.status === 'running');
       const earlier = agents.filter((agent) => agent.status !== 'running');
-      if (running.length) { lines.push('Agents:'); for (const agent of running) lines.push(agentLine(agent)); }
+      // subagentStatusLine may replace (or, with "", hide) the rows it is shown.
+      const custom = await subagentRows(state, [...running, ...earlier.slice(-20)].map((agent) => getAgent(session, agent.id)).filter(Boolean));
+      const rowFor = (agent) => custom.has(agent.id) ? (custom.get(agent.id) ? '  ' + custom.get(agent.id) : null) : agentLine(agent);
+      const pushRow = (agent) => { const row = rowFor(agent); if (row !== null) lines.push(row); };
+      if (running.length) { lines.push('Agents:'); for (const agent of running) pushRow(agent); }
       if (earlier.length) {
         // Like Claude Code's "Earlier in this session": finished (or restart-interrupted)
         // agents stay listed and can be reopened and messaged.
         lines.push('Earlier in this session:');
-        for (const agent of earlier.slice(-20)) lines.push(agentLine(agent));
+        for (const agent of earlier.slice(-20)) pushRow(agent);
         if (earlier.length > 20) lines.push('  … ' + (earlier.length - 20) + ' older');
       }
       if (procs.length) {
