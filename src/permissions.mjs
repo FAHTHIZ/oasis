@@ -418,6 +418,30 @@ export function commandSpellings(piece, depth = 0) {
     out.add(words.join(' '));
     out.add(named.join(' '));
     if (base === 'git') { const plain = stripGitGlobals(named); if (plain) out.add(plain.join(' ')); }
+    // git -c alias.x='!cmd' x: the alias body is a shell command.
+    if (base === 'git') {
+      for (let i = 1; i < words.length && words[i].startsWith('-'); i++) {
+        const setting = words[i] === '-c' ? words[i + 1] : words[i].startsWith('-c') ? words[i].slice(2) : null;
+        const alias = typeof setting === 'string' && setting.match(/^alias\.[^=]+=\s*!(.*)$/is);
+        if (alias) for (const inner of splitShellCommands(alias[1], depth + 1).commands) for (const spelling of commandSpellings(inner, depth + 1)) out.add(spelling);
+        if (words[i] === '-c') i++;
+      }
+    }
+    // GNU parallel runs its command for each input; `parallel ::: 'cmd'` runs each argument as a command.
+    if (base === 'parallel') {
+      const valued = new Set(['-j', '--jobs', '-S', '--sshlogin', '-a', '--arg-file', '--colsep', '-d', '--delimiter', '-I', '--tmpdir', '--joblog', '--results', '-n', '--max-args', '-L', '--timeout', '--delay', '--retries', '--env', '-E']);
+      let i = 1;
+      while (i < words.length && words[i].startsWith('-') && !/^:::+$/.test(words[i])) { const flag = words[i]; i++; if (flag === '--') break; if (valued.has(flag) && !flag.includes('=')) i++; }
+      if (/^:::+$/.test(words[i] || '')) {
+        for (const line of words.slice(i + 1)) if (!/^:::+$/.test(line)) for (const inner of splitShellCommands(line, depth + 1).commands) for (const spelling of commandSpellings(inner, depth + 1)) out.add(spelling);
+        break;
+      }
+      const end = words.findIndex((word, index) => index >= i && /^:::+$|^::::$/.test(word));
+      const inner = words.slice(i, end === -1 ? undefined : end);
+      if (!inner.length) break;
+      words = inner;
+      continue;
+    }
     if (base === 'eval') {
       for (const inner of splitShellCommands(words.slice(1).join(' '), depth + 1).commands) for (const spelling of commandSpellings(inner, depth + 1)) out.add(spelling);
       break;

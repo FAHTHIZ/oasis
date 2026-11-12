@@ -80,7 +80,7 @@ export function splitShell(line) {
   return commands;
 }
 
-const PREFIXES = new Set(['sudo', 'doas', 'command', 'builtin', 'exec', 'time', 'nice', 'nohup', 'env', 'xargs', 'timeout', 'stdbuf', 'ionice', 'setsid', 'unbuffer', 'chronic', 'flock', 'then', 'do', 'else', '!', 'npx', 'pnpx', 'bunx', 'busybox', 'toybox', 'chrt', 'taskset']);
+const PREFIXES = new Set(['sudo', 'doas', 'command', 'builtin', 'exec', 'time', 'nice', 'nohup', 'env', 'xargs', 'timeout', 'stdbuf', 'ionice', 'setsid', 'unbuffer', 'chronic', 'flock', 'then', 'do', 'else', '!', 'npx', 'pnpx', 'bunx', 'busybox', 'toybox', 'chrt', 'taskset', 'parallel']);
 // Options of transparent prefixes that consume the next token as their value.
 const PREFIX_VALUE_OPTIONS = {
   sudo: new Set(['-u', '-g', '-h', '-p', '-C', '-D', '-r', '-t', '-U', '-T']),
@@ -90,6 +90,7 @@ const PREFIX_VALUE_OPTIONS = {
   timeout: new Set(['-s', '--signal', '-k', '--kill-after']),
   ionice: new Set(['-c', '-n', '-p']),
   stdbuf: new Set(['-i', '-o', '-e']),
+  parallel: new Set(['-j', '--jobs', '-S', '--sshlogin', '-a', '--arg-file', '--colsep', '-d', '--delimiter', '-I', '--tmpdir', '--joblog', '--results', '-n', '--max-args', '-L', '--timeout', '--delay', '--retries', '--env', '-E']),
   xargs: new Set(['-I', '-i', '-n', '-P', '-L', '-l', '-d', '-a', '-E', '-e', '-s', '--max-args', '--max-procs', '--delimiter', '--arg-file']),
   npx: new Set(['-p', '--package', '-c', '--call']),
   flock: new Set(['-w', '--timeout', '-E', '--conflict-exit-code']),
@@ -322,6 +323,13 @@ function analyzeSimple(cmd, ctx = {}) {
     // Skip global options (-C dir, -c key=value, --git-dir=...) before the subcommand.
     let g = 0;
     while (g < args.length && args[g].startsWith('-')) g += (args[g] === '-C' || args[g] === '-c') ? 2 : 1;
+    // `git -c alias.x='!cmd' x` runs cmd through the shell, hidden behind git.
+    const globals = args.slice(0, g);
+    for (let i = 0; i < globals.length; i++) {
+      const setting = globals[i] === '-c' ? globals[i + 1] : globals[i].startsWith('-c') ? globals[i].slice(2) : null;
+      if (typeof setting === 'string' && /^alias\.[^=]+=\s*!/i.test(setting)) return { highRisk: 'defines a git alias that runs a shell command' };
+      if (/^--config-env(=|$)/.test(globals[i]) && /alias\./i.test(globals[i] + ' ' + (globals[i + 1] || ''))) return { highRisk: 'defines a git alias from an environment variable' };
+    }
     const gitArgs = args.slice(g);
     return analyzeGit(gitArgs, flags(gitArgs), operands(gitArgs));
   }
