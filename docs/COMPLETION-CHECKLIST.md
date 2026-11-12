@@ -36,7 +36,7 @@ Status: **done** (tested and pushed) · **doing** · **open** · **blocked**
 | Routines in the web app and hosted by `oasis web` / `oasis gateway` | done | `test/routines-hosted.test.mjs` |
 | Event-triggered routines (webhook fires a routine) | done | `test/routines-hosted.test.mjs` (webhook test) |
 | Crash-safe mid-turn saves in web, headless and App Server turns | done | `test/web-midturn-save.test.mjs`, `test/session-midturn.test.mjs` |
-| RFC 5545 RRULE routine schedules (DeepSeek Harness parity) | done | `test/rrule.test.mjs`, `test/routines.test.mjs` (RRULE lifecycle), differential check vs `rrule@2`: 0/4,500 mismatches |
+| RFC 5545 RRULE routine schedules (DeepSeek Harness parity) | done | `test/rrule.test.mjs`, `test/routines.test.mjs` (RRULE lifecycle); expansion by `rrule-temporal` 2.2.8 (adds BYSETPOS, BYWEEKNO, BYYEARDAY) |
 | Webhook event filters (GitHub `event.action`, ping) | done | `test/routines-hosted.test.mjs` |
 | Routine results review in the browser (Codex Triage parity) | done | `test/routines-hosted.test.mjs` (runs endpoint) |
 | Routine history retention, stale-edit conflicts, prune finished | done | `test/routines.test.mjs` (bounded history) |
