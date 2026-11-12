@@ -4,6 +4,7 @@ User-facing change history grouped by package version. A version heading does no
 
 ## Unreleased
 
+- "Could not reach the model provider" now names the host it tried (`at 127.0.0.1:11434`; never credentials or the path), and for a local Ollama port it suggests `ollama serve`.
 - Web app: the diff for a changed file now has **Discard**, which, after a confirmation, puts a tracked file back to its last committed version (including a deleted one), like the per-file revert in the Codex app and Cursor. It reads the committed version with `git ls-tree`/`cat-file`, so the repository's filters and hooks never run. It refuses untracked files, symlinks, `.git` and paths outside the workspace, and waits while an agent task is running (`POST /api/workspace/discard`).
 - `oasis app-server --listen ws://127.0.0.1:PORT` without `--ws-auth` now says at startup that any local user or process can connect, and suggests `--listen unix://` or `--ws-auth capability-token` for shared machines.
 - TUI: input taller than the terminal (for example a 400-line paste) now shows a window around the cursor with "[N more lines above/below]" markers. Before, it filled the screen, and because the frame could not be redrawn in place, every keystroke reprinted it into the scrollback. The text you send is unchanged.
