@@ -167,3 +167,22 @@ test('OpenCode Markdown and opencode.json commands keep OpenCode placeholders', 
   const off = await loadCustomCommands(root, { env: { ...commandEnv, OASIS_OTHER_AGENT_RULES: '0' }, home });
   assert.equal(off.has('team:review') || off.has('globaljson'), false);
 });
+
+test('Devin Desktop workflow folders in sub-folders load, below the workspace and its parents', async (t) => {
+  const { root, home, env } = await setup(t, {
+    'services/api/.devin/workflows/api-deploy.md': 'API DEPLOY',
+    'services/api/.windsurf/workflows/shared.md': 'NESTED SHARED',
+    'web/.windsurf/workflows/web-build.md': 'WEB BUILD',
+    '.devin/workflows/shared.md': 'ROOT SHARED',
+    'node_modules/pkg/.devin/workflows/dep.md': 'DEPENDENCY',
+    '.hidden/.devin/workflows/hidden.md': 'HIDDEN',
+    'a/b/c/d/e/.devin/workflows/deep.md': 'TOO DEEP'
+  });
+  const commands = await loadCustomCommands(root, { env, home });
+  assert.equal(commands.get('api-deploy').body, 'API DEPLOY');
+  assert.equal(commands.get('web-build').body, 'WEB BUILD');
+  assert.equal(commands.get('shared').body, 'ROOT SHARED');
+  for (const name of ['dep', 'hidden', 'deep']) assert.equal(commands.get(name), undefined, name);
+  const off = await loadCustomCommands(root, { env: { ...env, OASIS_OTHER_AGENT_RULES: '0' }, home });
+  assert.equal(off.get('api-deploy'), undefined);
+});
