@@ -500,3 +500,16 @@ test('smartConnect: a keyless server where every model needs a key says to paste
   ]);
   await assert.rejects(smartConnect('https://locked.example/v1', { fetchImpl }), (error) => error instanceof ProviderError && /needs an API key to use them/.test(error.message) && error.status === 401);
 });
+
+test('smartConnect: a local thinking model too slow to finish says so instead of "busy"', async () => {
+  const fetchImpl = async (url, options = {}) => {
+    const json = (body) => new Response(JSON.stringify(body), { status: 200, headers: { 'content-type': 'application/json' } });
+    if (/\/api\/tags$/.test(String(url))) return json({ models: [{ name: 'qwen3:4b' }] });
+    if (/\/v1\/models$/.test(String(url))) return json({ data: [{ id: 'qwen3:4b' }] });
+    if (/\/api\/show$/.test(String(url))) return json({});
+    const body = JSON.parse(options.body);
+    if ((body.max_tokens || 0) < 1000) return json({ choices: [{ finish_reason: 'length', message: { role: 'assistant', content: '', reasoning: 'Okay, let me think' } }] });
+    return new Promise((resolve, reject) => options.signal.addEventListener('abort', () => reject(new DOMException('aborted', 'AbortError'))));
+  };
+  await assert.rejects(smartConnect('http://localhost:11434', { fetchImpl, tries: 1, probeTimeoutMs: 50 }), (error) => /hidden thinking/.test(error.message) && !/busy/.test(error.message));
+});

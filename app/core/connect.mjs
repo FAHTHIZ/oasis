@@ -414,6 +414,15 @@ async function lockIn(connection, ranked, { fetchImpl, onStatus, tries = 4, pref
   const probe = async (model) => {
     const first = await testProvider({ ...connection, model, maxRetries: 0, maxTokens: 64 }, fetchImpl, { timeoutMs: probeTimeoutMs });
     if (first.toolCalling || String(first.reply || '').trim()) return first;
+    // A local thinking model (qwen3, R1-style) on a slow computer can't finish the
+    // longer answer in time. "Busy" would be the wrong advice, so say why.
+    if (connection.local) {
+      try { return await testProvider({ ...connection, model, maxRetries: 0, maxTokens: 2048 }, fetchImpl, { timeoutMs: probeTimeoutMs }); }
+      catch (error) {
+        if (!error || !error.timedOut) throw error;
+        throw Object.assign(new ProviderError(model + ' spends its answers on hidden thinking and could not finish one within ' + Math.round(probeTimeoutMs / 1000) + ' seconds on this computer. Use a model without hidden thinking, such as qwen2.5-coder.', { status: 0 }), { timedOut: true, thinking: true });
+      }
+    }
     return testProvider({ ...connection, model, maxRetries: 0, maxTokens: 2048 }, fetchImpl, { timeoutMs: probeTimeoutMs });
   };
   while (order.length && attempts < limit && hardFailures < Math.max(tries, preferred.length) && (attempts === 0 || Date.now() < deadline)) {
@@ -498,7 +507,7 @@ async function lockIn(connection, ranked, { fetchImpl, onStatus, tries = 4, pref
  *   { connection, model, toolCalling, notes, githubToken }
  * or throws ProviderError with a message written for the user.
  */
-export async function smartConnect(input, { fetchImpl = globalThis.fetch.bind(globalThis), onStatus = () => {}, known = [], test = true, allowPull = true, tries = 4, retryDelayMs } = {}) {
+export async function smartConnect(input, { fetchImpl = globalThis.fetch.bind(globalThis), onStatus = () => {}, known = [], test = true, allowPull = true, tries = 4, retryDelayMs, probeTimeoutMs } = {}) {
   const parsed = parsePaste(input);
   const notes = [];
   const githubToken = parsed.githubTokens[0] || '';
@@ -507,7 +516,7 @@ export async function smartConnect(input, { fetchImpl = globalThis.fetch.bind(gl
     say('Found ' + connection.models.length + ' model' + (connection.models.length === 1 ? '' : 's') + ' on ' + connection.label + '.', 'models');
     if (!connection.models.length && !preferred.length) throw new ProviderError(connection.label + ' answered but lists no chat models.');
     if (!test) return { connection, model: preferred[0] || connection.models[0], toolCalling: null, notes, githubToken };
-    const locked = await lockIn(connection, connection.models, { fetchImpl, onStatus, tries, preferred, ...(retryDelayMs !== undefined ? { retryDelayMs } : {}) });
+    const locked = await lockIn(connection, connection.models, { fetchImpl, onStatus, tries, preferred, ...(retryDelayMs !== undefined ? { retryDelayMs } : {}), ...(probeTimeoutMs !== undefined ? { probeTimeoutMs } : {}) });
     const unusable = new Set(locked.unusable || []);
     const rest = connection.models.filter((id) => id !== locked.model);
     // Models that are retired or have no quota go last, so they never become fallbacks.
