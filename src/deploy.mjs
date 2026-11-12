@@ -6,7 +6,7 @@ import { execFile, spawn } from 'node:child_process';
 import { readFile, readdir, lstat, rm } from 'node:fs/promises';
 import path from 'node:path';
 
-export const OUTPUT_DIRS = ['dist', 'build', 'out', '_site', 'public', 'site'];
+const OUTPUT_DIRS = ['dist', 'build', 'out', '_site', 'public', 'site'];
 const SKIP_DIRS = new Set(['.git', '.oasis', 'node_modules', '.github', '.vscode', '.idea']);
 const SECRET = /^(\.env(\..*)?|.*\.(pem|key|p12|pfx)|id_(rsa|ed25519|ecdsa)(\.pub)?|\.npmrc|\.netrc|credentials(\.json)?)$/i;
 const MAX_FILES = 20000;

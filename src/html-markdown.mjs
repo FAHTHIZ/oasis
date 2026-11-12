@@ -134,7 +134,7 @@ export async function convertHtmlInProcess(html, options = {}) {
 const BLOCK = /^(?:address|article|aside|blockquote|br|dd|div|dl|dt|figcaption|figure|footer|form|h[1-6]|header|hr|li|main|nav|ol|p|pre|section|table|tr|ul)$/i;
 
 // Linear plain-text rendering used when full conversion runs out of time.
-export async function htmlToPlainText(html) {
+async function htmlToPlainText(html) {
   await loadDom();
   const document = parse(html);
   for (const element of document.querySelectorAll('script, style, noscript, template, svg, [hidden]')) element.remove();

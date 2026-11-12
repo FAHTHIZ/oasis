@@ -6,7 +6,7 @@ import { access, readFile } from 'node:fs/promises';
 import { fetchLatestRelease, resolveTagCommit } from './github-release.mjs';
 
 const execFileAsync = promisify(execFile);
-export const UPDATE_REPO = 'FAHTHIZ/oasis';
+const UPDATE_REPO = 'FAHTHIZ/oasis';
 export const INSTALL_SPEC = 'https://github.com/FAHTHIZ/oasis/archive/';
 
 async function run(command, args, options = {}) {

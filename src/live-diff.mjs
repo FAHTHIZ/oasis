@@ -105,7 +105,7 @@ export function applyKey(view, key, lines, rows) {
 }
 
 /** Run the full-screen live view until the user quits. Without a TTY it prints once. */
-export async function runLiveDiff({ root = process.cwd(), paths = [], stat = false, interval = 1000, env = process.env, stdin = process.stdin, stdout = process.stdout } = {}) {
+async function runLiveDiff({ root = process.cwd(), paths = [], stat = false, interval = 1000, env = process.env, stdin = process.stdin, stdout = process.stdout } = {}) {
   let diff = collectDiff(root, { paths, env });
   const view = { scroll: 0, stat, paused: false };
   if (!stdout.isTTY || !stdin.isTTY) {

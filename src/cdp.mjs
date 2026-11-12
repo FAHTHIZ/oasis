@@ -82,7 +82,7 @@ function connectWebSocket(url, WebSocketImpl = globalThis.WebSocket) {
 }
 
 /** One CDP connection to a page target. */
-export class CdpPage {
+class CdpPage {
   constructor(ws, target) {
     this.ws = ws;
     this.target = target;

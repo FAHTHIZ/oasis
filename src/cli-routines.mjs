@@ -3,7 +3,7 @@ import path from 'node:path';
 import { stdout } from 'node:process';
 import { cancelRun, createJob, describeJob, editJob, listRuns, pauseJob, readJobs, removeFinished, removeJob, resumeJob, runDaemon, tick, triggerJob } from './routines.mjs';
 
-export const SCHEDULE_USAGE = `Usage: oasis schedule COMMAND
+const SCHEDULE_USAGE = `Usage: oasis schedule COMMAND
 
 Routines run on a schedule in fresh background sessions, even with no terminal open.
 Start the scheduler with "oasis schedule daemon" (or run "oasis schedule tick" from cron).

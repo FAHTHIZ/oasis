@@ -86,7 +86,7 @@ export function normalizeCases(raw) {
   });
 }
 
-export async function loadCases(file) {
+async function loadCases(file) {
   const text = await readFile(file, 'utf8');
   if (/\.jsonl$/i.test(file)) return normalizeCases(text.split(/\r?\n/).filter((line) => line.trim()).map((line, i) => { try { return JSON.parse(line); } catch { throw new Error(file + ':' + (i + 1) + ' is not valid JSON.'); } }));
   return normalizeCases(JSON.parse(text));
@@ -98,7 +98,7 @@ function safeRelative(workspace, rel) {
   return full;
 }
 
-export function toolsCalled(messages = []) {
+function toolsCalled(messages = []) {
   const names = [];
   for (const message of messages) for (const call of message && message.tool_calls || []) if (call && call.function && call.function.name) names.push(call.function.name);
   return names;
@@ -295,7 +295,7 @@ export function formatEvalReport(report) {
   return lines.join('\n') + '\n';
 }
 
-export function templateCases(target, count = 3) {
+function templateCases(target, count = 3) {
   const skills = target.skills.length ? target.skills : [{ name: target.name, description: target.description }];
   const cases = [];
   for (let i = 0; i < count; i++) {
@@ -311,7 +311,7 @@ export function templateCases(target, count = 3) {
   return { cases };
 }
 
-export async function draftCases(target, { agent, config, env, count = 3 } = {}) {
+async function draftCases(target, { agent, config, env, count = 3 } = {}) {
   if (!agent || !config || config.configured === false) return templateCases(target, count);
   const session = await agent.createSession({ root: target.root, config, env, tools: [], bare: true });
   session.headless = true;

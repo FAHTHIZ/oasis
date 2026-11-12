@@ -229,7 +229,7 @@ function repoCommandKeys(cwd, env, depth = 0) {
   return [...new Set(keys)];
 }
 
-export function repoConfigRunsCommands(cwd, env = process.env) {
+function repoConfigRunsCommands(cwd, env = process.env) {
   const keys = repoCommandKeys(cwd, env);
   return !keys || keys.length > 0;
 }

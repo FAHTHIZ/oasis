@@ -6,7 +6,7 @@ import { estimateTokens } from './context.mjs';
 import { saveSessionNotes } from './session-notes.mjs';
 
 export const HISTORY_COMPACT_THRESHOLD_CHARS = 60000;
-export const HISTORY_COMPACT_KEEP_MESSAGES = 28;
+const HISTORY_COMPACT_KEEP_MESSAGES = 28;
 export const HISTORY_COMPACT_INPUT_LIMIT = 32000;
 
 export function historyTextSize(messages) {

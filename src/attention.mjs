@@ -6,7 +6,7 @@
 //   OASIS_NOTIFY=auto|bell|osc|off      default auto
 //   OASIS_NOTIFY_AFTER_SECONDS=15       only for turns at least this long
 
-export const DEFAULT_NOTIFY_AFTER_SECONDS = 15;
+const DEFAULT_NOTIFY_AFTER_SECONDS = 15;
 
 const OSC9_TERMINALS = new Set(['iTerm.app', 'WezTerm', 'ghostty']);
 

@@ -70,7 +70,7 @@ const REASONS = [
 ];
 
 /** Workspace-relative, forward-slash, lower-case form of a path (or null if outside the root). */
-export function normalizeWorkspaceRelative(root, rawPath) {
+function normalizeWorkspaceRelative(root, rawPath) {
   const text = String(rawPath || '').trim();
   if (!text) return null;
   const absolute = path.resolve(root || process.cwd(), text);

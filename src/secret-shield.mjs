@@ -135,14 +135,6 @@ export function redactSecretText(text, { token = '[redacted]' } = {}) {
   return output;
 }
 
-/** redactSecretText() on every string inside a value (before it is serialized). */
-export function redactSecretValues(value, depth = 0) {
-  if (typeof value === 'string') return redactSecretText(value);
-  if (depth > 20 || !value || typeof value !== 'object') return value;
-  if (Array.isArray(value)) return value.map((item) => redactSecretValues(item, depth + 1));
-  return Object.fromEntries(Object.entries(value).map(([key, entry]) => [key, redactSecretValues(entry, depth + 1)]));
-}
-
 /** Swap placeholders back to real values inside tool arguments (deep). */
 export function unmaskSecrets(session, value) {
   const vault = session && session.secretVault instanceof Map ? session.secretVault : null;

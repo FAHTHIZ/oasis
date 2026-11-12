@@ -56,7 +56,7 @@ export function toShareGPTRecord(data, tools = []) {
   return { id: record.id, conversations, tools: JSON.stringify(record.tools.map((tool) => tool.function || tool)), metadata: record.metadata };
 }
 
-export function formatRecord(data, format = 'openai', tools = []) {
+function formatRecord(data, format = 'openai', tools = []) {
   if (format === 'sharegpt') return toShareGPTRecord(data, tools);
   if (format === 'openai') return toOpenAIRecord(data, tools);
   throw new Error('Unknown export format ' + format + '. Use sharegpt or openai.');

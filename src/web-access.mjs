@@ -3,7 +3,7 @@
 import { searchBackends, searchBackend, keylessFallbackEnabled } from './web-search.mjs';
 import { execFileSync } from 'node:child_process';
 
-export const SEARCH_PROVIDER_HOSTS = {
+const SEARCH_PROVIDER_HOSTS = {
   duckduckgo: 'html.duckduckgo.com',
   bing: 'www.bing.com',
   tavily: 'api.tavily.com',
@@ -12,7 +12,7 @@ export const SEARCH_PROVIDER_HOSTS = {
   firecrawl: 'api.firecrawl.dev'
 };
 
-export function webSearchHosts(args, env) {
+function webSearchHosts(args, env) {
   const configured = searchBackends(env);
   const strategy = String(args.strategy || env.OASIS_SEARCH_STRATEGY || 'auto').toLowerCase();
   let providers;

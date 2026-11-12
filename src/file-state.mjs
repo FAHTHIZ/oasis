@@ -10,7 +10,7 @@ import { readFile, stat } from 'node:fs/promises';
 
 function hash(buffer) { return createHash('sha256').update(buffer).digest('hex'); }
 
-export function fileStateEnabled(context = {}) {
+function fileStateEnabled(context = {}) {
   const session = context.session;
   if (!session || typeof session !== 'object') return false;
   const env = context.env || process.env;

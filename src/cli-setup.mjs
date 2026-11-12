@@ -192,7 +192,7 @@ export async function configureProvider(root = process.cwd(), options = {}) {
 // Paste-to-connect in the terminal: the same smart connect the app uses. Works
 // out the provider from a key, model link or local server address, picks the
 // best tool-calling model, keeps the next ones as automatic backups and saves.
-export async function connectFromTerminalPaste(text) {
+async function connectFromTerminalPaste(text) {
   const { connectFromPaste } = await import('./provider-connect.mjs');
   let last = '';
   const result = await connectFromPaste(text, {
@@ -268,7 +268,7 @@ export function providerKeysInEnv(env = process.env) {
   return found;
 }
 
-export async function connectFromEnvironment(wanted = '') {
+async function connectFromEnvironment(wanted = '') {
   const keys = providerKeysInEnv();
   const pick = wanted ? keys.find((item) => item.provider === wanted.toLowerCase() || item.name === wanted.toUpperCase()) : keys[0];
   if (!pick) {

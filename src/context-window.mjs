@@ -18,7 +18,7 @@ export function contextWindowFromError(error) {
 // real window from the error and drop to the small-context tool set (rare tools
 // stay reachable through tool_search).
 const LLAMA_OVERFLOW_PATTERN = /exceed_context_size_error|exceeds the available context size/i;
-export function isLoopbackBaseURL(baseURL) {
+function isLoopbackBaseURL(baseURL) {
   try { return ['localhost', '127.0.0.1', '::1', '[::1]'].includes(new URL(String(baseURL || '')).hostname.toLowerCase()); } catch { return false; }
 }
 

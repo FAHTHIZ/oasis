@@ -53,7 +53,7 @@ const PER_FILE_LIMIT = 9000;
 // The README is background sent with every request; its opening (what the
 // project is, how to run it) is what helps. The model can read the rest.
 const README_LIMIT = 2500;
-export const OTHER_AGENT_RULES = ['GEMINI.md', 'AGENT.md', path.join('.github', 'copilot-instructions.md'), '.cursorrules', '.windsurfrules', path.join('.devin', 'global_rules.md'), path.join('.windsurf', 'global_rules.md'), '.clinerules', '.roorules', 'CONVENTIONS.md', '.goosehints'];
+const OTHER_AGENT_RULES = ['GEMINI.md', 'AGENT.md', path.join('.github', 'copilot-instructions.md'), '.cursorrules', '.windsurfrules', path.join('.devin', 'global_rules.md'), path.join('.windsurf', 'global_rules.md'), '.clinerules', '.roorules', 'CONVENTIONS.md', '.goosehints'];
 
 async function isGitRoot(dir) {
   try { await lstat(path.join(dir, '.git')); return true; } catch { return false; }
@@ -123,7 +123,7 @@ async function configInstructionFiles(workspace, env, home) {
 
 // Gemini CLI's context.fileName (a name or list of names, default GEMINI.md) in
 // ~/.gemini/settings.json and .gemini/settings.json; plain file names only, up to 10.
-export async function geminiContextNames(workspace, env = process.env, home = os.homedir()) {
+async function geminiContextNames(workspace, env = process.env, home = os.homedir()) {
   const names = [];
   for (const file of [path.join(home, '.gemini', 'settings.json'), path.join(workspace, '.gemini', 'settings.json')]) {
     try {
@@ -359,7 +359,7 @@ export function readmeText(content) {
 // Other agents' rule folders, read natively with their own trigger semantics:
 // always-on, glob-scoped (loaded when a matching file is touched), on request
 // (listed by description; the model reads the file when relevant) or manual (skipped).
-export const OTHER_AGENT_RULE_DIRS = [
+const OTHER_AGENT_RULE_DIRS = [
   { dir: '.cursor/rules', ext: ['.mdc', '.md'], tool: 'Cursor' },
   { dir: '.devin/rules', ext: ['.md'], tool: 'Devin Desktop' },
   { dir: '.windsurf/rules', ext: ['.md'], tool: 'Windsurf' },
@@ -716,7 +716,7 @@ async function readSmallTextFile(file, limit) {
   } catch { return null; }
 }
 
-export async function claudeAutoMemoryBlock(root, { env = process.env, home, notices = [] } = {}) {
+async function claudeAutoMemoryBlock(root, { env = process.env, home, notices = [] } = {}) {
   if (env.OASIS_IMPORT_CLAUDE_MEMORY === '0' || env.CLAUDE_CODE_DISABLE_AUTO_MEMORY === '1') return '';
   const dir = await claudeAutoMemoryDir(root, env, home);
   const index = await readSmallTextFile(path.join(dir, 'MEMORY.md'), CLAUDE_MEMORY_INDEX_BYTES);

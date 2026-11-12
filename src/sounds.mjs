@@ -21,7 +21,7 @@ import os from 'node:os';
 import path from 'node:path';
 
 export const SOUND_NAMES = ['done', 'attention', 'error', 'task'];
-export const DEFAULT_SOUND_VOLUME = 50;
+const DEFAULT_SOUND_VOLUME = 50;
 // Turns shorter than this finish silently: instant replies do not chime.
 export const DONE_SOUND_AFTER_MS = 3000;
 

@@ -67,7 +67,7 @@ jobs:
 }
 
 /** A short, sortable id for a cloud task, used in its branch name. */
-export function cloudTaskId(now = Date.now(), random = randomBytes(2).toString('hex')) {
+function cloudTaskId(now = Date.now(), random = randomBytes(2).toString('hex')) {
   return now.toString(36) + random;
 }
 

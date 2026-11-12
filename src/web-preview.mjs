@@ -30,7 +30,7 @@ const TYPES = {
 const KEY = '[A-Za-z0-9_-]{32,64}';
 const PREVIEW_PATH = new RegExp('^/preview/(' + KEY + ')/(?::(\\d{2,5})/)?(.*)$');
 
-export function previewType(file) {
+function previewType(file) {
   return TYPES[path.extname(file).toLowerCase()] || 'application/octet-stream';
 }
 

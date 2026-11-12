@@ -31,7 +31,7 @@ async function withEventLock(file, work) {
   }
 }
 
-export function eventLogPath(root, sessionId, env = process.env) {
+function eventLogPath(root, sessionId, env = process.env) {
   if (typeof sessionId !== 'string' || !/^[a-f0-9-]{20,80}$/i.test(sessionId)) throw new Error('Invalid session ID.');
   return path.join(getSessionDirectory(root, env), sessionId + '.events.jsonl');
 }

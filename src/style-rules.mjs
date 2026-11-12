@@ -39,7 +39,7 @@ export function effectivePhrases(settings = {}, env = process.env) {
   return normalizePhrases([...defaults, ...normalizePhrases(settings.avoidPhrases)]);
 }
 
-export function writingRulesBlock(phrases, commentMode) {
+function writingRulesBlock(phrases, commentMode) {
   const lines = [];
   if (phrases.length) lines.push('Never use these words or phrases in replies, comments, commit messages or docs: ' + phrases.map((p) => '"' + p + '"').join(', ') + '. Say it plainly instead.');
   if (commentMode === 'none') lines.push('Do not add code comments. Leave existing comments as they are unless the change makes one wrong.');

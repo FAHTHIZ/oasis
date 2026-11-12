@@ -30,7 +30,7 @@ export function loopbackFetch(input, init = {}) {
  * fetch() semantics over node:http. openRequest(url, options, onResponse) returns a
  * ClientRequest (or a promise of one), so callers choose how to connect (direct, proxy).
  */
-export function nodeFetch(url, init = {}, openRequest) {
+function nodeFetch(url, init = {}, openRequest) {
   return new Promise((resolve, reject) => {
     const signal = init.signal;
     if (signal && signal.aborted) { reject(abortError(signal)); return; }

@@ -16,7 +16,7 @@ import path from 'node:path';
 
 const MIN_BYTES = 512;
 
-export function readDedupEnabled(session, env = process.env) {
+function readDedupEnabled(session, env = process.env) {
   if (!session || typeof session !== 'object') return false;
   if (/^(0|false|off|no)$/i.test(String(env.OASIS_READ_DEDUP || ''))) return false;
   const config = session.config || {};

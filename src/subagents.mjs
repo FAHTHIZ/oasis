@@ -231,7 +231,7 @@ const OPENCODE_TOOLS = {
  * Gemini model ids and OpenCode provider/model ids rarely name a model on the
  * user's OASIS provider, so these agents inherit the session model.
  */
-export function foreignAgentFrontMatter(flavor, raw = {}) {
+function foreignAgentFrontMatter(flavor, raw = {}) {
   const data = raw && typeof raw === 'object' ? raw : {};
   const lower = (value) => String(value ?? '').trim().toLowerCase();
   if (flavor === 'gemini') {
@@ -417,7 +417,7 @@ function agentDirectories(root, env) {
 // Entries with no prompt and no description only tweak OpenCode's built-in agents, so skip them.
 const JSON_AGENT_CONFIGS = [['opencode', 'OpenCode'], ['kilo', 'Kilo Code']];
 
-export async function loadJsonConfigAgents(root, env = process.env) {
+async function loadJsonConfigAgents(root, env = process.env) {
   const home = env.HOME || env.USERPROFILE || os.homedir();
   const configHome = env.XDG_CONFIG_HOME || path.join(home, '.config');
   const workspace = path.resolve(root);
