@@ -37,6 +37,8 @@ const TOKEN_PATTERNS = [
   /\bgsk_[A-Za-z0-9]{40,}\b/g,
   /\bxai-[A-Za-z0-9]{40,}\b/g,
   /\bpplx-[A-Za-z0-9]{40,}\b/g,
+  /\btvly-(?:dev-|prod-)?[A-Za-z0-9]{24,}\b/g,
+  /\bfc-[a-f0-9]{32}\b/g,
   /\br8_[A-Za-z0-9]{30,}\b/g,
   /\bya29\.[A-Za-z0-9_-]{40,}/g,
   /\bGOCSPX-[A-Za-z0-9_-]{24,}/g,
