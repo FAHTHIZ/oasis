@@ -196,7 +196,8 @@ export function renderSummary(summary) {
   lines.push('Headline pass rate is a macro-average of per-task pass rates. A task contributes only when every completed agent has exactly the requested number of distinct trials, complete matching SHA-256 task fingerprints, and matching category/difficulty metadata.', '');
   lines.push('| Agent | Requested model | CLI-reported model | Pass rate | Passed trials | Median trial time | Tokens | Total reported cost |', '|---|---|---|---:|---:|---:|---:|---:|');
   for (const item of summary.agents) {
-    if (item.skipped) { lines.push('| ' + item.name + ' | — | — | not run | — | — | — | — |'); continue; }
+    // Requested model stays visible, so a timed-out local run is not mistaken for an unconfigured one.
+    if (item.skipped) { lines.push('| ' + item.name + ' | ' + ((summary.requestedModels && summary.requestedModels[item.agent]) || 'CLI default') + ' | — | not run | — | — | — | — |'); continue; }
     lines.push('| ' + item.label + ' | ' + (item.requestedModel || 'CLI default') + ' | ' + (item.reportedModel || 'not reported') + ' | ' + pct(item.passRate) + ' | ' + item.passedTrials + '/' + item.trials + ' | ' + seconds(item.medianTrialTimeMs) + ' | ' + (item.totalTokens ?? 'n/a') + ' | ' + (item.totalReportedCostUSD === null ? 'n/a' : '$' + item.totalReportedCostUSD.toFixed(4)) + ' |');
   }
   if (summary.caveats.length) { lines.push('', '## Interpretation limits', ''); for (const caveat of summary.caveats) lines.push('- ' + caveat); }
