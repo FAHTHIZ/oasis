@@ -32,14 +32,43 @@ const SIMPLE = new Set([
 ]);
 
 // Flags that make an otherwise read-only program write files or run code.
+// Short flags can be grouped (`sort -uo out`, `tree -fo out`), so a writing
+// letter anywhere in a group counts, not only a group that starts with it.
 const UNSAFE_FLAGS = {
   find: /^-(exec|execdir|ok|okdir|delete|fprint|fprint0|fprintf|fls)$/,
-  sort: /^(-o.*|--output(=.*)?|--compress-program(=.*)?)$/,
+  sort: /^(-[A-Za-z]*o.*|--output(=.*)?|--compress-program(=.*)?)$/,
   rg: /^--pre(=.*)?$/,
-  tree: /^(-o|-R|--fromfile)$/,
-  file: /^(-C|--compile)$/,
-  date: /^(-s.*|--set(=.*)?)$/
+  // ag --pager runs the named program with the results.
+  ag: /^--pager(=.*)?$/,
+  tree: /^(-[A-Za-z]*[oR][A-Za-z]*|--fromfile)$/,
+  file: /^(-[A-Za-z]*C[A-Za-z]*|--compile)$/,
+  date: /^(-[A-Za-z]*s.*|--set(=.*)?)$/
 };
+
+// Files in the project that make a package manager or toolchain shim run code
+// the repository chose, even for `--version` or `yarn info`: Yarn's yarnPath /
+// yarn-path, a pnpmfile, and rustup's toolchain file (a `path =` toolchain runs
+// the repository's own cargo/rustc binaries).
+const REPO_LAUNCHERS = {
+  yarn: ['.yarnrc.yml', '.yarnrc'],
+  pnpm: ['.pnpmfile.cjs', '.pnpmfile.mjs'],
+  cargo: ['rust-toolchain', 'rust-toolchain.toml'],
+  rustc: ['rust-toolchain', 'rust-toolchain.toml']
+};
+
+function repoLauncherPresent(name, cwd, root) {
+  const files = REPO_LAUNCHERS[name];
+  if (!files) return false;
+  const top = path.resolve(root);
+  let dir = path.resolve(cwd);
+  while (true) {
+    if (files.some((file) => existsSync(path.join(dir, file)))) return true;
+    if (dir === top) return false;
+    const parent = path.dirname(dir);
+    if (parent === dir) return false;
+    dir = parent;
+  }
+}
 
 const VERSION_PROGRAMS = new Set([
   'node', 'npm', 'npx', 'pnpm', 'yarn', 'bun', 'deno', 'python', 'python3', 'pip', 'pip3', 'uv', 'go', 'cargo', 'rustc',
@@ -238,6 +267,7 @@ export function readOnlyArgv(command, args = [], { root, cwd = root } = {}) {
   if (!root || typeof command !== 'string' || !command || command.includes('/') || command.includes('\\')) return false;
   const name = command.replace(/\.exe$/i, '').toLowerCase();
   if (!Array.isArray(args) || args.some((arg) => typeof arg !== 'string')) return false;
+  if (repoLauncherPresent(name, cwd, root)) return false;
   if (args.length === 1 && /^(--version|-v|-V|version)$/.test(args[0]) && VERSION_PROGRAMS.has(name)) return true;
   if (name === 'git') {
     if (!readOnlyGit(args) || gitObjectSecret(args)) return false;
