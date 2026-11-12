@@ -2508,6 +2508,8 @@ function saveUnreadChats(set) {
 setInterval(() => {
   if (document.visibilityState === 'visible' && document.querySelector('#sidebar .side-task.running:not(.current)')) void renderSidebar();
 }, 8000);
+// Coming back to the tab shows what finished meanwhile at once, not on the next tick.
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && document.querySelector('#sidebar .side-task.running')) void renderSidebar(); });
 const SIDEBAR_KEY = 'oasis.sidebar';
 function applySidebar() {
   let hidden = false;
