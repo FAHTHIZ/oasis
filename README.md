@@ -124,8 +124,8 @@ OASIS has two interfaces, the terminal and the web app, on the same runtime, ses
     <td><img src="assets/screenshots/web-approval-dark.png" alt="The OASIS web app asking for approval to run npm test in a card above the message box, with the step behind it marked as waiting and the task sidebar showing Needs you."></td>
   </tr>
   <tr>
-    <td valign="top">Streaming diffs with word highlights, inline images, <code>/tasks</code>, <code>/rewind</code>, <code>/export</code> to Markdown or HTML. <code>oasis -p</code> and <code>oasis exec</code> for scripts.</td>
-    <td valign="top">Live timeline with expandable steps, a task sidebar, Files and Changes panels, a real terminal (<kbd>Ctrl</kbd>+<kbd>&#96;</kbd>), plan mode, Undo, cost and context meters, <code>/</code> and <code>@</code> autocomplete, and one-click Claude Code plugins.</td>
+    <td valign="top">Streaming diffs with word highlights, inline images, <code>/tasks</code>, <code>/rewind</code>, <code>/export</code> to Markdown or HTML, a live diff view (<code>oasis diff --watch</code>), and <code>oasis deploy</code> to GitHub Pages. <code>oasis -p</code> and <code>oasis exec</code> for scripts.</td>
+    <td valign="top">Live timeline with expandable steps, a task sidebar, Files and Changes panels, a real terminal (<kbd>Ctrl</kbd>+<kbd>&#96;</kbd>), a sandboxed Preview of your pages and dev servers with <code>/design</code> artboards and browser recordings, hands-free talk mode, plan mode, Undo, cost and context meters, <code>/</code> and <code>@</code> autocomplete, and one-click Claude Code plugins.</td>
   </tr>
 </table>
 
@@ -163,9 +163,10 @@ Beyond the two interfaces, OASIS speaks the protocols other tools already use, s
 | Zed, JetBrains and other ACP editors | `oasis acp` | The Agent Client Protocol over stdio: sessions you can list, load, resume, close and delete, Mode and Model pickers, a context meter, questions shown as editor forms, and `$/cancel_request` that really stops the turn |
 | Codex App Server clients | `oasis app-server` | Clients built for `codex app-server` drive OASIS with any model: threads, turns, steering, approvals, inline review, files, commands and fuzzy file search |
 | Cursor Cloud Agents API scripts | `oasis web --persistent-key` | Cursor's v1 and v0 REST endpoints (agents, runs, follow-ups, steering, run stream, signed webhooks) served by your own OASIS with any model; PRs and branch creation are refused. [Details](docs/INTERFACES.md#cursor-cloud-agents-api) |
-| VS Code, Cursor, Windsurf | `oasis ide install` | The VS Code-family extension, connected to an OASIS runtime |
+| VS Code, Cursor, Windsurf | `oasis ide install` | The VS Code-family extension, connected to an OASIS runtime, with inline tab completion from your configured model |
 | Your own code | `import` from `src/sdk.mjs` | The Node.js SDK: session, headless, tool and hook APIs in your process |
 | CI | `action.yml` | A GitHub Action that runs OASIS in a workflow with its credentials and permissions |
+| Cloud agents | `oasis cloud run "TASK"` | The task runs on GitHub Actions with your own model key; `--here` hands off the current branch, uncommitted work included, `--pr` opens a pull request, and `oasis cloud pull` brings it back |
 | Chat | `oasis gateway` | Telegram, Slack or Discord gateways, configured explicitly |
 
 <details>
@@ -290,11 +291,11 @@ This compares harness features from public documentation, not results. On a give
 | License | Apache-2.0 | Proprietary | Apache-2.0 | Apache-2.0 | Open source | Apache-2.0 |
 | Models | Any provider or local server | Anthropic | ChatGPT plan or API key | Gemini | Many providers | 15+ providers |
 | Web interface | Self-hosted, remote-ready | Cloud sessions | Codex Web (cloud) | No | Local | No |
-| Desktop app | Yes (unsigned builds) | Yes | Yes | No | Beta | Yes |
+| Desktop app | Yes (signing ready, certificates not yet added) | Yes | Yes | No | Beta | Yes |
 | Claude Code plugins | Yes, plus Codex plugins and Gemini extensions | Yes | No (own format) | No (own extensions) | No (own plugins) | No |
 | Subagents | Parallel, background, resumable, teams, worktrees | Yes | Agent command center | Yes | `general` subagent | No |
 
-OASIS trails in model-specific tuning, hosted cloud runs, community size and real-world hours. The full comparison, with sources and dates, is in [docs/COMPARISON.md](docs/COMPARISON.md).
+OASIS trails in model-specific tuning, a hosted (zero-setup) cloud, community size and real-world hours. The full comparison, with sources and dates, is in [docs/COMPARISON.md](docs/COMPARISON.md).
 
 ## Security
 
