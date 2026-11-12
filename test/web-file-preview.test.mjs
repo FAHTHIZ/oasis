@@ -45,4 +45,27 @@ test('inline file previews are authenticated and cannot read outside or secret p
 
   const outside = await fetch(base + '/api/workspace/file?path=' + encodeURIComponent('../outside.txt'), { headers });
   assert.equal(outside.status, 403);
+
+  const missing = await fetch(base + '/api/workspace/file?path=' + encodeURIComponent('src/nope.txt'), { headers });
+  assert.equal(missing.status, 404);
+  const missingText = await missing.text();
+  assert.match(missingText, /No file named src\/nope\.txt/);
+  assert.equal(missingText.includes(root), false, 'the absolute workspace path is not echoed');
+  assert.doesNotMatch(missingText, /ENOENT|lstat/);
+});
+
+test('the preview read refuses a final symlink and a FIFO even after the lstat check', { skip: process.platform === 'win32' }, async (t) => {
+  const { readRegularFileNoFollow } = await import('../src/web.mjs');
+  const { symlink } = await import('node:fs/promises');
+  const { execFileSync } = await import('node:child_process');
+  const dir = await mkdtemp(path.join(os.tmpdir(), 'oasis-nofollow-'));
+  t.after(() => rm(dir, { recursive: true, force: true }));
+  await writeFile(path.join(dir, 'secret.txt'), 'outside');
+  await writeFile(path.join(dir, 'ok.txt'), 'fine');
+  await symlink(path.join(dir, 'secret.txt'), path.join(dir, 'link.txt'));
+  execFileSync('mkfifo', [path.join(dir, 'pipe')]);
+  assert.equal(String(await readRegularFileNoFollow(path.join(dir, 'ok.txt'), 100)), 'fine');
+  assert.equal(await readRegularFileNoFollow(path.join(dir, 'ok.txt'), 2), null, 'grew past the limit');
+  await assert.rejects(readRegularFileNoFollow(path.join(dir, 'link.txt'), 100), { code: 'ELOOP' });
+  assert.equal(await readRegularFileNoFollow(path.join(dir, 'pipe'), 100), null, 'a FIFO does not block');
 });
