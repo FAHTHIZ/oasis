@@ -62,19 +62,79 @@ export function parseRule(raw) {
   return { raw: text, tools: alias || [name], specifier, isMcpPrefix: /^mcp_/.test(name) && match[2] === undefined };
 }
 
-export function globToRegExp(pattern) {
-  let source = '';
+// Glob tokens: literal char, ? (one non-slash), * (non-slash run), ** (any
+// run except line terminators, like RegExp `.`) and **/ (empty, or any run
+// ending in a slash).
+const LINE_TERMINATOR = /[\n\r\u2028\u2029]/;
+
+function globTokens(pattern) {
+  const tokens = [];
   for (let i = 0; i < pattern.length; i++) {
     const char = pattern[i];
     if (char === '*') {
       if (pattern[i + 1] === '*') {
         i++;
-        if (pattern[i + 1] === '/') { i++; source += '(?:.*/)?'; } else source += '.*';
-      } else source += '[^/]*';
-    } else if (char === '?') source += '[^/]';
-    else source += char.replace(/[|\\{}()[\]^$+.]/g, '\\$&');
+        if (pattern[i + 1] === '/') { i++; tokens.push({ type: 'dirs' }); } else tokens.push({ type: 'any' });
+      } else tokens.push({ type: 'star' });
+    } else if (char === '?') tokens.push({ type: 'one' });
+    else tokens.push({ type: 'char', char });
   }
-  return new RegExp('^' + source + '$');
+  return tokens;
+}
+
+/**
+ * Compiles a permission/scope glob to a matcher with RegExp-style test().
+ * It used to build a backtracking RegExp, so a rule such as
+ * Bash(*a*a*a*a*a*a*a*a*b) took seconds on a 40-character command and
+ * effectively hung the agent on a longer, model-written one. This simulates the
+ * pattern as an NFA instead: O(text x pattern) time, same matches.
+ */
+export function globToRegExp(pattern) {
+  const tokens = globTokens(String(pattern));
+  const size = tokens.length;
+  // State 2*i: about to match token i (the end when i === size). State 2*i+1:
+  // inside a **/ run that has not yet ended with a slash.
+  const close = (states) => {
+    for (let i = 0; i < size; i++) {
+      if (states[2 * i] && tokens[i].type !== 'char' && tokens[i].type !== 'one') states[2 * (i + 1)] = 1;
+    }
+    return states;
+  };
+  return {
+    source: String(pattern),
+    test(input) {
+      const text = String(input);
+      let states = new Uint8Array(2 * size + 2);
+      states[0] = 1;
+      close(states);
+      // UTF-16 units, as the RegExp it replaces (no u flag) matched.
+      for (let k = 0; k < text.length; k++) {
+        const char = text[k];
+        const next = new Uint8Array(2 * size + 2);
+        let alive = false;
+        for (let i = 0; i < size; i++) {
+          const entry = states[2 * i];
+          const inside = states[2 * i + 1];
+          if (!entry && !inside) continue;
+          const token = tokens[i];
+          if (token.type === 'dirs') {
+            if (LINE_TERMINATOR.test(char)) continue;
+            next[2 * i + 1] = 1; alive = true;
+            if (char === '/') next[2 * (i + 1)] = 1;
+            continue;
+          }
+          if (!entry) continue;
+          if (token.type === 'char') { if (char === token.char) { next[2 * (i + 1)] = 1; alive = true; } }
+          else if (token.type === 'one') { if (char !== '/') { next[2 * (i + 1)] = 1; alive = true; } }
+          else if (token.type === 'star') { if (char !== '/') { next[2 * i] = 1; alive = true; } }
+          else if (token.type === 'any') { if (!LINE_TERMINATOR.test(char)) { next[2 * i] = 1; alive = true; } }
+        }
+        if (!alive) return false;
+        states = close(next);
+      }
+      return states[2 * size] === 1;
+    }
+  };
 }
 
 function commandLine(command, args = []) {
