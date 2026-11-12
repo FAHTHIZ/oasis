@@ -4,6 +4,21 @@ User-facing change history grouped by package version. A version heading does no
 
 ## Unreleased
 
+Nothing yet.
+
+## [1.3.0] - 2026-11-12
+
+### Live runs that tell the truth
+
+- Commands stream their output while they run, and every step reports its real outcome. The timeline's step labels and group titles say "failed" or "denied" when that is what happened, not "done".
+- Terminal: a live status line names the running command (short commands only, so long scripts don't flood it), the spinner is driven by a clock, type-ahead is echoed while the agent works, and redraws are synchronized so the screen doesn't flicker. Ctrl+O during a turn expands the newest tool output.
+- Terminal: approvals show the proposed diff with clear added/removed styling, and the turn summary leaves out time spent waiting for you.
+- Web app: a crisper live run view. Streaming replies are split into finished Markdown blocks and an open tail, so earlier paragraphs stop re-rendering.
+- Web app: approve or deny right inside the waiting step. The docked approval sits above the run clock and notes, and the run clock pauses while it waits.
+- Web app: notes sent while the agent works keep their look after a reload and no longer offer "Edit and resend". Long chats say when old messages are trimmed and offer Show all. The sidebar refreshes running tasks when the tab comes back.
+
+### More
+
 - `/presets`: ten numbered slots (1-10; `0` is 10) for prompts and `/commands` you send often, like Codex's `/presets`. `/presets save N TEXT` saves (no TEXT keeps your last message), `/presets N` sends it, `/presets clear N|all` empties slots, and bare `/presets` in a terminal opens a picker. Saved per user in `presets.json` (private file mode) next to `config.json`, and `/presets N` works in the web app too.
 - Web app sidebar: a task left running in another chat shows "Needs you" when it is waiting on an approval or question, and "Done" in bold once it finishes, until you open it (like the unread markers in Codex's and Claude Code's task lists). `/api/sessions` marks a running session that is waiting with `waiting: true`.
 - Piping OASIS into a reader that stops early (`oasis doctor | head`) no longer ends with an unhandled `EPIPE` stack trace; the CLI exits quietly like other Unix tools.
