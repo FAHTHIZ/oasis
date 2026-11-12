@@ -1,10 +1,11 @@
 // The sites a web tool call reaches (the fetched host, or the configured search
 // providers' hosts), so each new site is approved once per session.
-import { searchBackends, searchBackend } from './web-search.mjs';
+import { searchBackends, searchBackend, keylessFallbackEnabled } from './web-search.mjs';
 import { execFileSync } from 'node:child_process';
 
 export const SEARCH_PROVIDER_HOSTS = {
   duckduckgo: 'html.duckduckgo.com',
+  bing: 'www.bing.com',
   tavily: 'api.tavily.com',
   brave: 'api.search.brave.com',
   exa: 'api.exa.ai',
@@ -21,6 +22,9 @@ export function webSearchHosts(args, env) {
   } else {
     providers = configured.length ? [...configured, 'duckduckgo'] : ['duckduckgo'];
   }
+  // Keyless search falls back to Bing when DuckDuckGo refuses the query, so
+  // the approval names both sites up front.
+  if (!configured.length && keylessFallbackEnabled(env)) providers.push('bing');
   return [...new Set(providers.map((provider) => {
     if (provider === 'searxng') {
       try { return new URL(String(env.OASIS_SEARXNG_URL)).hostname.toLowerCase(); }

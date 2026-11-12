@@ -233,3 +233,48 @@ test('web tools ask once per website and remember consent for the session', asyn
   assert.match(prompts[1], /localhost/);
   assert.match(prompts[2], /html\.duckduckgo\.com/);
 });
+
+const BING = `<ol id="b_results"><li class="b_algo" data-id iid=SERP.1><h2><a target="_blank" href="https://www.bing.com/ck/a?!&amp;&amp;p=abc&amp;u=a1aHR0cHM6Ly9vcGVuLW1ldGVvLmNvbS9lbi9kb2NzL2dlb2NvZGluZy1hcGk&amp;ntb=1"><strong>Geocoding API</strong> - open-meteo.com</a></h2><div class="b_caption"><p class="b_lineclamp2">Search locations by name &amp; get coordinates.</p></div></li>
+<li class="b_algo"><h2><a href="https://direct.example/page">Direct</a></h2><p>Plain link.</p></li></ol>`;
+
+test('Bing results are parsed and their redirect links unwrapped', async () => {
+  const { parseBingHtml } = await import('../src/web-search.mjs');
+  assert.deepEqual(parseBingHtml(BING), [
+    { title: 'Geocoding API - open-meteo.com', url: 'https://open-meteo.com/en/docs/geocoding-api', snippet: 'Search locations by name & get coordinates.' },
+    { title: 'Direct', url: 'https://direct.example/page', snippet: 'Plain link.' }
+  ]);
+});
+
+test('keyless search falls back to Bing when DuckDuckGo refuses the query', async () => {
+  const calls = [];
+  const fetchImpl = async (url) => {
+    calls.push(String(url));
+    if (String(url).includes('duckduckgo')) return { ok: true, status: 202, text: async () => '<html>anomaly</html>' };
+    return { ok: true, status: 200, text: async () => BING };
+  };
+  const result = await webSearch({ query: 'open meteo' }, { env: {}, fetch: fetchImpl });
+  assert.equal(result.backend, 'bing');
+  assert.deepEqual(result.providers, ['bing']);
+  assert.equal(result.results[0].url, 'https://open-meteo.com/en/docs/geocoding-api');
+  assert.match(result.note, /from Bing/);
+  assert.match(calls[1], /^https:\/\/www\.bing\.com\/search\?q=open%20meteo/);
+  const off = await webSearch({ query: 'open meteo' }, { env: { OASIS_SEARCH_KEYLESS_FALLBACK: '0' }, fetch: fetchImpl });
+  assert.equal(off.results.length, 0);
+  assert.match(off.error, /TAVILY_API_KEY/);
+});
+
+test('keyless search approval names both DuckDuckGo and the Bing fallback', async () => {
+  const { webAccessSites } = await import('../src/web-access.mjs');
+  assert.deepEqual(webAccessSites('web_search', {}, {}), ['html.duckduckgo.com', 'www.bing.com']);
+  assert.deepEqual(webAccessSites('web_search', {}, { OASIS_SEARCH_KEYLESS_FALLBACK: 'off' }), ['html.duckduckgo.com']);
+  assert.deepEqual(webAccessSites('web_search', {}, { TAVILY_API_KEY: 'k' }), ['api.tavily.com', 'html.duckduckgo.com']);
+});
+
+test('the terminal shows what a web search and a page fetch returned', async () => {
+  const { describeToolResult } = await import('../src/terminal-ui.mjs');
+  assert.equal(describeToolResult('web_search', { backend: 'bing', results: [{ url: 'https://www.open-meteo.com/a' }, { url: 'https://github.com/x' }] }, { color: false }), '  ⎿ 2 results via bing · open-meteo.com, github.com');
+  assert.match(describeToolResult('web_search', { results: [], error: 'DuckDuckGo is rate limiting keyless searches.' }, { color: false }), /^ {2}⎿ ✗ DuckDuckGo is rate limiting/);
+  assert.equal(describeToolResult('web_search', { results: [], providerErrors: [{ provider: 'tavily', error: 'rate limited' }] }, { color: false }), '  ⎿ No results · rate limited');
+  assert.equal(describeToolResult('fetch_url', { title: 'Docs', content: 'x'.repeat(4096), truncated: true, totalLength: 9000 }, { color: false }), '  ⎿ Read Docs · 9 KB (more available)');
+  assert.equal(describeToolResult('fetch_url', { redirect: 'https://a.dev/b' }, { color: false }), '  ⎿ Redirects to https://a.dev/b');
+});

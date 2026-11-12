@@ -4,7 +4,9 @@ User-facing change history grouped by package version. A version heading does no
 
 ## Unreleased
 
-Nothing yet.
+- Keyless web search keeps working when DuckDuckGo refuses the query (its HTTP 202 bot check, common on servers and VPSes): OASIS asks Bing instead, unwraps its redirect links and says where the results came from. The first search asks once for both sites; `OASIS_SEARCH_KEYLESS_FALLBACK=0` keeps it on DuckDuckGo only.
+- Terminal: web searches and page fetches leave a result line ("6 results · open-meteo.com, github.com", "Read Geocoding API · 23 KB", "No results · rate limited") instead of nothing.
+- Site approvals for web access say what they do: the button reads "Allow for this session" (it always held for the session, but was labelled "Allow once"), and a search that reaches several sites asks once instead of once per site.
 
 ## [1.3.0] - 2026-11-12
 
