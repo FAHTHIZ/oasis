@@ -140,7 +140,7 @@ export const BUILTIN_COMMANDS = {
   vim: 'Toggle vim editing for the prompt (/vim on|off)',
   sounds: 'Sound effects for finished turns, approvals, errors and completed steps (/sounds on|off|test|volume 0-100)',
   voice: 'Voice dictation: /voice on|off|status; Alt+V starts and stops recording',
-  diff: 'Show uncommitted changes in the working tree (/diff [PATH], /diff --stat)',
+  diff: 'Show uncommitted changes in the working tree (/diff [PATH], /diff --stat, /diff --watch for a live pane)',
   autocompact: 'Show or set the auto-compaction threshold (/autocompact 70 = compact at 70% of the window, off, reset)',
   'reload-plugins': 'Reload plugins, skills, agents, hooks and MCP servers without losing the conversation',
   'reload-skills': 'Re-scan skill and command directories without losing the conversation',
@@ -1302,6 +1302,10 @@ export async function runBuiltinCommand(name, argument, state) {
       const inside = git(['rev-parse', '--is-inside-work-tree']);
       if (inside.status !== 0) return { output: 'Not a Git repository; /diff needs Git.' };
       const words = argument ? argument.split(/\s+/).filter(Boolean) : [];
+      if (words.includes('--watch') || words.includes('-w')) {
+        const { openLiveDiffPane } = await import('./live-diff.mjs');
+        return { output: openLiveDiffPane({ root, paths: words.filter((word) => !word.startsWith('-')), env }).message };
+      }
       const stat = words.includes('--stat');
       const paths = words.filter((word) => !word.startsWith('-'));
       const hasHead = git(['rev-parse', '--verify', '-q', 'HEAD']).status === 0;
