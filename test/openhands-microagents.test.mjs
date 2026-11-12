@@ -84,3 +84,16 @@ test('a triggered microagent is added to the user message once per conversation'
   const all = JSON.stringify(payloads.at(-1).messages);
   assert.equal(all.split('OH-GIT').length - 1, 1, 'not repeated in the same conversation');
 });
+
+test('a task microagent lists its inputs and asks the user for missing ones', async (t) => {
+  const { root, env, home } = await workspace(t, { ...files, '.openhands/microagents/deploy.md': '---\nname: deploy\ntriggers:\n- /deploy\n---\nDeploy ${SERVICE} to ${REGION}.' });
+  const rules = await projectRules(root, { env, home });
+  const release = rules.find((rule) => rule.label === '.openhands/microagents/release.md');
+  assert.deepEqual(release.inputs, [{ name: 'VERSION', description: 'version to tag' }]);
+  const recalled = await keywordRulesFor(root, 'please /release', { env, home });
+  assert.match(recalled.text, /OH-TASK tag the release\.\n\nInputs this task needs:\n- VERSION: version to tag\n\nIf the user didn't provide any of these variables, ask the user to provide them first/);
+  const deploy = await keywordRulesFor(root, '/deploy now', { env, home });
+  assert.match(deploy.text, /Inputs this task needs:\n- SERVICE\n- REGION\n/);
+  const plain = await keywordRulesFor(root, 'commit it', { env, home });
+  assert.ok(!plain.text.includes('Inputs this task needs'));
+});
