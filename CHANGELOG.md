@@ -4,7 +4,7 @@ User-facing change history grouped by package version. A version heading does no
 
 ## Unreleased
 
-Nothing yet.
+- Piping OASIS into a reader that stops early (`oasis doctor | head`) no longer ends with an unhandled `EPIPE` stack trace; the CLI exits quietly like other Unix tools.
 
 ## [1.2.0] - 2026-11-12
 
