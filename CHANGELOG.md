@@ -4,6 +4,7 @@ User-facing change history grouped by package version. A version heading does no
 
 ## Unreleased
 
+- Web app: Settings names well-known local model servers ("Ollama (this device)", "LM Studio (this device)", "llama.cpp (this device)") instead of showing a raw `127.0.0.1:11434`.
 - Web app: diffs (edit approvals, tool cards, the file diff view) now highlight the words that changed inside similar changed lines, as the terminal already did. Both use the same jsdiff-based code, now in `src/word-diff.mjs`.
 - Docs: `docs/ARCHITECTURE-ALTERNATIVES.md` no longer lists the removed `src/cloud-task-store.mjs`, and a new test fails when current docs name a repository file that does not exist.
 - Internal: `src/tool-kernel.mjs` (the Node adapter for the portable tool kernel) no longer re-exports `TOOL_CAPABILITIES`, `TOOL_RISK_LEVELS`, `validateToolInput` and `evaluateToolPolicy`, which nothing imported from it; `src/tool-kernel-core.mjs` still has them.
