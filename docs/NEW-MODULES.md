@@ -2,16 +2,6 @@
 
 Documentation for modules and settings added to OASIS beyond the original architecture.
 
-## Semantic code search (`src/semantic-search.mjs`)
-
-Finds files and functions relevant to a natural-language query using local embeddings, fused with lexical (ripgrep) and structural (repo-map) signals.
-
-- **Tool:** `semantic_search` (read-only, low risk).
-- **Embedding provider:** Ollama `/api/embeddings` by default (`http://localhost:11434`), model `nomic-embed-text`.
-- **Configuration:** pass `embeddingConfig: { baseURL, embeddingModel }` via the tool context.
-- **Privacy:** vectors are cached locally under `<config>/cache/semantic-search/`; no code leaves the machine unless a hosted embedding provider is explicitly configured.
-- **Fusion:** `0.6 * semantic + 0.25 * lexical + 0.15 * repo-map` when lexical/repo-map signals are supplied.
-
 ## Append-only event stream (`src/event-stream.mjs`)
 
 Records tool calls, tool results, approvals, recoveries, and verification outcomes as sequence-numbered JSONL events next to the session file.

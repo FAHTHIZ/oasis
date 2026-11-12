@@ -233,3 +233,8 @@ test('Google Antigravity agent folders and front matter are understood', async (
   assert.ok(definition.parameters.properties.subagent_type.enum.includes('code-auditor'));
   assert.ok(!definition.parameters.properties.subagent_type.enum.includes('lead'));
 });
+
+test('Antigravity codebase_search maps to search tools OASIS really has', async () => {
+  const { mapToolNames } = await import('../src/subagents.mjs');
+  assert.deepEqual(mapToolNames(['view_file', 'codebase_search']), ['read_file', 'grep', 'search_files', 'repo_map']);
+});
