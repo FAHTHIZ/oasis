@@ -120,6 +120,21 @@ const STARTUP_TIPS = [
   'Type /connect github (or linear, notion, sentry, ...) to give Oasis an app in one step.'
 ];
 
+// The banner's "via …": a server name people recognise instead of the wire
+// protocol ("openai-compatible" said nothing about Ollama running locally).
+// No network probe: loopback ports of the common local servers, else the host.
+const LOCAL_SERVER_PORTS = { 11434: 'Ollama', 1234: 'LM Studio' };
+export function bannerProviderLabel(config = {}) {
+  const protocol = String(config.protocol || '');
+  if (!config.baseURL) return protocol;
+  let url;
+  try { url = new URL(String(config.baseURL)); } catch { return protocol; }
+  const host = url.hostname.replace(/^\[|\]$/g, '').toLowerCase();
+  const port = Number(url.port) || (url.protocol === 'https:' ? 443 : 80);
+  if (host === 'localhost' || host === '::1' || /^127\./.test(host)) return (LOCAL_SERVER_PORTS[port] || 'local server :' + port) + ' (this device)';
+  return protocol === 'openai-compatible' ? host : protocol;
+}
+
 export function startupTip(env = process.env, now = Date.now()) {
   if (String(env.OASIS_TIP || '').toLowerCase() === 'off' || env.OASIS_NO_TIPS === '1') return '';
   const day = Math.floor(Number(now) / 86_400_000);

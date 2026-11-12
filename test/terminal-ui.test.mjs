@@ -8,7 +8,7 @@ import { KeyDecoder, createEditorState, applyKey, layoutFrame, stringWidth, comm
 import { createCompleter, rankFuzzy } from '../src/completion.mjs';
 import { loadHistory, appendHistory } from '../src/input-history.mjs';
 import { renderMarkdown, MarkdownStream, renderDiff, highlightCode } from '../src/markdown.mjs';
-import { animationEnabled, logoFrame, footerFor, nextMode, startupTip, describeEdit, describeTool, runShellPassthrough, shellContextBlock, verboseToolOutput } from '../src/terminal-ui.mjs';
+import { animationEnabled, logoFrame, footerFor, nextMode, startupTip, bannerProviderLabel, describeEdit, describeTool, runShellPassthrough, shellContextBlock, verboseToolOutput } from '../src/terminal-ui.mjs';
 
 const keys = (raw) => new KeyDecoder().feed(raw);
 const typeAll = (state, raw) => { for (const key of keys(raw)) state = applyKey(state, key).state; return state; };
@@ -333,4 +333,14 @@ test('rate-limit waits read as one dim line with local clock time', async () => 
   const shown = rateLimitNotice({ waitMs: 13000, until: until.toISOString(), compactTools: true });
   assert.match(shown, /^  ⎿ Rate limited · waiting 13s \(until \d\d:\d\d:\d\d\)\n  ⎿ Using the compact tool set/);
   assert.doesNotMatch(rateLimitNotice({ waitMs: 60000, until: until.toISOString(), compactTools: true }), /compact tool set/);
+});
+
+test('banner names the model server instead of the wire protocol', () => {
+  assert.equal(bannerProviderLabel({ protocol: 'openai-compatible', baseURL: 'http://127.0.0.1:11434/v1' }), 'Ollama (this device)');
+  assert.equal(bannerProviderLabel({ protocol: 'openai-compatible', baseURL: 'http://localhost:1234/v1' }), 'LM Studio (this device)');
+  assert.equal(bannerProviderLabel({ protocol: 'openai-compatible', baseURL: 'http://127.0.0.1:8080/v1' }), 'local server :8080 (this device)');
+  assert.equal(bannerProviderLabel({ protocol: 'openai-compatible', baseURL: 'https://openrouter.ai/api/v1' }), 'openrouter.ai');
+  assert.equal(bannerProviderLabel({ protocol: 'anthropic', baseURL: 'https://api.anthropic.com' }), 'anthropic');
+  assert.equal(bannerProviderLabel({ protocol: 'openai' }), 'openai');
+  assert.equal(bannerProviderLabel({}), '');
 });
