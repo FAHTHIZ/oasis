@@ -5,6 +5,8 @@
 // dynamic watchPaths returned by SessionStart, CwdChanged and FileChanged hooks.
 // ConfigChange: user, project and local settings files and skill directories. Unless a
 // ConfigChange hook blocks it, a changed settings file is reloaded into the running session.
+// Skill directories are watched recursively (an edited skills/name/SKILL.md fires), and a
+// skills directory that does not exist yet is picked up when it is created.
 
 import { existsSync, watch } from 'node:fs';
 import path from 'node:path';
@@ -46,6 +48,7 @@ export function startHookWatchers(session, options = {}) {
   const notify = typeof options.notify === 'function' ? options.notify : (message) => session.hookMessages && session.hookMessages.push(message);
   const hookOpts = () => (typeof options.hookOptions === 'function' ? options.hookOptions() : { hooks: session.hooks, root: session.root, env });
   const dirWatchers = new Map(); // dir -> { watcher, names: Map(basename -> handler) }
+  const treeWatchers = new Map(); // skills dir -> recursive watcher
   const timers = new Map();
   let dynamic = Array.isArray(session.hookWatchPaths) ? session.hookWatchPaths.slice() : [];
   let stopped = false;
@@ -113,9 +116,26 @@ export function startHookWatchers(session, options = {}) {
     }
   });
 
-  const refresh = () => {
+  // Recursive watch of an existing directory; false when the platform or directory refuses it.
+  const watchTree = (dir, handler) => {
+    if (!existsSync(dir)) return false;
+    let watcher;
+    try { watcher = watch(dir, { persistent: false, recursive: true }, (_type, changed) => handler(changed ? String(changed) : null)); }
+    catch { return false; }
+    watcher.on('error', () => {});
+    treeWatchers.set(dir, watcher);
+    return true;
+  };
+
+  const closeAll = () => {
     for (const entry of dirWatchers.values()) { try { entry.watcher.close(); } catch {} }
     dirWatchers.clear();
+    for (const watcher of treeWatchers.values()) { try { watcher.close(); } catch {} }
+    treeWatchers.clear();
+  };
+
+  const refresh = () => {
+    closeAll();
     const files = new Set([...fileChangedMatcherPaths(session.hooks, session.root), ...dynamic.filter((item) => path.isAbsolute(item))]);
     for (const file of files) watchForHooks(file);
     if (options.liveReload || hasHooks(session.hooks, 'ConfigChange')) {
@@ -124,9 +144,16 @@ export function startHookWatchers(session, options = {}) {
           if (files.has(target.file)) continue;
           watchFile(target.file, () => configChanged(target, target.file));
         } else if (target.dir) {
-          // Any entry in a skills directory (new skill folder, edited SKILL.md at the top level).
-          const marker = path.join(target.dir, '*');
-          watchFile(marker, (changed) => configChanged(target, changed ? path.join(target.dir, changed) : target.dir));
+          // Any change inside a skills directory, at any depth (skills/name/SKILL.md).
+          const onChange = (changed) => configChanged(target, changed ? path.join(target.dir, changed) : target.dir);
+          if (watchTree(target.dir, onChange)) continue;
+          if (existsSync(target.dir)) { watchFile(path.join(target.dir, '*'), onChange); continue; }
+          // Not created yet: watch its parent and start watching once it appears.
+          watchFile(target.dir, () => {
+            if (stopped || !existsSync(target.dir) || treeWatchers.has(target.dir)) return;
+            debounce('appeared:' + target.dir, refresh);
+            onChange(null);
+          });
         }
       }
     }
@@ -146,8 +173,7 @@ export function startHookWatchers(session, options = {}) {
     stopped = true;
     for (const timer of timers.values()) clearTimeout(timer);
     timers.clear();
-    for (const entry of dirWatchers.values()) { try { entry.watcher.close(); } catch {} }
-    dirWatchers.clear();
+    closeAll();
   };
 
   const api = { stop, refresh, setDynamicPaths, paths: [] };
