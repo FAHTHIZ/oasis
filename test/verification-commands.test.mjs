@@ -42,3 +42,11 @@ test('a failed command is summarized by its error line, not the runtime banner',
   assert.equal(failureLine('Traceback (most recent call last):\n  File "a.py", line 1\nKeyError: 1\n\nDuring handling...\nTraceback (most recent call last):\n  File "a.py", line 3\nValueError: bad input\n'), 'ValueError: bad input');
   assert.equal(failureLine('building\nsomething went sideways\n'), 'something went sideways');
 });
+
+test('a failed command line names the error, not a trailing docs link', async () => {
+  const { failureLine } = await import('../src/terminal-ui.mjs');
+  const jest = '\n> jest --experimental-vm-modules\n\n● Unrecognized CLI Parameter:\n\n  Unrecognized option "experimental-vm-modules".\n\n  CLI Options Documentation:\n  https://jestjs.io/docs/cli\n';
+  assert.equal(failureLine(jest), 'Unrecognized CLI Parameter: Unrecognized option "experimental-vm-modules".');
+  assert.equal(failureLine('> x\nsh: 1: vitest: not found\n'), 'sh: 1: vitest: not found');
+  assert.equal(failureLine('Error: Cannot find module \'./a.mjs\'\nhttps://nodejs.org/docs\n'), 'Error: Cannot find module \'./a.mjs\'');
+});
