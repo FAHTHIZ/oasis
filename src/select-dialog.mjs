@@ -8,7 +8,14 @@ import { loadKeybindings, resolveBinding, actionEffect } from './keybindings.mjs
  * options: [{ label, value, hotkey? }]. Resolves to the chosen option's value, or the
  * value of the option with hotkey 'no' (or null) when declined or aborted.
  */
-export function selectDialog({ input = process.stdin, output = process.stdout, options, initial = 0, context = 'Confirmation', env = process.env, color = true, signal = null, keybindings = undefined } = {}) {
+/**
+ * collapse: { rows, summary(chosen) } replaces the dialog, and the `rows`
+ * terminal rows printed just above it (the question), with one summary line
+ * once answered, so an answered approval leaves a single line in the
+ * scrollback instead of the whole prompt. Only used when everything still
+ * fits on screen; otherwise the cursor could not reach the first row.
+ */
+export function selectDialog({ input = process.stdin, output = process.stdout, options, initial = 0, context = 'Confirmation', env = process.env, color = true, signal = null, keybindings = undefined, collapse = null } = {}) {
   const items = (options || []).filter(Boolean);
   const declined = (items.find((item) => item.hotkey === 'no') || { value: null }).value;
   const byHotkey = (name) => items.find((item) => item.hotkey === name);
@@ -36,7 +43,15 @@ export function selectDialog({ input = process.stdin, output = process.stdout, o
       try { input.setRawMode(wasRaw); } catch {}
       input.pause();
       const chosen = items.find((item) => item.value === value);
-      output.write('\r\x1b[2K' + (chosen ? (color ? '\x1b[2m' : '') + '→ ' + chosen.label + (color ? '\x1b[22m' : '') : '') + '\r\n');
+      const above = collapse && Number.isInteger(collapse.rows) && collapse.rows >= 0 ? collapse.rows : -1;
+      const screenRows = Number(output.rows) || 0;
+      const summary = above >= 0 && typeof collapse.summary === 'function' ? String(collapse.summary(chosen) || '') : '';
+      if (summary && screenRows && above + drawn + 1 < screenRows) {
+        // Up over the option rows and the question, clear to the end of the screen.
+        output.write('\r\x1b[' + (drawn + above) + 'A\x1b[J' + (color ? '\x1b[2m' : '') + summary + (color ? '\x1b[22m' : '') + '\r\n');
+      } else {
+        output.write('\r\x1b[2K' + (chosen ? (color ? '\x1b[2m' : '') + '→ ' + chosen.label + (color ? '\x1b[22m' : '') : '') + '\r\n');
+      }
       resolve(value);
     };
     const act = (effect) => {
