@@ -18,9 +18,9 @@ import { join as joinPath } from 'node:path';
 // Synchronized output (DEC private mode 2026): supported by kitty, WezTerm,
 // iTerm2, Ghostty, Alacritty, foot, Windows Terminal and others; ignored
 // elsewhere. OASIS_SYNC_OUTPUT=0 turns it off.
-export const SYNC_BEGIN = '\x1b[?2026h';
-export const SYNC_END = '\x1b[?2026l';
-export function synchronizedOutputEnabled(env = process.env) {
+const SYNC_BEGIN = '\x1b[?2026h';
+const SYNC_END = '\x1b[?2026l';
+function synchronizedOutputEnabled(env = process.env) {
   if (/^(?:0|false|no|off)$/i.test(String(env.OASIS_SYNC_OUTPUT || ''))) return false;
   return !['dumb', 'linux'].includes(String(env.TERM || ''));
 }
@@ -391,7 +391,7 @@ function applySearchKey(state, key) {
 }
 
 // Replaces text[start, end) with value and moves the cursor after it.
-export function applyCompletion(state, { start, end }, value) {
+function applyCompletion(state, { start, end }, value) {
   const text = state.text.slice(0, start) + value + state.text.slice(end);
   return withText(state, text, start + value.length);
 }

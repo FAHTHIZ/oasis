@@ -11,7 +11,7 @@ function originOf(url) {
 }
 
 /** Decides a permission request (setPermissionRequestHandler) or check (setPermissionCheckHandler). */
-export function allowPermission(permission, details = {}, appOrigin = '') {
+function allowPermission(permission, details = {}, appOrigin = '') {
   const origin = originOf(details.requestingUrl || details.securityOrigin || details.embeddingOrigin || '');
   if (!appOrigin || origin !== appOrigin) return false;
   if (details.isMainFrame === false) return false;

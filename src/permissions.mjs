@@ -77,7 +77,7 @@ export function globToRegExp(pattern) {
   return new RegExp('^' + source + '$');
 }
 
-export function commandLine(command, args = []) {
+function commandLine(command, args = []) {
   return [String(command || ''), ...(Array.isArray(args) ? args : [])].join(' ').trim();
 }
 
@@ -748,7 +748,7 @@ export function suggestRule(toolName, args = {}) {
 // need interactive approval, even with --yes, unless an explicit allow rule
 // names them.
 
-export const BLOCKED_EXECUTABLES = new Set([
+const BLOCKED_EXECUTABLES = new Set([
   'sh', 'bash', 'zsh', 'fish', 'dash', 'ash', 'ksh', 'csh', 'tcsh', 'mksh', 'nu', 'xonsh', 'elvish', 'busybox',
   'cmd', 'powershell', 'pwsh',
   'sudo', 'su', 'doas', 'pkexec', 'runas',
@@ -833,7 +833,7 @@ function projectRunnerRisk(base, args) {
   return false;
 }
 
-export function executableBase(command) {
+function executableBase(command) {
   return path.basename(String(command || '')).toLowerCase().replace(/\.(exe|cmd|bat|com)$/, '');
 }
 

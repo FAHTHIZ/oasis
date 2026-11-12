@@ -94,7 +94,7 @@ function installDeeplink(text) {
 // Turn what people copy out of READMEs into a source: install commands from
 // Claude Code, Codex, Gemini CLI and the skills CLI, bare npx/uvx/docker
 // commands, and package, directory and raw-file pages.
-export function normalizePasted(raw) {
+function normalizePasted(raw) {
   const text = String(raw || '').trim().replace(/^`+|`+$/g, '').replace(/^\$\s+/, '').trim();
   const gemini = /^gemini\s+extensions?\s+install\s+(.+)$/i.exec(text);
   if (gemini) {
@@ -388,7 +388,7 @@ async function installConverted(dir, foreign, source, { env, root, scope }) {
 }
 
 // Build the plan: what will happen, one summary for the approval, and a run().
-export async function planAddon(raw, options = {}) {
+async function planAddon(raw, options = {}) {
   const env = options.env || process.env;
   const root = options.root || process.cwd();
   const scope = options.scope === 'project' ? 'project' : 'user';
@@ -590,7 +590,7 @@ export async function planAddon(raw, options = {}) {
 
 // The MCP Registry knows which arguments and keys a server needs, so prefer
 // its entry for an npm package or a repository when there is one.
-export async function findRegistryEntry({ npm = '', repoUrl = '', query = '' }, { env = process.env, fetchImpl } = {}) {
+async function findRegistryEntry({ npm = '', repoUrl = '', query = '' }, { env = process.env, fetchImpl } = {}) {
   const registry = await import('./mcp-registry.mjs');
   const q = query || String(npm).replace(/^@[^/]+\//, '').replace(/@[^@]*$/, '');
   const rows = await registry.searchRegistry(q, { env, fetchImpl, limit: 8 }).catch(() => []);
@@ -680,7 +680,7 @@ async function missingValues(names, { env, root }) {
 // Save values (API keys and the like) for an installed MCP server or plugin.
 // MCP values go into its entry in the owner-only config; plugin values become
 // plugin options (secret ones in the keychain).
-export async function configureInstalled(name, values, { env, root }) {
+async function configureInstalled(name, values, { env, root }) {
   const found = await findInstalled(name, { env, root });
   if (!found) return null;
   const keys = Object.keys(values);

@@ -17,9 +17,9 @@ import './tools.mjs'; // load order: tools.mjs before power-tools.mjs (they impo
 import { startBackgroundProcess, killBackgroundEntry } from './power-tools.mjs';
 import { createBoundedRegexMatcher } from './safe-regex.mjs';
 
-export const MONITOR_DEFAULT_TIMEOUT_MS = 300000;
+const MONITOR_DEFAULT_TIMEOUT_MS = 300000;
 export const MONITOR_MAX_TIMEOUT_MS = 3600000;
-export const MONITOR_HEADLESS_MAX_MS = 600000;
+const MONITOR_HEADLESS_MAX_MS = 600000;
 const FLUSH_MS = 250;
 const MAX_LINES_PER_EVENT = 40;
 const MAX_EVENT_CHARS = 4000;
@@ -304,7 +304,7 @@ function shellLaunch(command) {
 }
 
 /** Start one plugin monitor (already expanded). Returns the background id. */
-export function startPluginMonitor(session, spec, { root, env = process.env } = {}) {
+function startPluginMonitor(session, spec, { root, env = process.env } = {}) {
   session.pluginMonitorsStarted ||= new Set();
   const key = spec.plugin + ':' + spec.name;
   if (session.pluginMonitorsStarted.has(key)) return null;

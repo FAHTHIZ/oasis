@@ -19,7 +19,7 @@ import { redactArtifactText } from './artifacts.mjs';
 // without storing file contents.
 const TRACE_LIMIT = 200;
 const TRACE_ARG_KEYS = ['path', 'command', 'pattern', 'query', 'url', 'name', 'old_path'];
-export function traceStep(event) {
+function traceStep(event) {
   const call = event && event.call;
   let args = {};
   try { args = call && call.function && typeof call.function.arguments === 'string' ? JSON.parse(call.function.arguments || '{}') : (call && call.function && call.function.arguments) || {}; } catch {}
@@ -424,7 +424,7 @@ export async function validateEvaluationSuite(options = {}) {
  * and count any verifier that unexpectedly accepts that unchanged workspace.
  * A valid fixture must also pass its reference patch, so broken fixtures fail closed.
  */
-export async function runEvalNegativeControl(options = {}) {
+async function runEvalNegativeControl(options = {}) {
   const report = await validateEvaluationSuite(options);
 
   // The reference patches are the positive control: every valid task should accept them.
@@ -992,7 +992,7 @@ export function parseClaudeCodeOutput(rawOutput) {
   };
 }
 
-export function buildClaudeCodeArgs(config, prompt) {
+function buildClaudeCodeArgs(config, prompt) {
   const args = [
     '-p',
     '--output-format', 'json',
@@ -1013,7 +1013,7 @@ export function buildClaudeCodeArgs(config, prompt) {
 }
 
 /** Parse `codex exec --json` JSONL: usage from turn.completed, answer from the last agent_message. */
-export function parseCodexOutput(rawOutput) {
+function parseCodexOutput(rawOutput) {
   let inputTokens = null; let outputTokens = null; let result = ''; let isError = false; let toolCalls = 0; let model = null; let events = 0;
   for (const line of String(rawOutput || '').split(/\r?\n/)) {
     const text = line.trim();
@@ -1075,7 +1075,7 @@ export function agentErrorSummary(output) {
   return found.replace(/\s+/g, ' ').trim().slice(0, 400);
 }
 
-export function parseGeminiOutput(rawOutput) {
+function parseGeminiOutput(rawOutput) {
   const raw = String(rawOutput || '');
   const start = raw.indexOf('{'); const end = raw.lastIndexOf('}');
   let payload;
@@ -1104,7 +1104,7 @@ export function buildCodexArgs(config, prompt, env = process.env) {
   return ['exec', '--json', '--sandbox', 'workspace-write', '--skip-git-repo-check', ...provider, ...(config.model ? ['-m', config.model] : []), prompt];
 }
 
-export function buildGeminiArgs(config, prompt) {
+function buildGeminiArgs(config, prompt) {
   // yolo auto-approves tools; Gemini CLI turns its own sandbox on with it (set GEMINI_SANDBOX=false if no container runtime).
   return ['-p', prompt, '--output-format', 'json', '--approval-mode', 'yolo', ...(config.model ? ['-m', config.model] : [])];
 }

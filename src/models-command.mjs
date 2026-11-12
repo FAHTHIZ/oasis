@@ -26,7 +26,7 @@ function price(value) {
 }
 
 /** Describe one model id with catalog facts (all optional). */
-export function describeModel(id, config = {}, env = process.env) {
+function describeModel(id, config = {}, env = process.env) {
   const options = { baseURL: config.baseURL, provider: config.catalogProvider, env };
   const entry = findCatalogModel(id, options);
   const out = { id };

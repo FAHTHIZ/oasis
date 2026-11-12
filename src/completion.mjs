@@ -7,7 +7,7 @@ import { sensitivePath, walkFiles } from './tools.mjs';
 const SKIP_DIRS = new Set(['.git', 'node_modules', '.hg', '.svn', 'dist', 'build', '.next', 'coverage', '__pycache__', '.venv', 'venv', 'target']);
 const PRIMARY_SKILL_COMMANDS = ['init', 'plan', 'fix', 'diagnose', 'review', 'rollback'];
 
-export function tokenAt(text, cursor) {
+function tokenAt(text, cursor) {
   let start = cursor;
   while (start > 0 && !/\s/.test(text[start - 1])) start -= 1;
   return { start, end: cursor, token: text.slice(start, cursor) };

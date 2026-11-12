@@ -31,7 +31,7 @@ export function fileChangedMatcherPaths(hooks, root) {
 }
 
 /** Settings and skill locations whose changes fire ConfigChange, with their source names. */
-export function configWatchTargets(root, env = process.env) {
+function configWatchTargets(root, env = process.env) {
   const home = env.HOME || env.USERPROFILE || os.homedir();
   const targets = [{ file: userSettingsPath(env), source: 'user_settings' }, { file: path.join(env.CLAUDE_CONFIG_DIR || path.join(home, '.claude'), 'settings.json'), source: 'user_settings' }];
   for (const entry of projectSettingsPaths(root)) targets.push({ file: entry.file, source: entry.scope === 'local' ? 'local_settings' : 'project_settings' });

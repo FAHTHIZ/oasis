@@ -4,7 +4,7 @@
 // properly: run_in_background + command_output, or monitor (which reports each
 // new line as it appears). Short sleeps, sleeps later in a pipeline, and
 // background runs are untouched. OASIS_ALLOW_LONG_SLEEP=1 turns the check off.
-export const LONG_SLEEP_SECONDS = 10;
+const LONG_SLEEP_SECONDS = 10;
 
 const UNIT = { '': 1, s: 1, m: 60, h: 3600, d: 86400 };
 

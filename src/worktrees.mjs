@@ -177,7 +177,7 @@ async function git(cwd, args, env, timeout = 20000) {
   return result.stdout.trim();
 }
 
-export function worktreeSlug(text) {
+function worktreeSlug(text) {
   return String(text || 'task').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 32) || 'task';
 }
 
@@ -267,7 +267,7 @@ async function unlinkSharedDirectories(worktree) {
   }
 }
 
-export async function worktreeBranchPrefix(root, env = process.env) {
+async function worktreeBranchPrefix(root, env = process.env) {
   const fromEnv = normalizeBranchPrefix(env.OASIS_WORKTREE_BRANCH_PREFIX);
   if (fromEnv) return fromEnv;
   try {

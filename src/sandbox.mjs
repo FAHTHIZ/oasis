@@ -120,9 +120,9 @@ export function sandboxReadBlock(root, env = process.env) {
   return { hidden, reopen };
 }
 
-export const PROTECTED_FILES = ['.bashrc', '.bash_profile', '.zshrc', '.zprofile', '.profile', '.gitconfig', '.gitmodules', '.ripgreprc', '.mcp.json',
+const PROTECTED_FILES = ['.bashrc', '.bash_profile', '.zshrc', '.zprofile', '.profile', '.gitconfig', '.gitmodules', '.ripgreprc', '.mcp.json',
   '.claude/settings.json', '.claude/settings.local.json', '.oasis/settings.json', '.oasis/settings.local.json', '.git/config'];
-export const PROTECTED_DIRS = ['.vscode', '.idea', '.git/hooks', '.claude/commands', '.claude/agents', '.claude/skills', '.claude/hooks',
+const PROTECTED_DIRS = ['.vscode', '.idea', '.git/hooks', '.claude/commands', '.claude/agents', '.claude/skills', '.claude/hooks',
   '.oasis/commands', '.oasis/agents', '.oasis/skills', '.oasis/hooks'];
 const PLACEHOLDER_FILES = new Set(['.mcp.json', '.claude/settings.json', '.claude/settings.local.json', '.oasis/settings.json', '.oasis/settings.local.json', '.git/config']);
 
@@ -159,7 +159,7 @@ export function protectedWritePaths(roots = []) {
   return { existing, missing };
 }
 
-export function removeSandboxPlaceholders(placeholders = []) {
+function removeSandboxPlaceholders(placeholders = []) {
   for (const item of placeholders) {
     const info = lstatOrNull(item.path);
     if (!info) continue;
@@ -206,7 +206,7 @@ export function collectCacheDirectories(env = process.env) {
 let cachedProbe = null;
 const containerProbes = new Map();
 
-export const CONTAINER_BACKENDS = ['docker', 'podman'];
+const CONTAINER_BACKENDS = ['docker', 'podman'];
 export const DEFAULT_CONTAINER_IMAGE = 'node:22-bookworm';
 
 export function detectContainerRuntime(backend, force = false, run = spawnSync) {

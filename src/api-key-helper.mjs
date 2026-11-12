@@ -23,7 +23,7 @@ export function runApiKeyHelper(command, options = {}) {
   });
 }
 
-export function runHelperCommand(command, options = {}, label = 'helper') {
+function runHelperCommand(command, options = {}, label = 'helper') {
   const env = options.env || process.env;
   const requestedTimeout = Number(options.timeoutMs);
   const timeoutMs = Number.isFinite(requestedTimeout) && requestedTimeout > 0 ? Math.max(1, Math.min(5 * 60 * 1000, Math.floor(requestedTimeout))) : 30000;

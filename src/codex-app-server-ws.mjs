@@ -35,8 +35,8 @@ import { createCodexAppServer } from './codex-app-server.mjs';
 
 const MAX_FRAME_BYTES = 16 * 1024 * 1024;
 
-export const CONTROL_SOCKET_DIR = 'app-server-control';
-export const CONTROL_SOCKET_FILE = 'app-server-control.sock';
+const CONTROL_SOCKET_DIR = 'app-server-control';
+const CONTROL_SOCKET_FILE = 'app-server-control.sock';
 
 export function defaultControlSocketPath(env = process.env) {
   const home = env.OASIS_CONFIG_DIR || path.join(env.HOME || env.USERPROFILE || '', '.oasis');
@@ -158,7 +158,7 @@ export async function loadWsAuth({ mode, tokenFile, tokenSha256, sharedSecretFil
 
 // Make the socket path usable: a private parent folder (when OASIS created it
 // or it is the default folder), and no live server or foreign file in the way.
-export async function prepareSocketPath(socketPath, { privateDir = true } = {}) {
+async function prepareSocketPath(socketPath, { privateDir = true } = {}) {
   const dir = path.dirname(socketPath);
   await mkdir(dir, { recursive: true, mode: 0o700 });
   if (privateDir) {

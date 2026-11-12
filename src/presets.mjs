@@ -5,7 +5,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { getConfigDirectory } from './config.mjs';
 
-export const PRESET_SLOTS = 10;
+const PRESET_SLOTS = 10;
 const MAX_TEXT = 8000;
 
 export function presetsFile(env = process.env) {
@@ -54,7 +54,7 @@ export async function setPreset(slot, text, env = process.env) {
   return number;
 }
 
-export async function clearPreset(slot, env = process.env) {
+async function clearPreset(slot, env = process.env) {
   const slots = await loadPresets(env);
   if (String(slot).trim().toLowerCase() === 'all') { await savePresets(Array(PRESET_SLOTS).fill(''), env); return 'all'; }
   const number = parseSlot(slot);
@@ -69,7 +69,7 @@ function oneLine(text, width = 70) {
   return flat.length > width ? flat.slice(0, width - 1) + '…' : flat;
 }
 
-export function formatPresets(slots) {
+function formatPresets(slots) {
   const lines = ['Presets (' + slots.filter(Boolean).length + ' of ' + PRESET_SLOTS + ' saved):'];
   slots.forEach((text, index) => lines.push('  ' + String(index + 1).padStart(2) + '  ' + (text ? oneLine(text) : '(empty)')));
   lines.push('', '/presets N runs slot N · /presets save N TEXT (no TEXT saves your last message) · /presets clear N');

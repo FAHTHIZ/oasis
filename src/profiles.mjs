@@ -15,12 +15,12 @@ import os from 'node:os';
 import { PROFILE_NAME_PATTERN, activeProfile, getBaseConfigDirectory } from './config.mjs';
 
 // What a new profile copies from its source. Sessions, logs and caches never move.
-export const PROFILE_COPY = ['config.json', 'settings.json', 'OASIS.md', 'mcp.json', 'keybindings.json', 'commands', 'agents', 'skills', 'output-styles', 'hooks', 'themes', 'statusline.sh'];
-export const PROFILE_MEMORY = ['memory'];
+const PROFILE_COPY = ['config.json', 'settings.json', 'OASIS.md', 'mcp.json', 'keybindings.json', 'commands', 'agents', 'skills', 'output-styles', 'hooks', 'themes', 'statusline.sh'];
+const PROFILE_MEMORY = ['memory'];
 
 const exists = (file) => lstat(file).then(() => true, () => false);
 
-export function profileDirectory(name, env = process.env, home = os.homedir()) {
+function profileDirectory(name, env = process.env, home = os.homedir()) {
   const base = getBaseConfigDirectory(env, home);
   if (!name || name === 'default') return base;
   if (!PROFILE_NAME_PATTERN.test(name)) throw new Error('Invalid profile name "' + name + '": use letters, digits, - and _ (up to 40).');
@@ -67,7 +67,7 @@ export async function listProfiles(env = process.env, home = os.homedir()) {
   return out;
 }
 
-export async function createProfile(name, { from = 'default', withMemory = false, env = process.env, home = os.homedir() } = {}) {
+async function createProfile(name, { from = 'default', withMemory = false, env = process.env, home = os.homedir() } = {}) {
   if (!name || name === 'default') throw new Error('Pick a profile name other than "default".');
   const target = profileDirectory(name, env, home);
   if (await exists(target)) throw new Error('Profile ' + name + ' already exists at ' + target + '.');
@@ -85,7 +85,7 @@ export async function createProfile(name, { from = 'default', withMemory = false
   return { name, dir: target, from, copied };
 }
 
-export async function useProfile(name, { env = process.env, home = os.homedir() } = {}) {
+async function useProfile(name, { env = process.env, home = os.homedir() } = {}) {
   const base = getBaseConfigDirectory(env, home);
   const file = path.join(base, 'active-profile');
   if (!name || name === 'default') { await unlink(file).catch(() => {}); return { name: 'default', dir: base }; }
@@ -96,7 +96,7 @@ export async function useProfile(name, { env = process.env, home = os.homedir() 
   return { name, dir };
 }
 
-export async function deleteProfile(name, { env = process.env, home = os.homedir() } = {}) {
+async function deleteProfile(name, { env = process.env, home = os.homedir() } = {}) {
   if (!name || name === 'default') throw new Error('The default profile cannot be deleted.');
   const dir = profileDirectory(name, env, home);
   if (!await exists(dir)) throw new Error('No profile named ' + name + '.');

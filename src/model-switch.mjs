@@ -67,7 +67,7 @@ function optionsFor(session, env) {
 }
 
 // Runs PreModelSwitch. Resolves { allowed, reason, messages }.
-export async function preModelSwitch(session, { to, requested, source = 'command', env = process.env, confirm = null } = {}) {
+async function preModelSwitch(session, { to, requested, source = 'command', env = process.env, confirm = null } = {}) {
   const from = session && session.config && session.config.model || '';
   if (!session || !hasHooks(session.hooks, 'PreModelSwitch')) return { allowed: true, reason: '', messages: [] };
   const result = await runHooks('PreModelSwitch', payloadFor(session, { from, to, requested, source, env }), optionsFor(session, env));

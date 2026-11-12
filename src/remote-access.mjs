@@ -15,8 +15,8 @@ import path from 'node:path';
 import { getConfigDirectory } from './config.mjs';
 
 const HOSTNAME_RE = /^(?=.{1,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)*$/;
-export const MIN_ACCESS_KEY_LENGTH = 32;
-export const ACCESS_KEY_FILE = 'web-access-key';
+const MIN_ACCESS_KEY_LENGTH = 32;
+const ACCESS_KEY_FILE = 'web-access-key';
 
 // "https://oasis.example.com/", "oasis.example.com:8443", "*.ts.net" → host-name patterns (ports are not part of the match).
 export function normalizeAllowedHost(value) {
@@ -46,7 +46,7 @@ function hostnameOf(hostHeader) {
   try { return new URL('http://' + hostHeader).hostname.replace(/^\[|\]$/g, '').toLowerCase(); } catch { return ''; }
 }
 
-export function hostMatches(hostname, allowedHosts = []) {
+function hostMatches(hostname, allowedHosts = []) {
   const name = String(hostname || '').toLowerCase();
   if (!name) return false;
   for (const pattern of allowedHosts) {

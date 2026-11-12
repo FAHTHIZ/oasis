@@ -262,7 +262,7 @@ function idsFrom(body) {
  * without "tools"). Probing those first on a keyless connection wastes the
  * setup budget on answers that can only be 401 or "no tools".
  */
-export function modelHints(body) {
+function modelHints(body) {
   const list = Array.isArray(body) ? body : body && (body.data || body.models || body.result || []);
   const paid = new Set();
   const noTools = new Set();
@@ -280,7 +280,7 @@ export function modelHints(body) {
 }
 
 /** Moves models a keyless connection cannot use, then models without tools, to the end. */
-export function orderByHints(ranked, hints, { keyless = false } = {}) {
+function orderByHints(ranked, hints, { keyless = false } = {}) {
   if (!hints) return ranked;
   const bucket = (id) => (keyless && hints.paid.has(id) ? 2 : 0) + (hints.noTools.has(id) ? 1 : 0);
   return ranked.map((id, index) => ({ id, index, rank: bucket(id) })).sort((a, b) => a.rank - b.rank || a.index - b.index).map((entry) => entry.id);
@@ -290,7 +290,7 @@ export function orderByHints(ranked, hints, { keyless = false } = {}) {
  * Lists the models a connection can use. Throws ProviderError with the HTTP
  * status when the server answers but refuses (so a 401 means "wrong key").
  */
-export async function listModels(connection, { fetchImpl = globalThis.fetch.bind(globalThis), timeoutMs = 8000 } = {}) {
+async function listModels(connection, { fetchImpl = globalThis.fetch.bind(globalThis), timeoutMs = 8000 } = {}) {
   const base = trimSlash(connection.baseURL || (connection.protocol === 'anthropic' ? 'https://api.anthropic.com' : ''));
   const url = connection.protocol === 'anthropic' ? base + '/v1/models?limit=100' : base + '/models';
   const response = await timed(fetchImpl, url, { headers: modelHeaders(connection) }, timeoutMs);
@@ -314,7 +314,7 @@ async function ollamaTags(origin, fetchImpl, timeoutMs) {
 }
 
 /** Asks a local Ollama to download a model, reporting progress as it goes. */
-export async function ollamaPull(origin, model, { fetchImpl = globalThis.fetch.bind(globalThis), onStatus = () => {} } = {}) {
+async function ollamaPull(origin, model, { fetchImpl = globalThis.fetch.bind(globalThis), onStatus = () => {} } = {}) {
   const response = await fetchImpl(origin + '/api/pull', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ model, stream: true }) });
   if (!response.ok) throw new ProviderError('Ollama could not download ' + model + ' (' + response.status + ').', { status: response.status });
   if (!response.body || !response.body.getReader) return;
@@ -629,7 +629,7 @@ async function connectOllama({ want, fetchImpl, say, allowPull, finish, origin }
 }
 
 /** Works out what kind of server lives at a URL and returns a connection for it. */
-export async function probeEndpoint(raw, { apiKey = '', fetchImpl = globalThis.fetch.bind(globalThis), local = false, timeoutMs = 6000 } = {}) {
+async function probeEndpoint(raw, { apiKey = '', fetchImpl = globalThis.fetch.bind(globalThis), local = false, timeoutMs = 6000 } = {}) {
   const url = new URL(raw);
   const origin = url.origin;
   const path = url.pathname.replace(/\/(chat\/completions|completions|models|messages|api\/tags|api\/chat|api\/generate)\/?$/, '').replace(/\/+$/, '');

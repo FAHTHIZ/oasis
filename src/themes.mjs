@@ -15,7 +15,7 @@ import { ANSI } from './markdown.mjs';
 
 export const BASE_THEMES = ['dark', 'light', 'dark-daltonized', 'light-daltonized', 'dark-ansi', 'light-ansi'];
 
-export const THEME_TOKENS = [
+const THEME_TOKENS = [
   'claude', 'claudeShimmer', 'text', 'inverseText', 'inactive', 'subtle', 'suggestion', 'permission', 'remember',
   'success', 'error', 'warning', 'merged', 'promptBorder', 'planMode', 'autoAccept', 'bashBorder', 'ide', 'fastMode',
   'diffAdded', 'diffRemoved', 'diffAddedDimmed', 'diffRemovedDimmed', 'diffAddedWord', 'diffRemovedWord',

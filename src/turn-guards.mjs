@@ -15,7 +15,7 @@ export const SOURCE_EXTENSIONS = new Set([
   '.cs', '.c', '.cc', '.cpp', '.h', '.hpp', '.rb', '.php', '.swift', '.kt',
   '.kts', '.vue', '.svelte', '.html', '.css', '.json', '.toml', '.yaml', '.yml'
 ]);
-export const VERIFICATION_TASKS = new Set([
+const VERIFICATION_TASKS = new Set([
   'test', 'tests', 'check', 'lint', 'build', 'typecheck', 'type-check', 'verify',
   'clippy', 'vet', 'compile', 'compileall'
 ]);
@@ -32,7 +32,7 @@ export function normalizeReviewPath(value) {
   return normalized;
 }
 
-export function isVerificationTaskToken(value) {
+function isVerificationTaskToken(value) {
   const token = String(value || '').toLowerCase();
   return VERIFICATION_TASKS.has(token) || token.startsWith('test:') ||
     token.startsWith('check:') || token.startsWith('lint:');
@@ -42,11 +42,11 @@ export function executableName(value) {
   return path.basename(String(value || '')).toLowerCase().replace(/\.(?:exe|cmd|bat|ps1)$/i, '');
 }
 
-export function hasHelpOrVersionArgument(args) {
+function hasHelpOrVersionArgument(args) {
   return args.some((item) => ['--help', '-h', '--version', '-v'].includes(item));
 }
 
-export function isDirectVerificationRunner(executable, args) {
+function isDirectVerificationRunner(executable, args) {
   if (!VERIFICATION_RUNNERS.has(executable) || hasHelpOrVersionArgument(args)) return false;
   if (executable === 'vitest') return args.includes('run') || args.includes('--run');
   if (executable === 'prettier') return args.includes('--check') || args.includes('--list-different');
@@ -57,7 +57,7 @@ export function isDirectVerificationRunner(executable, args) {
   return true;
 }
 
-export function isTestScriptPath(value) {
+function isTestScriptPath(value) {
   const text = String(value || '').toLowerCase().replace(/\\/g, '/');
   if (!/\.(?:c|m)?(?:js|ts|jsx|tsx)$|\.(?:py|rb|php|sh|bash|zsh)$/.test(text)) return false;
   const base = text.split('/').pop().replace(/\.[^.]+$/, '');
@@ -196,7 +196,7 @@ export function refusesSpuriously(text) {
     || /^i(?:'m| am|’m) sorry,? (?:but )?(?:i )?(?:can't|cannot|can’t) (?:do|fulfil|fulfill|complete) (?:that|this)/i.test(reply);
 }
 
-export const FENCE_LANGS = {
+const FENCE_LANGS = {
   '.js': ['js', 'javascript', 'mjs', 'cjs', 'node'], '.mjs': ['js', 'javascript', 'mjs', 'node'], '.cjs': ['js', 'javascript', 'cjs', 'node'],
   '.ts': ['ts', 'typescript'], '.tsx': ['tsx', 'ts', 'typescript'], '.jsx': ['jsx', 'js', 'javascript'],
   '.py': ['py', 'python', 'python3'], '.go': ['go', 'golang'], '.rs': ['rs', 'rust'], '.rb': ['rb', 'ruby'], '.sh': ['sh', 'bash', 'shell']
@@ -445,7 +445,7 @@ export async function activeLspBaseline(session, file, callContext, options) {
 // `require.main` check in an ES module, ran npm test (green, it never loaded
 // the file) and stopped; the module threw on import. New JavaScript modules
 // that export something must be imported or run once after the last edit.
-export const MODULE_CHECK_EXTENSIONS = new Set(['.mjs', '.cjs', '.js']);
+const MODULE_CHECK_EXTENSIONS = new Set(['.mjs', '.cjs', '.js']);
 
 export function newModuleCandidate(file, content) {
   const ext = path.extname(String(file || '')).toLowerCase();
@@ -476,7 +476,7 @@ export function markLoadedModules(state, commandText, exitCode) {
   }
 }
 
-export function moduleImportCheck(file) {
+function moduleImportCheck(file) {
   // Running the file loads it the same way an import does. Inline code
   // (node -e, --import) is high risk and never auto-approved, so the check
   // stays a plain `node <file>`; long-running modules are skipped upstream.

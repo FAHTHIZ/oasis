@@ -27,8 +27,8 @@ const ELISION_PATTERNS = [
   /^\s*(?:\/\/|#|--|;|\/\*+|<!--)\s*(?:[\[(]\s*)?(?:\.{3}\s*)?(?:same as before|unchanged|no changes(?: here)?|as before|keep as is)\s*(?:\.{3})?\s*[\])]?\s*\.?\s*(?:\*\/|-->)?\s*$/im
 ];
 
-export const SHRINK_MIN_LINES = 40;
-export const SHRINK_RATIO = 0.5;
+const SHRINK_MIN_LINES = 40;
+const SHRINK_RATIO = 0.5;
 
 function lineCount(text) {
   if (!text) return 0;

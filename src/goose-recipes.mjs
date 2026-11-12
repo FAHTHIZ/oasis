@@ -73,7 +73,7 @@ export async function listRecipes(root, env = process.env) {
 }
 
 /** Parses and checks a recipe. Throws with a readable message. */
-export function parseRecipe(text) {
+function parseRecipe(text) {
   let data;
   try { data = parseYaml(String(text), { schema: 'core', maxAliasCount: 50 }); } catch (error) { throw new Error('not valid YAML or JSON: ' + String(error.message).split('\n')[0]); }
   // Goose also accepts a recipe nested under `recipe:` (shared deeplink exports).

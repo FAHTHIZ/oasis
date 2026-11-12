@@ -34,7 +34,7 @@ import { findBinary } from './diagnostics.mjs';
 
 const workspaceTools = () => import('./tools.mjs');
 
-export const LSP_OPERATIONS = ['definition', 'references', 'hover', 'implementation', 'type_definition', 'document_symbols', 'workspace_symbols', 'incoming_calls', 'outgoing_calls', 'diagnostics'];
+const LSP_OPERATIONS = ['definition', 'references', 'hover', 'implementation', 'type_definition', 'document_symbols', 'workspace_symbols', 'incoming_calls', 'outgoing_calls', 'diagnostics'];
 const REQUEST_TIMEOUT = 30000;
 const INIT_TIMEOUT = 60000;
 const MAX_RESULTS = 100;

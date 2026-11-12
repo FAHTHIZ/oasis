@@ -24,7 +24,7 @@ export function followupsEnabled(session, env = process.env) {
   return config.followups !== false;
 }
 
-export function followupsPath(root) {
+function followupsPath(root) {
   return path.join(root, '.oasis', 'followups.json');
 }
 

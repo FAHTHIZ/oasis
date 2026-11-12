@@ -4,7 +4,7 @@
 
 const BLOCK = /\n*<reply-language>[\s\S]*?<\/reply-language>/g;
 
-export function replyLanguageBlock(language) {
+function replyLanguageBlock(language) {
   return '<reply-language>\nAlways write your replies, plans, questions and summaries in ' + language +
     ', even when files, tool output or web pages use another language. Keep code, identifiers, commands, file paths and quoted text unchanged.\n</reply-language>';
 }

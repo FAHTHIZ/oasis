@@ -128,7 +128,7 @@ export function programOf(tokens) {
 // Paths whose recursive deletion or ownership change is catastrophic.
 // Rewrites spellings that expand to the same place: ${HOME:?}, ${HOME}, "$HOME",
 // trailing /. or //, and ../ that climbs above a home or root directory.
-export function normalizeTarget(raw) {
+function normalizeTarget(raw) {
   let p = String(raw).replace(/^["']|["']$/g, '');
   p = p.replace(/\$\{(HOME|USERPROFILE)(?::?[-?=+][^}]*)?\}/g, '$$$1');
   p = p.replace(/\$USERPROFILE\b/g, '$$HOME');
@@ -414,7 +414,7 @@ function analyzeOther(name, args, lower, f, ops, cmd) {
 // Finds the bodies of $(...), `...`, <(...) and >(...) outside single quotes.
 // Each body is a command line the shell runs before (or alongside) the outer
 // command, so it is analyzed on its own.
-export function extractSubstitutions(line) {
+function extractSubstitutions(line) {
   const text = String(line || '');
   const found = [];
   let quote = '';

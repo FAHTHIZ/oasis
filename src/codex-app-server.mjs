@@ -33,7 +33,7 @@ import { createInterface } from 'node:readline';
 import { createTwoFilesPatch } from 'diff';
 import { createAppServerHost } from './codex-app-server-host.mjs';
 
-export const APP_SERVER_PLATFORM = { family: process.platform === 'win32' ? 'windows' : 'unix', os: process.platform === 'darwin' ? 'macos' : process.platform };
+const APP_SERVER_PLATFORM = { family: process.platform === 'win32' ? 'windows' : 'unix', os: process.platform === 'darwin' ? 'macos' : process.platform };
 
 export const EXECUTE_TOOLS = new Set(['run_command', 'run_shell', 'powershell', 'monitor_command', 'auto_test']);
 export const FILE_TOOLS = new Set(['edit_file', 'write_file', 'multi_edit', 'notebook_edit', 'delete_file', 'move_file', 'apply_patch']);

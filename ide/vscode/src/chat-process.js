@@ -186,4 +186,4 @@ function translateEvent(event, state = {}) {
   return out;
 }
 
-module.exports = { OasisChatProcess, translateEvent, splitCommand, friendlyStartError, friendlyExitError, isPotentiallyDestructiveAction, BASE_ARGS };
+module.exports = { OasisChatProcess, translateEvent, splitCommand, friendlyStartError, friendlyExitError, isPotentiallyDestructiveAction };

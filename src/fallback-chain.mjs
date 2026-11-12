@@ -1,4 +1,4 @@
-import { BUILTIN_PROVIDERS, getProvider } from './provider-registry.mjs';
+import { getProvider } from './provider-registry.mjs';
 import { isOpen } from './circuit-breaker.mjs';
 
 // Ranked fallback chain for the CLI.
@@ -17,10 +17,6 @@ import { isOpen } from './circuit-breaker.mjs';
 // network failures, or the model is gone. Mistakes in the request itself
 // (bad input, context overflow) and a bad key on the main provider are not
 // retried elsewhere; they would fail on the next model too or need the user.
-
-// Providers come from provider-registry.mjs (built-ins plus user settings).
-// FALLBACK_PROVIDERS stays exported for callers that list the built-ins.
-export const FALLBACK_PROVIDERS = BUILTIN_PROVIDERS;
 
 // Settings that describe one model or one endpoint, which must not leak into
 // a fallback on a different provider.

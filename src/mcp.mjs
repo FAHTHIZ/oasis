@@ -41,7 +41,7 @@ export async function loadMcpServers(options = {}) {
   }
 }
 
-export function validateMcpServerOrigin(origin) {
+function validateMcpServerOrigin(origin) {
   if (!origin || typeof origin !== 'object' || Array.isArray(origin)) {
     throw new Error('MCP import origin must be a structured provenance object.');
   }

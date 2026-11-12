@@ -226,4 +226,4 @@ vscode.postMessage({ type: 'ready' });
 </script></body></html>`;
 }
 
-module.exports = { ChatController, ChatViewProvider, openChatPanel, chatHtml };
+module.exports = { ChatController, ChatViewProvider, openChatPanel };

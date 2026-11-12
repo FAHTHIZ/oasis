@@ -10,19 +10,19 @@
 // retries wait about 100 seconds in total before giving up.
 export const MAX_PROVIDER_RETRIES = 8;
 export const QUICK_PROVIDER_RETRIES = 2;
-export const PATIENT_RETRY_STEPS_MS = [2000, 5000, 10000, 20000, 30000, 30000];
-export const PATIENT_RETRY_STATUSES = new Set([500, 502, 503, 504]);
-export const MAX_PROVIDER_RETRY_DELAY_MS = 5000;
+const PATIENT_RETRY_STEPS_MS = [2000, 5000, 10000, 20000, 30000, 30000];
+const PATIENT_RETRY_STATUSES = new Set([500, 502, 503, 504]);
+const MAX_PROVIDER_RETRY_DELAY_MS = 5000;
 // A Retry-After up to this long is waited out exactly (as the OpenAI and
 // Anthropic SDKs do). Longer ones are not retried inline: retrying before the
 // advertised time only burns attempts against a limit that is still closed,
 // so the request falls through to the rate-limit wait, the fallback chain or
 // a clear error instead.
-export const MAX_INLINE_RETRY_AFTER_MS = 60000;
+const MAX_INLINE_RETRY_AFTER_MS = 60000;
 export const RETRYABLE_PROVIDER_STATUSES = new Set([408, 425, 429, 500, 502, 503, 504]);
 // A 429 that means "out of quota / billing / account on hold" will not clear by
 // retrying; retrying only burns time (and, on some providers, more quota).
-export const HARD_QUOTA_PATTERN = /insufficient_quota|exceeded your current quota|billing|credit balance|payment required|account[_ ](?:is )?(?:on[_ ]hold|suspended|disabled|deactivated)|usage limit reached|weekly limit|monthly limit|spend(?:ing)? limit/i;
+const HARD_QUOTA_PATTERN = /insufficient_quota|exceeded your current quota|billing|credit balance|payment required|account[_ ](?:is )?(?:on[_ ]hold|suspended|disabled|deactivated)|usage limit reached|weekly limit|monthly limit|spend(?:ing)? limit/i;
 // gpt-oss behind some gateways: the server fails to parse the model's own
 // harmony output and returns 400 "Unknown role: assistant<|channel|>commentary".
 // Our request was valid; the same request usually works on a retry.
@@ -32,11 +32,11 @@ export function isMalformedGenerationError(status, text) {
 // A gateway (OmniRoute, LiteLLM) answers 5xx for a route it has no account
 // for: "bridge is not configured", "no active connection". Seen live from
 // OmniRoute; it never clears on a retry, so move to the next model at once.
-export const UNCONFIGURED_ROUTE_PATTERN = /\bnot configured\b|\bno (?:active |available )?(?:connections?|credentials|accounts?)\b|\bnot connected\b|\bprovider (?:is )?disabled\b/i;
+const UNCONFIGURED_ROUTE_PATTERN = /\bnot configured\b|\bno (?:active |available )?(?:connections?|credentials|accounts?)\b|\bnot connected\b|\bprovider (?:is )?disabled\b/i;
 // "Prompt too long (max 6000 characters)" (Cloudflare's playground behind
 // OmniRoute, wrapped in a 502), "context length exceeded" and the like never
 // clear on a retry: the same request is just as large next time.
-export const PROMPT_TOO_LARGE_PATTERN = /prompt (?:is )?too (?:long|large)|context.?length.?exceeded|maximum context length|input is too long|request (?:entity )?too large|ERR_INPUT_LIMIT|input (?:length )?limit (?:exceeded|reached)/i;
+const PROMPT_TOO_LARGE_PATTERN = /prompt (?:is )?too (?:long|large)|context.?length.?exceeded|maximum context length|input is too long|request (?:entity )?too large|ERR_INPUT_LIMIT|input (?:length )?limit (?:exceeded|reached)/i;
 export function isPromptTooLargeError(text) {
   return PROMPT_TOO_LARGE_PATTERN.test(String(text || ''));
 }
@@ -52,14 +52,14 @@ export function isHardQuotaError(text) {
 // and tells the real story only in the quota id (...PerMinute...) and
 // RetryInfo. Those clear in under a minute, so they are worth one wait on the
 // same model instead of a billing error. Returns the wait in ms, or null.
-export const SHORT_RATE_LIMIT_MAX_MS = 90000;
+const SHORT_RATE_LIMIT_MAX_MS = 90000;
 // Also covers free endpoints that state a short wait outright, e.g.
 // Pollinations' HTTP 402 "1 reply every 45 seconds per IP. Retry after 43s"
 // (seen live): an explicit hint of 90 s or less, with no daily, monthly or
 // credit wording, is a rate window, not an exhausted balance.
-export const EXPLICIT_SHORT_WAIT = /\bretry (?:after|in) (\d+(?:\.\d+)?) ?s(?:ec(?:ond)?s?)?\b/i;
-export const LONG_LIMIT_WORDING = /PerDay|per ?day|daily|per ?month|monthly|credit|balance|insufficient|billing/i;
-export const CONCURRENCY_LIMIT = /\bstill running\b|\b(?:1|one) request at a time\b|\btoo many concurrent\b|\bconcurren(?:t|cy) (?:request )?limit\b/i;
+const EXPLICIT_SHORT_WAIT = /\bretry (?:after|in) (\d+(?:\.\d+)?) ?s(?:ec(?:ond)?s?)?\b/i;
+const LONG_LIMIT_WORDING = /PerDay|per ?day|daily|per ?month|monthly|credit|balance|insufficient|billing/i;
+const CONCURRENCY_LIMIT = /\bstill running\b|\b(?:1|one) request at a time\b|\btoo many concurrent\b|\bconcurren(?:t|cy) (?:request )?limit\b/i;
 export function shortRateLimitMs(body) {
   const text = String(body || '');
   const explicit = EXPLICIT_SHORT_WAIT.exec(text);
@@ -78,7 +78,7 @@ export function shortRateLimitMs(body) {
   return Math.ceil(ms) + 500;
 }
 
-export function parseRetryAfterMs(raw) {
+function parseRetryAfterMs(raw) {
   const value = String(raw || '').trim();
   if (!value) return null;
   if (/^\d+(?:\.\d+)?$/.test(value)) {
@@ -92,7 +92,7 @@ export function parseRetryAfterMs(raw) {
 // When a provider says how long until its rate limit clears. Retry-After first, then
 // Anthropic's anthropic-ratelimit-*-reset (RFC 3339) and OpenAI-style
 // x-ratelimit-reset-* durations ("1m30s", "250ms"). Uncapped; null when unknown.
-export function parseDurationMs(text) {
+function parseDurationMs(text) {
   const value = String(text || '').trim();
   if (/^\d+(?:\.\d+)?$/.test(value)) return Number(value) * 1000;
   const parts = [...value.matchAll(/(\d+(?:\.\d+)?)(ms|h|m|s)/g)];
@@ -130,8 +130,8 @@ export function rateLimitResetMs(headers, now = Date.now()) {
 // is still rate-limited after the normal retries sleep until the advertised reset
 // (when it is at most N minutes away, max 24 h) and try again, up to 3 times.
 // Billing and out-of-credit errors never wait.
-export const RESETTABLE_LIMIT_PATTERN = /usage limit reached|rate.?limit|too many requests/i;
-export const BILLING_PATTERN = /insufficient_quota|billing|credit balance|payment required|account[_ ](?:is )?(?:on[_ ]hold|suspended|disabled|deactivated)/i;
+const RESETTABLE_LIMIT_PATTERN = /usage limit reached|rate.?limit|too many requests/i;
+const BILLING_PATTERN = /insufficient_quota|billing|credit balance|payment required|account[_ ](?:is )?(?:on[_ ]hold|suspended|disabled|deactivated)/i;
 export function rateLimitWaitMs({ status, headers, body = '', maxMinutes = 0, now = Date.now() } = {}) {
   const limit = Math.min(1440, Math.max(0, Number(maxMinutes) || 0)) * 60000;
   if (!limit || status !== 429 || BILLING_PATTERN.test(String(body))) return null;

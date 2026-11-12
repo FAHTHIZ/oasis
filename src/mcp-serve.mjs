@@ -14,9 +14,9 @@ import { stopLspClients } from './lsp.mjs';
 import { webSearchEnabled } from './web-search.mjs';
 import { protectedConfigTarget, protectedEditsAllowed } from './protected-paths.mjs';
 
-export const SERVE_READ_ONLY = ['read_file', 'list_files', 'glob_files', 'repo_map', 'grep', 'ast_grep', 'search_files', 'git_status', 'git_diff', 'git_log', 'lsp', 'diagnostics', 'fetch_url', 'web_search'];
-export const SERVE_EDITS = ['edit_file', 'multi_edit', 'write_file', 'notebook_edit'];
-export const SERVE_COMMANDS = ['run_command', 'command_output', 'kill_command', 'list_background'];
+const SERVE_READ_ONLY = ['read_file', 'list_files', 'glob_files', 'repo_map', 'grep', 'ast_grep', 'search_files', 'git_status', 'git_diff', 'git_log', 'lsp', 'diagnostics', 'fetch_url', 'web_search'];
+const SERVE_EDITS = ['edit_file', 'multi_edit', 'write_file', 'notebook_edit'];
+const SERVE_COMMANDS = ['run_command', 'command_output', 'kill_command', 'list_background'];
 
 export function servedTools({ allowEdits = false, allowCommands = false, env = process.env } = {}) {
   const names = new Set([...SERVE_READ_ONLY, ...(allowEdits ? SERVE_EDITS : []), ...(allowCommands ? SERVE_COMMANDS : [])]);
@@ -29,7 +29,7 @@ export function servedTools({ allowEdits = false, allowCommands = false, env = p
   }));
 }
 
-export function createMcpServer({ root, allowEdits = false, allowCommands = false, env = process.env, version = oasisVersion() } = {}) {
+function createMcpServer({ root, allowEdits = false, allowCommands = false, env = process.env, version = oasisVersion() } = {}) {
   const tools = servedTools({ allowEdits, allowCommands, env });
   const allowed = new Set(tools.map((tool) => tool.name));
   const session = { root, background: new Map(), settings: {} };

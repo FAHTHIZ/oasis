@@ -75,7 +75,7 @@ export function bareName(ecosystem, spec) {
   return value;
 }
 
-export function registryFor(ecosystem) {
+function registryFor(ecosystem) {
   if (ecosystem === 'npm' || ecosystem === 'npm-global') return 'npm';
   if (ecosystem === 'pip' || ecosystem === 'pipx' || ecosystem === 'pipx-fallback') return 'pypi';
   if (ecosystem === 'cargo') return 'crates';
@@ -103,7 +103,7 @@ const OSV_ECOSYSTEM = { npm: 'npm', pypi: 'PyPI', crates: 'crates.io' };
 // Advisories from OSV.dev (the open vulnerability database that aggregates the
 // GitHub Advisory Database, PyPA, RustSec and OpenSSF's malicious-packages feed)
 // for one package version. Returns null when OSV could not be reached.
-export async function osvAdvisories(registry, name, version, { fetchImpl = globalThis.fetch, timeoutMs = 5000 } = {}) {
+async function osvAdvisories(registry, name, version, { fetchImpl = globalThis.fetch, timeoutMs = 5000 } = {}) {
   try {
     const response = await fetchImpl('https://api.osv.dev/v1/query', {
       method: 'POST',
@@ -226,7 +226,7 @@ export function extractInstallTargets(command, args) {
 
 // Vets every registry package a command would install. Returns
 // { missing: [...], warnings: [...], risky } — missing names block the command.
-export async function vetCommandInstalls(command, args, options = {}) {
+async function vetCommandInstalls(command, args, options = {}) {
   const targets = extractInstallTargets(command, args);
   if (!targets.length) return { targets, missing: [], warnings: [], risky: false };
   const results = await Promise.all(targets.map((target) => vetPackage({ ecosystem: target.ecosystem, packageName: target.spec }, options)));

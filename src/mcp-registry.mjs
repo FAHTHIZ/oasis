@@ -19,7 +19,7 @@ import { getConfigDirectory, isLoopbackUrl } from './config.mjs';
 import { parseMcpServerEntries } from './mcp-project.mjs';
 import { onPathSync } from './clipboard-path.mjs';
 
-export const DEFAULT_REGISTRY = 'https://registry.modelcontextprotocol.io';
+const DEFAULT_REGISTRY = 'https://registry.modelcontextprotocol.io';
 const USAGE = 'Usage: oasis mcp install REGISTRY_NAME [--name LOCAL_NAME] [--scope user|project] [--remote | --package npm|pypi|oci] [-- EXTRA_ARGS...]';
 
 export function registryBase(env = process.env) {

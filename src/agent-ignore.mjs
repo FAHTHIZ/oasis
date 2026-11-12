@@ -35,7 +35,7 @@ const MAX_IGNORE_FILE = 256 * 1024;
 const MAX_RULES = 2000;
 const CACHE_MS = 1500;
 
-export function agentIgnoreEnabled(env = process.env) {
+function agentIgnoreEnabled(env = process.env) {
   return !/^(0|false|no|off)$/i.test(String(env.OASIS_AGENT_IGNORE || '').trim());
 }
 
@@ -133,7 +133,7 @@ export async function agentIgnoreMatch(absolutePath, options = {}) {
   return null;
 }
 
-export function agentIgnoreMessage(match, shown) {
+function agentIgnoreMessage(match, shown) {
   return (shown ? shown + ' is' : 'That path is') + ' excluded by ' + path.basename(match.file) + ' (' + match.tool + ' ignore file, pattern "' + match.pattern + '"). OASIS will not read, change or list it; edit ' + path.basename(match.file) + ' if this should change.';
 }
 

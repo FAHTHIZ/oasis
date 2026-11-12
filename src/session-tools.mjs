@@ -69,10 +69,10 @@ export const SESSION_TOOL_DEFINITIONS = [
 
 export const SESSION_TOOL_NAMES = new Set(['tool_search', ...SESSION_TOOL_DEFINITIONS.map((tool) => tool.function.name)]);
 export const SESSION_READ_ONLY_TOOLS = ['wait_for_mcp_servers', 'report_findings', 'schedule_wakeup', 'enter_worktree', 'exit_worktree', 'tool_search', 'terminal_read', 'terminal_list', 'monitor_command', 'enter_plan_mode', 'notify', 'cron_list', ...SHARED_TASK_READ_ONLY_TOOL_NAMES];
-export const DEFAULT_TOOL_SEARCH_THRESHOLD = 25;
+const DEFAULT_TOOL_SEARCH_THRESHOLD = 25;
 // MCP schemas larger than this (about 3,000 tokens) also go behind tool_search,
 // however few tools there are. One browser-automation server alone is ~20k chars.
-export const DEFAULT_TOOL_SEARCH_CHARS = 12000;
+const DEFAULT_TOOL_SEARCH_CHARS = 12000;
 
 // Defer MCP tools when there are many of them so they do not crowd the context window.
 export function deferMcpTools(session, { threshold = DEFAULT_TOOL_SEARCH_THRESHOLD, env = process.env } = {}) {
@@ -435,7 +435,7 @@ export function formatFindings(findings, { color = false } = {}) {
 }
 
 // WaitForMcpServers: block until background MCP connections settle (or a timeout).
-export async function waitForMcpServers(session, args = {}, options = {}) {
+async function waitForMcpServers(session, args = {}, options = {}) {
   const seconds = Math.min(120, Math.max(1, Math.round(Number(args.timeout_seconds) || 30)));
   let timedOut = false;
   if (session.mcpConnecting) {
@@ -457,7 +457,7 @@ export async function waitForMcpServers(session, args = {}, options = {}) {
 // Rarely used built-in tools whose schemas cost context on every request.
 // They stay callable: their names are listed in the system prompt, tool_search
 // loads them, and a direct call auto-loads them (see loadDeferredTool).
-export const RARE_BUILTIN_TOOLS = Object.freeze([
+const RARE_BUILTIN_TOOLS = Object.freeze([
   'install_extension', 'configure_provider', 'install_external_skill',
   'configure_mcp_server', 'install_plugin', 'add_extension', 'worktree_inspect', 'worktree_merge',
   'terminal_read', 'terminal_list', 'terminal_input', 'terminal_resize', 'terminal_interrupt', 'terminal_stop',
@@ -469,7 +469,7 @@ export const RARE_BUILTIN_TOOLS = Object.freeze([
 // coding task uses; harnesses with small prompts do as well and cost less
 // (docs/BENCHMARKS.md, "Context overhead"). OASIS_LEAN_TOOLS=0 or "leanTools":
 // false sends every tool up front.
-export const DEFERRED_TOOL_GROUPS = Object.freeze({
+const DEFERRED_TOOL_GROUPS = Object.freeze({
   'Git and GitHub': ['git_commit', 'git_branch', 'git_log', 'git_push', 'create_pull_request', 'enter_worktree', 'exit_worktree', 'worktree_inspect', 'worktree_merge'],
   'Code intelligence': ['repo_map', 'lsp', 'diagnostics', 'search_files', 'notebook_edit', 'execute_code', 'security_scan', 'report_findings', 'run_specialist_review'],
   'Files': ['delete_file'],

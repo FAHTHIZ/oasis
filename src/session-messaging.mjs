@@ -89,7 +89,7 @@ export async function unregisterActiveSession(session, options = {}) {
   return true;
 }
 
-export async function listActiveSessions(options = {}) {
+async function listActiveSessions(options = {}) {
   const env = options.env || process.env;
   const directory = path.join(storeRoot(env), 'active');
   let files = [];

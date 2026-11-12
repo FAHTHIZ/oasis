@@ -7,13 +7,13 @@ import { catalogImageInput } from './model-catalog.mjs';
 
 export const IMAGE_TYPES = { '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.gif': 'image/gif', '.webp': 'image/webp' };
 export const MAX_IMAGE_BYTES = 3_750_000; // ~5 MB once base64-encoded (Anthropic's per-image limit).
-export const MAX_IMAGES_IN_REQUEST = 4;
+const MAX_IMAGES_IN_REQUEST = 4;
 // Larger sources are accepted and downscaled with sharp (libvips) before upload.
 export const MAX_SOURCE_IMAGE_BYTES = 50 * 1024 * 1024;
 // Long-edge cap applied before upload. Claude Code downscales to 2000 px and
 // Codex to 2048 px; Anthropic rejects images over 2000 px once a request carries
 // many images, and rejects oversized computer/browser-use screenshots outright.
-export const DEFAULT_IMAGE_MAX_EDGE = 2000;
+const DEFAULT_IMAGE_MAX_EDGE = 2000;
 
 export function imageMediaType(file) {
   return IMAGE_TYPES[path.extname(String(file || '')).toLowerCase()] || null;
@@ -102,7 +102,7 @@ export function imageMaxEdge(env = process.env) {
 
 let sharpModule;
 // sharp is an optional native dependency; without it oversized images are refused.
-export function loadSharp() {
+function loadSharp() {
   if (!sharpModule) sharpModule = import('sharp').then((module) => module.default || module).catch(() => null);
   return sharpModule;
 }

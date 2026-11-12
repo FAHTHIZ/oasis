@@ -282,7 +282,7 @@ function renderHorizontal(graph, maxLabel) {
   return canvas;
 }
 
-export function renderFlowchart(source, { columns = 100, maxLabel = 28 } = {}) {
+function renderFlowchart(source, { columns = 100, maxLabel = 28 } = {}) {
   const graph = parseFlowchart(source);
   if (!graph) return null;
   if (graph.nodes.size > 60) return null;
@@ -333,7 +333,7 @@ export function parseSequence(source) {
   return participants.length ? { participants, steps } : null;
 }
 
-export function renderSequence(source, { columns = 100, maxLabel = 40 } = {}) {
+function renderSequence(source, { columns = 100, maxLabel = 40 } = {}) {
   const diagram = parseSequence(source);
   if (!diagram) return null;
   const { participants, steps } = diagram;

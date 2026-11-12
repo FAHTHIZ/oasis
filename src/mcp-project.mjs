@@ -69,7 +69,7 @@ export async function loadProjectMcpServers(root, options = {}) {
 // Claude Code keeps `claude mcp add` servers in ~/.claude.json (or $CLAUDE_CONFIG_DIR/.claude.json):
 // top-level "mcpServers" is the user scope and projects[<abs path>].mcpServers is the local scope.
 // Both are written by the user, so (unlike .mcp.json) they do not need workspace trust.
-export function claudeJsonPath(env = process.env) {
+function claudeJsonPath(env = process.env) {
   const base = env.CLAUDE_CONFIG_DIR || env.HOME || env.USERPROFILE || '';
   return base ? path.join(base, '.claude.json') : null;
 }

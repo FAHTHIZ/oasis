@@ -69,7 +69,7 @@ export function readLinuxDrmGpus({ root = '/sys/class/drm', readdir = fs.readdir
 // Windows display adapters from the registry. Win32_VideoController.AdapterRAM
 // is a 32-bit value that caps at 4 GB, so read HardwareInformation.qwMemorySize
 // (a 64-bit byte count) and DriverDesc for each adapter subkey instead.
-export const WINDOWS_DISPLAY_CLASS = 'HKLM\\SYSTEM\\CurrentControlSet\\Control\\Class\\{4d36e968-e325-11ce-bfc1-08002be10318}';
+const WINDOWS_DISPLAY_CLASS = 'HKLM\\SYSTEM\\CurrentControlSet\\Control\\Class\\{4d36e968-e325-11ce-bfc1-08002be10318}';
 
 export function parseWindowsDisplayAdapters(memoryText, nameText) {
   const blocks = (text, pattern) => {
@@ -151,7 +151,7 @@ export function modelMemoryBudget(hw) {
 }
 
 // Recommended local models by memory budget. Sizes are typical 4-bit downloads.
-export const LOCAL_MODEL_TIERS = [
+const LOCAL_MODEL_TIERS = [
   { minGB: 48, model: 'gpt-oss:120b', sizeGB: 65, contextWindow: 65536, label: 'large open model' },
   { minGB: 20, model: 'qwen3-coder:30b', sizeGB: 19, contextWindow: 65536, label: 'strong coding model' },
   { minGB: 13, model: 'gpt-oss:20b', sizeGB: 14, contextWindow: 32768, label: 'capable all-rounder' },

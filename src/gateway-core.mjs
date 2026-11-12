@@ -9,8 +9,8 @@ import { mkdir, writeFile } from 'node:fs/promises';
 export const APPROVAL_TIMEOUT_MS = 10 * 60000;
 export const MODES = ['default', 'acceptEdits', 'plan', 'auto'];
 
-export const MAX_ATTACHMENT_BYTES = 20 * 1024 * 1024;
-export const MAX_ATTACHMENTS = 5;
+const MAX_ATTACHMENT_BYTES = 20 * 1024 * 1024;
+const MAX_ATTACHMENTS = 5;
 const IMAGE_TYPES = new Set(['image/png', 'image/jpeg', 'image/webp', 'image/gif']);
 const MAX_INLINE_IMAGE = 5 * 1024 * 1024;
 

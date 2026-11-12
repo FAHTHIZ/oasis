@@ -13,7 +13,7 @@ const MAX_CHECKPOINT_FILE = 5 * 1024 * 1024;
 const MAX_CHECKPOINT_BYTES = 100 * 1024 * 1024;
 const MAX_TURNS = 50;
 
-export function ensureCheckpoints(session) {
+function ensureCheckpoints(session) {
   if (!session.checkpoints) session.checkpoints = { turns: [], bytes: 0 };
   return session.checkpoints;
 }

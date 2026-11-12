@@ -174,7 +174,7 @@ export function httpHookUrlAllowed(url, patterns) {
   });
 }
 
-export async function runHttpHook(hook, payload, options = {}) {
+async function runHttpHook(hook, payload, options = {}) {
   const env = options.env || process.env;
   const timeoutMs = Math.max(1, Math.min(600, Number(hook.timeout) || 30)) * 1000;
   const headers = { 'content-type': 'application/json' };
@@ -201,7 +201,7 @@ const PROMPT_HOOK_SYSTEM = [
   'Reply with only a JSON object: {"ok": true} if the policy is satisfied, or {"ok": false, "reason": "short explanation"} if not.'
 ].join('\n');
 
-export async function runPromptHook(hook, payload, options = {}) {
+async function runPromptHook(hook, payload, options = {}) {
   if (typeof options.evaluatePrompt !== 'function') return { exitCode: 1, stdout: '', stderr: 'Prompt hooks need a model, and none is available here.' };
   const json = JSON.stringify(payload, null, 2).slice(0, 30000);
   const text = hook.prompt.includes('$ARGUMENTS') ? hook.prompt.split('$ARGUMENTS').join(json) : hook.prompt + '\n\nEvent payload:\n' + json;
@@ -227,7 +227,7 @@ export async function runPromptHook(hook, payload, options = {}) {
 }
 
 // Agent hooks: a read-only verifier subagent investigates, then answers {"ok": ...}.
-export async function runAgentHook(hook, payload, options = {}) {
+async function runAgentHook(hook, payload, options = {}) {
   if (typeof options.evaluateAgent !== 'function') return { exitCode: 1, stdout: '', stderr: 'Agent hooks need a model, and none is available here.' };
   return runPromptHook({ ...hook, timeout: hook.timeout || 60 }, payload, { evaluatePrompt: (request) => options.evaluateAgent(request) });
 }
@@ -246,7 +246,7 @@ function substitutePayload(value, payload) {
   return value;
 }
 
-export async function runMcpToolHook(hook, payload, options = {}) {
+async function runMcpToolHook(hook, payload, options = {}) {
   if (typeof options.callMcpTool !== 'function') return { exitCode: 1, stdout: '', stderr: 'MCP tool hook: no MCP servers are connected in this session.' };
   const timeoutMs = Math.max(1, Math.min(600, Number(hook.timeout) || 600)) * 1000;
   try {

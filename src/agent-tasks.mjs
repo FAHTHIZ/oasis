@@ -341,7 +341,7 @@ function elapsed(record) {
 
 // Per-agent provider usage, summed over every request the agent (and any
 // agent it ran in the foreground) made, including failed or cancelled runs.
-export function emptyAgentUsage() {
+function emptyAgentUsage() {
   return { requests: 0, inputTokens: 0, outputTokens: 0, totalTokens: 0, cacheReadTokens: 0, costUsd: 0, costKnown: true };
 }
 

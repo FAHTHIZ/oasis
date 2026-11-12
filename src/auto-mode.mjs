@@ -258,7 +258,7 @@ function stableJson(value) {
 }
 
 // Same tool, same input (key order ignored), same user intent, rules and workspace.
-export function allowCacheKey({ toolName, args, messages, root, rules = [] } = {}) {
+function allowCacheKey({ toolName, args, messages, root, rules = [] } = {}) {
   try {
     return stableJson({ t: toolName, a: args, i: userIntent(messages), r: root, p: rules });
   } catch { return ''; }

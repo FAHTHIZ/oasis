@@ -46,7 +46,7 @@ export const COMPLETION_COMMANDS = {
   help: 'Show help'
 };
 
-export const COMPLETION_SUBCOMMANDS = {
+const COMPLETION_SUBCOMMANDS = {
   mcp: ['list', 'search', 'install', 'add', 'remove', 'serve', 'login', 'logout'],
   skills: ['list', 'find', 'inspect', 'add', 'install', 'eval'],
   plugins: ['list', 'install', 'remove', 'eval'],
@@ -66,7 +66,7 @@ export const COMPLETION_SUBCOMMANDS = {
   web: ['--open', '--port', '--host', '--tls-cert', '--tls-key']
 };
 
-export const COMPLETION_OPTIONS = [
+const COMPLETION_OPTIONS = [
   '--help', '--version', '-p', '--print', '-c', '--continue', '-r', '--resume',
   '--model', '--profile', '--permission-mode', '--safe-mode', '--restricted',
   '-w', '--worktree', '--yes', '--verbose', '--debug', '--output-format'

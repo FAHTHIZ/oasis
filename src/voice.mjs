@@ -13,7 +13,7 @@ import { mkdtemp, readFile, rm, stat } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 
-export const MAX_RECORDING_MS = 5 * 60 * 1000;
+const MAX_RECORDING_MS = 5 * 60 * 1000;
 const MAX_UPLOAD_BYTES = 25 * 1024 * 1024; // OpenAI's limit for transcription uploads
 const DEFAULT_URL = 'https://api.openai.com/v1/audio/transcriptions';
 const DEFAULT_MODEL = 'gpt-4o-mini-transcribe';

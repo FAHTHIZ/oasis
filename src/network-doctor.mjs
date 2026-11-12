@@ -20,7 +20,7 @@ function rootCause(error) {
 const CA_FIX = 'point NODE_EXTRA_CA_CERTS at your organisation\'s root CA file';
 
 /** The likely cause of each certificate failure, and its fix. */
-export function certificateAdvice(code) {
+function certificateAdvice(code) {
   const tag = ' (' + (code || 'certificate error') + ').';
   switch (code) {
     case 'CERT_HAS_EXPIRED':

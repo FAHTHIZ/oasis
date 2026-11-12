@@ -52,7 +52,7 @@ export async function resolvePublicAddresses(host, { lookupImpl = lookup } = {})
 }
 
 /** A net.connect-compatible lookup that only ever returns the vetted addresses. */
-export function pinnedLookup(addresses) {
+function pinnedLookup(addresses) {
   return (_host, options, callback) => {
     if (typeof options === 'function') { callback = options; options = {}; }
     if (options && options.all) callback(null, addresses);

@@ -144,7 +144,7 @@ export function backgroundUsageSink(session) {
 // Like Claude Code, the default is 3; 1 turns nesting off. Read by
 // OASIS_SUBAGENT_MAX_DEPTH, then CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH, then the
 // subagentMaxDepth setting. The background-agent cap is shared across the tree.
-export const DEFAULT_SUBAGENT_MAX_DEPTH = 3;
+const DEFAULT_SUBAGENT_MAX_DEPTH = 3;
 export function subagentMaxDepth(session, env = process.env) {
   const pick = (value) => value !== undefined && value !== null && value !== '' ? value : undefined;
   const raw = pick(env.OASIS_SUBAGENT_MAX_DEPTH) ?? pick(env.CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH) ?? (session && session.subagentMaxDepth);

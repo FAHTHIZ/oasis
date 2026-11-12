@@ -77,7 +77,7 @@ export async function appSharedModules(root) {
 }
 
 /** Folder of a browser package that may be served, e.g. node_modules/yaml/browser. */
-export function appPackageDir(root, name) {
+function appPackageDir(root, name) {
   return path.join(root, 'node_modules', APP_PACKAGE_SOURCES[name] || name, path.dirname(APP_PACKAGES[name]));
 }
 
