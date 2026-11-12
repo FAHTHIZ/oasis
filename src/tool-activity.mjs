@@ -124,6 +124,23 @@ export function toolActivityStatus(result) {
   return 'success';
 }
 
+// What happened to a step, in words a summary can repeat honestly:
+// 'ok', 'failed', 'declined' (the user said no), 'blocked' (a rule or safety
+// check stopped it), 'cancelled' (the task was stopped) or 'timed_out'.
+export function toolActivityOutcome(result) {
+  let value = result;
+  if (typeof value === 'string') {
+    try { value = JSON.parse(value); } catch { value = { output: value }; }
+  }
+  if (!value || typeof value !== 'object') return 'ok';
+  if (value.cancelled === true) return 'cancelled';
+  if (value.blocked === true) return 'blocked';
+  if (value.approved === false) return 'declined';
+  // A command moved to the background is still running: that is not a failure.
+  if (value.timedOut === true) return value.movedToBackground === true && !value.error ? 'ok' : 'timed_out';
+  return toolActivityStatus(value) === 'error' ? 'failed' : 'ok';
+}
+
 // A preview is offered only after a file-changing tool reports an actual change.
 // Paths are workspace-relative; the browser revalidates them before reading.
 export function toolActivityArtifacts(name, args = {}, result = null) {
