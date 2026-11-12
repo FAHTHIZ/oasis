@@ -477,9 +477,8 @@ export async function planAddon(raw, options = {}) {
           ? './plugin'
           : (source.subdir ? { source: 'git-subdir', url: source.url, path: source.subdir, ...(source.ref ? { ref: source.ref } : {}) } : { source: 'url', url: source.url, ...(source.ref ? { ref: source.ref } : {}) });
         if (source.local) {
-          const { cp } = await import('node:fs/promises');
           await rm(path.join(marketDir, 'plugin'), { recursive: true, force: true });
-          await cp(fetched.dir, path.join(marketDir, 'plugin'), { recursive: true, filter: (file) => !file.split(path.sep).includes('.git') });
+          await (await import('./plugin-copy.mjs')).copyPluginTree(fetched.dir, path.join(marketDir, 'plugin'));
         }
         await writeFile(path.join(marketDir, '.claude-plugin', 'marketplace.json'), JSON.stringify({ name: market, owner: { name: source.owner || 'local' }, plugins: [{ name: info.name, source: pluginSource }] }, null, 2) + '\n');
         await addMarketplace(marketDir, { env, cwd: root });

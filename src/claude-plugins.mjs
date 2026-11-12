@@ -1,4 +1,5 @@
 import { atomicWriteFile } from './atomic-write.mjs';
+import { copyPluginTree } from './plugin-copy.mjs';
 // Native Claude Code plugin and marketplace support.
 //
 // OASIS installs and runs plugins written for Claude Code without conversion:
@@ -29,7 +30,7 @@ import { atomicWriteFile } from './atomic-write.mjs';
 // with your permissions, exactly as in Claude Code: install only plugins you trust.
 import { spawn, spawnSync } from 'node:child_process';
 import { processTreeSpawnOptions, signalProcessTree } from './process-tree.mjs';
-import { cp, mkdir, readFile, readdir, realpath, rm, stat } from 'node:fs/promises';
+import { mkdir, readFile, readdir, realpath, rm, stat } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { getConfigDirectory } from './config.mjs';
@@ -741,7 +742,7 @@ export async function addMarketplace(input, options = {}) {
   if (source.type !== 'directory') {
     const final = path.join(home, 'marketplaces', name);
     await rm(final, { recursive: true, force: true });
-    await cp(location, final, { recursive: true });
+    await copyPluginTree(location, final, { skipGit: false });
     await rm(location, { recursive: true, force: true });
     location = final;
   }
@@ -813,14 +814,16 @@ export async function installPlugin(spec, options = {}) {
     const from = path.resolve(base, source);
     if (!inside(record.installLocation, from)) throw new Error('Plugin source escapes its marketplace: ' + source);
     if (!(await exists(from))) throw new Error('Plugin source directory is missing: ' + from);
+    // A symlinked source (./plugins/x -> $HOME) passes the path check above.
+    if (!inside(await realpath(record.installLocation), await realpath(from))) throw new Error('Plugin source escapes its marketplace: ' + source);
     installPath = cacheDir;
-    await cp(from, installPath, { recursive: true, filter: (file) => !file.split(path.sep).includes('.git') });
+    await copyPluginTree(from, installPath);
   } else if (source && typeof source === 'object' && source.source === 'npm') {
     const staging = cacheDir + '.staging';
     await rm(staging, { recursive: true, force: true });
     const fetched = await fetchNpmPluginSource(source, staging, env);
     installPath = cacheDir;
-    await cp(fetched.root, installPath, { recursive: true });
+    await copyPluginTree(fetched.root, installPath, { skipGit: false });
     await rm(staging, { recursive: true, force: true });
     npmInfo = fetched;
   } else if (source && typeof source === 'object') {
@@ -833,9 +836,9 @@ export async function installPlugin(spec, options = {}) {
     clone(url, staging, source.ref);
     if (source.sha) { git(['fetch', '--depth', '1', 'origin', source.sha], { cwd: staging }); git(['checkout', '--quiet', source.sha], { cwd: staging }); }
     const from = kind === 'git-subdir' ? path.resolve(staging, String(source.path || '')) : staging;
-    if (!inside(staging, from)) throw new Error('git-subdir path escapes the repository.');
+    if (!inside(staging, from) || !inside(await realpath(staging), await realpath(from))) throw new Error('git-subdir path escapes the repository.');
     installPath = cacheDir;
-    await cp(from, installPath, { recursive: true, filter: (file) => !path.relative(from, file).split(path.sep).includes('.git') });
+    await copyPluginTree(from, installPath);
     await rm(staging, { recursive: true, force: true });
   } else {
     throw new Error('Plugin entry "' + name + '" has no source.');

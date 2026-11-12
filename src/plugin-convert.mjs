@@ -8,7 +8,8 @@
 //
 // The converted copy keeps every file; only manifests and Gemini's TOML commands
 // are rewritten, so a plugin's scripts and assets keep working.
-import { cp, mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promises';
+import { copyPluginTree } from './plugin-copy.mjs';
+import { mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { geminiCommandToMarkdown } from './importers.mjs';
 
@@ -180,7 +181,7 @@ async function foreignServers(dir, info) {
 /** Copy a foreign plugin to dest as a Claude Code plugin. Returns its name. */
 export async function convertToClaudePlugin(srcDir, destDir, info) {
   await rm(destDir, { recursive: true, force: true });
-  await cp(srcDir, destDir, { recursive: true, filter: (file) => !file.split(path.sep).includes('.git') });
+  await copyPluginTree(srcDir, destDir);
   const files = await walk(destDir);
   const m = info.manifest;
   const name = NAME.test(info.name) ? info.name : slug(info.name);
