@@ -16,6 +16,7 @@ User-facing change history grouped by package version. A version heading does no
 
 - Targeted edits that pass a check no longer trigger an extra "review the diff" round trip and a duplicate summary. The verification gate meant to skip this only did so after a whole-file overwrite had happened earlier in the turn. Whole-file overwrites of existing files are still reviewed.
 - Answered approvals in the terminal collapse to one line (`⎿ Allowed once`, `⎿ Allowed for this session: …`, `⎿ Denied`) instead of leaving the full menu in the scrollback.
+- Closing `oasis web` (and the SDK's `startOasisWebServer`) no longer waits forever when the background model-catalog download gets stuck; it waits at most 2 seconds. The refresh also stays off inside test runners even when the server is given its own environment.
 - Keyless remote endpoints (for example `oasis connect https://text.pollinations.ai/openai`) are priced as free, so the footer shows `$0.00` instead of "cost unknown".
 
 ### Cursor Cloud Agents API on `oasis web`
