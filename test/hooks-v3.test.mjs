@@ -172,3 +172,24 @@ test('Setup hooks run command handlers only and never block', async (t) => {
   const [entry] = await readLog(log);
   assert.equal(entry.trigger, 'init');
 });
+
+test('ConfigChange sees nested SKILL.md edits and a skills directory created mid-session', async (t) => {
+  const root = await tmp(t);
+  await mkdir(path.join(root, '.claude', 'skills', 'deploy'), { recursive: true });
+  await mkdir(path.join(root, '.oasis'), { recursive: true });
+  await writeFile(path.join(root, '.claude', 'skills', 'deploy', 'SKILL.md'), '---\nname: deploy\n---\n');
+  const log = path.join(root, 'log.jsonl');
+  const session = { root, sessionId: 's3', hookMessages: [], hooks: { ConfigChange: [group({ type: 'command', command: logHook(log) }, 'skills')] } };
+  const env = { ...process.env, HOME: path.join(root, 'home'), OASIS_CONFIG_DIR: path.join(root, 'home', 'oasis') };
+  const watchers = startHookWatchers(session, { env });
+  t.after(() => watchers.stop());
+  const nested = path.join(root, '.claude', 'skills', 'deploy', 'SKILL.md');
+  await writeFile(nested, '---\nname: deploy\ndescription: changed\n---\n');
+  assert.ok(await waitFor(async () => (await readLog(log)).some((entry) => entry.file_path === nested)), 'nested SKILL.md edit fires ConfigChange');
+  const created = path.join(root, '.oasis', 'skills');
+  await mkdir(path.join(created, 'lint'), { recursive: true });
+  assert.ok(await waitFor(async () => (await readLog(log)).some((entry) => entry.file_path === created)), 'new skills directory fires ConfigChange');
+  const later = path.join(created, 'lint', 'SKILL.md');
+  // The new directory is watched once its creation has been noticed.
+  assert.ok(await waitFor(async () => { await writeFile(later, '---\nname: lint\n---\n' + Date.now()); await new Promise((resolve) => setTimeout(resolve, 300)); return (await readLog(log)).some((entry) => entry.file_path === later); }));
+});
