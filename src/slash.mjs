@@ -224,6 +224,32 @@ export async function subagentRows(state, records) {
   } catch { return new Map(); }
 }
 
+// Word-wraps text to width (no wrapping without a width); continuation lines get indent.
+function wrapWords(text, width, indent = '') {
+  const max = Number(width) || 0;
+  if (!max) return [indent + text];
+  const lines = [];
+  let line = '';
+  for (const word of String(text).split(/ +/)) {
+    if (line && (indent.length + line.length + 1 + word.length) > max) { lines.push(indent + line); line = word; }
+    else line = line ? line + ' ' + word : word;
+  }
+  if (line || !lines.length) lines.push(indent + line);
+  return lines;
+}
+
+// One /help row: "  /name   description", wrapped under the description
+// column so narrow terminals do not split words mid-way. Very narrow
+// terminals get the description on its own indented lines.
+export function helpEntry(label, description, width) {
+  const head = '  ' + label + ' ';
+  const max = Number(width) || 0;
+  if (!max) return [head + description];
+  if (max - head.length < 24) return ['  ' + label.trimEnd(), ...wrapWords(description, max - 1, '      ')];
+  const body = wrapWords(description, max - 1 - head.length, '');
+  return body.map((line, index) => (index ? ' '.repeat(head.length) : head) + line);
+}
+
 export async function runBuiltinCommand(name, argument, state) {
   if (name === 'ultrareview') { name = 'review'; argument = 'ultra ' + String(argument || '').trim(); }
   if (Object.hasOwn(COMMAND_ALIASES, name) && !Object.hasOwn(BUILTIN_COMMANDS, name)) name = COMMAND_ALIASES[name];
@@ -256,20 +282,20 @@ export async function runBuiltinCommand(name, argument, state) {
         if (!entries.length) continue;
         lines.push(group.title + ':');
         for (const [command, description] of entries) {
-          lines.push('  /' + command.padEnd(18) + ' ' + description);
+          lines.push(...helpEntry('/' + command.padEnd(18), description, state.width));
           used.add(command);
         }
       }
       const rest = Object.entries(BUILTIN_COMMANDS).filter(([command]) => !used.has(command));
       if (rest.length) {
         lines.push('More commands:');
-        for (const [command, description] of rest) lines.push('  /' + command.padEnd(18) + ' ' + description);
+        for (const [command, description] of rest) lines.push(...helpEntry('/' + command.padEnd(18), description, state.width));
       }
       if (custom.size) {
         lines.push('Custom commands:');
-        for (const command of custom.values()) lines.push('  /' + (command.name + (command.argumentHint ? ' ' + command.argumentHint : '')).padEnd(18) + ' ' + command.description + ' (' + command.scope + ')');
+        for (const command of custom.values()) lines.push(...helpEntry('/' + (command.name + (command.argumentHint ? ' ' + command.argumentHint : '')).padEnd(18), command.description + ' (' + command.scope + ')', state.width));
       }
-      lines.push('Tips: mention files with @path, start a line with # to save a project memory, and say "install pnpm" for direct installs.');
+      lines.push(...wrapWords('Tips: mention files with @path, start a line with # to save a project memory, and say "install pnpm" for direct installs.', state.width, ''));
       return { output: lines.join('\n') };
     }
     case 'init': {
