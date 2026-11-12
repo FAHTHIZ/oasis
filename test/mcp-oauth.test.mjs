@@ -8,6 +8,7 @@ import { mkdtemp, writeFile, readFile, stat, rm } from 'node:fs/promises';
 import { connectMcpServers, closeMcpClients } from '../src/mcp.mjs';
 import { loadProjectMcpServers } from '../src/mcp-project.mjs';
 import { getStoredToken, saveStoredToken, parseWwwAuthenticate, discoverOAuth, openInBrowser, createOAuthFetch } from '../src/mcp-oauth.mjs';
+import { fetchMcpSameOrigin, OasisOAuthProvider } from '../src/mcp-oauth.mjs';
 import { mcpLogin, mcpLogout } from '../src/mcp-auth-commands.mjs';
 
 test('OAuth token storage preserves concurrent server updates', async (t) => {
@@ -379,4 +380,76 @@ test('OAuth metadata on another loopback port needs OASIS_MCP_OAUTH_ALLOW_LOOPBA
   assert.deepEqual(seen, [metadata]);
   const publicHttp = await createOAuthFetch('http://127.0.0.1:8/mcp', { fetch: fetchImpl })('http://auth.example/token');
   assert.equal(publicHttp.status, 404, 'the opt-in never allows plain HTTP to non-loopback hosts');
+});
+
+test('MCP requests follow same-origin redirects but never send headers to another origin', async (t) => {
+  // Regression: an MCP server answering 307 to another host received the
+  // configured X-API-Key header there (fetch strips only Authorization).
+  const seen = [];
+  const other = createServer((req, res) => { seen.push(['other', req.headers['x-api-key']]); res.end('{}'); });
+  const main = createServer((req, res) => {
+    seen.push(['main', req.url, req.headers['x-api-key']]);
+    if (req.url === '/old') { res.writeHead(308, { location: '/mcp' }); res.end(); return; }
+    if (req.url === '/away') { res.writeHead(307, { location: 'http://127.0.0.1:' + other.address().port + '/mcp' }); res.end(); return; }
+    res.writeHead(200, { 'content-type': 'application/json' }); res.end('{"ok":true}');
+  });
+  await Promise.all([new Promise((r) => main.listen(0, '127.0.0.1', r)), new Promise((r) => other.listen(0, '127.0.0.1', r))]);
+  t.after(() => { main.close(); other.close(); });
+  const base = 'http://127.0.0.1:' + main.address().port;
+  const init = { method: 'POST', headers: { 'x-api-key': 'k1', 'content-type': 'application/json' }, body: '{}' };
+  const ok = await fetchMcpSameOrigin(fetch, base + '/old', init);
+  assert.equal(ok.status, 200);
+  assert.deepEqual(await ok.json(), { ok: true });
+  await assert.rejects(fetchMcpSameOrigin(fetch, base + '/away', init), /different origin/);
+  assert.equal(seen.some(([where]) => where === 'other'), false, 'the other origin was contacted');
+});
+
+test('concurrent refreshes share one token request, survive cancellation and keep rotated tokens', async (t) => {
+  // Regression (Codex 0.167.2 class): concurrent 401s each refreshed with the
+  // same rotating refresh token, the losers wiped the winner's new tokens, and
+  // a cancelled request could abort the rotation and lose the new token.
+  const home = await mkdtemp(path.join(os.tmpdir(), 'oasis-oauth-refresh-race-'));
+  t.after(() => rm(home, { recursive: true, force: true }));
+  const env = { ...process.env, OASIS_CONFIG_DIR: home };
+  let grants = 0;
+  const server = createServer((req, res) => {
+    let body = '';
+    req.on('data', (chunk) => { body += chunk; });
+    req.on('end', () => {
+      grants++;
+      setTimeout(() => {
+        res.writeHead(body.includes('refresh_token=R1') && grants === 1 ? 200 : 400, { 'content-type': 'application/json' });
+        res.end(grants === 1 ? '{"access_token":"A2","refresh_token":"R2","token_type":"Bearer"}' : '{"error":"invalid_grant"}');
+      }, 80);
+    });
+  });
+  await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
+  t.after(() => server.close());
+  const base = 'http://127.0.0.1:' + server.address().port;
+  const oauthFetch = createOAuthFetch(base + '/mcp', { fetch: (url, init) => fetch(url, init) });
+  const body = () => new URLSearchParams({ grant_type: 'refresh_token', refresh_token: 'R1', client_id: 'c' });
+  const cancelled = new AbortController();
+  const calls = [1, 2, 3].map((n) => oauthFetch(base + '/token', { method: 'POST', body: body(), ...(n === 3 ? { signal: cancelled.signal } : {}) }));
+  setTimeout(() => cancelled.abort(new Error('request cancelled')), 20);
+  const responses = await Promise.all(calls);
+  assert.equal(grants, 1, 'one refresh grant reached the server');
+  for (const response of responses) assert.deepEqual([response.status, (await response.json()).access_token], [200, 'A2']);
+
+  // A provider that handed out A1 and then sees a failed refresh must not wipe
+  // the A2 that another connection saved in the meantime.
+  const config = { name: 'remote', url: base + '/mcp' };
+  await saveStoredToken(config.url, { tokens: { access_token: 'A1', refresh_token: 'R1' }, accessToken: 'A1', refreshToken: 'R1', clientId: 'c' }, env);
+  const stale = new OasisOAuthProvider(config, { env });
+  assert.equal((await stale.tokens()).access_token, 'A1');
+  const other = new OasisOAuthProvider(config, { env });
+  await other.saveTokens({ access_token: 'A2', refresh_token: 'R2', token_type: 'Bearer' });
+  await stale.invalidateCredentials('tokens');
+  let saved = await getStoredToken(config.url, env);
+  assert.equal(saved.accessToken, 'A2');
+  assert.equal(saved.clientId, 'c', 'saving tokens kept the client registration');
+  assert.equal((await stale.tokens()).access_token, 'A2', 'the stale connection picks up the refreshed token');
+  // When nothing newer exists, invalidation still clears the bad tokens.
+  await stale.invalidateCredentials('tokens');
+  saved = await getStoredToken(config.url, env);
+  assert.equal(saved.accessToken, null);
 });

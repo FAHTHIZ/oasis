@@ -21,7 +21,7 @@ import { isLoopbackUrl } from './config.mjs';
 import { loadMcpExtras } from './mcp-extras.mjs';
 import { redactAuditValue } from './tool-kernel.mjs';
 import { validateToolArguments } from './tool-schema-validation.mjs';
-import { authRequiredError, createOAuthFetch, getStoredToken, loadMcpClientSdk, OasisOAuthProvider, refreshExpiringToken, rememberRequiredScope, routeMcpFetch, sameMcpEndpoint } from './mcp-oauth.mjs';
+import { authRequiredError, createOAuthFetch, getStoredToken, loadMcpClientSdk, OasisOAuthProvider, fetchMcpSameOrigin, refreshExpiringToken, rememberRequiredScope, routeMcpFetch, sameMcpEndpoint } from './mcp-oauth.mjs';
 
 import { clientCapabilities, handleServerNotification, handleServerRequest } from './mcp-client-features.mjs';
 const MAX_RESPONSE = 4 * 1024 * 1024;
@@ -354,7 +354,7 @@ export class McpHttpClient {
     const method = String(init.method || 'GET').toUpperCase();
     // close() ends the server-side session with one DELETE (cached headers, short timeout).
     if (method === 'DELETE') {
-      return await this.fetch(input, { ...init, headers: { ...this.config.headers, ...plainHeaderObject(init.headers), ...(this.helperHeaders || {}) }, signal: AbortSignal.timeout(5000) });
+      return await fetchMcpSameOrigin(this.fetch, input, { ...init, headers: { ...this.config.headers, ...plainHeaderObject(init.headers), ...(this.helperHeaders || {}) }, signal: AbortSignal.timeout(5000) });
     }
     if (this.closed) throw new Error('MCP server session closed.');
     const controller = new AbortController();
@@ -369,7 +369,7 @@ export class McpHttpClient {
         const extra = await this._helperHeaders(attempt > 0);
         if (this.closed) throw new Error('MCP server session closed.');
         const headers = { ...this.config.headers, ...plainHeaderObject(init.headers), ...extra };
-        const response = await this.fetch(input, { ...init, headers, signal: controller.signal });
+        const response = await fetchMcpSameOrigin(this.fetch, input, { ...init, headers, signal: controller.signal });
         this.lastStatus = response.status;
         if (response.status === 401 && this.config.headersHelper && attempt === 0) {
           await response.body?.cancel().catch(() => {});

@@ -211,10 +211,39 @@ function plainHeaders(headers) {
 
 const NULL_BODY_STATUS = new Set([101, 204, 205, 304]);
 
+// Refresh-token grants in flight, keyed by token endpoint and request body.
+// Several requests that hit a 401 at once each ask the SDK to refresh; with
+// refresh-token rotation only the first may use the old token, and the others
+// would fail and wipe the new one. They share one token request instead.
+const refreshesInFlight = new Map();
+
+function refreshGrantBody(init) {
+  const body = init && init.body;
+  const text = body instanceof URLSearchParams ? body.toString() : typeof body === 'string' ? body : '';
+  return /(?:^|&)grant_type=refresh_token(?:&|$)/.test(text) ? text : '';
+}
+
 export function createOAuthFetch(serverUrl, { fetch: fetchImpl = globalThis.fetch, lookupImpl = lookup, fetchTimeoutMs = OAUTH_METADATA_TIMEOUT_MS } = {}) {
   const safety = oauthSafetyForServer(serverUrl, lookupImpl);
   const timeoutMs = normalizeOAuthTimeout(fetchTimeoutMs);
   const guarded = async (input, init = {}) => {
+    const refreshBody = String(init.method || 'GET').toUpperCase() === 'POST' ? refreshGrantBody(init) : '';
+    if (!refreshBody) return await guardedOnce(input, init);
+    const key = requestUrl(input) + '\n' + refreshBody;
+    let shared = refreshesInFlight.get(key);
+    if (!shared) {
+      // A refresh is not cancelled with the request that started it: the server
+      // may already have rotated the token, and dropping its answer would lose
+      // the only copy. The OAuth timeout still bounds it.
+      const { signal: _signal, ...rest } = init;
+      shared = guardedOnce(input, rest).then(async (response) => ({ status: response.status, headers: response.headers, body: response.body ? Buffer.from(await response.arrayBuffer()) : null }));
+      refreshesInFlight.set(key, shared);
+      shared.finally(() => { if (refreshesInFlight.get(key) === shared) refreshesInFlight.delete(key); }).catch(() => {});
+    }
+    const { status, headers, body } = await shared;
+    return new Response(body && body.length ? body : null, { status, headers });
+  };
+  const guardedOnce = async (input, init = {}) => {
     const url = requestUrl(input);
     const method = String(init.method || (input && typeof input === 'object' && input.method) || 'GET').toUpperCase();
     const soft = method === 'GET' || method === 'HEAD';
@@ -274,6 +303,36 @@ function sameEndpoint(a, b) {
     const right = new URL(b);
     return left.origin === right.origin && left.pathname.replace(/\/$/, '') === right.pathname.replace(/\/$/, '');
   } catch { return false; }
+}
+
+// Remote MCP requests carry the server's configured headers (API keys, an
+// OAuth bearer token, headersHelper output). fetch's own redirect handling
+// drops only Authorization when it crosses origins, so an `X-API-Key` header
+// would reach whatever host the server redirects to. Redirects are followed
+// here only within the same origin; any other redirect is refused.
+const MAX_MCP_REDIRECTS = 5;
+
+export async function fetchMcpSameOrigin(fetchImpl, input, init = {}) {
+  let url = String(input instanceof URL ? input.href : (input && input.url) || input);
+  const origin = new URL(url).origin;
+  let request = { ...init, redirect: 'manual' };
+  for (let hop = 0; ; hop++) {
+    const response = await fetchImpl(url, request);
+    if (response.status < 300 || response.status > 399 || response.status === 304) return response;
+    const location = response.headers && response.headers.get && response.headers.get('location');
+    // An opaque redirect (browser-style manual mode) or one without a Location gives nothing to follow.
+    if (!location) return response;
+    await response.body?.cancel().catch(() => {});
+    const next = new URL(location, url);
+    if (next.origin !== origin) throw new Error('MCP server redirected to ' + next.origin + ', a different origin; refusing to send its credentials there.');
+    if (hop >= MAX_MCP_REDIRECTS) throw new Error('MCP server redirected too many times.');
+    // 303, and 301/302 after POST, turn into GET as fetch would.
+    if (response.status === 303 || ((response.status === 301 || response.status === 302) && String(request.method || 'GET').toUpperCase() === 'POST')) {
+      const { body: _body, ...rest } = request;
+      request = { ...rest, method: 'GET' };
+    }
+    url = next.href;
+  }
 }
 
 // One fetch for an SDK transport: requests to the MCP endpoint go to mcpFetch,
@@ -341,10 +400,25 @@ export class OasisOAuthProvider {
     return this.entry;
   }
 
+  // Saves merge into the entry as it is in the store now, not a copy read
+  // earlier: another connection (or OASIS process) may have refreshed the
+  // tokens since, and writing an old snapshot back would undo that. A fresh
+  // sign-in replaces the entry with what it gathered.
   async _save(patch) {
     await this.load();
-    Object.assign(this.entry, patch, { server: this.server.name, resource: canonicalResource(this.server.url) });
-    await saveStoredToken(this.server.url, { ...this.entry }, this.env);
+    const key = canonicalResource(this.server.url);
+    await updateStore(this.env, (store) => {
+      const current = this.fresh ? this.entry : (store.servers[key] || {});
+      const next = { ...current, ...patch, server: this.server.name, resource: key };
+      store.servers[key] = next;
+      this.entry = { ...next };
+    });
+  }
+
+  async _reload() {
+    if (this.fresh) return await this.load();
+    this.entry = { ...((await getStoredToken(this.server.url, this.env)) || {}) };
+    return this.entry;
   }
 
   get redirectUrl() { return this._redirectUrl || PLACEHOLDER_REDIRECT; }
@@ -375,10 +449,12 @@ export class OasisOAuthProvider {
   }
 
   async tokens() {
-    const entry = await this.load();
+    // Read the store each time, so tokens another connection refreshed are used.
+    const entry = await this._reload();
     const stored = entry.tokens || {};
     const access = stored.access_token || entry.accessToken;
     if (!access) return undefined;
+    this.handedAccessToken = access;
     const out = { access_token: access, token_type: stored.token_type || entry.tokenType || 'Bearer' };
     const refresh = stored.refresh_token || entry.refreshToken;
     if (refresh) out.refresh_token = refresh;
@@ -433,7 +509,15 @@ export class OasisOAuthProvider {
     if (scope === 'verifier') { this.verifier = ''; return; }
     if (scope === 'discovery') return;
     const patch = {};
-    if (scope === 'all' || scope === 'tokens') Object.assign(patch, { tokens: null, accessToken: null, refreshToken: null, expiresAt: null });
+    let wipeTokens = scope === 'all' || scope === 'tokens';
+    // A refresh that failed because another connection already rotated the
+    // token must not delete the new tokens that connection saved.
+    if (wipeTokens && !this.fresh && this.handedAccessToken) {
+      const current = await getStoredToken(this.server.url, this.env).catch(() => null);
+      const now = current && ((current.tokens && current.tokens.access_token) || current.accessToken);
+      if (now && now !== this.handedAccessToken) wipeTokens = false;
+    }
+    if (wipeTokens) Object.assign(patch, { tokens: null, accessToken: null, refreshToken: null, expiresAt: null });
     if ((scope === 'all' || scope === 'client') && !this.configuredClient) Object.assign(patch, { client: null, clientId: null, clientSecret: null });
     if (scope === 'all') this.verifier = '';
     if (Object.keys(patch).length && Object.keys(entry).length) await this._save(patch);
@@ -559,7 +643,7 @@ export async function loginMcpServer(server, { env = process.env, fetch: fetchIm
       }
     });
     const sdk = await loadMcpClientSdk();
-    const mcpFetch = (input, init = {}) => fetchImpl(input, { ...init, headers: { ...(server.headers || {}), ...plainHeaders(init.headers) } });
+    const mcpFetch = (input, init = {}) => fetchMcpSameOrigin(fetchImpl, input, { ...init, headers: { ...(server.headers || {}), ...plainHeaders(init.headers) } });
     const fetchForSdk = routeMcpFetch(server.url, mcpFetch, oauthFetch);
     // finishAuth must run on the transport that started the flow: it holds the
     // discovery state (resource_metadata hint, issuer) the client was registered with.
