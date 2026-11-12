@@ -4,6 +4,7 @@ User-facing change history grouped by package version. A version heading does no
 
 ## Unreleased
 
+- Security: Tavily (`tvly-…`) and Firecrawl (`fc-…`) API keys, both used for web search, are now redacted from transcripts, logs and tool output like the other provider keys.
 - Skills: a SKILL.md with OpenHands-style `triggers:` keywords is now added to your message when one of the keywords appears, once per conversation, the same way keyword microagents already were. The skill also stays in the normal skill list.
 - Security: the `monitor_command` pattern now runs in a worker with a 250 ms time limit. A catastrophic pattern such as `(a|a)*$` used to run on the main thread and freeze the TUI, the web server and Esc; it now returns `reason: "pattern_error"` and asks for a simpler pattern.
 - ConfigChange hooks with source `skills` fire for edits inside a skill folder (`.claude/skills/deploy/SKILL.md`), not just for entries at the top of the skills directory. They also fire for a `.claude/skills` or `.oasis/skills` directory created during the session, and for later edits inside it.
