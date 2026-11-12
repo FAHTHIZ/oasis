@@ -114,3 +114,24 @@ test('approval summaries and wrapped row counts', async () => {
   assert.equal(approvalSummary({ value: false }), '  ⎿ Denied');
   assert.equal(approvalSummary(undefined), '  ⎿ Denied');
 });
+
+test('terminal approvals show the proposed diff, colored and capped', async () => {
+  const { renderApprovalText } = await import('../src/cli.mjs');
+  const { formatApprovalMessage } = await import('../src/approval-language.mjs');
+  const approval = formatApprovalMessage('Review this edit.', { tool: 'edit_file', input: { path: 'a.js', old_string: 'one();', new_string: 'two();' } });
+  const plain = renderApprovalText(approval, { color: false });
+  assert.match(plain, /OASIS wants to change the file/);
+  assert.match(plain, /^ {2}-one\(\);$/m);
+  assert.match(plain, /^ {2}\+two\(\);$/m);
+  const colored = renderApprovalText(approval, { color: true });
+  assert.match(colored, /\x1b\[32m {2}\+two\(\);\x1b\[0m/);
+  assert.match(colored, /\x1b\[31m {2}-one\(\);\x1b\[0m/);
+  const long = formatApprovalMessage('Write it.', { tool: 'write_file', input: { path: 'b.txt', content: Array.from({ length: 50 }, (_, i) => 'line ' + i).join('\n') } });
+  const capped = renderApprovalText(long, { color: false, maxDiffLines: 10 });
+  assert.match(capped, /… \d+ more lines$/);
+  assert.equal(capped.split('\n').filter((line) => line.startsWith('  +line')).length <= 10, true);
+  const risky = formatApprovalMessage('Run this command in the workspace?\n  rm -rf build');
+  assert.match(renderApprovalText(risky, { color: false }), /^WARNING — RISKY ACTION/, 'plain output keeps the warning text');
+  assert.match(renderApprovalText(risky, { color: true }), /⚠ Risky action/);
+  assert.match(renderApprovalText(risky, { color: true }), /\x1b\[36m {2}rm -rf build\x1b\[0m/);
+});
