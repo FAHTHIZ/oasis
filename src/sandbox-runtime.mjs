@@ -26,12 +26,14 @@ async function manager() {
 export function srtConfig(sandbox) {
   const guarded = protectedWritePaths(sandbox.protectedRoots || []);
   const rg = resolveRipgrep(process.env);
+  const block = sandbox.readBlock || null;
+  const allowRead = [...(sandbox.reopenedPaths || []).map((item) => item.path), ...(block ? [...(sandbox.writable || []), ...block.reopen.map((item) => item.path)] : [])];
   return {
     network: { allowedDomains: sandbox.allowedDomains || [], deniedDomains: sandbox.deniedDomains || [] },
     filesystem: {
-      denyRead: (sandbox.maskedPaths || []).map((item) => item.path),
-      ...((sandbox.reopenedPaths || []).length ? { allowRead: sandbox.reopenedPaths.map((item) => item.path) } : {}),
-      allowWrite: sandbox.writable || [],
+      denyRead: [...(block ? block.hidden.map((item) => item.path) : []), ...(sandbox.maskedPaths || []).map((item) => item.path)],
+      ...(allowRead.length ? { allowRead: [...new Set(allowRead)] } : {}),
+      allowWrite: [...(sandbox.writable || []), ...(block ? block.reopen.filter((item) => item.writable).map((item) => item.path) : [])],
       denyWrite: [...guarded.existing, ...(sandbox.readOnlyPaths || [])].map((item) => item.path)
     },
     ...(rg ? { ripgrep: { command: rg.path } } : {})
