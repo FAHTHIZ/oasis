@@ -219,15 +219,19 @@ export async function publishChanges({ root, trigger, context, request, summary,
     // runAction checked out the PR head before the agent ran; never push anything else there.
     branch = context.prHeadRef;
     if ((await git(['rev-parse', '--abbrev-ref', 'HEAD'], root)) !== branch) throw new Error('the PR branch ' + branch + ' is not checked out, so the changes were not pushed.');
+  } else if (context.pushBranch && !trigger.number) {
+    // `oasis cloud run`: a fixed branch the person pulls back later. Continue it if it exists.
+    branch = context.pushBranch;
+    if ((await git(['rev-parse', '--abbrev-ref', 'HEAD'], root)) !== branch) await git(['checkout', '-q', '-B', branch], root);
   } else {
     branch = 'oasis/' + (trigger.number ? (trigger.isPullRequest ? 'pr-' : 'issue-') + trigger.number : 'task') + '-' + Date.now().toString(36);
     await git(['checkout', '-b', branch], root);
   }
   await git(['add', '-A'], root);
-  const subject = (trigger.number ? (trigger.isPullRequest ? 'Address review on #' : 'Fix #') + trigger.number + ': ' : '') + (trigger.title || trigger.request).replace(/\s+/g, ' ').slice(0, 60);
+  const subject = (trigger.number ? (trigger.isPullRequest ? 'Address review on #' : 'Fix #') + trigger.number + ': ' : '') + String(trigger.title || trigger.request || 'OASIS changes').replace(/\s+/g, ' ').slice(0, 60);
   await git(['commit', '-q', '-m', subject, '-m', 'Requested by @' + (trigger.author || 'unknown') + ' and made by Oasis.'], root);
   await git(['push', '-q', context.remote, 'HEAD:refs/heads/' + branch], root);
-  if (!sameRepoPr) {
+  if (!sameRepoPr && context.openPullRequest !== false) {
     const prBody = (trigger.number && !trigger.isPullRequest ? 'Closes #' + trigger.number + '\n\n' : '') +
       summary.slice(0, 48000) + '\n\n' + formatVerificationReport(verification);
     pullRequest = await request('POST', '/repos/' + context.repository + '/pulls', {
@@ -293,7 +297,9 @@ export async function runAction(options = {}) {
     remote: input(env, 'remote', 'origin'),
     gitName: input(env, 'git_name', 'oasis[bot]'),
     gitEmail: input(env, 'git_email', 'oasis-bot@users.noreply.github.com'),
-    prHeadRef: null, prHeadRepo: null, prBaseRef: null
+    prHeadRef: null, prHeadRepo: null, prBaseRef: null,
+    pushBranch: /^[\w./-]{1,200}$/.test(input(env, 'branch')) && !input(env, 'branch').includes('..') ? input(env, 'branch') : '',
+    openPullRequest: !/^(false|0|no)$/i.test(input(env, 'pull_request', 'true'))
   };
   if (trigger.isPullRequest && trigger.number) {
     const pr = event.pull_request || await request('GET', '/repos/' + repository + '/pulls/' + trigger.number).catch(() => null);
