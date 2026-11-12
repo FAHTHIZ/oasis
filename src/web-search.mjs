@@ -69,21 +69,37 @@ function decodeEntities(text) {
   return decodeHTML(String(text || '').replace(/<[^>]+>/g, '')).replace(/\s+/g, ' ').trim();
 }
 
+// Attribute value from one start tag, whatever the attribute order or quote style.
+function attr(tag, name) {
+  const match = new RegExp('\\s' + name + '\\s*=\\s*(?:"([^"]*)"|\'([^\']*)\'|([^\\s>]+))', 'i').exec(tag);
+  return match ? (match[1] ?? match[2] ?? match[3]) : null;
+}
+const hasClass = (tag, name) => new RegExp('(?:^|\\s)' + name + '(?:\\s|$)').test(attr(tag, 'class') || '');
+
+// The first <a> in `html` whose start tag passes `accept`, as { href, inner }.
+function findLink(html, accept) {
+  for (const match of html.matchAll(/<a\b[^>]*>([\s\S]*?)<\/a>/gi)) {
+    const tag = match[0].slice(0, match[0].indexOf('>') + 1);
+    if (accept(tag)) return { href: attr(tag, 'href'), inner: match[1] };
+  }
+  return null;
+}
+
 export function parseDuckDuckGoHtml(html) {
   const results = [];
-  const blocks = String(html).split(/<div[^>]+class="[^"]*\bresult\b[^"]*"/i).slice(1);
+  const blocks = String(html).split(/<div\b[^>]*\sclass\s*=\s*["'][^"']*\bresult\b[^"']*["'][^>]*>/i).slice(1);
   for (const block of blocks) {
-    const link = block.match(/<a[^>]+class="[^"]*result__a[^"]*"[^>]+href="([^"]+)"[^>]*>([\s\S]*?)<\/a>/i);
-    if (!link) continue;
-    let href = link[1].replace(/&amp;/g, '&');
+    const link = findLink(block, (tag) => hasClass(tag, 'result__a'));
+    if (!link || !link.href) continue;
+    let href = decodeHTML(link.href);
     const redirect = href.match(/[?&]uddg=([^&]+)/);
     if (redirect) {
       try { href = decodeURIComponent(redirect[1]); } catch {}
     }
     if (href.startsWith('//')) href = 'https:' + href;
     if (!/^https?:\/\//i.test(href) || /duckduckgo\.com\/y\.js/.test(href)) continue;
-    const snippet = block.match(/class="[^"]*result__snippet[^"]*"[^>]*>([\s\S]*?)<\/(?:a|div|td)>/i);
-    results.push({ title: decodeEntities(link[2]), url: href, snippet: snippet ? decodeEntities(snippet[1]) : '' });
+    const snippet = block.match(/<(a|div|td)\b[^>]*\sclass\s*=\s*["'][^"']*\bresult__snippet\b[^"']*["'][^>]*>([\s\S]*?)<\/\1>/i);
+    results.push({ title: decodeEntities(link.inner), url: href, snippet: snippet ? decodeEntities(snippet[2]) : '' });
   }
   return results;
 }
@@ -94,18 +110,19 @@ export function parseDuckDuckGoHtml(html) {
 // bing.com/ck/a?...&u=a1<base64url>; the real URL is unwrapped here.
 export function parseBingHtml(html) {
   const results = [];
-  const blocks = String(html).split(/<li[^>]+class="b_algo\b[^"]*"/i).slice(1);
+  const blocks = String(html).split(/<li\b[^>]*\sclass\s*=\s*["']b_algo\b[^"']*["'][^>]*>/i).slice(1);
   for (const block of blocks) {
-    const link = block.match(/<h2[^>]*>\s*<a[^>]+href="([^"]+)"[^>]*>([\s\S]*?)<\/a>/i);
-    if (!link) continue;
-    let href = link[1].replace(/&amp;/g, '&');
+    const heading = block.match(/<h2\b[^>]*>([\s\S]*?)<\/h2>/i);
+    const link = heading && findLink(heading[1], () => true);
+    if (!link || !link.href) continue;
+    let href = decodeHTML(link.href);
     const wrapped = href.match(/[?&]u=a1([^&]+)/);
     if (wrapped) {
       try { href = Buffer.from(wrapped[1].replace(/-/g, '+').replace(/_/g, '/'), 'base64').toString('utf8'); } catch {}
     }
     if (!/^https?:\/\//i.test(href) || /^https?:\/\/(?:www\.)?bing\.com\//i.test(href)) continue;
-    const snippet = block.match(/<p[^>]*>([\s\S]*?)<\/p>/i);
-    results.push({ title: decodeEntities(link[2]), url: href, snippet: snippet ? decodeEntities(snippet[1]).replace(/^Web\s*/, '') : '' });
+    const snippet = block.slice(heading.index + heading[0].length).match(/<p\b[^>]*>([\s\S]*?)<\/p>/i);
+    results.push({ title: decodeEntities(link.inner), url: href, snippet: snippet ? decodeEntities(snippet[1]).replace(/^Web\s*/, '') : '' });
   }
   return results;
 }
