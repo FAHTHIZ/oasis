@@ -160,7 +160,8 @@ test('web: /api/transcribe needs the token, accepts browser audio and uses the u
   const base = 'http://127.0.0.1:' + app.port;
   const auth = { authorization: 'Bearer ' + token };
   assert.equal((await fetch(base + '/api/transcribe', { method: 'POST', headers: { 'content-type': 'audio/webm' }, body: Buffer.alloc(100) })).status, 401);
-  assert.deepEqual(await (await fetch(base + '/api/voice', { headers: auth })).json(), { transcription: true, disabledByPolicy: false });
+  assert.deepEqual(await (await fetch(base + '/api/voice', { headers: auth })).json(), { transcription: true, speech: false, disabledByPolicy: false });
+  assert.equal((await fetch(base + '/api/speak', { method: 'POST', headers: { ...auth, 'content-type': 'application/json' }, body: '{"text":"hi"}' })).status, 409, 'no speech model configured');
   assert.equal((await fetch(base + '/api/transcribe', { method: 'POST', headers: { ...auth, 'content-type': 'text/plain' }, body: 'x' })).status, 415);
   const ok = await fetch(base + '/api/transcribe', { method: 'POST', headers: { ...auth, 'content-type': 'audio/webm;codecs=opus' }, body: Buffer.alloc(500) });
   assert.equal(ok.status, 200);
@@ -168,4 +169,27 @@ test('web: /api/transcribe needs the token, accepts browser audio and uses the u
   assert.match(server.seen[0].body, /filename="dictation.webm"/);
   const page = await fetch(base + '/app/');
   assert.match(page.headers.get('permissions-policy') || '', /microphone=\(self\), camera=\(\)/);
+});
+
+test('web: /api/speak reads a reply aloud with the configured speech model', async (t) => {
+  const { createServer } = await import('node:http');
+  const { startOasisWebServer } = await import('../src/web.mjs');
+  const seen = [];
+  const tts = createServer(async (req, res) => { let body = ''; for await (const chunk of req) body += chunk; seen.push(JSON.parse(body)); res.writeHead(200, { 'content-type': 'audio/mpeg' }); res.end(Buffer.alloc(64, 1)); });
+  await new Promise((resolve) => tts.listen(0, '127.0.0.1', resolve));
+  t.after(() => tts.close());
+  const root = await mkdtemp(path.join(os.tmpdir(), 'oasis-web-speak-'));
+  const env = { OASIS_CONFIG_DIR: path.join(root, 'config'), HOME: root, OASIS_IGNORE_CLAUDE_SETTINGS: '1', OASIS_TTS_BASE_URL: 'http://127.0.0.1:' + tts.address().port + '/v1' };
+  const token = 'test-runtime-token-0123456789';
+  const app = await startOasisWebServer({ root, host: '127.0.0.1', port: 0, env, token });
+  t.after(() => app.close());
+  const base = 'http://127.0.0.1:' + app.port;
+  const auth = { authorization: 'Bearer ' + token };
+  assert.equal((await (await fetch(base + '/api/voice', { headers: auth })).json()).speech, true);
+  assert.equal((await fetch(base + '/api/speak', { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{"text":"hi"}' })).status, 401);
+  const spoken = await fetch(base + '/api/speak', { method: 'POST', headers: { ...auth, 'content-type': 'application/json' }, body: JSON.stringify({ text: 'Fixed it. ```js\nx\n```' }) });
+  assert.equal(spoken.status, 200);
+  assert.equal(spoken.headers.get('content-type'), 'audio/mpeg');
+  assert.equal((await spoken.arrayBuffer()).byteLength, 64);
+  assert.doesNotMatch(seen[0].input, /```/);
 });

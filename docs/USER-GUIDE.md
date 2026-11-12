@@ -147,6 +147,7 @@ The sidebar (on wide screens) lists this project's tasks with a dot for those st
 | Use a terminal | Press Ctrl+` and choose **Start terminal** for your own shell in the workspace beside the chat. The agent cannot see it, and reloading the page reconnects to it. |
 | Download a chat | Ctrl+K → **Download this chat** saves one HTML page with every tool step, no scripts, credentials redacted. |
 | Open everything else | Ctrl+K (Cmd+K on macOS) opens the command palette. Ctrl+/ lists every shortcut. |
+| Talk with OASIS | Select the waveform button beside the microphone for a hands-free conversation. OASIS listens, sends what you said when you stop talking, works on it, reads the reply aloud (without code blocks or links) and listens again. Say "stop talking", press **End** or Escape to finish; **Skip** stops a reply being read. Replies use your speech model when OASIS has one (`OPENAI_API_KEY` or `OASIS_TTS_BASE_URL`), otherwise the browser's own voice. Where the browser has no speech recognition, OASIS records and transcribes with your transcription endpoint. |
 | Connect an app | Type `connect github` or `/connect linear` in the message box, or open **Settings → Apps**. See [Connect apps](#connect-apps). |
 
 The interface follows your system's light or dark theme and honours reduced-motion settings: the particle background, jitter and sweep animations switch off.

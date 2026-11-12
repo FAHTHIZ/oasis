@@ -736,3 +736,21 @@ html.lite .topbar{backdrop-filter:none;-webkit-backdrop-filter:none;background:v
 
 /* Before the first status: only Fen, no setup text that may not apply. */
 .welcome.booting > :not(.welcome-mark) { visibility: hidden; }
+
+/* Talk mode: a hands-free voice conversation. */
+.talk-bar { display: flex; align-items: center; gap: 10px; margin: 0 auto 8px; max-width: 720px; padding: 8px 10px 8px 14px; border: 1px solid var(--line, rgba(0,0,0,.12)); border-radius: 999px; background: var(--panel, rgba(255,255,255,.85)); box-shadow: 0 4px 18px rgba(0,0,0,.06); }
+.talk-bar[hidden] { display: none; }
+.talk-text { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 14px; }
+.talk-text #talkHeard { color: var(--muted, #667); }
+.talk-orb { display: inline-flex; gap: 3px; align-items: center; height: 18px; }
+.talk-orb i { display: block; width: 4px; height: 6px; border-radius: 2px; background: var(--accent, #1f8a5b); }
+.talk-bar[data-state="listening"] .talk-orb i { animation: talk-wave 0.9s ease-in-out infinite; }
+.talk-bar[data-state="listening"] .talk-orb i:nth-child(2) { animation-delay: .15s; }
+.talk-bar[data-state="listening"] .talk-orb i:nth-child(3) { animation-delay: .3s; }
+.talk-bar[data-state="speaking"] .talk-orb i { animation: talk-wave 0.5s ease-in-out infinite alternate; }
+.talk-bar[data-state="speaking"] .talk-orb i:nth-child(2) { animation-delay: .1s; }
+.talk-bar[data-state="working"] .talk-orb i { opacity: .45; animation: talk-pulse 1.4s ease-in-out infinite; }
+@keyframes talk-wave { 0%, 100% { height: 6px; } 50% { height: 18px; } }
+@keyframes talk-pulse { 0%, 100% { opacity: .3; } 50% { opacity: .9; } }
+#talkButton.listening { color: var(--accent, #1f8a5b); }
+@media (prefers-reduced-motion: reduce) { .talk-orb i { animation: none !important; } }

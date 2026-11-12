@@ -23,6 +23,7 @@ import { normalizeTaskProgress } from './core/task-progress.mjs';
 import { RuntimeTerminal, loadXterm } from './core/terminal.mjs';
 import { suggestToken, rankSuggestions, applySuggestion } from './core/composer-suggest.mjs';
 import { mcpServerFromForm, describeMcpServer } from './core/mcp.mjs';
+import { speakable, isStopPhrase, turnDetector, rmsLevel, lastReply } from './core/voice-mode.mjs';
 import { searchMarketplace, marketplaceCount, OFFICIAL_MARKETPLACE } from './core/claude-plugins.mjs';
 // Composer autocomplete state (declared early: refreshFiles clears the file cache).
 const suggest = { token: null, items: [], index: 0, commands: null, files: null, seq: 0 };
@@ -1110,6 +1111,7 @@ function offerUndo() {
 // needs you while this tab is in the background.
 const BASE_TITLE = document.title;
 function attention(kind, text) {
+  if (talk.on && kind === 'input' && window.speechSynthesis && typeof SpeechSynthesisUtterance !== 'undefined') window.speechSynthesis.speak(new SpeechSynthesisUtterance('OASIS needs you on screen.'));
   if (!document.hidden && document.hasFocus()) return;
   document.title = (kind === 'input' ? '(Needs you) ' : '● ') + BASE_TITLE;
   if (!settings.notify || typeof Notification === 'undefined' || Notification.permission !== 'granted') return;
@@ -3934,6 +3936,185 @@ function setupDictation() {
   });
 }
 
+/* ---------- Talk mode ---------- */
+// A hands-free voice conversation: OASIS listens, sends what you said when you stop
+// talking, works on it, reads the reply aloud and listens again. Say "stop talking"
+// or press End (or Escape) to finish. Replies are read with the configured speech
+// model when OASIS has one, otherwise with the browser's own voice.
+const talk = { on: false, state: 'off', cancel: null, audio: null, speechApi: null };
+function setTalkState(state, heard = '') {
+  talk.state = state;
+  const bar = $('talkBar');
+  bar.hidden = state === 'off';
+  bar.dataset.state = state;
+  $('talkState').textContent = { listening: 'Listening', hearing: 'Listening', sending: 'Sending', working: 'Working on it', speaking: 'Speaking', off: '' }[state] || state;
+  $('talkHeard').textContent = heard ? '"' + heard.slice(0, 160) + '"' : state === 'listening' ? 'Say what you want built or fixed. Say "stop talking" to end.' : '';
+  $('talkSkip').hidden = state !== 'speaking';
+  const button = $('talkButton');
+  button.classList.toggle('listening', state !== 'off');
+  button.setAttribute('aria-pressed', state !== 'off' ? 'true' : 'false');
+}
+function talkAvailable() {
+  const Recognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+  return Boolean(Recognition || (RT && RT.client && window.MediaRecorder && navigator.mediaDevices && navigator.mediaDevices.getUserMedia && window.AudioContext));
+}
+function listenWithRecognition(Recognition) {
+  return new Promise((resolve) => {
+    const rec = new Recognition();
+    rec.lang = navigator.language || 'en-US';
+    rec.interimResults = true;
+    rec.continuous = false;
+    let finalText = '';
+    let done = false;
+    const finish = (value) => { if (done) return; done = true; talk.cancel = null; resolve(value); };
+    talk.cancel = () => { try { rec.abort(); } catch { /* stopped */ } finish(''); };
+    rec.onresult = (event) => {
+      let interim = '';
+      for (let i = event.resultIndex; i < event.results.length; i++) {
+        if (event.results[i].isFinal) finalText += event.results[i][0].transcript + ' ';
+        else interim += event.results[i][0].transcript;
+      }
+      setTalkState('hearing', (finalText + interim).trim());
+    };
+    rec.onerror = (event) => {
+      if (event.error === 'not-allowed' || event.error === 'service-not-allowed') { toast('Microphone access is blocked. Allow it in the browser to talk.', 'error'); stopTalk(); }
+      finish(finalText.trim());
+    };
+    rec.onend = () => finish(finalText.trim());
+    try { rec.start(); } catch { finish(''); }
+  });
+}
+async function listenWithRecorder() {
+  let stream;
+  try { stream = await navigator.mediaDevices.getUserMedia({ audio: true }); }
+  catch { toast('Microphone access is blocked. Allow it to talk.', 'error'); stopTalk(); return ''; }
+  const context = new AudioContext();
+  const analyser = context.createAnalyser();
+  analyser.fftSize = 1024;
+  context.createMediaStreamSource(stream).connect(analyser);
+  const samples = new Uint8Array(analyser.fftSize);
+  const type = ['audio/webm;codecs=opus', 'audio/webm', 'audio/ogg;codecs=opus', 'audio/mp4'].find((t) => MediaRecorder.isTypeSupported && MediaRecorder.isTypeSupported(t)) || '';
+  const recorder = new MediaRecorder(stream, type ? { mimeType: type } : undefined);
+  const chunks = [];
+  recorder.ondataavailable = (event) => { if (event.data && event.data.size) chunks.push(event.data); };
+  const stopped = new Promise((resolve) => { recorder.onstop = resolve; });
+  recorder.start(250);
+  const detector = turnDetector({ start: performance.now() });
+  let outcome = 'listening';
+  let cancelled = false;
+  talk.cancel = () => { cancelled = true; };
+  while (outcome === 'listening' && !cancelled && talk.on) {
+    await new Promise((resolve) => setTimeout(resolve, 60));
+    analyser.getByteTimeDomainData(samples);
+    outcome = detector.push(rmsLevel(samples), performance.now());
+    if (detector.heard && talk.state === 'listening') setTalkState('hearing', '…');
+  }
+  talk.cancel = null;
+  if (recorder.state !== 'inactive') recorder.stop();
+  await stopped;
+  stream.getTracks().forEach((track) => track.stop());
+  context.close().catch(() => {});
+  if (cancelled || outcome !== 'done' || !chunks.length) return '';
+  setTalkState('sending', '…');
+  const mime = (recorder.mimeType || type || 'audio/webm').split(';')[0];
+  try {
+    const response = await fetch(RT.client.origin + '/api/transcribe', { method: 'POST', headers: { authorization: 'Bearer ' + RT.client.token, 'content-type': mime }, body: new Blob(chunks, { type: mime }), cache: 'no-store' });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(data.error || 'error ' + response.status);
+    return String(data.text || '').trim();
+  } catch (error) { toast('Could not transcribe: ' + error.message, 'error'); return ''; }
+}
+function speakWithBrowser(text) {
+  return new Promise((resolve) => {
+    if (!window.speechSynthesis || typeof SpeechSynthesisUtterance === 'undefined') { resolve(); return; }
+    const utterance = new SpeechSynthesisUtterance(text);
+    utterance.lang = navigator.language || 'en-US';
+    utterance.rate = 1.05;
+    let done = false;
+    const finish = () => { if (done) return; done = true; talk.cancel = null; resolve(); };
+    utterance.onend = finish;
+    utterance.onerror = finish;
+    talk.cancel = () => { window.speechSynthesis.cancel(); finish(); };
+    window.speechSynthesis.cancel();
+    window.speechSynthesis.speak(utterance);
+  });
+}
+async function speakReply(markdown) {
+  const text = speakable(markdown);
+  if (!text || !talk.on) return;
+  setTalkState('speaking', text.split('\n')[0]);
+  if (talk.speechApi) {
+    try {
+      const response = await fetch(RT.client.origin + '/api/speak', { method: 'POST', headers: { authorization: 'Bearer ' + RT.client.token, 'content-type': 'application/json' }, body: JSON.stringify({ text }), cache: 'no-store' });
+      if (!response.ok) throw new Error('speech ' + response.status);
+      const url = URL.createObjectURL(await response.blob());
+      const audio = new Audio(url);
+      talk.audio = audio;
+      await new Promise((resolve) => {
+        const finish = () => { talk.cancel = null; resolve(); };
+        audio.onended = finish; audio.onerror = finish;
+        talk.cancel = () => { audio.pause(); finish(); };
+        audio.play().catch(finish);
+      });
+      URL.revokeObjectURL(url);
+      talk.audio = null;
+      return;
+    } catch { talk.speechApi = false; /* use the browser's voice from now on */ }
+  }
+  await speakWithBrowser(text);
+}
+async function talkLoop() {
+  const Recognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+  let quiet = 0;
+  while (talk.on) {
+    if (agent.busy) { setTalkState('working'); await turnSettled; continue; }
+    setTalkState('listening');
+    const heard = Recognition ? await listenWithRecognition(Recognition) : await listenWithRecorder();
+    if (!talk.on) break;
+    if (!heard) {
+      // Browsers stop recognition after a few seconds of silence; keep listening, but
+      // stop after about a minute of nothing so the microphone doesn't stay on forever.
+      if (++quiet >= 12) { toast('Talk mode ended after a minute of silence.'); break; }
+      await new Promise((resolve) => setTimeout(resolve, 250));
+      continue;
+    }
+    quiet = 0;
+    if (isStopPhrase(heard)) break;
+    setTalkState('working', heard);
+    await send(heard);
+    if (!talk.on) break;
+    await speakReply(lastReply(display) || 'Done.');
+  }
+  stopTalk();
+}
+async function startTalk() {
+  if (talk.on) return;
+  if (!modelReady()) { toast('Connect a model first, then talk with OASIS.'); return; }
+  talk.on = true;
+  if (dictation.listening) dictation.stop(true);
+  if (talk.speechApi === null && RT && RT.client) {
+    const voice = await RT.client.api('/api/voice').catch(() => null);
+    if (voice && voice.disabledByPolicy) { talk.on = false; toast('Voice is turned off by your organization.', 'error'); return; }
+    talk.speechApi = Boolean(voice && voice.speech);
+  }
+  talkLoop().catch((error) => { toast('Talk mode stopped: ' + (error && error.message || error), 'error'); stopTalk(); });
+}
+function stopTalk() {
+  talk.on = false;
+  if (talk.cancel) talk.cancel();
+  if (window.speechSynthesis) window.speechSynthesis.cancel();
+  setTalkState('off');
+}
+function setupTalk() {
+  const button = $('talkButton');
+  if (!talkAvailable()) return;
+  button.hidden = false;
+  button.addEventListener('click', () => { if (talk.on) stopTalk(); else startTalk(); });
+  $('talkEnd').addEventListener('click', stopTalk);
+  $('talkSkip').addEventListener('click', () => { if (talk.state === 'speaking' && talk.cancel) talk.cancel(); });
+  document.addEventListener('keydown', (event) => { if (event.key === 'Escape' && talk.on && $('approvalSheet').hidden) stopTalk(); });
+}
+
 // Opening a fresh OASIS link in a tab that is already open only changes the hash, so the
 // page would keep using the old key (after a server restart every request then fails).
 // Reload so the new key from the link is used.
@@ -3957,6 +4138,7 @@ async function boot() {
   renderWelcome();
   renderPluginState();
   setupDictation();
+  setupTalk();
   setupUpdates();
   // The side panel comes back open only where it sits beside the chat; on a
   // phone it would cover the conversation.
