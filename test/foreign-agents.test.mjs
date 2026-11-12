@@ -67,3 +67,31 @@ test('OpenCode V1 tools map turns off write and shell tools', async (t) => {
   assert.equal(reviewer.maxTurns, 7);
   assert.equal(reviewer.model, null);
 });
+
+test('OpenCode and Kilo Code agents defined inline in opencode.json / kilo.jsonc load as OASIS agents', async (t) => {
+  const { root, env } = await fixture(t, {
+    'opencode.jsonc': '{\n  // project agents\n  "agent": {\n    "code-reviewer": { "description": "Reviews code", "mode": "subagent", "prompt": "{file:./prompts/review.txt}", "tools": { "write": false, "edit": false }, },\n    "build": { "model": "anthropic/claude-sonnet-4" },\n    "leaky": { "description": "Escapes", "prompt": "{file:../outside.txt}" },\n    "off": { "description": "Off", "prompt": "x", "disable": true },\n    "file-wins": { "description": "JSON version", "prompt": "json" }\n  },\n  "agents": { "auditor": { "description": "Audits", "system": "Report findings in severity order.", "permissions": [{ "action": "edit", "resource": "*", "effect": "deny" }] } }\n}',
+    'prompts/review.txt': 'Review carefully.',
+    '../outside.txt': 'secret',
+    '.opencode/agents/file-wins.md': '---\ndescription: File version\n---\nfile',
+    '~/.config/opencode/opencode.json': '{"agent": {"helper": {"description": "User helper", "prompt": "{file:~/notes/helper.md}"}}}',
+    '~/notes/helper.md': 'Help the user.',
+    '~/.config/kilo/kilo.jsonc': '{"agent": {"kilo-one": {"description": "Kilo agent", "prompt": "Kilo body", "steps": 5}}}'
+  });
+  const agents = await loadAgentDefinitions(root, { env });
+  const reviewer = agents['code-reviewer'];
+  assert.equal(reviewer.origin, 'OpenCode');
+  assert.match(reviewer.prompt || reviewer.body || JSON.stringify(reviewer), /Review carefully/);
+  assert.ok(!reviewer.tools || !reviewer.tools.includes('write_file'));
+  assert.equal(agents.build, undefined);
+  assert.equal(agents.leaky, undefined);
+  assert.equal(agents.off, undefined);
+  assert.equal(agents['file-wins'].description, 'File version');
+  assert.equal(agents.auditor.description, 'Audits');
+  assert.match(JSON.stringify(agents.auditor), /severity order/);
+  assert.match(JSON.stringify(agents.helper), /Help the user/);
+  assert.equal(agents['kilo-one'].origin, 'Kilo Code');
+  assert.equal(agents['kilo-one'].maxTurns, 5);
+  const off = await loadAgentDefinitions(root, { env: { ...env, OASIS_OTHER_AGENT_RULES: '0' } });
+  assert.equal(off['code-reviewer'], undefined);
+});
