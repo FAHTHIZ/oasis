@@ -20,6 +20,12 @@ inputs:
   prompt:
     description: Run this task directly instead of waiting for a mention (for workflow_dispatch or schedule).
     required: false
+  branch:
+    description: Push the changes to this branch (created if needed) instead of a new oasis/... branch. Used by `oasis cloud run`.
+    required: false
+  pull_request:
+    description: Open a pull request for changes that are not on a pull request already (true or false).
+    default: 'true'
   trigger_phrase:
     description: Phrase that triggers Oasis in comments, issues, and PRs.
     default: '@oasis'
@@ -78,6 +84,8 @@ runs:
         # Never launch language-server processes in unattended runs.
         OASIS_DISABLE_LSP: '1'
         INPUT_PROMPT: ${{ inputs.prompt }}
+        INPUT_BRANCH: ${{ inputs.branch }}
+        INPUT_PULL_REQUEST: ${{ inputs.pull_request }}
         INPUT_TRIGGER_PHRASE: ${{ inputs.trigger_phrase }}
         INPUT_ASSIGNEE_TRIGGER: ${{ inputs.assignee_trigger }}
         INPUT_LABEL_TRIGGER: ${{ inputs.label_trigger }}

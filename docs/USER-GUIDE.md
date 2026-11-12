@@ -68,6 +68,21 @@ By default a `-p` run whose changes OASIS could not verify still exits 0 and end
 
 Subagents you or OASIS start show up in `/tasks`: running ones first, finished ones under **Earlier in this session**, even after a restart. `/tasks ID` shows a report, `/tasks send ID MESSAGE` steers or resumes one, and `/tasks stop ID` stops it.
 
+### Cloud agents on GitHub Actions
+
+Run a task on a GitHub runner while your computer is off, then pick it up locally. It uses your GitHub CLI sign-in and your own model key:
+
+```sh
+oasis cloud setup                  # adds .github/workflows/oasis-cloud.yml; commit and push it
+gh secret set OASIS_API_KEY        # once per repository (OASIS_PROTOCOL, OASIS_BASE_URL, OASIS_MODEL as variables)
+oasis cloud run "Add tests for the date parser"
+oasis cloud run --here "Finish this refactor"   # hand off this branch, uncommitted work included
+oasis cloud list                   # state of recent cloud tasks
+oasis cloud pull ID                # check out the agent's branch here and keep going
+```
+
+Each task works on its own branch, `oasis/cloud-ID`, or on your branch with `--here`. The handoff pushes your uncommitted work as a commit on that branch without changing your working tree or staging area. Add `--pr` to have the agent open a pull request when it finishes; otherwise it only pushes the branch. Task records stay in the `.git` folder, so they are never committed.
+
 ### Routines that run on a schedule
 
 `/schedule` jobs live only as long as their session. For work that should happen whether or not a terminal is open, create a routine:
