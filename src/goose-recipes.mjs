@@ -114,12 +114,30 @@ export function renderRecipeTemplate(template, values) {
   });
 }
 
+async function askRecipeParameter(ask, recipe, param) {
+  const key = String(param.key);
+  const choices = String(param.input_type || '').toLowerCase() === 'select' && Array.isArray(param.options) ? param.options.map(String) : [];
+  const fallback = param.default !== undefined && param.default !== null ? String(param.default) : '';
+  let question = 'Recipe "' + String(recipe.title || '') + '" needs ' + key + (param.description ? ': ' + String(param.description) : '') + '.';
+  if (choices.length > 4) question += ' One of: ' + choices.join(', ') + '.';
+  if (fallback) question += ' Leave empty for ' + fallback + '.';
+  let answer;
+  try {
+    answer = await ask({ header: key.slice(0, 12), question: question.slice(0, 600), options: choices.length <= 4 ? choices.map((label) => ({ label: label.slice(0, 80), description: '' })) : [], multiSelect: false });
+  } catch { return undefined; }
+  const text = answer === null || answer === undefined ? '' : String(answer).trim();
+  if (text) return text.slice(0, 4000);
+  return fallback || undefined;
+}
+
 /**
  * Builds the prompt for a recipe. Returns { prompt, output } or { error }.
- * Parameters come from key=value pairs; missing required and user_prompt values
- * are reported so the user can pass them (OASIS does not open a form here).
+ * Parameters come from key=value pairs. With options.ask (a function taking an
+ * ask_user_question-shaped { header, question, options } and resolving to the
+ * answer), missing required and user_prompt values are asked for one at a time,
+ * like Goose's parameter form; otherwise they are reported so the user can pass them.
  */
-export async function recipePrompt(root, argumentText, env = process.env) {
+export async function recipePrompt(root, argumentText, env = process.env, options = {}) {
   const trimmed = String(argumentText || '').trim();
   const [ref, ...restWords] = trimmed.split(/\s+/);
   const file = await findRecipe(root, ref, env);
@@ -133,7 +151,10 @@ export async function recipePrompt(root, argumentText, env = process.env) {
     const key = String(param.key);
     const requirement = String(param.requirement || 'required').toLowerCase();
     let value = given[key];
+    // user_prompt values are asked for even when they have a default (it becomes the suggested answer).
+    if (value === undefined && requirement === 'user_prompt' && typeof options.ask === 'function') value = await askRecipeParameter(options.ask, recipe, param);
     if (value === undefined && param.default !== undefined && param.default !== null && requirement !== 'required') value = String(param.default);
+    if (value === undefined && requirement !== 'optional' && typeof options.ask === 'function') value = await askRecipeParameter(options.ask, recipe, param);
     if (value === undefined) {
       if (requirement === 'optional') value = '';
       else { missing.push(key + (param.description ? ' (' + String(param.description) + ')' : '')); continue; }
