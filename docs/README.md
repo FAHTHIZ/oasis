@@ -39,6 +39,7 @@ Use this index to find the right guide without having to understand the reposito
 
 ## Quality and evaluation
 
+- [Real-world runs](REAL-WORLD-RUNS.md) — unscripted tasks with real providers, plugins checked in OASIS, and what went wrong.
 - [Benchmark methodology](BENCHMARKS.md) — what model-free checks measure and what live evaluations must report.
 - [Project-quality benchmark](PROJECT-QUALITY-BENCHMARK.md) — historical repository presentation and engineering comparison against a 100-entry discovery index.
 
