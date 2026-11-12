@@ -24,7 +24,7 @@
 // .opencode/agents (also the older singular agent/), Kilo Code .kilo/agents, .kilo/agent,
 // .kilocode/agents and ~/.config/kilo/agent (OpenCode's format), translated by
 // foreignAgentFrontMatter; Roo Code .roomodes and Kilo .kilocodemodes custom modes (loadLegacyModes).
-import { readdir, readFile, stat } from 'node:fs/promises';
+import { readdir, readFile, realpath, stat } from 'node:fs/promises';
 import { parseFrontMatter } from './frontmatter.mjs';
 
 export { parseFrontMatter };
@@ -410,11 +410,70 @@ function agentDirectories(root, env) {
   ];
 }
 
+// OpenCode (opencode.ai/docs/agents) and Kilo Code accept agents inline in their JSON config:
+// "agent" (or the newer "agents") maps a name to { description, mode, prompt | system, tools,
+// permission(s), steps, disable }. `prompt` may be "{file:./path}", resolved against the
+// config file's folder; project configs may only reference files inside the project.
+// Entries with no prompt and no description only tweak OpenCode's built-in agents, so skip them.
+const JSON_AGENT_CONFIGS = [['opencode', 'OpenCode'], ['kilo', 'Kilo Code']];
+
+export async function loadJsonConfigAgents(root, env = process.env) {
+  const home = env.HOME || env.USERPROFILE || os.homedir();
+  const configHome = env.XDG_CONFIG_HOME || path.join(home, '.config');
+  const workspace = path.resolve(root);
+  const files = [];
+  for (const [base, label] of JSON_AGENT_CONFIGS) for (const ext of ['json', 'jsonc']) files.push({ file: path.join(configHome, base, base + '.' + ext), source: 'user', label });
+  for (const [base, label] of JSON_AGENT_CONFIGS) for (const ext of ['json', 'jsonc']) files.push({ file: path.join(workspace, base + '.' + ext), source: 'project', label });
+  const out = [];
+  for (const { file, source, label } of files) {
+    let data;
+    try {
+      const info = await stat(file);
+      if (!info.isFile() || info.size > 512 * 1024) continue;
+      data = (await import('./importers.mjs')).parseJsonc(await readFile(file, 'utf8'));
+    } catch { continue; }
+    if (!data || typeof data !== 'object') continue;
+    const tables = [data.agent, data.agents].filter((table) => table && typeof table === 'object' && !Array.isArray(table));
+    for (const table of tables) {
+      for (const [rawName, entry] of Object.entries(table).slice(0, 200)) {
+        const name = String(rawName).trim().toLowerCase();
+        if (!/^[a-z0-9][a-z0-9_-]{0,63}$/.test(name) || !entry || typeof entry !== 'object' || Array.isArray(entry)) continue;
+        let body = typeof entry.prompt === 'string' ? entry.prompt : typeof entry.system === 'string' ? entry.system : '';
+        const ref = /^\{file:([^}]+)\}$/.exec(body.trim());
+        if (ref) body = await readJsonAgentPromptFile(ref[1].trim(), path.dirname(file), source === 'project' ? workspace : null, home);
+        if (body == null || (!body.trim() && !entry.description)) continue;
+        if (Buffer.byteLength(body) > MAX_AGENT_FILE) continue;
+        const meta = { ...entry };
+        delete meta.prompt; delete meta.system;
+        const normalized = foreignAgentFrontMatter('opencode', meta);
+        if (!normalized) continue;
+        const agent = normalizeAgentDefinition(normalized, body, { name, source: source + ':' + file });
+        agent.origin = label;
+        out.push(agent);
+      }
+    }
+  }
+  return out;
+}
+
+async function readJsonAgentPromptFile(ref, base, confine, home) {
+  const target = ref.startsWith('~/') ? path.join(home, ref.slice(2)) : path.resolve(base, ref);
+  const inside = (dir, file) => { const rel = path.relative(dir, file); return rel && !rel.startsWith('..') && !path.isAbsolute(rel); };
+  try {
+    if (confine && !inside(await realpath(confine), await realpath(target))) return null;
+    const info = await stat(target);
+    if (!info.isFile() || info.size > MAX_AGENT_FILE) return null;
+    return await readFile(target, 'utf8');
+  } catch { return null; }
+}
+
 export async function loadAgentDefinitions(root, options = {}) {
   const env = options.env || process.env;
   const agents = { ...BUILTIN_AGENTS };
   // Roo Code / Kilo Code custom modes come first, so any agent file of the same name wins.
   if (env.OASIS_OTHER_AGENT_RULES !== '0') for (const mode of await loadLegacyModes(root, env)) agents[mode.name] = mode;
+  // OpenCode / Kilo Code agents defined inline in opencode.json(c) / kilo.json(c); agent files of the same name win.
+  if (env.OASIS_OTHER_AGENT_RULES !== '0') for (const agent of await loadJsonConfigAgents(root, env)) agents[agent.name] = agent;
   for (const { dir, source, nested, flavor, label } of agentDirectories(root, env)) {
     let entries;
     try { entries = await readdir(dir, { withFileTypes: true }); } catch { continue; }
