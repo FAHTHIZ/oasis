@@ -4,6 +4,7 @@ User-facing change history grouped by package version. A version heading does no
 
 ## Unreleased
 
+- Read-only command auto-approval no longer covers `jq` filters that use `env`, `$ENV` or `$__prog_args`; they printed every environment variable (API keys included) without asking, while `printenv` and `env` already asked.
 - `/help` now word-wraps descriptions under the description column at the terminal width, and the startup hint row breaks between items, so narrow terminals no longer split words such as "lo/sing" or "Shift+Tab/modes".
 - Project agent files (`.oasis/agents/`, `.claude/agents/`, `.agents/agents/`, `.gemini/agents/`) are now protected paths: editing them always asks with a warning, because their `hooks` and inline `mcpServers` run when the agent is launched in a trusted workspace.
 - Auto-test runs (the `autoTest` setting and `/test`) now run inside the OS sandbox when it is enabled, like `run_shell`; before, they were spawned directly, so agent-written test code could write outside the workspace even with the sandbox on.

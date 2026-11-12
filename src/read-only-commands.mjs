@@ -280,6 +280,9 @@ export function readOnlyArgv(command, args = [], { root, cwd = root } = {}) {
   const unsafe = UNSAFE_FLAGS[name];
   if (unsafe && args.some((arg) => unsafe.test(arg))) return false;
   if (name === 'uniq' && args.filter((arg) => !arg.startsWith('-')).length > 1) return false;
+  // jq's `env` builtin and $ENV print every environment variable (API keys
+  // included), which `printenv` and `env` already ask for.
+  if (name === 'jq' && args.some((arg) => /(^|[^\w$.])env\b|\$ENV\b|\$__prog/.test(arg))) return false;
   return argsStayInside(args, cwd, root) && recursiveReadSafe(name, args, cwd, root);
 }
 

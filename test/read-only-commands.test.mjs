@@ -246,3 +246,12 @@ test('package managers and toolchains ask when the repository picks their code',
   }
   assert.equal(readOnlyShellLine('npm --version', { root }), true);
 });
+
+test('jq filters that print the environment ask, like printenv', () => {
+  const root = process.cwd();
+  for (const line of ['jq -n env', 'jq -n "env.HOME"', 'jq -n "[env]"', "jq -n '{a: env}'"]) assert.equal(readOnlyShellLine(line, { root }), false, line);
+  assert.equal(readOnlyArgv('jq', ['-n', '$ENV'], { root }), false);
+  assert.equal(readOnlyArgv('jq', ['-n', '$__prog_args'], { root }), false);
+  assert.equal(readOnlyShellLine('jq -r .name package.json', { root }), true);
+  assert.equal(readOnlyShellLine('jq .environment package.json', { root }), true);
+});
