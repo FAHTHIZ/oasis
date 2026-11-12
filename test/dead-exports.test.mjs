@@ -6,7 +6,8 @@ const REMOVED = {
   '../app/core/timeline.mjs': ['STEP_KINDS'],
   '../src/frontmatter.mjs': ['stringifyYaml'],
   '../src/monitors.mjs': ['MONITOR_TOOL_DEFINITION'],
-  '../src/power-tools.mjs': ['NOTEBOOK_EDIT_DEFINITION', 'POWER_TOOL_DEFINITIONS', 'POWER_TOOL_NAMES']
+  '../src/power-tools.mjs': ['NOTEBOOK_EDIT_DEFINITION', 'POWER_TOOL_DEFINITIONS', 'POWER_TOOL_NAMES'],
+  '../src/tool-kernel.mjs': ['TOOL_CAPABILITIES', 'TOOL_RISK_LEVELS', 'validateToolInput', 'evaluateToolPolicy']
 };
 
 for (const [file, names] of Object.entries(REMOVED)) {
