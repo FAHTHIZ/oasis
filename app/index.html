@@ -125,6 +125,7 @@
         <div class="tabs" role="tablist">
           <button role="tab" class="tab active" data-tab="files" aria-selected="true">Files</button>
           <button role="tab" class="tab" data-tab="changes" aria-selected="false">Changes <span class="count" id="changesCount"></span></button>
+          <button role="tab" class="tab" data-tab="preview" aria-selected="false" id="previewTab" hidden>Preview</button>
           <button role="tab" class="tab" data-tab="terminal" aria-selected="false" id="terminalTab" hidden>Terminal</button>
         </div>
         <button class="icon-btn small" data-close="filesPanel" aria-label="Close files">
@@ -137,6 +138,20 @@
       </div>
       <div class="file-list" id="fileList"></div>
       <div class="changes-list" id="changesList" hidden></div>
+      <div class="preview-view" id="previewView" hidden>
+        <form class="preview-bar" id="previewForm">
+          <button class="icon-btn small" type="button" id="previewReload" aria-label="Reload preview" title="Reload">
+            <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M15.5 9.5a5.5 5.5 0 1 1-1.7-4M15.5 3.5v3h-3" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </button>
+          <label class="sr-only" for="previewAddress">File or dev server port</label>
+          <input id="previewAddress" type="text" placeholder="index.html or 5173" autocomplete="off" spellcheck="false">
+          <button class="icon-btn small" type="button" id="previewPopout" aria-label="Open preview in a new tab" title="Open in a new tab">
+            <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M11 4h5v5M16 4l-7 7M14 12v3.5H4.5V6H8" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </button>
+        </form>
+        <div class="preview-chips" id="previewChips"></div>
+        <iframe class="preview-frame" id="previewFrame" title="Preview" sandbox="allow-scripts allow-forms allow-popups allow-modals allow-downloads allow-pointer-lock" referrerpolicy="unsafe-url"></iframe>
+      </div>
       <div class="terminal-view" id="terminalView" hidden>
         <div class="terminal-bar"><span class="terminal-status" id="terminalStatus">Not started</span><span class="row"><button class="btn ghost small" id="terminalStart">Start terminal</button><button class="btn ghost small" id="terminalStop" hidden>Stop</button></span></div>
         <div class="terminal-host" id="terminalHost"></div>
