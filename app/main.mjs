@@ -7,7 +7,7 @@ import { SUBAGENT_STATUS_TEXT } from './core/subagents.mjs';
 import { createConnectorCard, connectIntent, splitServices, brandMark } from './core/connector-card.mjs';
 import { createSoundPlayer } from './core/sound.mjs';
 import { ambientField } from './core/ambient.mjs';
-import { activityLabel, liveLabel, summarizeArgs, toolKind, groupTitle, groupStats, formatDuration, elapsedSince, describeInput, buildTimeline } from './core/timeline.mjs';
+import { activityLabel, liveLabel, summarizeArgs, toolKind, groupTitle, groupStats, formatDuration, thinkingLabel, elapsedSince, describeInput, buildTimeline } from './core/timeline.mjs';
 import { IndexedDBStore, Workspace, lineDiff } from './core/workspace.mjs';
 import { Agent, textOf } from './core/agent.mjs';
 import { FrameSandbox } from './core/sandbox.mjs';
@@ -1269,7 +1269,9 @@ function ensureGroup() {
   }
   return activeGroup;
 }
-function removeThinking() { for (const t of document.querySelectorAll('#transcript .thinking')) t.remove(); }
+function removeThinking() {
+  for (const t of document.querySelectorAll('#transcript .thinking')) { clearInterval(t._clock); t.remove(); }
+}
 function showThinking() {
   removeThinking();
   if (activeGroup && activeGroup.live && $('transcript').lastElementChild === activeGroup.el) {
@@ -1280,7 +1282,16 @@ function showThinking() {
   const dots = document.createElement('div');
   dots.className = 'thinking';
   dots.setAttribute('role', 'status');
-  dots.innerHTML = '<span class="thinking-orb" aria-hidden="true"></span><span>Thinking</span>';
+  dots.innerHTML = '<span class="thinking-orb" aria-hidden="true"></span><span class="thinking-label">Thinking</span>';
+  const started = Date.now();
+  const label = dots.querySelector('.thinking-label');
+  // Only the visible text changes; the status role is not re-announced every second.
+  label.setAttribute('aria-hidden', 'true');
+  dots.setAttribute('aria-label', 'Thinking');
+  dots._clock = setInterval(() => {
+    if (!dots.isConnected) { clearInterval(dots._clock); return; }
+    label.textContent = thinkingLabel(Date.now() - started);
+  }, 1000);
   $('transcript').appendChild(dots);
   $('welcome').hidden = true;
 }
@@ -1428,6 +1439,7 @@ function handleEvent(event) {
       for (const server of signIn.slice(0, 3)) connectShortcut('/connect ' + server.signInUrl, { reason: server.name + ' needs you to sign in before its tools can be used.' });
       break;
     }
+    case 'notices': for (const note of event.notices || []) addMessage('note', note); break;
     case 'compacting': showThinking(); break;
     case 'compacted': addMessage('note', event.mode === 'summary' ? 'Earlier conversation summarised to save context.' : 'Older tool output trimmed to save context.'); break;
     case 'stopped':

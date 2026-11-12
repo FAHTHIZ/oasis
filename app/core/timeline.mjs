@@ -196,6 +196,13 @@ export function groupStats(steps = []) {
   return { total: steps.length, failed, running, durationMs };
 }
 
+// The waiting chip: after a few seconds it shows how long the model has been
+// working, so a slow provider or a local model loading into memory does not look frozen.
+export function thinkingLabel(elapsedMs) {
+  const value = Number(elapsedMs);
+  return Number.isFinite(value) && value >= 5000 ? 'Thinking · ' + formatDuration(value) : 'Thinking';
+}
+
 export function formatDuration(ms) {
   // Unknown (a step reopened from a saved session) shows nothing, not "<0.1s".
   if (ms === null || ms === undefined || ms === '') return '';
