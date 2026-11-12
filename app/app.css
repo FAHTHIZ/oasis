@@ -390,6 +390,9 @@ input[type="checkbox"]{width:18px;height:18px;accent-color:var(--accent)}
 .diff div{padding:0 14px;white-space:pre-wrap;overflow-wrap:anywhere}
 .diff .add{background:var(--add-bg);color:var(--add)}
 .diff .del{background:var(--del-bg);color:var(--del)}
+.diff mark{color:inherit;border-radius:3px;padding:0 1px}
+.diff .add mark{background:color-mix(in srgb,var(--add) 30%,transparent)}
+.diff .del mark{background:color-mix(in srgb,var(--del) 30%,transparent)}
 .diff .same{color:var(--muted)}
 .diff .note{color:var(--muted);padding:8px 14px}
 .approval-summary{font-size:14.5px}
