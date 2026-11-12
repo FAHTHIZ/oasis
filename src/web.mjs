@@ -2291,7 +2291,18 @@ export function createOasisWebServer(options = {}) {
         const { readdir } = await import('node:fs/promises');
         recordings = (await readdir(path.join(activeRoot, '.oasis', 'recordings'))).filter((name) => /^browser-[\w.-]+\.html$/.test(name)).sort().reverse().slice(0, 20).map((name) => '.oasis/recordings/' + name);
       } catch {}
-      json(res, 200, { base: preview.base(null), recordings });
+      // Design artboards: each folder under design/ with HTML variants (see the design skill).
+      const designs = [];
+      try {
+        const { readdir } = await import('node:fs/promises');
+        const folders = (await readdir(path.join(activeRoot, 'design'), { withFileTypes: true })).filter((entry) => entry.isDirectory() && /^[\w.-]+$/.test(entry.name));
+        for (const folder of folders.slice(0, 40)) {
+          const files = (await readdir(path.join(activeRoot, 'design', folder.name))).filter((name) => /^[\w.-]+\.html?$/i.test(name)).sort().slice(0, 12);
+          if (files.length) designs.push({ name: folder.name, files: files.map((name) => 'design/' + folder.name + '/' + name) });
+        }
+        designs.sort((a, b) => a.name.localeCompare(b.name));
+      } catch {}
+      json(res, 200, { base: preview.base(null), recordings, designs });
       return;
     }
 
