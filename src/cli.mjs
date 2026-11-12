@@ -32,7 +32,7 @@ import { resolveCustomCommand, expandFileMentions, loadCustomCommands, resolveSk
 import { visionEnabled } from './images.mjs';
 import { loadAgentDefinitions } from './subagents.mjs';
 import { renderStatusLine, statusLinePayload } from './status-line.mjs';
-import { BUILTIN_COMMANDS, COMMAND_ALIASES, runBuiltinCommand, createUsageTracker, recordUsage, formatInterval } from './slash.mjs';
+import { BUILTIN_COMMANDS, COMMAND_ALIASES, runBuiltinCommand, subagentRows, createUsageTracker, recordUsage, formatInterval } from './slash.mjs';
 import { appendMemoryNote } from './memory.mjs';
 import { runHeadless, OUTPUT_FORMATS, headlessSetupErrorOutput } from './headless.mjs';
 import { randomUUID } from 'node:crypto';
@@ -2353,6 +2353,15 @@ async function interactive(root, autoApprove, persistence = {}) {
     if (statusLine) {
       const line = await renderStatusLine(statusLine, statusLinePayload({ root, session, config: await loadConfig().catch(() => ({})), usage: USAGE, outputStyle: SESSION_OPTIONS.outputStyle }), { root, env: process.env, keepColor: Boolean(stdout.isTTY) }).catch(() => null);
       if (line) stdout.write('\n' + line);
+    }
+    // With subagentStatusLine set, running subagents get a row each above the prompt.
+    if (session && session.settings && session.settings.subagentStatusLine && session.agentTasks) {
+      const records = [...session.agentTasks.agents.values()].filter((record) => record.status === 'running').slice(0, 20);
+      const rows = records.length ? await subagentRows({ root, session, env: process.env, width: stdout.columns || 100, color: Boolean(stdout.isTTY && colorEnabled(stdout)) }, records).catch(() => new Map()) : new Map();
+      for (const record of records) {
+        const row = rows.has(record.id) ? rows.get(record.id) : record.id + ' ' + (record.type || 'agent') + ': ' + String(record.description || '').slice(0, 120) + ' · ' + (record.toolCalls || 0) + ' tool calls';
+        if (row) stdout.write('\n  ' + row);
+      }
     }
     attachCron(session);
     attachMonitors(session);

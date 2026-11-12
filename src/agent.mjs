@@ -466,7 +466,7 @@ export async function createSession({ root, config, restore = null, permissionMo
     try { loadedSettings = await loadSettings(root, { env, extraSettings: settingsOverrides, settingSources }); }
     catch (error) { settingsError = error.message; loadedSettings = { permissions: { allow: [], ask: [], deny: [], defaultMode: 'default' }, hooks: {}, sandbox: { enabled: false }, shell: { enabled: false } }; }
   }
-  if (bare) loadedSettings = { ...loadedSettings, hooks: {}, autoMemory: false, statusLine: null, fileSuggestion: null };
+  if (bare) loadedSettings = { ...loadedSettings, hooks: {}, autoMemory: false, statusLine: null, subagentStatusLine: null, fileSuggestion: null };
   const instructionNotices = [];
   const [projectContext, skillDescriptions] = bare ? ['', []] : await Promise.all([loadProjectInstructions(root, { env, notices: instructionNotices, excludes: loadedSettings.claudeMdExcludes }), loadSkillDescriptions(root, { env })]);
   if (restricted && loadedSettings.permissions && loadedSettings.permissions.defaultMode === 'bypassPermissions') loadedSettings = { ...loadedSettings, permissions: { ...loadedSettings.permissions, defaultMode: 'default' } };
