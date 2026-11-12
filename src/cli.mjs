@@ -559,7 +559,9 @@ function approve(prompt, forceInteractive = false, autoApprove = false, meta = {
       if (decision !== null) { stdout.write('[ide] ' + (decision ? 'Accepted' : 'Rejected') + ' in ' + ideSession.ide.ideName + '.\n'); return decision; }
       stdout.write('[ide] The diff could not be shown in the IDE; answer here instead.\n');
     }
-    return askApproval(prompt, forceInteractive, meta);
+    // Time spent waiting for the person is not work: the turn summary leaves it out.
+    const askedAt = Date.now();
+    try { return await askApproval(prompt, forceInteractive, meta); } finally { CURRENT_TURN_WAITED_MS += Date.now() - askedAt; }
   });
   approvalQueue = next.catch(() => {});
   next.then(() => { if (progress.state === 'paused') progress.set(resumeState); }, () => { if (progress.state === 'paused') progress.set(resumeState); });
@@ -567,6 +569,7 @@ function approve(prompt, forceInteractive = false, autoApprove = false, meta = {
 }
 
 let CURRENT_TURN_STARTED_AT = 0;
+let CURRENT_TURN_WAITED_MS = 0;
 
 async function askApproval(prompt, forceInteractive, meta) {
   // Channels that opted in to permission relay get the request too; the first answer wins.
@@ -1439,6 +1442,7 @@ async function runPrompt(prompt, root, autoApprove, session = null, persistence 
   if (stdin.isTTY) process.on('SIGINT', onInterrupt);
   const turnStartedAt = Date.now();
   CURRENT_TURN_STARTED_AT = turnStartedAt;
+  CURRENT_TURN_WAITED_MS = 0;
   terminalProgress().set('busy');
   let turnFailed = false;
   if (session && session.settings) configureSounds({ enabled: typeof session.settings.sounds === 'boolean' ? session.settings.sounds : undefined, volume: session.settings.soundVolume });
@@ -1589,7 +1593,7 @@ async function runPrompt(prompt, root, autoApprove, session = null, persistence 
         if (line) stdout.write((richOutput() ? '\x1b[2m  ' + line + '\x1b[22m' : '[auto-commit] ' + line) + '\n');
       }
     }
-    if (richOutput()) stdout.write('\x1b[2m  ' + formatTurnSummary({ ms: Date.now() - turnStartedAt, toolCalls: result.toolCalls, tokens: result.tokensUsed, finished: result.finished !== false || Boolean(result.verificationIncomplete && result.text) }) + '\x1b[22m\n');
+    if (richOutput()) stdout.write('\x1b[2m  ' + formatTurnSummary({ ms: Math.max(0, Date.now() - turnStartedAt - CURRENT_TURN_WAITED_MS), toolCalls: result.toolCalls, tokens: result.tokensUsed, finished: result.finished !== false || Boolean(result.verificationIncomplete && result.text) }) + '\x1b[22m\n');
     const doneSound = Date.now() - turnStartedAt >= DONE_SOUND_AFTER_MS && playSound('done', { stream: stdout });
     notifyAttention('OASIS · ' + formatTurnSummary({ ms: Date.now() - turnStartedAt, toolCalls: result.toolCalls, tokens: result.tokensUsed, finished: result.finished !== false || Boolean(result.verificationIncomplete && result.text) }), { elapsedMs: Date.now() - turnStartedAt, soundPlayed: doneSound, stream: stdout });
   } catch (error) {
