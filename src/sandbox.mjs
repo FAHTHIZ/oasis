@@ -290,16 +290,22 @@ export function resolveSandbox(settings = {}, root, force = false) {
   const existing = (list) => (Array.isArray(list) ? list : []).map((item) => { try { const real = realpathSync(item); const info = statSync(real); return { path: real, type: info.isDirectory() ? 'directory' : info.isFile() ? 'file' : null }; } catch { return null; } }).filter((item) => item && item.type);
   const allowWrite = existing(settings.sandbox.allowWrite).filter((item) => item.type === 'directory' || item.type === 'file').map((item) => item.path);
   const readOnlyPaths = existing(settings.sandbox.denyWrite);
+  // sandbox.credentials "deny" files are read-blocked like denyRead; allowRead cannot re-open them.
+  const credentialFiles = existing(settings.sandbox.credentialFiles);
   const deniedReads = existing(settings.sandbox.denyRead);
+  for (const item of credentialFiles) if (!deniedReads.some((entry) => entry.path === item.path)) deniedReads.push(item);
   // allowRead re-opens paths inside a denyRead folder (OASIS's built-in secret masks stay).
   // Repository entries are left out while blockReadsOutsideWorkingDirectories is on.
   const blockReads = Boolean(settings.permissions && settings.permissions.blockReadsOutsideWorkingDirectories);
-  const allowReadList = (Array.isArray(settings.sandbox.allowRead) ? settings.sandbox.allowRead : []).filter((item) => !(blockReads && (settings.sandbox.allowReadRepo || []).includes(item)));
+  // allowManagedReadPathsOnly (managed settings) keeps only the managed allowRead entries.
+  const allowReadSource = settings.sandbox.allowManagedReadPathsOnly ? settings.sandbox.managedAllowRead : settings.sandbox.allowRead;
+  const allowReadList = (Array.isArray(allowReadSource) ? allowReadSource : []).filter((item) => !(blockReads && (settings.sandbox.allowReadRepo || []).includes(item)));
   const masked = settings.sandbox.maskSensitivePaths === false ? [] : collectSensitivePaths();
   // Never re-open a built-in secret mask (or a path inside one), such as ~/.ssh.
   const reopened = existing(allowReadList).filter((item) => !deniedReads.some((denied) => denied.path === item.path)
     && deniedReads.some((denied) => denied.type === 'directory' && denied.path !== item.path && pathContains(denied.path, item.path))
-    && !masked.some((secret) => pathContains(secret.path, item.path)));
+    && !masked.some((secret) => pathContains(secret.path, item.path))
+    && !credentialFiles.some((secret) => pathContains(secret.path, item.path)));
   const writable = [root, ...additionalWritable, ...allowWrite.filter((dir) => !pathContains(root, dir)), ...caches.filter((dir) => !pathContains(root, dir))];
   // A denyRead entry under a re-opened allowRead path stays masked, so keep it even when a broader mask covers it.
   for (const item of deniedReads) if (!masked.some((entry) => pathContains(entry.path, item.path)) || reopened.some((open) => open.path !== item.path && pathContains(open.path, item.path))) masked.push(item);
@@ -316,6 +322,8 @@ export function resolveSandbox(settings = {}, root, force = false) {
     maskedPaths: masked,
     readOnlyPaths,
     reopenedPaths: reopened,
+    // sandbox.credentials "deny" variables: unset inside the OS sandbox (containers and SSH never get the host environment).
+    deniedEnv: (Array.isArray(settings.sandbox.credentialEnv) ? settings.sandbox.credentialEnv : []).filter((name) => /^[A-Za-z_][A-Za-z0-9_]*$/.test(name)).slice(0, 500),
     excludedCommands: Array.isArray(settings.sandbox.excludedCommands) ? settings.sandbox.excludedCommands.slice(0, 200) : [],
     failIfUnavailable: settings.sandbox.failIfUnavailable === true,
     writable: backend === 'os' ? writable : [root, ...additionalWritable, ...allowWrite.filter((dir) => !pathContains(root, dir))],
@@ -404,6 +412,12 @@ export function tmpToolchainMounts(command, env = process.env) {
   return [...roots].filter((dir) => ![...roots].some((other) => other !== dir && pathContains(other, dir)));
 }
 
+// `env -u NAME ... command` for backends without an unset option of their own.
+function unsetEnvPrefix(sandbox) {
+  const names = sandbox && Array.isArray(sandbox.deniedEnv) ? sandbox.deniedEnv : [];
+  return names.length ? ['/usr/bin/env', ...names.flatMap((name) => ['-u', name])] : [];
+}
+
 export function wrapCommand(command, args, sandbox, cwd, options = {}) {
   assertSandboxAvailable(sandbox);
   if (!sandbox || !sandbox.enabled || !sandbox.available) return { command, args };
@@ -433,11 +447,12 @@ export function wrapCommand(command, args, sandbox, cwd, options = {}) {
       else wrapped.push('--ro-bind', '/dev/null', item.path);
     }
     if (!sandbox.network) wrapped.push('--unshare-net');
+    for (const name of sandbox.deniedEnv || []) wrapped.push('--unsetenv', name);
     wrapped.push('--chdir', cwd, '--', command, ...args);
     return { command: 'bwrap', args: wrapped, release: trackPlaceholders(guarded.missing) };
   }
   if (sandbox.kind === 'sandbox-exec') {
-    return { command: 'sandbox-exec', args: ['-p', macProfile(sandbox), command, ...args] };
+    return { command: 'sandbox-exec', args: ['-p', macProfile(sandbox), ...unsetEnvPrefix(sandbox), command, ...args] };
   }
   if (CONTAINER_BACKENDS.includes(sandbox.kind)) {
     return { command: sandbox.kind, args: containerArgs(command, args, sandbox, cwd) };
@@ -449,7 +464,8 @@ export function wrapCommand(command, args, sandbox, cwd, options = {}) {
 export async function launchCommand(command, args, sandbox, cwd, options = {}) {
   if (sandbox && sandbox.enabled && sandbox.available && sandbox.kind === 'srt') {
     const { srtLaunch } = await import('./sandbox-runtime.mjs');
-    return srtLaunch(command, args, sandbox, cwd);
+    const prefix = unsetEnvPrefix(sandbox);
+    return prefix.length ? srtLaunch(prefix[0], [...prefix.slice(1), command, ...args], sandbox, cwd) : srtLaunch(command, args, sandbox, cwd);
   }
   return wrapCommand(command, args, sandbox, cwd, options);
 }

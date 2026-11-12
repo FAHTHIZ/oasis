@@ -99,7 +99,8 @@ Gaps found by checking the [hooks reference](https://code.claude.com/docs/en/hoo
 | ```` ```! ```` fenced shell blocks in commands/skills | done | `test/command-fenced-shell.test.mjs` (3 tests); the `shell: powershell` frontmatter key is not honoured |
 | `spinnerVerbs` | done | `test/spinner-verbs-setting.test.mjs` (4 tests); terminal only, the web app has no spinner verb |
 | `fileSuggestion` | done | `test/file-suggestion-setting.test.mjs` (3 tests); terminal `@` completion only, not the web composer; `subagentStatusLine` is still open |
-| `sandbox.credentials`, unix-socket/proxy keys, `allowManagedReadPathsOnly`, admin-required repository locks | open | `allowUnsandboxedCommands` needs nothing: OASIS has no unsandboxed retry |
+| `sandbox.credentials` (`files`, `envVars`), `sandbox.filesystem.allowManagedReadPathsOnly` | done | `test/sandbox-credentials.test.mjs` (4 tests, real bubblewrap). `mask` entries are applied as `deny` (OASIS has no substituting egress proxy, so tools that need the secret stop working in the sandbox); `mask` from repository settings is ignored, as in Claude Code |
+| Unix-socket/proxy keys, admin-required repository locks | open | `allowUnsandboxedCommands` needs nothing: OASIS has no unsandboxed retry |
 
 ## 2e. Terminal-agent interoperability (Gemini CLI, OpenCode, Goose, Aider, Roo/Kilo/Cline)
 

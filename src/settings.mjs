@@ -260,6 +260,48 @@ export function resolveSandboxSettingPath(entry, scope, root, env = process.env)
   return path.resolve(base, value);
 }
 
+const CREDENTIAL_ENV_NAME = /^[A-Za-z_][A-Za-z0-9_]*$/;
+
+/**
+ * Claude Code's sandbox.credentials: { files: [{ path, mode }], envVars: [{ name, mode }] }.
+ * "deny" files join the sandbox read mask and "deny" variables are unset for sandboxed
+ * commands. "mask" needs Claude Code's substituting egress proxy, which OASIS does not
+ * have, so a mask entry from user, --settings or managed settings is applied as "deny"
+ * with a note (Claude Code's own fallback for entries it cannot mask); repositories
+ * cannot set mask entries, as in Claude Code. Lists merge across every scope.
+ */
+export function applySandboxCredentials(target, credentials, scope, root, env = process.env) {
+  if (!credentials || typeof credentials !== 'object' || Array.isArray(credentials)) return;
+  const maskAllowed = ['user', 'flag', 'managed'].includes(scope);
+  const notes = target.credentialNotes || [];
+  const accept = (entry, what) => {
+    if (!entry || typeof entry !== 'object' || (entry.mode !== 'deny' && entry.mode !== 'mask')) return false;
+    if (entry.mode === 'mask') {
+      if (!maskAllowed) { notes.push(what + ': mask entries from ' + scope + ' settings are ignored.'); return false; }
+      notes.push(what + ': "mask" is applied as "deny" (OASIS has no substituting proxy).');
+    }
+    return true;
+  };
+  if (Array.isArray(credentials.files)) {
+    const files = [];
+    for (const entry of credentials.files.slice(0, 200)) {
+      if (!accept(entry, 'sandbox.credentials.files ' + String(entry && entry.path || '').slice(0, 200))) continue;
+      const resolved = resolveSandboxSettingPath(entry.path, scope, root, env);
+      if (resolved) files.push(resolved);
+    }
+    target.credentialFiles = [...new Set([...(target.credentialFiles || []), ...files])].slice(0, 500);
+  }
+  if (Array.isArray(credentials.envVars)) {
+    const names = [];
+    for (const entry of credentials.envVars.slice(0, 200)) {
+      if (!entry || typeof entry.name !== 'string' || !CREDENTIAL_ENV_NAME.test(entry.name)) continue;
+      if (accept(entry, 'sandbox.credentials.envVars ' + entry.name)) names.push(entry.name);
+    }
+    target.credentialEnv = [...new Set([...(target.credentialEnv || []), ...names])].slice(0, 500);
+  }
+  if (notes.length) target.credentialNotes = [...new Set(notes)].slice(0, 50);
+}
+
 export async function loadSettings(root, options = {}) {
   const env = options.env || process.env;
   const result = {
@@ -461,8 +503,12 @@ export async function loadSettings(root, options = {}) {
           const resolved = filesystem[key].slice(0, 200).map((entry) => resolveSandboxSettingPath(entry, scope, path.resolve(root), env)).filter(Boolean);
           result.sandbox[key] = [...new Set([...(result.sandbox[key] || []), ...resolved])].slice(0, 500);
           if (key === 'allowRead' && (scope === 'project' || scope === 'local')) result.sandbox.allowReadRepo = [...new Set([...(result.sandbox.allowReadRepo || []), ...resolved])].slice(0, 500);
+          if (key === 'allowRead' && scope === 'managed') result.sandbox.managedAllowRead = [...new Set([...(result.sandbox.managedAllowRead || []), ...resolved])].slice(0, 500);
         }
+        // allowManagedReadPathsOnly (managed): only managed allowRead entries re-open reads; denyRead still merges.
+        if (scope === 'managed' && filesystem.allowManagedReadPathsOnly === true) result.sandbox.allowManagedReadPathsOnly = true;
       }
+      applySandboxCredentials(result.sandbox, settings.sandbox.credentials, scope, path.resolve(root), env);
       if (typeof settings.sandbox.autoAllowCommands === 'boolean') result.sandbox.autoAllowCommands = settings.sandbox.autoAllowCommands;
       // sandbox.excludedCommands: Bash(...) rule contents run outside the sandbox; merged across trusted files.
       if (Array.isArray(settings.sandbox.excludedCommands)) result.sandbox.excludedCommands = [...new Set([...(result.sandbox.excludedCommands || []), ...settings.sandbox.excludedCommands.filter((item) => typeof item === 'string' && item.trim() && item.length <= 500 && !/[\r\n\0]/.test(item)).map((item) => item.trim())])].slice(0, 200);
