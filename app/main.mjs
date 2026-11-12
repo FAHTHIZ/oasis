@@ -24,6 +24,7 @@ import { RuntimeTerminal, loadXterm } from './core/terminal.mjs';
 import { suggestToken, rankSuggestions, applySuggestion } from './core/composer-suggest.mjs';
 import { mcpServerFromForm, describeMcpServer } from './core/mcp.mjs';
 import { speakable, isStopPhrase, turnDetector, rmsLevel, lastReply } from './core/voice-mode.mjs';
+import { previewTarget } from './core/preview.mjs';
 import { searchMarketplace, marketplaceCount, OFFICIAL_MARKETPLACE } from './core/claude-plugins.mjs';
 // Composer autocomplete state (declared early: refreshFiles clears the file cache).
 const suggest = { token: null, items: [], index: 0, commands: null, files: null, seq: 0 };
@@ -533,7 +534,7 @@ async function send(text) {
   finally {
     setBusy(false);
     if (!agent.detached) { persistChat(); attention('done', message); }
-    refreshFiles(); settle(); if (RT) refreshRuntimeStatus().then(updateProjectUI).catch(() => {});
+    refreshFiles(); refreshPreviewIfOpen(); settle(); if (RT) refreshRuntimeStatus().then(updateProjectUI).catch(() => {});
   }
 }
 
@@ -3426,7 +3427,8 @@ function updateProjectUI() {
   $('exportButton').hidden = Boolean(RT);
   $('newFileButton').hidden = Boolean(RT);
   $('terminalTab').hidden = !(RT && !RT.needsToken);
-  if ($('terminalTab').hidden && !$('terminalView').hidden) showPanelTab('files');
+  $('previewTab').hidden = $('terminalTab').hidden;
+  if ($('terminalTab').hidden && (!$('terminalView').hidden || !$('previewView').hidden)) showPanelTab('files');
   $('panelFoot').hidden = (!$('terminalView').hidden) || ($('exportButton').hidden && $('pushButton').hidden);
 }
 
@@ -3476,11 +3478,75 @@ function showPanelTab(name) {
   $('fileList').hidden = name !== 'files';
   $('changesList').hidden = name !== 'changes';
   $('terminalView').hidden = name !== 'terminal';
+  $('previewView').hidden = name !== 'preview';
   $('fileFilter').parentElement.hidden = name !== 'files';
-  $('panelFoot').hidden = name === 'terminal' || ($('exportButton').hidden && $('pushButton').hidden);
+  $('panelFoot').hidden = name === 'terminal' || name === 'preview' || ($('exportButton').hidden && $('pushButton').hidden);
   if (name === 'terminal') void openTerminal();
+  if (name === 'preview') void openPreview();
 }
 for (const tab of document.querySelectorAll('#filesPanel .tab')) tab.addEventListener('click', () => showPanelTab(tab.dataset.tab));
+
+/* ---------- Preview (project files or a dev server, sandboxed) ---------- */
+const preview = { base: '', address: localStorage.getItem('oasis.previewAddress') || '', recordings: [], loaded: false };
+function previewUrl(address, { direct = false } = {}) {
+  const target = previewTarget(address);
+  // Opened in its own tab on this computer, a dev server is reached directly (live reload works).
+  if (direct && target.port && /^(127\.0\.0\.1|localhost)$/.test(location.hostname)) return 'http://' + location.hostname + ':' + target.port + '/' + target.path;
+  if (!preview.base) return '';
+  return target.port ? preview.base + ':' + target.port + '/' + target.path : preview.base + target.path.split('/').map(encodeURIComponent).join('/');
+}
+async function guessPreviewAddress() {
+  const files = await workspace.paths().catch(() => []);
+  return ['index.html', 'public/index.html', 'dist/index.html', 'build/index.html', 'docs/index.html'].find((name) => files.includes(name))
+    || files.find((name) => /\.html?$/i.test(name)) || 'index.html';
+}
+function renderPreviewChips() {
+  const chips = $('previewChips');
+  chips.replaceChildren();
+  for (const file of preview.recordings.slice(0, 3)) {
+    const button = document.createElement('button');
+    button.type = 'button';
+    const stamp = file.replace(/^.*browser-/, '').replace(/\.html$/, '').replace(/T(\d\d)-(\d\d).*$/, ' $1:$2');
+    button.textContent = 'Recording ' + stamp;
+    button.title = 'Play the browser recording ' + file;
+    button.classList.toggle('active', preview.address === file);
+    button.addEventListener('click', () => loadPreview(file));
+    chips.append(button);
+  }
+}
+function loadPreview(address) {
+  preview.address = String(address || '').trim();
+  localStorage.setItem('oasis.previewAddress', preview.address);
+  $('previewAddress').value = preview.address;
+  const url = previewUrl(preview.address);
+  if (url) $('previewFrame').src = url;
+  renderPreviewChips();
+}
+async function openPreview() {
+  if (!RT || RT.needsToken) return;
+  try {
+    const info = await RT.client.api('/api/preview');
+    preview.base = info.base;
+    preview.recordings = info.recordings || [];
+  } catch (error) { toast('Preview is not available: ' + (error.message || error)); return; }
+  if (!preview.loaded) { preview.loaded = true; loadPreview(preview.address || await guessPreviewAddress()); }
+  else renderPreviewChips();
+}
+function reloadPreview() {
+  const frame = $('previewFrame');
+  if (!frame.src) return;
+  // A sandboxed page has its own origin, so reload by setting the address again.
+  const src = frame.src;
+  frame.src = 'about:blank';
+  requestAnimationFrame(() => { frame.src = src; });
+}
+function refreshPreviewIfOpen() {
+  if ($('previewView').hidden || $('filesPanel').hidden) return;
+  void openPreview().then(reloadPreview);
+}
+$('previewForm').addEventListener('submit', (event) => { event.preventDefault(); loadPreview($('previewAddress').value); });
+$('previewReload').addEventListener('click', reloadPreview);
+$('previewPopout').addEventListener('click', () => { const url = previewUrl(preview.address, { direct: true }); if (url) window.open(url, '_blank', 'noopener'); });
 
 /* ---------- Terminal (connected to OASIS on a computer) ---------- */
 let terminal = null;

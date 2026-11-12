@@ -29,6 +29,7 @@ import { createTaskHistoryStore } from './task-history-store.mjs';
 import { createWorktree, finishWorktree, removeWorktree, readWorktreeDiff, readWorktreeWorkingDiff, readWorkspaceDiff, inspectWorktree, mergeWorktree, isCommitIntegrated } from './worktrees.mjs';
 import { appModuleGraph, resolveAppPath, skillsIndex } from './app-server.mjs';
 import { listWorkspaceFiles } from './workspace-files.mjs';
+import { createPreviewHandler } from './web-preview.mjs';
 import { atomicWriteFile } from './atomic-write.mjs';
 import { connectFromPaste } from './provider-connect.mjs';
 import { basicAuthToken, createCursorAgentsApi, cursorError } from './cursor-agents-api.mjs';
@@ -550,6 +551,12 @@ export function createOasisWebServer(options = {}) {
   const allowedHosts = parseAllowedHosts([...(options.publicUrl ? [options.publicUrl] : []), ...(Array.isArray(options.allowedHosts) ? options.allowedHosts : parseAllowedHosts(options.allowedHosts || ''))]);
   const trustProxy = options.trustProxy === true;
   const authLimiter = options.authLimiter || createAuthLimiter();
+  // The Preview panel: project files or a local dev server, sandboxed, behind its own key.
+  const preview = createPreviewHandler({
+    getRoot: () => activeRoot,
+    loopbackOnly: isLoopbackBindHost(bindHost) && !options.publicUrl && !trustProxy,
+    ownPort: () => { try { return server.address().port; } catch { return null; } }
+  });
   // Managing providers, keys, updates and hardware needs a direct local
   // connection or HTTPS, so keys never cross a network in plain text.
   const canManage = (req) => isLoopbackClient(req) || requestIsSecure(req, { trustProxy });
@@ -1548,6 +1555,10 @@ export function createOasisWebServer(options = {}) {
     const parsedUrl = new URL(req.url || '/', 'http://localhost');
     const pathname = parsedUrl.pathname;
 
+    // Sandboxed preview pages send `Origin: null`, so only the Host header is checked here;
+    // the preview key in the path is what grants access.
+    if ((pathname.startsWith('/preview/') || req.headers.referer) && hostAllowed({ headers: { ...req.headers, origin: undefined }, socket: req.socket, connection: req.connection }, { allowedHosts, trustProxy }) && await preview.handle(req, res, parsedUrl)) return;
+
     if (req.method === 'GET' && STATIC_FILES.has(pathname)) {
       const [file, contentType] = STATIC_FILES.get(pathname);
       let body;
@@ -2271,6 +2282,16 @@ export function createOasisWebServer(options = {}) {
           (/sensitive|outside the workspace|symbolic link|resolves outside/i.test(message) ? 403 : 400);
         json(res, status, { error: status === 403 ? 'This path is protected or outside the task workspace.' : message.slice(0, 500) });
       }
+      return;
+    }
+
+    if (req.method === 'GET' && pathname === '/api/preview') {
+      let recordings = [];
+      try {
+        const { readdir } = await import('node:fs/promises');
+        recordings = (await readdir(path.join(activeRoot, '.oasis', 'recordings'))).filter((name) => /^browser-[\w.-]+\.html$/.test(name)).sort().reverse().slice(0, 20).map((name) => '.oasis/recordings/' + name);
+      } catch {}
+      json(res, 200, { base: preview.base(null), recordings });
       return;
     }
 
