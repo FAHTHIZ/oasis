@@ -4,6 +4,7 @@ User-facing change history grouped by package version. A version heading does no
 
 ## Unreleased
 
+- Workflows: `.devin/workflows` and `.windsurf/workflows` folders in sub-folders of the workspace (up to four levels down; `node_modules`, build output and hidden folders skipped) now become slash commands too, as in Devin Desktop. The workspace's own folders and those above it win on a name clash.
 - Security: the Preview dev-server proxy no longer removes the `Origin` header from POST, PUT and other state-changing requests that come from a different preview, such as a workspace HTML file or another port. Those requests reach the local service with `Origin: null`, so Ollama, Jupyter and other localhost services keep their CSRF protection. A dev app posting to its own server works as before.
 - OpenHands: a task microagent's `inputs` (and any `${VAR}` placeholders in its body) are now listed when `/name` triggers it, with OpenHands' instruction to ask the user for missing values first, so the agent asks with its question tool before running the task.
 - Agent ignore files (`.cursorignore`, `.geminiignore`, `.aiexclude`, ...) are matched by [node-ignore](https://github.com/kaelzhang/node-ignore) 7.0.14 (MIT, the .gitignore matcher ESLint and Prettier use) instead of OASIS's own pattern translator. A test compares it with `git check-ignore`; the one known difference, an unclosed `[` such as `a[b`, now matches the literal name as git does.

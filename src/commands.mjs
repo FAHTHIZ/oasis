@@ -70,6 +70,39 @@ async function gitRootChain(workspace) {
   return [workspace];
 }
 
+// Sub-folders (not the workspace itself) holding .devin/workflows or .windsurf/workflows,
+// deepest first, cached for five seconds. Bounded: 4 levels, 2,000 folders, dependency and build folders skipped.
+const SKIP_SUBFOLDERS = new Set(['node_modules', 'vendor', 'dist', 'build', 'out', 'target', 'coverage', '__pycache__', 'venv', 'bower_components']);
+const subfolderCache = new Map();
+async function workflowSubfolders(workspace) {
+  const cached = subfolderCache.get(workspace);
+  if (cached && Date.now() - cached.at < 5000) return cached.dirs;
+  const dirs = await scanWorkflowSubfolders(workspace);
+  if (subfolderCache.size > 20) subfolderCache.clear();
+  subfolderCache.set(workspace, { at: Date.now(), dirs });
+  return dirs;
+}
+async function scanWorkflowSubfolders(workspace) {
+  const found = [];
+  let budget = 2000;
+  const walk = async (dir, depth) => {
+    let entries;
+    try { entries = await readdir(dir, { withFileTypes: true }); } catch { return; }
+    for (const entry of entries) {
+      if (budget <= 0) return;
+      if (!entry.isDirectory() || entry.name.startsWith('.') || SKIP_SUBFOLDERS.has(entry.name)) continue;
+      budget--;
+      const full = path.join(dir, entry.name);
+      if (depth < 4) await walk(full, depth + 1);
+      for (const marker of ['.devin', '.windsurf']) {
+        try { if ((await lstat(path.join(full, marker, 'workflows'))).isDirectory()) { found.push({ dir: full, depth }); break; } } catch {}
+      }
+    }
+  };
+  await walk(workspace, 1);
+  return found.sort((a, b) => b.depth - a.depth || a.dir.localeCompare(b.dir)).map((item) => item.dir);
+}
+
 /** Command and workflow folders of other coding agents, lowest precedence first. */
 export async function foreignCommandDirectories(root, env = process.env, home = os.homedir()) {
   if (env.OASIS_OTHER_AGENT_RULES === '0') return [];
@@ -91,6 +124,12 @@ export async function foreignCommandDirectories(root, env = process.env, home = 
     { dir: path.join(workspace, '.opencode', 'command'), scope: 'project', foreign: 'OpenCode', opencode: true },
     { dir: path.join(workspace, '.opencode', 'commands'), scope: 'project', foreign: 'OpenCode', opencode: true }
   ];
+  // Devin Desktop also finds workflow folders in sub-folders of the workspace; those rank
+  // below the workspace's own and its parents' folders.
+  for (const dir of await workflowSubfolders(workspace)) {
+    dirs.push({ dir: path.join(dir, '.windsurf', 'workflows'), scope: 'project', foreign: 'Windsurf' });
+    dirs.push({ dir: path.join(dir, '.devin', 'workflows'), scope: 'project', foreign: 'Devin Desktop' });
+  }
   // Devin Desktop prefers .devin/workflows over the legacy .windsurf/workflows; nearer folders win.
   for (const dir of await gitRootChain(workspace)) {
     dirs.push({ dir: path.join(dir, '.windsurf', 'workflows'), scope: 'project', foreign: 'Windsurf', outside: dir !== workspace });
