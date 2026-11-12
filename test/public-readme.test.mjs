@@ -10,7 +10,7 @@ const read = (relative) => readFile(path.join(root, relative), 'utf8');
 test('README describes the two interfaces, honest limits and verifiable downloads', async () => {
   const readme = await read('README.md');
   for (const phrase of [
-    '## Two ways to work',
+    '## Work where you work',
     'Terminal',
     'Web app',
     'oasis web --open',
