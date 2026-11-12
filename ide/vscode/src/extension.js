@@ -10,6 +10,7 @@ const vscode = require('vscode');
 const path = require('node:path');
 const { startIdeServer } = require('./server.js');
 const { ChatController, ChatViewProvider, openChatPanel } = require('./chat-view.js');
+const { resolveCompletionTarget, readOasisConfig, requestCompletion, shouldSuggest } = require('./completion.js');
 
 const PROPOSED_SCHEME = 'oasis-proposed';
 const proposed = new Map();
@@ -146,7 +147,60 @@ function insertReference() {
   else vscode.env.clipboard.writeText(ref).then(() => vscode.window.showInformationMessage('Copied ' + ref));
 }
 
+// Tab completion: ghost text from the model OASIS is set up with (or oasis.completions.*).
+function completionSettings() {
+  const config = vscode.workspace.getConfiguration('oasis.completions');
+  return { enabled: config.get('enabled') !== false, model: config.get('model') || '', baseUrl: config.get('baseUrl') || '', protocol: config.get('protocol') || '', apiKey: config.get('apiKey') || '', debounceMs: Number(config.get('debounceMs')) || 250 };
+}
+
+function createCompletionProvider(status) {
+  let warned = false;
+  return {
+    async provideInlineCompletionItems(document, position, _context, token) {
+      const settings = completionSettings();
+      if (!settings.enabled || document.uri.scheme === 'output') return [];
+      const start = new vscode.Position(Math.max(0, position.line - 200), 0);
+      const end = new vscode.Position(Math.min(document.lineCount - 1, position.line + 80), Number.MAX_SAFE_INTEGER);
+      const prefix = document.getText(new vscode.Range(start, position));
+      const suffix = document.getText(new vscode.Range(position, document.validatePosition(end)));
+      if (!shouldSuggest({ prefix, suffix })) return [];
+      await new Promise((resolve) => setTimeout(resolve, settings.debounceMs));
+      if (token.isCancellationRequested) return [];
+      const controller = new AbortController();
+      const cancel = token.onCancellationRequested(() => controller.abort());
+      const target = resolveCompletionTarget(settings, readOasisConfig());
+      status.text = '$(loading~spin) OASIS';
+      try {
+        const text = await requestCompletion(target, { prefix, suffix, languageId: document.languageId, relativePath: relative(document.uri.fsPath) }, { signal: controller.signal });
+        if (!text || token.isCancellationRequested) return [];
+        return [new vscode.InlineCompletionItem(text, new vscode.Range(position, position))];
+      } catch (error) {
+        if (error && error.name === 'AbortError') return [];
+        if (!warned) { warned = true; vscode.window.showWarningMessage('OASIS completions: ' + error.message); }
+        return [];
+      } finally {
+        cancel.dispose();
+        status.text = settings.enabled ? '$(sparkle) OASIS' : '$(circle-slash) OASIS';
+      }
+    }
+  };
+}
+
 async function activate(context) {
+  const completionStatus = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 100);
+  completionStatus.command = 'oasis.toggleCompletions';
+  completionStatus.tooltip = 'OASIS tab completion (click to turn on or off)';
+  completionStatus.text = completionSettings().enabled ? '$(sparkle) OASIS' : '$(circle-slash) OASIS';
+  completionStatus.show();
+  context.subscriptions.push(completionStatus);
+  context.subscriptions.push(vscode.languages.registerInlineCompletionItemProvider({ pattern: '**' }, createCompletionProvider(completionStatus)));
+  context.subscriptions.push(vscode.commands.registerCommand('oasis.toggleCompletions', async () => {
+    const enabled = !completionSettings().enabled;
+    await vscode.workspace.getConfiguration('oasis.completions').update('enabled', enabled, vscode.ConfigurationTarget.Global);
+    completionStatus.text = enabled ? '$(sparkle) OASIS' : '$(circle-slash) OASIS';
+    vscode.window.setStatusBarMessage('OASIS tab completion ' + (enabled ? 'on' : 'off'), 2500);
+  }));
+
   context.subscriptions.push(vscode.workspace.registerTextDocumentContentProvider(PROPOSED_SCHEME, {
     provideTextDocumentContent: (uri) => proposed.get(uri.query) ?? ''
   }));
