@@ -4509,7 +4509,11 @@ async function openEditor(path, status) {
     catch (error) { content = error.message; }
     $('editor').value = content;
     $('editor').readOnly = true;
-    for (const id of ['revertButton', 'deleteFileButton', 'saveFileButton']) $(id).hidden = true;
+    for (const id of ['deleteFileButton', 'saveFileButton']) $(id).hidden = true;
+    // Discard: back to the last commit. New (untracked) files have no committed version.
+    $('revertButton').hidden = !status || status === 'added';
+    $('revertButton').textContent = 'Discard';
+    $('revertButton').title = 'Discard these changes and restore the last committed version';
     $('diffToggle').hidden = !status;
     $('diffView').hidden = true; $('editorSheet').classList.remove('fit');
     $('editor').hidden = false;
@@ -4526,6 +4530,8 @@ async function openEditor(path, status) {
   $('editor').readOnly = Boolean(file && file.deleted);
   $('diffToggle').hidden = !status;
   $('revertButton').hidden = !status;
+  $('revertButton').textContent = 'Revert';
+  $('revertButton').title = '';
   $('deleteFileButton').hidden = Boolean(file && file.deleted);
   $('saveFileButton').hidden = Boolean(file && file.deleted);
   $('diffView').hidden = true; $('editorSheet').classList.remove('fit');
@@ -4552,7 +4558,17 @@ async function showDiff() {
 }
 $('diffToggle').addEventListener('click', () => { if ($('diffView').hidden) showDiff(); else { $('diffView').hidden = true; $('editorSheet').classList.remove('fit'); $('editor').hidden = false; $('diffToggle').textContent = 'Diff'; } });
 $('saveFileButton').addEventListener('click', async () => { await workspace.write(editingPath, $('editor').value); refreshFiles(); toast('Saved ' + editingPath); closeSheet('editorSheet'); });
-$('revertButton').addEventListener('click', async () => { if (!confirm('Revert ' + editingPath + ' to how it was when opened?')) return; await workspace.revert(editingPath); refreshFiles(); closeSheet('editorSheet'); toast('Reverted ' + editingPath); });
+$('revertButton').addEventListener('click', async () => {
+  if (RT) {
+    if (!confirm('Discard your changes to ' + editingPath + ' and restore the last committed version? This cannot be undone.')) return;
+    try { await workspace.discard(editingPath); }
+    catch (error) { toast(error.message || String(error)); return; }
+    refreshFiles(); closeSheet('editorSheet'); toast('Restored ' + editingPath + ' from the last commit');
+    return;
+  }
+  if (!confirm('Revert ' + editingPath + ' to how it was when opened?')) return;
+  await workspace.revert(editingPath); refreshFiles(); closeSheet('editorSheet'); toast('Reverted ' + editingPath);
+});
 $('deleteFileButton').addEventListener('click', async () => { if (!confirm('Delete ' + editingPath + '?')) return; await workspace.remove(editingPath); refreshFiles(); closeSheet('editorSheet'); });
 $('editor').addEventListener('keydown', (event) => {
   if (event.key === 'Tab' && !event.shiftKey) { event.preventDefault(); document.execCommand('insertText', false, '  '); }

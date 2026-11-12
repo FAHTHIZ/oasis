@@ -3,7 +3,7 @@
 // so several agents can edit in parallel without touching the user's checkout.
 // Afterwards its changes are committed on that branch for review and merge.
 import path from 'node:path';
-import { spawn } from 'node:child_process';
+import { execFile, spawn } from 'node:child_process';
 import { processTreeSpawnOptions, signalProcessTree } from './process-tree.mjs';
 import { randomBytes } from 'node:crypto';
 import { appendFile, lstat, mkdir, readFile, readlink, realpath, rm, stat, symlink, unlink } from 'node:fs/promises';
@@ -618,6 +618,28 @@ export async function mergeWorktree(root, branchValue, options = {}) {
 // workspace directory. Secret-looking paths (.env, keys, credentials) are listed by
 // name only so the browser never receives their contents.
 const EMPTY_TREE = '4b825dc642cb6eb9a060e54bf8d69288fbee4904';
+/**
+ * The last-commit version of one workspace file, for "Discard changes".
+ * Uses ls-tree and cat-file, which never run the repository's filters,
+ * textconv or hooks. Returns { mode, content } (content is a Buffer), or null
+ * when the file is not in HEAD. Symlinks and submodules are refused.
+ */
+export async function headFileVersion(workspaceRoot, relative, options = {}) {
+  const env = options.env || process.env;
+  const root = path.resolve(workspaceRoot);
+  let listing = '';
+  try { listing = await git(root, ['-c', 'core.fsmonitor=false', 'ls-tree', '-z', 'HEAD', '--', relative], env, 10000); } catch { return null; }
+  const entry = listing.split('\0').find(Boolean);
+  const match = entry && entry.match(/^(\d{6}) (\w+) ([0-9a-f]{40,64})\t(.*)$/s);
+  if (!match || match[4] !== relative) return null;
+  if (match[2] !== 'blob' || (match[1] !== '100644' && match[1] !== '100755')) throw Object.assign(new Error('Only regular files can be restored here.'), { code: 'EUNSUPPORTED' });
+  const content = await new Promise((resolve, reject) => {
+    execFile('git', ['-c', 'core.fsmonitor=false', 'cat-file', 'blob', match[3]], { cwd: root, env: gitEnv(env), encoding: 'buffer', maxBuffer: 50 * 1024 * 1024, timeout: 20000 },
+      (error, stdout) => (error ? reject(error) : resolve(stdout)));
+  });
+  return { mode: match[1] === '100755' ? 0o755 : 0o644, content };
+}
+
 export async function readWorkspaceDiff(workspaceRoot, options = {}) {
   const env = options.env || process.env;
   const root = path.resolve(workspaceRoot);
