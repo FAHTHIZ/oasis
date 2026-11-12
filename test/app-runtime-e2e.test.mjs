@@ -248,6 +248,7 @@ test('runtime engine end to end: app at /, paste to connect, approve a real edit
   await evaluate(page, `window.__stale = true; location.reload(); true`);
   await waitFor(page, `document.readyState === 'complete' && !window.__stale && document.documentElement.dataset.ready === '1' && document.documentElement.classList.contains('runtime') && /Done\\. I built the counter/.test(document.getElementById('transcript').textContent)`, { label: 'the open chat is remembered across reloads' });
   await waitFor(page, `[...document.querySelectorAll('.msg.user.steer')].some((m) => /use tabs please/.test(m.textContent))`, { label: 'a note sent while working keeps its look after a reload' });
+  assert.equal(await evaluate(page, `(() => { const b = document.querySelector('.msg.user.steer [data-action="edit"]'); return Boolean(b && b.getClientRects().length); })()`), false, 'a note sent while working has no edit-and-resend button');
 
   // 9. Dictation writes into the message box and sends nothing by itself.
   await waitFor(page, `Boolean(document.getElementById('input')) && !${busy} && !document.getElementById('dictateButton').hidden`, { label: 'app ready after reload, with a microphone button' });
