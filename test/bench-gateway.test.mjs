@@ -42,6 +42,9 @@ test('gateway forces the model, serializes and spaces requests, and logs usage',
   const send = () => fetch(base + '/chat/completions', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ model: 'whatever', messages: [{ role: 'user', content: 'hi' }] }) });
   const responses = await Promise.all([send(), send()]);
   for (const response of responses) assert.equal(response.status, 200);
+  // fetch resolves on headers; the log line is written before the body ends,
+  // so read both bodies before reading the log.
+  await Promise.all(responses.map((response) => response.text()));
   assert.deepEqual(seen.map((item) => item.model), ['forced', 'forced']);
   assert.equal(seen[0].url, 'https://up.example/v1/chat/completions');
   assert.deepEqual(waits, [5000], 'the second request waits for the interval');
