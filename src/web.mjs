@@ -3005,7 +3005,7 @@ export async function startOasisWebServer(options = {}) {
   const catalogAbort = new AbortController();
   const catalogRefresh = options.refreshModelCatalog === false
     ? Promise.resolve()
-    : import('./model-catalog.mjs').then(({ refreshModelCatalog }) => refreshModelCatalog({ env: options.env || process.env, signal: catalogAbort.signal })).catch(() => {});
+    : import('./model-catalog.mjs').then(({ refreshModelCatalog, catalogRefreshDisabled }) => (catalogRefreshDisabled(process.env) ? false : refreshModelCatalog({ env: options.env || process.env, signal: catalogAbort.signal }))).catch(() => {});
   const address = app.server.address();
   const closeApp = app.close;
   return {
@@ -3014,7 +3014,12 @@ export async function startOasisWebServer(options = {}) {
     port: address && typeof address === 'object' ? address.port : port,
     async close() {
       catalogAbort.abort();
-      try { await closeApp(); } finally { await catalogRefresh; }
+      try { await closeApp(); } finally {
+        // An aborted fetch normally settles at once; never let a stuck one hold close() open.
+        let timer;
+        await Promise.race([catalogRefresh, new Promise((resolve) => { timer = setTimeout(resolve, 2000); })]);
+        clearTimeout(timer);
+      }
     }
   };
 }
