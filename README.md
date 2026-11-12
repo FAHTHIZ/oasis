@@ -7,7 +7,7 @@
 <p align="center">
   <a href="https://github.com/FAHTHIZ/oasis/actions/workflows/quality.yml"><img alt="Quality checks" src="https://img.shields.io/github/actions/workflow/status/FAHTHIZ/oasis/quality.yml?branch=main&style=flat-square&label=quality&labelColor=0B0F0C&color=32E07A"></a>
   <a href="https://github.com/FAHTHIZ/oasis/releases/latest"><img alt="Latest release" src="https://img.shields.io/github/v/release/FAHTHIZ/oasis?style=flat-square&labelColor=0B0F0C&color=7CFF5E"></a>
-  <img alt="More than 2,500 tests" src="https://img.shields.io/badge/tests-2%2C500%2B-0ED168?style=flat-square&labelColor=0B0F0C">
+  <img alt="More than 2,700 tests" src="https://img.shields.io/badge/tests-2%2C700%2B-0ED168?style=flat-square&labelColor=0B0F0C">
   <img alt="Node.js 22.15 or newer" src="https://img.shields.io/badge/node-22.15%2B-32E07A?style=flat-square&logo=node.js&logoColor=white&labelColor=0B0F0C">
   <img alt="Windows, macOS and Linux" src="https://img.shields.io/badge/platforms-windows%20%C2%B7%20macos%20%C2%B7%20linux-1A1F1B?style=flat-square&labelColor=0B0F0C">
   <a href="LICENSE"><img alt="Apache 2.0 license" src="https://img.shields.io/github/license/FAHTHIZ/oasis?style=flat-square&labelColor=0B0F0C&color=1A1F1B"></a>
@@ -120,8 +120,8 @@ OASIS has two interfaces, the terminal and the web app, on the same runtime, ses
     <th width="50%">Web app — <code>oasis web --open</code></th>
   </tr>
   <tr>
-    <td><a href="assets/demo/oasis-real-model-demo.mp4"><img src="assets/demo/oasis-real-model-demo.gif" alt="Unscripted OASIS terminal run with gpt-oss-20b: the agent reads a file, fixes a bug, adds a test, runs it after approval and is sent back to review its changes."></a></td>
-    <td><img src="assets/screenshots/web-approval-dark.png" alt="The OASIS web app asking for approval to run npm test in a card above the message box, with the step behind it marked as waiting and the task sidebar showing Needs you."></td>
+    <td><a href="assets/demo/oasis-real-model-demo.mp4"><img src="assets/demo/oasis-real-model-demo.gif" alt="Unscripted OASIS terminal run with gpt-oss-20b on 12 November 2026: the agent reads slug.mjs, fixes slugify, writes a test, runs npm test after each approval, fixes its own wrong assert import twice, and finishes with a passing check."></a><br><sub>Unscripted, gpt-oss-20b (free). The model gets its test import wrong twice and fixes it from the failing output. Waits are shortened.</sub></td>
+    <td><a href="assets/demo/oasis-web-demo.mp4"><img src="assets/demo/oasis-web-demo.gif" alt="The OASIS web app fixing a date bug: the request, a steering note sent while it works, grouped steps for search, read, edit and test, a summary table, and the Changes panel listing the two changed files."></a><br><sub>Real runtime, files and tests with a scripted model so the run is reproducible (<code>scripts/demo/record-web-demo.mjs</code>). Shows steering mid-task.</sub></td>
   </tr>
   <tr>
     <td valign="top">Streaming diffs with word highlights, inline images, <code>/tasks</code>, <code>/rewind</code>, <code>/export</code> to Markdown or HTML, a live diff view (<code>oasis diff --watch</code>), and <code>oasis deploy</code> to GitHub Pages. <code>oasis -p</code> and <code>oasis exec</code> for scripts.</td>
@@ -252,11 +252,12 @@ GitHub uses your existing `gh` sign-in, or runs `gh auth login --web` and shows 
 
 ## Tested like a real user
 
-These runs used OASIS the way a person would: type a request, approve steps, read the answer. Real providers, no scripted model, recorded 5–8 November 2026.
+These runs used OASIS the way a person would: type a request, approve steps, read the answer. Real providers, no scripted model, recorded 5–12 November 2026.
 
 | What we asked | Where | Model | Result |
 | --- | --- | --- | --- |
-| "Build a small to-do web app in index.html" | Web app | gpt-oss-20b (free) | Working app in about 6 minutes |
+| "slugify() in slug.mjs only replaces the first space. Fix it, add a test, run the tests." | Terminal, default mode | gpt-oss-20b (free) | Fixed, test passing after the model corrected its own import twice; 7 m 34 s, 3 approvals, 12 Nov ([video](assets/demo/oasis-real-model-demo.mp4)) |
+| "Build a small to-do web app in index.html: add, complete and delete items, saved in localStorage." | Web app, Ask first | gpt-oss-20b (free) | Working app, existing tests still passing; 231 s, 1 approval, 12 Nov |
 | "slugify() only replaces the first space. Fix it, add a test, run the tests." | Web app, Ask first | gpt-oss-20b | Fixed, test added and passing; 409 s, 2 approvals ([screenshot](assets/screenshots/real-model-approval-dark.png)) |
 | "math.mjs add() is wrong. Fix it and add a test, then run it." | `oasis -p` | gpt-oss-20b | Fixed, test passing, exit 0; about 10 minutes, mostly provider wait |
 | Read an uploaded PDF | Web app | gpt-oss-20b | Passed in 49 s ([screenshot](assets/screenshots/real-model-pdf.png)) |
@@ -274,7 +275,7 @@ These runs used OASIS the way a person would: type a request, approve steps, rea
 
 Everything that went wrong in these runs became a fix with a regression test: a streamed reply glued onto the next one, the agent telling the user about its internal checks, a keyless endpoint that kept asking for a key, activity cards that all said "Completed a project step". See the [Changelog](CHANGELOG.md).
 
-Known rough edges: free endpoints are slow (35–140 s per request), and with small models the verification step sometimes produces a second, longer summary after the first.
+Known rough edges: free endpoints are slow (35–140 s per request), and gpt-oss-20b sometimes writes its reasoning into the reply ("Wait, we still import…"), which OASIS shows as text. The second summary that the verification step used to produce after targeted edits was fixed on 12 November.
 
 </details>
 
@@ -315,7 +316,7 @@ Read the [security policy](SECURITY.md) before using OASIS on sensitive code.
 
 ```sh
 npm install
-npm test           # 2,500+ tests
+npm test           # 2,700+ tests
 npm run check      # tests, benchmark regressions, eval validation
 npm run lint
 ```

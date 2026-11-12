@@ -67,6 +67,31 @@ def color(value, default, bold=False):
 with open(CAST) as fh:
     header = json.loads(fh.readline())
     events = [json.loads(line) for line in fh if line.strip()]
+
+# Real-model runs spend minutes on a status line that only ticks a timer
+# ("Still waiting for the model… · 47s"). Keep a few of those rewrites so the
+# wait is visible, and play each run of them in about two seconds.
+def is_status(data):
+    return data.startswith('\r\x1b[2K') and 'esc to stop' in data and '\n' not in data
+squeezed, run, shift = [], [], 0.0
+def flush_run():
+    global shift
+    if not run:
+        return
+    keep = run[::max(1, len(run) // 8)][:8]
+    start = run[0][0] - shift
+    for k, ev in enumerate(keep):
+        squeezed.append([start + k * 0.25, ev[1], ev[2]])
+    shift += (run[-1][0] - run[0][0]) - (len(keep) - 1) * 0.25
+    run.clear()
+for ev in events:
+    if ev[1] == 'o' and is_status(ev[2]):
+        run.append(ev)
+        continue
+    flush_run()
+    squeezed.append([ev[0] - shift, ev[1], ev[2]])
+flush_run()
+events = squeezed
 COLS, ROWS = header['width'], header['height']
 
 ascent, descent = REG.getmetrics()
@@ -158,7 +183,7 @@ index = 0
 poster_at = None
 def snapshot(duration):
     global index, poster_at
-    if poster_at is None and any('Verified' in line for line in screen.display):
+    if poster_at is None and any(('Verified' in line or '✓ Checked' in line) for line in screen.display):
         poster_at = index
     path = os.path.join(tmp, f'f{index:05d}.png')
     render(screen).save(path, optimize=False, compress_level=1)

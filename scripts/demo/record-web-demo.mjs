@@ -123,43 +123,43 @@ async function main() {
   const page = await context.newPage();
   const t0 = Date.now();
   // The one-click connect link the runtime prints (`oasis web`).
-  await page.goto('http://127.0.0.1:' + app.port + '/#token=' + token, { waitUntil: 'domcontentloaded' });
-  await page.waitForFunction(() => /connected/i.test(document.querySelector('#agentRuntimeState')?.textContent || '') && !/not connected|failed/i.test(document.querySelector('#agentRuntimeState')?.textContent || ''));
-  await page.locator('#topbarProjectName').waitFor({ state: 'visible' });
+  await page.goto('http://127.0.0.1:' + app.port + '/app/#token=' + token, { waitUntil: 'domcontentloaded' });
+  await page.locator('#input').waitFor({ state: 'visible' });
+  await page.waitForFunction(() => /demo-model/.test(document.querySelector('#modelChip')?.textContent || ''), null, { timeout: 30000 });
   const introMs = Date.now() - t0;
   await sleep(1500);
 
-  const promptBox = page.locator('#agentPrompt');
+  const promptBox = page.locator('#input');
   await promptBox.click();
   await promptBox.pressSequentially('Tasks due today show as overdue late in the evening. Fix it and add a regression test.', { delay: 32 });
   await sleep(500);
-  await page.locator('#agentSendBtn').click();
+  await page.locator('#sendButton').click();
 
-  // Steer while it works.
-  await page.waitForFunction(() => /grep|search|isOverdue/i.test(document.querySelector('#agentMessages')?.innerText || ''), null, { timeout: 30000 });
+  // Steer while it works: a note typed while busy reaches the next model request.
+  await page.waitForFunction(() => document.body.classList.contains('busy'), null, { timeout: 30000 });
+  await page.waitForFunction(() => /isOverdue/i.test(document.body.innerText), null, { timeout: 30000 });
   await sleep(900);
   await promptBox.click();
   await promptBox.pressSequentially('Keep the CLI output format unchanged.', { delay: 40 });
   await sleep(400);
   await promptBox.press('Enter');
-  await page.waitForFunction(() => document.querySelector('.agent-steer'), null, { timeout: 10000 });
+  await sleep(600);
   steerSent = true;
 
   // Approve whatever the permission mode asks for until the final answer lands.
-  const done = () => page.evaluate(() => /review it in/i.test(document.querySelector('#agentMessages')?.innerText || ''));
+  const done = () => page.evaluate(() => /review it in/i.test(document.body.innerText) && !document.body.classList.contains('busy'));
   const until = Date.now() + 120000;
   while (!(await done())) {
     if (Date.now() > until) { await page.screenshot({ path: '/tmp/web-demo-stuck.png' }); throw new Error('demo did not finish'); }
-    if (await page.locator('#agentApprovalCard').isVisible()) {
+    if (await page.locator('#approvalSheet').isVisible()) {
       await sleep(1500);
-      await page.locator('#agentApproveBtn').click();
+      await page.locator('#allowButton').click();
       await sleep(400);
     }
     await sleep(150);
   }
   await sleep(2600);
-  if (await page.locator('#topbarChangesBtn').isVisible()) await page.locator('#topbarChangesBtn').click();
-  else { await page.locator('#agentTerminalTab').click(); await sleep(500); await page.locator('#agentChangesUtilityTab').click(); }
+  await page.locator('[role="tab"][data-tab="changes"]').click();
   await sleep(4500);
   await page.screenshot({ path: path.join(dir, 'poster.png') });
   await context.close();
@@ -172,7 +172,7 @@ async function main() {
   const src = path.join(videoDir, webm);
   const start = Math.max(0, introMs / 1000 - 0.3).toFixed(2);
   const font = '/home/user/fonts/jb/fonts/ttf/JetBrainsMono-Regular.ttf';
-  const caption = "drawbox=x=0:y=ih-34:w=iw:h=34:color=0x0b0f0c@0.92:t=fill,drawtext=fontfile=" + font + ":text='Real OASIS web workspace and tools · scripted demo model · reproducible with scripts/demo/record-web-demo.mjs':fontcolor=0x9fb3a6:fontsize=15:x=(w-text_w)/2:y=h-24";
+  const caption = "pad=iw:ih+34:0:0:color=0x0b0f0c,drawtext=fontfile=" + font + ":text='Real OASIS web workspace and tools · scripted demo model · reproducible with scripts/demo/record-web-demo.mjs':fontcolor=0x9fb3a6:fontsize=15:x=(w-text_w)/2:y=h-24";
   const mp4 = path.join(OUT_DIR, 'oasis-web-demo.mp4');
   execFileSync('ffmpeg', ['-y', '-loglevel', 'error', '-ss', start, '-i', src, '-vf', caption + ',fps=30,format=yuv420p', '-c:v', 'libx264', '-crf', '24', '-preset', 'slow', '-movflags', '+faststart', mp4]);
   execFileSync('ffmpeg', ['-y', '-loglevel', 'error', '-i', mp4, '-vf', 'fps=10,scale=960:-1:flags=lanczos,split[a][b];[a]palettegen=max_colors=128:stats_mode=diff[p];[b][p]paletteuse=dither=bayer:bayer_scale=4:diff_mode=rectangle', path.join(OUT_DIR, 'oasis-web-demo.gif')]);
