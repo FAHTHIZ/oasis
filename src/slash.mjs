@@ -1279,7 +1279,7 @@ export async function runBuiltinCommand(name, argument, state) {
       }
       const { runAutoTest } = await import('./auto-test.mjs');
       if (typeof state.print === 'function') state.print('[test] Running ' + command + (source === 'argument' ? '' : ' (from ' + source + ')') + '…');
-      const result = await runAutoTest(root, command, { timeoutMs, env, signal: state.signal });
+      const result = await runAutoTest(root, command, { timeoutMs, env, signal: state.signal, sandbox: session && session.sandbox });
       const seconds = (result.durationMs / 1000).toFixed(1) + 's';
       if (result.passed) return { output: '[test] Passed: ' + command + ' (' + seconds + ').' };
       if (result.cancelled) return { output: '[test] Cancelled: ' + command + '.' };
