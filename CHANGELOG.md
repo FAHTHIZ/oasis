@@ -4,6 +4,12 @@ User-facing change history grouped by package version. A version heading does no
 
 ## Unreleased
 
+### Fixes from real-model testing
+
+- Targeted edits that pass a check no longer trigger an extra "review the diff" round trip and a duplicate summary. The verification gate meant to skip this only did so after a whole-file overwrite had happened earlier in the turn. Whole-file overwrites of existing files are still reviewed.
+- Answered approvals in the terminal collapse to one line (`⎿ Allowed once`, `⎿ Allowed for this session: …`, `⎿ Denied`) instead of leaving the full menu in the scrollback.
+- Keyless remote endpoints (for example `oasis connect https://text.pollinations.ai/openai`) are priced as free, so the footer shows `$0.00` instead of "cost unknown".
+
 ### Cursor Cloud Agents API on `oasis web`
 
 - `oasis web` answers Cursor's Cloud Agents REST API under `/v1` and the legacy `/v0`, so scripts and tools written for it drive OASIS agents on your own computer or server with any configured model. Agents are OASIS conversations in the served folder; runs are agent turns. Supported: creating agents, listing with cursor pagination, follow-ups (`409 agent_busy` while a run is active), steering, cancelling, a Server-Sent Events run stream with `Last-Event-ID` resume, per-run token usage, archive, unarchive and delete, plus models, `me` and repositories. v0 adds the conversation, follow-up, stop and HMAC-signed `statusChange` webhooks. See [Cursor Cloud Agents API](docs/INTERFACES.md#cursor-cloud-agents-api).
