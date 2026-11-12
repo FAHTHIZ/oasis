@@ -340,16 +340,23 @@ function placeDocked() {
   const el = $('approvalSheet');
   if (el.hidden || !el.classList.contains('docked')) return;
   const box = $('composer').getBoundingClientRect();
+  // Sit above everything stacked on the message box (the run clock, waiting
+  // notes, the task list), so the card never covers "Waiting for you · 12s".
+  let top = box.top;
+  for (const id of ['todos', 'runStatus', 'pendingInputs']) {
+    const part = $(id);
+    if (part && !part.hidden && part.getClientRects().length) top = Math.min(top, part.getBoundingClientRect().top);
+  }
   el.style.left = Math.round(box.left) + 'px';
   el.style.width = Math.round(box.width) + 'px';
-  el.style.bottom = Math.round(innerHeight - box.top + 10) + 'px';
+  el.style.bottom = Math.round(innerHeight - top + 8) + 'px';
   // Leave room so the last steps can scroll out from under the card.
   $('chat').style.paddingBottom = (el.offsetHeight + 16) + 'px';
   scrollDown();
 }
 addEventListener('resize', placeDocked);
 // Opening the files panel or the sidebar moves the message box too.
-if (typeof ResizeObserver === 'function') new ResizeObserver(() => placeDocked()).observe($('composer'));
+if (typeof ResizeObserver === 'function') { const dockWatch = new ResizeObserver(() => placeDocked()); dockWatch.observe($('composer')); dockWatch.observe(document.querySelector('.composer-wrap')); }
 function openSheet(id) {
   const el = $(id);
   el.hidden = false;

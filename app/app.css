@@ -810,7 +810,7 @@ html.lite .topbar{backdrop-filter:none;-webkit-backdrop-filter:none;background:v
 .run-text strong{font-size:13.5px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .run-meta{font-size:12px;color:var(--muted);font-variant-numeric:tabular-nums}
 .run-error{font-size:12px;color:var(--danger);overflow-wrap:anywhere}
-.approval-instead{width:100%;margin:10px 0 0;padding:8px 11px;border:1px solid var(--line);border-radius:var(--r-md);background:var(--sunken);color:var(--text);font:inherit;font-size:13.5px}
+.approval-instead{width:100%;margin:10px 0 12px;padding:8px 11px;border:1px solid var(--line);border-radius:var(--r-md);background:var(--sunken);color:var(--text);font:inherit;font-size:13.5px}
 .approval-instead:focus{outline:none;border-color:var(--accent-line)}
 .step-ask{display:flex;justify-content:flex-end;gap:6px;margin:0 8px 8px 41px}
 .step-ask .btn{min-height:28px;padding:3px 12px;font-size:12.5px}
