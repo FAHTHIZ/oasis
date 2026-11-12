@@ -43,6 +43,30 @@ export function renderMarkdown(source) {
   return marked.parse(String(source || '').replace(/\r\n/g, '\n'), { async: false });
 }
 
+/**
+ * Streaming support: split text into blocks that can no longer change
+ * (every block before the last one) and the open tail. A streaming reply
+ * renders each stable block once and re-renders only the tail, so earlier
+ * paragraphs, code blocks and selections stay put while text arrives.
+ * Splits fall on block boundaries, so rendering the parts one by one gives
+ * the same HTML as rendering the whole text. Text with reference-style link
+ * definitions (which reach across blocks) is never split.
+ */
+export function splitStableMarkdown(source) {
+  const text = String(source || '').replace(/\r\n/g, '\n');
+  let tokens;
+  try { tokens = marked.lexer(text); } catch { return { stable: '', rest: text }; }
+  if (tokens.links && Object.keys(tokens.links).length) return { stable: '', rest: text };
+  let last = tokens.length - 1;
+  while (last >= 0 && tokens[last].type === 'space') last--;
+  if (last <= 0) return { stable: '', rest: text };
+  const stable = tokens.slice(0, last).map((token) => token.raw).join('');
+  // The lexer's raw text always adds up to the source; anything else
+  // (a marked change) falls back to rendering the whole text.
+  if (!stable || !text.startsWith(stable)) return { stable: '', rest: text };
+  return { stable, rest: text.slice(stable.length) };
+}
+
 if (typeof document !== 'undefined') {
   document.addEventListener('click', (event) => {
     const button = event.target.closest && event.target.closest('pre .copy');
