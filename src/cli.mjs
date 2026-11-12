@@ -3464,7 +3464,7 @@ async function main() {
     const modeAt = rest.indexOf('--permission-mode');
     const permissionMode = (modeAt >= 0 ? rest[modeAt + 1] : null) || SESSION_OPTIONS.permissionMode || null;
     if (permissionMode && !['default', 'acceptEdits', 'plan', 'auto'].includes(permissionMode)) throw new Error('oasis app-server --permission-mode must be default, acceptEdits, plan or auto.');
-    const { parseListenUrl, loadWsAuth, startCodexAppServerWebSocket } = await import('./codex-app-server-ws.mjs');
+    const { parseListenUrl, loadWsAuth, startCodexAppServerWebSocket, appServerListenNotice } = await import('./codex-app-server-ws.mjs');
     const target = parseListenUrl(listen);
     const authFlags = { mode: flag('--ws-auth'), tokenFile: flag('--ws-token-file'), tokenSha256: flag('--ws-token-sha256'), sharedSecretFile: flag('--ws-shared-secret-file'), issuer: flag('--ws-issuer'), audience: flag('--ws-audience'), maxClockSkewSeconds: flag('--ws-max-clock-skew-seconds') };
     if (target.transport === 'stdio' || target.transport === 'unix') {
@@ -3476,7 +3476,7 @@ async function main() {
     }
     const verify = target.transport === 'unix' ? null : await loadWsAuth(authFlags);
     const listener = await startCodexAppServerWebSocket({ ...(target.transport === 'unix' ? { socketPath: target.socketPath } : { host: target.host, port: target.port }), verify, env: process.env, version: oasisVersion(), permissionMode });
-    process.stderr.write('[oasis app-server] listening on ' + listener.url + (target.transport === 'unix' ? ' (this user only)' : verify ? ' (bearer token required)' : ' (loopback only, no auth)') + '; health: /readyz, /healthz\n');
+    process.stderr.write(appServerListenNotice(listener.url, target.transport, Boolean(verify)));
     await new Promise((resolve) => { const stop = () => resolve(); process.once('SIGINT', stop); process.once('SIGTERM', stop); });
     await listener.close();
     return;

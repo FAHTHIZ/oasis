@@ -240,3 +240,14 @@ export async function startCodexAppServerWebSocket(options = {}) {
     }
   };
 }
+
+/**
+ * The startup line. A loopback ws:// listener without auth accepts any
+ * process on this machine, including other users' on a shared host, so the
+ * line says so and names the private alternatives.
+ */
+export function appServerListenNotice(url, transport, hasAuth) {
+  const access = transport === 'unix' ? ' (this user only)' : hasAuth ? ' (bearer token required)'
+    : ' (loopback only, no auth: any local user or process can connect; on a shared machine use --listen unix:// or --ws-auth capability-token)';
+  return '[oasis app-server] listening on ' + url + access + '; health: /readyz, /healthz\n';
+}
