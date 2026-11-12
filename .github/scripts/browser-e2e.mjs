@@ -169,7 +169,9 @@ try {
         await busyCard.getByRole('button', { name: 'Open the running task' }).click();
         await other.page.locator('#approvalSheet').waitFor({ state: 'visible', timeout: timeoutMs });
         console.log('[busy] a second task in the same folder was turned away with a way to open the running one');
-        assert.match(await other.page.locator('#transcript').innerText(), /add\(\) in math\.mjs is wrong/, 'the other browser shows the request');
+        await other.page.locator('#transcript .msg.user', { hasText: 'add() in math.mjs is wrong' }).first().waitFor({ timeout: timeoutMs });
+        const otherText = await other.page.locator('#transcript').innerText();
+        assert.equal((otherText.match(/Ran the explore agent/g) || []).length, 1, 'the other browser shows each step once');
         await other.page.locator('#allowButton').click();
         await page.locator('#approvalSheet').waitFor({ state: 'hidden', timeout: timeoutMs });
         await page.locator('.toast', { hasText: 'answered on another device' }).waitFor({ timeout: timeoutMs });
