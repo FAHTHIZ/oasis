@@ -82,7 +82,8 @@ test('a note typed while the runtime works goes to the running job', async () =>
   agent.busy = true; agent.jobId = '11111111-2222-3333-4444-555555555555';
   assert.equal(await agent.steer('  use tabs  '), true);
   assert.deepEqual(calls, [['/api/jobs/11111111-2222-3333-4444-555555555555/steer', { message: 'use tabs' }]]);
-  assert.deepEqual(events, [{ type: 'user', content: 'use tabs', steer: true }]);
+  // The app shows it as a waiting note until the job reports it was read.
+  assert.deepEqual(events, [{ type: 'steer', content: 'use tabs' }]);
   client.api = async () => { throw new Error('That task is no longer running.'); };
   assert.equal(await agent.steer('late'), false);
 });
