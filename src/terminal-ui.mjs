@@ -447,13 +447,24 @@ function lastLine(text) {
 // The line of a failed command's output that explains the failure. Runtimes
 // end crashes with noise ("Node.js v22.20.0", a stack frame, "^"), so prefer
 // the error line itself: "AssertionError [ERR_ASSERTION]: Expected ...".
-const NOISE_LINE = /^(?:Node\.js v\d|at\s|\^+$|[~^\s]+$|\}$|\{$|throw\b|npm (?:ERR!|error) (?:A complete log|code|path|errno|command failed|cwd)|Traceback \(most recent call last\)|File ")/;
-const ERROR_LINE = /\b(?:\w*Error|Exception|FAIL(?:ED)?|panic|fatal|error)\b[:\[ ]/;
+// Bare links and "see the docs" pointers (Jest ends a bad flag with its CLI
+// docs URL) are noise too: the line above them says what went wrong.
+const NOISE_LINE = /^(?:Node\.js v\d|at\s|\^+$|[~^\s]+$|\}$|\{$|throw\b|npm (?:ERR!|error) (?:A complete log|code|path|errno|command failed|cwd)|Traceback \(most recent call last\)|File "|https?:\/\/\S+$|[\w ]*Documentation:$|For more information|Run with --|Usage:)/i;
+const ERROR_LINE = /\b(?:\w*Error|Exception|FAIL(?:ED)?|panic|fatal|error)\b[:\[ ]|^(?:● )?(?:Unrecognized|Unknown|Invalid|Cannot find|Could not|Missing|No such|Unexpected)\b|\bcommand not found\b|\bnot recognized as\b/i;
 export function failureLine(text) {
   const lines = String(text || '').split('\n').map((l) => l.trim()).filter(Boolean);
   const errors = lines.filter((line) => ERROR_LINE.test(line) && !NOISE_LINE.test(line));
   // Python tracebacks end with the real exception; most tools lead with it.
-  if (errors.length) return /Traceback \(most recent call last\)/.test(text) ? errors[errors.length - 1] : errors[0];
+  if (errors.length) {
+    const picked = /Traceback \(most recent call last\)/.test(text) ? errors[errors.length - 1] : errors[0];
+    // A heading such as Jest's "● Unrecognized CLI Parameter:" says what kind
+    // of failure it is; the next line says which one.
+    if (/:$/.test(picked)) {
+      const next = lines.slice(lines.indexOf(picked) + 1).find((line) => !NOISE_LINE.test(line));
+      if (next) return picked.replace(/^● /, '') + ' ' + next;
+    }
+    return picked;
+  }
   const useful = lines.filter((line) => !NOISE_LINE.test(line));
   return useful.length ? useful[useful.length - 1] : lastLine(text);
 }
