@@ -13,7 +13,10 @@ const TASK_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-
 const TERMINAL = new Set(['completed', 'cancelled', 'error', 'interrupted']);
 const STATUSES = new Set(['running', 'waiting_approval', ...TERMINAL]);
 const DEFAULT_MAX_TASKS = 200;
-const DEFAULT_MAX_EVENTS = 120;
+// Enough for every step of a long task; live command output is not kept
+// (each step's result holds its output).
+const DEFAULT_MAX_EVENTS = 1500;
+const MAX_STORED_EVENTS = 4000;
 const MAX_RECORD_BYTES = 1_000_000;
 const SECRET_KEY = /(?:api[_-]?key|access[_-]?token|refresh[_-]?token|client[_-]?secret|password|authorization|credential|private[_-]?key)/i;
 
@@ -54,7 +57,7 @@ function makeSnapshot(job, maxEvents) {
     throw new Error('Task history needs a valid UUID.');
   }
   const now = new Date().toISOString();
-  const events = Array.isArray(job.events) ? job.events.slice(-maxEvents).map((event, index) => ({
+  const events = Array.isArray(job.events) ? job.events.filter((event) => !event || event.type !== 'tool_output').slice(-maxEvents).map((event, index) => ({
     id: Number.isSafeInteger(event && event.id) && event.id > 0 ? event.id : index + 1,
     type: scrubText(event && event.type || 'event', 100),
     at: scrubText(event && event.at || now, 40),
@@ -102,7 +105,7 @@ function validateStored(raw, id, maxEvents) {
 export function createTaskHistoryStore(root, options = {}) {
   const env = options.env || process.env;
   const maxTasks = Math.max(10, Math.min(1000, Number(options.maxTasks) || DEFAULT_MAX_TASKS));
-  const maxEvents = Math.max(20, Math.min(500, Number(options.maxEvents) || DEFAULT_MAX_EVENTS));
+  const maxEvents = Math.max(20, Math.min(MAX_STORED_EVENTS, Number(options.maxEvents) || DEFAULT_MAX_EVENTS));
   const workspaceHash = createHash('sha256').update(path.resolve(root)).digest('hex').slice(0, 24);
   const directory = path.join(getConfigDirectory(env), 'task-history', workspaceHash);
   const legacyDirectory = path.join(getConfigDirectory(env), 'cloud-tasks', workspaceHash);
@@ -122,6 +125,17 @@ export function createTaskHistoryStore(root, options = {}) {
   async function writeRecord(record) {
     let safe = clone(record);
     let body = JSON.stringify(safe, null, 2) + '\n';
+    // Too big: first shorten old step results (the steps themselves stay),
+    // then keep fewer events, and only as a last resort the newest 40.
+    if (Buffer.byteLength(body, 'utf8') > MAX_RECORD_BYTES) {
+      safe.events = safe.events.map((event, index) => index < safe.events.length - 40 && event.data && typeof event.data.result === 'string' && event.data.result.length > 600
+        ? { ...event, data: { ...event.data, result: event.data.result.slice(0, 600) + '… [shortened in saved history]' } } : event);
+      body = JSON.stringify(safe, null, 2) + '\n';
+    }
+    if (Buffer.byteLength(body, 'utf8') > MAX_RECORD_BYTES) {
+      safe.events = safe.events.filter((event) => event.type !== 'model_wait').slice(-600);
+      body = JSON.stringify(safe, null, 2) + '\n';
+    }
     if (Buffer.byteLength(body, 'utf8') > MAX_RECORD_BYTES) {
       safe.events = safe.events.slice(-40);
       safe.result = safe.result == null ? null : { note: 'Task result omitted from local history because it exceeded the persistence size limit.' };
