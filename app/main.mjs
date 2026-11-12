@@ -1764,7 +1764,8 @@ async function runtimeSessionState() {
     if (saved && saved.messages && typeof saved.messages.sessionId === 'string' && saved.messages.sessionId) { linked.add(saved.messages.sessionId); chatSessions.set(item.id, saved.messages.sessionId); }
   }
   const running = new Set(sessions.filter((item) => item && item.running).map((item) => item.id));
-  return { sessions, linked, running, chatSessions };
+  const waiting = new Set(sessions.filter((item) => item && item.running && item.waiting).map((item) => item.id));
+  return { sessions, linked, running, waiting, chatSessions };
 }
 async function unlinkedRuntimeSessions(limit = 12, state = null) {
   const known = state || await runtimeSessionState();
@@ -1956,14 +1957,33 @@ async function renderSideSessions(ticket) {
   const state = await runtimeSessionState();
   const items = state ? await unlinkedRuntimeSessions(8, state) : null;
   if (ticket !== sidebarRender) return;
-  // Chats left while their task kept running on the computer.
+  // Chats left while their task kept running on the computer: working,
+  // waiting for an answer, or finished and not looked at yet (like the
+  // unread markers in Codex's and Claude Code's task lists).
   if (state) {
+    const unread = unreadChats();
+    let changed = false;
     for (const button of $('sideTasks').querySelectorAll('.side-task[data-chat]')) {
       const id = button.dataset.chat;
-      if (id === chatId || !state.running.has(state.chatSessions.get(id))) continue;
-      button.classList.add('running');
-      button.querySelector('.side-when').textContent = 'Working';
+      if (id === chatId) { if (unread.delete(id)) changed = true; backgroundRunning.delete(id); continue; }
+      const session = state.chatSessions.get(id);
+      if (state.running.has(session)) {
+        backgroundRunning.add(id);
+        const waiting = state.waiting.has(session);
+        button.classList.add('running');
+        button.classList.toggle('waiting', waiting);
+        button.querySelector('.side-when').textContent = waiting ? 'Needs you' : 'Working';
+        button.title = (button.title || 'Task') + (waiting ? ' (waiting for your answer)' : ' (running now)');
+        continue;
+      }
+      if (backgroundRunning.delete(id)) { unread.add(id); changed = true; }
+      if (unread.has(id)) {
+        button.classList.add('unread');
+        button.querySelector('.side-when').textContent = 'Done';
+        button.title = (button.title || 'Task') + ' (finished, not opened yet)';
+      }
     }
+    if (changed) saveUnreadChats(unread);
   }
   const list = $('sideSessions');
   $('sideSessionsLabel').hidden = list.hidden = !(items && items.length);
@@ -1981,6 +2001,16 @@ async function renderSideSessions(ticket) {
     li.appendChild(open);
     list.appendChild(li);
   }
+}
+// Chats whose background task finished since they were last open.
+const backgroundRunning = new Set();
+const UNREAD_KEY = 'oasis.unreadChats';
+function unreadChats() {
+  try { const list = JSON.parse(localStorage.getItem(UNREAD_KEY) || '[]'); return new Set(Array.isArray(list) ? list.filter((id) => typeof id === 'string').slice(0, 100) : []); }
+  catch { return new Set(); }
+}
+function saveUnreadChats(set) {
+  try { localStorage.setItem(UNREAD_KEY, JSON.stringify([...set].slice(0, 100))); } catch { /* storage blocked */ }
 }
 // A task left running in another chat finishes on its own; refresh its dot.
 setInterval(() => {
