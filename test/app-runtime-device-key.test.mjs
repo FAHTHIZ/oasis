@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { runtimeToken, saveRuntimeToken, forgetRuntimeToken, deviceRemembered, detectRuntime } from '../app/core/runtime.mjs';
+import { runtimeToken, saveRuntimeToken, forgetRuntimeToken, deviceRemembered, detectRuntime, RuntimeClient } from '../app/core/runtime.mjs';
 
 function storage() {
   const map = new Map();
@@ -45,4 +45,16 @@ test('a stored key the server rejects is forgotten and reported as stale', async
   assert.equal(found.staleToken, true);
   assert.equal(deviceRemembered(w), false);
   assert.equal(runtimeToken(w), '');
+});
+
+test('a key that stops working mid-session tells the app once per request, then fails the request', async () => {
+  let calls = 0;
+  const client = new RuntimeClient({ token: KEY, fetchImpl: async () => ({ ok: false, status: 401, json: async () => ({ error: 'This OASIS key is out of date.' }) }) });
+  client.onUnauthorized = () => { calls += 1; };
+  await assert.rejects(client.api('/api/status'), (error) => error.status === 401 && /out of date/.test(error.message));
+  assert.equal(calls, 1);
+  const ok = new RuntimeClient({ token: KEY, fetchImpl: async () => ({ ok: true, status: 200, json: async () => ({ fine: true }) }) });
+  ok.onUnauthorized = () => { calls += 1; };
+  assert.deepEqual(await ok.api('/api/status'), { fine: true });
+  assert.equal(calls, 1);
 });

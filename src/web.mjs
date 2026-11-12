@@ -1632,7 +1632,7 @@ export function createOasisWebServer(options = {}) {
     }
     if (!hasValidToken(req, token)) {
       if (req.headers.authorization) authLimiter.fail(caller);
-      json(res, 401, { error: 'A valid Oasis connection token is required.' });
+      json(res, 401, { error: req.headers.authorization ? 'This OASIS key is out of date: the server restarted or the key changed. Open the link OASIS printed in the terminal again.' : 'Sign in with the link OASIS printed in the terminal (it ends in #token=…).' });
       return;
     }
     authLimiter.succeed(caller);

@@ -3732,6 +3732,15 @@ async function startRuntime(found) {
     renderSidebar();
     return;
   }
+  // The key stopped working mid-session (the server restarted with a new one): go back to
+  // the sign-in screen instead of failing every request with the same error.
+  RT.client.onUnauthorized = () => {
+    if (RT.signedOut) return;
+    RT.signedOut = true;
+    forgetRuntimeToken();
+    toast('This OASIS link is out of date. Open the new link from the terminal.');
+    setTimeout(() => location.reload(), 1500);
+  };
   RT.rootPath = RT.status.workspacePath;
   // On a computer, file edits are checkpointed and undoable; approvals are
   // about commands and other actions with effects outside the files.
@@ -3907,6 +3916,13 @@ function setupDictation() {
     setTimeout(() => { if (recorder) dictation.stop(); }, 300000);
   });
 }
+
+// Opening a fresh OASIS link in a tab that is already open only changes the hash, so the
+// page would keep using the old key (after a server restart every request then fails).
+// Reload so the new key from the link is used.
+window.addEventListener('hashchange', () => {
+  if (/(?:^#|[#&?])token=[A-Za-z0-9_-]{16,200}/.test(location.hash)) location.reload();
+});
 
 async function boot() {
   applyTheme();

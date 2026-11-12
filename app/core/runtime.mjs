@@ -78,6 +78,7 @@ export class RuntimeClient {
     });
     let data = {};
     try { data = await response.json(); } catch { /* empty body */ }
+    if (response.status === 401 && typeof this.onUnauthorized === 'function') { try { this.onUnauthorized(); } catch { /* sign-in screen is best effort */ } }
     if (!response.ok) throw Object.assign(new Error(data.error || 'OASIS runtime error ' + response.status), { status: response.status, data });
     return data;
   }

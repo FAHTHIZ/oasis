@@ -241,7 +241,7 @@ test('browser runtime serves the app but requires a bearer token for every agent
 
   const anonymous = await fetch(base + '/api/status');
   assert.equal(anonymous.status, 401);
-  assert.match((await anonymous.json()).error, /connection token/i);
+  assert.match((await anonymous.json()).error, /Sign in with the link OASIS printed/);
 
   const auth = { authorization: 'Bearer ' + app.token };
   const status = await fetch(base + '/api/status', { headers: auth });
