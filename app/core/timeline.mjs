@@ -16,8 +16,6 @@ const GIT = new Set(['git_diff', 'git_status', 'git_log', 'git_branch', 'git_com
 const AGENT = new Set(['task', 'agent_status', 'send_message', 'agent_stop', 'advisor', 'run_specialist_review']);
 const PLAN = new Set(['todo_write', 'exit_plan_mode', 'ask_user_question', 'connect_service', 'load_skill', 'read_skill_resource', 'list_skills']);
 
-export const STEP_KINDS = ['shell', 'read', 'edit', 'search', 'web', 'git', 'agent', 'plan', 'tool'];
-
 // One word for the kind of work a tool does; drives the step icon.
 export function toolKind(name) {
   const n = String(name || '').toLowerCase();

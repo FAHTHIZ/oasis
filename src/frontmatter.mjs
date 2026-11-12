@@ -75,6 +75,3 @@ export function parseFrontMatter(text) {
   }
   return { data: out, body, hasFrontMatter };
 }
-
-/** Serialises a mapping as a front-matter block (`---\n...\n---\n`). */
-export { stringify as stringifyYaml } from 'yaml';
