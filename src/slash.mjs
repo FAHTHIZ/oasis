@@ -77,7 +77,7 @@ export const BUILTIN_COMMANDS = {
   followups: 'List or resolve loose ends captured from earlier turns: /followups [all|done ID|drop ID|clear]',
   memory: 'Show instruction files and auto memory (/memory search|show|forget|add|path)',
   undo: 'Undo the last turn: restore files and conversation (/undo [N])',
-  rewind: 'Undo recent turns: restore files and/or conversation (/rewind [N] [code|chat])',
+  rewind: 'Undo recent turns: restore files and/or conversation, or fork from an earlier turn (/rewind [N] [code|chat|fork])',
   review: 'Review changes for correctness bugs (/review [low|medium|high|xhigh|max|ultra] [--fix] [--comment] [--max-findings N|all] [PR#|branch|path])',
   audit: 'Run isolated security, performance, test-coverage, and dependency reviewers, then merge and verify findings (/audit [path-or-scope])',
   tasks: 'List background agents and processes (/tasks, /tasks ID, /tasks send ID MESSAGE, /tasks stop ID)',
@@ -2014,13 +2014,32 @@ export async function runBuiltinCommand(name, argument, state) {
       if (!argument) {
         const lines = ['Recent turns (1 = most recent):'];
         for (const turn of turns.slice(0, 15)) lines.push('  ' + turn.number + '. ' + JSON.stringify(turn.prompt) + (turn.files.length ? '  files: ' + turn.files.slice(0, 6).join(', ') + (turn.files.length > 6 ? ', ...' : '') : '  (no file changes)'));
-        lines.push('Use /rewind N to undo the last N turns (files and conversation), /rewind N code for files only, or /rewind N chat for the conversation only.');
+        lines.push('Use /rewind N to undo the last N turns (files and conversation), /rewind N code for files only, /rewind N chat for the conversation only, or /rewind N fork to keep this conversation saved and continue from N turns back in a copy.');
         lines.push('Changes made by shell commands are not tracked.');
         return { output: lines.join('\n') };
       }
-      const [countText, modeText = ''] = argument.split(/\s+/);
+      let [countText, modeText = ''] = argument.split(/\s+/);
+      // `/rewind fork N` and `/rewind N fork`: keep the whole conversation saved
+      // and continue from N turns back in a copy. Files are left as they are.
+      if (/^fork$/i.test(countText)) [countText, modeText] = [modeText, 'fork'];
       const count = Number.parseInt(countText, 10);
-      if (!Number.isInteger(count) || count < 1) return { output: 'Usage: /rewind N [code|chat]' };
+      if (!Number.isInteger(count) || count < 1) return { output: 'Usage: /rewind N [code|chat|fork]' };
+      if (/^fork$/i.test(modeText)) {
+        const { saveSession } = await import('./sessions.mjs');
+        const { randomUUID } = await import('node:crypto');
+        const original = await saveSession(session, { env });
+        session.sessionId = randomUUID();
+        const result = await rewind(session, count, 'conversation');
+        const copy = await saveSession(session, { env });
+        return {
+          output: [
+            'Forked from ' + result.turns + ' turn' + (result.turns === 1 ? '' : 's') + ' back. The full conversation is saved as ' + original.id + ' (/resume ' + original.id + ' to go back); you are now in ' + copy.id + '.',
+            result.conversationUnavailable ? '  The conversation was compacted, so the copy starts from the current point.' : '  Removed ' + result.messagesRemoved + ' messages from the copy.',
+            '  Files were not changed. Use /rewind N code to restore them too.'
+          ].join('\n'),
+          forked: { from: original.id, to: copy.id }
+        };
+      }
       const mode = /^code$/i.test(modeText) ? 'code' : /^(chat|conversation)$/i.test(modeText) ? 'conversation' : 'both';
       const result = await rewind(session, count, mode);
       const lines = ['Rewound ' + result.turns + ' turn' + (result.turns === 1 ? '' : 's') + '.'];
