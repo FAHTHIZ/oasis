@@ -64,6 +64,8 @@ oasis
 
 In scripts and CI use `oasis -p --permission-mode auto --goal "npm test passes"` (add `--goal-turns N`, default 10). A goal that is never met ends with exit code 1 and `subtype: "error_goal_not_met"` in JSON output, and `--output-format stream-json` emits a `goal_check` event after each turn.
 
+By default a `-p` run whose changes OASIS could not verify still exits 0 and ends its reply with a "Not verified" note. Add `--require-verified` (or set `OASIS_REQUIRE_VERIFIED=1`) to make that exit 1 with `subtype: "error_not_verified"`, so a pipeline does not treat an unchecked change as a pass.
+
 Subagents you or OASIS start show up in `/tasks`: running ones first, finished ones under **Earlier in this session**, even after a restart. `/tasks ID` shows a report, `/tasks send ID MESSAGE` steers or resumes one, and `/tasks stop ID` stops it.
 
 ### Routines that run on a schedule

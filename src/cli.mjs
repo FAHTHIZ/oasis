@@ -242,6 +242,7 @@ function helpText() {
     '  --max-turns N                 Limit model steps for one task (1-400)',
     '  --goal "condition"            With -p: keep working until a strict check says the condition is met',
     '  --goal-turns N                With --goal: most turns to try (default 10, max 100)',
+    '  --require-verified            With -p: exit 1 (error_not_verified) when OASIS could not verify the changes',
     '  --allowedTools RULES          Extra allow rules, e.g. "run_command(npm test:*),Edit(src/**)"',
     '  --disallowedTools RULES       Extra deny rules for this run',
     '  --append-system-prompt TEXT   Add instructions to the system prompt',
@@ -1763,7 +1764,8 @@ async function printModeRun(root, headless, args, autoApprove, persistence, stat
     permissionPrompts: headless.permissionPrompts || null,
     includeHookEvents: Boolean(headless.includeHookEvents),
     forwardSubagentText: Boolean(headless.forwardSubagentText),
-    promptSuggestions: Boolean(headless.promptSuggestions)
+    promptSuggestions: Boolean(headless.promptSuggestions),
+    requireVerified: Boolean(headless.requireVerified)
   }));
   // Codex's -o/--output-last-message: also write the final reply to a file.
   if (headless.outputLastMessage && summary) {
@@ -2866,6 +2868,7 @@ async function main() {
       headless.enabled = true;
       continue;
     }
+    if (arg === '--require-verified') { headless.requireVerified = true; continue; }
     if (arg === '--goal-turns') {
       const value = Number.parseInt(rawArgs[++i], 10);
       if (!Number.isInteger(value) || value < 1 || value > 100) throw new Error('--goal-turns must be a whole number from 1 to 100.');
