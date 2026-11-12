@@ -2,7 +2,7 @@
 
 OASIS is an open-source coding agent you run on a computer or server you control and use from any modern browser. The runtime owns the project, the shell and your model keys; the browser is only the screen. This guide walks through installing it, signing in, connecting a model, running a task and reviewing the result.
 
-<p align="center"><img src="../assets/screenshots/web-task-dark.png" alt="OASIS web app after a finished task: the user's request, short progress updates, folded execution groups with a subagent, and the Files panel" width="860"></p>
+<p align="center"><img src="../assets/screenshots/web-task-dark.png" alt="OASIS web app after a finished task: the request, a steering note sent while it worked, folded steps for the edit and the test run, a summary table, and the Changes panel with the two changed files" width="860"></p>
 
 ## 1. Choose an interface
 
