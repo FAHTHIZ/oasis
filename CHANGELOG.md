@@ -4,6 +4,10 @@ User-facing change history grouped by package version. A version heading does no
 
 ## Unreleased
 
+### `/rewind N fork`
+
+- `/rewind N fork` (or `/rewind fork N`) saves the whole conversation, then continues in a copy from N turns back, like Hermes's `/rewind fork`. The original stays available with `/resume ID`. Files are left as they are; `/rewind N code` restores them as well.
+
 ### `/model NAME EFFORT`
 
 - `/model gpt-5-mini high` switches the model and sets reasoning effort in one command, like Codex's inline `/model` argument. The effort word is one of `low`, `medium`, `high`, `max` or `auto`; anything else stays part of the model name.

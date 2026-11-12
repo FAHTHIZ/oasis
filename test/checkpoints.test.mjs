@@ -100,3 +100,29 @@ test('parallel agents capturing the same file keep the first snapshot and count 
   assert.equal(session.checkpoints.bytes, 'original\n'.length);
   assert.equal(String(session.checkpoints.turns.at(-1).files.get('f.txt').content), 'original\n');
 });
+
+test('/rewind N fork keeps the full conversation saved and continues from an earlier turn', async (t) => {
+  const { root, session } = await setup(t, [(payload) => {
+    const last = payload.messages.at(-1);
+    if (last.role === 'user') return toolCall('c' + payload.messages.length, 'write_file', { path: 'app.js', content: 'v' + payload.messages.length + '\n' });
+    return { content: 'ok' };
+  }]);
+  const env = { ...process.env, HOME: root, OASIS_CONFIG_DIR: path.join(root, '.config') };
+  await runAgentTurn(session, 'first change', { autoApprove: true, approval: async () => true });
+  const afterFirst = session.messages.length;
+  await runAgentTurn(session, 'second change', { autoApprove: true, approval: async () => true });
+  const fullLength = session.messages.length;
+  const fileBefore = await readFile(path.join(root, 'app.js'), 'utf8');
+  const result = await runBuiltinCommand('rewind', 'fork 1', { root, session, env });
+  assert.match(result.output, /Forked from 1 turn back/);
+  assert.match(result.output, /Files were not changed/);
+  assert.ok(result.forked && result.forked.from !== result.forked.to);
+  assert.equal(session.sessionId, result.forked.to);
+  assert.equal(session.messages.length, afterFirst);
+  assert.equal(await readFile(path.join(root, 'app.js'), 'utf8'), fileBefore);
+  const { loadSession } = await import('../src/sessions.mjs');
+  const original = await loadSession(root, result.forked.from, { env });
+  assert.equal(original.messages.length, fullLength);
+  const alt = await runBuiltinCommand('rewind', '1 fork', { root, session, env });
+  assert.match(alt.output, /Forked from 1 turn back/);
+});
