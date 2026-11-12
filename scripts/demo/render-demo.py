@@ -36,6 +36,9 @@ def has_glyph(font, ch):
     if path not in _cmaps:
         _cmaps[path] = TTFont(path).getBestCmap()
     return ord(ch) in _cmaps[path]
+# Colour emoji have no monochrome glyph in the bundled fonts; draw the closest
+# text symbol instead of an empty box. The recording itself is unchanged.
+EMOJI_TEXT = {'\u2705': '\u2714', '\u274c': '\u2718', '\u26a0': '!', '\U0001f680': '>', '\U0001f389': '*', '\U0001f4a1': '*', '\U0001f50d': '?'}
 def font_for(ch, bold):
     primary = BOLD if bold else REG
     if has_glyph(primary, ch):
@@ -127,10 +130,10 @@ def backdrop():
     for i, c in enumerate([(255, 95, 86), (255, 189, 46), (39, 201, 63)]):
         cx, cy = MARGIN + 22 * SCALE + i * 20 * SCALE, MARGIN + BAR // 2
         d.ellipse([cx - 6 * SCALE, cy - 6 * SCALE, cx + 6 * SCALE, cy + 6 * SCALE], fill=c)
-    title = os.environ.get('OASIS_DEMO_TITLE', 'oasis  —  ~/taskflow')
+    title = os.environ.get('OASIS_DEMO_TITLE', 'oasis')
     tf = ImageFont.truetype(REG.path, 13 * SCALE)
     d.text((MARGIN + TERM_W / 2 - tf.getlength(title) / 2, MARGIN + BAR / 2 - 8 * SCALE), title, font=tf, fill=(139, 148, 158))
-    caption = os.environ.get('OASIS_DEMO_CAPTION', 'Real OASIS runtime, tools and safety policy  ·  model replies scripted for reproducibility  ·  scripts/demo/')
+    caption = os.environ.get('OASIS_DEMO_CAPTION', 'Real OASIS runtime and tools  ·  scripts/demo/')
     cf = ImageFont.truetype(REG.path, 12 * SCALE)
     d.text((W / 2 - cf.getlength(caption) / 2, MARGIN + TERM_H + 16 * SCALE), caption, font=cf, fill=(160, 174, 168))
     return img
@@ -163,7 +166,9 @@ def render(screen):
                 if ch.data == '█':
                     d.rectangle([px, py, px + CELL_W, py + CELL_H], fill=fg)
                     continue
-                d.text((px, py + (CELL_H - (ascent + descent)) // 2), ch.data, font=f, fill=fg)
+                glyph = EMOJI_TEXT.get(ch.data, ch.data)
+                if glyph != ch.data: f = font_for(glyph, ch.bold)
+                d.text((px, py + (CELL_H - (ascent + descent)) // 2), glyph, font=f, fill=fg)
             if ch.underscore:
                 d.line([px, py + CELL_H - 2 * SCALE, px + CELL_W, py + CELL_H - 2 * SCALE], fill=fg, width=SCALE)
     if not screen.cursor.hidden:
