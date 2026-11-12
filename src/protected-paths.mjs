@@ -21,6 +21,12 @@ const PROTECTED = [
   // Hook scripts and plugin bundles that load automatically.
   /^\.(?:oasis|claude)\/hooks\//,
   /^\.(?:oasis|claude)\/plugins\//,
+  // Project commands run their inline shell and grant allowed-tools in
+  // trusted workspaces when the user types /name (Gemini and OpenCode too).
+  /^\.(?:oasis|claude)\/commands\//,
+  /^\.gemini\/commands\//,
+  /^\.opencode\/commands?\//,
+  /^opencode\.jsonc?$/,
   // MCP servers start processes on the next run.
   /^\.mcp\.json$/,
   /^\.(?:oasis|claude)\/mcp\.json$/,
@@ -54,6 +60,7 @@ const PROTECTED = [
 ];
 
 const REASONS = [
+  [/commands?\/|opencode\.jsonc?$/, 'custom commands in a trusted project run their inline shell and grant their allowed-tools when you type the command'],
   [/^\.(?:cursor|gemini|codex|continue)\/|^\.aider\.conf/, 'another coding agent loads this configuration (MCP servers, hooks, rules) automatically'],
   [/^\.vscode\/|\.code-workspace$/, 'the editor can run tasks on folder open and use settings that name executables or auto-approve agent tools'],
   [/^\.devcontainer/, 'dev containers run lifecycle commands (postCreateCommand) automatically'],

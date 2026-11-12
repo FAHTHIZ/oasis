@@ -16,7 +16,7 @@ test('settings, hooks, MCP and git paths are protected; ordinary files are not',
     '.OASIS/Settings.JSON', path.join(root, '.git', 'config')]) {
     assert.ok(protectedConfigPath(root, file), file);
   }
-  for (const file of ['src/index.js', 'README.md', '.oasis/skills/x/SKILL.md', '.claude/commands/fix.md', '.github/workflows/ci.yml', 'docs/.git-notes.md', 'settings.json', '../outside/.mcp.json', '']) {
+  for (const file of ['src/index.js', 'README.md', '.oasis/skills/x/SKILL.md', '.github/workflows/ci.yml', 'docs/.git-notes.md', 'settings.json', '../outside/.mcp.json', '']) {
     assert.equal(protectedConfigPath(root, file), null, file);
   }
   assert.match(protectedConfigPath(root, '.git/hooks/pre-commit').reason, /git runs these hooks/);
@@ -192,4 +192,13 @@ test('shell writes to protected files are recognized without spaces, after cd, t
     assert.ok(protectedShellWrite(command), command);
   for (const command of ['echo .git >> .gitignore', 'echo ".oasis" >> .gitignore', 'cat .git/config', 'ls .git/hooks', 'cd src && echo x > a.txt', 'git log > out.txt', 'cp .env.example .env'])
     assert.equal(protectedShellWrite(command), null, command);
+});
+
+test('project command files that can run inline shell are protected with a reason', () => {
+  for (const file of ['.claude/commands/fix.md', '.oasis/commands/x.md', '.gemini/commands/a/b.toml', '.opencode/commands/x.md', '.opencode/command/x.md', 'opencode.json']) {
+    const hit = protectedConfigPath('/work/repo', file);
+    assert.ok(hit, file);
+    assert.match(hit.reason, /inline shell/, file);
+  }
+  assert.equal(protectedConfigPath('/work/repo', 'docs/commands/x.md'), null);
 });
