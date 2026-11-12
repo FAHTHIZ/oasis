@@ -78,7 +78,11 @@ test('floating DTSTART uses the routine time zone; a missing DTSTART starts now'
 test('unsupported or malformed rules are refused with a reason', () => {
   for (const [rule, reason] of [
     ['RRULE:FREQ=HOURLY', /not supported.*every 2h/],
-    ['RRULE:FREQ=MONTHLY;BYSETPOS=-1;BYDAY=MO', /BYSETPOS is not supported/],
+    ['RRULE:FREQ=DAILY;BYSECOND=30', /BYSECOND is not supported.*one-minute floor/],
+    ['RRULE:FREQ=MONTHLY;BYSETPOS=-1', /BYSETPOS needs another BY\* part/],
+    ['RRULE:FREQ=MONTHLY;BYWEEKNO=20', /BYWEEKNO only works with FREQ=YEARLY/],
+    ['RRULE:FREQ=MONTHLY;BYYEARDAY=100', /BYYEARDAY only works with FREQ=YEARLY/],
+    ['RRULE:FREQ=YEARLY;BYSETPOS=0;BYDAY=MO', /BYSETPOS value 0 is out of range/],
     ['RRULE:FREQ=WEEKLY;BYDAY=1MO', /ordinals.*MONTHLY or FREQ=YEARLY/],
     ['RRULE:FREQ=DAILY;COUNT=2;UNTIL=20270101', /COUNT or UNTIL, not both/],
     ['DTSTART;TZID=Mars/Olympus:20261101T090000\nRRULE:FREQ=DAILY', /unknown time zone/],
@@ -87,4 +91,29 @@ test('unsupported or malformed rules are refused with a reason', () => {
     ['RRULE:BYDAY=MO', /FREQ is required/],
     ['RRULE:FREQ=WEEKLY;BYMONTHDAY=1', /cannot be used with FREQ=WEEKLY/]
   ]) assert.throws(() => parseRRule(rule, { timezone: 'UTC' }), reason, rule);
+});
+
+test('BYSETPOS, BYWEEKNO and BYYEARDAY (expanded by rrule-temporal)', () => {
+  const lastWeekday = parseRRule('DTSTART:20261101T090000Z\nRRULE:FREQ=MONTHLY;BYDAY=MO,TU,WE,TH,FR;BYSETPOS=-1');
+  assert.equal(lastWeekday.text, 'DTSTART:20261101T090000Z\nRRULE:FREQ=MONTHLY;BYDAY=MO,TU,WE,TH,FR;BYSETPOS=-1');
+  assert.deepEqual(iso(rruleOccurrences(lastWeekday, new Date('2026-11-01T00:00:00Z'), { limit: 3 })), ['2026-11-30T09:00:00.000Z', '2026-12-31T09:00:00.000Z', '2027-01-29T09:00:00.000Z']);
+  const week20 = parseRRule('DTSTART:20260101T080000Z\nRRULE:FREQ=YEARLY;BYWEEKNO=20;BYDAY=MO');
+  assert.equal(rruleNext(week20, new Date('2026-11-12T00:00:00Z')).toISOString(), '2027-05-17T08:00:00.000Z');
+  const day100 = parseRRule('DTSTART:20260101T080000Z\nRRULE:FREQ=YEARLY;BYYEARDAY=100');
+  assert.equal(rruleNext(day100, new Date('2026-11-12T00:00:00Z')).toISOString(), '2027-04-10T08:00:00.000Z');
+});
+
+test('occurrences across daylight saving keep the wall clock; a skipped time moves forward', () => {
+  const gap = parseRRule('DTSTART;TZID=America/New_York:20270312T023000\nRRULE:FREQ=DAILY');
+  // 02:30 does not exist on 2027-03-14: that run is at 03:30 EDT, not dropped.
+  assert.deepEqual(iso(rruleOccurrences(gap, new Date('2027-03-13T00:00:00Z'), { limit: 3 })), ['2027-03-13T07:30:00.000Z', '2027-03-14T07:30:00.000Z', '2027-03-15T06:30:00.000Z']);
+  const repeat = parseRRule('DTSTART;TZID=America/New_York:20271106T013000\nRRULE:FREQ=DAILY');
+  // 01:30 happens twice on 2027-11-07; it runs once, at the first (EDT).
+  assert.deepEqual(iso(rruleOccurrences(repeat, new Date('2027-11-06T00:00:00Z'), { limit: 3 })), ['2027-11-06T05:30:00.000Z', '2027-11-07T05:30:00.000Z', '2027-11-08T06:30:00.000Z']);
+});
+
+test('a rule that can never match ends quietly instead of looping', () => {
+  const started = Date.now();
+  assert.equal(rruleNext('DTSTART:20260101T090000Z\nRRULE:FREQ=YEARLY;BYMONTH=2;BYMONTHDAY=30', new Date('2026-11-12T00:00:00Z')), null);
+  assert.ok(Date.now() - started < 5000);
 });
