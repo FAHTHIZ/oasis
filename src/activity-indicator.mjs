@@ -117,6 +117,7 @@ export function describeWait(info = {}, elapsedMs = 0) {
   if (!info.label && Number(info.rateLimitMs) > elapsedMs) return 'Rate limited… · retrying in ' + formatElapsed(Number(info.rateLimitMs) - elapsedMs + 999) + ' · esc to stop';
   const parts = [waitLabel(info, elapsedMs) + '…', formatElapsed(elapsedMs)];
   const reading = promptProgressText(info.promptProgress, Number(info.promptProgressAgeMs) || 0);
+  if (info.detail) parts.push(String(info.detail));
   if (reading) parts.push(reading);
   else if (Number(info.inputTokens) > 0) parts.push(formatTokens(info.inputTokens) + ' tokens sent');
   if (info.step && Number(info.step) > 1) parts.push('step ' + info.step);
