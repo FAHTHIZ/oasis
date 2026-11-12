@@ -2478,7 +2478,7 @@ async function interactive(root, autoApprove, persistence = {}) {
             if (config.configured) session = await createSession({ root, config, ...sessionCreateOptions(), watchFiles: true });
           } catch { /* fall back to the plain message */ }
         }
-        const handled = await runBuiltinCommand(slash[1].toLowerCase(), String(slash[2] || '').trim(), { root, session, env: process.env, usage: USAGE, sessionOptions: SESSION_OPTIONS, autoApprove, print: (line) => stdout.write(line + '\n'), color: Boolean(stdout.isTTY && colorEnabled(stdout)), width: stdout.columns || 100, confirm: (question) => askApproval(question, true, {}) });
+        const handled = await runBuiltinCommand(slash[1].toLowerCase(), String(slash[2] || '').trim(), { root, session, env: process.env, usage: USAGE, sessionOptions: SESSION_OPTIONS, autoApprove, print: (line) => stdout.write(line + '\n'), color: Boolean(stdout.isTTY && colorEnabled(stdout)), width: stdout.columns || 100, confirm: (question) => askApproval(question, true, {}), ...(stdin.isTTY && stdout.isTTY ? { askUser: (question) => askQuestionInTerminal(question) } : {}) });
         if (handled) {
           if (handled.output) stdout.write(handled.output + '\n');
           if (handled.reload && session) {
