@@ -96,7 +96,9 @@ test('desktop automation, container teardown and cluster changes are high risk',
 test('strict Bash allow rules use the typed AST command representation', () => {
   const policy = policyWithAllow('Bash(npm test:*)');
   assert.equal(policy.evaluate('run_shell', { command: 'npm test' }).decision, 'allow');
-  assert.equal(policy.evaluate('run_shell', { command: 'FOO=bar npm test' }).decision, 'allow');
+  assert.equal(policy.evaluate('run_shell', { command: 'NODE_ENV=test npm test' }).decision, 'allow');
+  // Only well-known harmless variables are looked past; others can pick the program npm runs.
+  assert.notEqual(policy.evaluate('run_shell', { command: 'npm_config_script_shell=./evil npm test' }).decision, 'allow');
   assert.equal(policy.evaluate('run_shell', { command: 'npm test "a && b"' }).decision, 'allow');
   assert.notEqual(policy.evaluate('run_shell', { command: 'npm test && echo hi' }).decision, 'allow');
 });
