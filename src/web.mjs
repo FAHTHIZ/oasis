@@ -2507,7 +2507,30 @@ export function createOasisWebServer(options = {}) {
     if (req.method === 'GET' && pathname === '/api/voice') {
       const voice = await import('./voice.mjs');
       const settings = await loadSettings(root, { env }).catch(() => ({}));
-      json(res, 200, { transcription: !(settings && settings.voiceDisabledByPolicy) && voice.transcriptionReady(settings, env), disabledByPolicy: Boolean(settings && settings.voiceDisabledByPolicy) });
+      const { textToSpeechConfig } = await import('./tts.mjs');
+      const blocked = Boolean(settings && settings.voiceDisabledByPolicy);
+      json(res, 200, { transcription: !blocked && voice.transcriptionReady(settings, env), speech: !blocked && Boolean(textToSpeechConfig(env, settings)), disabledByPolicy: blocked });
+      return;
+    }
+
+    // Talk mode reads replies aloud with the configured speech model when there is one
+    // (the page falls back to the browser's own voice otherwise).
+    if (req.method === 'POST' && pathname === '/api/speak') {
+      const settings = await loadSettings(root, { env }).catch(() => ({}));
+      if (settings && settings.voiceDisabledByPolicy) { json(res, 403, { error: 'Voice is turned off by managed settings.' }); return; }
+      const { textToSpeechConfig, synthesizeSpeech, speakableText } = await import('./tts.mjs');
+      const config = textToSpeechConfig(env, settings);
+      if (!config) { json(res, 409, { error: 'No speech model is configured (set OPENAI_API_KEY or OASIS_TTS_BASE_URL).' }); return; }
+      const body = await readJsonBody(req, 64 * 1024);
+      const text = speakableText(String(body && body.text || ''), 1500);
+      if (!text) { json(res, 400, { error: 'Nothing to say.' }); return; }
+      try {
+        const audio = await synthesizeSpeech(config, { text, format: 'mp3' });
+        res.writeHead(200, { 'content-type': 'audio/mpeg', 'content-length': audio.length, 'cache-control': 'no-store' });
+        res.end(audio);
+      } catch (error) {
+        json(res, 502, { error: String(error && error.message || error).slice(0, 300) });
+      }
       return;
     }
 
