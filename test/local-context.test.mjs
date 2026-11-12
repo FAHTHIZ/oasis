@@ -188,3 +188,34 @@ test('small context windows get a compact system prompt; normal windows keep the
   assert.match(largePrompt, /How to work:[\s\S]*Delegate broad exploration/);
   assert.ok(smallPrompt.length < largePrompt.length * 0.75, smallPrompt.length + ' vs ' + largePrompt.length);
 });
+
+test('connect gives an Ollama model with a small default window a wide variant that shares its weights', async () => {
+  const { widenOllamaContext, ollamaWideModelName } = await import('../src/local-context.mjs');
+  assert.equal(ollamaWideModelName('qwen2.5-coder:3b'), 'qwen2.5-coder:3b-oasis');
+  assert.equal(ollamaWideModelName('library/llama3.2'), 'library/llama3.2:latest-oasis');
+  assert.equal(ollamaWideModelName('host:5000/team/model'), 'host:5000/team/model:latest-oasis');
+  const created = [];
+  const fetchImpl = async (url, init = {}) => {
+    const body = init.body ? JSON.parse(init.body) : {};
+    if (url.endsWith('/api/ps')) return Response.json({ models: [{ name: 'qwen2.5-coder:3b', context_length: 4096 }] });
+    if (url.endsWith('/api/show')) return Response.json({ model_info: { 'qwen2.context_length': 32768 }, parameters: '' });
+    if (url.endsWith('/api/create')) { created.push(body); return Response.json({ status: 'success' }); }
+    return new Response('no', { status: 404 });
+  };
+  const statuses = [];
+  const config = { protocol: 'openai-compatible', baseURL: 'http://localhost:11434/v1', model: 'qwen2.5-coder:3b' };
+  const wide = await widenOllamaContext(config, { fetchImpl, onStatus: (status) => statuses.push(status.text) });
+  assert.deepEqual(wide, { model: 'qwen2.5-coder:3b-oasis', contextLength: 32768, from: 'qwen2.5-coder:3b' });
+  assert.deepEqual(created, [{ model: 'qwen2.5-coder:3b-oasis', from: 'qwen2.5-coder:3b', parameters: { num_ctx: 32768 }, stream: false }]);
+  assert.match(statuses[0], /4,096-token window.*Created qwen2\.5-coder:3b-oasis.*32,768-token window/);
+  // Never for a variant, a model already loaded wide, a model whose own maximum is small, or a hosted endpoint.
+  assert.equal(await widenOllamaContext({ ...config, model: 'qwen2.5-coder:3b-oasis' }, { fetchImpl }), null);
+  const wideServer = async (url, init) => url.endsWith('/api/ps') ? Response.json({ models: [{ name: 'qwen2.5-coder:3b', context_length: 65536 }] }) : fetchImpl(url, init);
+  assert.equal(await widenOllamaContext(config, { fetchImpl: wideServer }), null);
+  const tinyModel = async (url, init) => url.endsWith('/api/show') ? Response.json({ model_info: { 'llama.context_length': 8192 } }) : fetchImpl(url, init);
+  assert.equal(await widenOllamaContext(config, { fetchImpl: tinyModel }), null);
+  assert.equal(await widenOllamaContext({ ...config, baseURL: 'https://api.openai.com/v1' }, { fetchImpl }), null);
+  const refused = async (url, init) => url.endsWith('/api/create') ? new Response('denied', { status: 403 }) : fetchImpl(url, init);
+  assert.equal(await widenOllamaContext(config, { fetchImpl: refused }), null, 'a refused create leaves the original model in place');
+  assert.equal(created.length, 1);
+});

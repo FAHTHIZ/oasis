@@ -5,6 +5,7 @@
 // The result becomes an ordinary runtime config with the next-best models of
 // the same provider as the fallback chain.
 import { smartConnect, parsePaste, maskSecret } from '../app/core/connect.mjs';
+import { widenOllamaContext } from './local-context.mjs';
 
 const APP_TO_RUNTIME = { openai: 'openai-compatible', anthropic: 'anthropic' };
 
@@ -37,13 +38,23 @@ export async function connectFromPaste(text, { fetchImpl = globalThis.fetch.bind
   }
   const result = await smartConnect(text, { fetchImpl, onStatus, allowPull });
   const config = runtimeConfigFromConnection(result);
+  const notes = [...(result.notes || [])];
+  // Ollama serves models with a 4K window by default, which silently cuts the
+  // system prompt and tools. Point the config at a wide-window variant instead.
+  const wide = await widenOllamaContext(config, { fetchImpl, onStatus }).catch(() => null);
+  if (wide) {
+    config.model = wide.model;
+    // The variant replaces the original; neither belongs in its own fallback chain.
+    config.fallbackModel = String(config.fallbackModel || '').split(',').filter((id) => id && id !== wide.model && id !== wide.from).join(',');
+    notes.push('Using ' + wide.model + ' (' + wide.contextLength.toLocaleString('en-US') + '-token window) instead of ' + wide.from + '.');
+  }
   return {
     config,
     label: result.connection.label,
     provider: result.connection.provider,
     models: result.connection.models.slice(0, 40),
     toolCalling: result.toolCalling,
-    notes: result.notes || [],
+    notes,
     masked: config.apiKey ? maskSecret(config.apiKey) : '',
     githubToken: result.githubToken || ''
   };

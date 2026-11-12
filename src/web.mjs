@@ -949,6 +949,11 @@ export function createOasisWebServer(options = {}) {
       session.mcpFailuresShown = mcpFailures.length;
     };
     reportMcpFailures();
+    // A local model serving a window too small for agent work: say so once per conversation, with the fix.
+    if (!session.localContextNoticesShown && Array.isArray(session.localContextNotices) && session.localContextNotices.length) {
+      session.localContextNoticesShown = true;
+      emit(job, 'notices', { notices: session.localContextNotices.slice(0, 3).map((note) => monitorText(note, 600)) });
+    }
     if (session.mcpConnecting && typeof session.mcpConnecting.then === 'function') session.mcpConnecting.then(reportMcpFailures, () => {});
     void (async () => {
       try {
