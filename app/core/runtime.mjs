@@ -742,6 +742,13 @@ export class RuntimeWorkspace {
     this.cache = null;
     return data;
   }
+  /** Puts one tracked file back to its last-commit version (Discard changes). */
+  async discard(path) {
+    const data = await this.client.api('/api/workspace/discard', { method: 'POST', body: { path } });
+    this.cache = null;
+    this.diffCache = null;
+    return data;
+  }
   async diff() {
     this.diffCache = await this.client.api('/api/workspace/diff').catch(() => ({ files: [], diff: '' }));
     return this.diffCache;

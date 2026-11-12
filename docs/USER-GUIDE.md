@@ -196,7 +196,7 @@ Pick a bounded first task with a visible outcome, such as explaining a function,
 
 1. State the outcome you want and any constraints.
 2. Read commands and permission requests before approving them.
-3. Open **Changes** to inspect every file OASIS touched and its diff.
+3. Open **Changes** to inspect every file OASIS touched and its diff. **Discard** in a file's diff puts a tracked file back to its last committed version (after a confirmation); new, untracked files are left alone.
 4. Check the tests OASIS ran, their exit status and output.
 5. Commit only after you understand and accept the diff.
 
