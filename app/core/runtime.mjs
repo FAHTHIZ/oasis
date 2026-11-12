@@ -496,7 +496,7 @@ export class RuntimeAgent {
       if (!clockSent && job.createdAt && job.now) {
         const started = Date.parse(job.createdAt);
         const skew = Date.parse(job.now) - Date.now();
-        if (Number.isFinite(started) && Number.isFinite(skew)) { clockSent = true; this.emit('run_clock', { startedAt: started - skew }); }
+        if (Number.isFinite(started) && Number.isFinite(skew)) { clockSent = true; this.clockSkew = skew; this.emit('run_clock', { startedAt: started - skew }); }
       }
       // A finished task's open approvals can no longer be answered.
       const live = !['completed', 'error', 'cancelled', 'interrupted'].includes(job.status);
@@ -515,6 +515,14 @@ export class RuntimeAgent {
           case 'assistant_text': if (data.text) addText(String(data.text), true); break;
           // The model's reasoning summary, streamed while it works (nothing for
           // a model that does not expose one). It opens the next step.
+          // A model request went out (start) or came back (end). Nothing is
+          // running and nothing streams then, so the page shows Thinking.
+          case 'model_wait':
+            if (data.phase === 'start') {
+              const at = Date.parse(event.at || '');
+              this.emit('model_start', { step: Number(data.step) || 1, ...(Number.isFinite(at) && live ? { startedAt: at - (this.clockSkew || 0) } : {}) });
+            } else if (data.phase === 'end') this.emit('model_end', { step: Number(data.step) || 1 });
+            break;
           case 'reasoning_delta':
             if (!data.text) break;
             if (stepHasTools || stepTextFinal) newStepIfNeeded();

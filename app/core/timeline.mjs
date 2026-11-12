@@ -231,11 +231,11 @@ export function groupStats(steps = []) {
   return { total: steps.length, failed: count('failed', 'timed_out'), declined: count('declined'), blocked: count('blocked'), stopped: count('cancelled'), running, durationMs };
 }
 
-// The waiting chip: after a few seconds it shows how long the model has been
-// working, so a slow provider or a local model loading into memory does not look frozen.
+// The waiting chip: it counts how long the model has been working, so a slow
+// provider or a local model loading into memory never looks frozen.
 export function thinkingLabel(elapsedMs) {
   const value = Number(elapsedMs);
-  return Number.isFinite(value) && value >= 5000 ? 'Thinking · ' + formatDuration(value) : 'Thinking';
+  return Number.isFinite(value) && value >= 1000 ? 'Thinking · ' + formatDuration(value) : 'Thinking';
 }
 
 // The settled reasoning block: "Thought for 12s" ("Thought" when the time is unknown).
