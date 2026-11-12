@@ -6,7 +6,9 @@ These runs used OASIS the way a person would: type a request, approve steps, rea
 
 | What we asked | Where | Model | Result |
 | --- | --- | --- | --- |
-| "slugify() in slug.mjs only replaces the first space. Fix it, add a test, run the tests." | Terminal, default mode | gpt-oss-20b (free) | Fixed, test passing after the model corrected its own import twice; 7 m 34 s, 3 approvals, 12 Nov ([video](../assets/demo/oasis-real-model-demo.mp4)) |
+| "npm test fails. Find the bug in cart.mjs, fix it, and run npm test to confirm." | Terminal, default mode, OASIS 1.3.0 | gpt-oss-20b (free) | Fixed the percentage discount, 2 of 2 tests passing; 3 m 04 s, 2 approvals, 12 Nov ([video](../assets/demo/oasis-real-model-demo.mp4)) |
+| "wordCount gives the wrong answer when there are double spaces or leading spaces. Fix it in stats.mjs, add a regression test, and run npm test." Sent while it worked: "Also handle tabs and newlines between words." | Web app, Ask first, OASIS 1.3.0 | gpt-oss-20b (free) | Fixed, note followed, regression test added, 3 of 3 passing; 6 m 47 s, 2 approvals answered in the waiting step, 12 Nov ([video](../assets/demo/oasis-web-real-model-demo.mp4), [screenshot](../assets/screenshots/real-model-web-task-dark.png)) |
+| "slugify() in slug.mjs only replaces the first space. Fix it, add a test, run the tests." | Terminal, default mode | gpt-oss-20b (free) | Fixed, test passing after the model corrected its own import twice; 7 m 34 s, 3 approvals, 12 Nov |
 | "Build a small to-do web app in index.html: add, complete and delete items, saved in localStorage." | Web app, Ask first | gpt-oss-20b (free) | Working app, existing tests still passing; 231 s, 1 approval, 12 Nov |
 | "slugify() only replaces the first space. Fix it, add a test, run the tests." | Web app, Ask first | gpt-oss-20b | Fixed, test added and passing; 409 s, 2 approvals ([screenshot](../assets/screenshots/real-model-approval-dark.png)) |
 | "math.mjs add() is wrong. Fix it and add a test, then run it." | `oasis -p` | gpt-oss-20b | Fixed, test passing, exit 0; about 10 minutes, mostly provider wait |
@@ -19,7 +21,7 @@ These runs used OASIS the way a person would: type a request, approve steps, rea
 
 Everything that went wrong in these runs became a fix with a regression test: a streamed reply glued onto the next one, the agent telling the user about its internal checks, a keyless endpoint that kept asking for a key, activity cards that all said "Completed a project step". See the [Changelog](../CHANGELOG.md).
 
-Known rough edges: free endpoints are slow (35–140 s per request), and gpt-oss-20b sometimes writes its reasoning into the reply ("Wait, we still import…"), which OASIS shows as text. The second summary that the verification step used to produce after targeted edits was fixed on 12 November.
+Known rough edges: free endpoints are slow (35–140 s per request), and gpt-oss-20b sometimes writes its reasoning into the reply ("Wait, we still import…"), which OASIS shows as text. The second summary that the verification step used to produce after targeted edits was fixed on 12 November; a whole-file rewrite of an existing file is still sent back for a diff review, which is why the 1.3.0 web run ends with two short summaries.
 
 ## Plugins checked in OASIS
 
