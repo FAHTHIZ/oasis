@@ -2361,13 +2361,13 @@ async function interactive(root, autoApprove, persistence = {}) {
         continue;
       }
       // /model, /theme and /color without an argument open a picker in a terminal.
-      if (!String(slash[2] || '').trim() && stdin.isTTY && stdout.isTTY && typeof stdin.setRawMode === 'function' && ['model', 'theme', 'color', 'rewind'].includes(slash[1].toLowerCase()) && (slash[1].toLowerCase() !== 'rewind' || session)) {
+      if (!String(slash[2] || '').trim() && stdin.isTTY && stdout.isTTY && typeof stdin.setRawMode === 'function' && ['model', 'theme', 'color', 'rewind', 'presets'].includes(slash[1].toLowerCase()) && (slash[1].toLowerCase() !== 'rewind' || session)) {
         try {
           const { pickerFor, selectDialog } = await import('./select-dialog.mjs');
           const command = slash[1].toLowerCase();
           const picker = await pickerFor(command, { session, env: process.env, settings: (session && session.settings) || await loadSettings(root).catch(() => null) });
           if (picker) {
-            stdout.write(command === 'rewind' ? 'Rewind to before which message?\n' : 'Select ' + command + ':\n');
+            stdout.write(command === 'rewind' ? 'Rewind to before which message?\n' : command === 'presets' ? 'Send which preset?\n' : 'Select ' + command + ':\n');
             const chosen = await selectDialog({ input: stdin, output: stdout, options: picker.options, initial: picker.initial, context: picker.context, color: colorEnabled(stdout) });
             if (!chosen) { stdout.write('Cancelled.\n'); continue; }
             slash[2] = chosen;
@@ -2402,6 +2402,8 @@ async function interactive(root, autoApprove, persistence = {}) {
             session = await reloadSessionComponents(session, root, handled.reload);
             continue;
           }
+          // /presets N: send the saved prompt or /command as if typed next.
+          if (handled.queue) { QUEUED_INPUT.unshift(String(handled.queue)); continue; }
           if (handled.osc52 && stdout.isTTY) stdout.write('\x1b]52;c;' + handled.osc52 + '\x07');
           if (handled.forked) persistence.enabled = true;
           for (const service of handled.connect ? [].concat(handled.connect) : []) {
