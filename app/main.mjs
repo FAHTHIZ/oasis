@@ -1540,6 +1540,8 @@ function showThinking() {
   $('transcript').appendChild(dots);
   $('welcome').hidden = true;
 }
+// Steps created by a live tool_start on this page (see the tool_start case).
+const liveStartedSteps = new WeakSet();
 function findStep(id) {
   for (const group of [activeGroup, lastTaskGroup]) {
     const tool = group && group.steps.find((t) => t.id === id);
@@ -1792,12 +1794,26 @@ function handleEvent(event) {
       break;
     }
     case 'tool_start': {
+      // Reattaching replays the live task's events. A step of this turn that
+      // is already on the page from a copy saved mid-turn is updated in place
+      // instead of being shown twice. Steps started live here are never
+      // merged (models may reuse call ids), nor are steps of earlier turns.
+      const seen = event.id && findStep(event.id);
+      const lastRequest = [...document.querySelectorAll('#transcript .msg.user')].pop();
+      const seenRow = seen && document.querySelector('#transcript .tool[data-id="' + CSS.escape(event.id) + '"]');
+      if (seen && seenRow && !liveStartedSteps.has(seen.tool) && lastRequest && (lastRequest.compareDocumentPosition(seenRow) & Node.DOCUMENT_POSITION_FOLLOWING)) {
+        if (event.label) seen.tool.label = event.label;
+        if (event.args) seen.tool.args = event.args;
+        updateStepRow(seen.group, seen.tool);
+        break;
+      }
       if (!currentTurn) startStep();
       removeThinking();
       clearCursor();
       const group = ensureGroup();
       group.thinking = false;
       const tool = { id: event.id, name: event.name, args: event.args || {}, startedAt: Date.now(), ...(event.label ? { label: event.label } : {}), ...(event.open ? { open: true } : {}) };
+      liveStartedSteps.add(tool);
       currentTurn.entry.tools.push(tool);
       group.steps.push(tool);
       if (event.name === 'task') { lastTaskGroup = group; lastTaskGroup.taskEntry = currentTurn.entry; }
