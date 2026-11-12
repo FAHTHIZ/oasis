@@ -11,7 +11,30 @@ const rename = (from, to) => (args) => {
 };
 const compose = (...fns) => (args) => fns.reduce((value, fn) => fn(value), args);
 
+// move_file / rename_file / copy_file: no such tools exist, but models ask
+// for them (seen live: gpt-oss-20b renaming jest.config.js to .cjs got
+// "Unknown tool: move_file" and had to find another way). Map them onto the
+// one command that does it, so the user still approves the real command line.
+const pick = (args, keys) => { for (const key of keys) if (typeof args[key] === 'string' && args[key].trim()) return args[key].trim(); return ''; };
+const SOURCE_KEYS = ['source', 'src', 'from', 'old_path', 'oldPath', 'source_path', 'sourcePath', 'path', 'file_path', 'filePath', 'old_name'];
+const TARGET_KEYS = ['destination', 'dest', 'dst', 'to', 'new_path', 'newPath', 'target', 'target_path', 'destination_path', 'destinationPath', 'new_name', 'newName'];
+const fileCommand = (posix, windows) => (args) => {
+  const from = pick(args, SOURCE_KEYS);
+  const to = pick(args, TARGET_KEYS);
+  if (!from || !to) return { command: posix, args: [from, to].filter(Boolean) };
+  return process.platform === 'win32' ? { command: 'cmd', args: ['/d', '/c', windows, from, to] } : { command: posix, args: [from, to] };
+};
+const moveFile = [['run_command', fileCommand('mv', 'move')]];
+const copyFile = [['run_command', fileCommand('cp', 'copy')]];
+
 const ALIASES = {
+  movefile: moveFile,
+  move: moveFile,
+  mv: moveFile,
+  renamefile: moveFile,
+  rename: moveFile,
+  copyfile: copyFile,
+  cp: copyFile,
   read: [['read_file', rename('file_path', 'path')]],
   // Read-only names other harnesses use for reading a file.
   view: [['read_file', compose(rename('file_path', 'path'), rename('filename', 'path'))]],
