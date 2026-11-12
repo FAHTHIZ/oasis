@@ -118,7 +118,7 @@ function explain(status, body, config) {
 }
 
 /** A JSON error body ({ error } or [{ error }]) that arrived outside SSE events. */
-export function malformedCallFinish(reason) {
+function malformedCallFinish(reason) {
   return /MALFORMED_FUNCTION_CALL/i.test(String(reason || ''));
 }
 

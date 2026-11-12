@@ -52,12 +52,12 @@ export function findAiComments(text) {
 }
 
 /** True when the comment set contains an actionable marker. */
-export function hasTrigger(comments) {
+function hasTrigger(comments) {
   return comments.some((item) => item.kind === 'change' || item.kind === 'question');
 }
 
 /** Stable fingerprint of actionable comments so the same request never fires twice. */
-export function triggerFingerprint(byFile) {
+function triggerFingerprint(byFile) {
   const hash = createHash('sha256');
   for (const [file, comments] of [...byFile.entries()].sort((a, b) => a[0].localeCompare(b[0]))) {
     for (const item of comments) if (item.kind !== 'context') hash.update(file + '\0' + item.kind + '\0' + item.text + '\n');

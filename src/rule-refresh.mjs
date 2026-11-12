@@ -58,7 +58,7 @@ export function extractHardRules(projectContext) {
   return rules;
 }
 
-export function ruleRefreshEnabled(env = process.env) {
+function ruleRefreshEnabled(env = process.env) {
   return !/^(0|false|off|no)$/i.test(String(env.OASIS_RULE_REFRESH || ''));
 }
 

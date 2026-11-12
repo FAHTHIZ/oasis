@@ -105,7 +105,7 @@ export function renderInline(text, { color = true } = {}) {
 
 // Renders one complete markdown line given fence state; returns null when the
 // line should be hidden (fence markers).
-export function renderMarkdownLine(line, state, options = {}) {
+function renderMarkdownLine(line, state, options = {}) {
   const { color = true, columns = 80 } = options;
   const fence = line.match(/^\s*(```|~~~)\s*([\w+#.-]*)\s*$/);
   const diagrams = options.diagrams ?? (color && process.env.OASIS_MERMAID !== '0');
@@ -292,7 +292,7 @@ export function lineDiff(before, after) {
   return out;
 }
 
-export function diffStats(ops) {
+function diffStats(ops) {
   return { added: ops.filter((op) => op.op === '+').length, removed: ops.filter((op) => op.op === '-').length };
 }
 

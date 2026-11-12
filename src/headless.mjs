@@ -20,7 +20,7 @@ import { validateJsonSchema, extractJson } from './json-schema.mjs';
 import { callMappedMcpTool } from './mcp.mjs';
 
 // Finds an MCP tool by Claude-style name (mcp__server__tool) or Oasis safe name.
-export function resolvePermissionTool(session, name) {
+function resolvePermissionTool(session, name) {
   if (!session || !session.mcpToolMap || !name) return null;
   if (session.mcpToolMap.has(name)) return name;
   const match = String(name).match(/^mcp__([^_]+(?:_[^_]+)*)__(.+)$/);

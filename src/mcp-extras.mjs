@@ -41,13 +41,13 @@ export function formatResourceContents(result) {
   return text.length > MAX_RESOURCE_TEXT ? text.slice(0, MAX_RESOURCE_TEXT) + '\n[truncated]' : text;
 }
 
-export async function readMcpResource(client, uri) {
+async function readMcpResource(client, uri) {
   if (!client.capabilities || !client.capabilities.resources) throw new Error('MCP server ' + client.config.name + ' does not offer resources.');
   const result = await client._request('resources/read', { uri: String(uri) }, 60000);
   return { uri: String(uri), mimeType: result && result.contents && result.contents[0] && result.contents[0].mimeType || null, content: formatResourceContents(result) };
 }
 
-export function promptCommandName(serverName, promptName) {
+function promptCommandName(serverName, promptName) {
   return 'mcp__' + serverName + '__' + promptName;
 }
 

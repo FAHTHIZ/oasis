@@ -145,4 +145,4 @@ function shouldSuggest({ prefix = '', suffix = '' } = {}) {
   return true;
 }
 
-module.exports = { resolveCompletionTarget, readOasisConfig, configDirectory, requestCompletion, cleanCompletion, shouldSuggest, chatPrompt, isOllama };
+module.exports = { resolveCompletionTarget, readOasisConfig, requestCompletion, cleanCompletion, shouldSuggest };

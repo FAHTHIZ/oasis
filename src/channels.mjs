@@ -47,7 +47,7 @@ function experimental(client) {
   return client && client.capabilities && client.capabilities.experimental && typeof client.capabilities.experimental === 'object' ? client.capabilities.experimental : {};
 }
 
-export function isChannelClient(session, client) {
+function isChannelClient(session, client) {
   if (!session || !Array.isArray(session.channels) || !session.channels.length) return false;
   if (session.settings && session.settings.channelsEnabled === false) return false;
   const caps = experimental(client);
@@ -144,7 +144,7 @@ export function relayInputPreview(input) {
   return '{' + parts.join(', ') + '}';
 }
 
-export function relayClients(session) {
+function relayClients(session) {
   return channelClients(session).filter((client) => { const value = experimental(client)['claude/channel/permission']; return value && typeof value === 'object'; });
 }
 

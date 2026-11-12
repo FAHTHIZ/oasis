@@ -16,8 +16,8 @@ import { compactionThresholdChars } from './context.mjs';
 
 export const DEFAULT_IDLE_COMPACT_MINUTES = 15;
 // Below this much history (about 10k tokens) a summary is not worth a model call.
-export const IDLE_COMPACT_MIN_CHARS = 40_000;
-export const IDLE_COMPACT_FRACTION = 0.5;
+const IDLE_COMPACT_MIN_CHARS = 40_000;
+const IDLE_COMPACT_FRACTION = 0.5;
 
 /** Minutes of inactivity before idle compaction, or 0 when it is off. */
 export function idleCompactMinutes(settings = {}, env = process.env) {

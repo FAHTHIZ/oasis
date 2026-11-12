@@ -24,7 +24,7 @@ export function redactArtifactText(value) {
   for (const [pattern, replacement] of SECRET_PATTERNS) text = text.replace(pattern, replacement);
   return text.slice(0, MAX_TEXT);
 }
-export function artifactSlug(value) {
+function artifactSlug(value) {
   const slug = String(value || '').normalize('NFKC').trim().toLowerCase().replace(/[^a-z0-9._-]+/g, '-').replace(/^[.-]+|[.-]+$/g, '').slice(0, 64);
   if (!slug || slug === '.' || slug === '..') throw new Error('Artifact name must contain letters or numbers.');
   return slug;

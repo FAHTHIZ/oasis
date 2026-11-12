@@ -82,7 +82,7 @@ export function buildPrompt(trigger, context) {
   return lines.join('\n');
 }
 
-export function githubClient(env, fetchImpl = fetch) {
+function githubClient(env, fetchImpl = fetch) {
   const api = (env.GITHUB_API_URL || 'https://api.github.com').replace(/\/+$/, '');
   const token = env.GITHUB_TOKEN || env.INPUT_GITHUB_TOKEN || '';
   return async function request(method, route, body) {

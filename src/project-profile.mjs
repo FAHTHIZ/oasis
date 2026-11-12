@@ -4,13 +4,13 @@ import path from 'node:path';
 import { readFile, stat } from 'node:fs/promises';
 import { NPM_PLACEHOLDER_TEST, detectProjectTestCommand } from './turn-guards.mjs';
 
-export const PROJECT_MANIFESTS = [
+const PROJECT_MANIFESTS = [
   ['package.json', 'JavaScript/TypeScript', 'node'], ['pyproject.toml', 'Python', 'python3'], ['requirements.txt', 'Python', 'python3'],
   ['Cargo.toml', 'Rust', 'cargo'], ['go.mod', 'Go', 'go'], ['Gemfile', 'Ruby', 'ruby'], ['pom.xml', 'Java (Maven)', 'mvn'],
   ['build.gradle', 'Java/Kotlin (Gradle)', null], ['build.gradle.kts', 'Kotlin (Gradle)', null], ['composer.json', 'PHP', 'php'],
   ['mix.exs', 'Elixir', 'mix'], ['Package.swift', 'Swift', 'swift'], ['CMakeLists.txt', 'C/C++ (CMake)', 'cmake'], ['Makefile', 'Make', 'make']
 ];
-export const KEY_SCRIPTS = ['test', 'lint', 'typecheck', 'check', 'build', 'format', 'dev', 'start'];
+const KEY_SCRIPTS = ['test', 'lint', 'typecheck', 'check', 'build', 'format', 'dev', 'start'];
 
 export async function onPath(program, env) {
   const dirs = String(env.PATH || process.env.PATH || '').split(path.delimiter).filter(Boolean);

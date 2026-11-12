@@ -7,7 +7,7 @@
 import path from 'node:path';
 import { globToRegExp } from './permissions.mjs';
 
-export const SCOPED_TOOLS = new Set(['write_file', 'edit_file', 'multi_edit', 'notebook_edit', 'delete_file']);
+const SCOPED_TOOLS = new Set(['write_file', 'edit_file', 'multi_edit', 'notebook_edit', 'delete_file']);
 
 function normalizePattern(raw) {
   let value = String(raw || '').trim().replace(/\\/g, '/').replace(/^\.\//, '');

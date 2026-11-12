@@ -237,7 +237,7 @@ function resolveImports(file, index, pythonModules) {
   return found;
 }
 
-export function rankGraph(files, definedIn, { isFocusFile = () => false, focusSymbols = new Set(), iterations = 40, damping = 0.85 } = {}) {
+function rankGraph(files, definedIn, { isFocusFile = () => false, focusSymbols = new Set(), iterations = 40, damping = 0.85 } = {}) {
   const index = new Map(files.map((file, i) => [file.path, i]));
   const n = files.length;
   // Only names another file can actually import take part. In an ES module that

@@ -71,7 +71,7 @@ export function describeTools(tools = []) {
 }
 
 /** Instructions appended to the system message. */
-export function toolsInstructions(tools = [], { forceTool = '' } = {}) {
+function toolsInstructions(tools = [], { forceTool = '' } = {}) {
   return [
     '',
     'You have access to the following functions:',

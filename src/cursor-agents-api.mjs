@@ -43,7 +43,7 @@ const HEARTBEAT_MS = 15000;
 const STREAM_RETENTION_SECONDS = 7 * 24 * 3600;
 const WEBHOOK_USER_AGENT = 'Cursor-Agent-Webhook/1.0';
 
-export class CursorApiError extends Error {
+class CursorApiError extends Error {
   constructor(status, code, message) {
     super(message);
     this.status = status;
@@ -129,7 +129,7 @@ function addUsage(target, usage) {
   return target;
 }
 
-export function validateWebhookUrl(value) {
+function validateWebhookUrl(value) {
   let url;
   try { url = new URL(String(value || '')); } catch { fail(400, 'validation_error', 'webhook.url must be an absolute URL.'); }
   if (String(value).length > 2048) fail(400, 'validation_error', 'webhook.url is too long (2,048 characters maximum).');
@@ -142,7 +142,7 @@ export function validateWebhookUrl(value) {
 }
 
 /** Signs a webhook body the way Cursor documents: sha256=<hex HMAC-SHA256 of the raw body>. */
-export function webhookSignature(secret, body) {
+function webhookSignature(secret, body) {
   return 'sha256=' + createHmac('sha256', String(secret)).update(body).digest('hex');
 }
 

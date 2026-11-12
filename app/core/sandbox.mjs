@@ -6,7 +6,7 @@
 // JavaScript so tests can run it in Node.
 
 /** Source of the in-sandbox runtime. Defines self.__oasisRun(code, files). */
-export function runtimeSource() {
+function runtimeSource() {
   return String.raw`
 (function () {
   function format(value, depth) {

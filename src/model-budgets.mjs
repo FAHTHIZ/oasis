@@ -10,11 +10,11 @@ import { contextWindowSize, compactionThresholdChars } from './context.mjs';
 // smaller caps get a conservative default; a provider 400 that names the real
 // cap lowers it for the rest of the session instead of failing the turn.
 export const MAX_TURN_TOOL_CALLS = 2000;
-export const DEFAULT_TURN_TOOL_CALLS = 300;
-export const DEFAULT_OUTPUT_CEILING = 32000;
-export const LEGACY_8K_MODELS = /claude-(instant|2)|claude-3-(opus|sonnet|haiku)|claude-3-5-|claude-3\.5|gpt-3\.5|gpt-4(?!o|\.1|-turbo)/i;
-export const MODERN_32K_MODELS = /claude|gpt-5|\bo[1-9](-|$)|gpt-4\.1|gemini-(2|3)|deepseek|qwen3|kimi|glm-4\.[5-9]|grok-[3-9]/i;
-export function strictConfiguredInteger(value) {
+const DEFAULT_TURN_TOOL_CALLS = 300;
+const DEFAULT_OUTPUT_CEILING = 32000;
+const LEGACY_8K_MODELS = /claude-(instant|2)|claude-3-(opus|sonnet|haiku)|claude-3-5-|claude-3\.5|gpt-3\.5|gpt-4(?!o|\.1|-turbo)/i;
+const MODERN_32K_MODELS = /claude|gpt-5|\bo[1-9](-|$)|gpt-4\.1|gemini-(2|3)|deepseek|qwen3|kimi|glm-4\.[5-9]|grok-[3-9]/i;
+function strictConfiguredInteger(value) {
   const raw = typeof value === 'number' ? value : String(value ?? '').trim();
   if (typeof raw === 'string' && !/^\d+$/.test(raw)) return 0;
   const parsed = typeof raw === 'number' ? raw : Number(raw);
@@ -29,7 +29,7 @@ export function firstPositiveConfiguredInteger(...values) {
   return 0;
 }
 
-export function boundedTurnInteger(primary, fallback, defaultValue, min, max) {
+function boundedTurnInteger(primary, fallback, defaultValue, min, max) {
   let value = strictConfiguredInteger(primary);
   if (value <= 0) value = strictConfiguredInteger(fallback);
   if (value <= 0) value = defaultValue;
@@ -139,7 +139,7 @@ export function thinkingBudgetFor(prompt, config = {}, env = process.env) {
 // (Anthropic) and a reasoning effort (OpenAI reasoning models); prompt keywords
 // such as "ultrathink" can still raise it for one turn. auto (null) restores base.
 export const EFFORT_LEVELS = ['low', 'medium', 'high', 'max', 'auto'];
-export const INLINE_EFFORT = /(^|\s)effort:(low|medium|high|max)(?=\s|$|[.,;!?])/i;
+const INLINE_EFFORT = /(^|\s)effort:(low|medium|high|max)(?=\s|$|[.,;!?])/i;
 export function inlineEffortLevel(prompt) {
   const match = INLINE_EFFORT.exec(String(prompt || ''));
   return match ? match[2].toLowerCase() : null;
@@ -164,7 +164,7 @@ export function subagentEffortConfig(parent, agent, env, config) {
   if (!window || window >= contextWindowSize(withCompact, env)) return withCompact;
   return { ...withCompact, compactThresholdChars: compactionThresholdChars({ ...withCompact, contextWindow: window }, env) };
 }
-export const EFFORT_SETTINGS = { low: ['low', 4000], medium: ['medium', 10000], high: ['high', 32000], max: ['high', 63999] };
+const EFFORT_SETTINGS = { low: ['low', 4000], medium: ['medium', 10000], high: ['high', 32000], max: ['high', 63999] };
 // OpenAI reasoning effort a model accepts. `max` exists on GPT-5.6+ and GPT-6,
 // `xhigh` from GPT-5.2; GPT-6 models reject `none` and `minimal` with HTTP 400.
 // Unknown models pass through unchanged.
@@ -227,7 +227,7 @@ export function claudeThinkingMode(model) {
   return 'budget';
 }
 
-export const CLAUDE_EFFORTS = ['low', 'medium', 'high', 'xhigh', 'max'];
+const CLAUDE_EFFORTS = ['low', 'medium', 'high', 'xhigh', 'max'];
 // Maps /effort and think-keyword budgets onto Claude effort levels. Keywords only
 // raise effort (a plain "think" never lowers a model's default); `xhigh` exists
 // from Claude 4.7 on, so 4.6 gets `high` instead.

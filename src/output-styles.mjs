@@ -55,7 +55,7 @@ export const BUILTIN_STYLES = {
   }
 };
 
-export function outputStyleDirectories(root, env = process.env, home = os.homedir()) {
+function outputStyleDirectories(root, env = process.env, home = os.homedir()) {
   return [
     { dir: path.join(home, '.claude', 'output-styles'), scope: 'user' },
     { dir: path.join(getConfigDirectory(env, home), 'output-styles'), scope: 'user' },

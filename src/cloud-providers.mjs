@@ -20,7 +20,7 @@ import os from 'node:os';
 import path from 'node:path';
 
 export const CLOUD_PROTOCOLS = ['bedrock', 'vertex', 'foundry'];
-export const ANTHROPIC_FAMILY = new Set(['anthropic', 'bedrock', 'vertex', 'foundry']);
+const ANTHROPIC_FAMILY = new Set(['anthropic', 'bedrock', 'vertex', 'foundry']);
 
 export function isAnthropicFamily(protocol) { return ANTHROPIC_FAMILY.has(protocol); }
 
@@ -31,9 +31,9 @@ export function cloudProtocolFromEnv(env) {
   return null;
 }
 
-export function awsRegion(env) { return env.AWS_REGION || env.AWS_DEFAULT_REGION || 'us-east-1'; }
-export function vertexRegion(env) { return env.CLOUD_ML_REGION || env.GOOGLE_CLOUD_REGION || 'us-east5'; }
-export function vertexProject(env) { return env.ANTHROPIC_VERTEX_PROJECT_ID || env.GOOGLE_CLOUD_PROJECT || env.GCLOUD_PROJECT || ''; }
+function awsRegion(env) { return env.AWS_REGION || env.AWS_DEFAULT_REGION || 'us-east-1'; }
+function vertexRegion(env) { return env.CLOUD_ML_REGION || env.GOOGLE_CLOUD_REGION || 'us-east5'; }
+function vertexProject(env) { return env.ANTHROPIC_VERTEX_PROJECT_ID || env.GOOGLE_CLOUD_PROJECT || env.GCLOUD_PROJECT || ''; }
 
 export function foundryBaseURL(env) {
   if (env.ANTHROPIC_FOUNDRY_BASE_URL) return String(env.ANTHROPIC_FOUNDRY_BASE_URL).replace(/\/+$/, '');

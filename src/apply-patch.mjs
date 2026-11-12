@@ -21,7 +21,7 @@ const SECTION_ENDS = ['*** End Patch', '*** Update File:', '*** Delete File:', '
 const startsWithAny = (line, prefixes) => prefixes.some((prefix) => line.startsWith(prefix));
 
 /** Pull the patch body out of a tool argument, freeform text or a shell command. */
-export function extractPatchText(value) {
+function extractPatchText(value) {
   if (typeof value !== 'string') return null;
   const text = value.replace(/\r\n/g, '\n');
   const begin = text.indexOf('*** Begin Patch');

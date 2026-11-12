@@ -16,7 +16,7 @@ import { mkdir, writeFile, access } from 'node:fs/promises';
 import { getConfigDirectory } from './config.mjs';
 
 export const CHORD_TIMEOUT_MS = 3000;
-export const RESERVED = new Set(['ctrl+c', 'ctrl+d', 'ctrl+m', 'ctrl+[', 'ctrl+i', 'ctrl+h']);
+const RESERVED = new Set(['ctrl+c', 'ctrl+d', 'ctrl+m', 'ctrl+[', 'ctrl+i', 'ctrl+h']);
 export const CONTEXTS = ['Global', 'Chat', 'Autocomplete', 'HistorySearch', 'Confirmation', 'Transcript', 'Task', 'Settings', 'Tabs', 'Help', 'ThemePicker', 'Attachments', 'Footer', 'MessageSelector', 'DiffDialog', 'DiffPanel', 'ModelPicker', 'EffortSlider', 'Select', 'Plugin', 'AbovePrompt', 'AbovePromptInput', 'AbovePromptSelect', 'Pane', 'PaneField', 'Agents', 'Scroll'];
 
 // Claude Code's defaults for the contexts OASIS implements.

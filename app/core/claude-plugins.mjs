@@ -3,7 +3,7 @@
 
 // The most-installed plugins in Anthropic's official marketplace (late 2026),
 // listed first when the search box is empty.
-export const POPULAR_PLUGINS = [
+const POPULAR_PLUGINS = [
   'frontend-design', 'superpowers', 'code-review', 'context7', 'code-simplifier', 'playwright',
   'github', 'claude-md-management', 'feature-dev', 'security-guidance', 'commit-commands',
   'pr-review-toolkit', 'typescript-lsp', 'ralph-loop', 'hookify', 'skill-creator'

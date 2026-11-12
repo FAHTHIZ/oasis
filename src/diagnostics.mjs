@@ -342,7 +342,7 @@ export function parseNodeCheck(relative, stderr) {
   return { file: relative, line: lineMatch ? Number(lineMatch[1]) : 1, column: caret ? caret[1].length + 1 : 1, severity: 'error', message: message.trim().slice(0, 600), source: 'node' };
 }
 
-export function jsonDiagnostic(relative, content) {
+function jsonDiagnostic(relative, content) {
   try { JSON.parse(content); return null; } catch (error) {
     const message = String(error.message || error);
     let line = 1;

@@ -9,7 +9,7 @@
 // history as 7,900 characters and was resent on every later request. The
 // model gets stdout once, plus stderr and flags only when they say something;
 // the command only when git failed. The in-process result is unchanged.
-export const COMMAND_DEFAULT_FLAGS = ['stdoutTruncated', 'stderrTruncated', 'timedOut', 'cancelled'];
+const COMMAND_DEFAULT_FLAGS = ['stdoutTruncated', 'stderrTruncated', 'timedOut', 'cancelled'];
 
 export function modelFacingResult(name, result, session = null) {
   if (!result || typeof result !== 'object' || Array.isArray(result)) return result;
@@ -107,8 +107,8 @@ export function throwIfCancelled(signal) {
   }
 }
 
-export const TODO_CHECKLIST_HEADER = 'Current task checklist (authoritative; update with todo_write):';
-export const TODO_REMINDER_MARK = '<system-reminder>\n' + TODO_CHECKLIST_HEADER;
+const TODO_CHECKLIST_HEADER = 'Current task checklist (authoritative; update with todo_write):';
+const TODO_REMINDER_MARK = '<system-reminder>\n' + TODO_CHECKLIST_HEADER;
 
 // Keeps the system message byte-stable and delivers the checklist as a
 // reminder message instead. Rewriting messages[0] on every todo_write change

@@ -27,7 +27,7 @@ function webRequest(timeoutMs, userAgent, redirect = 'follow') {
 }
 
 // Tag of the newest stable (non-draft, non-prerelease) release, from github.com.
-export async function latestTagFromWeb(repository, { fetchImpl = fetch, timeoutMs, userAgent = 'oasis' } = {}) {
+async function latestTagFromWeb(repository, { fetchImpl = fetch, timeoutMs, userAgent = 'oasis' } = {}) {
   const response = await fetchImpl('https://github.com/' + repository + '/releases/latest', webRequest(timeoutMs, userAgent, 'manual'));
   if (response.status === 404) return null;
   const location = response.headers && typeof response.headers.get === 'function' ? response.headers.get('location') : '';
@@ -57,7 +57,7 @@ export function parseExpandedAssets(html, repository, tag) {
   return assets;
 }
 
-export async function releaseFromWeb(repository, tag, { fetchImpl = fetch, timeoutMs, userAgent = 'oasis' } = {}) {
+async function releaseFromWeb(repository, tag, { fetchImpl = fetch, timeoutMs, userAgent = 'oasis' } = {}) {
   const response = await fetchImpl('https://github.com/' + repository + '/releases/expanded_assets/' + encodeURIComponent(tag), webRequest(timeoutMs, userAgent));
   if (!response.ok) throw new Error('github.com returned HTTP ' + response.status + ' while listing release ' + tag + '.');
   return {

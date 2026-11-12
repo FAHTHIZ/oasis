@@ -15,9 +15,9 @@ import { deflateRawSync } from 'node:zlib';
 import { getConfigDirectory } from './config.mjs';
 
 const APP_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-export const EXTENSION_DIR = path.join(APP_ROOT, 'ide', 'vscode');
+const EXTENSION_DIR = path.join(APP_ROOT, 'ide', 'vscode');
 
-export function ideLockDirectory(env = process.env) { return path.join(getConfigDirectory(env), 'ide'); }
+function ideLockDirectory(env = process.env) { return path.join(getConfigDirectory(env), 'ide'); }
 
 function alive(pid) {
   if (!Number.isInteger(pid) || pid <= 0) return false;
@@ -29,7 +29,7 @@ function contains(folder, target) {
   return rel === '' || (!rel.startsWith('..') && !path.isAbsolute(rel));
 }
 
-export async function listIdeLocks(env = process.env) {
+async function listIdeLocks(env = process.env) {
   const dir = ideLockDirectory(env);
   let names = [];
   try { names = await readdir(dir); } catch { return []; }
@@ -87,7 +87,7 @@ export async function discoverIde(root, env = process.env, options = {}) {
   return null;
 }
 
-export const IDE_TOOL_DEFINITIONS = [
+const IDE_TOOL_DEFINITIONS = [
   { type: 'function', function: { name: 'ide_get_diagnostics', description: 'Get errors and warnings from the user\'s IDE (language servers, linters, type checkers) for one file or the whole workspace. Use after edits to verify them, and before guessing at build errors.', parameters: { type: 'object', properties: { path: { type: 'string', description: 'Workspace-relative or absolute file path. Omit for all files with diagnostics.' } }, additionalProperties: false } } },
   { type: 'function', function: { name: 'ide_open_file', description: 'Open a file in the user\'s IDE at a line, to show them code you are discussing.', parameters: { type: 'object', properties: { path: { type: 'string' }, line: { type: 'integer', minimum: 1 } }, required: ['path'], additionalProperties: false } } }
 ];
@@ -223,7 +223,7 @@ export async function packageExtension(outFile) {
   return { file: path.resolve(outFile), version: manifest.version, bytes: archive.length };
 }
 
-export function editorClis() {
+function editorClis() {
   return ['code', 'cursor', 'windsurf', 'code-insiders', 'codium'].filter((cli) => {
     const probe = spawnSync(cli, ['--version'], { encoding: 'utf8', timeout: 10000, shell: process.platform === 'win32' });
     return probe.status === 0;

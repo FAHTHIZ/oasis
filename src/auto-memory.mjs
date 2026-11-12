@@ -24,7 +24,7 @@ import { getConfigDirectory } from './config.mjs';
 import MiniSearch from 'minisearch';
 import stemmer from 'wink-porter2-stemmer';
 
-export const MEMORY_CATEGORIES = ['preferences', 'project', 'decisions', 'lessons', 'people', 'reference'];
+const MEMORY_CATEGORIES = ['preferences', 'project', 'decisions', 'lessons', 'people', 'reference'];
 const MAX_MEMORIES = 500;
 function memoryLimit(env = process.env) { return Math.min(MAX_MEMORIES, Math.max(5, Number(env.OASIS_MEMORY_LIMIT) || MAX_MEMORIES)); }
 const MAX_BODY = 8000;
@@ -338,7 +338,7 @@ export async function saveMemory(root, input = {}, { env = process.env, source =
 
 // How much a memory is worth keeping in a bounded store and in the prompt
 // index: recalled, verified and recent notes rank high; outdated ones lowest.
-export function memoryValue(memory, now = Date.now()) {
+function memoryValue(memory, now = Date.now()) {
   const freshness = memoryFreshness(memory, now);
   if (freshness === 'outdated') return -1000;
   const updated = Date.parse(memory && memory.updated || '') || 0;
@@ -351,7 +351,7 @@ export function memoryValue(memory, now = Date.now()) {
   return value;
 }
 
-export function leastValuableMemory(memories, now = Date.now()) {
+function leastValuableMemory(memories, now = Date.now()) {
   let worst = null;
   let worstValue = Infinity;
   for (const memory of memories) {
@@ -526,7 +526,7 @@ export function memoryWriteApproval(settings = {}, env = process.env) {
 
 function pendingDir(env) { return path.join(getConfigDirectory(env), 'memory', 'pending'); }
 
-export async function queueMemoryWrite(root, op, args, { env = process.env, source = null } = {}) {
+async function queueMemoryWrite(root, op, args, { env = process.env, source = null } = {}) {
   const dir = pendingDir(env);
   await mkdir(dir, { recursive: true });
   const id = Date.now().toString(36) + '-' + createHash('sha256').update(JSON.stringify([op, args, Math.random()])).digest('hex').slice(0, 6);

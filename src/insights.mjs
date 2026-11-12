@@ -106,7 +106,7 @@ function bars(entries, unit = '') {
   return entries.map(([k, v]) => '<div class="bar"><span class="label" title="' + esc(k) + '">' + esc(k) + '</span><span class="track"><span class="fill" style="width:' + Math.round((v / max) * 100) + '%"></span></span><span class="num">' + v + unit + '</span></div>').join('') || '<p class="muted">None yet.</p>';
 }
 
-export function renderInsightsHtml(stats, narrative = '') {
+function renderInsightsHtml(stats, narrative = '') {
   const tips = [];
   if (stats.toolCalls && stats.toolErrors / stats.toolCalls > 0.1) tips.push('More than 10% of tool calls failed. The tools failing most are listed below; a CLAUDE.md note on how to build and test this project often fixes repeated command errors.');
   if (stats.denials > 5) tips.push(stats.denials + ' tool calls were denied. If you approve the same commands often, add allow rules with /permissions or oasis permissions add allow "Bash(npm test)".');

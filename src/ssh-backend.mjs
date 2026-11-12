@@ -15,7 +15,7 @@ import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import path from 'node:path';
 
-export const DEFAULT_SSH_EXCLUDES = ['node_modules/', '.venv/', 'venv/', '__pycache__/', '.mypy_cache/', '.pytest_cache/', '.tox/', 'target/', '.gradle/', '.next/cache/', '.oasis/sessions/'];
+const DEFAULT_SSH_EXCLUDES = ['node_modules/', '.venv/', 'venv/', '__pycache__/', '.mypy_cache/', '.pytest_cache/', '.tox/', 'target/', '.gradle/', '.next/cache/', '.oasis/sessions/'];
 const HOST_RE = /^(?:[A-Za-z0-9._-]+@)?(?:[A-Za-z0-9._-]+|\[[0-9A-Fa-f:]+\])$/;
 const REMOTE_PATH_RE = /^(?:~|~\/[\w.\/-]*|\/[\w.\/-]*)$/;
 const EXCLUDE_RE = /^[\w.*?\/\[\]-]{1,200}$/;
@@ -52,7 +52,7 @@ export function normalizeSshSettings(raw = {}, env = process.env, root = process
   return { host, remoteRoot, port, identityFile, sync, exclude, localRoot: path.resolve(root), connectTimeout: Number(raw.connectTimeout) > 0 ? Math.min(120, Number(raw.connectTimeout)) : 15 };
 }
 
-export function sshOptions(ssh, { tty = false } = {}) {
+function sshOptions(ssh, { tty = false } = {}) {
   const options = ['-o', 'BatchMode=yes', '-o', 'ConnectTimeout=' + ssh.connectTimeout, '-o', 'ServerAliveInterval=30'];
   if (ssh.port) options.push('-p', String(ssh.port));
   if (ssh.identityFile) options.push('-i', ssh.identityFile, '-o', 'IdentitiesOnly=yes');
@@ -60,7 +60,7 @@ export function sshOptions(ssh, { tty = false } = {}) {
   return options;
 }
 
-export function remoteWorkdir(ssh, cwd) {
+function remoteWorkdir(ssh, cwd) {
   const relative = path.relative(ssh.localRoot, path.resolve(cwd || ssh.localRoot));
   if (!relative || relative.startsWith('..') || path.isAbsolute(relative)) return ssh.remoteRoot;
   return ssh.remoteRoot.replace(/\/$/, '') + '/' + relative.split(path.sep).join('/');

@@ -41,7 +41,7 @@ import { parse as parseYamlText } from 'yaml';
 import { parse as parseJsoncText, printParseErrorCode } from 'jsonc-parser';
 import { parseYamlMapping, splitFrontMatter } from './frontmatter.mjs';
 
-export const IMPORT_SOURCES = ['codex', 'gemini', 'cursor', 'claude', 'hermes', 'opencode', 'antigravity', 'windsurf', 'cline'];
+const IMPORT_SOURCES = ['codex', 'gemini', 'cursor', 'claude', 'hermes', 'opencode', 'antigravity', 'windsurf', 'cline'];
 const MAX_SKILL_BYTES = 4 * 1024 * 1024;
 const MAX_FILE = 256 * 1024;
 

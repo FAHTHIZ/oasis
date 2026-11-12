@@ -4,7 +4,7 @@ import { mkdir } from 'node:fs/promises';
 import path from 'node:path';
 import { atomicWriteFile } from './atomic-write.mjs';
 
-export function mediaSlug(text, fallback) {
+function mediaSlug(text, fallback) {
   return String(text || '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40) || fallback;
 }
 

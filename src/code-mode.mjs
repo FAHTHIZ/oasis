@@ -8,7 +8,7 @@
 // mode, hooks, approvals and the sandbox apply exactly as if the model had made
 // the call itself. The script runs in the same QuickJS sandbox as workflows (no
 // filesystem, network, imports, clock or randomness of its own; 16 MB heap).
-export const MAX_CODE_CHARS = 20000;
+const MAX_CODE_CHARS = 20000;
 export const MAX_NESTED_CALLS = 60;
 const MAX_RESULT_CHARS = 30000;
 const BLOCKED = new Set(['execute_code', 'task', 'workflow', 'ask_user_question', 'connect_service', 'enter_plan_mode', 'exit_plan_mode', 'enter_worktree', 'exit_worktree', 'schedule_wakeup', 'advisor', 'run_specialist_review', 'send_message', 'team_send_message', 'skill_propose', 'memory_save', 'memory_delete']);

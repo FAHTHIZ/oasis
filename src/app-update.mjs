@@ -17,7 +17,7 @@ import semverParse from 'semver/functions/parse.js';
 import semverCompare from 'semver/functions/compare.js';
 const semver = { parse: semverParse, compare: semverCompare };
 
-export const UPDATE_REPOSITORY = 'FAHTHIZ/oasis';
+const UPDATE_REPOSITORY = 'FAHTHIZ/oasis';
 export const RELEASES_PAGE = 'https://github.com/' + UPDATE_REPOSITORY + '/releases/latest';
 export const UPDATE_CHECK_INTERVAL_MS = 6 * 60 * 60 * 1000;
 const MAX_ASSET_BYTES = 1024 * 1024 * 1024;
@@ -153,7 +153,7 @@ export async function checkForAppUpdate({
   };
 }
 
-export async function sha256File(filePath) {
+async function sha256File(filePath) {
   const hash = createHash('sha256');
   await pipeline(createReadStream(filePath), hash);
   return hash.digest('hex');
@@ -276,7 +276,7 @@ export async function cachedUpdateCheck({ statePath, now = Date.now(), intervalM
   return { ...result, cached: false, skippedVersion: state.skippedVersion || null };
 }
 
-export function describeAvailableUpdate(result) {
+function describeAvailableUpdate(result) {
   if (!result || !result.available || !result.latest) return '';
   return 'OASIS ' + result.latest.version + ' is available (you have ' + result.current + ').';
 }

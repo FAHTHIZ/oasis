@@ -71,4 +71,4 @@ async function startIdeServer(adapter, options = {}) {
   };
 }
 
-module.exports = { startIdeServer, lockDirectory, configDirectory, METHODS };
+module.exports = { startIdeServer };
