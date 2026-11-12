@@ -1827,7 +1827,17 @@ async function openRuntimeSession(item) {
   // Still running (started in another browser or the terminal): show the
   // request it is working on, then attach to the live task.
   const live = typeof item.jobId === 'string' && item.jobId;
-  if (live && item.prompt && !(shown.length && shown[shown.length - 1].role === 'user' && shown[shown.length - 1].content === item.prompt)) shown.push({ role: 'user', content: item.prompt, at: Date.now() });
+  // The live turn is replayed from the task's events, so a copy saved to disk
+  // mid-turn is dropped here (otherwise its steps show twice); the request it
+  // is working on always shows.
+  const prompt = live ? String(item.prompt || item.title || '') : '';
+  if (live) {
+    let mine = shown.length - 1;
+    while (mine >= 0 && !(shown[mine].role === 'user' && shown[mine].content === prompt)) mine--;
+    if (mine >= 0) shown.splice(mine + 1);
+    else if (!shown.some((entry) => entry.role === 'user')) shown.length = 0;
+  }
+  if (live && prompt && !(shown.length && shown[shown.length - 1].role === 'user' && shown[shown.length - 1].content === prompt)) shown.push({ role: 'user', content: prompt, at: Date.now() });
   await store.setValue(chatKey(projectId, chatId), { messages: { sessionId: item.id, pendingShell: [], ...(live ? { jobId: item.jobId } : {}) }, display: shown, ...(live ? { turnStart: shown.length } : {}) });
   const index = await chatIndex(projectId);
   index.current = chatId;
@@ -1881,9 +1891,9 @@ async function openActiveJob(job) {
   if (state && job.sessionId) {
     for (const [id, sessionId] of state.chatSessions) if (sessionId === job.sessionId) { await openChat(id); return; }
     const listed = state.sessions.find((item) => item && item.id === job.sessionId);
-    if (listed) { await openRuntimeSession({ ...listed, jobId: listed.jobId || job.id }); return; }
+    if (listed) { await openRuntimeSession({ ...listed, jobId: listed.jobId || job.id, prompt: listed.prompt || job.prompt || job.title || '' }); return; }
   }
-  await openRuntimeSession({ id: job.sessionId || job.id, title: job.title, prompt: job.title, jobId: job.id, running: true, unsaved: true });
+  await openRuntimeSession({ id: job.sessionId || job.id, title: job.title, prompt: job.prompt || job.title, jobId: job.id, running: true, unsaved: true });
 }
 /* ---------- Sidebar: tasks at a glance (wide screens) ---------- */
 // Like the session lists in Codex, Claude Code and Devin: one click to start
