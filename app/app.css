@@ -81,6 +81,11 @@ svg{width:20px;height:20px;flex:none}
 .welcome{padding:7vh 4px 8px;display:flex;flex-direction:column;align-items:flex-start;gap:14px}
 .welcome-mark{display:block;filter:drop-shadow(0 0 22px color-mix(in srgb,var(--accent) 45%,transparent));animation:mark-float 7s ease-in-out infinite}
 @keyframes mark-float{50%{transform:translateY(-4px)}}
+.fen{position:relative;width:84px;height:66px}
+.fen img{display:block;image-rendering:pixelated}
+:root.light .welcome-mark.fen{filter:drop-shadow(1px 0 0 #0A7846) drop-shadow(-1px 0 0 #0A7846) drop-shadow(0 1px 0 #0A7846) drop-shadow(0 -1px 0 #0A7846)}
+.fen .fen-blink{position:absolute;inset:0;opacity:0;animation:fen-blink 6s steps(1,end) infinite}
+@keyframes fen-blink{0%,93%{opacity:0}94%,97%{opacity:1}98%{opacity:0}}
 .welcome h1{font-size:clamp(30px,7vw,46px);letter-spacing:-.03em;background:linear-gradient(100deg,var(--text) 30%,color-mix(in srgb,var(--accent) 70%,var(--text)) 70%,var(--accent-2));-webkit-background-clip:text;background-clip:text;color:transparent}
 :root.light .welcome h1{background:none;color:var(--text)}
 .lede{color:var(--muted);max-width:52ch}
@@ -639,7 +644,7 @@ html.lite .topbar{backdrop-filter:none;-webkit-backdrop-filter:none;background:v
 .side-status{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--faint);font-family:var(--mono);min-width:0}
 .side-status span:last-child{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .side-status.ok .side-dot{background:var(--accent-2);box-shadow:0 0 8px var(--accent-2)}
-@media (prefers-reduced-motion:reduce){.welcome-mark,.side-task .side-dot,.suggestion{animation:none!important}.busy .composer::before{animation:none}}
+@media (prefers-reduced-motion:reduce){.welcome-mark,.fen .fen-blink,.side-task .side-dot,.suggestion{animation:none!important}.busy .composer::before{animation:none}}
 
 .remember-device { display: flex; align-items: center; gap: 8px; margin-top: 10px; font-size: 13px; color: var(--muted); cursor: pointer; user-select: none; }
 .remember-device input { accent-color: var(--accent); width: 16px; height: 16px; margin: 0; }

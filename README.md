@@ -330,6 +330,14 @@ CI also runs platform security tests, a live Docker sandbox test, native PTY tes
 | [Downloads and releases](docs/RELEASES.md) | [Comparison](docs/COMPARISON.md) | [Brand guidelines](BRAND.md) |
 | | [Benchmarks](docs/BENCHMARKS.md) | |
 
+## Meet Fen
+
+<img src="assets/fen.svg" alt="Fen, a pixel-art fennec fox in OASIS lime and green" width="112" align="left">
+
+Fen is the OASIS mascot: a fennec fox, the desert animal that always finds the water. Fen greets you beside the wordmark when the terminal starts (blinking once as it settles), sits on the web app's welcome screen and appears in the README artwork. Set `OASIS_NO_MASCOT=1` to show only the wordmark in the terminal.
+
+<br clear="left">
+
 ## License
 
 [Apache License 2.0](LICENSE).

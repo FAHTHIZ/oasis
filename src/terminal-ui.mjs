@@ -9,6 +9,7 @@ import { motionLevel } from './activity-indicator.mjs';
 import { ANSI, colorEnabled, renderDiff } from './markdown.mjs';
 import { currentTheme, themeFg } from './themes.mjs';
 import { stringWidth, stripAnsi } from './line-editor.mjs';
+import { fenLines, FEN_COLUMNS } from './mascot.mjs';
 
 const LOGO = [
   '  ██████   █████  ███████ ██ ███████',
@@ -78,6 +79,27 @@ export function logoFrame(reveal = 1, shine = -1, color = true) {
   });
 }
 
+// The startup banner: Fen beside the wordmark, the wordmark aligned with Fen's chin.
+// `layout` is 'full' (Fen and wordmark), 'logo' (wordmark only) or 'fen' (Fen only).
+const MASCOT_GAP = '   ';
+export function bannerFrame({ reveal = 1, shine = -1, color = true, blink = false, layout = 'full' } = {}) {
+  const logo = logoFrame(reveal, shine, color);
+  if (layout === 'logo') return logo;
+  const fen = fenLines({ color: color && Boolean(stops()), blink });
+  if (layout === 'fen') return fen;
+  const offset = fen.length - logo.length;
+  return fen.map((line, i) => line + MASCOT_GAP + (i >= offset ? logo[i - offset] : ''));
+}
+
+export function bannerLayout(columns, env = process.env) {
+  const cols = Number(columns || 0);
+  const logoWidth = LOGO[0].length;
+  const mascot = !/^(?:1|true|yes|on)$/i.test(String(env.OASIS_NO_MASCOT || ''));
+  if (!cols || cols >= FEN_COLUMNS + MASCOT_GAP.length + logoWidth + 4) return mascot ? 'full' : 'logo';
+  if (cols >= logoWidth + 4) return 'logo';
+  return mascot && cols >= FEN_COLUMNS + 4 ? 'fen' : 'none';
+}
+
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 async function packageVersion() {
@@ -110,12 +132,13 @@ export async function showStartupBanner({ root, model = '', provider = '', mode 
   const color = colorEnabled(output, env);
   const animate = animationEnabled(output, env) && output.isTTY;
   const version = await packageVersion();
-  const height = LOGO.length;
+  const layout = bannerLayout(output.columns, env);
+  const frame = (options = {}) => bannerFrame({ color, layout, ...options });
+  const height = frame().length;
   const width = LOGO[0].length;
   output.write('\n');
-  // Narrow terminals (a phone in Termux, a split pane) skip the logo instead of wrapping it.
-  const narrow = Number(output.columns || 0) > 0 && Number(output.columns) < width + 4;
-  if (narrow) {}
+  // Narrow terminals (a phone in Termux, a split pane) drop the wordmark or Fen instead of wrapping.
+  if (layout === 'none') {}
   else if (animate) {
     output.write('\x1b[?25l');
     try {
@@ -125,12 +148,14 @@ export async function showStartupBanner({ root, model = '', provider = '', mode 
       // fewer full-logo redraws, same final frame.
       const lite = motionLevel({ env, stream: output }) === 'lite';
       const revealFrames = lite ? 4 : 16;
-      for (let f = 1; f <= revealFrames; f += 1) { draw(logoFrame(f / revealFrames, lite ? -1 : Math.round((f / revealFrames) * width), color)); await sleep(lite ? 40 : 22); }
-      if (!lite) for (let s = width; s >= -6; s -= 3) { draw(logoFrame(1, s, color)); await sleep(16); }
-      draw(logoFrame(1, -1, color));
+      for (let f = 1; f <= revealFrames; f += 1) { draw(frame({ reveal: f / revealFrames, shine: lite ? -1 : Math.round((f / revealFrames) * width) })); await sleep(lite ? 40 : 22); }
+      if (!lite) for (let s = width; s >= -6; s -= 3) { draw(frame({ shine: s })); await sleep(16); }
+      // Fen blinks once as the banner settles.
+      if (!lite && layout !== 'logo') { draw(frame({ blink: true })); await sleep(120); }
+      draw(frame());
     } finally { output.write('\x1b[?25h'); }
   } else {
-    output.write(logoFrame(1, -1, color).join('\n') + '\n');
+    output.write(frame().join('\n') + '\n');
   }
   const dim = (text) => (color ? ANSI.dim + text + ANSI.noBold : text);
   const accent = (text) => (color ? rgb(gradientAt(0.15)) + text + ANSI.fg : text);

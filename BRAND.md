@@ -38,6 +38,18 @@ The reflection should support the symbol rather than compete with it. Keep the f
 
 The repository hero is static artwork. It establishes the visual direction; it does not claim that a startup animation is currently implemented in the application.
 
+## Fen, the mascot
+
+Fen is a pixel-art fennec fox: the desert fox that finds the oasis. Fen gives the product a friendly face in the places where people meet it first, while the portal stays the formal mark.
+
+| Asset | Use |
+|---|---|
+| src/mascot.mjs | The single source of Fen's pixels and palette. The terminal banner, the web app and the SVG assets are drawn from it. |
+| assets/fen.svg, assets/fen-blink.svg | Fen with eyes open and closed, for documentation and artwork. |
+| app/icons/fen.svg, app/icons/fen-blink.svg | The web app's welcome screen (a blink every few seconds, off with reduced motion). |
+
+Draw Fen only from the sprite: keep the pixels square (crisp edges, no smoothing), scale by whole multiples where possible, and do not add outlines on dark surfaces. On light surfaces a one-pixel Deep Emerald outline keeps the lime fur readable. Fen does not replace the portal in the app icon, favicon or wordmark lockup, and does not speak for the product in copy.
+
 ## Color system
 
 | Token | Hex | Role |
