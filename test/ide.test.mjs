@@ -116,6 +116,7 @@ test('the VS Code extension activates, starts the bridge, and serves the diff/se
   const uri = (fsPath, scheme = 'file', query = '') => ({ fsPath, path: fsPath, scheme, query });
   const document = { uri: uri(path.join(base, 'a.js')), languageId: 'javascript', getText: () => 'let x;', lineCount: 3 };
   const views = [];
+  const inline = [];
   const vscode = {
     env: { appName: 'Visual Studio Code', clipboard: { writeText: async () => {} } },
     workspace: { workspaceFolders: [{ uri: uri(base) }], registerTextDocumentContentProvider: () => disposable, onDidChangeWorkspaceFolders: () => disposable, getConfiguration: () => ({ get: () => undefined }), fs: { stat: async () => ({}) }, openTextDocument: async () => document },
@@ -123,10 +124,12 @@ test('the VS Code extension activates, starts the bridge, and serves the diff/se
       activeTextEditor: { document, selection: { isEmpty: false, start: { line: 0, character: 0 }, end: { line: 0, character: 6 } } },
       onDidChangeTextEditorSelection: () => disposable, tabGroups: { all: [], close: async () => {} },
       showInformationMessage: async () => 'Accept', showWarningMessage: async () => {}, showTextDocument: async () => {}, terminals: [], createTerminal: () => ({ show() {}, sendText() {} }),
-      registerWebviewViewProvider: (id) => { views.push(id); return disposable; }
+      registerWebviewViewProvider: (id) => { views.push(id); return disposable; },
+      createStatusBarItem: () => ({ show() {}, dispose() {} })
     },
     commands: { registerCommand: (name, fn) => { commands.set(name, fn); return disposable; }, executeCommand: async (...args) => { executed.push(args[0]); } },
-    languages: { getDiagnostics: () => [] },
+    languages: { getDiagnostics: () => [], registerInlineCompletionItemProvider: (selector, provider) => { inline.push(provider); return disposable; } },
+    StatusBarAlignment: { Left: 1, Right: 2 }, ConfigurationTarget: { Global: 1 },
     Uri: { file: (p) => uri(p), from: ({ scheme, path: p, query }) => uri(p, scheme, query) },
     Position: class { constructor(l, c) { this.line = l; this.character = c; } }, Range: class { constructor(a, b) { this.start = a; this.end = b; } }, ViewColumn: { Beside: 2 }
   };
@@ -137,8 +140,10 @@ test('the VS Code extension activates, starts the bridge, and serves the diff/se
   t.after(async () => { Module._load = originalLoad; await extension.deactivate(); if (previous === undefined) delete process.env.OASIS_CONFIG_DIR; else process.env.OASIS_CONFIG_DIR = previous; await rm(base, { recursive: true, force: true }); });
   await extension.activate(context);
   assert.ok(env.get('OASIS_IDE_PORT'), 'terminals receive OASIS_IDE_PORT');
-  assert.deepEqual([...commands.keys()].sort(), ['oasis.addSelectionToChat', 'oasis.continueSession', 'oasis.focusChat', 'oasis.insertReference', 'oasis.newChat', 'oasis.openChat', 'oasis.openTerminal', 'oasis.rejectAllDiffs']);
+  assert.deepEqual([...commands.keys()].sort(), ['oasis.addSelectionToChat', 'oasis.continueSession', 'oasis.focusChat', 'oasis.insertReference', 'oasis.newChat', 'oasis.openChat', 'oasis.openTerminal', 'oasis.rejectAllDiffs', 'oasis.toggleCompletions']);
   assert.deepEqual(views, ['oasis.chat']);
+  assert.equal(inline.length, 1, 'tab completion is registered');
+  assert.equal(typeof inline[0].provideInlineCompletionItems, 'function');
   const client = await discoverIde(base, { ...process.env, OASIS_IDE_PORT: env.get('OASIS_IDE_PORT') });
   assert.equal(client.ideName, 'Visual Studio Code');
   const selection = await client.call('getSelection');
