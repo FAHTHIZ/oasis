@@ -1431,12 +1431,11 @@ function queueRender() {
     follow.pin();
   });
 }
-// Long chats stay complete: old messages are skipped by layout and paint
-// (content-visibility in app.css) instead of being removed from the page.
-// Only extremely long chats on slow devices drop their oldest nodes.
-// Very long chats keep the page fast by dropping the oldest rendered items
-// (the saved chat keeps everything). A note at the top says so and can bring
-// them back; once the person asks for everything, this chat stops trimming.
+// Long chats stay on the page: old messages are skipped by layout and paint
+// (content-visibility in app.css). Only past 3000 items (600 on slow
+// devices) are the oldest dropped from the page; the saved chat keeps
+// everything. A note at the top says so and can bring them back, and once
+// the person asks for everything this chat stops trimming.
 let showWholeChat = false;
 function trimTranscript() {
   if (showWholeChat) return;
