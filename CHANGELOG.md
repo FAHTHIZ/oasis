@@ -4,6 +4,7 @@ User-facing change history grouped by package version. A version heading does no
 
 ## Unreleased
 
+- CLI: an unknown top-level flag (for example `oasis --modle x -p hi`) now exits with "Unknown option --modle. Did you mean --model?" instead of being sent to the model as the task. Without a terminal, `oasis --bogus` used to hang silently. To send a task that starts with a dash, put `--` before it (`oasis -- "-x is broken"`).
 - Web file preview: a missing file now gets "No file named … in this workspace" instead of the raw ENOENT error with the absolute path. The file is read through a handle opened without following a final symlink and re-checked, so a file swapped for a symlink or FIFO after the check cannot be read and cannot hang the request.
 - Protected paths: agent edits to project command files (`.oasis/commands/`, `.claude/commands/`, `.gemini/commands/`, `.opencode/commands/`, `opencode.json`) now ask first. In a trusted workspace these commands run their inline shell and grant their `allowed-tools` when you type them, so a prompt-injected edit could otherwise plant a command that runs later without approval.
 - Approvals: general prompts (opening the browser terminal, starting an MCP server, leaving plan mode with a plan and others) keep their line breaks, and indented command lines still show as code. They used to be squeezed into one run-on paragraph.

@@ -2792,6 +2792,41 @@ function subcommandHelp(rawArgs) {
   return true;
 }
 
+// Common top-level flags, for the "did you mean" hint on a typo.
+const COMMON_FLAGS = ['--print', '--continue', '--resume', '--model', '--max-turns', '--output-format', '--yes', '--workspace', '--worktree',
+  '--permission-mode', '--dangerously-skip-permissions', '--help', '--version', '--verbose', '--debug', '--name', '--bg', '--allowedTools',
+  '--disallowedTools', '--add-dir', '--system-prompt', '--append-system-prompt', '--restricted', '--interactive', '--goal', '--effort',
+  '--agent', '--sandbox', '--mcp-config', '--plugin-dir', '--settings', '--fork-session', '--session-id', '--json-schema', '--input-format',
+  '--prompt-interactive', '--tmux', '--exec', '--init'];
+
+function editDistance(a, b) {
+  const row = Array.from({ length: b.length + 1 }, (_, j) => j);
+  for (let i = 1; i <= a.length; i++) {
+    let previous = row[0];
+    row[0] = i;
+    for (let j = 1; j <= b.length; j++) {
+      const saved = row[j];
+      row[j] = Math.min(row[j] + 1, row[j - 1] + 1, previous + (a[i - 1] === b[j - 1] ? 0 : 1));
+      previous = saved;
+    }
+  }
+  return row[b.length];
+}
+
+/**
+ * A leftover argument that looks like a flag (all known flags are consumed
+ * before this) is a typo, not a task: Claude Code and Codex CLI reject it
+ * instead of sending "--bogus" to the model. Returns '' for anything else.
+ */
+export function unknownOptionMessage(arg) {
+  const text = String(arg || '');
+  if (!/^--?[A-Za-z][\w-]*(?:=.*)?$/s.test(text)) return '';
+  const name = text.replace(/=.*$/s, '');
+  const scored = COMMON_FLAGS.map((flag) => [flag, editDistance(name.toLowerCase(), flag.toLowerCase())]).sort((a, b) => a[1] - b[1]);
+  const hint = scored[0] && scored[0][1] <= Math.max(2, Math.floor(name.length / 4)) ? ' Did you mean ' + scored[0][0] + '?' : '';
+  return 'Unknown option ' + name + '.' + hint + ' Run oasis --help for options; to send text that starts with a dash as the task, put -- before it.';
+}
+
 async function main() {
   // HTTPS_PROXY / HTTP_PROXY / NO_PROXY for every outbound request (Node's fetch ignores them).
   installProxyFromEnv();
@@ -3204,6 +3239,12 @@ async function main() {
     if (SESSION_OPTIONS.runInit === 'only') return;
   }
   if (SESSION_OPTIONS.runMaintenance) await runSetupHooks(workspace, 'maintenance');
+  // `oasis -- "-x is broken"` sends text that starts with a dash as the task.
+  if (args[0] === '--') args.shift();
+  else if (args[0] && !['--interactive', '--help', '-h', '--version', '-v'].includes(args[0])) {
+    const message = unknownOptionMessage(args[0]);
+    if (message) throw new Error(message);
+  }
   const command = args[0];
   const rest = args.slice(1);
   // The Claude Agent SDK (0.3.x) launches the CLI with stream-json in and out but no -p.
