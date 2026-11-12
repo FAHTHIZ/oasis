@@ -28,7 +28,7 @@ import path from 'node:path';
 import { listRecipes, recipePrompt } from './goose-recipes.mjs';
 
 // Claude Code aliases for built-in commands (and /swarm from Kimi Code, which is /batch here).
-export const COMMAND_ALIASES = { tokens: 'context', approvals: 'permissions', ask: 'plan', keys: 'keybindings', peers: 'list-agents', settings: 'config', checkpoint: 'rewind', continue: 'resume', 'allowed-tools': 'permissions', stats: 'usage', checkup: 'doctor', 'code-review': 'review', bg: 'background', proactive: 'loop', reset: 'clear', new: 'clear', quit: 'exit', routines: 'schedule', feedback: 'bug', share: 'export', 'install-github-action': 'install-github-app', swarm: 'batch' };
+export const COMMAND_ALIASES = { tokens: 'context', approvals: 'permissions', ask: 'plan', keys: 'keybindings', peers: 'list-agents', settings: 'config', checkpoint: 'rewind', continue: 'resume', 'allowed-tools': 'permissions', stats: 'usage', checkup: 'doctor', 'code-review': 'review', bg: 'background', proactive: 'loop', reset: 'clear', new: 'clear', quit: 'exit', routines: 'schedule', feedback: 'bug', share: 'export', 'install-github-action': 'install-github-app', swarm: 'batch', preset: 'presets' };
 
 export const BUILTIN_COMMANDS = {
   help: 'Show built-in and custom commands',
@@ -136,6 +136,7 @@ export const BUILTIN_COMMANDS = {
   'fewer-permission-prompts': 'Find safe read-only commands you approve often and add them to the project allowlist',
   keys: 'Show the keyboard shortcut cheat sheet (/keys; alias /keybindings)',
   tips: 'Show a rotating setup and workflow tip (/tips)',
+  presets: 'Ten numbered slots for prompts and /commands you send often (/presets, /presets N, /presets save N [TEXT], /presets clear N)',
   keybindings: 'Show keyboard shortcuts',
   vim: 'Toggle vim editing for the prompt (/vim on|off)',
   sounds: 'Sound effects for finished turns, approvals, errors and completed steps (/sounds on|off|test|volume 0-100)',
@@ -229,7 +230,7 @@ export async function runBuiltinCommand(name, argument, state) {
       const groups = [
         { title: 'Core workflows', commands: ['init', 'plan', 'fix', 'diagnose', 'review', 'rollback'] },
         { title: 'Getting started', commands: ['help', 'setup', 'status', 'doctor', 'context', 'cost', 'undo'] },
-        { title: 'Working', commands: ['clear', 'compact', 'test', 'diagnostics', 'audit', 'tasks', 'workflows', 'learning', 'commit', 'pr', 'goal', 'recipe', 'batch', 'simplify', 'verify', 'todos', 'agents', 'teams', 'worktrees', 'resume', 'fork', 'copy', 'export'] },
+        { title: 'Working', commands: ['clear', 'compact', 'test', 'diagnostics', 'audit', 'tasks', 'workflows', 'learning', 'commit', 'pr', 'goal', 'recipe', 'batch', 'simplify', 'verify', 'todos', 'agents', 'teams', 'worktrees', 'resume', 'fork', 'copy', 'export', 'presets'] },
         { title: 'Safety', commands: ['permissions', 'mode', 'sandbox', 'security-review', 'undo', 'rewind', 'purge', 'logout', 'doctor'] },
         { title: 'Settings', commands: ['model', 'effort', 'config', 'language', 'avoid', 'comments', 'output-style', 'fast', 'color', 'add-dir', 'login', 'logout', 'auto-mode-setup', 'chrome'] }
       ];
@@ -904,6 +905,10 @@ export async function runBuiltinCommand(name, argument, state) {
       sessionOptions.effort = level === 'auto' ? null : level;
       if (session) session.config = applyEffort(session.config, sessionOptions.effort, session.baseEffortConfig || (session.baseEffortConfig = { reasoningEffort: session.config.reasoningEffort, thinkingBudget: session.config.thinkingBudget }));
       return { output: 'Reasoning effort set to ' + level + ' for this session.' };
+    }
+    case 'presets': {
+      const { presetsCommand } = await import('./presets.mjs');
+      return await presetsCommand(argument, { env, session });
     }
     case 'copy': {
       const replies = session ? session.messages.filter((m) => m.role === 'assistant' && typeof m.content === 'string' && m.content.trim()) : [];
