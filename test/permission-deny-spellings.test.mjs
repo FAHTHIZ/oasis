@@ -84,3 +84,26 @@ test('deny rules catch ANSI-C quoting, compound commands, exec -a, env -S and fi
   for (const command of ["echo '(git push)'", "echo $'git push'", 'find . -name rm', 'if-config push', '{ git status; }', 'env -S "ls -la"'])
     assert.notEqual(p.evaluate('run_shell', { command }).decision, 'deny', command);
 });
+
+test('deny rules see through chroot NEWROOT and script -c', () => {
+  // Regression: `chroot / rm x` unwrapped to "/" as the program, and
+  // `script -c "rm x"` was not unwrapped, so Bash(rm:*) missed both.
+  const p = policy();
+  for (const line of ['chroot / rm x', 'chroot --userspec=1:1 / rm x', 'script -c "rm x" /dev/null', 'script -qc "git push" log', 'script --command="curl x"']) {
+    assert.equal(p.evaluate('run_shell', { command: line }).decision, 'deny', line);
+  }
+});
+
+test('allow rules do not cover commands behind env assignments that change what runs', () => {
+  // Regression (Claude Code 2.1.319 class): Bash(ls:*) auto-approved
+  // `LD_PRELOAD=x.so ls`, `PATH=. ls`, `BASH_ENV=x ls` and `PATH=.; ls`.
+  const p = new PermissionPolicy({ permissions: { allow: ['Bash(ls:*)', 'Bash(git status:*)', 'Bash(npm test:*)'] } }, { root: '/tmp' });
+  for (const line of ['LD_PRELOAD=x.so ls', 'PATH=. ls', 'BASH_ENV=x ls', 'PATH=.; ls', 'IFS=x; ls', 'PAGER=x git status', 'GIT_EXTERNAL_DIFF=x git status', 'NODE_OPTIONS=--require=./x.js npm test', 'NODE_ENV=test LD_PRELOAD=x npm test']) {
+    assert.notEqual(p.evaluate('run_shell', { command: line }).decision, 'allow', line);
+  }
+  for (const line of ['NODE_ENV=test npm test', 'CI=1 FORCE_COLOR=0 npm test', 'LC_ALL=C ls -la', 'TZ=UTC ls']) {
+    assert.equal(p.evaluate('run_shell', { command: line }).decision, 'allow', line);
+  }
+  const explicit = new PermissionPolicy({ permissions: { allow: ['Bash(PATH=./bin ls:*)'] } }, { root: '/tmp' });
+  assert.equal(explicit.evaluate('run_shell', { command: 'PATH=./bin ls -l' }).decision, 'allow', 'a rule that names the assignment still matches');
+});

@@ -365,6 +365,13 @@ export function commandSpellings(piece, depth = 0) {
     // busybox/toybox APPLET ...: a multi-call binary runs the named applet
     // (busybox rm x is rm x). Only the shell applets fall through to -c parsing.
     if ((base === 'busybox' || base === 'toybox') && words[1] && !words[1].startsWith('-') && !SHELLS.has(words[1])) { words = words.slice(1); continue; }
+    // script -c CMD (util-linux) runs CMD in a new terminal session.
+    if (base === 'script') {
+      const at = words.findIndex((word, index) => index > 0 && (/^-[a-z]*c$/i.test(word) || word === '--command' || word.startsWith('--command=')));
+      const script = at === -1 ? null : words[at].startsWith('--command=') ? words[at].slice('--command='.length) : words[at + 1];
+      if (typeof script === 'string') for (const inner of splitShellCommands(script, depth + 1).commands) for (const spelling of commandSpellings(inner, depth + 1)) out.add(spelling);
+      break;
+    }
     if (SHELLS.has(base)) {
       let index = 1;
       if (base === 'busybox' && SHELLS.has(String(words[1] || ''))) index = 2;
@@ -407,7 +414,14 @@ const AST_ASSIGNMENT = /^([A-Za-z_][A-Za-z0-9_]*)=(.*)$/s;
 // or heredoc, and programs named through a variable set earlier on the line.
 // Deny and ask rules match these in addition to the legacy pieces, so they
 // only get broader. Empty when the grammar is unavailable.
-function astCommandPieces(line, depth = 0) {
+// Variables an allow rule may see set in front of its command (`NODE_ENV=test
+// npm test`) or on their own. Anything else (PATH, LD_PRELOAD, BASH_ENV,
+// NODE_OPTIONS, PAGER, GIT_*, IFS, ...) can change which program runs or make
+// it load other code, so for auto-approval the assignment stays part of the
+// command and `Bash(ls:*)` does not cover `LD_PRELOAD=x.so ls` or `PATH=.; ls`.
+const SAFE_ALLOW_ENV = /^(?:NODE_ENV|CI|DEBUG|TZ|LANG|LANGUAGE|LC_[A-Z]+|NO_COLOR|FORCE_COLOR|CLICOLOR|CLICOLOR_FORCE|TERM|COLUMNS|LINES|RUST_LOG|RUST_BACKTRACE|GOOS|GOARCH|CGO_ENABLED|GOFLAGS_NONE|PYTHONUNBUFFERED|PYTHONDONTWRITEBYTECODE|PYTHONIOENCODING|NODE_NO_WARNINGS|LOG_LEVEL|VERBOSE|ENV|APP_ENV|RAILS_ENV|RACK_ENV|MIX_ENV|FLASK_ENV|DJANGO_SETTINGS_MODULE|PORT|HOST|TEST|JEST_WORKER_ID|NEXT_TELEMETRY_DISABLED)$/;
+
+function astCommandPieces(line, depth = 0, { strictEnv = false } = {}) {
   if (depth > 4) return [];
   const parsed = parseShellCommands(line);
   if (!parsed) return [];
@@ -417,14 +431,20 @@ function astCommandPieces(line, depth = 0) {
     let tokens = cmd.tokens.filter((token, i, all) => !/^(\d*[<>]+[&|]?|&>>?|<<<)$/.test(token) && !/^(\d*[<>]+[&|]?|&>>?|<<<)$/.test(all[i - 1] || ''));
     if (tokens.length && tokens.every((token) => AST_ASSIGNMENT.test(token))) {
       for (const token of tokens) { const [, name, value] = token.match(AST_ASSIGNMENT); vars.set(name, value); }
+      const unsafe = strictEnv ? tokens.filter((token) => !SAFE_ALLOW_ENV.test(token.match(AST_ASSIGNMENT)[1])) : [];
+      if (unsafe.length) out.push(unsafe.map(quoteWord).join(' '));
       continue;
     }
     tokens = tokens.map((token) => token.replace(/\$\{([A-Za-z_][A-Za-z0-9_]*)\}|\$([A-Za-z_][A-Za-z0-9_]*)/g, (all, a, b) => (vars.has(a || b) ? vars.get(a || b) : all)));
     if (tokens[0] && /\s/.test(tokens[0]) && /^\$/.test(cmd.tokens[0])) tokens = [...tokens[0].split(/\s+/).filter(Boolean), ...tokens.slice(1)];
-    while (tokens.length > 1 && AST_ASSIGNMENT.test(tokens[0])) tokens = tokens.slice(1);
+    const kept = [];
+    while (tokens.length > 1 && AST_ASSIGNMENT.test(tokens[0])) {
+      if (strictEnv && !SAFE_ALLOW_ENV.test(tokens[0].match(AST_ASSIGNMENT)[1])) kept.push(tokens[0]);
+      tokens = tokens.slice(1);
+    }
     if (!tokens.length) continue;
-    out.push(tokens.map(quoteWord).join(' '));
-    if (cmd.stdinScript && AST_SHELLS.has(executableBase(tokens[0]))) out.push(...astCommandPieces(cmd.stdinScript, depth + 1));
+    out.push([...kept, ...tokens].map(quoteWord).join(' '));
+    if (cmd.stdinScript && AST_SHELLS.has(executableBase(tokens[0]))) out.push(...astCommandPieces(cmd.stdinScript, depth + 1, { strictEnv }));
   }
   return out;
 }
@@ -436,7 +456,7 @@ function strictCommandPieces(line) {
     const ast = parseShellCommands(line);
     if (!ast || ast.unparsable || ast.tooLarge || !ast.commands.length) return null;
     if (ast.commands.some((command) => command.dynamic || command.computedName)) return null;
-    const pieces = astCommandPieces(line);
+    const pieces = astCommandPieces(line, 0, { strictEnv: true });
     return pieces.length ? pieces : null;
   }
   const parsed = splitShellCommands(line);
@@ -463,7 +483,7 @@ function matchCommandSpecifier(specifier, line, options = {}) {
     const ast = parseShellCommands(line);
     if (!ast || ast.unparsable || ast.tooLarge || !ast.commands.length) return false;
     if (ast.commands.some((command) => command.dynamic || command.computedName)) return false;
-    const pieces = astCommandPieces(line);
+    const pieces = astCommandPieces(line, 0, { strictEnv: true });
     return pieces.length > 0 && pieces.every((piece) => matchSingleCommandSpecifier(specifier, piece));
   }
 
@@ -842,6 +862,9 @@ function unwrap(base, args) {
   } else if (base === 'flock') {
     skipFlags(new Set(['-w', '--timeout', '-E', '--conflict-exit-code']));
     i++; // lock file
+  } else if (base === 'chroot') {
+    skipFlags(new Set(['--userspec', '--groups']));
+    i++; // new root
   } else {
     skipFlags(new Set(['-o', '-n', '-d', '-c', '-t']));
   }
