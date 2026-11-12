@@ -97,3 +97,13 @@ test('a task microagent lists its inputs and asks the user for missing ones', as
   const plain = await keywordRulesFor(root, 'commit it', { env, home });
   assert.ok(!plain.text.includes('Inputs this task needs'));
 });
+
+test('SKILL.md files with triggers are added on a keyword match, once per conversation', async (t) => {
+  const { root, env, home } = await workspace(t, { ...files, '.agents/skills/k8s/SKILL.md': '---\nname: k8s\ndescription: Kubernetes help\ntriggers:\n- kubectl\n- helm\n---\nOH-K8S use namespaces.' });
+  const recalled = await keywordRulesFor(root, 'run Helm upgrade', { env, home });
+  assert.deepEqual(recalled.labels, [path.join(root, '.agents', 'skills', 'k8s', 'SKILL.md')]);
+  assert.match(recalled.text, /keyword match for "helm"[\s\S]*Skill location: .*\.agents[\\/]skills[\\/]k8s[\\/]SKILL\.md\n\nOH-K8S use namespaces\./);
+  assert.ok(!recalled.text.includes('triggers:'));
+  assert.equal((await keywordRulesFor(root, 'run helm', { env, home, alreadyLoaded: (label) => label === recalled.labels[0] })).text, '');
+  assert.equal((await keywordRulesFor(root, 'the pdf tool', { env, home })).text, '', 'skills without triggers are not injected');
+});
