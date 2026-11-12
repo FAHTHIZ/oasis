@@ -62,3 +62,67 @@ test('session search matches word prefixes, so a short query finds longer words'
     assert.equal(found.results[0] && found.results[0].sessionId, a.id);
   } finally { await rm(base, { recursive: true, force: true }); }
 });
+
+test('session search keeps an FTS5 index that only re-reads changed session files', async () => {
+  const { writeFile, readFile, stat, unlink, readdir } = await import('node:fs/promises');
+  const base = await mkdtemp(path.join(os.tmpdir(), 'oasis-recall-index-'));
+  const root = path.join(base, 'proj'); await mkdir(root);
+  const env = { OASIS_CONFIG_DIR: path.join(base, 'config') };
+  try {
+    const a = await saveSession(chat(root, 'Fix the flaky websocket reconnect test', 'Added jitter.'), { env });
+    const b = await saveSession(chat(root, 'Add dark mode', 'Added a theme toggle.'), { env });
+    const first = await searchSessions(root, 'websocket', { env });
+    assert.equal(first.reindexed, 2);
+    const indexFile = path.join(env.OASIS_CONFIG_DIR, 'sessions', 'search-index.sqlite');
+    if (process.platform !== 'win32') assert.equal((await stat(indexFile)).mode & 0o777, 0o600);
+    const again = await searchSessions(root, 'websocket', { env });
+    assert.equal(again.reindexed, 0, 'unchanged files are not re-read');
+    assert.equal(again.results[0].sessionId, a.id);
+
+    // Edits, deletions and new files are picked up.
+    const dir = path.dirname((await readdir(path.dirname(indexFile), { recursive: true, withFileTypes: true })).filter((e) => e.isFile() && e.name === b.id + '.json').map((e) => path.join(e.parentPath, e.name))[0]);
+    const bFile = path.join(dir, b.id + '.json');
+    const data = JSON.parse(await readFile(bFile, 'utf8'));
+    data.messages.push({ role: 'user', content: 'Now the websocket reconnect shows in dark mode too' });
+    await writeFile(bFile, JSON.stringify(data));
+    const edited = await searchSessions(root, 'websocket', { env });
+    assert.equal(edited.reindexed, 1);
+    assert.ok(edited.results.some((item) => item.sessionId === b.id));
+    await unlink(path.join(dir, a.id + '.json'));
+    const c = await saveSession(chat(root, 'Kubernetes liveness probe', 'Raised initialDelaySeconds.'), { env });
+    const after = await searchSessions(root, 'websocket', { env });
+    assert.equal(after.reindexed, 2, 'one deletion and one new file');
+    assert.ok(!after.results.some((item) => item.sessionId === a.id));
+    assert.equal((await searchSessions(root, 'liveness', { env })).results[0].sessionId, c.id);
+
+    // A corrupt cache is rebuilt from the session files.
+    await writeFile(indexFile, 'not a database'.repeat(100));
+    const rebuilt = await searchSessions(root, 'liveness', { env });
+    assert.equal(rebuilt.reindexed, 2);
+    assert.equal(rebuilt.results[0].sessionId, c.id);
+    assert.equal((await searchSessions(root, 'liveness', { env })).reindexed, 0, 'the rebuilt cache is persisted');
+  } finally { await rm(base, { recursive: true, force: true }); }
+});
+
+test('session search reads legacy session files as-is and loads node:sqlite without warnings', async () => {
+  const { writeFile } = await import('node:fs/promises');
+  const { getSessionDirectory } = await import('../src/sessions.mjs');
+  const { execFileSync } = await import('node:child_process');
+  const base = await mkdtemp(path.join(os.tmpdir(), 'oasis-recall-legacy-'));
+  const root = path.join(base, 'proj'); await mkdir(root);
+  const env = { OASIS_CONFIG_DIR: path.join(base, 'config') };
+  try {
+    const dir = getSessionDirectory(root, env); await mkdir(dir, { recursive: true });
+    // A minimal file as older releases wrote it: no name, config or usage fields.
+    const id = '0123456789abcdef0123456789abcdef';
+    await writeFile(path.join(dir, id + '.json'), JSON.stringify({ schemaVersion: 1, id, workspaceRoot: root, updatedAt: '2025-01-01T00:00:00.000Z', messages: [{ role: 'user', content: 'Translate onboarding to German' }] }));
+    await writeFile(path.join(dir, 'fedcba9876543210fedcba9876543210.json'), '{ not json');
+    const found = await searchSessions(root, 'german', { env });
+    assert.equal(found.results[0].sessionId, id);
+    assert.equal(found.searched, 2, 'the unreadable file is skipped, not fatal');
+    assert.equal(found.results[0].title, 'Translate onboarding to German');
+    const script = `import { searchSessions } from ${JSON.stringify(new URL('../src/session-search.mjs', import.meta.url).href)}; await searchSessions(${JSON.stringify(root)}, 'german', { env: ${JSON.stringify(env)} });`;
+    const stderr = execFileSync(process.execPath, ['--input-type=module', '-e', script], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
+    assert.equal(stderr, '');
+  } finally { await rm(base, { recursive: true, force: true }); }
+});

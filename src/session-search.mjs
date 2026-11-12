@@ -1,17 +1,26 @@
-// Cross-session recall: rank saved conversations for a query (MiniSearch
-// BM25+ with prefix matching over user and assistant text) and return short, redacted excerpts. Read-only.
+// Cross-session recall: rank saved conversations for a query and return short,
+// redacted excerpts. Read-only with respect to the sessions themselves.
 // Searches this workspace by default; scope "all" covers every workspace's
 // saved sessions under the OASIS config directory.
-import { readdir } from 'node:fs/promises';
+//
+// Ranking is SQLite FTS5 BM25 (node:sqlite, built into Node 22) over a cache in
+// <config>/sessions/search-index.sqlite. The session files stay the source of
+// truth: each search re-stats them and re-indexes only new or changed files, so
+// the cache can be deleted at any time. The index is contentless (no message
+// text is copied into it); excerpts are read from the session files.
+import { rmSync } from 'node:fs';
+import { chmod, mkdir, readdir, stat } from 'node:fs/promises';
+import { createRequire } from 'node:module';
 import path from 'node:path';
 import { getConfigDirectory } from './config.mjs';
 import { getSessionDirectory } from './sessions.mjs';
 import { readBoundedRegularFile } from './safe-storage.mjs';
 import { redactSecrets } from './auto-memory.mjs';
-import MiniSearch from 'minisearch';
 
 const MAX_SESSION_BYTES = 3 * 1024 * 1024;
 const MAX_FILES = 2000;
+const INDEX_VERSION = '1';
+const CANDIDATES = 150;
 const STOP = new Set('a an and are as at be but by for from has have i if in into is it its me my of on or our so that the this to was we were what when where which with you your'.split(' '));
 
 export const SESSION_SEARCH_TOOL_DEFINITION = {
@@ -56,7 +65,7 @@ async function sessionFiles(root, scope, env) {
     for (const entry of entries) if (entry.isFile() && /^[a-f0-9-]{20,80}\.json$/i.test(entry.name)) files.push(path.join(dir, entry.name));
     if (files.length >= MAX_FILES) break;
   }
-  return files.slice(0, MAX_FILES);
+  return { dirs, files: files.slice(0, MAX_FILES) };
 }
 
 function excerpt(text, terms, width = 260) {
@@ -68,7 +77,111 @@ function excerpt(text, terms, width = 260) {
   return (start > 0 ? '…' : '') + piece + (start + width < text.length ? '…' : '');
 }
 
-// Returns { results: [{ sessionId, updatedAt, title, workspace, role, index, score, excerpt }], searched }.
+async function readSession(file) {
+  try {
+    const data = JSON.parse(await readBoundedRegularFile(file, MAX_SESSION_BYTES, { label: 'Saved session' }));
+    return data && data.schemaVersion === 1 && Array.isArray(data.messages) ? data : null;
+  } catch { return null; }
+}
+
+function searchableMessages(data) {
+  const out = [];
+  data.messages.forEach((message, index) => {
+    if (!message || typeof message.content !== 'string' || !['user', 'assistant'].includes(message.role)) return;
+    const text = cleanText(message.content);
+    const tokens = text ? tokenize(text) : [];
+    if (tokens.length) out.push({ index, role: message.role, text, tokens });
+  });
+  return out;
+}
+
+// node:sqlite prints an ExperimentalWarning on first load in Node 22; that one
+// warning is not useful to OASIS users, so it is dropped while the module loads.
+let sqlite = null;
+function loadSqlite() {
+  if (sqlite) return sqlite;
+  const original = process.emitWarning;
+  process.emitWarning = function (warning, ...rest) {
+    if (/SQLite is an experimental feature/.test(String(warning && warning.message ? warning.message : warning))) return;
+    return original.call(this, warning, ...rest);
+  };
+  try { sqlite = createRequire(import.meta.url)('node:sqlite'); } finally { process.emitWarning = original; }
+  return sqlite;
+}
+
+const SCHEMA = `
+  CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT);
+  CREATE TABLE IF NOT EXISTS files (path TEXT PRIMARY KEY, mtime REAL, size INTEGER, session_id TEXT, updated_at TEXT, title TEXT, workspace TEXT);
+  CREATE TABLE IF NOT EXISTS rows (id INTEGER PRIMARY KEY, path TEXT NOT NULL, idx INTEGER NOT NULL, role TEXT NOT NULL);
+  CREATE INDEX IF NOT EXISTS rows_path ON rows(path);
+  CREATE VIRTUAL TABLE IF NOT EXISTS msgs USING fts5(body, content='', contentless_delete=1, tokenize="unicode61 remove_diacritics 0 tokenchars '_'");
+`;
+
+function openIndex(file) {
+  const { DatabaseSync } = loadSqlite();
+  const open = (target) => {
+    const db = new DatabaseSync(target);
+    try {
+      db.exec('PRAGMA busy_timeout = 5000');
+      const version = (() => { try { return db.prepare("SELECT value FROM meta WHERE key = 'version'").get()?.value; } catch { return null; } })();
+      if (version !== INDEX_VERSION) db.exec('DROP TABLE IF EXISTS msgs; DROP TABLE IF EXISTS rows; DROP TABLE IF EXISTS files; DROP TABLE IF EXISTS meta;');
+      db.exec(SCHEMA);
+      db.prepare("INSERT OR REPLACE INTO meta (key, value) VALUES ('version', ?)").run(INDEX_VERSION);
+      return db;
+    } catch (error) { db.close(); throw error; }
+  };
+  try { return open(file); } catch {
+    // A damaged cache is deleted and rebuilt; if that fails too (read-only folder), search in memory.
+    for (const suffix of ['', '-journal', '-wal', '-shm']) { try { rmSync(file + suffix, { force: true }); } catch { /* ignore */ } }
+    try { return open(file); } catch { /* fall through */ }
+    try { return open(':memory:'); } catch (error) { throw new Error('session_search could not open its index: ' + error.message); }
+  }
+}
+
+// Brings the index up to date with the session files in `dirs`.
+async function syncIndex(db, dirs, files) {
+  const inScope = new Set(dirs.map((dir) => path.resolve(dir)));
+  const known = new Map(db.prepare('SELECT path, mtime, size FROM files').all().map((row) => [row.path, row]));
+  const present = new Set(files);
+  const drop = (file) => {
+    for (const row of db.prepare('SELECT id FROM rows WHERE path = ?').all(file)) db.prepare('DELETE FROM msgs WHERE rowid = ?').run(row.id);
+    db.prepare('DELETE FROM rows WHERE path = ?').run(file);
+    db.prepare('DELETE FROM files WHERE path = ?').run(file);
+  };
+  const changed = [];
+  for (const file of files) {
+    let info;
+    try { info = await stat(file); } catch { continue; }
+    const row = known.get(file);
+    if (!row || row.mtime !== info.mtimeMs || row.size !== info.size) changed.push({ file, info, data: await readSession(file) });
+  }
+  const gone = [...known.keys()].filter((file) => inScope.has(path.dirname(file)) && !present.has(file));
+  if (!changed.length && !gone.length) return 0;
+  const insertFile = db.prepare('INSERT INTO files (path, mtime, size, session_id, updated_at, title, workspace) VALUES (?, ?, ?, ?, ?, ?, ?)');
+  const insertRow = db.prepare('INSERT INTO rows (path, idx, role) VALUES (?, ?, ?)');
+  const insertText = db.prepare('INSERT INTO msgs (rowid, body) VALUES (?, ?)');
+  db.exec('BEGIN IMMEDIATE');
+  try {
+    for (const file of gone) drop(file);
+    for (const { file, info, data } of changed) {
+      drop(file);
+      // Unreadable or foreign files are remembered (no rows) so they are not re-read every time.
+      const firstUser = data && data.messages.find((item) => item && item.role === 'user' && typeof item.content === 'string');
+      const title = !data ? '' : typeof data.name === 'string' && data.name ? data.name : firstUser ? cleanText(firstUser.content).slice(0, 80) : '';
+      insertFile.run(file, info.mtimeMs, info.size, data ? String(data.id || '') : '', data ? String(data.updatedAt || '') : '', title, data ? path.resolve(data.workspaceRoot || '') : '');
+      if (!data) continue;
+      for (const message of searchableMessages(data)) {
+        const { lastInsertRowid } = insertRow.run(file, message.index, message.role);
+        insertText.run(lastInsertRowid, message.tokens.join(' '));
+      }
+    }
+    db.exec('COMMIT');
+  } catch (error) { db.exec('ROLLBACK'); throw error; }
+  return changed.length + gone.length;
+}
+
+// Returns { results: [{ sessionId, updatedAt, title, workspace, role, index, score, excerpt }], searched, reindexed }
+// where `reindexed` counts session files (re)read into the index by this call.
 export async function searchSessions(root, query, options = {}) {
   const env = options.env || process.env;
   const terms = [...new Set(tokenize(query))];
@@ -77,48 +190,56 @@ export async function searchSessions(root, query, options = {}) {
   const scope = options.scope === 'all' ? 'all' : 'workspace';
   const role = ['user', 'assistant'].includes(options.role) ? options.role : 'any';
   const exclude = options.excludeId ? String(options.excludeId) : '';
-  const docs = [];
-  const files = await sessionFiles(root, scope, env);
-  for (const file of files) {
-    let data;
-    try { data = JSON.parse(await readBoundedRegularFile(file, MAX_SESSION_BYTES, { label: 'Saved session' })); } catch { continue; }
-    if (!data || data.schemaVersion !== 1 || !Array.isArray(data.messages) || data.id === exclude) continue;
-    if (scope === 'workspace' && path.resolve(data.workspaceRoot || '') !== path.resolve(root)) continue;
-    const firstUser = data.messages.find((item) => item && item.role === 'user' && typeof item.content === 'string');
-    const title = typeof data.name === 'string' && data.name ? data.name : firstUser ? cleanText(firstUser.content).slice(0, 80) : '';
-    data.messages.forEach((message, index) => {
-      if (!message || typeof message.content !== 'string' || !['user', 'assistant'].includes(message.role)) return;
-      if (role !== 'any' && message.role !== role) return;
-      const text = cleanText(message.content);
-      if (!text) return;
-      if (!tokenize(text).length) return;
-      docs.push({ id: docs.length, sessionId: data.id, updatedAt: String(data.updatedAt || ''), title, workspace: String(data.workspaceRoot || ''), role: message.role, index, text });
-    });
-  }
-  if (!docs.length) return { results: [], searched: files.length };
-  const index = new MiniSearch({ fields: ['text'], tokenize, processTerm: (term) => term });
-  index.addAll(docs);
+  const { dirs, files } = await sessionFiles(root, scope, env);
+  if (!files.length) return { results: [], searched: 0, reindexed: 0 };
+  const indexDir = path.join(getConfigDirectory(env), 'sessions');
+  const indexFile = path.join(indexDir, 'search-index.sqlite');
+  await mkdir(indexDir, { recursive: true }).catch(() => {});
+  const db = openIndex(indexFile);
+  let candidates;
+  let reindexed = 0;
+  try {
+    await chmod(indexFile, 0o600).catch(() => {});
+    reindexed = await syncIndex(db, dirs, files);
+    // Words of four or more letters also match longer words ("auth" finds "authentication").
+    const match = terms.map((term) => '"' + term + '"' + (term.length >= 4 ? '*' : '')).join(' OR ');
+    const where = ['msgs MATCH ?', 'f.session_id != ?'];
+    const params = [match, exclude];
+    if (role !== 'any') { where.push('r.role = ?'); params.push(role); }
+    if (scope === 'workspace') { where.push('f.workspace = ?'); params.push(path.resolve(root)); }
+    const inFiles = new Set(files);
+    candidates = db.prepare('SELECT r.path AS path, r.idx AS idx, r.role AS role, bm25(msgs) AS rank, f.session_id AS sessionId, f.updated_at AS updatedAt, f.title AS title, f.workspace AS workspace FROM msgs JOIN rows r ON r.id = msgs.rowid JOIN files f ON f.path = r.path WHERE ' + where.join(' AND ') + ' ORDER BY rank LIMIT ' + CANDIDATES).all(...params).filter((row) => inFiles.has(row.path));
+  } finally { db.close(); }
+  // Excerpts and the phrase/coverage boosts need the message text, read back from the session files.
+  const sessions = new Map();
   const phrase = String(query).toLowerCase().trim();
-  const scored = index.search(terms.join(' '), { tokenize: (text) => text.split(' '), prefix: (term) => term.length >= 4, combineWith: 'OR' }).map((hit) => {
-    const doc = docs[hit.id];
-    let score = hit.score;
+  const scored = [];
+  for (const row of candidates) {
+    if (!sessions.has(row.path)) sessions.set(row.path, await readSession(row.path));
+    const data = sessions.get(row.path);
+    const message = data && data.messages[row.idx];
+    if (!message || typeof message.content !== 'string') continue;
+    const text = cleanText(message.content);
+    const tokens = new Set(tokenize(text));
+    const covered = terms.filter((term) => tokens.has(term) || (term.length >= 4 && [...tokens].some((token) => token.startsWith(term)))).length;
+    let score = -row.rank;
     // Reward the exact phrase and covering more of the query's distinct terms.
-    if (doc.text.toLowerCase().includes(phrase)) score *= 1.5;
-    score *= 0.5 + 0.5 * Math.min(1, hit.queryTerms.length / terms.length);
-    return { doc, score };
-  });
-  scored.sort((x, y) => y.score - x.score || y.doc.updatedAt.localeCompare(x.doc.updatedAt));
+    if (text.toLowerCase().includes(phrase)) score *= 1.5;
+    score *= 0.5 + 0.5 * Math.min(1, covered / terms.length);
+    scored.push({ row, text, score });
+  }
+  scored.sort((x, y) => y.score - x.score || String(y.row.updatedAt).localeCompare(String(x.row.updatedAt)));
   // At most two excerpts per session so one long conversation cannot crowd out the rest.
   const perSession = new Map();
   const results = [];
-  for (const { doc, score } of scored) {
-    const seen = perSession.get(doc.sessionId) || 0;
+  for (const { row, text, score } of scored) {
+    const seen = perSession.get(row.sessionId) || 0;
     if (seen >= 2) continue;
-    perSession.set(doc.sessionId, seen + 1);
-    results.push({ sessionId: doc.sessionId, updatedAt: doc.updatedAt, title: redactSecrets(doc.title).text, workspace: doc.workspace, role: doc.role, index: doc.index, score: Number(score.toFixed(3)), excerpt: redactSecrets(excerpt(doc.text, terms)).text });
+    perSession.set(row.sessionId, seen + 1);
+    results.push({ sessionId: row.sessionId, updatedAt: row.updatedAt, title: redactSecrets(row.title).text, workspace: row.workspace, role: row.role, index: row.idx, score: Number(score.toFixed(3)), excerpt: redactSecrets(excerpt(text, terms)).text });
     if (results.length >= limit) break;
   }
-  return { results, searched: files.length };
+  return { results, searched: files.length, reindexed };
 }
 
 export function formatSessionSearch(result, query) {
