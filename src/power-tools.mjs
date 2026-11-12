@@ -641,7 +641,9 @@ async function runShell(root, args, context, flavor = 'sh') {
   const bypass = Boolean(context.autoApprove && context.permissionMode === 'bypassPermissions');
   const env0 = context.env || process.env;
   // `ls src && git status` and other read-only lines inside the workspace run without asking.
-  const readOnly = flavor !== 'powershell' && process.platform !== 'win32' && !hardRisk && !appRisk && !install.forceAsk && readOnlyCommandsEnabled(env0, (context.session && context.session.settings) || {}) && readOnlyShellLine(command, { root: path.resolve(root) });
+  // A command that leaves the sandbox (sandbox.excludedCommands) always asks, read-only or not.
+  const leftSandbox = Boolean(requestedSandbox) && !sandbox;
+  const readOnly = !leftSandbox && flavor !== 'powershell' && process.platform !== 'win32' && !hardRisk && !appRisk && !install.forceAsk && readOnlyCommandsEnabled(env0, (context.session && context.session.settings) || {}) && readOnlyShellLine(command, { root: path.resolve(root) });
   if (readOnly && /(^|[\s;&|])git\s/.test(command)) { const overlay = Object.create(context); overlay.env = readOnlyGitEnv(env0); context = overlay; }
   const autoAllowed = readOnly || (!hardRisk && !install.forceAsk && !(appRisk && !bypass) && (context.ruleAllowed || (sandbox && sandbox.autoAllowShellCommands === true) || (context.autoApprove && context.permissionMode === 'bypassPermissions')));
   if (!autoAllowed) {

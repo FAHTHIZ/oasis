@@ -101,3 +101,26 @@ test('allowRead never re-opens a built-in secret mask such as ~/.ssh', async (t)
   const sandbox = resolveSandbox({ sandbox: { enabled: true, writableCaches: false, denyRead: [home], allowRead: [path.join(home, '.ssh'), path.join(home, 'docs')] } }, root, true);
   assert.deepEqual(sandbox.reopenedPaths.map((item) => item.path), [path.join(home, 'docs')]);
 });
+
+test('a read-only command that leaves the sandbox through excludedCommands still asks', { skip: !bwrapReady }, async (t) => {
+  // Regression (Claude Code 2.1.321 class): with excludedCommands ["ls *", "git *"],
+  // `ls src` and `git status` matched the read-only fast path and ran outside
+  // the sandbox without a prompt.
+  const root = await tmp(t);
+  await mkdir(path.join(root, 'src'));
+  await writeFile(path.join(root, 'src', 'a.txt'), 'a\n');
+  const prompts = [];
+  const approval = async (text) => { prompts.push(text); return false; };
+  const excluding = resolveSandbox({ sandbox: { enabled: true, writableCaches: false, excludedCommands: ['ls *', 'cat *'] } }, root, true);
+  const shell = await executeTool('run_shell', { command: 'ls src' }, { root, sandbox: excluding, approval, env: process.env });
+  assert.equal(shell.approved, false, JSON.stringify(shell).slice(0, 300));
+  assert.match(prompts.at(-1), /WITHOUT an OS sandbox/);
+  const argv = await executeTool('run_command', { command: 'cat', args: ['src/a.txt'] }, { root, sandbox: excluding, approval, env: process.env });
+  assert.equal(argv.approved, false, JSON.stringify(argv).slice(0, 300));
+  assert.equal(prompts.length, 2);
+  // Inside the sandbox the same read-only commands still run without asking.
+  const plain = resolveSandbox({ sandbox: { enabled: true, writableCaches: false } }, root, true);
+  const inside = await executeTool('run_shell', { command: 'ls src' }, { root, sandbox: plain, approval, env: process.env });
+  assert.match(String(inside.stdout), /a\.txt/, JSON.stringify(inside).slice(0, 300));
+  assert.equal(prompts.length, 2);
+});

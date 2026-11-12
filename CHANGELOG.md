@@ -4,6 +4,7 @@ User-facing change history grouped by package version. A version heading does no
 
 ## Unreleased
 
+- Security: a read-only command that leaves the OS sandbox through `sandbox.excludedCommands` (say `git status` with `"git *"` excluded) now asks first. It used to run outside the sandbox without a prompt; inside the sandbox read-only commands still run without asking.
 - Web app: a `fileSuggestion` command in settings now also fills the composer's `@` suggestions, as it does in the terminal (`GET /api/file-suggestions`, same trust and hook gates). Without the setting the composer keeps its own file list.
 - RRULE routines are expanded by [rrule-temporal](https://github.com/ggaabe/rrule-temporal) 2.2.8 (MIT, a Temporal-based RFC 5545 engine) instead of OASIS's own day-by-day scanner, so BYSETPOS ("last weekday of the month"), BYWEEKNO and BYYEARDAY now work. Existing rules give the same times, including across daylight-saving changes (a skipped local time still moves forward, a repeated one runs once). Sub-daily rules and BYSECOND are still refused with a hint. The library loads with the first RRULE routine.
 - Security: remote MCP servers follow redirects only within their own origin. A server answering with a redirect to another host used to receive its `.mcp.json` headers there (`X-API-Key` and similar; fetch drops only `Authorization`); now the request fails with a clear error. Sign-in requests were already guarded.
