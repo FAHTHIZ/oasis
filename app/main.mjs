@@ -3478,8 +3478,13 @@ function renderClaudePlugins() {
     const offer = ccRow('Anthropic plugin marketplace', 'About 300 plugins, including frontend-design, superpowers, code-review, context7 and playwright.', [
       ccButton('Add it', 'Add the Anthropic plugin marketplace', '', () => void ccAction('add-marketplace', OFFICIAL_MARKETPLACE))
     ]);
-    $('ccInstalled').after(offer);
-    offer.id = 'ccOffer';
+    // A bare <li> after the installed list rendered with a stray bullet and
+    // without the bordered row style, so the offer gets its own list.
+    const list = document.createElement('ul');
+    list.className = 'connection-list';
+    list.id = 'ccOffer';
+    list.append(offer);
+    $('ccInstalled').after(list);
     return;
   }
   const items = searchMarketplace(ccOverview, $('ccSearch').value, 24);
