@@ -67,11 +67,29 @@ export function userEmailAddresses({ root = process.cwd(), env = process.env, gi
   return [...found];
 }
 
+// A network shell command that reads the git identity while it runs
+// (`curl -d "$(git config user.email)" ...`) sends it without the address ever
+// appearing in the call.
+const IDENTITY_READ = /\bgit\s+(?:-[Cc]\s+\S+\s+)*config\b[^;&|\n]*\buser\.email\b|\bgit\s+(?:log|show|rev-list)\b[^;&|\n]*%[ac][eE]|\$\{?GIT_(?:AUTHOR|COMMITTER)_EMAIL\b|\bgit\s+var\s+GIT_(?:AUTHOR|COMMITTER)_IDENT\b|\bgh\s+api\s+(?:\/)?user(?:\/emails)?\b|\$\{?OASIS_USER_EMAIL\b/i;
+const SHELL_TOOLS = new Set(['run_command', 'run_shell', 'monitor', 'powershell']);
+
+function shellText(args) {
+  return [args && args.command, ...(Array.isArray(args && args.args) ? args.args : [])].filter((part) => typeof part === 'string').join(' ');
+}
+
 export function outboundEmailHit(name, args, emails = []) {
   if (!emails.length) return null;
-  const network = name === 'fetch_url' || name === 'web_search' || String(name).startsWith('mcp__')
-    || ((name === 'run_command' || name === 'powershell') && NETWORK_SHELL.test([args && args.command, ...(Array.isArray(args && args.args) ? args.args : [])].join(' ')));
+  const tool = String(name || '');
+  const shell = SHELL_TOOLS.has(tool);
+  // MCP tools are named mcp_<server>_<tool> (prompts mcp__<server>__<prompt>).
+  const network = tool === 'fetch_url' || tool === 'web_search' || tool === 'browser' || tool.startsWith('mcp_')
+    || (shell && NETWORK_SHELL.test(shellText(args)));
   if (!network) return null;
+  if (shell && IDENTITY_READ.test(shellText(args))) {
+    // `gh api user` on its own only reads; something else must send it on.
+    const rest = shellText(args).replace(new RegExp(IDENTITY_READ.source, 'gi'), ' ');
+    if (NETWORK_SHELL.test(rest)) return emails[0];
+  }
   let text = '';
   try { text = JSON.stringify(args).toLowerCase(); } catch { return null; }
   const decoded = (() => { try { return decodeURIComponent(text); } catch { return text; } })();
