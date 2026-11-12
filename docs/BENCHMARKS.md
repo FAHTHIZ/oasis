@@ -61,6 +61,8 @@ Counts use one vocabulary for every model, so they track but do not equal each p
 
 Measured 2026-11-09. The two held-out misses are vocabulary gaps: "update the README images" (the note says "screenshots") and "run the python tests" (the note says "pytest"). Both still rank second. `test/memory-retrieval-bench.test.mjs` fails if held-out recall@1 drops below 88%, recall@3 below 96% or MRR below 0.93. The set is small and was written by the maintainers, so it guards against regressions; it does not measure retrieval at scale.
 
+Optional embedding rerankers were measured on the same questions on 2026-11-12 with [transformers.js](https://github.com/huggingface/transformers.js) 4.3.2. Reciprocal-rank fusion of BM25 with all-MiniLM-L6-v2 or bge-small-en-v1.5 (q8) gave held-out recall@1 96% (MRR 0.980) with dev unchanged. Reranking BM25's list by MiniLM similarity alone gave held-out 100% but dropped dev recall@1 to 93%. The gain is one question in 40, and the cost is a 745 MB install with native binaries plus a model download on first use, so OASIS does not ship a reranker. See row 31 of the [replacement matrix](REPLACEMENT-ROADMAP.md#decision-matrix-for-remaining-home-grown-parts).
+
 ## Live model evaluations
 
 Live evaluations involve an actual provider and model. Their outcomes depend on the model snapshot, provider implementation, prompt, task set, context limits, tool protocol, sampling settings, network conditions and available budget.
