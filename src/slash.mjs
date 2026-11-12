@@ -1570,7 +1570,11 @@ export async function runBuiltinCommand(name, argument, state) {
       const describe = (box) => box && box.enabled ? (box.available ? (box.kind === 'ssh' ? 'on (commands run on ' + box.ssh.host + ' in ' + box.ssh.remoteRoot + ', sync ' + box.ssh.sync + ')' : 'on (' + box.kind + (box.network ? ', network on' : ', network off') + ')') : 'on but unavailable - ' + box.reason) : 'off';
       if (!argument) {
         const probe = detectSandbox();
-        return { output: 'Sandbox: ' + describe(current) + '. This machine: ' + (probe.available ? probe.kind + ' available' : 'no sandbox - ' + probe.reason) + '.\nUsage: /sandbox on | off | network on | network off | os | docker [IMAGE] | podman [IMAGE] | ssh USER@HOST [REMOTE_DIR]. Make it permanent with "sandbox": {"enabled": true} in settings (add "backend": "docker" for container isolation on any OS, including Windows).' };
+        const credentials = (session && session.settings && session.settings.sandbox) || {};
+        const credentialLine = (credentials.credentialFiles || []).length || (credentials.credentialEnv || []).length
+          ? '\nCredentials hidden from sandboxed commands: ' + [...(credentials.credentialFiles || []), ...(credentials.credentialEnv || []).map((name) => '$' + name)].join(', ') + '.' + (credentials.credentialNotes || []).map((note) => '\n  ' + note).join('')
+          : '';
+        return { output: 'Sandbox: ' + describe(current) + '. This machine: ' + (probe.available ? probe.kind + ' available' : 'no sandbox - ' + probe.reason) + '.' + credentialLine + '\nUsage: /sandbox on | off | network on | network off | os | docker [IMAGE] | podman [IMAGE] | ssh USER@HOST [REMOTE_DIR]. Make it permanent with "sandbox": {"enabled": true} in settings (add "backend": "docker" for container isolation on any OS, including Windows).' };
       }
       if (!session) return { output: 'Start a task first; /sandbox changes the running session.' };
       const words = argument.toLowerCase().split(/\s+/);
