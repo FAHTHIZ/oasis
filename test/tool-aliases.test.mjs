@@ -130,3 +130,16 @@ test('trained-in namespaces (repo_browser, default_api, functions) map to the re
   assert.equal(resolveToolAlias('functions_ReadFile', {}, names).name, 'read_file');
   assert.ok(resolveToolAlias('repo_browser_open_everything', {}, names).error);
 });
+
+test('move, rename and copy requests become the one command that does it', () => {
+  const tools = ['run_command', 'read_file'];
+  const mv = resolveToolAlias('move_file', { source: 'jest.config.js', destination: 'jest.config.cjs' }, tools);
+  assert.equal(mv.name, 'run_command');
+  assert.deepEqual(mv.args, process.platform === 'win32' ? { command: 'cmd', args: ['/d', '/c', 'move', 'jest.config.js', 'jest.config.cjs'] } : { command: 'mv', args: ['jest.config.js', 'jest.config.cjs'] });
+  assert.equal(resolveToolAlias('RenameFile', { old_path: 'a', new_path: 'b' }, tools).name, 'run_command');
+  if (process.platform !== 'win32') {
+    assert.deepEqual(resolveToolAlias('copy_file', { from: 'a', to: 'b' }, tools).args, { command: 'cp', args: ['a', 'b'] });
+    assert.deepEqual(resolveToolAlias('rename_file', { path: 'a.js', new_name: 'a.cjs' }, tools).args, { command: 'mv', args: ['a.js', 'a.cjs'] });
+  }
+  assert.ok(resolveToolAlias('move_file', { source: 'a', destination: 'b' }, ['read_file']).error);
+});

@@ -83,7 +83,7 @@ import { runHooks, hasHooks, CLAUDE_TOOL_NAMES } from './hooks.mjs';
 import { resolveSandbox } from './sandbox.mjs';
 import { webSearchEnabled, webSearchToolDefinition } from './web-search.mjs';
 import { loadProjectMcpServers } from './mcp-project.mjs';
-import { access, mkdir, readFile, realpath, stat, writeFile } from 'node:fs/promises';
+import { access, mkdir, readdir, readFile, realpath, stat, writeFile } from 'node:fs/promises';
 
 async function pathExists(file) { try { await access(file); return true; } catch { return false; } }
 import { SHELL_TOOL_DEFINITION, POWERSHELL_TOOL_DEFINITION, findPowerShell, killAllBackground } from './power-tools.mjs';
@@ -401,6 +401,13 @@ export function attributionSection(attribution) {
   return '\n\nAttribution (from settings' + (attribution.managed ? ', set by your organization' : '; the user\'s own instructions about attribution take precedence') + '):\n' + lines.join('\n');
 }
 
+export async function workspaceIsEmpty(root) {
+  try {
+    const entries = await readdir(root);
+    return !entries.some((name) => !name.startsWith('.'));
+  } catch { return false; }
+}
+
 async function describeEnvironment(root, env = process.env, { gitSnapshot = true } = {}) {
   const lines = ['Platform: ' + process.platform + ' ' + os.release() + ' (' + process.arch + '), Node ' + process.version, "Today's date: " + new Date().toISOString().slice(0, 10)];
   const git = async (args) => {
@@ -411,6 +418,9 @@ async function describeEnvironment(root, env = process.env, { gitSnapshot = true
   };
   const project = await describeProject(root, env).catch(() => '');
   if (project) lines.push(project);
+  // A folder with nothing but dotfiles is a new project: the prompt then asks
+  // for the simplest setup that works (see NEW_PROJECT_RULE).
+  if (await workspaceIsEmpty(root)) lines.push('Workspace: empty (a new project)');
   const inside = await git(['rev-parse', '--is-inside-work-tree']);
   if (inside !== 'true') { lines.push('Git repository: no'); return lines.join('\n'); }
   const [branch, status, log, files] = await Promise.all([
