@@ -12,7 +12,7 @@
 // install chromium`) and ffmpeg. Writes oasis-web-demo.{mp4,gif} and a poster.
 
 import http from 'node:http';
-import { mkdtempSync, cpSync, writeFileSync, mkdirSync, rmSync, readdirSync, renameSync } from 'node:fs';
+import { existsSync, mkdtempSync, cpSync, writeFileSync, mkdirSync, rmSync, readdirSync, renameSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import os from 'node:os';
 import path from 'node:path';
@@ -118,7 +118,9 @@ async function main() {
   const app = await startOasisWebServer({ root: project, host: '127.0.0.1', port: 0, env, token });
 
   const videoDir = path.join(dir, 'video');
-  const browser = await chromium.launch({ headless: true });
+  // Playwright's own Chromium when it is installed, otherwise any local Chrome.
+  const { findChrome } = await import('../../src/cdp.mjs');
+  const browser = await chromium.launch({ headless: true, ...(existsSync(chromium.executablePath()) ? {} : { executablePath: findChrome() || undefined }) });
   const context = await browser.newContext({ viewport: { width: W, height: H }, deviceScaleFactor: 1, colorScheme: 'dark', serviceWorkers: 'block', recordVideo: { dir: videoDir, size: { width: W, height: H } } });
   const page = await context.newPage();
   const t0 = Date.now();
@@ -171,7 +173,8 @@ async function main() {
   mkdirSync(OUT_DIR, { recursive: true });
   const src = path.join(videoDir, webm);
   const start = Math.max(0, introMs / 1000 - 0.3).toFixed(2);
-  const font = '/home/user/fonts/jb/fonts/ttf/JetBrainsMono-Regular.ttf';
+  const font = [process.env.OASIS_DEMO_FONT, '/home/user/fonts/jb/fonts/ttf/JetBrainsMono-Regular.ttf', '/usr/share/fonts/truetype/noto/NotoSansMono-Regular.ttf', '/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf', '/System/Library/Fonts/Menlo.ttc'].find((file) => file && existsSync(file));
+  if (!font) throw new Error('No monospace font found for the caption; set OASIS_DEMO_FONT to a .ttf file.');
   const caption = "pad=iw:ih+34:0:0:color=0x0b0f0c,drawtext=fontfile=" + font + ":text='Real OASIS web workspace and tools · scripted demo model · reproducible with scripts/demo/record-web-demo.mjs':fontcolor=0x9fb3a6:fontsize=15:x=(w-text_w)/2:y=h-24";
   const mp4 = path.join(OUT_DIR, 'oasis-web-demo.mp4');
   execFileSync('ffmpeg', ['-y', '-loglevel', 'error', '-ss', start, '-i', src, '-vf', caption + ',fps=30,format=yuv420p', '-c:v', 'libx264', '-crf', '24', '-preset', 'slow', '-movflags', '+faststart', mp4]);
