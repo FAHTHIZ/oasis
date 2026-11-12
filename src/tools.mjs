@@ -1135,6 +1135,16 @@ async function installExternalSkill(args, context, root) {
   };
 }
 
+// OpenHands AgentSkills: `triggers: [keywords]` in SKILL.md front matter also adds the
+// skill to the user message when a keyword appears (memory.mjs keywordRulesFor).
+function skillTriggers(content) {
+  const data = splitFrontMatter(content).data;
+  const key = Object.keys(data).find((name) => name.toLowerCase() === 'triggers');
+  const list = key === undefined ? [] : Array.isArray(data[key]) ? data[key] : typeof data[key] === 'string' ? data[key].split(',') : [];
+  const triggers = list.map((item) => String(item).trim()).filter(Boolean).slice(0, 40);
+  return triggers.length ? { triggers } : {};
+}
+
 function parseSkillMetadata(content, fallbackName) {
   const metadata = splitFrontMatter(content).data;
   const read = (key) => frontMatterValue(metadata, key);
@@ -1217,7 +1227,8 @@ export async function listAvailableSkills(root, options = {}) {
           absolutePath: ABSOLUTE_SKILL_SOURCES[source] ? filePath : undefined,
           absoluteSkillDirectory: ABSOLUTE_SKILL_SOURCES[source] ? path.join(directory, entry.name) : undefined,
           ...(origin ? { origin } : {}),
-          ...(source === 'foreign-user' || source === 'parent-portable' ? { skillsRoot: directory } : {})
+          ...(source === 'foreign-user' || source === 'parent-portable' ? { skillsRoot: directory } : {}),
+          ...skillTriggers(content)
         };
         byName.set(meta.name.toLowerCase(), skill);
       } catch { /* Ignore incomplete or unsafe skill files. */ }

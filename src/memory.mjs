@@ -606,6 +606,28 @@ export async function keywordRulesFor(root, message, options = {}) {
     blocks.push('<EXTRA_INFO>\nThe following information has been included based on a keyword match for "' + trigger + '".\nIt may or may not be relevant to the user\'s request.\nSkill location: ' + rule.label + '\n\n' + body.trim() + '\n</EXTRA_INFO>');
     if (budget <= 0) break;
   }
+  // SKILL.md files with `triggers:` (OpenHands AgentSkills) are added the same way.
+  if (budget > 0) {
+    let skills = [];
+    const tools = await import('./tools.mjs');
+    try { skills = await tools.listAvailableSkills(root, { env }); } catch { skills = []; }
+    for (const skill of skills) {
+      if (budget <= 0) break;
+      if (!Array.isArray(skill.triggers) || !skill.triggers.length || skill.source === 'built-in') continue;
+      // The label is the Skill location line, which is how a later turn sees it was sent.
+      const label = tools.skillLocation(root, skill).path || 'skill ' + skill.name;
+      if (labels.includes(label) || alreadyLoaded(label)) continue;
+      const trigger = skill.triggers.find((keyword) => keywordMatches(keyword, text));
+      if (!trigger) continue;
+      let content = '';
+      try { content = (await tools.loadSkillText(root, skill.name, { env })).content; } catch { continue; }
+      const body = cleanInstructionText('skill ' + skill.name, parseFrontMatter(content).body, null).slice(0, Math.min(PER_FILE_LIMIT, budget));
+      if (!body.trim()) continue;
+      budget -= body.length;
+      labels.push(label);
+      blocks.push('<EXTRA_INFO>\nThe following information has been included based on a keyword match for "' + trigger + '".\nIt may or may not be relevant to the user\'s request.\nSkill location: ' + label + '\n\n' + body.trim() + '\n</EXTRA_INFO>');
+    }
+  }
   return { text: blocks.join('\n'), labels };
 }
 
