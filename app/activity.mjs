@@ -33,7 +33,8 @@ function dur(ms) { return ms === null || ms === undefined ? '' : (formatDuration
 /**
  * deps: { entries(): display array, running(): boolean, timings(): live model
  * timing records, iconFor(kind): svg string, fillInspector(box, tool),
- * showInChat(id), copyText(text), toast(text), download(name, text) }
+ * showInChat(id), copyText(text), toast(text), download(name, text),
+ * title(): the chat's title, openActivity() }
  */
 export function initActivity(deps) {
   state.deps = deps;
@@ -58,6 +59,7 @@ export function initActivity(deps) {
   const list = $('activityList');
   list.addEventListener('scroll', () => { state.follow = list.scrollTop + list.clientHeight >= list.scrollHeight - 24; }, { passive: true });
   list.addEventListener('keydown', onListKey);
+  $('taskMeta').addEventListener('click', () => deps.openActivity());
   refreshActivity();
 }
 
@@ -86,14 +88,40 @@ function renderBadge(trace) {
   count.classList.toggle('bad', Boolean(last.stats.failed));
 }
 
+// The bar over the chat: which task this is, what it is doing now and what
+// the latest message has done so far. Its summary opens the full timeline.
+const BAR_WORDS = { running: 'Working', done: 'Done', issues: 'Done, with failures', error: 'Error', stopped: 'Stopped' };
+function renderTaskBar(trace) {
+  const bar = $('taskBar');
+  if (!bar) return;
+  const last = trace.turns.at(-1);
+  if (!last) { bar.hidden = true; return; }
+  bar.hidden = false;
+  const title = state.deps.title();
+  if ($('taskTitle').textContent !== title) { $('taskTitle').textContent = title; $('taskTitle').title = title; }
+  const waiting = last.status === 'running' && last.steps.some((step) => step.outcome === 'running' && step.tool.waiting);
+  const status = waiting ? 'waiting' : last.status;
+  bar.dataset.status = status;
+  const word = waiting ? 'Needs you' : BAR_WORDS[last.status] || 'Done';
+  if ($('taskStateText').textContent !== word) $('taskStateText').textContent = word;
+  const parts = [];
+  if (last.stats.steps) parts.push(last.stats.steps + ' step' + (last.stats.steps === 1 ? '' : 's'));
+  if (last.stats.failed) parts.push(last.stats.failed + ' failed');
+  if (last.files.length) parts.push(last.files.length + ' file' + (last.files.length === 1 ? '' : 's') + ' changed');
+  if (last.durationMs) parts.push(dur(last.durationMs));
+  const meta = parts.join(' · ') || 'No steps yet';
+  if ($('taskMeta').textContent !== meta) $('taskMeta').textContent = meta;
+}
+
 function render() {
   if (!state.deps) return;
   const trace = currentTrace();
   state.trace = trace;
   renderBadge(trace);
+  renderTaskBar(trace);
   // Keep ticking once a second while a step runs, so bars and clocks move.
   const running = trace.turns.some((turn) => turn.status === 'running');
-  if (running && !state.ticker) state.ticker = setInterval(() => { if (visible()) refreshActivity(); }, 1000);
+  if (running && !state.ticker) state.ticker = setInterval(() => refreshActivity(), 1000);
   if (!running && state.ticker) { clearInterval(state.ticker); state.ticker = 0; }
   if (!visible()) return;
   renderSummary(trace);
@@ -137,7 +165,9 @@ function renderSummary(trace) {
   const head = el('div', 'activity-summary-head');
   const dot = el('span', 'status-dot');
   dot.setAttribute('aria-hidden', 'true');
-  head.append(dot, el('strong', '', turnStatusLabel(last.status)), el('span', 'activity-summary-sub', 'Latest message · ' + trace.totals.turns + ' in this chat'));
+  const waiting = last.status === 'running' && last.steps.some((step) => step.outcome === 'running' && step.tool.waiting);
+  box.dataset.status = waiting ? 'waiting' : last.status;
+  head.append(dot, el('strong', '', waiting ? 'Needs you' : turnStatusLabel(last.status)), el('span', 'activity-summary-sub', 'Latest message · ' + trace.totals.turns + ' in this chat'));
   const stats = el('dl', 'activity-stats');
   for (const [label, value] of parts) {
     const cell = el('div', 'activity-stat' + (label === 'Failed' && last.stats.failed ? ' bad' : ''));
