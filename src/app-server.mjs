@@ -19,7 +19,6 @@ const TYPES = {
 export const APP_PACKAGES = Object.freeze({
   yaml: 'browser/index.js',
   jsonrepair: 'lib/esm/index.js',
-  entities: 'dist/index.js',
   fflate: 'esm/browser.js',
   diff: 'libesm/index.js',
   marked: 'lib/marked.esm.js',
@@ -48,12 +47,12 @@ export const APP_PACKAGES = Object.freeze({
 // Bare imports inside a vendored browser build: serving a package also serves these.
 const APP_PACKAGE_DEPS = Object.freeze({ '@floating-ui/dom': ['@floating-ui/core'], 'focus-trap': ['tabbable'], minimatch: ['brace-expansion', 'balanced-match', '@isaacs/nonrecursive-glob-match'] });
 
-// Bare names whose browser build ships in another npm package. highlight.js's own
-// es/ entries wrap CommonJS; its pre-built ES module (common languages) is in
-// @highlightjs/cdn-assets. Node keeps resolving the real highlight.js package.
 // Extra files a root-level build loads besides its entry (a JSON module).
 const APP_PACKAGE_FILES = Object.freeze({ 'binary-extensions': ['binary-extensions.json'] });
 
+// Bare names whose browser build ships in another npm package. highlight.js's own
+// es/ entries wrap CommonJS; its pre-built ES module (common languages) is in
+// @highlightjs/cdn-assets. Node keeps resolving the real highlight.js package.
 const APP_PACKAGE_SOURCES = Object.freeze({ 'highlight.js': '@highlightjs/cdn-assets' });
 
 /** Shared src modules and npm packages the app imports (transitively); refuses Node-only ones. */
