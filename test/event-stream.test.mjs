@@ -79,3 +79,39 @@ test('event logs redact short credentials in named fields and CLI argument pairs
   await clearEvents(root, sessionId, { env });
   await rm(root, { recursive: true, force: true });
 });
+
+test('a saved session records tool calls, results and approvals, shows them in oasis sessions events, and deleting the session removes them', async (t) => {
+  const path = (await import('node:path')).default;
+  const { mkdtemp } = await import('node:fs/promises');
+  const { scriptedModel, toolCall } = await import('./helpers/scripted-model.mjs');
+  const { createSession, closeSession, runAgentTurn } = await import('../src/agent.mjs');
+  const { saveSession, deleteSession } = await import('../src/sessions.mjs');
+  const { formatAuditEvent } = await import('../src/cli-sessions.mjs');
+  const root = await mkdtemp(path.join(os.tmpdir(), 'oasis-audit-'));
+  const home = await mkdtemp(path.join(os.tmpdir(), 'oasis-audit-home-'));
+  t.after(() => Promise.all([rm(root, { recursive: true, force: true }), rm(home, { recursive: true, force: true })]));
+  const env = { ...process.env, OASIS_CONFIG_DIR: home, OASIS_SANDBOX: '0' };
+  const { config } = await scriptedModel(t, [toolCall('call_1', 'run_command', { command: process.execPath, args: ['-e', 'process.exit(3)'] }), { content: 'done' }]);
+  const session = await createSession({ root, config: { ...config, maxSteps: 4 }, env });
+  t.after(() => closeSession(session));
+  await saveSession(session, { env });
+  const asked = [];
+  await runAgentTurn(session, 'run it', { env, approval: async (message) => { asked.push(message); return true; } });
+  let events = [];
+  for (let i = 0; i < 50 && !events.some((e) => e.type === 'tool_result'); i += 1) {
+    events = await readEvents(root, session.sessionId, { env });
+    await new Promise((resolve) => setTimeout(resolve, 20));
+  }
+  const call = events.find((e) => e.type === 'tool_call');
+  const result = events.find((e) => e.type === 'tool_result');
+  assert.equal(call.tool, 'run_command');
+  assert.match(call.input, /process\.exit\(3\)/);
+  assert.equal(result.ok, false);
+  assert.equal(result.exitCode, 3);
+  if (asked.length) assert.ok(events.some((e) => e.type === 'approval' && e.allowed === true));
+  assert.ok(call.seq < result.seq, 'events are in order');
+  assert.match(formatAuditEvent(result), /tool_result run_command failed \(exit 3\)/);
+  await saveSession(session, { env });
+  await deleteSession(root, session.sessionId, { env });
+  assert.deepEqual(await readEvents(root, session.sessionId, { env }), []);
+});

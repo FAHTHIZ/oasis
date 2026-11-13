@@ -202,6 +202,8 @@ Pick a bounded first task with a visible outcome, such as explaining a function,
 
 `/export review.html` writes a standalone review page; `/export notes.md` writes Markdown. A model saying "done" is not a test result; see [Benchmark methodology](BENCHMARKS.md).
 
+Saved sessions keep an audit trail next to the conversation: every tool call and its result, each approval decision (yours, a hook's or auto mode's), the checks that ran, and automatic model fallbacks. `oasis sessions events ID` prints it (`--type approval` filters, `--json` for scripts). Secrets are redacted before writing, and `oasis sessions clear ID` deletes the trail with the session.
+
 ## 7. Security boundaries
 
 - Approval prompts are not a replacement for operating-system isolation.

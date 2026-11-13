@@ -5,6 +5,7 @@ import { sessionKeyPool, ROTATE_STATUSES } from './key-pool.mjs';
 import { explainNetworkError, unreachableProviderMessage } from './network-doctor.mjs';
 import { proxyForUrl } from './proxy.mjs';
 import { loadAgentTranscript } from './sessions.mjs';
+import { appendEvent } from './event-stream.mjs';
 import { randomUUID } from 'node:crypto';
 import { providerFetch } from './loopback-fetch.mjs';
 import { isWorktreeBranchName } from './branch-names.mjs';
@@ -1288,6 +1289,7 @@ async function requestCompletion(session, options = {}) {
       (session.hookMessages ||= []).push('[fallback] ' + current.model + ' ' + (FALLBACK_REASON_TEXT[kind] || 'failed') + ' (' + reason.slice(0, 120) + '); switched to ' + (next.entry.provider ? next.entry.provider + ':' : '') + next.config.model + '.');
       // Claude Code reports automatic fallbacks to PostModelSwitch with source "auto" and no requested model.
       postModelSwitch(session, { from: current.model, to: next.config.model, requested: null, source: 'auto', env });
+      recordSessionEvent(session, { type: 'recovery', action: 'model_fallback', from: (current.fallbackProvider ? current.fallbackProvider + ':' : '') + current.model, to: (next.entry.provider ? next.entry.provider + ':' : '') + next.config.model, kind, reason: reason.slice(0, 200) }, env);
       if (typeof options.onFallback === 'function') options.onFallback(session.fallbackActive);
     }
   }
@@ -3178,6 +3180,13 @@ async function authorizeCall(session, name, args, context, options) {
     if (answer === 'always' && suggestion && policy) policy.rememberForSession(suggestion);
     return Boolean(answer);
   };
+  // Audit trail: every approval decision (user, hook or auto-mode classifier).
+  const decideApproval = overlay.approval;
+  overlay.approval = async (message, force = false, extra = null) => {
+    const allowed = await decideApproval(message, force, extra);
+    recordSessionEvent(session, { type: 'approval', tool: name, allowed, mode, ...(allowed ? {} : { reason: String(overlay.permissionHookDenial || 'not approved').slice(0, 500) }) }, context.env);
+    return allowed;
+  };
   const sites = webAccessSites(name, args, context.env || process.env);
   let siteApprovalHandled = false;
   if (sites.length) {
@@ -3333,6 +3342,19 @@ async function detectLocalContextWindow(session, { env = process.env, fetchImpl 
   session.config = { ...config, contextWindow: probe.contextLength };
   if (probe.contextLength < RECOMMENDED_LOCAL_CONTEXT) session.localContextNotices.push(localContextAdvice(config.model, probe.contextLength, probe.server));
   return probe;
+}
+
+// Append-only audit log next to the saved session (oasis sessions events ID).
+// Only sessions that have been saved have an ID; writes are queued in call
+// order and never slow down or fail the turn.
+function recordSessionEvent(session, event, env) {
+  if (!session || !session.sessionId) return;
+  appendEvent(session.root, session.sessionId, event, { env: env || process.env }).catch(() => {});
+}
+
+function auditSnippet(value, max) {
+  const text = typeof value === 'string' ? value : JSON.stringify(value === undefined ? null : value);
+  return text.length > max ? text.slice(0, max) + '… (' + text.length + ' chars)' : text;
 }
 
 function toolParameterSchemas(session) {
@@ -4664,6 +4686,7 @@ async function runAgentTurnRaw(session, prompt, options = {}) {
           recordClaimCheck(claimState, { command: autoTest.command, exitCode: outcome.exitCode });
           verification.lastVerificationExitCode = outcome.passed ? 0 : outcome.exitCode || 1;
           verification.lastVerificationKind = 'test';
+          recordSessionEvent(session, { type: 'verification', kind: 'test', command: String(outcome.command || autoTest.command).slice(0, 300), exitCode: outcome.exitCode, passed: Boolean(outcome.passed), automatic: true }, options.env);
           verification.autoTestLast = { command: outcome.command, exitCode: outcome.exitCode, passed: outcome.passed, attempts: verification.autoTestAttempts };
           if (outcome.cancelled) throw Object.assign(new Error('Agent task cancelled by the user.'), { name: 'AbortError' });
           if (!outcome.passed) {
@@ -4963,7 +4986,15 @@ async function runAgentTurnRaw(session, prompt, options = {}) {
     });
     for (const batch of batches) {
       // Results keep the model's original call order even if calls finish out of order.
-      const results = await runPool(batch.calls, batch.concurrency, (call) => executeOneCall(session, call, context, options));
+      const results = await runPool(batch.calls, batch.concurrency, async (call) => {
+        const toolName = call.function && call.function.name;
+        recordSessionEvent(session, { type: 'tool_call', id: call.id, tool: toolName, input: auditSnippet(safeToolArguments(call.function && call.function.arguments), 2000) }, options.env);
+        const message = await executeOneCall(session, call, context, options);
+        const outcome = message && message.result;
+        const failed = Boolean(outcome && (outcome.error || (outcome.exitCode !== undefined && outcome.exitCode !== 0)));
+        recordSessionEvent(session, { type: 'tool_result', id: call.id, tool: toolName, ok: !failed, ...(outcome && outcome.exitCode !== undefined ? { exitCode: outcome.exitCode } : {}), output: auditSnippet(outcome && outcome.error ? outcome.error : message && message.content, 1000) }, options.env);
+        return message;
+      });
       for (const item of results) outputs.set(item.tool_call_id, item);
     }
 
@@ -5074,6 +5105,7 @@ async function runAgentTurnRaw(session, prompt, options = {}) {
           recordClaimCheck(claimState, { command: [args.command].concat(Array.isArray(args.args) ? args.args : []).join(' '), exitCode: result.exitCode });
           verification.lastVerificationExitCode = result.exitCode;
           verification.lastVerificationKind = verificationCommandKind(args.command, args.args);
+          recordSessionEvent(session, { type: 'verification', kind: verification.lastVerificationKind, command: [args.command].concat(Array.isArray(args.args) ? args.args : []).join(' ').slice(0, 300), exitCode: result.exitCode, passed: result.exitCode === 0 }, options.env);
         }
       }
       if (name === 'run_shell' && result && result.approved === false) {
@@ -5089,6 +5121,7 @@ async function runAgentTurnRaw(session, prompt, options = {}) {
         if (target && typeof result.exitCode === 'number' && !target.piped && !result.exitCodeWarning && isVerificationCommand(target.command, target.args)) {
           verification.lastVerificationExitCode = result.exitCode;
           verification.lastVerificationKind = verificationCommandKind(target.command, target.args);
+          recordSessionEvent(session, { type: 'verification', kind: verification.lastVerificationKind, command: String(shellCommand || '').slice(0, 300), exitCode: result.exitCode, passed: result.exitCode === 0 }, options.env);
         }
       }
       // Scratch-space files (.oasis/scratch/) are throwaway and do not count as project changes.
