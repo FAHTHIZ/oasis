@@ -966,6 +966,8 @@ function stepRow(tool, { enter = false } = {}) {
   tail.setAttribute('aria-hidden', 'true');
   details.append(summary, box);
   details.addEventListener('toggle', () => { if (details.open) { fillInspector(box, item._tool || tool); addTraceLink(box, item); } });
+  // A step the user opened or closed themselves keeps that state.
+  summary.addEventListener('click', () => { details._singleOpened = false; });
   item.append(details, tail);
   patchStepRow(item, tool);
   if (enter) item.classList.add('enter');
@@ -1080,9 +1082,21 @@ function setGroupOpen(group, open) {
 // so opening it shows that step's input and output directly, not a second
 // row with the same words.
 function openSingleStep(group) {
-  if (!group.el.classList.contains('single') || !group.el.classList.contains('open')) return;
   const details = group.list.querySelector('.tool > details');
-  if (details && !details.open) details.open = true;
+  if (!details) return;
+  if (!group.el.classList.contains('single') || !group.el.classList.contains('open')) {
+    // The group grew past one step (or closed): fold back a step that only
+    // opened because it was alone, so a long run does not keep it expanded.
+    if (details._singleOpened) {
+      details._singleOpened = false;
+      details.open = false;
+      // Drop the inspector it built; it is rebuilt when the step is opened again.
+      const box = details.querySelector('.inspect');
+      if (box) box.replaceChildren();
+    }
+    return;
+  }
+  if (!details.open) { details.open = true; details._singleOpened = true; }
 }
 function updateGroupHead(group) {
   const stats = groupStats(group.steps);
