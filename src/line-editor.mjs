@@ -435,6 +435,27 @@ export function commonPrefix(values) {
   return prefix;
 }
 
+// Where text ends when the terminal wraps it at `cols`: { row, col }, with
+// col === cols meaning the row is exactly full. A wide (CJK, emoji) character
+// that does not fit in the last cell moves whole to the next row, as
+// terminals draw it, leaving that cell empty.
+function wrapEnd(text, cols) {
+  if (PRINTABLE_ASCII.test(text)) {
+    const width = text.length;
+    if (width === 0) return { row: 0, col: 0 };
+    return { row: Math.floor((width - 1) / cols), col: ((width - 1) % cols) + 1 };
+  }
+  let row = 0;
+  let col = 0;
+  for (const { segment } of graphemes.segment(text)) {
+    const w = stringWidth(segment);
+    if (!w) continue;
+    if (col + w > cols) { row += 1; col = 0; }
+    col += w;
+  }
+  return { row, col };
+}
+
 // ---------------------------------------------------------------------------
 // Layout: computes the frame to draw and where the cursor sits, accounting for
 // wrapping at the terminal width.
@@ -474,19 +495,21 @@ export function layoutFrame({ prompt, continuation, text, cursor, hints = [], co
   let cursorCol = 0;
   let endRow = 0;
   segments.forEach((segment, index) => {
-    const width = stringWidth(segment.prefix) + stringWidth(segment.body);
+    const prefix = stripAnsi(segment.prefix);
     if (index === cursorLine) {
-      const cw = stringWidth(segment.prefix) + stringWidth(cursorText);
-      cursorRow = row + Math.floor(cw / cols);
-      cursorCol = cw % cols;
+      const at = wrapEnd(prefix + stripAnsi(cursorText), cols);
+      // At the right edge the cursor sits at the start of the next row.
+      cursorRow = row + at.row + (at.col === cols ? 1 : 0);
+      cursorCol = at.col === cols ? 0 : at.col;
     }
+    const end = wrapEnd(prefix + stripAnsi(segment.body), cols);
     out += segment.prefix + segment.body;
     if (index < segments.length - 1) {
       out += '\r\n';
-      row += Math.max(1, Math.ceil(width / cols));
+      row += end.row + 1;
     } else {
-      if (width > 0 && width % cols === 0) out += '\r\n';
-      endRow = row + Math.floor(width / cols);
+      if (end.col === cols) out += '\r\n';
+      endRow = row + end.row + (end.col === cols ? 1 : 0);
     }
   });
   return { out, cursorRow, cursorCol, endRow };
