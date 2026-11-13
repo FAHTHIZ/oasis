@@ -119,17 +119,51 @@ export function heldToolReason(mapped) {
   return '';
 }
 
-// Filter an MCP server's tools by an optional per-server allowedTools list.
-// Patterns support a trailing * wildcard (e.g. "search_*"). No list (or an
-// empty one) means every tool is allowed, preserving existing behavior.
-export function toolAllowlist(serverName, tools, settings = {}) {
-  const server = settings && settings.mcp && settings.mcp.servers && settings.mcp.servers[serverName];
-  const allowed = server && Array.isArray(server.allowedTools) ? server.allowedTools : null;
-  if (!allowed || !allowed.length) return tools;
-  const match = (name) => allowed.some((pattern) => {
-    const text = String(pattern || '');
-    if (text.endsWith('*')) return name.startsWith(text.slice(0, -1));
-    return name === text;
+// Per-server tool filters. `allowedTools` (Codex: `enabled_tools`) keeps only
+// the listed tools; `disabledTools` (Codex: `disabled_tools`) removes tools and
+// wins over the allow list. A pattern is an exact tool name or a prefix ending
+// in `*` ("search_*"). No list (or an empty one) keeps every tool.
+const MAX_TOOL_FILTERS = 200;
+
+export function normalizeToolFilter(value, label = 'allowedTools') {
+  if (value === undefined || value === null) return undefined;
+  const list = typeof value === 'string' ? value.split(',') : value;
+  if (!Array.isArray(list) || list.length > MAX_TOOL_FILTERS) throw new Error(label + ' must be a list of up to ' + MAX_TOOL_FILTERS + ' tool names.');
+  const out = [];
+  for (const raw of list) {
+    const text = typeof raw === 'string' ? raw.trim() : '';
+    if (!text || text.length > 200 || /[\0\s]/.test(text) || text.indexOf('*') !== -1 && text.indexOf('*') !== text.length - 1) {
+      throw new Error(label + ' entries must be tool names, optionally ending in * (got ' + JSON.stringify(raw) + ').');
+    }
+    if (!out.includes(text)) out.push(text);
+  }
+  return out;
+}
+
+// The tool filter fields of one server entry, accepting both spellings.
+export function serverToolFilters(spec) {
+  const filters = {};
+  if (!spec || typeof spec !== 'object') return filters;
+  const allowed = spec.allowedTools !== undefined ? spec.allowedTools : spec.enabledTools !== undefined ? spec.enabledTools : spec.enabled_tools;
+  const disabled = spec.disabledTools !== undefined ? spec.disabledTools : spec.disabled_tools;
+  const allowedList = normalizeToolFilter(allowed, 'allowedTools');
+  const disabledList = normalizeToolFilter(disabled, 'disabledTools');
+  if (allowedList && allowedList.length) filters.allowedTools = allowedList;
+  if (disabledList && disabledList.length) filters.disabledTools = disabledList;
+  return filters;
+}
+
+function toolPatternMatches(pattern, name) {
+  return pattern.endsWith('*') ? name.startsWith(pattern.slice(0, -1)) : name === pattern;
+}
+
+export function filterServerTools(tools, filters = {}) {
+  const list = Array.isArray(tools) ? tools : [];
+  const allowed = filters && Array.isArray(filters.allowedTools) && filters.allowedTools.length ? filters.allowedTools : null;
+  const disabled = filters && Array.isArray(filters.disabledTools) ? filters.disabledTools : [];
+  return list.filter((tool) => {
+    const name = String(tool && tool.name || '');
+    if (allowed && !allowed.some((pattern) => toolPatternMatches(pattern, name))) return false;
+    return !disabled.some((pattern) => toolPatternMatches(pattern, name));
   });
-  return tools.filter((tool) => match(tool.name));
 }
