@@ -46,6 +46,10 @@ p{margin:0}
 .mono{font-family:var(--mono)}
 code,pre,.diff,.editor,.tool .arg,.file-row,.model-chip{font-feature-settings:"calt" 0,"liga" 0}
 svg{width:20px;height:20px;flex:none}
+svg.icon{fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+svg.icon.i-stop{fill:currentColor}
+.chevron{display:inline-flex}
+.chevron svg{width:14px;height:14px}
 
 /* Layout */
 .app{height:100dvh;display:grid;grid-template-rows:auto 1fr;grid-template-columns:minmax(0,1fr);padding-left:var(--safe-left);padding-right:var(--safe-right)}
