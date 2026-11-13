@@ -173,6 +173,7 @@ function helpText() {
     '  oasis sessions list [--archived]  List locally saved sessions for this workspace (archived ones are hidden unless --archived)',
     '  oasis sessions archive|unarchive ID  Hide a session from lists (or show it again); it can still be resumed by ID',
     '  oasis sessions search QUERY [--all] [--json]  Search earlier saved conversations',
+    '  oasis sessions events ID [--type TYPE] [--json]  Show the audit trail: tool calls, results, approvals, checks, fallbacks',
     '  oasis sessions export ID...|--all [--format sharegpt|openai] [--out FILE]  Export trajectories as JSONL',
     '  oasis batch PROMPTS.jsonl [--out FILE] [--concurrency N]  Run many prompts, one fresh session each, and save trajectories',
     '  oasis sessions clear ID       Delete one saved session',

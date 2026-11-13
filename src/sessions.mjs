@@ -8,7 +8,7 @@ import { sanitizeSharedTaskStore } from './shared-tasks.mjs';
 import { sanitizeMustPreserve } from './context.mjs';
 import { redactSecrets } from './auto-memory.mjs';
 import { atomicWriteFile } from './atomic-write.mjs';
-import { appendEvent } from './event-stream.mjs';
+import { appendEvent, clearEvents } from './event-stream.mjs';
 
 const MAX_SESSION_BYTES = 3 * 1024 * 1024;
 const MAX_MESSAGES = 120;
@@ -397,6 +397,7 @@ export async function deleteSession(root, id, options = {}) {
   await unlink(target);
   await rm(target.replace(/\.json$/, '.agents'), { recursive: true, force: true }).catch(() => {});
   await rm(target.replace(/\.json$/, '.checkpoints'), { recursive: true, force: true }).catch(() => {});
+  await clearEvents(root, id, { env: options.env || process.env }).catch(() => {});
   return { id: data.id, deleted: true };
 }
 
