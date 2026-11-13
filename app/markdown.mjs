@@ -10,6 +10,7 @@
 import { Marked } from 'marked';
 import hljs from 'highlight.js';
 import DOMPurify from 'dompurify';
+import remend from 'remend';
 
 const MAX_HIGHLIGHT_CHARS = 200_000;
 const ALLOWED_TAGS = ['p', 'br', 'hr', 'a', 'strong', 'em', 'del', 'code', 'pre', 'button', 'span', 'h2', 'h3', 'h4', 'ul', 'ol', 'li', 'blockquote', 'table', 'thead', 'tbody', 'tr', 'th', 'td'];
@@ -80,6 +81,16 @@ export function renderMarkdown(source) {
  * the same HTML as rendering the whole text. Text with reference-style link
  * definitions (which reach across blocks) is never split.
  */
+/**
+ * The block a streaming reply is still writing. remend (Apache-2.0, from
+ * Vercel's Streamdown) closes an unfinished **bold**, *italic*, `code`,
+ * ~~strike~~ or [link](… so it shows formatted instead of flashing raw
+ * markers until the closing ones arrive; an unfinished link shows its text.
+ */
+export function renderPartialMarkdown(tail) {
+  return renderMarkdown(remend(String(tail || ''), { linkMode: 'text-only', katex: false }));
+}
+
 export function splitStableMarkdown(source) {
   const text = String(source || '').replace(/\r\n/g, '\n');
   let tokens;
