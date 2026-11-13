@@ -29,7 +29,21 @@ test('sequence diagrams render lifelines, messages, notes and blocks', () => {
   assert.equal(parseSequence(src).participants.length, 2);
   const out = renderMermaid(src);
   for (const text of ['│ User │', '│ Model │', 'hello', '▶', '◀', '╌', 'loop retry', '┆ done ┆', '──┐']) assert.ok(out.includes(text), text + '\n' + out);
-  assert.equal(renderMermaid('classDiagram\n  A <|-- B'), null);
+  assert.equal(renderMermaid('erDiagram\n  A ||--o{ B : has'), null);
+});
+
+test('state and class diagrams and xycharts are drawn by beautiful-mermaid', () => {
+  const state = renderMermaid('stateDiagram-v2\n  [*] --> Idle\n  Idle --> Running: start\n  Running --> [*]', { columns: 80 });
+  for (const text of ['│   Idle  │', '│ Running │', 'start', '▼']) assert.ok(state.includes(text), text + '\n' + state);
+  const cls = renderMermaid('classDiagram\n  Animal <|-- Dog\n  Animal : +name', { columns: 80 });
+  for (const text of ['│ Animal │', '│ +name  │', '│ Dog │', '△']) assert.ok(cls.includes(text), text + '\n' + cls);
+  assert.match(renderMermaid('xychart-beta\n  x-axis [jan, feb]\n  bar [1, 2]', { columns: 80 }), /jan[\s\S]*feb/);
+  // No trailing blanks, and nothing wider than the terminal.
+  assert.ok(state.split('\n').every((row) => row === row.trimEnd()));
+  assert.equal(renderMermaid('xychart-beta\n  x-axis [jan, feb]\n  bar [1, 2]', { columns: 20 }), null);
+  // Wide labels would misalign its boxes, and broken input is not drawn.
+  assert.equal(renderMermaid('classDiagram\n  A <|-- 世界', { columns: 80 }), null);
+  assert.equal(renderMermaid('stateDiagram-v2\n  bogus ---', { columns: 80 }), null);
 });
 
 test('markdown renders mermaid fences as diagrams in color mode and keeps source otherwise', () => {

@@ -2,7 +2,11 @@
 // Supports flowchart/graph (TD/TB/BT/LR/RL, node shapes, labeled and chained edges,
 // "&" groups, subgraph members) with a layered layout, and sequenceDiagram
 // (participants/actors, messages, self messages, notes, loop/alt/opt/par blocks).
-// Anything else returns null so the caller can show the source instead.
+// State and class diagrams and xychart are drawn by beautiful-mermaid
+// (MIT, lukilabs/beautiful-mermaid), loaded on first use. Anything else, or a
+// drawing wider than the terminal, returns null so the caller can show the source.
+import { createRequire } from 'node:module';
+import { fileURLToPath } from 'node:url';
 import { stringWidth } from './line-editor.mjs';
 
 const U = 1, D = 2, L = 4, R = 8;
@@ -408,11 +412,45 @@ function renderSequence(source, { columns = 100, maxLabel = 40 } = {}) {
   return text;
 }
 
+// beautiful-mermaid is ESM with an import-only export map; require() of its
+// entry file (Node 22.12+ loads synchronous ESM this way) keeps renderMermaid
+// synchronous for the Markdown renderer. About 300 ms, once, on first use.
+const require = createRequire(import.meta.url);
+let beautiful;
+function beautifulMermaid() {
+  if (beautiful === undefined) {
+    try { beautiful = require(fileURLToPath(import.meta.resolve('beautiful-mermaid'))); } catch { beautiful = null; }
+  }
+  return beautiful;
+}
+
+// ER diagrams are left out: beautiful-mermaid 1.1.3 draws three or more
+// entities with crossed, detached connectors.
+const BEAUTIFUL_TYPES = /^(?:stateDiagram(?:-v2)?|classDiagram|xychart(?:-beta)?)\b/;
+
+function renderWithBeautifulMermaid(source, options) {
+  // Its layout counts characters, not terminal columns, so wide (CJK, emoji)
+  // labels would break the boxes; show the source for those instead.
+  const text = String(source || '');
+  if (stringWidth(text.replace(/\n/g, '')) !== [...text.replace(/\n/g, '')].length) return null;
+  const lib = beautifulMermaid();
+  if (!lib || typeof lib.renderMermaidASCII !== 'function') return null;
+  const drawn = String(lib.renderMermaidASCII(text, { colorMode: 'none' }) || '');
+  const rows = drawn.split('\n').map((row) => row.replace(/\s+$/, ''));
+  while (rows.length && !rows[rows.length - 1]) rows.pop();
+  while (rows.length && !rows[0]) rows.shift();
+  if (!rows.length) return null;
+  const columns = Number(options.columns) || Infinity;
+  if (rows.some((row) => stringWidth(row) > columns)) return null;
+  return rows.join('\n');
+}
+
 export function renderMermaid(source, options = {}) {
   const first = String(source || '').split('\n').map((l) => l.trim()).find((l) => l && !l.startsWith('%%')) || '';
   try {
     if (/^(flowchart|graph)\b/i.test(first)) return renderFlowchart(source, options);
     if (/^sequenceDiagram\b/.test(first)) return renderSequence(source, options);
+    if (BEAUTIFUL_TYPES.test(first)) return renderWithBeautifulMermaid(source, options);
   } catch { return null; }
   return null;
 }
