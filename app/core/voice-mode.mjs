@@ -2,22 +2,43 @@
 // you said when you stop talking, works on it, reads the reply aloud and listens again.
 // This module holds the parts that don't need a browser, so they can be tested.
 
+import { Lexer } from 'marked';
+
+/** Plain words of inline Markdown tokens: links read as their text (bare URLs as "a link"). */
+function spokenInline(tokens = []) {
+  let out = '';
+  for (const token of tokens) {
+    if (token.type === 'link') out += token.autolink || /^https?:\/\//.test(token.text) ? 'a link' : spokenInline(token.tokens);
+    else if (token.type === 'image') out += token.text;
+    else if (token.type === 'codespan') out += token.text;
+    else if (token.type === 'br') out += '\n';
+    else if (token.type === 'html') continue;
+    else if (token.tokens) out += spokenInline(token.tokens);
+    else out += token.text || '';
+  }
+  return out;
+}
+
+/** Spoken lines of block tokens: code is announced, tables and raw HTML are skipped. */
+function spokenBlocks(tokens = [], lines = []) {
+  for (const token of tokens) {
+    if (token.type === 'code') lines.push('(code omitted)');
+    else if (token.type === 'list') for (const item of token.items) spokenBlocks(item.tokens, lines);
+    else if (token.type === 'blockquote') spokenBlocks(token.tokens, lines);
+    else if (token.type === 'table' || token.type === 'html' || token.type === 'space' || token.type === 'hr') continue;
+    else lines.push(spokenInline(token.tokens || [{ type: 'text', text: token.text || '' }]));
+  }
+  return lines;
+}
+
 /**
- * A chat reply made suitable for reading aloud: code blocks, link targets, URLs,
- * tables and Markdown markup are dropped or simplified, and long replies stop at a
- * sentence boundary. (Same rules as speakableText in src/tts.mjs.)
+ * A chat reply made suitable for reading aloud, from marked's Markdown tokens:
+ * code blocks are announced, links read as their text, bare URLs as "a link",
+ * tables and markup are dropped, and long replies stop at a sentence boundary.
  */
 export function speakable(markdown, limit = 900) {
-  let text = String(markdown || '');
-  text = text.replace(/```[\s\S]*?(```|$)/g, ' (code omitted) ');
-  text = text.replace(/`([^`\n]+)`/g, '$1');
-  text = text.replace(/!\[([^\]]*)\]\([^)]*\)/g, '$1');
-  text = text.replace(/\[([^\]]+)\]\([^)]*\)/g, '$1');
-  text = text.replace(/https?:\/\/[^\s<>()]+?(?=[.,;:!?]*(\s|$))/g, 'a link');
-  text = text.split('\n').filter((line) => !/^\s*\|.*\|\s*$/.test(line)).join('\n');
-  text = text.replace(/^\s{0,3}#{1,6}\s+/gm, '').replace(/^\s*[-*+]\s+/gm, '').replace(/^\s*>\s?/gm, '');
-  text = text.replace(/(\*\*|__|\*|_|~~)(\S[^\n]*?\S|\S)\1/g, '$2');
-  text = text.replace(/\s*\n\s*/g, '\n').replace(/[ \t]{2,}/g, ' ').trim();
+  const text = spokenBlocks(Lexer.lex(String(markdown || ''), { gfm: true }))
+    .join('\n').replace(/\s*\n\s*/g, '\n').replace(/[ \t]{2,}/g, ' ').trim();
   if (text.length <= limit) return text;
   const cut = text.slice(0, limit);
   const end = Math.max(cut.lastIndexOf('. '), cut.lastIndexOf('! '), cut.lastIndexOf('? '), cut.lastIndexOf('\n'));
