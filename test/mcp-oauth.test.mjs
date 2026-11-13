@@ -7,7 +7,7 @@ import { createHash } from 'node:crypto';
 import { mkdtemp, writeFile, readFile, stat, rm } from 'node:fs/promises';
 import { connectMcpServers, closeMcpClients } from '../src/mcp.mjs';
 import { loadProjectMcpServers } from '../src/mcp-project.mjs';
-import { getStoredToken, saveStoredToken, parseWwwAuthenticate, discoverOAuth, openInBrowser, createOAuthFetch } from '../src/mcp-oauth.mjs';
+import { getStoredToken, saveStoredToken, discoverOAuth, openInBrowser, createOAuthFetch } from '../src/mcp-oauth.mjs';
 import { fetchMcpSameOrigin, OasisOAuthProvider } from '../src/mcp-oauth.mjs';
 import { mcpLogin, mcpLogout } from '../src/mcp-auth-commands.mjs';
 
@@ -133,8 +133,7 @@ async function workspace(t, base, extra = {}) {
 // Plays the browser: follow the authorization redirect back to the loopback callback.
 const browser = (url) => { fetch(url, { redirect: 'follow' }).catch(() => {}); return true; };
 
-test('WWW-Authenticate parsing and discovery through protected-resource metadata', async (t) => {
-  assert.deepEqual(parseWwwAuthenticate('Bearer realm="x", resource_metadata="https://a/b"'), { realm: 'x', resource_metadata: 'https://a/b' });
+test('discovery through protected-resource metadata', async (t) => {
   const { base } = await fakeServer(t);
   const found = await discoverOAuth(base + '/mcp');
   assert.equal(found.tokenEndpoint, base + '/token');
