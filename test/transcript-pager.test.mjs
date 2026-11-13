@@ -53,3 +53,13 @@ test('Ctrl+O opens a full-screen pager and q returns to the prompt', async () =>
   const result = await done;
   assert.equal(result.text, 'ok');
 });
+
+test('transcript wraps wide characters by display width', async () => {
+  const { transcriptLines } = await import('../src/terminal-ui.mjs');
+  const { default: stringWidth } = await import('string-width');
+  const lines = transcriptLines([{ role: 'user', content: '日本語'.repeat(20) }], { color: false, width: 30 });
+  const body = lines.filter((line) => line.includes('日'));
+  assert.ok(body.length >= 4);
+  for (const line of body) assert.ok(stringWidth(line) <= 28, line);
+  assert.equal(body.map((line) => line.trim()).join(''), '日本語'.repeat(20));
+});
