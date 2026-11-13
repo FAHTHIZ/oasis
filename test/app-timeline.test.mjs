@@ -131,7 +131,8 @@ test('the thinking chip shows elapsed time after five seconds', async () => {
 });
 
 test('a tool call streamed as JSON text is recognised while it streams', async () => {
-  const { streamingTextToolCall } = await import('../app/core/timeline.mjs');
+  const { splitTextToolCall } = await import('../app/core/timeline.mjs');
+  const streamingTextToolCall = (text) => splitTextToolCall(text).tool;
   assert.equal(streamingTextToolCall('{\n  "name": "write_file",\n  "arguments": {\n    "path": "src/index.html"'), 'write_file');
   assert.equal(streamingTextToolCall('```json\n{"name": "run_command", "parameters": {"command": "npm test"'), 'run_command');
   assert.equal(streamingTextToolCall('<tool_call>\n{"name":"read_file","arguments":{'), 'read_file');

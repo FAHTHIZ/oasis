@@ -524,40 +524,6 @@ export async function loadMcpClientSdk() {
   return await sdkModule;
 }
 
-// Finds the authorization server for an MCP server URL (SDK discovery behind the guard).
-export async function discoverOAuth(serverUrl, { fetch: fetchImpl = fetch, resourceMetadataUrl = null, lookupImpl = lookup, fetchTimeoutMs = OAUTH_METADATA_TIMEOUT_MS } = {}) {
-  const guarded = createOAuthFetch(serverUrl, { fetch: fetchImpl, lookupImpl, fetchTimeoutMs });
-  await requireSafeEndpoint(serverUrl, 'MCP server URL', guarded.safety);
-  if (!resourceMetadataUrl) {
-    try {
-      const probe = await guarded(serverUrl, {
-        method: 'POST',
-        headers: { 'content-type': 'application/json', accept: 'application/json, text/event-stream' },
-        body: JSON.stringify({ jsonrpc: '2.0', id: 0, method: 'ping' })
-      });
-      if (probe.status === 401) resourceMetadataUrl = (await loadMcpClientSdk()).extractWWWAuthenticateParams(probe).resourceMetadataUrl || null;
-    } catch {}
-  }
-  let metadataUrl;
-  try { metadataUrl = resourceMetadataUrl ? new URL(resourceMetadataUrl) : undefined; } catch { metadataUrl = undefined; }
-  const { discoverOAuthServerInfo } = await loadMcpClientSdk();
-  const info = await discoverOAuthServerInfo(serverUrl, { fetchFn: guarded, ...(metadataUrl ? { resourceMetadataUrl: metadataUrl } : {}) });
-  const metadata = info.authorizationServerMetadata || null;
-  const fallbackIssuer = String(info.authorizationServerUrl || new URL(serverUrl).origin);
-  const issuer = metadata && metadata.issuer || (new URL(fallbackIssuer).pathname === '/' ? fallbackIssuer.replace(/\/$/, '') : fallbackIssuer);
-  const resourceMetadata = info.resourceMetadata || null;
-  return {
-    issuer,
-    metadataIssuer: metadata && metadata.issuer || null,
-    requireIss: Boolean(metadata && metadata.authorization_response_iss_parameter_supported),
-    authorizationEndpoint: metadata && metadata.authorization_endpoint || new URL('/authorize', issuer).href,
-    tokenEndpoint: metadata && metadata.token_endpoint || new URL('/token', issuer).href,
-    registrationEndpoint: metadata && metadata.registration_endpoint || null,
-    scopes: resourceMetadata && Array.isArray(resourceMetadata.scopes_supported) ? resourceMetadata.scopes_supported : null,
-    resource: resourceMetadata && resourceMetadata.resource || null
-  };
-}
-
 export function openInBrowser(url, { env = process.env, platform = process.platform, spawnImpl = spawn } = {}) {
   if (env.OASIS_NO_BROWSER === '1') return false;
   // Do not route an OAuth URL through cmd.exe. The URL contains query-string
