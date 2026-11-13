@@ -29,7 +29,7 @@ import { commentWarning } from './style-rules.mjs';
 import { snapshotScriptedEdit, noOpEditWarning } from './inplace-edit-check.mjs';
 import { resolveWorkspacePath, walkFiles, sensitivePath, scrubEnvironment, nonInteractiveEnvironment } from './tools.mjs';
 import { agentIgnoreMatch } from './agent-ignore.mjs';
-import { assertSandboxAvailable, launchCommand } from './sandbox.mjs';
+import { assertSandboxAvailable, launchCommand, sandboxLocalhostNote } from './sandbox.mjs';
 import { fileGlobMatcher } from './glob.mjs';
 import { editNotebook } from './notebook.mjs';
 import { processTreeSpawnOptions, signalProcessTree } from './process-tree.mjs';
@@ -743,7 +743,7 @@ async function runShell(root, args, context, flavor = 'sh') {
       settled = true;
       cleanup();
       const condensed = flushCondensers();
-      const note = benignExitNote(command, code);
+      const note = benignExitNote(command, code) || sandboxLocalhostNote(sandbox, command, code);
       resolve({ approved: true, command, exitCode: code, ...(note ? { note } : {}), stdout, ...condensed, stderr: flavor === 'powershell' ? stderr.replace(/\x1b\[[0-9;]*[A-Za-z]/g, '') : stderr, timedOut, cancelled: cancelled || Boolean(context.signal && context.signal.aborted), ...(sandbox ? { sandboxed: sandbox.kind } : {}), signal, ...(safetySnapshot ? { safetySnapshot: gitSafety.snapshotNote(safetySnapshot) } : {}) });
     });
   });
