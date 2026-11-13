@@ -27,6 +27,7 @@ import { speakable, isStopPhrase, turnDetector, rmsLevel, lastReply } from './co
 import { previewTarget } from './core/preview.mjs';
 import { anchorMenu } from './core/popover.mjs';
 import { createFocusTrap } from 'focus-trap';
+import { deleteDB } from 'idb';
 import { icon, kindIcon } from './core/icons.mjs';
 import { searchMarketplace, marketplaceCount, OFFICIAL_MARKETPLACE } from './core/claude-plugins.mjs';
 import { syncBrowserChats } from './core/chat-sync.mjs';
@@ -3918,7 +3919,7 @@ $('clearChat').addEventListener('click', async () => {
 $('wipeAll').addEventListener('click', async () => {
   if (!confirm('Erase all projects, chats, keys and settings stored by OASIS on this device?')) return;
   localStorage.clear();
-  await new Promise((resolve) => { const req = indexedDB.deleteDatabase('oasis-universal'); req.onsuccess = req.onerror = req.onblocked = resolve; });
+  await deleteDB('oasis-universal').catch(() => {});
   if ('caches' in window) for (const key of await caches.keys()) await caches.delete(key);
   delete document.documentElement.dataset.ready;
   location.reload();
