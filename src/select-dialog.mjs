@@ -1,6 +1,7 @@
 // Claude Code-style select dialog for permission prompts: arrow keys or j/k move, Enter
 // accepts, digits pick directly, y/n/a answer at once, Esc declines. Keys come from the
 // Confirmation and Select keybinding contexts, so keybindings.json can rebind them.
+import { truncateColumns } from './text-cursor.mjs';
 import { KeyDecoder } from './line-editor.mjs';
 import { loadKeybindings, resolveBinding, actionEffect } from './keybindings.mjs';
 
@@ -28,10 +29,13 @@ export function selectDialog({ input = process.stdin, output = process.stdout, o
     let drawn = 0;
     let done = false;
     const paint = (t, on) => (color && on ? '\x1b[36m' + t + '\x1b[39m' : t);
+    // One terminal row per option: a label that wrapped would throw off the
+    // row count used to redraw in place.
+    const fit = (text) => truncateColumns(String(text).replace(/[\r\n\t]+/g, ' '), Math.max(10, (Number(output.columns) || 80) - 1));
     const draw = () => {
       let out = drawn ? '\x1b[' + drawn + 'A\r' : '\r';
-      items.forEach((item, i) => { out += '\x1b[2K' + paint((i === index ? '❯ ' : '  ') + (i + 1) + '. ' + item.label, i === index) + '\r\n'; });
-      out += '\x1b[2K' + (color ? '\x1b[2m' : '') + 'Enter to confirm · Esc to cancel' + (color ? '\x1b[22m' : '');
+      items.forEach((item, i) => { out += '\x1b[2K' + paint(fit((i === index ? '❯ ' : '  ') + (i + 1) + '. ' + item.label), i === index) + '\r\n'; });
+      out += '\x1b[2K' + (color ? '\x1b[2m' : '') + fit('Enter to confirm · Esc to cancel') + (color ? '\x1b[22m' : '');
       output.write(out);
       drawn = items.length;
     };

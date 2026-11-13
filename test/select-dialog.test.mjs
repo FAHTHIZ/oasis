@@ -135,3 +135,17 @@ test('terminal approvals show the proposed diff, colored and capped', async () =
   assert.match(renderApprovalText(risky, { color: true }), /⚠ Risky action/);
   assert.match(renderApprovalText(risky, { color: true }), /\x1b\[36m {2}rm -rf build\x1b\[0m/);
 });
+
+test('long option labels are cut to one terminal row so redraws stay in place', async () => {
+  const t = tty();
+  t.output.columns = 20;
+  const options = [{ label: '日本語のとても長いラベルです', value: 1 }, { label: 'short', value: 2 }];
+  const done = selectDialog({ input: t.input, output: t.output, options, env: envWith(), color: false });
+  await tick(); t.input.write('\x1b[B');
+  await tick(); t.input.write('\r');
+  assert.equal(await done, 2);
+  const { default: stringWidth } = await import('string-width');
+  const rows = t.rendered().split(/\r\n|\x1b\[\d+A\r/).filter((row) => row.includes('1. '));
+  assert.ok(rows.length >= 2);
+  for (const row of rows) { assert.ok(stringWidth(row) <= 19, row); assert.ok(row.endsWith('…'), row); }
+});
