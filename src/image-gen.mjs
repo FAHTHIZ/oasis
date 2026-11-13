@@ -11,6 +11,7 @@
 import { readFile, stat } from 'node:fs/promises';
 import path from 'node:path';
 import { saveGeneratedMedia } from './media-output.mjs';
+import { sniffImageType } from './images.mjs';
 
 const DEFAULT_BASE = 'https://api.openai.com/v1';
 const MAX_INPUT_IMAGE = 20 * 1024 * 1024;
@@ -48,11 +49,10 @@ export function imageGenerationConfig(env = process.env, settings = {}) {
   return { baseUrl, apiKey, model: String(env.OASIS_IMAGE_MODEL || options.model || 'gpt-image-1'), size: String(options.size || 'auto') };
 }
 
+const EXTENSIONS = { 'image/png': 'png', 'image/jpeg': 'jpg', 'image/gif': 'gif', 'image/webp': 'webp' };
+
 function extensionFor(bytes) {
-  if (bytes[0] === 0x89 && bytes[1] === 0x50) return 'png';
-  if (bytes[0] === 0xff && bytes[1] === 0xd8) return 'jpg';
-  if (bytes[0] === 0x52 && bytes[1] === 0x49 && bytes[8] === 0x57) return 'webp';
-  return 'png';
+  return EXTENSIONS[sniffImageType(bytes)] || 'png';
 }
 
 function mimeFor(file) {
