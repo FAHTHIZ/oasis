@@ -14,7 +14,7 @@ import { FrameSandbox } from './core/sandbox.mjs';
 import { SkillLibrary } from './core/skills.mjs';
 import { GitHub, parseRepo } from './core/github.mjs';
 import { createZip, readZip } from './core/zip.mjs';
-import { renderMarkdown, splitStableMarkdown } from './markdown.mjs';
+import { renderMarkdown, renderPartialMarkdown, splitStableMarkdown } from './markdown.mjs';
 import { smartConnect, looksLikeConnection, parsePaste, scanLocal, buildChain, nextInChain, configFor, classifyFailure, maskSecret, isGitHubToken, serverLabel } from './core/connect.mjs';
 import { PLUGINS, getPlugin, pluginsFor, suggestPlugins } from './core/plugins.mjs';
 import { detectRuntime, RuntimeAgent, RuntimeWorkspace, tokenFromPaste, saveRuntimeToken, forgetRuntimeToken, deviceRemembered } from './core/runtime.mjs';
@@ -1418,7 +1418,7 @@ function renderStream(turn) {
   const tailKey = tail + '\u0000' + pending.tool;
   if (md.tail !== tailKey) {
     while (body.childNodes.length > md.count) body.lastChild.remove();
-    if (tail) body.insertAdjacentHTML('beforeend', renderMarkdown(tail));
+    if (tail) body.insertAdjacentHTML('beforeend', renderPartialMarkdown(tail));
     if (pending.tool) {
       const note = document.createElement('p');
       note.className = 'pending-tool-call';
@@ -1435,7 +1435,7 @@ function settleStream(turn, text) {
   if (!turn || !turn.body) return;
   const md = turn.md;
   const same = md && md.source === text && !splitTextToolCall(text).tool
-    && md.html + renderMarkdown(text.slice(md.len)) === renderMarkdown(text);
+    && md.html + renderPartialMarkdown(text.slice(md.len)) === renderMarkdown(text);
   if (same) { turn.text = text; renderStream(turn); return; }
   turn.body.innerHTML = renderMarkdown(text);
   turn.md = { len: text.length, count: turn.body.childNodes.length, html: turn.body.innerHTML, tail: '\u0000', source: text };

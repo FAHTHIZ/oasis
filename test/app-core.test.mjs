@@ -376,6 +376,19 @@ test('system prompt includes project instructions and skills', async () => {
   assert.match(prompt, /- testing: Write tests\./);
 });
 
+test('a streaming tail renders unfinished formatting closed (remend)', async () => {
+  const { renderMarkdown, renderPartialMarkdown } = await import('../app/markdown.mjs');
+  assert.match(renderPartialMarkdown('This is **bold'), /<strong>bold<\/strong>/);
+  assert.match(renderPartialMarkdown('Run `npm i'), /<code>npm i<\/code>/);
+  assert.match(renderPartialMarkdown('a ~~gone'), /<del>gone<\/del>/);
+  const link = renderPartialMarkdown('See [the docs](https://exa');
+  assert.match(link, /the docs/);
+  assert.ok(!link.includes('href') && !link.includes('https://exa'), 'an unfinished link shows only its text');
+  assert.equal(renderPartialMarkdown('Done **here**.'), renderMarkdown('Done **here**.'), 'finished text renders the same');
+  assert.match(renderPartialMarkdown('```js\nconst a = 1'), /hljs-keyword/, 'an open code fence stays a code block');
+  assert.ok(!renderPartialMarkdown('<img src=x onerror=alert(1)> **x').includes('<img'));
+});
+
 test('markdown renderer escapes HTML and only links http(s)', async () => {
   const { renderMarkdown } = await import('../app/markdown.mjs');
   const html = renderMarkdown('<img src=x onerror=alert(1)> **b** [x](javascript:alert(1)) [ok](https://a.b/c?d=1&e=2)\n\n```js\n<b>\n```\n\n| a | b |\n|---|---|\n| 1 | 2 |');

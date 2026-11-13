@@ -33,7 +33,8 @@ export const APP_PACKAGES = Object.freeze({
   '@floating-ui/core': 'dist/floating-ui.core.browser.min.mjs',
   fuzzysort: 'fuzzysort.js',
   'focus-trap': 'dist/focus-trap.esm.min.js',
-  tabbable: 'dist/index.esm.min.js'
+  tabbable: 'dist/index.esm.min.js',
+  remend: 'dist/index.js'
 });
 
 // Bare imports inside a vendored browser build: serving a package also serves these.
