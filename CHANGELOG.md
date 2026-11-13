@@ -4,6 +4,10 @@ User-facing change history grouped by package version. A version heading does no
 
 ## Unreleased
 
+- A command that was denied or blocked (by you, a rule or the auto mode classifier) no longer gets the "You already ran this exact command successfully" reminder. No process started, so the reminder told the model a side effect had been repeated when nothing ran.
+- Web app: a step group that opens straight to its only step now folds that step back when a second step joins the group, instead of leaving the first step's inspector expanded for the rest of the run. A step you opened or closed yourself keeps its state.
+- OASIS now requires Node.js 22.19 or newer (was 22.15). The terminal renderer, `@earendil-works/pi-tui` 1.5.2, declares `node >=22.19.0`, so 22.15–22.18 passed the installer and `oasis doctor` checks but were unsupported. The installers, `oasis doctor`, `package.json` and the docs agree on the new floor.
+
 - `oasis doctor` wraps long report lines between words with a hanging indent on a terminal (piped output is unchanged), instead of the terminal splitting words such as "openai-comp/atible".
 - Shell deny rules now see commands run through GNU `parallel` (`parallel rm ::: x`, `parallel ::: "rm x"`) and through inline git aliases (`git -c alias.y='!rm x' y`); an inline alias that runs a shell command is also always high risk, so `--yes` and broad allow rules still ask.
 - The secret shield now keeps «secret:ID» placeholders in `generate_image`, `text_to_speech` and `create_pull_request` arguments instead of swapping in the real value, so a prompt-injected model cannot send a hidden credential to an image or speech provider or publish it in a pull request.

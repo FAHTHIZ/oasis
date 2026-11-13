@@ -43,10 +43,11 @@ export function inferSetupProviderPreset(config) {
   return 'custom';
 }
 
-// The oldest Node.js the runtime dependencies support: OpenTelemetry 3 declares
-// 22.15, and require() of ES modules (lowlight) needs 22.12. Keep in sync with
+// The oldest Node.js the runtime dependencies support: the terminal renderer
+// (@earendil-works/pi-tui) declares 22.19, OpenTelemetry 3 declares 22.15, and
+// require() of ES modules (lowlight) needs 22.12. Keep in sync with
 // package.json "engines"; test/dependency-engines.test.mjs checks both.
-export const MIN_NODE_VERSION = '22.15.0';
+export const MIN_NODE_VERSION = '22.19.0';
 
 export function isNodeVersionSupported(version = process.versions.node) {
   const match = String(version).match(/^(\d+)(?:\.(\d+)(?:\.(\d+))?)?(?:[-+][0-9A-Za-z.-]+)?$/);

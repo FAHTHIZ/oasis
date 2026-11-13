@@ -1,5 +1,5 @@
 # What this script does:
-# 1. Checks for Node.js 22.15 or newer.
+# 1. Checks for Node.js 22.19 or newer.
 # 2. Offers to install Node.js with winget only after asking first.
 # 3. Resolves the latest stable GitHub release and installs its immutable commit.
 # 4. Runs oasis doctor and opens first-run provider setup.
@@ -29,26 +29,26 @@ function Refresh-Path {
     $env:Path = @($machine, $user) -join ';'
 }
 
-Write-Host 'Checking for Node.js 22.15 or newer...'
+Write-Host 'Checking for Node.js 22.19 or newer...'
 $node = Get-Command node -ErrorAction SilentlyContinue
 $nodeVersion = 0
 if ($node) {
     try { $nodeVersion = [int]((& node -p 'const [a, b] = process.versions.node.split(".").map(Number); a * 100 + b').Trim()) } catch { $nodeVersion = 0 }
 }
-if ($nodeVersion -lt 2215) {
-    Write-Host 'Node.js 22.15 or newer was not found. OASIS needs it to run.'
+if ($nodeVersion -lt 2219) {
+    Write-Host 'Node.js 22.19 or newer was not found. OASIS needs it to run.'
     if (Get-Command winget -ErrorAction SilentlyContinue) {
         if (-not (Confirm-Change "May I run 'winget install OpenJS.NodeJS.LTS --exact --scope user'?")) { exit 1 }
         & winget install --id OpenJS.NodeJS.LTS --exact --scope user --accept-source-agreements --accept-package-agreements
         if ($LASTEXITCODE -ne 0) {
             Write-Host 'winget could not finish a user-only installation. No administrator command was run.'
-            Write-Host 'Install Node.js 22.15 or newer from https://nodejs.org/en/download, then run this script again.'
+            Write-Host 'Install Node.js 22.19 or newer from https://nodejs.org/en/download, then run this script again.'
             exit 1
         }
         Refresh-Path
     } else {
         Write-Host 'winget was not found, so I have not installed anything.'
-        Write-Host 'Install Node.js 22.15 or newer from https://nodejs.org/en/download, then try again.'
+        Write-Host 'Install Node.js 22.19 or newer from https://nodejs.org/en/download, then try again.'
         exit 1
     }
     $node = Get-Command node -ErrorAction SilentlyContinue
@@ -57,8 +57,8 @@ if ($nodeVersion -lt 2215) {
         exit 1
     }
     try { $nodeVersion = [int]((& node -p 'const [a, b] = process.versions.node.split(".").map(Number); a * 100 + b').Trim()) } catch { $nodeVersion = 0 }
-    if ($nodeVersion -lt 2215) {
-        Write-Host 'The installed Node.js version is still too old. Install version 22.15 or newer and try again.'
+    if ($nodeVersion -lt 2219) {
+        Write-Host 'The installed Node.js version is still too old. Install version 22.19 or newer and try again.'
         exit 1
     }
 }
