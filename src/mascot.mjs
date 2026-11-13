@@ -59,22 +59,3 @@ export function fenLines({ color = true, blink = false, palette = FEN_PALETTE } 
 }
 
 export const FEN_COLUMNS = FEN[0].length;
-
-// Crisp SVG of the sprite. `size` is the pixel edge length in SVG units.
-export function fenSvg({ size = 16, title = 'Fen, the OASIS fennec fox', background = '', blink = false, padding = 1 } = {}) {
-  const sprite = blink ? FEN_BLINK : FEN;
-  const width = (sprite[0].length + padding * 2) * size;
-  const height = (sprite.length + padding * 2) * size;
-  const rects = [];
-  for (let y = 0; y < sprite.length; y += 1) {
-    for (let x = 0; x < sprite[y].length; x += 1) {
-      const key = sprite[y][x];
-      if (key === '.') continue;
-      rects.push('<rect x="' + (x + padding) * size + '" y="' + (y + padding) * size + '" width="' + size + '" height="' + size + '" fill="' + FEN_PALETTE[key] + '"/>');
-    }
-  }
-  return '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ' + width + ' ' + height + '" width="' + width + '" height="' + height + '" shape-rendering="crispEdges" role="img" aria-label="' + title + '">' +
-    '<title>' + title + '</title>' +
-    (background ? '<rect width="' + width + '" height="' + height + '" fill="' + background + '"/>' : '') +
-    rects.join('') + '</svg>\n';
-}

@@ -5,9 +5,38 @@ import path from 'node:path';
 import { mkdtemp, writeFile, readFile, rm } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { McpServerClient } from '../src/mcp.mjs';
-import { createMcpServeHandler, servedTools } from '../src/mcp-serve.mjs';
+import { PassThrough } from 'node:stream';
+import { serveMcp, servedTools } from '../src/mcp-serve.mjs';
 
 const CLI = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'src', 'cli.mjs');
+
+// Drives the real stdio server over in-memory streams: one JSON-RPC message in,
+// its reply (or null for a notification) out.
+function createMcpServeHandler({ root, allowEdits = false, env = {} }) {
+  const input = new PassThrough();
+  const output = new PassThrough();
+  const waiting = new Map();
+  let buffer = '';
+  output.on('data', (chunk) => {
+    buffer += chunk;
+    let index;
+    while ((index = buffer.indexOf('\n')) >= 0) {
+      const line = buffer.slice(0, index); buffer = buffer.slice(index + 1);
+      if (!line.trim()) continue;
+      const message = JSON.parse(line);
+      const done = waiting.get(message.id);
+      if (done) { waiting.delete(message.id); done(message); }
+    }
+  });
+  const served = serveMcp({ root, args: allowEdits ? ['--allow-edits'] : [], env, input, output, log: { write() {} } });
+  const handle = async (message) => {
+    const reply = message.id === undefined ? null : new Promise((resolve) => waiting.set(message.id, resolve));
+    input.write(JSON.stringify(message) + '\n');
+    return reply;
+  };
+  handle.close = async () => { input.end(); await served; };
+  return handle;
+}
 
 async function tmp(t) {
   const dir = await mkdtemp(path.join(os.tmpdir(), 'oasis-serve-'));

@@ -3,9 +3,16 @@ import assert from 'node:assert/strict';
 
 // Exports removed as dead code: nothing in the repo imported them. The modules must still load.
 const REMOVED = {
-  '../app/core/timeline.mjs': ['STEP_KINDS'],
+  '../app/core/timeline.mjs': ['STEP_KINDS', 'streamingTextToolCall'],
+  '../src/artifacts.mjs': ['readArtifact'],
   '../src/frontmatter.mjs': ['stringifyYaml'],
+  '../src/hooks.mjs': ['HOOK_TYPES'],
+  '../src/mascot.mjs': ['fenSvg'],
+  '../src/mcp-oauth.mjs': ['discoverOAuth'],
+  '../src/mcp-serve.mjs': ['createMcpServeHandler'],
   '../src/monitors.mjs': ['MONITOR_TOOL_DEFINITION'],
+  '../src/network-safety.mjs': ['normalizeIpAddress'],
+  '../src/tool-registry-bridge.mjs': ['bridgeToolDefinitions'],
   '../src/power-tools.mjs': ['NOTEBOOK_EDIT_DEFINITION', 'POWER_TOOL_DEFINITIONS', 'POWER_TOOL_NAMES'],
   '../src/tool-kernel.mjs': ['TOOL_CAPABILITIES', 'TOOL_RISK_LEVELS', 'validateToolInput', 'evaluateToolPolicy']
 };

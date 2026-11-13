@@ -112,11 +112,6 @@ export async function recordArtifactEvent(root,name,type,details,options={}) {
   }
   return persist(state,p);
 }
-export async function readArtifact(root,name,options={}) {
-  const p=pathsFor(root,name,options.env||process.env);
-  const artifact=await readState(p.data);
-  return artifact?{artifact,dataPath:p.data,htmlPath:p.html,fileUrl:pathToFileURL(p.html).href}:null;
-}
 export async function listArtifacts(root,options={}) {
   const dir=directoryFor(root,options.env||process.env);
   let names=[];try{names=(await readdir(dir,{withFileTypes:true})).filter(e=>e.isFile()&&e.name.endsWith('.json'));}catch{return [];}
