@@ -33,6 +33,8 @@ import { icon, kindIcon } from './core/icons.mjs';
 import { searchMarketplace, marketplaceCount, OFFICIAL_MARKETPLACE } from './core/claude-plugins.mjs';
 import { syncBrowserChats } from './core/chat-sync.mjs';
 import { initActivity, refreshActivity, focusStep, resetActivity } from './activity.mjs';
+// The module graph loaded: tell the boot watchdog (boot-watchdog.js) to stand down.
+document.documentElement.dataset.booted = '1';
 // Composer autocomplete state (declared early: refreshFiles clears the file cache).
 const suggest = { token: null, items: [], index: 0, commands: null, files: null, noFileCommand: false, seq: 0 };
 
