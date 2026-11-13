@@ -32,7 +32,7 @@ export const COMMAND_ALIASES = { tokens: 'context', approvals: 'permissions', as
 
 export const BUILTIN_COMMANDS = {
   help: 'Show built-in and custom commands',
-  notify: 'Send a structured, non-executable message to another live Oasis session (/notify SESSION MESSAGE)',
+  notify: 'Send a structured, non-executable message to another live Oasis session (/notify lists them; /notify SESSION [--warning|--blocking] MESSAGE)',
   inbox: 'Read and manage durable messages for this session (/inbox [list|read ID|dismiss ID])',
   artifact: 'Create and update a local investigation page (/artifact NAME, /artifact add NAME TYPE DETAILS)',
   status: 'Show the model provider configuration',
@@ -1820,6 +1820,30 @@ export async function runBuiltinCommand(name, argument, state) {
       }
       for (const item of failures) lines.push('  ' + item.name + ' - not connected: ' + item.error);
       return { output: lines.join('\n') };
+    }
+    case 'notify': {
+      if (!session) return { output: 'Start a session before sending messages to other sessions.' };
+      const messaging = await import('./session-messaging.mjs');
+      await messaging.registerActiveSession(session, { env }).catch(() => {});
+      const words = String(argument || '').trim().split(/\s+/).filter(Boolean);
+      if (!words.length || (words.length === 1 && ['list', 'peers', '--list'].includes(words[0].toLowerCase()))) {
+        const peers = await messaging.listPeerSessions(session, { env });
+        const usageLine = 'Usage: /notify SESSION [--warning|--blocking] MESSAGE   (SESSION is an ID or name from this list)';
+        if (!peers.length) return { output: 'No other live Oasis sessions in this workspace.\n' + usageLine };
+        return { output: 'Live sessions in this workspace:\n' + peers.map((peer) => '  ' + peer.id + (peer.name ? '  ' + peer.name : '') + '  ' + peer.state).join('\n') + '\n' + usageLine };
+      }
+      const target = words.shift();
+      let priority = 'info';
+      const text = words.filter((word) => {
+        const flag = word.toLowerCase();
+        if (flag === '--warning' || flag === '--blocking' || flag === '--info') { priority = flag.slice(2); return false; }
+        return true;
+      }).join(' ');
+      if (!text) return { output: 'Usage: /notify SESSION [--warning|--blocking] MESSAGE' };
+      try {
+        const sent = await messaging.sendSessionMessage(session, target, text, { env, priority });
+        return { output: 'Sent to ' + target + (sent.priority !== 'info' ? ' (' + sent.priority + ')' : '') + '. ' + (sent.queued ? 'It is busy and will see the message at its next step.' : 'It will see the message at the start of its next step.') };
+      } catch (error) { return { output: error.message }; }
     }
     case 'inbox': {
       if (!session) return { output: 'Start a session before using the inbox.' };

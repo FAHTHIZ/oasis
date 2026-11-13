@@ -107,6 +107,14 @@ async function listActiveSessions(options = {}) {
   return active.sort((a, b) => String(a.startedAt).localeCompare(String(b.startedAt)));
 }
 
+// Other live sessions in the same workspace (the ones /notify can reach).
+export async function listPeerSessions(session, options = {}) {
+  if (!session || !session.root) return [];
+  const own = session.activeSessionId || '';
+  const root = path.resolve(session.root);
+  return (await listActiveSessions(options)).filter((record) => record.id !== own && path.resolve(record.workspaceRoot || '') === root);
+}
+
 export async function resolveActiveTarget(target, options = {}) {
   const query = String(target || '').trim();
   if (!query) throw new Error('Usage: /notify <active-session-id-or-name> <message>.');
