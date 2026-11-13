@@ -55,6 +55,9 @@ export function modelFacingResult(name, result, session = null) {
 // After an interrupted turn (Ctrl+C, cancel, or crash) the history can end with
 // tool calls that never got results, or with a user message and no reply. Providers
 // reject that, so add explicit "interrupted" results and a short assistant note.
+/** The stand-in reply repairInterruptedHistory adds after a request that got none. */
+export const INTERRUPTED_REPLY = '[The previous request was interrupted by the user before it finished.]';
+
 export function repairInterruptedHistory(session) {
   const messages = session.messages || [];
   let repaired = 0;
@@ -93,7 +96,7 @@ export function repairInterruptedHistory(session) {
   }
   const last = messages[messages.length - 1];
   if (last && (last.role === 'user' || last.role === 'tool') && messages.length > 1) {
-    messages.push({ role: 'assistant', content: '[The previous request was interrupted by the user before it finished.]' });
+    messages.push({ role: 'assistant', content: INTERRUPTED_REPLY });
     repaired++;
   }
   return repaired;
