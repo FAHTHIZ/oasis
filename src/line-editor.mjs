@@ -262,6 +262,36 @@ function withText(state, text, cursor) {
   return { ...state, text, cursor: Math.max(0, Math.min(cursor, text.length)) };
 }
 
+// Large pastes show as one placeholder token, like Claude Code's
+// "[Pasted text #1 +42 lines]"; the full text goes out on submit.
+const PASTE_MIN_LINES = 10;
+const PASTE_MIN_CHARS = 1000;
+const PASTE_TOKEN = /\[Pasted text #(\d+)(?: \+\d+ lines|, \d+ chars)\]/g;
+function pasteToken(id, value) {
+  const lines = value.split('\n').length;
+  return '[Pasted text #' + id + (lines > 1 ? ' +' + lines + ' lines' : ', ' + value.length + ' chars') + ']';
+}
+/** Replaces paste placeholders in `text` with the text they stand for. */
+export function expandPastes(text, pastes) {
+  if (!pastes || !text.includes('[Pasted text #')) return text;
+  return text.replace(PASTE_TOKEN, (token, id) => (pastes[id] !== undefined && pasteToken(id, pastes[id]) === token ? pastes[id] : token));
+}
+// The placeholder that ends at `end` (or starts at `start`), as [from, to].
+function pasteTokenAt(state, { end, start }) {
+  if (!state.pastes) return null;
+  for (const match of state.text.matchAll(PASTE_TOKEN)) {
+    const from = match.index;
+    const to = from + match[0].length;
+    if ((end === to || start === from) && state.pastes[match[1]] !== undefined && pasteToken(match[1], state.pastes[match[1]]) === match[0]) return [from, to];
+  }
+  return null;
+}
+function insertPaste(state, value) {
+  if (!state.pastes || (value.split('\n').length <= PASTE_MIN_LINES && value.length < PASTE_MIN_CHARS)) return insertText(state, value);
+  const id = String((state.pasteCount || 0) + 1);
+  return insertText({ ...state, pasteCount: Number(id), pastes: { ...state.pastes, [id]: value } }, pasteToken(id, value));
+}
+
 function insertText(state, value) {
   const text = state.text.slice(0, state.cursor) + value + state.text.slice(state.cursor);
   return withText(state, text, state.cursor + value.length);
@@ -284,7 +314,7 @@ export function applyKey(state, key) {
   const { text, cursor } = state;
   switch (key.name) {
     case 'char': return { state: insertText(state, key.text), action: null };
-    case 'paste': return { state: insertText(state, key.text.replace(/\t/g, '    ')), action: null };
+    case 'paste': return { state: insertPaste(state, key.text.replace(/\t/g, '    ')), action: null };
     case 'newline': return { state: insertText(state, '\n'), action: null };
     case 'enter': {
       // A trailing backslash continues onto a new line, like a shell.
@@ -295,11 +325,15 @@ export function applyKey(state, key) {
     }
     case 'backspace': {
       if (!cursor) return { state, action: 'bell' };
+      const token = pasteTokenAt(state, { end: cursor });
+      if (token) return { state: withText(state, text.slice(0, token[0]) + text.slice(cursor), token[0]), action: null };
       const start = prevBoundary(text, cursor);
       return { state: withText(state, text.slice(0, start) + text.slice(cursor), start), action: null };
     }
     case 'delete': {
       if (cursor >= text.length) return { state, action: null };
+      const token = pasteTokenAt(state, { start: cursor });
+      if (token) return { state: withText(state, text.slice(0, cursor) + text.slice(token[1]), cursor), action: null };
       return { state: withText(state, text.slice(0, cursor) + text.slice(nextBoundary(text, cursor)), cursor), action: null };
     }
     case 'ctrlD': {
@@ -563,6 +597,7 @@ export function readInput(options = {}) {
     const restored = !options.initialText && stash.text && stash.pendingRestore ? stash.text : '';
     if (restored) { stash.text = ''; stash.pendingRestore = false; }
     let state = createEditorState({ history, text: options.initialText || restored });
+    if (options.collapsePastes !== false) state.pastes = {};
     if (options.vim) state.vim = createVimState(options.vim === 'normal' ? 'normal' : 'insert');
     let hints = [];
     let previousCursorRow = 0;
@@ -753,6 +788,7 @@ export function readInput(options = {}) {
     const finish = (result) => {
       if (done) return;
       done = true;
+      if (result.type === 'submit' && typeof result.text === 'string') result = { ...result, text: expandPastes(result.text, state.pastes) };
       cancelRecording();
       hints = [];
       if (paletteScreen) { output.write('\x1b[?1049l'); paletteScreen = false; palette = null; }
@@ -810,7 +846,7 @@ export function readInput(options = {}) {
       const dir = mkdtempSync(joinPath(tmpdir(), 'oasis-prompt-'));
       const file = joinPath(dir, 'prompt.md');
       try {
-        writeFileSync(file, state.text, 'utf8');
+        writeFileSync(file, expandPastes(state.text, state.pastes), 'utf8');
         input.off('data', onData);
         try { input.setRawMode(false); } catch {}
         output.write('\r\n\x1b[?2004l');
@@ -894,7 +930,7 @@ export function readInput(options = {}) {
       if (effect.action === 'commandPalette') { await openCommandPalette(); return null; }
       if (effect.action === 'externalEditor') { openExternalEditor(); return null; }
       if (effect.action === 'stash') {
-        if (state.text.trim()) { stash.text = state.text; state = { ...state, text: '', cursor: 0, undo: [...state.undo, { text: state.text, cursor: state.cursor }] }; hints = [DIM('Prompt stashed; it comes back after your next message (Ctrl+S on an empty prompt restores it now).', color)]; }
+        if (state.text.trim()) { stash.text = expandPastes(state.text, state.pastes); state = { ...state, text: '', cursor: 0, undo: [...state.undo, { text: state.text, cursor: state.cursor }] }; hints = [DIM('Prompt stashed; it comes back after your next message (Ctrl+S on an empty prompt restores it now).', color)]; }
         else if (stash.text) { state = { ...state, text: stash.text, cursor: stash.text.length }; stash.text = ''; hints = []; }
         else output.write('\x07');
         return null;
