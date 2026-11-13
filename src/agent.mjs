@@ -5124,7 +5124,10 @@ async function runAgentTurnRaw(session, prompt, options = {}) {
         else if (RETRY_TRACKED_COMMANDS.has(name) && result && typeof result === 'object' && !result.background && !result.running) {
           const key = name + ' ' + JSON.stringify({ command: args.command, args: args.args, cwd: args.cwd });
           const failed = (Number.isInteger(result.exitCode) && result.exitCode !== 0) || result.timedOut === true;
-          if (!failed && typeof item.content === 'string') {
+          // A denied or blocked call never started a process, so it neither "ran
+          // successfully" nor repeated any side effect.
+          const ran = result.approved !== false && result.blocked !== true && !result.error;
+          if (!failed && ran && typeof item.content === 'string') {
             // Seen live: `node todo.mjs add milk` ran four times to "show the output",
             // adding milk four times. A second identical successful run with no edit in
             // between repeats its side effects; read-only commands and checks are fine.
