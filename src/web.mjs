@@ -34,6 +34,10 @@ import { atomicWriteFile } from './atomic-write.mjs';
 import { connectFromPaste } from './provider-connect.mjs';
 import { basicAuthToken, createCursorAgentsApi, cursorError } from './cursor-agents-api.mjs';
 
+// The web app shows pages from the project in its own Preview tab. Told nothing,
+// models end a "build me a page" task with `xdg-open index.html`.
+const WEB_APP_NOTE = 'The user is working in the OASIS web app, beside this conversation. It has a Preview tab that shows HTML pages and local dev servers from this project live, and Files, Changes and Terminal tabs. To let the user try a page or app you built, tell them to open it in Preview (for example "Open Preview to try it"); do not suggest xdg-open, open, start or double-clicking a file.';
+
 // Commands that only make sense in the terminal (the web UI has its own session picker).
 const WEB_UNSUPPORTED_COMMANDS = new Set(['resume']);
 // Built-ins that only make sense in the terminal; the browser explains instead of running them.
@@ -949,11 +953,11 @@ export function createOasisWebServer(options = {}) {
     if (session && path.resolve(session.root) !== taskRoot) session = null;
     if (sessionId && !session) {
       const restore = await loadSession(taskRoot, sessionId, { env });
-      session = await createSession({ root: taskRoot, config, restore, env });
+      session = await createSession({ root: taskRoot, config, restore, env, appendSystemPrompt: input.client === 'app' ? WEB_APP_NOTE : '' });
       activeSessions.set(sessionId, session);
     }
     if (!session) {
-      session = await createSession({ root: taskRoot, config, env });
+      session = await createSession({ root: taskRoot, config, env, appendSystemPrompt: input.client === 'app' ? WEB_APP_NOTE : '' });
       const temporaryId = randomUUID();
       session.sessionId = temporaryId;
       activeSessions.set(temporaryId, session);
