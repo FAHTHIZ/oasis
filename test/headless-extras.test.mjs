@@ -139,11 +139,25 @@ test('--bare skips project instructions and hooks', async (t) => {
 
 test('deniedHint names the command that was not approved and the flag that allows it', async () => {
   const { deniedHint } = await import('../src/headless.mjs');
-  const hint = deniedHint([{ tool_name: 'run_command', tool_input: { command: 'npm', args: ['test'] }, detail: 'Run this command?' }]);
+  const hint = deniedHint([{ tool_name: 'run_command', tool_input: { command: 'npm', args: ['test'] }, detail: 'Run this command?' }], { env: {} });
   assert.match(hint, /Not approved in this run \(nobody can approve in -p mode\): `npm test`\./);
   assert.match(hint, /--allowedTools "run_command\(npm test:\*\)"/);
   assert.match(hint, /--full-auto \(edits plus commands inside the OS sandbox\)/);
   assert.equal(deniedHint([]), '');
+});
+
+test('deniedHint does not suggest --full-auto to a --full-auto run, nor for high-risk commands it cannot allow', async () => {
+  // Seen in a --full-auto run: `node -e ...` was refused, and the hint said to use --full-auto.
+  const { deniedHint } = await import('../src/headless.mjs');
+  const inline = [{ tool_name: 'run_command', tool_input: { command: 'node', args: ['-e', 'console.log(1)'] }, detail: 'Run this command in the workspace? node "-e" "console.log(1)" HIGH RISK: this command runs inline code. Auto-approval does not apply.' }];
+  const risky = deniedHint(inline, { env: { OASIS_SANDBOX: '1' } });
+  assert.doesNotMatch(risky, /--full-auto \(/);
+  assert.doesNotMatch(risky, /--permission-mode auto/);
+  assert.match(risky, /always ask, even with --full-auto/);
+  assert.match(risky, /--allowedTools "run_command\(node -e:\*\)"/);
+  const plain = deniedHint([{ tool_name: 'run_command', tool_input: { command: 'npm', args: ['test'] }, detail: 'Run this command?' }], { env: { OASIS_SANDBOX: '1' } });
+  assert.doesNotMatch(plain, /--full-auto/);
+  assert.match(plain, /--allowedTools "run_command\(npm test:\*\)", or --permission-mode auto/);
 });
 
 const bwrapReady = process.platform === 'linux' && existsSync('/usr/bin/bwrap');
@@ -163,3 +177,33 @@ test('--full-auto runs model commands without asking, inside the OS sandbox', { 
   assert.equal(output.sandboxed, 'bubblewrap', result.content);
   assert.match(output.stdout, /ran/);
 });
+
+test('--full-auto: a sandboxed command that cannot reach localhost is told why', { skip: !bwrapReady }, async (t) => {
+  // Seen while building a server: the model started it in the background, then
+  // curl in a second command failed with a bare exit 7 (separate empty network).
+  const root = await tmp(t);
+  await writeFile(path.join(root, 'probe.js'), "require('http').get('http://localhost:' + process.argv[2] + '/health').on('error', () => process.exit(7));\n");
+  const run = await runCli(t, root, ['-p', 'check the server', '--full-auto', '--output-format', 'stream-json'], [
+    toolCall('c1', 'run_command', { command: 'node', args: ['probe.js', '3456', 'localhost'] }),
+    { content: 'done' }
+  ]);
+  assert.equal(run.code, 0, run.stderr);
+  const result = run.stdout.split('\n').filter(Boolean).map((line) => JSON.parse(line)).find((event) => event.type === 'tool_result');
+  const output = JSON.parse(result.content);
+  assert.equal(output.exitCode, 7, result.content);
+  assert.match(output.note, /sandbox has no network/);
+  assert.match(output.note, /same command/);
+});
+
+test('sandboxLocalhostNote only speaks up for failed local requests without sandbox network', async () => {
+  const { sandboxLocalhostNote } = await import('../src/sandbox.mjs');
+  const box = { available: true, kind: 'bubblewrap', network: false };
+  assert.match(sandboxLocalhostNote(box, 'curl -s http://localhost:3456/health', 7), /no network/);
+  assert.match(sandboxLocalhostNote(box, 'curl http://127.0.0.1:8080', 7), /no network/);
+  assert.equal(sandboxLocalhostNote(box, 'curl http://localhost:3456', 0), null);
+  assert.equal(sandboxLocalhostNote({ ...box, network: true }, 'curl http://localhost:3456', 7), null);
+  assert.equal(sandboxLocalhostNote({ ...box, available: false }, 'curl http://localhost:3456', 7), null);
+  assert.equal(sandboxLocalhostNote(box, 'npm test', 1), null);
+  assert.equal(sandboxLocalhostNote(box, 'cat notlocalhost.txt', 1), null);
+});
+

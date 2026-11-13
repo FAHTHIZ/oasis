@@ -36,7 +36,7 @@ import { getConfigDirectory, loadConfig, saveConfig, validateBaseUrl, isLoopback
 import { testProviderConnection } from './agent.mjs';
 import { installGitHubExtension, inspectGitHubExtension } from './extensions.mjs';
 import { analyzeCommand } from './permissions.mjs';
-import { assertSandboxAvailable, launchCommand } from './sandbox.mjs';
+import { assertSandboxAvailable, launchCommand, sandboxLocalhostNote } from './sandbox.mjs';
 import { fileGlobMatcher } from './glob.mjs';
 import { isNotebookPath, readNotebook } from './notebook.mjs';
 import { imageMediaType, readImageFile } from './images.mjs';
@@ -837,8 +837,9 @@ export async function runWorkspaceCommand(root, command, args = [], options = {}
       if (settled) return;
       settled = true; cleanup();
       const logFiles = finishOutputLog();
+      const note = sandboxLocalhostNote(sandbox, [command, ...args].join(' '), code);
       resolve({
-        command, approved: true, exitCode: code, signal,
+        command, approved: true, exitCode: code, signal, ...(note ? { note } : {}),
         stdout: stdoutBuffer.text(logFiles.stdoutLogPath, logFiles.stdoutLogTruncated),
         stderr: stderrBuffer.text(logFiles.stderrLogPath, logFiles.stderrLogTruncated),
         stdoutTruncated: stdoutBuffer.truncated, stderrTruncated: stderrBuffer.truncated,

@@ -408,6 +408,16 @@ function seatbeltString(value) {
   return '"' + text.replace(/\\/g, '\\\\').replace(/"/g, '\\"') + '"';
 }
 
+// A sandboxed command without network gets its own empty network namespace, so
+// "start the server in one command, curl it in the next" fails with a bare
+// connection error. Name the cause when a failed command talks to localhost.
+const LOCAL_ADDRESS = /(?:^|[^\w.-])(?:localhost|127\.0\.0\.1|0\.0\.0\.0)(?![\w.-])|\[::1\]/i;
+export function sandboxLocalhostNote(sandbox, commandLine, exitCode) {
+  if (!sandbox || !sandbox.available || sandbox.network || exitCode === 0 || exitCode === null || exitCode === undefined) return null;
+  if (!LOCAL_ADDRESS.test(String(commandLine || ''))) return null;
+  return 'The OS sandbox has no network: each command gets its own, so it cannot reach a server started by another command. Start the server and query it in the same command (one run_shell script), or ask the user to set sandbox.network to true.';
+}
+
 export function assertSandboxAvailable(sandbox) {
   if (sandbox && sandbox.enabled && !sandbox.available) {
     const reason = String(sandbox.reason || 'No supported OS sandbox is available on this platform.');
