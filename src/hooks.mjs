@@ -24,6 +24,7 @@
 import { debugLog, debugEnabled } from './debug-log.mjs';
 import { credentialEnvName } from './credential-env.mjs';
 import { spawn } from 'node:child_process';
+import stripAnsi from 'strip-ansi';
 import { processTreeSpawnOptions, signalProcessTree } from './process-tree.mjs';
 
 import { parseRule, ruleMatches } from './permissions.mjs';
@@ -388,7 +389,7 @@ export async function runHooks(event, payload, options = {}) {
     if (event === 'WorktreeCreate' && out.exitCode === 0 && !result.worktreePath) {
       const json = parseJsonOutput(out.stdout);
       const fromJson = json && json.hookSpecificOutput && typeof json.hookSpecificOutput.worktreePath === 'string' ? json.hookSpecificOutput.worktreePath : '';
-      const lines = String(out.stdout || '').replace(/\x1b\[[0-9;?]*[ -\/]*[@-~]/g, '').split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+      const lines = stripAnsi(String(out.stdout || '')).split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
       result.worktreePath = fromJson || (json ? '' : lines.at(-1) || '') || null;
       continue;
     }

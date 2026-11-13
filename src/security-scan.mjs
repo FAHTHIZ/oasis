@@ -22,6 +22,7 @@
 import { lstat, mkdir, mkdtemp, readFile, realpath, rm, stat } from 'node:fs/promises';
 import { existsSync, readdirSync } from 'node:fs';
 import os from 'node:os';
+import stripAnsi from 'strip-ansi';
 import path from 'node:path';
 import { onPathSync } from './clipboard-path.mjs';
 
@@ -525,7 +526,7 @@ export async function runSecurityScan(root, args = {}, options = {}) {
         }
       } else report = await readJson(reportFile);
       if (report.value === undefined) {
-        const tail = String(result.stderr || result.stdout || '').replace(/\x1b\[[0-9;]*m/g, '').trim().split('\n').slice(-4).join(' ');
+        const tail = stripAnsi(String(result.stderr || result.stdout || '')).trim().split('\n').slice(-4).join(' ');
         ran.push({ ...entry, exitCode: result.exitCode, error: clip((report.tooLarge ? 'report too large' : report.error) + (tail ? ': ' + tail : ''), 400) });
         continue;
       }
