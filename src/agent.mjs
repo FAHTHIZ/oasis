@@ -103,7 +103,7 @@ import { promptToolCalling, toPromptToolMessages, foldSystemMessages, withSystem
 import { isLocalModelEndpoint, probeLocalContext, probeProviderModelWindow, applySmallContextProfile, localContextAdvice, SMALL_CONTEXT_TOKENS, RECOMMENDED_LOCAL_CONTEXT } from './local-context.mjs';
 import { ripgrepPathAddition } from './ripgrep.mjs';
 import { MAX_PROVIDER_RETRIES, QUICK_PROVIDER_RETRIES, RETRYABLE_PROVIDER_STATUSES, isHardQuotaError, isMalformedGenerationError, isUnconfiguredRouteError, isPromptTooLargeError, notifyProviderRetry, providerErrorSummary, providerRetryDelayMs, providerRetryLimit, rateLimitResetMs, rateLimitWaitMs, shortRateLimitMs, waitForProviderRetry } from './provider-retry.mjs';
-import { ACTION_NUDGE, AUTO_LSP_EDIT_TOOLS, CONTINUE_NUDGE, CYCLE_HALT_AT, CYCLE_WARN_AT, CYCLE_WINDOW_STEPS, EMPTY_REPLY_NOTICE, EMPTY_REPLY_NUDGE, FALSE_CLAIM_NUDGE, FILE_EDITING_TOOL_NAMES, GIVE_UP_NUDGE, MAX_EMPTY_REPLY_NUDGES, MAX_SESSION_TOOL_CALLS, PROTECTED_EDIT_TOOLS, REFUSAL_NUDGE, RETRY_HALT_AT, RETRY_TRACKED_COMMANDS, RETRY_WARN_AT, THRASH_ESCALATE_AT, THRASH_WARN_AT, UNREADABLE_CALL_NUDGE, activeLspBaseline, announcesNextStep, appendLspUnavailableNotice, asksForAction, asksForNewTests, assistedVerificationCalls, assistedVerificationEnabled, claimsUnmadeChange, failureSignature, fencedFileFromReply, givesUpEarly, isCompleteFileRead, isVerificationCommand, lspCallOptions, normalizeReviewPath, parallelToolCalls, promptCacheKeyField, readsLikeInstructions, refusesSpuriously, samplingTemperature, successfulMutation, targetFileHint, untestedNewCode, verificationIssues, wrongFileNudge, newModuleCandidate, markLoadedModules, markRanSources } from './turn-guards.mjs';
+import { ACTION_NUDGE, AUTO_LSP_EDIT_TOOLS, CONTINUE_NUDGE, CYCLE_HALT_AT, CYCLE_WARN_AT, CYCLE_WINDOW_STEPS, EMPTY_REPLY_NOTICE, EMPTY_REPLY_NUDGE, FALSE_CLAIM_NUDGE, FILE_EDITING_TOOL_NAMES, GIVE_UP_NUDGE, MAX_EMPTY_REPLY_NUDGES, MAX_SESSION_TOOL_CALLS, PROTECTED_EDIT_TOOLS, REFUSAL_NUDGE, RETRY_HALT_AT, RETRY_TRACKED_COMMANDS, RETRY_WARN_AT, THRASH_ESCALATE_AT, THRASH_WARN_AT, UNREADABLE_CALL_NUDGE, activeLspBaseline, announcesNextStep, appendLspUnavailableNotice, asksForAction, asksForNewTests, assistedVerificationCalls, assistedVerificationEnabled, claimsUnmadeChange, failureSignature, fencedFileFromReply, givesUpEarly, isCompleteFileRead, isVerificationCommand, lspCallOptions, normalizeReviewPath, parallelToolCalls, promptCacheKeyField, readsLikeInstructions, refusesSpuriously, samplingTemperature, successfulMutation, targetFileHint, untestedNewCode, verificationIssues, wrongFileNudge, newModuleCandidate, markLoadedModules, markRanSources, SOURCE_EXTENSIONS } from './turn-guards.mjs';
 import { postModelSwitch } from './model-switch.mjs';
 import { MAX_OUTPUT_RECOVERIES, applyEffort, claudeEffortFor, claudeThinkingMode, thinkingTurnedOff, firstPositiveConfiguredInteger, inlineEffortLevel, isOpenRouterBaseURL, maxOutputTokensFor, openRouterOutputCapFromError, outputCapFromError, reasoningEffortFor, resolveTurnLimits, stripInlineEffort, subagentEffortConfig, thinkingBudgetFor, truncationRecoveryPrompt } from './model-budgets.mjs';
 import { HISTORY_COMPACT_INPUT_LIMIT, HISTORY_COMPACT_THRESHOLD_CHARS, announceCompaction, compactionDeadline, compactionError, deterministicHistorySummary, findCompactionBoundary, historyBudgetSize, historyTextSize, reportCompaction, safeHistoryLine, supersedeBeforeCompaction, usableCompactionSummary } from './compaction-history.mjs';
@@ -4735,6 +4735,30 @@ async function runAgentTurnRaw(session, prompt, options = {}) {
           }
         }
       }
+      // HTML, CSS, JSON, YAML and TOML have no test runner to call. When they
+      // (plus any scripts already run cleanly) are the whole change, parse
+      // them in-process: a clean parse is the check, problems go back to the
+      // model to fix. See src/static-check.mjs.
+      if (verification.staticCheckPending && verification.changedPaths.size && verification.lastVerificationExitCode !== 0 && !options.planOnly) {
+        verification.staticCheckPending = false;
+        const { staticFileCheck, STATIC_CHECK_EXTENSIONS } = await import('./static-check.mjs');
+        const sources = [...verification.changedPaths].filter((item) => SOURCE_EXTENSIONS.has(path.extname(item).toLowerCase()));
+        const staticFiles = sources.filter((item) => STATIC_CHECK_EXTENSIONS.has(path.extname(item).toLowerCase()));
+        if (staticFiles.length && sources.every((item) => staticFiles.includes(item) || (verification.ranPaths && verification.ranPaths.has(item)))) {
+          const { checked, problems } = await staticFileCheck(session.root, staticFiles);
+          if (checked.length === staticFiles.length) {
+            verification.lastVerificationExitCode = problems.length ? 1 : 0;
+            verification.lastVerificationKind = 'static';
+            recordSessionEvent(session, { type: 'verification', kind: 'static', command: 'parse ' + checked.join(' ').slice(0, 280), exitCode: problems.length ? 1 : 0, passed: !problems.length, automatic: true }, options.env);
+            if (problems.length && (verification.staticFixes || 0) < 2) {
+              verification.staticFixes = (verification.staticFixes || 0) + 1;
+              if (text && options.onText) await emitDisplayText(session, options, text);
+              session.messages.push({ role: 'user', content: '<system-reminder>OASIS parsed the files you changed and found problems:\n' + problems.map((item) => '- ' + item).join('\n') + '\nFix them (create any missing file the page refers to, or change the reference), then finish. Do not mention this note.</system-reminder>' });
+              continue;
+            }
+          }
+        }
+      }
       if (verification.tamperCheckPending && verification.changedPaths.size) {
         verification.tamperCheckPending = false;
         const { detectTestTampering } = await import('./test-tamper.mjs');
@@ -5193,6 +5217,7 @@ async function runAgentTurnRaw(session, prompt, options = {}) {
         verification.lastVerificationExitCode = null;
         verification.lastVerificationKind = null;
         verification.autoTestPending = true;
+        verification.staticCheckPending = true;
         verification.tamperCheckPending = true;
       }
       if (result && result.lspVerification && result.lspVerification.path) {
