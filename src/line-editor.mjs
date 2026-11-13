@@ -406,6 +406,15 @@ function applySearchKey(state, key) {
   }
 }
 
+// The history entry Ctrl+R currently matches, with the cursor at the match.
+export function searchPreview(state) {
+  const search = state.search;
+  if (!search || search.match < 0) return null;
+  const text = state.history[search.match] || '';
+  const at = text.toLowerCase().indexOf(search.query.toLowerCase());
+  return { text, cursor: at < 0 ? text.length : at };
+}
+
 // Replaces text[start, end) with value and moves the cursor after it.
 function applyCompletion(state, { start, end }, value) {
   const text = state.text.slice(0, start) + value + state.text.slice(end);
@@ -540,7 +549,12 @@ export function readInput(options = {}) {
         if (state.search) rows = [DIM('(reverse-i-search) ', color) + state.search.query + (state.search.match < 0 && state.search.query ? DIM('  (no match)', color) : '')];
         else rows = [...hints, ...(state.vim ? [DIM(vimModeLabel(state), color)] : []), ...footer()];
       }
-      const frame = layoutFrame({ prompt: promptText(), continuation: continuation(), text: state.text, cursor: final ? state.text.length : state.cursor, hints: rows, columns: columns(), maxLines: Math.max(3, (output.rows || 24) - rows.length - 3) });
+      // While Ctrl+R searches, the prompt previews the matching history entry
+      // with the cursor on the match, as in bash and zsh.
+      const view = !final ? searchPreview(state) : null;
+      const shownText = view ? view.text : state.text;
+      const shownCursor = final ? state.text.length : view ? view.cursor : state.cursor;
+      const frame = layoutFrame({ prompt: promptText(), continuation: continuation(), text: shownText, cursor: shownCursor, hints: rows, columns: columns(), maxLines: Math.max(3, (output.rows || 24) - rows.length - 3) });
       let s = '';
       if (previousCursorRow > 0) s += '\x1b[' + previousCursorRow + 'A';
       s += '\r\x1b[J' + frame.out;
