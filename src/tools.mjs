@@ -161,7 +161,7 @@ export const TOOL_DEFINITIONS = [
   { type: 'function', function: { name: 'repo_map', description: 'Get a compact, ranked map of the repository: source files with their top-level functions, classes and types (with line numbers). Most-referenced files come first. Use it first in an unfamiliar codebase, or with focus to find where something lives, before reading whole files.', parameters: { type: 'object', properties: { path: { type: 'string', description: 'Workspace-relative directory to map; defaults to the whole workspace' }, focus: { type: 'array', items: { type: 'string' }, description: 'Files, directories or symbol names to rank first' }, max_chars: { type: 'integer', description: 'Output budget in characters, 1000 to 60000; defaults to 12000' } } } } },
   { type: 'function', function: { name: 'glob_files', description: 'Find files by glob (**, *, ?), e.g. src/**/*.mjs. Skips dependencies, .git and secret files.', parameters: { type: 'object', properties: { pattern: { type: 'string', description: 'Workspace-relative glob, no ..' }, path: { type: 'string', description: 'Folder; default the root' }, limit: { type: 'integer', description: '1-500; default 200' } }, required: ['pattern'] } } },
   { type: 'function', function: { name: 'search_files', description: 'Search workspace text files for a literal case-insensitive string. Returns matching lines and paths, excluding secret files and dependency/build directories.', parameters: { type: 'object', properties: { query: { type: 'string', description: 'Literal phrase or symbol to search for' }, path: { type: 'string', description: 'Folder or file to search in; default the whole workspace' }, limit: { type: 'integer', description: 'Maximum matching lines, 1 to 60; defaults to 25' } }, required: ['query'] } } },
-  { type: 'function', function: { name: 'write_file', description: 'Create or overwrite a workspace text file (old contents are checkpointed). Use edit_file to change part of an existing file.', parameters: { type: 'object', properties: { path: { type: 'string', description: 'Workspace-relative path' }, content: { type: 'string', description: 'Complete file contents' } }, required: ['path', 'content'] } } },
+  { type: 'function', function: { name: 'write_file', description: 'Create or overwrite a workspace text file (old contents are checkpointed). Use edit_file to change part of an existing file. For a long new file (over ~300 lines), write it in parts: the first part normally, then each next part with append: true.', parameters: { type: 'object', properties: { path: { type: 'string', description: 'Workspace-relative path' }, content: { type: 'string', description: 'Complete file contents, or the next part when append is true' }, append: { type: 'boolean', description: 'Add content to the end of the file instead of replacing it' } }, required: ['path', 'content'] } } },
   { type: 'function', function: { name: 'todo_write', description: 'Replace the task checklist; send the COMPLETE list each time. Mark an item completed only after verifying it. Session state only; edits no files.', parameters: { type: 'object', properties: { todos: { type: 'array', maxItems: 50, items: { type: 'object', properties: { content: { type: 'string', minLength: 1, maxLength: 200 }, status: { type: 'string', enum: ['pending', 'in_progress', 'completed'] } }, required: ['content', 'status'], additionalProperties: false } } }, required: ['todos'], additionalProperties: false } } },
   { type: 'function', function: { name: 'delete_file', description: 'Delete one file inside the workspace. Requires explicit interactive approval even in auto mode. Directories and sensitive files cannot be deleted with this tool.', parameters: { type: 'object', properties: { path: { type: 'string', description: 'Workspace-relative file path' } }, required: ['path'] } } },
   { type: 'function', function: { name: 'run_command', description: 'Run one program with an argument list in the workspace (no shell syntax). Read-only commands run at once; others need approval unless --yes. Destructive programs and shell interpreters are blocked unless allowed.', parameters: { type: 'object', properties: { command: { type: 'string', description: 'Executable, e.g. npm or git' }, args: { type: 'array', items: { type: 'string' }, description: 'Arguments, e.g. ["test"]' }, timeoutSeconds: { type: 'integer', description: '5-600; default 120. On timeout it keeps running in the background (command_output).' }, run_in_background: { type: 'boolean', description: 'For servers and watchers: returns an id; read with command_output, stop with kill_command.' }, max_seconds: { type: 'integer', description: 'With run_in_background: stop after this many seconds.' }, interactive: { type: 'boolean', description: 'Real terminal for REPLs and prompts, driven with terminal_* tools. Not with run_in_background.' } }, required: ['command', 'args'] } } },
@@ -1926,6 +1926,10 @@ async function executeToolUnlocked(name, args = {}, context = {}) {
       if (typeof args.content !== 'string') throw new Error('File contents must be a string.');
       if (Buffer.byteLength(args.content, 'utf8') > MAX_TEXT_FILE) throw new Error('New file content exceeds the 256 KiB limit.');
       const target = await resolveWorkspacePath(root, args.path, { rejectSymlinks: true });
+      // append: true lets a model with a small output limit build a long file
+      // over several calls instead of sending one call that gets cut off.
+      const appending = args.append === true;
+      let newContent = args.content;
       let backedUpExistingFile = false;
       let previousContent = null;
       let previousEncoding = 'utf8';
@@ -1933,15 +1937,21 @@ async function executeToolUnlocked(name, args = {}, context = {}) {
       try {
         const old = await lstat(target.absolute);
         if (old.isDirectory()) throw new Error('Refusing to replace a directory with a file.');
-        await assertFileFresh(context, target.absolute, writeDisplayPath, { fullOverwrite: true });
+        await assertFileFresh(context, target.absolute, writeDisplayPath, { fullOverwrite: !appending });
         if (old.isFile() && old.size <= MAX_TEXT_FILE) {
           try { ({ text: previousContent, encoding: previousEncoding } = await readTextFile(target.absolute)); } catch { previousContent = null; }
         }
-        assertNoNewElision(previousContent, args.content, writeDisplayPath);
+        if (appending) {
+          if (previousContent === null) throw new Error('Cannot append to ' + writeDisplayPath + ': it is not a readable text file under 256 KiB.');
+          newContent = previousContent + args.content;
+          if (Buffer.byteLength(newContent, 'utf8') > MAX_TEXT_FILE) throw new Error('Appending would make ' + writeDisplayPath + ' larger than the 256 KiB limit.');
+        } else {
+          assertNoNewElision(previousContent, args.content, writeDisplayPath);
+        }
         await snapshotFile(target.root, target.absolute, 'before-agent-write');
         backedUpExistingFile = true;
       } catch (error) { if (error.code !== 'ENOENT') throw error; }
-      const conventions = preserveFileConventions(previousContent, args.content);
+      const conventions = preserveFileConventions(previousContent, newContent);
       const content = conventions.content;
       await mkdir(path.dirname(target.absolute), { recursive: true });
       // New project files get normal permissions (umask applies) so web servers, containers and
@@ -1951,9 +1961,9 @@ async function executeToolUnlocked(name, args = {}, context = {}) {
       await clientMirrorWrite(context, target.absolute, content);
       await recordFileState(context, target.absolute);
       const docWarning = backedUpExistingFile ? '' : unrequestedDocWarning(writeDisplayPath, context.session && context.session.currentRequest);
-      const writeModuleWarning = await moduleSystemWarning(root, target.absolute, writeDisplayPath, previousContent, args.content).catch(() => '');
-      const writeWarning = previousContent === null ? combineWarnings(writeModuleWarning, docWarning, commentWarning('', args.content, writeDisplayPath, context.session && context.session.commentMode), securityWarning('', args.content, writeDisplayPath)) : combineWarnings(writeModuleWarning, commentWarning(previousContent, args.content, writeDisplayPath, context.session && context.session.commentMode), shrinkWarning(previousContent, args.content, writeDisplayPath), testTamperWarning(previousContent, args.content, writeDisplayPath), typographyWarning(previousContent, args.content, writeDisplayPath), securityWarning(previousContent, args.content, writeDisplayPath), recordAndDetectCircling(context.session || context, target.absolute, previousContent, args.content, writeDisplayPath));
-      return { path: writeDisplayPath, writtenBytes: Buffer.byteLength(content, 'utf8'), backedUpExistingFile, ...(conventions.kept.length ? { kept: conventions.kept } : {}), ...(writeWarning ? { warning: writeWarning } : {}) };
+      const writeModuleWarning = await moduleSystemWarning(root, target.absolute, writeDisplayPath, previousContent, newContent).catch(() => '');
+      const writeWarning = previousContent === null ? combineWarnings(writeModuleWarning, docWarning, commentWarning('', newContent, writeDisplayPath, context.session && context.session.commentMode), securityWarning('', newContent, writeDisplayPath)) : combineWarnings(writeModuleWarning, commentWarning(previousContent, newContent, writeDisplayPath, context.session && context.session.commentMode), shrinkWarning(previousContent, newContent, writeDisplayPath), testTamperWarning(previousContent, newContent, writeDisplayPath), typographyWarning(previousContent, newContent, writeDisplayPath), securityWarning(previousContent, newContent, writeDisplayPath), recordAndDetectCircling(context.session || context, target.absolute, previousContent, newContent, writeDisplayPath));
+      return { path: writeDisplayPath, writtenBytes: Buffer.byteLength(content, 'utf8'), backedUpExistingFile, ...(appending ? { appended: true, appendedBytes: Buffer.byteLength(args.content, 'utf8') } : {}), ...(conventions.kept.length ? { kept: conventions.kept } : {}), ...(writeWarning ? { warning: writeWarning } : {}) };
     }
     case 'delete_file': {
       const target = await resolveWorkspacePath(root, args.path, { rejectSymlinks: true });

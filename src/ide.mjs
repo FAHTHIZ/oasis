@@ -136,9 +136,11 @@ export async function ideSelectionContext(session) {
 export async function proposedContent(root, tool, input = {}) {
   if (!input || typeof input.path !== 'string') return null;
   const file = path.resolve(root, input.path);
-  if (tool === 'write_file') return typeof input.content === 'string' ? { file, content: input.content, action: 'write' } : null;
+  if (tool === 'write_file' && input.append !== true) return typeof input.content === 'string' ? { file, content: input.content, action: 'write' } : null;
   let current;
-  try { current = await readFile(file, 'utf8'); } catch { return null; }
+  try { current = await readFile(file, 'utf8'); } catch { current = tool === 'write_file' ? '' : null; }
+  if (current === null) return null;
+  if (tool === 'write_file') return typeof input.content === 'string' ? { file, content: current + input.content, action: 'write' } : null;
   const apply = (text, oldString, newString, all) => {
     if (typeof oldString !== 'string' || !oldString || typeof newString !== 'string' || !text.includes(oldString)) return null;
     return all ? text.split(oldString).join(newString) : text.replace(oldString, () => newString);

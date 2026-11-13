@@ -20,3 +20,10 @@ test('real and unrelated names are left alone', () => {
   assert.equal(repairToolName('git_init', known), 'git_init');
   assert.equal(repairToolName('', known), '');
 });
+
+test('a long call cut off inside a string explains how to split it', async () => {
+  const { repairToolArguments } = await import('../src/tool-call-repair.mjs');
+  const raw = JSON.stringify({ path: 'a.html', content: 'x'.repeat(2000) }).slice(0, 1500);
+  assert.throws(() => repairToolArguments(raw), /cut off after 1500 characters[\s\S]*append: true/);
+  assert.throws(() => repairToolArguments('{"path":"a","content":"ab'), /not valid JSON/);
+});
