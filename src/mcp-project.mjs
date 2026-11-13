@@ -18,6 +18,7 @@ import { spawn } from 'node:child_process';
 import { processTreeSpawnOptions, signalProcessTree } from './process-tree.mjs';
 import path from 'node:path';
 import { isLoopbackUrl } from './config.mjs';
+import { serverToolFilters } from './mcp-trust.mjs';
 import { loadMcpExtras } from './mcp-extras.mjs';
 import { redactAuditValue } from './tool-kernel.mjs';
 import { validateToolArguments } from './tool-schema-validation.mjs';
@@ -123,6 +124,7 @@ export function parseMcpServerEntries(parsed, env = process.env, source = 'proje
     try {
       if (!spec || typeof spec !== 'object') throw new Error('entry must be an object');
       if (spec.disabled === true || spec.enabled === false) continue;
+      const toolFilters = serverToolFilters(spec);
       const type = String(spec.type || (spec.url ? 'http' : 'stdio')).toLowerCase();
       if (type === 'http' || type === 'streamable-http' || type === 'sse') {
         const url = new URL(expandVariables(spec.url, env));
@@ -141,7 +143,7 @@ export function parseMcpServerEntries(parsed, env = process.env, source = 'proje
           if (Number.isInteger(spec.oauth.callbackPort) && spec.oauth.callbackPort > 1023 && spec.oauth.callbackPort < 65536) oauth.callbackPort = spec.oauth.callbackPort;
         }
         if (spec.headersHelper !== undefined && (typeof spec.headersHelper !== 'string' || !spec.headersHelper.trim())) throw new Error('headersHelper must be a command string');
-        servers.push({ name, type: type === 'sse' ? 'sse' : 'http', url: url.toString(), headers, ...(oauth ? { oauth } : {}), ...(spec.headersHelper ? { headersHelper: spec.headersHelper, ...(env.CLAUDE_PLUGIN_ROOT ? { pluginRoot: env.CLAUDE_PLUGIN_ROOT } : {}) } : {}), source });
+        servers.push({ name, type: type === 'sse' ? 'sse' : 'http', url: url.toString(), headers, ...(oauth ? { oauth } : {}), ...(spec.headersHelper ? { headersHelper: spec.headersHelper, ...(env.CLAUDE_PLUGIN_ROOT ? { pluginRoot: env.CLAUDE_PLUGIN_ROOT } : {}) } : {}), ...toolFilters, source });
       } else if (type === 'stdio') {
         const extraEnv = {};
         for (const [key, value] of Object.entries(spec.env || {})) {
@@ -154,7 +156,7 @@ export function parseMcpServerEntries(parsed, env = process.env, source = 'proje
           if (typeof spec.cwd !== 'string' || !spec.cwd.trim() || spec.cwd.includes('\0')) throw new Error('cwd must be a directory path');
           cwd = expandVariables(spec.cwd, env);
         }
-        servers.push({ name, command: String(spec.command || ''), args: Array.isArray(spec.args) ? spec.args.map((arg) => expandVariables(arg, env)) : [], passEnv: [], enabled: true, extraEnv, ...(cwd ? { cwd } : {}), source });
+        servers.push({ name, command: String(spec.command || ''), args: Array.isArray(spec.args) ? spec.args.map((arg) => expandVariables(arg, env)) : [], passEnv: [], enabled: true, extraEnv, ...(cwd ? { cwd } : {}), ...toolFilters, source });
       } else {
         throw new Error('transport "' + type + '" is not supported (use stdio, http or sse)');
       }
@@ -244,7 +246,7 @@ export function mcpTaskBackgroundMs(env = process.env) {
 
 export class McpHttpClient {
   constructor(config, options = {}) {
-    this.config = { name: config.name, url: config.url, headers: config.headers || {}, enabled: true, type: config.type === 'sse' ? 'sse' : 'http', ...(config.oauth ? { oauth: config.oauth } : {}), ...(config.headersHelper ? { headersHelper: config.headersHelper, pluginRoot: config.pluginRoot } : {}) };
+    this.config = { name: config.name, url: config.url, headers: config.headers || {}, enabled: true, type: config.type === 'sse' ? 'sse' : 'http', ...(config.oauth ? { oauth: config.oauth } : {}), ...(config.headersHelper ? { headersHelper: config.headersHelper, pluginRoot: config.pluginRoot } : {}), ...serverToolFilters(config) };
     this.helperHeaders = null;
     this.fetch = options.fetch || fetch;
     this.env = options.env || process.env;

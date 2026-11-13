@@ -1,6 +1,6 @@
 import { atomicWriteFile } from './atomic-write.mjs';
 import { credentialEnvName } from './credential-env.mjs';
-import { inspectMcpTool, toolFingerprint, checkPin, repin, heldToolReason } from './mcp-trust.mjs';
+import { inspectMcpTool, toolFingerprint, checkPin, repin, heldToolReason, serverToolFilters, filterServerTools } from './mcp-trust.mjs';
 import { spawn } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { processTreeSpawnOptions, signalProcessTree } from './process-tree.mjs';
@@ -91,6 +91,7 @@ export function validateMcpServerConfig(server) {
     passEnv: [...new Set(passEnv)],
     enabled: server.enabled !== false
   };
+  Object.assign(normalized, serverToolFilters(server));
   if (server.origin !== undefined) normalized.origin = validateMcpServerOrigin(server.origin);
   if (server.cwd !== undefined) {
     if (typeof server.cwd !== 'string' || !server.cwd.trim() || server.cwd.length > 1000 || server.cwd.includes('\0')) throw new Error('MCP server cwd must be a directory path.');
@@ -329,7 +330,8 @@ export function mcpToolDefinitions(clients, options = {}) {
   const pins = options.pins || null;
   for (const [serverName, client] of clients) {
     const seen = (client.toolFingerprints ||= new Map());
-    for (const tool of client.tools) {
+    // allowedTools / disabledTools on the server entry hide tools before the model sees them.
+    for (const tool of filterServerTools(client.tools, client.config || {})) {
       if (definitions.length >= 100) continue;
       const safeName = ('mcp_' + serverName + '_' + tool.name).replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 64);
       if (map.has(safeName)) continue;
