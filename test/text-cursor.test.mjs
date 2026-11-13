@@ -70,3 +70,15 @@ test('vim h, l, x and X treat an emoji as one character', () => {
   state = applyVimKey(state, { name: 'char', text: 'X' }).state;
   assert.equal(state.text, 'b');
 });
+
+test('layout wraps a wide character that does not fit the last cell onto the next row', async () => {
+  const { layoutFrame } = await import('../src/line-editor.mjs');
+  // "> a日本語" fills 9 of 10 cells; "漢" needs 2, so the terminal moves it down.
+  let frame = layoutFrame({ prompt: '> ', continuation: '  ', text: 'a日本語漢', cursor: 5, columns: 10 });
+  assert.deepEqual([frame.cursorRow, frame.cursorCol, frame.endRow], [1, 2, 1]);
+  frame = layoutFrame({ prompt: '> ', continuation: '  ', text: 'a日本語漢', cursor: 4, columns: 10 });
+  assert.deepEqual([frame.cursorRow, frame.cursorCol], [0, 9]);
+  // Exactly full row: cursor and the next line start on the following row.
+  frame = layoutFrame({ prompt: '> ', continuation: '  ', text: '日本語漢\nx', cursor: 4, columns: 10, hints: ['h'] });
+  assert.deepEqual([frame.cursorRow, frame.cursorCol, frame.endRow], [1, 0, 2]);
+});
