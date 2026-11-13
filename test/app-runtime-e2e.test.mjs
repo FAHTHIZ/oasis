@@ -214,10 +214,17 @@ test('runtime engine end to end: app at /, paste to connect, approve a real edit
   // The note waits as a chip above the message box (not a new turn) until the agent reads it.
   await waitFor(page, `document.getElementById('input').value === '' && [...document.querySelectorAll('#pendingInputs .pending-input.steer')].some((m) => /use tabs please/.test(m.textContent))`, { label: 'note waiting above the message box' });
   assert.equal(await evaluate(page, `[...document.querySelectorAll('.msg.user')].some((m) => /use tabs please/.test(m.textContent))`), false, 'a waiting note is not shown as a new message');
-  // The waiting step answers in its own row, the same as the sheet's Allow.
-  await waitFor(page, `document.querySelector('.tool.waiting .step-ask .step-allow')`, { label: 'inline Allow in the waiting step' });
-  await evaluate(page, `document.querySelector('.tool.waiting .step-ask .step-allow').click(); true`);
-  await waitFor(page, `document.getElementById('approvalSheet').hidden && !document.querySelector('.step-ask')`, { label: 'inline Allow answered the approval' });
+  // A docked approval sits right above the message box with its own buttons,
+  // so the waiting row does not repeat them; otherwise the row answers too.
+  const docked = await evaluate(page, `document.getElementById('approvalSheet').classList.contains('docked')`);
+  if (docked) {
+    assert.equal(await evaluate(page, `Boolean(document.querySelector('.step-ask'))`), false, 'no second Allow/Deny pair while the sheet is docked');
+    await evaluate(page, `document.getElementById('allowButton').click(); true`);
+  } else {
+    await waitFor(page, `document.querySelector('.tool.waiting .step-ask .step-allow')`, { label: 'inline Allow in the waiting step' });
+    await evaluate(page, `document.querySelector('.tool.waiting .step-ask .step-allow').click(); true`);
+  }
+  await waitFor(page, `document.getElementById('approvalSheet').hidden && !document.querySelector('.step-ask')`, { label: 'Allow answered the approval' });
   await waitFor(page, `!${busy} && /noted: use tabs/.test(document.getElementById('transcript').textContent)`, { label: 'the running task read the note', timeout: 30000 });
   assert.equal(await evaluate(page, `[...document.querySelectorAll('.msg.user.steer')].some((m) => /use tabs please/.test(m.textContent)) && document.getElementById('pendingInputs').hidden`), true, 'once read, the note joins the chat where the agent read it');
 
