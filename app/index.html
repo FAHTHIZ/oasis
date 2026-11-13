@@ -17,7 +17,7 @@
 <div class="app" id="app">
   <header class="topbar">
     <button class="icon-btn sidebar-toggle" id="sidebarToggle" type="button" aria-controls="sidebar" aria-expanded="true" title="Hide sidebar" aria-label="Hide sidebar">
-      <svg viewBox="0 0 20 20" aria-hidden="true"><rect x="3" y="4" width="14" height="12" rx="2.2" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M8 4.5v11" stroke="currentColor" stroke-width="1.6"/></svg>
+      <svg class="icon" aria-hidden="true"><use href="icons/lucide.svg#panel-left"/></svg>
     </button>
     <button class="brand" id="projectButton" aria-label="Projects" title="Projects">
       <img src="icons/oasis-mark.svg" alt="" width="26" height="26">
@@ -25,36 +25,36 @@
         <span class="brand-name">OASIS</span>
         <span class="project-line"><span class="project-name" id="projectName">No project</span><span class="project-branch" id="projectBranch" hidden></span></span>
       </span>
-      <svg class="chev" viewBox="0 0 16 16" aria-hidden="true"><path d="M4 6l4 4 4-4" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      <svg class="icon chev" aria-hidden="true"><use href="icons/lucide.svg#chevron-down"/></svg>
     </button>
     <div class="topbar-actions">
       <button class="icon-btn" id="commandPaletteButton" title="Search actions (Ctrl+K or /)" aria-label="Open command palette">
-        <svg viewBox="0 0 20 20" aria-hidden="true"><circle cx="8.7" cy="8.7" r="5.5" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="m13 13 4 4" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+        <svg class="icon" aria-hidden="true"><use href="icons/lucide.svg#search"/></svg>
       </button>
       <button class="icon-btn" id="chatsButton" title="Chats" aria-label="Chats">
-        <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M4 5.5A1.5 1.5 0 015.5 4h9A1.5 1.5 0 0116 5.5v6a1.5 1.5 0 01-1.5 1.5H9l-3.5 3v-3h0A1.5 1.5 0 014 11.5z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg>
+        <svg class="icon" aria-hidden="true"><use href="icons/lucide.svg#message-square"/></svg>
       </button>
       <button class="icon-btn" id="pluginsButton" title="Plugins" aria-label="Plugins">
-        <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M8 3.5a1.75 1.75 0 013.5 0V5H15v3.5h-1.5a1.75 1.75 0 000 3.5H15V16H11.5v-1.5a1.75 1.75 0 00-3.5 0V16H4.5v-3.5H6a1.75 1.75 0 000-3.5H4.5V5H8z" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg>
+        <svg class="icon" aria-hidden="true"><use href="icons/lucide.svg#puzzle"/></svg>
       </button>
       <button class="icon-btn" id="activityButton" title="Activity (Ctrl+Shift+A)" aria-label="Activity">
-        <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M2.5 10h3l2-5 3.5 10 2-5h4.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        <svg class="icon" aria-hidden="true"><use href="icons/lucide.svg#activity"/></svg>
         <span class="live-dot" id="activityLive" hidden></span>
       </button>
       <button class="icon-btn" id="filesButton" title="Files" aria-label="Files">
-        <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M3 5.5A1.5 1.5 0 014.5 4h3.3l1.6 1.8h6.1A1.5 1.5 0 0117 7.3v7.2a1.5 1.5 0 01-1.5 1.5h-11A1.5 1.5 0 013 14.5z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg>
+        <svg class="icon" aria-hidden="true"><use href="icons/lucide.svg#folder"/></svg>
         <span class="badge" id="changesBadge" hidden>0</span>
       </button>
       <button class="icon-btn" id="settingsButton" title="Settings" aria-label="Settings">
-        <svg viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="10" r="2.6" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M10 2.8v2M10 15.2v2M2.8 10h2M15.2 10h2M4.9 4.9l1.4 1.4M13.7 13.7l1.4 1.4M4.9 15.1l1.4-1.4M13.7 6.3l1.4-1.4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+        <svg class="icon" aria-hidden="true"><use href="icons/lucide.svg#settings"/></svg>
       </button>
     </div>
   </header>
 
   <main class="main">
    <nav class="sidebar" id="sidebar" aria-label="Tasks">
-    <button class="new-task" type="button" id="sideNewTask"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M10 4.5v11M4.5 10h11" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg><span>New task</span></button>
-    <button class="side-search" type="button" id="sideSearch"><svg viewBox="0 0 20 20" aria-hidden="true"><circle cx="8.7" cy="8.7" r="5.5" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="m13 13 4 4" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg><span>Search</span><kbd id="sideSearchKey">Ctrl K</kbd></button>
+    <button class="new-task" type="button" id="sideNewTask"><svg class="icon" aria-hidden="true"><use href="icons/lucide.svg#plus"/></svg><span>New task</span></button>
+    <button class="side-search" type="button" id="sideSearch"><svg class="icon" aria-hidden="true"><use href="icons/lucide.svg#search"/></svg><span>Search</span><kbd id="sideSearchKey">Ctrl K</kbd></button>
     <h2 class="side-label" id="sideTasksLabel">Tasks</h2>
     <ul class="side-list" id="sideTasks" aria-labelledby="sideTasksLabel"></ul>
     <h2 class="side-label" id="sideSessionsLabel" hidden>Other devices and terminal</h2>
@@ -68,7 +68,7 @@
       <span class="update-text"><b id="updateTitle"></b> <span id="updateDetail"></span></span>
       <button type="button" class="btn small primary" id="updateAction"></button>
       <button type="button" class="btn small ghost" id="updateNotes">What's new</button>
-      <button type="button" class="icon-btn small" id="updateLater" title="Not now" aria-label="Not now"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M5 5l10 10M15 5L5 15" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg></button>
+      <button type="button" class="icon-btn small" id="updateLater" title="Not now" aria-label="Not now"><svg class="icon" aria-hidden="true"><use href="icons/lucide.svg#x"/></svg></button>
     </div>
     <section class="chat" id="chat">
       <div class="welcome booting" id="welcome">
@@ -97,7 +97,7 @@
     </div>
     <div class="todos" id="todos" role="region" aria-label="Task progress" aria-live="polite" aria-atomic="false" hidden></div>
     <div class="plugin-suggest" id="pluginSuggest" hidden></div>
-    <button type="button" class="jump-latest" id="jumpLatest" hidden><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M10 4v12m0 0l-5-5m5 5l5-5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg><span id="jumpLatestText">Jump to latest</span></button>
+    <button type="button" class="jump-latest" id="jumpLatest" hidden><svg class="icon" aria-hidden="true"><use href="icons/lucide.svg#arrow-down"/></svg><span id="jumpLatestText">Jump to latest</span></button>
     <div class="run-status" id="runStatus" hidden><span class="run-status-dot" aria-hidden="true"></span><span class="run-status-text">Working</span></div>
     <div class="pending-inputs" id="pendingInputs" role="list" aria-label="Messages waiting for OASIS" hidden></div>
     <p class="sr-only" id="liveStatus" role="status" aria-live="polite"></p>
@@ -109,17 +109,17 @@
         <button type="button" class="chip" id="modeChip" title="Approval mode" aria-haspopup="menu">
           <span class="dot"></span><span id="modeLabel">Ask first</span>
         </button>
-        <button type="button" class="chip plugin-chip" id="composerPlugins" title="Plugins" aria-label="Plugins"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M8 3.5a1.75 1.75 0 013.5 0V5H15v3.5h-1.5a1.75 1.75 0 000 3.5H15V16H11.5v-1.5a1.75 1.75 0 00-3.5 0V16H4.5v-3.5H6a1.75 1.75 0 000-3.5H4.5V5H8z" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg><span id="pluginCount"></span></button>
-        <button type="button" class="chip plugin-chip" id="attachButton" title="Attach images" aria-label="Attach images"><svg viewBox="0 0 20 20" aria-hidden="true"><rect x="3.5" y="4.5" width="13" height="11" rx="2" fill="none" stroke="currentColor" stroke-width="1.5"/><circle cx="7.5" cy="8.5" r="1.3" fill="currentColor"/><path d="M4 14l4-4 3 3 2-2 3.5 3.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg></button>
+        <button type="button" class="chip plugin-chip" id="composerPlugins" title="Plugins" aria-label="Plugins"><svg class="icon" aria-hidden="true"><use href="icons/lucide.svg#puzzle"/></svg><span id="pluginCount"></span></button>
+        <button type="button" class="chip plugin-chip" id="attachButton" title="Attach images" aria-label="Attach images"><svg class="icon" aria-hidden="true"><use href="icons/lucide.svg#image"/></svg></button>
         <input type="file" id="attachInput" accept="image/png,image/jpeg,image/gif,image/webp" multiple hidden>
-        <button type="button" class="chip plugin-chip" id="dictateButton" title="Dictate" aria-label="Dictate" aria-pressed="false" hidden><svg viewBox="0 0 20 20" aria-hidden="true"><rect x="7.5" y="3" width="5" height="9" rx="2.5" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M5 9.5a5 5 0 0010 0M10 14.5V17" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg></button>
-        <button type="button" class="chip plugin-chip" id="talkButton" title="Talk with OASIS" aria-label="Talk with OASIS" aria-pressed="false" hidden><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M3.5 10v0M6.5 7.5v5M9.5 5v10M12.5 7v6M15.5 9v2" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg></button>
+        <button type="button" class="chip plugin-chip" id="dictateButton" title="Dictate" aria-label="Dictate" aria-pressed="false" hidden><svg class="icon" aria-hidden="true"><use href="icons/lucide.svg#mic"/></svg></button>
+        <button type="button" class="chip plugin-chip" id="talkButton" title="Talk with OASIS" aria-label="Talk with OASIS" aria-pressed="false" hidden><svg class="icon" aria-hidden="true"><use href="icons/lucide.svg#audio-lines"/></svg></button>
         <button type="button" class="model-chip" id="modelChip" title="Model" aria-haspopup="menu"></button>
         <span class="spacer"></span>
         <span class="usage" id="usage"></span>
         <button type="submit" class="send" id="sendButton" aria-label="Send">
-          <svg class="i-send" viewBox="0 0 20 20" aria-hidden="true"><path d="M10 16V4m0 0l-5 5m5-5l5 5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
-          <svg class="i-stop" viewBox="0 0 20 20" aria-hidden="true"><rect x="5.5" y="5.5" width="9" height="9" rx="1.5" fill="currentColor"/></svg>
+          <svg class="icon i-send" aria-hidden="true"><use href="icons/lucide.svg#arrow-up"/></svg>
+          <svg class="icon i-stop" aria-hidden="true"><use href="icons/lucide.svg#square"/></svg>
         </button>
       </div>
     </form>
@@ -137,7 +137,7 @@
           <button role="tab" class="tab" data-tab="terminal" aria-selected="false" id="terminalTab" hidden>Terminal</button>
         </div>
         <button class="icon-btn small" data-close="filesPanel" aria-label="Close files">
-          <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M5 5l10 10M15 5L5 15" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>
+          <svg class="icon" aria-hidden="true"><use href="icons/lucide.svg#x"/></svg>
         </button>
       </div>
       <div class="panel-tools">
@@ -165,12 +165,12 @@
       <div class="preview-view" id="previewView" hidden>
         <form class="preview-bar" id="previewForm">
           <button class="icon-btn small" type="button" id="previewReload" aria-label="Reload preview" title="Reload">
-            <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M15.5 9.5a5.5 5.5 0 1 1-1.7-4M15.5 3.5v3h-3" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            <svg class="icon" aria-hidden="true"><use href="icons/lucide.svg#rotate-cw"/></svg>
           </button>
           <label class="sr-only" for="previewAddress">File or dev server port</label>
           <input id="previewAddress" type="text" placeholder="index.html or 5173" autocomplete="off" spellcheck="false">
           <button class="icon-btn small" type="button" id="previewPopout" aria-label="Open preview in a new tab" title="Open in a new tab">
-            <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M11 4h5v5M16 4l-7 7M14 12v3.5H4.5V6H8" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            <svg class="icon" aria-hidden="true"><use href="icons/lucide.svg#external-link"/></svg>
           </button>
         </form>
         <div class="preview-chips" id="previewChips"></div>
@@ -220,7 +220,7 @@
 <div class="sheet-backdrop" id="backdrop" hidden></div>
 
 <section class="sheet" id="projectsSheet" role="dialog" aria-modal="true" aria-labelledby="projectsTitle" hidden>
-  <div class="sheet-head"><h2 id="projectsTitle">Projects</h2><button class="icon-btn small" data-close="projectsSheet" aria-label="Close"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M5 5l10 10M15 5L5 15" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg></button></div>
+  <div class="sheet-head"><h2 id="projectsTitle">Projects</h2><button class="icon-btn small" data-close="projectsSheet" aria-label="Close"><svg class="icon" aria-hidden="true"><use href="icons/lucide.svg#x"/></svg></button></div>
   <div class="sheet-body">
     <div class="import-grid">
       <form class="import-card" id="githubForm">
@@ -245,7 +245,7 @@
 </section>
 
 <section class="sheet" id="settingsSheet" role="dialog" aria-modal="true" aria-labelledby="settingsTitle" hidden>
-  <div class="sheet-head"><h2 id="settingsTitle">Settings</h2><button class="icon-btn small" data-close="settingsSheet" aria-label="Close"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M5 5l10 10M15 5L5 15" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg></button></div>
+  <div class="sheet-head"><h2 id="settingsTitle">Settings</h2><button class="icon-btn small" data-close="settingsSheet" aria-label="Close"><svg class="icon" aria-hidden="true"><use href="icons/lucide.svg#x"/></svg></button></div>
   <form class="sheet-body settings" id="settingsForm">
     <fieldset>
       <legend>Models</legend>
@@ -365,7 +365,7 @@
       <button class="btn small ghost" id="downloadFileButton" title="Download this file">Download</button>
       <button class="btn small ghost danger" id="deleteFileButton">Delete</button>
       <button class="btn small primary" id="saveFileButton">Save</button>
-      <button class="icon-btn small" data-close="editorSheet" aria-label="Close"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M5 5l10 10M15 5L5 15" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg></button>
+      <button class="icon-btn small" data-close="editorSheet" aria-label="Close"><svg class="icon" aria-hidden="true"><use href="icons/lucide.svg#x"/></svg></button>
     </div>
   </div>
   <textarea class="editor" id="editor" spellcheck="false" autocapitalize="off" autocomplete="off" wrap="off"></textarea>
@@ -373,7 +373,7 @@
 </section>
 
 <section class="sheet" id="pluginsSheet" role="dialog" aria-modal="true" aria-labelledby="pluginsTitle" hidden>
-  <div class="sheet-head"><h2 id="pluginsTitle">Plugins</h2><button class="icon-btn small" data-close="pluginsSheet" aria-label="Close"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M5 5l10 10M15 5L5 15" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg></button></div>
+  <div class="sheet-head"><h2 id="pluginsTitle">Plugins</h2><button class="icon-btn small" data-close="pluginsSheet" aria-label="Close"><svg class="icon" aria-hidden="true"><use href="icons/lucide.svg#x"/></svg></button></div>
   <div class="sheet-body">
     <section class="cc-plugins" id="ccPlugins" aria-labelledby="ccPluginsTitle" hidden>
       <h3 class="sheet-subtitle" id="ccPluginsTitle">Claude Code plugins</h3>
@@ -412,7 +412,7 @@
 </section>
 
 <section class="sheet" id="questionSheet" role="dialog" aria-modal="true" aria-labelledby="questionTitle" hidden>
-  <div class="sheet-head"><h2 id="questionTitle">OASIS has a question</h2><button class="icon-btn small" data-close="questionSheet" aria-label="Skip"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M5 5l10 10M15 5L5 15" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg></button></div>
+  <div class="sheet-head"><h2 id="questionTitle">OASIS has a question</h2><button class="icon-btn small" data-close="questionSheet" aria-label="Skip"><svg class="icon" aria-hidden="true"><use href="icons/lucide.svg#x"/></svg></button></div>
   <form class="sheet-body" id="questionForm" autocomplete="off">
     <p class="approval-summary" id="questionText"></p>
     <div class="question-options" id="questionOptions"></div>
@@ -422,7 +422,7 @@
 </section>
 
 <section class="sheet" id="chatsSheet" role="dialog" aria-modal="true" aria-labelledby="chatsTitle" hidden>
-  <div class="sheet-head"><h2 id="chatsTitle">Chats</h2><button class="icon-btn small" data-close="chatsSheet" aria-label="Close"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M5 5l10 10M15 5L5 15" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg></button></div>
+  <div class="sheet-head"><h2 id="chatsTitle">Chats</h2><button class="icon-btn small" data-close="chatsSheet" aria-label="Close"><svg class="icon" aria-hidden="true"><use href="icons/lucide.svg#x"/></svg></button></div>
   <div class="sheet-body">
     <button class="btn primary" type="button" id="newChatButton">New chat</button>
     <h3 class="section-label" id="chatsListLabel">In this project</h3>
@@ -437,7 +437,7 @@
 
 
 <section class="sheet" id="pushSheet" role="dialog" aria-modal="true" aria-labelledby="pushTitle" hidden>
-  <div class="sheet-head"><h2 id="pushTitle">Push to GitHub</h2><button class="icon-btn small" data-close="pushSheet" aria-label="Close"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M5 5l10 10M15 5L5 15" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg></button></div>
+  <div class="sheet-head"><h2 id="pushTitle">Push to GitHub</h2><button class="icon-btn small" data-close="pushSheet" aria-label="Close"><svg class="icon" aria-hidden="true"><use href="icons/lucide.svg#x"/></svg></button></div>
   <form class="sheet-body settings" id="pushForm">
     <label for="pushBranch">Branch</label>
     <input id="pushBranch" autocapitalize="off" spellcheck="false" required>
