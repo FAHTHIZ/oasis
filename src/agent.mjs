@@ -14,6 +14,7 @@ import { protectedConfigTarget, protectedEditMessage, protectedEditsAllowed, rul
 import { extractCorrections, addCorrections, correctionsReminder, correctionViolations, correctionNudge, correctionsFromMemories, CORRECTION_MEMORY_PREFIX } from './standing-corrections.mjs';
 import { scriptedEditKind } from './inplace-edit-check.mjs';
 import { extractHardRules, extractBranchRules, ruleRefreshReminder } from './rule-refresh.mjs';
+import { readOnlyArgv, readOnlyShellLine } from './read-only-commands.mjs';
 import { newClaimState, recordCheck as recordClaimCheck, recordEdit as recordClaimEdit, claimIssue, appendUnverifiedNotice, recordEditFailure, recordEditSuccess, failedEditIssue, appendFailedEditNotice } from './claim-check.mjs';
 import { resolveToolAlias, normalizeRunCommandCall, cleanToolCallName } from './tool-aliases.mjs';
 import { scopeViolation, editScopeFromEnv } from './scope-lock.mjs';
@@ -4467,6 +4468,9 @@ async function runAgentTurnRaw(session, prompt, options = {}) {
   let todosWrittenThisTurn = false;
   let emptyReply = false;
   const failedCommandRuns = new Map();
+  // command key -> edit epoch of its last successful run, to catch a state-changing
+  // command (`todo add milk`, `git commit`, a migration) re-run for no reason.
+  const succeededCommands = new Map();
   // command key -> { signature, count, editEpoch } for failures that persist across edits.
   const persistentFailures = new Map();
   let editEpoch = 0;
@@ -5112,6 +5116,19 @@ async function runAgentTurnRaw(session, prompt, options = {}) {
         else if (RETRY_TRACKED_COMMANDS.has(name) && result && typeof result === 'object' && !result.background && !result.running) {
           const key = name + ' ' + JSON.stringify({ command: args.command, args: args.args, cwd: args.cwd });
           const failed = (Number.isInteger(result.exitCode) && result.exitCode !== 0) || result.timedOut === true;
+          if (!failed && typeof item.content === 'string') {
+            // Seen live: `node todo.mjs add milk` ran four times to "show the output",
+            // adding milk four times. A second identical successful run with no edit in
+            // between repeats its side effects; read-only commands and checks are fine.
+            const harmless = isVerificationCommand(args.command, args.args) || (name === 'run_command' ? readOnlyArgv(args.command, args.args, { root: session.root }) : name === 'run_shell' && readOnlyShellLine(String(args.command || ''), { root: session.root }));
+            if (!harmless) {
+              if (succeededCommands.get(key) === editEpoch && !item.rerunWarned) {
+                item.rerunWarned = true;
+                item.content += '\n\n<system-reminder>You already ran this exact command successfully in this turn, with no file changes since. If it changes state (adds data, commits, sends, migrates), running it again repeated that effect. Do not run it again; use the output you already have, and tell the user if the repeat changed anything.</system-reminder>';
+              }
+              succeededCommands.set(key, editEpoch);
+            }
+          }
           if (!failed) persistentFailures.delete(key);
           else {
             const signature = failureSignature(result);
