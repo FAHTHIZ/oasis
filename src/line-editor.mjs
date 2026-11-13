@@ -13,6 +13,7 @@ import stringWidthText from 'string-width';
 import stripAnsiText from 'strip-ansi';
 import { StdinBuffer } from '@earendil-works/pi-tui/dist/stdin-buffer.js';
 import { parseKey, decodeKittyPrintable, isKeyRelease } from '@earendil-works/pi-tui/dist/keys.js';
+import { prevGrapheme, nextGrapheme, wordBackward, wordForward, columnOf, indexAtColumn } from './text-cursor.mjs';
 import { mkdtempSync, readFileSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join as joinPath } from 'node:path';
@@ -236,33 +237,21 @@ export function createEditorState({ history = [], text = '' } = {}) {
   return { text, cursor: text.length, history: history.slice(), historyIndex: history.length, draft: '', search: null, killRing: '', undo: [] };
 }
 
-function prevBoundary(text, index) {
-  if (index <= 0) return 0;
-  const code = text.charCodeAt(index - 1);
-  return code >= 0xdc00 && code <= 0xdfff && index >= 2 ? index - 2 : index - 1;
-}
-function nextBoundary(text, index) {
-  if (index >= text.length) return text.length;
-  const code = text.charCodeAt(index);
-  return code >= 0xd800 && code <= 0xdbff ? index + 2 : index + 1;
-}
-function wordLeft(text, index) {
+const prevBoundary = prevGrapheme;
+const nextBoundary = nextGrapheme;
+// Ctrl+W and Alt+Backspace erase back to whitespace (readline's
+// unix-word-rubout); Alt+B/F, Ctrl+Left/Right and Alt+D use word boundaries.
+function spaceWordLeft(text, index) {
   let i = index;
   while (i > 0 && /\s/.test(text[i - 1])) i -= 1;
   while (i > 0 && !/\s/.test(text[i - 1])) i -= 1;
-  return i;
-}
-function wordRight(text, index) {
-  let i = index;
-  while (i < text.length && /\s/.test(text[i])) i += 1;
-  while (i < text.length && !/\s/.test(text[i])) i += 1;
   return i;
 }
 function lineInfo(text, cursor) {
   const lineStart = text.lastIndexOf('\n', cursor - 1) + 1;
   let lineEnd = text.indexOf('\n', cursor);
   if (lineEnd === -1) lineEnd = text.length;
-  return { lineStart, lineEnd, column: cursor - lineStart };
+  return { lineStart, lineEnd };
 }
 
 function withText(state, text, cursor) {
@@ -317,8 +306,8 @@ export function applyKey(state, key) {
     }
     case 'left': return { state: { ...state, cursor: prevBoundary(text, cursor) }, action: null };
     case 'right': return { state: { ...state, cursor: nextBoundary(text, cursor) }, action: null };
-    case 'wordLeft': return { state: { ...state, cursor: wordLeft(text, cursor) }, action: null };
-    case 'wordRight': return { state: { ...state, cursor: wordRight(text, cursor) }, action: null };
+    case 'wordLeft': return { state: { ...state, cursor: wordBackward(text, cursor) }, action: null };
+    case 'wordRight': return { state: { ...state, cursor: wordForward(text, cursor) }, action: null };
     case 'home': { const { lineStart } = lineInfo(text, cursor); return { state: { ...state, cursor: lineStart }, action: null }; }
     case 'end': { const { lineEnd } = lineInfo(text, cursor); return { state: { ...state, cursor: lineEnd }, action: null }; }
     case 'killEnd': {
@@ -331,11 +320,11 @@ export function applyKey(state, key) {
       return { state: { ...withText(state, text.slice(0, lineStart) + text.slice(cursor), lineStart), killRing: text.slice(lineStart, cursor) }, action: null };
     }
     case 'killWord': {
-      const start = wordLeft(text, cursor);
+      const start = spaceWordLeft(text, cursor);
       return { state: { ...withText(state, text.slice(0, start) + text.slice(cursor), start), killRing: text.slice(start, cursor) }, action: null };
     }
     case 'deleteWord': {
-      const end = wordRight(text, cursor);
+      const end = wordForward(text, cursor);
       return { state: { ...withText(state, text.slice(0, cursor) + text.slice(end), cursor), killRing: text.slice(cursor, end) }, action: null };
     }
     case 'yank': return state.killRing ? { state: insertText(state, state.killRing), action: null } : { state, action: 'bell' };
@@ -345,10 +334,10 @@ export function applyKey(state, key) {
       return { state: { ...state, text: last.text, cursor: last.cursor, undo: state.undo.slice(0, -1) }, action: null };
     }
     case 'up': {
-      const { lineStart, column } = lineInfo(text, cursor);
+      const { lineStart } = lineInfo(text, cursor);
       if (lineStart > 0) {
         const prev = lineInfo(text, lineStart - 1);
-        return { state: { ...state, cursor: prev.lineStart + Math.min(column, prev.lineEnd - prev.lineStart) }, action: null };
+        return { state: { ...state, cursor: indexAtColumn(text, prev.lineStart, prev.lineEnd, columnOf(text, lineStart, cursor)) }, action: null };
       }
       if (state.historyIndex <= 0) return { state, action: 'bell' };
       const draft = state.historyIndex === state.history.length ? text : state.draft;
@@ -357,10 +346,10 @@ export function applyKey(state, key) {
       return { state: { ...state, historyIndex: index, draft, text: value, cursor: value.length }, action: null };
     }
     case 'down': {
-      const { lineEnd, column } = lineInfo(text, cursor);
+      const { lineStart, lineEnd } = lineInfo(text, cursor);
       if (lineEnd < text.length) {
         const next = lineInfo(text, lineEnd + 1);
-        return { state: { ...state, cursor: next.lineStart + Math.min(column, next.lineEnd - next.lineStart) }, action: null };
+        return { state: { ...state, cursor: indexAtColumn(text, next.lineStart, next.lineEnd, columnOf(text, lineStart, cursor)) }, action: null };
       }
       if (state.historyIndex >= state.history.length) return { state, action: 'bell' };
       const index = state.historyIndex + 1;
