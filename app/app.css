@@ -944,3 +944,8 @@ html.lite .topbar{backdrop-filter:none;-webkit-backdrop-filter:none;background:v
 .panel{container-type:inline-size}
 @media (max-width:420px){.trace-step{grid-template-columns:22px minmax(0,1fr) 46px}.trace-target,.trace-track,.trace-ruler,.trace-model{display:none}}
 @media (prefers-reduced-motion:reduce){.live-dot,.trace-row.running .trace-track i{animation:none}}
+
+/* Shown by boot-watchdog.js when the app's modules fail to load. */
+.boot-failure{position:fixed;inset:auto 16px 16px;z-index:1000;max-width:560px;margin:0 auto;padding:16px 18px;display:flex;flex-wrap:wrap;gap:12px;align-items:center;justify-content:space-between;background:var(--raised);color:var(--text);border:1px solid var(--danger);border-radius:var(--r-lg);box-shadow:var(--shadow)}
+.boot-failure p{margin:0;flex:1 1 300px}
+.boot-failure code{font-family:var(--mono);font-size:.92em}
