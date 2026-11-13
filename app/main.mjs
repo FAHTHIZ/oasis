@@ -987,10 +987,12 @@ function patchStepRow(item, tool) {
 }
 // A step waiting for approval answers right in its row: Allow and Deny run
 // the same path as the approval sheet, which stays open for the full detail
-// and the "what to do instead" note.
+// and the "what to do instead" note. When the sheet is docked right above
+// the message box its own buttons are in view, so the row does not repeat them.
 function patchStepAsk(item, tool) {
   let ask = item.querySelector('.step-ask');
-  const show = Boolean(tool.waiting) && tool.ok === undefined && !$('approvalSheet').hidden;
+  const sheet = $('approvalSheet');
+  const show = Boolean(tool.waiting) && tool.ok === undefined && !sheet.hidden && !sheet.classList.contains('docked');
   if (!show) { if (ask) ask.remove(); return; }
   if (ask) return;
   ask = document.createElement('div');
