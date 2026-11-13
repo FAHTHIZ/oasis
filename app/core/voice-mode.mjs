@@ -36,13 +36,13 @@ function spokenBlocks(tokens = [], lines = []) {
  * code blocks are announced, links read as their text, bare URLs as "a link",
  * tables and markup are dropped, and long replies stop at a sentence boundary.
  */
-export function speakable(markdown, limit = 900) {
+export function speakable(markdown, limit = 900, more = 'The rest is on screen.') {
   const text = spokenBlocks(Lexer.lex(String(markdown || ''), { gfm: true }))
     .join('\n').replace(/\s*\n\s*/g, '\n').replace(/[ \t]{2,}/g, ' ').trim();
   if (text.length <= limit) return text;
   const cut = text.slice(0, limit);
   const end = Math.max(cut.lastIndexOf('. '), cut.lastIndexOf('! '), cut.lastIndexOf('? '), cut.lastIndexOf('\n'));
-  return (end > limit * 0.5 ? cut.slice(0, end + 1) : cut).trim() + ' The rest is on screen.';
+  return (end > limit * 0.5 ? cut.slice(0, end + 1) : cut).trim() + ' ' + more;
 }
 
 /** Phrases that end the conversation instead of being sent. */
