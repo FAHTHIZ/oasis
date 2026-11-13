@@ -1,3 +1,5 @@
+import fuzzysort from 'fuzzysort';
+
 // Searchable actions for the browser workspace command panel.
 // The panel is deliberately an index of real UI actions, not a second tool runtime.
 export const APP_PALETTE_COMMANDS = Object.freeze([
@@ -34,38 +36,20 @@ export const APP_KEYBOARD_SHORTCUTS = Object.freeze([
   { keys: 'Tab', label: 'Accept a / or @ suggestion', detail: 'Arrow keys move through suggestions; Escape closes them.' }
 ]);
 
-function termScore(words, term) {
-  let best = Infinity;
-  for (const word of words) {
-    const exact = word.indexOf(term);
-    if (exact >= 0) {
-      best = Math.min(best, exact + (exact === 0 ? 0 : 5));
-      continue;
-    }
-    // Keep short terms literal; fuzzy subsequences are useful for longer typos,
-    // but matching across unrelated words creates noisy command results.
-    if (term.length < 4) continue;
-    let cursor = 0;
-    let gaps = 0;
-    for (const character of term) {
-      const found = word.indexOf(character, cursor);
-      if (found < 0) { cursor = -1; break; }
-      gaps += found - cursor;
-      cursor = found + 1;
-    }
-    if (cursor >= 0) best = Math.min(best, 35 + gaps);
-  }
-  return best;
-}
+// Matching is fuzzysort (MIT, no dependencies): Sublime-style scores that reward
+// contiguous runs and word starts, space-separated terms that may match
+// different fields, typo-tolerant subsequences. A result has to score at least
+// 70% of the best one, so "new chat" does not also list every other "chat".
+const KEYS = ['label', 'keywords', 'description', 'section', 'shortcut'];
+const MIN_SCORE = 0.2;
 
 export function searchAppCommands(query, commands = APP_PALETTE_COMMANDS) {
-  const terms = String(query || '').trim().toLowerCase().split(/[ \t\r\n]+/).filter(Boolean);
-  return commands.map((item, index) => {
-    const words = [item.label, item.description, item.section, item.keywords, item.shortcut]
-      .filter(Boolean).join(' ').toLowerCase().split(/[^a-z0-9+/-]+/).filter(Boolean);
-    const scores = terms.map((term) => termScore(words, term));
-    return { item, index, score: scores.some((score) => !Number.isFinite(score)) ? Infinity : scores.reduce((sum, score) => sum + score, 0) };
-  }).filter((entry) => Number.isFinite(entry.score))
-    .sort((a, b) => a.score - b.score || a.index - b.index)
+  const search = String(query || '').trim();
+  if (!search) return [...commands];
+  const hits = fuzzysort.go(search, commands, { keys: KEYS, threshold: MIN_SCORE, limit: 0 });
+  const best = hits.length ? hits[0].score : 0;
+  return hits.filter((hit) => hit.score >= best * 0.7)
+    .map((hit) => ({ item: hit.obj, score: hit.score, index: commands.indexOf(hit.obj) }))
+    .sort((a, b) => b.score - a.score || a.index - b.index)
     .map((entry) => entry.item);
 }
