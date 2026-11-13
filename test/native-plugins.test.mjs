@@ -5,7 +5,12 @@ import os from 'node:os';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { mkdtemp, mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promises';
-import { installNativePlugin, validateNativePluginPackage, listNativePlugins, uninstallNativePlugin, parseNativePluginPackageArguments } from '../src/native-plugins.mjs';
+import { installNativePlugin, validateNativePluginPackage, uninstallNativePlugin } from '../src/native-plugins.mjs';
+import { readInstalledPlugins, pluginCli } from '../src/claude-plugins.mjs';
+
+async function listNativePlugins({ env }) {
+  return Object.entries(await readInstalledPlugins(env)).filter(([, record]) => record.source === 'oasis-native').map(([id, record]) => ({ id, name: id.split('@')[0], version: record.version, grantedPermissions: record.grantedPermissions }));
+}
 import { loadEnabledPlugins, pluginCommands, pluginSkills, pluginAgents, pluginHooks, pluginMcpServers } from '../src/claude-plugins.mjs';
 
 function git(cwd, ...args) {
@@ -64,8 +69,6 @@ test('native plugin validates and installs HTTPS-compatible Git sources from a t
   git(pkg,'commit','-qm','fixture');
   git(pkg,'branch','-M','main');
   const gitUrl=pathToFileURL(pkg).href+'#main';
-  const parsed=parseNativePluginPackageArguments('install '+gitUrl+' --grant commands',root);
-  assert.equal(parsed.positionals[0],gitUrl,'Git URLs and their optional refs must not be resolved as local paths');
   const checked=await validateNativePluginPackage(gitUrl,{env});
   assert.equal(checked.name,'review-helper');
   const cloneRoot=path.join(home,'.config','oasis','native-plugin-sources');
@@ -79,8 +82,9 @@ test('native plugin validates and installs HTTPS-compatible Git sources from a t
 
 test('native plugin Git URLs reject insecure HTTP and unsafe refs', async (t) => {
   const { root } = await setup(t);
-  assert.throws(() => parseNativePluginPackageArguments('validate http://example.invalid/repo.git', root), /HTTPS, SSH, or file:\/\//i);
-  assert.throws(() => parseNativePluginPackageArguments('validate https://github.com/example/plugin.git#../../etc', root), /safe branch or tag/i);
+  void root;
+  await assert.rejects(validateNativePluginPackage('http://example.invalid/repo.git'), /HTTPS, SSH, or file:\/\//i);
+  await assert.rejects(validateNativePluginPackage('https://github.com/example/plugin.git#../../etc'), /safe branch or tag/i);
 });
 
 test('native plugin validates and installs only explicitly granted capabilities',async t=>{
@@ -218,4 +222,23 @@ test('granting MCP explicitly bundles server code and resolves its local path',a
   const [server]=await pluginMcpServers([plugin],{env,root});
   assert.match(server.mcpServers.example.args[0],/native-plugins[\\/]review-helper[\\/]mcp[\\/]server.mjs/);
   assert.equal((await pluginCommands([plugin],{env,root})).length,0);
+});
+
+test('oasis plugin validate|list|update|uninstall handle native OASIS plugins end to end', async (t) => {
+  const { root, pkg, env } = await setup(t);
+  await writePackage(pkg);
+  const lines = [];
+  const run = (...args) => pluginCli(root, args, { env, write: (text) => lines.push(text) });
+  await run('validate', pkg);
+  assert.match(lines.join(''), /OASIS plugin "review-helper" v1\.0\.0 by Oasis Test Suite \(MIT\)/);
+  assert.match(lines.join(''), /Requests permissions: commands, skills, agents, hooks, mcp\.\nValid\./);
+  const installed = await installNativePlugin(pkg, { env, grantedPermissions: ['commands', 'skills'] });
+  lines.length = 0; await run('list');
+  assert.match(lines.join(''), /review-helper@oasis-native \(OASIS plugin; granted: commands, skills\) v1\.0\.0/);
+  lines.length = 0; await run('update');
+  assert.match(lines.join(''), /Skipped review-helper@oasis-native/);
+  lines.length = 0; await run('uninstall', 'review-helper');
+  assert.match(lines.join(''), /Uninstalled review-helper@oasis-native/);
+  await assert.rejects(readFile(path.join(installed.installPath, 'plugin.json'), 'utf8'), /ENOENT/, 'the package folder is removed, not just the registry entry');
+  assert.deepEqual(await listNativePlugins({ env }), []);
 });
