@@ -32,3 +32,16 @@ test('write_file and edit_file report the mismatch in their result', async (t) =
   const edited = await executeTool('edit_file', { path: 'lib.js', old_string: 'export function f() { return 1; }\n', new_string: 'function f() { return 1; }\nmodule.exports = { f };\n' }, { root });
   assert.match(edited.warning || '', /ES module .*module\.exports/);
 });
+
+test('always-false "run when executed directly" guards are flagged', () => {
+  for (const bad of [
+    "if (import.meta.url===new URL('file://' + process.argv[1])){ run(); }",
+    'if (import.meta.url === process.argv[1]) main();',
+    'if (process.argv[1] === import.meta.url) main();'
+  ]) assert.match(moduleSystemIssues('todo.mjs', bad), /always false[\s\S]*pathToFileURL\(process\.argv\[1\]\)\.href/, bad);
+  for (const good of [
+    'if (import.meta.url === pathToFileURL(process.argv[1]).href) main();',
+    'if (import.meta.url === `file://${process.argv[1]}`) main();',
+    "const here = new URL('.', import.meta.url);"
+  ]) assert.equal(moduleSystemIssues('todo.mjs', good), '', good);
+});

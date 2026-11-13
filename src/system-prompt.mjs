@@ -53,7 +53,7 @@ export function compactSystemPrompt(root, projectContext, skillDescriptions = ''
 // Live run (gpt-oss-20b, empty folder, "build a weather CLI with a test"):
 // the model reached for Jest, then spent several turns fighting Jest's ESM
 // flags. Built-ins (node:test, fetch) would have worked on the first try.
-export const NEW_PROJECT_RULE = '- This folder is empty, so you are starting a new project. Pick the simplest setup that meets the request: prefer the language\'s built-in tools (Node: node:test and node --test, global fetch, ES modules; Python: unittest, urllib) over new dependencies and config files unless the user asks for a framework. Create the files, then run the program and its tests before you finish, and tell the user how to run it.';
+export const NEW_PROJECT_RULE = '- This folder is empty, so you are starting a new project. Pick the simplest setup that meets the request: prefer the language\'s built-in tools (Node: node:test and node --test, global fetch, ES modules; Python: unittest, urllib) over new dependencies and config files unless the user asks for a framework. Create the files, then run its tests and the program itself the way a user would (for a CLI, a real command such as node app.mjs add x; tests that import functions do not prove the entry point works) before you finish, and tell the user how to run it.';
 
 // The core prompt: how to work, stay honest and stay safe. Manuals for tools
 // that are not loaded up front arrive with the tool (TOOL_GUIDANCE in
