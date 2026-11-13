@@ -862,6 +862,12 @@ export async function uninstallPlugin(spec, options = {}) {
   const installed = await readInstalledPlugins(env);
   const id = resolveInstalledId(spec, installed);
   const record = installed[id];
+  // Native OASIS plugins live outside the plugin cache and keep their own
+  // rollback-safe uninstall (package, registry and settings together).
+  if (record && record.source === 'oasis-native') {
+    const { uninstallNativePlugin } = await import('./native-plugins.mjs');
+    return (await uninstallNativePlugin(id, { env })).id;
+  }
   delete installed[id];
   await writeInstalledPlugins(installed, env);
   await setEnabled(id, null, { env });
@@ -1033,9 +1039,23 @@ export async function validatePath(target) {
       }
     }
   } else if (!report.length) {
-    problems.push('No .claude-plugin/plugin.json or .claude-plugin/marketplace.json found in ' + dir);
+    const native = await readJson(path.join(dir, 'plugin.json'), null);
+    if (native && native.schemaVersion === 1) await validateNativeInto(dir, report, problems);
+    else problems.push('No .claude-plugin/plugin.json, .claude-plugin/marketplace.json or OASIS plugin.json found in ' + dir);
   }
   return { ok: problems.length === 0, report, problems };
+}
+
+// OASIS native plugins (plugin.json with schemaVersion 1, a local folder or a
+// HTTPS/SSH/file:// Git URL with an optional #ref).
+async function validateNativeInto(source, report, problems) {
+  const { validateNativePluginPackage } = await import('./native-plugins.mjs');
+  try {
+    const pkg = await validateNativePluginPackage(source);
+    const c = pkg.components;
+    report.push('OASIS plugin "' + pkg.name + '" v' + pkg.version + ' by ' + pkg.author + ' (' + pkg.license + '): ' + c.commands.length + ' command(s), ' + c.skills.length + ' skill(s), ' + c.agents.length + ' agent(s), ' + (c.hooks ? 'hooks' : 'no hooks') + ', ' + c.mcpServers.length + ' MCP server(s).');
+    report.push('Requests permissions: ' + (pkg.requestedPermissions.join(', ') || 'none') + '.');
+  } catch (error) { problems.push(error.message); }
 }
 
 // ---------- CLI ----------
@@ -1120,11 +1140,15 @@ export async function pluginCli(root, args = [], options = {}) {
     const installed = await readInstalledPlugins(env);
     const ids = params[0] ? [resolveInstalledId(params[0], installed)] : Object.keys(installed);
     await updateMarketplace(null, { env }).catch(() => {});
-    for (const id of ids) { await installPlugin(id, { env, root, scope }); out('Updated ' + id + '\n'); }
+    for (const id of ids) {
+      if (installed[id] && installed[id].source === 'oasis-native') { out('Skipped ' + id + ': OASIS plugins update by reinstalling from their source (oasis add SOURCE).\n'); continue; }
+      await installPlugin(id, { env, root, scope }); out('Updated ' + id + '\n');
+    }
     return;
   }
   if (action === 'validate') {
-    const result = await validatePath(params[0] || root);
+    const target = params[0] || root;
+    const result = /^(?:[a-z][a-z0-9+.-]*:\/\/|git@)/i.test(String(target)) ? await (async () => { const report = [], problems = []; await validateNativeInto(target, report, problems); return { ok: !problems.length, report, problems }; })() : await validatePath(target);
     out(result.report.join('\n') + (result.report.length ? '\n' : '') + (result.ok ? 'Valid.\n' : 'Problems:\n' + result.problems.map((p) => '  - ' + p).join('\n') + '\n'));
     if (!result.ok) process.exitCode = 1;
     return;
@@ -1137,7 +1161,7 @@ export async function pluginCli(root, args = [], options = {}) {
     if (!Object.keys(registries).length && !active.length) out('No Claude Code plugins installed. Try: oasis plugin marketplace add anthropics/claude-code\n');
     for (const [id, record] of Object.entries(registries)) {
       const on = activation.active.includes(id);
-      out((on ? '[enabled]  ' : '[disabled] ') + id + (record.source === 'claude-code' ? ' (from Claude Code)' : '') + (record.version ? ' v' + record.version : '') + '\n');
+      out((on ? '[enabled]  ' : '[disabled] ') + id + (record.source === 'claude-code' ? ' (from Claude Code)' : record.source === 'oasis-native' ? ' (OASIS plugin; granted: ' + ((record.grantedPermissions || []).join(', ') || 'none') + ')' : '') + (record.version ? ' v' + record.version : '') + '\n');
     }
     for (const plugin of active.filter((p) => p.origin === 'plugin-dir')) out('[session]  ' + plugin.name + ' (' + plugin.root + ')\n');
     for (const id of Object.keys(enabled)) if (enabled[id] && !registries[id]) out('[missing]  ' + id + ' is enabled in settings but not installed: oasis plugin install ' + id + '\n');

@@ -194,6 +194,7 @@ oasis -p --permission-mode auto --goal "npm test passes"              # keeps go
 oasis plugin marketplace add anthropics/claude-plugins-official
 oasis plugin install superpowers@claude-plugins-official
 oasis add BuilderIO/skills            # Codex plugins and Gemini CLI extensions, converted on install
+oasis plugin validate ./my-plugin     # Claude Code or OASIS plugin; list, update and uninstall cover both
 ```
 
 **Apps in one step.** Say "connect GitHub" or type `/connect linear` and a Connect card appears in the conversation. Approve access on the service's own page and its tools are ready in the same turn. 48 apps are built in, and any other remote MCP server works by name from the official MCP Registry or by URL.
