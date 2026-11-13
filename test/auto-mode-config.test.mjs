@@ -5,7 +5,7 @@ import path from 'node:path';
 import { mkdtemp, mkdir, writeFile, readFile } from 'node:fs/promises';
 import { spawnSync } from 'node:child_process';
 import { createServer } from 'node:http';
-import { deflateRawSync } from 'node:zlib';
+import { crc32, deflateRawSync } from 'node:zlib';
 import { fileURLToPath } from 'node:url';
 import { DEFAULT_AUTO_MODE, effectiveAutoModeConfig, critiqueAutoMode, classifyAction, newAutoModeState, ruleLabel, parseClassifierReply } from '../src/auto-mode.mjs';
 import { loadSettings, setWorkspaceTrust } from '../src/settings.mjs';
@@ -71,8 +71,8 @@ function makeZip(files) {
   const locals = []; const centrals = []; let offset = 0;
   for (const [name, text] of Object.entries(files)) {
     const data = Buffer.from(text); const packed = deflateRawSync(data); const nameBuf = Buffer.from(name);
-    const local = Buffer.alloc(30); local.writeUInt32LE(0x04034b50, 0); local.writeUInt16LE(8, 8); local.writeUInt32LE(packed.length, 18); local.writeUInt32LE(data.length, 22); local.writeUInt16LE(nameBuf.length, 26);
-    const central = Buffer.alloc(46); central.writeUInt32LE(0x02014b50, 0); central.writeUInt16LE(8, 10); central.writeUInt32LE(packed.length, 20); central.writeUInt32LE(data.length, 24); central.writeUInt16LE(nameBuf.length, 28); central.writeUInt32LE(offset, 42);
+    const local = Buffer.alloc(30); local.writeUInt32LE(0x04034b50, 0); local.writeUInt16LE(8, 8); local.writeUInt32LE(crc32(data), 14); local.writeUInt32LE(packed.length, 18); local.writeUInt32LE(data.length, 22); local.writeUInt16LE(nameBuf.length, 26);
+    const central = Buffer.alloc(46); central.writeUInt32LE(0x02014b50, 0); central.writeUInt16LE(8, 10); central.writeUInt32LE(crc32(data), 16); central.writeUInt32LE(packed.length, 20); central.writeUInt32LE(data.length, 24); central.writeUInt16LE(nameBuf.length, 28); central.writeUInt32LE(offset, 42);
     locals.push(local, nameBuf, packed); centrals.push(central, nameBuf); offset += 30 + nameBuf.length + packed.length;
   }
   const cd = Buffer.concat(centrals);
@@ -82,12 +82,12 @@ function makeZip(files) {
 
 test('zip reader extracts deflated entries and rejects path escapes', async () => {
   const zip = makeZip({ 'a/b.txt': 'hello zip' });
-  assert.equal(readZipEntries(zip)[0].content.toString(), 'hello zip');
+  assert.equal((await readZipEntries(zip))[0].content.toString(), 'hello zip');
   const dir = await mkdtemp(path.join(os.tmpdir(), 'oasis-zip-'));
   await extractZip(zip, dir);
   assert.equal(await readFile(path.join(dir, 'a', 'b.txt'), 'utf8'), 'hello zip');
   await assert.rejects(extractZip(makeZip({ '../evil.txt': 'x' }), dir), /escapes/);
-  assert.throws(() => readZipEntries(Buffer.from('nope')), /Not a zip/);
+  await assert.rejects(readZipEntries(Buffer.from('nope')), /Not a zip/);
 });
 
 test('--plugin-url downloads a plugin zip and loads its commands for the session', async (t) => {
