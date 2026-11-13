@@ -21,6 +21,13 @@ test('safe variants and unchanged code are not flagged', () => {
   assert.deepEqual(risks('', 'cfg = yaml.load(f, Loader=yaml.SafeLoader)', 'app/x.py'), []);
   assert.deepEqual(risks('', 'const x = JSON.parse(input); execFile("git", ["log"]);', 'src/a.js'), []);
   assert.deepEqual(risks('', 'el.textContent = userText;', 'src/ui.ts'), []);
+  // Clearing a list or setting fixed markup inserts nothing from the user (seen on a todo app build).
+  assert.deepEqual(risks('', "list.innerHTML = '';", 'app.js'), []);
+  assert.deepEqual(risks('', 'el.innerHTML = "<li>Empty</li>";', 'app.js'), []);
+  assert.deepEqual(risks('', 'if (el.innerHTML === html) return;', 'app.js'), []);
+  assert.match(risks('', "el.innerHTML = '<li>' + text + '</li>';", 'app.js').join(), /XSS/);
+  assert.match(risks('', 'el.innerHTML = `<li>${text}</li>`;', 'app.js').join(), /XSS/);
+  assert.match(risks('', "el.innerHTML += item;", 'app.js').join(), /XSS/);
   assert.deepEqual(risks('', 'cur.execute("SELECT * FROM t WHERE id=%s", (i,))', 'app/db.py'), []);
   const old = 'const v = eval(input);\n';
   assert.deepEqual(risks(old, old + 'const y = 2;\n', 'src/a.js'), []);
