@@ -41,7 +41,8 @@ export const APP_PACKAGES = Object.freeze({
   minimatch: 'dist/esm/index.js',
   'brace-expansion': 'dist/esm/index.js',
   'balanced-match': 'dist/esm/index.js',
-  '@isaacs/nonrecursive-glob-match': 'dist/esm/index.js'
+  '@isaacs/nonrecursive-glob-match': 'dist/esm/index.js',
+  tinykeys: 'dist/tinykeys.mjs'
 });
 
 // Bare imports inside a vendored browser build: serving a package also serves these.

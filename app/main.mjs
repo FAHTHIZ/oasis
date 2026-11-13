@@ -27,6 +27,7 @@ import { speakable, isStopPhrase, turnDetector, rmsLevel, lastReply } from './co
 import { previewTarget } from './core/preview.mjs';
 import { anchorMenu } from './core/popover.mjs';
 import { createFocusTrap } from 'focus-trap';
+import { tinykeys } from 'tinykeys';
 import { deleteDB } from 'idb';
 import { icon, kindIcon } from './core/icons.mjs';
 import { searchMarketplace, marketplaceCount, OFFICIAL_MARKETPLACE } from './core/claude-plugins.mjs';
@@ -399,51 +400,52 @@ document.addEventListener('click', (event) => {
   }
 });
 $('backdrop').addEventListener('click', () => { const top = openSheets[openSheets.length - 1]; if (top && top !== 'approvalSheet') closeSheet(top); });
-document.addEventListener('keydown', (event) => {
-  const modifier = event.ctrlKey || event.metaKey;
-  if (modifier && event.key.toLowerCase() === 'k') {
+// App-wide shortcuts on tinykeys: modifiers must match exactly, $mod is Cmd on
+// Apple devices and Ctrl elsewhere (so Ctrl+K and Ctrl+B keep their text-editing
+// meaning on macOS), and KeyK-style codes work on any keyboard layout.
+const inTerminal = (event) => event.target instanceof Element && Boolean(event.target.closest('.xterm'));
+tinykeys(document, {
+  '$mod+KeyK': (event) => {
     event.preventDefault();
     if (!$('shortcutsDialog').open) openNativeDialog('commandPaletteDialog');
-    return;
-  }
-  // Ctrl+B / Cmd+B toggles the task sidebar (as in VS Code), except in the
-  // terminal, where Ctrl+B belongs to tmux and readline.
-  if (modifier && event.shiftKey && !event.altKey && event.key.toLowerCase() === 'a' && !(event.target instanceof Element && event.target.closest('.xterm'))) {
+  },
+  // Ctrl/Cmd+Shift+A shows the activity panel; Ctrl/Cmd+B toggles the task sidebar
+  // (as in VS Code). Neither fires in the terminal, where tmux and readline use them.
+  '$mod+Shift+KeyA': (event) => {
+    if (inTerminal(event)) return;
     event.preventDefault();
     toggleActivity();
-    return;
-  }
-  if (modifier && !event.altKey && !event.shiftKey && event.key.toLowerCase() === 'b' && !(event.target instanceof Element && event.target.closest('.xterm')) && matchMedia('(min-width: 1100px)').matches) {
+  },
+  '$mod+KeyB': (event) => {
+    if (inTerminal(event) || !matchMedia('(min-width: 1100px)').matches) return;
     event.preventDefault();
     $('sidebarToggle').click();
-    return;
-  }
-  if (event.ctrlKey && !event.metaKey && !event.altKey && (event.key === '`' || event.code === 'Backquote') && RT && !RT.needsToken) {
+  },
+  'Control+Backquote': (event) => {
+    if (!RT || RT.needsToken) return;
     event.preventDefault();
     toggleTerminal();
-    return;
-  }
-  // ? opens the shortcut list when you are not typing, as in GitHub and Gmail.
-  const typing = event.target instanceof Element && event.target.closest('input, textarea, select, [contenteditable=""], [contenteditable="true"], .xterm');
-  if (event.key === '?' && !modifier && !event.altKey && !typing && !$('commandPaletteDialog').open && !$('shortcutsDialog').open) {
-    event.preventDefault();
-    openNativeDialog('shortcutsDialog');
-    return;
-  }
-  if (modifier && event.key === '/') {
+  },
+  '$mod+[Shift]+Slash': (event) => {
     event.preventDefault();
     if ($('commandPaletteDialog').open) closeNativeDialog('commandPaletteDialog');
     openNativeDialog('shortcutsDialog');
-    return;
-  }
+  },
+  // ? opens the shortcut list when you are not typing, as in GitHub and Gmail.
+  '[Shift]+?': (event) => {
+    const typing = event.target instanceof Element && event.target.closest('input, textarea, select, [contenteditable=""], [contenteditable="true"], .xterm');
+    if (typing || $('commandPaletteDialog').open || $('shortcutsDialog').open) return;
+    event.preventDefault();
+    openNativeDialog('shortcutsDialog');
+  },
   // Connected to OASIS on a computer, / types a command with inline suggestions
   // (as in the terminal); in the browser-only app it opens the palette.
-  if (event.key === '/' && event.target === $('input') && !$('input').value && !event.altKey && !modifier && !event.isComposing && !(RT && !RT.needsToken)) {
+  '[Shift]+/': (event) => {
+    if (event.target !== $('input') || $('input').value || (RT && !RT.needsToken)) return;
     event.preventDefault();
     openNativeDialog('commandPaletteDialog');
-    return;
-  }
-  if (event.key === 'Escape') {
+  },
+  Escape: () => {
     if ($('commandPaletteDialog').open || $('shortcutsDialog').open) return; // Native dialog handles Escape.
     if (!$('modeMenu').hidden) { $('modeMenu').hidden = true; return; }
     const top = openSheets[openSheets.length - 1];
@@ -452,7 +454,7 @@ document.addEventListener('keydown', (event) => {
     // Nothing else open: Esc stops the running task (finished work stays).
     else if (agent.busy && $('composerSuggest').hidden && !(talk && talk.on)) agent.stop();
   }
-});
+}, { ignore: (event) => event.isComposing });
 
 // The system back button and gesture (Android, browsers, desktop mice): each
 // open sheet adds a history entry, so Back closes the top sheet instead of

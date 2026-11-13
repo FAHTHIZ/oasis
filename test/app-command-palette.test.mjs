@@ -27,8 +27,8 @@ test('browser workspace exposes an accessible native command panel and shortcut 
   assert.ok(html.includes('id="commandPaletteResults" role="listbox"'));
   assert.ok(html.includes('id="shortcutsDialog"'));
   assert.ok(html.includes('id="shortcutsFilter"'));
-  assert.ok(main.includes("event.key.toLowerCase() === 'k'"));
-  assert.ok(main.includes("event.key === '/'"));
+  assert.ok(main.includes("'$mod+KeyK':"), 'MOD+K opens the palette (tinykeys)');
+  assert.ok(main.includes("'[Shift]+/':"), '/ in the empty message box');
   assert.ok(main.includes('searchAppCommands('));
   assert.ok(css.includes('.native-dialog::backdrop'));
   assert.ok(css.includes('.command-result[aria-selected="true"]'));
@@ -46,8 +46,12 @@ test('keyboard guide documents only shortcuts wired by the browser workspace', (
   assert.ok(keys.includes('Shift+Tab'));
   assert.ok(keys.includes('Ctrl+`'));
   assert.ok(keys.includes('MOD+B'));
-  assert.ok(main.includes("event.key.toLowerCase() === 'b'"), 'MOD+B is wired');
   assert.ok(keys.includes('MOD+Shift+A'));
-  assert.ok(main.includes("event.key.toLowerCase() === 'a'"), 'MOD+Shift+A is wired');
+  // Each global chord in the guide has its tinykeys binding in main.mjs.
+  const bindings = { 'MOD+K': '$mod+KeyK', 'MOD+/': '$mod+[Shift]+Slash', 'Ctrl+`': 'Control+Backquote', 'MOD+B': '$mod+KeyB', 'MOD+Shift+A': '$mod+Shift+KeyA', '?': '[Shift]+?' };
+  for (const [guide, binding] of Object.entries(bindings)) {
+    if (keys.includes(guide)) assert.ok(main.includes("'" + binding + "':"), guide + ' is wired as ' + binding);
+  }
+  assert.ok(main.includes("from 'tinykeys'"));
   assert.equal(APP_KEYBOARD_SHORTCUTS.length, 15);
 });
