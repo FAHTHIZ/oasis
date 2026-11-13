@@ -3,11 +3,14 @@
 // (sandbox.html: opaque origin, so no access to the app, its storage or keys)
 // whose content security policy blocks every network request. A timeout terminates the
 // worker, so infinite loops cannot freeze the app. The runtime itself is plain
-// JavaScript so tests can run it in Node.
+// JavaScript so tests can run it in Node. Sucrase (bundled by
+// scripts/vendor-sucrase.mjs) runs inside the worker too and compiles ES module
+// syntax, TypeScript and JSX to CommonJS as files are required.
+import { SUCRASE_SOURCE } from '../vendor/sucrase.mjs';
 
 /** Source of the in-sandbox runtime. Defines self.__oasisRun(code, files). */
 function runtimeSource() {
-  return String.raw`
+  return SUCRASE_SOURCE + '\n' + String.raw`
 (function () {
   function format(value, depth) {
     depth = depth || 0;
@@ -103,7 +106,11 @@ function runtimeSource() {
     function resolve(from, request) {
       var base = request.charAt(0) === '/' ? '' : from;
       var target = join(base, request.replace(/^\/+/, ''));
-      var candidates = [target, target + '.js', target + '.cjs', target + '.json', target + '/index.js'];
+      var candidates = [target];
+      ['.js', '.mjs', '.cjs', '.ts', '.tsx', '.jsx', '.mts', '.cts', '.json', '/index.js', '/index.mjs', '/index.ts', '/index.tsx', '/index.jsx'].forEach(function (ext) { candidates.push(target + ext); });
+      // TypeScript sources import their compiled names: './util.js' means util.ts.
+      var js = /\.(m|c)?js$/.exec(target);
+      if (js) ['.ts', '.tsx'].forEach(function (ext) { candidates.push(target.slice(0, -js[0].length) + (js[1] && ext === '.ts' ? '.' + js[1] + 'ts' : ext)); });
       for (var i = 0; i < candidates.length; i++) if (Object.prototype.hasOwnProperty.call(files, candidates[i])) return candidates[i];
       return null;
     }
@@ -118,35 +125,45 @@ function runtimeSource() {
         var module = { exports: {} };
         cache[path] = module;
         if (/\.json$/.test(path)) { module.exports = JSON.parse(files[path]); return module.exports; }
-        var source = files[path];
-        if (/^\s*(import|export)\s/m.test(source) && !/module\.exports|exports\./.test(source)) source = esmToCjs(source);
-        var wrapper = new Function('module', 'exports', 'require', '__filename', '__dirname', 'console', 'test', 'describe', 'it', source + '\n//# sourceURL=' + path);
+        var source = compile(files[path], path);
+        var wrapper = evaluate('', ['module', 'exports', 'require', '__filename', '__dirname', 'console', 'test', 'describe', 'it'], source, path);
         wrapper(module, module.exports, makeRequire(dirname(path)), path, dirname(path), sandboxConsole, test, describe, it);
         return module.exports;
       };
     }
-    // Small ES module support: import/export statements in project files.
-    function esmToCjs(source) {
-      var names = [];
-      var out = source
-        .replace(/^\s*import\s+([\w$]+)\s*,?\s*\{([^}]*)\}\s*from\s*['"]([^'"]+)['"];?/gm, function (_, d, list, from) { return 'const ' + d + ' = require(' + JSON.stringify(from) + ').default ?? require(' + JSON.stringify(from) + '); const {' + list.replace(/\s+as\s+/g, ': ') + '} = require(' + JSON.stringify(from) + ');'; })
-        .replace(/^\s*import\s*\{([^}]*)\}\s*from\s*['"]([^'"]+)['"];?/gm, function (_, list, from) { return 'const {' + list.replace(/\s+as\s+/g, ': ') + '} = require(' + JSON.stringify(from) + ');'; })
-        .replace(/^\s*import\s*\*\s*as\s+([\w$]+)\s*from\s*['"]([^'"]+)['"];?/gm, function (_, n, from) { return 'const ' + n + ' = require(' + JSON.stringify(from) + ');'; })
-        .replace(/^\s*import\s+([\w$]+)\s+from\s*['"]([^'"]+)['"];?/gm, function (_, n, from) { return 'const ' + n + ' = (function (m) { return m && m.default !== undefined ? m.default : m; })(require(' + JSON.stringify(from) + '));'; })
-        .replace(/^\s*import\s*['"]([^'"]+)['"];?/gm, function (_, from) { return 'require(' + JSON.stringify(from) + ');'; })
-        .replace(/^\s*export\s+default\s+/gm, 'module.exports.default = ')
-        .replace(/^\s*export\s+(async\s+function\*?|function\*?|class|const|let|var)\s+([\w$]+)/gm, function (_, kind, name) { names.push(name); return kind + ' ' + name; })
-        .replace(/^\s*export\s*\{([^}]*)\};?/gm, function (_, list) { list.split(',').forEach(function (item) { var p = item.trim().split(/\s+as\s+/); if (p[0]) names.push(p[1] ? p[0] + ':' + p[1] : p[0]); }); return ''; });
-      return out + '\n' + names.map(function (n) { var p = n.split(':'); return 'module.exports[' + JSON.stringify(p[1] || p[0]) + '] = ' + p[0] + ';'; }).join('\n');
+    // Like new Function, but the source starts on line 1, so stack traces match the file.
+    function evaluate(kind, params, source, name) {
+      return (0, eval)('(' + kind + 'function (' + params.join(', ') + ') {' + source + '\n})\n//# sourceURL=' + name);
+    }
+    function isModule(source) { return /^\s*(import|export)[\s{*'"]/m.test(source); }
+    // Sucrase keeps line numbers, so stack traces still point at the source.
+    function transforms(source, path) {
+      var list = isModule(source) ? ['imports'] : [];
+      if (/\.(m|c)?tsx?$/.test(path)) list.push('typescript');
+      if (/\.[jt]sx$/.test(path) || (list.length && /\.(m|c)?js$/.test(path) && !/\.cjs$/.test(path))) list.push('jsx');
+      return list;
+    }
+    function compile(source, path) {
+      var list = transforms(source, path);
+      return list.length ? sucrase.transform(source, { transforms: list, filePath: path, production: true }).code : source;
     }
 
     var result = { logs: logs };
     try {
       var readFile = function (p) { var k = join('', String(p).replace(/^\.?\/+/, '')); if (!Object.prototype.hasOwnProperty.call(files, k)) throw new Error('No such file: ' + p); return files[k]; };
       var listFiles = function () { return Object.keys(files).sort(); };
-      var body = /^\s*(import|export)\s/m.test(code) ? esmToCjs(code) : code;
-      var AsyncFunction = Object.getPrototypeOf(async function () {}).constructor;
-      var fn = new AsyncFunction('require', 'module', 'exports', 'console', 'assert', 'test', 'describe', 'it', 'readFile', 'listFiles', body + '\n//# sourceURL=oasis-run.js');
+      var params = ['require', 'module', 'exports', 'console', 'assert', 'test', 'describe', 'it', 'readFile', 'listFiles'];
+      // The snippet may be plain JavaScript, an ES module, TypeScript or TSX. If
+      // Sucrase cannot parse it, plain JavaScript gets the final say.
+      var fn, compiled = null, compileError = null;
+      try { compiled = sucrase.transform(code, { transforms: (isModule(code) ? ['imports'] : []).concat(['typescript', 'jsx']), filePath: 'oasis-run.tsx', production: true }).code; }
+      catch (e) { compileError = e; }
+      try { fn = evaluate('async ', params, compiled === null ? code : compiled, 'oasis-run.js'); }
+      catch (e) {
+        if (!(e instanceof SyntaxError)) throw e;
+        if (compiled === null) throw compileError; // Sucrase's message has the line and column
+        fn = evaluate('async ', params, code, 'oasis-run.js');
+      }
       var mod = { exports: {} };
       var value = await fn(makeRequire(''), mod, mod.exports, sandboxConsole, assert, test, describe, it, readFile, listFiles);
       if (tests.length) {

@@ -471,6 +471,10 @@ export function appContentSecurityPolicy(body) {
   return pageContentSecurityPolicy(body).replace("frame-src 'none'", "frame-src 'self' blob:").replace("frame-ancestors 'none'", "frame-ancestors 'self'");
 }
 
+// The JavaScript sandbox frame (app/sandbox.html, an opaque-origin iframe) runs
+// untrusted code in blob workers that eval it: no network, nothing else.
+export const SANDBOX_CONTENT_SECURITY_POLICY = "default-src 'none'; script-src 'self' blob: 'unsafe-eval'; worker-src blob:; connect-src 'none'; img-src 'none'; frame-src 'none'; form-action 'none'; base-uri 'none'; frame-ancestors 'self'";
+
 export function pageContentSecurityPolicy(body) {
   const html = Buffer.isBuffer(body) ? body.toString('utf8') : String(body || '');
   const key = createHash('sha256').update(html).digest('base64');
@@ -1646,7 +1650,7 @@ export function createOasisWebServer(options = {}) {
       if (target.file.endsWith(path.sep + 'sw.js')) body = Buffer.from(body.toString('utf8').replace('__BUILD__', 'runtime-' + Date.now().toString(36)));
       const ext = path.extname(target.file);
       const type = APP_TYPES[ext] || 'application/octet-stream';
-      res.writeHead(200, { ...headers, 'content-type': type, ...(ext === '.html' ? { 'content-security-policy': appContentSecurityPolicy(body), 'permissions-policy': 'microphone=(self), camera=(), geolocation=(), usb=(), serial=(), hid=(), payment=()' } : {}) });
+      res.writeHead(200, { ...headers, 'content-type': type, ...(ext === '.html' ? { 'content-security-policy': path.basename(target.file) === 'sandbox.html' ? SANDBOX_CONTENT_SECURITY_POLICY : appContentSecurityPolicy(body), 'permissions-policy': 'microphone=(self), camera=(), geolocation=(), usb=(), serial=(), hid=(), payment=()' } : {}) });
       res.end(req.method === 'HEAD' ? undefined : body);
     } catch {
       res.writeHead(404, { ...headers, 'content-type': 'text/plain; charset=utf-8' });
