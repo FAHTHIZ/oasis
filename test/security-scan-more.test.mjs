@@ -4,23 +4,27 @@ import { mkdtemp, writeFile, mkdir, chmod, rm, readFile } from 'node:fs/promises
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { cvss3Score, parseJsonStream, parseGovulncheck, parseCargoAudit, parseBandit, parseZizmor, planScanners, runSecurityScan } from '../src/security-scan.mjs';
+import { cvssScore, parseJsonStream, parseGovulncheck, parseCargoAudit, parseBandit, parseZizmor, planScanners, runSecurityScan } from '../src/security-scan.mjs';
 import { onPathSync } from '../src/clipboard-path.mjs';
 
 const FIXTURES = path.join(path.dirname(fileURLToPath(import.meta.url)), 'fixtures', 'security-scan');
 const fixture = async (name) => readFile(path.join(FIXTURES, name), 'utf8');
 const tmp = () => mkdtemp(path.join(os.tmpdir(), 'oasis-scan-more-'));
 
-test('cvss3Score matches the FIRST calculator', () => {
-  assert.equal(cvss3Score('CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H'), 9.8);
-  assert.equal(cvss3Score('CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:C/C:H/I:H/A:H'), 10);
-  assert.equal(cvss3Score('CVSS:3.1/AV:L/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H'), 6.2);
-  assert.equal(cvss3Score('CVSS:3.1/AV:L/AC:L/PR:L/UI:N/S:U/C:H/I:N/A:N'), 5.5);
-  assert.equal(cvss3Score('CVSS:3.0/AV:N/AC:L/PR:L/UI:N/S:C/C:L/I:L/A:N'), 6.4);
-  assert.equal(cvss3Score('CVSS:3.1/AV:N/AC:H/PR:N/UI:R/S:U/C:L/I:N/A:N'), 3.1);
-  assert.equal(cvss3Score('CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:N'), 0);
-  assert.equal(cvss3Score('CVSS:4.0/AV:N/AC:L/AT:N/PR:N/UI:N/VC:H/VI:H/VA:H/SC:N/SI:N/SA:N'), null);
-  assert.equal(cvss3Score('garbage'), null);
+test('cvssScore matches the FIRST calculators', () => {
+  assert.equal(cvssScore('CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H'), 9.8);
+  assert.equal(cvssScore('CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:C/C:H/I:H/A:H'), 10);
+  assert.equal(cvssScore('CVSS:3.1/AV:L/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H'), 6.2);
+  assert.equal(cvssScore('CVSS:3.1/AV:L/AC:L/PR:L/UI:N/S:U/C:H/I:N/A:N'), 5.5);
+  assert.equal(cvssScore('CVSS:3.0/AV:N/AC:L/PR:L/UI:N/S:C/C:L/I:L/A:N'), 6.4);
+  assert.equal(cvssScore('CVSS:3.1/AV:N/AC:H/PR:N/UI:R/S:U/C:L/I:N/A:N'), 3.1);
+  assert.equal(cvssScore('CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:N'), 0);
+  assert.equal(cvssScore('CVSS:4.0/AV:N/AC:L/AT:N/PR:N/UI:N/VC:H/VI:H/VA:H/SC:N/SI:N/SA:N'), 9.3);
+  assert.equal(cvssScore('CVSS:4.0/AV:L/AC:L/AT:N/PR:L/UI:N/VC:H/VI:H/VA:H/SC:N/SI:N/SA:N'), 8.5);
+  assert.equal(cvssScore('AV:N/AC:L/Au:N/C:P/I:P/A:P'), 7.5);
+  assert.equal(cvssScore('CVSS:3.1/AV:N'), null);
+  assert.equal(cvssScore('CVSS:3.1/AV:Q/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H'), null);
+  assert.equal(cvssScore('garbage'), null);
 });
 
 test('parseJsonStream splits concatenated JSON, ignoring braces inside strings', () => {
