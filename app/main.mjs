@@ -1072,6 +1072,15 @@ function setGroupOpen(group, open) {
   group.el.classList.toggle('open', open);
   group.head.setAttribute('aria-expanded', String(open));
   group.body.hidden = !open;
+  openSingleStep(group);
+}
+// A finished group of one step: its header already says what the step did,
+// so opening it shows that step's input and output directly, not a second
+// row with the same words.
+function openSingleStep(group) {
+  if (!group.el.classList.contains('single') || !group.el.classList.contains('open')) return;
+  const details = group.list.querySelector('.tool > details');
+  if (details && !details.open) details.open = true;
 }
 function updateGroupHead(group) {
   const stats = groupStats(group.steps);
@@ -1081,6 +1090,8 @@ function updateGroupHead(group) {
   group.el.classList.toggle('waiting', waiting);
   group.el.classList.toggle('failed', !running && stats.failed > 0);
   group.el.classList.toggle('done', !running && !waiting);
+  const single = !running && !waiting && group.steps.length === 1 && !group.subagents.length;
+  if (group.el.classList.contains('single') !== single) { group.el.classList.toggle('single', single); openSingleStep(group); }
   let title = groupTitle(group.steps);
   if (waiting) title = 'Waiting for your approval';
   group.head.querySelector('.steps-title').textContent = title;
