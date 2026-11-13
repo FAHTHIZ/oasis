@@ -243,7 +243,7 @@ function withText(state, text, cursor) {
   return { ...state, text, cursor: Math.max(0, Math.min(cursor, text.length)) };
 }
 
-export function insertText(state, value) {
+function insertText(state, value) {
   const text = state.text.slice(0, state.cursor) + value + state.text.slice(state.cursor);
   return withText(state, text, state.cursor + value.length);
 }

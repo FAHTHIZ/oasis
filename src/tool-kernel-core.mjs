@@ -1,7 +1,7 @@
 import { validateToolArguments } from './tool-schema-validation.mjs';
 
-export const TOOL_CAPABILITIES = Object.freeze(['read', 'write', 'execute', 'network', 'mcp', 'browser', 'git', 'secret']);
-export const TOOL_RISK_LEVELS = Object.freeze(['low', 'medium', 'high', 'critical']);
+const TOOL_CAPABILITIES = Object.freeze(['read', 'write', 'execute', 'network', 'mcp', 'browser', 'git', 'secret']);
+const TOOL_RISK_LEVELS = Object.freeze(['low', 'medium', 'high', 'critical']);
 
 export function defineTool(definition) {
   if (!definition || typeof definition !== 'object') throw new TypeError('Tool definition must be an object.');
@@ -48,7 +48,7 @@ function normalizeToolPolicyDecision(tool, raw = {}, redactText = (text) => Stri
   return result;
 }
 
-export function evaluateToolPolicy(tool, input, policy, redactText = (text) => String(text)) {
+function evaluateToolPolicy(tool, input, policy, redactText = (text) => String(text)) {
   if (!policy || typeof policy.decide !== 'function') {
     return normalizeToolPolicyDecision(tool, {
       decision: 'deny',
@@ -59,7 +59,7 @@ export function evaluateToolPolicy(tool, input, policy, redactText = (text) => S
   return normalizeToolPolicyDecision(tool, policy.decide({ tool, input }) || {}, redactText);
 }
 
-export async function validateToolInput(tool, input, validateArguments = validateToolArguments) {
+async function validateToolInput(tool, input, validateArguments = validateToolArguments) {
   if (!input || typeof input !== 'object' || Array.isArray(input)) {
     throw new Error('Invalid input for ' + tool.name + ': arguments must be a JSON object.');
   }

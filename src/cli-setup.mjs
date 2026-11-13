@@ -233,7 +233,7 @@ export async function pasteFirstSetup(root, { announce = true } = {}) {
   return 'menu';
 }
 
-export function redactSecretText(message, secret) {
+function redactSecretText(message, secret) {
   let out = message;
   for (const part of String(secret || '').split(/\s+/)) if (part.length >= 12) out = out.split(part).join('[redacted]');
   return out.slice(0, 1200);

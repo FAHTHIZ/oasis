@@ -86,7 +86,7 @@ function pickHookAnswer(result) {
 }
 
 /** Runs Elicitation hooks, the interactive handler, and ElicitationResult hooks. */
-export async function elicit(session, serverName, params) {
+async function elicit(session, serverName, params) {
   const mode = params.mode === 'url' ? 'url' : 'form';
   const base = { session_id: session && session.sessionId || 'unsaved', mcp_server_name: serverName, message: String(params.message || ''), mode, ...(mode === 'url' ? { url: params.url, elicitation_id: params.elicitationId } : { requested_schema: params.requestedSchema }) };
   const hookOpts = session && typeof session.hookOptionsFor === 'function' ? session.hookOptionsFor() : session ? { hooks: session.hooks || {}, root: session.root, env: process.env } : null;

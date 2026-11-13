@@ -60,7 +60,7 @@ async function writePackage(pkg,{version='1.0.0',permissions=['commands','skills
   await writeFile(path.join(pkg,'plugin.json'),JSON.stringify(manifest,null,2));
 }
 test('native plugin validates and installs HTTPS-compatible Git sources from a temporary clone',async t=>{
-  const {root,pkg,env,home}=await setup(t);
+  const {pkg,env,home}=await setup(t);
   await writePackage(pkg,{permissions:['commands']});
   git(pkg,'init','-q');
   git(pkg,'config','user.name','Oasis Test');

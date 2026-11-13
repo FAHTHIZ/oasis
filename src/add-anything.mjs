@@ -28,7 +28,7 @@ const slug = (value, fallback = 'addon') => String(value || '').toLowerCase().re
 
 // What did the user give us? Pure string work; no network.
 // Split a pasted command line the way a POSIX shell would (quotes, escapes).
-export function splitCommandLine(text) {
+function splitCommandLine(text) {
   const out = [];
   let cur = '';
   let quote = '';

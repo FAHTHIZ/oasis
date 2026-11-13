@@ -12,7 +12,7 @@ const PROJECT_MANIFESTS = [
 ];
 const KEY_SCRIPTS = ['test', 'lint', 'typecheck', 'check', 'build', 'format', 'dev', 'start'];
 
-export async function onPath(program, env) {
+async function onPath(program, env) {
   const dirs = String(env.PATH || process.env.PATH || '').split(path.delimiter).filter(Boolean);
   const names = process.platform === 'win32' ? [program + '.exe', program + '.cmd', program] : [program];
   for (const dir of dirs) for (const name of names) {
