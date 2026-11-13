@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { MemoryStore, Workspace, cleanPath, lineDiff } from '../app/core/workspace.mjs';
-import { executeTool, globToRegExp, needsApproval, TOOL_DEFINITIONS } from '../app/core/tools.mjs';
+import { executeTool, globMatcher, needsApproval, TOOL_DEFINITIONS } from '../app/core/tools.mjs';
 import { InlineSandbox } from '../app/core/sandbox.mjs';
 import { Agent, buildSystemPrompt, textOf } from '../app/core/agent.mjs';
 import { SkillLibrary, parseSkill } from '../app/core/skills.mjs';
@@ -61,11 +61,18 @@ test('edit_file returns a valid unified diff that applies to the old file', asyn
 });
 
 test('glob patterns match like a shell', () => {
-  assert.ok(globToRegExp('src/**/*.js').test('src/a/b/c.js'));
-  assert.ok(globToRegExp('src/**/*.js').test('src/c.js'));
-  assert.ok(globToRegExp('*.md').test('docs/x.md'));
-  assert.ok(!globToRegExp('src/*.js').test('src/a/b.js'));
-  assert.ok(globToRegExp('*.{ts,tsx}').test('a/b.tsx'));
+  assert.ok(globMatcher('src/**/*.js')('src/a/b/c.js'));
+  assert.ok(globMatcher('src/**/*.js')('src/c.js'));
+  assert.ok(globMatcher('*.md')('docs/x.md'));
+  assert.ok(!globMatcher('src/*.js')('src/a/b.js'));
+  assert.ok(globMatcher('*.{ts,tsx}')('a/b.tsx'));
+  // What the hand-written translator got wrong or did not support:
+  assert.ok(globMatcher('**/*.{js,{ts,tsx}}')('a/b.tsx'), 'nested braces');
+  assert.ok(globMatcher('src/[ab].js')('src/a.js'), 'character classes');
+  assert.ok(globMatcher('app/[id]/page.tsx')('app/[id]/page.tsx'), 'literal brackets');
+  assert.ok(globMatcher('*.env')('.env') && globMatcher('**/.github/**')('.github/workflows/ci.yml'), 'dotfiles');
+  assert.ok(globMatcher('src/!(*.test).js')('src/a.js') && !globMatcher('src/!(*.test).js')('src/a.test.js'), 'extglobs');
+  assert.ok(globMatcher('file{1..3}.txt')('file2.txt'), 'brace ranges');
 });
 
 test('file tools read, edit with relaxed matching, grep and glob', async () => {

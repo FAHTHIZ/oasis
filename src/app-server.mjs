@@ -37,11 +37,15 @@ export const APP_PACKAGES = Object.freeze({
   remend: 'dist/index.js',
   idb: 'build/index.js',
   'binary-extensions': 'index.js',
-  '@cfworker/json-schema': 'dist/esm/index.js'
+  '@cfworker/json-schema': 'dist/esm/index.js',
+  minimatch: 'dist/esm/index.js',
+  'brace-expansion': 'dist/esm/index.js',
+  'balanced-match': 'dist/esm/index.js',
+  '@isaacs/nonrecursive-glob-match': 'dist/esm/index.js'
 });
 
 // Bare imports inside a vendored browser build: serving a package also serves these.
-const APP_PACKAGE_DEPS = Object.freeze({ '@floating-ui/dom': ['@floating-ui/core'], 'focus-trap': ['tabbable'] });
+const APP_PACKAGE_DEPS = Object.freeze({ '@floating-ui/dom': ['@floating-ui/core'], 'focus-trap': ['tabbable'], minimatch: ['brace-expansion', 'balanced-match', '@isaacs/nonrecursive-glob-match'] });
 
 // Bare names whose browser build ships in another npm package. highlight.js's own
 // es/ entries wrap CommonJS; its pre-built ES module (common languages) is in
