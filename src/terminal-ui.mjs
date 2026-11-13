@@ -4,6 +4,7 @@ import { spawn } from 'node:child_process';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import wrapAnsi from 'wrap-ansi';
 import { scrubEnvironment } from './tools.mjs';
 import { motionLevel } from './activity-indicator.mjs';
 import { ANSI, colorEnabled, renderDiff } from './markdown.mjs';
@@ -285,8 +286,7 @@ export function transcriptLines(messages, { color = true, width = 100, maxResult
     for (const raw of String(text).replace(/\r/g, '').split('\n')) {
       let line = raw.replace(/\t/g, '  ');
       if (!line) { rows.push(''); continue; }
-      while (line.length > cols - indent.length) { rows.push(indent + line.slice(0, cols - indent.length)); line = line.slice(cols - indent.length); }
-      rows.push(indent + line);
+      for (const row of wrapAnsi(line, cols - indent.length, { hard: true, trim: false }).split('\n')) rows.push(indent + row);
     }
     return rows;
   };

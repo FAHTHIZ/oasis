@@ -48,3 +48,9 @@ export function indexAtColumn(text, lineStart, lineEnd, column) {
   }
   return lineEnd;
 }
+
+// Cuts plain text to at most `max` display columns, ending in '…' when cut.
+export function truncateColumns(text, max) {
+  if (stringWidth(text) <= max) return text;
+  return text.slice(0, indexAtColumn(text, 0, text.length, Math.max(0, max - 1))) + '…';
+}
