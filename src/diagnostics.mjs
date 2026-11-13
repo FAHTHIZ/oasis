@@ -25,6 +25,7 @@
 import { spawn, spawnSync } from 'node:child_process';
 import { processTreeSpawnOptions, signalProcessTree } from './process-tree.mjs';
 import { readFile, stat, access } from 'node:fs/promises';
+import stripAnsi from 'strip-ansi';
 import path from 'node:path';
 import { nodeChildEnv } from './node-process.mjs';
 // tools.mjs imports this module, so its helpers are loaded lazily to avoid a cycle.
@@ -182,7 +183,7 @@ export function parseDiagnostics(checker, output, root = '.') {
     results.push({ file: normalizeFile(root, file), line: Number(line) || 1, column: Number(column) || 1, severity, message: String(message).trim().slice(0, 600), ...(code ? { code } : {}), source: checker });
   };
   for (const raw of String(output || '').split(/\r?\n/)) {
-    const line = raw.replace(/\u001b\[[0-9;]*m/g, '');
+    const line = stripAnsi(raw);
     let m;
     switch (checker) {
       case 'typescript':
