@@ -139,6 +139,9 @@ test('!commands are split like a shell, and anything needing a real shell goes t
   assert.equal(shellWords('FOO=bar node test.js'), null);
   assert.deepEqual(shellWords("echo '$HOME'"), ['echo', '$HOME']);
   assert.equal(shellWords('echo "open'), null);
+  assert.deepEqual(shellWords('echo "C:\\Users"'), ['echo', 'C:\\Users'], 'a backslash before an ordinary character stays inside double quotes');
+  assert.deepEqual(shellWords('echo "a\\"b" "\\$HOME" "x\\\\y" "\\n"'), ['echo', 'a"b', '$HOME', 'x\\y', '\\n']);
+  assert.deepEqual(shellWords('echo C:\\Users'), ['echo', 'C:Users'], 'unquoted, a backslash escapes any character');
 });
 
 test('!command runs through the runtime with approval, and its output goes with the next message', async () => {
