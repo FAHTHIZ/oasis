@@ -70,7 +70,7 @@ function localReference(value) {
   try { return decodeURIComponent(clean); } catch { return clean; }
 }
 
-async function checkHtml(root, file, text) {
+async function checkHtml(root, file, text, info = { scripts: [], ids: new Set() }) {
   const problems = [];
   const scripts = [];
   const styles = [];
@@ -80,8 +80,13 @@ async function checkHtml(root, file, text) {
   const parser = new HtmlParser({
     onopentag(name, attrs) {
       const tag = name.toLowerCase();
+      if (attrs.id) info.ids.add(String(attrs.id));
       if (tag === 'script') {
-        if (attrs.src) refs.push({ attr: 'src', value: attrs.src, line: lineAt(parser.startIndex) });
+        if (attrs.src) {
+          refs.push({ attr: 'src', value: attrs.src, line: lineAt(parser.startIndex) });
+          const local = localReference(attrs.src);
+          if (local) info.scripts.push(path.relative(path.resolve(root), path.resolve(path.dirname(path.resolve(root, file)), local)).split(path.sep).join('/'));
+        }
         else if (SCRIPT_TYPES.test(String(attrs.type || '').trim())) current = { kind: 'script', start: parser.endIndex + 1, module: /module/i.test(attrs.type || '') };
       } else if (tag === 'style') current = { kind: 'style', start: parser.endIndex + 1 };
       else if (tag === 'link' && /\bstylesheet\b|\bicon\b|\bmanifest\b/i.test(attrs.rel || '') && attrs.href) refs.push({ attr: 'href', value: attrs.href, line: lineAt(parser.startIndex) });
@@ -93,6 +98,7 @@ async function checkHtml(root, file, text) {
       if (current && (tag === 'script' || tag === 'style') && current.kind === tag) {
         const body = text.slice(current.start, parser.startIndex);
         (tag === 'script' ? scripts : styles).push({ body, line: lineAt(current.start) - 1 });
+        if (tag === 'script') info.inline = (info.inline || '') + '\n' + body;
         current = null;
       }
     }
@@ -139,30 +145,99 @@ function checkToml(file, text) {
   try { parseToml(text); return []; } catch (error) { return [file + ': ' + String(error.message).split('\n')[0]]; }
 }
 
+const BROWSER_SCRIPT_EXTENSIONS = new Set(['.js', '.mjs']);
+
+async function readSmall(root, file) {
+  try {
+    const absolute = path.resolve(root, file);
+    if ((await stat(absolute)).size > MAX_BYTES) return null;
+    return await readFile(absolute, 'utf8');
+  } catch { return null; }
+}
+
+// ids looked up with getElementById('x') / querySelector('#x') that no page
+// defines and the scripts never create (no other mention of the literal).
+function missingIds(scriptText, ids) {
+  const problems = [];
+  const seen = new Set();
+  const lookup = /\b(?:getElementById\(\s*(['"`])([\w-]+)\1\s*\)|querySelector(?:All)?\(\s*(['"`])#([\w-]+)\3\s*\))/g;
+  for (const match of scriptText.matchAll(lookup)) {
+    const id = match[2] || match[4];
+    if (seen.has(id) || ids.has(id)) continue;
+    seen.add(id);
+    const mentions = scriptText.split(id).length - 1;
+    const lookups = [...scriptText.matchAll(new RegExp('(?:getElementById\\(\\s*[\'"`]|querySelector(?:All)?\\(\\s*[\'"`]#)' + id.replace(/[-]/g, '\\-') + '[\'"`]', 'g'))].length;
+    if (mentions > lookups) continue;
+    problems.push(id);
+  }
+  return problems;
+}
+
 /**
  * Checks the given workspace-relative files. Returns { checked, problems }:
  * checked lists files a parser looked at; problems are short "file line N:
- * what" strings. Unsupported, missing or huge files are skipped.
+ * what" strings. Unsupported, missing or huge files are skipped. A .js/.mjs
+ * file counts only when a page loads it with <script src> (a changed page, or
+ * an .html file next to it or at the root): it is syntax-checked, and DOM ids
+ * it looks up that the page lacks are reported.
  */
 export async function staticFileCheck(root, files) {
   const checked = [];
   const problems = [];
+  const pages = new Map(); // html file -> { scripts, ids, inline }
+  const pageInfo = async (file, text) => {
+    if (pages.has(file)) return { info: pages.get(file), found: [] };
+    const info = { scripts: [], ids: new Set(), inline: '' };
+    const found = await checkHtml(root, file, text, info);
+    pages.set(file, info);
+    return { info, found };
+  };
   for (const file of files) {
     const ext = path.extname(file).toLowerCase();
     if (!STATIC_CHECK_EXTENSIONS.has(ext)) continue;
-    let text;
-    try {
-      const absolute = path.resolve(root, file);
-      if ((await stat(absolute)).size > MAX_BYTES) continue;
-      text = await readFile(absolute, 'utf8');
-    } catch { continue; }
+    const text = await readSmall(root, file);
+    if (text == null) continue;
     checked.push(file);
-    if (ext === '.html' || ext === '.htm') problems.push(...await checkHtml(root, file, text));
+    if (ext === '.html' || ext === '.htm') problems.push(...(await pageInfo(file, text)).found);
     else if (ext === '.css') problems.push(...await syntaxProblems('tree-sitter-css.wasm', text, file));
     else if (ext === '.json') problems.push(...checkJson(file, text));
     else if (ext === '.yaml' || ext === '.yml') problems.push(...checkYaml(file, text));
     else if (ext === '.toml') problems.push(...checkToml(file, text));
     if (problems.length >= MAX_PROBLEMS) break;
+  }
+  const scripts = files.filter((file) => BROWSER_SCRIPT_EXTENSIONS.has(path.extname(file).toLowerCase()));
+  if (scripts.length && problems.length < MAX_PROBLEMS) {
+    // Pages that might load them: changed pages, plus .html beside each script and at the root.
+    const { readdir } = await import('node:fs/promises');
+    const dirs = new Set(['.', ...scripts.map((file) => path.dirname(file))]);
+    for (const dir of dirs) {
+      let entries = [];
+      try { entries = await readdir(path.resolve(root, dir)); } catch { continue; }
+      for (const name of entries) {
+        if (!/\.html?$/i.test(name)) continue;
+        const file = path.join(dir, name).split(path.sep).join('/');
+        if (pages.has(file)) continue;
+        const text = await readSmall(root, file);
+        if (text != null) await pageInfo(file, text);
+      }
+    }
+    for (const file of scripts) {
+      const normal = path.normalize(file).split(path.sep).join('/');
+      const loaders = [...pages.values()].filter((info) => info.scripts.includes(normal));
+      if (!loaders.length) continue;
+      const text = await readSmall(root, file);
+      if (text == null) continue;
+      checked.push(file);
+      const syntax = await syntaxProblems('tree-sitter-javascript.wasm', text, file);
+      problems.push(...syntax);
+      if (!syntax.length) {
+        const ids = new Set(loaders.flatMap((info) => [...info.ids]));
+        const allScript = [text, ...loaders.map((info) => info.inline || '')].join('\n');
+        const missing = missingIds(allScript, ids).filter((id) => text.includes(id));
+        if (missing.length) problems.push(file + ': looks up element id' + (missing.length > 1 ? 's ' : ' ') + missing.slice(0, 5).map((id) => '"' + id + '"').join(', ') + ' that the page does not have');
+      }
+      if (problems.length >= MAX_PROBLEMS) break;
+    }
   }
   return { checked, problems: problems.slice(0, MAX_PROBLEMS) };
 }
