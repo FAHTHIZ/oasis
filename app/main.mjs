@@ -25,6 +25,7 @@ import { suggestToken, rankSuggestions, applySuggestion } from './core/composer-
 import { mcpServerFromForm, describeMcpServer } from './core/mcp.mjs';
 import { speakable, isStopPhrase, turnDetector, rmsLevel, lastReply } from './core/voice-mode.mjs';
 import { previewTarget } from './core/preview.mjs';
+import { anchorMenu } from './core/popover.mjs';
 import { searchMarketplace, marketplaceCount, OFFICIAL_MARKETPLACE } from './core/claude-plugins.mjs';
 import { syncBrowserChats } from './core/chat-sync.mjs';
 import { initActivity, refreshActivity, focusStep, resetActivity } from './activity.mjs';
@@ -3223,11 +3224,6 @@ function updateModeUI() {
 }
 
 /* ---------- Model menu ---------- */
-function positionMenu(menu, anchor) {
-  const rect = anchor.getBoundingClientRect();
-  menu.style.left = Math.max(8, Math.min(rect.left, innerWidth - menu.offsetWidth - 8)) + 'px';
-  menu.style.top = Math.max(8, rect.top - menu.offsetHeight - 8) + 'px';
-}
 function renderModelMenu() {
   const menu = $('modelMenu');
   menu.replaceChildren();
@@ -3273,17 +3269,13 @@ $('modelChip').addEventListener('click', (event) => {
   const menu = $('modelMenu');
   if (!menu.hidden) { menu.hidden = true; return; }
   renderModelMenu();
-  menu.hidden = false;
-  positionMenu(menu, $('modelChip'));
+  anchorMenu(menu, $('modelChip'));
 });
 $('modeChip').addEventListener('click', (event) => {
   event.stopPropagation();
   const menu = $('modeMenu');
   if (!menu.hidden) { menu.hidden = true; return; }
-  menu.hidden = false;
-  const rect = $('modeChip').getBoundingClientRect();
-  menu.style.left = Math.max(8, Math.min(rect.left, innerWidth - menu.offsetWidth - 8)) + 'px';
-  menu.style.top = Math.max(8, rect.top - menu.offsetHeight - 8) + 'px';
+  anchorMenu(menu, $('modeChip'));
 });
 $('modeMenu').addEventListener('click', (event) => {
   const button = event.target.closest('[data-mode]');
