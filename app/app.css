@@ -919,9 +919,10 @@ html.lite .topbar{backdrop-filter:none;-webkit-backdrop-filter:none;background:v
 .trace-target{font:11.5px var(--mono);color:var(--faint);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
 .trace-track{position:relative;height:14px;border-radius:3px;background:repeating-linear-gradient(90deg,var(--line) 0 1px,transparent 1px 25%)}
 .trace-track i{position:absolute;top:4px;height:6px;min-width:2px;border-radius:3px;background:var(--accent-2)}
-.trace-row.fail .trace-track i{background:var(--danger)}
-.trace-row.skip .trace-track i{background:var(--faint);opacity:.5}
-.trace-row.running .trace-track i{background:var(--accent);animation:pulse 1.2s ease-in-out infinite}
+.trace-track i{background-image:repeating-linear-gradient(135deg,var(--warn) 0 2px,transparent 2px 4px);background-size:var(--wait,0%) 100%;background-repeat:no-repeat}
+.trace-row.fail .trace-track i{background-color:var(--danger)}
+.trace-row.skip .trace-track i{background-color:var(--faint);opacity:.5}
+.trace-row.running .trace-track i{background-color:var(--accent);animation:pulse 1.2s ease-in-out infinite}
 .trace-dur{font:11px var(--mono);color:var(--faint);text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
 .trace-detail{padding:2px 4px 8px 34px}
 .trace-detail .inspect{margin:0}
