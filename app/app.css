@@ -179,9 +179,12 @@ svg.icon.i-stop{fill:currentColor}
 .steps-head .chevron,.tool .chevron{flex:none;color:var(--faint);font-size:18px;line-height:1;transition:transform .18s var(--ease)}
 .steps.open>.steps-head .chevron{transform:rotate(90deg)}
 .steps-body{border-top:1px solid var(--line);padding:6px 6px 8px}
+.steps.single .step-list>.tool>details>summary{display:none}
+.steps.single .step-list>.tool>details>.inspect{margin:2px 6px 4px}
 .steps-timing{padding:6px 10px 0;color:var(--muted);font-size:12px;font-variant-numeric:tabular-nums}
 .step-list{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:1px;position:relative}
 .step-list::before{content:"";position:absolute;left:19px;top:14px;bottom:14px;width:1px;background:linear-gradient(var(--line-strong),var(--line))}
+.steps.single .step-list::before{display:none}
 .tool{position:relative;border-radius:var(--r-md)}
 .tool.enter{animation:rise .18s var(--ease) both}
 .tool>details>summary{list-style:none;display:flex;align-items:center;gap:9px;padding:6px 8px;cursor:pointer;font-size:13px;min-height:34px;border-radius:var(--r-md)}
