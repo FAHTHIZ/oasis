@@ -83,6 +83,11 @@ export function repairToolArguments(raw) {
     if (fixed && fixed.ok && isPlainObject(fixed.value)) return { args: fixed.value, repaired: true };
   }
   const reason = (() => { try { JSON.parse(trimmed); return ''; } catch (error) { return error.message; } })();
+  // A call that stops inside a string was cut off, almost always by the
+  // model's output limit. Resending the same call fails the same way.
+  if (endsInsideString(candidate) && trimmed.length > 800) {
+    throw new ToolArgumentsError('Tool arguments were cut off after ' + trimmed.length + ' characters (the reply hit the model\'s output limit), so nothing was run. Do not resend the same large call. For write_file, send the file in parts of about 150 lines: the first with write_file, then each next part with write_file and append: true. For other tools, send less text per call.', raw);
+  }
   throw new ToolArgumentsError('Tool arguments were not valid JSON' + (reason ? ' (' + reason + ')' : '') + '. Resend the call with a single JSON object using double-quoted keys and strings.', raw);
 }
 
