@@ -149,16 +149,72 @@ function renderMarkdownLine(line, state, options = {}) {
   if (bullet) return bullet[1] + '• ' + renderInline(bullet[2], { color });
   const numbered = line.match(/^(\s*)(\d+[.)])\s+(.*)$/);
   if (numbered) return numbered[1] + numbered[2] + ' ' + renderInline(numbered[3], { color });
-  if (/^\s*\|.*\|\s*$/.test(line)) {
-    if (/^\s*\|[\s:|-]+\|\s*$/.test(line)) return C.dim + line.replace(/[-:]/g, '─') + C.noBold;
-    return line.split('|').map((cell) => renderInline(cell, { color })).join(C.dim + '│' + C.noBold);
-  }
   return renderInline(line, { color });
+}
+
+// GFM tables: rows are held until the table ends, then marked's lexer parses
+// them (escaped pipes, inline code, alignment) and they are drawn as one box
+// with columns sized by display width (CJK, emoji) and cells wrapped to fit.
+const TABLE_ROW = /^\s*\|.*\|\s*$/;
+function isTableRow(line, state, options) {
+  return options.color !== false && !state.fence && TABLE_ROW.test(line);
+}
+
+function padCell(text, width, align) {
+  const gap = Math.max(0, width - stringWidth(stripAnsi(text)));
+  if (align === 'right') return ' '.repeat(gap) + text;
+  if (align === 'center') return ' '.repeat(Math.floor(gap / 2)) + text + ' '.repeat(gap - Math.floor(gap / 2));
+  return text + ' '.repeat(gap);
+}
+
+export function renderTable(lines, { columns = 80 } = {}) {
+  const token = Lexer.lex(lines.join('\n'), { gfm: true }).find((item) => item.type === 'table');
+  if (!token) return lines.map((line) => renderInline(line)).join('\n');
+  const header = token.header.map((cell) => inlineTokens(cell.tokens));
+  const body = token.rows.map((row) => header.map((_, index) => (row[index] ? inlineTokens(row[index].tokens) : '')));
+  const count = header.length;
+  const natural = header.map((_, index) => Math.max(1, ...[header, ...body].map((row) => Math.max(...stripAnsi(row[index]).split('\n').map((part) => stringWidth(part))))));
+  // Shrink the widest columns until the box fits (3 cells of border per column + 1).
+  const room = Math.max(count * 4, Math.max(20, columns) - 2 - (3 * count + 1));
+  const widths = natural.slice();
+  while (widths.reduce((sum, w) => sum + w, 0) > room) {
+    const widest = widths.indexOf(Math.max(...widths));
+    if (widths[widest] <= 4) break;
+    widths[widest] -= 1;
+  }
+  const line = (left, mid, right) => C.dim + left + widths.map((w) => '─'.repeat(w + 2)).join(mid) + right + C.noBold;
+  const bar = C.dim + '│' + C.noBold;
+  const row = (cells, bold) => {
+    const wrapped = cells.map((cell, index) => wrapAnsi(cell, widths[index], { hard: true, trim: true }).split('\n'));
+    const height = Math.max(...wrapped.map((parts) => parts.length));
+    const out = [];
+    for (let r = 0; r < height; r += 1) {
+      out.push(bar + wrapped.map((parts, index) => ' ' + (bold ? C.bold : '') + padCell(parts[r] || '', widths[index], token.align[index]) + (bold ? C.noBold : '') + ' ').join(bar) + bar);
+    }
+    return out;
+  };
+  return [line('┌', '┬', '┐'), ...row(header, true), line('├', '┼', '┤'), ...body.flatMap((cells) => row(cells, false)), line('└', '┴', '┘')].join('\n');
+}
+
+function flushTable(state, options) {
+  if (!state.table) return null;
+  const lines = state.table;
+  state.table = null;
+  return renderTable(lines, options);
 }
 
 export function renderMarkdown(text, options = {}) {
   const state = { fence: null, lang: '' };
-  const out = String(text || '').split('\n').map((line) => renderMarkdownLine(line, state, options)).filter((line) => line !== null);
+  const out = [];
+  for (const line of String(text || '').split('\n')) {
+    if (isTableRow(line, state, options)) { (state.table ||= []).push(line); continue; }
+    const table = flushTable(state, options);
+    if (table !== null) out.push(table);
+    const rendered = renderMarkdownLine(line, state, options);
+    if (rendered !== null) out.push(rendered);
+  }
+  const table = flushTable(state, options);
+  if (table !== null) out.push(table);
   if (state.mermaid && state.mermaid.length) out.push(...state.mermaid.map((row) => '  ' + row));
   return out.join('\n');
 }
@@ -239,6 +295,14 @@ export class MarkdownStream {
       const line = this.partial.slice(0, newline);
       this.partial = this.partial.slice(newline + 1);
       this.erasePartial();
+      const options = { color: this.color, columns: this.columns() };
+      if (isTableRow(line, this.state, options)) {
+        (this.state.table ||= []).push(line);
+        if (this.lineStartWidth) { this.write('\n'); this.lineStartWidth = 0; }
+        continue;
+      }
+      const table = flushTable(this.state, options);
+      if (table !== null) { if (this.pendingBlank) { this.write('\n'); this.pendingBlank = false; } this.write(table + '\n'); }
       const prose = !this.state.fence && !/^\s*(```|~~~|\|)/.test(line);
       const rendered = renderMarkdownLine(line, this.state, { color: this.color, columns: this.columns() });
       // Blank prose lines wait for more text: runs collapse to one, and a
@@ -259,6 +323,14 @@ export class MarkdownStream {
     if (!this.started) return false;
     if (this.partial && this.partial.trim() && this.pendingBlank) { this.erasePartial(); this.write('\n'); }
     this.pendingBlank = false;
+    const options = { color: this.color, columns: this.columns() };
+    if (this.partial && isTableRow(this.partial, this.state, options)) {
+      this.erasePartial();
+      (this.state.table ||= []).push(this.partial);
+      this.partial = '';
+    }
+    const table = flushTable(this.state, options);
+    if (table !== null) this.write(table + (this.partial ? '\n' : ''));
     if (this.partial) {
       this.erasePartial();
       const prose = !this.state.fence && !/^\s*(```|~~~|\|)/.test(this.partial);
