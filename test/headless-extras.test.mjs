@@ -142,5 +142,24 @@ test('deniedHint names the command that was not approved and the flag that allow
   const hint = deniedHint([{ tool_name: 'run_command', tool_input: { command: 'npm', args: ['test'] }, detail: 'Run this command?' }]);
   assert.match(hint, /Not approved in this run \(nobody can approve in -p mode\): `npm test`\./);
   assert.match(hint, /--allowedTools "run_command\(npm test:\*\)"/);
+  assert.match(hint, /--full-auto \(edits plus commands inside the OS sandbox\)/);
   assert.equal(deniedHint([]), '');
+});
+
+const bwrapReady = process.platform === 'linux' && existsSync('/usr/bin/bwrap');
+test('--full-auto runs model commands without asking, inside the OS sandbox', { skip: !bwrapReady }, async (t) => {
+  // Regression: the turn context never carried session.sandbox, so with the
+  // sandbox enabled run_command was denied in -p mode and never wrapped.
+  const root = await tmp(t);
+  await writeFile(path.join(root, 'check.js'), 'console.log("ran");\n');
+  const run = await runCli(t, root, ['-p', 'run the tests', '--full-auto', '--output-format', 'stream-json'], [
+    toolCall('c1', 'run_command', { command: 'node', args: ['check.js'] }),
+    { content: 'done' }
+  ]);
+  assert.equal(run.code, 0, run.stderr);
+  const result = run.stdout.split('\n').filter(Boolean).map((line) => JSON.parse(line)).find((event) => event.type === 'tool_result');
+  const output = JSON.parse(result.content);
+  assert.equal(output.approved, true, result.content);
+  assert.equal(output.sandboxed, 'bubblewrap', result.content);
+  assert.match(output.stdout, /ran/);
 });

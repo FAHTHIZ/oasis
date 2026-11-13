@@ -1755,6 +1755,11 @@ async function canonicalPathLockKey(root, rawPath) {
 }
 
 export async function executeTool(name, args = {}, context = {}) {
+  // The OS sandbox belongs to the session; a context without one inherits it
+  // so run_command/run_shell actually run inside bubblewrap/Seatbelt.
+  if (context && context.sandbox === undefined && context.session && context.session.sandbox) {
+    context = { ...context, sandbox: context.session.sandbox };
+  }
   if (PATH_LOCKED_TOOLS.has(name) && args && typeof args.path === 'string' && args.path) {
     const root = path.resolve(context.root || process.cwd());
     const key = await canonicalPathLockKey(root, args.path);

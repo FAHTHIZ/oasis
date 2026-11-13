@@ -4384,6 +4384,7 @@ async function runAgentTurnRaw(session, prompt, options = {}) {
     root: session.root,
     config: session.config,
     session,
+    sandbox: session.sandbox,
     approval: options.approval,
     autoApprove: Boolean(options.autoApprove),
     maxCommandSeconds: session.config.maxCommandSeconds,
