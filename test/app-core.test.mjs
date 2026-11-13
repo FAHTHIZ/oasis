@@ -581,3 +581,22 @@ test('the app import map covers every package shared modules import, and the CSP
   const hash = "'sha256-" + createHash('sha256').update(inline[1]).digest('base64') + "'";
   assert.ok(html.includes("script-src 'self' " + hash), 'the CSP lists the import map hash ' + hash);
 });
+
+test('every import map entry loads through the app server\'s /vendor route', async () => {
+  const { startAppServer } = await import('../src/app-server.mjs');
+  const root = new URL('..', import.meta.url).pathname.replace(/\/$/, '');
+  const html = await readFile(new URL('../app/index.html', import.meta.url), 'utf8');
+  const imports = JSON.parse(/<script type="importmap">([\s\S]*?)<\/script>/.exec(html)[1]).imports;
+  const server = await startAppServer({ root, port: 0 });
+  try {
+    const page = 'http://127.0.0.1:' + server.address().port + '/app/index.html';
+    for (const [name, target] of Object.entries(imports)) {
+      const response = await fetch(new URL(target, page));
+      assert.equal(response.status, 200, name + ' → ' + target);
+      assert.match(response.headers.get('content-type') || '', /javascript/, name);
+      await response.arrayBuffer();
+    }
+  } finally {
+    await new Promise((resolve) => server.close(resolve));
+  }
+});
