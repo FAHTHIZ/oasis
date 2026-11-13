@@ -193,7 +193,8 @@ export function renderTable(lines, { columns = 80 } = {}) {
     }
     return out;
   };
-  return [line('┌', '┬', '┐'), ...row(header, true), line('├', '┼', '┤'), ...body.flatMap((cells) => row(cells, false)), line('└', '┴', '┘')].join('\n');
+  // Indented like code blocks and diagrams.
+  return [line('┌', '┬', '┐'), ...row(header, true), line('├', '┼', '┤'), ...body.flatMap((cells) => row(cells, false)), line('└', '┴', '┘')].map((text) => '  ' + text).join('\n');
 }
 
 function flushTable(state, options) {
