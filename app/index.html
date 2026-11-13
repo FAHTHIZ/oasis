@@ -64,6 +64,11 @@
     </div>
    </nav>
    <div class="chat-col">
+    <div class="task-bar" id="taskBar" hidden>
+      <h2 class="task-title" id="taskTitle"></h2>
+      <span class="task-state" id="taskState"><span class="status-dot" aria-hidden="true"></span><span id="taskStateText"></span></span>
+      <button type="button" class="task-meta" id="taskMeta" title="Open the run timeline (Ctrl+Shift+A)"></button>
+    </div>
     <div class="update-bar" id="updateBar" role="status" hidden>
       <span class="update-text"><b id="updateTitle"></b> <span id="updateDetail"></span></span>
       <button type="button" class="btn small primary" id="updateAction"></button>
