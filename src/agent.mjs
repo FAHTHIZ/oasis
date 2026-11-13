@@ -4743,8 +4743,9 @@ async function runAgentTurnRaw(session, prompt, options = {}) {
         verification.staticCheckPending = false;
         const { staticFileCheck, STATIC_CHECK_EXTENSIONS } = await import('./static-check.mjs');
         const sources = [...verification.changedPaths].filter((item) => SOURCE_EXTENSIONS.has(path.extname(item).toLowerCase()));
-        const staticFiles = sources.filter((item) => STATIC_CHECK_EXTENSIONS.has(path.extname(item).toLowerCase()));
+        const staticFiles = sources.filter((item) => !(verification.ranPaths && verification.ranPaths.has(item)) && (STATIC_CHECK_EXTENSIONS.has(path.extname(item).toLowerCase()) || /\.m?js$/i.test(item)));
         if (staticFiles.length && sources.every((item) => staticFiles.includes(item) || (verification.ranPaths && verification.ranPaths.has(item)))) {
+          // .js counts only when a page loads it (browser script); otherwise checked is short and nothing changes.
           const { checked, problems } = await staticFileCheck(session.root, staticFiles);
           if (checked.length === staticFiles.length) {
             verification.lastVerificationExitCode = problems.length ? 1 : 0;

@@ -63,3 +63,33 @@ test('a page-only change is checked in-process and its problems go back to the m
   assert.equal(summary.verification.lastCheck.passed, true);
   assert.equal(requests.length, 4, 'no extra gate round trip after the clean parse');
 });
+
+test('a browser script loaded by a page is syntax-checked and its id lookups are matched against the page', async (t) => {
+  const root = await tmp(t);
+  await writeFile(path.join(root, 'index.html'), '<!doctype html>\n<ul id="list"></ul>\n<form id="form"></form>\n<script src="app.js"></script>\n');
+  await writeFile(path.join(root, 'app.js'), "const list = document.getElementById('list');\nconst input = document.getElementById('new-todo');\nconst made = document.createElement('div'); made.id = 'extra';\ndocument.querySelector('#extra');\n");
+  await writeFile(path.join(root, 'tool.js'), 'not even ( valid');
+  let result = await staticFileCheck(root, ['app.js', 'tool.js']);
+  assert.deepEqual(result.checked, ['app.js'], 'tool.js is not loaded by any page, so it is left to a real check');
+  assert.equal(result.problems.length, 1);
+  assert.match(result.problems[0], /app\.js: looks up element id "new-todo" that the page does not have/);
+  await writeFile(path.join(root, 'app.js'), 'function broken( {\n');
+  result = await staticFileCheck(root, ['index.html', 'app.js']);
+  assert.deepEqual(result.checked, ['index.html', 'app.js']);
+  assert.match(result.problems.join('\n'), /app\.js line 1: /);
+});
+
+test('a page plus its browser script ends the turn verified', async (t) => {
+  const root = await tmp(t);
+  const { config, requests } = await scriptedModel(t, [
+    toolCall('c1', 'write_file', { path: 'index.html', content: '<!doctype html>\n<button id="go">Go</button>\n<script src="app.js"></script>\n' }),
+    toolCall('c2', 'write_file', { path: 'app.js', content: "document.getElementById('go').addEventListener('click', () => alert('hi'));\n" }),
+    { content: 'Built the page.' }
+  ]);
+  const settings = { permissions: { allow: [], ask: [], deny: [], defaultMode: 'acceptEdits' }, hooks: {}, sandbox: { enabled: false }, shell: { enabled: false } };
+  const { exitCode, summary } = await runHeadless({ prompt: 'make a page', root, config, outputFormat: 'json', sessionOptions: { settings }, write: () => {} });
+  assert.equal(exitCode, 0);
+  assert.equal(summary.verification.complete, true, JSON.stringify(summary.verification));
+  assert.equal(summary.verification.lastCheck.kind, 'static');
+  assert.equal(requests.length, 3);
+});
