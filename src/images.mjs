@@ -4,6 +4,10 @@ import { readFile, stat } from 'node:fs/promises';
 import path from 'node:path';
 import { resolveWorkspacePath } from './tools.mjs';
 import { catalogImageInput } from './model-catalog.mjs';
+import { PNG } from 'image-size/types/png';
+import { JPG } from 'image-size/types/jpg';
+import { GIF } from 'image-size/types/gif';
+import { WEBP } from 'image-size/types/webp';
 
 const IMAGE_TYPES = { '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.gif': 'image/gif', '.webp': 'image/webp' };
 export const MAX_IMAGE_BYTES = 3_750_000; // ~5 MB once base64-encoded (Anthropic's per-image limit).
@@ -70,7 +74,10 @@ export function imageInputCapability(config = {}, env = process.env) {
   return { status: 'unknown', reason: 'Image support cannot be verified from the configured model ID.' };
 }
 
-function sniffType(buffer) {
+// Strict signature check for the four formats every vision provider accepts.
+// image-size's own validators are looser (its PNG check skips the first byte),
+// so they are only used to read dimensions once the type is known.
+export function sniffImageType(buffer) {
   if (buffer.length >= 8 && buffer.readUInt32BE(0) === 0x89504e47) return 'image/png';
   if (buffer.length >= 3 && buffer[0] === 0xff && buffer[1] === 0xd8 && buffer[2] === 0xff) return 'image/jpeg';
   if (buffer.length >= 6 && /^GIF8[79]a$/.test(buffer.subarray(0, 6).toString('latin1'))) return 'image/gif';
@@ -78,19 +85,12 @@ function sniffType(buffer) {
   return null;
 }
 
+const SIZE_READERS = { 'image/png': PNG, 'image/jpeg': JPG, 'image/gif': GIF, 'image/webp': WEBP };
+
 function dimensions(buffer, type) {
   try {
-    if (type === 'image/png') return { width: buffer.readUInt32BE(16), height: buffer.readUInt32BE(20) };
-    if (type === 'image/gif') return { width: buffer.readUInt16LE(6), height: buffer.readUInt16LE(8) };
-    if (type === 'image/jpeg') {
-      let offset = 2;
-      while (offset + 9 < buffer.length) {
-        if (buffer[offset] !== 0xff) { offset++; continue; }
-        const marker = buffer[offset + 1];
-        if (marker >= 0xc0 && marker <= 0xcf && ![0xc4, 0xc8, 0xcc].includes(marker)) return { width: buffer.readUInt16BE(offset + 7), height: buffer.readUInt16BE(offset + 5) };
-        offset += 2 + buffer.readUInt16BE(offset + 2);
-      }
-    }
+    const { width, height } = SIZE_READERS[type].calculate(buffer);
+    if (width > 0 && height > 0) return { width, height };
   } catch {}
   return {};
 }
@@ -114,7 +114,7 @@ function loadSharp() {
  */
 export async function fitImage(image, { env = process.env, sharp } = {}) {
   const input = Buffer.isBuffer(image.buffer) ? image.buffer : Buffer.from(String(image.data || ''), 'base64');
-  const mediaType = sniffType(input) || image.mediaType;
+  const mediaType = sniffImageType(input) || image.mediaType;
   const size = dimensions(input, mediaType);
   const maxEdge = imageMaxEdge(env);
   const known = size.width > 0 && size.height > 0;
@@ -170,7 +170,7 @@ export async function readImageFile(root, rawPath, options = {}) {
   const relative = target.relative.split(path.sep).join('/');
   if (info.size > MAX_SOURCE_IMAGE_BYTES) throw new Error('Image is larger than the ' + Math.round(MAX_SOURCE_IMAGE_BYTES / 1048576) + ' MB limit. Resize or compress it first.');
   const buffer = await readFile(target.absolute);
-  const mediaType = sniffType(buffer);
+  const mediaType = sniffImageType(buffer);
   if (!mediaType) throw new Error('This file does not contain a PNG, JPEG, GIF, or WebP image.');
   const result = { path: relative, image: true, mediaType, bytes: info.size, ...dimensions(buffer, mediaType) };
   if (!visionEnabled(options.config, options.env)) {

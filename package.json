@@ -111,6 +111,7 @@
     "highlight.js": "11.11.2",
     "htmlparser2": "^10.1.0",
     "ignore": "7.0.14",
+    "image-size": "2.1.0",
     "ipaddr.js": "^2.5.0",
     "jsonc-parser": "3.3.1",
     "jsonrepair": "3.15.0",
