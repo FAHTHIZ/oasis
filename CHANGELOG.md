@@ -4,6 +4,7 @@ User-facing change history grouped by package version. A version heading does no
 
 ## Unreleased
 
+- `oasis -p --output-format stream-json`: the `init` event now carries the session id (it was `null` until the end-of-run save), as `claude -p` does, so a client can record the id for `--resume` before the run finishes. A run that ends before anything is saved reports `session_id: null` in its result instead of an id that `--resume` cannot find.
 - Web app: with the light theme (chosen, or matched from the device) the page no longer flashes dark while it loads. A small classic script in `<head>` (`app/theme-boot.js`) applies the saved theme before first paint.
 - Voice replies (web app Talk mode, `/api/speak` and the Telegram, Slack and Discord gateways) no longer read out backticks and code when a model opens a code fence in the middle of a line (`Fixed it. ```js`); the fence is moved to its own line first, so the code is announced as "(code omitted)".
 - A command that was denied or blocked (by you, a rule or the auto mode classifier) no longer gets the "You already ran this exact command successfully" reminder. No process started, so the reminder told the model a side effect had been repeated when nothing ran.
