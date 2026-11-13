@@ -553,6 +553,7 @@ async function send(text) {
   renderAttachments();
   let settle;
   turnEdited = false;
+  turnPage = '';
   turnSettled = new Promise((resolve) => { settle = resolve; });
   try { await agent.send(message, { maxSteps: Number(settings.maxSteps) || 40, plugins, images }); }
   catch { /* shown through the error event */ }
@@ -1224,14 +1225,27 @@ function messageActions(role, at = 0) {
 // After a turn that changed files on this computer, the last reply offers
 // Undo, which runs /undo (files and conversation go back one turn).
 let turnEdited = false;
+// The page (index.html, …) this turn wrote, so its reply can open it in Preview.
+let turnPage = '';
 let quietUndo = false;
 function offerUndo() {
-  for (const old of document.querySelectorAll('.msg-actions button[data-action="undo"]')) old.remove();
+  for (const old of document.querySelectorAll('.msg-actions button[data-action="undo"], .msg-actions button[data-action="preview"]')) old.remove();
   if (!RT || RT.needsToken || !turnEdited) return;
   const replies = document.querySelectorAll('#transcript .msg.assistant');
   const last = replies[replies.length - 1];
   const bar = last && last.querySelector('.msg-actions');
   if (!bar) return;
+  if (turnPage) {
+    const view = document.createElement('button');
+    view.type = 'button';
+    view.dataset.action = 'preview';
+    view.dataset.page = turnPage;
+    view.className = 'labelled';
+    view.title = 'Open ' + turnPage + ' in Preview';
+    view.setAttribute('aria-label', view.title);
+    view.innerHTML = icon('eye') + '<span>Preview</span>';
+    bar.appendChild(view);
+  }
   const b = document.createElement('button');
   b.type = 'button';
   b.dataset.action = 'undo';
@@ -1316,7 +1330,15 @@ function onTranscriptClick(event) {
   const wrap = action.closest('.msg');
   const text = messageText(wrap);
   if (action.dataset.action === 'copy') copyText(text).then((ok) => ok ? flashCopied(action) : toast('Could not copy.'));
-  else if (action.dataset.action === 'undo') {
+  else if (action.dataset.action === 'preview') {
+    // The first open of Preview loads preview.address once the server answers.
+    const page = action.dataset.page;
+    const loaded = preview.loaded;
+    preview.address = page;
+    toggleFiles(true);
+    showPanelTab('preview');
+    if (loaded) loadPreview(page);
+  } else if (action.dataset.action === 'undo') {
     if (document.body.classList.contains('busy')) { toast('Wait for OASIS to finish, or stop it first.'); return; }
     action.remove();
     markTurnUndone(wrap);
@@ -1971,6 +1993,7 @@ function handleRunEvent(event) {
       if (Number.isFinite(Number(event.durationMs))) tool.durationMs = Number(event.durationMs);
       if (event.label) tool.label = event.label;
       if (event.ok !== false && /write|edit|patch|delete|move|rename|notebook/i.test(String(event.name || tool.name || ''))) turnEdited = true;
+      if (event.ok !== false && /^(write_file|edit_file|multi_edit)$/.test(String(event.name || tool.name || '')) && /\.html?$/i.test(String((tool.args && tool.args.path) || ''))) turnPage = String(tool.args.path).replace(/^\.\//, '');
       if (RT && /^(write_file|edit_file|multi_edit|delete_file|notebook_edit|run_command|git_commit)$/.test(event.name || tool.name)) refreshFiles();
       const content = String(event.content || '');
       if (content.length > 6000) tool.more = true;
@@ -2716,6 +2739,7 @@ async function resumeTurn(jobId) {
   setBusy(true);
   let settle;
   turnEdited = false;
+  turnPage = '';
   turnSettled = new Promise((resolve) => { settle = resolve; });
   try { await agent.resume(jobId); }
   catch { /* shown through the error event */ }
