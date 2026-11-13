@@ -1,9 +1,8 @@
 // Claude Code-compatible status line: settings.statusLine = { type: 'command', command }.
 // The command gets session JSON on stdin; the first line of its output is shown
 // above the input prompt. Only trusted workspaces (or user settings) can set it.
+import stripAnsi from 'strip-ansi';
 import { runHookCommand } from './hooks.mjs';
-
-const ANSI = /\x1b\[[0-9;?]*[ -\/]*[@-~]/g;
 
 export function statusLinePayload({ root, session = null, config = {}, usage = null, outputStyle = null }) {
   const model = session && session.config && session.config.model || config.model || '';
@@ -26,7 +25,7 @@ export async function renderStatusLine(statusLine, payload, options = {}) {
   if (result.exitCode !== 0 || result.timedOut) return null;
   const firstLine = String(result.stdout || '').split(/\r?\n/).find((line) => line.trim()) || '';
   // Keep color codes only on a real terminal; always drop other control characters.
-  let cleaned = options.keepColor ? firstLine : firstLine.replace(ANSI, '');
+  let cleaned = options.keepColor ? firstLine : stripAnsi(firstLine);
   cleaned = cleaned.replace(options.keepColor ? /[\x00-\x08\x0b-\x1a\x1c-\x1f\x7f]/g : /[\x00-\x08\x0b-\x1f\x7f]/g, '');
   return cleaned.slice(0, 400) || null;
 }
@@ -94,9 +93,8 @@ export async function renderSubagentStatusLines(setting, payload, options = {}) 
     let item;
     try { item = JSON.parse(line); } catch { continue; }
     if (!item || typeof item.id !== 'string' || !ids.has(item.id) || typeof item.content !== 'string') continue;
-    let content = options.keepColor ? item.content : item.content.replace(ANSI, '');
-    // OSC 8 hyperlinks stay on a real terminal; other control characters (and newlines) go.
-    if (!options.keepColor) content = content.replace(/\x1b\]8;[^\x07\x1b]*(?:\x07|\x1b\\)/g, '');
+    // Colors and OSC 8 hyperlinks stay on a real terminal; other control characters (and newlines) go.
+    let content = options.keepColor ? item.content : stripAnsi(item.content);
     content = content.replace(options.keepColor ? /[\x00-\x06\x08-\x1a\x1c-\x1f\x7f]/g : /[\x00-\x1f\x7f]/g, '');
     rows.set(item.id, content.slice(0, 400));
   }

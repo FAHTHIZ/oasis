@@ -16,6 +16,7 @@
 import './tools.mjs'; // load order: tools.mjs before power-tools.mjs (they import each other)
 import { startBackgroundProcess, killBackgroundEntry } from './power-tools.mjs';
 import { createBoundedRegexMatcher } from './safe-regex.mjs';
+import stripAnsi from 'strip-ansi';
 
 const MONITOR_DEFAULT_TIMEOUT_MS = 300000;
 const MONITOR_MAX_TIMEOUT_MS = 3600000;
@@ -36,7 +37,7 @@ export function pushBackgroundEvent(session, text, meta = {}) {
 }
 
 function escapeAttr(value) { return String(value || '').replace(/[&"<>\n\r]/g, (c) => ({ '&': '&amp;', '"': '&quot;', '<': '&lt;', '>': '&gt;' }[c] || ' ')); }
-function clip(line) { const clean = String(line).replace(/\x1b\[[0-9;?]*[A-Za-z]/g, '').replace(/[\x00-\x08\x0b-\x1f\x7f]/g, ''); return clean.length > MAX_LINE_CHARS ? clean.slice(0, MAX_LINE_CHARS) + '…' : clean; }
+function clip(line) { const clean = stripAnsi(String(line)).replace(/[\x00-\x08\x0b-\x1f\x7f]/g, ''); return clean.length > MAX_LINE_CHARS ? clean.slice(0, MAX_LINE_CHARS) + '…' : clean; }
 
 // Batches lines per monitor so a burst becomes one event, not hundreds.
 function lineBatcher(session, monitor) {
