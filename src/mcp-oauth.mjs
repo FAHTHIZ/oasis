@@ -140,12 +140,6 @@ async function requireSafeEndpoint(url, label, safety = {}) {
   return parsed.toString();
 }
 
-export function parseWwwAuthenticate(header) {
-  const out = {};
-  for (const match of String(header || '').matchAll(/([a-zA-Z_]+)="([^"]*)"/g)) out[match[1]] = match[2];
-  return out;
-}
-
 // The standard fetch implementation resolves hostnames again when it connects.
 // For OAuth endpoints, that would reopen a DNS-rebinding window after the safety
 // check. Resolve once, validate every answer, then pin the actual socket lookup to
@@ -541,7 +535,7 @@ export async function discoverOAuth(serverUrl, { fetch: fetchImpl = fetch, resou
         headers: { 'content-type': 'application/json', accept: 'application/json, text/event-stream' },
         body: JSON.stringify({ jsonrpc: '2.0', id: 0, method: 'ping' })
       });
-      if (probe.status === 401) resourceMetadataUrl = parseWwwAuthenticate(probe.headers.get('www-authenticate')).resource_metadata || null;
+      if (probe.status === 401) resourceMetadataUrl = (await loadMcpClientSdk()).extractWWWAuthenticateParams(probe).resourceMetadataUrl || null;
     } catch {}
   }
   let metadataUrl;
