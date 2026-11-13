@@ -4,6 +4,7 @@ User-facing change history grouped by package version. A version heading does no
 
 ## Unreleased
 
+- Voice replies (web app Talk mode, `/api/speak` and the Telegram, Slack and Discord gateways) no longer read out backticks and code when a model opens a code fence in the middle of a line (`Fixed it. ```js`); the fence is moved to its own line first, so the code is announced as "(code omitted)".
 - A command that was denied or blocked (by you, a rule or the auto mode classifier) no longer gets the "You already ran this exact command successfully" reminder. No process started, so the reminder told the model a side effect had been repeated when nothing ran.
 - Web app: a step group that opens straight to its only step now folds that step back when a second step joins the group, instead of leaving the first step's inspector expanded for the rest of the run. A step you opened or closed yourself keeps its state.
 - OASIS now requires Node.js 22.19 or newer (was 22.15). The terminal renderer, `@earendil-works/pi-tui` 1.5.2, declares `node >=22.19.0`, so 22.15–22.18 passed the installer and `oasis doctor` checks but were unsupported. The installers, `oasis doctor`, `package.json` and the docs agree on the new floor.
