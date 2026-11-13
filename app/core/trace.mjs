@@ -21,6 +21,14 @@ function stepPath(args = {}) {
   return String(args.path || args.file_path || args.notebook_path || '').replaceAll(String.fromCharCode(92), '/');
 }
 
+// How long the step sat waiting for the user's approval (part of its span).
+function waitedMs(tool, span, now) {
+  let total = Number(tool.waitedMs) || 0;
+  if (finite(tool.waitStartedAt) !== null) total += Math.max(0, now - Number(tool.waitStartedAt));
+  if (span) total = Math.min(total, span[1] - span[0]);
+  return Math.max(0, Math.round(total));
+}
+
 function stepSpan(tool, now) {
   const start = finite(tool.startedAt);
   if (start === null) return null;
@@ -111,6 +119,7 @@ function finishTurn(turn, { now, running }) {
       startedAt: span ? span[0] : null,
       endedAt: span ? span[1] : null,
       durationMs: span ? span[1] - span[0] : (Number.isFinite(Number(tool.durationMs)) ? Number(tool.durationMs) : null),
+      waitedMs: waitedMs(tool, span, now),
       entryIndex,
       tool
     });
@@ -182,7 +191,7 @@ export function traceToMarkdown(trace) {
     lines.push('## ' + turn.index + '. ' + (turn.prompt.split('\n')[0].slice(0, 120) || '(no message)'));
     lines.push('', turnStatusLabel(turn.status) + ' · ' + turn.stats.steps + ' step' + (turn.stats.steps === 1 ? '' : 's') + (turn.durationMs ? ' · ' + formatDuration(turn.durationMs) : '') + (turn.files.length ? ' · changed ' + turn.files.join(', ') : ''), '');
     for (const step of turn.steps) {
-      lines.push('- ' + step.label + (step.target && !step.label.includes(step.target) ? ' — `' + step.target.replace(/`/g, "'") + '`' : '') + ' (' + OUTCOME_MARK[step.outcome] + (step.durationMs !== null ? ', ' + (formatDuration(step.durationMs) || '<0.1s') : '') + ')');
+      lines.push('- ' + step.label + (step.target && !step.label.includes(step.target) ? ' — `' + step.target.replace(/`/g, "'") + '`' : '') + ' (' + OUTCOME_MARK[step.outcome] + (step.durationMs !== null ? ', ' + (formatDuration(step.durationMs - step.waitedMs) || '<0.1s') : '') + (step.waitedMs >= 1000 ? ', waited ' + formatDuration(step.waitedMs) + ' for approval' : '') + ')');
     }
     if (turn.error) lines.push('', '> Error: ' + turn.error.split('\n')[0]);
     lines.push('');
@@ -222,6 +231,7 @@ export function traceToJSON(trace) {
         startedAt: step.startedAt,
         endedAt: step.endedAt,
         durationMs: step.durationMs,
+        waitedMs: step.waitedMs,
         args: maskSecrets(step.tool.args || {}),
         output: String(step.tool.content || '').slice(0, 4096)
       }))

@@ -842,8 +842,10 @@ function stepState(tool) {
   return stepRan(tool) ? 'fail' : 'skip';
 }
 function stepDuration(tool) {
-  if (Number.isFinite(Number(tool.durationMs))) return formatDuration(tool.durationMs);
-  if (Number.isFinite(Number(tool.startedAt)) && Number.isFinite(Number(tool.endedAt))) return formatDuration(tool.endedAt - tool.startedAt);
+  // Time spent waiting for approval is not run time (the Activity row shows it apart).
+  const waited = Number(tool.waitedMs) || 0;
+  if (Number.isFinite(Number(tool.durationMs))) return formatDuration(Math.max(0, tool.durationMs - waited));
+  if (Number.isFinite(Number(tool.startedAt)) && Number.isFinite(Number(tool.endedAt))) return formatDuration(Math.max(0, tool.endedAt - tool.startedAt - waited));
   return '';
 }
 
@@ -1947,7 +1949,7 @@ function handleRunEvent(event) {
       if (event.outcome) tool.outcome = event.outcome;
       if (event.more) tool.more = true;
       delete tool.live;
-      tool.waiting = false;
+      setWaiting(tool, false);
       tool.endedAt = Math.max(Number(tool.startedAt) || 0, serverTime(event.at));
       if (Number.isFinite(Number(event.durationMs))) tool.durationMs = Number(event.durationMs);
       if (event.label) tool.label = event.label;
@@ -2916,12 +2918,19 @@ function refreshWaitingRows() {
   if (!group) return;
   for (const tool of group.steps) if (tool.waiting) updateStepRow(group, tool);
 }
+// Time a step spent waiting for your approval is kept apart from the time it
+// ran, so a 4 s command approved after 20 s does not read as a 24 s command.
+function setWaiting(tool, waiting) {
+  if (waiting && !tool.waitStartedAt) tool.waitStartedAt = Date.now();
+  if (!waiting && tool.waitStartedAt) { tool.waitedMs = (Number(tool.waitedMs) || 0) + Math.max(0, Date.now() - tool.waitStartedAt); delete tool.waitStartedAt; }
+  tool.waiting = waiting;
+}
 function markWaitingTools(waiting) {
   const group = activeGroup;
   if (!group) return;
   for (const tool of group.steps) {
     if (tool.ok !== undefined || Boolean(tool.waiting) === waiting) continue;
-    tool.waiting = waiting;
+    setWaiting(tool, waiting);
     updateStepRow(group, tool);
   }
   if (waiting && !group.el.classList.contains('open')) setGroupOpen(group, true);

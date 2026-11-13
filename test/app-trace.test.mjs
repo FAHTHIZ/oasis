@@ -73,3 +73,19 @@ test('exports: Markdown for people, JSON without secrets', () => {
   assert.equal(json.turns[0].steps[1].output, '{"error":"nope"}');
   assert.equal(json.turns[0].model[0].offset, undefined);
 });
+
+test('time spent waiting for approval is kept apart from run time', () => {
+  const trace = buildTrace([
+    { role: 'user', content: 'Run it', at: T },
+    { role: 'assistant', content: '', tools: [
+      { id: 'w', name: 'run_command', args: { command: 'sleep 4' }, startedAt: T, endedAt: T + 25000, waitedMs: 21000, ok: true },
+      { id: 'x', name: 'run_command', args: { command: 'npm test' }, startedAt: T + 26000, waitStartedAt: T + 26000 }
+    ] }
+  ], { now: T + 30000, running: true });
+  const [done, waiting] = trace.turns[0].steps;
+  assert.equal(done.durationMs, 25000);
+  assert.equal(done.waitedMs, 21000);
+  assert.equal(waiting.waitedMs, 4000, 'an open wait counts up to now');
+  assert.match(traceToMarkdown(trace), /sleep 4.*\(ok, 4s, waited 21s for approval\)/);
+  assert.equal(traceToJSON(trace).turns[0].steps[0].waitedMs, 21000);
+});
