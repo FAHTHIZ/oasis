@@ -11,6 +11,8 @@ import { loadKeybindings, resolveBinding, actionEffect, CHORD_TIMEOUT_MS, DEFAUL
 import { spawnSync } from 'node:child_process';
 import stringWidthText from 'string-width';
 import stripAnsiText from 'strip-ansi';
+import { StdinBuffer } from '@earendil-works/pi-tui/dist/stdin-buffer.js';
+import { parseKey, decodeKittyPrintable, isKeyRelease } from '@earendil-works/pi-tui/dist/keys.js';
 import { mkdtempSync, readFileSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join as joinPath } from 'node:path';
@@ -57,11 +59,15 @@ export function truncateToWidth(text, max) {
 
 // ---------------------------------------------------------------------------
 // Key decoding
+//
+// Raw input is split into complete sequences by pi-tui's StdinBuffer (from
+// pi-mono, after OpenTUI): escape sequences split across reads, bracketed
+// paste, terminal replies (OSC/DCS/APC) and a short timeout that tells a lone
+// Esc from Alt+key. Each sequence is named by pi-tui's parseKey, which knows
+// legacy xterm/VT codes, xterm modifyOtherKeys and the kitty keyboard
+// protocol (CSI-u, alternate/base-layout keys, keypad, event types). The
+// mapping below turns those names into the editor's key events.
 
-const CSI_FINAL = {
-  A: 'up', B: 'down', C: 'right', D: 'left', H: 'home', F: 'end', Z: 'shiftTab'
-};
-const TILDE_KEYS = { 1: 'home', 7: 'home', 4: 'end', 8: 'end', 3: 'delete', 5: 'pageUp', 6: 'pageDown', 2: 'insert' };
 const CONTROL_KEYS = {
   '\r': 'enter', '\n': 'newline', '\t': 'tab', '\x7f': 'backspace', '\b': 'backspace',
   '\x01': 'home', '\x05': 'end', '\x02': 'left', '\x06': 'right', '\x10': 'up', '\x0e': 'down',
@@ -76,6 +82,7 @@ function controlStroke(ch) {
   if (ch === '\t') return 'tab';
   if (ch === '\x7f' || ch === '\b') return 'backspace';
   const code = ch.charCodeAt(0);
+  if (code === 0) return 'ctrl+space';
   if (code >= 1 && code <= 26) return 'ctrl+' + String.fromCharCode(code + 96);
   if (code === 0x1f) return 'ctrl+_';
   if (code === 0x1c) return 'ctrl+\\';
@@ -83,123 +90,143 @@ function controlStroke(ch) {
   if (code === 0x1e) return 'ctrl+^';
   return null;
 }
-function modifierPrefix(mod) {
-  const bits = Math.max(0, Number(mod || 1) - 1);
-  return (bits & 4 ? 'ctrl+' : '') + (bits & 2 ? 'meta+' : '') + (bits & 1 ? 'shift+' : '') + (bits & 8 ? 'super+' : '');
-}
-const SPECIAL_STROKES = { up: 'up', down: 'down', left: 'left', right: 'right', home: 'home', end: 'end', delete: 'delete', pageUp: 'pageup', pageDown: 'pagedown', insert: 'insert' };
+const MODIFIER_ORDER = ['ctrl', 'meta', 'shift', 'super'];
+const SPECIAL_KEYS = { up: 'up', down: 'down', left: 'left', right: 'right', home: 'home', end: 'end', delete: 'delete', pageUp: 'pageUp', pageDown: 'pageDown', insert: 'insert', clear: 'clear' };
+for (let n = 1; n <= 12; n += 1) SPECIAL_KEYS['f' + n] = 'f' + n;
 function charStroke(ch) {
   if (ch === ' ') return 'space';
   if (/^[A-Z]$/.test(ch)) return 'shift+' + ch.toLowerCase();
   return ch;
 }
+const isPlain = (seq) => seq.length > 0 && !seq.startsWith('\x1b') && seq.charCodeAt(0) >= 0x20 && seq !== '\x7f';
 
-// Stateful decoder: turns raw terminal input into key events. Bracketed paste
-// (ESC[200~ … ESC[201~) is collected into one `paste` event, even across chunks.
+// Alt/Meta + a key that produced text (legacy ESC-prefix or kitty CSI-u).
+function metaKey(ch) {
+  if (ch === '\r' || ch === '\n') return { name: 'newline', stroke: 'meta+enter' };
+  if (ch === 'b' || ch === 'B') return { name: 'wordLeft', stroke: 'meta+' + charStroke(ch) };
+  if (ch === 'f' || ch === 'F') return { name: 'wordRight', stroke: 'meta+' + charStroke(ch) };
+  if (ch === 'd') return { name: 'deleteWord', stroke: 'meta+d' };
+  if (ch === '\x7f' || ch === '\b') return { name: 'killWord', stroke: 'meta+backspace' };
+  return { name: 'meta', text: ch, stroke: 'meta+' + (controlStroke(ch) || charStroke(ch)) };
+}
+
+// One complete non-text sequence -> editor key event (or null to drop it).
+function sequenceKey(seq) {
+  if (seq.length === 1) {
+    if (seq === '\x1b') return { name: 'escape', stroke: 'escape' };
+    const control = CONTROL_KEYS[seq];
+    if (control) return { name: control, stroke: controlStroke(seq) };
+    const stroke = controlStroke(seq);
+    return stroke ? { name: 'ctrlKey', stroke } : null;
+  }
+  if (isKeyRelease(seq)) return null;
+  // Legacy Alt+key: ESC followed by the key's own byte(s).
+  if (seq[0] === '\x1b' && seq[1] !== '[' && seq[1] !== 'O' && [...seq.slice(1)].length === 1) {
+    if (seq === '\x1b\x1b') return { name: 'escape', stroke: 'escape' };
+    return metaKey(seq.slice(1));
+  }
+  const id = parseKey(seq);
+  if (!id) return null;
+  const parts = id.split('+');
+  let key = parts.pop();
+  if (key === '' && parts.length) { parts.pop(); key = '+'; }
+  const mods = new Set(parts.map((mod) => (mod === 'alt' ? 'meta' : mod)));
+  const printable = decodeKittyPrintable(seq);
+  if (printable !== undefined) return { name: 'char', text: printable, stroke: charStroke(printable) };
+  const prefix = MODIFIER_ORDER.filter((mod) => mods.has(mod)).map((mod) => mod + '+').join('');
+  const modified = mods.size > 0;
+  if (key === 'enter') return modified ? { name: 'newline', stroke: prefix + 'enter' } : { name: 'enter', stroke: 'enter' };
+  if (key === 'tab') return mods.has('shift') ? { name: 'shiftTab', stroke: 'shift+tab' } : { name: 'tab', stroke: prefix + 'tab' };
+  if (key === 'escape') return { name: 'escape', stroke: prefix + 'escape' };
+  if (key === 'backspace') return mods.has('meta') || mods.has('ctrl') ? { name: 'killWord', stroke: prefix + 'backspace' } : { name: 'backspace', stroke: 'backspace' };
+  if (key === 'left' || key === 'right') {
+    const word = mods.has('meta') || mods.has('ctrl') || mods.has('super');
+    return { name: word ? (key === 'left' ? 'wordLeft' : 'wordRight') : key, stroke: prefix + key };
+  }
+  if (SPECIAL_KEYS[key]) return { name: SPECIAL_KEYS[key], stroke: prefix + key.toLowerCase() };
+  const ch = key === 'space' ? ' ' : key;
+  if ([...ch].length !== 1) return null;
+  if (mods.has('ctrl') && !mods.has('meta') && /^[a-z]$/.test(ch)) {
+    const name = CONTROL_KEYS[String.fromCharCode(ch.charCodeAt(0) - 96)] || 'ctrlKey';
+    return { name, stroke: prefix + ch };
+  }
+  if (mods.has('ctrl') && ch === '-') return { name: 'undo', stroke: 'ctrl+_' };
+  if (mods.has('meta') && !mods.has('ctrl')) return metaKey(mods.has('shift') && /^[a-z]$/.test(ch) ? ch.toUpperCase() : ch);
+  if (!modified) return { name: 'char', text: ch, stroke: charStroke(ch) };
+  return { name: mods.has('ctrl') ? 'ctrlKey' : 'char', ...(mods.has('ctrl') ? {} : { text: mods.has('shift') && /^[a-z]$/.test(ch) ? ch.toUpperCase() : ch }), stroke: prefix + (ch === ' ' ? 'space' : ch) };
+}
+
+// Stateful decoder: turns raw terminal input into key events. A run of typed
+// text becomes one `char` event; bracketed paste becomes one `paste` event
+// (CRLF and CR normalised to LF), even across reads. Incomplete sequences
+// wait for the next read. A lone Esc is reported at once, or, when `onKeys`
+// is given, after a short timeout so a split Alt+key is not read as Esc + key.
 export class KeyDecoder {
-  constructor() { this.pasting = null; this.pending = ''; }
+  constructor({ onKeys = null, escapeTimeout } = {}) {
+    this.onKeys = onKeys;
+    this.queue = [];
+    this.feeding = false;
+    this.buffer = new StdinBuffer(escapeTimeout === undefined ? {} : { escapeTimeout });
+    this.buffer.on('data', (seq) => this.queue.push({ seq }));
+    this.buffer.on('paste', (text) => this.queue.push({ paste: text }));
+    // Sequences flushed by StdinBuffer's timer (outside feed) go to onKeys.
+    this.buffer.on('data', () => { if (!this.feeding) this.drainLater(); });
+  }
+
+  drainLater() {
+    if (this.draining) return;
+    this.draining = true;
+    queueMicrotask(() => {
+      this.draining = false;
+      const keys = this.take();
+      if (keys.length && this.onKeys) this.onKeys(keys);
+    });
+  }
 
   feed(chunk) {
-    let data = this.pending + String(chunk);
-    this.pending = '';
+    this.feeding = true;
+    try { this.buffer.process(String(chunk)); } finally { this.feeding = false; }
+    if (!this.onKeys) {
+      // Without a callback nothing can be reported later: a lone Esc is a
+      // key now, and the timer must not drop a partial sequence.
+      if (this.buffer.getBuffer() === '\x1b') for (const seq of this.buffer.flush()) this.queue.push({ seq });
+      else if (this.buffer.timeout) { clearTimeout(this.buffer.timeout); this.buffer.timeout = null; }
+    }
+    return this.take();
+  }
+
+  take() {
+    const items = this.queue;
+    this.queue = [];
     const keys = [];
-    let i = 0;
-    const plainRun = () => {
-      let text = '';
-      while (i < data.length) {
-        const ch = data[i];
-        if (ch === '\x1b' || CONTROL_KEYS[ch] || ch < ' ') break;
-        text += ch;
-        i += 1;
-      }
-      return text;
-    };
-    while (i < data.length) {
-      if (this.pasting !== null) {
-        const end = data.indexOf('\x1b[201~', i);
-        if (end === -1) {
-          // Keep a possible partial terminator for the next chunk.
-          const tail = data.slice(i);
-          const keep = Math.min(tail.length, 5);
-          this.pasting += tail.slice(0, tail.length - keep);
-          this.pending = tail.slice(tail.length - keep);
-          return keys;
-        }
-        this.pasting += data.slice(i, end);
-        keys.push({ name: 'paste', text: this.pasting.replace(/\r\n?/g, '\n') });
-        this.pasting = null;
-        i = end + 6;
+    for (let i = 0; i < items.length; i += 1) {
+      const item = items[i];
+      if (item.paste !== undefined) { keys.push({ name: 'paste', text: item.paste.replace(/\r\n?/g, '\n') }); continue; }
+      const { seq } = item;
+      if (isPlain(seq)) {
+        let text = seq;
+        while (i + 1 < items.length && items[i + 1].seq !== undefined && isPlain(items[i + 1].seq)) { i += 1; text += items[i].seq; }
+        keys.push({ name: 'char', text, ...([...text].length === 1 ? { stroke: charStroke(text) } : {}) });
         continue;
       }
-      const ch = data[i];
-      if (ch === '\x1b') {
-        const next = data[i + 1];
-        if (next === undefined) { keys.push({ name: 'escape', stroke: 'escape' }); i += 1; continue; }
-        if (next === '[' || next === 'O') {
-          let j = i + 2;
-          while (j < data.length && !/[@-~]/.test(data[j])) j += 1;
-          if (j >= data.length) { this.pending = data.slice(i); return keys; }
-          const params = data.slice(i + 2, j);
-          const final = data[j];
-          i = j + 1;
-          if (final === '~' && params === '200') { this.pasting = ''; continue; }
-          if (final === '~' && params === '201') continue;
-          const parts = params.split(';');
-          const modifier = Number(parts[1] || 1);
-          if (final === 'u' || (final === '~' && parts[0] === '27')) {
-            // Kitty / modifyOtherKeys: ESC[13;2u or ESC[27;2;13~ for Shift+Enter.
-            const code = final === 'u' ? Number(parts[0]) : Number(parts[2]);
-            const mod = final === 'u' ? modifier : Number(parts[1] || 1);
-            const prefix = modifierPrefix(mod);
-            if (code === 13 && mod > 1) keys.push({ name: 'newline', stroke: prefix + 'enter' });
-            else if (code === 13) keys.push({ name: 'enter', stroke: 'enter' });
-            else if (code === 9 && mod === 2) keys.push({ name: 'shiftTab', stroke: 'shift+tab' });
-            else if (code === 27) keys.push({ name: 'escape', stroke: prefix + 'escape' });
-            else if (code >= 32) {
-              const text = String.fromCodePoint(code);
-              const ctrlLetter = mod > 1 && (Math.max(0, mod - 1) & 4) && /[a-z]/i.test(text);
-              keys.push(ctrlLetter ? { name: CONTROL_KEYS[String.fromCharCode(text.toLowerCase().charCodeAt(0) - 96)] || 'ctrlKey', stroke: prefix + text.toLowerCase() } : { name: 'char', text, stroke: prefix + charStroke(text) });
-            }
-            continue;
-          }
-          if (final === '~') { const name = TILDE_KEYS[parts[0]]; if (name) keys.push({ name, stroke: modifierPrefix(modifier) + (SPECIAL_STROKES[name] || name) }); continue; }
-          const name = CSI_FINAL[final];
-          if (!name) continue;
-          const stroke = name === 'shiftTab' ? 'shift+tab' : modifierPrefix(modifier) + (SPECIAL_STROKES[name] || name);
-          if ((name === 'left' || name === 'right') && (modifier === 3 || modifier === 5 || modifier === 9)) keys.push({ name: name === 'left' ? 'wordLeft' : 'wordRight', stroke });
-          else keys.push({ name, stroke });
-          continue;
-        }
-        // Alt/Meta + key.
-        i += 2;
-        if (next === '\r' || next === '\n') keys.push({ name: 'newline', stroke: 'meta+enter' });
-        else if (next === 'b' || next === 'B') keys.push({ name: 'wordLeft', stroke: 'meta+' + charStroke(next) });
-        else if (next === 'f' || next === 'F') keys.push({ name: 'wordRight', stroke: 'meta+' + charStroke(next) });
-        else if (next === 'd') keys.push({ name: 'deleteWord', stroke: 'meta+d' });
-        else if (next === '\x7f' || next === '\b') keys.push({ name: 'killWord', stroke: 'meta+backspace' });
-        else if (next === '\x1b') { keys.push({ name: 'escape', stroke: 'escape' }); i -= 1; }
-        else keys.push({ name: 'meta', text: next, stroke: 'meta+' + (controlStroke(next) || charStroke(next)) });
+      // Unbracketed multi-line paste: Enter followed by more text in the same read.
+      // A pasted CRLF line break counts too, so "a\r\nb" is not sent at "a".
+      const after = items[i + 1] && items[i + 1].seq;
+      if (seq === '\r' && after !== undefined && (isPlain(after) || after === '\n' || after === '\r') && items.length - i > 2 && !after.startsWith('\x1b')) {
+        let text = '';
+        while (i < items.length && items[i].seq !== undefined && !items[i].seq.startsWith('\x1b')) { text += items[i].seq; i += 1; }
+        i -= 1;
+        keys.push({ name: 'paste', text: text.replace(/\r\n?/g, '\n') });
         continue;
       }
-      const control = CONTROL_KEYS[ch];
-      if (control) {
-        // Unbracketed multi-line paste: Enter followed by more text in the same chunk.
-        if (control === 'enter' && i + 1 < data.length && data[i + 1] !== '\x1b' && data.length - i > 2 && !CONTROL_KEYS[data[i + 1]] ) {
-          let text = '';
-          while (i < data.length && data[i] !== '\x1b') { text += data[i]; i += 1; }
-          keys.push({ name: 'paste', text: text.replace(/\r\n?/g, '\n') });
-          continue;
-        }
-        keys.push({ name: control, stroke: controlStroke(ch) });
-        i += 1;
-        continue;
-      }
-      if (ch < ' ') { const stroke = controlStroke(ch); if (stroke) keys.push({ name: 'ctrlKey', stroke }); i += 1; continue; }
-      const text = plainRun();
-      if (text) keys.push({ name: 'char', text, ...([...text].length === 1 ? { stroke: charStroke(text) } : {}) });
+      const key = sequenceKey(seq);
+      if (key) keys.push(key);
     }
     return keys;
   }
+
+  // Drops any partial input and pending timer.
+  destroy() { this.buffer.destroy(); this.queue = []; }
 }
 
 // ---------------------------------------------------------------------------
@@ -507,7 +534,8 @@ export function readInput(options = {}) {
     let paletteScreen = false;
     let busy = Promise.resolve();
     let done = false;
-    const decoder = new KeyDecoder();
+    const enqueue = (keys) => { for (const key of keys) busy = busy.then(() => (done ? null : handle(key))); };
+    const decoder = new KeyDecoder({ onKeys: enqueue });
     const wasRaw = Boolean(input.isRaw);
 
     const promptText = () => (typeof options.prompt === 'function' ? options.prompt(state) : options.prompt || '> ');
@@ -667,6 +695,7 @@ export function readInput(options = {}) {
       else { state = { ...state, text: '' }; draw(true); }
       output.write('\r\n\x1b[?2004l');
       input.off('data', onData);
+      decoder.destroy();
       output.off && output.off('resize', onResize);
       try { input.setRawMode(wasRaw); } catch {}
       input.pause();
@@ -973,8 +1002,7 @@ export function readInput(options = {}) {
     };
 
     const onData = (chunk) => {
-      const keys = decoder.feed(chunk.toString('utf8'));
-      for (const key of keys) busy = busy.then(() => (done ? null : handle(key)));
+      enqueue(decoder.feed(chunk.toString('utf8')));
     };
     const onResize = () => { if (!done) { if (pager) drawPager(); else draw(); } };
 
