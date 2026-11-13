@@ -441,3 +441,18 @@ export function readableOutput(content) {
   }
   return text;
 }
+
+// True when a reply repeats, word for word, an earlier reply of the same
+// turn (small models echo their summary after a verification nudge). The
+// chat shows it once.
+export function repeatsEarlierReply(entries = [], entry, text) {
+  const key = String(text || '').replace(/\s+/g, ' ').trim();
+  if (!key) return false;
+  for (let index = entries.length - 1; index >= 0; index--) {
+    const other = entries[index];
+    if (!other || other === entry) continue;
+    if (other.role === 'user' && !other.steer) return false;
+    if (other.role === 'assistant' && String(other.content || '').replace(/\s+/g, ' ').trim() === key) return true;
+  }
+  return false;
+}

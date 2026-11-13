@@ -6,7 +6,7 @@ import { alwaysAllowLabel } from './core/approval-rule.mjs';
 import { SUBAGENT_STATUS_TEXT } from './core/subagents.mjs';
 import { createConnectorCard, connectIntent, splitServices, brandMark } from './core/connector-card.mjs';
 import { createSoundPlayer } from './core/sound.mjs';
-import { readableOutput, stepOutcome, stepRan, stepLabel, summarizeArgs, toolKind, groupTitle, groupStats, formatDuration, thinkingLabel, thoughtLabel, splitTextToolCall, elapsedSince, describeInput, buildTimeline, groupTiming, runElapsed, timingSplit } from './core/timeline.mjs';
+import { readableOutput, repeatsEarlierReply, stepOutcome, stepRan, stepLabel, summarizeArgs, toolKind, groupTitle, groupStats, formatDuration, thinkingLabel, thoughtLabel, splitTextToolCall, elapsedSince, describeInput, buildTimeline, groupTiming, runElapsed, timingSplit } from './core/timeline.mjs';
 import { IndexedDBStore, Workspace, lineDiff } from './core/workspace.mjs';
 import { wordHighlights } from '../src/word-diff.mjs';
 import { Agent, textOf } from './core/agent.mjs';
@@ -1897,7 +1897,9 @@ function handleRunEvent(event) {
     }
     case 'assistant': {
       if (!currentTurn) startStep();
-      const text = event.content || '';
+      let text = event.content || '';
+      // The same summary twice in one turn (an echo after a verification nudge) shows once.
+      if (text.trim() && !(event.toolCalls && event.toolCalls.length) && repeatsEarlierReply(display, currentTurn.entry, text)) text = '';
       currentTurn.text = text;
       currentTurn.entry.content = text;
       if (text.trim()) {
