@@ -186,8 +186,9 @@ function githubMock() {
     const path = url.replace('https://api.github.com', '');
     if (path === '/repos/o/r') return json({ default_branch: 'main', private: false });
     if (path === '/repos/o/r/commits/main') return json({ sha: 'c0', commit: { tree: { sha: 't0' } } });
-    if (path === '/repos/o/r/git/trees/t0?recursive=1') return json({ tree: [{ type: 'blob', path: 'a.js', sha: 's1', size: 5 }, { type: 'blob', path: 'logo.png', sha: 's2', size: 9 }, { type: 'tree', path: 'src' }] });
+    if (path === '/repos/o/r/git/trees/t0?recursive=1') return json({ tree: [{ type: 'blob', path: 'a.js', sha: 's1', size: 5 }, { type: 'blob', path: 'logo.png', sha: 's2', size: 9 }, { type: 'blob', path: 'img/Photo.HEIC', sha: 's3', size: 9 }, { type: 'blob', path: 'deck.xlsx', sha: 's4', size: 9 }, { type: 'blob', path: 'v1.2/README', sha: 's5', size: 2 }, { type: 'tree', path: 'src' }] });
     if (url === 'https://raw.githubusercontent.com/o/r/c0/a.js') return new Response('hello');
+    if (url === 'https://raw.githubusercontent.com/o/r/c0/v1.2/README') return new Response('hi');
     if (path === '/repos/o/r/git/ref/heads/fix') return json({ message: 'Not Found' }, 404);
     if (path === '/repos/o/r/git/commits/c0') return json({ tree: { sha: 't0' } });
     if (path === '/repos/o/r/git/blobs' && method === 'POST') return json({ sha: 'b1' });
@@ -204,8 +205,8 @@ test('GitHub import skips binaries and push commits on a new branch with a PR', 
   const { calls, fetchImpl } = githubMock();
   const gh = new GitHub({ token: 't', fetchImpl });
   const imported = await gh.importRepo('o/r');
-  assert.deepEqual(imported.files.map((f) => f.path), ['a.js']);
-  assert.deepEqual(imported.skipped, ['logo.png']);
+  assert.deepEqual(imported.files.map((f) => f.path), ['a.js', 'v1.2/README']);
+  assert.deepEqual(imported.skipped, ['logo.png', 'img/Photo.HEIC', 'deck.xlsx']);
   const ws = await Workspace.create(new MemoryStore(), { name: 'r', source: imported.source, files: imported.files });
   await ws.write('a.js', 'hello world');
   const result = await gh.push(ws, { branch: 'fix', message: 'Fix', openPullRequest: true });
@@ -440,6 +441,8 @@ test('test server serves only the connected workspace and shared modules', async
     assert.equal((await fetch(base + '/vendor/fuzzysort/fuzzysort.js')).status, 200);
     assert.equal((await fetch(base + '/vendor/tabbable/dist/index.esm.min.js')).status, 200, 'focus-trap\'s own import is served');
     assert.equal((await fetch(base + '/vendor/fuzzysort/package.json')).status, 404, 'a root-level build serves only its entry file');
+    assert.equal((await fetch(base + '/vendor/binary-extensions/binary-extensions.json')).status, 200, 'listed extra files of a root-level build are served');
+    assert.equal((await fetch(base + '/vendor/binary-extensions/package.json')).status, 404);
     assert.equal((await fetch(base + '/vendor/@floating-ui/utils/dist/floating-ui.utils.mjs')).status, 404, 'unlisted scoped packages are not served');
     assert.equal((await fetch(base + '/app/skills/index.json', { method: 'POST' })).status, 405);
   } finally { server.close(); }

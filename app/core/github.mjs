@@ -2,10 +2,15 @@
 // into the on-device workspace and commit changes back on a branch, with an
 // optional pull request. No git binary or server needed.
 
+import binaryExtensions from 'binary-extensions';
+
 const API = 'https://api.github.com';
 const TEXT_LIMIT = 1024 * 1024;
 const MAX_FILES = 4000;
-const BINARY = /\.(png|jpe?g|gif|webp|ico|bmp|tiff?|psd|pdf|zip|gz|tgz|bz2|xz|7z|rar|jar|war|class|so|dylib|dll|exe|bin|o|a|wasm|mp3|mp4|mov|avi|mkv|webm|ogg|wav|flac|ttf|otf|woff2?|eot|sqlite|db|pyc|lock\.bin|keystore|jks|p12|der|heic|avif)$/i;
+// binary-extensions (MIT, sindresorhus) plus the database, keystore and modern
+// image formats it leaves out. Content with a NUL byte is skipped as well.
+const BINARY = new Set([...binaryExtensions, 'db', 'keystore', 'jks', 'der', 'heic', 'heif', 'avif']);
+const isBinaryPath = (file) => { const dot = file.lastIndexOf('.'); return dot > file.lastIndexOf('/') && BINARY.has(file.slice(dot + 1).toLowerCase()); };
 
 export function parseRepo(input) {
   const text = String(input || '').trim().replace(/\.git$/, '').replace(/\/+$/, '');
@@ -70,7 +75,7 @@ export class GitHub {
     const skipped = [];
     const entries = tree.tree.filter((entry) => {
       if (entry.type !== 'blob') return false;
-      if (BINARY.test(entry.path) || entry.size > TEXT_LIMIT || /(^|\/)(node_modules|\.git)\//.test(entry.path)) { skipped.push(entry.path); return false; }
+      if (isBinaryPath(entry.path) || entry.size > TEXT_LIMIT || /(^|\/)(node_modules|\.git)\//.test(entry.path)) { skipped.push(entry.path); return false; }
       return true;
     });
     if (entries.length > MAX_FILES) { skipped.push(...entries.slice(MAX_FILES).map((e) => e.path)); entries.length = MAX_FILES; }
