@@ -1948,6 +1948,35 @@ const toolArgumentErrors = new WeakMap();
 // Repairs near-miss tool calls in place: recovers calls written as text, and
 // rewrites sloppy-but-recoverable arguments to canonical JSON so the history
 // replayed to strict providers is valid.
+// Weak models garble tool names: "run_commandjson", "functions.read_file",
+// "Write_File", "edit_file<|call|>". Map an unknown name to the one registered
+// tool it unambiguously means; anything else is left for the unknown-tool path.
+export function repairToolName(name, known) {
+  if (typeof name !== 'string' || !name || !known || !known.size || known.has(name)) return name;
+  const cleaned = name.trim()
+    .replace(/<\|[^|]*\|>.*$/s, '')
+    .replace(/^(?:functions?|tools?|default_api)[.:]/i, '')
+    .replace(/^["'`]+|["'`]+$/g, '')
+    .trim();
+  if (known.has(cleaned)) return cleaned;
+  const lower = cleaned.toLowerCase().replace(/[-\s]+/g, '_');
+  for (const candidate of known) if (candidate.toLowerCase() === lower) return candidate;
+  // Trailing junk after a real name ("run_commandjson", "read_file{"): the
+  // longest registered name that prefixes it, if the leftover is not a word
+  // that would make it another tool (read_file vs read_files).
+  const tail = lower.replace(/[^a-z0-9_]+$/, '');
+  if (known.has(tail)) return tail;
+  let best = '';
+  for (const candidate of known) {
+    if (candidate.length > best.length && lower.startsWith(candidate.toLowerCase())) best = candidate;
+  }
+  if (best) {
+    const rest = lower.slice(best.length);
+    if (/^(?:json|args|arguments|call|tool|function|[^a-z0-9]+.*)$/.test(rest)) return best;
+  }
+  return name;
+}
+
 function normalizeAssistantToolCalls(session, assistant, step) {
   const repairs = { textCalls: 0, repairedArguments: 0, invalidArguments: 0 };
   const native = Array.isArray(assistant.tool_calls) ? assistant.tool_calls : [];
@@ -1978,8 +2007,17 @@ function normalizeAssistantToolCalls(session, assistant, step) {
       if (unknown.length) Object.defineProperty(assistant, 'unknownToolNames', { value: unknown, enumerable: false, configurable: true });
     }
   }
+  const knownNames = new Set(availableToolNames(session));
   for (const call of Array.isArray(assistant.tool_calls) ? assistant.tool_calls : []) {
     if (!call || !call.function) continue;
+    const fixedName = repairToolName(call.function.name, knownNames);
+    if (fixedName && fixedName !== call.function.name) {
+      call.function.name = fixedName;
+      repairs.repairedNames = (repairs.repairedNames || 0) + 1;
+      for (const item of Array.isArray(assistant.responseItems) ? assistant.responseItems : []) {
+        if (item && item.type === 'function_call' && (item.call_id || item.id) === call.id) item.name = fixedName;
+      }
+    }
     let raw = call.function.arguments;
     // A freeform apply_patch sends the raw patch, not JSON: keep it as { patch }.
     if (typeof raw === 'string' && /^\s*\*\*\* Begin Patch/.test(raw)) {
@@ -4635,7 +4673,7 @@ async function runAgentTurnRaw(session, prompt, options = {}) {
     }
     if (debugEnabled('raw')) debugLog('raw', 'model reply before cleanup: ' + JSON.stringify({ content: typeof assistant.content === 'string' ? assistant.content.slice(0, 4000) : assistant.content, tool_calls: assistant.tool_calls || [] }).slice(0, 6000));
     const toolCallRepairs = normalizeAssistantToolCalls(session, assistant, step);
-    if ((toolCallRepairs.textCalls || toolCallRepairs.repairedArguments || toolCallRepairs.invalidArguments) && typeof options.onToolCallRepair === 'function') options.onToolCallRepair(toolCallRepairs);
+    if ((toolCallRepairs.textCalls || toolCallRepairs.repairedNames || toolCallRepairs.repairedArguments || toolCallRepairs.invalidArguments) && typeof options.onToolCallRepair === 'function') options.onToolCallRepair(toolCallRepairs);
     const assistantMessage = { role: 'assistant', content: assistant.content ?? null };
     // DeepSeek (thinking mode with tools) and Kimi return 400 unless every
     // later request replays the reasoning; other providers never see it.
