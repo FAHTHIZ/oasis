@@ -20,7 +20,7 @@ import { inspectGitHubExtension, inspectGitHubMcpServers, selectReviewedMcpServe
 import { loadMcpServers, saveMcpServers } from './mcp.mjs';
 import { BUILTIN_COMMANDS, runBuiltinCommand, createUsageTracker, recordUsage } from './slash.mjs';
 import { expandFileMentions, resolveCustomCommand, resolveSkillCommand, loadCustomCommands } from './commands.mjs';
-import { visionEnabled, imageInputCapability, MAX_IMAGE_BYTES } from './images.mjs';
+import { visionEnabled, imageInputCapability, sniffImageType, MAX_IMAGE_BYTES } from './images.mjs';
 import { loadSettings } from './settings.mjs';
 import { resolveSandbox } from './sandbox.mjs';
 import { estimateTokens, contextWindowSize, contextTokens as contextTokensFor } from './context.mjs';
@@ -285,12 +285,7 @@ const MAX_UPLOAD_BODY_BYTES = 30 * 1024 * 1024;
 // larger, still bounded body.
 export const MAX_WEB_IMAGES = 4;
 const MAX_CHAT_BODY_BYTES = 64 * 1024 + MAX_WEB_IMAGES * Math.ceil(MAX_IMAGE_BYTES * 4 / 3 + 1024);
-const WEB_IMAGE_SIGNATURES = {
-  'image/png': (b) => b.length > 8 && b[0] === 0x89 && b[1] === 0x50 && b[2] === 0x4e && b[3] === 0x47,
-  'image/jpeg': (b) => b.length > 3 && b[0] === 0xff && b[1] === 0xd8 && b[2] === 0xff,
-  'image/gif': (b) => b.length > 6 && b.toString('latin1', 0, 4) === 'GIF8',
-  'image/webp': (b) => b.length > 12 && b.toString('latin1', 0, 4) === 'RIFF' && b.toString('latin1', 8, 12) === 'WEBP',
-};
+const WEB_IMAGE_TYPES = new Set(['image/png', 'image/jpeg', 'image/gif', 'image/webp']);
 
 /** Validates images attached in the browser: type, real file signature, size and count. */
 export function validateWebImages(value, { config = {}, env = process.env } = {}) {
@@ -302,13 +297,12 @@ export function validateWebImages(value, { config = {}, env = process.env } = {}
   if (capability.status === 'unsupported') throw Object.assign(new Error('The current model does not accept images. ' + capability.reason), { statusCode: 400 });
   return value.map((item, index) => {
     const mediaType = String(item && item.mediaType || '').toLowerCase();
-    const check = WEB_IMAGE_SIGNATURES[mediaType];
-    if (!check) throw Object.assign(new Error('Image ' + (index + 1) + ' must be PNG, JPEG, GIF or WebP.'), { statusCode: 415 });
+    if (!WEB_IMAGE_TYPES.has(mediaType)) throw Object.assign(new Error('Image ' + (index + 1) + ' must be PNG, JPEG, GIF or WebP.'), { statusCode: 415 });
     const data = String(item.data || '');
     if (!data || data.length % 4 === 1 || !/^[A-Za-z0-9+/]+={0,2}$/.test(data)) throw Object.assign(new Error('Image ' + (index + 1) + ' is not valid base64.'), { statusCode: 400 });
     const bytes = Buffer.from(data, 'base64');
     if (bytes.length > MAX_IMAGE_BYTES) throw Object.assign(new Error('Image ' + (index + 1) + ' is larger than ' + Math.round(MAX_IMAGE_BYTES / 1e6 * 10) / 10 + ' MB.'), { statusCode: 413 });
-    if (!check(bytes)) throw Object.assign(new Error('Image ' + (index + 1) + ' does not look like a ' + mediaType.slice(6).toUpperCase() + ' file.'), { statusCode: 415 });
+    if (sniffImageType(bytes) !== mediaType) throw Object.assign(new Error('Image ' + (index + 1) + ' does not look like a ' + mediaType.slice(6).toUpperCase() + ' file.'), { statusCode: 415 });
     const name = String(item.name || 'pasted-image-' + (index + 1)).replace(/[^\w. -]+/g, '_').slice(0, 80);
     return { mediaType, data, path: name };
   });

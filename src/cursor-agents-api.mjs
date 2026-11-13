@@ -30,6 +30,7 @@ import { request as httpsRequest } from 'node:https';
 import { getConfigDirectory } from './config.mjs';
 import { atomicWriteFile } from './atomic-write.mjs';
 import { isLoopbackAddress } from './remote-access.mjs';
+import { sniffImageType } from './images.mjs';
 
 const AGENT_ID = /^bc-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const RUN_ID = /^run-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -338,8 +339,7 @@ export function createCursorAgentsApi(options) {
       // v0 sends { data, dimension } without a type; detect it from the bytes then.
       let mediaType = String(image.mimeType || image.mediaType || '').toLowerCase();
       if (!mediaType && typeof image.data === 'string') {
-        const head = Buffer.from(image.data.slice(0, 32), 'base64');
-        mediaType = head[0] === 0x89 ? 'image/png' : head[0] === 0xff ? 'image/jpeg' : head.toString('latin1', 0, 4) === 'GIF8' ? 'image/gif' : head.toString('latin1', 0, 4) === 'RIFF' ? 'image/webp' : '';
+        mediaType = sniffImageType(Buffer.from(image.data.slice(0, 32), 'base64')) || '';
       }
       if (typeof image.data !== 'string' || !image.data) fail(400, 'validation_error', field + '.images[' + index + '] needs base64 data.');
       return { mediaType, data: image.data, name: 'api-image-' + (index + 1) };
