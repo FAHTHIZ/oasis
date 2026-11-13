@@ -73,15 +73,6 @@ export function renderMarkdown(source) {
 }
 
 /**
- * Streaming support: split text into blocks that can no longer change
- * (every block before the last one) and the open tail. A streaming reply
- * renders each stable block once and re-renders only the tail, so earlier
- * paragraphs, code blocks and selections stay put while text arrives.
- * Splits fall on block boundaries, so rendering the parts one by one gives
- * the same HTML as rendering the whole text. Text with reference-style link
- * definitions (which reach across blocks) is never split.
- */
-/**
  * The block a streaming reply is still writing. remend (Apache-2.0, from
  * Vercel's Streamdown) closes an unfinished **bold**, *italic*, `code`,
  * ~~strike~~ or [link](… so it shows formatted instead of flashing raw
@@ -91,6 +82,15 @@ export function renderPartialMarkdown(tail) {
   return renderMarkdown(remend(String(tail || ''), { linkMode: 'text-only', katex: false }));
 }
 
+/**
+ * Streaming support: split text into blocks that can no longer change
+ * (every block before the last one) and the open tail. A streaming reply
+ * renders each stable block once and re-renders only the tail, so earlier
+ * paragraphs, code blocks and selections stay put while text arrives.
+ * Splits fall on block boundaries, so rendering the parts one by one gives
+ * the same HTML as rendering the whole text. Text with reference-style link
+ * definitions (which reach across blocks) is never split.
+ */
 export function splitStableMarkdown(source) {
   const text = String(source || '').replace(/\r\n/g, '\n');
   let tokens;
