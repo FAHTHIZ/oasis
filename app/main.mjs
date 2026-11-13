@@ -1211,6 +1211,7 @@ function messageActions(role, at = 0) {
 // After a turn that changed files on this computer, the last reply offers
 // Undo, which runs /undo (files and conversation go back one turn).
 let turnEdited = false;
+let quietUndo = false;
 function offerUndo() {
   for (const old of document.querySelectorAll('.msg-actions button[data-action="undo"]')) old.remove();
   if (!RT || RT.needsToken || !turnEdited) return;
@@ -1306,6 +1307,7 @@ function onTranscriptClick(event) {
     if (document.body.classList.contains('busy')) { toast('Wait for OASIS to finish, or stop it first.'); return; }
     action.remove();
     markTurnUndone(wrap);
+    quietUndo = true;
     send('/undo');
   } else if (action.dataset.action === 'edit') {
     if (document.body.classList.contains('busy')) { toast('Wait for OASIS to finish, or stop it first.'); return; }
@@ -1842,6 +1844,8 @@ function handleEvent(event) {
       endTurn('');
       lastTaskGroup = null;
       runClock.start(Date.now());
+      // The Undo button already dimmed the turn; a "/undo" bubble repeats it.
+      if (quietUndo && event.content === '/undo') { quietUndo = false; break; }
       const at = Date.now();
       display.push({ role: 'user', content: event.content, at, ...(event.images ? { images: event.images } : {}) });
       const el = addMessage('user', event.content, at);

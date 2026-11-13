@@ -2120,8 +2120,9 @@ export async function runBuiltinCommand(name, argument, state) {
       const result = await rewind(session, count, mode);
       const lines = ['Rewound ' + result.turns + ' turn' + (result.turns === 1 ? '' : 's') + '.'];
       if (mode !== 'conversation') {
-        lines.push('  Restored: ' + (result.restored.length ? result.restored.join(', ') : '(none)'));
+        if (result.restored.length) lines.push('  Restored: ' + result.restored.join(', '));
         if (result.deleted.length) lines.push('  Removed new files: ' + result.deleted.join(', '));
+        if (!result.restored.length && !result.deleted.length && !result.skipped.length) lines.push('  No files had changed.');
         if (result.skipped.length) lines.push('  Could not restore (too large or unsafe): ' + result.skipped.join(', '));
       }
       if (mode !== 'code') lines.push(result.conversationUnavailable ? '  The conversation was compacted, so only files were restored.' : '  Removed ' + result.messagesRemoved + ' messages from the conversation.');
