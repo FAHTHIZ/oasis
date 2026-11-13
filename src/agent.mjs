@@ -109,7 +109,7 @@ import { postModelSwitch } from './model-switch.mjs';
 import { MAX_OUTPUT_RECOVERIES, applyEffort, claudeEffortFor, claudeThinkingMode, thinkingTurnedOff, firstPositiveConfiguredInteger, inlineEffortLevel, isOpenRouterBaseURL, maxOutputTokensFor, openRouterOutputCapFromError, outputCapFromError, reasoningEffortFor, resolveTurnLimits, stripInlineEffort, subagentEffortConfig, thinkingBudgetFor, truncationRecoveryPrompt } from './model-budgets.mjs';
 import { HISTORY_COMPACT_INPUT_LIMIT, HISTORY_COMPACT_THRESHOLD_CHARS, announceCompaction, compactionDeadline, compactionError, deterministicHistorySummary, findCompactionBoundary, historyBudgetSize, historyTextSize, reportCompaction, safeHistoryLine, supersedeBeforeCompaction, usableCompactionSummary } from './compaction-history.mjs';
 import { applyAnthropicCacheBreakpoints, promptCachingEnabled, replaysReasoning, withProviderExtraContent } from './provider-request.mjs';
-import { modelFacingResult, refreshTodoPrompt, repairInterruptedHistory, throwIfCancelled } from './tool-results.mjs';
+import { INTERRUPTED_REPLY, modelFacingResult, refreshTodoPrompt, repairInterruptedHistory, throwIfCancelled } from './tool-results.mjs';
 import { STEER_LIMIT, deliverSteering, pendingSteering, steeringMessage } from './steering.mjs';
 import { describeProject, fileLayout } from './project-profile.mjs';
 import { formatApiError, responseText } from './api-error.mjs';
@@ -4403,6 +4403,14 @@ async function runAgentTurnRaw(session, prompt, options = {}) {
   else if (session.thinkingBudget && typeof options.onThinkingBudget === 'function') options.onThinkingBudget(session.thinkingBudget);
   session.reasoningEffort = isAnthropicFamily(session.config.protocol) ? '' : reasoningEffortFor(request, turnConfig, options.env || process.env);
   if (session.reasoningEffort && typeof options.onReasoningEffort === 'function') options.onReasoningEffort(session.reasoningEffort);
+  // Retrying a turn that failed before any reply (provider down, rate limit,
+  // network) sends the same request again: answer the one already recorded
+  // rather than showing the model the request twice.
+  // (repairInterruptedHistory has already given that request a stand-in reply.)
+  const stand = session.messages.length - 1;
+  const standIn = session.messages[stand] && session.messages[stand].role === 'assistant' && session.messages[stand].content === INTERRUPTED_REPLY ? 1 : 0;
+  const unanswered = session.messages[stand - standIn];
+  if (unanswered && unanswered.role === 'user' && !unanswered.images && !(Array.isArray(options.images) && options.images.length) && typeof unanswered.content === 'string' && unanswered.content === userContent) session.messages.length = stand - standIn;
   const activeRequestIndex = session.messages.length;
   const userMessage = { role: 'user', content: userContent };
   if (Array.isArray(options.images) && options.images.length) {
