@@ -72,6 +72,13 @@ let settingsWarningShown = false;
 const APP_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const INSTALL_URL = 'https://github.com/FAHTHIZ/oasis/archive/';
 
+// "static passed" meant nothing to people; say what was checked.
+function checkKindLabel(check) {
+  if (check.kind === 'static') return check.passed ? 'files parsed cleanly' : 'file parse found problems';
+  if (check.kind === 'syntax') return 'syntax check ' + (check.passed ? 'passed' : 'failed');
+  return check.kind + (check.passed ? ' passed' : ' failed');
+}
+
 function printQuickHelp() {
   const rows = (items) => items.map(([cmd, text]) => '  ' + cmd.padEnd(34) + text);
   stdout.write([
@@ -1585,7 +1592,7 @@ async function runPrompt(prompt, root, autoApprove, session = null, persistence 
       const evidence = result.verification;
       const check = evidence.checkRequired
         ? (evidence.lastCheck
-          ? evidence.lastCheck.kind + (evidence.lastCheck.passed ? ' passed' : ' failed') +
+          ? checkKindLabel(evidence.lastCheck) +
             (Number.isInteger(evidence.lastCheck.exitCode) ? ' (exit ' + evidence.lastCheck.exitCode + ')' : '')
           : 'not recorded')
         : 'not required';
@@ -1606,7 +1613,7 @@ async function runPrompt(prompt, root, autoApprove, session = null, persistence 
         // evidence stays in the plain output, -p JSON and /status.
         const issues = Array.isArray(evidence.issues) ? evidence.issues : [];
         const facts = [
-          evidence.lastCheck ? evidence.lastCheck.kind + (evidence.lastCheck.passed ? ' passed' : ' failed') : '',
+          evidence.lastCheck ? checkKindLabel(evidence.lastCheck) : '',
           evidence.autoTest ? 'auto-test ' + (evidence.autoTest.passed ? 'passed' : 'failed') : '',
           lspIssues ? lspIssues + ' editor diagnostic' + (lspIssues === 1 ? '' : 's') : ''
         ].filter(Boolean);
