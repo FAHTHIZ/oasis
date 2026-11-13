@@ -564,5 +564,7 @@ export function deniedHint(denied) {
   if (!commands.length && !tools.length) return '';
   const rules = commands.slice(0, 3).map((line) => 'run_command(' + line.split(/\s+/).slice(0, 2).join(' ') + ':*)');
   return '\nNot approved in this run (nobody can approve in -p mode): ' + [...commands.map((line) => '`' + line + '`'), ...tools].slice(0, 6).join(', ') + '.\n' +
-    (rules.length ? 'To allow next time: --allowedTools "' + rules.join(',') + '", or --permission-mode auto.\n' : 'To allow next time: --allowedTools, --yes or --permission-mode auto.\n');
+    (rules.length
+      ? 'To allow next time: --full-auto (edits plus commands inside the OS sandbox), --allowedTools "' + rules.join(',') + '", or --permission-mode auto.\n'
+      : 'To allow next time: --allowedTools, --yes or --permission-mode auto.\n');
 }
