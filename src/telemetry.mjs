@@ -269,11 +269,20 @@ export function getTelemetry(env = process.env) {
   return active;
 }
 
-export async function shutdownTelemetry() {
+export async function shutdownTelemetry(timeoutMs = 2000) {
   if (!active) return;
   const current = active;
   active = null; activeKey = '';
-  await current.shutdown();
+  let timer;
+  await Promise.race([current.shutdown(), new Promise((resolve) => { timer = setTimeout(resolve, timeoutMs); timer.unref?.(); })]);
+  clearTimeout(timer);
+}
+
+// process.exit skips 'beforeExit', so explicit exits (signals, Ctrl+C twice,
+// `oasis web` shutdown) flush the last spans, metrics and logs first. Bounded
+// so a dead collector never delays the exit by more than a couple of seconds.
+export function exitAfterTelemetry(code) {
+  shutdownTelemetry().catch(() => {}).finally(() => process.exit(code));
 }
 
 // Rough line counts for file-changing tools, for oasis.lines_of_code.count.

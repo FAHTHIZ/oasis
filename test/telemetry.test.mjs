@@ -211,3 +211,19 @@ test('OTEL_SEMCONV_STABILITY_OPT_IN=gen_ai_latest_experimental names spans "invo
   assert.ok(names.includes('execute_tool list_files'), names.join(', '));
   assert.equal(names.some((n) => n.startsWith('oasis.')), false);
 });
+
+test('an explicit exit (signal, double Ctrl+C, web shutdown) still delivers the last spans', async (t) => {
+  const { spawn } = await import('node:child_process');
+  const { fileURLToPath } = await import('node:url');
+  const paths = [];
+  const collector = http.createServer((req, res) => { paths.push(req.url); req.resume(); req.on('end', () => res.end('{}')); });
+  await new Promise((resolve) => collector.listen(0, '127.0.0.1', resolve));
+  t.after(() => new Promise((resolve) => collector.close(resolve)));
+  const moduleUrl = new URL('../src/telemetry.mjs', import.meta.url).href;
+  const script = "const t = await import(" + JSON.stringify(moduleUrl) + "); const tel = t.getTelemetry(process.env); await tel.span('last', {}, async () => {}); t.exitAfterTelemetry(3);";
+  const env = { ...process.env, OASIS_ENABLE_TELEMETRY: '1', OTEL_METRICS_EXPORTER: 'none', OTEL_LOGS_EXPORTER: 'none', OTEL_TRACES_EXPORTER: 'otlp', OTEL_EXPORTER_OTLP_HEADERS: '', OTEL_EXPORTER_OTLP_TRACES_HEADERS: '', OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: '', OTEL_EXPORTER_OTLP_ENDPOINT: 'http://127.0.0.1:' + collector.address().port };
+  const child = spawn(process.execPath, ['--input-type=module', '-e', script], { env, cwd: path.dirname(fileURLToPath(import.meta.url)), stdio: 'ignore' });
+  const code = await new Promise((resolve) => child.on('exit', resolve));
+  assert.equal(code, 3, 'the requested exit code is kept');
+  assert.ok(paths.some((p) => p.includes('/v1/traces')), 'the span reached the collector before exit: ' + paths.join(','));
+});
