@@ -38,6 +38,7 @@ test('web: preview serves project files sandboxed, refuses secrets and proxies a
   await writeFile(path.join(root, '.env'), 'SECRET=1');
   await mkdir(path.join(root, 'docs'));
   await writeFile(path.join(root, 'docs', 'index.html'), 'docs');
+  for (const name of ['model.glb', 'lib.cjs', 'notes.md', 'app.ts']) await writeFile(path.join(root, name), 'x');
   await mkdir(path.join(root, '.oasis', 'recordings'), { recursive: true });
   await writeFile(path.join(root, '.oasis', 'recordings', 'browser-2026-01-01T00-00-00.html'), '<p>rec</p>');
   const outside = await mkdtemp(path.join(os.tmpdir(), 'oasis-web-preview-out-'));
@@ -70,6 +71,11 @@ test('web: preview serves project files sandboxed, refuses secrets and proxies a
   assert.doesNotMatch(PREVIEW_SANDBOX, /allow-same-origin/);
   assert.match(await page.text(), new RegExp('href="' + info.base + 'site.css"'));
   assert.equal((await fetch(origin + info.base + 'site.css', { headers: { origin: 'null' } })).headers.get('content-type'), 'text/css; charset=utf-8');
+  const typeOf = async (name) => (await fetch(origin + info.base + name)).headers.get('content-type');
+  assert.equal(await typeOf('model.glb'), 'model/gltf-binary');
+  assert.equal(await typeOf('lib.cjs'), 'text/javascript; charset=utf-8');
+  assert.equal(await typeOf('notes.md'), 'text/plain; charset=utf-8');
+  assert.equal(await typeOf('app.ts'), 'text/plain; charset=utf-8');
   assert.equal((await fetch(origin + info.base + '.env')).status, 403);
   assert.equal((await fetch(origin + info.base + 'link.txt')).status, 403);
   assert.equal((await fetch(origin + info.base + 'missing.html')).status, 404);
