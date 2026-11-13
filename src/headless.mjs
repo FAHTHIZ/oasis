@@ -526,7 +526,7 @@ export async function runHeadless(options) {
   else if (outputFormat !== 'none') write(JSON.stringify(summary) + '\n');
   // Nobody can approve anything in -p, so say what was skipped and how to allow it next time.
   if (outputFormat === 'text' && denied.length && env.OASIS_PROGRESS !== '0') {
-    try { process.stderr.write(deniedHint(denied)); } catch {}
+    try { process.stderr.write(deniedHint(denied, { env })); } catch {}
   }
   if (outputFormat === 'text' && notVerified && env.OASIS_PROGRESS !== '0') {
     try { process.stderr.write('\n[oasis] Exiting 1: --require-verified is on and OASIS could not verify these changes.\n'); } catch {}
@@ -551,20 +551,25 @@ export function headlessSetupErrorOutput(error, outputFormat) {
 }
 
 /** One stderr paragraph for `oasis -p` naming what was not approved and the flag that allows it. */
-export function deniedHint(denied) {
+export function deniedHint(denied, { env = process.env } = {}) {
   const commands = [];
   const tools = [];
+  let highRisk = false;
   for (const item of denied || []) {
     const input = item && item.tool_input;
     if (input && typeof input.command === 'string' && (item.tool_name === 'run_command' || item.tool_name === 'run_shell')) {
       const line = [input.command].concat(Array.isArray(input.args) ? input.args : []).join(' ').trim();
       if (line && !commands.includes(line)) commands.push(line);
+      if (/HIGH RISK:/.test(String(item.detail || ''))) highRisk = true;
     } else if (item && item.tool_name && !tools.includes(item.tool_name)) tools.push(item.tool_name);
   }
   if (!commands.length && !tools.length) return '';
   const rules = commands.slice(0, 3).map((line) => 'run_command(' + line.split(/\s+/).slice(0, 2).join(' ') + ':*)');
-  return '\nNot approved in this run (nobody can approve in -p mode): ' + [...commands.map((line) => '`' + line + '`'), ...tools].slice(0, 6).join(', ') + '.\n' +
-    (rules.length
-      ? 'To allow next time: --full-auto (edits plus commands inside the OS sandbox), --allowedTools "' + rules.join(',') + '", or --permission-mode auto.\n'
-      : 'To allow next time: --allowedTools, --yes or --permission-mode auto.\n');
+  const head = '\nNot approved in this run (nobody can approve in -p mode): ' + [...commands.map((line) => '`' + line + '`'), ...tools].slice(0, 6).join(', ') + '.\n';
+  if (!rules.length) return head + 'To allow next time: --allowedTools, --yes or --permission-mode auto.\n';
+  // Inline code, wrappers and the like ask even with --full-auto or --yes; only an allow rule lets them run.
+  if (highRisk) return head + 'High-risk commands (inline code, wrappers and the like) always ask, even with --full-auto. To allow next time: --allowedTools "' + rules.join(',') + '".\n';
+  // --full-auto sets OASIS_SANDBOX=1; suggesting it again would not help.
+  const sandboxed = String(env.OASIS_SANDBOX || '') === '1';
+  return head + 'To allow next time: ' + (sandboxed ? '' : '--full-auto (edits plus commands inside the OS sandbox), ') + '--allowedTools "' + rules.join(',') + '", or --permission-mode auto.\n';
 }
