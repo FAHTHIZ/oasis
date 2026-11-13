@@ -978,6 +978,10 @@ export function readInput(options = {}) {
       if (key.name !== 'ctrlC') lastCtrlC = 0;
       const wasHinting = hints.length > 0;
       let outcome = state.vim && !state.search ? applyVimKey(state, key) : null;
+      if (outcome && outcome.rest) {
+        const typed = applyKey(outcome.state, { name: 'char', text: outcome.rest });
+        outcome = { state: trackInsert(outcome.state, typed.state), action: outcome.action || typed.action };
+      }
       if (!outcome) {
         outcome = applyKey(state, key);
         if (state.vim) outcome = { ...outcome, state: trackInsert(state, outcome.state) };
