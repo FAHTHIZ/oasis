@@ -26,6 +26,7 @@ export const APP_PACKAGES = Object.freeze({
   'highlight.js': 'es/highlight.min.js',
   dompurify: 'dist/purify.es.mjs',
   'eventsource-parser': 'dist/index.js',
+  'fastest-levenshtein': 'esm/mod.js',
   turndown: 'lib/turndown.browser.es.js',
   'turndown-plugin-gfm': 'lib/turndown-plugin-gfm.browser.es.js',
   '@floating-ui/dom': 'dist/floating-ui.dom.browser.min.mjs',
