@@ -14,7 +14,7 @@ import { protectedConfigTarget, protectedEditMessage, protectedEditsAllowed, rul
 import { extractCorrections, addCorrections, correctionsReminder, correctionViolations, correctionNudge, correctionsFromMemories, CORRECTION_MEMORY_PREFIX } from './standing-corrections.mjs';
 import { scriptedEditKind } from './inplace-edit-check.mjs';
 import { extractHardRules, extractBranchRules, ruleRefreshReminder } from './rule-refresh.mjs';
-import { newClaimState, recordCheck as recordClaimCheck, recordEdit as recordClaimEdit, claimIssue, appendUnverifiedNotice } from './claim-check.mjs';
+import { newClaimState, recordCheck as recordClaimCheck, recordEdit as recordClaimEdit, claimIssue, appendUnverifiedNotice, recordEditFailure, recordEditSuccess, failedEditIssue, appendFailedEditNotice } from './claim-check.mjs';
 import { resolveToolAlias, normalizeRunCommandCall, cleanToolCallName } from './tool-aliases.mjs';
 import { scopeViolation, editScopeFromEnv } from './scope-lock.mjs';
 import { shellExitTarget } from './pipe-status.mjs';
@@ -4945,7 +4945,7 @@ async function runAgentTurnRaw(session, prompt, options = {}) {
         });
         continue;
       }
-      const claimNudge = claimIssue(claimState, text, { edited: verification.changedPaths.size > 0, deniedCheck: verification.deniedCheck || '' });
+      const claimNudge = claimIssue(claimState, text, { edited: verification.changedPaths.size > 0, deniedCheck: verification.deniedCheck || '' }) || failedEditIssue(claimState, text);
       if (claimNudge) {
         if (text && options.onText) await emitDisplayText(session, options, text);
         session.messages.push({ role: 'user', content: claimNudge });
@@ -4981,7 +4981,7 @@ async function runAgentTurnRaw(session, prompt, options = {}) {
           continue;
         }
       }
-      const finalText = emptyReply ? (assistant.providerStop ? 'The provider ended the reply with no text (finish reason: ' + assistant.providerStop + '). Nothing was summarized; rephrase the request or try another model.' : EMPTY_REPLY_NOTICE) : issues.length ? appendUnverifiedNotice(text, issues, verification, claimState) : appendLspUnavailableNotice(text, verification);
+      const finalText = emptyReply ? (assistant.providerStop ? 'The provider ended the reply with no text (finish reason: ' + assistant.providerStop + '). Nothing was summarized; rephrase the request or try another model.' : EMPTY_REPLY_NOTICE) : appendFailedEditNotice(issues.length ? appendUnverifiedNotice(text, issues, verification, claimState) : appendLspUnavailableNotice(text, verification), claimState);
       assistantMessage.content = finalText;
       let followupsAdded = [];
       if (!options.isSubagent && !options.planOnly && followupsEnabled(session, options.env || process.env)) {
@@ -5192,6 +5192,10 @@ async function runAgentTurnRaw(session, prompt, options = {}) {
           recordSessionEvent(session, { type: 'verification', kind: verification.lastVerificationKind, command: String(shellCommand || '').slice(0, 300), exitCode: result.exitCode, passed: result.exitCode === 0 }, options.env);
         }
       }
+      if (result && typeof result.error === 'string' && ['write_file', 'edit_file', 'multi_edit', 'notebook_edit', 'apply_patch'].includes(name)) {
+        const failedPath = safeToolArguments(call.function && call.function.arguments).path || result.path;
+        if (failedPath && !isScratchPath(normalizeReviewPath(failedPath))) recordEditFailure(claimState, { path: normalizeReviewPath(failedPath), error: result.error });
+      }
       // Scratch-space files (.oasis/scratch/) are throwaway and do not count as project changes.
       if (result && result.path && !isScratchPath(normalizeReviewPath(result.path)) && (
         (name === 'edit_file' || name === 'multi_edit' || name === 'notebook_edit') && result.changed === true ||
@@ -5200,6 +5204,7 @@ async function runAgentTurnRaw(session, prompt, options = {}) {
       )) {
         const changedPath = normalizeReviewPath(result.path);
         recordClaimEdit(claimState);
+        recordEditSuccess(claimState, changedPath);
         verification.changedPaths.add(changedPath);
         if (name === 'write_file' && result.backedUpExistingFile === false) (verification.createdPaths ||= new Set()).add(changedPath);
         // New JavaScript modules must be loaded once after their last edit.

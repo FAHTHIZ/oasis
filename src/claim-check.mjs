@@ -23,7 +23,7 @@ export function claimsPassing(text) {
 }
 
 export function newClaimState() {
-  return { ran: 0, lastExit: null, lastCommand: '', editedAfter: false, masked: false, unfinished: false, nudged: false };
+  return { ran: 0, lastExit: null, lastCommand: '', editedAfter: false, masked: false, unfinished: false, nudged: false, failedEdits: new Map(), editNudged: false };
 }
 
 export function recordCheck(state, { command, exitCode, masked = false }) {
@@ -92,5 +92,55 @@ export function appendUnverifiedNotice(text, issues, verification = {}, state = 
   if (value.includes('Not verified: ')) return value;
   // The answer already admits the check did not run and makes no passing claim: no need to repeat it.
   if (!claimed && !failed && !stale && ADMITS_UNVERIFIED.test(value)) return value;
+  return (value.trim() ? value.replace(/\s+$/, '') + '\n\n' : '') + note;
+}
+
+// Failed edits: a reply must not say "Updated notes.txt." when the write to
+// notes.txt failed and was never retried successfully (seen live: write_file
+// failed with "File has not been read yet" and the model reported success).
+const pathKey = (value) => String(value || '').replace(/\\/g, '/').replace(/^\.\//, '');
+const baseName = (value) => pathKey(value).split('/').pop();
+
+export function recordEditFailure(state, { path, error }) {
+  if (!state || !path) return;
+  (state.failedEdits ||= new Map()).set(pathKey(path), String(error || 'the edit failed').split('\n')[0].slice(0, 200));
+}
+
+// A later successful edit of the same file settles an earlier failure.
+export function recordEditSuccess(state, path) {
+  if (state && state.failedEdits && path) state.failedEdits.delete(pathKey(path));
+}
+
+const ADMITS_FAILURE = /\b(?:could ?n[o']t|can ?not|cannot|unable to|failed|fail(?:s|ure)|did ?n[o']t|was ?n[o']t|not (?:been )?(?:applied|changed|updated|written|saved|edited|modified)|no changes?|error)\b/i;
+const CLAIMS_CHANGE = /\b(?:updated|changed|edited|modified|wrote|written|created|added|fixed|replaced|renamed|saved|applied|implemented|rewrote|appended|inserted)\b/i;
+
+function unsettled(state, text) {
+  if (!state || !state.failedEdits || !state.failedEdits.size) return [];
+  const value = String(text || '');
+  return [...state.failedEdits].filter(([file]) => {
+    const name = baseName(file);
+    if (!name || !value.includes(name)) return false;
+    // Only sentences that name the file count; one that admits the failure settles it.
+    const sentences = value.split(/(?<=[.!?])\s+|\n+/).filter((sentence) => sentence.includes(name));
+    return sentences.some((sentence) => CLAIMS_CHANGE.test(sentence)) && !sentences.some((sentence) => ADMITS_FAILURE.test(sentence));
+  });
+}
+
+// One nudge per turn when the reply claims a change that did not apply.
+export function failedEditIssue(state, text) {
+  if (!state || state.editNudged) return '';
+  const files = unsettled(state, text);
+  if (!files.length) return '';
+  state.editNudged = true;
+  return 'Your reply says ' + files.map(([file]) => file).join(', ') + ' changed, but ' + (files.length === 1 ? 'that edit' : 'those edits') + ' failed: ' +
+    files.map(([file, error]) => file + ' (' + error + ')').join('; ') + '. The file is unchanged. Fix the cause and redo the edit (for example, read the file first), or tell the user plainly that the change was not made.';
+}
+
+// After the nudge, the runtime itself says what did not apply.
+export function appendFailedEditNotice(text, state) {
+  const value = String(text || '');
+  const files = unsettled(state, value);
+  if (!files.length || value.includes('Not done: ')) return value;
+  const note = files.map(([file, error]) => 'Not done: the change to ' + file + ' did not apply (' + error + ').').join('\n');
   return (value.trim() ? value.replace(/\s+$/, '') + '\n\n' : '') + note;
 }

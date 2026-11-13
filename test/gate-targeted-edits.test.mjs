@@ -59,3 +59,39 @@ test('a whole-file overwrite still needs a diff review after a passing check', a
   assert.ok(gates[0].steps.some((step) => /review the diff of add\.mjs/.test(step)), JSON.stringify(gates[0].steps));
   assert.equal(requests.length, 6);
 });
+
+// Seen live: write_file failed ("File has not been read yet") and the model
+// replied "Updated add.mjs." The runtime sends it back once, then says so.
+test('a reply claiming a change whose edit failed is corrected', async (t) => {
+  const { root, env } = await project(t);
+  const { config, requests } = await scriptedModel(t, [
+    toolCall('w1', 'write_file', { path: 'add.mjs', content: 'export function add(a, b) {\n  return a + b;\n}\n' }),
+    { content: 'Updated add.mjs.' },
+    { content: 'Updated add.mjs.' }
+  ]);
+  const session = await createSession({ root, env, config });
+  t.after(() => closeSession(session));
+  const result = await runAgentTurn(session, 'Fix add.', { env, autoApprove: true });
+  assert.equal(requests.length, 3, 'one nudge');
+  const nudge = JSON.stringify(requests[2].messages.at(-1));
+  assert.match(nudge, /add\.mjs/);
+  assert.match(nudge, /failed/);
+  assert.match(result.text, /Not done: the change to add\.mjs did not apply/);
+});
+
+test('a failed edit retried successfully needs no correction', async (t) => {
+  const { root, env } = await project(t);
+  const { config, requests } = await scriptedModel(t, [
+    toolCall('w1', 'write_file', { path: 'add.mjs', content: 'export function add(a, b) {\n  return a + b;\n}\n' }),
+    toolCall('r1', 'read_file', { path: 'add.mjs' }),
+    toolCall('e1', 'edit_file', { path: 'add.mjs', old_string: 'return a - b;', new_string: 'return a + b;' }),
+    toolCall('t1', 'run_command', { command: 'node', args: ['test.mjs'] }),
+    { content: 'Updated add.mjs; node test.mjs passes.' },
+    { content: 'unexpected extra request' }
+  ]);
+  const session = await createSession({ root, env, config });
+  t.after(() => closeSession(session));
+  const result = await runAgentTurn(session, 'Fix add.', { env, autoApprove: true });
+  assert.equal(requests.length, 5);
+  assert.doesNotMatch(result.text, /Not done/);
+});
