@@ -381,7 +381,7 @@ export class RuntimeAgent {
       const started = await this.client.api('/api/chat', {
         method: 'POST',
         signal,
-        body: { message, ...(pictures.length ? { images: pictures } : {}), ...(this.sessionId ? { sessionId: this.sessionId } : {}), permissionMode: APP_TO_RUNTIME_MODE[this.getMode()] || 'default' }
+        body: { message, ...(pictures.length ? { images: pictures } : {}), ...(this.sessionId ? { sessionId: this.sessionId } : {}), permissionMode: APP_TO_RUNTIME_MODE[this.getMode()] || 'default', client: 'app' }
       });
       this.jobId = started.jobId;
       this.lastJobId = started.jobId;
