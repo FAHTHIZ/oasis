@@ -28,7 +28,7 @@ import path from 'node:path';
 import { listRecipes, recipePrompt } from './goose-recipes.mjs';
 
 // Claude Code aliases for built-in commands (and /swarm from Kimi Code, which is /batch here).
-export const COMMAND_ALIASES = { tokens: 'context', approvals: 'permissions', ask: 'plan', keys: 'keybindings', peers: 'list-agents', settings: 'config', checkpoint: 'rewind', continue: 'resume', 'allowed-tools': 'permissions', stats: 'usage', checkup: 'doctor', 'code-review': 'review', bg: 'background', proactive: 'loop', reset: 'clear', new: 'clear', quit: 'exit', routines: 'schedule', feedback: 'bug', share: 'export', 'install-github-action': 'install-github-app', swarm: 'batch', preset: 'presets' };
+export const COMMAND_ALIASES = { tokens: 'context', approvals: 'permissions', ask: 'plan', keybindings: 'keys', peers: 'list-agents', settings: 'config', checkpoint: 'rewind', continue: 'resume', 'allowed-tools': 'permissions', stats: 'usage', checkup: 'doctor', 'code-review': 'review', bg: 'background', proactive: 'loop', reset: 'clear', new: 'clear', quit: 'exit', routines: 'schedule', feedback: 'bug', share: 'export', 'install-github-action': 'install-github-app', swarm: 'batch', preset: 'presets' };
 
 export const BUILTIN_COMMANDS = {
   help: 'Show built-in and custom commands',
@@ -134,10 +134,9 @@ export const BUILTIN_COMMANDS = {
   batch: 'Plan a large change as independent units and run them in parallel worktree subagents (/batch INSTRUCTION)',
   schedule: 'Schedule a prompt in this session (/schedule CRON PROMPT, /schedule list, /schedule delete ID), or a durable routine (/schedule durable DESCRIPTION, /schedule routines)',
   'fewer-permission-prompts': 'Find safe read-only commands you approve often and add them to the project allowlist',
-  keys: 'Show the keyboard shortcut cheat sheet (/keys; alias /keybindings)',
+  keys: 'Show keyboard shortcuts and your custom keybindings (/keys init creates the file; alias /keybindings)',
   tips: 'Show a rotating setup and workflow tip (/tips)',
   presets: 'Ten numbered slots for prompts and /commands you send often (/presets, /presets N, /presets save N [TEXT], /presets clear N)',
-  keybindings: 'Show keyboard shortcuts',
   vim: 'Toggle vim editing for the prompt (/vim on|off)',
   sounds: 'Sound effects for finished turns, approvals, errors and completed steps (/sounds on|off|test|volume 0-100)',
   voice: 'Voice dictation: /voice on|off|status; Alt+V starts and stops recording',
