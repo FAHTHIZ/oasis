@@ -52,3 +52,18 @@ test('the powershell tool runs through approval rules like Bash', async (t) => {
   assert.equal(prompts.length, 1);
   assert.match(prompts[0], /PowerShell/);
 });
+
+test('a PowerShell grep with no match says exit code 1 is not a failure', async (t) => {
+  const dir = await fakePwsh();
+  const root = await mkdtemp(path.join(os.tmpdir(), 'oasis-pwsh-root-'));
+  await writeFile(path.join(root, 'a.txt'), 'hello\n');
+  const env = { ...process.env, HOME: root, PATH: dir + ':' + process.env.PATH, CLAUDE_CODE_USE_POWERSHELL_TOOL: '1' };
+  const settings = { permissions: { allow: ['PowerShell(grep:*)', 'PowerShell(npm:*)'], ask: [], deny: [], defaultMode: 'default' }, hooks: {}, sandbox: { enabled: false }, shell: { enabled: false } };
+  const { config, requests } = await scriptedModel(t, [toolCall('p1', 'powershell', { command: 'grep missing a.txt' }), { content: 'done' }]);
+  const session = await createSession({ root, config, settings, env });
+  t.after(() => closeSession(session));
+  await runAgentTurn(session, 'go', { env, approval: async () => true });
+  const tool = requests[1].messages.find((m) => m.role === 'tool');
+  assert.match(tool.content, /"exitCode":\s*1/);
+  assert.match(tool.content, /no matches or files differ, not a failure/);
+});

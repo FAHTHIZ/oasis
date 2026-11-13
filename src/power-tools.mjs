@@ -743,7 +743,8 @@ async function runShell(root, args, context, flavor = 'sh') {
       settled = true;
       cleanup();
       const condensed = flushCondensers();
-      resolve({ approved: true, command, exitCode: code, stdout, ...condensed, stderr: flavor === 'powershell' ? stderr.replace(/\x1b\[[0-9;]*[A-Za-z]/g, '') : stderr, timedOut, cancelled: cancelled || Boolean(context.signal && context.signal.aborted), ...(sandbox ? { sandboxed: sandbox.kind } : {}), signal, ...(safetySnapshot ? { safetySnapshot: gitSafety.snapshotNote(safetySnapshot) } : {}) });
+      const note = benignExitNote(command, code);
+      resolve({ approved: true, command, exitCode: code, ...(note ? { note } : {}), stdout, ...condensed, stderr: flavor === 'powershell' ? stderr.replace(/\x1b\[[0-9;]*[A-Za-z]/g, '') : stderr, timedOut, cancelled: cancelled || Boolean(context.signal && context.signal.aborted), ...(sandbox ? { sandboxed: sandbox.kind } : {}), signal, ...(safetySnapshot ? { safetySnapshot: gitSafety.snapshotNote(safetySnapshot) } : {}) });
     });
   });
 }

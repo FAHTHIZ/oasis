@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { runWithProviderBreaker, isOpen, retryInSeconds, isBreakerOpenError, providerBreakerKey, reset } from '../src/circuit-breaker.mjs';
+import { shortProviderReason } from '../src/agent.mjs';
 import { fallbackReason, remainingFallbacks, parseFallbackChain } from '../src/fallback-chain.mjs';
 
 const unavailable = () => { throw Object.assign(new Error('HTTP 503 overloaded'), { status: 503 }); };
@@ -18,6 +19,8 @@ test('the breaker opens after the threshold and then fails fast without calling 
   const error = await runWithProviderBreaker('a', () => { called = true; }).catch((caught) => caught);
   assert.equal(called, false);
   assert.equal(isBreakerOpenError(error), true);
+  assert.ok(error.retryInSeconds > 0 && error.retryInSeconds <= 60, 'the error says when the next probe goes through');
+  assert.match(shortProviderReason(error), /circuit breaker open, next try in \d+s\)/);
   assert.equal(fallbackReason(error), 'server', 'an open breaker moves the chain on');
 });
 

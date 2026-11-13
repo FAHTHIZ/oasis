@@ -71,7 +71,13 @@ function breakerFor(provider, options = {}) {
 export async function runWithProviderBreaker(provider, fn, { shouldTrip, signal, env, threshold, cooldownMs, maxCooldownMs } = {}) {
   const entry = breakerFor(provider, { env, threshold, cooldownMs, maxCooldownMs });
   if (typeof shouldTrip === 'function') entry.trip = shouldTrip;
-  return await entry.policy.execute(() => fn(), signal);
+  try {
+    return await entry.policy.execute(() => fn(), signal);
+  } catch (error) {
+    // Say when the next probe goes through, for "circuit breaker open" notes.
+    if (isBrokenCircuitError(error)) { try { error.retryInSeconds = retryInSeconds(provider); } catch {} }
+    throw error;
+  }
 }
 
 // True while the provider's breaker is open and its cooldown has not passed.

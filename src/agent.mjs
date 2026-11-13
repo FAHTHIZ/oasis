@@ -1299,7 +1299,7 @@ async function requestCompletion(session, options = {}) {
 
 // One line per failed model, e.g. "daily free-tier quota used up (retry in 21h11m)".
 export function shortProviderReason(error) {
-  if (isBreakerOpenError(error)) return 'skipped: it failed repeatedly just now (circuit breaker open)';
+  if (isBreakerOpenError(error)) return 'skipped: it failed repeatedly just now (circuit breaker open' + (error.retryInSeconds > 0 ? ', next try in ' + error.retryInSeconds + 's' : '') + ')';
   return briefFailure(error && error.message || error, error && (error.status || error.statusCode));
 }
 
