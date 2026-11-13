@@ -96,6 +96,7 @@ import { validateJsonSchema, extractJson } from './json-schema.mjs';
 import { createSharedTaskStore, SHARED_TASK_TOOL_NAMES, runSharedTaskTool } from './shared-tasks.mjs';
 import { unrequestedGitWrite } from './git-intent.mjs';
 import { parseFallbackChain, remainingFallbacks, fallbackReason, FALLBACK_REASON_TEXT } from './fallback-chain.mjs';
+import { runWithProviderBreaker, providerBreakerKey, isBreakerOpenError } from './circuit-breaker.mjs';
 import { repairToolArguments, extractTextToolCalls, unknownTextToolCalls } from './tool-call-repair.mjs';
 import { promptToolCalling, toPromptToolMessages, foldSystemMessages, withSystemInUserTurn } from './prompt-tools.mjs';
 import { isLocalModelEndpoint, probeLocalContext, probeProviderModelWindow, applySmallContextProfile, localContextAdvice, SMALL_CONTEXT_TOKENS, RECOMMENDED_LOCAL_CONTEXT } from './local-context.mjs';
@@ -1250,6 +1251,10 @@ async function requestCompletionWithStreamRestarts(session, options = {}) {
   }
 }
 
+// Fallback reasons that say the provider itself is unhealthy. A missing model
+// is specific to that model, so it does not open the provider's breaker.
+const PROVIDER_FAULTS = new Set(['server', 'rate', 'credits', 'auth']);
+
 async function requestCompletion(session, options = {}) {
   const chain = parseFallbackChain(session && session.fallbackModel);
   if (!chain.length || !session.config) return requestCompletionWithStreamRestarts(session, options);
@@ -1257,8 +1262,15 @@ async function requestCompletion(session, options = {}) {
   const failed = new Set();
   const attempts = [];
   for (;;) {
+    const attempted = session.config;
     try {
-      return await requestCompletionWithStreamRestarts(session, options);
+      // Failures that point at the provider (not the request) count against its
+      // breaker; once it opens, calls fail at once and the chain moves on.
+      return await runWithProviderBreaker(providerBreakerKey(attempted), () => requestCompletionWithStreamRestarts(session, options), {
+        env,
+        signal: options.signal,
+        shouldTrip: (error) => !(options.signal && options.signal.aborted) && PROVIDER_FAULTS.has(fallbackReason(error, { onFallbackProvider: Boolean(attempted && attempted.fallbackProvider) }))
+      });
     } catch (error) {
       if (options.signal && options.signal.aborted) throw error;
       const current = session.config;
@@ -1283,6 +1295,7 @@ async function requestCompletion(session, options = {}) {
 
 // One line per failed model, e.g. "daily free-tier quota used up (retry in 21h11m)".
 export function shortProviderReason(error) {
+  if (isBreakerOpenError(error)) return 'skipped: it failed repeatedly just now (circuit breaker open)';
   return briefFailure(error && error.message || error, error && (error.status || error.statusCode));
 }
 
