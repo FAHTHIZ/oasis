@@ -1054,6 +1054,8 @@ function reportModelTiming(session, options, { step, started, ended, timing, usa
   const since = (at) => (at ? at - started : null);
   const record = {
     step,
+    startedAt: started,
+    endedAt: ended,
     model: String(session.config && session.config.model || ''),
     effort: String(session.reasoningEffort || session.effortLevel || ''),
     thinkingBudget: Number(session.thinkingBudget) || 0,

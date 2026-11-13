@@ -3,7 +3,6 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { activityLabel, liveLabel, toolKind, groupTitle, groupStats, formatDuration, describeInput, buildTimeline, summarizeArgs, fallbackToolLabel } from '../app/core/timeline.mjs';
 import { createSoundPlayer, SOUND_KINDS } from '../app/core/sound.mjs';
-import { particleCount } from '../app/core/ambient.mjs';
 
 const main = readFileSync(new URL('../app/main.mjs', import.meta.url), 'utf8');
 const css = readFileSync(new URL('../app/app.css', import.meta.url), 'utf8');
@@ -121,12 +120,6 @@ test('sounds are opt-in, short and never stack', () => {
   assert.equal(createSoundPlayer({ enabled: () => true, win: {} })('done'), false, 'no Web Audio, no sound, no error');
 });
 
-test('the particle field stays small on any screen', () => {
-  assert.equal(particleCount(390, 844), 18);
-  assert.equal(particleCount(1440, 900), 50);
-  assert.equal(particleCount(3840, 2160), 70);
-});
-
 test('the thinking chip shows elapsed time after five seconds', async () => {
   const { thinkingLabel } = await import('../app/core/timeline.mjs');
   assert.equal(thinkingLabel(0), 'Thinking');
@@ -188,4 +181,17 @@ test('a failed step says what did not happen instead of the past tense', async (
   assert.equal(stepLabel({ id: 'c', name: 'run_command', args: { command: 'ls' }, ok: false }), 'Command failed');
   assert.equal(stepLabel({ id: 'd', name: 'edit_file', args: { path: 'a.js' }, ok: false, outcome: 'timed_out' }), 'Timed out trying to edit a.js');
   assert.equal(stepLabel({ id: 'e', name: 'write_file', args: { path: 'notes.txt' }, ok: true }), 'Wrote notes.txt');
+});
+
+test('step output reads as text, not the JSON a tool returned', async () => {
+  const { readableOutput } = await import('../app/core/timeline.mjs');
+  assert.equal(readableOutput('{"error":"File has not been read yet"}\nThis step failed: File has not been read yet'), 'This step failed: File has not been read yet');
+  assert.equal(readableOutput('{"error":"Nope"}'), 'Nope');
+  const command = JSON.stringify({ command: 'cat', approved: true, exitCode: 1, signal: null, stdout: '', stderr: 'cat: missing.txt: No such file or directory\n', stdoutTruncated: false, stderrTruncated: false, timedOut: false, cancelled: false });
+  assert.equal(readableOutput(command + '\nThe command failed (exit code 1).'), 'cat: missing.txt: No such file or directory\nThe command failed (exit code 1).');
+  assert.equal(readableOutput(JSON.stringify({ exitCode: 0, stdout: 'a\nb\n', stderr: '' })), 'a\nb');
+  assert.equal(readableOutput(JSON.stringify({ exitCode: 0, stdout: '', stderr: '' })), 'Finished with no output.');
+  assert.equal(readableOutput(JSON.stringify({ exitCode: 2, stdout: '', stderr: 'boom' })), 'boom\nExit code 2.');
+  assert.equal(readableOutput('{"path":"a.txt","bytes":3}'), '{"path":"a.txt","bytes":3}');
+  assert.equal(readableOutput('plain text'), 'plain text');
 });
