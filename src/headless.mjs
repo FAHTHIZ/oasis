@@ -1,3 +1,6 @@
+import { randomUUID } from 'node:crypto';
+import { existsSync } from 'node:fs';
+import path from 'node:path';
 // Headless (print) mode for scripts and CI, like `claude -p`.
 //   oasis -p "fix the failing test" --output-format json --max-turns 20
 // Output formats:
@@ -15,7 +18,7 @@ import { createSession, runAgentTurn, runAgentPlan, closeSession, suggestNextPro
 import { expandFileMentions } from './commands.mjs';
 import { labelToolActivity } from './tool-activity.mjs';
 import { visionEnabled } from './images.mjs';
-import { saveSession, loadSession, saveMidTurn, settleMidTurnSave } from './sessions.mjs';
+import { saveSession, loadSession, saveMidTurn, settleMidTurnSave, getSessionDirectory } from './sessions.mjs';
 import { validateJsonSchema, extractJson } from './json-schema.mjs';
 import { callMappedMcpTool } from './mcp.mjs';
 
@@ -200,6 +203,10 @@ export async function runHeadless(options) {
     const hookObserver = outputFormat === 'stream-json' || onEvent ? (event) => { if (includeHookEvents || ['SessionStart', 'Setup'].includes(event.hook_event)) emit({ type: 'system', ...event, session_id: session && session.sessionId || null }); } : null;
     session = await createSession({ root, config, restore: restored, env, ...sessionOptions, ...(hookObserver ? { onHookEvent: hookObserver } : {}) });
     session.headless = true;
+    // Name a saved run up front, as Claude Code does: the init event and every
+    // later event then carry the id a client needs for --resume, instead of
+    // null until the end-of-run save.
+    if (persistence.enabled && !session.sessionId) session.sessionId = randomUUID();
     // Text mode only: stream-json consumers get exactly the events they expect.
     if (outputFormat === 'text' && env.OASIS_PROGRESS !== '0') for (const note of session.localContextNotices || []) { try { process.stderr.write('[local model] ' + note + '\n'); } catch {} }
     // Hook lifecycle events: SessionStart/Setup always (Claude Code), the rest with --include-hook-events.
@@ -489,9 +496,12 @@ export async function runHeadless(options) {
   const progressed = Boolean(session && Array.isArray(session.messages) && session.messages.some((message) => message && message.role === 'assistant'));
   let savedAfterError = false;
   if (session) await settleMidTurnSave(session);
+  let saved = Boolean(persistence.resumeId && !persistence.fork);
   if (session && persistence.enabled && (!error || progressed)) {
-    try { sessionId = (await saveSession(session, { env })).id; savedAfterError = Boolean(error); } catch {}
+    try { sessionId = (await saveSession(session, { env })).id; savedAfterError = Boolean(error); saved = true; } catch {}
   }
+  // The id named in init is only resumable once something was saved under it.
+  if (!saved && sessionId && !existsSync(path.join(getSessionDirectory(root, env), sessionId + '.json'))) sessionId = null;
   let suggestion = '';
   if (session && promptSuggestions && !error && result && (outputFormat === 'stream-json' || onEvent)) suggestion = await suggestNextPrompt(session, { signal });
   // The budget ledger also holds subagent, review and side-request spend.
