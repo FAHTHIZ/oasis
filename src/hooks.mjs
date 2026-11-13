@@ -30,7 +30,6 @@ import { processTreeSpawnOptions, signalProcessTree } from './process-tree.mjs';
 import { parseRule, ruleMatches } from './permissions.mjs';
 
 export const HOOK_EVENTS = ['PreToolUse', 'PostToolUse', 'PostToolUseFailure', 'PostToolBatch', 'PermissionRequest', 'PermissionDenied', 'UserPromptSubmit', 'UserPromptExpansion', 'Stop', 'StopFailure', 'SubagentStart', 'SubagentStop', 'SessionStart', 'SessionEnd', 'PreCompact', 'PostCompact', 'Notification', 'CwdChanged', 'DirectoryAdded', 'InstructionsLoaded', 'TaskCreated', 'TaskCompleted', 'PreModelSwitch', 'PostModelSwitch', 'FileChanged', 'ConfigChange', 'WorktreeCreate', 'WorktreeRemove', 'TeammateIdle', 'Setup', 'Elicitation', 'ElicitationResult', 'MessageDisplay'];
-export const HOOK_TYPES = ['command', 'http', 'mcp_tool', 'prompt', 'agent'];
 
 const TOOL_EVENTS = new Set(['PreToolUse', 'PostToolUse', 'PostToolUseFailure', 'PermissionRequest', 'PermissionDenied']);
 // Events whose plain (non-JSON) stdout on exit 0 becomes context for the model.

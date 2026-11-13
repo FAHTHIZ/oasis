@@ -89,7 +89,3 @@ export function bridgeToolDefinition(definition, handler = {}) {
     run: handler.run || (async () => ({ bridged: true }))
   });
 }
-
-export function bridgeToolDefinitions(definitions, handlers = {}) {
-  return definitions.map((definition) => bridgeToolDefinition(definition, handlers[definition.function.name] || {}));
-}

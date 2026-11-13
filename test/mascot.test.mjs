@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { FEN, FEN_BLINK, FEN_PALETTE, fenLines, fenSvg } from '../src/mascot.mjs';
+import { FEN, FEN_BLINK, FEN_PALETTE, fenLines } from '../src/mascot.mjs';
 import { bannerFrame, bannerLayout } from '../src/terminal-ui.mjs';
 
 const strip = (text) => text.replace(/\x1b\[[0-9;]*m/g, '');
@@ -30,11 +30,4 @@ test('the banner puts Fen beside the wordmark and drops pieces in narrow termina
   assert.equal(bannerLayout(45, {}), 'logo');
   assert.equal(bannerLayout(20, {}), 'fen');
   assert.equal(bannerLayout(10, {}), 'none');
-});
-
-test('fenSvg renders crisp pixels with an accessible title', () => {
-  const svg = fenSvg({ size: 8 });
-  assert.match(svg, /shape-rendering="crispEdges"/);
-  assert.match(svg, /<title>Fen, the OASIS fennec fox<\/title>/);
-  assert.equal((svg.match(/<rect /g) || []).length, FEN.join('').replace(/\./g, '').length);
 });

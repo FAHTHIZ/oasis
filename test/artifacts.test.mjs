@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import os from 'node:os';
 import path from 'node:path';
 import { mkdtemp, mkdir, readFile, rm, stat } from 'node:fs/promises';
-import { createArtifact, recordArtifactEvent, readArtifact, listArtifacts, deleteArtifact, redactArtifactText, recordArtifactToolEvent } from '../src/artifacts.mjs';
+import { createArtifact, recordArtifactEvent, listArtifacts, deleteArtifact, redactArtifactText, recordArtifactToolEvent } from '../src/artifacts.mjs';
 import { runBuiltinCommand } from '../src/slash.mjs';
 
 async function fixture(t) {
@@ -27,9 +27,9 @@ test('artifact creation writes a local investigation page and structured state',
 });
 
 test('artifact updates capture every investigation section',async t=>{
-  const {root,env}=await fixture(t); await createArtifact(root,'audit',{env});
+  const {root,env}=await fixture(t); const created=await createArtifact(root,'audit',{env});
   for(const type of ['timeline','command','file','test','error','hypothesis','rollback'])await recordArtifactEvent(root,'audit',type,type+' entry',{env});
-  const {artifact}=await readArtifact(root,'audit',{env});
+  const artifact=JSON.parse(await readFile(created.dataPath,'utf8'));
   assert.ok(artifact.timeline.some(x=>/created/.test(x.text)));
   for(const [key,type] of [['commands','command'],['changedFiles','file'],['tests','test'],['errors','error'],['hypotheses','hypothesis'],['rollbackPoints','rollback']])assert.ok(artifact[key].some(x=>x.text===type+' entry'),key);
 });
@@ -45,10 +45,10 @@ test('artifact redacts credentials from persisted JSON, HTML, and displayed deta
 });
 
 test('artifact tool events collect commands, changed files, tests, and errors',async t=>{
-  const {root,env}=await fixture(t); await createArtifact(root,'auto',{env});
+  const {root,env}=await fixture(t); const created=await createArtifact(root,'auto',{env});
   await recordArtifactToolEvent(root,'auto','run_command',{command:'npm test'},{exitCode:1,output:'AssertionError'},{env});
   await recordArtifactToolEvent(root,'auto','write_file',{path:'src/index.mjs'},{success:true},{env});
-  const {artifact}=await readArtifact(root,'auto',{env});
+  const artifact=JSON.parse(await readFile(created.dataPath,'utf8'));
   assert.match(artifact.commands[0].text,/npm test/);
   assert.match(artifact.tests[0].text,/FAILED/);
   assert.match(artifact.errors[0].text,/AssertionError/);
@@ -56,10 +56,10 @@ test('artifact tool events collect commands, changed files, tests, and errors',a
 });
 
 test('artifact list and cleanup are workspace-scoped',async t=>{
-  const {root,env}=await fixture(t); await createArtifact(root,'keep',{env}); await createArtifact(root,'remove',{env});
+  const {root,env}=await fixture(t); await createArtifact(root,'keep',{env}); const removed=await createArtifact(root,'remove',{env});
   assert.deepEqual((await listArtifacts(root,{env})).map(x=>x.slug).sort(),['keep','remove']);
   await deleteArtifact(root,'remove',{env});
-  assert.equal(await readArtifact(root,'remove',{env}),null);
+  await assert.rejects(stat(removed.dataPath),{code:'ENOENT'});
   assert.deepEqual((await listArtifacts(root,{env})).map(x=>x.slug),['keep']);
 });
 

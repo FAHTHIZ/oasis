@@ -5,7 +5,7 @@ import path from 'node:path';
 import { mkdtemp, mkdir, writeFile, readFile, rm } from 'node:fs/promises';
 import { createSession, runAgentTurn, closeSession, stopFailureType } from '../src/agent.mjs';
 import { loadSettings } from '../src/settings.mjs';
-import { runHooks, matcherAccepts, ifAccepts, describeHook, HOOK_EVENTS, HOOK_TYPES } from '../src/hooks.mjs';
+import { runHooks, matcherAccepts, ifAccepts, describeHook, HOOK_EVENTS } from '../src/hooks.mjs';
 import { scriptedModel, toolCall } from './helpers/scripted-model.mjs';
 
 async function tmp(t) {
@@ -83,9 +83,8 @@ test('PreToolUse input rewrites are checked against deny rules for the final com
   assert.match(result.content, /Denied by permission rule.*after PreToolUse updated the tool input/);
 });
 
-test('every Claude Code event and handler type is known', () => {
+test('every Claude Code event is known', () => {
   for (const event of ['PostToolBatch', 'PermissionDenied', 'StopFailure', 'UserPromptExpansion', 'InstructionsLoaded', 'TaskCreated', 'TaskCompleted', 'PreModelSwitch', 'PostModelSwitch', 'DirectoryAdded']) assert.ok(HOOK_EVENTS.includes(event), event);
-  assert.deepEqual(HOOK_TYPES, ['command', 'http', 'mcp_tool', 'prompt', 'agent']);
 });
 
 test('matchers follow Claude Code: plain names are exact, anything else is an unanchored regex', () => {

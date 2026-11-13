@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { isNonPublicIpAddress, normalizeIpAddress } from '../src/network-safety.mjs';
+import { isNonPublicIpAddress } from '../src/network-safety.mjs';
 
 test('public unicast addresses are allowed', () => {
   for (const address of ['8.8.8.8', '1.1.1.1', '93.184.216.34', '2606:4700:4700::1111', '2a00:1450:4001::200e', '[2001:4860:4860::8888]']) {
@@ -28,12 +28,10 @@ test('IPv4 embedded in IPv6 inherits the IPv4 policy', () => {
 test('deprecated IPv4-compatible ::a.b.c.d is not mistaken for IPv4-mapped', () => {
   // ipaddr.js parses "::8.8.8.8" as "::ffff:8.8.8.8"; the policy must still block it.
   assert.equal(isNonPublicIpAddress('::8.8.8.8'), true);
-  assert.equal(normalizeIpAddress('::8.8.8.8'), '0:0:0:0:0:0:808:808');
 });
 
 test('hostnames are not IP literals and malformed IPv6 fails closed', () => {
   assert.equal(isNonPublicIpAddress('example.com'), false);
   assert.equal(isNonPublicIpAddress('2130706433'), false, 'inet_aton integer spellings are hostnames here, not IPs');
   assert.equal(isNonPublicIpAddress('1:2:3:4:5:6:7:8:9'), true);
-  assert.equal(normalizeIpAddress('example.com'), null);
 });

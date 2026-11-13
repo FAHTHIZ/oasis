@@ -7,9 +7,31 @@ import { createHash } from 'node:crypto';
 import { mkdtemp, writeFile, readFile, stat, rm } from 'node:fs/promises';
 import { connectMcpServers, closeMcpClients } from '../src/mcp.mjs';
 import { loadProjectMcpServers } from '../src/mcp-project.mjs';
-import { getStoredToken, saveStoredToken, discoverOAuth, openInBrowser, createOAuthFetch } from '../src/mcp-oauth.mjs';
+import { getStoredToken, saveStoredToken, openInBrowser, createOAuthFetch, loadMcpClientSdk, loginMcpServer } from '../src/mcp-oauth.mjs';
 import { fetchMcpSameOrigin, OasisOAuthProvider } from '../src/mcp-oauth.mjs';
 import { mcpLogin, mcpLogout } from '../src/mcp-auth-commands.mjs';
+
+
+// What sign-in does before the browser opens: the SDK's RFC 9728/8414 discovery,
+// with every request going through the OASIS endpoint guard.
+async function discoverOAuth(serverUrl, { fetch: fetchImpl = fetch, resourceMetadataUrl = null, lookupImpl, fetchTimeoutMs } = {}) {
+  const guarded = createOAuthFetch(serverUrl, { fetch: fetchImpl, ...(lookupImpl ? { lookupImpl } : {}), ...(fetchTimeoutMs ? { fetchTimeoutMs } : {}) });
+  const sdk = await loadMcpClientSdk();
+  if (!resourceMetadataUrl) {
+    try {
+      const probe = await guarded(serverUrl, { method: 'POST', headers: { 'content-type': 'application/json', accept: 'application/json, text/event-stream' }, body: JSON.stringify({ jsonrpc: '2.0', id: 0, method: 'ping' }) });
+      if (probe.status === 401) resourceMetadataUrl = sdk.extractWWWAuthenticateParams(probe).resourceMetadataUrl || null;
+    } catch {}
+  }
+  const info = await sdk.discoverOAuthServerInfo(serverUrl, { fetchFn: guarded, ...(resourceMetadataUrl ? { resourceMetadataUrl: new URL(resourceMetadataUrl) } : {}) });
+  const metadata = info.authorizationServerMetadata || {};
+  return {
+    issuer: metadata.issuer || String(info.authorizationServerUrl).replace(/\/$/, ''),
+    tokenEndpoint: metadata.token_endpoint,
+    registrationEndpoint: metadata.registration_endpoint || null,
+    scopes: info.resourceMetadata && Array.isArray(info.resourceMetadata.scopes_supported) ? info.resourceMetadata.scopes_supported : null
+  };
+}
 
 test('OAuth token storage preserves concurrent server updates', async (t) => {
   const home = await mkdtemp(path.join(os.tmpdir(), 'oasis-oauth-store-race-'));
@@ -252,7 +274,7 @@ test('OAuth discovery never fetches private-network resource metadata URLs', asy
   assert.equal(found.tokenEndpoint, origin + '/token');
   assert.equal(requests.some((url) => url.includes('169.254.169.254')), false);
   await assert.rejects(
-    discoverOAuth(origin + '/mcp', { fetch: fetchImpl, lookupImpl: async () => [{ address: '0:0:0:0:0:ffff:7f00:1', family: 6 }] }),
+    loginMcpServer({ type: 'http', url: origin + '/mcp' }, { fetch: fetchImpl, lookupImpl: async () => [{ address: '0:0:0:0:0:ffff:7f00:1', family: 6 }] }),
     /resolves to a private or special-purpose address/
   );
 });

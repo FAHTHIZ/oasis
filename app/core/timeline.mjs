@@ -318,9 +318,6 @@ export function splitTextToolCall(text) {
   if (!match) return { text: value, tool: '' };
   return { text: value.slice(0, match.index).trimEnd(), tool: match[1] };
 }
-export function streamingTextToolCall(text) {
-  return splitTextToolCall(text).tool;
-}
 
 export function formatDuration(ms) {
   // Unknown (a step reopened from a saved session) shows nothing, not "<0.1s".

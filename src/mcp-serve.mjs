@@ -5,7 +5,7 @@
 // --allow-commands. Secret files and paths outside the workspace stay blocked.
 // The protocol (version negotiation, framing, ping, errors) is the official
 // MCP TypeScript SDK server; OASIS only supplies tools/list and tools/call.
-import { Server, InMemoryTransport, ProtocolError, ProtocolErrorCode } from '@modelcontextprotocol/server';
+import { Server, ProtocolError, ProtocolErrorCode } from '@modelcontextprotocol/server';
 import { StdioServerTransport } from '@modelcontextprotocol/server/stdio';
 import { oasisVersion } from './version.mjs';
 import path from 'node:path';
@@ -56,25 +56,6 @@ function createMcpServer({ root, allowEdits = false, allowCommands = false, env 
   });
   const close = async () => { await stopLspClients(session).catch(() => {}); await server.close().catch(() => {}); };
   return { server, close };
-}
-
-// In-process handler: one JSON-RPC message in, its reply (or null for a
-// notification) out, through the same SDK server over an in-memory transport.
-export function createMcpServeHandler(options = {}) {
-  const { server, close } = createMcpServer(options);
-  const [local, remote] = InMemoryTransport.createLinkedPair();
-  const waiting = new Map();
-  local.onmessage = (message) => { const done = waiting.get(message.id); if (done) { waiting.delete(message.id); done(message); } };
-  const ready = Promise.all([server.connect(remote), local.start()]);
-  const handle = async (message) => {
-    await ready;
-    if (!message || message.id === undefined) { await local.send(message); return null; }
-    const reply = new Promise((resolve) => waiting.set(message.id, resolve));
-    await local.send(message);
-    return reply;
-  };
-  handle.close = async () => { await close(); await local.close().catch(() => {}); };
-  return handle;
 }
 
 export async function serveMcp({ root, args = [], env = process.env, input = process.stdin, output = process.stdout, log = process.stderr } = {}) {

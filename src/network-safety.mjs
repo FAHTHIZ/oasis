@@ -101,9 +101,3 @@ export function isNonPublicIpAddress(raw) {
   if (!address.match(GLOBAL_UNICAST)) return true;
   return inAny(address, NON_PUBLIC_IPV6);
 }
-
-/** Normalised textual form of an IP literal, or null when the input is not one. */
-export function normalizeIpAddress(raw) {
-  const address = parse(raw);
-  return address ? address.toNormalizedString() : null;
-}
