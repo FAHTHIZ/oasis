@@ -11,18 +11,18 @@ import { providerFetch } from './loopback-fetch.mjs';
 import { isWorktreeBranchName } from './branch-names.mjs';
 import { scratchEnabled, scratchKey, scratchRelative, scratchPrompt, ensureScratch, isScratchPath, SCRATCH_ROOT } from './scratch.mjs';
 import { protectedConfigTarget, protectedEditMessage, protectedEditsAllowed, ruleNamesProtectedPath } from './protected-paths.mjs';
-import { extractCorrections, addCorrections, correctionsReminder, correctionViolations, correctionNudge, correctionsFromMemories, CORRECTION_MEMORY_PREFIX } from './standing-corrections.mjs';
+import { extractCorrections, addCorrections, correctionsReminder, correctionsFromMemories, CORRECTION_MEMORY_PREFIX } from './standing-corrections.mjs';
 import { scriptedEditKind } from './inplace-edit-check.mjs';
 import { extractHardRules, extractBranchRules, ruleRefreshReminder } from './rule-refresh.mjs';
 import { readOnlyArgv, readOnlyShellLine } from './read-only-commands.mjs';
-import { newClaimState, recordCheck as recordClaimCheck, recordEdit as recordClaimEdit, claimIssue, appendUnverifiedNotice, recordEditFailure, recordEditSuccess, failedEditIssue, appendFailedEditNotice } from './claim-check.mjs';
+import { newClaimState, recordCheck as recordClaimCheck, recordEdit as recordClaimEdit, recordEditFailure, recordEditSuccess } from './claim-check.mjs';
 import { resolveToolAlias, normalizeRunCommandCall, cleanToolCallName } from './tool-aliases.mjs';
 import { scopeViolation, editScopeFromEnv } from './scope-lock.mjs';
 import { shellExitTarget } from './pipe-status.mjs';
 import { loadPins, savePins } from './mcp-trust.mjs';
 import { guardExternalContent, clearInjectionTurnFlag, untrustedGuardEnabled } from './untrusted-content.mjs';
 import { maskSecrets, unmaskSecretsForTool, shareSecretVault, secretShieldEnabled, redactSecretText, SECRET_SHIELD_NOTE } from './secret-shield.mjs';
-import { extractFollowups, recordFollowups, followupReminder, followupsEnabled } from './followups.mjs';
+import { followupReminder, followupsEnabled } from './followups.mjs';
 import { dedupedReadHit, recordDedupedRead } from './read-dedup.mjs';
 import { startPluginMonitorsFor } from './monitors.mjs';
 import { parseChannelEntries, mcpInstructionsSection, flushPendingChannels } from './channels.mjs';
@@ -56,7 +56,6 @@ import { BROWSER_TOOL_DEFINITION, closeBrowser } from './browser-tool.mjs';
 import { WORKFLOW_TOOL_DEFINITION } from './workflows.mjs';
 import { debugLog, debugEnabled } from './debug-log.mjs';
 import path from 'node:path';
-import { existsSync } from 'node:fs';
 import os from 'node:os';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
@@ -85,7 +84,7 @@ import { runHooks, hasHooks, CLAUDE_TOOL_NAMES } from './hooks.mjs';
 import { resolveSandbox } from './sandbox.mjs';
 import { webSearchEnabled, webSearchToolDefinition } from './web-search.mjs';
 import { loadProjectMcpServers } from './mcp-project.mjs';
-import { access, mkdir, readdir, readFile, realpath, stat, writeFile } from 'node:fs/promises';
+import { access, mkdir, readdir, readFile, realpath, writeFile } from 'node:fs/promises';
 
 async function pathExists(file) { try { await access(file); return true; } catch { return false; } }
 import { SHELL_TOOL_DEFINITION, POWERSHELL_TOOL_DEFINITION, findPowerShell, killAllBackground } from './power-tools.mjs';
@@ -104,22 +103,23 @@ import { promptToolCalling, toPromptToolMessages, foldSystemMessages, withSystem
 import { isLocalModelEndpoint, probeLocalContext, probeProviderModelWindow, applySmallContextProfile, localContextAdvice, SMALL_CONTEXT_TOKENS, RECOMMENDED_LOCAL_CONTEXT } from './local-context.mjs';
 import { ripgrepPathAddition } from './ripgrep.mjs';
 import { MAX_PROVIDER_RETRIES, QUICK_PROVIDER_RETRIES, RETRYABLE_PROVIDER_STATUSES, isHardQuotaError, isMalformedGenerationError, isUnconfiguredRouteError, isPromptTooLargeError, notifyProviderRetry, providerErrorSummary, providerRetryDelayMs, providerRetryLimit, rateLimitResetMs, rateLimitWaitMs, shortRateLimitMs, waitForProviderRetry } from './provider-retry.mjs';
-import { ACTION_NUDGE, AUTO_LSP_EDIT_TOOLS, CONTINUE_NUDGE, CYCLE_HALT_AT, CYCLE_WARN_AT, CYCLE_WINDOW_STEPS, EMPTY_REPLY_NOTICE, EMPTY_REPLY_NUDGE, FALSE_CLAIM_NUDGE, FILE_EDITING_TOOL_NAMES, GIVE_UP_NUDGE, MAX_EMPTY_REPLY_NUDGES, MAX_SESSION_TOOL_CALLS, PROTECTED_EDIT_TOOLS, REFUSAL_NUDGE, RETRY_HALT_AT, RETRY_TRACKED_COMMANDS, RETRY_WARN_AT, THRASH_ESCALATE_AT, THRASH_WARN_AT, UNREADABLE_CALL_NUDGE, activeLspBaseline, announcesNextStep, appendLspUnavailableNotice, asksForAction, asksForNewTests, assistedVerificationCalls, assistedVerificationEnabled, claimsUnmadeChange, failureSignature, fencedFileFromReply, givesUpEarly, isCompleteFileRead, isVerificationCommand, lspCallOptions, normalizeReviewPath, parallelToolCalls, promptCacheKeyField, readsLikeInstructions, refusesSpuriously, samplingTemperature, successfulMutation, targetFileHint, untestedNewCode, verificationIssues, wrongFileNudge, newModuleCandidate, markLoadedModules, markRanSources, SOURCE_EXTENSIONS } from './turn-guards.mjs';
+import { AUTO_LSP_EDIT_TOOLS, CYCLE_HALT_AT, CYCLE_WARN_AT, CYCLE_WINDOW_STEPS, FILE_EDITING_TOOL_NAMES, MAX_SESSION_TOOL_CALLS, PROTECTED_EDIT_TOOLS, RETRY_HALT_AT, RETRY_TRACKED_COMMANDS, RETRY_WARN_AT, THRASH_ESCALATE_AT, THRASH_WARN_AT, UNREADABLE_CALL_NUDGE, activeLspBaseline, asksForNewTests, failureSignature, isCompleteFileRead, isVerificationCommand, lspCallOptions, normalizeReviewPath, parallelToolCalls, promptCacheKeyField, samplingTemperature, successfulMutation, verificationIssues, newModuleCandidate, markLoadedModules, markRanSources } from './turn-guards.mjs';
 import { postModelSwitch } from './model-switch.mjs';
 import { MAX_OUTPUT_RECOVERIES, applyEffort, claudeEffortFor, claudeThinkingMode, thinkingTurnedOff, firstPositiveConfiguredInteger, inlineEffortLevel, isOpenRouterBaseURL, maxOutputTokensFor, openRouterOutputCapFromError, outputCapFromError, reasoningEffortFor, resolveTurnLimits, stripInlineEffort, subagentEffortConfig, thinkingBudgetFor, truncationRecoveryPrompt } from './model-budgets.mjs';
 import { HISTORY_COMPACT_INPUT_LIMIT, HISTORY_COMPACT_THRESHOLD_CHARS, announceCompaction, compactionDeadline, compactionError, deterministicHistorySummary, findCompactionBoundary, historyBudgetSize, historyTextSize, reportCompaction, safeHistoryLine, supersedeBeforeCompaction, usableCompactionSummary } from './compaction-history.mjs';
 import { applyAnthropicCacheBreakpoints, promptCachingEnabled, replaysReasoning, withProviderExtraContent } from './provider-request.mjs';
 import { INTERRUPTED_REPLY, modelFacingResult, refreshTodoPrompt, repairInterruptedHistory, throwIfCancelled } from './tool-results.mjs';
-import { STEER_LIMIT, deliverSteering, pendingSteering, steeringMessage } from './steering.mjs';
+import { STEER_LIMIT, deliverSteering, steeringMessage } from './steering.mjs';
 import { describeProject, fileLayout } from './project-profile.mjs';
 import { formatApiError, responseText } from './api-error.mjs';
 import { compactSystemPrompt, systemPrompt } from './system-prompt.mjs';
-import { formatLspVerificationBlocker, verificationCommandKind, verificationSummary } from './verification-summary.mjs';
+import { verificationCommandKind, verificationSummary } from './verification-summary.mjs';
 import { ASK_USER_TOOL_DEFINITION, askUserQuestion, questionBudget } from './ask-user.mjs';
 import { CONNECT_SERVICE_TOOL_DEFINITION } from './connectors.mjs';
 import { normalizeUsage, usageOrEstimate } from './usage-estimate.mjs';
 import { webAccessSites, outboundEmailHit, userEmailAddresses } from './web-access.mjs';
 import { exitPlanMode, permissionMode } from './plan-mode.mjs';
+import { newGateState, runCompletionGates } from './completion-gates.mjs';
 export { usageOrEstimate } from './usage-estimate.mjs';
 export { normalizeQuestion, resolveQuestionAnswer } from './ask-user.mjs';
 export { formatLspVerificationBlocker, verificationCommandKind as verificationCommandKindForTest } from './verification-summary.mjs';
@@ -4266,6 +4266,9 @@ async function runAgentTurnWithTelemetry(session, prompt, options = {}) {
   });
 }
 
+// What the completion gates may call back into (see completion-gates.mjs).
+const COMPLETION_HOST = Object.freeze({ emitDisplayText, pruneHistory, recordSessionEvent, hookOptions, availableToolNames });
+
 async function runAgentTurnRaw(session, prompt, options = {}) {
   if (!options.isSubagent) session.currentTurnId = randomUUID();
   const request = String(prompt || '').trim();
@@ -4423,7 +4426,6 @@ async function runAgentTurnRaw(session, prompt, options = {}) {
   // here, so hooks or failures before prompt insertion cannot discard them.
   if (carriedSteering.length) session.pendingSteering = [];
   if (!options.isSubagent) beginCheckpoint(session, userMessage, request);
-  let stopHookContinuations = 0;
   let outputRecoveries = 0;
   let overflowRecoveries = 0;
   let malformedCallRecoveries = 0;
@@ -4462,19 +4464,8 @@ async function runAgentTurnRaw(session, prompt, options = {}) {
   // on real runtime evidence, not model-reported claims.
   context.verification = verification;
   const claimState = newClaimState();
-  let correctionNudged = false;
-  let actionNudges = 0;
-  let wrongFileNudged = false;
-  let refusalNudged = false;
-  let unknownToolNudges = 0;
-  let fencedApplied = false;
-  let echoNudges = 0;
-  let emptyReplyNudges = 0;
-  let openTodoNudged = false;
-  // Only a checklist this turn worked on: a stale one from an earlier turn
-  // must not drag an unrelated question back into old work.
-  let todosWrittenThisTurn = false;
-  let emptyReply = false;
+  // Nudge counters for replies that end without a tool call; see completion-gates.mjs.
+  const gates = newGateState();
   const failedCommandRuns = new Map();
   // command key -> edit epoch of its last successful run, to catch a state-changing
   // command (`todo add milk`, `git commit`, a migration) re-run for no reason.
@@ -4718,302 +4709,13 @@ async function runAgentTurnRaw(session, prompt, options = {}) {
       continue;
     }
     if (truncationNotice) pendingTruncationNotice = truncationNotice;
-    finalize: if (!calls.length) {
-      // The user steered while this reply was generating: show the reply, then
-      // hand the model their message instead of ending the turn.
-      if (!options.isSubagent && pendingSteering(session)) {
-        if (text && options.onText) await emitDisplayText(session, options, text);
-        deliverSteering(session, options);
-        continue;
-      }
-      if (verification.autoTestPending && verification.changedPaths.size && !options.isSubagent) {
-        verification.autoTestPending = false;
-        const { resolveAutoTest, runAutoTest, autoTestFailurePrompt } = await import('./auto-test.mjs');
-        const autoTest = resolveAutoTest(session.settings, options.env || process.env);
-        if (autoTest && (verification.autoTestAttempts || 0) < autoTest.maxAttempts) {
-          verification.autoTestAttempts = (verification.autoTestAttempts || 0) + 1;
-          const call = { id: 'auto_test_' + verification.autoTestAttempts, type: 'function', function: { name: 'auto_test', arguments: JSON.stringify({ command: autoTest.command }) } };
-          if (options.onToolStart) options.onToolStart({ name: 'auto_test', call, args: { command: autoTest.command } });
-          const outcome = await runAutoTest(session.root, autoTest.command, { timeoutMs: autoTest.timeoutMs, signal: options.signal, env: { ...process.env, ...(session.settings && session.settings.env || {}) }, sandbox: session.sandbox });
-          if (options.onToolResult) options.onToolResult({ name: 'auto_test', call, result: { command: outcome.command, exitCode: outcome.exitCode, passed: outcome.passed, timedOut: outcome.timedOut, durationMs: outcome.durationMs, output: outcome.output.slice(-2000) } });
-          recordClaimCheck(claimState, { command: autoTest.command, exitCode: outcome.exitCode });
-          verification.lastVerificationExitCode = outcome.passed ? 0 : outcome.exitCode || 1;
-          verification.lastVerificationKind = 'test';
-          recordSessionEvent(session, { type: 'verification', kind: 'test', command: String(outcome.command || autoTest.command).slice(0, 300), exitCode: outcome.exitCode, passed: Boolean(outcome.passed), automatic: true }, options.env);
-          verification.autoTestLast = { command: outcome.command, exitCode: outcome.exitCode, passed: outcome.passed, attempts: verification.autoTestAttempts };
-          if (outcome.cancelled) throw Object.assign(new Error('Agent task cancelled by the user.'), { name: 'AbortError' });
-          if (!outcome.passed) {
-            if (text && options.onText) await emitDisplayText(session, options, text);
-            session.messages.push({ role: 'user', content: autoTestFailurePrompt(outcome, verification.autoTestAttempts, autoTest.maxAttempts) });
-            continue;
-          }
-        }
-      }
-      // HTML, CSS, JSON, YAML and TOML have no test runner to call. When they
-      // (plus any scripts already run cleanly) are the whole change, parse
-      // them in-process: a clean parse is the check, problems go back to the
-      // model to fix. See src/static-check.mjs.
-      if (verification.staticCheckPending && verification.changedPaths.size && verification.lastVerificationExitCode !== 0 && !options.planOnly) {
-        verification.staticCheckPending = false;
-        const { staticFileCheck, STATIC_CHECK_EXTENSIONS } = await import('./static-check.mjs');
-        const sources = [...verification.changedPaths].filter((item) => SOURCE_EXTENSIONS.has(path.extname(item).toLowerCase()));
-        const staticFiles = sources.filter((item) => !(verification.ranPaths && verification.ranPaths.has(item)) && (STATIC_CHECK_EXTENSIONS.has(path.extname(item).toLowerCase()) || /\.m?js$/i.test(item)));
-        if (staticFiles.length && sources.every((item) => staticFiles.includes(item) || (verification.ranPaths && verification.ranPaths.has(item)))) {
-          // .js counts only when a page loads it (browser script); otherwise checked is short and nothing changes.
-          const { checked, problems } = await staticFileCheck(session.root, staticFiles);
-          if (checked.length === staticFiles.length) {
-            verification.lastVerificationExitCode = problems.length ? 1 : 0;
-            verification.lastVerificationKind = 'static';
-            recordSessionEvent(session, { type: 'verification', kind: 'static', command: 'parse ' + checked.join(' ').slice(0, 280), exitCode: problems.length ? 1 : 0, passed: !problems.length, automatic: true }, options.env);
-            if (problems.length && (verification.staticFixes || 0) < 2) {
-              verification.staticFixes = (verification.staticFixes || 0) + 1;
-              if (text && options.onText) await emitDisplayText(session, options, text);
-              session.messages.push({ role: 'user', content: '<system-reminder>OASIS parsed the files you changed and found problems:\n' + problems.map((item) => '- ' + item).join('\n') + '\nFix them (create any missing file the page refers to, or change the reference), then finish. Do not mention this note.</system-reminder>' });
-              continue;
-            }
-          }
-        }
-      }
-      if (verification.tamperCheckPending && verification.changedPaths.size) {
-        verification.tamperCheckPending = false;
-        const { detectTestTampering } = await import('./test-tamper.mjs');
-        verification.testTampering = await detectTestTampering(session.root, [...verification.changedPaths]);
-      }
-      if (assistant.unreadableToolCalls && unknownToolNudges < 2) {
-        unknownToolNudges++;
-        session.messages.push({ role: 'user', content: UNREADABLE_CALL_NUDGE(assistant.unreadableToolCalls) });
-        continue;
-      }
-      if (assistant.unknownToolNames && unknownToolNudges < 2) {
-        unknownToolNudges++;
-        const names = [...availableToolNames(session)].filter((name) => !name.includes('__')).slice(0, 30);
-        session.messages.push({ role: 'user', content: '<system-reminder>' + assistant.unknownToolNames.join(', ') + (assistant.unknownToolNames.length === 1 ? ' is not a tool' : ' are not tools') + ', so nothing ran. Available tools: ' + names.join(', ') + '. Do only what the user asked (do not commit or push unless asked). Call a real tool now, or give your final answer.</system-reminder>' });
-        continue;
-      }
-      if (!text && assistant.echoedToolResponse && echoNudges < 2) {
-        echoNudges++;
-        session.messages.push({ role: 'user', content: '<system-reminder>You wrote a tool result yourself instead of replying. Tool results come only from OASIS. Continue the task: call a tool, or give your final answer to the user in plain text.</system-reminder>' });
-        continue;
-      }
-      // After one nudge, a reply that still holds the new file in a code block
-      // is applied with write_file (small/local models only, new files only,
-      // through the normal tool path and permissions).
-      if (actionNudges >= 1 && !fencedApplied && !verification.changedPaths.size && !options.planOnly && permissionMode(session, options) !== 'plan' && asksForAction(request) && assistedVerificationEnabled(session, options.env || process.env)) {
-        const fenced = fencedFileFromReply(request, text);
-        let exists = true;
-        if (fenced) { try { await stat(path.join(session.root, fenced.path)); } catch { exists = false; } }
-        if (fenced && !exists) {
-          fencedApplied = true;
-          calls = [{ id: 'oasis_apply_1', type: 'function', function: { name: 'write_file', arguments: JSON.stringify(fenced) } }];
-          assistantMessage.tool_calls = calls;
-          fencedBatch = true;
-          break finalize; // the text is shown once below, with the calls
-        }
-      }
-      // The model created the file this turn, a check failed, and it answered
-      // with the corrected whole file in a code block instead of editing. Apply
-      // it (twice at most; whole-file replacements of its own new file only).
-      if ((verification.fencedFixes || 0) < 2 && verification.createdPaths && verification.createdPaths.size && verification.lastVerificationExitCode != null && verification.lastVerificationExitCode !== 0 && !options.planOnly && permissionMode(session, options) !== 'plan' && assistedVerificationEnabled(session, options.env || process.env)) {
-        const fenced = fencedFileFromReply(request, text);
-        if (fenced && verification.createdPaths.has(normalizeReviewPath(fenced.path))) {
-          let current = '';
-          try { current = await readFile(path.join(session.root, fenced.path), 'utf8'); } catch { current = ''; }
-          if (current && fenced.content.trim() !== current.trim() && fenced.content.length >= current.length * 0.6) {
-            verification.fencedFixes = (verification.fencedFixes || 0) + 1;
-            // Leave room for one more harness-run check of the replaced file.
-            verification.assistedRuns = Math.min(verification.assistedRuns || 0, 1);
-            calls = [{ id: 'oasis_apply_fix_' + verification.fencedFixes, type: 'function', function: { name: 'write_file', arguments: JSON.stringify(fenced) } }];
-            assistantMessage.tool_calls = calls;
-            fencedBatch = true;
-            break finalize;
-          }
-        }
-      }
-      // A canned refusal stays in context and small models then repeat it, so
-      // drop it (and a scolding nudge just before it) and retry with a plain,
-      // neutral instruction. Once per turn, small or local models only.
-      if (!refusalNudged && !verification.changedPaths.size && !options.planOnly && permissionMode(session, options) !== 'plan' && asksForAction(request) && refusesSpuriously(text) && assistedVerificationEnabled(session, options.env || process.env)) {
-        refusalNudged = true;
-        if (session.messages[session.messages.length - 1] === assistantMessage) session.messages.pop();
-        const previous = session.messages[session.messages.length - 1];
-        if (previous && previous.role === 'user' && typeof previous.content === 'string' && previous.content.startsWith('<system-reminder>')) session.messages.pop();
-        if (typeof options.onActionNudge === 'function') { try { options.onActionNudge({ kind: 'refused' }); } catch {} }
-        session.messages.push({ role: 'user', content: REFUSAL_NUDGE + targetFileHint(request) });
-        continue;
-      }
-      // Smaller models often answer "create X" with a tutorial instead of doing it.
-      // They also announce the next step ("I need to create the file") and stop.
-      if (actionNudges < 2 && !verification.changedPaths.size && !options.planOnly && permissionMode(session, options) !== 'plan' && asksForAction(request)) {
-        const kind = !String(text || '').trim() ? 'empty' : claimsUnmadeChange(text) ? 'false-claim' : readsLikeInstructions(text) ? 'described' : announcesNextStep(text) ? 'announced' : givesUpEarly(text) ? 'gave-up' : '';
-        if (kind) {
-          actionNudges++;
-          // A false "I created it" in context gets repeated by small models; drop it.
-          if (kind === 'false-claim' && assistedVerificationEnabled(session, options.env || process.env) && session.messages[session.messages.length - 1] === assistantMessage) session.messages.pop();
-          if (typeof options.onActionNudge === 'function') { try { options.onActionNudge({ kind }); } catch {} }
-          session.messages.push({ role: 'user', content: kind === 'false-claim' ? FALSE_CLAIM_NUDGE + targetFileHint(request) : kind === 'described' ? ACTION_NUDGE : kind === 'gave-up' ? GIVE_UP_NUDGE : CONTINUE_NUDGE });
-          continue;
-        }
-      }
-      if (!wrongFileNudged && !options.planOnly && permissionMode(session, options) !== 'plan') {
-        const nudge = wrongFileNudge(request, verification, (relative) => { try { return existsSync(path.resolve(session.root || process.cwd(), relative)); } catch { return true; } });
-        if (nudge) {
-          wrongFileNudged = true;
-          if (typeof options.onActionNudge === 'function') { try { options.onActionNudge({ kind: 'wrong-file' }); } catch {} }
-          session.messages.push({ role: 'user', content: nudge });
-          continue;
-        }
-      }
-      // A final answer while the model's own checklist still has open steps is
-      // the clearest false "done": send it back once to finish those steps or
-      // to update the checklist and say plainly what is unfinished.
-      const openTodos = Array.isArray(session.todos) ? session.todos.filter((item) => item && item.status !== 'completed') : [];
-      if (text && openTodos.length && todosWrittenThisTurn && !openTodoNudged && !options.planOnly && permissionMode(session, options) !== 'plan') {
-        openTodoNudged = true;
-        if (typeof options.onActionNudge === 'function') { try { options.onActionNudge({ kind: 'open-todos' }); } catch {} }
-        session.messages.push({ role: 'user', content: '<system-reminder>Your checklist still has open steps:\n' + openTodos.map((item) => '- [' + item.status + '] ' + item.content).join('\n') + '\nFinish them now, or, if they cannot or should not be done, update the checklist with todo_write and tell the user plainly which steps are unfinished and why. Do not report the task as complete while steps are open.</system-reminder>' });
-        continue;
-      }
-      // An empty reply (no text, no tool call) is not an answer: it used to end
-      // the turn as "finished" with nothing to show. Ask again, then say so.
-      if (!text) {
-        // A provider-side stop (content filter, refusal, error finish) comes back
-        // the same way on a re-ask, so it is reported instead of retried.
-        if (assistant.providerStop) emptyReplyNudges = MAX_EMPTY_REPLY_NUDGES;
-        if (emptyReplyNudges < MAX_EMPTY_REPLY_NUDGES) {
-          emptyReplyNudges++;
-          if (session.messages[session.messages.length - 1] === assistantMessage) session.messages.pop();
-          if (typeof options.onActionNudge === 'function') { try { options.onActionNudge({ kind: 'empty' }); } catch {} }
-          session.messages.push({ role: 'user', content: EMPTY_REPLY_NUDGE });
-          continue;
-        }
-        emptyReply = true;
-      }
-      const issues = verificationIssues(verification);
-      const blockedText = verification.nudgeUsed ? formatLspVerificationBlocker(issues) : null;
-      if (blockedText) {
-        assistantMessage.content = blockedText;
-        if (options.onText) await emitDisplayText(session, options, blockedText);
-        pruneHistory(session);
-        return {
-          text: blockedText,
-          toolCalls: totalToolCalls,
-          tokensUsed,
-          tokenBudget,
-          finished: false,
-          verificationIncomplete: true,
-          verificationIssues: issues,
-          verification: verificationSummary(verification),
-          budgetExceeded: tokensUsed > tokenBudget
-        };
-      }
-      // Small and local models often fumble the mechanical part of the gate
-      // (they tell the user to run git diff). The harness runs the review and
-      // the project's own test command for them, through the normal tool path
-      // and permissions, and hands back the results.
-      if (issues.length && (verification.assistedRuns || 0) < 2 && assistedVerificationEnabled(session, options.env || process.env)) {
-        const checks = await assistedVerificationCalls(session.root, verification);
-        if (checks.length) {
-          verification.assistedRuns = (verification.assistedRuns || 0) + 1;
-          calls = checks.map((check, index) => ({ id: 'oasis_check_' + verification.assistedRuns + '_' + index, type: 'function', function: { name: check.name, arguments: JSON.stringify(check.args) } }));
-          verification.syntaxCheckIds = new Set(checks.map((check, index) => check.syntax ? 'oasis_check_' + verification.assistedRuns + '_' + index : null).filter(Boolean));
-          assistantMessage.tool_calls = calls;
-          assistedBatch = true;
-          break finalize; // the text is shown once below, with the calls
-        }
-      }
-      if (issues.length && !verification.nudgeUsed) {
-        verification.nudgeUsed = true;
-        // A streamed reply is already on screen; say why work continues.
-        if (typeof options.onVerificationGate === 'function') {
-          const stale = claimState.ran && claimState.editedAfter && claimState.lastCommand ? claimState.lastCommand : '';
-          const steps = issues.map((issue) => /diff has not been reviewed/.test(issue) ? 'review the diff of ' + (/\(([^)]*)\)/.exec(issue) || [null, 'the changes'])[1]
-            : /has passed after the latest code edit/.test(issue) ? (stale ? 'rerun ' + stale : 'run a check')
-            : /asked for new tests/.test(issue) ? 'add a test'
-            : /tests were weakened/.test(issue) ? 'restore weakened tests'
-            : issue.split(/[;(]/)[0].slice(0, 60));
-          try { options.onVerificationGate({ issues, steps }); } catch {}
-        }
-        session.messages.push({
-          role: 'user',
-          content: [
-            'Before finalizing, complete the post-edit verification gate. You changed: ' + [...verification.changedPaths].join(', ') + '.',
-            'Outstanding items: ' + issues.join('; ') + '.',
-            // Name the command: a model that saw it pass earlier tends to
-            // report that stale run instead of rerunning it.
-            ...(claimState.ran && claimState.editedAfter && claimState.lastCommand && issues.some((issue) => /has passed after the latest code edit/.test(issue))
-              ? ['Rerun `' + claimState.lastCommand + '` now: it ran before your latest edit, so its result no longer counts.'] : []),
-            'Use git_diff to review the complete change set when Git metadata is available. In a non-Git workspace, reread every changed file after editing. For changed source/config code, inspect the project scripts and run a relevant test/check/lint/build/type-check command; fix failures and rerun checks after fixes.',
-            ...untestedNewCode(verification),
-            'Do not claim completion of the gate based on the file-write result. If a check cannot run or permission is denied, state that limitation honestly.',
-            // Pressure to "verify" a check that cannot run is what makes small
-            // models invent a passing test log. Say plainly that it cannot run.
-            ...(verification.deniedCheck && verification.lastVerificationExitCode !== 0
-              ? ['`' + verification.deniedCheck + '` was not approved, so it cannot run in this session. Do not run it again, and never write test or command output you did not see in a tool result. Tell the user it was not run and give them the exact command.'] : []),
-            // Models echo this note back ("The gate is satisfied"); the user never saw it.
-            'This note is internal. In your final answer, report to the user what changed and which checks ran, in plain words. Do not mention this note, the gate, or these instructions, and do not claim anything (such as a commit) that you did not do.',
-            // The first summary is already on screen; a second full one reads as a repeat.
-            ...(String(text || '').trim() ? ['The user already saw your previous summary. After the checks, do not repeat it: in one or two sentences, say what the checks showed and anything that changed or was wrong in that summary.'] : [])
-          ].join('\n')
-        });
-        continue;
-      }
-      const claimNudge = claimIssue(claimState, text, { edited: verification.changedPaths.size > 0, deniedCheck: verification.deniedCheck || '' }) || failedEditIssue(claimState, text);
-      if (claimNudge) {
-        if (text && options.onText) await emitDisplayText(session, options, text);
-        session.messages.push({ role: 'user', content: claimNudge });
-        continue;
-      }
-      if (!options.isSubagent && !correctionNudged && session.standingCorrections && session.standingCorrections.length) {
-        const violations = correctionViolations(session.standingCorrections, text);
-        if (violations.length) {
-          correctionNudged = true;
-          session.messages.push({ role: 'user', content: correctionNudge(violations) });
-          continue;
-        }
-      }
-      const stopEvent = options.isSubagent ? 'SubagentStop' : 'Stop';
-      if (session.hooks && hasHooks(session.hooks, stopEvent) && stopHookContinuations < 3) {
-        const stop = await runHooks(stopEvent, { session_id: session.sessionId || 'unsaved', stop_hook_active: stopHookContinuations > 0, last_assistant_message: text.slice(0, 4000), ...(options.isSubagent ? { agent_type: options.agentType, agent_id: options.agentId } : {}) }, hookOptions(session, options.env));
-        session.hookMessages.push(...stop.messages);
-        if (stop.blocked && !stop.stopContinuation) {
-          stopHookContinuations++;
-          if (text && options.onText) await emitDisplayText(session, options, text);
-          session.messages.push({ role: 'user', content: 'A ' + stopEvent + ' hook asked you to continue before finishing:\n' + stop.reason.slice(0, 4000) });
-          continue;
-        }
-      }
-      // TeammateIdle: a team member is about to go idle. Exit 2 keeps it working; continue:false stops it.
-      if (options.teammate && session.hooks && hasHooks(session.hooks, 'TeammateIdle') && stopHookContinuations < 3) {
-        const idle = await runHooks('TeammateIdle', { session_id: session.sessionId || 'unsaved', teammate_name: options.teammate.name, team_name: options.teammate.team, agent_id: options.agentId }, hookOptions(session, options.env));
-        session.hookMessages.push(...idle.messages);
-        if (idle.blocked && !idle.stopContinuation) {
-          stopHookContinuations++;
-          if (text && options.onText) await emitDisplayText(session, options, text);
-          session.messages.push({ role: 'user', content: 'A TeammateIdle hook asked you to keep working:\n' + idle.reason.slice(0, 4000) });
-          continue;
-        }
-      }
-      const finalText = emptyReply ? (assistant.providerStop ? 'The provider ended the reply with no text (finish reason: ' + assistant.providerStop + '). Nothing was summarized; rephrase the request or try another model.' : EMPTY_REPLY_NOTICE) : appendFailedEditNotice(issues.length ? appendUnverifiedNotice(text, issues, verification, claimState) : appendLspUnavailableNotice(text, verification), claimState);
-      assistantMessage.content = finalText;
-      let followupsAdded = [];
-      if (!options.isSubagent && !options.planOnly && followupsEnabled(session, options.env || process.env)) {
-        try { followupsAdded = await recordFollowups(session.root, extractFollowups(text), { sessionId: session.sessionId || '' }); } catch {}
-      }
-      if (finalText && options.onText) await emitDisplayText(session, options, finalText);
-      pruneHistory(session);
-      return {
-        text: finalText,
-        toolCalls: totalToolCalls,
-        tokensUsed,
-        tokenBudget,
-        finished: issues.length === 0,
-        verificationIncomplete: issues.length > 0,
-        verificationIssues: issues,
-        verification: verificationSummary(verification),
-        budgetExceeded: tokensUsed > tokenBudget,
-        ...(emptyReply ? { emptyReply: true } : {}),
-        ...(followupsAdded.length ? { followupsAdded: followupsAdded.map((item) => ({ id: item.id, text: item.text })) } : {})
-      };
+    if (!calls.length) {
+      const outcome = await runCompletionGates({ session, options, request, text, assistant, assistantMessage, verification, claimState, gates, totals: { toolCalls: totalToolCalls, tokensUsed, tokenBudget } }, COMPLETION_HOST);
+      if (outcome.type === 'continue') continue;
+      if (outcome.type === 'finish') return outcome.result;
+      calls = outcome.calls;
+      if (outcome.batch === 'fenced') fencedBatch = true;
+      else assistedBatch = true;
     }
     if (text && options.onText) await emitDisplayText(session, options, text);
 
@@ -5120,7 +4822,7 @@ async function runAgentTurnRaw(session, prompt, options = {}) {
         // (outputs differ by timestamps, so the identical-outcome check misses it).
         const commandText = RETRY_TRACKED_COMMANDS.has(name) ? [args.command].concat(Array.isArray(args.args) ? args.args : []).join(' ') : '';
         if ((FILE_EDITING_TOOL_NAMES.has(name) || (commandText && scriptedEditKind(commandText))) && result && typeof result === 'object' && !result.error && result.approved !== false && result.blocked !== true) { failedCommandRuns.clear(); recentOutcomes.clear(); editEpoch++; }
-        if (name === 'todo_write' && result && typeof result === 'object' && !result.error) todosWrittenThisTurn = true;
+        if (name === 'todo_write' && result && typeof result === 'object' && !result.error) gates.todosWrittenThisTurn = true;
         else if (RETRY_TRACKED_COMMANDS.has(name) && result && typeof result === 'object' && !result.background && !result.running) {
           const key = name + ' ' + JSON.stringify({ command: args.command, args: args.args, cwd: args.cwd });
           const failed = (Number.isInteger(result.exitCode) && result.exitCode !== 0) || result.timedOut === true;
