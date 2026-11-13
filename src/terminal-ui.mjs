@@ -571,7 +571,7 @@ export function describeEdit({ name, args = {}, result = {} }, { color = true } 
       : [];
   if (name === 'write_file' && typeof args.content === 'string') {
     const lines = args.content.split('\n').length;
-    return '  ⎿ ' + (color ? ANSI.dim : '') + 'Wrote ' + lines + ' line' + (lines === 1 ? '' : 's') + ' to ' + args.path + (color ? ANSI.noBold : '');
+    return '  ⎿ ' + (color ? ANSI.dim : '') + (args.append === true ? 'Appended ' : 'Wrote ') + lines + ' line' + (lines === 1 ? '' : 's') + ' to ' + args.path + (color ? ANSI.noBold : '');
   }
   if (!pairs.length) return '';
   let added = 0;
