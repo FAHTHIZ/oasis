@@ -103,7 +103,7 @@ import { promptToolCalling, toPromptToolMessages, foldSystemMessages, withSystem
 import { isLocalModelEndpoint, probeLocalContext, probeProviderModelWindow, applySmallContextProfile, localContextAdvice, SMALL_CONTEXT_TOKENS, RECOMMENDED_LOCAL_CONTEXT } from './local-context.mjs';
 import { ripgrepPathAddition } from './ripgrep.mjs';
 import { MAX_PROVIDER_RETRIES, QUICK_PROVIDER_RETRIES, RETRYABLE_PROVIDER_STATUSES, isHardQuotaError, isMalformedGenerationError, isUnconfiguredRouteError, isPromptTooLargeError, notifyProviderRetry, providerErrorSummary, providerRetryDelayMs, providerRetryLimit, rateLimitResetMs, rateLimitWaitMs, shortRateLimitMs, waitForProviderRetry } from './provider-retry.mjs';
-import { ACTION_NUDGE, AUTO_LSP_EDIT_TOOLS, CONTINUE_NUDGE, CYCLE_HALT_AT, CYCLE_WARN_AT, CYCLE_WINDOW_STEPS, EMPTY_REPLY_NOTICE, EMPTY_REPLY_NUDGE, FALSE_CLAIM_NUDGE, FILE_EDITING_TOOL_NAMES, GIVE_UP_NUDGE, MAX_EMPTY_REPLY_NUDGES, MAX_SESSION_TOOL_CALLS, PROTECTED_EDIT_TOOLS, REFUSAL_NUDGE, RETRY_HALT_AT, RETRY_TRACKED_COMMANDS, RETRY_WARN_AT, THRASH_ESCALATE_AT, THRASH_WARN_AT, UNREADABLE_CALL_NUDGE, activeLspBaseline, announcesNextStep, appendLspUnavailableNotice, asksForAction, asksForNewTests, assistedVerificationCalls, assistedVerificationEnabled, claimsUnmadeChange, failureSignature, fencedFileFromReply, givesUpEarly, isCompleteFileRead, isVerificationCommand, lspCallOptions, normalizeReviewPath, parallelToolCalls, promptCacheKeyField, readsLikeInstructions, refusesSpuriously, samplingTemperature, successfulMutation, targetFileHint, untestedNewCode, verificationIssues, wrongFileNudge, newModuleCandidate, markLoadedModules } from './turn-guards.mjs';
+import { ACTION_NUDGE, AUTO_LSP_EDIT_TOOLS, CONTINUE_NUDGE, CYCLE_HALT_AT, CYCLE_WARN_AT, CYCLE_WINDOW_STEPS, EMPTY_REPLY_NOTICE, EMPTY_REPLY_NUDGE, FALSE_CLAIM_NUDGE, FILE_EDITING_TOOL_NAMES, GIVE_UP_NUDGE, MAX_EMPTY_REPLY_NUDGES, MAX_SESSION_TOOL_CALLS, PROTECTED_EDIT_TOOLS, REFUSAL_NUDGE, RETRY_HALT_AT, RETRY_TRACKED_COMMANDS, RETRY_WARN_AT, THRASH_ESCALATE_AT, THRASH_WARN_AT, UNREADABLE_CALL_NUDGE, activeLspBaseline, announcesNextStep, appendLspUnavailableNotice, asksForAction, asksForNewTests, assistedVerificationCalls, assistedVerificationEnabled, claimsUnmadeChange, failureSignature, fencedFileFromReply, givesUpEarly, isCompleteFileRead, isVerificationCommand, lspCallOptions, normalizeReviewPath, parallelToolCalls, promptCacheKeyField, readsLikeInstructions, refusesSpuriously, samplingTemperature, successfulMutation, targetFileHint, untestedNewCode, verificationIssues, wrongFileNudge, newModuleCandidate, markLoadedModules, markRanSources } from './turn-guards.mjs';
 import { postModelSwitch } from './model-switch.mjs';
 import { MAX_OUTPUT_RECOVERIES, applyEffort, claudeEffortFor, claudeThinkingMode, thinkingTurnedOff, firstPositiveConfiguredInteger, inlineEffortLevel, isOpenRouterBaseURL, maxOutputTokensFor, openRouterOutputCapFromError, outputCapFromError, reasoningEffortFor, resolveTurnLimits, stripInlineEffort, subagentEffortConfig, thinkingBudgetFor, truncationRecoveryPrompt } from './model-budgets.mjs';
 import { HISTORY_COMPACT_INPUT_LIMIT, HISTORY_COMPACT_THRESHOLD_CHARS, announceCompaction, compactionDeadline, compactionError, deterministicHistorySummary, findCompactionBoundary, historyBudgetSize, historyTextSize, reportCompaction, safeHistoryLine, supersedeBeforeCompaction, usableCompactionSummary } from './compaction-history.mjs';
@@ -5140,6 +5140,7 @@ async function runAgentTurnRaw(session, prompt, options = {}) {
         // remember it so the gate and the final answer say so honestly.
         if (isVerificationCommand(args.command, args.args) && result.approved === false) verification.deniedCheck = [args.command].concat(Array.isArray(args.args) ? args.args : []).join(' ').slice(0, 200);
         if (result.approved !== false) markLoadedModules(verification, [args.command].concat(Array.isArray(args.args) ? args.args : []).join(' '), result.exitCode);
+        if (result.approved !== false && !result.timedOut) markRanSources(verification, args.command, args.args, result.exitCode);
         if (isVerificationCommand(args.command, args.args) && result.approved !== false) {
           recordClaimCheck(claimState, { command: [args.command].concat(Array.isArray(args.args) ? args.args : []).join(' '), exitCode: result.exitCode });
           verification.lastVerificationExitCode = result.exitCode;
@@ -5155,6 +5156,7 @@ async function runAgentTurnRaw(session, prompt, options = {}) {
         const shellCommand = safeToolArguments(call.function && call.function.arguments).command;
         const target = shellExitTarget(shellCommand);
         if (target && !target.piped && !result.exitCodeWarning) markLoadedModules(verification, shellCommand, result.exitCode);
+        if (target && !target.piped && !result.exitCodeWarning && !result.timedOut) markRanSources(verification, target.command, target.args, result.exitCode);
         if (target && isVerificationCommand(target.command, target.args)) recordClaimCheck(claimState, { command: shellCommand, exitCode: result.exitCode, masked: Boolean(target.piped || result.exitCodeWarning) });
         // A check whose status is masked by a pipe (npm test | tail) proves nothing.
         if (target && typeof result.exitCode === 'number' && !target.piped && !result.exitCodeWarning && isVerificationCommand(target.command, target.args)) {
@@ -5175,6 +5177,7 @@ async function runAgentTurnRaw(session, prompt, options = {}) {
         if (name === 'write_file' && result.backedUpExistingFile === false) (verification.createdPaths ||= new Set()).add(changedPath);
         // New JavaScript modules must be loaded once after their last edit.
         if (verification.loadedPaths) verification.loadedPaths.delete(changedPath);
+        if (verification.ranPaths) verification.ranPaths.delete(changedPath);
         if (verification.createdPaths && verification.createdPaths.has(changedPath)) {
           if (name === 'write_file') {
             const written = safeToolArguments(call.function && call.function.arguments).content;

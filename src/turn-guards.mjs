@@ -358,7 +358,7 @@ export async function assistedVerificationCalls(root, verification) {
   if (verification.lastVerificationExitCode === 0) {
     for (const file of unloadedNewModules(verification).slice(0, 3)) calls.push({ name: 'run_command', args: moduleImportCheck(file) });
   }
-  if (changed.some((item) => SOURCE_EXTENSIONS.has(path.extname(item).toLowerCase())) && verification.lastVerificationExitCode !== 0) {
+  if (changed.some((item) => SOURCE_EXTENSIONS.has(path.extname(item).toLowerCase())) && verification.lastVerificationExitCode !== 0 && !changedSourcesAllRan(verification)) {
     const test = await detectProjectTestCommand(root);
     if (test) calls.push({ name: 'run_command', args: test });
     else {
@@ -468,6 +468,30 @@ export function unloadedNewModules(state) {
 }
 
 // A command that ran a new module by path (node src/lib.mjs, an import check).
+// Running a changed script directly (node hello.mjs, python3 app.py) with
+// exit 0 after its last edit is a real check for a small program with no test
+// suite. Seen live: "make hello" wrote hello.mjs, ran it ("hi"), and the gate
+// still demanded a test, costing a model round trip and a false warning.
+const SCRIPT_RUNNERS = new Set(['node', 'nodejs', 'bun', 'deno', 'python', 'python3', 'py', 'ruby', 'php', 'bash', 'sh', 'tsx', 'ts-node']);
+export function markRanSources(state, command, args, exitCode) {
+  if (exitCode !== 0 || !state || !(state.changedPaths instanceof Set)) return;
+  const executable = path.basename(String(command || '')).replace(/\.exe$/i, '').toLowerCase();
+  const argv = Array.isArray(args) ? args.map(String) : [];
+  let script = '';
+  if (SCRIPT_RUNNERS.has(executable)) {
+    const positional = argv.filter((item) => item && !item.startsWith('-'));
+    script = (executable === 'deno' || executable === 'bun') && positional[0] === 'run' ? positional[1] : positional[0];
+  } else if (/^\.{0,2}\//.test(String(command || ''))) script = String(command);
+  const file = normalizeReviewPath(script || '');
+  if (file && state.changedPaths.has(file)) (state.ranPaths ||= new Set()).add(file);
+}
+
+function changedSourcesAllRan(state) {
+  const sources = [...state.changedPaths].filter((item) => SOURCE_EXTENSIONS.has(path.extname(item).toLowerCase()));
+  const ran = state.ranPaths instanceof Set ? state.ranPaths : new Set();
+  return sources.length > 0 && sources.every((item) => ran.has(item));
+}
+
 export function markLoadedModules(state, commandText, exitCode) {
   if (exitCode !== 0 || !(state.moduleCandidates instanceof Set) || !state.moduleCandidates.size) return;
   const text = String(commandText || '');
@@ -517,7 +541,8 @@ export function verificationIssues(state) {
     // Name the files: a model that reviewed one diff tends to stop there.
     issues.push('the changed-file diff has not been reviewed (' + unreviewed.slice(0, 8).join(', ') + (unreviewed.length > 8 ? ', …' : '') + ')');
   }
-  if (changed.some((item) => SOURCE_EXTENSIONS.has(path.extname(item).toLowerCase())) && state.lastVerificationExitCode !== 0) {
+  const ranClean = changedSourcesAllRan(state);
+  if (changed.some((item) => SOURCE_EXTENSIONS.has(path.extname(item).toLowerCase())) && state.lastVerificationExitCode !== 0 && !ranClean) {
     issues.push('no relevant test, check, lint, build, or type-check command has passed after the latest code edit');
   }
   const unloaded = state.lastVerificationExitCode === 0 ? unloadedNewModules(state) : [];
@@ -537,7 +562,7 @@ export function verificationIssues(state) {
       // A result explicitly marked non-blocking (for example, disabled by the
       // unattended Action policy) remains visible but does not block completion.
       // Source edits still require a recognized project check to pass above.
-      if (result.blocking !== false && state.lastVerificationExitCode !== 0) {
+      if (result.blocking !== false && state.lastVerificationExitCode !== 0 && !ranClean) {
         issues.push('LSP verification unavailable for ' + file + ': ' + String(result.reason || 'no diagnostic result'));
       }
     } else if (Array.isArray(result.newErrors) && result.newErrors.length) {
