@@ -940,7 +940,21 @@ function fillInspector(box, tool) {
 function inspectorOutput(tool) {
   if (tool.fullContent) return tool.fullContent;
   if (tool.ok === undefined) return tool.live ? tool.live : tool.waiting ? 'Waiting for your approval…' : 'Running…';
-  return tool.content || 'No output was returned.';
+  return readableFailure(tool.content) || 'No output was returned.';
+}
+
+// A failed tool returns {"error":"…"} and OASIS adds "This step failed: …"
+// below it: show the sentence once, not the JSON too.
+function readableFailure(content) {
+  const text = String(content || '');
+  const newline = text.indexOf('\n');
+  const first = newline === -1 ? text : text.slice(0, newline);
+  if (!/^\{"error":/.test(first)) return text;
+  let error = '';
+  try { const value = JSON.parse(first); if (value && typeof value.error === 'string' && Object.keys(value).length === 1) error = value.error; } catch { return text; }
+  if (!error) return text;
+  const rest = newline === -1 ? '' : text.slice(newline + 1).trim();
+  return rest && rest.includes(error.slice(0, 60)) ? rest : (error + (rest ? '\n' + rest : ''));
 }
 
 // A step row is built once and then patched in place as the step moves

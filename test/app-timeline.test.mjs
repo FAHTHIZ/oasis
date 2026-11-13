@@ -179,3 +179,13 @@ test('a group title names at most three kinds of work, then how many more', () =
   ];
   assert.equal(groupTitle(steps), 'Read a, edited b, searched the web and 2 more');
 });
+
+test('a failed step says what did not happen instead of the past tense', async () => {
+  const { stepLabel } = await import('../app/core/timeline.mjs');
+  assert.equal(stepLabel({ id: 'a', name: 'write_file', args: { path: 'notes.txt' }, ok: false }), "Couldn't write notes.txt");
+  assert.equal(groupTitle([{ id: 'a', name: 'write_file', args: { path: 'notes.txt' }, ok: false }]), "Couldn't write notes.txt");
+  assert.equal(stepLabel({ id: 'b', name: 'run_command', args: { command: 'npm test' }, ok: false }), 'Tests failed');
+  assert.equal(stepLabel({ id: 'c', name: 'run_command', args: { command: 'ls' }, ok: false }), 'Command failed');
+  assert.equal(stepLabel({ id: 'd', name: 'edit_file', args: { path: 'a.js' }, ok: false, outcome: 'timed_out' }), 'Timed out trying to edit a.js');
+  assert.equal(stepLabel({ id: 'e', name: 'write_file', args: { path: 'notes.txt' }, ok: true }), 'Wrote notes.txt');
+});

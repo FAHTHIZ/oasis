@@ -180,7 +180,26 @@ export function stepLabel(step = {}) {
     const what = summarizeArgs(step.name, step.args) || liveLabel(step).replace(/^\w+ing /, '').trim() || 'this step';
     return NOT_RUN_LABELS[outcome] + ': ' + (what.length > 70 ? what.slice(0, 67) + '…' : what);
   }
-  return step.label && !/^Used /.test(step.label) ? step.label : activityLabel(step);
+  const done = step.label && !/^Used /.test(step.label) ? step.label : activityLabel(step);
+  return outcome === 'failed' || outcome === 'timed_out' ? failedLabel(done, outcome) : done;
+}
+
+// "Wrote notes.txt" that failed reads "Couldn't write notes.txt"; a failed
+// test run reads "Tests failed". Labels without a known verb keep their words.
+const FAILED_VERBS = { Wrote: 'write', Edited: 'edit', Read: 'read', Deleted: 'delete', Searched: 'search', Listed: 'list', Updated: 'update', Made: 'make', Pushed: 'push', Opened: 'open', Installed: 'install', Added: 'add', Connected: 'connect', Checked: 'check', Reviewed: 'review', Merged: 'merge', Asked: 'ask', Started: 'start', Stopped: 'stop', Sent: 'send', Managed: 'manage', Presented: 'present' };
+function failedLabel(label, outcome) {
+  const failed = outcome === 'timed_out' ? 'timed out' : 'failed';
+  if (label === 'Ran the tests') return 'Tests ' + failed;
+  if (label === 'Ran a command') return 'Command ' + failed;
+  const phrase = failingPhrase(label);
+  return outcome === 'timed_out' ? phrase.replace(/^Couldn't /, 'Timed out trying to ') : phrase;
+}
+function failingPhrase(label) {
+  const match = /^(\w+) (.*)$/.exec(label);
+  if (match && FAILED_VERBS[match[1]]) return "Couldn't " + FAILED_VERBS[match[1]] + ' ' + match[2];
+  if (match && match[1] === 'Ran') return "Couldn't run " + match[2];
+  if (match && match[1] === 'Used') return "Couldn't use " + match[2];
+  return label;
 }
 
 // One line for a finished group: one step is named exactly ("Edited
