@@ -138,6 +138,20 @@ export async function manageSessions(root, rest, { approve } = {}) {
     if (rest.includes('--out')) stdout.write('Exported ' + count + ' session(s).\n');
     return;
   }
+  if (action === 'events' || action === 'audit') {
+    const json = rest.includes('--json');
+    const typeFlag = rest.indexOf('--type');
+    const type = typeFlag >= 0 ? rest[typeFlag + 1] : '';
+    const id = rest.slice(1).find((arg, index, list) => !arg.startsWith('--') && list[index - 1] !== '--type');
+    if (!id) throw new Error('Usage: oasis sessions events SESSION_ID [--type tool_call|tool_result|approval|verification|recovery|session_saved] [--json]');
+    if (!sessions.some((item) => item.id === id)) throw new Error('No saved session with ID ' + id + ' exists for this workspace.');
+    const { readEvents } = await import('./event-stream.mjs');
+    const events = (await readEvents(root, id)).filter((event) => !type || event.type === type);
+    if (json) { stdout.write(JSON.stringify(events, null, 2) + '\n'); return; }
+    if (!events.length) { stdout.write('No recorded events' + (type ? ' of type ' + type : '') + ' for ' + id + '.\n'); return; }
+    for (const event of events) stdout.write(formatAuditEvent(event) + '\n');
+    return;
+  }
   if (action === 'search') {
     const json = rest.includes('--json');
     const all = rest.includes('--all');
@@ -148,5 +162,20 @@ export async function manageSessions(root, rest, { approve } = {}) {
     stdout.write((json ? JSON.stringify(result, null, 2) : formatSessionSearch(result, query)) + '\n');
     return;
   }
-  throw new Error('Unknown sessions action. Use oasis sessions list [--archived], oasis sessions archive|unarchive SESSION_ID, oasis sessions search QUERY, oasis sessions clear SESSION_ID, or oasis sessions prune [--older-than DAYS].');
+  throw new Error('Unknown sessions action. Use oasis sessions list [--archived], oasis sessions archive|unarchive SESSION_ID, oasis sessions search QUERY, oasis sessions events SESSION_ID, oasis sessions clear SESSION_ID, or oasis sessions prune [--older-than DAYS].');
+}
+
+// One readable line per audit event, e.g. "#12 10:31:04 tool_result run_command failed (exit 1): ...".
+export function formatAuditEvent(event) {
+  const time = String(event.at || '').slice(11, 19);
+  const head = '#' + event.seq + ' ' + time + ' ' + event.type;
+  const one = (value, max = 160) => String(value === undefined ? '' : value).replace(/\s+/g, ' ').slice(0, max);
+  switch (event.type) {
+    case 'tool_call': return head + ' ' + event.tool + ' ' + one(event.input);
+    case 'tool_result': return head + ' ' + event.tool + ' ' + (event.ok ? 'ok' : 'failed') + (event.exitCode !== undefined ? ' (exit ' + event.exitCode + ')' : '') + (event.output ? ': ' + one(event.output, 120) : '');
+    case 'approval': return head + ' ' + event.tool + ' ' + (event.allowed ? 'allowed' : 'denied: ' + one(event.reason, 120)) + (event.mode ? ' [' + event.mode + ']' : '');
+    case 'verification': return head + ' ' + (event.kind || 'check') + ' ' + (event.passed ? 'passed' : 'failed (exit ' + event.exitCode + ')') + ': ' + one(event.command, 120);
+    case 'recovery': return head + ' ' + (event.action || '') + ' ' + (event.from ? event.from + ' -> ' + event.to : '') + (event.reason ? ' (' + one(event.reason, 100) + ')' : '');
+    default: return head;
+  }
 }
