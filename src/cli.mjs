@@ -53,6 +53,7 @@ import { doctor, updateOasis, uninstallOasis } from './cli-doctor.mjs';
 import { manageMcp, manageExternalExtensions } from './cli-extensions.mjs';
 import { manageSessions, backgroundCommand } from './cli-sessions.mjs';
 import { autoSetup, configureProvider, pasteFirstSetup, providerKeysInEnv, connectCommand, ensureModelProviderSetup, configureSetupPrompts } from './cli-setup.mjs';
+import { exitAfterTelemetry } from './telemetry.mjs';
 
 // Options that shape every agent session created by this process.
 const SESSION_OPTIONS = { permissionMode: null, allowedTools: [], disallowedTools: [], appendSystemPrompt: '', model: null, effort: null, outputStyle: null, addDirs: [], pendingFiles: [], mcpServers: [], settingsOverrides: [], tools: null, channels: [], devChannels: [] };
@@ -1470,7 +1471,7 @@ async function runPrompt(prompt, root, autoApprove, session = null, persistence 
   const controller = new AbortController();
   const onInterrupt = (kind) => {
     if (controller.signal.aborted && kind === 'escape') return;
-    if (controller.signal.aborted) { stdout.write('\nExiting Oasis.\n'); closeSession(session); process.exit(130); }
+    if (controller.signal.aborted) { stdout.write('\nExiting Oasis.\n'); closeSession(session); exitAfterTelemetry(130); }
     endStream();
     stdout.write('\n' + interruptNotice(kind, colorEnabled(stdout)) + '\n');
     controller.abort();
@@ -1823,11 +1824,11 @@ async function printModeRun(root, headless, args, autoApprove, persistence, stat
   let stopSignal = null;
   const SIGNAL_CODES = { SIGINT: 2, SIGTERM: 15, SIGHUP: 1 };
   const onStopSignal = (name) => {
-    if (stopSignal) process.exit(128 + SIGNAL_CODES[name]);
+    if (stopSignal) exitAfterTelemetry(128 + SIGNAL_CODES[name]);
     stopSignal = name;
     stderr.write('[oasis] Received ' + name + '; stopping the task and any running commands.\n');
     stopController.abort();
-    setTimeout(() => process.exit(128 + SIGNAL_CODES[name]), 5000).unref();
+    setTimeout(() => exitAfterTelemetry(128 + SIGNAL_CODES[name]), 5000).unref();
   };
   const stopHandlers = Object.keys(SIGNAL_CODES).map((name) => [name, () => onStopSignal(name)]);
   for (const [name, handler] of stopHandlers) process.on(name, handler);
@@ -2766,7 +2767,7 @@ async function startWebWorkspace(root, args) {
     // Supervisors expect a prompt exit: once the server has closed (sessions
     // saved), exit even if an idle keep-alive socket or child handle lingers,
     // and never take longer than a few seconds after the signal.
-    void Promise.allSettled(stopping).then(() => process.exit(0));
+    void Promise.allSettled(stopping).then(() => exitAfterTelemetry(0));
     setTimeout(() => process.exit(0), 5000).unref();
   };
   process.once('SIGINT', shutdown);
