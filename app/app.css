@@ -393,7 +393,7 @@ input[type="checkbox"]{width:18px;height:18px;accent-color:var(--accent)}
 .approval-actions{justify-content:flex-end;flex-wrap:wrap}
 
 /* Menu and toasts */
-.menu{position:fixed;z-index:40;background:var(--panel);border:1px solid var(--line-strong);border-radius:var(--r-md);box-shadow:var(--shadow);padding:5px;width:min(300px,92vw)}
+.menu{position:fixed;z-index:40;max-height:var(--menu-max,none);overflow:auto;background:var(--panel);border:1px solid var(--line-strong);border-radius:var(--r-md);box-shadow:var(--shadow);padding:5px;width:min(300px,92vw)}
 .menu button{display:block;width:100%;text-align:left;padding:9px 11px;border-radius:8px}
 .menu button:hover,.menu button[aria-checked="true"]{background:var(--raised)}
 .menu strong{display:block;font-size:14px;font-weight:600}
@@ -432,7 +432,7 @@ body:has(.sheet.docked:not([hidden])) .toasts{bottom:auto;top:64px}
 .model-chip:hover{border-color:var(--line)}
 .model-chip.empty{color:var(--accent);font-family:var(--font)}
 .menu-toggle{display:flex;align-items:center;gap:9px;padding:9px 11px;border-top:1px solid var(--line);margin-top:4px;font-size:13px;color:var(--text-2)}
-#modelMenu{max-height:min(70vh,520px);overflow:auto;width:min(340px,94vw)}
+#modelMenu{max-height:min(70vh,520px,var(--menu-max,100vh));width:min(340px,94vw)}
 #modelMenu strong{font-family:var(--mono);font-size:13px;overflow-wrap:anywhere}
 
 /* Connections in Settings */

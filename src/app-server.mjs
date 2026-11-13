@@ -27,8 +27,13 @@ export const APP_PACKAGES = Object.freeze({
   dompurify: 'dist/purify.es.mjs',
   'eventsource-parser': 'dist/index.js',
   turndown: 'lib/turndown.browser.es.js',
-  'turndown-plugin-gfm': 'lib/turndown-plugin-gfm.browser.es.js'
+  'turndown-plugin-gfm': 'lib/turndown-plugin-gfm.browser.es.js',
+  '@floating-ui/dom': 'dist/floating-ui.dom.browser.min.mjs',
+  '@floating-ui/core': 'dist/floating-ui.core.browser.min.mjs'
 });
+
+// Bare imports inside a vendored browser build: serving a package also serves these.
+const APP_PACKAGE_DEPS = Object.freeze({ '@floating-ui/dom': ['@floating-ui/core'] });
 
 // Bare names whose browser build ships in another npm package. highlight.js's own
 // es/ entries wrap CommonJS; its pre-built ES module (common languages) is in
@@ -59,7 +64,7 @@ export async function appModuleGraph(root) {
         if (specifier.startsWith('node:')) continue; // caught below for src modules
         const name = specifier.startsWith('@') ? specifier.split('/').slice(0, 2).join('/') : specifier.split('/')[0];
         if (!Object.hasOwn(APP_PACKAGES, name) || specifier !== name) throw new Error(path.relative(root, file) + ' imports ' + specifier + ', which has no browser build listed in APP_PACKAGES.');
-        packages.add(name);
+        for (const each of [name, ...(APP_PACKAGE_DEPS[name] || [])]) packages.add(each);
         continue;
       }
       const target = path.resolve(path.dirname(file), specifier);
@@ -150,7 +155,9 @@ export function resolveAppPath(root, urlPath, shared, packages = null) {
     return { file: inside(path.join(root, 'app'), rel.endsWith('/') ? rel + 'index.html' : rel) };
   }
   if (pathname.startsWith('/vendor/')) {
-    const [name, ...rest] = pathname.slice('/vendor/'.length).split('/');
+    const parts = pathname.slice('/vendor/'.length).split('/');
+    const name = parts[0].startsWith('@') ? parts.shift() + '/' + parts.shift() : parts.shift();
+    const rest = parts;
     if (!packages || !packages.has(name)) return null;
     const entryDir = path.dirname(APP_PACKAGES[name]);
     const rel = rest.join('/');

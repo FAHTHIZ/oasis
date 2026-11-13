@@ -421,6 +421,10 @@ test('test server serves only the connected workspace and shared modules', async
     assert.equal((await fetch(base + '/vendor/yaml/package.json')).status, 404, 'only the browser build folder is served');
     assert.equal((await fetch(base + '/vendor/ajv/dist/ajv.js')).status, 404, 'only listed packages are served');
     assert.equal((await fetch(base + '/vendor/yaml/browser/../../../package.json')).status, 404);
+    assert.equal((await fetch(base + '/vendor/@floating-ui/dom/dist/floating-ui.dom.browser.min.mjs')).status, 200, 'scoped packages are served');
+    assert.equal((await fetch(base + '/vendor/@floating-ui/core/dist/floating-ui.core.browser.min.mjs')).status, 200, 'a vendored build\'s own bare imports are served');
+    assert.equal((await fetch(base + '/vendor/@floating-ui/dom/package.json')).status, 404);
+    assert.equal((await fetch(base + '/vendor/@floating-ui/utils/dist/floating-ui.utils.mjs')).status, 404, 'unlisted scoped packages are not served');
     assert.equal((await fetch(base + '/app/skills/index.json', { method: 'POST' })).status, 405);
   } finally { server.close(); }
 });
