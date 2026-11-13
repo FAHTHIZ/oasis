@@ -36,8 +36,14 @@ function spokenBlocks(tokens = [], lines = []) {
  * code blocks are announced, links read as their text, bare URLs as "a link",
  * tables and markup are dropped, and long replies stop at a sentence boundary.
  */
+// Models often open a fence mid-line ("Fixed it. ```js\nx\n```"). CommonMark
+// reads that as paragraph text, so the backticks and code would be spoken; move
+// such a fence onto its own line first so it is announced as code instead.
+const INLINE_FENCE = /([^\n])[ \t]*((?:`{3,}|~{3,})[\w+#.-]*[ \t]*\n)/g;
+
 export function speakable(markdown, limit = 900, more = 'The rest is on screen.') {
-  const text = spokenBlocks(Lexer.lex(String(markdown || ''), { gfm: true }))
+  const source = String(markdown || '').replace(INLINE_FENCE, '$1\n$2');
+  const text = spokenBlocks(Lexer.lex(source, { gfm: true }))
     .join('\n').replace(/\s*\n\s*/g, '\n').replace(/[ \t]{2,}/g, ' ').trim();
   if (text.length <= limit) return text;
   const cut = text.slice(0, limit);
