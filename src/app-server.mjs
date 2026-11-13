@@ -35,7 +35,8 @@ export const APP_PACKAGES = Object.freeze({
   'focus-trap': 'dist/focus-trap.esm.min.js',
   tabbable: 'dist/index.esm.min.js',
   remend: 'dist/index.js',
-  idb: 'build/index.js'
+  idb: 'build/index.js',
+  'binary-extensions': 'index.js'
 });
 
 // Bare imports inside a vendored browser build: serving a package also serves these.
@@ -44,6 +45,9 @@ const APP_PACKAGE_DEPS = Object.freeze({ '@floating-ui/dom': ['@floating-ui/core
 // Bare names whose browser build ships in another npm package. highlight.js's own
 // es/ entries wrap CommonJS; its pre-built ES module (common languages) is in
 // @highlightjs/cdn-assets. Node keeps resolving the real highlight.js package.
+// Extra files a root-level build loads besides its entry (a JSON module).
+const APP_PACKAGE_FILES = Object.freeze({ 'binary-extensions': ['binary-extensions.json'] });
+
 const APP_PACKAGE_SOURCES = Object.freeze({ 'highlight.js': '@highlightjs/cdn-assets' });
 
 /** Shared src modules and npm packages the app imports (transitively); refuses Node-only ones. */
@@ -167,8 +171,9 @@ export function resolveAppPath(root, urlPath, shared, packages = null) {
     if (!packages || !packages.has(name)) return null;
     const entryDir = path.dirname(APP_PACKAGES[name]);
     const rel = rest.join('/');
-    // A build at the package root (fuzzysort) serves only that file, not package.json and the rest.
-    if (entryDir === '.' ? rel !== APP_PACKAGES[name] : !(rel === entryDir || rel.startsWith(entryDir + '/'))) return null;
+    // A build at the package root (fuzzysort) serves only that file and its listed
+    // extras, not package.json and the rest.
+    if (entryDir === '.' ? rel !== APP_PACKAGES[name] && !(APP_PACKAGE_FILES[name] || []).includes(rel) : !(rel === entryDir || rel.startsWith(entryDir + '/'))) return null;
     return { file: inside(appPackageDir(root, name), path.relative(entryDir, rel)) };
   }
   if (pathname.startsWith('/src/')) {
