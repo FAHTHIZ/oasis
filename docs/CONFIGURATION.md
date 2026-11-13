@@ -349,6 +349,10 @@ A malformed list (spaces, `*` in the middle) stops that server from starting
 and is reported, instead of silently exposing every tool. Source:
 `src/mcp-trust.mjs` (`filterServerTools`).
 
+## Model circuit breaker
+
+When a fallback chain is set, each model gets a circuit breaker. After `OASIS_BREAKER_THRESHOLD` (default 2) consecutive provider failures (5xx, rate limit, out of credit, rejected fallback key) the chain skips that model. After `OASIS_BREAKER_COOLDOWN_SECONDS` (default 30) one probe request is allowed; each failed probe doubles the wait, up to 30 minutes. A success closes the breaker.
+
 ## Long-running MCP tools
 
 When an MCP server supports tasks (MCP 2025-11-25) and a tool declares
