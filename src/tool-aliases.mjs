@@ -3,6 +3,8 @@
 // milliseconds). Instead of failing those calls and letting the model retry
 // blindly, map them onto the equivalent OASIS tool. Unknown names get a short
 // "did you mean" list so the next attempt is right.
+import { distance as levenshtein } from 'fastest-levenshtein';
+
 
 const rename = (from, to) => (args) => {
   const next = { ...args };
@@ -89,20 +91,6 @@ function sharesEveryWord(requested, name) {
   return real.length > 1 && real.every((word) => asked.some((part) => part.startsWith(word)));
 }
 
-function distance(a, b) {
-  const row = Array.from({ length: b.length + 1 }, (_, index) => index);
-  for (let i = 1; i <= a.length; i++) {
-    let previous = row[0];
-    row[0] = i;
-    for (let j = 1; j <= b.length; j++) {
-      const current = row[j];
-      row[j] = Math.min(row[j] + 1, row[j - 1] + 1, previous + (a[i - 1] === b[j - 1] ? 0 : 1));
-      previous = current;
-    }
-  }
-  return row[b.length];
-}
-
 /**
  * Resolve a requested tool name against the available tools.
  * Returns { name, args, aliasedFrom } when it can be mapped, or
@@ -132,7 +120,7 @@ export function resolveToolAlias(requested, args, available) {
   const channel = /^(.+?)[_\-.]?(?:commentary|analysis|final)$/i.exec(requested);
   if (channel) {
     const base = squash(channel[1]);
-    const close = [...names].filter((name) => distance(base, squash(name)) <= 1);
+    const close = [...names].filter((name) => levenshtein(base, squash(name)) <= 1);
     if (close.length === 1) return { name: close[0], args, aliasedFrom: requested };
   }
   // Namespaces models were trained with: gpt-oss emits repo_browser.read_file /
@@ -150,7 +138,7 @@ export function resolveToolAlias(requested, args, available) {
   const plural = [...names].filter((name) => squash(name) === key + 's' || squash(name) + 's' === key);
   if (plural.length === 1) return { name: plural[0], args, aliasedFrom: requested };
   const ranked = [...names]
-    .map((name) => ({ name, score: Math.min(distance(key, squash(name)), squash(name).includes(key) || key.includes(squash(name)) ? 1 : Infinity, sharesEveryWord(requested, name) ? 3 : Infinity) }))
+    .map((name) => ({ name, score: Math.min(levenshtein(key, squash(name)), squash(name).includes(key) || key.includes(squash(name)) ? 1 : Infinity, sharesEveryWord(requested, name) ? 3 : Infinity) }))
     .sort((a, b) => a.score - b.score || a.name.localeCompare(b.name))
     .filter((item) => item.score <= Math.max(3, Math.floor(key.length / 3)))
     .slice(0, 3)

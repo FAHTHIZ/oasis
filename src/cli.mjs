@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import stringWidth from 'string-width';
 import stripAnsi from 'strip-ansi';
+import { distance as levenshtein } from 'fastest-levenshtein';
 import { notifyAttention } from './attention.mjs';
 import { createTerminalProgress } from './terminal-progress.mjs';
 import { playSound, configureSounds, completedTodoCount, DONE_SOUND_AFTER_MS } from './sounds.mjs';
@@ -2817,20 +2818,6 @@ const COMMON_FLAGS = ['--print', '--continue', '--resume', '--model', '--max-tur
   '--agent', '--sandbox', '--mcp-config', '--plugin-dir', '--settings', '--fork-session', '--session-id', '--json-schema', '--input-format',
   '--prompt-interactive', '--tmux', '--exec', '--init'];
 
-function editDistance(a, b) {
-  const row = Array.from({ length: b.length + 1 }, (_, j) => j);
-  for (let i = 1; i <= a.length; i++) {
-    let previous = row[0];
-    row[0] = i;
-    for (let j = 1; j <= b.length; j++) {
-      const saved = row[j];
-      row[j] = Math.min(row[j] + 1, row[j - 1] + 1, previous + (a[i - 1] === b[j - 1] ? 0 : 1));
-      previous = saved;
-    }
-  }
-  return row[b.length];
-}
-
 /**
  * A leftover argument that looks like a flag (all known flags are consumed
  * before this) is a typo, not a task: Claude Code and Codex CLI reject it
@@ -2840,7 +2827,7 @@ export function unknownOptionMessage(arg) {
   const text = String(arg || '');
   if (!/^--?[A-Za-z][\w-]*(?:=.*)?$/s.test(text)) return '';
   const name = text.replace(/=.*$/s, '');
-  const scored = COMMON_FLAGS.map((flag) => [flag, editDistance(name.toLowerCase(), flag.toLowerCase())]).sort((a, b) => a[1] - b[1]);
+  const scored = COMMON_FLAGS.map((flag) => [flag, levenshtein(name.toLowerCase(), flag.toLowerCase())]).sort((a, b) => a[1] - b[1]);
   const hint = scored[0] && scored[0][1] <= Math.max(2, Math.floor(name.length / 4)) ? ' Did you mean ' + scored[0][0] + '?' : '';
   return 'Unknown option ' + name + '.' + hint + ' Run oasis --help for options; to send text that starts with a dash as the task, put -- before it.';
 }
