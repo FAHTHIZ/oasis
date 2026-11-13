@@ -34,7 +34,8 @@ export const APP_PACKAGES = Object.freeze({
   fuzzysort: 'fuzzysort.js',
   'focus-trap': 'dist/focus-trap.esm.min.js',
   tabbable: 'dist/index.esm.min.js',
-  remend: 'dist/index.js'
+  remend: 'dist/index.js',
+  idb: 'build/index.js'
 });
 
 // Bare imports inside a vendored browser build: serving a package also serves these.

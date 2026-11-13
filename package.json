@@ -112,6 +112,7 @@
     "gpt-tokenizer": "^4.1.1",
     "highlight.js": "11.11.2",
     "htmlparser2": "^10.1.0",
+    "idb": "8.0.4",
     "ignore": "7.0.14",
     "image-size": "2.1.0",
     "ipaddr.js": "^2.5.0",
@@ -144,6 +145,7 @@
     "zod": "^4.6.7"
   },
   "devDependencies": {
+    "fake-indexeddb": "6.2.8",
     "lucide-static": "1.72.0",
     "oxlint": "^1.93.0"
   },

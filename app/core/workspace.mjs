@@ -2,6 +2,7 @@
 // which every modern browser supports (including iOS Safari), so the app works
 // offline and keeps work across restarts. Tests use the in-memory store.
 import { diffArrays } from 'diff';
+import { openDB } from 'idb';
 
 export const MAX_FILE_BYTES = 2 * 1024 * 1024;
 
@@ -38,61 +39,52 @@ export class MemoryStore {
   async deleteFile(projectId, path) { this.files.delete(projectId + '\u0000' + path); }
 }
 
-function request(req) {
-  return new Promise((resolve, reject) => {
-    req.onsuccess = () => resolve(req.result);
-    req.onerror = () => reject(req.error);
-  });
-}
-
+// IndexedDB through idb (ISC, Jake Archibald): promise-based requests and
+// transactions whose tx.done settles on commit or abort, so a write is never
+// reported before it lands and a failed one always rejects. When another tab
+// upgrades the database, this connection closes and reopens on next use.
 export class IndexedDBStore {
   constructor(name = 'oasis-universal') { this.name = name; this.db = null; }
-  async open() {
-    if (this.db) return this.db;
-    const req = indexedDB.open(this.name, 1);
-    req.onupgradeneeded = () => {
-      const db = req.result;
-      if (!db.objectStoreNames.contains('projects')) db.createObjectStore('projects', { keyPath: 'id' });
-      if (!db.objectStoreNames.contains('files')) {
-        const files = db.createObjectStore('files', { keyPath: ['projectId', 'path'] });
-        files.createIndex('project', 'projectId');
-      }
-      if (!db.objectStoreNames.contains('kv')) db.createObjectStore('kv');
-    };
-    this.db = await request(req);
+  open() {
+    this.db ||= openDB(this.name, 1, {
+      upgrade(db) {
+        if (!db.objectStoreNames.contains('projects')) db.createObjectStore('projects', { keyPath: 'id' });
+        if (!db.objectStoreNames.contains('files')) db.createObjectStore('files', { keyPath: ['projectId', 'path'] }).createIndex('project', 'projectId');
+        if (!db.objectStoreNames.contains('kv')) db.createObjectStore('kv');
+      },
+      blocking: () => this.close(),
+      terminated: () => { this.db = null; }
+    }).catch((error) => { this.db = null; throw error; });
     return this.db;
   }
-  async tx(stores, mode, fn) {
-    const db = await this.open();
-    const tx = db.transaction(stores, mode);
-    const result = await fn(tx);
-    await new Promise((resolve, reject) => { tx.oncomplete = resolve; tx.onerror = () => reject(tx.error); tx.onabort = () => reject(tx.error); });
-    return result;
+  close() {
+    const db = this.db;
+    this.db = null;
+    if (db) db.then((open) => open.close(), () => {});
   }
-  async listProjects() { return (await this.tx(['projects'], 'readonly', (tx) => request(tx.objectStore('projects').getAll()))).sort((a, b) => b.updatedAt - a.updatedAt); }
-  async getProject(id) { return (await this.tx(['projects'], 'readonly', (tx) => request(tx.objectStore('projects').get(id)))) || null; }
-  async putProject(project) { await this.tx(['projects'], 'readwrite', (tx) => request(tx.objectStore('projects').put(project))); }
+  async listProjects() { return (await (await this.open()).getAll('projects')).sort((a, b) => b.updatedAt - a.updatedAt); }
+  async getProject(id) { return (await (await this.open()).get('projects', id)) || null; }
+  async putProject(project) { await (await this.open()).put('projects', project); }
   async deleteProject(id) {
-    await this.tx(['projects', 'files'], 'readwrite', async (tx) => {
-      tx.objectStore('projects').delete(id);
-      const keys = await request(tx.objectStore('files').index('project').getAllKeys(id));
-      for (const key of keys) tx.objectStore('files').delete(key);
-    });
+    const tx = (await this.open()).transaction(['projects', 'files'], 'readwrite');
+    const files = tx.objectStore('files');
+    const keys = await files.index('project').getAllKeys(id);
+    await Promise.all([tx.objectStore('projects').delete(id), ...keys.map((key) => files.delete(key)), tx.done]);
   }
   async listFiles(projectId) {
-    const rows = await this.tx(['files'], 'readonly', (tx) => request(tx.objectStore('files').index('project').getAll(projectId)));
+    const rows = await (await this.open()).getAllFromIndex('files', 'project', projectId);
     return rows.map(({ projectId: _p, ...file }) => file);
   }
   async getFile(projectId, path) {
-    const row = await this.tx(['files'], 'readonly', (tx) => request(tx.objectStore('files').get([projectId, path])));
+    const row = await (await this.open()).get('files', [projectId, path]);
     if (!row) return null;
     const { projectId: _p, ...file } = row;
     return file;
   }
-  async putFile(projectId, file) { await this.tx(['files'], 'readwrite', (tx) => request(tx.objectStore('files').put({ ...file, projectId }))); }
-  async deleteFile(projectId, path) { await this.tx(['files'], 'readwrite', (tx) => request(tx.objectStore('files').delete([projectId, path]))); }
-  async getValue(key) { return this.tx(['kv'], 'readonly', (tx) => request(tx.objectStore('kv').get(key))); }
-  async setValue(key, value) { await this.tx(['kv'], 'readwrite', (tx) => request(tx.objectStore('kv').put(value, key))); }
+  async putFile(projectId, file) { await (await this.open()).put('files', { ...file, projectId }); }
+  async deleteFile(projectId, path) { await (await this.open()).delete('files', [projectId, path]); }
+  async getValue(key) { return (await this.open()).get('kv', key); }
+  async setValue(key, value) { await (await this.open()).put('kv', value, key); }
 }
 
 function newId() {
