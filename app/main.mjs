@@ -6,8 +6,7 @@ import { alwaysAllowLabel } from './core/approval-rule.mjs';
 import { SUBAGENT_STATUS_TEXT } from './core/subagents.mjs';
 import { createConnectorCard, connectIntent, splitServices, brandMark } from './core/connector-card.mjs';
 import { createSoundPlayer } from './core/sound.mjs';
-import { ambientField } from './core/ambient.mjs';
-import { stepOutcome, stepRan, stepLabel, summarizeArgs, toolKind, groupTitle, groupStats, formatDuration, thinkingLabel, thoughtLabel, splitTextToolCall, elapsedSince, describeInput, buildTimeline, groupTiming, runElapsed, timingSplit } from './core/timeline.mjs';
+import { readableOutput, stepOutcome, stepRan, stepLabel, summarizeArgs, toolKind, groupTitle, groupStats, formatDuration, thinkingLabel, thoughtLabel, splitTextToolCall, elapsedSince, describeInput, buildTimeline, groupTiming, runElapsed, timingSplit } from './core/timeline.mjs';
 import { IndexedDBStore, Workspace, lineDiff } from './core/workspace.mjs';
 import { wordHighlights } from '../src/word-diff.mjs';
 import { Agent, textOf } from './core/agent.mjs';
@@ -28,6 +27,7 @@ import { speakable, isStopPhrase, turnDetector, rmsLevel, lastReply } from './co
 import { previewTarget } from './core/preview.mjs';
 import { searchMarketplace, marketplaceCount, OFFICIAL_MARKETPLACE } from './core/claude-plugins.mjs';
 import { syncBrowserChats } from './core/chat-sync.mjs';
+import { initActivity, refreshActivity, focusStep, resetActivity } from './activity.mjs';
 // Composer autocomplete state (declared early: refreshFiles clears the file cache).
 const suggest = { token: null, items: [], index: 0, commands: null, files: null, noFileCommand: false, seq: 0 };
 
@@ -37,7 +37,7 @@ const store = new IndexedDBStore();
 const sandbox = new FrameSandbox();
 const skills = new SkillLibrary({ baseURL: new URL('skills/', location.href).href });
 
-const DEFAULTS = { connections: [], activeConnection: '', activeModel: '', autoSwitch: true, projectPlugins: {}, mode: 'ask', maxSteps: 40, theme: 'system', githubToken: '', notify: false, sounds: false, effects: true };
+const DEFAULTS = { connections: [], activeConnection: '', activeModel: '', autoSwitch: true, projectPlugins: {}, mode: 'ask', maxSteps: 40, theme: 'system', githubToken: '', notify: false, sounds: false };
 // Slow phones and old computers: fewer repaints while a reply streams, no
 // blur or animation, and a shorter transcript kept in the page.
 const sound = createSoundPlayer({ enabled: () => Boolean(settings && settings.sounds) });
@@ -124,22 +124,8 @@ function upsertConnection(connection) {
 function applyTheme() {
   const dark = settings.theme === 'dark' || (settings.theme === 'system' && !matchMedia('(prefers-color-scheme: light)').matches);
   document.documentElement.classList.toggle('light', !dark);
-  document.querySelector('meta[name="theme-color"]').content = dark ? '#0B100C' : '#F6F8F4';
-  applyEffects();
+  document.querySelector('meta[name="theme-color"]').content = dark ? '#0C0E0D' : '#F7F7F5';
 }
-// Particles run only where they cost nothing noticeable and are wanted.
-let ambient = null;
-const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)');
-function applyEffects() {
-  const canvas = $('ambient');
-  if (!canvas) return;
-  const wanted = settings.effects !== false && !LITE && !reducedMotion.matches;
-  document.documentElement.classList.toggle('fx', wanted);
-  if (!wanted) { if (ambient) ambient.stop(); return; }
-  ambient = ambient || ambientField(canvas, { busy: () => document.body.classList.contains('busy'), accent: () => getComputedStyle(document.documentElement).getPropertyValue('--accent').trim() || '#9BFF55' });
-  if (ambient.running) ambient.recolor(); else ambient.start();
-}
-reducedMotion.addEventListener('change', applyEffects);
 matchMedia('(prefers-color-scheme: light)').addEventListener('change', applyTheme);
 
 /* ---------- Toasts ---------- */
@@ -299,7 +285,8 @@ function runPaletteCommand(id) {
     'keyboard-help': () => requestAnimationFrame(() => openNativeDialog('shortcutsDialog')),
     'export-chat': () => downloadChat(),
     'sign-out': () => { forgetRuntimeToken(); delete document.documentElement.dataset.ready; location.reload(); },
-    'open-terminal': () => { toggleFiles(true); showPanelTab('terminal'); }
+    'open-terminal': () => { toggleFiles(true); showPanelTab('terminal'); },
+    'open-activity': () => toggleActivity(true)
   };
   closeNativeDialog('commandPaletteDialog');
   const action = actions[id];
@@ -404,6 +391,11 @@ document.addEventListener('keydown', (event) => {
   }
   // Ctrl+B / Cmd+B toggles the task sidebar (as in VS Code), except in the
   // terminal, where Ctrl+B belongs to tmux and readline.
+  if (modifier && event.shiftKey && !event.altKey && event.key.toLowerCase() === 'a' && !(event.target instanceof Element && event.target.closest('.xterm'))) {
+    event.preventDefault();
+    toggleActivity();
+    return;
+  }
   if (modifier && !event.altKey && !event.shiftKey && event.key.toLowerCase() === 'b' && !(event.target instanceof Element && event.target.closest('.xterm')) && matchMedia('(min-width: 1100px)').matches) {
     event.preventDefault();
     $('sidebarToggle').click();
@@ -824,6 +816,8 @@ function setBusy(busy) {
   $('sendButton').setAttribute('aria-label', busy ? 'Stop' : 'Send');
   if (typeof updateSteering === 'function') updateSteering();
   $('input').placeholder = busy ? 'Add a note for OASIS while it works…' : 'Ask OASIS to build, fix or explain…';
+  $('activityLive').hidden = !busy;
+  refreshActivity();
 }
 
 /* ---------- Timeline: prose updates and execution groups ---------- */
@@ -940,21 +934,7 @@ function fillInspector(box, tool) {
 function inspectorOutput(tool) {
   if (tool.fullContent) return tool.fullContent;
   if (tool.ok === undefined) return tool.live ? tool.live : tool.waiting ? 'Waiting for your approval…' : 'Running…';
-  return readableFailure(tool.content) || 'No output was returned.';
-}
-
-// A failed tool returns {"error":"…"} and OASIS adds "This step failed: …"
-// below it: show the sentence once, not the JSON too.
-function readableFailure(content) {
-  const text = String(content || '');
-  const newline = text.indexOf('\n');
-  const first = newline === -1 ? text : text.slice(0, newline);
-  if (!/^\{"error":/.test(first)) return text;
-  let error = '';
-  try { const value = JSON.parse(first); if (value && typeof value.error === 'string' && Object.keys(value).length === 1) error = value.error; } catch { return text; }
-  if (!error) return text;
-  const rest = newline === -1 ? '' : text.slice(newline + 1).trim();
-  return rest && rest.includes(error.slice(0, 60)) ? rest : (error + (rest ? '\n' + rest : ''));
+  return readableOutput(tool.content) || 'No output was returned.';
 }
 
 // A step row is built once and then patched in place as the step moves
@@ -975,11 +955,21 @@ function stepRow(tool, { enter = false } = {}) {
   tail.hidden = true;
   tail.setAttribute('aria-hidden', 'true');
   details.append(summary, box);
-  details.addEventListener('toggle', () => { if (details.open) fillInspector(box, item._tool || tool); });
+  details.addEventListener('toggle', () => { if (details.open) { fillInspector(box, item._tool || tool); addTraceLink(box, item); } });
   item.append(details, tail);
   patchStepRow(item, tool);
   if (enter) item.classList.add('enter');
   return item;
+}
+// "Open in Activity": the same step on the run timeline, with its timing.
+function addTraceLink(box, item) {
+  if (box.querySelector('.trace-link')) return;
+  const link = document.createElement('button');
+  link.type = 'button';
+  link.className = 'trace-link';
+  link.textContent = 'Open in Activity';
+  link.addEventListener('click', () => { toggleActivity(true); requestAnimationFrame(() => focusStep(item.dataset.id)); });
+  box.appendChild(link);
 }
 function patchStepRow(item, tool) {
   item._tool = tool;
@@ -1004,7 +994,7 @@ function patchStepRow(item, tool) {
     const out = item.querySelector('.inspect-pre.output');
     // While running only the output changes; refill fully once it settles.
     if (out && tool.ok === undefined) out.textContent = inspectorOutput(tool);
-    else fillInspector(item.querySelector('.inspect'), tool);
+    else { fillInspector(item.querySelector('.inspect'), tool); addTraceLink(item.querySelector('.inspect'), item); }
   }
 }
 // A step waiting for approval answers right in its row: Allow and Deny run
@@ -1850,6 +1840,10 @@ function stepsRunning() {
   return Boolean(activeGroup && activeGroup.live && activeGroup.steps.some((step) => step.ok === undefined));
 }
 function handleEvent(event) {
+  handleRunEvent(event);
+  if (event.type !== 'text' && event.type !== 'reasoning') refreshActivity();
+}
+function handleRunEvent(event) {
   if (!QUIET_EVENTS.has(event.type)) lastActivity = Date.now();
   switch (event.type) {
     case 'user': {
@@ -2084,6 +2078,7 @@ function handleEvent(event) {
 
 // Saved chats render through the same grouping as the live view.
 function renderSavedDisplay(entries) {
+  refreshActivity();
   const blocks = buildTimeline(entries);
   for (const [index, block] of blocks.entries()) {
     if (block.type === 'group') {
@@ -2684,6 +2679,7 @@ async function restoreChat({ keepChat = false } = {}) {
   $('transcript').replaceChildren();
   showWholeChat = false;
   display = [];
+  resetActivity();
   agent.reset();
   renderTodos([]);
   usageState.tokens = 0; usageState.context = null; usageState.cost = null; renderUsage();
@@ -3829,7 +3825,6 @@ function openSettings() {
   $('notifyInput').closest('label').hidden = typeof Notification === 'undefined';
   $('soundInput').checked = Boolean(settings.sounds);
   $('densityVerbose').checked = settings.density === 'verbose';
-  $('effectsInput').checked = settings.effects !== false;
   $('githubToken').value = settings.githubToken;
   $('testResult').textContent = '';
   $('versionLabel').textContent = APP_VERSION;
@@ -3872,7 +3867,6 @@ function formSettings() {
     theme: $('themeSelect').value,
     notify: $('notifyInput').checked,
     sounds: $('soundInput').checked,
-    effects: $('effectsInput').checked,
     density: $('densityVerbose').checked ? 'verbose' : 'normal',
     githubToken: $('githubToken').value.trim()
   };
@@ -4228,15 +4222,60 @@ function setPanelWidth(px) {
 }
 function showPanelTab(name) {
   for (const other of document.querySelectorAll('#filesPanel .tab')) { other.classList.toggle('active', other.dataset.tab === name); other.setAttribute('aria-selected', String(other.dataset.tab === name)); }
+  $('activityView').hidden = name !== 'activity';
   $('fileList').hidden = name !== 'files';
   $('changesList').hidden = name !== 'changes';
   $('terminalView').hidden = name !== 'terminal';
   $('previewView').hidden = name !== 'preview';
   $('fileFilter').parentElement.hidden = name !== 'files';
-  $('panelFoot').hidden = name === 'terminal' || name === 'preview' || ($('exportButton').hidden && $('pushButton').hidden);
+  $('panelFoot').hidden = name === 'terminal' || name === 'preview' || name === 'activity' || ($('exportButton').hidden && $('pushButton').hidden);
   if (name === 'terminal') void openTerminal();
   if (name === 'preview') void openPreview();
+  if (name === 'activity') refreshActivity();
+  localStorage.setItem('oasis.panelTab', name === 'terminal' || name === 'preview' ? 'files' : name);
 }
+function currentPanelTab() { const tab = document.querySelector('#filesPanel .tab.active'); return tab ? tab.dataset.tab : 'files'; }
+// The Activity button opens the run timeline beside the chat, or closes it.
+function toggleActivity(force) {
+  const showing = !$('filesPanel').hidden && currentPanelTab() === 'activity';
+  const show = force === undefined ? !showing : force;
+  if (!show) { if (showing) toggleFiles(false); return; }
+  toggleFiles(true);
+  showPanelTab('activity');
+}
+$('activityButton').addEventListener('click', () => toggleActivity());
+function showStepInChat(id) {
+  const row = id && document.querySelector('#transcript .tool[data-id="' + CSS.escape(id) + '"]');
+  if (!row) { toast('That step is no longer in the conversation view.'); return; }
+  const group = groupOf.get(row.closest('.steps'));
+  if (group) setGroupOpen(group, true);
+  const details = row.querySelector('details');
+  if (details && !details.open) details.open = true;
+  if (innerWidth < 1024) toggleFiles(false);
+  row.scrollIntoView({ block: 'center', behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' });
+  row.classList.add('flash');
+  setTimeout(() => row.classList.remove('flash'), 1400);
+}
+function downloadText(name, text) {
+  const link = document.createElement('a');
+  link.href = URL.createObjectURL(new Blob([text], { type: 'application/json' }));
+  link.download = name;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  setTimeout(() => URL.revokeObjectURL(link.href), 4000);
+}
+initActivity({
+  entries: () => display,
+  running: () => Boolean(agent && agent.busy),
+  timings: () => runTimings,
+  iconFor: (kind) => iconSvg(KIND_ICONS[kind] || KIND_ICONS.tool),
+  fillInspector,
+  showInChat: showStepInChat,
+  copyText,
+  toast,
+  download: downloadText
+});
 for (const tab of document.querySelectorAll('#filesPanel .tab')) tab.addEventListener('click', () => showPanelTab(tab.dataset.tab));
 
 /* ---------- Preview (project files or a dev server, sandboxed) ---------- */
@@ -4385,7 +4424,7 @@ let terminal = null;
 let xterm = null;
 let fitTerminal = null;
 function termTheme() {
-  return { background: '#0B100C', foreground: '#E6EDE4', cursor: '#9BFF55', selectionBackground: '#9BFF5540' };
+  return { background: '#0C0E0D', foreground: '#ECEFED', cursor: '#3FD68F', selectionBackground: '#3FD68F40' };
 }
 async function openTerminal() {
   if (!RT || RT.needsToken) { $('terminalStatus').textContent = 'Connect to OASIS on a computer to use a terminal.'; return; }
@@ -5073,6 +5112,7 @@ async function boot() {
   // The side panel comes back open only where it sits beside the chat; on a
   // phone it would cover the conversation.
   if (innerWidth >= 1024 && (localStorage.getItem('oasis.files') === '1' || (localStorage.getItem('oasis.files') === null && workspace))) toggleFiles(true);
+  { const tab = localStorage.getItem('oasis.panelTab'); if (tab === 'activity' || tab === 'changes') showPanelTab(tab); }
   refreshFiles();
   if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => {});
   const shared = new URLSearchParams(location.search);
