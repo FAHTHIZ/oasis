@@ -136,3 +136,18 @@ test('notify is rate limited and message text is bounded', async (t) => {
   await assert.rejects(sendSessionMessage(source, target.activeSessionId, 'over limit', { env }), /rate limit/);
   await assert.rejects(sendSessionMessage(source, target.activeSessionId, 'x'.repeat(4001), { env }), /4000-character limit/);
 });
+
+test('/notify lists live peers, sends by name with a priority, and the receiver sees it in /inbox', async (t) => {
+  const { env, root, source, target } = await fixture(t);
+  const listed = await runBuiltinCommand('notify', '', { root, session: source, env });
+  assert.match(listed.output, /Live sessions in this workspace:/);
+  assert.ok(listed.output.includes(target.activeSessionId + '  receiver'));
+  assert.ok(!listed.output.includes(source.activeSessionId), 'a session does not list itself');
+  const sent = await runBuiltinCommand('notify', 'receiver --blocking stop editing api.mjs, I am refactoring it', { root, session: source, env });
+  assert.match(sent.output, /^Sent to receiver \(blocking\)\./);
+  const inbox = await runBuiltinCommand('inbox', '', { root, session: target, env });
+  assert.match(inbox.output, /\[blocking\] unread/);
+  assert.match(inbox.output, /stop editing api\.mjs, I am refactoring it/);
+  const missing = await runBuiltinCommand('notify', 'nobody hello', { root, session: source, env });
+  assert.match(missing.output, /No active Oasis session matches "nobody"/);
+});
