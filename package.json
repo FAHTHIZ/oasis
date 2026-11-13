@@ -124,6 +124,7 @@
     "lowlight": "^3.3.0",
     "marked": "^18.2.0",
     "mime-types": "3.0.2",
+    "minimatch": "11.0.8",
     "minisearch": "^7.2.0",
     "picomatch": "^4.0.7",
     "quickjs-emscripten": "0.32.0",

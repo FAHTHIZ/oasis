@@ -2,6 +2,7 @@
 // touch the host system. Risky actions (deleting, network, pushing) go through
 // the approval callback according to the chosen mode.
 import { createTwoFilesPatch, FILE_HEADERS_ONLY } from 'diff';
+import { Minimatch } from 'minimatch';
 
 import { relaxedReplace, closestMatchHint } from '../../src/edit-match.mjs';
 import { htmlToMarkdown } from './html-markdown.mjs';
@@ -37,24 +38,16 @@ export function needsApproval(name, mode) {
   return writes.has(name) || outside.has(name);
 }
 
-export function globToRegExp(glob) {
-  let source = '';
-  const text = String(glob || '').replace(/^\.\//, '');
-  for (let i = 0; i < text.length; i++) {
-    const char = text[i];
-    if (char === '*') {
-      if (text[i + 1] === '*') {
-        i++;
-        if (text[i + 1] === '/') { i++; source += '(?:.*/)?'; } else source += '.*';
-      } else source += '[^/]*';
-    } else if (char === '?') source += '[^/]';
-    else if (char === '{') {
-      const end = text.indexOf('}', i);
-      if (end > i) { source += '(?:' + text.slice(i + 1, end).split(',').map((part) => part.replace(/[.+^$()|[\]\\]/g, '\\$&').replace(/\*/g, '[^/]*')).join('|') + ')'; i = end; } else source += '\\{';
-    } else source += char.replace(/[.+^$()|[\]\\]/g, '\\$&');
-  }
-  // A pattern without a slash matches at any depth, like most shells' globstar habits.
-  return new RegExp('^' + (text.includes('/') ? '' : '(?:.*/)?') + source + '$');
+// Workspace globs on minimatch (npm's matcher), with the Node side's choices
+// (src/glob.mjs): dotfiles match, a pattern without a slash matches the file
+// name at any depth, and brackets match as a class or literally, so
+// app/[id]/page.tsx still finds that file.
+export function globMatcher(glob) {
+  const text = String(glob || '').replace(/\\/g, '/').replace(/^\.\//, '');
+  const options = { dot: true, matchBase: !text.includes('/'), optimizationLevel: 1 };
+  const matchers = [new Minimatch(text, options)];
+  if (/[[\]]/.test(text)) matchers.push(new Minimatch(text.replace(/[[\]]/g, '\\$&'), options));
+  return (path) => matchers.some((matcher) => matcher.match(path));
 }
 
 function clip(text, limit = MAX_RESULT) {
@@ -125,7 +118,7 @@ export async function executeTool(name, args, ctx) {
       try { matcher = new RegExp(args.regex ? String(args.pattern) : String(args.pattern).replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), flags); }
       catch (error) { throw new Error('Invalid regular expression: ' + error.message); }
       const scope = String(args.path || '').replace(/^\.?\/+/, '');
-      const scopeTest = !scope ? () => true : /[*?{]/.test(scope) ? ((re) => (p) => re.test(p))(globToRegExp(scope)) : (p) => p === scope || p.startsWith(scope.replace(/\/+$/, '') + '/');
+      const scopeTest = !scope ? () => true : /[*?{[]/.test(scope) ? globMatcher(scope) : (p) => p === scope || p.startsWith(scope.replace(/\/+$/, '') + '/');
       const files = await ws.load();
       const hits = [];
       for (const path of await ws.paths()) {
@@ -140,8 +133,7 @@ export async function executeTool(name, args, ctx) {
       return hits.length ? clip(hits.join('\n') + (hits.length >= 400 ? '\n… stopped at 400 matches' : '')) : 'No matches for ' + JSON.stringify(args.pattern) + '.';
     }
     case 'glob_files': {
-      const re = globToRegExp(args.pattern);
-      const matches = (await ws.paths()).filter((p) => re.test(p));
+      const matches = (await ws.paths()).filter(globMatcher(args.pattern));
       return matches.length ? clip(matches.join('\n')) : 'No files match ' + args.pattern + '.';
     }
     case 'run_javascript': {
