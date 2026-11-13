@@ -12,7 +12,7 @@ This guide takes you from a fresh checkout to a reviewed, verified coding task. 
 
 ## 2. Install from source
 
-Requirements: Node.js 22.15 or newer and Git.
+Requirements: Node.js 22.19 or newer and Git.
 
     git clone https://github.com/FAHTHIZ/oasis.git
     cd oasis

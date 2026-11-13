@@ -16,7 +16,7 @@ function New-FakeTools([string]$Root, [string[]]$Tools, [int]$NpmExit = 0, [int]
     # PowerShell scripts, not .cmd files, so arguments arrive unmangled.
     if ($Tools -contains 'node') {
         Set-Content -Path (Join-Path $bin 'node.ps1') -Value @(
-            'if ($args[0] -eq "-p") { "2215" } else { "v22.15.0" }'
+            'if ($args[0] -eq "-p") { "2219" } else { "v22.19.0" }'
         )
     }
     if ($Tools -contains 'npm') {

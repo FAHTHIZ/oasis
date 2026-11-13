@@ -76,10 +76,10 @@ test('setup preserves a configured provider and defaults fresh config to the API
 });
 
 test('Node support diagnostics match the package engine requirement', () => {
-  for (const version of ['20.19.0', '21.9.0', '21', 'v22.1.0', '22beta', 'latest', '', '22', '22.0.0', '22.14.9', '22.12.0']) {
+  for (const version of ['20.19.0', '21.9.0', '21', 'v22.1.0', '22beta', 'latest', '', '22', '22.0.0', '22.14.9', '22.12.0', '22.15.0', '22.18.9']) {
     assert.equal(isNodeVersionSupported(version), false, 'should reject ' + JSON.stringify(version));
   }
-  for (const version of ['22.15.0', '22.15', '22.20.0', '23.0.0', '24.2.0', '26.0.1', '25.0.0-nightly20260101abc', '24.0.0-rc.1']) {
+  for (const version of ['22.19.0', '22.19', '22.20.0', '23.0.0', '24.2.0', '26.0.1', '25.0.0-nightly20260101abc', '24.0.0-rc.1']) {
     assert.equal(isNodeVersionSupported(version), true, 'should accept ' + JSON.stringify(version));
   }
   assert.equal(isNodeVersionSupported(), true, 'the running Node meets the floor');

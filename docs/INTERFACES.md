@@ -68,7 +68,7 @@ Tasks run on the server, not in the tab. Reloading, closing the tab or losing th
 
 ## Terminal session
 
-Requirements: Node.js 22.15 or newer and Git.
+Requirements: Node.js 22.19 or newer and Git.
 
 ```sh
 git clone https://github.com/FAHTHIZ/oasis.git
@@ -84,7 +84,7 @@ Use `oasis -p` or `oasis exec` for non-interactive runs and `oasis doctor` to ch
 
 `oasis exec --json` prints the Codex exec JSONL event stream (`thread.started`, `item.*`, `turn.completed`), so the OpenAI Codex TypeScript SDK can drive OASIS with `codexPathOverride` pointing at the `oasis` binary. Thread ids are OASIS session ids; `resume THREAD_ID` continues one. See CHANGELOG for the item and `--config` mapping.
 
-Android users who want the CLI on the device itself can run it in Termux with Node.js 22.15 or newer and Git.
+Android users who want the CLI on the device itself can run it in Termux with Node.js 22.19 or newer and Git.
 
 ## Downloads
 

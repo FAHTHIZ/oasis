@@ -15,8 +15,8 @@ if [ ! -f package.json ] || [ ! -f src/cli.mjs ]; then
 fi
 
 node_version="$(node -p 'const [a, b] = process.versions.node.split(".").map(Number); a * 100 + b')"
-if [ "$node_version" -lt 2215 ]; then
-  echo "OASIS needs Node.js 22.15 or newer; found $(node --version)." >&2
+if [ "$node_version" -lt 2219 ]; then
+  echo "OASIS needs Node.js 22.19 or newer; found $(node --version)." >&2
   exit 1
 fi
 

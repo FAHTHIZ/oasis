@@ -14,7 +14,7 @@ Releases are published on [GitHub Releases](https://github.com/FAHTHIZ/oasis/rel
 | Release tarball | `npm install --global ./oasis-oss-<version>.tgz` |
 | From source | `git clone https://github.com/FAHTHIZ/oasis.git && cd oasis && npm install && npm install --global .` |
 
-All methods need Node.js 22.15 or newer and Git.
+All methods need Node.js 22.19 or newer and Git.
 
 ## Verify a download
 
