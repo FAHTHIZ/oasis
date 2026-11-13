@@ -11,6 +11,8 @@
 //   other        p P u  . (repeat last change)  counts (3w, d2w, 2dd)
 // Enter submits from either mode. j/k on the first/last line walk input history.
 
+import { prevGrapheme, nextGrapheme } from './text-cursor.mjs';
+
 const WORD = /[A-Za-z0-9_\u00c0-\uffff]/;
 
 export function createVimState(mode = 'insert') {
@@ -20,6 +22,17 @@ export function createVimState(mode = 'insert') {
 export function vimModeLabel(state) {
   if (!state || !state.vim) return '';
   return state.vim.mode === 'normal' ? '-- NORMAL --' : '-- INSERT --';
+}
+
+// Moves `count` graphemes with `step`, never past `limit`.
+function steps(text, from, count, limit, step) {
+  let at = from;
+  for (let i = 0; i < count; i++) {
+    const next = step(text, at);
+    if (step === nextGrapheme ? next > limit : next < limit) break;
+    at = next;
+  }
+  return at;
 }
 
 function lineBounds(text, cursor) {
@@ -37,8 +50,10 @@ function edit(state, text, cursor) {
 // In NORMAL mode the cursor sits on a character, never past the end of a line.
 function clampNormal(state) {
   const { start, end } = lineBounds(state.text, state.cursor);
-  const max = end > start ? end - 1 : start;
-  return { ...state, cursor: Math.max(start, Math.min(state.cursor, max)) };
+  const max = end > start ? prevGrapheme(state.text, end) : start;
+  const cursor = Math.max(start, Math.min(state.cursor, max));
+  // Never rest inside a grapheme (an emoji's second UTF-16 unit, a combining mark).
+  return { ...state, cursor: cursor > start && prevGrapheme(state.text, nextGrapheme(state.text, cursor)) !== cursor ? prevGrapheme(state.text, cursor) : cursor };
 }
 
 const kind = (ch, big) => (ch === undefined ? -1 : /\s/.test(ch) ? 0 : big ? 1 : WORD.test(ch) ? 1 : 2);
@@ -92,8 +107,8 @@ function motion(state, key, count) {
   let to = cursor;
   const repeat = (fn) => { for (let i = 0; i < count; i++) to = fn(to); };
   switch (key) {
-    case 'h': { const { start } = lineBounds(text, cursor); to = Math.max(start, cursor - count); return { to }; }
-    case 'l': { const { end } = lineBounds(text, cursor); to = Math.min(end, cursor + count); return { to }; }
+    case 'h': { const { start } = lineBounds(text, cursor); repeat((i) => Math.max(start, prevGrapheme(text, i))); return { to }; }
+    case 'l': { const { end } = lineBounds(text, cursor); repeat((i) => Math.min(end, nextGrapheme(text, i))); return { to }; }
     case 'w': repeat((i) => nextWordStart(text, i, false)); return { to };
     case 'W': repeat((i) => nextWordStart(text, i, true)); return { to };
     case 'b': repeat((i) => prevWordStart(text, i, false)); return { to };
@@ -262,7 +277,7 @@ export function applyVimKey(state, key) {
   if (vim.mode === 'insert') {
     if (key.name === 'escape') {
       const { start } = lineBounds(state.text, state.cursor);
-      const next = withVim({ ...state, cursor: state.cursor > start ? state.cursor - 1 : state.cursor }, { mode: 'normal', pending: '', count: '' });
+      const next = withVim({ ...state, cursor: state.cursor > start ? prevGrapheme(state.text, state.cursor) : state.cursor }, { mode: 'normal', pending: '', count: '' });
       return { state: clampNormal(next), action: null };
     }
     return null;
@@ -361,7 +376,7 @@ function normalChar(state, ch) {
   const { text, cursor } = state;
   switch (ch) {
     case 'i': return record({ state: enterInsert(state) }, { keys: 'i' });
-    case 'a': return record({ state: enterInsert(state, Math.min(cursor + (text.length && text[cursor] !== '\n' ? 1 : 0), lineBounds(text, cursor).end)) }, { keys: 'a' });
+    case 'a': return record({ state: enterInsert(state, Math.min(text.length && text[cursor] !== '\n' ? nextGrapheme(text, cursor) : cursor, lineBounds(text, cursor).end)) }, { keys: 'a' });
     case 'I': { const m = motion(state, '^', 1); return record({ state: enterInsert(state, m.to) }, { keys: 'I' }); }
     case 'A': return record({ state: enterInsert(state, lineBounds(text, cursor).end) }, { keys: 'A' });
     case 'o': { const { end } = lineBounds(text, cursor); return record({ state: enterInsert(edit(state, text.slice(0, end) + '\n' + text.slice(end), end + 1)) }, { keys: 'o', insert: true }); }
@@ -382,9 +397,9 @@ function normalChar(state, ch) {
       }
       return { state: clampNormal(reset({ ...state, cursor: to })) };
     }
-    case 'x': { if (!text.length || text[cursor] === '\n') return { state: reset(state), action: 'bell' }; const { end } = lineBounds(text, cursor); return record(applyOperator(reset(state), 'd', cursor, Math.min(end, cursor + count)), { keys: (vim.count || '') + 'x' }); }
-    case 'X': { const { start } = lineBounds(text, cursor); if (cursor === start) return { state: reset(state), action: 'bell' }; return record(applyOperator(reset(state), 'd', Math.max(start, cursor - count), cursor), { keys: (vim.count || '') + 'X' }); }
-    case 's': { const { end } = lineBounds(text, cursor); return record(applyOperator(reset(state), 'c', cursor, Math.min(end, cursor + count)), { keys: 's', insert: true }); }
+    case 'x': { if (!text.length || text[cursor] === '\n') return { state: reset(state), action: 'bell' }; const { end } = lineBounds(text, cursor); return record(applyOperator(reset(state), 'd', cursor, steps(text, cursor, count, end, nextGrapheme)), { keys: (vim.count || '') + 'x' }); }
+    case 'X': { const { start } = lineBounds(text, cursor); if (cursor === start) return { state: reset(state), action: 'bell' }; return record(applyOperator(reset(state), 'd', steps(text, cursor, count, start, prevGrapheme), cursor), { keys: (vim.count || '') + 'X' }); }
+    case 's': { const { end } = lineBounds(text, cursor); return record(applyOperator(reset(state), 'c', cursor, steps(text, cursor, count, end, nextGrapheme)), { keys: 's', insert: true }); }
     case 'S': { const { start, end } = lineBounds(text, cursor); return record(applyOperator(reset(state), 'c', start, end), { keys: 'S', insert: true }); }
     case 'D': return record(applyOperator(reset(state), 'd', cursor, lineBounds(text, cursor).end), { keys: 'D' });
     case 'C': return record(applyOperator(reset(state), 'c', cursor, lineBounds(text, cursor).end), { keys: 'C', insert: true });
