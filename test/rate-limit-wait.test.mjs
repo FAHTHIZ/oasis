@@ -62,7 +62,8 @@ test('a headless run waits for the reset and then finishes', async (t) => {
   assert.equal(requests, 3, 'default: only the normal bounded retries');
   requests = 0;
   const on = await run({ OASIS_WAIT_FOR_RATE_LIMIT_MINUTES: '5' });
-  assert.match(on.out, /\[rate limit\] Waiting \d+s /, on.out);
+  assert.match(on.out, /\[rate limit\] Waiting \d+s for the provider rate limit \(attempt 1, until \d\d:\d\d:\d\d\)\./, on.out);
+  assert.doesNotMatch(on.out, /\d{4}-\d\d-\d\dT/, 'a local clock time, not an ISO timestamp');
   assert.match(on.out, /finished after reset/, on.out);
   assert.equal(requests, 4);
 });
