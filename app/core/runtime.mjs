@@ -696,8 +696,11 @@ export function shellWords(text) {
       if (quote === '"' && (c === '$' || c === String.fromCharCode(96))) return null;
       if (c === quote) quote = null;
       else if (c === '\\' && quote === '"' && i + 1 < text.length) {
+        // POSIX: inside double quotes a backslash escapes only $ ` " \ and newline;
+        // before anything else it stays literal ("C:\Users" keeps its backslash).
         if (text[i + 1] === '\n' || text[i + 1] === '\r') return null;
-        cur += text[++i];
+        if ('$"\\'.includes(text[i + 1]) || text[i + 1] === String.fromCharCode(96)) cur += text[++i];
+        else cur += c;
       } else cur += c;
       continue;
     }
