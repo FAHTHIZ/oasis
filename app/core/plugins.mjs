@@ -24,7 +24,7 @@ export const PLUGINS = [
     starters: ['Review my changes and list concrete problems', 'Review the whole project and suggest the top 5 fixes']
   },
   {
-    id: 'security', name: 'Security audit', icon: 'shield', skills: ['security-review'],
+    id: 'security', name: 'Security audit', icon: 'shield-check', skills: ['security-review'],
     description: 'Hunts for secrets, injection, unsafe input handling and auth mistakes.',
     keywords: ['security', 'secure', 'vulnerab', 'secret', 'password', 'token', 'xss', 'injection', 'csrf', 'auth', 'exploit', 'cve', 'sanitize'],
     starters: ['Audit this project for security problems', 'Check for leaked secrets and unsafe input handling']
@@ -42,20 +42,20 @@ export const PLUGINS = [
     starters: ['Design a REST API for this project and implement it', 'Add input validation to every endpoint']
   },
   {
-    id: 'mobile', name: 'Mobile apps', icon: 'phone', skills: ['mobile-development'],
+    id: 'mobile', name: 'Mobile apps', icon: 'smartphone', skills: ['mobile-development'],
     description: 'React Native, Flutter, Swift and Kotlin know-how for phone apps.',
     keywords: ['android', 'ios', 'mobile', 'react native', 'flutter', 'swift', 'kotlin', 'expo', 'iphone', 'phone app'],
     starters: ['Explain how this mobile app is structured', 'Add a settings screen to the app']
   },
   {
-    id: 'docs', name: 'Docs writer', icon: 'book', skills: ['init'],
+    id: 'docs', name: 'Docs writer', icon: 'book-open', skills: ['init'],
     prompt: 'When writing documentation, be accurate to the code: read it first, keep examples runnable, and prefer short sections with headings.',
     description: 'Writes and updates READMEs, guides and code comments that match the code.',
     keywords: ['readme', 'docs', 'documentation', 'document', 'comment', 'changelog', 'guide', 'tutorial', 'jsdoc', 'docstring'],
     starters: ['Write a clear README for this project', 'Update the docs to match the code']
   },
   {
-    id: 'github', name: 'GitHub', icon: 'branch', skills: [], actions: ['github'],
+    id: 'github', name: 'GitHub', icon: 'git-branch', skills: [], actions: ['github'],
     prompt: 'When the work is done and the user asks to share it, use github_push to commit to a new branch and open a pull request.',
     description: 'Opens any GitHub repository and pushes your changes back as a pull request.',
     keywords: ['github', 'repo', 'repository', 'clone', 'pull request', 'push', 'commit', 'branch'],

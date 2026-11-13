@@ -26,6 +26,7 @@ import { mcpServerFromForm, describeMcpServer } from './core/mcp.mjs';
 import { speakable, isStopPhrase, turnDetector, rmsLevel, lastReply } from './core/voice-mode.mjs';
 import { previewTarget } from './core/preview.mjs';
 import { anchorMenu } from './core/popover.mjs';
+import { icon, kindIcon } from './core/icons.mjs';
 import { searchMarketplace, marketplaceCount, OFFICIAL_MARKETPLACE } from './core/claude-plugins.mjs';
 import { syncBrowserChats } from './core/chat-sync.mjs';
 import { initActivity, refreshActivity, focusStep, resetActivity } from './activity.mjs';
@@ -827,20 +828,6 @@ function setBusy(busy) {
 // is open while it runs (its title says what is happening right now) and
 // folds into one line when the agent moves on. Every step opens to show its
 // exact input and output. Labels and grouping live in core/timeline.mjs.
-const KIND_ICONS = {
-  shell: 'M4 6l3.5 3.5L4 13M9.5 14H16',
-  read: 'M5.5 3.5h6l3 3v10h-9zM11.5 3.5v3h3M8 10h4.5M8 13h4.5',
-  edit: 'M12.5 4.5l3 3M4 16l1-4 8.5-8.5 3 3L8 15l-4 1z',
-  search: 'M8.7 3.2a5.5 5.5 0 110 11 5.5 5.5 0 010-11zM13 13l4 4',
-  web: 'M10 3a7 7 0 110 14 7 7 0 010-14zM3 10h14M10 3c2 2 2.8 4.4 2.8 7S12 15 10 17M10 3C8 5 7.2 7.4 7.2 10S8 15 10 17',
-  git: 'M6 3.5v13M6 16.5a1.6 1.6 0 100-3.2 1.6 1.6 0 000 3.2zM14 3.5a1.6 1.6 0 110 3.2 1.6 1.6 0 010-3.2zM14 6.7c0 4-8 2.8-8 6.6',
-  agent: 'M10 3.5a2.6 2.6 0 110 5.2 2.6 2.6 0 010-5.2zM4.5 16c.6-3 2.8-4.6 5.5-4.6s4.9 1.6 5.5 4.6',
-  plan: 'M7.5 5.5H16M7.5 10H16M7.5 14.5H16M4 5.5h.01M4 10h.01M4 14.5h.01',
-  tool: 'M12.6 3.6a3.8 3.8 0 00-4.7 4.9L3.6 12.8a1.6 1.6 0 002.3 2.3l4.3-4.3a3.8 3.8 0 004.9-4.7l-2.3 2.3-2.1-.5-.5-2.1z'
-};
-function iconSvg(path) {
-  return '<svg viewBox="0 0 20 20" aria-hidden="true"><path d="' + path + '" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>';
-}
 const OUTCOME_WORDS = { ok: 'Done', failed: 'Failed', timed_out: 'Timed out', declined: 'Declined', blocked: 'Blocked', cancelled: 'Stopped' };
 function stepStatus(tool) {
   const outcome = stepOutcome(tool);
@@ -948,7 +935,7 @@ function stepRow(tool, { enter = false } = {}) {
   item.dataset.kind = toolKind(tool.name);
   const details = document.createElement('details');
   const summary = document.createElement('summary');
-  summary.innerHTML = '<span class="state" aria-hidden="true"></span><span class="kind-icon">' + iconSvg(KIND_ICONS[toolKind(tool.name)] || KIND_ICONS.tool) + '</span><span class="name"></span><span class="arg"></span><span class="tool-status"></span><span class="dur"></span><span class="chevron" aria-hidden="true">›</span>';
+  summary.innerHTML = '<span class="state" aria-hidden="true"></span><span class="kind-icon">' + kindIcon(toolKind(tool.name)) + '</span><span class="name"></span><span class="arg"></span><span class="tool-status"></span><span class="dur"></span><span class="chevron" aria-hidden="true">' + icon('chevron-right') + '</span>';
   const box = document.createElement('div');
   box.className = 'inspect';
   const tail = document.createElement('pre');
@@ -1043,7 +1030,7 @@ function createGroup(steps = [], { live = false } = {}) {
   const head = document.createElement('button');
   head.type = 'button';
   head.className = 'steps-head';
-  head.innerHTML = '<span class="steps-orb" aria-hidden="true"></span><span class="steps-title"></span><span class="steps-meta"></span><span class="chevron" aria-hidden="true">›</span>';
+  head.innerHTML = '<span class="steps-orb" aria-hidden="true"></span><span class="steps-title"></span><span class="steps-meta"></span><span class="chevron" aria-hidden="true">' + icon('chevron-right') + '</span>';
   const body = document.createElement('div');
   body.className = 'steps-body';
   body.id = 'steps-' + Math.random().toString(36).slice(2, 10);
@@ -1200,17 +1187,17 @@ function messageActions(role, at = 0) {
     time.textContent = messageTime(at);
     bar.appendChild(time);
   }
-  const button = (action, label, path) => {
+  const button = (action, label, name) => {
     const b = document.createElement('button');
     b.type = 'button';
     b.dataset.action = action;
     b.setAttribute('aria-label', label);
     b.title = label;
-    b.innerHTML = '<svg viewBox="0 0 20 20" aria-hidden="true"><path d="' + path + '" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+    b.innerHTML = icon(name);
     bar.appendChild(b);
   };
-  button('copy', 'Copy', 'M7 7V4.5A1.5 1.5 0 018.5 3h7A1.5 1.5 0 0117 4.5v7a1.5 1.5 0 01-1.5 1.5H13M4.5 7h7A1.5 1.5 0 0113 8.5v7a1.5 1.5 0 01-1.5 1.5h-7A1.5 1.5 0 013 15.5v-7A1.5 1.5 0 014.5 7z');
-  if (role === 'user') button('edit', 'Edit and resend', 'M12.5 4.5l3 3M4 16l1-4 8.5-8.5 3 3L8 15l-4 1z');
+  button('copy', 'Copy', 'copy');
+  if (role === 'user') button('edit', 'Edit and resend', 'pencil');
   return bar;
 }
 // After a turn that changed files on this computer, the last reply offers
@@ -1230,7 +1217,7 @@ function offerUndo() {
   b.className = 'labelled';
   b.title = 'Undo this turn: restore the files and the conversation (/undo)';
   b.setAttribute('aria-label', b.title);
-  b.innerHTML = '<svg viewBox="0 0 20 20" aria-hidden="true"><path d="M7.5 5L4 8.5 7.5 12M4.5 8.5h7a4.5 4.5 0 010 9H9" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg><span>Undo</span>';
+  b.innerHTML = icon('undo-2') + '<span>Undo</span>';
   bar.appendChild(b);
 }
 
@@ -2316,7 +2303,7 @@ async function openChats() {
     const del = document.createElement('button');
     del.className = 'icon-btn small';
     del.setAttribute('aria-label', 'Delete chat ' + (item.title || ''));
-    del.innerHTML = '<svg viewBox="0 0 20 20" aria-hidden="true"><path d="M5 6h10M8 6V4.5h4V6M6.5 6l.7 9.5h5.6l.7-9.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+    del.innerHTML = icon('trash-2');
     del.addEventListener('click', async () => {
       if (!confirm('Delete this chat? Files are not affected.')) return;
       const current = await chatIndex(workspace.project.id);
@@ -2434,7 +2421,7 @@ async function renderRuntimeSessions() {
       archive.className = 'icon-btn small';
       archive.setAttribute('aria-label', 'Archive session ' + (item.title || ''));
       archive.title = 'Archive';
-      archive.innerHTML = '<svg viewBox="0 0 20 20" aria-hidden="true"><path d="M3.5 5h13v3h-13zM4.5 8v7.5h11V8M8 11h4" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+      archive.innerHTML = icon('archive');
       archive.addEventListener('click', async () => {
         try { await RT.client.api('/api/sessions/' + encodeURIComponent(item.id) + '/archive', { method: 'POST' }); }
         catch (error) { toast('Could not archive that session: ' + error.message, 'error'); return; }
@@ -3344,12 +3331,12 @@ function renderWelcome() {
   const box = $('suggestions');
   box.replaceChildren();
   const fresh = Boolean(RT && RT.status && RT.status.workspaceEmpty);
-  const SUGGESTION_ICONS = fresh ? ['check', 'plug', 'globe', 'book'] : ['eye', 'bug', 'check', 'globe'];
+  const SUGGESTION_ICONS = fresh ? ['check', 'plug', 'globe', 'book-open'] : ['eye', 'bug', 'check', 'globe'];
   if (ready) for (const [i, text] of (fresh ? NEW_PROJECT_SUGGESTIONS : SUGGESTIONS).entries()) {
     const chip = document.createElement('button');
     chip.className = 'suggestion';
     chip.style.setProperty('--i', String(i));
-    chip.innerHTML = '<svg viewBox="0 0 20 20" aria-hidden="true"><path d="' + ICON_PATHS[SUGGESTION_ICONS[i % 4]] + '" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg><span></span>';
+    chip.innerHTML = icon(SUGGESTION_ICONS[i % 4]) + '<span></span>';
     chip.querySelector('span').textContent = text;
     chip.addEventListener('click', () => { $('input').value = text; autosize(); renderPluginSuggest(); $('input').focus(); });
     box.appendChild(chip);
@@ -3380,19 +3367,6 @@ async function renderWelcomeApps(box) {
 }
 
 /* ---------- Plugins ---------- */
-const ICON_PATHS = {
-  bug: 'M7 6a3 3 0 016 0M5.5 8h9v4.5a4.5 4.5 0 01-9 0zM10 8v9M3 10h2.5M14.5 10H17M3.5 15l2.3-1.2M16.5 15l-2.3-1.2M4 5.5l2 1.5M16 5.5L14 7',
-  check: 'M4 10.5l4 4 8-9',
-  eye: 'M2.5 10s2.8-5 7.5-5 7.5 5 7.5 5-2.8 5-7.5 5-7.5-5-7.5-5zM10 12.3a2.3 2.3 0 100-4.6 2.3 2.3 0 000 4.6z',
-  shield: 'M10 2.5l6 2.3v4.6c0 3.9-2.5 6.6-6 8.1-3.5-1.5-6-4.2-6-8.1V4.8zM7.3 10l2 2 3.5-3.8',
-  globe: 'M10 17.5a7.5 7.5 0 100-15 7.5 7.5 0 000 15zM2.5 10h15M10 2.5c2 2.1 3 4.6 3 7.5s-1 5.4-3 7.5c-2-2.1-3-4.6-3-7.5s1-5.4 3-7.5z',
-  plug: 'M7 2.5v4M13 2.5v4M5 6.5h10v3a5 5 0 01-10 0zM10 14.5v3',
-  book: 'M3.5 4.5c2.5-1 4.7-1 6.5.5 1.8-1.5 4-1.5 6.5-.5v11c-2.5-1-4.7-1-6.5.5-1.8-1.5-4-1.5-6.5-.5zM10 5v11',
-  branch: 'M6 3.5v13M6 16.5a1.8 1.8 0 100-3.6M14 3.5a1.8 1.8 0 110 3.6 1.8 1.8 0 010-3.6zM14 7.1c0 4-8 3-8 6'
-};
-function pluginIcon(name) {
-  return '<svg viewBox="0 0 20 20" width="18" height="18" aria-hidden="true"><path d="' + (ICON_PATHS[name] || ICON_PATHS.plug) + '" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>';
-}
 function pluginTile(plugin) {
   const on = enabledPluginIds().includes(plugin.id);
   const tile = document.createElement('div');
@@ -3403,7 +3377,7 @@ function pluginTile(plugin) {
   head.className = 'plugin-head';
   head.setAttribute('aria-pressed', String(on));
   head.innerHTML = '<span class="plugin-icon" aria-hidden="true"></span><span class="plugin-text"><strong></strong><span></span></span><span class="plugin-state"></span>';
-  head.querySelector('.plugin-icon').innerHTML = pluginIcon(plugin.icon);
+  head.querySelector('.plugin-icon').innerHTML = icon(plugin.icon);
   head.querySelector('strong').textContent = plugin.name;
   head.querySelector('.plugin-text span').textContent = plugin.description;
   head.querySelector('.plugin-state').textContent = on ? 'On' : 'Off';
@@ -3945,7 +3919,7 @@ async function openProjects() {
     const del = document.createElement('button');
     del.className = 'icon-btn small';
     del.setAttribute('aria-label', 'Delete ' + project.name);
-    del.innerHTML = '<svg viewBox="0 0 20 20" aria-hidden="true"><path d="M5 6h10M8 6V4.5h4V6M6.5 6l.7 9.5h5.6l.7-9.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+    del.innerHTML = icon('trash-2');
     del.addEventListener('click', async () => {
       if (!confirm('Delete "' + project.name + '" and its chat from this device?')) return;
       await store.deleteProject(project.id);
@@ -4263,7 +4237,7 @@ initActivity({
   entries: () => display,
   running: () => Boolean(agent && agent.busy),
   timings: () => runTimings,
-  iconFor: (kind) => iconSvg(KIND_ICONS[kind] || KIND_ICONS.tool),
+  iconFor: kindIcon,
   fillInspector,
   showInChat: showStepInChat,
   copyText,
