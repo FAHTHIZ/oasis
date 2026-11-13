@@ -2467,7 +2467,16 @@ async function interactive(root, autoApprove, persistence = {}) {
         try {
           const { pickerFor, selectDialog } = await import('./select-dialog.mjs');
           const command = slash[1].toLowerCase();
-          const picker = await pickerFor(command, { session, env: process.env, settings: (session && session.settings) || await loadSettings(root).catch(() => null) });
+          // Before the first message there is no session yet: list what the configured provider serves, not Claude aliases.
+          let pickerSession = session;
+          if (!pickerSession && command === 'model') {
+            try {
+              const pickerConfig = await loadConfig();
+              if (SESSION_OPTIONS.model) pickerConfig.model = SESSION_OPTIONS.model;
+              if (pickerConfig.configured) pickerSession = { config: pickerConfig, root };
+            } catch { /* aliases only */ }
+          }
+          const picker = await pickerFor(command, { session: pickerSession, env: process.env, settings: (session && session.settings) || await loadSettings(root).catch(() => null) });
           if (picker) {
             stdout.write(command === 'rewind' ? 'Rewind to before which message?\n' : command === 'presets' ? 'Send which preset?\n' : 'Select ' + command + ':\n');
             const chosen = await selectDialog({ input: stdin, output: stdout, options: picker.options, initial: picker.initial, context: picker.context, color: colorEnabled(stdout) });
