@@ -9,6 +9,7 @@
 // first (the text is sent to the provider and may cost money) unless a permission
 // rule allows text_to_speech.
 import { saveGeneratedMedia } from './media-output.mjs';
+import { speakable } from '../app/core/voice-mode.mjs';
 
 const DEFAULT_BASE = 'https://api.openai.com/v1';
 const MAX_INPUT_CHARS = 4096;
@@ -78,20 +79,7 @@ export async function synthesizeSpeech(config, { text, voice = config.voice, for
  * simplified, and the result is capped at a sentence boundary.
  */
 export function speakableText(markdown, limit = 1500) {
-  let text = String(markdown || '');
-  text = text.replace(/```[\s\S]*?(```|$)/g, ' (code omitted) ');
-  text = text.replace(/`([^`\n]+)`/g, '$1');
-  text = text.replace(/!\[([^\]]*)\]\([^)]*\)/g, '$1');
-  text = text.replace(/\[([^\]]+)\]\([^)]*\)/g, '$1');
-  text = text.replace(/https?:\/\/[^\s<>()]+?(?=[.,;:!?]*(\s|$))/g, 'a link');
-  text = text.split('\n').filter((line) => !/^\s*\|.*\|\s*$/.test(line)).join('\n');
-  text = text.replace(/^\s{0,3}#{1,6}\s+/gm, '').replace(/^\s*[-*+]\s+/gm, '').replace(/^\s*>\s?/gm, '');
-  text = text.replace(/(\*\*|__|\*|_|~~)(\S[^\n]*?\S|\S)\1/g, '$2');
-  text = text.replace(/\s*\n\s*/g, '\n').replace(/[ \t]{2,}/g, ' ').trim();
-  if (text.length <= limit) return text;
-  const cut = text.slice(0, limit);
-  const end = Math.max(cut.lastIndexOf('. '), cut.lastIndexOf('! '), cut.lastIndexOf('? '), cut.lastIndexOf('\n'));
-  return (end > limit * 0.5 ? cut.slice(0, end + 1) : cut).trim() + ' The full reply is in the text message.';
+  return speakable(markdown, limit, 'The full reply is in the text message.');
 }
 
 /** Voice replies in chat gateways: "off" (default), "auto" (answer voice notes with voice) or "always". */
