@@ -425,6 +425,7 @@ test('test server serves only the connected workspace and shared modules', async
     assert.equal((await fetch(base + '/vendor/@floating-ui/core/dist/floating-ui.core.browser.min.mjs')).status, 200, 'a vendored build\'s own bare imports are served');
     assert.equal((await fetch(base + '/vendor/@floating-ui/dom/package.json')).status, 404);
     assert.equal((await fetch(base + '/vendor/fuzzysort/fuzzysort.js')).status, 200);
+    assert.equal((await fetch(base + '/vendor/tabbable/dist/index.esm.min.js')).status, 200, 'focus-trap\'s own import is served');
     assert.equal((await fetch(base + '/vendor/fuzzysort/package.json')).status, 404, 'a root-level build serves only its entry file');
     assert.equal((await fetch(base + '/vendor/@floating-ui/utils/dist/floating-ui.utils.mjs')).status, 404, 'unlisted scoped packages are not served');
     assert.equal((await fetch(base + '/app/skills/index.json', { method: 'POST' })).status, 405);
