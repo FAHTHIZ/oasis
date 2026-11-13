@@ -325,6 +325,30 @@ returned by tools and images attached with `@path.png` are previewed inline, at 
 output is not a terminal. Set `OASIS_INLINE_IMAGES=0` to disable them, or
 `OASIS_INLINE_IMAGES=kitty` / `iterm` to force a protocol.
 
+## MCP tool filters
+
+A server entry can hide tools from the model. `allowedTools` keeps only the
+listed tools and `disabledTools` removes tools; `disabledTools` wins when both
+match. Each entry is an exact tool name or a prefix ending in `*`. Codex
+spellings (`enabled_tools`, `disabled_tools`) are read too. This works in a
+project `.mcp.json`, plugin servers and the user `mcp-servers.json`:
+
+```json
+{
+  "mcpServers": {
+    "github": {
+      "url": "https://api.githubcopilot.com/mcp/",
+      "allowedTools": ["get_*", "list_*", "search_*"],
+      "disabledTools": ["get_secret_scanning_alert"]
+    }
+  }
+}
+```
+
+A malformed list (spaces, `*` in the middle) stops that server from starting
+and is reported, instead of silently exposing every tool. Source:
+`src/mcp-trust.mjs` (`filterServerTools`).
+
 ## Long-running MCP tools
 
 When an MCP server supports tasks (MCP 2025-11-25) and a tool declares
