@@ -607,8 +607,13 @@ export function moduleSystemIssues(displayPath, content, packageType = '') {
     for (const name of ['__dirname', '__filename']) {
       if (new RegExp('(?<![.\\w$])' + name + '\\b').test(code) && !new RegExp('\\b(?:const|let|var)\\s+' + name + '\\b').test(code)) issues.push(name);
     }
-    if (!issues.length) return '';
-    return displayPath + ' is an ES module' + (ext === '.js' ? ' (package.json has "type": "module")' : '') + ' but uses CommonJS ' + [...new Set(issues)].join(', ') +
+    // Live run (gpt-oss-20b, "todo CLI with tests"): the unit tests passed
+    // but `node todo.mjs add x` printed nothing, because the main guard
+    // compared a string with a URL object and was always false.
+    const brokenGuard = /import\.meta\.url\s*[!=]==?\s*(?:new\s+URL\s*\(|process\.argv\s*\[\s*1\s*\](?![\w.$]))|(?:new\s+URL\s*\([^()]*(?:\([^()]*\)[^()]*)*\)|process\.argv\s*\[\s*1\s*\])\s*[!=]==?\s*import\.meta\.url/;
+    const guard = brokenGuard.test(code) ? displayPath + ' checks "run when executed directly" with a comparison that is always false (import.meta.url is a string; compare it to a string URL), so running the file does nothing. Use `import.meta.url === pathToFileURL(process.argv[1]).href` (import { pathToFileURL } from \'node:url\'), then run the program once as a user would.' : '';
+    if (!issues.length) return guard;
+    return (guard ? guard + ' ' : '') + displayPath + ' is an ES module' + (ext === '.js' ? ' (package.json has "type": "module")' : '') + ' but uses CommonJS ' + [...new Set(issues)].join(', ') +
       ', which throws when the file is loaded. Use import/export; for "run when executed directly" use `import.meta.url === pathToFileURL(process.argv[1]).href`, and for paths use `fileURLToPath(new URL(\'.\', import.meta.url))`.';
   }
   if (ext === '.cjs' && /(?:^|\n)\s*(?:export\s+(?:default\b|const\b|function\b|class\b|let\b|\{)|import\s+[\w*{][^;\n]*\bfrom\s)/.test(code)) {
