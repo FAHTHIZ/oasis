@@ -9,6 +9,16 @@ test('replies are read without code, links or markup', () => {
   assert.match(text, /code omitted/);
 });
 
+test('speech follows Markdown structure, not lookalike characters', () => {
+  // Underscores and asterisks inside words, and a table, as the regex version mangled them.
+  const text = speakable('Run snake_case_name and __init__.py.\n\n| a | b |\n|---|---|\n| 1 | 2 |\n\n> quoted *note*\n\n    indented code\n\n1. first\n2. second <b>bold</b>');
+  assert.match(text, /^Run snake_case_name and init\.py\./);
+  assert.doesNotMatch(text, /\|/);
+  assert.match(text, /quoted note/);
+  assert.match(text, /quoted note\n\(code omitted\)\nfirst\nsecond bold$/);
+  assert.equal(speakable('See [the docs](https://x.test) or <https://y.test>.'), 'See the docs or a link.');
+});
+
 test('stop phrases end talk mode', () => {
   for (const phrase of ['stop talking', 'Okay, stop listening.', 'goodbye', "That's all", 'end the conversation']) assert.equal(isStopPhrase(phrase), true, phrase);
   assert.equal(isStopPhrase('stop the server on port 3000'), false);
