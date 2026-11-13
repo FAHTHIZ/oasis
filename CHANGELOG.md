@@ -4,6 +4,7 @@ User-facing change history grouped by package version. A version heading does no
 
 ## Unreleased
 
+- Internals: the end-of-turn checks (what happens when the model answers without calling a tool) moved out of the 5,500-line agent loop into `src/completion-gates.mjs`, an ordered gate pipeline with its own tests. Behaviour is unchanged.
 - Mermaid diagrams in replies: `stateDiagram`/`stateDiagram-v2`, `classDiagram` and `xychart-beta` blocks are now drawn as text diagrams (by [beautiful-mermaid](https://github.com/lukilabs/beautiful-mermaid), MIT) instead of being shown as source. Flowcharts and sequence diagrams keep OASIS's own renderer. A diagram that would be wider than the terminal, or uses wide (CJK) labels, still falls back to its source.
 - `oasis -p --output-format stream-json`: the `init` event now carries the session id (it was `null` until the end-of-run save), as `claude -p` does, so a client can record the id for `--resume` before the run finishes. A run that ends before anything is saved reports `session_id: null` in its result instead of an id that `--resume` cannot find.
 - Web app: with the light theme (chosen, or matched from the device) the page no longer flashes dark while it loads. A small classic script in `<head>` (`app/theme-boot.js`) applies the saved theme before first paint.
