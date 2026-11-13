@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content">
 <title>OASIS — Coding Agent Workspace</title>
 <meta name="description" content="The OASIS connected workspace UI. Start a normal session with the local OASIS runtime on your computer.">
-<meta name="theme-color" content="#0B100C">
+<meta name="theme-color" content="#0C0E0D">
 <meta name="color-scheme" content="dark light">
 <meta name="robots" content="noindex,nofollow">
 <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'sha256-CUJ+YdNxOrTXUYLs58mJ+qm916SHlJPqhGtLNf83oFo='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; font-src 'self'; connect-src 'self' https: http:; frame-src 'self' blob: data:; child-src 'self' blob:; worker-src 'self' blob:; base-uri 'self'; form-action 'none'">
@@ -14,7 +14,6 @@
 <link rel="stylesheet" href="app.css">
 </head>
 <body>
-<canvas class="ambient" id="ambient" aria-hidden="true" hidden></canvas>
 <div class="app" id="app">
   <header class="topbar">
     <button class="icon-btn sidebar-toggle" id="sidebarToggle" type="button" aria-controls="sidebar" aria-expanded="true" title="Hide sidebar" aria-label="Hide sidebar">
@@ -37,6 +36,10 @@
       </button>
       <button class="icon-btn" id="pluginsButton" title="Plugins" aria-label="Plugins">
         <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M8 3.5a1.75 1.75 0 013.5 0V5H15v3.5h-1.5a1.75 1.75 0 000 3.5H15V16H11.5v-1.5a1.75 1.75 0 00-3.5 0V16H4.5v-3.5H6a1.75 1.75 0 000-3.5H4.5V5H8z" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg>
+      </button>
+      <button class="icon-btn" id="activityButton" title="Activity (Ctrl+Shift+A)" aria-label="Activity">
+        <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M2.5 10h3l2-5 3.5 10 2-5h4.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        <span class="live-dot" id="activityLive" hidden></span>
       </button>
       <button class="icon-btn" id="filesButton" title="Files" aria-label="Files">
         <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M3 5.5A1.5 1.5 0 014.5 4h3.3l1.6 1.8h6.1A1.5 1.5 0 0117 7.3v7.2a1.5 1.5 0 01-1.5 1.5h-11A1.5 1.5 0 013 14.5z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg>
@@ -127,6 +130,7 @@
       <div class="panel-resize" id="panelResize" role="separator" aria-orientation="vertical" aria-label="Resize files panel" aria-valuemin="280" aria-valuenow="360" tabindex="0"></div>
       <div class="panel-head">
         <div class="tabs" role="tablist">
+          <button role="tab" class="tab" data-tab="activity" aria-selected="false" id="activityTab">Activity <span class="count" id="activityCount"></span></button>
           <button role="tab" class="tab active" data-tab="files" aria-selected="true">Files</button>
           <button role="tab" class="tab" data-tab="changes" aria-selected="false">Changes <span class="count" id="changesCount"></span></button>
           <button role="tab" class="tab" data-tab="preview" aria-selected="false" id="previewTab" hidden>Preview</button>
@@ -139,6 +143,22 @@
       <div class="panel-tools">
         <input type="search" id="fileFilter" placeholder="Filter files" aria-label="Filter files" autocomplete="off">
         <button class="btn ghost small" id="newFileButton" title="New file">New</button>
+      </div>
+      <div class="activity-view" id="activityView" hidden>
+        <div class="activity-summary" id="activitySummary" hidden></div>
+        <div class="activity-tools">
+          <div class="seg" role="radiogroup" aria-label="Show steps" id="activityFilters"></div>
+          <div class="row">
+            <input type="search" id="activitySearch" placeholder="Search steps, files, commands" aria-label="Search steps" autocomplete="off">
+            <button class="btn ghost small" id="activityCopy" type="button" title="Copy the trace as Markdown">Copy</button>
+            <button class="btn ghost small" id="activityDownload" type="button" title="Download the trace as JSON">JSON</button>
+          </div>
+        </div>
+        <div class="activity-list" id="activityList" aria-label="Run timeline">
+          <p class="activity-empty" id="activityEmpty">Every step OASIS takes shows up here: files it reads and edits, commands it runs, and how long each one took.</p>
+          <p class="activity-empty" id="activityNoMatch" hidden>No steps match.</p>
+          <div class="activity-turns" id="activityTurns"></div>
+        </div>
       </div>
       <div class="file-list" id="fileList"></div>
       <div class="changes-list" id="changesList" hidden></div>
@@ -271,7 +291,6 @@
       <label class="check"><input type="checkbox" id="notifyInput"> Notify me when a task finishes or needs me while this tab is in the background</label>
       <label class="check"><input type="checkbox" id="densityVerbose"> Keep every step list open (verbose); otherwise finished work folds into one line</label>
       <label class="check"><input type="checkbox" id="soundInput"> Play soft sounds when a task finishes, fails or needs me</label>
-      <label class="check"><input type="checkbox" id="effectsInput"> Ambient particle effects (off automatically with reduced motion or on low-power devices)</label>
     </fieldset>
     <fieldset id="appSettings" hidden>
       <legend>Apps</legend>

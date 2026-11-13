@@ -44,5 +44,7 @@ test('keyboard guide documents only shortcuts wired by the browser workspace', (
   assert.ok(keys.includes('Ctrl+`'));
   assert.ok(keys.includes('MOD+B'));
   assert.ok(main.includes("event.key.toLowerCase() === 'b'"), 'MOD+B is wired');
-  assert.equal(APP_KEYBOARD_SHORTCUTS.length, 14);
+  assert.ok(keys.includes('MOD+Shift+A'));
+  assert.ok(main.includes("event.key.toLowerCase() === 'a'"), 'MOD+Shift+A is wired');
+  assert.equal(APP_KEYBOARD_SHORTCUTS.length, 15);
 });

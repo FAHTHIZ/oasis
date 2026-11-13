@@ -409,3 +409,35 @@ export function buildTimeline(entries = []) {
 export function elapsedSince(start, now = Date.now()) {
   return Number.isFinite(Number(start)) ? formatDuration(now - Number(start)) : '';
 }
+
+// What a step returned, readable: a failed tool's {"error":"…"} shows the
+// sentence once (OASIS adds "This step failed: …" below it), and a command
+// result {command, exitCode, stdout, stderr, …} shows its output, not JSON.
+export function readableOutput(content) {
+  const text = String(content || '');
+  const newline = text.indexOf('\n');
+  const first = newline === -1 ? text : text.slice(0, newline);
+  if (!first.startsWith('{"')) return text;
+  let value;
+  try { value = JSON.parse(first); } catch { return text; }
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return text;
+  const rest = newline === -1 ? '' : text.slice(newline + 1).trim();
+  if (typeof value.error === 'string' && Object.keys(value).length === 1) {
+    const error = value.error;
+    if (!error) return text;
+    return rest && rest.includes(error.slice(0, 60)) ? rest : (error + (rest ? '\n' + rest : ''));
+  }
+  if ('exitCode' in value && ('stdout' in value || 'stderr' in value)) {
+    const parts = [];
+    const stdout = String(value.stdout || '').replace(/\s+$/, '');
+    const stderr = String(value.stderr || '').replace(/\s+$/, '');
+    if (stdout) parts.push(stdout + (value.stdoutTruncated ? '\n… (output cut short)' : ''));
+    if (stderr) parts.push(stderr + (value.stderrTruncated ? '\n… (output cut short)' : ''));
+    if (value.timedOut) parts.push('Timed out.');
+    else if (value.cancelled) parts.push('Stopped.');
+    else if (!rest && value.exitCode !== 0 && value.exitCode !== null && value.exitCode !== undefined) parts.push('Exit code ' + value.exitCode + '.');
+    if (rest) parts.push(rest);
+    return parts.join('\n') || (value.exitCode === 0 ? 'Finished with no output.' : text);
+  }
+  return text;
+}
