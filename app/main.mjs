@@ -1235,6 +1235,41 @@ function messageActions(role, at = 0) {
   if (role === 'user') button('edit', 'Edit and resend', 'pencil');
   return bar;
 }
+// A failed turn (provider down, rate limit, network) offers Try again, which
+// sends the same request again; the conversation already holds it, so the
+// model answers it rather than seeing it twice.
+function offerRetry(card) {
+  let index = display.length - 1;
+  while (index >= 0 && display[index].role !== 'user') index--;
+  const request = index >= 0 ? String(display[index].content || '') : '';
+  if (!request.trim() || request.startsWith('/')) return;
+  const row = document.createElement('div');
+  row.className = 'msg-actions-row';
+  const retry = document.createElement('button');
+  retry.type = 'button';
+  retry.className = 'chip';
+  retry.innerHTML = icon('rotate-ccw') + '<span>Try again</span>';
+  retry.addEventListener('click', () => {
+    if (document.body.classList.contains('busy')) { toast('Wait for OASIS to finish, or stop it first.'); return; }
+    retryRequest(request);
+  });
+  row.appendChild(retry);
+  card.appendChild(row);
+}
+
+function retryRequest(request) {
+  // The retried request replaces the failed attempt: its message and the
+  // error below it leave the transcript (the Activity panel keeps the record).
+  let index = display.length - 1;
+  while (index >= 0 && display[index].role !== 'user') index--;
+  if (index >= 0) display.splice(index);
+  const bubbles = document.querySelectorAll('#transcript > .msg.user');
+  const failed = bubbles[bubbles.length - 1];
+  if (failed) { while (failed.nextSibling) failed.nextSibling.remove(); failed.remove(); }
+  persistChat();
+  send(request);
+}
+
 // After a turn that changed files on this computer, the last reply offers
 // Undo, which runs /undo (files and conversation go back one turn).
 let turnEdited = false;
@@ -2080,6 +2115,7 @@ function handleRunEvent(event) {
       display.push({ role: 'error', content: event.message });
       const card = addMessage('error', event.message);
       if (event.activeJob) busyFolderActions(card, event.activeJob, event.request || '');
+      else offerRetry(card);
       sound('fail');
       scrollDown(true);
       break;
