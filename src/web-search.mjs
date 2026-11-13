@@ -3,7 +3,7 @@
 // configured engines in parallel and merges independent rankings using RRF.
 // Credentials are read only from the process environment and are never returned.
 import { oasisVersion } from './version.mjs';
-import { decodeHTML } from 'entities';
+import { DomUtils, parseDocument } from 'htmlparser2';
 
 export const WEB_SEARCH_TOOL_DEFINITION = {
   type: 'function',
@@ -64,42 +64,29 @@ export function searchBackends(env = process.env) {
   });
 }
 
-// Result titles and snippets: tags dropped, character references decoded by `entities`.
-function decodeEntities(text) {
-  return decodeHTML(String(text || '').replace(/<[^>]+>/g, '')).replace(/\s+/g, ' ').trim();
-}
-
-// Attribute value from one start tag, whatever the attribute order or quote style.
-function attr(tag, name) {
-  const match = new RegExp('\\s' + name + '\\s*=\\s*(?:"([^"]*)"|\'([^\']*)\'|([^\\s>]+))', 'i').exec(tag);
-  return match ? (match[1] ?? match[2] ?? match[3]) : null;
-}
-const hasClass = (tag, name) => new RegExp('(?:^|\\s)' + name + '(?:\\s|$)').test(attr(tag, 'class') || '');
-
-// The first <a> in `html` whose start tag passes `accept`, as { href, inner }.
-function findLink(html, accept) {
-  for (const match of html.matchAll(/<a\b[^>]*>([\s\S]*?)<\/a>/gi)) {
-    const tag = match[0].slice(0, match[0].indexOf('>') + 1);
-    if (accept(tag)) return { href: attr(tag, 'href'), inner: match[1] };
-  }
-  return null;
-}
+// Result pages are parsed by htmlparser2 (the forgiving, spec-following parser
+// behind cheerio): attributes in any order or quote style, character references
+// decoded, nested markup in titles and snippets reduced to its text.
+const { findAll, findOne, textContent } = DomUtils;
+const hasClass = (node, name) => String(node.attribs && node.attribs.class || '').split(/\s+/).includes(name);
+const isTag = (node, tag) => node.name === tag;
+const text = (node) => (node ? textContent(node).replace(/\s+/g, ' ').trim() : '');
+const elements = (html) => parseDocument(String(html || '')).children;
 
 export function parseDuckDuckGoHtml(html) {
   const results = [];
-  const blocks = String(html).split(/<div\b[^>]*\sclass\s*=\s*["'][^"']*\bresult\b[^"']*["'][^>]*>/i).slice(1);
-  for (const block of blocks) {
-    const link = findLink(block, (tag) => hasClass(tag, 'result__a'));
-    if (!link || !link.href) continue;
-    let href = decodeHTML(link.href);
+  for (const block of findAll((node) => isTag(node, 'div') && hasClass(node, 'result'), elements(html))) {
+    const link = findOne((node) => isTag(node, 'a') && hasClass(node, 'result__a'), block.children);
+    if (!link || !link.attribs.href) continue;
+    let href = link.attribs.href;
     const redirect = href.match(/[?&]uddg=([^&]+)/);
     if (redirect) {
       try { href = decodeURIComponent(redirect[1]); } catch {}
     }
     if (href.startsWith('//')) href = 'https:' + href;
     if (!/^https?:\/\//i.test(href) || /duckduckgo\.com\/y\.js/.test(href)) continue;
-    const snippet = block.match(/<(a|div|td)\b[^>]*\sclass\s*=\s*["'][^"']*\bresult__snippet\b[^"']*["'][^>]*>([\s\S]*?)<\/\1>/i);
-    results.push({ title: decodeEntities(link.inner), url: href, snippet: snippet ? decodeEntities(snippet[2]) : '' });
+    const snippet = findOne((node) => ['a', 'div', 'td'].includes(node.name) && hasClass(node, 'result__snippet'), block.children);
+    results.push({ title: text(link), url: href, snippet: text(snippet) });
   }
   return results;
 }
@@ -110,19 +97,24 @@ export function parseDuckDuckGoHtml(html) {
 // bing.com/ck/a?...&u=a1<base64url>; the real URL is unwrapped here.
 export function parseBingHtml(html) {
   const results = [];
-  const blocks = String(html).split(/<li\b[^>]*\sclass\s*=\s*["']b_algo\b[^"']*["'][^>]*>/i).slice(1);
-  for (const block of blocks) {
-    const heading = block.match(/<h2\b[^>]*>([\s\S]*?)<\/h2>/i);
-    const link = heading && findLink(heading[1], () => true);
-    if (!link || !link.href) continue;
-    let href = decodeHTML(link.href);
+  for (const block of findAll((node) => isTag(node, 'li') && hasClass(node, 'b_algo'), elements(html))) {
+    const heading = findOne((node) => isTag(node, 'h2'), block.children);
+    const link = heading && findOne((node) => isTag(node, 'a'), heading.children);
+    if (!link || !link.attribs.href) continue;
+    let href = link.attribs.href;
     const wrapped = href.match(/[?&]u=a1([^&]+)/);
     if (wrapped) {
       try { href = Buffer.from(wrapped[1].replace(/-/g, '+').replace(/_/g, '/'), 'base64').toString('utf8'); } catch {}
     }
     if (!/^https?:\/\//i.test(href) || /^https?:\/\/(?:www\.)?bing\.com\//i.test(href)) continue;
-    const snippet = block.slice(heading.index + heading[0].length).match(/<p\b[^>]*>([\s\S]*?)<\/p>/i);
-    results.push({ title: decodeEntities(link.inner), url: href, snippet: snippet ? decodeEntities(snippet[1]).replace(/^Web\s*/, '') : '' });
+    // The caption is the first paragraph after the heading (its following
+    // siblings, then those of each ancestor up to the result block).
+    const after = [];
+    for (let node = heading; node && node !== block; node = node.parent) {
+      for (let next = node.next; next; next = next.next) after.push(next);
+    }
+    const snippet = findOne((node) => isTag(node, 'p'), after);
+    results.push({ title: text(link), url: href, snippet: text(snippet).replace(/^Web\s*/, '') });
   }
   return results;
 }
