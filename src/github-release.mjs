@@ -104,24 +104,3 @@ export async function resolveTagCommit(repository, tag, { fetchImpl = fetch, env
   if (!/^[0-9a-f]{40}$/.test(sha)) throw new Error('GitHub did not return a valid commit id for release ' + tag + '.');
   return sha;
 }
-
-// Parse a SHA256SUMS file into a { filename: hash } map. Handles the standard
-// "<hash>  <filename>" format (two spaces) and tolerates extra whitespace.
-export function parseChecksums(text) {
-  const map = {};
-  for (const line of String(text || '').split('\n')) {
-    const match = /^([a-fA-F0-9]{64})\s+\*?(.+)$/.exec(line.trim());
-    if (match) map[match[2].trim()] = match[1].toLowerCase();
-  }
-  return map;
-}
-
-// Verify a downloaded artifact's SHA-256 hash against the published checksum.
-// Returns true when they match; throws with a clear message when they do not.
-export function verifyChecksum(fileHash, checksums, filename) {
-  const expected = checksums && checksums[filename];
-  if (!expected) throw new Error('No published checksum for ' + filename + '.');
-  const actual = String(fileHash || '').toLowerCase();
-  if (actual !== expected) throw new Error('Checksum mismatch for ' + filename + ': expected ' + expected + ', got ' + actual + '.');
-  return true;
-}
