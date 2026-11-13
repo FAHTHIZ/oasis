@@ -195,3 +195,15 @@ test('step output reads as text, not the JSON a tool returned', async () => {
   assert.equal(readableOutput('{"path":"a.txt","bytes":3}'), '{"path":"a.txt","bytes":3}');
   assert.equal(readableOutput('plain text'), 'plain text');
 });
+
+test('a reply repeated word for word in the same turn is recognised', async () => {
+  const { repeatsEarlierReply } = await import('../app/core/timeline.mjs');
+  const first = { role: 'assistant', content: 'Changed notes.txt.', tools: [] };
+  const second = { role: 'assistant', content: '', tools: [] };
+  const entries = [{ role: 'user', content: 'Edit' }, first, { role: 'assistant', content: '', tools: [{ id: 'a' }] }, second];
+  assert.equal(repeatsEarlierReply(entries, second, 'Changed  notes.txt.\n'), true);
+  assert.equal(repeatsEarlierReply(entries, second, 'Something else.'), false);
+  assert.equal(repeatsEarlierReply(entries, first, 'Changed notes.txt.'), false, 'not against itself');
+  const later = [...entries, { role: 'user', content: 'Again' }, second];
+  assert.equal(repeatsEarlierReply(later, second, 'Changed notes.txt.'), false, 'an earlier turn does not count');
+});
