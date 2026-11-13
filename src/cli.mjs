@@ -1831,12 +1831,21 @@ async function printModeRun(root, headless, args, autoApprove, persistence, stat
   // exit 0. Abort the turn (which stops running commands), then exit 128+signal.
   const stopController = new AbortController();
   let stopSignal = null;
+  let stopSignalAt = 0;
   const SIGNAL_CODES = { SIGINT: 2, SIGTERM: 15, SIGHUP: 1 };
   const onStopSignal = (name) => {
-    if (stopSignal) exitAfterTelemetry(128 + SIGNAL_CODES[name]);
+    if (stopSignal) {
+      // `timeout` and process supervisors deliver SIGTERM to the process and
+      // then to its group, so one stop request arrives twice. Only a later
+      // signal means "exit now"; an immediate exit would skip the save notice.
+      if (Date.now() - stopSignalAt >= 1000) exitAfterTelemetry(128 + SIGNAL_CODES[name]);
+      return;
+    }
     stopSignal = name;
+    stopSignalAt = Date.now();
     stderr.write('[oasis] Received ' + name + '; stopping the task and any running commands.\n');
-    stopController.abort();
+    // The result says what stopped the run; "cancelled by the user" would be wrong for a CI timeout.
+    stopController.abort(Object.assign(new Error('Stopped by ' + name + ' before the task finished.'), { name: 'AbortError', stopSignal: name }));
     setTimeout(() => exitAfterTelemetry(128 + SIGNAL_CODES[name]), 5000).unref();
   };
   const stopHandlers = Object.keys(SIGNAL_CODES).map((name) => [name, () => onStopSignal(name)]);
