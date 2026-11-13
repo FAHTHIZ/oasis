@@ -155,7 +155,10 @@ test('completion offers slash commands at the start and @files with fuzzy matchi
   assert.ok(fuzzy.candidates.some((c) => c.value === '@src/cli.mjs'));
   const hidden = await complete('@.e', 3);
   assert.ok(!hidden.candidates.some((c) => c.value === '@.env'), 'secret files are never offered');
-  assert.deepEqual(rankFuzzy(['src/agent.mjs', 'src/cli.mjs', 'docs/cli.md'], 'cli'), ['docs/cli.md', 'src/cli.mjs']);
+  assert.deepEqual(rankFuzzy(['src/agent.mjs', 'src/cli.mjs', 'docs/cli.md'], 'cli'), ['src/cli.mjs', 'docs/cli.md']);
+  // Matches at path-segment and word starts beat scattered letters.
+  assert.equal(rankFuzzy(['scripts/check-eval-quarantine.mjs', 'test/cli.test.mjs', 'src/cli-doctor.mjs'], 'srcli')[0], 'src/cli-doctor.mjs');
+  assert.equal(rankFuzzy(['src/cli-doctor.mjs', 'docs/cli.md'], 'cl doc')[0], 'src/cli-doctor.mjs');
 });
 
 test('history persists per workspace and skips space-prefixed prompts', async () => {

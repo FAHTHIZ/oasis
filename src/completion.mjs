@@ -2,6 +2,7 @@
 // skills, imported) and @file mentions with path and fuzzy matching.
 import { readdir } from 'node:fs/promises';
 import path from 'node:path';
+import fuzzysort from 'fuzzysort';
 import { sensitivePath, walkFiles } from './tools.mjs';
 
 const SKIP_DIRS = new Set(['.git', 'node_modules', '.hg', '.svn', 'dist', 'build', '.next', 'coverage', '__pycache__', '.venv', 'venv', 'target']);
@@ -13,54 +14,32 @@ function tokenAt(text, cursor) {
   return { start, end: cursor, token: text.slice(start, cursor) };
 }
 
+// Fuzzy path matching is fuzzysort (MIT, no dependencies): Sublime-style scoring
+// that rewards contiguous runs and matches at word, path-segment and camelCase
+// starts, so "srcli" finds src/cli.mjs and "cl doc" finds cli-doctor.mjs.
+// Paths are prepared without fuzzysort's global cache, which would otherwise
+// keep every path of every search alive.
+const matchPath = (file, query) => fuzzysort.single(query, fuzzysort.prepare(String(file)));
+
+/** The files matching query, best first (ties: shorter path, then alphabetical). */
 export function rankFuzzy(files, query, limit = 30) {
-  const needle = query.toLowerCase();
+  if (!String(query || '').trim()) return [];
   const scored = [];
   for (const file of files) {
-    const lower = file.toLowerCase();
-    const base = lower.slice(lower.lastIndexOf('/') + 1);
-    let score = -1;
-    if (base.startsWith(needle)) score = 0;
-    else if (base.includes(needle)) score = 1;
-    else if (lower.includes(needle)) score = 2;
-    else {
-      // Subsequence match ("srcli" → src/cli.mjs).
-      let i = 0;
-      for (const ch of lower) if (ch === needle[i]) i += 1;
-      if (i === needle.length) score = 3;
-    }
-    if (score >= 0) scored.push({ file, score });
+    const hit = matchPath(file, query);
+    if (hit) scored.push({ file, score: hit.score });
   }
-  scored.sort((a, b) => a.score - b.score || a.file.length - b.file.length || a.file.localeCompare(b.file));
+  scored.sort((a, b) => b.score - a.score || a.file.length - b.file.length || a.file.localeCompare(b.file));
   return scored.slice(0, limit).map((item) => item.file);
 }
 
-// Score one path for a query, higher is better, with the matched character
-// positions (for highlighting). Same tiers as rankFuzzy: file-name prefix,
-// file-name substring, path substring, then an in-order subsequence. Returns
-// null when the query does not match.
+// Score one path for a query, higher is better (an integer, 1 to 10000), with
+// the matched character positions for highlighting. null when it does not match.
 export function fuzzyScore(file, query) {
-  const needle = String(query || '').toLowerCase();
-  if (!needle) return null;
-  const lower = String(file).toLowerCase();
-  const baseStart = lower.lastIndexOf('/', lower.length - 2) + 1;
-  const base = lower.slice(baseStart);
-  const run = (at) => Array.from({ length: needle.length }, (_, i) => at + i);
-  let tier;
-  let indices;
-  if (base.startsWith(needle)) { tier = 3; indices = run(baseStart); }
-  else if (base.includes(needle)) { tier = 2; indices = run(baseStart + base.indexOf(needle)); }
-  else if (lower.includes(needle)) { tier = 1; indices = run(lower.lastIndexOf(needle)); }
-  else {
-    indices = [];
-    let i = 0;
-    for (let at = 0; at < lower.length && i < needle.length; at++) if (lower[at] === needle[i]) { indices.push(at); i += 1; }
-    if (i < needle.length) return null;
-    tier = 0;
-  }
-  const spread = indices[indices.length - 1] - indices[0] + 1 - needle.length;
-  const score = Math.max(1, tier * 10000 + 5000 - Math.min(spread, 2500) - Math.min(lower.length, 2499));
-  return { score, indices };
+  if (!String(query || '').trim()) return null;
+  const hit = matchPath(file, query);
+  if (!hit) return null;
+  return { score: Math.max(1, Math.round(hit.score * 10000)), indices: [...hit.indexes].sort((a, b) => a - b) };
 }
 
 // Claude Code's fileSuggestion command: {"query"} on stdin, newline-separated paths on
