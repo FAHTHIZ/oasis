@@ -26,6 +26,7 @@ import { mcpServerFromForm, describeMcpServer } from './core/mcp.mjs';
 import { speakable, isStopPhrase, turnDetector, rmsLevel, lastReply } from './core/voice-mode.mjs';
 import { previewTarget } from './core/preview.mjs';
 import { anchorMenu } from './core/popover.mjs';
+import { createFocusTrap } from 'focus-trap';
 import { icon, kindIcon } from './core/icons.mjs';
 import { searchMarketplace, marketplaceCount, OFFICIAL_MARKETPLACE } from './core/claude-plugins.mjs';
 import { syncBrowserChats } from './core/chat-sync.mjs';
@@ -326,6 +327,7 @@ for (const id of ['commandPaletteDialog', 'shortcutsDialog']) {
 
 /* ---------- Sheets ---------- */
 const openSheets = [];
+const sheetTraps = new Map();
 // A docked approval sits over the chat column, just above the message box.
 function placeDocked() {
   const el = $('approvalSheet');
@@ -359,8 +361,18 @@ function openSheet(id) {
   if (docked) placeDocked(); else $('backdrop').hidden = false;
   openSheets.push(id);
   try { history.pushState({ sheet: id }, ''); } catch { /* sandboxed frames */ }
-  const focusable = el.querySelector('input,select,textarea,button:not([data-close])');
-  if (focusable && matchMedia('(pointer:fine)').matches) focusable.focus();
+  // A modal sheet keeps Tab inside it and gives focus back on close (focus-trap,
+  // MIT); stacked sheets pause the one below. A docked approval does not trap.
+  // With a mouse the first field takes focus; on touch the sheet itself does,
+  // so no keyboard pops up.
+  const first = matchMedia('(pointer:fine)').matches && el.querySelector('input,select,textarea,button:not([data-close])');
+  sheetTraps.get(id)?.deactivate({ returnFocus: false });
+  if (docked) { if (first) first.focus(); } else {
+    if (!el.hasAttribute('tabindex')) el.tabIndex = -1;
+    const trap = createFocusTrap(el, { initialFocus: () => first || el, fallbackFocus: el, escapeDeactivates: false, clickOutsideDeactivates: false, allowOutsideClick: true, returnFocusOnDeactivate: true, preventScroll: true });
+    sheetTraps.set(id, trap);
+    trap.activate();
+  }
   if (id === 'approvalSheet') { runClock.tick(); refreshWaitingRows(); }
 }
 let ignorePop = false;
@@ -368,6 +380,8 @@ function closeSheet(id, { fromHistory = false } = {}) {
   const el = $(id);
   if (!el || el.hidden) return;
   el.hidden = true;
+  sheetTraps.get(id)?.deactivate();
+  sheetTraps.delete(id);
   if (el.classList.contains('docked')) { el.classList.remove('docked'); el.style.left = el.style.width = el.style.bottom = ''; $('chat').style.paddingBottom = ''; }
   if (!fromHistory && history.state && history.state.sheet === id) { ignorePop = true; history.back(); }
   openSheets.splice(openSheets.indexOf(id), 1);

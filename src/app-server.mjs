@@ -31,11 +31,13 @@ export const APP_PACKAGES = Object.freeze({
   'turndown-plugin-gfm': 'lib/turndown-plugin-gfm.browser.es.js',
   '@floating-ui/dom': 'dist/floating-ui.dom.browser.min.mjs',
   '@floating-ui/core': 'dist/floating-ui.core.browser.min.mjs',
-  fuzzysort: 'fuzzysort.js'
+  fuzzysort: 'fuzzysort.js',
+  'focus-trap': 'dist/focus-trap.esm.min.js',
+  tabbable: 'dist/index.esm.min.js'
 });
 
 // Bare imports inside a vendored browser build: serving a package also serves these.
-const APP_PACKAGE_DEPS = Object.freeze({ '@floating-ui/dom': ['@floating-ui/core'] });
+const APP_PACKAGE_DEPS = Object.freeze({ '@floating-ui/dom': ['@floating-ui/core'], 'focus-trap': ['tabbable'] });
 
 // Bare names whose browser build ships in another npm package. highlight.js's own
 // es/ entries wrap CommonJS; its pre-built ES module (common languages) is in
