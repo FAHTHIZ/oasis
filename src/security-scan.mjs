@@ -22,6 +22,7 @@
 import { lstat, mkdir, mkdtemp, readFile, realpath, rm, stat } from 'node:fs/promises';
 import { existsSync, readdirSync } from 'node:fs';
 import os from 'node:os';
+import { createRequire } from 'node:module';
 import stripAnsi from 'strip-ansi';
 import path from 'node:path';
 import { onPathSync } from './clipboard-path.mjs';
@@ -57,32 +58,19 @@ function cvssBand(score) {
   return value >= 9 ? 'critical' : value >= 7 ? 'high' : value >= 4 ? 'medium' : 'low';
 }
 
-// CVSS v3.0/v3.1 base score from a vector string (FIRST specification,
-// section 7.1). Returns null for other versions, which fall back to words.
-const CVSS3 = {
-  AV: { N: 0.85, A: 0.62, L: 0.55, P: 0.2 }, AC: { L: 0.77, H: 0.44 }, UI: { N: 0.85, R: 0.62 },
-  CIA: { H: 0.56, L: 0.22, N: 0 }
-};
+// CVSS base score from a vector string (v2, v3.0, v3.1 and v4.0) through
+// metaeffekt's ae-cvss-calculator. Returns null for anything it cannot score,
+// which then falls back to the scanner's severity word. The calculator is
+// loaded on first use so it does not slow every OASIS start.
+const require = createRequire(import.meta.url);
+let cvssCalculator = null;
 
-function roundUp(value) {
-  const scaled = Math.round(value * 100000);
-  return scaled % 10000 === 0 ? scaled / 100000 : (Math.floor(scaled / 10000) + 1) / 10;
-}
-
-export function cvss3Score(vector) {
-  const match = String(vector || '').match(/^CVSS:3\.[01]\/(.+)$/);
-  if (!match) return null;
-  const metrics = Object.fromEntries(match[1].split('/').map((part) => part.split(':')));
-  const changed = metrics.S === 'C';
-  const pr = { N: 0.85, L: changed ? 0.68 : 0.62, H: changed ? 0.5 : 0.27 }[metrics.PR];
-  const values = [CVSS3.AV[metrics.AV], CVSS3.AC[metrics.AC], pr, CVSS3.UI[metrics.UI], CVSS3.CIA[metrics.C], CVSS3.CIA[metrics.I], CVSS3.CIA[metrics.A]];
-  if (values.some((value) => value === undefined) || !['U', 'C'].includes(metrics.S)) return null;
-  const [av, ac, prv, ui, c, i, a] = values;
-  const iss = 1 - (1 - c) * (1 - i) * (1 - a);
-  const impact = changed ? 7.52 * (iss - 0.029) - 3.25 * Math.pow(iss - 0.02, 15) : 6.42 * iss;
-  if (impact <= 0) return 0;
-  const exploitability = 8.22 * av * ac * prv * ui;
-  return roundUp(Math.min(changed ? 1.08 * (impact + exploitability) : impact + exploitability, 10));
+export function cvssScore(vector) {
+  cvssCalculator ||= require('ae-cvss-calculator');
+  let parsed = null;
+  try { parsed = cvssCalculator.fromVector(String(vector || '').trim()); } catch { return null; }
+  const score = parsed ? parsed.calculateScores().base : undefined;
+  return Number.isFinite(score) ? score : null;
 }
 
 function wordBand(word) {
@@ -317,7 +305,7 @@ export function parseCargoAudit(report, workspace, base = '') {
   for (const item of vulnerabilities) {
     const advisory = item.advisory || {};
     const pkg = item.package || {};
-    const score = cvss3Score(advisory.cvss);
+    const score = cvssScore(advisory.cvss);
     const aliases = (advisory.aliases || []).filter((alias) => /^CVE-/.test(alias));
     const patched = item.versions && Array.isArray(item.versions.patched) ? item.versions.patched : [];
     const functions = advisory && item.affected && item.affected.functions ? Object.keys(item.affected.functions) : [];

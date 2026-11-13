@@ -96,6 +96,7 @@
     "@vscode/tree-sitter-wasm": "0.3.1",
     "@xterm/addon-fit": "0.11.0",
     "@xterm/xterm": "6.0.0",
+    "ae-cvss-calculator": "1.0.13",
     "ajv": "8.20.0",
     "cockatiel": "4.0.0",
     "croner": "^11.0.0",
