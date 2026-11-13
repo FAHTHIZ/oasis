@@ -344,3 +344,10 @@ test('banner names the model server instead of the wire protocol', () => {
   assert.equal(bannerProviderLabel({ protocol: 'openai' }), 'openai');
   assert.equal(bannerProviderLabel({}), '');
 });
+
+test('write summaries count a trailing newline as the end of the last line', async () => {
+  const { describeEdit } = await import('../src/terminal-ui.mjs');
+  assert.match(describeEdit({ name: 'write_file', args: { path: 'a.mjs', content: 'console.log(1)\n' }, result: {} }, { color: false }), /Wrote 1 line to a\.mjs/);
+  assert.match(describeEdit({ name: 'write_file', args: { path: 'a.mjs', content: 'a\nb' }, result: {} }, { color: false }), /Wrote 2 lines/);
+  assert.match(describeEdit({ name: 'write_file', args: { path: 'a.mjs', content: 'c\n', append: true }, result: {} }, { color: false }), /Appended 1 line/);
+});

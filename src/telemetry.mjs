@@ -287,7 +287,7 @@ export function exitAfterTelemetry(code) {
 
 // Rough line counts for file-changing tools, for oasis.lines_of_code.count.
 export function lineChanges(name, args = {}) {
-  const lines = (text) => (typeof text === 'string' && text.length ? text.split('\n').length : 0);
+  const lines = (text) => (typeof text === 'string' && text.length ? text.split('\n').length - (text.endsWith('\n') ? 1 : 0) : 0);
   if (name === 'write_file') return { added: lines(args.content), removed: 0 };
   if (name === 'edit_file') return { added: lines(args.new_string), removed: lines(args.old_string) };
   if (name === 'multi_edit' && Array.isArray(args.edits)) return args.edits.reduce((sum, edit) => ({ added: sum.added + lines(edit && edit.new_string), removed: sum.removed + lines(edit && edit.old_string) }), { added: 0, removed: 0 });

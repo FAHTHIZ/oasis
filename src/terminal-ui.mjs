@@ -234,7 +234,8 @@ export function promptFor(text, color = true) {
 }
 
 // /focus: the last prompt, one line per tool call (with +/- line counts for edits) and the final reply.
-function lineCount(text) { return text ? String(text).split('\n').length : 0; }
+// "a\n" is one line, not two: a trailing newline ends the last line.
+function lineCount(text) { if (!text) return 0; const value = String(text); return value.split('\n').length - (value.endsWith('\n') ? 1 : 0); }
 function editStats(name, args) {
   if (name === 'write_file') return '+' + lineCount(args.content);
   const pairs = name === 'edit_file' ? [[args.old_string, args.new_string]] : name === 'multi_edit' && Array.isArray(args.edits) ? args.edits.map((e) => [e.old_string, e.new_string]) : [];
@@ -570,7 +571,7 @@ export function describeEdit({ name, args = {}, result = {} }, { color = true } 
     : name === 'multi_edit' && Array.isArray(args.edits) ? args.edits.map((edit) => [edit.old_string, edit.new_string])
       : [];
   if (name === 'write_file' && typeof args.content === 'string') {
-    const lines = args.content.split('\n').length;
+    const lines = lineCount(args.content);
     return '  ⎿ ' + (color ? ANSI.dim : '') + (args.append === true ? 'Appended ' : 'Wrote ') + lines + ' line' + (lines === 1 ? '' : 's') + ' to ' + args.path + (color ? ANSI.noBold : '');
   }
   if (!pairs.length) return '';
