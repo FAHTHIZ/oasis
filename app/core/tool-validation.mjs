@@ -1,64 +1,48 @@
-// Browser-safe validation for the IndexedDB workspace tool schemas.
-// Keep this intentionally small: no Node imports, package loader or network.
-function typeMatches(type, value) {
-  if (Array.isArray(type)) return type.some((item) => typeMatches(item, value));
-  switch (type) {
-    case 'object': return value !== null && typeof value === 'object' && !Array.isArray(value);
-    case 'array': return Array.isArray(value);
-    case 'string': return typeof value === 'string';
-    case 'integer': return Number.isInteger(value);
-    case 'number': return typeof value === 'number' && Number.isFinite(value);
-    case 'boolean': return typeof value === 'boolean';
-    case 'null': return value === null;
-    default: return true;
-  }
+// Browser validation of model-supplied tool arguments with @cfworker/json-schema
+// (MIT): full JSON Schema drafts 4 through 2020-12 ($ref, anyOf/oneOf, const,
+// formats, ...) without eval, so it runs under the app's CSP where Ajv's
+// generated code cannot. Like the Node side (src/tool-schema-validation.mjs),
+// a schema without $schema is read as Draft-07.
+import { Validator } from '@cfworker/json-schema';
+
+const validators = new WeakMap();
+// Summaries that only point at a nested error, which is reported on its own.
+const WRAPPERS = new Set(['properties', 'items', 'prefixItems', 'additionalItems', 'patternProperties', 'false', '$ref', 'allOf']);
+
+function dialectOf(schema) {
+  const id = typeof schema.$schema === 'string' ? schema.$schema : '';
+  if (id.includes('2020-12')) return '2020-12';
+  if (id.includes('2019-09')) return '2019-09';
+  if (id.includes('draft-04')) return '4';
+  return '7';
 }
 
-function validateNode(schema, value, path, errors, depth) {
-  if (!schema || typeof schema !== 'object' || Array.isArray(schema)) return;
-  if (depth > 12) { errors.push(path + ' exceeds maximum schema depth'); return; }
-  if (schema.type && !typeMatches(schema.type, value)) {
-    errors.push(path + ' must be ' + (Array.isArray(schema.type) ? schema.type.join(' or ') : schema.type));
-    return;
+function validatorFor(schema) {
+  if (typeof schema !== 'object') return new Validator(schema, '7', false);
+  let validator = validators.get(schema);
+  if (!validator) validators.set(schema, validator = new Validator(schema, dialectOf(schema), false));
+  return validator;
+}
+
+function describe(error) {
+  const at = error.instanceLocation.replace(/^#/, '') || '/';
+  if (error.keyword === 'additionalProperties' || error.keyword === 'unevaluatedProperties') {
+    const property = /Property "(.*)" does not match/.exec(error.error);
+    if (property) return at + ' contains unsupported property "' + property[1] + '"';
   }
-  if (Array.isArray(schema.enum) && !schema.enum.some((item) => Object.is(item, value))) {
-    errors.push(path + ' must be one of the allowed values');
-  }
-  if (typeof value === 'string') {
-    if (Number.isInteger(schema.minLength) && value.length < schema.minLength) errors.push(path + ' must contain at least ' + schema.minLength + ' characters');
-    if (Number.isInteger(schema.maxLength) && value.length > schema.maxLength) errors.push(path + ' must contain at most ' + schema.maxLength + ' characters');
-    if (typeof schema.pattern === 'string') {
-      try { if (!new RegExp(schema.pattern).test(value)) errors.push(path + ' does not match the required pattern'); }
-      catch { errors.push(path + ' has an invalid pattern in its schema'); }
-    }
-  }
-  if (typeof value === 'number' && Number.isFinite(value)) {
-    if (Number.isFinite(schema.minimum) && value < schema.minimum) errors.push(path + ' must be at least ' + schema.minimum);
-    if (Number.isFinite(schema.maximum) && value > schema.maximum) errors.push(path + ' must be at most ' + schema.maximum);
-  }
-  if (Array.isArray(value)) {
-    if (Number.isInteger(schema.minItems) && value.length < schema.minItems) errors.push(path + ' must contain at least ' + schema.minItems + ' items');
-    if (Number.isInteger(schema.maxItems) && value.length > schema.maxItems) errors.push(path + ' must contain at most ' + schema.maxItems + ' items');
-    if (schema.items && typeof schema.items === 'object') {
-      for (let index = 0; index < Math.min(value.length, 100); index++) validateNode(schema.items, value[index], path + '[' + index + ']', errors, depth + 1);
-    }
-  }
-  if (value !== null && typeof value === 'object' && !Array.isArray(value)) {
-    const properties = schema.properties && typeof schema.properties === 'object' ? schema.properties : {};
-    for (const key of Array.isArray(schema.required) ? schema.required : []) {
-      if (!Object.prototype.hasOwnProperty.call(value, key)) errors.push(path + ' is missing required property "' + key + '"');
-    }
-    for (const [key, child] of Object.entries(value)) {
-      if (Object.prototype.hasOwnProperty.call(properties, key)) validateNode(properties[key], child, path + '.' + key, errors, depth + 1);
-      else if (schema.additionalProperties === false) errors.push(path + ' contains unsupported property "' + key + '"');
-      else if (schema.additionalProperties && typeof schema.additionalProperties === 'object') validateNode(schema.additionalProperties, child, path + '.' + key, errors, depth + 1);
-    }
-  }
+  return at + ' ' + error.error.replace(/^Instance /, '').replace(/\.$/, '');
 }
 
 export async function validateAppToolArguments(schema, args) {
   if (schema === undefined || schema === null) return { valid: true, skipped: true };
-  const errors = [];
-  validateNode(schema, args, '/', errors, 0);
-  return errors.length ? { valid: false, errors: errors.slice(0, 8) } : { valid: true, skipped: false };
+  let result;
+  try { result = validatorFor(schema).validate(args); }
+  catch (error) { return { valid: false, schemaError: String(error && error.message || error) }; }
+  if (result.valid) return { valid: true, skipped: false };
+  // Inside anyOf/oneOf/not, only the combinator's own summary is useful: the
+  // per-branch failures are expected for every branch but the intended one.
+  const errors = result.errors
+    .filter((error) => !WRAPPERS.has(error.keyword) && !/\/(anyOf|oneOf|not|if|then|else)\/./.test(error.keywordLocation.replace(/^#/, '')))
+    .map(describe);
+  return { valid: false, errors: [...new Set(errors.length ? errors : result.errors.map(describe))].slice(0, 8) };
 }

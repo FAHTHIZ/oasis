@@ -78,6 +78,7 @@
   "dependencies": {
     "@agentclientprotocol/sdk": "^2.5.0",
     "@anthropic-ai/sandbox-runtime": "^0.0.81",
+    "@cfworker/json-schema": "4.1.6",
     "@floating-ui/dom": "^1.8.0",
     "@highlightjs/cdn-assets": "11.11.2",
     "@modelcontextprotocol/client": "2.4.0",

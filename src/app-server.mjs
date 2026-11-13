@@ -36,7 +36,8 @@ export const APP_PACKAGES = Object.freeze({
   tabbable: 'dist/index.esm.min.js',
   remend: 'dist/index.js',
   idb: 'build/index.js',
-  'binary-extensions': 'index.js'
+  'binary-extensions': 'index.js',
+  '@cfworker/json-schema': 'dist/esm/index.js'
 });
 
 // Bare imports inside a vendored browser build: serving a package also serves these.
