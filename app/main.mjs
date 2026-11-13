@@ -4242,7 +4242,9 @@ initActivity({
   showInChat: showStepInChat,
   copyText,
   toast,
-  download: downloadText
+  download: downloadText,
+  title: chatTitle,
+  openActivity: () => toggleActivity(true)
 });
 for (const tab of document.querySelectorAll('#filesPanel .tab')) tab.addEventListener('click', () => showPanelTab(tab.dataset.tab));
 
@@ -5062,7 +5064,7 @@ async function boot() {
   follow.init();
   applyTheme();
   applySidebar();
-  $('sideSearchKey').textContent = displayShortcut('MOD+K');
+  $('sideSearchKey').textContent = isApplePlatform ? '⌘K' : 'Ctrl K';
   fillProviderOptions();
   updateModeUI();
   const found = await detectRuntime().catch(() => ({ available: false }));

@@ -47,7 +47,8 @@ function words(value) { return String(value).replace(/[_-]+/g, ' ').trim(); }
 export function summarizeArgs(name, args = {}) {
   if (!args || typeof args !== 'object') return '';
   if (args.pattern) return args.pattern + (args.path ? '  in ' + args.path : '');
-  if (args.path || args.file_path) return String(args.path || args.file_path) + (args.offset ? ':' + args.offset : '');
+  // The project root ("." or "./") says nothing next to "Listed project files".
+  if (args.path || args.file_path) return /^\.\/?$/.test(String(args.path || args.file_path)) ? '' : String(args.path || args.file_path) + (args.offset ? ':' + args.offset : '');
   if (args.url) return String(args.url);
   if (name === 'task' && args.description) return String(args.description).slice(0, 100);
   if (args.name) return String(args.name);

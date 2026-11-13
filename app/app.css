@@ -75,6 +75,21 @@ svg.icon.i-stop{fill:currentColor}
 
 .main{min-height:0;display:flex;position:relative}
 .chat-col{flex:1;min-width:0;display:flex;flex-direction:column}
+.task-bar{display:flex;align-items:center;gap:10px;min-height:44px;padding:6px 14px;border-bottom:1px solid var(--line)}
+.task-bar[hidden]{display:none}
+.task-title{flex:1;min-width:0;margin:0;font-size:14px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.task-state{display:inline-flex;align-items:center;gap:6px;flex:none;font-size:12.5px;color:var(--muted)}
+.task-state .status-dot{width:7px;height:7px;border-radius:50%;background:var(--muted)}
+.task-bar[data-status=running] .task-state .status-dot{background:var(--accent);animation:pulse 1.4s ease-in-out infinite}
+.task-bar[data-status=waiting] .task-state{color:var(--warn)}
+.task-bar[data-status=waiting] .task-state .status-dot{background:var(--warn)}
+.task-bar[data-status=done] .task-state .status-dot{background:var(--accent)}
+.task-bar[data-status=issues] .task-state .status-dot,.task-bar[data-status=error] .task-state .status-dot{background:var(--danger)}
+.task-meta{flex:none;border:0;background:none;color:var(--muted);font:inherit;font-size:12.5px;font-variant-numeric:tabular-nums;padding:4px 6px;border-radius:6px;cursor:pointer}
+.task-meta:hover{color:var(--text);background:var(--sunken)}
+.task-meta:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+@media (max-width:640px){.task-meta{display:none}}
+@media (prefers-reduced-motion:reduce){.task-bar[data-status=running] .task-state .status-dot{animation:none}}
 .update-bar{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:8px 10px 8px 14px;border-bottom:1px solid var(--accent-line);background:var(--accent-soft);font-size:13.5px}
 .update-bar[hidden]{display:none}
 .update-text{flex:1 1 220px;min-width:0;color:var(--muted)}
@@ -851,6 +866,7 @@ html.lite .topbar{backdrop-filter:none;-webkit-backdrop-filter:none;background:v
 .activity-summary[data-status="running"] .status-dot{background:var(--accent);animation:pulse 1.2s ease-in-out infinite}
 .activity-summary:is([data-status="issues"],[data-status="error"]) .status-dot{background:var(--danger)}
 .activity-summary[data-status="stopped"] .status-dot{background:var(--faint)}
+.activity-summary[data-status="waiting"] .status-dot{background:var(--warn)}
 .activity-stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(64px,1fr));gap:4px;margin:0}
 .activity-stat{display:grid;gap:1px;min-width:0}
 .activity-stat dt{font-size:10.5px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:var(--faint);white-space:nowrap}
