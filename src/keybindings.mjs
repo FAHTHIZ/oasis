@@ -38,7 +38,7 @@ export const DEFAULT_BINDINGS = {
 };
 
 // What each action does in the OASIS editor: a key name for applyKey, or an editor action.
-export const ACTIONS = {
+const ACTIONS = {
   'app:interrupt': { key: 'ctrlC' }, 'app:exit': { key: 'ctrlD' }, 'app:toggleTodos': { key: 'ctrlT' }, 'app:toggleTranscript': { key: 'ctrlO' }, 'app:commandPalette': { action: 'commandPalette' }, 'app:redraw': { action: 'redraw' },
   'history:search': { key: 'search' }, 'history:previous': { key: 'up' }, 'history:next': { key: 'down' },
   'chat:cancel': { key: 'escape' }, 'chat:clearInput': { key: 'clearScreen' }, 'chat:clearScreen': { key: 'clearScreen' }, 'chat:cycleMode': { key: 'shiftTab' },

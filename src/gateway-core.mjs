@@ -6,8 +6,8 @@
 import path from 'node:path';
 import { mkdir, writeFile } from 'node:fs/promises';
 
-export const APPROVAL_TIMEOUT_MS = 10 * 60000;
-export const MODES = ['default', 'acceptEdits', 'plan', 'auto'];
+const APPROVAL_TIMEOUT_MS = 10 * 60000;
+const MODES = ['default', 'acceptEdits', 'plan', 'auto'];
 
 const MAX_ATTACHMENT_BYTES = 20 * 1024 * 1024;
 const MAX_ATTACHMENTS = 5;

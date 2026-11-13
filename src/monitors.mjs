@@ -18,7 +18,7 @@ import { startBackgroundProcess, killBackgroundEntry } from './power-tools.mjs';
 import { createBoundedRegexMatcher } from './safe-regex.mjs';
 
 const MONITOR_DEFAULT_TIMEOUT_MS = 300000;
-export const MONITOR_MAX_TIMEOUT_MS = 3600000;
+const MONITOR_MAX_TIMEOUT_MS = 3600000;
 const MONITOR_HEADLESS_MAX_MS = 600000;
 const FLUSH_MS = 250;
 const MAX_LINES_PER_EVENT = 40;

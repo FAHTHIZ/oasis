@@ -35,7 +35,7 @@ const MAX_PROMPT = 20_000;
 const MAX_OUTPUT = 60_000;
 const LOCK_STALE_MS = 2 * 60_000;
 const UNITS = { s: 1000, m: 60_000, h: 3_600_000, d: 86_400_000, w: 7 * 86_400_000 };
-export const PERMISSION_MODES = ['default', 'acceptEdits', 'plan', 'auto', 'dontAsk'];
+const PERMISSION_MODES = ['default', 'acceptEdits', 'plan', 'auto', 'dontAsk'];
 
 export function schedulesDirectory(env = process.env) {
   return path.join(getConfigDirectory(env), 'schedules');

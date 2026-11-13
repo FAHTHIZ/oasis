@@ -9,7 +9,7 @@ import { contextWindowSize, compactionThresholdChars } from './context.mjs';
 // optional environment/configuration override. Older models with
 // smaller caps get a conservative default; a provider 400 that names the real
 // cap lowers it for the rest of the session instead of failing the turn.
-export const MAX_TURN_TOOL_CALLS = 2000;
+const MAX_TURN_TOOL_CALLS = 2000;
 const DEFAULT_TURN_TOOL_CALLS = 300;
 const DEFAULT_OUTPUT_CEILING = 32000;
 const LEGACY_8K_MODELS = /claude-(instant|2)|claude-3-(opus|sonnet|haiku)|claude-3-5-|claude-3\.5|gpt-3\.5|gpt-4(?!o|\.1|-turbo)/i;
