@@ -8,7 +8,6 @@
 // the last one (foreground or background) exits.
 import { shellQuote } from './ssh-backend.mjs';
 import { protectedWritePaths } from './sandbox.mjs';
-export { domainList } from './sandbox.mjs';
 import { resolveRipgrep } from './ripgrep.mjs';
 
 let loaded = null;

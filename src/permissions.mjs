@@ -49,8 +49,7 @@ const TOOL_ALIASES = {
   todowrite: ['todo_write']
 };
 
-export const EDIT_TOOLS = new Set(['edit_file', 'multi_edit', 'write_file', 'notebook_edit']);
-export const COMMAND_TOOLS = new Set(['run_command', 'run_shell', 'monitor', 'powershell']);
+const EDIT_TOOLS = new Set(['edit_file', 'multi_edit', 'write_file', 'notebook_edit']);
 
 export function parseRule(raw) {
   const text = String(raw || '').trim();

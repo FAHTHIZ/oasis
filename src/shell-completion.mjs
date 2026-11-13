@@ -72,7 +72,7 @@ const COMPLETION_OPTIONS = [
   '-w', '--worktree', '--yes', '--verbose', '--debug', '--output-format'
 ];
 
-export const PERMISSION_MODES = ['manual', 'accept-edits', 'plan', 'auto', 'dont-ask'];
+const PERMISSION_MODES = ['manual', 'accept-edits', 'plan', 'auto', 'dont-ask'];
 
 const words = (list) => list.join(' ');
 

@@ -11,7 +11,6 @@ import { existsSync } from 'node:fs';
 import os from 'node:os';
 import { runHooks, hasHooks } from './hooks.mjs';
 import { normalizeBranchPrefix } from './branch-names.mjs';
-export { normalizeBranchPrefix } from './branch-names.mjs';
 
 const MAX_GIT_OUTPUT_BYTES = 4 * 1024 * 1024;
 const GIT_KILL_GRACE_MS = 750;
