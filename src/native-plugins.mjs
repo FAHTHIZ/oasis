@@ -385,34 +385,3 @@ export async function uninstallNativePlugin(name,options={}){
   }
   return {name:slug,id};
 }
-export async function listNativePlugins(options={}){
-  const env=options.env||process.env;
-  const registry=await readRegistry(env);
-  const out=[];
-  for(const [id,record] of Object.entries(registry)){
-    if(record.source!=='oasis-native')continue;
-    const meta=await readJsonSafe(path.join(record.installPath,'.oasis-native-installed.json'),null).catch(()=>null);
-    if(meta)out.push({id,name:meta.name,version:meta.version,grantedPermissions:meta.grantedPermissions,requestedPermissions:meta.requestedPermissions});
-  }
-  return out.sort((a,b)=>a.name.localeCompare(b.name));
-}
-export function parseNativePluginPackageArguments(argument,root){
-  const tokens=String(argument||'').trim().split(/\s+/).filter(Boolean);
-  const action=(tokens.shift()||'list').toLowerCase();
-  const positionals=[],grantedPermissions=[];
-  let acceptPermissionDiff=false;
-  for(let i=0;i<tokens.length;i++){
-    const token=tokens[i];
-    if(token==='--accept-permission-diff')acceptPermissionDiff=true;
-    else if(token==='--grant'||token==='--permissions'){
-      const value=tokens[++i];if(!value)throw new Error(token+' needs a comma-separated permission list.');
-      grantedPermissions.push(...value.split(',').map(x=>x.trim()).filter(Boolean));
-    }else if(token.startsWith('--grant='))grantedPermissions.push(...token.slice(8).split(',').map(x=>x.trim()).filter(Boolean));
-    else positionals.push(token);
-  }
-  if(['install','update','validate'].includes(action)){
-    if(!positionals[0])throw new Error('Usage: /plugin-package '+action+' LOCAL-PATH'+(action==='install'?' --grant commands,skills,hooks,agents,mcp':' --grant ...'));
-    if (!parseNativePluginGitSource(positionals[0])) positionals[0]=path.resolve(root,positionals[0]);
-  }
-  return {action,positionals,grantedPermissions:[...new Set(grantedPermissions)],acceptPermissionDiff};
-}
