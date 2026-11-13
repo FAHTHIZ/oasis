@@ -117,6 +117,7 @@
     "linkedom": "^0.18.15",
     "lowlight": "^3.3.0",
     "marked": "^18.2.0",
+    "mime-types": "3.0.2",
     "minisearch": "^7.2.0",
     "picomatch": "^4.0.7",
     "quickjs-emscripten": "0.32.0",

@@ -11,27 +11,26 @@ import http from 'node:http';
 import { randomBytes } from 'node:crypto';
 import { lstat, readFile, stat } from 'node:fs/promises';
 import path from 'node:path';
+import { contentType as mimeContentType } from 'mime-types';
 import { resolveWorkspacePath, sensitivePath } from './tools.mjs';
 
 export const PREVIEW_SANDBOX = 'sandbox allow-scripts allow-forms allow-popups allow-modals allow-downloads allow-pointer-lock';
 const MAX_PREVIEW_FILE_BYTES = 50 * 1024 * 1024;
 
-const TYPES = {
-  '.html': 'text/html; charset=utf-8', '.htm': 'text/html; charset=utf-8', '.css': 'text/css; charset=utf-8',
-  '.js': 'text/javascript; charset=utf-8', '.mjs': 'text/javascript; charset=utf-8', '.cjs': 'text/javascript; charset=utf-8',
-  '.json': 'application/json; charset=utf-8', '.map': 'application/json; charset=utf-8', '.webmanifest': 'application/manifest+json',
-  '.svg': 'image/svg+xml', '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.gif': 'image/gif', '.webp': 'image/webp', '.avif': 'image/avif', '.ico': 'image/x-icon',
-  '.woff': 'font/woff', '.woff2': 'font/woff2', '.ttf': 'font/ttf', '.otf': 'font/otf',
-  '.mp3': 'audio/mpeg', '.wav': 'audio/wav', '.ogg': 'audio/ogg', '.mp4': 'video/mp4', '.webm': 'video/webm',
-  '.pdf': 'application/pdf', '.wasm': 'application/wasm', '.txt': 'text/plain; charset=utf-8', '.md': 'text/plain; charset=utf-8',
-  '.xml': 'application/xml; charset=utf-8', '.csv': 'text/plain; charset=utf-8'
-};
+// Content types come from mime-types (the mime-db lookup behind Express), so
+// fonts, media, 3D models, documents and other long-tail project files are
+// served as what they are. A few entries are overridden for a browser preview:
+// CommonJS is still a script, TypeScript source is text rather than an MPEG
+// stream, and Markdown and CSV display as text instead of downloading.
+const PLAIN = 'text/plain; charset=utf-8';
+const PREVIEW_OVERRIDES = { '.cjs': 'text/javascript; charset=utf-8', '.ts': PLAIN, '.mts': PLAIN, '.cts': PLAIN, '.md': PLAIN, '.markdown': PLAIN, '.csv': PLAIN };
 
 const KEY = '[A-Za-z0-9_-]{32,64}';
 const PREVIEW_PATH = new RegExp('^/preview/(' + KEY + ')/(?::(\\d{2,5})/)?(.*)$');
 
 function previewType(file) {
-  return TYPES[path.extname(file).toLowerCase()] || 'application/octet-stream';
+  const ext = path.extname(file).toLowerCase();
+  return PREVIEW_OVERRIDES[ext] || (ext && mimeContentType(ext)) || 'application/octet-stream';
 }
 
 /** Split `/preview/KEY/:5173/rest` or `/preview/KEY/rest`. */
