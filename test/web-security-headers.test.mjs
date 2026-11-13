@@ -25,5 +25,9 @@ test('web page is served with a hash-based Content-Security-Policy covering ever
   }
   assert.ok(inline >= 1, 'the import map is an inline script');
   assert.doesNotMatch(html, /\son[a-z]+="/, 'no inline event handlers (CSP would block them)');
+  const frame = (await fetch('http://127.0.0.1:' + app.port + '/app/sandbox.html')).headers.get('content-security-policy');
+  assert.match(frame, /worker-src blob:/, 'the JavaScript sandbox frame may start its blob workers');
+  assert.match(frame, /script-src 'self' blob: 'unsafe-eval'/);
+  assert.match(frame, /connect-src 'none'/);
   assert.match(pageContentSecurityPolicy('<script>a()</script><script src="/x.js"></script>'), /script-src 'self' 'sha256-[^']+'(;|$)/);
 });
