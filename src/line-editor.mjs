@@ -12,7 +12,7 @@ import { spawnSync } from 'node:child_process';
 import stringWidthText from 'string-width';
 import stripAnsiText from 'strip-ansi';
 import { StdinBuffer } from '@earendil-works/pi-tui/dist/stdin-buffer.js';
-import { parseKey, decodeKittyPrintable, isKeyRelease } from '@earendil-works/pi-tui/dist/keys.js';
+import { parseKey, decodeKittyPrintable, isKeyRelease, setKittyProtocolActive } from '@earendil-works/pi-tui/dist/keys.js';
 import { prevGrapheme, nextGrapheme, wordBackward, wordForward, columnOf, indexAtColumn } from './text-cursor.mjs';
 import { mkdtempSync, readFileSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -163,8 +163,9 @@ function sequenceKey(seq) {
 // wait for the next read. A lone Esc is reported at once, or, when `onKeys`
 // is given, after a short timeout so a split Alt+key is not read as Esc + key.
 export class KeyDecoder {
-  constructor({ onKeys = null, escapeTimeout } = {}) {
+  constructor({ onKeys = null, onReply = null, escapeTimeout } = {}) {
     this.onKeys = onKeys;
+    this.onReply = onReply;
     this.queue = [];
     this.feeding = false;
     this.buffer = new StdinBuffer(escapeTimeout === undefined ? {} : { escapeTimeout });
@@ -220,6 +221,8 @@ export class KeyDecoder {
         keys.push({ name: 'paste', text: text.replace(/\r\n?/g, '\n') });
         continue;
       }
+      // Answers to the kitty keyboard query (CSI ? flags u) and to DA1.
+      if (/^\x1b\[\?[\d;]*[uc]$/.test(seq)) { if (this.onReply) this.onReply(seq); continue; }
       const key = sequenceKey(seq);
       if (key) keys.push(key);
     }
@@ -506,6 +509,24 @@ export const SHORTCUTS_HELP = [
   '  Rebind keys in ~/.claude/keybindings.json or ~/.oasis/keybindings.json (/keybindings)'
 ];
 
+// Kitty keyboard protocol, level 1 (disambiguate escape codes), as Codex and
+// Gemini CLI do: Shift+Enter, Ctrl+Enter and Alt+keys arrive as distinct
+// CSI-u keys and Esc needs no timeout. Support is asked once (CSI ? u, with
+// DA1 as a sentinel for terminals that do not know it); the flags are pushed
+// while the prompt is open and popped when it closes, so a shell command,
+// $EDITOR or a crash never inherits them. OASIS_KITTY_KEYBOARD=0 turns it off.
+export const kittyKeyboard = { supported: null, pushed: null };
+const KITTY_PUSH = '\x1b[>1u';
+const KITTY_POP = '\x1b[<u';
+function kittyAllowed(env) {
+  if (/^(?:0|false|no|off)$/i.test(String(env.OASIS_KITTY_KEYBOARD || ''))) return false;
+  return !['dumb', 'linux'].includes(String(env.TERM || '')) && env.OASIS_AX_SCREEN_READER !== '1';
+}
+function popKittyOnExit() {
+  const output = kittyKeyboard.pushed;
+  if (output) { try { output.write(KITTY_POP); } catch {} kittyKeyboard.pushed = null; }
+}
+
 // Reads one message from a TTY. Resolves to { type: 'submit', text } or
 // { type: 'eof' }. Falls back to the caller when stdin is not a TTY.
 export function readInput(options = {}) {
@@ -533,7 +554,25 @@ export function readInput(options = {}) {
     let busy = Promise.resolve();
     let done = false;
     const enqueue = (keys) => { for (const key of keys) busy = busy.then(() => (done ? null : handle(key))); };
-    const decoder = new KeyDecoder({ onKeys: enqueue });
+    const env = options.env || process.env;
+    const useKitty = options.kittyKeyboard !== false && kittyAllowed(env);
+    const pushKitty = () => {
+      if (kittyKeyboard.pushed || done) return;
+      output.write(KITTY_PUSH);
+      kittyKeyboard.pushed = output;
+      setKittyProtocolActive(true);
+    };
+    const popKitty = () => {
+      if (kittyKeyboard.pushed !== output) return;
+      output.write(KITTY_POP);
+      kittyKeyboard.pushed = null;
+      setKittyProtocolActive(false);
+    };
+    const onReply = (seq) => {
+      if (/u$/.test(seq)) { kittyKeyboard.supported = true; if (useKitty) pushKitty(); }
+      else if (kittyKeyboard.supported === null) kittyKeyboard.supported = false;
+    };
+    const decoder = new KeyDecoder({ onKeys: enqueue, onReply });
     const wasRaw = Boolean(input.isRaw);
 
     const promptText = () => (typeof options.prompt === 'function' ? options.prompt(state) : options.prompt || '> ');
@@ -697,6 +736,7 @@ export function readInput(options = {}) {
       if (result.type === 'submit') draw(true);
       else { state = { ...state, text: '' }; draw(true); }
       output.write('\r\n\x1b[?2004l');
+      popKitty();
       input.off('data', onData);
       decoder.destroy();
       output.off && output.off('resize', onResize);
@@ -751,9 +791,12 @@ export function readInput(options = {}) {
         input.off('data', onData);
         try { input.setRawMode(false); } catch {}
         output.write('\r\n\x1b[?2004l');
+        const hadKitty = kittyKeyboard.pushed === output;
+        popKitty();
         const run = spawnSync(editor + ' ' + JSON.stringify(file), { stdio: 'inherit', shell: true });
         try { input.setRawMode(true); } catch {}
         output.write('\x1b[?2004h');
+        if (hadKitty) pushKitty();
         input.on('data', onData);
         previousCursorRow = 0;
         if (run.status !== 0 && run.status !== null) { hints = [DIM('Editor exited with status ' + run.status + '; draft unchanged.', color)]; return; }
@@ -1015,6 +1058,12 @@ export function readInput(options = {}) {
     input.on('data', onData);
     output.on && output.on('resize', onResize);
     output.write('\x1b[?2004h');
+    if (useKitty) {
+      if (kittyKeyboard.supported) pushKitty();
+      // Asked again at each prompt until the terminal answers.
+      else if (kittyKeyboard.supported === null) output.write('\x1b[?u\x1b[c');
+    }
+    if (!popKittyOnExit.installed) { popKittyOnExit.installed = true; process.once('exit', popKittyOnExit); }
     draw();
     // Lets a scheduler submit a prompt while the editor is idle and empty.
     if (options.onReady) options.onReady((text) => { if (done || state.text.trim()) return false; state = { ...state, text: String(text), cursor: String(text).length }; finish({ type: 'submit', text: String(text), external: true }); return true; });
