@@ -14,11 +14,15 @@ test('suggestToken finds / only at the start and @ after whitespace', () => {
 
 test('rankSuggestions prefers exact, prefix and basename matches', () => {
   const files = ['src/agent.mjs', 'test/agent.test.mjs', 'docs/AGENTS.md', 'src/markdown.mjs', 'app/main.mjs'];
-  assert.deepEqual(rankSuggestions(files, 'agent'), ['src/agent.mjs', 'docs/AGENTS.md', 'test/agent.test.mjs']);
+  const agent = rankSuggestions(files, 'agent');
+  assert.equal(agent[0], 'src/agent.mjs', 'the shortest whole-name match first');
+  assert.deepEqual([...agent].sort(), ['docs/AGENTS.md', 'src/agent.mjs', 'test/agent.test.mjs']);
   assert.equal(rankSuggestions(files, 'main')[0], 'app/main.mjs');
   assert.deepEqual(rankSuggestions(files, 'mdm'), ['src/markdown.mjs'], 'falls back to in-order letters');
   const commands = [{ name: 'compact' }, { name: 'commit' }, { name: 'config' }, { name: 'review' }];
-  assert.deepEqual(rankSuggestions(commands, 'co', (c) => c.name).map((c) => c.name), ['compact', 'commit', 'config']);
+  assert.deepEqual(rankSuggestions(commands, 'co', (c) => c.name).map((c) => c.name).sort(), ['commit', 'compact', 'config'], 'only prefix matches, not review');
+  assert.deepEqual(rankSuggestions([{ name: 'ab-x' }, { name: 'ab-y' }], 'ab', (c) => c.name).map((c) => c.name), ['ab-x', 'ab-y'], 'equal scores keep the original order');
+  assert.equal(rankSuggestions(['src/cli-doctor.mjs', 'src/cli.mjs', 'docs/cli.md'], 'srcli')[0], 'src/cli.mjs', 'matches across a path segment');
   assert.equal(rankSuggestions(commands, '', (c) => c.name, 2).length, 2, 'an empty query lists the first items');
   assert.deepEqual(rankSuggestions(commands, 'zzz', (c) => c.name), []);
 });

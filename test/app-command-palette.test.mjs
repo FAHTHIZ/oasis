@@ -15,6 +15,9 @@ test('browser command panel indexes real workspace actions and integrations', ()
   assert.deepEqual(searchAppCommands('new chat').map((item) => item.id), ['new-chat']);
   assert.ok(searchAppCommands('provider').some((item) => item.id === 'open-settings'));
   assert.deepEqual(searchAppCommands('no-such-command'), []);
+  assert.equal(searchAppCommands('termnal')[0].id, 'open-terminal', 'tolerates a missing letter');
+  assert.equal(searchAppCommands('log out')[0].id, 'sign-out', 'terms may match keywords');
+  assert.equal(searchAppCommands('').length, APP_PALETTE_COMMANDS.length, 'an empty query lists every command in order');
 });
 
 test('browser workspace exposes an accessible native command panel and shortcut guide', () => {

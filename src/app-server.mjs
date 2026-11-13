@@ -30,7 +30,8 @@ export const APP_PACKAGES = Object.freeze({
   turndown: 'lib/turndown.browser.es.js',
   'turndown-plugin-gfm': 'lib/turndown-plugin-gfm.browser.es.js',
   '@floating-ui/dom': 'dist/floating-ui.dom.browser.min.mjs',
-  '@floating-ui/core': 'dist/floating-ui.core.browser.min.mjs'
+  '@floating-ui/core': 'dist/floating-ui.core.browser.min.mjs',
+  fuzzysort: 'fuzzysort.js'
 });
 
 // Bare imports inside a vendored browser build: serving a package also serves these.
@@ -162,7 +163,8 @@ export function resolveAppPath(root, urlPath, shared, packages = null) {
     if (!packages || !packages.has(name)) return null;
     const entryDir = path.dirname(APP_PACKAGES[name]);
     const rel = rest.join('/');
-    if (entryDir !== '.' && !(rel === entryDir || rel.startsWith(entryDir + '/'))) return null;
+    // A build at the package root (fuzzysort) serves only that file, not package.json and the rest.
+    if (entryDir === '.' ? rel !== APP_PACKAGES[name] : !(rel === entryDir || rel.startsWith(entryDir + '/'))) return null;
     return { file: inside(appPackageDir(root, name), path.relative(entryDir, rel)) };
   }
   if (pathname.startsWith('/src/')) {

@@ -1,5 +1,6 @@
 // Composer autocomplete: "/" for commands and skills, "@" for project files.
 // Pure helpers so the ranking and text edits are testable without a DOM.
+import fuzzysort from 'fuzzysort';
 
 /**
  * The completion token under the caret, or null.
@@ -24,38 +25,26 @@ export function suggestToken(value, caret = String(value || '').length) {
   return null;
 }
 
-function subsequence(needle, haystack) {
-  let i = 0;
-  for (const ch of haystack) if (ch === needle[i]) i += 1;
-  return i === needle.length;
-}
-
 /**
- * Rank items by how well `query` matches `key(item)`: exact, then prefix, then
- * prefix of a path segment or word, then substring, then in-order letters.
- * Ties keep the original order (built-ins before custom commands, or the
- * workspace's file order).
+ * Rank items by how well `query` matches `key(item)`, with fuzzysort (MIT):
+ * contiguous runs and matches at path-segment, word and camelCase starts score
+ * highest, so "agent" puts src/agent.mjs first and "mdm" still finds
+ * src/markdown.mjs. Ties keep the original order (built-ins before custom
+ * commands, or the workspace's file order); an empty query lists the first items.
  */
 export function rankSuggestions(items, query, key = (item) => String(item), limit = 8) {
-  const q = String(query || '').toLowerCase();
+  const list = Array.isArray(items) ? items : [];
+  const max = Math.max(1, limit);
+  const search = String(query || '').trim();
+  if (!search) return list.slice(0, max);
   const scored = [];
-  (Array.isArray(items) ? items : []).forEach((item, index) => {
-    const name = String(key(item) || '');
-    const lower = name.toLowerCase();
-    const base = lower.slice(lower.lastIndexOf('/') + 1);
-    let score;
-    if (!q) score = 5;
-    else if (lower === q || base === q) score = 0;
-    else if (lower.startsWith(q)) score = 1;
-    else if (base.startsWith(q)) score = 2;
-    else if (lower.split(/[/._\-\s]/).some((part) => part.startsWith(q))) score = 3;
-    else if (lower.includes(q)) score = 4;
-    else if (q.length > 1 && subsequence(q, lower)) score = 6;
-    else return;
-    scored.push({ item, score, index, length: name.length });
+  list.forEach((item, index) => {
+    // prepare() rather than a raw string: fuzzysort's global cache would keep every path alive.
+    const hit = fuzzysort.single(search, fuzzysort.prepare(String(key(item) || '')));
+    if (hit) scored.push({ item, index, score: hit.score });
   });
-  scored.sort((a, b) => a.score - b.score || (a.score >= 2 && a.score <= 4 ? a.length - b.length : 0) || a.index - b.index);
-  return scored.slice(0, Math.max(1, limit)).map((entry) => entry.item);
+  scored.sort((a, b) => b.score - a.score || a.index - b.index);
+  return scored.slice(0, max).map((entry) => entry.item);
 }
 
 /** Replace the token with the chosen completion. Returns the new value and caret. */
