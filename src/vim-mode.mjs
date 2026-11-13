@@ -299,10 +299,14 @@ export function applyVimKey(state, key) {
   if (key.name !== 'char') return null; // Ctrl keys, Tab, Shift+Tab keep their usual meaning.
   let current = state;
   let action = null;
-  for (const ch of key.text) {
-    const result = normalChar(current, ch);
+  // Typed-ahead keys arrive as one run ("A!"): once a command enters INSERT
+  // mode, the rest of the run is text for the editor to insert.
+  const chars = [...key.text];
+  for (let i = 0; i < chars.length; i++) {
+    const result = normalChar(current, chars[i]);
     current = result.state;
     if (result.action) action = result.action;
+    if (current.vim && current.vim.mode === 'insert' && i < chars.length - 1) return { state: current, action, rest: chars.slice(i + 1).join('') };
   }
   return { state: current, action };
 }

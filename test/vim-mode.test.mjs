@@ -170,3 +170,22 @@ test('/vim toggles and persists editorMode in user settings', async (t) => {
   assert.match(off.output, /off/);
   assert.equal(sessionOptions.editorMode, 'normal');
 });
+
+test('typed-ahead run that enters INSERT inserts the rest as text, and . repeats it', async () => {
+  const input = new PassThrough();
+  input.isTTY = true;
+  input.setRawMode = () => {};
+  const output = new PassThrough();
+  output.columns = 80;
+  output.resume();
+  const done = readInput({ input, output, vim: true, color: false, prompt: '> ' });
+  input.write('héllo 日本');
+  input.write('\x1b');
+  await new Promise((resolve) => setTimeout(resolve, 20));
+  input.write('A!?');
+  input.write('\x1b');
+  await new Promise((resolve) => setTimeout(resolve, 20));
+  input.write('0.');
+  input.write('\r');
+  assert.equal((await done).text, 'héllo 日本!?!?'); // . repeats A, which appends at the end
+});
