@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import os from 'node:os';
 import path from 'node:path';
 import { mkdtemp, readFile, rm } from 'node:fs/promises';
+import { crc32 } from 'node:zlib';
 import { extractZip, fetchPluginArchive, readZipEntries } from '../src/zip.mjs';
 
 function makeStoredZip(entries) {
@@ -16,9 +17,9 @@ function makeStoredZip(entries) {
     const local = Buffer.alloc(30);
     local.writeUInt32LE(0x04034b50, 0);
     local.writeUInt16LE(20, 4);
-    local.writeUInt16LE(0, 6);
+    local.writeUInt16LE(0x800, 6); // UTF-8 names
     local.writeUInt16LE(0, 8);
-    local.writeUInt32LE(0, 14); // CRC is not currently inspected by this minimal reader.
+    local.writeUInt32LE(item.crc ?? crc32(body), 14);
     local.writeUInt32LE(body.length, 18);
     local.writeUInt32LE(body.length, 22);
     local.writeUInt16LE(name.length, 26);
@@ -29,9 +30,9 @@ function makeStoredZip(entries) {
     central.writeUInt32LE(0x02014b50, 0);
     central.writeUInt16LE(20, 4);
     central.writeUInt16LE(20, 6);
-    central.writeUInt16LE(0, 8);
+    central.writeUInt16LE(0x800, 8);
     central.writeUInt16LE(0, 10);
-    central.writeUInt32LE(0, 16);
+    central.writeUInt32LE(item.crc ?? crc32(body), 16);
     central.writeUInt32LE(body.length, 20);
     central.writeUInt32LE(body.length, 24);
     central.writeUInt16LE(name.length, 28);
@@ -39,7 +40,7 @@ function makeStoredZip(entries) {
     central.writeUInt16LE(0, 32);
     central.writeUInt16LE(0, 34);
     central.writeUInt16LE(0, 36);
-    central.writeUInt32LE((0o100644 * 65536) >>> 0, 38);
+    central.writeUInt32LE(((item.mode ?? 0o100644) * 65536) >>> 0, 38);
     central.writeUInt32LE(localOffset, 42);
     centralParts.push(central, name);
     centralSize += central.length + name.length;
@@ -61,28 +62,28 @@ function makeStoredZip(entries) {
 const publicLookup = async () => [{ address: '93.184.216.34', family: 4 }];
 const minimalPluginZip = () => makeStoredZip([{ name: '.claude-plugin/plugin.json', content: '{"name":"fixture"}' }]);
 
-test('ZIP reader rejects traversal, absolute, drive, NUL, and ambiguous backslash paths', () => {
+test('ZIP reader rejects traversal, absolute, drive, NUL, and ambiguous backslash paths', async () => {
   for (const name of ['../escape.txt', '/absolute.txt', 'C:/outside.txt', 'nested/../../escape', 'folder\\..\\escape.txt', 'file.txt:secret', 'CON.txt', 'trailing.', 'trailing ', 'bad?name.txt']) {
-    assert.throws(() => readZipEntries(makeStoredZip([{ name, content: 'nope' }])), /unsafe or ambiguous path|escapes the destination/, name);
+    await assert.rejects(readZipEntries(makeStoredZip([{ name, content: 'nope' }])), /unsafe or ambiguous path|escapes the destination/, name);
   }
-  assert.throws(() => readZipEntries(makeStoredZip([{ name: 'nul' + String.fromCharCode(0) + 'name.txt', content: 'nope' }])), /unsafe or ambiguous path/);
+  await assert.rejects(readZipEntries(makeStoredZip([{ name: 'nul' + String.fromCharCode(0) + 'name.txt', content: 'nope' }])), /unsafe or ambiguous path/);
 });
 
-test('ZIP reader rejects truncated and inconsistent directory/header metadata cleanly', () => {
-  assert.throws(() => readZipEntries(Buffer.from([0x50, 0x4b, 0x03])), /truncated end-of-central-directory/);
+test('ZIP reader rejects truncated and inconsistent directory/header metadata cleanly', async () => {
+  await assert.rejects(readZipEntries(Buffer.from([0x50, 0x4b, 0x03])), /Not a zip archive/);
   const badDirectory = makeStoredZip([{ name: 'file.txt', content: 'ok' }]);
   const eocd = badDirectory.lastIndexOf(Buffer.from([0x50, 0x4b, 0x05, 0x06]));
   badDirectory.writeUInt32LE(0xfffffff0, eocd + 16);
-  assert.throws(() => readZipEntries(badDirectory), /central-directory bounds/);
+  await assert.rejects(readZipEntries(badDirectory), /Corrupt zip archive/);
 
-  const badLocalName = makeStoredZip([{ name: 'file.txt', content: 'ok' }]);
-  badLocalName[30] = 'X'.charCodeAt(0);
-  assert.throws(() => readZipEntries(badLocalName), /inconsistent local header/);
+  const badLocalHeader = makeStoredZip([{ name: 'file.txt', content: 'ok' }]);
+  badLocalHeader[0] = 0;
+  await assert.rejects(readZipEntries(badLocalHeader), /Corrupt zip archive: invalid local file header/);
 });
 
-test('ZIP reader rejects duplicate, case-colliding, and size-mismatched entries', () => {
-  assert.throws(
-    () => readZipEntries(makeStoredZip([
+test('ZIP reader rejects duplicate, case-colliding, size-mismatched and corrupted entries', async () => {
+  await assert.rejects(
+    readZipEntries(makeStoredZip([
       { name: 'Readme.md', content: 'one' },
       { name: 'README.md', content: 'two' }
     ])),
@@ -92,7 +93,14 @@ test('ZIP reader rejects duplicate, case-colliding, and size-mismatched entries'
   const eocd = archive.lastIndexOf(Buffer.from([0x50, 0x4b, 0x05, 0x06]));
   const centralOffset = archive.readUInt32LE(eocd + 16);
   archive.writeUInt32LE(99, centralOffset + 24);
-  assert.throws(() => readZipEntries(archive), /size does not match its declared size/);
+  await assert.rejects(readZipEntries(archive), /Corrupt zip archive: .*size mismatch/);
+  await assert.rejects(readZipEntries(makeStoredZip([{ name: 'flipped.txt', content: 'data', crc: 1 }])), /CRC-32 check/);
+});
+
+test('ZIP reader decodes names, keeps directories and skips symlinks', async () => {
+  const entries = await readZipEntries(makeStoredZip([{ name: 'dir/', content: '' }, { name: 'dir/caf\u00e9.txt', content: 'ok' }, { name: 'link', content: '/etc/passwd', mode: 0o120777 }]));
+  assert.deepEqual(entries.map((entry) => entry.name), ['dir/', 'dir/caf\u00e9.txt']);
+  assert.equal(entries[1].content.toString(), 'ok');
 });
 
 test('ZIP extraction refuses a symlinked destination or an existing symlink parent', async (t) => {

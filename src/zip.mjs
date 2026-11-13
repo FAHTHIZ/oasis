@@ -1,103 +1,90 @@
-// Minimal, dependency-free ZIP reader for plugin archives (--plugin-url). Supports stored and
-// deflated entries (what `zip`, GitHub archive downloads and most tools produce). Paths that
-// would escape the destination, symlinks and absurdly large archives are rejected.
+// ZIP reader for plugin archives (--plugin-url), on yauzl (MIT; the reader behind
+// extract-zip, Electron and Puppeteer): ZIP64, CP437 and Info-ZIP Unicode names, and
+// entry sizes checked against the central directory while inflating. On top of that,
+// every entry's CRC-32 is verified, and paths that would escape the destination,
+// unportable or colliding names, symlinks and absurdly large archives are rejected.
 import { oasisVersion } from './version.mjs';
 import { lstat, mkdir, realpath, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { lookup } from 'node:dns/promises';
 import { isIP } from 'node:net';
+import { crc32 } from 'node:zlib';
+import yauzl from 'yauzl';
 import { isBlockedAddress, isLocalHostname, normalizeHostname, pinnedRequest, readBoundedBody, resolvePublicAddresses } from './safe-http.mjs';
 import { isLoopbackUrl } from './config.mjs';
-import { inflateRawSync } from 'node:zlib';
 
 const MAX_TOTAL = 200 * 1024 * 1024;
 const MAX_ENTRIES = 20000;
 
-export function readZipEntries(buffer) {
+// Portable-path policy: names that are unsafe or ambiguous on Windows or POSIX.
+function checkEntryName(name, seenPaths) {
+  const parts = name.split('/');
+  if (parts.some((part) => part === '..')) throw new Error('Zip entry escapes the destination: ' + name);
+  if (!name || name.includes(String.fromCharCode(0)) ||
+      parts.some((part, i) => part === '.' || (!part && i !== parts.length - 1) ||
+        /[<>:"|?*\x00-\x1f]/.test(part) || /[. ]$/.test(part) ||
+        /^(con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\..*)?$/i.test(part))) {
+    throw new Error('Zip entry has an unsafe or ambiguous path: ' + name);
+  }
+  // Reject duplicate/case-colliding paths so extraction is deterministic on
+  // both case-sensitive and case-insensitive filesystems.
+  const pathKey = name.replace(/\/$/, '').normalize('NFC').toLowerCase();
+  if (seenPaths.has(pathKey)) throw new Error('Zip archive contains duplicate or case-colliding paths: ' + name);
+  seenPaths.add(pathKey);
+}
+
+const openBuffer = (data) => new Promise((resolve, reject) => {
+  yauzl.fromBuffer(data, { lazyEntries: true, validateEntrySizes: true, strictFileNames: false }, (error, zip) => {
+    if (error) reject(new Error('Not a zip archive (' + error.message + ').'));
+    else resolve(zip);
+  });
+});
+
+const readEntry = (zip, entry) => new Promise((resolve, reject) => {
+  zip.openReadStream(entry, (error, stream) => {
+    if (error) return reject(error);
+    const chunks = [];
+    stream.on('data', (chunk) => chunks.push(chunk));
+    stream.on('error', reject);
+    stream.on('end', () => resolve(Buffer.concat(chunks)));
+  });
+});
+
+/** Reads every file and directory entry of a ZIP buffer: [{ name, directory } | { name, content, executable }]. */
+export async function readZipEntries(buffer) {
   const data = Buffer.isBuffer(buffer) ? buffer : Buffer.from(buffer);
-  if (data.length < 22) throw new Error('Not a zip archive (truncated end-of-central-directory record).');
-  let eocd = -1;
-  for (let i = data.length - 22; i >= Math.max(0, data.length - 22 - 65535); i--) {
-    if (i + 22 <= data.length && data.readUInt32LE(i) === 0x06054b50) {
-      const commentLength = data.readUInt16LE(i + 20);
-      if (i + 22 + commentLength === data.length) { eocd = i; break; }
-    }
-  }
-  if (eocd < 0) throw new Error('Not a zip archive (no valid end-of-central-directory record).');
-  const diskNumber = data.readUInt16LE(eocd + 4);
-  const centralDisk = data.readUInt16LE(eocd + 6);
-  const diskCount = data.readUInt16LE(eocd + 8);
-  const count = data.readUInt16LE(eocd + 10);
-  const centralSize = data.readUInt32LE(eocd + 12);
-  let offset = data.readUInt32LE(eocd + 16);
-  if (diskNumber !== 0 || centralDisk !== 0 || diskCount !== count || count === 0xffff ||
-      centralSize === 0xffffffff || offset === 0xffffffff) {
-    throw new Error('Multi-disk and ZIP64 archives are not supported.');
-  }
-  if (count > MAX_ENTRIES) throw new Error('Zip archive has too many entries.');
-  const centralStart = offset;
-  const centralEnd = offset + centralSize;
-  if (!Number.isSafeInteger(centralEnd) || offset < 0 || centralEnd > eocd) {
-    throw new Error('Corrupt zip central-directory bounds.');
-  }
+  const zip = await openBuffer(data);
+  if (zip.entryCount > MAX_ENTRIES) { zip.close(); throw new Error('Zip archive has too many entries.'); }
   const entries = [];
   const seenPaths = new Set();
   let total = 0;
-  for (let n = 0; n < count; n++) {
-    if (offset < 0 || offset + 46 > centralEnd || data.readUInt32LE(offset) !== 0x02014b50) throw new Error('Corrupt zip central directory.');
-    const method = data.readUInt16LE(offset + 10);
-    const compressed = data.readUInt32LE(offset + 20);
-    const size = data.readUInt32LE(offset + 24);
-    const nameLength = data.readUInt16LE(offset + 28);
-    const extraLength = data.readUInt16LE(offset + 30);
-    const commentLength = data.readUInt16LE(offset + 32);
-    const externalAttrs = data.readUInt32LE(offset + 38);
-    const localOffset = data.readUInt32LE(offset + 42);
-    const recordEnd = offset + 46 + nameLength + extraLength + commentLength;
-    if (recordEnd > centralEnd) throw new Error('Truncated zip central-directory entry.');
-    const rawName = data.subarray(offset + 46, offset + 46 + nameLength).toString('utf8');
-    // ZIP paths must be portable: a backslash is a separator on Windows but a
-    // literal character on POSIX. Normalize before checking containment.
-    const name = rawName.replace(/\\/g, '/');
-    const parts = name.split('/');
-    if (parts.some((part) => part === '..')) throw new Error('Zip entry escapes the destination: ' + rawName);
-    if (!name || name.includes(String.fromCharCode(0)) || name.startsWith('/') || /^[a-z]:/i.test(name) ||
-        parts.some((part, i) => part === '.' || (!part && i !== parts.length - 1) ||
-          /[<>:"|?*\x00-\x1f]/.test(part) || /[. ]$/.test(part) ||
-          /^(con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\..*)?$/i.test(part))) {
-      throw new Error('Zip entry has an unsafe or ambiguous path: ' + rawName);
-    }
-    // Reject duplicate/case-colliding paths so extraction is deterministic on
-    // both case-sensitive and case-insensitive filesystems.
-    const pathKey = name.replace(/\/$/, '').normalize('NFC').toLowerCase();
-    if (seenPaths.has(pathKey)) throw new Error('Zip archive contains duplicate or case-colliding paths: ' + rawName);
-    seenPaths.add(pathKey);
-    offset += 46 + nameLength + extraLength + commentLength;
-    const mode = (externalAttrs >>> 16) & 0o170000;
-    if (mode === 0o120000) continue; // symlink: skipped
-    if (name.endsWith('/')) { entries.push({ name, directory: true }); continue; }
-    total += size;
-    if (total > MAX_TOTAL) throw new Error('Zip archive is too large when extracted.');
-    if (localOffset < 0 || localOffset + 30 > centralStart || data.readUInt32LE(localOffset) !== 0x04034b50) {
-      throw new Error('Corrupt zip local header for ' + name + '.');
-    }
-    const localMethod = data.readUInt16LE(localOffset + 8);
-    const localNameLength = data.readUInt16LE(localOffset + 26);
-    const localExtraLength = data.readUInt16LE(localOffset + 28);
-    const localNameEnd = localOffset + 30 + localNameLength;
-    const start = localNameEnd + localExtraLength;
-    if (localMethod !== method || localNameEnd > centralStart || start > centralStart ||
-        data.subarray(localOffset + 30, localNameEnd).toString('utf8') !== rawName ||
-        compressed > centralStart - start) {
-      throw new Error('Corrupt zip compressed data or inconsistent local header for ' + name + '.');
-    }
-    const raw = data.subarray(start, start + compressed);
-    let content;
-    if (method === 0) content = Buffer.from(raw);
-    else if (method === 8) content = inflateRawSync(raw, { maxOutputLength: Math.max(size, 1) });
-    else throw new Error('Unsupported zip compression method ' + method + ' for ' + name + '.');
-    if (content.length !== size) throw new Error('Zip entry size does not match its declared size: ' + name + '.');
-    entries.push({ name, content, executable: Boolean((externalAttrs >>> 16) & 0o111) });
+  try {
+    await new Promise((resolve, reject) => {
+      const fail = (error) => reject(/^Zip /.test(error.message) ? error
+        : /^(absolute path|invalid relative path): /.test(error.message) ? new Error('Zip entry escapes the destination (' + error.message + ').')
+          : new Error('Corrupt zip archive: ' + error.message));
+      zip.on('error', fail);
+      zip.on('end', resolve);
+      zip.on('entry', (entry) => (async () => {
+        const name = entry.fileName;
+        checkEntryName(name, seenPaths);
+        const mode = (entry.externalFileAttributes >>> 16) & 0o170000;
+        if (mode === 0o120000) return; // symlink: skipped
+        if (name.endsWith('/')) { entries.push({ name, directory: true }); return; }
+        if (entry.isEncrypted()) throw new Error('Zip entry is encrypted: ' + name);
+        if (entry.compressionMethod !== 0 && entry.compressionMethod !== 8) {
+          throw new Error('Unsupported zip compression method ' + entry.compressionMethod + ' for ' + name + '.');
+        }
+        total += entry.uncompressedSize;
+        if (total > MAX_TOTAL) throw new Error('Zip archive is too large when extracted.');
+        const content = await readEntry(zip, entry);
+        if (crc32(content) !== entry.crc32) throw new Error('Zip entry failed its CRC-32 check: ' + name + '.');
+        entries.push({ name, content, executable: Boolean((entry.externalFileAttributes >>> 16) & 0o111) });
+      })().then(() => zip.readEntry(), fail));
+      zip.readEntry();
+    });
+  } finally {
+    zip.close();
   }
   return entries;
 }
@@ -127,7 +114,7 @@ export async function extractZip(buffer, destination) {
       }
     }
   };
-  for (const entry of readZipEntries(buffer)) {
+  for (const entry of await readZipEntries(buffer)) {
     const target = path.resolve(realRoot, entry.name);
     if (target !== realRoot && !target.startsWith(realRoot + path.sep)) throw new Error('Zip entry escapes the destination: ' + entry.name);
     await ensureSafeParents(target);
