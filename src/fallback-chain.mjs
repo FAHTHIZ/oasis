@@ -1,5 +1,5 @@
 import { getProvider } from './provider-registry.mjs';
-import { isOpen } from './circuit-breaker.mjs';
+import { isOpen, isBreakerOpenError, providerBreakerKey } from './circuit-breaker.mjs';
 
 // Ranked fallback chain for the CLI.
 //
@@ -70,6 +70,8 @@ const MODEL_GONE = /model[^.]{0,60}(?:not found|does not exist|not available|una
 // another provider: a missing or bad key there just means "skip this one".
 export function fallbackReason(error, { onFallbackProvider = false } = {}) {
   if (!error || error.name === 'AbortError') return '';
+  // The provider's circuit breaker is open: it failed repeatedly just now.
+  if (isBreakerOpenError(error)) return 'server';
   const status = Number(error.status || error.statusCode) || 0;
   const text = String(error.message || error);
   if (/context.?length|context window|prompt is too long|too many tokens|maximum context/i.test(text) || status === 413) return '';
@@ -115,7 +117,7 @@ export function remainingFallbacks(chain, { current, baseConfig, failed = new Se
     if (!config) continue;
     if (current && config.model === current.model && config.baseURL === current.baseURL) continue;
     // Skip providers whose circuit breaker is open (cooling down).
-    if (isOpen(config.fallbackProvider || 'default')) continue;
+    if (isOpen(providerBreakerKey(config))) continue;
     out.push({ entry, config });
   }
   return out;

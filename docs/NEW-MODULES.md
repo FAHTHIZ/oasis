@@ -13,12 +13,13 @@ Records tool calls, tool results, approvals, recoveries, and verification outcom
 
 ## Provider circuit breaker (`src/circuit-breaker.mjs`)
 
-Prevents hammering a provider that is repeatedly failing (rate-limited, down, or overloaded).
+Stops OASIS from hammering a model that keeps failing (rate-limited, out of credit, down, or overloaded). Built on [cockatiel](https://github.com/connor4312/cockatiel) 4.0.0.
 
-- **API:** `recordFailure(provider)`, `recordSuccess(provider)`, `isOpen(provider)`.
-- **Defaults:** threshold 3 failures, cooldown 60 seconds.
-- **Behavior:** after the threshold, `isOpen` returns true until the cooldown expires; a success resets the count.
-- **Scope:** in-memory only; no persistence across restarts.
+- **API:** `runWithProviderBreaker(key, fn, { shouldTrip })`, `isOpen(key)`, `retryInSeconds(key)`, `isBreakerOpenError(error)`, `providerBreakerKey(config)`, `reset()`.
+- **Scope:** one breaker per provider endpoint and model, used only when a fallback chain is configured. Only provider faults (`server`, `rate`, `credits`, `auth` from `fallbackReason`) count; bad requests and aborts never trip it.
+- **Defaults:** opens after 2 consecutive provider faults; cooldown starts at 30 s and doubles after each failed probe, capped at 30 min. While open the chain skips that model; after the cooldown one probe request goes through.
+- **Settings:** `OASIS_BREAKER_THRESHOLD`, `OASIS_BREAKER_COOLDOWN_SECONDS`.
+- **Persistence:** in-memory only.
 
 ## Unified security posture report (`src/security-report.mjs`)
 
