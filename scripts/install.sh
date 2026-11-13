@@ -1,6 +1,6 @@
 #!/usr/bin/env sh
 # What this script does:
-# 1. Checks for Node.js 22.15 or newer.
+# 1. Checks for Node.js 22.19 or newer.
 # 2. Offers supported Node.js installation steps and asks before changing anything.
 # 3. Resolves the latest stable GitHub release and installs its immutable commit.
 # 4. Runs oasis doctor and opens first-run provider setup.
@@ -47,9 +47,9 @@ ask_yes_no() {
 }
 node_supported() {
   command -v node >/dev/null 2>&1 || return 1
-  # major*100+minor, so 22.15 is 2215 (the oldest supported release).
+  # major*100+minor, so 22.19 is 2219 (the oldest supported release).
   version=$(node -p 'const [a, b] = process.versions.node.split(".").map(Number); a * 100 + b' 2>/dev/null) || return 1
-  [ "$version" -ge 2215 ] 2>/dev/null
+  [ "$version" -ge 2219 ] 2>/dev/null
 }
 resolve_latest_release() {
   node --input-type=module -e '
@@ -185,21 +185,21 @@ try {
 }
 install_node_if_approved() {
   if command -v pkg >/dev/null 2>&1 && [ -n "${PREFIX:-}" ]; then
-    say "Node.js 22.15 or newer was not found. This looks like Termux on Android."
+    say "Node.js 22.19 or newer was not found. This looks like Termux on Android."
     if ask_yes_no "May I run 'pkg install nodejs'?"; then pkg install nodejs; else exit 1; fi
   elif [ "$(uname -s 2>/dev/null || true)" = "Darwin" ] && command -v brew >/dev/null 2>&1; then
-    say "Node.js 22.15 or newer was not found. Homebrew is available on this Mac."
+    say "Node.js 22.19 or newer was not found. Homebrew is available on this Mac."
     if ask_yes_no "May I run 'brew install node'?"; then brew install node; else exit 1; fi
   else
-    say "Node.js 22.15 or newer was not found. I have not installed anything."
-    say "Install Node.js 22.15 or newer from https://nodejs.org/en/download, then run this installer again."
+    say "Node.js 22.19 or newer was not found. I have not installed anything."
+    say "Install Node.js 22.19 or newer from https://nodejs.org/en/download, then run this installer again."
     exit 1
   fi
 }
-say "Checking for Node.js 22.15 or newer..."
+say "Checking for Node.js 22.19 or newer..."
 if ! node_supported; then install_node_if_approved; fi
 if ! node_supported; then
-  say "Node.js is still missing or older than version 22.15. Please check https://nodejs.org/en/download and try again."
+  say "Node.js is still missing or older than version 22.19. Please check https://nodejs.org/en/download and try again."
   exit 1
 fi
 say "Node.js is ready: $(node --version)."

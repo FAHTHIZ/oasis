@@ -10,7 +10,7 @@
   },
   "license": "Apache-2.0",
   "engines": {
-    "node": ">=22.15"
+    "node": ">=22.19"
   },
   "optionalDependencies": {
     "node-pty": "1.1.0",

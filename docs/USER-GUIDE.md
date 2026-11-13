@@ -17,7 +17,7 @@ Integrations (editor extension, Agent Client Protocol, Node.js SDK, GitHub Actio
 
 ## 2. Install OASIS
 
-Requirements: Node.js 22.15 or newer and Git.
+Requirements: Node.js 22.19 or newer and Git.
 
 ```sh
 git clone https://github.com/FAHTHIZ/oasis.git
