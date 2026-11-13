@@ -505,7 +505,7 @@ export async function runHeadless(options) {
     type: 'result',
     subtype,
     is_error: isError,
-    result: error ? String(error.message || error) : String(result.text || ''),
+    result: error ? (signal && signal.aborted && signal.reason && signal.reason.stopSignal ? signal.reason.message : String(error.message || error)) : String(result.text || ''),
     session_id: sessionId,
     num_turns: requests,
     duration_ms: Date.now() - started,
