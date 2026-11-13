@@ -209,7 +209,7 @@ function patchTurn(section, turn, { folded }) {
   head.querySelector('.trace-turn-title').textContent = title;
   head.title = turn.prompt.slice(0, 400);
   const pill = head.querySelector('.trace-pill');
-  pill.textContent = turn.status === 'running' ? 'Working' : turn.status === 'issues' ? turn.stats.failed + ' failed' : turnStatusLabel(turn.status);
+  pill.textContent = turn.status === 'running' ? (turn.steps.some((step) => step.outcome === 'running' && step.tool.waiting) ? 'Needs you' : 'Working') : turn.status === 'issues' ? turn.stats.failed + ' failed' : turnStatusLabel(turn.status);
   pill.dataset.status = turn.status;
   head.querySelector('.trace-turn-dur').textContent = [turn.stats.steps + (turn.stats.steps === 1 ? ' step' : ' steps'), dur(turn.durationMs)].filter(Boolean).join(' · ');
   head.setAttribute('aria-expanded', String(!folded));
@@ -279,9 +279,15 @@ function rowFor(turn, step) {
   const bar = button.querySelector('.trace-track i');
   bar.style.left = step.offset + '%';
   bar.style.width = step.width + '%';
-  button.querySelector('.trace-dur').textContent = step.outcome === 'running' ? dur(step.durationMs) || '…' : dur(step.durationMs);
+  // Waiting for your approval is drawn as a hatched lead-in and left out of the run time.
+  const waited = step.waitedMs >= 1000 && step.durationMs ? step.waitedMs : 0;
+  bar.style.setProperty('--wait', waited ? Math.round(waited / step.durationMs * 100) + '%' : '0%');
+  const ran = step.durationMs === null ? null : step.durationMs - waited;
+  const durEl = button.querySelector('.trace-dur');
+  durEl.textContent = step.outcome === 'running' ? (step.tool.waiting ? 'waiting' : dur(ran) || '…') : dur(ran);
+  durEl.title = waited ? 'Ran ' + (dur(ran) || '<0.1s') + ' after waiting ' + dur(waited) + ' for your approval' : '';
   button.setAttribute('aria-expanded', String(state.open.has(row.dataset.key)));
-  button.setAttribute('aria-label', step.label + (target ? ', ' + target : '') + ', ' + OUTCOME_TEXT[step.outcome] + (step.durationMs !== null ? ', ' + dur(step.durationMs) : ''));
+  button.setAttribute('aria-label', step.label + (target ? ', ' + target : '') + ', ' + OUTCOME_TEXT[step.outcome] + (ran !== null ? ', ' + (dur(ran) || 'under 0.1 seconds') : '') + (waited ? ', waited ' + dur(waited) + ' for approval' : ''));
   if (state.open.has(row.dataset.key)) fillDetail(row, step);
   return row;
 }
