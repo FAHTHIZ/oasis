@@ -48,7 +48,7 @@ import { connectMcpServers, mcpToolDefinitions, callMappedMcpTool, closeMcpClien
 import { resolveMcpPrompt, expandMcpResourceMentions } from './mcp-extras.mjs';
 import { autoMemoryEnabled, memoryIndexPrompt, recallForPrompt, MEMORY_TOOL_DEFINITIONS, listMemories, saveMemory } from './auto-memory.mjs';
 import { learningEnabled, LEARNING_TOOL_DEFINITIONS, assertLearningVerification } from './learning.mjs';
-import { countJsonTokens } from './tokens.mjs';
+import { countJsonTokens, countTextTokens } from './tokens.mjs';
 import { estimateTokens, microcompact, maskObservations, contextWindowSize, modelContextWindow, compactionThresholdChars, mustPreserveContextBlock, appendMustPreserveContext } from './context.mjs';
 import { genAiProviderName, genAiSpanNames, getTelemetry, lineChanges } from './telemetry.mjs';
 import { isAnthropicFamily } from './cloud-providers.mjs';
@@ -3289,6 +3289,23 @@ async function runAgentTurnRaw(session, prompt, options = {}) {
           step--;
           continue;
         }
+      }
+      // Stopped after the provider began answering: the prompt was processed
+      // and the shown output generated, so they count toward /cost and the
+      // budget (marked estimated; the provider sends no usage for a cut stream).
+      if (options.signal && options.signal.aborted && timing.firstAt) {
+        try {
+          const usage = { inputTokens: timing.inputEstimate + countJsonTokens(session.toolDefinitions || TOOL_DEFINITIONS), outputTokens: countTextTokens(streamedText + providerReasoning), estimated: true, interrupted: true };
+          usage.totalTokens = usage.inputTokens + usage.outputTokens;
+          const pricedModel = resolveModelAlias(session.config && session.config.model, { protocol: session.config && session.config.protocol, env: options.env || process.env });
+          const stepPricing = { config: session.config, overrides: session.pricing || {}, env: options.env || process.env };
+          const stepCost = estimateCostUsd(pricedModel, usage, stepPricing);
+          const costKnown = priceFor(pricedModel, stepPricing) !== null;
+          tokensUsed += usage.totalTokens;
+          if (options.onUsage) options.onUsage({ ...usage, costUsd: stepCost, costKnown, model: pricedModel, step: step + 1 });
+          recordTokenUsage(session, usage);
+          recordBudgetSpend(session, stepCost, { costKnown });
+        } catch { /* accounting never masks the interruption */ }
       }
       // Stopped mid-reply: keep what the user already saw, so "continue" or a
       // correction builds on it instead of the reply silently vanishing.
