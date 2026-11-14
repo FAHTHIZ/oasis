@@ -11,3 +11,9 @@ export const EMPTY_REPLY_NOTICE = 'The model ended its turn without a reply (it 
 export function providerStopNotice(stop) {
   return 'The provider ended the reply with no text (finish reason: ' + stop + '). Nothing was summarized; rephrase the request or try another model.';
 }
+
+// The same stop after some text: the reply is shown, but marked as cut short,
+// so a filtered half-answer is not taken for the whole one.
+export function providerCutNotice(stop) {
+  return '(The provider stopped this reply before it finished: finish reason ' + stop + '. It may be incomplete.)';
+}
