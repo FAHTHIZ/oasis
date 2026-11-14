@@ -68,10 +68,10 @@ export function classifyTask(prompt, hint = null) {
     || inferToolRequirement(text);
 
   const safetySignal = SAFETY_SIGNALS.find((pattern) => pattern.test(text));
-  if (safetySignal) return { tier: 'strong', reason: 'task contains a security-sensitive signal', requiresTools };
+  if (safetySignal) return { tier: 'strong', reason: 'task contains a security-sensitive signal', requiresTools, pinned: 'safety' };
 
   if (['large', 'medium', 'hard'].includes(explicit)) {
-    return { tier: 'strong', reason: 'benchmark task is not marked small', requiresTools };
+    return { tier: 'strong', reason: 'benchmark task is not marked small', requiresTools, pinned: 'hint' };
   }
   if (!text) return { tier: 'strong', reason: 'empty task defaults to strong model', requiresTools: false };
 
@@ -134,6 +134,15 @@ export function selectTaskModel(prompt, currentModel, routing = {}, options = {}
   let requested = classification.tier === 'easy' ? easyModel : strongModel;
   let tier = classification.tier;
   let reason = classification.reason;
+  // Cascade: work that would go to the strong model starts on the cheaper one
+  // and moves up only on evidence from the run (see src/escalation.mjs).
+  // Security-sensitive and explicitly hard tasks still start strong.
+  const cascade = routing.mode === 'cascade' && strongModel && strongModel !== easyModel;
+  if (cascade && tier === 'strong' && !classification.pinned) {
+    requested = easyModel;
+    tier = 'work';
+    reason = 'cascade: starts on ' + easyModel + ' and moves to ' + strongModel + ' if the run shows it is stuck (' + classification.reason + ')';
+  }
 
   if (requested && (requiresTools || requiresImages)) {
     const catalogOptions = {
@@ -168,9 +177,11 @@ export function selectTaskModel(prompt, currentModel, routing = {}, options = {}
   }
   return {
     enabled: true,
+    mode: cascade ? 'cascade' : 'classify',
     tier,
     model: requested || baseModel,
     strongModel,
+    ...(tier === 'work' ? { escalateTo: strongModel } : {}),
     requiresTools,
     requiresImages,
     reason
@@ -186,6 +197,7 @@ export function sanitizeModelRouting(value) {
     : '';
   return {
     enabled: value.enabled === true,
+    ...(value.mode === 'cascade' ? { mode: 'cascade' } : {}),
     easyModel: normalize(value.easyModel),
     strongModel: normalize(value.strongModel)
   };
