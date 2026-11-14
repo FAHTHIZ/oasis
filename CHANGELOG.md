@@ -4,6 +4,7 @@ User-facing change history grouped by package version. A version heading does no
 
 ## Unreleased
 
+- Checkpoints are written crash-safely: the index and file copies are replaced in one step, and a file copy left short by a crash is rewritten on the next save (it was kept because its name existed, so that `/rewind` point was lost for good). `/rewind` restores files in one step too, so a crash mid-rewind cannot leave a file half-written.
 - `run_specialist_review` reviewers get 24 steps, 60 tool calls and 600,000 tokens (cache reads not counted); they had 4 steps, 8 calls and 18,000 tokens, which the system prompt and tools used up within a few requests, so most reviews stopped after a file or two and came back marked incomplete. Their spend still counts toward `--max-budget-usd`.
 - Compaction fits small context windows: the transcript sent to the summarizer is held to about half the model's window. It had a 32,000-character floor (24,000 mid-turn), about 8,000 tokens, so on an 8K local model the summary request overflowed and compaction failed exactly when the window was full.
 - In the browser app, long `run_javascript` output keeps its head and its end; it kept only the first 24,000 characters, so the error or failed assertion printed last was dropped and a failing run could look clean.

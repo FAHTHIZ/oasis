@@ -4,7 +4,8 @@
 // conversation back to before that turn. Changes made by shell commands are not
 // tracked, matching Claude Code's checkpoint behaviour.
 import { createHash } from 'node:crypto';
-import { lstat, mkdir, readdir, readFile, unlink, writeFile } from 'node:fs/promises';
+import { chmod, lstat, mkdir, readdir, readFile, unlink } from 'node:fs/promises';
+import { atomicWriteFile } from './atomic-write.mjs';
 import path from 'node:path';
 import { resolveWorkspacePath } from './tools.mjs';
 
@@ -95,14 +96,19 @@ export async function saveCheckpoints(session, directory) {
         if (!keep.has(hash)) {
           keep.add(hash);
           const target = path.join(blobs, hash);
-          try { await lstat(target); } catch { await writeFile(target, entry.content, { mode: 0o600 }); }
+          // A blob left short by a crash mid-write has the right name but the
+          // wrong size; it failed the hash check on load, and skipping it here
+          // because the name existed lost that checkpoint for good.
+          const existing = await lstat(target).catch(() => null);
+          if (!existing || !existing.isFile() || existing.size !== entry.content.length) await atomicWriteFile(target, entry.content, { mode: 0o600, encoding: null });
         }
       }
       files.push(item);
     }
     turns.push({ prompt: turn.prompt, createdAt: turn.createdAt, user: markerContent(turn.userMessage), files });
   }
-  await writeFile(path.join(directory, 'index.json'), JSON.stringify({ version: INDEX_VERSION, turns }) + '\n', { mode: 0o600 });
+  // Replaced in one step: a torn index lost every checkpoint of the session.
+  await atomicWriteFile(path.join(directory, 'index.json'), JSON.stringify({ version: INDEX_VERSION, turns }) + '\n', { mode: 0o600 });
   for (const name of await readdir(blobs).catch(() => [])) if (HASH.test(name) && !keep.has(name)) await unlink(path.join(blobs, name)).catch(() => {});
   store.persisted = true;
   return { saved: true, turns: turns.length, blobs: keep.size };
@@ -159,7 +165,10 @@ export async function rewind(session, count = 1, mode = 'both') {
         continue;
       }
       await mkdir(path.dirname(absolute), { recursive: true });
-      await writeFile(target.absolute, entry.content, entry.mode ? { mode: entry.mode & 0o777 } : undefined);
+      // Restored in one step, so a crash mid-rewind cannot leave the file
+      // half-written.
+      await atomicWriteFile(target.absolute, entry.content, { encoding: null, ...(entry.mode ? { mode: entry.mode & 0o777 } : {}) });
+      if (entry.mode) await chmod(target.absolute, entry.mode & 0o777).catch(() => {});
       restored.push(file);
     }
   }
