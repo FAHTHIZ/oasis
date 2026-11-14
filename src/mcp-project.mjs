@@ -31,7 +31,7 @@ import { authRequiredError, createOAuthFetch, getStoredToken, loadMcpClientSdk, 
 
 import { clientCapabilities, handleServerNotification, handleServerRequest } from './mcp-client-features.mjs';
 const MAX_RESPONSE = 4 * 1024 * 1024;
-const MAX_CONTENT = 24000;
+const MAX_CONTENT = 100_000;
 const MAX_HEADERS_HELPER_OUTPUT_BYTES = 64 * 1024;
 const MAX_HEADERS_HELPER_STDERR_BYTES = 4000;
 function mcpAbortReason(signal) {
@@ -172,16 +172,34 @@ export function parseMcpServerEntries(parsed, env = process.env, source = 'proje
   return { servers, failures };
 }
 
-function compactResult(result) {
+// MCP output limit, in characters: MAX_MCP_OUTPUT_TOKENS (Claude Code's
+// variable, also OASIS_MAX_MCP_OUTPUT_TOKENS) at about 4 characters per token,
+// default 25,000 tokens like Claude Code. It was a fixed 24,000 characters,
+// cut without a note, so a large document from a docs server lost its end.
+export function mcpOutputLimitChars(env = process.env) {
+  const source = env || process.env;
+  const raw = Number(source.OASIS_MAX_MCP_OUTPUT_TOKENS || source.MAX_MCP_OUTPUT_TOKENS || 0);
+  const tokens = Number.isFinite(raw) && raw > 0 ? Math.min(1_000_000, Math.max(1000, Math.floor(raw))) : 25_000;
+  return tokens * 4;
+}
+
+function clipMcpText(text, max) {
+  if (text.length <= max) return text;
+  const head = Math.floor(max * 0.7);
+  const tail = Math.max(0, max - head - 200);
+  return text.slice(0, head) + '\n\n[... ' + (text.length - head - tail) + ' characters of MCP output omitted; set MAX_MCP_OUTPUT_TOKENS to raise the limit, or ask the tool for a smaller part ...]\n\n' + (tail ? text.slice(-tail) : '');
+}
+
+function compactResult(result, max = MAX_CONTENT) {
   if (!result || typeof result !== 'object') return String(result);
-  if (!Array.isArray(result.content)) return JSON.stringify(result).slice(0, MAX_CONTENT);
+  if (!Array.isArray(result.content)) return clipMcpText(JSON.stringify(result), max);
   const parts = [];
   for (const block of result.content) {
     if (block && block.type === 'text' && typeof block.text === 'string') parts.push(block.text);
     else if (block && block.type === 'image') parts.push('[MCP image content omitted]');
     else if (block && block.type === 'resource') parts.push(block.resource && typeof block.resource.text === 'string' ? block.resource.text : '[MCP resource omitted]');
   }
-  return ((result.isError ? 'MCP tool reported an error:\n' : '') + parts.join('\n\n')).slice(0, MAX_CONTENT);
+  return clipMcpText((result.isError ? 'MCP tool reported an error:\n' : '') + parts.join('\n\n'), max);
 }
 
 // ---------- Remote transports: the official MCP client SDK ----------
@@ -581,7 +599,7 @@ export class McpHttpClient {
         throw new Error('MCP server ' + this.config.name + ' returned invalid structured output for tool ' + name + ': ' + detail);
       }
     }
-    return { isError: Boolean(result.isError), content: compactResult(result), ...(result.structuredContent !== undefined ? { structuredContent: result.structuredContent } : {}) };
+    return { isError: Boolean(result.isError), content: compactResult(result, mcpOutputLimitChars(options.env || this.env)), ...(result.structuredContent !== undefined ? { structuredContent: result.structuredContent } : {}) };
   }
 
   // MCP tasks run through the official @modelcontextprotocol/ext-tasks
