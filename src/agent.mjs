@@ -1865,6 +1865,18 @@ async function requestCompletionRawInner(session, options = {}) {
       try { data = JSON.parse(body); } catch {
         throw new Error('The model provider returned invalid JSON. Confirm the configured endpoint and provider protocol.');
       }
+      // Gateways answer some failures with HTTP 200 and an error body. Seen live
+      // from OpenRouter when a :free model is withdrawn: {"error":{"code":404,
+      // "message":"This model is unavailable for free. ... use this slug
+      // instead: <paid slug>"}}. Treat it as the HTTP error it describes, so the
+      // fallback chain moves on (and never to the suggested paid slug) instead
+      // of reporting "no assistant message".
+      if (data && data.error && !data.choices && !Array.isArray(data.content) && !Array.isArray(data.output)) {
+        const code = Number(data.error.code || data.error.status);
+        const status = code >= 400 && code <= 599 ? code : 502;
+        recordQuotaFailure(route, { status, headers: response.headers, body, env: providerEnv });
+        throw Object.assign(new Error(formatApiError(status, body, config.protocol, config.baseURL)), { status });
+      }
     }
     if (nativeAnthropic) {
       if (!Array.isArray(data.content)) throw new Error('The Anthropic provider returned no content blocks.');
