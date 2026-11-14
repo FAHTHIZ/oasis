@@ -4,6 +4,7 @@ User-facing change history grouped by package version. A version heading does no
 
 ## Unreleased
 
+- Browser app: an empty model reply (no text, no tool call) no longer ends the turn with nothing. Like the CLI, the agent asks again twice and then shows a notice; a content-filter, error or refusal stop is reported straight away. The shared text lives in the browser-safe `src/empty-reply.mjs`.
 - Two processes on the same session no longer overwrite each other. Resuming a session in two terminals (or the CLI and `oasis web`) used to keep only whichever saved last. A save now checks whether the session file was saved by someone else since this process loaded or last saved it; if so, this conversation is saved as a new session and a note gives its ID, so both stay resumable.
 - Browser app, Anthropic: replies are no longer limited to 8,192 output tokens. The default now follows the model (32,000 for Claude 3.7 / 4 and later, 8,192 for 3.5, 4,096 for Claude 3), and a "max_tokens ... > N" 400 is retried once at the reported limit, which is remembered for that model. `outputCapFromError` moved to the browser-safe `src/output-cap.mjs`, shared with the CLI.
 - `oasis bg send` no longer cuts messages at 20,000 characters (same 200,000 bound as steering), and the stream-json `permission_request` event carries the whole approval prompt instead of its first 300 characters.

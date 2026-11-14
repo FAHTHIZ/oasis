@@ -3,6 +3,7 @@
 // resolves tool-name aliases, asks before risky actions, compacts long
 // conversations and stops cleanly on request.
 
+import { EMPTY_REPLY_NOTICE, EMPTY_REPLY_NUDGE, MAX_EMPTY_REPLY_NUDGES, providerStopNotice } from '../../src/empty-reply.mjs';
 import { chat } from './providers.mjs';
 import { TOOL_DEFINITIONS, TOOL_NAMES, executeTool, needsApproval } from './tools.mjs';
 import { defineTool, runTool } from '../../src/tool-kernel-core.mjs';
@@ -243,6 +244,7 @@ export class Agent {
     let finalText = '';
     let system = null;
     let truncations = 0;
+    let emptyReplies = 0;
     try {
       for (let step = 0; step < maxSteps; step++) {
         const config = this.getConfig();
@@ -296,6 +298,17 @@ export class Agent {
           }
         }
         calls = calls.map((call, index) => ({ id: call.id || 'call_' + step + '_' + index, type: 'function', function: { name: call.function.name, arguments: call.function.arguments }, ...(call.extra_content && typeof call.extra_content === 'object' ? { extra_content: call.extra_content } : {}) }));
+        // An empty reply (no text, no tool call) is not an answer: ask again
+        // (twice), then say so instead of ending the turn with nothing.
+        if (!calls.length && !String(content || '').trim() && !reply.truncated) {
+          if (!reply.providerStop && emptyReplies < MAX_EMPTY_REPLY_NUDGES && step < maxSteps - 1) {
+            emptyReplies++;
+            this.messages.push({ role: 'user', content: EMPTY_REPLY_NUDGE });
+            this.onEvent({ type: 'empty_reply', step });
+            continue;
+          }
+          content = reply.providerStop ? providerStopNotice(reply.providerStop) : EMPTY_REPLY_NOTICE;
+        }
         const assistant = { role: 'assistant', content: content || '' };
         if (calls.length) assistant.tool_calls = calls;
         this.messages.push(assistant);
