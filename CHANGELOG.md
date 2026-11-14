@@ -4,6 +4,7 @@ User-facing change history grouped by package version. A version heading does no
 
 ## Unreleased
 
+- Browser workspace: the approval to open the terminal panel put focus in the "tell OASIS what to do instead" box, so text typed for the terminal went there and Enter denied the terminal. That box now appears only when a running task can receive the note, approvals never start focused on an answer, and the Deny button no longer keeps a stale "Deny and send" label from an earlier approval.
 - Terminal: when a reply started with blank lines (common with reasoning models such as Qwen 3.5), the reply bullet sat alone on its own line with the text below it. Leading blank lines are now dropped before the first words.
 - `oasis doctor` said "Fallback models: none" right after `oasis connect` saved backup models, because it read only `--fallback-model` and settings. It now uses the same order as a session: the flag, then settings, then the saved connection.
 - `npm run bench:perf -- --compare` (Linux) times `--version` and `--help` of other agent CLIs on PATH (Claude Code, Codex, Gemini CLI, OpenCode, Aider) with the same method as OASIS, sampling the peak memory of each CLI's whole process tree.
