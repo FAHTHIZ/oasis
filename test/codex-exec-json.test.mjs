@@ -7,6 +7,7 @@ import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { scriptedModel, toolCall } from './helpers/scripted-model.mjs';
 import { createCodexExecJsonStream, parseCodexConfigValue, codexEffort } from '../src/codex-exec-json.mjs';
+import { readSmall, LARGE_FILE } from '../src/codex-app-server.mjs';
 
 const CLI = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'src', 'cli.mjs');
 
@@ -179,4 +180,25 @@ test('Codex --config values and reasoning effort map to OASIS', () => {
   assert.equal(codexEffort('minimal'), 'low');
   assert.equal(codexEffort('xhigh'), 'max');
   assert.equal(codexEffort('bogus'), null);
+});
+
+// Files over 1 MiB are not read for diffs; an edit to one was reported as
+// "add" (exec JSON) and as an add with no change (app server).
+test('an edit to a file over 1 MiB is reported as an update', async (t) => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'oasis-exec-large-'));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const big = path.join(root, 'big.sql');
+  await writeFile(big, 'x'.repeat(2 * 1024 * 1024));
+  // The app server picks add/update from this: missing is null, too large is not.
+  assert.equal(readSmall(big), LARGE_FILE);
+  assert.equal(readSmall(path.join(root, 'missing.sql')), null);
+  assert.equal(readSmall(root), null);
+  let text = '';
+  const stream = createCodexExecJsonStream({ write: (chunk) => { text += chunk; }, root, threadId: 't-large' });
+  stream.toolObserver.start({ name: 'edit_file', args: { path: 'big.sql', old_string: 'x', new_string: 'y' }, call: { id: 'e1' } });
+  await writeFile(big, 'y' + 'x'.repeat(2 * 1024 * 1024 - 1));
+  stream.toolObserver.result({ name: 'edit_file', result: { path: 'big.sql', changed: true }, call: { id: 'e1' } });
+  const events = text.trim().split('\n').map((line) => JSON.parse(line));
+  const change = events.find((event) => event.type === 'item.completed' && event.item.type === 'file_change');
+  assert.deepEqual(change.item.changes, [{ path: big, kind: 'update' }]);
 });
