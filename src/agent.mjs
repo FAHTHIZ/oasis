@@ -102,7 +102,7 @@ import { repairToolArguments, extractTextToolCalls, unknownTextToolCalls } from 
 import { promptToolCalling, toPromptToolMessages, foldSystemMessages, withSystemInUserTurn } from './prompt-tools.mjs';
 import { isLocalModelEndpoint, probeLocalContext, probeProviderModelWindow, applySmallContextProfile, localContextAdvice, SMALL_CONTEXT_TOKENS, RECOMMENDED_LOCAL_CONTEXT } from './local-context.mjs';
 import { ripgrepPathAddition } from './ripgrep.mjs';
-import { MAX_PROVIDER_RETRIES, QUICK_PROVIDER_RETRIES, RETRYABLE_PROVIDER_STATUSES, isHardQuotaError, isMalformedGenerationError, isUnconfiguredRouteError, isPromptTooLargeError, notifyProviderRetry, providerErrorSummary, providerRetryDelayMs, providerRetryLimit, rateLimitResetMs, rateLimitWaitMs, shortRateLimitMs, waitForProviderRetry } from './provider-retry.mjs';
+import { MAX_PROVIDER_RETRIES, QUICK_PROVIDER_RETRIES, RETRYABLE_PROVIDER_STATUSES, serverRetryAdvice, isHardQuotaError, isMalformedGenerationError, isUnconfiguredRouteError, isPromptTooLargeError, notifyProviderRetry, providerErrorSummary, providerRetryDelayMs, providerRetryLimit, rateLimitResetMs, rateLimitWaitMs, shortRateLimitMs, waitForProviderRetry } from './provider-retry.mjs';
 import { AUTO_LSP_EDIT_TOOLS, CYCLE_HALT_AT, CYCLE_WARN_AT, CYCLE_WINDOW_STEPS, FILE_EDITING_TOOL_NAMES, MAX_SESSION_TOOL_CALLS, PROTECTED_EDIT_TOOLS, RETRY_HALT_AT, RETRY_TRACKED_COMMANDS, RETRY_WARN_AT, THRASH_ESCALATE_AT, THRASH_WARN_AT, UNREADABLE_CALL_NUDGE, activeLspBaseline, asksForNewTests, failureSignature, isCompleteFileRead, isVerificationCommand, lspCallOptions, normalizeReviewPath, parallelToolCalls, promptCacheKeyField, samplingTemperature, successfulMutation, verificationIssues, newModuleCandidate, markLoadedModules, markRanSources } from './turn-guards.mjs';
 import { postModelSwitch } from './model-switch.mjs';
 import { MAX_OUTPUT_RECOVERIES, applyEffort, claudeEffortFor, claudeThinkingMode, thinkingTurnedOff, firstPositiveConfiguredInteger, inlineEffortLevel, isOpenRouterBaseURL, maxOutputTokensFor, openRouterOutputCapFromError, outputCapFromError, reasoningEffortFor, resolveTurnLimits, stripInlineEffort, subagentEffortConfig, thinkingBudgetFor, truncationRecoveryPrompt } from './model-budgets.mjs';
@@ -1734,8 +1734,9 @@ async function requestCompletionRaw(session, options = {}) {
         attempt -= 1; // bounded by shortWaitBudget; leaves 5xx retries intact
         continue;
       }
-      const retryDelay = providerRetryDelayMs(attempt + 1, response.headers.get('retry-after'));
-      if (retryDelay !== null && attempt < providerRetryLimit(status, options.env) && (RETRYABLE_PROVIDER_STATUSES.has(status) || isMalformedGenerationError(status, errorBody)) && !isHardQuotaError(errorBody) && !isUnconfiguredRouteError(status, errorBody) && !isPromptTooLargeError(errorBody) && !(status === 429 && shortRateLimitMs(errorBody) !== null)) {
+      const retryDelay = providerRetryDelayMs(attempt + 1, response.headers);
+      const serverAdvice = serverRetryAdvice(response.headers);
+      if (retryDelay !== null && serverAdvice !== false && attempt < providerRetryLimit(status, options.env) && (serverAdvice === true || RETRYABLE_PROVIDER_STATUSES.has(status) || isMalformedGenerationError(status, errorBody)) && !isHardQuotaError(errorBody) && !isUnconfiguredRouteError(status, errorBody) && !isPromptTooLargeError(errorBody) && !(status === 429 && shortRateLimitMs(errorBody) !== null)) {
         traceRecovery(providerEnv, 'provider_retry', { status, attempt: attempt + 1, limit: providerRetryLimit(status, options.env), wait_ms: retryDelay, reason: providerErrorSummary(errorBody) });
         notifyProviderRetry(options, { status, attempt: attempt + 1, limit: providerRetryLimit(status, options.env), waitMs: retryDelay, reason: providerErrorSummary(errorBody) });
         await waitBetweenAttempts(retryDelay);

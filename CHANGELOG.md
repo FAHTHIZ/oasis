@@ -4,6 +4,7 @@ User-facing change history grouped by package version. A version heading does no
 
 ## Unreleased
 
+- Provider retries follow the retry-after-ms header (milliseconds, read before Retry-After) and x-should-retry, as the OpenAI and Anthropic SDKs do: "true" retries a status that is not normally retried, such as a 409, and "false" stops retries of a 5xx the server says will not clear.
 - Queued messages for the model (teammate messages, finished-agent notices, background MCP results, background hook results) are no longer lost when they add up to more than 20,000 characters. Each request takes up to 100,000 characters of whole messages (20,000 for hook results); the rest stay queued for the next request, with a note saying how many are waiting.
 - MCP prompts used as commands keep up to 200,000 characters (was 60,000, cut without a note) and end with a note past that; MCP server instructions over 8,000 characters now say they were cut.
 - A Stop, SubagentStop, or TeammateIdle hook's reason reaches the model with up to 10,000 characters (start and end, with a note) instead of being cut at 4,000, and tool hook feedback keeps 20,000 instead of 8,000.
