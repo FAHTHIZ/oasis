@@ -60,3 +60,30 @@ test('repeated saves from one process stay on the same session', async (t) => {
     assert.equal((await saveSession(session, { env })).id, id);
   }
 });
+
+test('archiving a session elsewhere survives the live session saving again', async (t) => {
+  const { setSessionArchived, listSessions } = await import('../src/sessions.mjs');
+  const root = await mkdtemp(path.join(os.tmpdir(), 'oasis-archive-live-'));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const env = { ...process.env, HOME: root, OASIS_CONFIG_DIR: path.join(root, 'cfg') };
+  const live = await createSession({ root, config, env });
+  live.messages.push({ role: 'user', content: 'start' }, { role: 'assistant', content: 'ok' });
+  const { id } = await saveSession(live, { env });
+  await setSessionArchived(root, id, true, { env });
+  live.messages.push({ role: 'user', content: 'more' }, { role: 'assistant', content: 'ok' });
+  assert.equal((await saveSession(live, { env })).id, id);
+  assert.equal((await loadSession(root, id, { env })).archived, true);
+  assert.equal((await listSessions(root, { env })).find((item) => item.id === id).archived, true);
+
+  // Unarchiving in the live session itself still wins.
+  live.archived = false;
+  await saveSession(live, { env });
+  assert.equal((await loadSession(root, id, { env })).archived, false);
+
+  // A resumed session behaves the same.
+  const resumed = await createSession({ root, config, env, restore: await loadSession(root, id, { env }) });
+  await setSessionArchived(root, id, true, { env });
+  resumed.messages.push({ role: 'user', content: 'again' }, { role: 'assistant', content: 'ok' });
+  await saveSession(resumed, { env });
+  assert.equal((await loadSession(root, id, { env })).archived, true);
+});

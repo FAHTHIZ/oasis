@@ -4,6 +4,7 @@ User-facing change history grouped by package version. A version heading does no
 
 ## Unreleased
 
+- Archiving a session from the web UI or `oasis sessions archive` while it is open elsewhere sticks: the live session's next save used to write its own (unarchived) flag back over it.
 - The browser app gives empty or repeated tool-call IDs in one reply fresh ones (the terminal agent already did), so each tool result answers exactly one call instead of two results sharing an ID, which Anthropic rejects.
 - Compaction summaries are written from a much fuller transcript. The summarizer saw every user message cut to 1,800 characters, assistant text to 1,300 and tool results to 650 (mid-task compaction also capped the whole transcript at 24,000), and the original request was the first thing dropped when the transcript was long. It now gets up to 20,000 / 6,000 / 4,000 characters per message (head and tail, with a marker), the first request is always kept, the newest whole lines fill the rest, and mid-task compaction scales with the context window up to 120,000 characters.
 - The browser tool's snapshot says when the page text (12,000 characters) or the numbered element list (300) was cut, with how to read further, instead of silently presenting part of the page as the whole.

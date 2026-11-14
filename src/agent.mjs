@@ -615,6 +615,7 @@ export async function createSession({ root, config, restore = null, permissionMo
     persistedUpdatedAt: restore && restore.id && typeof restore.updatedAt === 'string' ? restore.updatedAt : '',
     sessionName: String(sessionName || restore && restore.name || '').slice(0, 120),
     archived: Boolean(restore && restore.archived === true),
+    ...(restore && restore.id ? { persistedArchived: restore.archived === true } : {}),
     fallbackModel: fallbackModel || loadedSettings.fallbackModel || (config && typeof config.fallbackModel === 'string' ? config.fallbackModel : '') || '',
     maxBudgetUsd: Number(maxBudgetUsd) || 0,
     costUsd: 0,

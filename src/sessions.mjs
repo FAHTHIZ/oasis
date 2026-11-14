@@ -283,17 +283,21 @@ export function sanitizeGoal(goal) {
   };
 }
 
-// updatedAt of a saved session, read from the head of its file (it is one of
-// the first fields), or '' when the file is missing or unreadable.
-async function savedUpdatedAt(file) {
+// updatedAt ('' when the file is missing or unreadable) and the archived flag
+// of a saved session, read from the head of its file (both come before the
+// messages).
+async function savedHead(file) {
   let handle;
   try {
     handle = await open(file, 'r');
     const buffer = Buffer.alloc(64 * 1024);
     const { bytesRead } = await handle.read(buffer, 0, buffer.length, 0);
-    const match = buffer.subarray(0, bytesRead).toString('utf8').match(/"updatedAt":\s*"([^"]{1,64})"/);
-    return match ? match[1] : '';
-  } catch { return ''; } finally { if (handle) await handle.close().catch(() => {}); }
+    const head = buffer.subarray(0, bytesRead).toString('utf8');
+    const match = head.match(/"updatedAt":\s*"([^"]{1,64})"/);
+    const messagesAt = head.search(/"messages":/);
+    const archivedAt = head.search(/"archived":\s*true/);
+    return { updatedAt: match ? match[1] : '', archived: archivedAt >= 0 && (messagesAt < 0 || archivedAt < messagesAt) };
+  } catch { return { updatedAt: '', archived: false }; } finally { if (handle) await handle.close().catch(() => {}); }
 }
 
 export async function saveSession(session, options = {}) {
@@ -306,10 +310,15 @@ export async function saveSession(session, options = {}) {
   // session instead and say so; both stay resumable.
   let forkedFrom = '';
   if (session.sessionId && session.persistedUpdatedAt) {
-    const onDisk = await savedUpdatedAt(sessionPath(session.root, id, env));
-    if (onDisk && onDisk !== session.persistedUpdatedAt) {
+    const onDisk = await savedHead(sessionPath(session.root, id, env));
+    if (onDisk.updatedAt && onDisk.updatedAt !== session.persistedUpdatedAt) {
       forkedFrom = id;
       id = randomUUID();
+    } else if (onDisk.updatedAt && typeof session.persistedArchived === 'boolean' && Boolean(session.archived) === session.persistedArchived) {
+      // Archiving from the web UI or `oasis sessions archive` rewrites the file
+      // in place; a live session that did not change the flag itself keeps
+      // the one on disk instead of silently un-archiving it on the next save.
+      session.archived = onDisk.archived;
     }
   }
   const complete = completeExchanges(session.messages, session.pendingToolOutputs).map((message) => message && message.images ? (({ images, ...rest }) => rest)(message) : message);
@@ -367,6 +376,7 @@ export async function saveSession(session, options = {}) {
   await replaceFileDurably(destination, body, { mode: 0o600 });
   session.sessionId = id;
   session.persistedUpdatedAt = payload.updatedAt;
+  session.persistedArchived = payload.archived === true;
   if (forkedFrom) {
     (session.hookMessages ||= []).push('[session] Another OASIS process saved session ' + forkedFrom + ' while this one was open. To keep both conversations, this one was saved as a new session: ' + id + ' (resume it with oasis --resume ' + id + ').');
   }
@@ -454,8 +464,16 @@ export async function setSessionArchived(root, id, archived, options = {}) {
   const target = sessionPath(root, id, env);
   const payload = JSON.parse(await readBoundedRegularFile(target, MAX_SESSION_BYTES, { label: 'Saved session', tooLargeMessage: 'Stored session is too large.' }));
   if (!payload || payload.schemaVersion !== 1 || payload.id !== id || path.resolve(payload.workspaceRoot || '') !== path.resolve(root)) throw new Error('That saved session does not belong to this workspace or uses an unsupported format.');
-  if (archived) payload.archived = true; else delete payload.archived;
-  await replaceFileDurably(target, JSON.stringify(payload, null, 2) + '\n', { mode: 0o600 });
+  delete payload.archived;
+  // The flag goes before the messages, where saveSession reads it from the
+  // head of the file (a live session must not un-archive it on its next save).
+  const ordered = {};
+  for (const [key, value] of Object.entries(payload)) {
+    if (key === 'messages' && archived) ordered.archived = true;
+    ordered[key] = value;
+  }
+  if (archived && !ordered.archived) ordered.archived = true;
+  await replaceFileDurably(target, JSON.stringify(ordered, null, 2) + '\n', { mode: 0o600 });
   return { id, archived: Boolean(archived), updatedAt: String(payload.updatedAt || ''), name: typeof payload.name === 'string' ? payload.name : '' };
 }
 
