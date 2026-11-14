@@ -1,7 +1,7 @@
 // /doctor inside a session: a compact health report for the current workspace.
 import { loadSettings } from './settings.mjs';
 import { isNodeVersionSupported, MIN_NODE_VERSION } from './config.mjs';
-import { detectSandbox, detectContainerRuntime, detectSandboxRuntime, domainList, unixSocketFilterPath } from './sandbox.mjs';
+import { resolveSandbox, unixSocketFilterPath } from './sandbox.mjs';
 import { detectCheckers, findBinary } from './diagnostics.mjs';
 import { BUILTIN_SERVERS } from './lsp.mjs';
 import { onPathSync } from './clipboard-path.mjs';
@@ -9,6 +9,36 @@ import { contextWindowSize, contextTokens } from './context.mjs';
 import { workflowRuntimeStatus } from './workflow-sandbox.mjs';
 import { describeRipgrep } from './ripgrep.mjs';
 import { buildSecurityReport, formatSecurityReport } from './security-report.mjs';
+
+/**
+ * The sandbox section shared by `oasis doctor` and /doctor. It asks resolveSandbox, so it reports
+ * the backend, domain filtering, proxy ports and Unix-socket policy that commands would actually get.
+ */
+export function sandboxDoctor(settings, root, { env = process.env, indent = '  ' } = {}) {
+  const lines = [];
+  const problems = [];
+  const enabled = Boolean(settings.sandbox && settings.sandbox.enabled);
+  const backend = settings.sandbox.backend || 'os';
+  let status;
+  try { status = resolveSandbox({ ...settings, sandbox: { ...settings.sandbox, enabled: true } }, root); } catch (error) { status = { available: false, kind: 'none', reason: String(error && error.message || error) }; }
+  if (status.allowedDomains && status.allowedDomains.length) lines.push(indent + 'Network: only ' + status.allowedDomains.join(', ') + ' (sandbox-runtime proxy)');
+  if (status.httpProxyPort || status.socksProxyPort) lines.push(indent + 'Network proxy: your own (' + [status.httpProxyPort && 'HTTP :' + status.httpProxyPort, status.socksProxyPort && 'SOCKS :' + status.socksProxyPort].filter(Boolean).join(', ') + '); it does the filtering');
+  lines.push(indent + 'Sandbox: ' + (enabled ? 'enabled' : 'off') + ' (' + (status.available ? status.kind + ' available' : 'unavailable: ' + status.reason) + ')');
+  lines.push(indent + 'Command isolation: ' + (enabled && status.available
+    ? (backend === 'os' ? 'OS sandbox active' : backend === 'ssh' ? 'remote execution over SSH (' + String(settings.sandbox.ssh && settings.sandbox.ssh.host || env.OASIS_SSH_HOST || '') + ')' : 'container sandbox active (' + backend + ', image ' + (settings.sandbox.image || 'node:22-bookworm') + ')')
+    : 'not active; approval controls are not OS isolation'));
+  if (backend === 'os' && status.available) {
+    const open = status.allowAllUnixSockets === true;
+    const filtered = status.kind !== 'bubblewrap' || Boolean(unixSocketFilterPath());
+    lines.push(indent + 'Unix sockets: ' + (open ? 'allowed (sandbox.network.allowAllUnixSockets)' : filtered ? 'blocked' + (status.allowUnixSockets && status.allowUnixSockets.length && process.platform === 'darwin' ? ' except ' + status.allowUnixSockets.join(', ') : '') : 'NOT blocked (no seccomp helper for ' + process.arch + ')'));
+    if (enabled && !open && !filtered) problems.push('Sandboxed commands can reach host Unix sockets such as /var/run/docker.sock: the seccomp helper from @anthropic-ai/sandbox-runtime is missing or cannot run here.');
+  }
+  if (settings.sandbox.adminRequired) lines.push(indent + 'Admin-required: yes (a repository cannot widen the sandbox or turn it off)');
+  for (const entry of settings.sandbox.lockedRepoEntries || []) problems.push('Ignored repository sandbox entry under a path your settings deny reading: ' + entry);
+  if (enabled && !status.available) problems.push('The sandbox is enabled but unavailable: ' + status.reason);
+  else if (!enabled && status.available) lines.push(indent + 'Tip: commands can run inside the ' + status.kind + ' sandbox (workspace writable, rest of the system read-only, credentials hidden, package caches writable). Try /sandbox on, or add "sandbox": {"enabled": true} to settings.');
+  return { lines, problems, status };
+}
 
 export async function workspaceDoctor(root, { env = process.env, session = null } = {}) {
   const lines = [];
@@ -25,27 +55,10 @@ export async function workspaceDoctor(root, { env = process.env, session = null 
     const settings = await loadSettings(root, { env });
     lines.push('  Trusted: ' + (settings.trusted ? 'yes' : 'no') + '; settings files: ' + (settings.sources.length || 'none'));
     if (settings.ignoredUntrusted.length) problems.push('Ignored until you run oasis trust: ' + settings.ignoredUntrusted.join(', '));
-    const backend = settings.sandbox.backend || 'os';
-    let sandbox;
-    if (backend === 'ssh') {
-      const { normalizeSshSettings, detectSshRuntime } = await import('./ssh-backend.mjs');
-      sandbox = detectSshRuntime(normalizeSshSettings(settings.sandbox.ssh || {}, env, root));
-    } else if (backend === 'os' && domainList(settings.sandbox.allowedDomains).length) {
-      sandbox = detectSandboxRuntime();
-      lines.push('  Network: only ' + domainList(settings.sandbox.allowedDomains).join(', ') + ' (sandbox-runtime proxy)');
-    } else sandbox = backend === 'os' ? detectSandbox() : detectContainerRuntime(backend);
-    lines.push('  Sandbox: ' + (settings.sandbox.enabled ? 'enabled' : 'off') + ' (' + (sandbox.available ? sandbox.kind + ' available' : 'unavailable: ' + sandbox.reason) + ')');
-    lines.push('  Command isolation: ' + (settings.sandbox.enabled && sandbox.available
-      ? (backend === 'os' ? 'OS sandbox active' : backend === 'ssh' ? 'remote execution over SSH (' + String(settings.sandbox.ssh && settings.sandbox.ssh.host || env.OASIS_SSH_HOST || '') + ')' : 'container sandbox active (' + backend + ', image ' + (settings.sandbox.image || 'node:22-bookworm') + ')')
-      : 'not active; approval controls are not OS isolation'));
-    if (backend === 'os' && sandbox.available) {
-      const open = settings.sandbox.allowAllUnixSockets === true;
-      const filtered = sandbox.kind !== 'bubblewrap' || Boolean(unixSocketFilterPath());
-      lines.push('  Unix sockets: ' + (open ? 'allowed (sandbox.network.allowAllUnixSockets)' : filtered ? 'blocked' : 'NOT blocked (no seccomp helper for ' + process.arch + ')'));
-      if (settings.sandbox.enabled && !open && !filtered) problems.push('Sandboxed commands can reach host Unix sockets such as /var/run/docker.sock: the seccomp helper from @anthropic-ai/sandbox-runtime is missing or cannot run here.');
-    }
-    if (settings.sandbox.enabled && !sandbox.available) problems.push('The sandbox is enabled but unavailable: ' + sandbox.reason);
-    else if (!settings.sandbox.enabled && sandbox.available) lines.push('  Tip: commands can run inside the ' + sandbox.kind + ' sandbox (workspace writable, rest of the system read-only, credentials hidden, package caches writable). Try /sandbox on, or add "sandbox": {"enabled": true} to settings.');
+    const report = sandboxDoctor(settings, root, { env });
+    const sandbox = report.status;
+    lines.push(...report.lines);
+    problems.push(...report.problems);
     // Unified security posture (secret scan, permissions, sandbox, sensitive paths).
     const securityReport = buildSecurityReport({
       env,

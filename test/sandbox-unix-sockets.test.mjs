@@ -175,3 +175,17 @@ test('without an admin-required sandbox a trusted repository keeps its entries',
   assert.equal(flagged.sandbox.adminRequired, true);
   assert.deepEqual(flagged.sandbox.excludedCommands, []);
 });
+
+test('doctor reports the configured sandbox backend, proxy port and admin-required lock', async (t) => {
+  const { sandboxDoctor } = await import('../src/doctor.mjs');
+  const s = await setup(t, { user: { sandbox: { enabled: true, backend: 'podman', network: { socksProxyPort: 1080 } } }, managed: { sandbox: { allowUnsandboxedCommands: false } } });
+  const settings = await loadSettings(s.root, { env: s.env });
+  const report = sandboxDoctor(settings, s.root, { env: s.env });
+  const text = report.lines.join('\n');
+  assert.doesNotMatch(text, /bubblewrap available/, 'a container backend is not reported as bubblewrap');
+  assert.match(text, /Admin-required: yes/);
+  if (report.status.available) assert.match(text, /container sandbox active \(podman/);
+  else assert.ok(report.problems.some((p) => /enabled but unavailable/.test(p)));
+  const os = sandboxDoctor({ ...settings, sandbox: { ...settings.sandbox, backend: 'os' } }, s.root, { env: s.env });
+  assert.match(os.lines.join('\n'), /Network proxy: your own \(SOCKS :1080\)/);
+});
