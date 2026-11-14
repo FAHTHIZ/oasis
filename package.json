@@ -47,6 +47,7 @@
     "bench:gateway": "node bench/gateway/run.mjs",
     "bench:live": "node scripts/bench-live.mjs",
     "bench:perf": "node scripts/bench-perf.mjs",
+    "bench:routers": "node scripts/bench-routers.mjs",
     "bench:memory": "node scripts/bench-memory.mjs",
     "lint": "oxlint --deny-warnings"
   },
