@@ -5,13 +5,20 @@
 // - Prompts: each server prompt becomes /mcp__server__prompt in the terminal
 //   and the browser; arguments are positional or name=value.
 const MAX_RESOURCE_TEXT = 40000;
-const MAX_ITEMS = 200;
+const MAX_ITEMS = 5000;
 
 function cleanList(items, key) {
   return (Array.isArray(items) ? items : []).filter((item) => item && typeof item[key] === 'string' && item[key].length <= 2000).slice(0, MAX_ITEMS);
 }
 
 const MAX_INSTRUCTIONS = 8000;
+
+// All pages when the client can page (McpHttpClient.listAll), else one request.
+async function listAll(client, method, key) {
+  if (typeof client.listAll === 'function') return await client.listAll(method, key);
+  const listed = await client._request(method, {}, 15000);
+  return Array.isArray(listed && listed[key]) ? listed[key] : [];
+}
 const MAX_PROMPT_TEXT = 200_000;
 
 // Called after initialize + tools/list. Listing failures never break the server.
@@ -27,11 +34,11 @@ export async function loadMcpExtras(client, init = {}) {
   client.resourceTemplates = [];
   client.prompts = [];
   if (capabilities.resources) {
-    try { client.resources = cleanList((await client._request('resources/list', {}, 15000)).resources, 'uri'); } catch {}
-    try { client.resourceTemplates = cleanList((await client._request('resources/templates/list', {}, 15000)).resourceTemplates, 'uriTemplate'); } catch {}
+    try { client.resources = cleanList(await listAll(client, 'resources/list', 'resources'), 'uri'); } catch {}
+    try { client.resourceTemplates = cleanList(await listAll(client, 'resources/templates/list', 'resourceTemplates'), 'uriTemplate'); } catch {}
   }
   if (capabilities.prompts) {
-    try { client.prompts = cleanList((await client._request('prompts/list', {}, 15000)).prompts, 'name').filter((prompt) => /^[a-zA-Z0-9_.-]{1,80}$/.test(prompt.name)); } catch {}
+    try { client.prompts = cleanList(await listAll(client, 'prompts/list', 'prompts'), 'name').filter((prompt) => /^[a-zA-Z0-9_.-]{1,80}$/.test(prompt.name)); } catch {}
   }
 }
 

@@ -14,7 +14,7 @@
 function entryList(value) {
   if (!Array.isArray(value)) return null;
   const out = [];
-  for (const item of value.slice(0, 500)) {
+  for (const item of value) {
     if (!item || typeof item !== 'object' || Array.isArray(item)) continue;
     if (typeof item.serverName === 'string' && item.serverName.trim()) out.push({ serverName: item.serverName.trim().slice(0, 200) });
     else if (Array.isArray(item.serverCommand) && item.serverCommand.length && item.serverCommand.every((part) => typeof part === 'string')) out.push({ serverCommand: item.serverCommand.map((part) => part.slice(0, 2000)) });
@@ -23,7 +23,7 @@ function entryList(value) {
   return out;
 }
 
-const names = (value) => Array.isArray(value) ? value.filter((item) => typeof item === 'string' && item.trim()).map((item) => item.trim().slice(0, 200)).slice(0, 500) : null;
+const names = (value) => Array.isArray(value) ? value.filter((item) => typeof item === 'string' && item.trim()).map((item) => item.trim().slice(0, 200)) : null;
 
 // Called by loadSettings for every settings file. `trusted` is false for project
 // files in an untrusted workspace; those may only add denials and rejections.
