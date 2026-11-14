@@ -1457,7 +1457,8 @@ async function runPrompt(prompt, root, autoApprove, session = null, persistence 
       try { const { listCheckpoints } = await import('./checkpoints.mjs'); const latest = listCheckpoints(session)[0]; changed = latest && latest.files || []; } catch {}
       if (changed.length) stdout.write('  ⎿ ' + (changed.length === 1 ? changed[0] + ' was' : changed.length + ' files were') + ' changed before you stopped; /rewind 1 undoes ' + (changed.length === 1 ? 'it' : 'them') + '.\n');
     } else {
-      stdout.write('\nOASIS error: ' + (error.message || String(error)) + '\n');
+      const message = 'OASIS error: ' + (error.message || String(error));
+      stdout.write('\n' + (stdout.isTTY && stdout.columns ? wrapCommandOutput(message, stdout.columns) : message) + '\n');
       turnFailed = true;
       playSound('error', { stream: stdout });
       haltAutoContinue(error);

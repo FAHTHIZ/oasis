@@ -4,6 +4,8 @@ User-facing change history grouped by package version. A version heading does no
 
 ## Unreleased
 
+- A failed turn's `OASIS error:` message is word-wrapped to the terminal width. Before, the terminal split words across rows ("ref" / "used").
+
 - `/resume` and `oasis -c` now show which conversation came back straight away: its title, message count, age, and the last request and reply. Before, nothing appeared until the next message, and the notice broke the timestamp mid-word.
 - Reopened web sessions, HTML and Markdown exports, and the resume recap no longer show OASIS's internal prompts (verification-gate and guard nudges, hook feedback, compaction digests) as if the user had typed them. They also drop the reminder and @file blocks appended to real prompts. One helper (`userFacingPrompt` in `src/sessions.mjs`) decides this, and its test checks it against each nudge's source.
 
