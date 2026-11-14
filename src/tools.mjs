@@ -1191,7 +1191,7 @@ export function foreignUserSkillDirectories(env = process.env) {
     ...['config', 'antigravity-cli'].flatMap((base) => {
       const plugins = path.join(home, '.gemini', base, 'plugins');
       let names = [];
-      try { names = readdirSync(plugins, { withFileTypes: true }).filter((entry) => entry.isDirectory()).map((entry) => entry.name).sort().slice(0, 40); } catch {}
+      try { names = readdirSync(plugins, { withFileTypes: true }).filter((entry) => entry.isDirectory()).map((entry) => entry.name).sort(); } catch {}
       return names.map((name) => ['~/.gemini/' + base + '/plugins/' + name + '/skills', path.join(plugins, name, 'skills')]);
     })
   ];
@@ -1209,7 +1209,7 @@ export async function listAvailableSkills(root, options = {}) {
   async function scan(directory, source, relativePrefix = '', origin = '') {
     let entries;
     try { entries = await readdir(directory, { withFileTypes: true }); } catch { return; }
-    for (const entry of entries.filter((item) => item.isDirectory() && !item.isSymbolicLink()).slice(0, 80)) {
+    for (const entry of entries.filter((item) => item.isDirectory() && !item.isSymbolicLink())) {
       if (!/^[a-zA-Z0-9_-]{1,64}$/.test(entry.name)) continue;
       const filePath = path.join(directory, entry.name, 'SKILL.md');
       try {
@@ -1243,7 +1243,7 @@ export async function listAvailableSkills(root, options = {}) {
   async function scanImportedExtensions(extensionRoot, source, workspaceRelative = '') {
     let extensions;
     try { extensions = await readdir(extensionRoot, { withFileTypes: true }); } catch { return; }
-    for (const extension of extensions.filter((entry) => entry.isDirectory() && !entry.isSymbolicLink()).slice(0, 100)) {
+    for (const extension of extensions.filter((entry) => entry.isDirectory() && !entry.isSymbolicLink())) {
       if (!/^[a-z0-9][a-z0-9-]{0,63}$/.test(extension.name)) continue;
       const extensionDirectory = path.join(extensionRoot, extension.name);
       try {
@@ -1255,7 +1255,7 @@ export async function listAvailableSkills(root, options = {}) {
       const skillsDirectory = path.join(extensionDirectory, 'skills');
       let skillDirs;
       try { skillDirs = await readdir(skillsDirectory, { withFileTypes: true }); } catch { continue; }
-      for (const skillDir of skillDirs.filter((entry) => entry.isDirectory() && !entry.isSymbolicLink()).slice(0, 240)) {
+      for (const skillDir of skillDirs.filter((entry) => entry.isDirectory() && !entry.isSymbolicLink())) {
         if (!/^[a-zA-Z][a-zA-Z0-9-]{0,63}$/.test(skillDir.name)) continue;
         const filePath = path.join(skillsDirectory, skillDir.name, 'SKILL.md');
         try {
@@ -1321,7 +1321,7 @@ export async function listAvailableSkills(root, options = {}) {
   await scan(path.join(root, '.oasis', 'skills'), 'workspace', '.oasis/skills');
   await scanImportedExtensions(path.join(root, '.oasis', 'extensions'), 'project-extension', '.oasis/extensions');
   const policy = options.skillPolicy || await skillPolicyFor(root, env);
-  return applySkillPolicy([...byName.values()], policy).sort((a, b) => a.name.localeCompare(b.name)).slice(0, 240);
+  return applySkillPolicy([...byName.values()], policy).sort((a, b) => a.name.localeCompare(b.name));
 }
 
 // Folders above the workspace up to its git root, farthest first. Nothing when the
