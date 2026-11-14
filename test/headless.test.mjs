@@ -54,7 +54,24 @@ test('max turns stops a looping model and reports error_max_turns', async (t) =>
   const { exitCode } = await runHeadless({ prompt: 'loop', root, config, outputFormat: 'json', maxTurns: 2, sessionOptions: { settings }, write: (text) => { out += text; } });
   const parsed = JSON.parse(out);
   assert.equal(parsed.subtype, 'error_max_turns');
-  assert.equal(exitCode, 0);
+  // Like Claude Code: a run cut off at --max-turns did not finish.
+  assert.equal(parsed.is_error, true);
+  assert.equal(exitCode, 1);
+});
+
+// Regression: the repeat guard stopping a model that sends the same call
+// again and again reported error_max_turns with is_error false and exit 0.
+test('a run stopped by the repeat guard exits 1', async (t) => {
+  const root = await tmp();
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const { config } = await scriptedModel(t, [(payload, requests) => toolCall('r' + requests.length, 'list_files', { path: '.' })]);
+  let out = '';
+  const { exitCode } = await runHeadless({ prompt: 'loop', root, config: { ...config, maxSteps: 20 }, outputFormat: 'json', sessionOptions: { settings }, write: (text) => { out += text; } });
+  const parsed = JSON.parse(out);
+  assert.match(parsed.result, /stuck|same/i);
+  assert.notEqual(parsed.subtype, 'success');
+  assert.equal(parsed.is_error, true);
+  assert.equal(exitCode, 1);
 });
 
 test('oasis -p runs end to end with piped stdin and text output', async (t) => {
