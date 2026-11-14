@@ -106,7 +106,7 @@ import { MAX_PROVIDER_RETRIES, QUICK_PROVIDER_RETRIES, RETRYABLE_PROVIDER_STATUS
 import { AUTO_LSP_EDIT_TOOLS, CYCLE_HALT_AT, CYCLE_WARN_AT, CYCLE_WINDOW_STEPS, FILE_EDITING_TOOL_NAMES, MAX_SESSION_TOOL_CALLS, PROTECTED_EDIT_TOOLS, RETRY_HALT_AT, RETRY_TRACKED_COMMANDS, RETRY_WARN_AT, THRASH_ESCALATE_AT, THRASH_WARN_AT, UNREADABLE_CALL_NUDGE, activeLspBaseline, asksForNewTests, failureSignature, isCompleteFileRead, isVerificationCommand, lspCallOptions, normalizeReviewPath, parallelToolCalls, promptCacheKeyField, samplingTemperature, successfulMutation, verificationIssues, newModuleCandidate, markLoadedModules, markRanSources } from './turn-guards.mjs';
 import { postModelSwitch } from './model-switch.mjs';
 import { MAX_OUTPUT_RECOVERIES, applyEffort, claudeEffortFor, claudeThinkingMode, thinkingTurnedOff, firstPositiveConfiguredInteger, inlineEffortLevel, isOpenRouterBaseURL, maxOutputTokensFor, openRouterOutputCapFromError, outputCapFromError, reasoningEffortFor, resolveTurnLimits, stripInlineEffort, subagentEffortConfig, thinkingBudgetFor, truncationRecoveryPrompt } from './model-budgets.mjs';
-import { HISTORY_COMPACT_INPUT_LIMIT, HISTORY_COMPACT_THRESHOLD_CHARS, announceCompaction, compactionDeadline, compactionError, deterministicHistorySummary, findCompactionBoundary, historyBudgetSize, historyTextSize, reportCompaction, safeHistoryLine, supersedeBeforeCompaction, usableCompactionSummary } from './compaction-history.mjs';
+import { HISTORY_COMPACT_INPUT_LIMIT, HISTORY_COMPACT_THRESHOLD_CHARS, summaryTranscript, announceCompaction, compactionDeadline, compactionError, deterministicHistorySummary, findCompactionBoundary, historyBudgetSize, historyTextSize, reportCompaction, safeHistoryLine, supersedeBeforeCompaction, usableCompactionSummary } from './compaction-history.mjs';
 import { applyAnthropicCacheBreakpoints, promptCachingEnabled, replaysReasoning, withProviderExtraContent } from './provider-request.mjs';
 import { INTERRUPTED_REPLY, modelFacingResult, refreshTodoPrompt, repairInterruptedHistory, throwIfCancelled } from './tool-results.mjs';
 import { MAX_STEER_CHARS, deliverSteering, foldSteering, steeringMessage } from './steering.mjs';
@@ -180,7 +180,7 @@ export async function compactHistoryIfNeeded(session, options = {}) {
   if (preCompact.blocked) return { compacted: false, tokensUsed: 0, blockedByHook: true, reason: preCompact.reason };
 
   const oldMessages = messages.slice(1, boundary);
-  const transcript = oldMessages.map(safeHistoryLine).filter(Boolean).join('\n').slice(-Math.max(HISTORY_COMPACT_INPUT_LIMIT, Math.min(240000, Math.floor(thresholdChars / 2))));
+  const transcript = summaryTranscript(oldMessages, Math.max(HISTORY_COMPACT_INPUT_LIMIT, Math.min(240000, Math.floor(thresholdChars / 2))));
   const mustPreserve = Array.isArray(session.mustPreserve) ? session.mustPreserve.slice(0, 20).map((item) => ({ kind: String(item.kind || 'rule').slice(0, 24), text: String(item.text || '').slice(0, 600) })).filter((item) => item.text.trim()) : [];
   const preserveBlock = mustPreserveContextBlock(mustPreserve);
   const summaryInstructions = [
@@ -336,7 +336,8 @@ async function compactMidTurnHistoryIfNeeded(session, requestIndex, options = {}
   const oldChars = historyTextSize(oldMessages);
   if (oldChars < 8_000) return { compacted: false, tokensUsed: 0 };
 
-  const transcript = oldMessages.map(safeHistoryLine).filter(Boolean).join('\n').slice(-24_000);
+  // Old tool rounds hold the findings; give the summarizer room for them.
+  const transcript = summaryTranscript(oldMessages, Math.max(24_000, Math.min(120_000, Math.floor(threshold / 4))));
   const preCompact = await runPreCompactHooks(session, 'auto', options);
   const mustPreserve = Array.isArray(session.mustPreserve) ? session.mustPreserve.slice(0, 20).map((item) => ({ kind: String(item.kind || 'rule').slice(0, 24), text: String(item.text || '').slice(0, 600) })).filter((item) => item.text.trim()) : [];
   const preserveBlock = mustPreserveContextBlock(mustPreserve);

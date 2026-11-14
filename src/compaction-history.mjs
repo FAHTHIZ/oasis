@@ -38,6 +38,63 @@ export function safeHistoryLine(message) {
   return '';
 }
 
+// Head and tail of an oversized piece, with a marker giving the size left out.
+function clipMiddle(text, max) {
+  const value = String(text == null ? '' : text);
+  if (value.length <= max) return value;
+  const head = Math.floor(max * 0.65);
+  const tail = max - head;
+  return value.slice(0, head) + ' [... ' + (value.length - head - tail) + ' characters omitted ...] ' + value.slice(-tail);
+}
+
+// One line of the transcript a compaction summary is written from. The local
+// digest (safeHistoryLine) is small by design; the model summarizer got the same
+// 1,800 / 1,300 / 650-character cuts, so a long user spec lost its later
+// requirements and tool results (where the findings are) were nearly gone
+// before the model ever saw them. Here they keep far more, head and tail.
+export function summaryHistoryLine(message) {
+  const role = String(message && message.role || 'unknown').toUpperCase();
+  const content = typeof (message && message.content) === 'string' ? message.content : (message && message.content != null ? JSON.stringify(message.content) : '');
+  if (role === 'USER') return 'USER: ' + clipMiddle(content, 20000);
+  if (role === 'ASSISTANT') {
+    const calls = Array.isArray(message.tool_calls)
+      ? message.tool_calls.map((call) => {
+          const fn = call.function || {};
+          return String(fn.name || 'unknown') + '(' + clipMiddle(fn.arguments || '{}', 1500) + ')';
+        }).join(', ')
+      : '';
+    return 'ASSISTANT: ' + clipMiddle(content, 6000) + (calls ? '\nTOOL CALLS: ' + calls : '');
+  }
+  if (role === 'TOOL') return 'TOOL ' + String(message.name || 'unknown') + ': ' + clipMiddle(content, 4000);
+  return '';
+}
+
+// The transcript for the summarizer, within maxChars: the first user message
+// (usually the task itself) is always kept, then the newest whole lines, with
+// a marker where older lines were left out. A raw tail slice dropped the
+// original request first and could cut a line in half.
+export function summaryTranscript(messages, maxChars) {
+  const lines = (messages || []).map(summaryHistoryLine).filter(Boolean);
+  const total = lines.reduce((sum, line) => sum + line.length + 1, 0);
+  if (total <= maxChars) return lines.join('\n');
+  const firstUser = lines.findIndex((line) => line.startsWith('USER: '));
+  const head = firstUser >= 0 ? clipMiddle(lines[firstUser], Math.floor(maxChars / 4)) : '';
+  const room = maxChars - head.length - 80;
+  const kept = [];
+  let used = 0;
+  for (let i = lines.length - 1; i > firstUser; i--) {
+    const cost = lines[i].length + 1;
+    if (used + cost > room) {
+      if (!kept.length) kept.push(clipMiddle(lines[i], Math.max(0, room)));
+      break;
+    }
+    kept.unshift(lines[i]);
+    used += cost;
+  }
+  const omitted = lines.length - kept.length - (head ? 1 : 0);
+  return [head, omitted > 0 ? '[... ' + omitted + ' earlier transcript lines omitted ...]' : '', ...kept].filter(Boolean).join('\n');
+}
+
 export function deterministicHistorySummary(messages) {
   const lines = messages.map(safeHistoryLine).filter(Boolean);
   const text = lines.join('\n');
