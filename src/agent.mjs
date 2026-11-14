@@ -3859,6 +3859,12 @@ async function executeMappedMcpToolWithKernel(session, name, args, context, opti
       mcpOptions.signal = runtime.signal;
       mcpOptions.timeoutMs = mcpToolTimeoutMs(runtime.env || options.env || process.env);
       mcpOptions.env = runtime.env;
+      // The per-call approval prompt waits for the user; that time does not
+      // count against the tool timeout (as for workspace tools).
+      if (typeof mcpOptions.approval === 'function' && typeof runtime.waitForUser === 'function') {
+        const ask = mcpOptions.approval;
+        mcpOptions.approval = (...prompt) => runtime.waitForUser(() => ask(...prompt));
+      }
       // Only sessions that can wake when the result lands (interactive CLI,
       // streaming headless) background a task; one-shot runs keep waiting.
       if (typeof session.onBackgroundEvent === 'function') mcpOptions.onBackgroundTask = (task) => trackBackgroundMcpTask(session, task);
