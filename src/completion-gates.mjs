@@ -29,7 +29,7 @@ import { formatLspVerificationBlocker, verificationSummary } from './verificatio
 import { permissionMode } from './plan-mode.mjs';
 import {
   ACTION_NUDGE, CONTINUE_NUDGE, EMPTY_REPLY_NOTICE, EMPTY_REPLY_NUDGE, FALSE_CLAIM_NUDGE, GIVE_UP_NUDGE, MAX_EMPTY_REPLY_NUDGES, providerStopNotice, providerCutNotice,
-  REFUSAL_NUDGE, SOURCE_EXTENSIONS, UNREADABLE_CALL_NUDGE, GATE_FOLLOWUP_NUDGE, announcesNextStep, announcesTerseStep, appendLspUnavailableNotice, asksForAction,
+  REFUSAL_NUDGE, SOURCE_EXTENSIONS, UNREADABLE_CALL_NUDGE, GATE_FOLLOWUP_NUDGE, NEW_TEST_FOLLOWUP_NUDGE, announcesNextStep, announcesTerseStep, appendLspUnavailableNotice, asksForAction,
   assistedVerificationCalls, assistedVerificationEnabled, claimsUnmadeChange, fencedFileFromReply, givesUpEarly, normalizeReviewPath,
   readsLikeInstructions, refusesSpuriously, relatedTestsHint, targetFileHint, untestedNewCode, verificationIssues, wrongFileNudge
 } from './turn-guards.mjs';
@@ -289,6 +289,12 @@ export async function runCompletionGates(turn, host) {
   if (issues.length && verification.nudgeUsed && !verification.followupNudged && (announcesNextStep(text) || announcesTerseStep(text))) {
     verification.followupNudged = true;
     session.messages.push({ role: 'user', content: GATE_FOLLOWUP_NUDGE + '\nStill outstanding: ' + issues.join('; ') + '.' });
+    return CONTINUE;
+  }
+  if (issues.length && verification.nudgeUsed && !verification.newTestNudged && !options.planOnly && issues.some((issue) => /^the request asked for (?:new tests|a new test)/.test(issue))) {
+    verification.newTestNudged = true;
+    if (typeof options.onActionNudge === 'function') { try { options.onActionNudge({ kind: 'new-test' }); } catch {} }
+    session.messages.push({ role: 'user', content: NEW_TEST_FOLLOWUP_NUDGE });
     return CONTINUE;
   }
   if (issues.length && !verification.nudgeUsed) {
