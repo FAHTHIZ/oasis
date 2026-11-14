@@ -1179,7 +1179,7 @@ async function runPrompt(prompt, root, autoApprove, session = null, persistence 
   // background task cannot finish and then be overwritten by the parent's stale
   // initial "running" record.
   await waitForBackgroundRegistration();
-  const config = await loadConfig();
+  const config = await loadConfig({ model: modeOptions.model || SESSION_OPTIONS.model || undefined });
   if (SESSION_OPTIONS.model) config.model = SESSION_OPTIONS.model;
   if (SESSION_OPTIONS.effort) Object.assign(config, applyEffort(config, SESSION_OPTIONS.effort));
   if (modeOptions.model) config.model = modeOptions.model;
@@ -1626,7 +1626,7 @@ async function printModeRun(root, headless, args, autoApprove, persistence, stat
     }
   }
   if (!prompt.trim() && !streamInput) throw new Error('Usage: oasis -p "your task" [--output-format text|json|stream-json] [--max-turns N] [--goal "condition"] [--model ID]');
-  const config = await loadConfig();
+  const config = await loadConfig({ model: SESSION_OPTIONS.model || undefined });
   if (SESSION_OPTIONS.model) config.model = SESSION_OPTIONS.model;
   if (SESSION_OPTIONS.effort) Object.assign(config, applyEffort(config, SESSION_OPTIONS.effort));
   if (!config.configured) {
