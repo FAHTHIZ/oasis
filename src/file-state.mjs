@@ -6,9 +6,19 @@
 //    command, or another agent), the edit is refused until the model re-reads it.
 // The agent's own successful writes refresh the record, so chained edits work.
 import { createHash } from 'node:crypto';
+import { createReadStream } from 'node:fs';
 import { readFile, stat } from 'node:fs/promises';
 
-function hash(buffer) { return createHash('sha256').update(buffer).digest('hex'); }
+const WHOLE_READ_LIMIT = 4 * 1024 * 1024;
+// read_file streams big files and returns only their start, but the hashes for
+// stale-edit checks and read dedup used to load the whole file: reading a 400 MB
+// log took the process to 575 MB. Files above the limit are hashed in chunks.
+export async function hashFile(absolute, size) {
+  const digest = createHash('sha256');
+  if (size <= WHOLE_READ_LIMIT) return digest.update(await readFile(absolute)).digest('hex');
+  for await (const chunk of createReadStream(absolute, { highWaterMark: 1024 * 1024 })) digest.update(chunk);
+  return digest.digest('hex');
+}
 
 function fileStateEnabled(context = {}) {
   const session = context.session;
@@ -33,8 +43,7 @@ export async function recordFileState(context, absolute, options = {}) {
   try {
     const info = await stat(absolute);
     if (!info.isFile()) return;
-    const content = await readFile(absolute);
-    const sha256 = hash(content);
+    const sha256 = await hashFile(absolute, info.size);
     const previous = store(context).get(absolute);
     // A ranged re-read of a file already seen in full (unchanged) keeps it "fully read".
     const partial = options.partial && !(previous && previous.sha256 === sha256 && !previous.partial) ? options.partial : '';
@@ -70,7 +79,7 @@ export async function assertFileFresh(context, absolute, relative, options = {})
       'Read the whole file first, or change just the relevant section with edit_file / multi_edit.');
   }
   if (record.mtimeMs === info.mtimeMs && record.size === info.size) return;
-  const current = hash(await readFile(absolute));
+  const current = await hashFile(absolute, info.size);
   if (current === record.sha256) { record.mtimeMs = info.mtimeMs; record.size = info.size; return; }
   throw new Error('File has been modified since it was last read (by the user, a formatter/linter, a command, or another agent): ' + relative + '. Read it again with read_file and base the edit on the new contents.');
 }

@@ -11,8 +11,9 @@
 //  - disable entirely with OASIS_READ_DEDUP=0 or config.readDedup === false.
 
 import { createHash } from 'node:crypto';
-import { readFile, stat } from 'node:fs/promises';
+import { stat } from 'node:fs/promises';
 import path from 'node:path';
+import { hashFile } from './file-state.mjs';
 
 const MIN_BYTES = 512;
 
@@ -40,7 +41,7 @@ function keyFor(root, args) {
 async function currentHash(absolute) {
   const info = await stat(absolute);
   if (!info.isFile()) return '';
-  return createHash('sha256').update(await readFile(absolute)).digest('hex');
+  return hashFile(absolute, info.size);
 }
 
 function toolResultStillPresent(session, toolCallId, contentHash) {

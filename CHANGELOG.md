@@ -4,6 +4,7 @@ User-facing change history grouped by package version. A version heading does no
 
 ## Unreleased
 
+- Memory: `read_file` on a large file no longer loads the whole file to hash it for the stale-edit check and read dedup. Files above 4 MB are hashed in 1 MB chunks. Reading a 402 MB log used to take the process from 175 MB to 575 MB peak RSS; it now peaks at 222 MB (`test/big-file-hash-memory.test.mjs`).
 - Benchmarks: a failed trial of an external agent (Claude Code, Codex, Gemini CLI, OpenCode, Aider) keeps the last 3,000 characters of its output as `agentOutputTail`, with the credentials it was given and known secret formats removed. Before, nothing was kept, so a failure could not be diagnosed afterwards (`test/eval-agent-output-tail.test.mjs`).
 - Benchmarks: a task that only some agents ran is listed in SUMMARY.md with each agent's outcome instead of disappearing.
 - Headless `tool_calls` now counts every tool call in the run. Before, it was 0 whenever an error or Ctrl+C stopped the run, and only the last turn counted when the run took several turns (goal, steering or schema-retry turns) (`test/headless-tool-call-count.test.mjs`).
