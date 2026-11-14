@@ -64,7 +64,8 @@ test('inline shell enforces timeout, kills the process tree, and bounds captured
   assert.match(timed.text, /timed out/);
   assert.equal(timed.ran[0].code, null);
   const noisy = await expandInlineShell('!\u0060node -e "process.stdout.write(\'x\'.repeat(1000000))"\u0060', { root, allowed: true, timeoutSeconds: 5 });
-  assert.ok(noisy.text.length <= 16 * 1024);
+  assert.ok(noisy.text.length <= 30000);
+  assert.match(noisy.text, /cut from the middle/);
   assert.equal(noisy.ran[0].code, 0);
 });
 

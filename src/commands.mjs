@@ -42,7 +42,8 @@ import { sensitivePath } from './tools.mjs';
 import { agentIgnoreMatch } from './agent-ignore.mjs';
 import { imageMediaType, MAX_SOURCE_IMAGE_BYTES } from './images.mjs';
 
-const MAX_COMMAND_FILE = 64 * 1024;
+// Command files larger than this are skipped; 64 KiB dropped real commands silently.
+const MAX_COMMAND_FILE = 1024 * 1024;
 const MAX_MENTION_BYTES = 100 * 1024;
 const MAX_MENTIONS = 20;
 const MAX_DEPTH = 3;
@@ -296,7 +297,21 @@ export function commandOptions(meta = {}) {
 // Claude Code forms: !`cmd` at the start of a line or after whitespace (KEY=!`cmd` stays
 // literal), and a fenced block opened with ```! whose body runs as one multi-line script.
 const INLINE_SHELL = /^```![ \t]*\r?\n([\s\S]{0,8000}?)\r?\n?^```[ \t]*$|(?<=^|\s)!`([^`\n]{1,2000})`/gm;
-const MAX_INLINE_OUTPUT = 16 * 1024;
+// Like Claude Code's 30,000-character Bash output default. Longer output keeps
+// its start and end with a note; it used to be cut at 16 KiB with no note.
+const MAX_INLINE_OUTPUT = 30_000;
+const INLINE_CAPTURE_BYTES = 256 * 1024;
+
+export function inlineOutputText(head, tail, total) {
+  let text = Buffer.concat(head).toString('utf8');
+  if (total > INLINE_CAPTURE_BYTES * 2) text += '\n…[' + (total - INLINE_CAPTURE_BYTES * 2).toLocaleString('en-US') + ' bytes of output cut from the middle]…\n';
+  if (tail.length) text += Buffer.concat(tail).toString('utf8');
+  if (text.length <= MAX_INLINE_OUTPUT) return text;
+  const note = '\n…[' + (text.length - MAX_INLINE_OUTPUT).toLocaleString('en-US') + ' characters of output cut from the middle]…\n';
+  const room = MAX_INLINE_OUTPUT - note.length;
+  const keepHead = Math.ceil(room * 0.6);
+  return text.slice(0, keepHead) + note + text.slice(text.length - (room - keepHead));
+}
 
 function inlineEnv(env) {
   const out = {};
@@ -307,7 +322,11 @@ function inlineEnv(env) {
 function runInline(command, root, env, timeoutMs) {
   const shell = process.platform === 'win32' ? { cmd: process.env.ComSpec || 'cmd.exe', args: ['/d', '/s', '/c', command] } : { cmd: '/bin/sh', args: ['-c', command] };
   return new Promise((resolve) => {
-    let output = '';
+    const head = [];
+    let headBytes = 0;
+    const tail = [];
+    let tailBytes = 0;
+    let total = 0;
     let timedOut = false;
     let settled = false;
     let timer;
@@ -335,16 +354,29 @@ function runInline(command, root, env, timeoutMs) {
       signalProcessTree(child, 'SIGKILL');
     }, timeoutMs);
     timer.unref?.();
+    // Bytes, not strings: decoding each chunk alone split multi-byte characters.
     const add = (chunk) => {
-      if (output.length < MAX_INLINE_OUTPUT) {
-        output += chunk.toString('utf8').slice(0, MAX_INLINE_OUTPUT - output.length);
+      total += chunk.length;
+      if (headBytes < INLINE_CAPTURE_BYTES) {
+        const part = chunk.subarray(0, INLINE_CAPTURE_BYTES - headBytes);
+        head.push(part);
+        headBytes += part.length;
+        chunk = chunk.subarray(part.length);
+      }
+      if (!chunk.length) return;
+      tail.push(chunk);
+      tailBytes += chunk.length;
+      while (tailBytes > INLINE_CAPTURE_BYTES && tail.length) {
+        const extra = tailBytes - INLINE_CAPTURE_BYTES;
+        if (tail[0].length <= extra) { tailBytes -= tail.shift().length; }
+        else { tail[0] = tail[0].subarray(extra); tailBytes -= extra; }
       }
     };
     child.stdout.on('data', add);
     child.stderr.on('data', add);
     child.on('error', (error) => finish({ output: error.message, code: null }));
     child.on('close', (code) => finish({
-      output: output.slice(0, MAX_INLINE_OUTPUT) + (timedOut ? '\n(timed out)' : ''),
+      output: inlineOutputText(head, tail, total) + (timedOut ? '\n(timed out)' : ''),
       code: timedOut ? null : code
     }));
   });
