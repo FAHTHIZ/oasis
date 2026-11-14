@@ -4,6 +4,7 @@ User-facing change history grouped by package version. A version heading does no
 
 ## Unreleased
 
+- A prompt or agent hook whose event payload passes 30,000 characters (a long Stop reply, a large tool response) gets its longest strings shortened to head and tail, so the JSON stays valid and the end of the reply is shown; the serialized JSON was cut at 30,000 characters, which dropped the end and broke the JSON. Tool checks that cannot be shown whole are still refused.
 - `/btw`, the `/goal` check and the advisor size the transcript they send to the model's context window (about 60% of it); they always sent up to 150,000 characters, about 37,000 tokens, which overflowed 8K and 32K windows, so the request failed and a goal check could never pass on a small local model.
 - The `/goal` check reads the whole goal; it cut the condition to 2,000 characters though goals can be 4,000, so a requirement at the end of a long goal was never checked and the goal could be judged met without it.
 - `oasis -p --goal` and `oasis -p "/goal ..."` refuse a goal over 4,000 characters with the same message as the interactive `/goal`; they cut it at 4,000 characters without saying so, so the goal check judged a condition the user never wrote.

@@ -232,6 +232,32 @@ export function promptHookPayload(payload) {
   return payload && payload.tool_input && typeof payload.tool_input === 'object' ? { ...payload, tool_input: shortenFileBodies(payload.tool_input) } : payload;
 }
 
+// A payload too big for a prompt hook (a long Stop reply, a big tool
+// response) is shortened inside its longest strings, keeping each one's head
+// and tail, so the JSON stays valid and the end of the reply (where the
+// conclusion is) is still shown. Slicing the serialized JSON cut off the end
+// and left broken JSON.
+function longestString(value, holder = null, key = null, best = { length: -1 }) {
+  if (typeof value === 'string') { if (value.length > best.length) Object.assign(best, { length: value.length, holder, key }); }
+  else if (value && typeof value === 'object') for (const [k, v] of Object.entries(value)) longestString(v, value, k, best);
+  return best;
+}
+export function fitPayloadJson(payload, max) {
+  const copy = JSON.parse(JSON.stringify(payload ?? null));
+  let json = JSON.stringify(copy, null, 2);
+  for (let i = 0; i < 20 && json.length > max; i++) {
+    const best = longestString(copy);
+    if (!best.holder || best.length < 400) break;
+    const text = best.holder[best.key];
+    const keep = Math.max(200, text.length - (json.length - max) - 200);
+    if (keep >= text.length) break;
+    const head = Math.floor(keep * 0.3);
+    best.holder[best.key] = text.slice(0, head) + '\n[... ' + (text.length - keep) + ' characters omitted ...]\n' + text.slice(-(keep - head));
+    json = JSON.stringify(copy, null, 2);
+  }
+  return json.length > max ? json.slice(0, max) : json;
+}
+
 async function runPromptHook(hook, payload, options = {}) {
   if (typeof options.evaluatePrompt !== 'function') return { exitCode: 1, stdout: '', stderr: 'Prompt hooks need a model, and none is available here.' };
   // The model must see the whole action it is asked to check. Cutting the
@@ -243,7 +269,7 @@ async function runPromptHook(hook, payload, options = {}) {
     if (TOOL_CHECK_EVENTS.has(payload.hook_event_name)) {
       return { exitCode: 2, stdout: '', stderr: 'The ' + (hook.type || 'prompt') + ' hook could not check this action: it is too large to show in full (' + json.length.toLocaleString('en-US') + ' characters).' };
     }
-    json = json.slice(0, MAX_PROMPT_HOOK_PAYLOAD);
+    json = fitPayloadJson(promptHookPayload(payload), MAX_PROMPT_HOOK_PAYLOAD);
   }
   const text = hook.prompt.includes('$ARGUMENTS') ? hook.prompt.split('$ARGUMENTS').join(json) : hook.prompt + '\n\nEvent payload:\n' + json;
   const timeoutMs = Math.max(1, Math.min(MAX_HOOK_TIMEOUT_SECONDS, Number(hook.timeout) || 30)) * 1000;
