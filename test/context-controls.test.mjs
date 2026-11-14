@@ -144,3 +144,10 @@ test('/context all returns detailed estimated categories without claiming exact 
   assert.match(result.output, /Command\/build\/test output/);
   assert.match(result.output, /unavailable to Oasis/i);
 });
+
+test('a must-preserve record over the length limit is refused, not cut', () => {
+  const session = { mustPreserve: [] };
+  assert.throws(() => addMustPreserve(session, 'rule', 'x'.repeat(601)), /601 characters; the limit is 600/);
+  assert.equal(session.mustPreserve.length, 0);
+  assert.equal(addMustPreserve(session, 'rule', 'y'.repeat(600))[0].text.length, 600);
+});
