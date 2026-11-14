@@ -601,6 +601,9 @@ export function verificationIssues(state) {
   if (state.testsRequested && !changed.some((item) => isTestPath(item))) {
     issues.push('the request asked for new tests, but no test file was added or changed; add tests that cover the new behavior and run them');
   }
+  if (state.testsRequested && Array.isArray(state.testsOnlyExtended) && state.testsOnlyExtended.length) {
+    issues.push('the request asked for a new test, but the change only added assertions inside existing test cases (' + state.testsOnlyExtended.slice(0, 5).join(', ') + '); add a separate test case for this fix, so it passes or fails on its own, and run it');
+  }
   if (Array.isArray(state.testTampering) && state.testTampering.length) {
     issues.push('tests were weakened instead of the code being fixed (' + state.testTampering.map((item) => item.file + ': ' + item.reason).join('; ') + '); restore them, or explain to the user why this is intended');
   }

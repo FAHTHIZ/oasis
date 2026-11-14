@@ -4,6 +4,7 @@ User-facing change history grouped by package version. A version heading does no
 
 ## Unreleased
 
+- Verification gate: when asked to "add a regression test", a model could add assertions to an existing test case, so no test reported on the fix by itself (seen in the live OVH benchmark). In files that declare test cases, the gate now asks for a separate case. Plain assertion scripts are not affected.
 - Streaming: through OmniRoute, the closing `}` of a tool call arrived in the finish chunk as a separate nameless call with a new id, so Oasis got a truncated call plus an `unknown_tool` error and the task stalled. A nameless call whose arguments complete the previous call's unfinished JSON is now merged back into it.
 - Benchmark gateway: OmniRoute's keepalive chunks (`"model":"keepalive"`) were recorded as the served model, so runs through OmniRoute reported "Same model NOT verified". They are now ignored.
 - Verification gate: after the post-edit check reminder, a model could reply only "Check util diff." and the turn ended there, so `oasis -p` printed that fragment as the whole answer (seen with gpt-oss-20b through OmniRoute). A bare next-step reply now gets one more reminder naming what is still outstanding. In `-p` text and json output, the reminder no longer claims the user already saw the earlier summary, since only the final reply is printed.
