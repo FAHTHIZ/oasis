@@ -4,6 +4,7 @@ User-facing change history grouped by package version. A version heading does no
 
 ## Unreleased
 
+- Browser app: chats are saved whole (they were cut to the last 300 messages and 200 shown entries), and the chat list keeps every chat (it dropped all past 50). If storage is full, the recent part is kept. Chats saved by older versions load without a tool result whose call was cut off, which providers rejected.
 - Roo and Kilo mode rule folders: every file is read (the first 50 used to be the limit), and files past the 48 KiB budget are listed by path in the prompt instead of being skipped without a word.
 - Saved sessions keep their whole history. A 5,000-message cap used to drop the start of long sessions on save; only the 64 MiB byte cap remains, and a session near it is first written without indentation before any history is trimmed.
 - With a fallback model set, an HTTP 529 (overloaded) switches to it right away instead of retrying the overloaded model first. Without one, 529 is still retried.

@@ -9,7 +9,7 @@ import { createSoundPlayer } from './core/sound.mjs';
 import { readableOutput, repeatsEarlierReply, stepOutcome, stepRan, stepLabel, summarizeArgs, toolKind, groupTitle, groupStats, formatDuration, thinkingLabel, thoughtLabel, splitTextToolCall, elapsedSince, describeInput, buildTimeline, groupTiming, runElapsed, timingSplit } from './core/timeline.mjs';
 import { IndexedDBStore, Workspace, lineDiff } from './core/workspace.mjs';
 import { wordHighlights } from '../src/word-diff.mjs';
-import { Agent, textOf } from './core/agent.mjs';
+import { Agent, answeredHistory, textOf } from './core/agent.mjs';
 import { FrameSandbox } from './core/sandbox.mjs';
 import { SkillLibrary } from './core/skills.mjs';
 import { GitHub, parseRepo } from './core/github.mjs';
@@ -2330,9 +2330,11 @@ function persistChat() {
     projectId: workspace.project.id,
     id: chatId,
     title: chatTitle(),
-    display: display.slice(-200).map((entry) => ({ ...entry, tools: entry.tools && entry.tools.map((t) => ({ ...t, content: (t.content || '').slice(0, 2000) })) })),
-    ...(RT && agent.busy && agent.jobId ? { turnStart: Math.max(0, turnStart - Math.max(0, display.length - 200)) } : {}),
-    messages: RT ? agent.snapshot() : agent.messages.slice(-300).map((m) => (Array.isArray(m.content) ? { ...m, content: textOf(m.content) + ' (image not kept in saved chats)' } : m)),
+    // The whole chat is kept: cutting it to the last few hundred entries lost
+    // the start of long chats on reload and could orphan tool results.
+    display: display.map((entry) => ({ ...entry, tools: entry.tools && entry.tools.map((t) => ({ ...t, content: (t.content || '').slice(0, 2000) })) })),
+    ...(RT && agent.busy && agent.jobId ? { turnStart } : {}),
+    messages: RT ? agent.snapshot() : agent.messages.map((m) => (Array.isArray(m.content) ? { ...m, content: textOf(m.content) + ' (image not kept in saved chats)' } : m)),
     ...(!RT ? { pendingSteering: agent.steering.slice(0, 20) } : {})
   }; } catch { return chatSaving; }
   const save = () => saveChat(snapshot);
@@ -2343,18 +2345,24 @@ function persistChat() {
 async function saveChat(snapshot) {
   const { projectId, id, display: trimmed } = snapshot;
   try {
-    await store.setValue(chatKey(projectId, id), {
+    const record = {
       messages: snapshot.messages,
       ...(Number.isInteger(snapshot.turnStart) ? { turnStart: snapshot.turnStart } : {}),
       ...(snapshot.pendingSteering ? { pendingSteering: snapshot.pendingSteering } : {}),
       display: trimmed
-    });
+    };
+    try { await store.setValue(chatKey(projectId, id), record); }
+    catch (error) {
+      // Storage full: keep the recent part rather than nothing.
+      if (!Array.isArray(record.messages) || record.messages.length <= 300) throw error;
+      const cut = record.display.length - 200;
+      await store.setValue(chatKey(projectId, id), { ...record, messages: answeredHistory(record.messages.slice(-300)), display: record.display.slice(-200), ...(Number.isInteger(record.turnStart) ? { turnStart: Math.max(0, record.turnStart - Math.max(0, cut)) } : {}) });
+    }
     const index = await chatIndex(projectId);
     // The chat open right now stays current, even if this save is for one the user just left.
     index.current = workspace && workspace.project.id === projectId ? chatId : index.current || id;
     index.list = index.list.filter((item) => item.id !== id);
     if (trimmed.length) index.list.unshift({ id, title: snapshot.title, updatedAt: Date.now() });
-    index.list = index.list.slice(0, 50);
     await store.setValue('chats:' + projectId, index);
   } catch { /* storage full: chat stays in memory */ }
 }
@@ -2574,7 +2582,7 @@ async function openRuntimeSession(item) {
   await store.setValue(chatKey(projectId, chatId), { messages: { sessionId: item.id, pendingShell: [], ...(live ? { jobId: item.jobId } : {}) }, display: shown, ...(live ? { turnStart: shown.length } : {}) });
   const index = await chatIndex(projectId);
   index.current = chatId;
-  index.list = [{ id: chatId, title: item.title || 'Session', updatedAt: Date.now() }, ...index.list].slice(0, 50);
+  index.list = [{ id: chatId, title: item.title || 'Session', updatedAt: Date.now() }, ...index.list];
   await store.setValue('chats:' + projectId, index);
   await restoreChat({ keepChat: true });
   refreshFiles();
