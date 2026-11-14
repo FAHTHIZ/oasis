@@ -32,7 +32,9 @@ import os from 'node:os';
 import path from 'node:path';
 import { getConfigDirectory } from './config.mjs';
 
-const MAX_AGENT_FILE = 64 * 1024;
+// Claude Code reads agent files of any size; 64 KiB dropped larger ones silently.
+const MAX_AGENT_FILE = 1024 * 1024;
+const MAX_AGENT_PROMPT = 200000;
 export const MAX_PARALLEL_SUBAGENTS = 6;
 
 const CLAUDE_TO_OASIS = {
@@ -178,7 +180,7 @@ export function normalizeAgentDefinition(raw, body, { name, source, plugin = fal
     omitClaudeMd: booleanField(data.omitclaudemd),
     // First user turn when this agent runs as the main session agent (--agent); not for plugin agents.
     initialPrompt: !plugin && data.initialprompt ? String(data.initialprompt).trim().slice(0, 20000) : '',
-    prompt: String(body || '').trim().slice(0, 200000),
+    prompt: agentPromptText(body),
     // Antigravity: `subagent: false` keeps an agent out of the task tool (it can still be the main agent).
     subagentAllowed: data.subagent === undefined ? true : booleanField(data.subagent),
     source
@@ -465,6 +467,14 @@ async function readJsonAgentPromptFile(ref, base, confine, home) {
     if (!info.isFile() || info.size > MAX_AGENT_FILE) return null;
     return await readFile(target, 'utf8');
   } catch { return null; }
+}
+
+// The agent's own prompt, cut with a note past MAX_AGENT_PROMPT characters
+// instead of mid-sentence with no sign of the rest.
+function agentPromptText(body) {
+  const text = String(body || '').trim();
+  if (text.length <= MAX_AGENT_PROMPT) return text;
+  return text.slice(0, MAX_AGENT_PROMPT) + '\n\n[Agent prompt cut: ' + (text.length - MAX_AGENT_PROMPT).toLocaleString('en-US') + ' more characters are in the agent file.]';
 }
 
 export async function loadAgentDefinitions(root, options = {}) {
