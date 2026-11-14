@@ -76,7 +76,10 @@ export function inspectResponse(text) {
     if (!obj || typeof obj !== 'object') return;
     out.events++;
     const holder = obj.response && typeof obj.response === 'object' ? obj.response : obj.message && typeof obj.message === 'object' ? obj.message : obj;
-    if (!out.servedModel && typeof holder.model === 'string') out.servedModel = holder.model;
+    // OmniRoute sends {"model":"keepalive","choices":[]} while it waits on
+    // the upstream; that is not the serving model.
+    const keepalive = holder.model === 'keepalive' && Array.isArray(obj.choices) && !obj.choices.length;
+    if (!out.servedModel && !keepalive && typeof holder.model === 'string') out.servedModel = holder.model;
     if (!out.servedModel && typeof obj.modelVersion === 'string') out.servedModel = obj.modelVersion;
     if (!out.provider && typeof obj.provider === 'string') out.provider = obj.provider;
     const usage = holder.usage || obj.usage || obj.usageMetadata;
