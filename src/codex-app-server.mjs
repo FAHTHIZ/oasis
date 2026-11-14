@@ -458,7 +458,7 @@ export function createCodexAppServer(options = {}) {
       turn.status = entry.controller.signal.aborted ? 'interrupted' : 'failed';
       if (turn.status === 'failed') turn.error = { message: String(error && error.message || error), codexErrorInfo: null, additionalDetails: null };
     } finally {
-      try { const { saveSession, settleMidTurnSave } = await load('sessions'); await settleMidTurnSave(entry.session); await saveSession(entry.session, { env }); } catch {}
+      try { const { saveSession, settleMidTurnSave } = await load('sessions'); await settleMidTurnSave(entry.session); await saveSession(entry.session, { env }); } catch (error) { log('could not save the session: ' + (error && error.message || error)); }
       turn.completedAt = nowSeconds();
       if (onFinish) { try { onFinish(lastText); } catch (error) { log('turn finish hook failed: ' + error.message); } }
       entry.turn = null; entry.controller = null;
@@ -491,7 +491,7 @@ export function createCodexAppServer(options = {}) {
         if (turn.status === 'failed') turn.error = { message: String(error && error.message || error), codexErrorInfo: null, additionalDetails: null };
       } finally {
         notify('item/completed', { item, threadId, turnId: turn.id, completedAtMs: Date.now() });
-        try { const { saveSession } = await load('sessions'); await saveSession(entry.session, { env }); } catch {}
+        try { const { saveSession } = await load('sessions'); await saveSession(entry.session, { env }); } catch (error) { log('could not save the session: ' + (error && error.message || error)); }
         turn.completedAt = nowSeconds();
         entry.turn = null; entry.controller = null;
         notify('turn/completed', { threadId, turn: turnView(turn) });
@@ -504,7 +504,7 @@ export function createCodexAppServer(options = {}) {
   // Unload a thread from this connection (saving it first). Used by
   // thread/unsubscribe, thread/archive and thread/delete.
   async function unloadThread(entry, { save = true } = {}) {
-    if (save) { try { const { saveSession } = await load('sessions'); await saveSession(entry.session, { env }); } catch {} }
+    if (save) { try { const { saveSession } = await load('sessions'); await saveSession(entry.session, { env }); } catch (error) { log('could not save the session: ' + (error && error.message || error)); } }
     try { const { closeSession } = await load('agent'); if (closeSession) await closeSession(entry.session); } catch {}
     threads.delete(entry.session.sessionId);
   }
@@ -638,7 +638,7 @@ export function createCodexAppServer(options = {}) {
         if (typeof params.threadId !== 'string' || !params.threadId) throw rpcError(-32602, 'threadId is required.');
         const source = threads.get(params.threadId);
         if (source && source.turn) throw rpcError(-32000, 'Wait for the running turn to finish (or interrupt it) before forking.');
-        if (source) { try { const { saveSession } = await load('sessions'); await saveSession(source.session, { env }); } catch {} }
+        if (source) { try { const { saveSession } = await load('sessions'); await saveSession(source.session, { env }); } catch (error) { log('could not save the session: ' + (error && error.message || error)); } }
         // lastTurnId uses the turn ids from thread/resume and thread/read ("turn-N"): keep turns 1..N.
         const match = typeof params.lastTurnId === 'string' ? /^turn-(\d+)$/.exec(params.lastTurnId) : null;
         if (params.lastTurnId && !match) throw rpcError(-32602, 'lastTurnId must be a turn id from thread/read or thread/resume (turn-N).');
@@ -725,7 +725,7 @@ export function createCodexAppServer(options = {}) {
         const entry = threadEntry(params.threadId);
         const name = String(params.name || '').trim().slice(0, 120);
         entry.session.sessionName = name;
-        try { const { saveSession } = await load('sessions'); await saveSession(entry.session, { env }); } catch {}
+        try { const { saveSession } = await load('sessions'); await saveSession(entry.session, { env }); } catch (error) { log('could not save the session: ' + (error && error.message || error)); }
         notify('thread/name/updated', { threadId: params.threadId, threadName: name || null });
         return {};
       }

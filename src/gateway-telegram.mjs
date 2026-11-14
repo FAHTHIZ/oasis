@@ -121,7 +121,7 @@ export function createTelegramGateway(options = {}) {
           say(chatId, 'Approval needed:\n' + String(message).slice(0, 3000), { reply_markup: approvalButtons(id, Boolean(meta && meta.suggestion)) }).catch((error) => { log(error.message); approvals.get(id) && approvals.get(id).resolve(false); });
         })
       });
-      try { const { saveSession } = deps.sessions || await import('./sessions.mjs'); await saveSession(state.session, { env }); } catch {}
+      try { const { saveSession } = deps.sessions || await import('./sessions.mjs'); await saveSession(state.session, { env }); } catch (error) { log('could not save the session: ' + (error && error.message || error)); }
       if (controller.signal.aborted) await say(chatId, 'Stopped.');
       else {
         await say(chatId, (turn && turn.text ? turn.text : 'Done.') + (tools.length ? '\n\n(' + tools.length + ' tool call' + (tools.length === 1 ? '' : 's') + ')' : ''));
