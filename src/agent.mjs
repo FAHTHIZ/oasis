@@ -1182,7 +1182,7 @@ async function runPreCompactHooks(session, trigger, options) {
 }
 
 async function runPostCompactHooks(session, trigger, summary, options) {
-  const payload = { session_id: session.sessionId || 'unsaved', trigger, compact_summary: summary.slice(0, 20000) };
+  const payload = { session_id: session.sessionId || 'unsaved', trigger, compact_summary: summary };
   if (hasHooks(session.hooks, 'PostCompact')) {
     const post = await runHooks('PostCompact', payload, hookOptions(session, options.env));
     (session.hookMessages ||= []).push(...post.messages);
