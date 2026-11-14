@@ -209,3 +209,11 @@ test('a headless fallback is announced on stderr and as a stream-json event', as
   const event = lines.join('\n').split('\n').filter(Boolean).map((line) => { try { return JSON.parse(line); } catch { return null; } }).find((item) => item && item.subtype === 'model_fallback');
   assert.deepEqual({ from: event.from, to: event.to }, { from: 'does-not-exist', to: 'backup' });
 });
+
+test('the terminal prints Oasis notices with their own tag, and hook output as [hook]', async () => {
+  const { sessionNoticeLine } = await import('../src/cli.mjs');
+  assert.equal(sessionNoticeLine('[fallback] main is overloaded; switched to backup.'), '[fallback] main is overloaded; switched to backup.');
+  assert.equal(sessionNoticeLine('[key-pool] provider returned 429; switched to the next API key.'), '[key-pool] provider returned 429; switched to the next API key.');
+  assert.equal(sessionNoticeLine('Formatter ran on 2 files'), '[hook] Formatter ran on 2 files');
+  assert.equal(sessionNoticeLine('[weird] from a hook'), '[hook] [weird] from a hook');
+});
