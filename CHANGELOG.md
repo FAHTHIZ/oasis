@@ -4,6 +4,7 @@ User-facing change history grouped by package version. A version heading does no
 
 ## Unreleased
 
+- `oasis bg send` no longer cuts messages at 20,000 characters (same 200,000 bound as steering), and the stream-json `permission_request` event carries the whole approval prompt instead of its first 300 characters.
 - `ask_user_question`: the user's typed answer is no longer cut at 2,000 characters (now the 200,000-character steering bound), and questions, option labels and descriptions allow 4,000 / 200 / 1,000 characters instead of 600 / 80 / 300.
 - PostCompact hooks receive the whole `compact_summary` instead of its first 20,000 characters.
 - Compaction summaries are no longer cut. With any must-preserve record set, a summary past about 12,000 characters lost its tail (usually the open work and next steps), the must-preserve block was clipped at 8,000 characters including labels, and mid-turn tool-round summaries were cut at 12,000 characters. All three are now kept whole; the records stay bounded by their own 20-item / 8,000-character limit.
