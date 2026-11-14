@@ -1857,6 +1857,7 @@ test('independent read-only specialist reviews run concurrently and preserve too
   let parentRequests = 0;
   let activeSpecialists = 0;
   let maxActiveSpecialists = 0;
+  const bothArrived = [];
   const jsonResponse = (body) => new Response(JSON.stringify(body), {
     status: 200,
     headers: { 'content-type': 'application/json' }
@@ -1870,7 +1871,11 @@ test('independent read-only specialist reviews run concurrently and preserve too
       maxActiveSpecialists = Math.max(maxActiveSpecialists, activeSpecialists);
       const role = system.match(/Your role is ([^:]+):/);
       const specialistName = role ? role[1] : 'unknown';
-      await new Promise((resolve) => setTimeout(resolve, 40));
+      // Wait (bounded) for the other specialist to arrive. A fixed 40 ms
+      // pause flaked on slow CI runners, where starting the second session
+      // took longer than the first one's reply.
+      if (activeSpecialists < 2) await new Promise((resolve) => { const timer = setTimeout(resolve, 5000); bothArrived.push(() => { clearTimeout(timer); resolve(); }); });
+      else for (const release of bothArrived.splice(0)) release();
       activeSpecialists--;
       return jsonResponse({
         choices: [{ message: { role: 'assistant', content: 'Review complete for ' + specialistName + '.' } }],
