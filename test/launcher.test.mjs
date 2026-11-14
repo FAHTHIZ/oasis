@@ -26,3 +26,17 @@ test('the entry point passes arguments and exit codes through', () => {
   assert.notEqual(bad.status, 0);
   assert.match(bad.stdout + bad.stderr, /Usage: oasis uninstall/);
 });
+
+test('bare --help, -h, help and help all answer from the help module with the full CLI output', () => {
+  const run = (args, env = {}) => spawnSync(process.execPath, [path.join(ROOT, pkg.bin.oasis), ...args], { encoding: 'utf8', env: { ...process.env, OASIS_NO_COMPILE_CACHE: '1', NO_COLOR: '1', ...env } });
+  for (const args of [['--help'], ['-h'], ['help'], ['help', 'all'], ['--help', 'all'], ['help', '--all']]) {
+    const fast = run(args);
+    const full = run(args, { OASIS_FULL_HELP_PATH: '1' });
+    assert.equal(fast.status, 0, fast.stderr);
+    assert.equal(full.status, 0, full.stderr);
+    assert.equal(fast.stdout, full.stdout, 'oasis ' + args.join(' ') + ' prints the same help either way');
+    assert.match(fast.stdout, /OASIS — a plain-English coding agent/);
+  }
+  // Anything more than a bare help request still goes through the full CLI.
+  assert.match(run(['web', '--help']).stdout, /Usage: oasis web/);
+});
