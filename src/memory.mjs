@@ -534,7 +534,9 @@ export async function nestedMemoryFor(root, filePath, loaded = new Set(), option
   const parts = relative ? relative.split(path.sep).filter(Boolean).slice(0, 30) : [];
   const found = [];
   const excluded = excludeMatcher(options.excludes);
-  let budget = options.maxChars || 12000;
+  // Nested AGENTS.md files are rules for the directory being edited; 12,000
+  // characters cut ordinary ones short.
+  let budget = options.maxChars || 100_000;
   // Gemini CLI loads its context files (GEMINI.md or context.fileName) just in time too.
   const nestedNames = env.OASIS_OTHER_AGENT_RULES === '0' ? NESTED_NAMES : [...new Set([...NESTED_NAMES, '.goosehints', ...(parts.length ? await geminiContextNames(workspace, env, options.home || env.HOME || os.homedir()) : [])])];
   for (let i = 1; i <= parts.length; i++) {
