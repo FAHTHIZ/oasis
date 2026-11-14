@@ -178,6 +178,18 @@ export function announcesNextStep(text) {
   return /(?:^|[.!\n]\s*)(?:i need to|i will|i'll|i’ll|let me|next,? i|now i|i should|i am going to|i'm going to|i’m going to|i must)\b[^.!?\n]*[.:]?\s*$/i.test(reply) || /:\s*$/.test(reply);
 }
 
+// gpt-oss and other terse models announce a step as a bare imperative
+// ("Check util diff.", "Run tests.") and end the turn. Only a short,
+// single-line reply with no code and no "you" counts: "Run `npm start` to
+// launch it" is advice to the user, not an unfinished step.
+export function announcesTerseStep(text) {
+  const reply = String(text || '').trim();
+  if (!reply || reply.length > 120 || /[`\n]/.test(reply) || /\byou(?:r)?\b/i.test(reply)) return false;
+  return /^(?:now,?\s+|next,?\s+|then,?\s+)?(?:check|run|re-?run|read|open|inspect|view|look at|review|verify|test|search|grep|list|examine|diff|compare)\b(?:[^.!?]|\.(?=\w))*[.:]?$/i.test(reply);
+}
+
+export const GATE_FOLLOWUP_NUDGE = '<system-reminder>You named the next verification step but ended your turn without doing it. Do it now with a tool call; then give the user your final answer.</system-reminder>';
+
 // "I cannot proceed", "I'm unable to", "I apologize, but ..." after a tool error.
 export function givesUpEarly(text) {
   const reply = String(text || '').trim();
