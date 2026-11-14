@@ -228,6 +228,8 @@ export function addMustPreserve(session, kind, text) {
   const normalizedKind = MUST_PRESERVE_KINDS.has(String(kind || '').toLowerCase()) ? String(kind).toLowerCase() : 'rule';
   const normalizedText = String(text || '').trim();
   if (!normalizedText) throw new Error('Preserved context cannot be empty.');
+  // Cutting the text would keep a rule without its end; say so instead.
+  if (normalizedText.length > MAX_MUST_PRESERVE_TEXT) throw new Error('Preserved context is ' + normalizedText.length + ' characters; the limit is ' + MAX_MUST_PRESERVE_TEXT + '. Shorten it or split it into separate records.');
   const current = sanitizeMustPreserve(session.mustPreserve);
   const entry = { kind: normalizedKind, text: normalizedText.slice(0, MAX_MUST_PRESERVE_TEXT) };
   const next = sanitizeMustPreserve([...current, entry]);
