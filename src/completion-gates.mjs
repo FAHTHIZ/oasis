@@ -37,6 +37,20 @@ import {
 const CONTINUE = Object.freeze({ type: 'continue' });
 
 /** Fresh per-turn gate counters. */
+
+// The Stop hook payload carries the whole final reply (Claude Code sends it
+// uncut). A hook that checks the conclusion, a "DONE" marker or a test
+// summary at the end, must see the end, so a very long reply keeps its head
+// and tail around a marker instead of being cut at 4,000 characters.
+export const MAX_STOP_HOOK_MESSAGE_CHARS = 100_000;
+export function stopHookMessage(text) {
+  const value = String(text || '');
+  if (value.length <= MAX_STOP_HOOK_MESSAGE_CHARS) return value;
+  const head = Math.floor(MAX_STOP_HOOK_MESSAGE_CHARS * 0.3);
+  const tail = MAX_STOP_HOOK_MESSAGE_CHARS - head;
+  return value.slice(0, head) + '\n[' + (value.length - head - tail) + ' characters omitted]\n' + value.slice(-tail);
+}
+
 export function newGateState() {
   return {
     unknownToolNudges: 0,
@@ -318,7 +332,7 @@ export async function runCompletionGates(turn, host) {
   }
   const stopEvent = options.isSubagent ? 'SubagentStop' : 'Stop';
   if (session.hooks && hasHooks(session.hooks, stopEvent) && g.stopHookContinuations < 3) {
-    const stop = await runHooks(stopEvent, { session_id: session.sessionId || 'unsaved', stop_hook_active: g.stopHookContinuations > 0, last_assistant_message: text.slice(0, 4000), ...(options.isSubagent ? { agent_type: options.agentType, agent_id: options.agentId } : {}) }, hookOptions(session, options.env));
+    const stop = await runHooks(stopEvent, { session_id: session.sessionId || 'unsaved', stop_hook_active: g.stopHookContinuations > 0, last_assistant_message: stopHookMessage(text), ...(options.isSubagent ? { agent_type: options.agentType, agent_id: options.agentId } : {}) }, hookOptions(session, options.env));
     session.hookMessages.push(...stop.messages);
     if (stop.blocked && !stop.stopContinuation) {
       g.stopHookContinuations++;
