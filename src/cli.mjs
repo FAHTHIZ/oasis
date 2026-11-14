@@ -1801,7 +1801,8 @@ async function printModeRun(root, headless, args, autoApprove, persistence, stat
   const goalCommand = /^\/goal\s+(.+)$/s.exec(prompt.trim());
   if (goalCommand && !/^(pause|resume|clear|edit|status)\b/i.test(goalCommand[1].trim())) {
     // oasis -p "/goal npm test passes" works like --goal.
-    headless.goal = goalCommand[1].trim().slice(0, 4000);
+    if (goalCommand[1].trim().length > 4000) throw new Error('A goal can be at most 4,000 characters. Put the details in a file and point the goal at it.');
+    headless.goal = goalCommand[1].trim();
     prompt = '';
   }
   if (headless.goal && !prompt.trim()) prompt = 'Goal: ' + headless.goal + '\nWork toward this goal now. Verify results by running checks, not by assumption. Keep going until it is fully met.';
@@ -3059,7 +3060,8 @@ async function main() {
     if (arg.startsWith('--output-format=')) { headless.outputFormat = arg.slice(16); continue; }
     if (arg === '--goal') {
       if (!rawArgs[i + 1]) throw new Error('--goal requires a condition, e.g. --goal "npm test passes".');
-      headless.goal = String(rawArgs[++i]).slice(0, 4000);
+      headless.goal = String(rawArgs[++i]);
+      if (headless.goal.length > 4000) throw new Error('A goal can be at most 4,000 characters. Put the details in a file and point the goal at it.');
       headless.enabled = true;
       continue;
     }
