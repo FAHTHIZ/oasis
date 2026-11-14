@@ -28,7 +28,7 @@ import { deliverSteering, pendingSteering } from './steering.mjs';
 import { formatLspVerificationBlocker, verificationSummary } from './verification-summary.mjs';
 import { permissionMode } from './plan-mode.mjs';
 import {
-  ACTION_NUDGE, CONTINUE_NUDGE, EMPTY_REPLY_NOTICE, EMPTY_REPLY_NUDGE, FALSE_CLAIM_NUDGE, GIVE_UP_NUDGE, MAX_EMPTY_REPLY_NUDGES, providerStopNotice,
+  ACTION_NUDGE, CONTINUE_NUDGE, EMPTY_REPLY_NOTICE, EMPTY_REPLY_NUDGE, FALSE_CLAIM_NUDGE, GIVE_UP_NUDGE, MAX_EMPTY_REPLY_NUDGES, providerStopNotice, providerCutNotice,
   REFUSAL_NUDGE, SOURCE_EXTENSIONS, UNREADABLE_CALL_NUDGE, announcesNextStep, appendLspUnavailableNotice, asksForAction,
   assistedVerificationCalls, assistedVerificationEnabled, claimsUnmadeChange, fencedFileFromReply, givesUpEarly, normalizeReviewPath,
   readsLikeInstructions, refusesSpuriously, targetFileHint, untestedNewCode, verificationIssues, wrongFileNudge
@@ -352,7 +352,8 @@ export async function runCompletionGates(turn, host) {
       return CONTINUE;
     }
   }
-  const finalText = g.emptyReply ? (assistant.providerStop ? providerStopNotice(assistant.providerStop) : EMPTY_REPLY_NOTICE) : appendFailedEditNotice(issues.length ? appendUnverifiedNotice(text, issues, verification, claimState) : appendLspUnavailableNotice(text, verification), claimState);
+  const shownText = assistant.providerStop && text ? text.replace(/\s+$/, '') + '\n\n' + providerCutNotice(assistant.providerStop) : text;
+  const finalText = g.emptyReply ? (assistant.providerStop ? providerStopNotice(assistant.providerStop) : EMPTY_REPLY_NOTICE) : appendFailedEditNotice(issues.length ? appendUnverifiedNotice(shownText, issues, verification, claimState) : appendLspUnavailableNotice(shownText, verification), claimState);
   assistantMessage.content = finalText;
   let followupsAdded = [];
   if (!options.isSubagent && !options.planOnly && followupsEnabled(session, options.env || process.env)) {

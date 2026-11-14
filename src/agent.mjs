@@ -34,7 +34,7 @@ import { beginCheckpoint, captureBeforeChange, checkpointPersistenceEnabled, FIL
 import { keywordRulesFor, nestedMemoryFor } from './memory.mjs';
 import { resolveModelAlias, isModelAlias, modelAllowed, modelDenied, modelRestrictionMessage, applyModelOverride, fastModeRequest } from './model-aliases.mjs';
 import { selectTaskModel } from './model-routing.mjs';
-import { readProviderStream, mergeAnthropicUsage, toolCallSlot, strayStreamError } from './provider-stream.mjs';
+import { readProviderStream, mergeAnthropicUsage, toolCallSlot, strayStreamError, uniqueToolCallIds } from './provider-stream.mjs';
 import { maxParallelReadsFrom, planToolBatches } from './tool-batch-scheduler.mjs';
 import { validateToolArguments } from './tool-schema-validation.mjs';
 import { redactAuditValue, runTool } from './tool-kernel.mjs';
@@ -1872,6 +1872,7 @@ async function requestCompletionRaw(session, options = {}) {
     }
     if (!streamed && typeof options.onReasoning === 'function') { const said = typeof message.reasoning_content === 'string' ? message.reasoning_content : typeof message.reasoning === 'string' ? message.reasoning : ''; if (said) options.onReasoning(said); }
     if (typeof options.onDelta === 'function' && !streamed && typeof message.content === 'string' && message.content) options.onDelta(message.content);
+    if (Array.isArray(message.tool_calls)) uniqueToolCallIds(message.tool_calls.filter((call) => call && typeof call === 'object'));
     const chatTruncated = data.choices[0].finish_reason === 'length';
     const chatStop = String(data.choices[0].finish_reason || '');
     return { ...message, usage: usageOrEstimate(data.usage, bodyText, message), ...(/^(content_filter|error)$/i.test(chatStop) ? { providerStop: chatStop.toLowerCase() } : {}), ...(chatTruncated ? { truncated: true, outputLimit } : {}) };
