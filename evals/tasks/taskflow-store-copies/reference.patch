@@ -14,17 +14,18 @@ index 094060c..c501ef5 100644
        const task = createTask(fields, { id: nextId(tasks), now: now() });
        tasks = [...tasks, task];
 diff --git a/test/store.test.mjs b/test/store.test.mjs
-index 5428276..2d60f56 100644
+index 504cbe1..290a0ce 100644
 --- a/test/store.test.mjs
 +++ b/test/store.test.mjs
-@@ -34,3 +34,10 @@ test('returned tasks are copies', async (t) => {
-   store.all()[0].tags.push('mutated');
-   assert.deepEqual(store.get(1).tags, ['a']);
+@@ -27,3 +27,11 @@ test('emits completed once per completion', async (t) => {
+   await store.update(1, { status: 'done' });
+   assert.deepEqual(seen, [1]);
  });
 +
-+test('changing a task returned by get does not change the store', async (t) => {
++test('changing a task returned by all or get does not change the store', async (t) => {
 +  const store = await openStore(await tempFile(t), { now: () => NOW });
 +  await store.add({ title: 'one', tags: ['a'] });
++  store.all()[0].tags.push('mutated');
 +  store.get(1).tags.push('b');
 +  assert.deepEqual(store.get(1).tags, ['a']);
 +});

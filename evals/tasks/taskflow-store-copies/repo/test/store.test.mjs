@@ -27,10 +27,3 @@ test('emits completed once per completion', async (t) => {
   await store.update(1, { status: 'done' });
   assert.deepEqual(seen, [1]);
 });
-
-test('returned tasks are copies', async (t) => {
-  const store = await openStore(await tempFile(t), { now: () => NOW });
-  await store.add({ title: 'one', tags: ['a'] });
-  store.all()[0].tags.push('mutated');
-  assert.deepEqual(store.get(1).tags, ['a']);
-});

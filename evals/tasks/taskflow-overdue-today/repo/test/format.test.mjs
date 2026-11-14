@@ -9,7 +9,6 @@ test('truncates long titles with an ellipsis', () => {
 });
 
 test('describes due dates relative to now', () => {
-  assert.equal(relativeDue({ due: '2026-11-01', status: 'open' }, NOW), 'today');
   assert.equal(relativeDue({ due: '2026-11-02', status: 'open' }, NOW), 'tomorrow');
   assert.equal(relativeDue({ due: '2026-11-04', status: 'open' }, NOW), 'in 3 days');
   assert.equal(relativeDue({ due: '2026-10-01', status: 'open' }, NOW), 'overdue');
