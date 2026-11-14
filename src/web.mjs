@@ -10,6 +10,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { isIP } from 'node:net';
 import { createSession, runAgentTurn, closeSession, testProviderConnection, steerSession, carryUndeliveredSteering, compactHistoryIfNeeded, MAX_STREAMED_REPLY_CHARS } from './agent.mjs';
+import { MAX_STEER_CHARS } from './steering.mjs';
 import { startIdleCompaction, idleCompactMinutes } from './idle-compaction.mjs';
 import { loadConfig, saveConfig, getProviderSummary, validateProtocol, validateBaseUrl, isLoopbackUrl, getBaseConfigDirectory } from './config.mjs';
 import { cachedUpdateCheck, updateChecksDisabled, readUpdateState, writeUpdateState, RELEASES_PAGE } from './app-update.mjs';
@@ -3051,10 +3052,10 @@ export function createOasisWebServer(options = {}) {
     if (req.method === 'POST' && steerMatch) {
       const job = jobs.get(steerMatch[1]);
       if (!job) { json(res, 404, { error: 'Job not found or expired.' }); return; }
-      const body = await readJsonBody(req);
+      const body = await readJsonBody(req, 4 * MAX_STEER_CHARS + 64 * 1024);
       const message = typeof body.message === 'string' ? body.message.trim() : '';
       if (!message) { json(res, 400, { error: 'Enter a message.' }); return; }
-      if (message.length > 12000) { json(res, 413, { error: 'Message is too long (12,000 characters maximum).' }); return; }
+      if (message.length > MAX_STEER_CHARS) { json(res, 413, { error: 'Message is too long (' + MAX_STEER_CHARS.toLocaleString('en-US') + ' characters maximum).' }); return; }
       if (!['running', 'waiting_approval'].includes(job.status) || job.cancelRequested || !job.steerTarget) {
         json(res, 409, { error: 'That task is no longer running. Send this as a new message.', status: job.status });
         return;
