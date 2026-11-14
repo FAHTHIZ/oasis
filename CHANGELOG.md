@@ -4,6 +4,7 @@ User-facing change history grouped by package version. A version heading does no
 
 ## Unreleased
 
+- `/btw`, the `/goal` check and the advisor size the transcript they send to the model's context window (about 60% of it); they always sent up to 150,000 characters, about 37,000 tokens, which overflowed 8K and 32K windows, so the request failed and a goal check could never pass on a small local model.
 - The `/goal` check reads the whole goal; it cut the condition to 2,000 characters though goals can be 4,000, so a requirement at the end of a long goal was never checked and the goal could be judged met without it.
 - `oasis -p --goal` and `oasis -p "/goal ..."` refuse a goal over 4,000 characters with the same message as the interactive `/goal`; they cut it at 4,000 characters without saying so, so the goal check judged a condition the user never wrote.
 - Stop and SubagentStop hooks get the whole final reply in `last_assistant_message`, as Claude Code sends it; it was cut to its first 4,000 characters, so a hook checking the end of a long reply (a test summary, a DONE marker) never saw it. A reply over 100,000 characters keeps its head and tail.
