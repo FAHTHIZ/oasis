@@ -46,14 +46,22 @@ jobs:
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: ${{ matrix.node-version }}
-      - name: Install production dependencies and vendor terminal assets
-        run: npm install --omit=dev --no-audit --no-fund
+      # The test suite imports devDependencies (fake-indexeddb, esbuild), so it
+      # needs the full, lockfile-exact install; the production-only install is
+      # proven separately below.
+      - name: Install dependencies from the lockfile and vendor terminal assets
+        run: npm ci --no-audit --no-fund
       - name: Run full quality gate and validate eval fixtures
         env:
           NODE_OPTIONS: --import=${{ github.workspace }}/.github/scripts/test-resource-watch.mjs
         run: npm run check
       - name: Verify installable CLI package contents
         run: npm pack --dry-run
+      - name: The CLI and SDK load with production dependencies only
+        run: |
+          npm ci --omit=dev --no-audit --no-fund
+          node src/oasis.mjs --version
+          node --input-type=module -e "await import('./src/sdk.mjs'); await import('./src/agent.mjs'); await import('./src/web.mjs');"
       - name: Generate current model-free harness benchmark report
         run: node bench/harness/run.mjs --json "$RUNNER_TEMP/oasis-harness-node-${{ matrix.node-version }}.json"
       - name: Smoke-check benchmark entrypoints without external provider access
@@ -105,8 +113,8 @@ jobs:
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 22
-      - name: Install production dependencies
-        run: npm install --omit=dev --no-audit --no-fund
+      - name: Install dependencies from the lockfile
+        run: npm ci --no-audit --no-fund
       - name: Install ast-grep (pinned) so the structural-search tests run
         run: npm install --prefix /tmp/ast-grep --no-audit --no-fund --no-save @ast-grep/cli@0.51.0
       - name: Install gitleaks (pinned, checksum verified) so the security_scan tests run
