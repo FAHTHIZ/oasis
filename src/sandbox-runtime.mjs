@@ -28,7 +28,17 @@ export function srtConfig(sandbox) {
   const block = sandbox.readBlock || null;
   const allowRead = [...(sandbox.reopenedPaths || []).map((item) => item.path), ...(block ? [...(sandbox.writable || []), ...block.reopen.map((item) => item.path)] : [])];
   return {
-    network: { allowedDomains: sandbox.allowedDomains || [], deniedDomains: sandbox.deniedDomains || [] },
+    network: {
+      allowedDomains: sandbox.allowedDomains || [],
+      deniedDomains: sandbox.deniedDomains || [],
+      // Widening keys come only from your own settings, --settings or policy (see settings.mjs).
+      ...(sandbox.allowAllUnixSockets ? { allowAllUnixSockets: true } : {}),
+      ...(sandbox.allowUnixSockets && sandbox.allowUnixSockets.length ? { allowUnixSockets: sandbox.allowUnixSockets } : {}),
+      ...(sandbox.allowLocalBinding ? { allowLocalBinding: true } : {}),
+      ...(sandbox.allowMachLookup && sandbox.allowMachLookup.length ? { allowMachLookup: sandbox.allowMachLookup } : {}),
+      ...(Number.isInteger(sandbox.httpProxyPort) ? { httpProxyPort: sandbox.httpProxyPort } : {}),
+      ...(Number.isInteger(sandbox.socksProxyPort) ? { socksProxyPort: sandbox.socksProxyPort } : {})
+    },
     filesystem: {
       denyRead: [...(block ? block.hidden.map((item) => item.path) : []), ...(sandbox.maskedPaths || []).map((item) => item.path)],
       ...(allowRead.length ? { allowRead: [...new Set(allowRead)] } : {}),
