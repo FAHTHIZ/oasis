@@ -444,3 +444,76 @@ export async function buildRepoMap(root, options = {}) {
       : 'Files are ranked by PageRank over which files use symbols defined in which (personalized to focus when given). Use read_file with a line offset to open a definition.'
   };
 }
+
+// Runnable test files (not fixtures or snapshots, which TEST_PATH also matches).
+const RUNNABLE_TEST = /(?:^|\/)(?:test|tests|__tests__|spec)\/(?:[^/]+\/)*[^/]+\.(?:m?[jt]sx?|cjs|py)$|\.(?:test|spec)\.(?:m?[jt]sx?|cjs)$|(?:^|\/)test_[^/]+\.py$|_test\.py$/;
+const NOT_RUNNABLE = /(?:^|\/)(?:fixtures?|__fixtures__|__snapshots__|snapshots?|helpers?|__mocks__|node_modules)\//;
+
+export function isRunnableTestFile(file) {
+  const value = String(file || '').replace(/\\/g, '/');
+  return RUNNABLE_TEST.test(value) && !NOT_RUNNABLE.test(value);
+}
+
+/**
+ * Test files affected by a change: tests that import a changed file directly
+ * or through up to `maxDepth` hops of the reverse import graph (relative
+ * JS/TS and Python imports), plus tests named after a changed file
+ * (sum.js -> sum.test.js, test_sum.py) when the graph has no edge. The same
+ * idea as `jest --findRelatedTests` and `vitest related`, for any project and
+ * without running the test framework. Changed test files are included.
+ * Returns [{ path, distance, via }], nearest first.
+ */
+export async function findRelatedTests(root, changedPaths, { maxDepth = 4, limit = 20, maxFiles = MAX_FILES } = {}) {
+  const changed = [...new Set((changedPaths || []).map((p) => String(p).replace(/\\/g, '/').replace(/^\.\//, '')).filter(Boolean))];
+  if (!changed.length) return [];
+  const walked = await walkFiles(path.resolve(root), { maxFiles, maxDepth: 12, filter: (rel) => languageForFile(rel) === 'js' || languageForFile(rel) === 'py' });
+  const files = [];
+  for (const item of walked) {
+    const relative = path.relative(path.resolve(root), item.absolute).split(path.sep).join('/');
+    const language = languageForFile(relative);
+    let text = '';
+    try { text = await readFile(item.absolute, 'utf8'); } catch { continue; }
+    if (text.includes('\0')) continue;
+    files.push({ path: relative, imports: importSpecifiers(text, language) });
+  }
+  const index = new Map(files.map((file, i) => [file.path, i]));
+  const pythonModules = new Map();
+  files.forEach((file, i) => { const m = file.path.match(/^(?:src|lib|python)\/(.+\.py)$/); if (m) pythonModules.set(m[1], i); });
+  const importedBy = files.map(() => new Set());
+  files.forEach((file, i) => { for (const j of resolveImports(file, index, pythonModules)) importedBy[j].add(i); });
+  const found = new Map();
+  const add = (file, distance, via) => {
+    const prior = found.get(file);
+    if (!prior || prior.distance > distance) found.set(file, { path: file, distance, via });
+  };
+  for (const file of changed) if (isRunnableTestFile(file) && index.has(file)) add(file, 0, file);
+  // Breadth-first over "is imported by" edges from every changed file.
+  for (const start of changed) {
+    const origin = index.get(start);
+    if (origin === undefined) continue;
+    const seen = new Set([origin]);
+    let frontier = [origin];
+    for (let depth = 1; depth <= maxDepth && frontier.length; depth++) {
+      const next = [];
+      for (const i of frontier) for (const j of importedBy[i]) {
+        if (seen.has(j)) continue;
+        seen.add(j);
+        if (isRunnableTestFile(files[j].path)) add(files[j].path, depth, start);
+        else next.push(j);
+      }
+      frontier = next;
+    }
+  }
+  // Name match for changed sources the graph did not connect to any test.
+  for (const start of changed) {
+    if (isRunnableTestFile(start) || [...found.values()].some((entry) => entry.via === start)) continue;
+    const stem = path.posix.basename(start).replace(/\.[^.]+$/, '').toLowerCase();
+    if (stem.length < 3 || stem === 'index') continue;
+    for (const file of files) {
+      if (!isRunnableTestFile(file.path)) continue;
+      const base = path.posix.basename(file.path).toLowerCase().replace(/\.[^.]+$/, '').replace(/\.(?:test|spec)$/, '').replace(/^test_|_test$/g, '');
+      if (base === stem) add(file.path, maxDepth + 1, start);
+    }
+  }
+  return [...found.values()].sort((a, b) => a.distance - b.distance || a.path.localeCompare(b.path)).slice(0, limit);
+}

@@ -344,6 +344,45 @@ export async function detectProjectTestCommand(root) {
   return null;
 }
 
+// The quickest relevant check: the tests that import the changed files
+// (src/repo-map.mjs findRelatedTests), with a command for the project's runner.
+// Hub modules reach most of a suite in two hops, so only the nearest group is named.
+export function nearestRelatedTests(related, { max = 8 } = {}) {
+  if (!Array.isArray(related) || !related.length) return [];
+  const best = related[0].distance;
+  const near = related.filter((entry) => entry.distance === best);
+  const next = near.length < 3 ? related.filter((entry) => entry.distance === best + 1) : [];
+  return [...near, ...next].slice(0, max).map((entry) => entry.path);
+}
+
+export async function relatedTestCommand(root, tests) {
+  if (!tests.length) return null;
+  if (tests.every((file) => file.endsWith('.py'))) return { command: 'python3', args: ['-m', 'pytest', '-q', ...tests] };
+  if (!tests.every((file) => /\.(?:m?[jt]sx?|cjs)$/.test(file))) return null;
+  let script = '';
+  try { const pkg = JSON.parse(await readFile(path.join(root, 'package.json'), 'utf8')); script = pkg && pkg.scripts && typeof pkg.scripts.test === 'string' ? pkg.scripts.test : ''; } catch {}
+  if (/\bvitest\b/.test(script)) return { command: 'npx', args: ['vitest', 'run', ...tests] };
+  if (/\bjest\b/.test(script)) return { command: 'npx', args: ['jest', ...tests] };
+  if (/\bnode\b[^&|;]*--test\b|scripts\/run-tests\.mjs/.test(script) || (!script && tests.every((file) => /\.m?js$/.test(file)))) return { command: 'node', args: ['--test', ...tests] };
+  return null;
+}
+
+export async function relatedTestsHint(root, changedPaths) {
+  const sources = [...changedPaths].filter((file) => SOURCE_EXTENSIONS.has(path.extname(file).toLowerCase()));
+  if (!sources.length) return '';
+  let related = [];
+  // Bounded: a hint is not worth holding up the turn on a huge tree.
+  let timer;
+  try {
+    const search = (await import('./repo-map.mjs')).findRelatedTests(root, sources, { limit: 40 });
+    related = await Promise.race([search, new Promise((resolve) => { timer = setTimeout(() => resolve([]), 3000); })]);
+  } catch { return ''; } finally { clearTimeout(timer); }
+  const tests = nearestRelatedTests(related);
+  if (!tests.length) return '';
+  const command = await relatedTestCommand(root, tests);
+  return 'Tests that import the changed files: ' + tests.join(', ') + '.' + (command ? ' A quick first check: `' + [command.command, ...command.args].join(' ') + '`.' : '') + ' Then run the full suite if it is practical.';
+}
+
 export async function assistedVerificationCalls(root, verification) {
   const calls = [];
   const changed = [...verification.changedPaths];

@@ -3,6 +3,13 @@
 A short, dated record of changes, tests, benchmark results, blockers and known
 weaknesses. Newest first. Detailed user-facing notes go in the CHANGELOG.
 
+## 2026-11-14 (related-test discovery in the verification gate)
+
+- Gap: Jest (`--findRelatedTests`) and Vitest (`vitest related`) can run only the tests a change reaches, but only inside those frameworks; the post-edit gate only said "run a relevant test", so models ran the whole suite or guessed.
+- `findRelatedTests(root, changed)` in `src/repo-map.mjs` reuses the repo map's import parser and resolver (relative JS/TS, Python packages) to walk the reverse import graph up to 4 hops, skips fixtures/snapshots/helpers, falls back to name matching (`sum.js` -> `sum.test.js`, `test_sum.py`), and counts changed tests as their own check. On this repository it takes about one second for 500+ test files.
+- The verification gate (`src/completion-gates.mjs`) now names the nearest tests and a runnable command for the project's runner (node --test, Vitest, Jest, pytest; no guess for unknown runners), bounded at 3 seconds.
+- Tests: `test/related-tests.test.mjs` (4), including an agent turn whose gate message names `test/math.test.mjs` and `node --test test/math.test.mjs`. Gate, claim-check, LSP gate, repo-map and verification-command suites pass (49).
+
 ## 2026-11-14 (subagent report handoff)
 
 - Neuron Network phase 4, first slice: long subagent reports are stored in `<scratch>/agents/` and the parent gets a preview plus `report_file` instead of a head/tail-truncated tool result that lost the middle. Background-agent notices use the same preview.

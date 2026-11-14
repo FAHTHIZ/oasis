@@ -31,7 +31,7 @@ import {
   ACTION_NUDGE, CONTINUE_NUDGE, EMPTY_REPLY_NOTICE, EMPTY_REPLY_NUDGE, FALSE_CLAIM_NUDGE, GIVE_UP_NUDGE, MAX_EMPTY_REPLY_NUDGES, providerStopNotice, providerCutNotice,
   REFUSAL_NUDGE, SOURCE_EXTENSIONS, UNREADABLE_CALL_NUDGE, announcesNextStep, appendLspUnavailableNotice, asksForAction,
   assistedVerificationCalls, assistedVerificationEnabled, claimsUnmadeChange, fencedFileFromReply, givesUpEarly, normalizeReviewPath,
-  readsLikeInstructions, refusesSpuriously, targetFileHint, untestedNewCode, verificationIssues, wrongFileNudge
+  readsLikeInstructions, refusesSpuriously, relatedTestsHint, targetFileHint, untestedNewCode, verificationIssues, wrongFileNudge
 } from './turn-guards.mjs';
 
 const CONTINUE = Object.freeze({ type: 'continue' });
@@ -282,6 +282,7 @@ export async function runCompletionGates(turn, host) {
   }
   if (issues.length && !verification.nudgeUsed) {
     verification.nudgeUsed = true;
+    const relatedHint = issues.some((issue) => /has passed after the latest code edit/.test(issue)) ? await relatedTestsHint(session.root, verification.changedPaths) : '';
     // A streamed reply is already on screen; say why work continues.
     if (typeof options.onVerificationGate === 'function') {
       const stale = claimState.ran && claimState.editedAfter && claimState.lastCommand ? claimState.lastCommand : '';
@@ -303,6 +304,7 @@ export async function runCompletionGates(turn, host) {
           ? ['Rerun `' + claimState.lastCommand + '` now: it ran before your latest edit, so its result no longer counts.'] : []),
         'Use git_diff to review the complete change set when Git metadata is available. In a non-Git workspace, reread every changed file after editing. For changed source/config code, inspect the project scripts and run a relevant test/check/lint/build/type-check command; fix failures and rerun checks after fixes.',
         ...untestedNewCode(verification),
+        ...(relatedHint ? [relatedHint] : []),
         'Do not claim completion of the gate based on the file-write result. If a check cannot run or permission is denied, state that limitation honestly.',
         // Pressure to "verify" a check that cannot run is what makes small
         // models invent a passing test log. Say plainly that it cannot run.
