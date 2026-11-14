@@ -444,7 +444,7 @@ export async function listSessions(root, options = {}) {
 
       if (data && data.schemaVersion === 1 && path.resolve(data.workspaceRoot || '') === path.resolve(root)) {
         const firstUser = Array.isArray(data.messages) ? data.messages.find((item) => item && item.role === 'user' && typeof item.content === 'string') : null;
-        const title = firstUser ? firstUser.content.replace(/<[a-z-]+>[\s\S]*?<\/[a-z-]+>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 80) : '';
+        const title = firstUser ? promptTitle(firstUser.content) : '';
         sessions.push({ id: data.id, updatedAt: data.updatedAt, model: data.provider && data.provider.model || '', messages: Array.isArray(data.messages) ? data.messages.length : 0, title: typeof data.name === 'string' && data.name ? data.name : title, ...(typeof data.name === 'string' && data.name ? { name: data.name } : {}), ...(data.archived === true ? { archived: true } : {}) });
       }
     } catch { /* Ignore corrupt session files in listings. */ }
@@ -532,4 +532,14 @@ export async function settleMidTurnSave(session) {
   if (!session) return;
   if (session.midTurnTimer) { clearTimeout(session.midTurnTimer); session.midTurnTimer = null; }
   if (session.midTurnSave) await session.midTurnSave;
+}
+
+// A chat's title from its first prompt: what the user typed, without the file
+// contents an @mention attached ("Referenced files: <file path=...>") or
+// Oasis's own tagged blocks (<system-reminder>, <file path="...">...</file>).
+export function promptTitle(content, max = 80) {
+  let text = String(content || '');
+  const attached = text.indexOf('\n\nReferenced files:\n');
+  if (attached >= 0) text = text.slice(0, attached);
+  return text.replace(/<([a-z]+-[\w-]+|file|untrusted[\w-]*)(?:\s[^>]*)?>[\s\S]*?<\/\1>/gi, ' ').replace(/\s+/g, ' ').trim().slice(0, max);
 }

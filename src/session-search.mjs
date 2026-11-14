@@ -13,7 +13,7 @@ import { chmod, mkdir, readdir, stat } from 'node:fs/promises';
 import { createRequire } from 'node:module';
 import path from 'node:path';
 import { getConfigDirectory } from './config.mjs';
-import { MAX_SESSION_BYTES, getSessionDirectory } from './sessions.mjs';
+import { MAX_SESSION_BYTES, getSessionDirectory, promptTitle } from './sessions.mjs';
 import { readBoundedRegularFile } from './safe-storage.mjs';
 import { redactSecrets } from './auto-memory.mjs';
 
@@ -179,7 +179,7 @@ async function syncIndex(db, dirs, files) {
       drop(file);
       // Unreadable or foreign files are remembered (no rows) so they are not re-read every time.
       const firstUser = data && data.messages.find((item) => item && item.role === 'user' && typeof item.content === 'string');
-      const title = !data ? '' : typeof data.name === 'string' && data.name ? data.name : firstUser ? cleanText(firstUser.content).slice(0, 80) : '';
+      const title = !data ? '' : typeof data.name === 'string' && data.name ? data.name : firstUser ? promptTitle(firstUser.content) : '';
       insertFile.run(file, info.mtimeMs, info.size, data ? String(data.id || '') : '', data ? String(data.updatedAt || '') : '', title, data ? path.resolve(data.workspaceRoot || '') : '');
       if (!data) continue;
       for (const message of searchableMessages(data)) {

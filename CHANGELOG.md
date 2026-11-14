@@ -4,6 +4,8 @@ User-facing change history grouped by package version. A version heading does no
 
 ## Unreleased
 
+- Chat titles (`oasis sessions`, the browser app sidebar, session search) now use what the user typed. A chat started with "look at @math.mjs please" was titled with the attached file contents ("Referenced files: <file path=…"). Test in `test/session-title-mentions.test.mjs`.
+
 - `/compact` preview: "Detected likely paths" now lists files the conversation named, including bare source files (`math.mjs`) and dot-folders (`.github/workflows/ci.yml`). It no longer shows paths from Oasis's own reminders such as `oasis/followups.json`. Test in `test/compaction-preview-paths.test.mjs`.
 
 - Edit view: an `edit_file`/`multi_edit` result now shows the changed lines in full, with file line numbers and two lines of context (read from the file after the edit; display only, no extra model tokens). Before, only the replaced fragment was shown (`- a - b` / `+ a + b`).
