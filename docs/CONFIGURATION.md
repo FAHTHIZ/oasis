@@ -282,6 +282,28 @@ unknown; it is not treated as proof that a model cannot call tools. Provider
 metadata can be incomplete or stale, so this is a conservative routing guard,
 not a live tool-capability probe.
 
+## Run report
+
+Source: `src/run-report.mjs`. After each task, `/report` shows what happened:
+the model chosen and why, whether it escalated (or why escalation was skipped),
+provider fallbacks, the requests and tokens per model, side requests such as
+compaction or subagents, tool calls, and the outcome (finished, finished but not
+verified, stopped, cancelled or failed). `/report json` prints the raw record,
+which is also returned as `result.runReport`.
+
+The cost line is labelled by where it came from:
+
+- provider-reported: every request carried the provider's own charge (for
+  example OpenRouter's `usage.cost`);
+- estimate: computed from the model price table, because at least one
+  request had no provider charge;
+- unknown: some model had no known price.
+
+Token counts are labelled when any request was estimated from text length
+because the provider returned no usage. The report covers only requests OASIS
+makes itself. External CLIs, MCP servers and hooks run outside it, and their
+usage and cost are not included.
+
 ## Output token limit
 
 Source: `maxOutputTokensFor` in `src/agent.mjs`.

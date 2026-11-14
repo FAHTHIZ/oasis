@@ -51,6 +51,7 @@ export const BUILTIN_COMMANDS = {
   'auto-commit': 'Commit each turn\'s file changes to Git automatically, Aider-style (/auto-commit [on|off])',
   fast: 'Toggle fast mode: faster output on Opus 5.5 / 5 / 4.8 via the Anthropic API, at a higher price (/fast [on|off])',
   model: 'Show or switch the model for this session (/model [id] [effort])',
+  report: 'Show what the last task did: models and why, escalation, fallbacks, requests, tokens, cost (estimated or provider-reported) and outcome (/report json for raw data)',
   routing: 'Use a cheaper model for easy read-only tasks, or with cascade for all tasks, escalating to the strong model when stuck (/routing easy MODEL, strong MODEL, on|off|cascade|classify|status|reset)',
   mode: 'Show or switch the permission mode (/mode ' + PERMISSION_MODES.join('|') + '; aliases: manual, accept-edits)',
   permissions: 'Show permission rules, mode, and sandbox',
@@ -901,6 +902,12 @@ export async function runBuiltinCommand(name, argument, state) {
       session.settings ||= {};
       session.settings.modelRouting = action === 'reset' ? { enabled: false, easyModel: '', strongModel: '' } : current;
       return { output: action === 'reset' ? 'Automatic model routing reset.' : describe(current) + ' Saved to user settings.' };
+    }
+    case 'report': {
+      const { formatRunReport } = await import('./run-report.mjs');
+      const report = session && session.lastRunReport;
+      if (String(argument || '').trim() === 'json') return { output: report ? JSON.stringify(report, null, 2) : '{}' };
+      return { output: formatRunReport(report) };
     }
     case 'usage':
       return await runBuiltinCommand('cost', argument, state);

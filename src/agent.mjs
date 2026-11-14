@@ -35,6 +35,7 @@ import { keywordRulesFor, nestedMemoryFor } from './memory.mjs';
 import { resolveModelAlias, isModelAlias, modelAllowed, modelDenied, modelRestrictionMessage, applyModelOverride, fastModeRequest } from './model-aliases.mjs';
 import { selectTaskModel } from './model-routing.mjs';
 import { canEscalate, escalate, newEscalation, thrashEvidence } from './escalation.mjs';
+import { buildRunReport, newRunTracker, trackFallback, trackUsage } from './run-report.mjs';
 import { readProviderStream, mergeAnthropicUsage, toolCallSlot, strayStreamError, uniqueToolCallIds } from './provider-stream.mjs';
 import { maxParallelReadsFrom, planToolBatches } from './tool-batch-scheduler.mjs';
 import { validateToolArguments } from './tool-schema-validation.mjs';
@@ -4411,7 +4412,9 @@ export async function runAgentTurn(session, prompt, options = {}) {
     costKnown: true,
     strongModelCostKnown: true
   };
+  const runTracker = newRunTracker();
   const onUsage = (entry = {}) => {
+    trackUsage(runTracker, entry, session && session.config && session.config.model || selectedModel);
     taskUsage.inputTokens += Number(entry.inputTokens || 0);
     taskUsage.outputTokens += Number(entry.outputTokens || 0);
     taskUsage.totalTokens += Number(entry.totalTokens || 0);
@@ -4438,7 +4441,12 @@ export async function runAgentTurn(session, prompt, options = {}) {
     }
     if (typeof options.onUsage === 'function') options.onUsage(entry);
   };
-  const turnOptions = { ...options, onUsage, ...(escalation ? {
+  const onFallback = (event) => {
+    trackFallback(runTracker, event);
+    if (typeof options.onFallback === 'function') options.onFallback(event);
+  };
+  const reportRoute = { ...route, model: selectedModel };
+  const turnOptions = { ...options, onUsage, onFallback, ...(escalation ? {
     escalation,
     onEscalate: (event) => {
       const tel = getTelemetry(env);
@@ -4472,8 +4480,11 @@ export async function runAgentTurn(session, prompt, options = {}) {
       if (savingsUSD !== null) session.webUsage.routingSavingsUSD = Number(session.webUsage.routingSavingsUSD || 0) + savingsUSD;
       else session.webUsage.routingSavingsKnown = false;
     }
+    const runReport = buildRunReport(runTracker, { result, route: reportRoute, escalation });
+    if (session && !options.isSubagent) session.lastRunReport = runReport;
     return {
       ...result,
+      runReport,
       modelRouting: {
         enabled: Boolean(route.enabled),
         ...(route.mode ? { mode: route.mode } : {}),
@@ -4493,6 +4504,12 @@ export async function runAgentTurn(session, prompt, options = {}) {
         selectedModel
       }
     };
+  } catch (error) {
+    if (session && !options.isSubagent) {
+      session.lastRunReport = buildRunReport(runTracker, { result: {}, route: reportRoute, escalation });
+      session.lastRunReport.outcome = error && error.name === 'AbortError' ? 'cancelled' : 'failed: ' + String(error && error.message || error).split('\n')[0].slice(0, 200);
+    }
+    throw error;
   } finally {
     // Preserve a genuine emergency fallback switch, but otherwise return the
     // session to its chosen default model after this routed task.
@@ -4834,6 +4851,7 @@ async function runAgentTurnRaw(session, prompt, options = {}) {
         ...(options.signal ? { signal: options.signal } : {}),
         ...(typeof options.onRateLimitWait === 'function' ? { onRateLimitWait: options.onRateLimitWait } : {}),
         ...(typeof options.onProviderRetry === 'function' ? { onProviderRetry: options.onProviderRetry } : {}),
+        ...(typeof options.onFallback === 'function' ? { onFallback: options.onFallback } : {}),
         ...(typeof options.fetchImpl === 'function' ? { fetchImpl: options.fetchImpl } : {}),
         ...(reasoningHook ? { onReasoning: (chunk) => {
           seen(false);
