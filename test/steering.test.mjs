@@ -117,3 +117,16 @@ test('stream-json: a user line with steer:true goes to the running turn, others 
   assert.deepEqual(await iterator.next(), { value: 'first', done: false });
   input.end();
 });
+
+// Steers were cut at 20,000 characters with no note.
+test('a long steer is delivered whole', async () => {
+  const { MAX_STEER_CHARS, carryUndeliveredSteering } = await import('../src/steering.mjs');
+  const session = {};
+  const long = 'detail '.repeat(10000) + 'END-MARK';
+  assert.equal(steerSession(session, long), true);
+  assert.equal(takeSteering(session)[0], long);
+  steerSession(session, long);
+  carryUndeliveredSteering(session);
+  assert.equal(session.pendingSteering[0], long);
+  assert.ok(MAX_STEER_CHARS >= 200_000);
+});

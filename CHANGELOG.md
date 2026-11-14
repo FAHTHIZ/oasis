@@ -4,6 +4,7 @@ User-facing change history grouped by package version. A version heading does no
 
 ## Unreleased
 
+- Messages sent while a turn runs (steers) are kept whole up to 200,000 characters, the same bound as a web chat message. They were cut at 20,000 characters with no note, and the web steer endpoint refused anything over 12,000 characters (or about 32 KiB of body).
 - Subagent reports are kept whole up to 1,000,000 characters, with a note if that bound is hit. They used to be cut at 30,000 characters with no note, which also lost the JSON verdict an agent hook writes at the end. Saved reports keep 200,000 characters (was 8,000), and agent definition bodies keep 200,000 (was 30,000).
 - Prompt and agent hooks on PreToolUse and PermissionRequest now see the whole tool action. The payload used to be cut at 30,000 characters, so padding could hide the end of a command. File bodies are shortened to head and tail, and an action that still does not fit is blocked instead of judged on a part.
 - Security: the auto mode classifier now always sees the whole action. Its prompt was cut at 24,000 characters, so padding in front of a long command hid the end of it, and the classifier judged only the harmless start. Long file bodies are shortened to their head and tail; any other action too large to show in full is asked about instead.

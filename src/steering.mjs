@@ -8,12 +8,15 @@
 // Anything still undelivered when the turn ends is returned to the caller
 // (takeSteering) so the interface can send it as the next prompt.
 export const STEER_LIMIT = 20;
+// Same bound as a web chat message: a steer is a user message too, and it
+// used to be cut at 20,000 characters with no note.
+export const MAX_STEER_CHARS = 200_000;
 export function steerSession(session, text) {
   const value = String(text == null ? '' : text).trim();
   if (!session || !value) return false;
   const queue = Array.isArray(session.steering) ? session.steering : (session.steering = []);
   if (queue.length >= STEER_LIMIT) return false;
-  queue.push({ text: value.slice(0, 20000), at: Date.now() });
+  queue.push({ text: value.slice(0, MAX_STEER_CHARS), at: Date.now() });
   return true;
 }
 export function pendingSteering(session) {
@@ -42,7 +45,7 @@ export function carryUndeliveredSteering(session) {
   const existing = Array.isArray(session.pendingSteering) ? session.pendingSteering : [];
   const combined = [...existing, ...texts]
     .filter((text) => typeof text === 'string')
-    .map((text) => text.trim().slice(0, 20000))
+    .map((text) => text.trim().slice(0, MAX_STEER_CHARS))
     .filter(Boolean);
   // Keep the most recent instructions without changing or truncating the
   // existing conversation, which may contain an open tool-call sequence.
