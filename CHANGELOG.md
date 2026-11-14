@@ -4,6 +4,7 @@ User-facing change history grouped by package version. A version heading does no
 
 ## Unreleased
 
+- Time spent on an MCP tool's approval prompt no longer counts against the tool timeout, the same as workspace tools and questions.
 - MCP tool output follows `MAX_MCP_OUTPUT_TOKENS` (Claude Code's variable, also `OASIS_MAX_MCP_OUTPUT_TOKENS`; default 25,000 tokens, about 100,000 characters). It was a fixed 24,000 characters cut silently; a larger result now keeps its head and tail with a note saying how much was left out and how to raise the limit, and the model sees the whole budget instead of the general 24,000-character tool cap.
 - Browser app compaction is sturdier: a provider "prompt is too long" / "maximum context length" error now condenses the conversation and asks once more instead of failing the task; a failed or empty summary falls back to a plain digest (user requests, tools used, latest notes) instead of replacing the history with nothing; and the transcript sent for summary keeps its first 30,000 characters (the original goal) as well as the latest 90,000, where it used to keep only the tail.
 - Browser app: an empty model reply (no text, no tool call) no longer ends the turn with nothing. Like the CLI, the agent asks again twice and then shows a notice; a content-filter, error or refusal stop is reported straight away. The shared text lives in the browser-safe `src/empty-reply.mjs`.
