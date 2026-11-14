@@ -229,6 +229,8 @@ Filled in as replacements land on `main`.
 | (this commit) | `src/circuit-breaker.mjs` → cockatiel 4.0.0 `ConsecutiveBreaker` + exponential half-open cooldown; wired into `requestCompletion` and `remainingFallbacks` | `test/circuit-breaker` 6/6, `fallback-chain`, `fallback-retry-delay` |
 | `d321abba` | Web-app diffs mark changed words (shared `src/word-diff.mjs`, jsdiff) | `test/word-diff`, `markdown`, `app-core`, `app-markdown-browser` |
 | (this commit) | One durable replace (`replaceFileDurably` / `replaceFileDurablySync` in `src/atomic-write.mjs`: random temp name, fsync, Windows rename retry, directory fsync, temp always removed) used by 20 state stores that each had their own temp+rename; pid-only temp names collided on concurrent saves and several leaked temps on failure | `test/atomic-write` (concurrency, cleanup, mode), 186 store tests |
+| `8d7a94d7` | Durable recovery: a save taken mid tool batch keeps finished results (labelled recovered data) and answers still-running calls with an explicit `Interrupted:` result instead of dropping the step | `test/session-midturn`, `steering`, `runtime`, `web-midturn-save` |
+| (this commit) | Tool-call IDs on the wire (`src/tool-call-ids.mjs`): unique per request, `[A-Za-z0-9_-]{1,40}` (Mistral: nine alphanumerics), deterministic so the cached prefix is stable; the loop also gives empty or repeated IDs in one reply fresh IDs | `test/tool-call-ids` 6/6, 520 provider/stream/tool tests |
 
 ## Components to retain unless evidence says otherwise
 
