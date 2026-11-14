@@ -30,3 +30,12 @@ test('app read_file shows a huge single line cut with its length', async () => {
   const out = await executeTool('read_file', { path: 'big.js' }, { workspace });
   assert.match(out, /line cut; it is 50000 characters long\)\n\s+2  next$/);
 });
+
+test('app run_javascript keeps the error at the end of long output', async () => {
+  const workspace = await ws('');
+  const sandbox = { run: async () => ({ logs: Array.from({ length: 3000 }, (_, i) => 'log ' + i), error: 'AssertionError: expected 3 to equal 4' }) };
+  const out = await executeTool('run_javascript', { code: 'x' }, { workspace, sandbox });
+  assert.ok(out.length < 24200);
+  assert.match(out, /^log 0\n/);
+  assert.match(out, /characters of output cut[\s\S]*Error: AssertionError: expected 3 to equal 4$/);
+});
