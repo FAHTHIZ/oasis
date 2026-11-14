@@ -83,7 +83,7 @@ import { classifierTimeoutSeconds, classifyAction, newAutoModeState } from './au
 import { runHooks, hasHooks, CLAUDE_TOOL_NAMES, capHookText } from './hooks.mjs';
 import { resolveSandbox } from './sandbox.mjs';
 import { webSearchEnabled, webSearchToolDefinition } from './web-search.mjs';
-import { loadProjectMcpServers, mcpToolTimeoutMs } from './mcp-project.mjs';
+import { loadProjectMcpServers, mcpOutputLimitChars, mcpToolTimeoutMs } from './mcp-project.mjs';
 import { access, mkdir, readdir, readFile, realpath, writeFile } from 'node:fs/promises';
 
 async function pathExists(file) { try { await access(file); return true; } catch { return false; } }
@@ -2169,13 +2169,13 @@ function fitToolResultToWindow(session, content, env = process.env) {
   return content.slice(0, head) + note + content.slice(content.length - (room - head));
 }
 
-function serializableResult(value) {
+function serializableResult(value, max = MAX_REPLY_CHARS) {
   let text;
   try { text = JSON.stringify(value); } catch { text = String(value); }
-  if (text.length > MAX_REPLY_CHARS) {
-    const fitted = fitLargeResult(value, MAX_REPLY_CHARS);
+  if (text.length > max) {
+    const fitted = fitLargeResult(value, max);
     if (fitted) return fitted;
-    return text.slice(0, MAX_REPLY_CHARS) + '\n[Tool result truncated.]';
+    return text.slice(0, max) + '\n[Tool result truncated.]';
   }
   return text;
 }
@@ -4218,7 +4218,9 @@ async function executeOneCallRaw(session, call, context, options) {
     role: 'tool',
     tool_call_id: call.id,
     name,
-    content: serializableResult(modelFacingResult(name, result, session)),
+    // MCP results get the MAX_MCP_OUTPUT_TOKENS budget (the server already
+    // clipped with a note); the general 24,000-character cap would cut them again.
+    content: serializableResult(modelFacingResult(name, result, session), session.mcpToolMap && session.mcpToolMap.has(name) ? Math.max(MAX_REPLY_CHARS, mcpOutputLimitChars(options.env || process.env) + 2000) : MAX_REPLY_CHARS),
     result
   };
 }
