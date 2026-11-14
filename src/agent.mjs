@@ -1672,6 +1672,9 @@ async function requestCompletionRaw(session, options = {}) {
     // not enough, and "retry in 1s" hints kept hitting the same full window.
     const shortWaitBudget = parseFallbackChain(session && session.fallbackModel).length ? 1 : 6;
     const attemptLimit = Math.max(MAX_PROVIDER_RETRIES, providerRetryLimit(0));
+    // 529 means this model is overloaded right now. With a backup model set,
+    // switching to it beats waiting out the overload on the same one.
+    const hasFallback = parseFallbackChain(session && session.fallbackModel).length > 0;
     for (let attempt = 0; attempt <= attemptLimit; attempt++) {
       try {
         response = await fetchImpl(endpoint, {
@@ -1736,7 +1739,7 @@ async function requestCompletionRaw(session, options = {}) {
       }
       const retryDelay = providerRetryDelayMs(attempt + 1, response.headers);
       const serverAdvice = serverRetryAdvice(response.headers);
-      if (retryDelay !== null && serverAdvice !== false && attempt < providerRetryLimit(status, options.env) && (serverAdvice === true || RETRYABLE_PROVIDER_STATUSES.has(status) || isMalformedGenerationError(status, errorBody)) && !isHardQuotaError(errorBody) && !isUnconfiguredRouteError(status, errorBody) && !isPromptTooLargeError(errorBody) && !(status === 429 && shortRateLimitMs(errorBody) !== null)) {
+      if (retryDelay !== null && serverAdvice !== false && attempt < providerRetryLimit(status, options.env) && !(hasFallback && status === 529) && (serverAdvice === true || RETRYABLE_PROVIDER_STATUSES.has(status) || isMalformedGenerationError(status, errorBody)) && !isHardQuotaError(errorBody) && !isUnconfiguredRouteError(status, errorBody) && !isPromptTooLargeError(errorBody) && !(status === 429 && shortRateLimitMs(errorBody) !== null)) {
         traceRecovery(providerEnv, 'provider_retry', { status, attempt: attempt + 1, limit: providerRetryLimit(status, options.env), wait_ms: retryDelay, reason: providerErrorSummary(errorBody) });
         notifyProviderRetry(options, { status, attempt: attempt + 1, limit: providerRetryLimit(status, options.env), waitMs: retryDelay, reason: providerErrorSummary(errorBody) });
         await waitBetweenAttempts(retryDelay);
