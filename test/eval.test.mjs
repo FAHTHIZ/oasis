@@ -1158,3 +1158,10 @@ test('OASIS eval records a compact, redacted tool trace and per-request tokens f
   assert.doesNotMatch(trial.trace[1].arg, /sk-abcdef/);
   assert.match(trial.trace[1].arg, /^node --test token=\[REDACTED/);
 });
+
+test('a CLI result marked cost_known: false is an unknown cost, not a free run', async () => {
+  const { parseClaudeCodeOutput } = await import('../src/eval.mjs');
+  const parsed = parseClaudeCodeOutput(JSON.stringify({ result: 'ok', total_cost_usd: 0, cost_known: false, usage: { input_tokens: 2, output_tokens: 1 } }));
+  assert.equal(parsed.costUSD, null);
+  assert.equal(parseClaudeCodeOutput(JSON.stringify({ result: 'ok', total_cost_usd: 0.25, usage: { input_tokens: 2, output_tokens: 1 } })).costUSD, 0.25);
+});

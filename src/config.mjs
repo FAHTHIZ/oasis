@@ -1,5 +1,5 @@
 import { atomicWriteFile } from './atomic-write.mjs';
-import { BUILTIN_PROVIDERS, providerForEndpoint } from './provider-registry.mjs';
+import { BUILTIN_PROVIDERS, providerForEndpoint, providerApiKey } from './provider-registry.mjs';
 import { DEFAULT_TURN_STEPS, MAX_TURN_STEPS, DEFAULT_TURN_TOOL_CALLS, MAX_TURN_TOOL_CALLS } from './model-budgets.mjs';
 import { mkdir, readFile, chmod, copyFile } from 'node:fs/promises';
 import { readFileSync } from 'node:fs';
@@ -18,6 +18,14 @@ const SETUP_PROVIDER_PRESETS = new Set([
 
 // A fresh setup should work for users who do not already have a paid-provider key.
 // An explicit valid fallback lets callers choose a safe context-specific default.
+// The key a registry provider on this loopback address reads from its own
+// variable: FREELLMAPI_API_KEY for the FreeLLMAPI gateway on :3001. These
+// names are specific to that server, so sending them there leaks nothing.
+function localProviderKey(baseURL, env) {
+  const id = providerForEndpoint(baseURL);
+  return id ? providerApiKey(id, env) : '';
+}
+
 export function shouldPromptForProviderBaseURL(presetName) {
   return String(presetName || '').trim().toLowerCase() === 'custom';
 }
@@ -186,12 +194,13 @@ export async function loadConfig(options = {}) {
 
   const sameSavedTarget = savedBaseURL === baseURL && savedProtocol === protocol;
   const localEndpoint = isLoopbackUrl(baseURL);
-  const explicitKey = cloud ? (protocol === 'bedrock' ? env.AWS_BEARER_TOKEN_BEDROCK || '' : protocol === 'foundry' ? env.ANTHROPIC_FOUNDRY_API_KEY || '' : '') : localEndpoint ? (env.OASIS_LOCAL_API_KEY || (env.OASIS_BASE_URL && env.OASIS_API_KEY ? env.OASIS_API_KEY : '')) : (env.OASIS_API_KEY ||
+  const explicitKey = cloud ? (protocol === 'bedrock' ? env.AWS_BEARER_TOKEN_BEDROCK || '' : protocol === 'foundry' ? env.ANTHROPIC_FOUNDRY_API_KEY || '' : '') : localEndpoint ? (env.OASIS_LOCAL_API_KEY || (env.OASIS_BASE_URL && env.OASIS_API_KEY ? env.OASIS_API_KEY : '') || localProviderKey(baseURL, env)) : (env.OASIS_API_KEY ||
     (protocol === 'anthropic' ? env.ANTHROPIC_API_KEY : env.OPENAI_API_KEY) || '');
   // Never send a stored/remote credential to a different endpoint or a loopback server by accident.
   // A local gateway that needs a key (LiteLLM, OmniRoute with auth) gets OASIS_LOCAL_API_KEY, or
   // OASIS_API_KEY when OASIS_BASE_URL names the server in the same environment; an ambient
-  // OPENAI_API_KEY / ANTHROPIC_API_KEY is never sent to a local server.
+  // OPENAI_API_KEY / ANTHROPIC_API_KEY is never sent to a local server. A registry provider on
+  // that address reads its own variable (FREELLMAPI_API_KEY, OMNIROUTE_API_KEY, VLLM_API_KEY).
   const apiKey = explicitKey || (sameSavedTarget ? (saved.apiKey || '') : '');
   // apiKeyHelper (settings or OASIS_API_KEY_HELPER) supplies the key at request time when none is set.
   const apiKeyHelper = !apiKey && !cloud && !localEndpoint && env.OASIS_API_KEY_HELPER ? String(env.OASIS_API_KEY_HELPER) : '';

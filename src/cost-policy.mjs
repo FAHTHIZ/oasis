@@ -15,13 +15,13 @@
 
 import { priceFor, isLocalProvider, cloudModelBehindGateway } from './pricing.mjs';
 import { isOpenRouterBaseURL } from './model-budgets.mjs';
+import { LOCAL_MODEL_SERVER_PORTS } from './provider-registry.mjs';
 
 const ON = /^(?:1|true|yes|on)$/i;
 
-// Default ports of model servers that run the model themselves: Ollama,
-// LM Studio, llama.cpp, vLLM, KoboldCpp, Jan. A loopback service on another
-// port may be a gateway (LiteLLM, OmniRoute) forwarding to a paid provider.
-const LOCAL_SERVER_PORTS = new Set(['11434', '1234', '8080', '8000', '5001', '1337']);
+// Only default ports of model servers that run the model themselves count as
+// free. A loopback service on another port may be a gateway (LiteLLM,
+// OmniRoute, FreeLLMAPI) forwarding to a paid provider.
 
 export function zeroBudgetEnabled(session = {}, env = process.env) {
   if (env && env.OASIS_ZERO_BUDGET !== undefined && env.OASIS_ZERO_BUDGET !== '') return ON.test(String(env.OASIS_ZERO_BUDGET));
@@ -56,7 +56,7 @@ export function routeCost(config = {}, { session = {}, env = process.env } = {})
   const qualified = (config.fallbackProvider ? config.fallbackProvider + ':' : '') + model;
   if (declared.some((pattern) => globToRegExp(pattern).test(model) || globToRegExp(pattern).test(qualified))) return { cost: 'free', reason: 'you declared it free' };
   if (isLocalProvider(config) && !cloudModelBehindGateway(model, config)) {
-    if (config.protocol === 'ollama' || LOCAL_SERVER_PORTS.has(loopbackPort(config))) return { cost: 'free', reason: 'a model server on this machine' };
+    if (config.protocol === 'ollama' || LOCAL_MODEL_SERVER_PORTS.has(loopbackPort(config))) return { cost: 'free', reason: 'a model server on this machine' };
     return { cost: 'unknown', reason: 'a local endpoint on port ' + loopbackPort(config) + ', which may be a gateway that forwards to a paid provider' };
   }
   const price = priceFor(model, { config, overrides: session.pricing || {}, env });

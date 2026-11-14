@@ -107,6 +107,10 @@ test('newer provider keys, OAuth tokens and webhook URLs are masked', () => {
   const samples = [
     'sk-or-v1-' + r(64),
     'gsk_' + r(52),
+    'nvapi-' + r(64),
+    'csk-' + r(48),
+    'fw_' + r(24),
+    'freellmapi-' + 'a1b2c3d4'.repeat(6),
     'xai-' + r(80),
     'pplx-' + r(48),
     'r8_' + r(37),

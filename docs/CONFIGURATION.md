@@ -86,6 +86,7 @@ Built-in providers:
 | `jan` (local) | openai-compatible | `http://127.0.0.1:1337/v1` | none |
 | `vllm` (local) | openai-compatible | `http://127.0.0.1:8000/v1` | `VLLM_API_KEY` (optional) |
 | `omniroute` (gateway) | openai-compatible | `http://127.0.0.1:20128/v1` | `OMNIROUTE_API_KEY` |
+| `freellmapi` (gateway) | openai-compatible | `http://127.0.0.1:3001/v1` | `FREELLMAPI_API_KEY` |
 
 Amazon Bedrock, Google Vertex AI and Microsoft Foundry are configured through
 `src/cloud-providers.mjs`, not this table.
@@ -94,7 +95,9 @@ Keys for local servers: OASIS never sends an ambient `OPENAI_API_KEY` or
 `ANTHROPIC_API_KEY` to a `localhost` address. A local gateway that needs a key
 (LiteLLM, OmniRoute with authentication) gets `OASIS_LOCAL_API_KEY`, or
 `OASIS_API_KEY` when `OASIS_BASE_URL` points at that server in the same
-environment:
+environment. A built-in provider on its default address also reads its own
+variable (`FREELLMAPI_API_KEY` for `:3001`, `OMNIROUTE_API_KEY` for `:20128`,
+`VLLM_API_KEY` for `:8000`), which is never sent to any other address:
 
 ```bash
 OASIS_BASE_URL=http://127.0.0.1:4000/v1 OASIS_API_KEY=sk-litellm-key oasis
@@ -132,6 +135,36 @@ Tested on 2026-11-08 with OmniRoute 3.8.53 and the keyless LLM7 upstream
 (`llm7/codestral-latest`, `llm7/gpt-oss:20b`): model discovery, streaming tool
 calls, the paste flow and the no-retry path. LLM7's free daily token quota runs
 out fast; OmniRoute passes its 429 through and OASIS reports it as a daily limit.
+
+### FreeLLMAPI gateway
+
+[FreeLLMAPI](https://github.com/Azhan787/FreeLLMAPI) is a self-hosted,
+OpenAI-compatible gateway on `localhost:3001` that pools free-tier keys you add
+for each provider (Groq, Gemini, Cerebras, OpenRouter, keyless Kilo routes and
+more) behind one unified key, with per-key rate-limit tracking and failover.
+
+1. Run its server (`npm install` and `npm run dev`, or its Docker image), sign in
+   to the dashboard, add provider keys, and copy the unified `freellmapi-…` key.
+2. Connect OASIS: paste the key into `oasis connect` (a `freellmapi-` key is
+   recognised and tried at `localhost:3001`), or set the environment:
+   `FREELLMAPI_API_KEY=freellmapi-… OASIS_BASE_URL=http://127.0.0.1:3001/v1 OASIS_MODEL=auto oasis`.
+3. For the browser app, add its origin to FreeLLMAPI's `DASHBOARD_ORIGINS` so
+   the gateway answers cross-origin requests.
+
+`auto` lets FreeLLMAPI pick a healthy model per request; naming a model (for
+example `nemotron-3-ultra-550b`) keeps every request on that model. OASIS reads
+each model's context window from the gateway's `GET /v1/models`, treats the
+gateway as cloud (cloud timeouts, never priced or admitted by `--zero-budget` as
+free: free tiers are not proof a route cannot bill), and reports
+`"cost_known": false` in `-p --output-format json` results because the routed
+model's price is not known. Respect each provider's own free-tier terms; the
+gateway's combined allowance is not guaranteed.
+
+Tested on 2026-11-14 with FreeLLMAPI from source and its keyless Kilo platform:
+`oasis -p` fixed a one-line bug through `nemotron-3-ultra-550b` in 4 requests
+(13 s, 26,531 input tokens), with the key read from `FREELLMAPI_API_KEY` alone.
+`auto` reported a 1,048,576-token window; when it routes to a model with a
+smaller one, OASIS learns the real limit from the overflow error and compacts.
 
 ### Adding or re-pointing a provider
 

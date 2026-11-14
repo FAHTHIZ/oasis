@@ -192,6 +192,10 @@ export async function runHeadless(options) {
   let error = null;
   const usage = { input_tokens: 0, output_tokens: 0, total_tokens: 0 };
   let costUsd = 0;
+  // False once any request went to a model with no known price (a gateway's
+  // routed model, an unlisted custom model): total_cost_usd then counts only
+  // the priced requests and is not evidence that the run was free.
+  let costKnown = true;
   let requests = 0;
   let structured;
   let schemaErrors = null;
@@ -312,6 +316,7 @@ export async function runHeadless(options) {
       } } : {}),
       onUsage: (step) => {
         costUsd += Number(step.costUsd || 0);
+        if (step.costKnown === false) costKnown = false;
         usage.input_tokens += Number(step.inputTokens || 0);
         usage.output_tokens += Number(step.outputTokens || 0);
         usage.total_tokens += Number(step.totalTokens || 0);
@@ -522,6 +527,7 @@ export async function runHeadless(options) {
     tool_calls: result ? Number(result.toolCalls || 0) : 0,
     usage,
     total_cost_usd: Number(costUsd.toFixed(6)),
+    ...(costKnown ? {} : { cost_known: false }),
     ...(session && session.fallbackActive ? { fallback_model: session.fallbackActive.to } : {}),
     permission_denials: denied,
     ...(structured !== undefined ? { structured_output: structured } : {}),

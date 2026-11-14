@@ -40,6 +40,20 @@ test('--max-budget-usd stops the run with error_max_budget_usd', async (t) => {
   assert.match(summary.result, /max-budget-usd/);
 });
 
+test('a run on a model with no known price says cost_known: false instead of passing as free', async (t) => {
+  const root = await tmp();
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const { config } = await scriptedModel(t, [{ content: 'done' }, { content: 'done' }]);
+  // A cloud-style name on a loopback port that is not a model server is a
+  // gateway's routed model: its price is unknown.
+  const { summary } = await runHeadless({ prompt: 'go', root, config: { ...config, model: 'gpt-mystery-9' }, outputFormat: 'json', env: { ...process.env }, sessionOptions: { settings }, write: () => {} });
+  assert.equal(summary.subtype, 'success');
+  assert.equal(summary.total_cost_usd, 0);
+  assert.equal(summary.cost_known, false);
+  const local = await runHeadless({ prompt: 'go', root, config, outputFormat: 'json', env: { ...process.env }, sessionOptions: { settings }, write: () => {} });
+  assert.equal(local.summary.cost_known, undefined, 'a local model is known to cost nothing');
+});
+
 test('--fallback-model switches models when the main one is overloaded', async (t) => {
   const root = await tmp();
   t.after(() => rm(root, { recursive: true, force: true }));

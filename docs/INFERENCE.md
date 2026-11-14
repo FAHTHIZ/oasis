@@ -29,7 +29,7 @@ chain moves to its next entry.
 | A model you priced at $0 (`OASIS_PRICE_INPUT=0 OASIS_PRICE_OUTPUT=0` or settings `pricing`) | free |
 | A model with a catalog price above $0 | paid, refused |
 | A model listed at $0 in the catalog, or with no known price | unknown, refused |
-| A loopback service on any other port (it may be LiteLLM or OmniRoute forwarding to a paid model) | unknown, refused |
+| A loopback service on any other port (it may be LiteLLM, OmniRoute or FreeLLMAPI forwarding to a paid model) | unknown, refused |
 
 Unknown is refused on purpose: a free tier can bill once it is used up, and an
 advertised free allowance is not a guarantee. If you know a route cannot bill
