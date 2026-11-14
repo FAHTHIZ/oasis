@@ -12,3 +12,11 @@ for (const file of ['acp.mjs', 'codex-app-server.mjs', 'gateway-telegram.mjs']) 
     assert.match(source, /could not save the session/);
   });
 }
+
+for (const file of ['cli.mjs', 'web.mjs']) {
+  test(file + ' reports a failed save after idle compaction', async () => {
+    const source = await readFile(new URL('../src/' + file, import.meta.url), 'utf8');
+    assert.equal(/saveSession\([^;]*\)\.catch\(\(\) => \{\}\)/.test(source), false);
+    assert.match(source, /could not save the compacted session/i);
+  });
+}

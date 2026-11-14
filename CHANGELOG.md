@@ -4,6 +4,7 @@ User-facing change history grouped by package version. A version heading does no
 
 ## Unreleased
 
+- The CLI and `oasis web` now report a failed session save after idle compaction on stderr instead of ignoring it.
 - Browser app: the system prompt's "Top level" list now says how many entries past the first 60 were left out, instead of silently ending the list.
 - Steering notes are no longer dropped. When more than 20 undelivered steering messages piled up across turns (or in a saved session), the oldest were silently discarded on carry, save and load; they are now merged into the first carried note, so every instruction still reaches the next turn.
 - Waiting for a person no longer uses up a tool's timeout. Approval prompts inside a tool (for example "Run this command?") and `ask_user_question` answers paused nothing before, so a user who took more than two minutes to answer saw the tool fail with "Tool timed out". The tool kernel now pauses its timer while it waits for the user and resumes it with the time that was left; cancellation still works during the wait.
