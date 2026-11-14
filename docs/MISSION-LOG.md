@@ -3,6 +3,11 @@
 A short, dated record of changes, tests, benchmark results, blockers and known
 weaknesses. Newest first. Detailed user-facing notes go in the CHANGELOG.
 
+## 2026-11-14 (subagent report handoff)
+
+- Neuron Network phase 4, first slice: long subagent reports are stored in `<scratch>/agents/` and the parent gets a preview plus `report_file` instead of a head/tail-truncated tool result that lost the middle. Background-agent notices use the same preview.
+- Regression test `test/report-handoff.test.mjs` (3): with handoff off the end-to-end test fails (the middle marker is lost, no `report_file`); with it on the parent's tool result is under 12,000 characters and the file holds the whole report. Related suites (subagent usage, agent tasks, neuron network, plugins, transcript resume, storage bounds) pass: 63 tests.
+
 ## 2026-11-14 (best-of-N attempts with automatic verification)
 
 - Gap: Codex runs best-of-N only in its cloud (`codex cloud exec --attempts 1-4`) and Cursor's `/best-of-n` runs one worktree per model; both leave the choice to the user. OASIS had worktree isolation, auto-test and test-tamper analysis but no way to combine them across parallel attempts.
