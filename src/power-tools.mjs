@@ -39,7 +39,10 @@ import { condenseOutputEnabled, createOutputCondenser } from './output-condense.
 const MAX_TEXT_FILE = 256 * 1024;
 // Exact-string edits only rewrite the matched span, so they can safely handle files far
 // larger than a single read (generated code, big bundles, long data files).
-const MAX_EDIT_FILE = 4 * 1024 * 1024;
+// Claude Code edits files up to 1 GiB; 4 MiB refused ordinary large files
+// (lockfiles, SQL dumps, data fixtures). An exact-string edit is a few
+// linear passes over the text, so 64 MiB stays fast.
+const MAX_EDIT_FILE = 64 * 1024 * 1024;
 const MAX_OUTPUT = 24 * 1024;
 const MAX_BACKGROUND_BUFFER = 512 * 1024;
 const MAX_BACKGROUND_PROCESSES = 8;
@@ -368,7 +371,7 @@ export async function multiEditFile(root, args = {}, context = {}) {
     throw error;
   }
   if (!info.isFile()) throw new Error('That path is not a regular file.');
-  if (info.size > MAX_EDIT_FILE) throw new Error('File is larger than the 4 MiB edit limit.');
+  if (info.size > MAX_EDIT_FILE) throw new Error('File is larger than the 64 MiB edit limit.');
   await assertFileFresh(context, target.absolute, target.relative.split(path.sep).join('/'), { exactMatch: true });
   // ACP editors: edit the open (possibly unsaved) buffer, like edit_file does.
   const clientFs = context && context.session && context.session.clientFs;
@@ -403,7 +406,7 @@ export async function multiEditFile(root, args = {}, context = {}) {
     next = edit.replace_all === true ? next.split(edit.old_string).join(edit.new_string) : next.replace(edit.old_string, () => edit.new_string);
     replacements += edit.replace_all === true ? count : 1;
   });
-  if (Buffer.byteLength(next, 'utf8') > MAX_EDIT_FILE) throw new Error('The edited file would exceed the 4 MiB edit limit.');
+  if (Buffer.byteLength(next, 'utf8') > MAX_EDIT_FILE) throw new Error('The edited file would exceed the 64 MiB edit limit.');
   const relative = target.relative.split(path.sep).join('/');
   if (next === original) return { path: relative, changed: false };
   await snapshotFile(target.root, target.absolute, 'before-agent-multi-edit');
