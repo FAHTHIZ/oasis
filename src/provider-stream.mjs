@@ -108,6 +108,29 @@ export function toolCallSlot(calls, part) {
 // omitted terminal usage"); that clears on a restart like a cut-off stream.
 // Errors that cannot clear (auth, quota, context, policy, other 4xx) stay final.
 const PERMANENT_STREAM_ERROR = /context|too long|maximum.{0,20}tokens|api key|unauthori[sz]ed|forbidden|permission|quota|billing|credit|payment|content.?(policy|filter)|safety|not found|does not exist|unsupported|invalid.{0,10}(request|parameter|argument)/i;
+// Anthropic sends overload and server errors as an SSE error event after a
+// 200 ("overloaded_error", "api_error"). Those clear on a retry, as Claude Code
+// and the Anthropic SDK treat them; auth, permission and request errors do not.
+const ANTHROPIC_STREAM_STATUS = { overloaded_error: 529, api_error: 500, rate_limit_error: 429, timeout_error: 504 };
+export function anthropicStreamError(event) {
+  const error = event && event.error && typeof event.error === 'object' ? event.error : {};
+  const message = String(error.message || event.message || 'The Anthropic stream failed.');
+  const status = ANTHROPIC_STREAM_STATUS[String(error.type || '')];
+  if (!status) return new Error(message);
+  return Object.assign(new Error('The model stream was interrupted: ' + message + ' (' + error.type + ')'), { code: 'OASIS_STREAM_INTERRUPTED', status });
+}
+
+// The Responses API reports failures in response.failed / error events with a
+// code; server_error and rate limits clear on a retry like a cut-off stream.
+const RESPONSES_STREAM_STATUS = { server_error: 500, internal_error: 500, rate_limit_exceeded: 429, server_is_overloaded: 503, slow_down: 429 };
+export function responsesStreamError(event) {
+  const error = (event && event.response && event.response.error) || (event && event.error) || {};
+  const detail = String(error.message || (event && event.message) || 'The Responses API stream failed.');
+  const status = RESPONSES_STREAM_STATUS[String(error.code || (event && event.code) || '')];
+  if (!status) return new Error(detail);
+  return Object.assign(new Error('The model stream was interrupted: ' + detail), { code: 'OASIS_STREAM_INTERRUPTED', status });
+}
+
 export function chatStreamError(raw) {
   const message = String((raw && (raw.message || (typeof raw === 'string' ? raw : ''))) || 'The chat-completions stream failed.');
   const status = Number(raw && (raw.status || raw.code)) || 0;
@@ -147,9 +170,7 @@ export async function readProviderStream(response, protocol, onDelta, onProgress
       if (data === '[DONE]') return;
       const event = parseProviderEvent(data);
       const type = event.type || '';
-      if (type === 'error' || type === 'message_error') {
-        throw new Error(String(event.error && event.error.message || event.message || 'The Anthropic stream failed.'));
-      }
+      if (type === 'error' || type === 'message_error') throw anthropicStreamError(event);
       if (type === 'message_start') {
         const message = event.message || {};
         messageId = message.id;
@@ -218,8 +239,7 @@ export async function readProviderStream(response, protocol, onDelta, onProgress
       } else if (type === 'response.completed' || type === 'response.incomplete') {
         finalResponse = event.response || event;
       } else if (type === 'response.failed' || type === 'error') {
-        const detail = event.response && event.response.error && event.response.error.message || event.error && event.error.message || event.message;
-        throw new Error(String(detail || 'The Responses API stream failed.'));
+        throw responsesStreamError(event);
       }
     });
     if (!finalResponse) throw new Error('The Responses API stream ended without a completed response event.');
