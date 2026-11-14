@@ -49,5 +49,26 @@ test('an in-body 429 is recorded in the quota ledger like an HTTP 429', async ()
   const { error, routes } = await run({ provider: () => json(body) });
   assert.equal(error.status, 429);
   const route = routes.find((item) => item.model === WITHDRAWN);
-  assert.ok(route && route.failures >= 1, JSON.stringify(routes));
+  assert.ok(route && route.failures === 1 && route.quotaFailures === 1, JSON.stringify(routes));
+  assert.equal(route.requests, 1, 'one response is one request, not a success plus a failure');
+});
+
+test('repeated in-body quota errors with no reset time still climb the guessed cooldown ladder', async () => {
+  const body = JSON.stringify({ error: { message: 'quota exceeded for this key', code: 429 } });
+  const dir = await mkdtemp(path.join(os.tmpdir(), 'oasis-200err-'));
+  const env = { ...process.env, OASIS_CONFIG_DIR: dir, OASIS_TELEMETRY: '0', OASIS_NO_UPDATE_CHECK: '1' };
+  for (const name of ['OASIS_ZERO_BUDGET', 'OASIS_FREE_MODELS', 'OASIS_QUOTA_LEDGER']) delete env[name];
+  const config = { protocol: 'openai-compatible', baseURL: 'https://api.gateway.test/v1', apiKey: 'k', model: 'm', maxSteps: 3 };
+  const fetchImpl = async () => json(body);
+  try {
+    for (let i = 0; i < 2; i++) {
+      // A guessed cooldown never refuses the only model, so both sessions send.
+      const session = await createSession({ root: dir, config, settings, env });
+      try { await assert.rejects(runAgentTurn(session, 'hi', { autoApprove: true, env, fetchImpl })); } finally { await closeSession(session); }
+    }
+    const [route] = listRoutes(env);
+    assert.equal(route.requests, 2);
+    assert.equal(route.recentQuotaHits.length, 2, 'the history survives the 200 status');
+    assert.ok(route.cooldown.until - Date.now() > 5 * 60_000, 'second rung (10 minutes), not the first (2 minutes)');
+  } finally { await rm(dir, { recursive: true, force: true }); }
 });
