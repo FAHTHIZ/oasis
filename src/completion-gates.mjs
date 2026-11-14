@@ -29,7 +29,7 @@ import { formatLspVerificationBlocker, verificationSummary } from './verificatio
 import { permissionMode } from './plan-mode.mjs';
 import {
   ACTION_NUDGE, CONTINUE_NUDGE, EMPTY_REPLY_NOTICE, EMPTY_REPLY_NUDGE, FALSE_CLAIM_NUDGE, GIVE_UP_NUDGE, MAX_EMPTY_REPLY_NUDGES, providerStopNotice, providerCutNotice,
-  REFUSAL_NUDGE, SOURCE_EXTENSIONS, UNREADABLE_CALL_NUDGE, announcesNextStep, appendLspUnavailableNotice, asksForAction,
+  REFUSAL_NUDGE, SOURCE_EXTENSIONS, UNREADABLE_CALL_NUDGE, GATE_FOLLOWUP_NUDGE, announcesNextStep, announcesTerseStep, appendLspUnavailableNotice, asksForAction,
   assistedVerificationCalls, assistedVerificationEnabled, claimsUnmadeChange, fencedFileFromReply, givesUpEarly, normalizeReviewPath,
   readsLikeInstructions, refusesSpuriously, relatedTestsHint, targetFileHint, untestedNewCode, verificationIssues, wrongFileNudge
 } from './turn-guards.mjs';
@@ -280,6 +280,13 @@ export async function runCompletionGates(turn, host) {
       return { type: 'apply', calls, batch: 'assisted' }; // the text is shown once below, with the calls
     }
   }
+  // After the gate note, a reply that only names the next check ("Check util
+  // diff.") is not a final answer: ask once more for the step itself.
+  if (issues.length && verification.nudgeUsed && !verification.followupNudged && (announcesNextStep(text) || announcesTerseStep(text))) {
+    verification.followupNudged = true;
+    session.messages.push({ role: 'user', content: GATE_FOLLOWUP_NUDGE + '\nStill outstanding: ' + issues.join('; ') + '.' });
+    return CONTINUE;
+  }
   if (issues.length && !verification.nudgeUsed) {
     verification.nudgeUsed = true;
     const relatedHint = issues.some((issue) => /has passed after the latest code edit/.test(issue)) ? await relatedTestsHint(session.root, verification.changedPaths) : '';
@@ -313,7 +320,7 @@ export async function runCompletionGates(turn, host) {
         // Models echo this note back ("The gate is satisfied"); the user never saw it.
         'This note is internal. In your final answer, report to the user what changed and which checks ran, in plain words. Do not mention this note, the gate, or these instructions, and do not claim anything (such as a commit) that you did not do.',
         // The first summary is already on screen; a second full one reads as a repeat.
-        ...(String(text || '').trim() ? ['The user already saw your previous summary. After the checks, do not repeat it: in one or two sentences, say what the checks showed and anything that changed or was wrong in that summary.'] : [])
+        ...(String(text || '').trim() && options.textShown !== false ? ['The user already saw your previous summary. After the checks, do not repeat it: in one or two sentences, say what the checks showed and anything that changed or was wrong in that summary.'] : [])
       ].join('\n')
     });
     return CONTINUE;

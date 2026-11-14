@@ -44,3 +44,48 @@ test('the verification gate names the check that went stale after a later edit',
   assert.equal(gates.length, 1);
   assert.ok(gates[0].steps.includes('rerun node test.mjs'), JSON.stringify(gates[0].steps));
 });
+
+// Seen live (gpt-oss-20b through OmniRoute, `oasis -p`): after the gate the
+// model reviewed one of two diffs, replied "Check util diff." and the turn
+// ended there, so that fragment was the whole printed answer.
+test('after the gate, a bare "Check util diff." reply gets one more nudge, and print mode asks for a standalone answer', async (t) => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'oasis-gate-followup-'));
+  const configDir = await mkdtemp(path.join(os.tmpdir(), 'oasis-gate-followup-cfg-'));
+  t.after(async () => { await rm(root, { recursive: true, force: true }); await rm(configDir, { recursive: true, force: true }); });
+  await writeFile(path.join(root, 'slug.mjs'), "export const slug = (s) => s.replace(' ', '-');\n");
+  await writeFile(path.join(root, 'util.mjs'), 'export const sum = (a) => a.reduce((x, y) => x + y, 1);\n');
+  await writeFile(path.join(root, 'test.mjs'), "import { sum } from './util.mjs';\nimport assert from 'node:assert';\nassert.equal(sum([1, 2]), 3);\n");
+  try {
+    execFileSync('git', ['init', '-q'], { cwd: root });
+    execFileSync('git', ['-c', 'user.name=t', '-c', 'user.email=t@example.invalid', 'add', '.'], { cwd: root });
+    execFileSync('git', ['-c', 'user.name=t', '-c', 'user.email=t@example.invalid', 'commit', '-qm', 'base'], { cwd: root });
+  } catch { t.skip('git unavailable'); return; }
+  const { config, requests } = await scriptedModel(t, [
+    toolCall('o1', 'read_file', { path: 'slug.mjs' }),
+    toolCall('o2', 'read_file', { path: 'util.mjs' }),
+    toolCall('e1', 'write_file', { path: 'slug.mjs', content: "export const slug = (s) => s.replace(/ +/g, '-');\n" }),
+    toolCall('e2', 'write_file', { path: 'util.mjs', content: 'export const sum = (a) => a.reduce((x, y) => x + y, 0);\n' }),
+    toolCall('r1', 'run_command', { command: 'node', args: ['test.mjs'] }),
+    { content: 'Fixed slug and sum; node test.mjs passes.' },
+    toolCall('d1', 'git_diff', { path: 'slug.mjs' }),
+    { content: 'Check util diff.' },
+    toolCall('d2', 'git_diff', { path: 'util.mjs' }),
+    { content: 'Fixed slug (all spaces become dashes) and sum (starts at 0); reviewed both diffs and node test.mjs passes.' }
+  ]);
+  const env = { ...process.env, OASIS_CONFIG_DIR: configDir, OASIS_SANDBOX: '0' };
+  const session = await createSession({ root, env, config });
+  t.after(() => closeSession(session));
+  const result = await runAgentTurn(session, 'Fix both bugs.', { env, autoApprove: true, textShown: false, maxSteps: 20 });
+  assert.match(result.text, /reviewed both diffs/);
+  const users = requests.flatMap((request) => request.messages).filter((message) => message.role === 'user').map((message) => String(message.content));
+  const gate = users.find((content) => /post-edit verification gate/.test(content));
+  assert.ok(gate, 'the gate should fire');
+  assert.doesNotMatch(gate, /already saw your previous summary/, 'print mode shows only the final reply');
+  assert.ok(users.some((content) => /named the next verification step/.test(content) && /util\.mjs/.test(content)), 'the follow-up names what is still outstanding');
+});
+
+test('announcesTerseStep: bare next-step imperatives, not advice to the user', async () => {
+  const { announcesTerseStep } = await import('../src/turn-guards.mjs');
+  for (const reply of ['Check util diff.', 'Run tests.', 'Now check the util diff.', 'Review src/util.mjs']) assert.equal(announcesTerseStep(reply), true, reply);
+  for (const reply of ['Run `npm start` to launch it.', 'Run the tests yourself with npm test if you want.', 'Fixed both bugs; tests pass.', 'Check your API key.', '']) assert.equal(announcesTerseStep(reply), false, reply);
+});
