@@ -175,6 +175,7 @@ function helpText() {
     '  oasis --append-subagent-system-prompt TEXT  Extra system text for every subagent (also -file PATH)',
     '  oasis --allow-dangerously-skip-permissions  Add bypassPermissions to the Shift+Tab mode cycle',
     '  oasis -w [NAME]               Work in a new git worktree on its own branch',
+    '  oasis attempts 3 --verify "npm test" [--apply] TASK  Best-of-N: run the task in parallel worktrees, keep the attempt that passes your check',
     '  oasis diagnostics [PATH...] [--checker NAME] [--json]  Run type checkers/linters and list problems',
     '  oasis plan "task"             Inspect the workspace and produce a read-only implementation plan',
     '  oasis install pnpm            Install a tool using a detected manager',
@@ -3455,6 +3456,33 @@ async function main() {
     return;
   }
   if (command === 'sessions') return await manageSessions(workspace, rest, { approve });
+  if (command === 'attempts' || command === 'best-of-n') {
+    const { parseAttemptsArgs, attemptsUsage, runBestOfN, formatAttemptsReport } = await import('./best-of-n.mjs');
+    const options = parseAttemptsArgs(rest);
+    if (options.help) { stdout.write(attemptsUsage() + '\n'); return; }
+    // --model, --max-turns and --permission-mode are global flags; carry them into every attempt.
+    if (SESSION_OPTIONS.permissionMode) options.permissionMode = SESSION_OPTIONS.permissionMode;
+    if (!options.models.length && SESSION_OPTIONS.model) options.models = [SESSION_OPTIONS.model];
+    if (!options.maxTurns && headless.maxTurns) options.maxTurns = headless.maxTurns;
+    const log = (line) => { if (!options.json) process.stderr.write(line + '\n'); };
+    const controller = new AbortController();
+    const onSigint = () => controller.abort();
+    process.once('SIGINT', onSigint);
+    try {
+      const outcome = await runBestOfN(workspace, options, {
+        env: process.env, signal: controller.signal,
+        onProgress: (event) => {
+          if (event.type === 'start') log('[attempts] Running ' + event.attempts + ' attempts in separate worktrees' + (event.dirty ? ' (from HEAD; your uncommitted changes are not included)' : '') + '.');
+          else if (event.type === 'attempt_started') log('[attempts] #' + event.index + ' started' + (event.model ? ' with ' + event.model : '') + ' in ' + event.worktree);
+          else if (event.type === 'attempt_finished') log('[attempts] #' + event.index + ' finished' + (event.record.error ? ' with an error' : event.record.verify ? (event.record.verify.passed ? ', check passed' : ', check failed') : ''));
+        }
+      });
+      stdout.write(options.json ? JSON.stringify(outcome.report) + '\n' : formatAttemptsReport(outcome, options));
+      if (options.verify && !outcome.winner) process.exitCode = 1;
+      if (outcome.applied && outcome.applied.error) process.exitCode = 1;
+    } finally { process.removeListener('SIGINT', onSigint); }
+    return;
+  }
   if (command === 'batch') {
     const { runBatch } = await import('./trajectories.mjs');
     const result = await runBatch(workspace, rest, { env: process.env, permissionMode: SESSION_OPTIONS.permissionMode || null });

@@ -3,6 +3,14 @@
 A short, dated record of changes, tests, benchmark results, blockers and known
 weaknesses. Newest first. Detailed user-facing notes go in the CHANGELOG.
 
+## 2026-11-14 (best-of-N attempts with automatic verification)
+
+- Gap: Codex runs best-of-N only in its cloud (`codex cloud exec --attempts 1-4`) and Cursor's `/best-of-n` runs one worktree per model; both leave the choice to the user. OASIS had worktree isolation, auto-test and test-tamper analysis but no way to combine them across parallel attempts.
+- Added `src/best-of-n.mjs` and `oasis attempts [N] [--models a,b] --verify CMD [--apply] TASK`: each attempt is a real `oasis -p` process in its own worktree; OASIS captures a binary patch (new files included, shared `node_modules` symlink excluded), runs the verify command in that worktree, runs `analyzeTestDiff` on the patch, ranks by evidence and applies only a verified winner. Patches and `report.json` are kept in `.oasis/attempts/<run>/` (added to `.git/info/exclude`); worktrees and branches are removed.
+- Found while building: `runWorktreeCommand` trims stdout, which corrupts the last hunk of a patch, so patch capture uses an untrimmed git runner. `-n` and `--model` are global CLI flags, so the count is a leading number or `--count`, and `--model`/`--max-turns`/`--permission-mode` are carried into every attempt.
+- Tests: `test/best-of-n.test.mjs` (6) — parsing, ranking, a scripted run where one attempt is wrong, one is right and one "passes" by deleting assertions (the right one is applied, tests untouched, worktrees and branches gone), no-verify applies nothing, dirty `--apply` refused, and an end-to-end run with two real `oasis -p` children against a scripted OpenAI-compatible server using different models.
+- Not measured yet: whether best-of-3 raises the pass rate on `evals/tasks` with a live model. That needs model quota (see the benchmark blocker above).
+
 ## 2026-11-14 (recorded same-model benchmarks; shell side doors)
 
 - Shell safety side doors (commit c483a962): `find . -delete` / `find . -exec rm -rf {} +` with no narrowing test, `docker|podman run` that mounts `/`, home, `/etc` or the Docker socket or runs `--privileged`/`--pid=host`, and `echo 'rm -rf *' | sh` ran without asking under bypass or a broad allow rule. All now need a person, in both `run_shell` and `run_command` (shared `src/container-risk.mjs`). Targeted finds, project mounts and harmless pipes stay ordinary. Test: `test/shell-escape-hatches.test.mjs` (2 of 3 failed before the fix).
