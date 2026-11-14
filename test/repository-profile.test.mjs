@@ -55,8 +55,12 @@ test('contributor policies exist outside the installable npm package', async () 
 });
 
 test('CLI help and onboarding messages do not link to removed documentation', async () => {
-  const cli = await read('../src/cli.mjs');
+  const cli = (await read('../src/cli.mjs')) + (await read('../src/cli-help.mjs'));
   assert.ok(cli.includes('Docs: https://github.com/FAHTHIZ/oasis#readme'));
-  assert.ok(cli.includes('Guide: https://github.com/FAHTHIZ/oasis#quick-start'));
+  assert.ok(cli.includes('Guide: https://github.com/FAHTHIZ/oasis#install'));
   assert.ok(!cli.includes('/docs/'), 'CLI help and setup errors must not refer to removed docs paths.');
+  // Every README anchor the CLI links to is a real heading.
+  const readme = await read('../README.md');
+  const anchors = new Set(readme.split('\n').filter((line) => /^#{1,6} /.test(line)).map((line) => line.replace(/^#+ /, '').trim().toLowerCase().replace(/[^\w\- ]/g, '').replace(/ /g, '-')));
+  for (const [, anchor] of cli.matchAll(/github\.com\/FAHTHIZ\/oasis#([\w-]+)/g)) if (anchor !== 'readme') assert.ok(anchors.has(anchor), 'README has no heading for #' + anchor);
 });
