@@ -170,3 +170,13 @@ test('IDE tools execute through the shared kernel and produce audit records', as
   assert.ok(calls.some((call) => call[0] === 'openFile'));
   assert.deepEqual(new Set((session.toolAuditLog || []).filter((entry) => entry.tool.startsWith('ide_')).map((entry) => entry.tool)), new Set(['ide_get_diagnostics', 'ide_open_file']));
 });
+
+test('a long IDE selection keeps its start and says which lines to read', async () => {
+  const text = Array.from({ length: 8000 }, (_, i) => 'line ' + (i + 1) + ' of the selection').join('\n') + '\nFINAL LINE';
+  const session = { ide: { call: async () => ({ filePath: '/w/big.js', relativePath: 'big.js', startLine: 1, endLine: 8001, text, languageId: 'javascript' }) } };
+  const selection = await ideSelectionContext(session);
+  assert.ok(selection.text.length > 90_000);
+  assert.match(selection.text, /\[selection cut: [\d,]+ more characters; read big\.js from line \d+ to 8001 for the rest\]/);
+  const medium = { ide: { call: async () => ({ filePath: '/w/m.js', startLine: 1, endLine: 2000, text: 'x = 1;\n'.repeat(4000) + 'LAST' }) } };
+  assert.match((await ideSelectionContext(medium)).text, /LAST\n```/);
+});
