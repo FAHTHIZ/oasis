@@ -3,6 +3,12 @@
 A short, dated record of changes, tests, benchmark results, blockers and known
 weaknesses. Newest first. Detailed user-facing notes go in the CHANGELOG.
 
+## 2026-11-14 (inference overhaul stage 3: gateway behaviour benchmark)
+
+- New bench/gateway/run.mjs (`npm run bench:gateway`, part of `check:quick`): five scenarios run the real agent loop over several sessions against simulated providers and count every request Oasis sends, feature off vs on. Simulated, not live; stated in the report and docs.
+- Results (bench/results/gateway-2026-11-14.json): daily-exhausted main model over 5 sessions, failed requests 5 to 1 (10 to 6 total); paid main model with a free backup, paid requests 5 to 0; only a paid model, zero-budget sends 0; runaway tool loop, 41 to 8 requests with --max-requests 8; an only model with a guessed cooldown is never refused (4 and 4).
+- Token benchmark (`bench/tokens/run.mjs --check`) still within baseline after stages 1 and 2.
+
 ## 2026-11-14 (inference overhaul stage 2: persistent quota ledger)
 
 - New src/quota-ledger.mjs: one record per provider, key fingerprint (SHA-256, never the key) and model in `<config dir>/quota-ledger.json` (0600). Today's requests, tokens and failures; the limits the provider last reported in its headers, with a timestamp; cooldowns marked "provider" (stated reset: Retry-After, x-ratelimit/anthropic reset headers, OpenRouter's X-RateLimit-Reset in the error body) or "guess" (2 min, 10 min, 1 h ladder, quota signals only). Ideas from FreeLLMAPI's ratelimit.ts; no database.

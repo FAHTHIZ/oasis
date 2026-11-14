@@ -102,3 +102,45 @@ qwen/qwen3-coder:free  on openrouter.ai  key 3f9a1c07de
   recording off.
 - Several Oasis processes can update the file at once. Each write re-reads it
   and changes only its own record, so a lost count is possible but rare.
+
+## Measuring it
+
+`npm run bench:gateway` (`node bench/gateway/run.mjs`, about 5 seconds, no
+network) runs the real agent loop for several sessions against simulated
+providers and counts every HTTP request Oasis sends, with the feature under
+test off (baseline) and on. Between sessions the in-memory circuit breaker is
+reset, as in a new process, so only state Oasis saves carries over. "Paid"
+means the catalog lists a price above $0 for the model; the dollar figures use
+1,200 input and 150 output tokens per reply.
+
+Results on 2026-11-14 (`bench/results/gateway-2026-11-14.json`):
+
+| Scenario | Variant | Requests | Failed | Paid | Est. $ | Sessions done |
+|---|---|---|---|---|---|---|
+| Main model's daily quota used up (429, Retry-After 2 h), backup works, 5 sessions | ledger off | 10 | 5 | 0 | 0 | 5/5 |
+| | ledger on | 6 | 1 | 0 | 0 | 5/5 |
+| Paid main model, declared-free backup, 5 sessions | normal | 5 | 0 | 5 | 0.0293 | 5/5 |
+| | zero-budget | 5 | 0 | 0 | 0 | 5/5 |
+| Only a paid model, 3 sessions | normal | 3 | 0 | 3 | 0.0175 | 3/3 |
+| | zero-budget | 0 | 0 | 0 | 0 | 0/3 (stopped, nothing sent) |
+| Model loops on tool calls and never finishes, 1 session | step limit 40 | 41 | 0 | 0 | 0 | 0/1 |
+| | --max-requests 8 | 8 | 0 | 0 | 0 | 0/1 (stopped) |
+| Only model: quota 429 with no reset time, then recovers, 3 sessions | ledger off | 4 | 1 | 0 | 0 | 3/3 |
+| | ledger on | 4 | 1 | 0 | 0 | 3/3 (a guess never refuses your only model) |
+
+These are simulations: they show what Oasis sends under each provider
+behaviour, not how fast or reliable a real provider is. Live runs need quota
+that was not available for this stage (the test key allows 50 free-model
+requests a day), so no live gateway numbers are claimed here. `npm run
+check:quick` runs the benchmark with `--check`, which fails if a scenario stops
+meeting its expectation.
+
+## Limitations
+
+- Zero-budget mode trusts its evidence: a loopback port, OpenRouter's `:free`
+  naming, and your declarations. It cannot see a provider's billing settings.
+- Image generation, speech and web search are not gated by zero-budget mode.
+- Remaining quota is known only for providers that send rate-limit headers,
+  and only as of the last response.
+- The ledger is per machine and per config directory (profiles are separate).
+- Child processes inherit request and token limits but count separately.
