@@ -2278,6 +2278,9 @@ const EXIT_PLAN_TOOL_DEFINITION = { type: 'function', function: {
 
 const SPECIALIST_REVIEW_TOOLS = new Set(['git_status', 'git_diff', 'git_log', 'lsp', 'list_files', 'glob_files', 'repo_map', 'read_file', 'search_files', 'grep', 'ast_grep']);
 const MAX_SPECIALIST_REVIEWS_PER_TASK = 2;
+export const SPECIALIST_MAX_STEPS = 24;
+const SPECIALIST_MAX_TOOL_CALLS = 60;
+const SPECIALIST_MAX_TOKENS = 600_000;
 // Models fan out wide read batches (Claude often sends 20+ reads at once);
 // the read scheduler caps how many run concurrently.
 const MAX_TOOL_BATCH = 64;
@@ -2333,9 +2336,13 @@ async function runSpecialistReview(parentSession, args, context, options, budget
 
   const review = await runAgentTurn(reviewSession, reviewPrompt, {
     planOnly: true,
-    maxSteps: 4,
-    maxToolCalls: 8,
-    maxTokens: 18000,
+    // Room to read the code under review. Four steps, eight calls and 18,000
+    // tokens (the system prompt and tools alone take several thousand per
+    // request) ended most reviews after a file or two, flagged incomplete.
+    // Spend still counts toward the parent's --max-budget-usd.
+    maxSteps: SPECIALIST_MAX_STEPS,
+    maxToolCalls: SPECIALIST_MAX_TOOL_CALLS,
+    maxTokens: SPECIALIST_MAX_TOKENS,
     maxCommandSeconds: context.maxCommandSeconds,
     approval: async () => false,
     autoApprove: false,

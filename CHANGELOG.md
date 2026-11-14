@@ -4,6 +4,7 @@ User-facing change history grouped by package version. A version heading does no
 
 ## Unreleased
 
+- `run_specialist_review` reviewers get 24 steps, 60 tool calls and 600,000 tokens (cache reads not counted); they had 4 steps, 8 calls and 18,000 tokens, which the system prompt and tools used up within a few requests, so most reviews stopped after a file or two and came back marked incomplete. Their spend still counts toward `--max-budget-usd`.
 - Compaction fits small context windows: the transcript sent to the summarizer is held to about half the model's window. It had a 32,000-character floor (24,000 mid-turn), about 8,000 tokens, so on an 8K local model the summary request overflowed and compaction failed exactly when the window was full.
 - In the browser app, long `run_javascript` output keeps its head and its end; it kept only the first 24,000 characters, so the error or failed assertion printed last was dropped and a failing run could look clean.
 - In the browser app, `read_file` cuts a long read at a whole line and says which offset comes next. It clipped the joined text at 24,000 characters, which split a line and dropped the continuation note, so the model guessed where to resume. An offset past the end now says how many lines the file has instead of returning nothing.
