@@ -175,6 +175,7 @@ function helpText() {
     '  oasis --append-subagent-system-prompt TEXT  Extra system text for every subagent (also -file PATH)',
     '  oasis --allow-dangerously-skip-permissions  Add bypassPermissions to the Shift+Tab mode cycle',
     '  oasis -w [NAME]               Work in a new git worktree on its own branch',
+    '  oasis quota [--json] [--reset [TEXT]]               Model usage today per provider, key and model; reported limits; cooldowns',
     '  oasis attempts 3 --verify "npm test" [--apply] TASK  Best-of-N: run the task in parallel worktrees, keep the attempt that passes your check',
     '  oasis diagnostics [PATH...] [--checker NAME] [--json]  Run type checkers/linters and list problems',
     '  oasis plan "task"             Inspect the workspace and produce a read-only implementation plan',
@@ -3468,6 +3469,22 @@ async function main() {
     return;
   }
   if (command === 'sessions') return await manageSessions(workspace, rest, { approve });
+  if (command === 'quota') {
+    const { listRoutes, resetLedger, formatQuotaReport, ledgerPath, ledgerEnabled } = await import('./quota-ledger.mjs');
+    if (rest.includes('--help') || rest.includes('-h')) { stdout.write('Usage: oasis quota [--json] [--reset [TEXT]]\n  Shows model usage today per provider, key and model, the limits providers last reported, and cooldowns.\n  --reset clears every record, or those whose provider, key fingerprint or model contains TEXT.\n  Stored in ' + ledgerPath(process.env) + '. OASIS_QUOTA_LEDGER=off turns recording off.\n'); return; }
+    const resetAt = rest.indexOf('--reset');
+    if (resetAt >= 0) {
+      const match = rest[resetAt + 1] && !rest[resetAt + 1].startsWith('--') ? rest[resetAt + 1] : '';
+      const removed = resetLedger(process.env, match);
+      stdout.write('Cleared ' + removed + ' quota record' + (removed === 1 ? '' : 's') + '.\n');
+      return;
+    }
+    const routes = listRoutes(process.env);
+    if (rest.includes('--json')) { stdout.write(JSON.stringify({ enabled: ledgerEnabled(process.env), file: ledgerPath(process.env), routes }, null, 2) + '\n'); return; }
+    if (!ledgerEnabled(process.env)) stdout.write('Recording is off (OASIS_QUOTA_LEDGER=off).\n');
+    stdout.write(formatQuotaReport(routes));
+    return;
+  }
   if (command === 'attempts' || command === 'best-of-n') {
     const { parseAttemptsArgs, attemptsUsage, runBestOfN, formatAttemptsReport } = await import('./best-of-n.mjs');
     const options = parseAttemptsArgs(rest);

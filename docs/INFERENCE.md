@@ -66,3 +66,39 @@ or settings `maxRequests` and `maxTotalTokens`, or `OASIS_MAX_REQUESTS` and
 
 `--max-budget-usd` still caps estimated dollars. It is checked after each reply,
 because the price is only known from the reply's usage.
+
+## Usage and quota tracking
+
+Oasis records every model request in `<config dir>/quota-ledger.json`
+(file mode 0600), one record per provider, API key and model:
+
+```
+$ oasis quota
+qwen/qwen3-coder:free  on openrouter.ai  key 3f9a1c07de
+  today: 41 requests, 512000 input + 9100 output tokens, 1 failed (1 quota)
+  reported by the provider 3 min ago: requests 0 of 50 left, resets 2026-11-15T00:00:00.000Z (a snapshot of that moment, not a guarantee)
+  cooling down until 2026-11-15T00:00:00.000Z (reset time stated by the provider)
+```
+
+- Keys are never written; a key appears as the first 10 hex characters of its
+  SHA-256, so two keys for one provider stay apart.
+- "Remaining" comes only from the provider's own rate-limit headers
+  (`x-ratelimit-*`, `anthropic-ratelimit-*`) and is shown with its age. A
+  provider that sends none is shown as "remaining quota: unknown", never as
+  available. Advertised free-tier sizes are not used.
+- Daily counts reset at midnight UTC.
+- After a quota failure (429 or 402 that is not a short per-minute wait):
+  - if the provider stated when it resets (Retry-After, rate-limit reset
+    headers, or OpenRouter's `X-RateLimit-Reset` in the error body), the route
+    is skipped without a request until then, in this and later sessions, and
+    the fallback chain moves on;
+  - if it did not, Oasis guesses 2 minutes, then 10, then an hour. A guess
+    only skips the route when a fallback model exists, so your only model is
+    never refused on a guess;
+  - a successful request clears the cooldown;
+  - local servers (loopback) never cool down; a 429 there means busy.
+- `oasis quota --json` prints the raw records, `oasis quota --reset [TEXT]`
+  clears all records or the matching ones, and `OASIS_QUOTA_LEDGER=off` turns
+  recording off.
+- Several Oasis processes can update the file at once. Each write re-reads it
+  and changes only its own record, so a lost count is possible but rare.

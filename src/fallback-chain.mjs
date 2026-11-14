@@ -72,6 +72,8 @@ export function fallbackReason(error, { onFallbackProvider = false } = {}) {
   if (!error || error.name === 'AbortError') return '';
   // Zero-budget mode refused this route before sending: try the next one.
   if (error.code === 'OASIS_ZERO_BUDGET_BLOCKED') return 'paid';
+  // The quota ledger skipped a route that is out of quota, without a request.
+  if (error.code === 'OASIS_QUOTA_COOLDOWN') return 'rate';
   // A request or token budget is a stop for the whole run, not this model.
   if (error.code === 'REQUEST_BUDGET_EXCEEDED' || error.code === 'TOKEN_BUDGET_EXCEEDED') return '';
   // The provider's circuit breaker is open: it failed repeatedly just now.

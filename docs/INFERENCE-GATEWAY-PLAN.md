@@ -102,6 +102,6 @@ existing chain (no SQLite, no server):
 | Stage | Content | Status |
 |---|---|---|
 | 1 | Zero-budget mode and request and token budgets, enforced before every request, including fallbacks, subagents and side requests | done |
-| 2 | Persistent quota ledger, pre-send skip of routes the provider said are exhausted, `oasis quota` report | planned |
+| 2 | Persistent quota ledger, pre-send skip of routes the provider said are exhausted, `oasis quota` report | done |
 | 3 | Efficiency measurements on the deterministic harness (bench/harness), comparing the existing context features on and off | planned |
 | 4 | Documentation: gateway setup, local inference, zero-budget mode, troubleshooting, limitations | planned |

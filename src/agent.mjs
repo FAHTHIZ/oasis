@@ -97,6 +97,7 @@ import { validateJsonSchema, extractJson } from './json-schema.mjs';
 import { createSharedTaskStore, SHARED_TASK_TOOL_NAMES, runSharedTaskTool } from './shared-tasks.mjs';
 import { unrequestedGitWrite } from './git-intent.mjs';
 import { assertZeroBudgetRoute, chargeRequestAttempt, recordTokenUsage } from './cost-policy.mjs';
+import { quotaRoute, assertRouteAvailable, recordSuccess as recordQuotaSuccess, recordFailure as recordQuotaFailure, recordTokens as recordQuotaTokens } from './quota-ledger.mjs';
 import { parseFallbackChain, remainingFallbacks, fallbackReason, FALLBACK_REASON_TEXT } from './fallback-chain.mjs';
 import { runWithProviderBreaker, providerBreakerKey, isBreakerOpenError } from './circuit-breaker.mjs';
 import { repairToolArguments, extractTextToolCalls, unknownTextToolCalls } from './tool-call-repair.mjs';
@@ -1355,7 +1356,7 @@ async function requestCompletion(session, options = {}) {
       return await runWithProviderBreaker(providerBreakerKey(attempted), () => requestCompletionWithStreamRestarts(session, options), {
         env,
         signal: options.signal,
-        shouldTrip: (error) => !(options.signal && options.signal.aborted) && PROVIDER_FAULTS.has(fallbackReason(error, { onFallbackProvider: Boolean(attempted && attempted.fallbackProvider) }))
+        shouldTrip: (error) => !(options.signal && options.signal.aborted) && !(error && error.code === 'OASIS_QUOTA_COOLDOWN') && PROVIDER_FAULTS.has(fallbackReason(error, { onFallbackProvider: Boolean(attempted && attempted.fallbackProvider) }))
       });
     } catch (error) {
       if (options.signal && options.signal.aborted) throw error;
@@ -1495,7 +1496,17 @@ async function requestCompletionTracedInner(session, options = {}) {
   }, { kind: 3 });
 }
 
+// Records the reply's tokens against the provider, key and model that served
+// it (src/quota-ledger.mjs). Internal re-sends share one record.
 async function requestCompletionRaw(session, options = {}) {
+  if (options.quotaState) return requestCompletionRawInner(session, options);
+  const quotaState = { route: null };
+  const reply = await requestCompletionRawInner(session, { ...options, quotaState });
+  if (quotaState.route && reply && reply.usage) recordQuotaTokens(quotaState.route, reply.usage, { env: options.env || session.providerEnv || process.env });
+  return reply;
+}
+
+async function requestCompletionRawInner(session, options = {}) {
   const config = withResolvedModel(session.config, options.env || session.providerEnv || session.modelEnv || process.env, Boolean(session.permissions && session.permissions.mode === 'plan'), session.settings && session.settings.modelOverrides);
   const textOnly = Boolean(session.textOnlyModels && session.textOnlyModels.has(String(config.model || '')));
   const sentMessages = wireToolCallIds(textOnly && hasImages(session.messages) ? withoutImages(session.messages, config.model) : session.messages, { style: toolCallIdStyle(config) });
@@ -1523,6 +1534,10 @@ async function requestCompletionRaw(session, options = {}) {
   // OASIS_API_KEY_POOL / OASIS_API_KEY_POOL_FILE: rotate across keys on 429/401/402/403.
   const keyPool = !cloudAnthropic && !config.apiKeyHelper && !config.fallbackProvider && (providerEnv.OASIS_API_KEY_POOL || providerEnv.OASIS_API_KEY_POOL_FILE) ? sessionKeyPool(session, providerEnv, apiKey) : null;
   if (keyPool) apiKey = keyPool.current() || apiKey;
+  // A route the provider said is out of quota is skipped without a request
+  // (a guessed cooldown only when there is a fallback to move to).
+  let route = quotaRoute(config, apiKey);
+  if (!keyPool) assertRouteAvailable(route, { env: providerEnv, hasFallback: parseFallbackChain(session && session.fallbackModel).length > 0 });
   let fastRequest = null;
   session.lastRequestSpeed = '';
   if (nativeAnthropic) {
@@ -1734,15 +1749,21 @@ async function requestCompletionRaw(session, options = {}) {
         throw error;
       }
 
-      if (response.ok) break;
+      if (response.ok) {
+        recordQuotaSuccess(route, { headers: response.headers, env: providerEnv });
+        if (options.quotaState) options.quotaState.route = route;
+        break;
+      }
       const status = response.status;
       let errorBody = '';
       try { errorBody = await response.text(); } catch {}
+      recordQuotaFailure(route, { status, headers: response.headers, body: errorBody, env: providerEnv });
       if (keyPool && ROTATE_STATUSES.has(status) && keyRotations < keyPool.size - 1 && requestHeaders === headers) {
         const next = keyPool.fail(apiKey, status, rateLimitResetMs(response.headers));
         if (next) {
           keyRotations++;
           apiKey = next;
+          route = quotaRoute(config, apiKey);
           if (headers['x-api-key']) headers['x-api-key'] = next; else headers.authorization = 'Bearer ' + next;
           (session.hookMessages ||= []).push('[key-pool] provider returned ' + status + '; switched to the next API key (' + keyRotations + ' of ' + (keyPool.size - 1) + ' spare).');
           attempt--;
