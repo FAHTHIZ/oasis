@@ -320,12 +320,14 @@ export function mustPreserveContextBlock(items) {
   const records = sanitizeMustPreserve(items);
   if (!records.length) return '';
   return '\n\nMUST-PRESERVE USER RECORDS (retain explicitly and verbatim unless contradictory or unsafe):\n' +
-    records.map((item) => '[' + item.kind + '] ' + item.text).join('\n').slice(0, 8000);
+    records.map((item) => '[' + item.kind + '] ' + item.text).join('\n');
 }
 
-export function appendMustPreserveContext(summary, items, maxChars = 20000) {
-  const block = mustPreserveContextBlock(items);
-  if (!block) return String(summary || '').slice(0, maxChars);
-  const limit = Math.max(0, Number.isInteger(maxChars) ? maxChars : 20000);
-  return (String(summary || '').slice(0, Math.max(0, limit - block.length)) + block).slice(0, limit);
+// sanitizeMustPreserve already bounds the records (20 items, 8000 characters),
+// so neither the summary nor the records are cut here. Both used to be: a
+// summary past ~12,000 characters lost its tail (often the next steps) as
+// soon as any must-preserve record existed, and the block itself was cut at
+// 8,000 characters including labels, clipping the last record.
+export function appendMustPreserveContext(summary, items) {
+  return String(summary || '') + mustPreserveContextBlock(items);
 }
