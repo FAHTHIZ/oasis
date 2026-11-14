@@ -253,9 +253,9 @@ The following are measurement and integration gaps to address alongside the comp
 - **Memory quality:** measure the existing MiniSearch BM25+/Porter2 baseline on a held-out corpus; add stale/conflict, provenance, user-correction, deletion and prompt-token-cost metrics before considering hybrid semantic retrieval.
 - **Durable recovery:** process kill/restart during model calls, tool execution, checkpoint writes and background approval; verify idempotency and transcript integrity.
 - **Sandbox conformance:** automated filesystem/network/process/resource tests for every supported backend/OS.
-- **Tool/agent trace correlation:** one trace across model request, retries, tool call, subagent, verification and result, without collecting private prompt content by default.
+- **Tool/agent trace correlation:** one trace across model request, retries, tool call, subagent, verification and result, without collecting private prompt content by default. Status: turn, model request, tool and subagent spans share one trace, and retries and recoveries are `oasis.recovery` events on the span they happened in (`src/agent.mjs` `traceRecovery`).
 - **Extension supply chain:** immutable source revisions, permission manifests, install previews, least privilege, revocation and deterministic rollback.
-- **Release publication and version consistency:** the `v1.1.0` Git tag exists at `2da78dd50a708833f97be97f20fb8016c0ab4c1d`, but no GitHub Release is associated with it as checked on 2026-11-07. Keep package version, tag, release object, checksums, README links and updater behaviour aligned; publish only after same-commit quality, site and installer gates pass.
+- **Release publication and version consistency:** the `v1.1.0` Git tag exists at `2da78dd50a708833f97be97f20fb8016c0ab4c1d`, but no GitHub Release is associated with it as checked on 2026-11-07. As of 2026-11-14 `package.json` is 1.3.0 and v1.1.1, v1.2.0 and v1.3.0 each have a GitHub Release (v1.3.0 is Latest); `v1.1.0` is still a tag only. Keep package version, tag, release object, checksums, README links and updater behaviour aligned; publish only after same-commit quality, site and installer gates pass.
 - **External coding evaluations:** pinned public tasks and verifiers, with cost/latency/quality reported separately.
 
 ## Change policy
