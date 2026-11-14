@@ -4,6 +4,7 @@ User-facing change history grouped by package version. A version heading does no
 
 ## Unreleased
 
+- `oasis acp`, the Codex app server and the Telegram gateway log a failed session save (disk full, a session over the size cap) instead of dropping the error.
 - Browser app: a reply cut off by the output token limit never runs the tool call that was still being written. The model is told the call did not run and to split large writes, and continues a cut-off answer (up to three times per request).
 - `/compact preserve` refuses a record over 600 characters with the length and limit, instead of saving it cut off at 600.
 - Browser app: a reply stream that ends before the model finished (no `finish_reason`/`[DONE]`, or no Anthropic `message_stop`) is retried instead of being kept as the answer, which could run a half-written tool call. Anthropic authentication and invalid-request errors inside a stream are no longer retried.
