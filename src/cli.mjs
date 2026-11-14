@@ -3043,7 +3043,8 @@ async function main() {
     // Aider runs --test-cmd only with --auto-test; without --test-cmd, keep the configured command.
     if (SESSION_OPTIONS.aiderTestCmd && process.env.OASIS_AUTO_TEST !== 'off') process.env.OASIS_AUTO_TEST = SESSION_OPTIONS.aiderTestCmd;
   }
-  await access(workspace);
+  try { await access(workspace); }
+  catch { throw new Error('The workspace folder does not exist or is not accessible: ' + workspace + ' (check -C / --workspace).'); }
   await resolveFlagFiles(workspace);
   if (SESSION_OPTIONS.pluginUrls && SESSION_OPTIONS.pluginUrls.length) {
     const { fetchPluginArchive } = await import('./zip.mjs');
