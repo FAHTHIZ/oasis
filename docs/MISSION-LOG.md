@@ -3,6 +3,13 @@
 A short, dated record of changes, tests, benchmark results, blockers and known
 weaknesses. Newest first. Detailed user-facing notes go in the CHANGELOG.
 
+## 2026-11-14 (inference overhaul stage 2: persistent quota ledger)
+
+- New src/quota-ledger.mjs: one record per provider, key fingerprint (SHA-256, never the key) and model in `<config dir>/quota-ledger.json` (0600). Today's requests, tokens and failures; the limits the provider last reported in its headers, with a timestamp; cooldowns marked "provider" (stated reset: Retry-After, x-ratelimit/anthropic reset headers, OpenRouter's X-RateLimit-Reset in the error body) or "guess" (2 min, 10 min, 1 h ladder, quota signals only). Ideas from FreeLLMAPI's ratelimit.ts; no database.
+- requestCompletionRaw records each attempt and the reply's tokens, and skips a route on a provider-stated cooldown before sending (a guess only when a fallback exists). The fallback chain treats the skip as "rate", and the circuit breaker does not count it. Loopback servers never cool down.
+- `oasis quota [--json] [--reset [TEXT]]`; OASIS_QUOTA_LEDGER=off.
+- Tests: test/quota-ledger.test.mjs (7, including an end-to-end run where a second session skips the exhausted model without contacting it). 40 suites touching 429, 402, fallback and key pools pass (420). Full suite before stages 1 and 2: 3148 pass, 0 fail.
+
 ## 2026-11-14 (inference overhaul stage 1: zero-budget mode, request and token budgets)
 
 - Audit and plan: docs/INFERENCE-GATEWAY-PLAN.md. Every chat request already goes through one chain (requestCompletion, then requestCompletionRaw); fallback, breaker, key pool, retries and pricing are kept. Gaps: no zero-budget guarantee, no request or token budget, no persistent quota state.
