@@ -181,16 +181,24 @@ export async function loadConfig(options = {}) {
   let savedProtocol;
   try { savedProtocol = validateProtocol(saved.protocol || inferProtocol(savedBaseURL, DEFAULT_PROTOCOL)); }
   catch { savedProtocol = inferProtocol(savedBaseURL, DEFAULT_PROTOCOL); }
-  const requestedProtocol = env.OASIS_PROTOCOL || cloudProtocolFromEnv(env) || (env.OASIS_BASE_URL && stripTrailingSlashes(env.OASIS_BASE_URL) !== savedBaseURL ? inferProtocol(env.OASIS_BASE_URL, DEFAULT_PROTOCOL) : savedProtocol);
+  // OPENAI_BASE_URL / ANTHROPIC_BASE_URL (the vendor SDK and Claude Code convention) are used
+  // only when nothing OASIS-specific is set and nothing is saved, so a variable exported for
+  // another tool never overrides `oasis setup`. Without this, OPENAI_API_KEY went to api.openai.com.
+  const vendorBase = !env.OASIS_BASE_URL && !env.OASIS_PROTOCOL && !cloudProtocolFromEnv(env) && !savedBaseURL && !saved.protocol
+    ? (env.OPENAI_BASE_URL ? { name: 'OPENAI_BASE_URL', url: String(env.OPENAI_BASE_URL), protocol: inferProtocol(String(env.OPENAI_BASE_URL), DEFAULT_PROTOCOL) }
+      : env.ANTHROPIC_BASE_URL ? { name: 'ANTHROPIC_BASE_URL', url: String(env.ANTHROPIC_BASE_URL), protocol: 'anthropic' } : null)
+    : null;
+  const envBase = env.OASIS_BASE_URL ? { name: 'OASIS_BASE_URL', url: String(env.OASIS_BASE_URL) } : vendorBase;
+  const requestedProtocol = env.OASIS_PROTOCOL || cloudProtocolFromEnv(env) || vendorBase?.protocol || (env.OASIS_BASE_URL && stripTrailingSlashes(env.OASIS_BASE_URL) !== savedBaseURL ? inferProtocol(env.OASIS_BASE_URL, DEFAULT_PROTOCOL) : savedProtocol);
   const protocol = validateProtocol(requestedProtocol);
   const cloud = CLOUD_PROTOCOLS.includes(protocol);
   const defaultBase = cloud ? defaultCloudBaseURL(protocol, env) : (protocol === 'anthropic' ? DEFAULT_ANTHROPIC_BASE_URL : DEFAULT_BASE_URL);
-  const chosenBase = env.OASIS_BASE_URL || (savedProtocol === protocol ? savedBaseURL : '') || defaultBase;
+  const chosenBase = envBase?.url || (savedProtocol === protocol ? savedBaseURL : '') || defaultBase;
   if (!chosenBase && protocol === 'foundry') throw new Error('Microsoft Foundry needs a resource: set ANTHROPIC_FOUNDRY_RESOURCE to your Azure resource name, or ANTHROPIC_FOUNDRY_BASE_URL to https://RESOURCE.services.ai.azure.com/anthropic.');
   const baseURL = validateBaseUrl(chosenBase);
   const defaultModel = cloud ? defaultCloudModel(protocol, env) : protocol === 'anthropic' ? 'claude-sonnet-5' : (protocol === 'openai-responses' ? DEFAULT_MODEL : (savedProtocol === protocol ? saved.model : ''));
   const model = String(env.OASIS_MODEL || (savedProtocol === protocol ? saved.model : '') || defaultModel).trim();
-  if (!model) throw new Error(cloud ? 'No model is configured for ' + protocol + '. Set OASIS_MODEL (or ANTHROPIC_MODEL) to a ' + (protocol === 'bedrock' ? 'Bedrock model or inference profile ID, for example us.anthropic.claude-sonnet-5-5' : protocol === 'foundry' ? 'Foundry deployment name (or ANTHROPIC_DEFAULT_SONNET_MODEL), for example claude-sonnet-5-5' : 'Vertex model ID, for example claude-sonnet-5-5') + '.' : env.OASIS_BASE_URL ? 'No model is configured for OASIS_BASE_URL (' + stripTrailingSlashes(env.OASIS_BASE_URL) + '). Set OASIS_MODEL to a model that server lists, or run oasis connect ' + stripTrailingSlashes(env.OASIS_BASE_URL) + ' to pick one and save it.' : 'No model is configured. Run oasis setup.');
+  if (!model) throw new Error(cloud ? 'No model is configured for ' + protocol + '. Set OASIS_MODEL (or ANTHROPIC_MODEL) to a ' + (protocol === 'bedrock' ? 'Bedrock model or inference profile ID, for example us.anthropic.claude-sonnet-5-5' : protocol === 'foundry' ? 'Foundry deployment name (or ANTHROPIC_DEFAULT_SONNET_MODEL), for example claude-sonnet-5-5' : 'Vertex model ID, for example claude-sonnet-5-5') + '.' : envBase ? 'No model is configured for ' + envBase.name + ' (' + stripTrailingSlashes(envBase.url) + '). Set OASIS_MODEL to a model that server lists, or run oasis connect ' + stripTrailingSlashes(envBase.url) + ' to pick one and save it.' : 'No model is configured. Run oasis setup.');
 
   const sameSavedTarget = savedBaseURL === baseURL && savedProtocol === protocol;
   const localEndpoint = isLoopbackUrl(baseURL);
