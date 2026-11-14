@@ -141,6 +141,29 @@ requests a day), so no live gateway numbers are claimed here. `npm run
 check:quick` runs the benchmark with `--check`, which fails if a scenario stops
 meeting its expectation.
 
+## Troubleshooting
+
+- "Zero-budget mode refused <model>": the route is paid or its price is
+  unknown. Use a local server (Ollama 11434, LM Studio 1234, llama.cpp 8080,
+  vLLM 8000), an OpenRouter `:free` model, or declare one you know is free:
+  `OASIS_FREE_MODELS=provider/model`.
+- "Skipped <model> ... without sending a request": the quota ledger has the
+  route in cooldown. `oasis quota` shows why and until when; `oasis quota
+  --reset <model>` clears it if you added credit or the provider reset early.
+- "HTTP 429: Rate limit exceeded: free-models-per-day" from OpenRouter: the
+  50-requests-per-day free allowance is used up. It resets at the time in
+  `x-ratelimit-reset` (Oasis waits for it). OpenRouter raises the allowance
+  for accounts that bought credit; Oasis never buys it for you.
+- "HTTP 404: This model is unavailable for free": OpenRouter withdrew that
+  `:free` model. It suggests a paid slug; Oasis does not follow it. Pick a
+  current free model (`oasis models`) or configure a fallback.
+- Some gateways answer failures with HTTP 200 and an error body. Oasis treats
+  the status in the body as the real one, so fallback and quota tracking work
+  the same as for a normal HTTP error.
+- "Request budget exceeded" / "token budget exceeded": the run hit
+  `--max-requests` or `--max-total-tokens`. The conversation is kept;
+  `oasis --resume` continues it with a higher limit.
+
 ## Limitations
 
 - Zero-budget mode trusts its evidence: a loopback port, OpenRouter's `:free`
