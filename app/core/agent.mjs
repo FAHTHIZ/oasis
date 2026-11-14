@@ -350,7 +350,17 @@ export class Agent {
             }
           }
         }
-        calls = calls.map((call, index) => ({ id: call.id || 'call_' + step + '_' + index, type: 'function', function: { name: call.function.name, arguments: call.function.arguments }, ...(call.extra_content && typeof call.extra_content === 'object' ? { extra_content: call.extra_content } : {}) }));
+        // Results are matched by ID: an empty or repeated ID in one reply (some
+        // local servers and gateways send "call_0" for every call) gets a fresh
+        // one, or one result would answer two calls and Anthropic rejects it.
+        const seenIds = new Set();
+        const freshId = (call, index) => {
+          let id = typeof call.id === 'string' && call.id ? call.id : '';
+          if (!id || seenIds.has(id)) id = 'call_' + step + '_' + index + '_' + Math.random().toString(36).slice(2, 10);
+          seenIds.add(id);
+          return id;
+        };
+        calls = calls.map((call, index) => ({ id: freshId(call, index), type: 'function', function: { name: call.function.name, arguments: call.function.arguments }, ...(call.extra_content && typeof call.extra_content === 'object' ? { extra_content: call.extra_content } : {}) }));
         // An empty reply (no text, no tool call) is not an answer: ask again
         // (twice), then say so instead of ending the turn with nothing.
         if (!calls.length && !String(content || '').trim() && !reply.truncated) {
