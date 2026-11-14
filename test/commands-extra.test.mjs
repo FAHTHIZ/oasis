@@ -140,3 +140,20 @@ test('inline read-only commands run without an allowed-tools match, writes still
     await rm(root, { recursive: true, force: true });
   }
 });
+
+// Arguments were cut at 8,000 characters and fenced ```! blocks over 8,000
+// characters were left unrun, both without a word.
+test('long command arguments and long fenced scripts are kept whole', async (t) => {
+  const root = await tmp(t);
+  const home = await tmp(t);
+  await mkdir(path.join(root, '.oasis', 'commands'), { recursive: true });
+  await writeFile(path.join(root, '.oasis', 'commands', 'fix.md'), 'Fix this:\n$ARGUMENTS');
+  const script = '# ' + 'padding '.repeat(1500) + '\n' + node + ' -e "console.log(\'LONG SCRIPT RAN\')"';
+  await writeFile(path.join(root, '.oasis', 'commands', 'run.md'), 'Output:\n```!\n' + script + '\n```\nDone.');
+  const env = { ...process.env, HOME: home, OASIS_CONFIG_DIR: path.join(home, 'cfg') };
+  const pasted = 'trace line\n'.repeat(2000) + 'END OF TRACE';
+  const fix = await resolveCustomCommand(root, '/fix ' + pasted, { env, home, trusted: true });
+  assert.match(fix.prompt, /END OF TRACE$/);
+  const run = await resolveCustomCommand(root, '/run', { env, home, trusted: true });
+  assert.match(run.prompt, /LONG SCRIPT RAN/);
+});
