@@ -288,6 +288,9 @@ export class MarkdownStream {
   }
 
   push(text) {
+    // Reasoning models often open a reply with blank lines; dropping them
+    // keeps the first words next to the reply bullet instead of below it.
+    if (!this.started && text) text = text.replace(/^(?:[ \t]*\r?\n)+/, '');
     if (!text) return;
     this.begin();
     this.partial += text;
