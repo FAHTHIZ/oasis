@@ -70,7 +70,7 @@ import { loadAgentDefinitions, taskToolDefinition, BUILTIN_AGENTS, MAX_PARALLEL_
 import { createSharedTaskStore, SHARED_TASK_TOOL_NAMES } from './shared-tasks.mjs';
 import { unrequestedGitWrite } from './git-intent.mjs';
 import { recordTokenUsage } from './cost-policy.mjs';
-import { repairToolArguments, extractTextToolCalls, unknownTextToolCalls } from './tool-call-repair.mjs';
+import { repairToolArguments, extractTextToolCalls, unknownTextToolCalls, hideStreamingToolCalls } from './tool-call-repair.mjs';
 import { isLocalModelEndpoint, probeLocalContext, probeProviderModelWindow, applySmallContextProfile, localContextAdvice, SMALL_CONTEXT_TOKENS, RECOMMENDED_LOCAL_CONTEXT } from './local-context.mjs';
 import { ripgrepPathAddition } from './ripgrep.mjs';
 import { AUTO_LSP_EDIT_TOOLS, CYCLE_HALT_AT, CYCLE_WARN_AT, CYCLE_WINDOW_STEPS, FILE_EDITING_TOOL_NAMES, MAX_SESSION_TOOL_CALLS, PROTECTED_EDIT_TOOLS, RETRY_HALT_AT, RETRY_TRACKED_COMMANDS, RETRY_WARN_AT, THRASH_ESCALATE_AT, THRASH_WARN_AT, UNREADABLE_CALL_NUDGE, activeLspBaseline, asksForNewTests, failureSignature, isCompleteFileRead, isVerificationCommand, lspCallOptions, normalizeReviewPath, successfulMutation, verificationIssues, newModuleCandidate, markLoadedModules, markRanSources } from './turn-guards.mjs';
@@ -3198,6 +3198,7 @@ async function runAgentTurnRaw(session, prompt, options = {}) {
       }
     }
     let streamedText = '';
+    let streamToolNames = null;
     // What the model said while reasoning on this step: the provider's own
     // summary or reasoning stream, then any leading <think> block. Secrets are
     // redacted and the size capped before it is shown.
@@ -3243,7 +3244,8 @@ async function runAgentTurnRaw(session, prompt, options = {}) {
           if (streamedText.length >= MAX_STREAMED_REPLY_CHARS) return;
           streamedText = (streamedText + String(delta || '')).slice(0, MAX_STREAMED_REPLY_CHARS);
           if (reasoningHook && /^\s*</.test(streamedText)) showReasoning();
-          options.onDelta(visibleReply(streamedText));
+          if (!streamToolNames) streamToolNames = availableToolNames(session);
+          options.onDelta(hideStreamingToolCalls(visibleReply(streamedText), streamToolNames));
         } } : Number(session.subagentDepth) > 0 && (session.providerEnv || process.env).OASIS_SUBAGENT_STREAM !== '0' ? {
           // Subagents have no display, but streaming still arms the idle
           // watchdog: a silent provider fails after OASIS_STREAM_IDLE_SECONDS

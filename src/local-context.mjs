@@ -12,6 +12,7 @@
 // smaller tool set, and tell the user exactly how to raise the window.
 
 import { GATEWAY_PORTS } from './provider-registry.mjs';
+import { isLoopbackUrl } from './config.mjs';
 
 const PROBE_TIMEOUT_MS = 2000;
 
@@ -113,19 +114,55 @@ async function probeOllama(origin, model, fetchImpl) {
   const running = ps && Array.isArray(ps.models) ? ps.models.find((item) => sameModel(item.name, config.model) || sameModel(item.model, config.model)) : null;
   let nativeContext = 0;
   let modelfileContext = 0;
+  let kvBytesPerToken = 0;
   if (show) {
     for (const [key, value] of Object.entries(show.model_info || {})) {
       if (/\.context_length$/.test(key) && Number(value) > 0) nativeContext = Number(value);
     }
+    kvBytesPerToken = kvCacheBytesPerToken(show.model_info);
     const match = /(?:^|\n)\s*num_ctx\s+(\d+)/.exec(String(show.parameters || ''));
     if (match) modelfileContext = Number(match[1]);
   }
   if (running && Number(running.context_length) > 0) {
-    return { contextLength: Number(running.context_length), source: 'loaded', loaded: true, nativeContext };
+    return { contextLength: Number(running.context_length), source: 'loaded', loaded: true, nativeContext, ...(kvBytesPerToken ? { kvBytesPerToken } : {}) };
   }
-  if (modelfileContext) return { contextLength: modelfileContext, source: 'modelfile', loaded: Boolean(running), nativeContext };
+  if (modelfileContext) return { contextLength: modelfileContext, source: 'modelfile', loaded: Boolean(running), nativeContext, ...(kvBytesPerToken ? { kvBytesPerToken } : {}) };
   if (!ps && !show) return null;
-  return { contextLength: 0, source: 'unknown', loaded: Boolean(running), nativeContext };
+  return { contextLength: 0, source: 'unknown', loaded: Boolean(running), nativeContext, ...(kvBytesPerToken ? { kvBytesPerToken } : {}) };
+}
+
+// f16 K and V for every layer: layers x KV heads x (key + value width) x 2 bytes.
+// qwen3:0.6b: 28 x 8 x 256 x 2 = 114,688 bytes, so a 32K window is 3.8 GB
+// of cache for 0.5 GB of weights (Ollama reported 4.4 GB loaded). 0 = unknown.
+export function kvCacheBytesPerToken(info = {}) {
+  const get = (suffix) => { for (const [key, value] of Object.entries(info || {})) if (key.endsWith(suffix) && Number(value) > 0) return Number(value); return 0; };
+  const layers = get('.block_count');
+  const heads = get('.attention.head_count');
+  const kvHeads = get('.attention.head_count_kv') || heads;
+  const width = get('.embedding_length');
+  const keyLength = get('.attention.key_length') || (heads && width ? width / heads : 0);
+  const valueLength = get('.attention.value_length') || keyLength;
+  if (!layers || !kvHeads || !keyLength) return 0;
+  return Math.round(layers * kvHeads * (keyLength + valueLength) * 2);
+}
+
+// The widest window from 32K down to 16K whose cache plus weights fits the
+// model memory budget. Below 16K agent work is not useful, so 16K is the floor.
+export function fittingContext({ target, nativeContext, kvBytesPerToken, weightsBytes, budgetGB }) {
+  const ceiling = Math.min(target, nativeContext || target);
+  if (!(kvBytesPerToken > 0) || !(budgetGB > 0)) return ceiling;
+  const budget = budgetGB * 1024 ** 3 - (Number(weightsBytes) || 0);
+  for (const size of [ceiling, 24_576, SMALL_CONTEXT_TOKENS]) {
+    if (size <= ceiling && kvBytesPerToken * size <= budget) return size;
+  }
+  return Math.min(ceiling, SMALL_CONTEXT_TOKENS);
+}
+
+async function localModelBudgetGB() {
+  try {
+    const { detectHardware, modelMemoryBudget } = await import('./hardware.mjs');
+    return modelMemoryBudget(await detectHardware());
+  } catch { return 0; }
 }
 
 // Ollama's OpenAI-compatible API cannot set the window per request, and a
@@ -141,7 +178,7 @@ export function ollamaWideModelName(model) {
   return hasTag ? value + '-oasis' : value + ':latest-oasis';
 }
 
-export async function widenOllamaContext(config = {}, { fetchImpl = globalThis.fetch, target = RECOMMENDED_LOCAL_CONTEXT, onStatus = () => {} } = {}) {
+export async function widenOllamaContext(config = {}, { fetchImpl = globalThis.fetch, target = RECOMMENDED_LOCAL_CONTEXT, onStatus = () => {}, memoryBudgetGB } = {}) {
   if (typeof fetchImpl !== 'function' || !config.model || !isOllamaEndpoint(config, {})) return null;
   if (/-oasis$/i.test(String(config.model))) return null;
   let origin;
@@ -150,7 +187,17 @@ export async function widenOllamaContext(config = {}, { fetchImpl = globalThis.f
   if (!probe) return null;
   // Already wide enough: a Modelfile num_ctx or a server started with a large OLLAMA_CONTEXT_LENGTH.
   if (probe.contextLength >= target) return null;
-  const size = Math.min(target, probe.nativeContext || target);
+  // Size the window to this computer's memory only when Ollama runs on it.
+  let budgetGB = 0;
+  let weightsBytes = 0;
+  if (probe.kvBytesPerToken && isLoopbackUrl(config.baseURL)) {
+    budgetGB = memoryBudgetGB === undefined ? await localModelBudgetGB() : Number(memoryBudgetGB) || 0;
+    const tags = budgetGB ? await getJson(fetchImpl, origin + '/api/tags') : null;
+    const entry = tags && Array.isArray(tags.models) ? tags.models.find((item) => sameModel(item.name, config.model) || sameModel(item.model, config.model)) : null;
+    weightsBytes = entry ? Number(entry.size) || 0 : 0;
+  }
+  const ceiling = Math.min(target, probe.nativeContext || target);
+  const size = fittingContext({ target, nativeContext: probe.nativeContext, kvBytesPerToken: probe.kvBytesPerToken, weightsBytes, budgetGB });
   if (size < SMALL_CONTEXT_TOKENS || size <= probe.contextLength) return null;
   const wide = ollamaWideModelName(config.model);
   const controller = new AbortController();
@@ -168,7 +215,8 @@ export async function widenOllamaContext(config = {}, { fetchImpl = globalThis.f
   } catch { return null; } finally { clearTimeout(timer); }
   probeCache.clear();
   const before = probe.contextLength ? probe.contextLength.toLocaleString('en-US') + '-token' : 'small default';
-  onStatus({ step: 'context', text: 'Ollama loads ' + config.model + ' with a ' + before + ' window, too small for agent work. Created ' + wide + ': the same model and weights with a ' + size.toLocaleString('en-US') + '-token window.' });
+  onStatus({ step: 'context', text: 'Ollama loads ' + config.model + ' with a ' + before + ' window, too small for agent work. Created ' + wide + ': the same model and weights with a ' + size.toLocaleString('en-US') + '-token window' +
+    (size < ceiling ? ', sized to fit about ' + budgetGB + ' GB of model memory on this computer (' + ceiling.toLocaleString('en-US') + ' would not fit).' : '.') });
   return { model: wide, contextLength: size, from: config.model };
 }
 
@@ -179,7 +227,7 @@ export function localContextAdvice(model, contextLength, server = 'ollama') {
     ? 'Reload it with a larger context length (lms load ' + model + ' --context-length ' + want + ', or the Context Length slider in LM Studio).'
     : server === 'llama.cpp'
       ? 'Restart llama-server with --ctx-size ' + want + ' (with --parallel N, each slot gets ctx-size / N).'
-      : 'Run oasis connect http://localhost:11434 to let OASIS create a ' + want.toLocaleString('en-US') + '-token variant of the model (same weights, no download), or restart Ollama with OLLAMA_CONTEXT_LENGTH=' + want + '.';
+      : 'Run oasis connect http://localhost:11434 to let OASIS create a wider variant of the model (up to ' + want.toLocaleString('en-US') + ' tokens, sized to this computer\'s memory; same weights, no download), or restart Ollama with OLLAMA_CONTEXT_LENGTH=' + want + '.';
   const name = server === 'lmstudio' ? 'LM Studio' : server === 'llama.cpp' ? 'llama-server' : 'Ollama';
   return name + ' is serving ' + model + ' with a ' + size + '-token context window, which is too small for reliable agent work (' +
     want.toLocaleString('en-US') + '+ recommended). ' + fix + ' OASIS will compact early and send a smaller tool set until then.';
