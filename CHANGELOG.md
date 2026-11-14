@@ -4,6 +4,7 @@ User-facing change history grouped by package version. A version heading does no
 
 ## Unreleased
 
+- `read_file` results reach the model up to 100,000 characters (Claude Code's Read returns up to 25,000 tokens), bounded by a fifth of the context window; they were capped at 24,000 characters, about 600 lines, so a large file took four or five reads and as many model steps. On a small window the cut stays line-aware with where to continue, and a tool result too big for the window is now always shortened (one path skipped that check once the window allowed 24,000 characters).
 - Longer turns by default: up to 150 model requests per message in the terminal agent (was 60; `maxSteps` / `OASIS_MAX_STEPS` now go up to 1,000) and 100 in the browser app (was 40; settings allow up to 500). Real refactors stopped halfway at the old limits; the token and tool-call budgets still bound a runaway turn.
 - The per-turn token budget (`maxTokens`, default 2,000,000) no longer counts cache reads. Every step re-sends the whole conversation, so with prompt caching most input tokens are the same cached prefix read again; counting it stopped a long task in a large context after a dozen or so steps. The turn summary still reports every token.
 - The browser app has a stream watchdog like the terminal agent: a provider that stops sending, before the response or mid-stream, fails after 5 minutes of silence (`streamIdleSeconds` in the provider config) instead of spinning until Stop. A stall before any data is retried; one after text arrived is reported so the reply is not repeated.
