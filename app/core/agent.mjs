@@ -462,6 +462,11 @@ export class Agent {
           this.messages.push({ role: 'tool', tool_call_id: call.id, content: String(result) });
           this.onEvent({ type: 'tool_result', id: call.id, name, ok, content: String(result) });
           if (ok && (name === 'write_file' || name === 'delete_file')) system = null;
+          // After a change, the same check (rerunning the tests, grepping
+          // again) is the normal fix-and-verify loop, not a repeat. The guard
+          // counted calls across the whole turn and refused the third test run
+          // even when files had changed in between.
+          if (ok && (name === 'write_file' || name === 'edit_file' || name === 'delete_file')) recent.length = 0;
         }
         if (truncationNote) this.messages.push({ role: 'user', content: truncationNote });
         if (step === maxSteps - 1) {
