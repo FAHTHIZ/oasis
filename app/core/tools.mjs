@@ -55,6 +55,16 @@ function clip(text, limit = MAX_RESULT) {
   return value.length > limit ? value.slice(0, limit) + '\n… (' + (value.length - limit) + ' more characters cut; narrow the request)' : value;
 }
 
+// Program output keeps its head and its end: the error, the failing assertion
+// and the returned value come last, and a head-only cut dropped them.
+function clipEnds(text, limit = MAX_RESULT) {
+  const value = String(text ?? '');
+  if (value.length <= limit) return value;
+  const head = Math.floor(limit * 0.3);
+  const tail = limit - head;
+  return value.slice(0, head) + '\n… (' + (value.length - limit) + ' characters of output cut) …\n' + value.slice(-tail);
+}
+
 function unified(path, before, after) {
   return createTwoFilesPatch('a/' + path, 'b/' + path, String(before ?? ''), String(after ?? ''), '', '', { context: 3, headerOptions: FILE_HEADERS_ONLY }).trimEnd();
 }
@@ -155,7 +165,8 @@ export async function executeTool(name, args, ctx) {
     case 'run_javascript': {
       if (!ctx.sandbox) throw new Error('JavaScript sandbox is not available here.');
       const files = {};
-      for (const path of await ws.paths()) files[path] = (await ws.load()).get(path).content;
+      const loaded = await ws.load();
+      for (const path of await ws.paths()) files[path] = loaded.get(path).content;
       const timeout = Math.min(60000, Math.max(500, Number(args.timeout_ms) || 10000));
       const result = await ctx.sandbox.run(String(args.code || ''), { files, timeoutMs: timeout });
       const parts = [];
@@ -163,7 +174,7 @@ export async function executeTool(name, args, ctx) {
       if (result.error) parts.push('Error: ' + result.error);
       else if (result.value !== undefined) parts.push('Returned: ' + result.value);
       if (result.timedOut) parts.push('Stopped after ' + timeout + ' ms.');
-      return clip(parts.join('\n') || '(no output)');
+      return clipEnds(parts.join('\n') || '(no output)');
     }
     case 'fetch_url': {
       let url;
