@@ -153,3 +153,18 @@ test('Termux smoke script checks the runtime without making global or user-data 
   assert.ok(smoke.includes('quickjs-emscripten'));
   assert.ok(!/npm install --global|npm uninstall --global|SetEnvironmentVariable/.test(smoke));
 });
+
+test('shell installer declines cleanly when there is no controlling terminal', async () => {
+  const script = await readFile(new URL('../scripts/install.sh', import.meta.url), 'utf8');
+  const say = script.match(/^say\(\) \{.*\}$/m);
+  const ask = script.match(/^ask_yes_no\(\) \{[\s\S]*?^\}/m);
+  assert.ok(say && ask, 'say and ask_yes_no are defined');
+  const harness = say[0] + '\n' + ask[0] + '\nASSUME_YES=0\nif ask_yes_no "Install?"; then echo APPROVED; else echo DECLINED; fi\n';
+  // setsid detaches from any terminal, like curl | sh under CI or cron.
+  const result = spawnSync('setsid', ['-w', 'sh', '-c', harness], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
+  if (result.error && result.error.code === 'ENOENT') return; // setsid is Linux-only
+  const output = result.stdout + result.stderr;
+  assert.match(output, /I cannot ask for permission here/);
+  assert.match(output, /DECLINED/);
+  assert.doesNotMatch(output, /cannot open|No such device/);
+});
