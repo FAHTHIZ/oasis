@@ -20,6 +20,7 @@ import { mkdtemp, mkdir, readFile, readdir, rm, stat, writeFile } from 'node:fs/
 import os from 'node:os';
 import path from 'node:path';
 import { getConfigDirectory } from './config.mjs';
+import { atomicWriteFile } from './atomic-write.mjs';
 
 const GIT_HOSTS = /^(github\.com|gitlab\.com|bitbucket\.org|codeberg\.org|git\.sr\.ht|huggingface\.co)$/i;
 const NAME = /^[a-z0-9][a-z0-9._-]{0,63}$/;
@@ -623,10 +624,16 @@ async function writeStdioServer(name, entry, { root, env, scope }) {
   const check = parseMcpServerEntries({ mcpServers: { [name]: entry } }, { ...env, ...placeholders }, scope);
   if (check.failures && check.failures.length) throw new Error('MCP server "' + name + '" is not usable: ' + check.failures[0].error);
   const file = scope === 'project' ? path.join(root, '.mcp.json') : path.join(getConfigDirectory(env), 'mcp.json');
-  const parsed = (await readJsonFile(file)) || {};
+  // Read strictly: falling back to {} here replaced a .mcp.json that had a
+  // syntax error with a file holding only the new server.
+  let parsed = {};
+  try { parsed = JSON.parse(await readFile(file, 'utf8')); } catch (error) {
+    if (error.code !== 'ENOENT') throw new Error('Could not read ' + file + ': ' + error.message);
+  }
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) throw new Error(file + ' does not contain a JSON object.');
   const servers = parsed.mcpServers && typeof parsed.mcpServers === 'object' && !Array.isArray(parsed.mcpServers) ? parsed.mcpServers : {};
   await mkdir(path.dirname(file), { recursive: true, ...(scope === 'user' ? { mode: 0o700 } : {}) });
-  await writeFile(file, JSON.stringify({ ...parsed, mcpServers: { ...servers, [name]: entry } }, null, 2) + '\n', scope === 'user' ? { mode: 0o600 } : {});
+  await atomicWriteFile(file, JSON.stringify({ ...parsed, mcpServers: { ...servers, [name]: entry } }, null, 2) + '\n', scope === 'user' ? { mode: 0o600 } : {});
   return { installed: [name], message: 'Added MCP server "' + name + '" (' + [entry.command, ...entry.args].join(' ') + ') in ' + file + '. It starts with your next session.' };
 }
 
@@ -701,7 +708,7 @@ async function configureInstalled(name, values, { env, root }) {
       if (Object.keys(headers).length) entry.headers = headers;
     }
     const user = found.file === mcpFiles(root, env)[0];
-    await writeFile(found.file, JSON.stringify({ ...found.doc, mcpServers: { ...found.doc.mcpServers, [found.name]: entry } }, null, 2) + '\n', user ? { mode: 0o600 } : {});
+    await atomicWriteFile(found.file, JSON.stringify({ ...found.doc, mcpServers: { ...found.doc.mcpServers, [found.name]: entry } }, null, 2) + '\n', user ? { mode: 0o600 } : {});
     return { type: 'mcp', name: found.name, keys, file: found.file };
   }
   const { setPluginOption } = await import('./claude-plugins.mjs');

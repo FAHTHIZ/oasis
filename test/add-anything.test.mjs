@@ -289,3 +289,15 @@ test('"Add to Cursor" and "Install in VS Code" links install the server they des
   assert.equal(redirect.kind, 'remote-mcp'); assert.equal(redirect.name, 'github'); assert.equal(redirect.transport, 'http');
   assert.throws(() => c('cursor://anysphere.cursor-deeplink/mcp/install?name=x&config=%%%'), /no readable MCP server config/);
 });
+
+// A broken mcp.json used to be read as {} and replaced by a file holding only
+// the new server.
+test('adding an MCP server never replaces an mcp.json that does not parse', async (t) => {
+  const base = await mkdtemp(path.join(os.tmpdir(), 'oasis-add-broken-'));
+  t.after(() => rm(base, { recursive: true, force: true }));
+  const env = { ...process.env, OASIS_CONFIG_DIR: path.join(base, 'cfg') };
+  const broken = '{ "mcpServers": { "keep": { "command": "x" } }, }';
+  await write(path.join(base, 'cfg', 'mcp.json'), broken);
+  await assert.rejects(addAnything('claude mcp add docs -- npx docs-mcp', { root: base, env, approve: async () => true }), /Could not read .*mcp\.json/);
+  assert.equal(await readFile(path.join(base, 'cfg', 'mcp.json'), 'utf8'), broken);
+});
