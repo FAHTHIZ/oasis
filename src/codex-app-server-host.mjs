@@ -304,8 +304,7 @@ export function createAppServerHost(options = {}) {
           record.pty = term;
           record.kill = () => { try { term.kill(); } catch {} };
           term.onData((data) => stdout.push(data));
-          if (child.stdin) child.stdin.on('error', () => {});
-        for (const chunk of record.pendingInput.splice(0)) if (chunk.data) term.write(chunk.data.toString('utf8'));
+          for (const chunk of record.pendingInput.splice(0)) if (chunk.data) term.write(chunk.data.toString('utf8'));
           if (record.cancelled) record.kill();
           term.onExit(({ exitCode }) => finish(typeof exitCode === 'number' ? exitCode : 1));
         }).catch((error) => {
@@ -319,6 +318,8 @@ export function createAppServerHost(options = {}) {
         } catch (error) { fail(error); return; }
         record.child = child;
         record.kill = () => { try { signalProcessTree(child, 'SIGKILL'); } catch {} };
+        // A command that exits without reading its stdin must not crash the server with EPIPE.
+        if (child.stdin) child.stdin.on('error', () => {});
         for (const chunk of record.pendingInput.splice(0)) { if (chunk.data && chunk.data.length) child.stdin.write(chunk.data); if (chunk.close) child.stdin.end(); }
         if (record.cancelled) record.kill();
         child.stdout.on('data', (data) => stdout.push(data));
