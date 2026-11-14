@@ -4,6 +4,7 @@ User-facing change history grouped by package version. A version heading does no
 
 ## Unreleased
 
+- `oasis import` no longer replaces an mcp.json or .mcp.json that has a syntax error. The destination is now read strictly before the first write, so the import stops with an error naming the file and nothing is changed.
 - Adding an MCP server with /add or `oasis add` no longer replaces an mcp.json or .mcp.json that has a syntax error. The file used to be read as empty and rewritten with only the new server; OASIS now stops with an error, as `oasis mcp add` already did. Those writes are now atomic.
 - Enabling, disabling and configuring plugins now write settings.json through the same serialized writer as the rest of OASIS, so a plugin change and another settings change made at the same moment no longer lose one of them. An empty settings file is read as no settings instead of an error.
 - Plugin commands no longer replace a settings or plugin file they cannot parse. Enabling, disabling or configuring a plugin when settings.json had a syntax error used to write a fresh file holding only the plugin entry, losing permissions, hooks and env. OASIS now stops with an error naming the file. Plugin JSON files of up to 16 MiB are read (was 1 MiB, silently ignored past that).
