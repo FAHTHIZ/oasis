@@ -464,7 +464,7 @@ async function opencodeJsonCommands(file) {
   const table = data && typeof data === 'object' ? (data.commands && typeof data.commands === 'object' ? data.commands : data.command) : null;
   if (!table || typeof table !== 'object' || Array.isArray(table)) return [];
   const out = [];
-  for (const [rawName, entry] of Object.entries(table).slice(0, 200)) {
+  for (const [rawName, entry] of Object.entries(table)) {
     const name = String(rawName).toLowerCase().replace(/\//g, ':');
     if (!/^[a-z0-9][a-z0-9:_-]{0,100}$/.test(name) || !entry || typeof entry !== 'object' || typeof entry.template !== 'string' || !entry.template.trim() || entry.template.includes('\0')) continue;
     out.push(opencodeCommand(name, entry, entry.template));
@@ -717,8 +717,10 @@ export async function expandFileMentions(root, text, options = {}) {
     if (await agentIgnoreMatch(absolute, { env: options.env, isDir: info.isDirectory() }) || (real !== absolute && await agentIgnoreMatch(real, { env: options.env, isDir: info.isDirectory() }))) continue;
     if (info.isDirectory()) {
       let names = [];
-      try { names = (await readdir(real)).filter((name) => !name.startsWith('.')).sort().slice(0, 200); } catch {}
-      attachments.push('<directory path="' + relative + '">\n' + names.join('\n') + '\n</directory>');
+      try { names = (await readdir(real)).filter((name) => !name.startsWith('.')).sort(); } catch {}
+      // Large folders list their first 500 entries and say how many more there are.
+      const shown = names.length > 500 ? [...names.slice(0, 500), '[' + (names.length - 500) + ' more entries; use list_files to see them]'] : names;
+      attachments.push('<directory path="' + relative + '">\n' + shown.join('\n') + '\n</directory>');
       files.push(relative);
       continue;
     }
