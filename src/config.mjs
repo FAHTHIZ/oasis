@@ -197,7 +197,8 @@ export async function loadConfig(options = {}) {
   if (!chosenBase && protocol === 'foundry') throw new Error('Microsoft Foundry needs a resource: set ANTHROPIC_FOUNDRY_RESOURCE to your Azure resource name, or ANTHROPIC_FOUNDRY_BASE_URL to https://RESOURCE.services.ai.azure.com/anthropic.');
   const baseURL = validateBaseUrl(chosenBase);
   const defaultModel = cloud ? defaultCloudModel(protocol, env) : protocol === 'anthropic' ? 'claude-sonnet-5' : (protocol === 'openai-responses' ? DEFAULT_MODEL : (savedProtocol === protocol ? saved.model : ''));
-  const model = String(env.OASIS_MODEL || (savedProtocol === protocol ? saved.model : '') || defaultModel).trim();
+  // options.model is a command-line --model; it beats OASIS_MODEL and satisfies the missing-model check.
+  const model = String(options.model || env.OASIS_MODEL || (savedProtocol === protocol ? saved.model : '') || defaultModel).trim();
   if (!model) throw new Error(cloud ? 'No model is configured for ' + protocol + '. Set OASIS_MODEL (or ANTHROPIC_MODEL) to a ' + (protocol === 'bedrock' ? 'Bedrock model or inference profile ID, for example us.anthropic.claude-sonnet-5-5' : protocol === 'foundry' ? 'Foundry deployment name (or ANTHROPIC_DEFAULT_SONNET_MODEL), for example claude-sonnet-5-5' : 'Vertex model ID, for example claude-sonnet-5-5') + '.' : envBase ? 'No model is configured for ' + envBase.name + ' (' + stripTrailingSlashes(envBase.url) + '). Set OASIS_MODEL to a model that server lists, or run oasis connect ' + stripTrailingSlashes(envBase.url) + ' to pick one and save it.' : 'No model is configured. Run oasis setup.');
 
   const sameSavedTarget = savedBaseURL === baseURL && savedProtocol === protocol;
