@@ -368,6 +368,7 @@ idle session.
 
 | Variable | Effect |
 | --- | --- |
+| `MCP_TOOL_TIMEOUT` / `OASIS_MCP_TOOL_TIMEOUT_MS` | How long one MCP tool call may run, in milliseconds (default `120000`, up to a day). |
 | `OASIS_MCP_TASK_BACKGROUND_MS` | Grace period before a task moves to the background (default `5000`). |
 | `OASIS_MCP_TASK_BACKGROUND=0` | Always wait for the task. `CLAUDE_CODE_DISABLE_MCP_TASK_BACKGROUND=1` does the same. |
 

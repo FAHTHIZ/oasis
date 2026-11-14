@@ -83,7 +83,7 @@ import { classifierTimeoutSeconds, classifyAction, newAutoModeState } from './au
 import { runHooks, hasHooks, CLAUDE_TOOL_NAMES, capHookText } from './hooks.mjs';
 import { resolveSandbox } from './sandbox.mjs';
 import { webSearchEnabled, webSearchToolDefinition } from './web-search.mjs';
-import { loadProjectMcpServers } from './mcp-project.mjs';
+import { loadProjectMcpServers, mcpToolTimeoutMs } from './mcp-project.mjs';
 import { access, mkdir, readdir, readFile, realpath, writeFile } from 'node:fs/promises';
 
 async function pathExists(file) { try { await access(file); return true; } catch { return false; } }
@@ -3841,12 +3841,12 @@ async function executeMappedMcpToolWithKernel(session, name, args, context, opti
     // The existing permission gate and MCP trust/consent checks remain authoritative.
     requiresApproval: false,
     // Human approval can take longer than a network request; the client applies
-    // its own 120-second request timeout after approval has been granted.
-    timeoutMs: 600000,
+    // its own request timeout (mcpToolTimeoutMs) after approval has been granted.
+    timeoutMs: mcpToolTimeoutMs(options.env || process.env) + 600000,
     run: async (validatedInput, runtime) => {
       const mcpOptions = Object.create(runtime.authorizationContext && typeof runtime.authorizationContext === 'object' ? runtime.authorizationContext : null);
       mcpOptions.signal = runtime.signal;
-      mcpOptions.timeoutMs = 120000;
+      mcpOptions.timeoutMs = mcpToolTimeoutMs(runtime.env || options.env || process.env);
       mcpOptions.env = runtime.env;
       // Only sessions that can wake when the result lands (interactive CLI,
       // streaming headless) background a task; one-shot runs keep waiting.
