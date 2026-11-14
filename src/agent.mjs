@@ -35,7 +35,7 @@ import { keywordRulesFor, nestedMemoryFor } from './memory.mjs';
 import { resolveModelAlias, isModelAlias, modelAllowed, modelDenied, modelRestrictionMessage, applyModelOverride, fastModeRequest } from './model-aliases.mjs';
 import { selectTaskModel } from './model-routing.mjs';
 import { readProviderStream, mergeAnthropicUsage, toolCallSlot, strayStreamError } from './provider-stream.mjs';
-import { planToolBatches } from './tool-batch-scheduler.mjs';
+import { maxParallelReadsFrom, planToolBatches } from './tool-batch-scheduler.mjs';
 import { validateToolArguments } from './tool-schema-validation.mjs';
 import { redactAuditValue, runTool } from './tool-kernel.mjs';
 import { openAIEndpoint, responsesEndpoint, anthropicEndpoint, toResponsesRequest, toAnthropicRequest, chatCompletionTool } from './provider-requests.mjs';
@@ -4805,7 +4805,8 @@ async function runAgentTurnRaw(session, prompt, options = {}) {
       isReadOnly,
       isSpecialistReview,
       isTask,
-      maxParallelTasks: MAX_PARALLEL_SUBAGENTS
+      maxParallelTasks: MAX_PARALLEL_SUBAGENTS,
+      maxParallelReads: maxParallelReadsFrom(options.env || process.env)
     });
     // A mid-turn save taken while the batch runs keeps finished results.
     session.pendingToolOutputs = outputs;
