@@ -375,7 +375,9 @@ export class RuntimeAgent {
       ].join('\n');
     }
     if (names.length) message += '\n\n(Use the ' + names.join(', ') + ' plugin' + (names.length > 1 ? 's' : '') + (skills.length ? ': skills ' + skills.join(', ') : '') + '.)';
-    if (message.length > 12000) message = message.slice(0, 12000);
+    // The runtime takes up to 200,000 characters (MAX_CHAT_MESSAGE_CHARS);
+    // this was 12,000, which silently cut a pasted log.
+    if (message.length > 200000) message = message.slice(0, 200000);
     try {
       this.emit('thinking');
       const started = await this.client.api('/api/chat', {
