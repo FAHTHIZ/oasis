@@ -272,3 +272,11 @@ test('Claude Code auto memory for the repository is imported, including from a w
   assert.doesNotMatch(await loadMemory(root, { env: { ...e, OASIS_IMPORT_CLAUDE_MEMORY: '0' }, home }), /Never mock the database/);
   assert.equal(claudeProjectDirName('/home/me/my.repo'), '-home-me-my-repo');
 });
+
+test('an @folder mention with many entries says how many were not listed', async () => {
+  const { root } = await workspace();
+  await mkdir(path.join(root, 'many'));
+  for (let i = 0; i < 520; i++) await writeFile(path.join(root, 'many', 'f' + String(i).padStart(3, '0') + '.txt'), '');
+  const dir = await expandFileMentions(root, 'look at @many');
+  assert.match(dir.text, /f499\.txt\n\[20 more entries; use list_files to see them\]\n<\/directory>/);
+});

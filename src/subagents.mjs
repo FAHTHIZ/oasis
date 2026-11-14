@@ -342,7 +342,7 @@ async function loadLegacyModes(root, env) {
     let parsed;
     try { parsed = (await import('yaml')).parse(text, { schema: 'core', maxAliasCount: 50 }); } catch { continue; }
     const modes = parsed && Array.isArray(parsed.customModes) ? parsed.customModes : [];
-    for (const mode of modes.slice(0, 50)) {
+    for (const mode of modes) {
       if (!mode || typeof mode !== 'object' || !/^[a-zA-Z0-9-]{1,64}$/.test(String(mode.slug || ''))) continue;
       const slug = String(mode.slug);
       const name = slug.toLowerCase();
@@ -437,7 +437,7 @@ async function loadJsonConfigAgents(root, env = process.env) {
     if (!data || typeof data !== 'object') continue;
     const tables = [data.agent, data.agents].filter((table) => table && typeof table === 'object' && !Array.isArray(table));
     for (const table of tables) {
-      for (const [rawName, entry] of Object.entries(table).slice(0, 200)) {
+      for (const [rawName, entry] of Object.entries(table)) {
         const name = String(rawName).trim().toLowerCase();
         if (!/^[a-z0-9][a-z0-9_-]{0,63}$/.test(name) || !entry || typeof entry !== 'object' || Array.isArray(entry)) continue;
         let body = typeof entry.prompt === 'string' ? entry.prompt : typeof entry.system === 'string' ? entry.system : '';
