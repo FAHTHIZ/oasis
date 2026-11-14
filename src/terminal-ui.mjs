@@ -565,7 +565,27 @@ export function describeToolResult(name, result, { color = true } = {}) {
 }
 
 // Returns a colored diff summary for a successful edit, or '' when not applicable.
-export function describeEdit({ name, args = {}, result = {} }, { color = true } = {}) {
+// The edited lines in full, with up to two lines of context and their line
+// numbers, located through the new text in the file after the edit. Null when
+// the new text is not found exactly once (the plain fragment diff is shown).
+const EDIT_CONTEXT_LINES = 2;
+export function editHunk(fileText, before, after) {
+  const text = String(fileText ?? '');
+  if (!after || !text) return null;
+  const at = text.indexOf(after);
+  if (at < 0 || text.indexOf(after, at + 1) !== -1) return null;
+  let start = text.lastIndexOf('\n', at - 1) + 1;
+  let end = text.indexOf('\n', at + after.length);
+  if (end < 0) end = text.length;
+  for (let k = 0; k < EDIT_CONTEXT_LINES && start > 0; k += 1) start = text.lastIndexOf('\n', start - 2) + 1;
+  for (let k = 0; k < EDIT_CONTEXT_LINES && end + 1 < text.length; k += 1) { const next = text.indexOf('\n', end + 1); end = next < 0 ? text.length : next; }
+  const prefix = text.slice(start, at);
+  const suffix = text.slice(at + after.length, end);
+  const startLine = text.slice(0, start).split('\n').length;
+  return { before: prefix + before + suffix, after: prefix + after + suffix, startLine };
+}
+
+export function describeEdit({ name, args = {}, result = {} }, { color = true, fileText = null } = {}) {
   if (!result || result.error) return '';
   const pairs = name === 'edit_file' ? [[args.old_string, args.new_string]]
     : name === 'multi_edit' && Array.isArray(args.edits) ? args.edits.map((edit) => [edit.old_string, edit.new_string])
@@ -580,7 +600,8 @@ export function describeEdit({ name, args = {}, result = {} }, { color = true } 
   const bodies = [];
   for (const [before, after] of pairs) {
     if (typeof before !== 'string' || typeof after !== 'string') continue;
-    const diff = renderDiff(before, after, { color, maxLines: 24 });
+    const hunk = fileText !== null && !(name === 'edit_file' && args.replace_all === true) ? editHunk(fileText, before, after) : null;
+    const diff = hunk ? renderDiff(hunk.before, hunk.after, { color, maxLines: 24, startLine: hunk.startLine }) : renderDiff(before, after, { color, maxLines: 24 });
     added += diff.added;
     removed += diff.removed;
     bodies.push(diff.text);

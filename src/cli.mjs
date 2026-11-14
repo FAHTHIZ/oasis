@@ -37,7 +37,7 @@ import { BUILTIN_COMMANDS, COMMAND_ALIASES, runBuiltinCommand, subagentRows, cre
 import { appendMemoryNote } from './memory.mjs';
 import { runHeadless, OUTPUT_FORMATS, headlessSetupErrorOutput } from './headless.mjs';
 import { randomUUID } from 'node:crypto';
-import { fstatSync, readFileSync, realpathSync, rmSync } from 'node:fs';
+import { fstatSync, readFileSync, realpathSync, rmSync, statSync } from 'node:fs';
 import { runDiagnostics, formatDiagnostics, CHECKERS } from './diagnostics.mjs';
 import { readInput, KeyDecoder } from './line-editor.mjs';
 import { loadHistory, appendHistory } from './input-history.mjs';
@@ -1342,7 +1342,12 @@ async function runPrompt(prompt, root, autoApprove, session = null, persistence 
         if (richOutput() && call && ['edit_file', 'multi_edit', 'write_file'].includes(name)) {
           let args = {};
           try { args = JSON.parse(call.function && call.function.arguments || '{}'); } catch {}
-          const shown = describeEdit({ name, args, result }, { color: true });
+          // The file after the edit, so the diff shows whole lines with numbers.
+          let fileText = null;
+          if (name !== 'write_file' && result && !result.error) {
+            try { const file = path.resolve(root, String(result.path || args.path || '')); if (statSync(file).size <= 2 * 1024 * 1024) fileText = readFileSync(file, 'utf8'); } catch { fileText = null; }
+          }
+          const shown = describeEdit({ name, args, result }, { color: true, fileText });
           if (shown) stdout.write(shown + '\n');
         }
         let summary = richOutput() && !verboseEnabled(session) ? describeToolResult(name, result, { color: true }) : '';

@@ -537,6 +537,30 @@ export function markRanSources(state, command, args, exitCode) {
   } else if (/^\.{0,2}\//.test(String(command || ''))) script = String(command);
   const file = normalizeReviewPath(script || '');
   if (file && state.changedPaths.has(file)) (state.ranPaths ||= new Set()).add(file);
+  // Inline code that imports or opens a changed file and exits 0
+  // (node -e "import('./math.mjs').then(...)", python -c "import parser")
+  // exercised it as much as `node math.mjs` would.
+  const evalAt = SCRIPT_RUNNERS.has(executable) ? argv.findIndex((item) => INLINE_EVAL_FLAGS.has(item)) : -1;
+  const code = evalAt >= 0 ? String(argv[evalAt + 1] || '') : '';
+  if (!code) return;
+  for (const changed of state.changedPaths) {
+    if (!SOURCE_EXTENSIONS.has(path.extname(changed).toLowerCase())) continue;
+    if (inlineCodeLoads(code, changed, executable)) (state.ranPaths ||= new Set()).add(changed);
+  }
+}
+
+const INLINE_EVAL_FLAGS = new Set(['-e', '--eval', '-p', '--print', '-c']);
+function inlineCodeLoads(code, file, executable) {
+  const escaped = file.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  // A quoted path ('./math.mjs', "src/math.mjs") names the file itself.
+  if (new RegExp('[\'"`](?:\\./)?' + escaped + '[\'"`]').test(code)) return true;
+  if (/^python/.test(executable) || executable === 'py') {
+    // python -c "import parser" / "from pkg.parser import x" for pkg/parser.py.
+    if (!/\.py$/i.test(file)) return false;
+    const dotted = file.replace(/\.py$/i, '').replace(/\//g, '.').replace(/\.__init__$/, '').replace(/[.]/g, '\\.');
+    return new RegExp('(?:^|[\\s;])(?:import|from)\\s+' + dotted + '(?:[\\s;,.]|$)').test(code);
+  }
+  return false;
 }
 
 function changedSourcesAllRan(state) {
@@ -581,7 +605,9 @@ export function unreviewedPaths(state) {
   if (state.diffReviewedAll) return [];
   const created = state.createdPaths instanceof Set ? state.createdPaths : new Set();
   const overwritten = state.overwrittenPaths instanceof Set ? state.overwrittenPaths : null;
-  const checked = state.lastVerificationExitCode === 0;
+  // Running every changed source cleanly (node math.mjs, or inline code that
+  // imports it) counts like a passing check here.
+  const checked = state.lastVerificationExitCode === 0 || changedSourcesAllRan(state);
   return [...state.changedPaths].filter((item) => !(state.diffReviewedPaths.has(item) || created.has(item) || (checked && overwritten && !overwritten.has(item))));
 }
 

@@ -4,6 +4,10 @@ User-facing change history grouped by package version. A version heading does no
 
 ## Unreleased
 
+- Edit view: an `edit_file`/`multi_edit` result now shows the changed lines in full, with file line numbers and two lines of context (read from the file after the edit; display only, no extra model tokens). Before, only the replaced fragment was shown (`- a - b` / `+ a + b`).
+- Completion gate: inline code that imports or opens a changed file and exits 0 (`node -e "import('./math.mjs')…"`, `python -c "from pkg.parser import …"`) now counts as running it, like `node math.mjs`. Running every changed source cleanly also clears the diff-review step for targeted edits (overwrites still need a diff). Previously this forced an extra round trip in which the model repeated its answer.
+- Word wrap: continuation rows after the second no longer start with the space from the break.
+
 - Usage accounting: a request stopped with Esc or Ctrl+C after the provider began answering now counts toward `/cost`, the session token totals and `--max-budget-usd` (estimated from the prompt and the shown output, and marked as estimated). Previously two interrupted turns showed "0 tokens across 0 model requests". A request stopped before any response is not counted. Tests in `test/cancel-history.test.mjs`.
 
 - `/cost` before the first message now prices the saved provider (a local server shows "$0.00 (local model)") instead of "Cost: unknown for this model". On a terminal, slash command output word-wraps instead of breaking mid-word at the edge. Tests in `test/cost-before-session.test.mjs`.
