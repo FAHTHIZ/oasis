@@ -10,7 +10,13 @@ export function mergeExtraContent(current, next) {
   return merged;
 }
 
-const MAX_PROVIDER_STREAM_BYTES = 8 * 1024 * 1024;
+// Every token delta arrives wrapped in 100-250 bytes of SSE and JSON
+// envelope, so a long reply (64k+ output tokens, or a long reasoning trace)
+// legitimately runs to tens of MiB on the wire. The total cap only stops a
+// runaway stream; the per-event cap bounds what the parser has to buffer for
+// one event, which is the real memory risk.
+const MAX_PROVIDER_STREAM_BYTES = 512 * 1024 * 1024;
+const MAX_PROVIDER_EVENT_BYTES = 32 * 1024 * 1024;
 
 // SSE framing (CR/LF/CRLF, multi-line data, comments, id/retry) comes from
 // eventsource-parser; lines that are not SSE fields go to onStray.
@@ -21,8 +27,11 @@ export async function consumeServerSentEvents(response, onEvent, onStray) {
   const reader = response.body.getReader();
   const decoder = new TextDecoder();
   let receivedBytes = 0;
+  // Bytes fed since the last complete event (an upper bound on what the
+  // parser holds for the event in progress).
+  let pendingBytes = 0;
   const parser = createSseParser({
-    onEvent: (message) => onEvent({ event: message.event || 'message', data: message.data }),
+    onEvent: (message) => { pendingBytes = 0; onEvent({ event: message.event || 'message', data: message.data }); },
     onError: (error) => { if (error.type === 'unknown-field' && error.line && typeof onStray === 'function') onStray(error.line); }
   });
   try {
@@ -30,9 +39,14 @@ export async function consumeServerSentEvents(response, onEvent, onStray) {
       const chunk = await reader.read();
       if (chunk.done) break;
       receivedBytes += chunk.value.byteLength;
+      pendingBytes += chunk.value.byteLength;
       if (receivedBytes > MAX_PROVIDER_STREAM_BYTES) {
         await reader.cancel().catch(() => {});
-        throw new Error('The model provider stream exceeded Oasis’s 8 MiB response limit.');
+        throw new Error('The model provider stream exceeded Oasis’s 512 MiB response limit.');
+      }
+      if (pendingBytes > MAX_PROVIDER_EVENT_BYTES) {
+        await reader.cancel().catch(() => {});
+        throw new Error('The model provider sent a single stream event larger than 32 MiB.');
       }
       parser.feed(decoder.decode(chunk.value, { stream: true }));
     }
