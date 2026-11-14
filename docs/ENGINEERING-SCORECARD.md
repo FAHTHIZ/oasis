@@ -1,7 +1,7 @@
 # OASIS engineering scorecard
 
-**Review snapshot:** 2026-11-07  
-**Baseline commit:** 5ebb6d97826d01fb04c831c5e2eea123ceb12312 (pre-cleanup snapshot)  
+**Review snapshot:** 2026-11-14 (first snapshot 2026-11-07, baseline 5ebb6d97)  
+**Baseline commit:** e783eecb  
 **Scope:** repository and release-readiness evidence; not a security certification or a competitor ranking.
 
 This scorecard keeps product presentation, engineering discipline and measured runtime quality separate. Each rating describes the strength of available evidence at the snapshot; it is not a percentage and does not imply the software is finished.
@@ -23,9 +23,9 @@ This scorecard keeps product presentation, engineering discipline and measured r
 | Runtime architecture | Partial | Architecture map, provider request/stream adapters, tool-schema validation and ordered tool-batch scheduling are independently testable | Continue staged decomposition with characterization tests for retries, cancellation, metadata and recovery |
 | Security boundaries | Established / Partial | Security policy, permission checks, protected paths and platform regression tests | Keep active-sandbox state explicit; expand independent threat review and platform-specific evidence |
 | Automated test discipline | Established / Partial | Large Node test suite, cross-platform regression jobs, clean-environment tests, Docker sandbox and browser checks | Maintain green same-commit CI and document skipped tests and platform limitations |
-| Release engineering | Open | npm tarball release workflow, explicit release gates and checksum generation exist; GitHub currently has no published release assets | Publish a reviewed release with platform artifacts, checksums, provenance and install/upgrade verification |
+| Release engineering | Partial | v1.1.1, v1.2.0 and v1.3.0 are published on GitHub with installers for Linux (deb and AppImage, x64 and arm64), macOS (dmg, x64 and arm64) and Windows (exe, x64 and arm64), the npm tarball and `SHA256SUMS`. On 2026-11-14 the tarball and amd64 deb matched `SHA256SUMS`, and the tarball installed into a clean prefix and ran `oasis --version` and `oasis doctor` on Linux | Code signing (macOS builds are ad hoc signed, Windows builds unsigned; needs the owner's certificates) and install/upgrade checks on clean macOS and Windows machines |
 | Connected workspace delivery | Partial | Browser UI is served by the host runtime with access key, host allow-list, lockout and HTTPS-only provider setup; reloads reattach to running tasks | Server-side chat history shared across devices; SSE instead of polling |
-| Benchmarks | Partial | Deterministic harness/token checks and live-evaluation tooling exist | Publish repeated, same-model, same-task peer comparisons with raw data and independent verifiers |
+| Benchmarks | Partial | Deterministic harness and token checks run in CI. Same-model live runs on free endpoints through a recording gateway (`bench/results/live-2026-11-14-*`): one trial per task on up to three tasks, with endpoint mismatches and harness flaws reported as such, not as scores | Repeated trials on a larger task set, with Claude Code, Codex CLI and Gemini CLI on an endpoint that speaks their protocol, and at least one stronger model |
 | Contributor experience | Partial | Contribution/security/support policies and issue templates exist | Keep PR checklist concise; validate a first-time contributor path on a clean machine |
 | Observability and operations | Partial | Usage metadata, diagnostics, sessions and command logs exist | Document operational signals, retention, error reporting and support expectations |
 | Documentation quality | Established / Partial | README, documentation index, architecture/configuration/interface guides and replacement studies | Keep all setup, release and UI statements tied to current behavior |
@@ -56,8 +56,8 @@ Revisit this scorecard after a meaningful runtime, interface, CI or release chan
 
 ## Current priority order
 
-1. Restore a fully green same-commit CI baseline.
+1. Keep same-commit CI green (it broke on Node 24/26 on 2026-11-14 from a memory test's threshold; fixed in 972a7273).
 2. Verify the web app over a real HTTPS tunnel from a phone.
-3. Publish a verifiable npm-tarball release, only after the manual release gates pass.
+3. Sign release builds once certificates are available, and verify install and upgrade on clean macOS and Windows machines.
 4. Continue provider and agent lifecycle decomposition without destabilising existing interfaces.
 5. Publish controlled, reproducible same-model harness comparisons.
