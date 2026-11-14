@@ -665,6 +665,14 @@ function sessionCreateOptions() {
   };
 }
 
+// Hook output and Oasis's own notices share session.hookMessages. Notices that
+// carry their own tag ([fallback], [key-pool], [session]) printed as
+// "[hook] [fallback] …", as if a user hook had switched the model.
+export function sessionNoticeLine(message) {
+  const text = String(message).slice(0, 800);
+  return /^\[(?:fallback|key-pool|session)\] /.test(text) ? text : '[hook] ' + text;
+}
+
 function reportSessionNotices(session) {
   if (!session) return;
   if (!settingsWarningShown) {
@@ -683,7 +691,7 @@ function reportSessionNotices(session) {
     if (session.sandbox && session.sandbox.enabled) stdout.write(session.sandbox.available ? '[sandbox] Commands run inside ' + session.sandbox.kind + (session.sandbox.network ? '' : ' with network disabled') + '.\n' : '[sandbox] Requested but unavailable: ' + session.sandbox.reason + '\n');
   }
   if (Array.isArray(session.hookMessages) && session.hookMessages.length) {
-    for (const message of session.hookMessages.splice(0)) stdout.write('[hook] ' + String(message).slice(0, 800) + '\n');
+    for (const message of session.hookMessages.splice(0)) stdout.write(sessionNoticeLine(message) + '\n');
   }
 }
 
