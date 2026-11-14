@@ -126,3 +126,37 @@ test('a request for new tests is not finished until a test file changes', async 
   assert.equal(asksForNewTests('Add the flag, no tests needed'), false);
   assert.equal(asksForNewTests('Fix the bug so tests pass'), false);
 });
+
+// Seen in the live benchmark (taskflow-emoji-truncate): asked to "add a
+// regression test", the model added asserts to an existing test() case.
+test('testFilesExtendedWithoutNewCase: asserts added inside an existing case, not a new case', async () => {
+  const { testFilesExtendedWithoutNewCase } = await import('../src/test-tamper.mjs');
+  const extended = 'diff --git a/test/fmt.test.mjs b/test/fmt.test.mjs\n--- a/test/fmt.test.mjs\n+++ b/test/fmt.test.mjs\n@@ -12,0 +13,2 @@\n+  assert.equal(truncate(\'ab😀cd\', 4), \'ab😀…\');\n+  assert.equal(truncate(\'😀😀😀\', 2), \'😀…\');\n';
+  assert.deepEqual(testFilesExtendedWithoutNewCase(extended), ['test/fmt.test.mjs']);
+  const newCase = extended.replace("@@ -12,0 +13,2 @@\n", "@@ -12,0 +13,4 @@\n+test('emoji are not split', () => {\n") + '+});\n';
+  assert.deepEqual(testFilesExtendedWithoutNewCase(newCase), []);
+  const newFile = 'diff --git a/test/new.test.mjs b/test/new.test.mjs\n--- /dev/null\n+++ b/test/new.test.mjs\n@@ -0,0 +1 @@\n+assert.equal(1, 1);\n';
+  assert.deepEqual(testFilesExtendedWithoutNewCase(newFile), []);
+});
+
+test('the gate asks for a separate case when tests were requested and only asserts were added', async (t) => {
+  const { inspectTestChanges } = await import('../src/test-tamper.mjs');
+  const root = await mkdtemp(path.join(os.tmpdir(), 'oasis-extended-only-'));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  await mkdir(path.join(root, 'test'));
+  const cases = "import test from 'node:test';\nimport assert from 'node:assert';\ntest('pads', () => {\n  assert.equal(1, 1);\n});\n";
+  await writeFile(path.join(root, 'test', 'pad.test.mjs'), cases);
+  await writeFile(path.join(root, 'test.mjs'), "import assert from 'node:assert';\nassert.equal(1, 1);\n");
+  try {
+    execFileSync('git', ['init', '-q'], { cwd: root });
+    execFileSync('git', ['-c', 'user.name=t', '-c', 'user.email=t@example.invalid', 'add', '.'], { cwd: root });
+    execFileSync('git', ['-c', 'user.name=t', '-c', 'user.email=t@example.invalid', 'commit', '-qm', 'base'], { cwd: root });
+  } catch { t.skip('git unavailable'); return; }
+  await writeFile(path.join(root, 'test', 'pad.test.mjs'), cases.replace('  assert.equal(1, 1);\n', '  assert.equal(1, 1);\n  assert.equal(2, 2);\n'));
+  await writeFile(path.join(root, 'test.mjs'), "import assert from 'node:assert';\nassert.equal(1, 1);\nassert.equal(2, 2);\n");
+  const changes = await inspectTestChanges(root, ['test/pad.test.mjs', 'test.mjs']);
+  assert.deepEqual(changes.extendedOnly, ['test/pad.test.mjs'], 'a bare assertion script has no cases to add');
+  const state = { changedPaths: new Set(['src/pad.mjs', 'test/pad.test.mjs']), diffReviewedPaths: new Set(), diffReviewedAll: true, lastVerificationExitCode: 0, testsRequested: true, testsOnlyExtended: changes.extendedOnly };
+  assert.ok(verificationIssues(state).some((issue) => /asked for a new test, but the change only added assertions inside existing test cases \(test\/pad\.test\.mjs\)/.test(issue)));
+  assert.ok(!verificationIssues({ ...state, testsRequested: false }).some((issue) => /asked for a new test/.test(issue)));
+});

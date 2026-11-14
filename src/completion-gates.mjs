@@ -138,8 +138,12 @@ export async function runCompletionGates(turn, host) {
   }
   if (verification.tamperCheckPending && verification.changedPaths.size) {
     verification.tamperCheckPending = false;
-    const { detectTestTampering } = await import('./test-tamper.mjs');
-    verification.testTampering = await detectTestTampering(session.root, [...verification.changedPaths]);
+    const { inspectTestChanges, isTestPath } = await import('./test-tamper.mjs');
+    const changes = await inspectTestChanges(session.root, [...verification.changedPaths]);
+    verification.testTampering = changes.tampering;
+    // Files the agent created are untracked, so absent from the diff; a new test file is a new test.
+    const created = verification.createdPaths instanceof Set ? verification.createdPaths : new Set();
+    verification.testsOnlyExtended = [...verification.changedPaths].some((item) => created.has(item) && isTestPath(item)) ? [] : changes.extendedOnly;
   }
   if (assistant.unreadableToolCalls && g.unknownToolNudges < 2) {
     g.unknownToolNudges++;
@@ -295,7 +299,7 @@ export async function runCompletionGates(turn, host) {
       const stale = claimState.ran && claimState.editedAfter && claimState.lastCommand ? claimState.lastCommand : '';
       const steps = issues.map((issue) => /diff has not been reviewed/.test(issue) ? 'review the diff of ' + (/\(([^)]*)\)/.exec(issue) || [null, 'the changes'])[1]
         : /has passed after the latest code edit/.test(issue) ? (stale ? 'rerun ' + stale : 'run a check')
-        : /asked for new tests/.test(issue) ? 'add a test'
+        : /asked for (?:new tests|a new test)/.test(issue) ? 'add a test'
         : /tests were weakened/.test(issue) ? 'restore weakened tests'
         : issue.split(/[;(]/)[0].slice(0, 60));
       try { options.onVerificationGate({ issues, steps }); } catch {}

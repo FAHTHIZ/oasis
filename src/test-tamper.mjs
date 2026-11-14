@@ -3,6 +3,8 @@
 // `git diff HEAD` for the files the agent changed, so pre-existing user edits
 // in other files are not attributed to the agent.
 import { execFile } from 'node:child_process';
+import { readFile } from 'node:fs/promises';
+import path from 'node:path';
 
 const TEST_PATH = [
   /(^|\/)(tests?|__tests__|specs?|testing)\//i,
@@ -105,14 +107,54 @@ export function analyzeTestDiff(diffText) {
   return findings;
 }
 
-/** Check the given changed paths against HEAD. Resolves [] outside Git or when nothing is weakened. */
-export function detectTestTampering(root, paths, { timeoutMs = 15000 } = {}) {
+/**
+ * Tracked test files whose diff added assertions but no test case. Seen in a
+ * live benchmark: asked to "add a regression test", the model put two asserts
+ * into an existing test(); the fix was right but no test reports on it alone.
+ */
+export function testFilesExtendedWithoutNewCase(diffText) {
+  const files = new Map();
+  let current = null;
+  for (const line of String(diffText || '').split('\n')) {
+    if (line.startsWith('diff --git ')) { current = null; continue; }
+    if (line.startsWith('--- ')) { if (line.slice(4) === '/dev/null') current = 'new'; continue; }
+    if (line.startsWith('+++ ')) {
+      const target = line.slice(4).replace(/^b\//, '');
+      current = current === 'new' || target === '/dev/null' || !isTestPath(target) ? null : files.get(target) || { added: 0, cases: 0 };
+      if (current) files.set(target, current);
+      continue;
+    }
+    if (!current || typeof current !== 'object') continue;
+    if (line.startsWith('+')) {
+      if (TEST_DECL.test(line.slice(1))) current.cases++;
+      else if (ASSERTION.test(line.slice(1))) current.added++;
+    } else if (line.startsWith('-') && TEST_DECL.test(line.slice(1))) current.cases--;
+  }
+  const entries = [...files.entries()];
+  if (!entries.length || entries.some(([, entry]) => entry.cases > 0)) return [];
+  return entries.filter(([, entry]) => entry.added > 0).map(([file]) => file);
+}
+
+function gitTestDiff(root, paths, timeoutMs) {
   const tests = [...new Set(paths || [])].filter((file) => isTestPath(file) || isTestConfigPath(file));
-  if (!tests.length) return Promise.resolve([]);
+  if (!tests.length) return Promise.resolve('');
   return new Promise((resolve) => {
-    execFile('git', ['diff', '--no-color', '--no-ext-diff', '-U0', 'HEAD', '--', ...tests], { cwd: root, timeout: timeoutMs, maxBuffer: 8 * 1024 * 1024, windowsHide: true }, (error, stdout) => {
-      if (error) return resolve([]);
-      resolve(analyzeTestDiff(stdout));
-    });
+    execFile('git', ['diff', '--no-color', '--no-ext-diff', '-U0', 'HEAD', '--', ...tests], { cwd: root, timeout: timeoutMs, maxBuffer: 8 * 1024 * 1024, windowsHide: true }, (error, stdout) => resolve(error ? '' : stdout));
   });
+}
+
+/** Check the given changed paths against HEAD. Resolves [] outside Git or when nothing is weakened. */
+export async function detectTestTampering(root, paths, { timeoutMs = 15000 } = {}) {
+  return analyzeTestDiff(await gitTestDiff(root, paths, timeoutMs));
+}
+
+/** One git diff for both checks: weakened tests and tests extended without a new case. */
+export async function inspectTestChanges(root, paths, { timeoutMs = 15000 } = {}) {
+  const diff = await gitTestDiff(root, paths, timeoutMs);
+  // A plain assertion script (test.mjs with bare asserts) has no cases to add.
+  const extendedOnly = [];
+  for (const file of testFilesExtendedWithoutNewCase(diff)) {
+    try { if (String(await readFile(path.resolve(root, file), 'utf8')).split('\n').some((line) => TEST_DECL.test(line))) extendedOnly.push(file); } catch {}
+  }
+  return { tampering: analyzeTestDiff(diff), extendedOnly };
 }
