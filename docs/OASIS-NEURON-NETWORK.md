@@ -27,7 +27,7 @@ Each node should eventually carry:
 - status, cancellation state, checkpoint reference, and output/artifact references;
 - input/output tokens, estimated cost, tool calls, elapsed time, and verification state.
 
-The agent registry remains the source of truth. The first implementation adds lineage metadata to existing agent records and exposes a bounded read-only graph view. Nested spawning remains disabled until the network scheduler, inherited budgets, and delegation security checks are implemented.
+The agent registry remains the source of truth. The first implementation adds lineage metadata to existing agent records and exposes a bounded read-only graph view. Subagents already nest: since 7863a84a (2026-11-08) a subagent can start its own subagents up to `subagentMaxDepth` layers (default 3, maximum 5, set by `OASIS_SUBAGENT_MAX_DEPTH` or `CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH`; 1 turns nesting off), and read-only agents stay leaves. The network scheduler, per-child token and deadline budgets, and delegation security checks described below are not implemented yet.
 
 ### 2. Work graph — task dependencies and ownership
 
@@ -108,7 +108,7 @@ Useful upstream references:
 | Phase | Deliverable | Acceptance criteria |
 |---|---|---|
 | 1. Network identity | Agent parent/depth lineage, graph inspection, persisted lineage | Existing top-level agent behavior unchanged; restored history preserves valid lineage |
-| 2. Bounded hierarchy | Recursive delegation with depth, fan-out, child, token, cost, and deadline budgets | Cannot exceed any parent or session budget; cancellation reaches descendants |
+| 2. Bounded hierarchy | Recursive delegation with depth, fan-out, child, token, cost, and deadline budgets | Cannot exceed any parent or session budget; cancellation reaches descendants **Partly done:** depth limit (`src/subagent-support.mjs`), one dollar ledger shared with the parent's `--max-budget-usd`, the 8-agent background cap shared across the tree, and stopping or failure of an agent stopping its descendants (`stopDescendants`). Per-child token, fan-out and deadline budgets are not implemented. |
 | 3. Delegation trust | Intent/capability checks at spawn and result/artifact checks at return | No permission escalation; suspicious or out-of-scope output is quarantined |
 | 4. Artifact handoff | Durable worker artifacts and compact structured reports | Large outputs are referenced, not repeatedly copied through parent context. **Reports done (November 2026):** a report over 12,000 characters (`OASIS_SUBAGENT_HANDOFF_CHARS`, `off` to disable) is written whole to `<scratch>/agents/<id>.md` and the parent gets a head/tail preview plus `report_file`, foreground and background (`src/report-handoff.mjs`, `test/report-handoff.test.mjs`). |
 | 5. Unified scheduler | One coordination path for agents, teams, and workflow-created workers | Leases, retries, backpressure, shutdown, and recovery are consistent |
@@ -125,7 +125,7 @@ The first code slice introduces:
 - a read-only `neuron_network` tool for the main coordinator;
 - bounded graph output containing status, role, task/team links, workspace mode, and aggregate usage.
 
-It intentionally does not enable recursive worker spawning yet. That requires the budget and security layers above; removing the current recursion guard before those controls exist would be a regression, not an improvement.
+This slice did not change spawning. Nested subagents were added separately (see phase 2) with a depth limit and shared dollar and background-agent caps; the per-child token and deadline budgets and the spawn-time trust checks of phases 2 and 3 are still missing.
 
 ## Report handoff (phase 4, first slice)
 
