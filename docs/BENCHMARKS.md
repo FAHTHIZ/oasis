@@ -46,6 +46,8 @@ These numbers measure launch cost only. They say nothing about how well an agent
 
 Run on 14 November 2026 with OVH's anonymous `gpt-oss-20b`, direct, through FreeLLMAPI and through OmniRoute, over 3 rounds ([details and raw rows](../bench/results/routers-2026-11-14/README.md)). Both routers passed every tool-call, streaming, usage and unknown-model check. OmniRoute's streams were slower in all three rounds (median first token 6.4 s against 0.5 s direct and 2.0 s through FreeLLMAPI), and OmniRoute does not list `ovh/…` models in `/models`. Three rounds are an indication, not a measured router overhead.
 
+Oasis was then run end to end on two eval tasks over each route ([write-up and raw records](../bench/results/routers-2026-11-14/e2e/README.md)). Direct: 2/2. FreeLLMAPI: 1/1 scored (one task excluded after OVH 429s). OmniRoute: 0/2 at first. Two OmniRoute stream quirks caused this: the tail of a tool call's arguments arrived as a separate nameless call, and keepalive chunks were mistaken for the served model. After Oasis handled both (commit `98b411d0`), OmniRoute scored 1/2, and the remaining failure was the model ignoring a required error wording. One trial per task: this shows the routes work for agent traffic. It does not rank them.
+
 ## Model-free harness benchmark
 
 Run:

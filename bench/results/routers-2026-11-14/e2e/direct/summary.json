@@ -1,0 +1,91 @@
+{
+  "date": "2026-11-14T09:06:11.765Z",
+  "oasisVersion": "1.3.0",
+  "requestedModels": {
+    "oasis": "gpt-oss-20b"
+  },
+  "router": "oai.endpoints.kepler.ai.cloud.ovh.net (recorded)",
+  "sameModelVerified": true,
+  "servedModel": "gpt-oss-20b",
+  "gateway": {
+    "agents": {
+      "oasis": {
+        "calls": 28,
+        "errors": 0,
+        "servedModels": {
+          "gpt-oss-20b": 28
+        },
+        "providers": {},
+        "inputTokens": 248984,
+        "outputTokens": 8892
+      }
+    },
+    "sameModel": true,
+    "sameProvider": false,
+    "servedModel": "gpt-oss-20b"
+  },
+  "trialsPerTask": 1,
+  "requestedAgents": [
+    "oasis"
+  ],
+  "sharedTaskIds": [
+    "clamp-integer",
+    "safe-relative-path"
+  ],
+  "sharedTasks": [
+    "clamp-integer",
+    "safe-relative-path"
+  ],
+  "excludedTasks": [],
+  "unverifiedTasks": [],
+  "fingerprintMismatchTasks": [],
+  "metadataMismatchTasks": [],
+  "incompleteTasks": [],
+  "rateLimitedTasks": [],
+  "taskMetadata": {
+    "clamp-integer": {
+      "category": "utility-logic",
+      "difficulty": "small"
+    },
+    "safe-relative-path": {
+      "category": "security-boundaries",
+      "difficulty": "medium"
+    }
+  },
+  "caveats": [
+    "Agent adapters do not use identical tool surfaces, approval modes, or sandbox policies. This is a configured-product comparison, not an isolated measurement of harness code.",
+    "Token and cost fields are adapter-reported usage. Cost may be absent or calculated differently by providers; it is not a normalized billing audit.",
+    "Fewer than two agents completed a run; this is not a head-to-head comparison.",
+    "Only 2 task(s) have complete, identical SHA-256 fingerprints and the requested number of trials across all completed agents; the guide targets at least 50 representative tasks.",
+    "Only 1 trial(s) per task were requested. One trial is a smoke test; three trials are a minimum diagnostic repeat, not a confidence interval or significance test.",
+    "No verified matched task is labeled large; this run does not test larger repository-level work.",
+    "Every scored agent was served model gpt-oss-20b, but the gateway could not confirm one upstream provider for all of them (missing or different provider fields); serving stacks can differ in quantization and limits."
+  ],
+  "agents": [
+    {
+      "agent": "oasis",
+      "name": "OASIS",
+      "label": "OASIS 1.3.0 (gpt-oss-20b)",
+      "file": "oasis.json",
+      "requestedModel": "gpt-oss-20b",
+      "reportedModel": "gpt-oss-20b",
+      "cliVersion": "1.3.0",
+      "sourceRevision": "b135fbc371394e6a8b7d4d9acdb91773643eaef7",
+      "runtime": {
+        "node": "v22.21.0",
+        "platform": "linux",
+        "arch": "x64"
+      },
+      "passRate": 1,
+      "passedTrials": 2,
+      "trials": 2,
+      "medianTrialTimeMs": 569436,
+      "totalTokens": 257876,
+      "totalReportedCostUSD": 0.008625,
+      "perTask": {
+        "clamp-integer": 1,
+        "safe-relative-path": 1
+      }
+    }
+  ]
+}
