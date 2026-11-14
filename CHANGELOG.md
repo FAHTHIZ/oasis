@@ -4,6 +4,7 @@ User-facing change history grouped by package version. A version heading does no
 
 ## Unreleased
 
+- The tool kernel no longer cuts tool timeouts to 15 minutes (it would have stopped a long `MCP_TOOL_TIMEOUT` call), and a `run_command` given the full 600 seconds now stops on its own timeout, with its output, instead of racing the kernel limit set at the same 600 seconds.
 - MCP tool calls follow `MCP_TOOL_TIMEOUT` (milliseconds, as in Claude Code) or `OASIS_MCP_TOOL_TIMEOUT_MS`, up to a day. Every call used to stop at two minutes, and a longer request was clamped to 15.
 - A hook's `timeout` is honoured up to a day. It was cut to 600 seconds without a word, so a longer check was killed at 10 minutes.
 - `oasis acp`, the Codex app server and the Telegram gateway log a failed session save (disk full, a session over the size cap) instead of dropping the error.

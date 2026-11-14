@@ -20,3 +20,9 @@ test('callTool passes a long timeout through instead of clamping it to 15 minute
   await client.callTool('build', {}, { autoApprove: true, timeoutMs: 1800000 });
   assert.equal(seen, 1800000);
 });
+
+test('the tool kernel keeps a long tool timeout instead of cutting it to 15 minutes', async () => {
+  const { defineTool } = await import('../src/tool-kernel-core.mjs');
+  const tool = defineTool({ name: 'long_tool', capabilities: ['mcp'], inputSchema: { type: 'object' }, run: async () => 'ok', timeoutMs: mcpToolTimeoutMs({ MCP_TOOL_TIMEOUT: '1800000' }) + 600000 });
+  assert.equal(tool.timeoutMs, 2400000);
+});
