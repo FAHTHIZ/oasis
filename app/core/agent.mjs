@@ -103,6 +103,9 @@ export async function buildSystemPrompt({ workspace, skills, plugins = [], now =
   return lines.join('\n');
 }
 
+const MAX_TRUNCATION_RECOVERIES = 3;
+const TRUNCATED_REPLY_NOTE = (tool) => 'Your previous reply hit the output token limit and was cut off.' + (tool ? ' The ' + tool + ' call was incomplete and was NOT run; nothing changed from it. Split the work: write a large file as a short first part with write_file, then add the rest with edit_file calls.' : ' Continue from where you stopped, without repeating earlier text.');
+
 // Saved chats from older versions kept only their last 300 messages, which can
 // start on a tool result whose call was cut off; providers reject that. Drop
 // tool results that answer no earlier call.
@@ -238,6 +241,7 @@ export class Agent {
     const recent = [];
     let finalText = '';
     let system = null;
+    let truncations = 0;
     try {
       for (let step = 0; step < maxSteps; step++) {
         const config = this.getConfig();
@@ -270,6 +274,10 @@ export class Agent {
         }
         let content = typeof reply.content === 'string' ? reply.content : streamed;
         let calls = Array.isArray(reply.tool_calls) ? reply.tool_calls.filter((c) => c && c.function) : [];
+        // Output hit the token limit: the last tool call was still being written.
+        // Never run it; tell the model why and how to fit the work.
+        let cutCall = null;
+        if (reply.truncated && calls.length) { cutCall = calls[calls.length - 1]; calls = calls.slice(0, -1); }
         if (content && /<tool_response>/i.test(content)) content = content.replace(/<tool_response>[\s\S]*?(?:<\/tool_response>|$)/gi, '').trim();
         if (!calls.length && content) {
           const extracted = extractTextToolCalls(content, TOOL_NAMES, SCHEMAS);
@@ -291,6 +299,13 @@ export class Agent {
         if (calls.length) assistant.tool_calls = calls;
         this.messages.push(assistant);
         this.onEvent({ type: 'assistant', content: content || '', toolCalls: calls, step });
+        let truncationNote = '';
+        if (reply.truncated && truncations < MAX_TRUNCATION_RECOVERIES && step < maxSteps - 1) {
+          truncations++;
+          truncationNote = TRUNCATED_REPLY_NOTE(cutCall && cutCall.function.name);
+          this.onEvent({ type: 'truncated', tool: cutCall ? cutCall.function.name : null, step });
+          if (!calls.length) { this.messages.push({ role: 'user', content: truncationNote }); continue; }
+        }
         if (!calls.length) {
           finalText = content || '';
           if (this.steering.length && step < maxSteps - 1) continue;
@@ -371,6 +386,7 @@ export class Agent {
           this.onEvent({ type: 'tool_result', id: call.id, name, ok, content: String(result) });
           if (ok && (name === 'write_file' || name === 'delete_file')) system = null;
         }
+        if (truncationNote) this.messages.push({ role: 'user', content: truncationNote });
         if (step === maxSteps - 1) {
           finalText = 'Stopped after ' + maxSteps + ' steps. Send "continue" to keep going.';
           this.messages.push({ role: 'assistant', content: finalText });
