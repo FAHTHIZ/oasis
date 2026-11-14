@@ -27,14 +27,15 @@ test('commits exactly the files the turn changed and leaves other work alone', a
   await writeFile(path.join(root, 'mine.txt'), 'user\n');    // user's own untracked file
   await writeFile(path.join(root, 'staged.txt'), 's\n'); git(root, 'add', 'staged.txt'); // user's staged work
   const result = await autoCommitTurn({ root, paths: ['a.js', 'new.js', 'b.js'], prompt: 'Fix the parser\nand more' });
-  assert.equal(result.subject, 'oasis: Fix the parser');
+  assert.equal(result.subject, 'Fix the parser');
   assert.deepEqual(result.files.sort(), ['a.js', 'b.js', 'new.js']);
   assert.deepEqual(git(root, 'show', '--name-status', '--format=', 'HEAD').split('\n').sort(), ['A\tnew.js', 'D\tb.js', 'M\ta.js']);
-  assert.match(git(root, 'log', '-1', '--format=%B'), /Files changed by OASIS in this turn:\n- a\.js/);
+  assert.match(git(root, 'log', '-1', '--format=%B'), /^Fix the parser\n\nFiles changed:\n- a\.js/);
+  assert.doesNotMatch(git(root, 'log', '-1', '--format=%B%an%ae'), /oasis|co-authored|\[bot\]/i);
   const status = git(root, 'status', '--porcelain');
   assert.match(status, /^A  staged\.txt$/m);
   assert.match(status, /^\?\? mine\.txt$/m);
-  assert.match(describeAutoCommit(result), /^Committed [0-9a-f]{7,} oasis: Fix the parser \(3 files\)\. Undo with git reset --soft HEAD~1\.$/);
+  assert.match(describeAutoCommit(result), /^Committed [0-9a-f]{7,} Fix the parser \(3 files\)\. Undo with git reset --soft HEAD~1\.$/);
 });
 
 test('skips ignored files, unchanged files, non-repositories and merges', async (t) => {
@@ -60,8 +61,8 @@ test('a failing pre-commit hook is reported and the files stay staged', async (t
 });
 
 test('subjects are one short line', () => {
-  assert.equal(commitSubject(''), 'oasis: changes');
-  assert.equal(commitSubject('/fix the flaky test'), 'oasis: fix the flaky test');
+  assert.equal(commitSubject(''), 'Changes');
+  assert.equal(commitSubject('/fix the flaky test'), 'Fix the flaky test');
   const long = commitSubject('Refactor the configuration loader so that every provider shares one validation path and error format');
   assert.ok(long.length <= 72, long);
   assert.match(long, /…$/);

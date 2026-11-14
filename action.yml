@@ -56,6 +56,12 @@ inputs:
   append_system_prompt:
     description: Extra instructions for every run.
     required: false
+  git_name:
+    description: Commit author name. Defaults to the person who triggered the run (never a bot account).
+    required: false
+  git_email:
+    description: Commit author email. Defaults to that person's GitHub noreply address.
+    required: false
   github_token:
     description: Token for comments, pushes, and pull requests.
     default: ${{ github.token }}
@@ -96,3 +102,5 @@ runs:
         INPUT_MAX_TURNS: ${{ inputs.max_turns }}
         INPUT_EFFORT: ${{ inputs.effort }}
         INPUT_APPEND_SYSTEM_PROMPT: ${{ inputs.append_system_prompt }}
+        INPUT_GIT_NAME: ${{ inputs.git_name }}
+        INPUT_GIT_EMAIL: ${{ inputs.git_email }}

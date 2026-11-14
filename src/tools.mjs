@@ -1994,6 +1994,13 @@ async function executeToolUnlocked(name, args = {}, context = {}) {
       const env = context.env || process.env;
       const discard = gitSafety.gitSafetyEnabled(env) ? gitSafety.discardingGitCommand(args.command, args.args || []) : '';
       const commitCall = gitSafety.gitCommitInvocation(args.command, args.args || []);
+      if (commitCall && Array.isArray(args.args)) {
+        // Commits credit the user only: AI/bot Co-authored-by trailers and
+        // "Generated with" footers the model added are removed before Git runs.
+        const { sanitizeCommitArgv } = await import('./commit-attribution.mjs');
+        const cleaned = sanitizeCommitArgv(args.command, args.args);
+        if (cleaned !== args.args) args = { ...args, args: cleaned };
+      }
       {
         const { rawBranchRuleBlock } = await import('./git-tools.mjs');
         const blockedByRule = await rawBranchRuleBlock(root, args.command, args.args || [], context.session && context.session.branchRules, env).catch(() => '');
