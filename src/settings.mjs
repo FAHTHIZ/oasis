@@ -612,11 +612,15 @@ export async function loadSettings(root, options = {}) {
     if (settings.pricing && typeof settings.pricing === 'object' && !Array.isArray(settings.pricing)) result.pricing = { ...(result.pricing || {}), ...settings.pricing };
     if (settings.modelRouting && typeof settings.modelRouting === 'object' && !Array.isArray(settings.modelRouting)) {
       const routing = sanitizeModelRouting(settings.modelRouting);
+      const earlierMode = result.modelRouting && result.modelRouting.mode;
       result.modelRouting = {
         enabled: typeof settings.modelRouting.enabled === 'boolean' ? routing.enabled : result.modelRouting.enabled,
         easyModel: routing.easyModel || result.modelRouting.easyModel,
         strongModel: routing.strongModel || result.modelRouting.strongModel
       };
+      // "mode": "cascade" | "classify"; a later file may switch it either way.
+      const mode = settings.modelRouting.mode === 'cascade' || settings.modelRouting.mode === 'classify' ? settings.modelRouting.mode : earlierMode;
+      if (mode === 'cascade') result.modelRouting.mode = 'cascade';
       if (!result.modelRouting.easyModel) result.modelRouting.enabled = false;
     }
     if (typeof settings.fallbackModel === 'string' && settings.fallbackModel.trim()) result.fallbackModel = settings.fallbackModel.trim();

@@ -213,6 +213,7 @@ Automatic routing is optional and uses two models on the active provider:
 /routing easy MODEL_ID
 /routing strong MODEL_ID
 /routing on
+/routing cascade
 /routing status
 ```
 
@@ -222,6 +223,56 @@ strong model. The strong model defaults to the session model unless a different
 one is configured. Use `/routing off` to pause routing or `/routing reset` to
 remove the saved routing configuration. The `/usage` report includes estimated
 savings when model prices are known.
+
+### Cascade: start cheap, escalate on evidence
+
+Source: `src/escalation.mjs`.
+
+```text
+/routing easy CHEAP_MODEL
+/routing strong STRONG_MODEL
+/routing cascade
+```
+
+or in user settings:
+
+```json
+{ "modelRouting": { "enabled": true, "mode": "cascade", "easyModel": "CHEAP_MODEL", "strongModel": "STRONG_MODEL" } }
+```
+
+In cascade mode, coding tasks that would go to the strong model start on the
+easy model instead. The strong model takes over the rest of the task, once,
+the first time the run shows objective evidence of being stuck:
+
+- the same check fails the same way after three rounds of edits;
+- the same failing command is run again with no change in between, enough
+  times that the turn would otherwise stop;
+- the same tool call returns the same result three times, or a no-progress
+  cycle repeats within eight steps.
+
+Without cascade, these signals end the turn with "I'm stuck". With cascade,
+the strong model gets a note saying what failed and continues from the same
+conversation. The terminal prints `[routing] escalated at step N from A to B: reason`,
+and the result's `modelRouting.escalation` records the step, signal, models and
+reason. An OpenTelemetry event `oasis.model_escalation` is emitted when
+telemetry is on. After the task, the session returns to its own model.
+
+Limits, stated plainly:
+
+- Security-sensitive tasks and tasks hinted as hard still start on the
+  strong model. Easy read-only tasks use the easy model as before.
+- Escalation reacts to being stuck, not to answer quality. A cheaper model that
+  finishes confidently with a wrong change, and passes the verification gates,
+  is not escalated. Whether cascade beats the strong model alone on cost per
+  solved task depends on the models and tasks; measure it before relying on
+  it: `oasis eval --route-easy-model A --route-strong-model B --route-mode cascade --trials 3 --yes`
+  against a plain run on B. Each trial records whether and when it escalated.
+- In zero-budget mode, escalation happens only when the strong model is
+  proven free (local, an OpenRouter `:free` variant, or declared in
+  `OASIS_FREE_MODELS`); otherwise the run stops as before and
+  `modelRouting.escalationSkipped` says why. A strong model outside
+  `availableModels` is never used.
+- `/routing classify` returns to read-only-only routing.
 
 The model catalogue imports the upstream `tool_call` flag when it is present.
 For a task that needs tools, OASIS avoids selecting a model explicitly marked as

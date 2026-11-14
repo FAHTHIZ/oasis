@@ -785,7 +785,7 @@ function parseArgs(args) {
   const config = {
     validate: false, negativeControl: false, task: null, trials: 3, help: false, compare: null, compareOutput: null, compareHtml: null,
     claudeCode: false, model: null, maxTurns: 30, timeoutSeconds: 600,
-    timeoutExplicit: false, budgetUSD: null, claudeOptionsUsed: false, routeEasyModel: null, routeStrongModel: null, routingOptionsUsed: false
+    timeoutExplicit: false, budgetUSD: null, claudeOptionsUsed: false, routeEasyModel: null, routeStrongModel: null, routeMode: 'classify', routingOptionsUsed: false
   };
   for (let i = 0; i < args.length; i++) {
     const arg = args[i];
@@ -804,6 +804,13 @@ function parseArgs(args) {
       const value = args[++i];
       if (!value || value.startsWith('--')) throw new Error(label + ' requires an output file path.');
       config[option] = value;
+      continue;
+    }
+    if (arg === '--route-mode') {
+      const value = args[++i];
+      if (value !== 'cascade' && value !== 'classify') throw new Error('--route-mode must be cascade or classify.');
+      config.routeMode = value;
+      config.routingOptionsUsed = true;
       continue;
     }
     if (arg === '--route-easy-model' || arg === '--route-strong-model') {
@@ -887,6 +894,9 @@ function parseArgs(args) {
   }
   if (config.routingOptionsUsed && config.claudeCode) {
     throw new Error('--route-easy-model and --route-strong-model apply only to OASIS eval runs, not --claude-code.');
+  }
+  if (config.routeMode === 'cascade' && !config.routeEasyModel) {
+    throw new Error('--route-mode cascade requires --route-easy-model.');
   }
   if (config.routeStrongModel && !config.routeEasyModel) {
     throw new Error('--route-strong-model requires --route-easy-model.');
@@ -1379,7 +1389,7 @@ export async function runEvalCommand(args = [], options = {}) {
   const tasksDir = options.tasksDir || DEFAULT_TASKS_DIR;
   const config = parseArgs(args);
   if (config.help) {
-    output.write('Usage:\n  oasis eval --validate\n  oasis eval --negative-control\n  oasis eval [--task ID] [--trials N] [--timeout-seconds N] [--route-easy-model ID --route-strong-model ID] --yes\n  oasis eval --claude-code [--task ID] [--trials N] [--model MODEL] [--max-turns N] [--timeout-seconds N] [--budget-usd USD] --yes\n  oasis eval --codex | --gemini-cli | --opencode | --aider [--task ID] [--trials N] [--model MODEL] [--timeout-seconds N] --yes\n  oasis eval --compare <run-a.json> <run-b.json> [--out comparison.json] [--html comparison.html]\n\n');
+    output.write('Usage:\n  oasis eval --validate\n  oasis eval --negative-control\n  oasis eval [--task ID] [--trials N] [--timeout-seconds N] [--route-easy-model ID --route-strong-model ID [--route-mode cascade]] --yes\n  oasis eval --claude-code [--task ID] [--trials N] [--model MODEL] [--max-turns N] [--timeout-seconds N] [--budget-usd USD] --yes\n  oasis eval --codex | --gemini-cli | --opencode | --aider [--task ID] [--trials N] [--model MODEL] [--timeout-seconds N] --yes\n  oasis eval --compare <run-a.json> <run-b.json> [--out comparison.json] [--html comparison.html]\n\n');
     output.write('Model evaluations execute coding agents in disposable copies. The verifier is external to the workspace, but this is not an OS-level sandbox. Review the task suite and only run with --yes in a controlled workspace. Claude Code mode requires the CLI and its authentication.\n');
     return { ok: true };
   }
@@ -1458,6 +1468,7 @@ export async function runEvalCommand(args = [], options = {}) {
             session.settings ||= {};
             session.settings.modelRouting = {
               enabled: true,
+              ...(config.routeMode === 'cascade' ? { mode: 'cascade' } : {}),
               easyModel: config.routeEasyModel,
               strongModel: config.routeStrongModel || provider.model
             };
@@ -1479,7 +1490,9 @@ export async function runEvalCommand(args = [], options = {}) {
             // Streamed like interactive and headless runs, so a stalled provider
             // hits the header timeout and idle watchdog (OASIS_NO_STREAM=1 opts out).
             ...(process.env.OASIS_NO_STREAM !== '1' ? { onDelta: () => {} } : {}),
-            ...(config.routeEasyModel ? { routingHint: task.difficulty } : {}),
+            // A cascade run must not pin "medium"/"hard" fixtures to the strong
+            // model up front: escalation on evidence is what is being measured.
+            ...(config.routeEasyModel && config.routeMode !== 'cascade' ? { routingHint: task.difficulty } : {}),
             onUsage: (entry) => {
               usage.inputTokens += Number(entry.inputTokens || 0);
               usage.outputTokens += Number(entry.outputTokens || 0);
@@ -1541,7 +1554,7 @@ export async function runEvalCommand(args = [], options = {}) {
         trials.push({
           taskId: task.id, taskFingerprint: task.taskFingerprint, category: task.category, difficulty: task.difficulty, trial,
           status: passed ? 'passed' : 'failed',
-          model, requestedModel: provider.model, routeTier: routed && routed.tier || 'strong',
+          model, requestedModel: provider.model, routeTier: routed && routed.tier || 'strong', escalation: routed && routed.escalation || null,
           routeReason: routed && routed.reason || null,
           strongModel: routed && routed.strongModel || config.routeStrongModel || provider.model,
           protocol: provider.protocol, baseURL: provider.baseURL,
@@ -1557,7 +1570,7 @@ export async function runEvalCommand(args = [], options = {}) {
           ...(agentResult && !agentResult.finished ? { unfinished: unfinishedReason(agentResult) } : {})
         });
         output.write((passed ? '  PASS ' : '  FAIL ') + task.id + ' trial ' + trial +
-          ' · ' + (config.routeEasyModel ? (routed && routed.tier || 'strong') + '/' : '') + model +
+          ' · ' + (config.routeEasyModel ? (routed && routed.tier || 'strong') + '/' : '') + model + (routed && routed.escalation ? '→' + routed.escalation.to + ' (step ' + routed.escalation.step + ')' : '') +
           ' · ' + totalTokens + ' tokens · ' + elapsedMs + ' ms' +
           (costUSD === null ? ' · cost unknown' : ' · $' + costUSD.toFixed(6)) +
           (routingSavingsUSD === null || !config.routeEasyModel ? '' : ' · saved vs strong $' + routingSavingsUSD.toFixed(6)) + '\n');
@@ -1597,7 +1610,10 @@ export async function runEvalCommand(args = [], options = {}) {
       enabled: true,
       easyModel: config.routeEasyModel,
       strongModel: config.routeStrongModel || provider.model,
-      note: 'Fixture difficulty labels are routing hints; unlabeled requests use conservative prompt classification.'
+      mode: config.routeMode,
+      note: config.routeMode === 'cascade'
+        ? 'Cascade: tasks start on the easy model (security-sensitive prompts excepted) and move to the strong model when the run gets stuck; difficulty labels are not used as hints.'
+        : 'Fixture difficulty labels are routing hints; unlabeled requests use conservative prompt classification.'
     } : { enabled: false },
     provider: { model: provider.model, protocol: provider.protocol, baseURL: provider.baseURL, maxSteps: provider.maxSteps, maxOutputTokens: provider.maxOutputTokens ?? null },
     pricing: { inputUsdPerMillionTokens: inputRate, outputUsdPerMillionTokens: outputRate, note: 'Cost is a rough estimate from configured rates and does not distinguish cached tokens. Pass-rate differences under 10 percentage points are noisy with small task samples; run at least three trials per task when benchmarking.' }

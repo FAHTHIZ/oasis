@@ -51,7 +51,7 @@ export const BUILTIN_COMMANDS = {
   'auto-commit': 'Commit each turn\'s file changes to Git automatically, Aider-style (/auto-commit [on|off])',
   fast: 'Toggle fast mode: faster output on Opus 5.5 / 5 / 4.8 via the Anthropic API, at a higher price (/fast [on|off])',
   model: 'Show or switch the model for this session (/model [id] [effort])',
-  routing: 'Route clearly easy read-only tasks to a cheaper model (/routing easy MODEL, strong MODEL, on|off|status|reset)',
+  routing: 'Use a cheaper model for easy read-only tasks, or with cascade for all tasks, escalating to the strong model when stuck (/routing easy MODEL, strong MODEL, on|off|cascade|classify|status|reset)',
   mode: 'Show or switch the permission mode (/mode ' + PERMISSION_MODES.join('|') + '; aliases: manual, accept-edits)',
   permissions: 'Show permission rules, mode, and sandbox',
   agents: 'List available subagents',
@@ -855,8 +855,10 @@ export async function runBuiltinCommand(name, argument, state) {
       const words = String(argument || '').trim().split(/\s+/).filter(Boolean);
       const action = String(words[0] || 'status').toLowerCase();
       const current = { enabled: false, easyModel: '', strongModel: '', ...(session.settings && session.settings.modelRouting || {}) };
-      const describe = (value) => value.enabled && value.easyModel
-        ? 'Automatic routing is on. Clearly read-only requests use ' + value.easyModel + '; hard, ambiguous, and change requests use ' + (value.strongModel || session.config.model) + '.'
+      const describe = (value) => value.enabled && value.easyModel && value.mode === 'cascade'
+        ? 'Cascade routing is on. Tasks start on ' + value.easyModel + ' and move to ' + (value.strongModel || session.config.model) + ' for the rest of the task if the run gets stuck (the same failure after several edits, repeated failing commands, or repeated identical tool calls). Security-sensitive tasks start on the strong model. Run /routing classify for read-only-only routing.'
+        : value.enabled && value.easyModel
+        ? 'Automatic routing is on. Clearly read-only requests use ' + value.easyModel + '; hard, ambiguous, and change requests use ' + (value.strongModel || session.config.model) + '. Run /routing cascade to start coding tasks on ' + value.easyModel + ' too.'
         : value.easyModel
           ? 'Automatic model routing is off. Easy model: ' + value.easyModel + '; strong model: ' + (value.strongModel || session.config.model) + '. Run /routing on to enable it.'
           : 'Automatic model routing is off. Current model: ' + session.config.model + '.';
@@ -866,6 +868,12 @@ export async function runBuiltinCommand(name, argument, state) {
       } else if (action === 'on' || action === 'enable') {
         if (!current.easyModel) return { output: 'Set a cheaper model first with /routing easy MODEL. The current session model remains the strong-model default.' };
         current.enabled = true;
+      } else if (action === 'cascade' || action === 'classify') {
+        if (!current.easyModel) return { output: 'Set a cheaper model first with /routing easy MODEL. The current session model remains the strong-model default.' };
+        if (action === 'cascade' && (current.strongModel || session.config.model) === current.easyModel) return { output: 'Cascade needs two different models: set /routing strong MODEL to the model to escalate to.' };
+        current.enabled = true;
+        if (action === 'cascade') current.mode = 'cascade';
+        else delete current.mode;
       } else if (action === 'easy' || action === 'strong') {
         const model = String(words.slice(1).join(' ') || '').trim();
         if (!model || model.length > 200 || /[\r\n\0]/.test(model)) return { output: 'Usage: /routing ' + action + ' MODEL_ID' };
@@ -882,7 +890,7 @@ export async function runBuiltinCommand(name, argument, state) {
         current.easyModel = '';
         current.strongModel = '';
       } else {
-        return { output: 'Usage: /routing [status|easy MODEL|strong MODEL|on|off|reset]' };
+        return { output: 'Usage: /routing [status|easy MODEL|strong MODEL|on|off|cascade|classify|reset]' };
       }
       const { updateUserSettings } = await import('./settings.mjs');
       await updateUserSettings((settings) => {
