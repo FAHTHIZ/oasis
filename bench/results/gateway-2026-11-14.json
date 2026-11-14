@@ -1,0 +1,243 @@
+{
+  "generatedAt": "2026-11-14T05:57:43.592Z",
+  "node": "v22.20.0",
+  "note": "Simulated providers; counts what Oasis sends. Not a live measurement.",
+  "scenarios": [
+    {
+      "name": "daily-quota-exhausted-primary",
+      "about": "The main model's daily free quota is used up (429 with Retry-After 2 h); a backup model works. 5 sessions.",
+      "baseline": {
+        "requests": 10,
+        "failedRequests": 5,
+        "paidRequests": 0,
+        "estimatedCostUsd": 0,
+        "tokensBilled": 6750,
+        "succeeded": 5,
+        "sessions": 5,
+        "stops": [],
+        "models": [
+          "coder-large:429",
+          "coder-small:200",
+          "coder-large:429",
+          "coder-small:200",
+          "coder-large:429",
+          "coder-small:200",
+          "coder-large:429",
+          "coder-small:200",
+          "coder-large:429",
+          "coder-small:200"
+        ]
+      },
+      "feature": {
+        "requests": 6,
+        "failedRequests": 1,
+        "paidRequests": 0,
+        "estimatedCostUsd": 0,
+        "tokensBilled": 6750,
+        "succeeded": 5,
+        "sessions": 5,
+        "stops": [],
+        "models": [
+          "coder-large:429",
+          "coder-small:200",
+          "coder-small:200",
+          "coder-small:200",
+          "coder-small:200",
+          "coder-small:200"
+        ]
+      },
+      "pass": true
+    },
+    {
+      "name": "zero-budget-paid-primary",
+      "about": "The main model is paid (catalog $3/$15 per million tokens); a declared-free backup exists. 5 sessions.",
+      "baseline": {
+        "requests": 5,
+        "failedRequests": 0,
+        "paidRequests": 5,
+        "estimatedCostUsd": 0.02925,
+        "tokensBilled": 6750,
+        "succeeded": 5,
+        "sessions": 5,
+        "stops": [],
+        "models": [
+          "claude-sonnet-4-5:200",
+          "claude-sonnet-4-5:200",
+          "claude-sonnet-4-5:200",
+          "claude-sonnet-4-5:200",
+          "claude-sonnet-4-5:200"
+        ]
+      },
+      "feature": {
+        "requests": 5,
+        "failedRequests": 0,
+        "paidRequests": 0,
+        "estimatedCostUsd": 0,
+        "tokensBilled": 6750,
+        "succeeded": 5,
+        "sessions": 5,
+        "stops": [],
+        "models": [
+          "free-coder:200",
+          "free-coder:200",
+          "free-coder:200",
+          "free-coder:200",
+          "free-coder:200"
+        ]
+      },
+      "pass": true
+    },
+    {
+      "name": "zero-budget-no-free-route",
+      "about": "Only a paid model is configured. Zero-budget mode must stop without sending anything. 3 sessions.",
+      "baseline": {
+        "requests": 3,
+        "failedRequests": 0,
+        "paidRequests": 3,
+        "estimatedCostUsd": 0.01755,
+        "tokensBilled": 4050,
+        "succeeded": 3,
+        "sessions": 3,
+        "stops": [],
+        "models": [
+          "claude-sonnet-4-5:200",
+          "claude-sonnet-4-5:200",
+          "claude-sonnet-4-5:200"
+        ]
+      },
+      "feature": {
+        "requests": 0,
+        "failedRequests": 0,
+        "paidRequests": 0,
+        "estimatedCostUsd": 0,
+        "tokensBilled": 0,
+        "succeeded": 0,
+        "sessions": 3,
+        "stops": [
+          "OASIS_ZERO_BUDGET_BLOCKED"
+        ],
+        "models": []
+      },
+      "pass": true
+    },
+    {
+      "name": "runaway-tool-loop-request-budget",
+      "about": "The model keeps calling tools and never finishes. --max-requests 8 against the default step limit. 1 session.",
+      "baseline": {
+        "requests": 41,
+        "failedRequests": 0,
+        "paidRequests": 0,
+        "estimatedCostUsd": 0,
+        "tokensBilled": 55350,
+        "succeeded": 0,
+        "sessions": 1,
+        "stops": [
+          "unfinished"
+        ],
+        "models": [
+          "free-coder:200",
+          "free-coder:200",
+          "free-coder:200",
+          "free-coder:200",
+          "free-coder:200",
+          "free-coder:200",
+          "free-coder:200",
+          "free-coder:200",
+          "free-coder:200",
+          "free-coder:200",
+          "free-coder:200",
+          "free-coder:200",
+          "free-coder:200",
+          "free-coder:200",
+          "free-coder:200",
+          "free-coder:200",
+          "free-coder:200",
+          "free-coder:200",
+          "free-coder:200",
+          "free-coder:200",
+          "free-coder:200",
+          "free-coder:200",
+          "free-coder:200",
+          "free-coder:200",
+          "free-coder:200",
+          "free-coder:200",
+          "free-coder:200",
+          "free-coder:200",
+          "free-coder:200",
+          "free-coder:200",
+          "free-coder:200",
+          "free-coder:200",
+          "free-coder:200",
+          "free-coder:200",
+          "free-coder:200",
+          "free-coder:200",
+          "free-coder:200",
+          "free-coder:200",
+          "free-coder:200",
+          "free-coder:200",
+          "free-coder:200"
+        ]
+      },
+      "feature": {
+        "requests": 8,
+        "failedRequests": 0,
+        "paidRequests": 0,
+        "estimatedCostUsd": 0,
+        "tokensBilled": 10800,
+        "succeeded": 0,
+        "sessions": 1,
+        "stops": [
+          "REQUEST_BUDGET_EXCEEDED"
+        ],
+        "models": [
+          "free-coder:200",
+          "free-coder:200",
+          "free-coder:200",
+          "free-coder:200",
+          "free-coder:200",
+          "free-coder:200",
+          "free-coder:200",
+          "free-coder:200"
+        ]
+      },
+      "pass": true
+    },
+    {
+      "name": "only-model-guessed-cooldown",
+      "about": "The only model returns a quota 429 with no reset time, then recovers. A guess must never refuse your only model. 3 sessions.",
+      "baseline": {
+        "requests": 4,
+        "failedRequests": 1,
+        "paidRequests": 0,
+        "estimatedCostUsd": 0,
+        "tokensBilled": 4050,
+        "succeeded": 3,
+        "sessions": 3,
+        "stops": [],
+        "models": [
+          "coder-large:429",
+          "coder-large:200",
+          "coder-large:200",
+          "coder-large:200"
+        ]
+      },
+      "feature": {
+        "requests": 4,
+        "failedRequests": 1,
+        "paidRequests": 0,
+        "estimatedCostUsd": 0,
+        "tokensBilled": 4050,
+        "succeeded": 3,
+        "sessions": 3,
+        "stops": [],
+        "models": [
+          "coder-large:429",
+          "coder-large:200",
+          "coder-large:200",
+          "coder-large:200"
+        ]
+      },
+      "pass": true
+    }
+  ]
+}
