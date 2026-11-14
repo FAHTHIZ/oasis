@@ -107,7 +107,8 @@ export async function pickerFor(command, { session = null, env = process.env, se
     if (session && session.config && !/^(0|false)$/i.test(String(env.OASIS_MODEL_PICKER_FETCH || ''))) {
       const { listProviderModels } = await import('./provider-models.mjs');
       const listed = await listProviderModels(session.config, { env: session.providerEnv || env, cwd: session.root, timeoutMs: 2500 }).catch(() => ({ models: null }));
-      served = listed.models || [];
+      const { isLikelyChatModel } = await import('./provider-models.mjs');
+      served = (listed.models || []).filter(isLikelyChatModel);
     }
     // Claude aliases mean nothing to other providers unless ANTHROPIC_DEFAULT_*_MODEL maps them.
     const mapsAliases = Object.keys(env).some((name) => /^ANTHROPIC_DEFAULT_\w+_MODEL$/.test(name) && env[name]);
