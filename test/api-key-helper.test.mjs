@@ -99,4 +99,10 @@ test('a key-protected local gateway gets OASIS_API_KEY only when OASIS_BASE_URL 
   assert.equal((await loadConfig({ env: { ...base, OASIS_BASE_URL: local, OASIS_LOCAL_API_KEY: 'sk-local', OASIS_API_KEY: 'sk-gateway' } })).apiKey, 'sk-local');
   // An ambient cloud key is never sent to a local server.
   assert.equal((await loadConfig({ env: { ...base, OASIS_BASE_URL: local, OPENAI_API_KEY: 'sk-cloud' } })).apiKey, '');
+  // A built-in gateway reads its own variable; it is never sent anywhere else.
+  const freellmapi = 'http://localhost:3001/v1';
+  assert.equal((await loadConfig({ env: { ...base, OASIS_BASE_URL: freellmapi, FREELLMAPI_API_KEY: 'freellmapi-k', OPENAI_API_KEY: 'sk-cloud' } })).apiKey, 'freellmapi-k');
+  assert.equal((await loadConfig({ env: { ...base, OASIS_BASE_URL: 'http://127.0.0.1:20128/v1', OMNIROUTE_API_KEY: 'sk-omni' } })).apiKey, 'sk-omni');
+  assert.equal((await loadConfig({ env: { ...base, OASIS_BASE_URL: local, FREELLMAPI_API_KEY: 'freellmapi-k' } })).apiKey, '');
+  assert.equal((await loadConfig({ env: { ...base, OASIS_BASE_URL: freellmapi, FREELLMAPI_API_KEY: 'freellmapi-k', OASIS_LOCAL_API_KEY: 'sk-local' } })).apiKey, 'sk-local');
 });

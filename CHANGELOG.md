@@ -4,6 +4,13 @@ User-facing change history grouped by package version. A version heading does no
 
 ## Unreleased
 
+- FreeLLMAPI is a built-in gateway provider (`freellmapi`, `http://127.0.0.1:3001/v1`, `FREELLMAPI_API_KEY`). A pasted `freellmapi-…` key connects to it, and it is treated like OmniRoute: cloud timeouts, never priced or admitted by `--zero-budget` as free.
+- A built-in provider on its default loopback address reads its own key variable (`FREELLMAPI_API_KEY`, `OMNIROUTE_API_KEY`, `VLLM_API_KEY`); only `OASIS_LOCAL_API_KEY` or `OASIS_API_KEY` worked, so an exported gateway key was silently not sent and every request failed with 401.
+- Gateways on their default loopback ports (OmniRoute, FreeLLMAPI, LiteLLM 4000, vLLM 8000) are asked for each model's context window via `GET /models`, like hosted providers. Every loopback address was skipped, so a gateway model's window was guessed.
+- `-p --output-format json` results include `"cost_known": false` when a request went to a model with no known price, and benchmark reports show that trial's cost as unknown; `total_cost_usd: 0` read as a free run.
+- The secret shield masks NVIDIA (`nvapi-`), Cerebras (`csk-`), Fireworks (`fw_`) and FreeLLMAPI (`freellmapi-`) keys in tool output and transcripts; these setup-menu providers' keys passed through unmasked.
+- Pricing, the zero-budget policy and the context probe share one list of local model-server ports from the provider registry; pricing knew only three of the six, so `gpt-oss` served by vLLM or Jan on this machine was priced as an OpenAI model.
+
 - `npm run bench:live -- --task a,b --interleave` runs task by task (every agent on task 1, then task 2) instead of agent by agent, so a free tier that slows or runs out part-way through hits every agent alike. Summaries now list trials that ended in an agent or provider error (rate limit, crash, timeout) instead of folding them silently into the pass rate.
 - In the browser app, a message sent after a `!` shell command reaches the model whole; with terminal output carried in, the request was cut to 6,500 characters without notice.
 - In the browser app, the repeated-call guard resets after a file is written, edited or deleted. It counted identical calls across the whole task, so the third identical test run or search was refused even when the code had changed between runs, breaking the fix-and-verify loop.

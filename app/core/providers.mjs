@@ -22,6 +22,7 @@ export const PRESETS = {
   lmstudio: { label: 'LM Studio (your computer)', protocol: 'openai', baseURL: 'http://localhost:1234/v1', model: '', keyHint: 'not needed', note: 'Turn on the local server and CORS in LM Studio.' },
   llamacpp: { label: 'llama.cpp server', protocol: 'openai', baseURL: 'http://localhost:8080/v1', model: '', keyHint: 'not needed' },
   omniroute: { label: 'OmniRoute (gateway)', protocol: 'openai', baseURL: 'http://localhost:20128/v1', model: 'auto', keyHint: 'sk-… from Dashboard → Endpoints', note: 'A self-hosted gateway that routes one endpoint to many providers. Start it with `omniroute`.' },
+  freellmapi: { label: 'FreeLLMAPI (gateway)', protocol: 'openai', baseURL: 'http://localhost:3001/v1', model: 'auto', keyHint: 'freellmapi-… from the dashboard', note: 'A self-hosted gateway that pools your own free-tier keys behind one key. Add this app\'s origin to its DASHBOARD_ORIGINS for browser use.' },
   custom: { label: 'Custom (OpenAI-compatible)', protocol: 'openai', baseURL: '', model: '', keyHint: '' }
 };
 

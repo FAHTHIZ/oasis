@@ -24,6 +24,8 @@ const KEY_RULES = [
   { test: /^csk-[A-Za-z0-9]{20,}$/, providers: ['cerebras'] },
   { test: /^fw_[A-Za-z0-9]{16,}$/, providers: ['fireworks'] },
   { test: /^tgp_v1_[A-Za-z0-9_-]{20,}$/, providers: ['together'] },
+  // The unified key a self-hosted FreeLLMAPI gateway issues.
+  { test: /^freellmapi-[A-Za-z0-9_-]{24,}$/, providers: ['freellmapi'] },
   { test: /^sk-(proj|svcacct|admin)-[A-Za-z0-9_-]{20,}$/, providers: ['openai'] },
   { test: /^sk-[a-f0-9]{32}$/, providers: ['deepseek', 'moonshot', 'openai'] },
   { test: /^sk-[A-Za-z0-9]{40,}$/, providers: ['openai', 'moonshot', 'deepseek'] },
@@ -31,6 +33,9 @@ const KEY_RULES = [
   { test: /^[a-f0-9]{64}$/, providers: ['together', 'mistral'] },
   { test: /^[A-Za-z0-9]{32}$/, providers: ['mistral', 'together'] }
 ];
+
+// Self-hosted gateways on loopback that forward to cloud providers.
+const GATEWAYS = new Set(['omniroute', 'freellmapi']);
 
 const GITHUB_TOKEN = /^(gh[pousr]_[A-Za-z0-9]{30,}|github_pat_[A-Za-z0-9_]{40,})$/;
 const LOCAL_HOST = /^(localhost|127\.\d+\.\d+\.\d+|0\.0\.0\.0|\[::1\]|10\.\d+\.\d+\.\d+|192\.168\.\d+\.\d+|172\.(1[6-9]|2\d|3[01])\.\d+\.\d+|[a-z0-9-]+\.local)$/i;
@@ -411,7 +416,7 @@ async function lockIn(connection, ranked, { fetchImpl, onStatus, tries = 4, pref
   const order = [...preferred.filter((id) => !ranked.includes(id)), ...preferred.filter((id) => ranked.includes(id)), ...ranked.filter((id) => !preferred.includes(id))];
   const failures = [];
   const unusable = [];
-  const gateway = connection.provider === 'omniroute';
+  const gateway = GATEWAYS.has(connection.provider);
   const skippedProviders = new Set();
   // Hundreds of listed models: allow more chat-only answers before settling.
   if (gateway) tries = Math.max(tries, 8);
@@ -668,10 +673,10 @@ async function probeEndpoint(raw, { apiKey = '', fetchImpl = globalThis.fetch.bi
     try {
       const ids = await attempt.test();
       if (attempt.kind === 'ollama') return makeConnection('ollama', { baseURL: origin + '/v1', local: true, models: rankModels(ids), label: local ? 'Ollama (this device)' : 'Ollama at ' + url.host });
-      const provider = knownPreset ? knownPreset[0] : /:1234$/.test(origin) ? 'lmstudio' : /:8080$/.test(origin) ? 'llamacpp' : /:20128$/.test(origin) ? 'omniroute' : 'custom';
+      const provider = knownPreset ? knownPreset[0] : /:1234$/.test(origin) ? 'lmstudio' : /:8080$/.test(origin) ? 'llamacpp' : /:20128$/.test(origin) ? 'omniroute' : /:3001$/.test(origin) ? 'freellmapi' : 'custom';
       const label = knownPreset ? knownPreset[1].label : provider === 'custom' ? url.host : PRESETS[provider].label;
       // A gateway on localhost forwards to the cloud: time and label it as cloud.
-      return makeConnection(provider, { baseURL: attempt.base, apiKey, local: local && provider !== 'omniroute', models: orderByHints(rankModels(ids), ids.hints, { keyless: !apiKey }), skipModels: ids.hints ? [...ids.hints.noTools, ...(apiKey ? [] : ids.hints.paid)] : [], label });
+      return makeConnection(provider, { baseURL: attempt.base, apiKey, local: local && !GATEWAYS.has(provider), models: orderByHints(rankModels(ids), ids.hints, { keyless: !apiKey }), skipModels: ids.hints ? [...ids.hints.noTools, ...(apiKey ? [] : ids.hints.paid)] : [], label });
     } catch (error) {
       // A gateway can guard an Ollama-style alias (/api/tags) as well as /v1, so an
       // auth failure on one probe must not stop the probes that carry the key.

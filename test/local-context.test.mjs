@@ -163,10 +163,17 @@ test('unknown hosted models take their window from the provider /models listing'
   const window = await probeProviderModelWindow({ protocol: 'openai-compatible', baseURL: 'https://api.example.test/v1/', model: 'mystery-model', apiKey: 'k1' }, { fetchImpl, env: {}, cache: false });
   assert.equal(window, 65536);
   assert.deepEqual(seen, [{ url: 'https://api.example.test/v1/models', auth: 'Bearer k1' }]);
-  // Loopback servers are not probed by default, and the probe can be turned off.
-  assert.equal(await probeProviderModelWindow({ baseURL: 'http://127.0.0.1:8000/v1', model: 'm' }, { fetchImpl, env: {}, cache: false }), 0);
+  // A gateway on loopback (FreeLLMAPI, OmniRoute, LiteLLM, vLLM) lists windows
+  // like a hosted provider and is asked too; local model servers have their own
+  // probe and are skipped here, as is any other loopback port (often a dev
+  // server). The probe can be turned off.
+  assert.equal(await probeProviderModelWindow({ baseURL: 'http://127.0.0.1:3001/v1', model: 'mystery-model' }, { fetchImpl, env: {}, cache: false }), 65536);
+  assert.equal(seen[1].url, 'http://127.0.0.1:3001/v1/models');
+  assert.equal(await probeProviderModelWindow({ baseURL: 'http://127.0.0.1:1234/v1', model: 'mystery-model' }, { fetchImpl, env: {}, cache: false }), 0);
+  assert.equal(await probeProviderModelWindow({ baseURL: 'http://127.0.0.1:5173/v1', model: 'mystery-model' }, { fetchImpl, env: {}, cache: false }), 0);
+  assert.equal(await probeProviderModelWindow({ baseURL: 'http://127.0.0.1:11434/v1', model: 'mystery-model' }, { fetchImpl, env: {}, cache: false }), 0);
   assert.equal(await probeProviderModelWindow({ baseURL: 'https://api.example.test/v1', model: 'm' }, { fetchImpl, env: { OASIS_MODEL_INFO_PROBE: '0' }, cache: false }), 0);
-  assert.equal(seen.length, 1);
+  assert.equal(seen.length, 2);
 });
 
 test('DeepSeek V4 models get the 1M window', async () => {

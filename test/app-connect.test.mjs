@@ -446,6 +446,22 @@ test('smartConnect: OmniRoute guarding /api/tags with 401 still connects with th
   assert.equal(runtimeConfigFromConnection(result).fallbackModel, '', 'dead upstreams never become backups');
 });
 
+test('smartConnect: a pasted FreeLLMAPI key connects to the local gateway, timed as cloud', async () => {
+  const key = 'freellmapi-' + 'a1b2c3d4'.repeat(6);
+  assert.deepEqual(detectKey(key), ['freellmapi']);
+  const { fetchImpl, calls } = fakeFetch([
+    [/:3001\/v1\/models$/, (url, options) => (JSON.stringify(options.headers || {}).includes(key)
+      ? { data: [{ id: 'auto', owned_by: 'freellmapi' }, { id: 'llama-3.3-70b', owned_by: 'freellmapi' }] }
+      : { status: 401, body: { error: { message: 'Invalid API key' } } })],
+    [/:3001\/v1\/chat\/completions$/, () => toolReply]
+  ]);
+  const result = await smartConnect(key, { fetchImpl, retryDelayMs: 0 });
+  assert.equal(result.connection.provider, 'freellmapi');
+  assert.equal(result.connection.baseURL, 'http://localhost:3001/v1');
+  assert.equal(result.connection.local, false, 'a localhost gateway forwards to the cloud');
+  assert.ok(calls.every((c) => /:3001\//.test(c.url)), 'the key is only sent to the gateway');
+});
+
 test('smartConnect: a rejected key at an address says so instead of asking for a key', async () => {
   const key = 'sk-' + 'a1b2c3d4'.repeat(4);
   const { fetchImpl } = fakeFetch([[/:20128\//, () => ({ status: 401, body: { error: { message: 'Invalid API key' } } })]]);
