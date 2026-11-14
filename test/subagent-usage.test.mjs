@@ -114,3 +114,24 @@ test('a failed subagent keeps the tokens it spent before failing', async (t) => 
   assert.equal(record.usage.requests, 1);
   assert.equal(record.tokensUsed, 10);
 });
+
+// Reports were cut at 30,000 characters with no note, which also dropped the
+// JSON verdict an agent hook writes at the end.
+test('a long subagent report reaches the parent whole', async (t) => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'oasis-sub-report-'));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const long = 'finding\n'.repeat(10000) + '{"ok": false, "reason": "END-MARK"}';
+  const { config } = await modelServer(t, {
+    parent: (payload) => payload.messages.at(-1).role === 'user' ? { content: null, tool_calls: [call('t1', 'task', { description: 'review', prompt: 'review', subagent_type: 'explore' })] } : { content: 'done' },
+    child: () => ({ content: long })
+  });
+  const session = await createSession({ root, config, settings });
+  t.after(() => closeSession(session));
+  await runAgentTurn(session, 'start', { autoApprove: true });
+  const record = session.agentTasks.agents.get('agent_1');
+  assert.equal(record.report, long);
+  const { boundSubagentReport, MAX_SUBAGENT_REPORT_CHARS } = await import('../src/agent.mjs');
+  const huge = boundSubagentReport('x'.repeat(MAX_SUBAGENT_REPORT_CHARS + 10) + 'TAIL');
+  assert.match(huge, /characters of the report omitted/);
+  assert.ok(huge.endsWith('TAIL'));
+});

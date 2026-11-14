@@ -178,7 +178,7 @@ export function normalizeAgentDefinition(raw, body, { name, source, plugin = fal
     omitClaudeMd: booleanField(data.omitclaudemd),
     // First user turn when this agent runs as the main session agent (--agent); not for plugin agents.
     initialPrompt: !plugin && data.initialprompt ? String(data.initialprompt).trim().slice(0, 20000) : '',
-    prompt: String(body || '').trim().slice(0, 30000),
+    prompt: String(body || '').trim().slice(0, 200000),
     // Antigravity: `subagent: false` keeps an agent out of the task tool (it can still be the main agent).
     subagentAllowed: data.subagent === undefined ? true : booleanField(data.subagent),
     source
