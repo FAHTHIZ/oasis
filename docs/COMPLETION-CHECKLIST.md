@@ -17,7 +17,7 @@ Status: **done** (tested and pushed) · **doing** · **open** · **blocked**
 | Baseline: lint, audit, full test suite on Node 22 | done | oxlint 0 warnings; `npm audit` 0 vulnerabilities; 2,384 tests, 0 failures |
 | Use the CLI as a new user (clean HOME) | done | `--help`, `doctor`, `connect` (Ollama) and a `-p` task with a local model |
 | Use the web workspace as a new user | done | Connected a local model, ran tasks in two tabs; found the busy-folder dead end (fixed) |
-| Current competitor scan (Claude Code, Codex, OpenCode, OpenHands) | doing | Claude Code 2.1.322, OpenCode 2.2.6, OpenHands 1.38.0 as of 2026-11-10 |
+| Current competitor scan (Claude Code, Codex, Gemini CLI, OpenCode, Aider) | done | Benchmarked versions are the latest published on 2026-11-14: Claude Code 2.1.325, Codex CLI 0.169.0, Gemini CLI 0.68.0, OpenCode 1.19.5 (npm `latest`), Aider 0.86.2 (PyPI). Feature comparison in [COMPARISON.md](COMPARISON.md) |
 
 ## 2. Fix and consolidate
 
@@ -124,7 +124,7 @@ Gaps found by checking the [hooks reference](https://code.claude.com/docs/en/hoo
 | Item | Status | Evidence / notes |
 | --- | --- | --- |
 | Same-model, multi-trial benchmark vs Claude Code / Codex / OpenCode | partial | 2026-11-14 run on Kilo's keyless route: 1 of 12 tasks completed for all five agents (all passed `clamp-integer`) before Kilo's anonymous quota ran out (429 `PROMOTION_MODEL_LIMIT_REACHED`). Evidence: `bench/results/live-2026-11-14-kilo-h2h-partial/`. Resume when the quota resets, or with a free Kilo/OpenRouter/Groq account key from the owner |
-| OASIS prompt-token use is the highest of five agents on `clamp-integer` (242,932 vs Codex 157,994, OpenCode 111,139; gateway counts) | open | Prompt doubled at request 4 (7.6k → 16.1k) and stayed. The relay now records message sizes, so the next run shows which message it was |
+| OASIS prompt-token use is the highest of five agents on `clamp-integer` (242,932 vs Codex 157,994, OpenCode 111,139; gateway counts) | explained | Not a harness defect. Base request is comparable (OASIS ~7.0k, Codex ~6.9k, OpenCode ~7.8k tokens). The jump is the model reading `test/runtime.test.mjs` (24,064 chars) whole at its 2nd call (OVH run trace), which every later request carries; Claude Code's Read would also return it whole (under 2,000 lines). The rest is request count: each extra round trip re-sends the context. The relay now names the tool behind the largest message (`adc35b81`) |
 | Benchmark harness: quota stop, rate-limited trials excluded, progress saved per unit, message sizes recorded | done | `test/bench-live.test.mjs` (26 pass, with a fake upstream that returns Kilo's quota 429) |
 | Gemini CLI in the same benchmark | doing | `bench:live --router` runs it through FreeLLMAPI's native `/v1beta` surface (`5ee05996`); smoke: passed clamp-integer in 17 s. Full run after the main one, so both stay inside Kilo's hourly limit |
 | Live check of both routers with OASIS | done | FreeLLMAPI (source, 2026-11-14) and OmniRoute 3.8.53: `oasis -p` fixed a bug through each on the same free Nemotron model, 4 requests each; `docs/CONFIGURATION.md` |
@@ -143,7 +143,7 @@ Gaps found by checking the [hooks reference](https://code.claude.com/docs/en/hoo
 
 | Item | Status | Evidence / notes |
 | --- | --- | --- |
-| README revamp with real screenshots only | open | Do after the product and interfaces stabilise |
+| README revamp with real screenshots only | partial | `af1d2c8a`: hero labelled as an illustration (the demos are real recordings), test count, free-tier routers, a verified-vs-not status table. Benchmark summary to add when the OVH run ends |
 
 ## Blockers
 
