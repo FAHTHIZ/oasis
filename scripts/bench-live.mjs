@@ -219,6 +219,17 @@ export function summarize(runs, options, now = new Date(), gateway = null) {
     if (!rows.length || categories.length !== 1 || difficulties.length !== 1 || !categories[0] || !['small', 'medium', 'large'].includes(difficulties[0])) return null;
     return { category: categories[0], difficulty: difficulties[0] };
   };
+  // Tasks that only some agents ran (a run cut short by a quota, or an agent
+  // skipped part-way) are not scored, but their outcomes stay visible.
+  const partialTasks = {};
+  for (const id of [...new Set(taskSets.flatMap((set) => [...set]))].filter((id) => !shared.includes(id)).sort()) {
+    partialTasks[id] = Object.fromEntries(completed.map((run) => {
+      const rows = rowsFor(run, id);
+      if (!rows.length) return [run.agent, 'not run'];
+      const passed = rows.filter((row) => row.status === 'passed').length;
+      return [run.agent, (passed ? 'passed ' : 'failed ') + passed + '/' + rows.length + (rows.some((row) => row.status !== 'passed' && row.upstreamRateLimited) ? ' (upstream HTTP 429)' : '')];
+    }));
+  }
   const verifiedTasks = [], unverifiedTasks = [], fingerprintMismatchTasks = [], metadataMismatchTasks = [], incompleteTasks = [], rateLimitedTasks = [], taskMetadata = {};
   for (const id of shared) {
     const groups = completed.map((run) => rowsFor(run, id));
@@ -262,6 +273,7 @@ export function summarize(runs, options, now = new Date(), gateway = null) {
   if (fingerprintMismatchTasks.length) caveats.push(fingerprintMismatchTasks.length + ' shared task(s) had inconsistent or different fingerprints and were excluded.');
   if (metadataMismatchTasks.length) caveats.push(metadataMismatchTasks.length + ' shared task(s) had missing or conflicting category/difficulty metadata and were excluded.');
   if (rateLimitedTasks.length) caveats.push(rateLimitedTasks.length + ' shared task(s) were excluded because an agent failed a trial while the upstream was refusing its requests with HTTP 429: ' + rateLimitedTasks.join(', ') + '.');
+  if (Object.keys(partialTasks).length) caveats.push(Object.keys(partialTasks).length + ' task(s) were not run by every completed agent and are not scored: ' + Object.keys(partialTasks).join(', ') + '. Their outcomes are listed under Task coverage.');
   if (incompleteTasks.length) caveats.push(incompleteTasks.length + ' shared task(s) did not have exactly ' + options.trials + ' distinct trial rows for every completed agent and were excluded.');
   const completedAgents = completed.map((run) => run.agent);
   // Trials that ended in an agent or provider error (rate limit, crash,
@@ -283,7 +295,7 @@ export function summarize(runs, options, now = new Date(), gateway = null) {
   else if (!sameProviderVerified) caveats.push('Every scored agent was served model ' + scoredModels[0][0] + ', but the gateway could not confirm one upstream provider for all of them (missing or different provider fields); serving stacks can differ in quantization and limits.');
   if (!options.router && !options.upstream) caveats.push('No shared gateway was configured. Model/provider differences mean results describe each product as configured, not a controlled same-model harness comparison.');
   if (distinctModels.length !== 1 || options.agents.some((agent) => !requestedModels[agent])) caveats.push('The selected agents do not all have one identical, explicitly requested model ID.');
-  return { date: now.toISOString(), oasisVersion: oasisVersion(), requestedModels, router: options.router ? new URL(options.router).host : options.upstream ? new URL(options.upstream).host + ' (recorded)' : null, sameModelVerified, servedModel: sameModelVerified ? scoredModels[0][0] : null, gateway, trialsPerTask: options.trials, requestedAgents: options.agents, sharedTaskIds: shared, sharedTasks: verifiedTasks, excludedTasks: [...new Set([...unverifiedTasks, ...fingerprintMismatchTasks, ...metadataMismatchTasks, ...incompleteTasks, ...rateLimitedTasks])].sort(), unverifiedTasks, fingerprintMismatchTasks, metadataMismatchTasks, incompleteTasks, rateLimitedTasks, taskMetadata, caveats, agents };
+  return { date: now.toISOString(), oasisVersion: oasisVersion(), requestedModels, router: options.router ? new URL(options.router).host : options.upstream ? new URL(options.upstream).host + ' (recorded)' : null, sameModelVerified, servedModel: sameModelVerified ? scoredModels[0][0] : null, gateway, trialsPerTask: options.trials, requestedAgents: options.agents, sharedTaskIds: shared, sharedTasks: verifiedTasks, excludedTasks: [...new Set([...unverifiedTasks, ...fingerprintMismatchTasks, ...metadataMismatchTasks, ...incompleteTasks, ...rateLimitedTasks])].sort(), unverifiedTasks, fingerprintMismatchTasks, metadataMismatchTasks, incompleteTasks, rateLimitedTasks, partialTasks, taskMetadata, caveats, agents };
 }
 export function renderSummary(summary) {
   const lines = [];
@@ -313,6 +325,11 @@ export function renderSummary(summary) {
   lines.push('Shared task IDs: ' + (summary.sharedTaskIds.length ? summary.sharedTaskIds.join(', ') : 'none') + '.');
   lines.push('Verified matched tasks: ' + (summary.sharedTasks.length ? summary.sharedTasks.join(', ') : 'none') + '.');
   if (summary.excludedTasks.length) lines.push('Excluded task IDs: ' + summary.excludedTasks.join(', ') + '.');
+  const partial = Object.entries(summary.partialTasks || {});
+  if (partial.length && completed.length) {
+    lines.push('', 'Not every agent ran these tasks, so they are not scored:', '', '| Task | ' + completed.map((item) => item.name).join(' | ') + ' |', '|---|' + Array(completed.length).fill('---').join('|') + '|');
+    for (const [id, outcomes] of partial) lines.push('| `' + id + '` | ' + completed.map((item) => outcomes[item.agent] || 'not run').join(' | ') + ' |');
+  }
   if (summary.sharedTasks.length && completed.length) {
     lines.push('', '<details><summary>Per-task results</summary>', '', '| Task | Category | Difficulty | ' + completed.map((item) => item.name).join(' | ') + ' |', '|---|' + Array(completed.length + 2).fill('---:').join('|') + '|');
     for (const id of summary.sharedTasks) lines.push('| `' + id + '` | ' + summary.taskMetadata[id].category + ' | ' + summary.taskMetadata[id].difficulty + ' | ' + completed.map((item) => item.perTask[id] === null ? 'n/a' : pct(item.perTask[id])).join(' | ') + ' |');

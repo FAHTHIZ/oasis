@@ -343,3 +343,20 @@ test('the relay names the tool behind a large result (chat, Responses and Anthro
   const anthropic = messageSizes({ messages: [{ role: 'assistant', content: [{ type: 'tool_use', id: 't1', name: 'Read', input: { file_path: '/x' } }] }, { role: 'user', content: [{ type: 'tool_result', tool_use_id: 't1', content: 'w'.repeat(800) }] }] });
   assert.equal(anthropic.largestMessage.tool, 'Read');
 });
+
+test('tasks only some agents ran are not scored but their outcomes are listed', () => {
+  const options = parseBenchArgs(['--agents', 'oasis,claude,codex', '--model', 'm']);
+  const row = (id, status, extra = {}) => ({ taskId: id, taskFingerprint: 'a'.repeat(64), category: 'security-boundaries', difficulty: 'medium', trial: 1, status, wallTimeMs: 1, totalTokens: 1, costUSD: 0, ...extra });
+  const make = (agent, rows) => ({ agent, name: agent, summary: { label: agent, provider: { model: 'm' } }, results: rows });
+  const summary = summarize([
+    make('oasis', [row('both', 'passed'), row('cut', 'passed')]),
+    make('claude', [row('both', 'failed'), row('cut', 'failed', { upstreamRateLimited: 2 })]),
+    make('codex', [row('both', 'passed')])
+  ], options, new Date('2026-11-14T00:00:00Z'));
+  assert.deepEqual(summary.sharedTasks, ['both']);
+  assert.deepEqual(summary.partialTasks, { cut: { oasis: 'passed 1/1', claude: 'failed 0/1 (upstream HTTP 429)', codex: 'not run' } });
+  assert.equal(summary.agents[0].trials, 1);
+  const rendered = renderSummary(summary);
+  assert.match(rendered, /1 task\(s\) were not run by every completed agent and are not scored: cut/);
+  assert.match(rendered, /\| `cut` \| passed 1\/1 \| failed 0\/1 \(upstream HTTP 429\) \| not run \|/);
+});
