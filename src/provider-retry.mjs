@@ -171,8 +171,25 @@ export function providerRetryLimit(status, env = process.env) {
   return Math.min(wanted, 20);
 }
 
+// The wait a response advertises: retry-after-ms (milliseconds, sent by OpenAI and
+// Anthropic and read first by their SDKs), then Retry-After (seconds or an HTTP date).
+export function advertisedRetryAfterMs(headers) {
+  const get = (name) => (headers && typeof headers.get === 'function' ? headers.get(name) : headers && headers[name]) || '';
+  const ms = String(get('retry-after-ms')).trim();
+  if (/^\d+(?:\.\d+)?$/.test(ms)) return Math.max(0, Number(ms));
+  return parseRetryAfterMs(get('retry-after'));
+}
+
+// x-should-retry: "true" or "false" is the server's own call (the Anthropic and
+// OpenAI SDKs follow it over the status code). null when the header is absent.
+export function serverRetryAdvice(headers) {
+  const get = (name) => (headers && typeof headers.get === 'function' ? headers.get(name) : headers && headers[name]) || '';
+  const value = String(get('x-should-retry')).trim().toLowerCase();
+  return value === 'true' ? true : value === 'false' ? false : null;
+}
+
 export function providerRetryDelayMs(retryNumber, retryAfter = null, random = Math.random) {
-  const advertised = parseRetryAfterMs(retryAfter);
+  const advertised = retryAfter && typeof retryAfter === 'object' ? advertisedRetryAfterMs(retryAfter) : parseRetryAfterMs(retryAfter);
   if (advertised !== null) return advertised > MAX_INLINE_RETRY_AFTER_MS ? null : advertised;
   // Exponential backoff with jitter (50-100% of the step), so parallel subagents that hit
   // the same rate limit do not all retry in the same instant and collide again.
