@@ -4,6 +4,8 @@ User-facing change history grouped by package version. A version heading does no
 
 ## Unreleased
 
+- `oasis sessions` now shows each session's title (its name or first prompt), so sessions can be told apart. `oasis doctor` no longer asks for `contextWindow` when the config already sets it; it names the configured window instead.
+
 - Chat titles (`oasis sessions`, the browser app sidebar, session search) now use what the user typed. A chat started with "look at @math.mjs please" was titled with the attached file contents ("Referenced files: <file path=…"). Test in `test/session-title-mentions.test.mjs`.
 
 - `/compact` preview: "Detected likely paths" now lists files the conversation named, including bare source files (`math.mjs`) and dot-folders (`.github/workflows/ci.yml`). It no longer shows paths from Oasis's own reminders such as `oasis/followups.json`. Test in `test/compaction-preview-paths.test.mjs`.

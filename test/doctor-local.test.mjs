@@ -46,3 +46,22 @@ test('oasis doctor lists the backup models that oasis connect saved in the confi
   assert.match(out, /Model: main-model/);
   assert.match(out, /Fallback models: backup-a, backup-b/);
 });
+
+test('oasis doctor names the configured contextWindow when the local server does not report one', async (t) => {
+  const server = createServer((req, res) => { res.writeHead(404); res.end(); });
+  await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
+  t.after(() => new Promise((resolve) => server.close(resolve)));
+  const dir = await mkdtemp(path.join(os.tmpdir(), 'oasis-doctor-window-'));
+  t.after(() => rm(dir, { recursive: true, force: true }));
+  const { writeFile } = await import('node:fs/promises');
+  await writeFile(path.join(dir, 'config.json'), JSON.stringify({ protocol: 'openai-compatible', baseURL: 'http://127.0.0.1:' + server.address().port + '/v1', model: 'm', apiKey: '', keyless: true, contextWindow: 65536 }));
+  const { spawn } = await import('node:child_process');
+  const env = { ...process.env, OASIS_CONFIG_DIR: dir, HOME: dir, NO_COLOR: '1' };
+  for (const key of Object.keys(env)) if (/^(OASIS_(BASE_URL|MODEL|PROTOCOL|API_KEY|FALLBACK_MODEL|CONTEXT_WINDOW)|OPENAI_|ANTHROPIC_)/.test(key)) delete env[key];
+  const child = spawn(process.execPath, [CLI, 'doctor'], { cwd: dir, env });
+  let out = '';
+  child.stdout.on('data', (chunk) => { out += chunk; });
+  await new Promise((resolve) => child.on('close', resolve));
+  assert.match(out, /using the configured 65,536-token window/);
+  assert.doesNotMatch(out, /set contextWindow in config if replies get cut off/, 'Do not ask for a setting that is already set.');
+});

@@ -239,7 +239,9 @@ async function doctorLocalServer(config, write = (line) => stdout.write(line)) {
     const probe = await probeLocalContext(config, { env: { ...process.env, OASIS_LOCAL_CONTEXT_PROBE: '1' }, cache: false });
     const names = { ollama: 'Ollama', lmstudio: 'LM Studio', 'llama.cpp': 'llama-server' };
     if (!probe || !probe.contextLength) {
-      write('  Local model server: no context window reported (the server is not running, or it does not publish one; set contextWindow in config if replies get cut off)\n');
+      const configured = Number(config && config.contextWindow) || Number(process.env.OASIS_CONTEXT_WINDOW) || 0;
+      if (configured > 0) write('  Local model server: no context window reported; using the configured ' + configured.toLocaleString('en-US') + '-token window (contextWindow). Make sure the server really loads that many tokens.\n');
+      else write('  Local model server: no context window reported (the server is not running, or it does not publish one; set contextWindow in config if replies get cut off)\n');
       return;
     }
     const window = Number(probe.contextLength);
