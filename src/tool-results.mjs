@@ -1,6 +1,7 @@
 // What the model sees from a tool call (modelFacingResult), repairing history a crash or
 // cancel left half-written, cancellation checks, and the todo checklist reminder.
 // Extracted from agent.mjs, which re-exports the public names.
+import { randomUUID } from 'node:crypto';
 
 // What the model reads from a tool result, when that differs from the result
 // object the runtime keeps. git_status and git_diff results carried the full
@@ -75,9 +76,31 @@ export function repairInterruptedHistory(session) {
     const message = messages[i];
     if (message.role !== 'assistant' || !Array.isArray(message.tool_calls) || !message.tool_calls.length) continue;
     let end = i + 1;
-    const answered = new Set();
-    while (end < messages.length && messages[end].role === 'tool') { answered.add(messages[end].tool_call_id); end++; }
-    const missing = message.tool_calls.filter((call) => call && call.id && !answered.has(call.id));
+    const results = new Map();
+    while (end < messages.length && messages[end].role === 'tool') {
+      const id = messages[end].tool_call_id;
+      if (!results.has(id)) results.set(id, []);
+      results.get(id).push(end);
+      end++;
+    }
+    // A call without an ID, or a second call reusing an ID in the same
+    // message, can never be matched to a result; it gets its own ID (and the
+    // n-th result carrying the shared ID goes to the n-th call with it).
+    const seen = new Set();
+    const missing = [];
+    for (const call of message.tool_calls) {
+      if (!call || typeof call !== 'object') continue;
+      const original = typeof call.id === 'string' ? call.id : '';
+      const queue = results.get(original);
+      const resultIndex = queue && queue.length ? queue.shift() : -1;
+      if (!original || seen.has(original)) {
+        call.id = 'call_' + randomUUID().replace(/-/g, '').slice(0, 24);
+        if (resultIndex >= 0) messages[resultIndex].tool_call_id = call.id;
+        repaired++;
+      }
+      seen.add(call.id);
+      if (resultIndex < 0) missing.push(call);
+    }
     if (!missing.length) continue;
     // Calls that finished before the turn stopped keep their real output, so
     // the model does not repeat a write or a commit that already happened.
