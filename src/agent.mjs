@@ -1237,6 +1237,10 @@ const MAX_STREAM_RESTARTS = 2;
 const MAX_MALFORMED_CALL_RECOVERIES = 3;
 const MALFORMED_CALL_NUDGE = '<system-reminder>\nYour last tool call could not be parsed (the provider rejected it as a malformed function call), so nothing ran. Call the tool again with valid JSON arguments. If it carried a long file body, split the work: write a short file first, then add to it with edit_file.\n</system-reminder>';
 
+export function defaultStreamIdleMs(effort) {
+  return /^(?:high|xhigh|max)$/i.test(String(effort || '')) ? 600000 : 300000;
+}
+
 // Records a retry or recovery on the active trace (model request or turn span),
 // so a trace shows why a step took several attempts. No-op without telemetry.
 function traceRecovery(env, kind, details = {}) {
@@ -1595,7 +1599,10 @@ async function requestCompletionRaw(session, options = {}) {
   // never cut off while tokens are still arriving, but a silent hang is.
   const configuredTimeoutSeconds = Number(providerEnv.OASIS_REQUEST_TIMEOUT_SECONDS) || 0;
   const timeoutMs = requestTimeoutMs({ timeoutMs: options.timeoutMs, configuredSeconds: configuredTimeoutSeconds, local: isLoopbackProvider(config), streaming: typeof options.onDelta === 'function' });
-  const streamIdleMs = Math.min(900000, Math.max(1000, Number(options.streamIdleMs) || Number(providerEnv.OASIS_STREAM_IDLE_SECONDS) * 1000 || 120000));
+  // A reasoning model can think for minutes without sending a byte (OpenAI
+  // Responses and chat completions send no keepalive meanwhile), so the
+  // default matches Codex's 5 minutes, doubled for high effort.
+  const streamIdleMs = Math.min(900000, Math.max(1000, Number(options.streamIdleMs) || Number(providerEnv.OASIS_STREAM_IDLE_SECONDS) * 1000 || defaultStreamIdleMs(session.reasoningEffort)));
   let timedOut = false;
   let stalled = false;
   let responseStarted = false;
