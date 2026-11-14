@@ -41,3 +41,13 @@ test('grep rejects malformed type names and explains unknown ones', async () => 
   await assert.rejects(() => grepWorkspace(root, { pattern: 'x', type: 'nosuchtype' }), /type/i);
   await assert.rejects(() => grepWorkspace(root, { pattern: 'x', type: 'nosuchtype' }, { forceFallback: true }), /not known without ripgrep/);
 });
+
+test('the fallback grep says when it skipped a large file', async () => {
+  const root = await tree();
+  await writeFile(path.join(root, 'src', 'big.log'), 'needle\n' + 'x'.repeat(1100 * 1024));
+  const found = await grepWorkspace(root, { pattern: 'needle', output_mode: 'files_with_matches' }, { forceFallback: true });
+  assert.ok(!found.results.includes('src/big.log'));
+  assert.match(found.note, /1 file over 1 MiB was not searched/);
+  const small = await grepWorkspace(root, { pattern: 'needle', path: 'src/b.js' }, { forceFallback: true });
+  assert.equal(small.note, undefined);
+});

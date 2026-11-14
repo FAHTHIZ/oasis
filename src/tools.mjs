@@ -509,6 +509,11 @@ function emptySearchHint(needle, prefix) {
     '. Use grep for a regex, glob_files to find files by name, or list_files to see what exists. If the code does not exist yet, stop searching and create it.';
 }
 
+// Large single-file sources (TypeScript's checker.ts is 2.8 MB, sqlite3.c 9 MB)
+// must be searchable; at 256 KiB they returned no matches without a word.
+const SEARCH_MAX_BYTES = 16 * 1024 * 1024;
+const SEARCH_MAX_FILESIZE = '16M';
+
 export async function searchWorkspaceFiles(root, query, limit = 25, scope) {
   const needle = String(query || '');
   if (!needle.trim()) throw new Error('Search query cannot be empty.');
@@ -523,7 +528,7 @@ export async function searchWorkspaceFiles(root, query, limit = 25, scope) {
   // ripgrep searches the whole tree (honouring .gitignore) in parallel; the
   // JavaScript scan below is the fallback when no rg binary is available.
   if (resolveRipgrep(process.env)) {
-    const found = await grepWorkspace(root, { pattern: needle, ignore_case: true, path: prefix || '.', limit: maxResults }, { fixedStrings: true, maxFilesize: '256K', fullLines: true });
+    const found = await grepWorkspace(root, { pattern: needle, ignore_case: true, path: prefix || '.', limit: maxResults }, { fixedStrings: true, maxFilesize: SEARCH_MAX_FILESIZE, fullLines: true });
     const matches = [];
     for (const line of found.results) {
       const m = line.match(/^(.*?):(\d+):(.*)$/s);
@@ -533,7 +538,7 @@ export async function searchWorkspaceFiles(root, query, limit = 25, scope) {
     if (!matches.length && REGEX_LOOKING.test(needle)) {
       // Models often send `a|b` or `foo.*bar` here. Retry once as a regex.
       try {
-        const retry = await grepWorkspace(root, { pattern: needle, ignore_case: true, path: prefix || '.', limit: maxResults }, { maxFilesize: '256K', fullLines: true });
+        const retry = await grepWorkspace(root, { pattern: needle, ignore_case: true, path: prefix || '.', limit: maxResults }, { maxFilesize: SEARCH_MAX_FILESIZE, fullLines: true });
         for (const line of retry.results) {
           const m = line.match(/^(.*?):(\d+):(.*)$/s);
           if (!m || SKIP_DIRS_RE.test(m[1])) continue;
@@ -550,7 +555,7 @@ export async function searchWorkspaceFiles(root, query, limit = 25, scope) {
   for (const file of files) {
     let info;
     try { info = await stat(file.absolute); } catch { continue; }
-    if (info.size > 256 * 1024) continue;
+    if (info.size > SEARCH_MAX_BYTES) continue;
     let content;
     try { content = await readFile(file.absolute, 'utf8'); } catch { continue; }
     if (content.includes('\0')) continue;

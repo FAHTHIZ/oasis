@@ -4,6 +4,7 @@ User-facing change history grouped by package version. A version heading does no
 
 ## Unreleased
 
+- search_files searches files up to 16 MiB (was 256 KiB), so large single-file sources such as TypeScript's checker.ts no longer return "no matches". When ripgrep is missing, the fallback grep now says how many files over 1 MiB it skipped, or that it stopped after 8,000 files.
 - write_file, write_file with append, and edit_file strings accept up to 64 MiB, the same as editing an existing file (was 256 KiB). Overwriting a file over 256 KiB now keeps its line endings and encoding and runs the elision check; before, those were skipped for large files.
 - Security: every hook group for an event is loaded. Before, groups past the 50th were dropped, so a PreToolUse guard there never ran. Plugin dependencies past the 50th were also ignored.
 - OpenCode/Kilo commands and agents defined in opencode.json are no longer cut to the first 200, Roo/Kilo custom modes to the first 50, and an @folder mention lists 500 entries (was 200) with a note saying how many more there are.

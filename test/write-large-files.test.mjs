@@ -30,3 +30,13 @@ test('large writes, appends and edits work', async (t) => {
   await executeTool('edit_file', { path: 'gen.js', old_string: block, new_string: 'y'.repeat(300 * 1024) }, context);
   assert.match(await readFile(path.join(root, 'gen.js'), 'utf8'), /^const A = "y+";\n$/);
 });
+
+test('search_files finds a match inside a 3 MB source file', async (t) => {
+  const { searchWorkspaceFiles } = await import('../src/tools.mjs');
+  const root = await mkdtemp(path.join(os.tmpdir(), 'oasis-large-search-'));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  await writeFile(path.join(root, 'checker.ts'), 'const a = 1;\n'.repeat(250000) + 'function checkSourceElementWorker() {}\n');
+  const found = await searchWorkspaceFiles(root, 'checkSourceElementWorker');
+  assert.equal(found.matches.length, 1);
+  assert.equal(found.matches[0].line, 250001);
+});
