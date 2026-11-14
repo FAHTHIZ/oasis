@@ -356,6 +356,8 @@ export function createAcpServer(options = {}) {
         onStreamRestart: () => { streamed = ''; },
         onText: (value) => {
           const textValue = String(value || '');
+          // The final text can extend what was streamed; send the rest.
+          if (streamed && textValue.length > streamed.length && textValue.startsWith(streamed)) update(sessionId, { sessionUpdate: 'agent_message_chunk', content: { type: 'text', text: textValue.slice(streamed.length) } });
           if (!streamed && textValue) update(sessionId, { sessionUpdate: 'agent_message_chunk', content: { type: 'text', text: textValue } });
           streamed = '';
         },

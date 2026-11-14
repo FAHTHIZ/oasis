@@ -9,7 +9,7 @@ import { access, lstat, mkdir, open, readFile, realpath, rename, rm } from 'node
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { isIP } from 'node:net';
-import { createSession, runAgentTurn, closeSession, testProviderConnection, steerSession, carryUndeliveredSteering, compactHistoryIfNeeded } from './agent.mjs';
+import { createSession, runAgentTurn, closeSession, testProviderConnection, steerSession, carryUndeliveredSteering, compactHistoryIfNeeded, MAX_STREAMED_REPLY_CHARS } from './agent.mjs';
 import { startIdleCompaction, idleCompactMinutes } from './idle-compaction.mjs';
 import { loadConfig, saveConfig, getProviderSummary, validateProtocol, validateBaseUrl, isLoopbackUrl, getBaseConfigDirectory } from './config.mjs';
 import { cachedUpdateCheck, updateChecksDisabled, readUpdateState, writeUpdateState, RELEASES_PAGE } from './app-update.mjs';
@@ -1159,7 +1159,7 @@ export function createOasisWebServer(options = {}) {
           },
           onThinkingBudget: (budget) => emit(job, 'thinking', { budget }),
           onReasoningEffort: (effort) => emit(job, 'thinking', { effort }),
-          onText: (text) => { reasoningBuffer = ''; emit(job, 'assistant_text', { text: String(text || '').slice(0, 24000) }); },
+          onText: (text) => { reasoningBuffer = ''; emit(job, 'assistant_text', { text: String(text || '').slice(0, MAX_STREAMED_REPLY_CHARS) }); },
           // The model's reasoning summary as it streams (already redacted and
           // capped by the agent). A step's text replaces the one before.
           onModelTiming: (record) => emit(job, 'model_timing', record),
@@ -1171,7 +1171,7 @@ export function createOasisWebServer(options = {}) {
             if (delta) emit(job, 'reasoning_delta', { text: delta, ...(grows ? {} : { reset: true }) });
           },
           onDelta: (text) => {
-            const current = String(text || '').slice(0, 24000);
+            const current = String(text || '').slice(0, MAX_STREAMED_REPLY_CHARS);
             const delta = current.startsWith(assistantDeltaBuffer) ? current.slice(assistantDeltaBuffer.length) : current;
             assistantDeltaBuffer = current;
             if (delta) emit(job, 'assistant_delta', { text: delta });
