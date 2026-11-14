@@ -4113,7 +4113,7 @@ async function executeOneCallRaw(session, call, context, options) {
 // that was running may have left files half-changed.
 export function interruptedTurnNote(info = {}) {
   const request = String(info && info.request || '').replace(/\s+/g, ' ').trim().slice(0, 300);
-  return '<interrupted-turn>OASIS stopped before your previous turn finished' + (request ? ' (the request was: "' + request + '")' : '') + '. The conversation was restored up to the last completed step. Check the current state of the files before continuing, because your last step may not have finished.</interrupted-turn>';
+  return '<interrupted-turn>OASIS stopped before your previous turn finished' + (request ? ' (the request was: "' + request + '")' : '') + '. The conversation was restored up to the last completed step; tool calls whose result starts with "Interrupted:" may have partly run. Check the current state of the files before continuing, and do not repeat a step that already finished.</interrupted-turn>';
 }
 
 export async function runAgentTurn(session, prompt, options = {}) {
@@ -4764,12 +4764,15 @@ async function runAgentTurnRaw(session, prompt, options = {}) {
       isTask,
       maxParallelTasks: MAX_PARALLEL_SUBAGENTS
     });
+    // A mid-turn save taken while the batch runs keeps finished results.
+    session.pendingToolOutputs = outputs;
     for (const batch of batches) {
       // Results keep the model's original call order even if calls finish out of order.
       const results = await runPool(batch.calls, batch.concurrency, async (call) => {
         const toolName = call.function && call.function.name;
         recordSessionEvent(session, { type: 'tool_call', id: call.id, tool: toolName, input: auditSnippet(safeToolArguments(call.function && call.function.arguments), 2000) }, options.env);
         const message = await executeOneCall(session, call, context, options);
+        if (message && message.tool_call_id) outputs.set(message.tool_call_id, message);
         const outcome = message && message.result;
         const failed = Boolean(outcome && (outcome.error || (outcome.exitCode !== undefined && outcome.exitCode !== 0)));
         recordSessionEvent(session, { type: 'tool_result', id: call.id, tool: toolName, ok: !failed, ...(outcome && outcome.exitCode !== undefined ? { exitCode: outcome.exitCode } : {}), output: auditSnippet(outcome && outcome.error ? outcome.error : message && message.content, 1000) }, options.env);
@@ -4988,6 +4991,8 @@ async function runAgentTurnRaw(session, prompt, options = {}) {
         await recordDedupedRead(session, safeToolArguments(call.function && call.function.arguments), item.tool_call_id, item, options.env || process.env).catch(() => {});
       }
     }
+
+    session.pendingToolOutputs = null;
 
     if (assistant.unreadableToolCalls) {
       const lastTool = session.messages[session.messages.length - 1];

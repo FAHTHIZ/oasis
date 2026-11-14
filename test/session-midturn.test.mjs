@@ -3,17 +3,36 @@ import assert from 'node:assert/strict';
 import { mkdtemp, rm } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import { completeExchanges, saveSession, loadSession } from '../src/sessions.mjs';
+import { completeExchanges, saveSession, loadSession, INTERRUPTED_TOOL_RESULT } from '../src/sessions.mjs';
 
 const call = (id) => ({ id, type: 'function', function: { name: 'read_file', arguments: '{}' } });
 
-test('completeExchanges drops a tool call whose results have not all arrived', () => {
+test('completeExchanges answers every unanswered tool call so the transcript stays valid', () => {
   const base = [{ role: 'system', content: 's' }, { role: 'user', content: 'fix it' }];
   const done = [...base, { role: 'assistant', content: '', tool_calls: [call('a')] }, { role: 'tool', tool_call_id: 'a', content: 'ok' }];
   assert.deepEqual(completeExchanges(done), done);
-  const pending = [...done, { role: 'assistant', content: '', tool_calls: [call('b'), call('c')] }, { role: 'tool', tool_call_id: 'b', content: 'ok' }];
-  assert.deepEqual(completeExchanges(pending), done);
   assert.deepEqual(completeExchanges(base), base);
+  const step = { role: 'assistant', content: '', tool_calls: [call('b'), call('c')] };
+  const pending = [...done, step, { role: 'tool', tool_call_id: 'b', content: 'ok' }];
+  const fixed = completeExchanges(pending);
+  assert.deepEqual(fixed.slice(0, pending.length), pending);
+  assert.equal(fixed.length, pending.length + 1);
+  assert.deepEqual(fixed.at(-1), { role: 'tool', tool_call_id: 'c', name: 'read_file', content: INTERRUPTED_TOOL_RESULT });
+  // An assistant message whose calls cannot be answered (no id) is dropped.
+  assert.deepEqual(completeExchanges([...done, { role: 'assistant', content: '', tool_calls: [{ type: 'function', function: { name: 'x' } }] }]), done);
+});
+
+test('completeExchanges keeps output from calls that finished before OASIS stopped', () => {
+  const base = [{ role: 'system', content: 's' }, { role: 'user', content: 'deploy' }];
+  const messages = [...base, { role: 'assistant', content: '', tool_calls: [call('w'), call('r')] }];
+  const pendingOutputs = new Map([['w', { role: 'tool', tool_call_id: 'w', name: 'read_file', content: 'wrote 3 lines' }]]);
+  const fixed = completeExchanges(messages, pendingOutputs);
+  assert.equal(fixed.length, 5);
+  assert.equal(fixed[3].tool_call_id, 'w');
+  assert.match(fixed[3].content, /recovered[\s\S]*wrote 3 lines$/);
+  assert.equal(fixed[4].tool_call_id, 'r');
+  assert.equal(fixed[4].content, INTERRUPTED_TOOL_RESULT);
+  assert.equal(messages.length, 3, 'the live transcript is not modified');
 });
 
 // A turn interrupted mid-task (closed terminal, crash) is saved as it goes and
@@ -31,7 +50,9 @@ test('a session saved mid-turn loads back as a valid transcript', async (t) => {
   const loaded = await loadSession(dir, saved.id, { env });
   const messages = loaded.messages || loaded.session?.messages;
   assert.equal(messages.at(-1).role, 'tool');
-  assert.equal(messages.length, 4);
+  assert.equal(messages.at(-1).tool_call_id, 'b');
+  assert.equal(messages.at(-1).content, INTERRUPTED_TOOL_RESULT);
+  assert.equal(messages.length, 6);
 });
 
 test('saveMidTurn trails the step, throttles snapshots, and settleMidTurnSave waits for the last one', async (t) => {
