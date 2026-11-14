@@ -21,12 +21,13 @@ const ALL_AGENTS = ['oasis', 'claude', 'codex', 'gemini', 'opencode', 'aider'];
 const DISPLAY = { oasis: 'OASIS', ...Object.fromEntries(Object.entries(EXTERNAL_AGENTS).map(([id, adapter]) => [id, adapter.name])) };
 
 export function parseBenchArgs(argv) {
-  const options = { agents: ALL_AGENTS.slice(), model: '', models: {}, trials: 1, task: null, router: '', upstream: '', gatewayIntervalMs: 0, outDir: '', yes: false, timeoutSeconds: 600, help: false };
+  const options = { agents: ALL_AGENTS.slice(), model: '', models: {}, trials: 1, task: null, interleave: false, router: '', upstream: '', gatewayIntervalMs: 0, outDir: '', yes: false, timeoutSeconds: 600, help: false };
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i];
     const value = () => { const next = argv[++i]; if (next === undefined || next.startsWith('--')) throw new Error(arg + ' needs a value.'); return next; };
     if (arg === '--help' || arg === '-h') options.help = true;
     else if (arg === '--yes') options.yes = true;
+    else if (arg === '--interleave') options.interleave = true;
     else if (arg === '--agents') options.agents = value().split(',').map((item) => item.trim()).filter(Boolean);
     else if (arg === '--model') options.model = value();
     else if (arg === '--model-for') { const [agent, ...rest] = value().split('='); options.models[agent] = rest.join('='); }
@@ -45,6 +46,7 @@ export function parseBenchArgs(argv) {
   for (const [agent, model] of Object.entries(options.models)) { if (!ALL_AGENTS.includes(agent)) throw new Error('Unknown agent in --model-for: ' + agent + '.'); if (!model.trim()) throw new Error('--model-for needs a non-empty model ID.'); }
   if (!Number.isInteger(options.timeoutSeconds) || options.timeoutSeconds < 30 || options.timeoutSeconds > 3600) throw new Error('--timeout-seconds must be 30-3600.');
   if (!Number.isInteger(options.gatewayIntervalMs) || options.gatewayIntervalMs < 0) throw new Error('--gateway-interval-ms must be a whole number of milliseconds.');
+  if (options.interleave && !options.task) throw new Error('--interleave needs --task with the task IDs to alternate over.');
   if (options.router && options.upstream) throw new Error('Use either --router or --upstream, not both.');
   if (options.upstream) { let parsed; try { parsed = new URL(options.upstream); } catch { throw new Error('--upstream must be a valid HTTP(S) URL.'); } if (!['http:', 'https:'].includes(parsed.protocol) || !parsed.hostname) throw new Error('--upstream must be a valid HTTP(S) URL.'); }
   if (options.router) { let parsed; try { parsed = new URL(options.router); } catch { throw new Error('--router must be a valid HTTP(S) URL.'); } if (!['http:', 'https:'].includes(parsed.protocol) || !parsed.hostname) throw new Error('--router must be a valid HTTP(S) URL.'); }
@@ -103,10 +105,19 @@ export async function runBenchmark(options, { env = process.env, runner = runEva
   if (options.upstream && !options.model) throw new Error('--upstream needs --model: the gateway sends that one model for every agent.');
   const gateway = options.upstream ? await startGateway({ upstream: options.upstream, model: options.model, minIntervalMs: options.gatewayIntervalMs, log: path.join(outDir, 'gateway.jsonl') }) : null;
   try {
-  for (const agent of options.agents) {
+  // Default: each agent runs every task before the next agent starts. With
+  // --interleave the order is task-major (task 1 for every agent, then task 2,
+  // ...), so a free tier that slows down or runs out part-way through affects
+  // every agent alike instead of only the ones scheduled last.
+  const taskIds = options.task ? String(options.task).split(',').map((id) => id.trim()).filter(Boolean) : [];
+  const units = options.interleave
+    ? taskIds.flatMap((task) => options.agents.map((agent) => ({ agent, task })))
+    : options.agents.map((agent) => ({ agent, task: options.task }));
+  const collected = new Map(options.agents.map((agent) => [agent, { results: [], summary: null, errors: [] }]));
+  for (const { agent, task } of units) {
     const model = modelFor(agent, options, env);
     const args = [...(agent === 'oasis' ? [] : [EXTERNAL_AGENTS[agent].flag]), '--trials', String(options.trials), '--timeout-seconds', String(options.timeoutSeconds)];
-    if (options.task) args.push('--task', options.task);
+    if (task) args.push('--task', task);
     if (model && agent !== 'oasis') args.push('--model', model);
     const agentEnv = gateway
       ? agentEnvironment(agent, { ...options, router: gateway.agentUrl(agent) }, { ...env, OASIS_BENCH_API_KEY: 'bench-gateway' })
@@ -116,20 +127,32 @@ export async function runBenchmark(options, { env = process.env, runner = runEva
     // 127.0.0.1, and fail before the first request.
     if (gateway) for (const name of ['NO_PROXY', 'no_proxy']) agentEnv[name] = withLoopback(env[name]);
     if (agent === 'oasis' && model) agentEnv.OASIS_MODEL = model;
-    process.stdout.write('\n== ' + DISPLAY[agent] + (model ? ' (' + model + ')' : '') + '\n');
+    process.stdout.write('\n== ' + DISPLAY[agent] + (model ? ' (' + model + ')' : '') + (options.interleave ? ' · ' + task : '') + '\n');
+    const entry = collected.get(agent);
     try {
       const result = await runner(args, { autoApprove: true, env: agentEnv, output: quietOutput('  '), resultsDir: rawDir });
-      // An agent that never got going (not signed in, bad model, gateway down) has not
-      // been measured; scoring it 0% would be misleading.
-      if (result.results.length && result.results.every((row) => row.error)) throw new Error('every trial ended in an agent error before verification (first: ' + String(result.results[0].error).split('\n')[0].slice(0, 200) + ')');
-      const file = path.join(outDir, agent + '.json');
-      await copyFile(result.resultsPath, file);
-      runs.push({ agent, name: DISPLAY[agent], file: path.basename(file), summary: result.summary, results: result.results });
+      entry.results.push(...result.results);
+      entry.summary = result.summary;
+      if (!options.interleave) entry.resultsPath = result.resultsPath;
     } catch (error) {
       const message = String(error && error.message || error).split('\n')[0].slice(0, 300);
       process.stdout.write('  skipped: ' + message + '\n');
-      runs.push({ agent, name: DISPLAY[agent], skipped: message });
+      entry.errors.push(message);
     }
+  }
+  for (const agent of options.agents) {
+    const entry = collected.get(agent);
+    // An agent that never got going (not signed in, bad model, gateway down) has not
+    // been measured; scoring it 0% would be misleading.
+    if (!entry.results.length || entry.results.every((row) => row.error)) {
+      const reason = entry.errors[0] || (entry.results.length ? 'every trial ended in an agent error before verification (first: ' + String(entry.results[0].error).split('\n')[0].slice(0, 200) + ')' : 'no trials ran');
+      runs.push({ agent, name: DISPLAY[agent], skipped: reason });
+      continue;
+    }
+    const file = path.join(outDir, agent + '.json');
+    if (entry.resultsPath) await copyFile(entry.resultsPath, file);
+    else await writeFile(file, JSON.stringify({ summary: entry.summary, results: entry.results }, null, 2) + '\n');
+    runs.push({ agent, name: DISPLAY[agent], file: path.basename(file), summary: entry.summary, results: entry.results, agentErrors: entry.errors });
   }
   } finally {
     await rm(rawDir, { recursive: true, force: true }).catch(() => {});
@@ -202,6 +225,13 @@ export function summarize(runs, options, now = new Date(), gateway = null) {
   if (metadataMismatchTasks.length) caveats.push(metadataMismatchTasks.length + ' shared task(s) had missing or conflicting category/difficulty metadata and were excluded.');
   if (incompleteTasks.length) caveats.push(incompleteTasks.length + ' shared task(s) did not have exactly ' + options.trials + ' distinct trial rows for every completed agent and were excluded.');
   const completedAgents = completed.map((run) => run.agent);
+  // Trials that ended in an agent or provider error (rate limit, crash,
+  // timeout) count as failures; list them so a free-tier hiccup is not read as
+  // a quality result.
+  for (const run of completed) {
+    const errored = run.results.filter((row) => verifiedTasks.includes(row.taskId) && row.error);
+    if (errored.length) caveats.push(run.name + ': ' + errored.length + ' scored trial(s) ended in an agent or provider error before verification and count as failures (first: ' + String(errored[0].error).split('\n')[0].slice(0, 160) + ').');
+  }
   // Only agents that produced scored trials count: an agent skipped after a
   // few calls (rate limit, crash) does not affect what the scores rest on.
   const servedFor = (agent) => gateway && gateway.agents[agent] ? Object.keys(gateway.agents[agent].servedModels) : [];
@@ -270,6 +300,8 @@ async function main() {
   --gateway-interval-ms N  space upstream calls N ms apart (free-tier rate limits)
   --trials N           trials per task (default 1; use 3+ for publishable numbers)
   --task ID[,ID...]    run only these tasks
+  --interleave         run task by task (every agent on task 1, then task 2...),
+                       so a free tier that tightens mid-run hits all agents alike
   --timeout-seconds N  per-task timeout (default 600)
   --out DIR            results folder (default bench/results/live-YYYY-MM-DD)
 
