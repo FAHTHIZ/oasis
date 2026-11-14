@@ -27,6 +27,19 @@ export function loadXterm(doc = document) {
   return vendorPromise;
 }
 
+// xterm wraps at the last column, mid-word. Notes are split at spaces so each
+// row fits `cols - 1` columns; a word longer than that keeps its own row.
+export function wrapWords(text, cols) {
+  const width = Math.max(20, (Number(cols) || 80) - 1);
+  const rows = [];
+  let line = '';
+  for (const word of String(text).split(' ')) {
+    if (line && line.length + 1 + word.length > width) { rows.push(line); line = word; } else line = line ? line + ' ' + word : word;
+  }
+  if (line) rows.push(line);
+  return rows;
+}
+
 export class RuntimeTerminal {
   constructor({ client, approve = async () => false, onStatus = () => {}, onOutput = () => {}, onExit = () => {}, pollMs = 400 } = {}) {
     this.client = client;
