@@ -1237,7 +1237,17 @@ export async function suggestNextPrompt(session, options = {}) {
 
 // A response that dies mid-stream never yields tool calls (they're only returned
 // once the stream completes), so retrying the same request can't run anything twice.
-const MAX_STREAM_RESTARTS = 2;
+// Codex retries a dropped stream 5 times (stream_max_retries); two was too
+// few for a flaky network or a provider that resets long streams. The
+// backoff between restarts grows (0.25 s to 10 s), and
+// OASIS_STREAM_MAX_RETRIES (0-20) overrides the count.
+const DEFAULT_STREAM_RESTARTS = 5;
+const MAX_STALL_RESTARTS = 2;
+export function streamRestartLimit(env = process.env) {
+  const raw = (env || process.env).OASIS_STREAM_MAX_RETRIES;
+  const wanted = raw === undefined || raw === '' ? NaN : Number(raw);
+  return Number.isInteger(wanted) && wanted >= 0 ? Math.min(wanted, 20) : DEFAULT_STREAM_RESTARTS;
+}
 // Gemini's MALFORMED_FUNCTION_CALL: its own tool call did not parse.
 const MAX_MALFORMED_CALL_RECOVERIES = 3;
 const MALFORMED_CALL_NUDGE = '<system-reminder>\nYour last tool call could not be parsed (the provider rejected it as a malformed function call), so nothing ran. Call the tool again with valid JSON arguments. If it carried a long file body, split the work: write a short file first, then add to it with edit_file.\n</system-reminder>';
@@ -1272,11 +1282,15 @@ async function requestCompletionWithStreamRestarts(session, options = {}) {
     } catch (error) {
       // A provider that reported overload mid-stream gets one more, slower try.
       const overloaded = Number(error && error.status) >= 500;
+      // A stall already cost a full idle window (300 s or more), so it gets
+      // at most two restarts; a dropped connection fails fast and gets them all.
+      const allowed = streamRestartLimit(options.env || session.providerEnv || process.env);
+      const limit = (error && error.stalled ? Math.min(allowed, MAX_STALL_RESTARTS) : allowed) + (overloaded ? 1 : 0);
       // A malformed tool call tends to repeat on the identical request, so the
       // turn loop retries it with a corrective note instead (see below).
-      if (!error || error.code !== 'OASIS_STREAM_INTERRUPTED' || error.malformedCall || restart >= MAX_STREAM_RESTARTS + (overloaded ? 1 : 0) || (options.signal && options.signal.aborted)) throw error;
-      traceRecovery(options.env || session.providerEnv, 'stream_restart', { attempt: restart + 1, limit: MAX_STREAM_RESTARTS + (overloaded ? 1 : 0), status: Number(error.status) || undefined, reason: error.message });
-      if (typeof options.onStreamRestart === 'function') options.onStreamRestart({ attempt: restart + 1, limit: MAX_STREAM_RESTARTS + (overloaded ? 1 : 0), reason: error.message, ...(error.status ? { status: Number(error.status) } : {}) });
+      if (!error || error.code !== 'OASIS_STREAM_INTERRUPTED' || error.malformedCall || restart >= limit || (options.signal && options.signal.aborted)) throw error;
+      traceRecovery(options.env || session.providerEnv, 'stream_restart', { attempt: restart + 1, limit: limit, status: Number(error.status) || undefined, reason: error.message });
+      if (typeof options.onStreamRestart === 'function') options.onStreamRestart({ attempt: restart + 1, limit: limit, reason: error.message, ...(error.status ? { status: Number(error.status) } : {}) });
       await waitForProviderRetry(providerRetryDelayMs(restart + (overloaded ? 3 : 1)), options.signal || new AbortController().signal);
     }
   }
@@ -1832,7 +1846,7 @@ async function requestCompletionRaw(session, options = {}) {
       cancelled.name = 'AbortError';
       throw cancelled;
     }
-    if (stalled) throw Object.assign(new Error('The model stream stalled: no data arrived for ' + Math.round(streamIdleMs / 1000) + ' seconds (set OASIS_STREAM_IDLE_SECONDS to change this).'), { code: 'OASIS_STREAM_INTERRUPTED' });
+    if (stalled) throw Object.assign(new Error('The model stream stalled: no data arrived for ' + Math.round(streamIdleMs / 1000) + ' seconds (set OASIS_STREAM_IDLE_SECONDS to change this).'), { code: 'OASIS_STREAM_INTERRUPTED', stalled: true });
     if (error.name === 'AbortError' || timedOut) throw new Error('The model request timed out after ' + Math.round(timeoutMs / 1000) + ' seconds waiting for a response (set OASIS_REQUEST_TIMEOUT_SECONDS to change this).');
     // undici reports a connection dropped while reading the body as TypeError('terminated').
     if (error instanceof TypeError && responseStarted) throw Object.assign(new Error('The model stream was interrupted: the connection closed before the response finished.'), { code: 'OASIS_STREAM_INTERRUPTED' });
