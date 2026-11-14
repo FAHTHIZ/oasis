@@ -39,8 +39,14 @@ you (for example a Gemini key on a project with no billing account), declare it:
 OASIS_FREE_MODELS='gemini-2.5-flash,groq:llama-3.3-*' oasis --zero-budget
 ```
 
-Zero-budget mode covers chat requests. Image generation, speech and web search
-providers have their own settings and are not gated by it yet.
+Zero-budget mode also covers the other services that can bill:
+
+- Image generation, text to speech and voice transcription use the same rule
+  before anything is uploaded. Declare one free with a prefix:
+  `OASIS_FREE_MODELS=image:flux,tts:*,voice:whisper-large-v3-turbo`.
+- Web search uses only keyless backends (DuckDuckGo, your SearXNG). Keyed
+  backends (Tavily, Brave, Exa, Firecrawl) run on credit-based plans, so they
+  are hidden unless declared, for example `OASIS_FREE_MODELS=search:tavily`.
 
 ## Request and token budgets
 
@@ -139,7 +145,7 @@ meeting its expectation.
 
 - Zero-budget mode trusts its evidence: a loopback port, OpenRouter's `:free`
   naming, and your declarations. It cannot see a provider's billing settings.
-- Image generation, speech and web search are not gated by zero-budget mode.
+- MCP servers and hooks that call paid APIs themselves are outside Oasis's view and are not gated.
 - Remaining quota is known only for providers that send rate-limit headers,
   and only as of the last response.
 - The ledger is per machine and per config directory (profiles are separate).

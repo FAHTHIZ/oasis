@@ -116,3 +116,23 @@ test('side requests count against the parent budget', async (t) => {
   await assert.rejects(askSideQuestion(session, 'what happened?', { env: noEnv }), (e) => e.code === 'REQUEST_BUDGET_EXCEEDED');
   assert.equal(seen.length, 1);
 });
+
+test('zero-budget mode gates image, speech and transcription services before any upload', async () => {
+  const { assertZeroBudgetService, zeroBudgetSearchEnv } = await import('../src/cost-policy.mjs');
+  const on = { OASIS_ZERO_BUDGET: '1' };
+  assert.throws(() => assertZeroBudgetService('image', { baseUrl: 'https://api.openai.com/v1', model: 'gpt-image-1', apiKey: 'k' }, { env: on }), (e) => e.code === 'OASIS_ZERO_BUDGET_BLOCKED' && /image:gpt-image-1/.test(e.message));
+  assert.equal(assertZeroBudgetService('image', { baseUrl: 'https://image.pollinations.ai/v1', model: 'flux', apiKey: '' }, { env: on }).cost, 'free', 'keyless endpoint');
+  assert.equal(assertZeroBudgetService('tts', { baseUrl: 'http://127.0.0.1:8080/v1', model: 'kokoro', apiKey: '' }, { env: on }).cost, 'free');
+  assert.equal(assertZeroBudgetService('tts', { baseUrl: 'https://api.openai.com/v1', model: 'gpt-4o-mini-tts', apiKey: 'k' }, { env: { ...on, OASIS_FREE_MODELS: 'tts:*' } }).cost, 'free', 'declared');
+  assert.equal(assertZeroBudgetService('image', { baseUrl: 'https://api.openai.com/v1', model: 'gpt-image-1', apiKey: 'k' }, { env: {} }), null, 'off by default');
+  const { transcribeAudio } = await import('../src/voice.mjs');
+  let uploads = 0;
+  await assert.rejects(transcribeAudio(Buffer.from('RIFF'), { env: { ...on, OPENAI_API_KEY: 'k' }, fetchImpl: async () => { uploads++; return new Response('{}'); } }), /Zero-budget mode refused voice:/);
+  assert.equal(uploads, 0, 'no audio left the machine');
+  const env = { ...on, TAVILY_API_KEY: 't', BRAVE_SEARCH_API_KEY: 'b', OASIS_SEARXNG_URL: 'http://127.0.0.1:8888', OASIS_FREE_MODELS: 'search:brave' };
+  const searched = zeroBudgetSearchEnv(env);
+  assert.equal(searched.TAVILY_API_KEY, undefined, 'credit-based backends are hidden');
+  assert.equal(searched.BRAVE_SEARCH_API_KEY, 'b', 'unless declared free');
+  assert.equal(searched.OASIS_SEARXNG_URL, 'http://127.0.0.1:8888');
+  assert.equal(zeroBudgetSearchEnv({ TAVILY_API_KEY: 't' }).TAVILY_API_KEY, 't', 'unchanged when off');
+});
