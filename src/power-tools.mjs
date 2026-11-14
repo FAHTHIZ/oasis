@@ -164,6 +164,7 @@ const PREVIEW_COLUMNS = 400;
 const WINDOW_BEFORE = 120;
 const WINDOW_AFTER = 240;
 const MAX_WINDOWED_FILES = 50;
+const FALLBACK_GREP_FILES = 8000;
 
 async function windowLongMatches(rgPath, cwd, long, results, { pattern, ignoreCase, fixedStrings, signal }) {
   const files = [...new Set(long.map((item) => item.file))].slice(0, MAX_WINDOWED_FILES);
@@ -325,7 +326,11 @@ export async function grepWorkspace(root, args = {}, options = {}) {
   };
   try {
     const info = await stat(target.absolute);
-    const files = info.isFile() ? [{ absolute: target.absolute, relative: path.basename(target.absolute) }] : await walkFiles(target.absolute, { includeHidden: true, maxFiles: 8000, maxDepth: 14 });
+    const files = info.isFile() ? [{ absolute: target.absolute, relative: path.basename(target.absolute) }] : await walkFiles(target.absolute, { includeHidden: true, maxFiles: FALLBACK_GREP_FILES, maxDepth: 14 });
+    // Without ripgrep, files past these limits are not searched; the result says
+    // so, because "no matches" would otherwise be wrong.
+    let skippedLarge = 0;
+    const walkLimited = files.length >= FALLBACK_GREP_FILES;
     for (const file of files) {
       const relative = path.relative(rootReal, file.absolute).split(path.sep).join('/');
       if (matchGlob && !matchGlob(relative)) continue;
@@ -333,7 +338,7 @@ export async function grepWorkspace(root, args = {}, options = {}) {
       let content;
       try {
         const s = await stat(file.absolute);
-        if (s.size > MAX_TEXT_FILE * 4) continue;
+        if (s.size > MAX_TEXT_FILE * 4) { skippedLarge++; continue; }
         content = await readFile(file.absolute, 'utf8');
       } catch { continue; }
       if (content.includes('\0')) continue;
@@ -356,7 +361,10 @@ export async function grepWorkspace(root, args = {}, options = {}) {
       if (hits && mode === 'count') emit(relative + ':' + hits);
       if (truncated) break;
     }
-    return { pattern, mode, engine: 'builtin', results, count: results.length, truncated, ...(offset ? { offset } : {}) };
+    const notes = [];
+    if (skippedLarge) notes.push(skippedLarge + ' file' + (skippedLarge === 1 ? '' : 's') + ' over 1 MiB ' + (skippedLarge === 1 ? 'was' : 'were') + ' not searched');
+    if (walkLimited && !truncated) notes.push('only the first ' + FALLBACK_GREP_FILES + ' files were searched');
+    return { pattern, mode, engine: 'builtin', results, count: results.length, truncated, ...(offset ? { offset } : {}), ...(notes.length ? { note: 'ripgrep is not available, so ' + notes.join(' and ') + '. Narrow the path or install ripgrep for a complete search.' } : {}) };
   } finally {
     await matcher.close().catch(() => {});
   }
