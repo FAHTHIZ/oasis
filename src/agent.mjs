@@ -140,6 +140,11 @@ export { formatWait, isHardQuotaError, isMalformedGenerationError, providerRetry
 const MAX_REPLY_CHARS = 24000;
 // Reasoning shown on the page for one model step (characters).
 const MAX_REASONING_SHOWN = 8000;
+// How much of a reply is streamed live. Long answers (a full file, a long
+// report) run past 24k characters; streaming stopped there and the CLI, ACP
+// and the browser showed a cut-off reply. The bound only limits the cost of
+// rebuilding the cumulative text on every delta.
+export const MAX_STREAMED_REPLY_CHARS = 1_000_000;
 
 
 export async function compactHistoryIfNeeded(session, options = {}) {
@@ -4615,8 +4620,11 @@ async function runAgentTurnRaw(session, prompt, options = {}) {
           showReasoning();
         } } : {}),
         ...(typeof options.onDelta === 'function' ? { onDelta: (delta) => {
-          streamedText = (streamedText + String(delta || '')).slice(0, MAX_REPLY_CHARS);
           if (delta) seen(true);
+          // Past the bound the stream keeps the watchdog fed but the shown
+          // text stops growing; the final onText carries the whole reply.
+          if (streamedText.length >= MAX_STREAMED_REPLY_CHARS) return;
+          streamedText = (streamedText + String(delta || '')).slice(0, MAX_STREAMED_REPLY_CHARS);
           if (reasoningHook && /^\s*</.test(streamedText)) showReasoning();
           options.onDelta(visibleReply(streamedText));
         } } : Number(session.subagentDepth) > 0 && (session.providerEnv || process.env).OASIS_SUBAGENT_STREAM !== '0' ? {

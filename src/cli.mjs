@@ -1568,6 +1568,10 @@ async function runPrompt(prompt, root, autoApprove, session = null, persistence 
         if (verboseEnabled(session)) { const shown = verboseToolOutput(name, result, { color: colorEnabled(stdout) }); if (shown) stdout.write(shown + '\n'); }
       },
       onText: (text) => {
+        // The final text can extend what was streamed (the live stream is
+        // bounded); show the rest instead of dropping it.
+        const full = String(text || '');
+        if (streamedSoFar && streamedSoFar !== ' ' && full.length > streamedSoFar.length && full.startsWith(streamedSoFar)) streamDelta(full);
         if (endStream()) return;
         if (richOutput()) { const md = new MarkdownStream({ write: (chunk) => stdout.write(chunk), color: true, columns: () => stdout.columns || 80, prefix: '\x1b[38;2;251;191;36m●\x1b[39m ' }); md.push(String(text)); md.end(); }
         else stdout.write('\nOasis> ' + text + '\n');

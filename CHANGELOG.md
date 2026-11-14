@@ -4,6 +4,7 @@ User-facing change history grouped by package version. A version heading does no
 
 ## Unreleased
 
+- Long replies now stream in full. The live stream stopped at 24,000 characters, so a long answer (a whole file, a long report) showed cut off in the CLI, over ACP (Zed and other editors) and in the browser app. Streaming now runs to 1,000,000 characters, and the CLI and ACP append any remainder from the final reply.
 - `fetch_url` now downloads pages up to 10 MiB (was 1 MiB), as Claude Code's WebFetch does. Long article pages are several MiB of HTML (Wikipedia's "United States" is about 3 MiB) and were refused with "Response exceeds the 1 MiB limit"; they now convert to Markdown in the existing worker, with the same timeout and plain-text fallback.
 - `/model --list` and the /model picker no longer drop models from large gateways. The list was capped at 500 models after sorting, and OpenRouter alone lists about 470, so a slightly larger gateway lost every model late in the alphabet (`qwen/`, `x-ai/`, `z-ai/`). The caps are now 5,000 models and 16 MiB.
 - Saved sessions now keep the whole conversation. Before, a save kept only the last 120 messages, so resuming after a long agentic turn (60+ tool calls) lost the earlier requests and work; a session over 3 MiB could not be saved at all, and a reply with more than 30 parallel tool calls made the save fail. The caps are now 5,000 messages, 64 MiB and 512 calls per reply, and a session over the size cap is saved with its oldest exchanges dropped instead of failing. Session search reads the same larger files.
