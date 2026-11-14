@@ -66,6 +66,8 @@ In scripts and CI use `oasis -p --permission-mode auto --goal "npm test passes"`
 
 By default a `-p` run whose changes OASIS could not verify still exits 0 and ends its reply with a "Not verified" note. Add `--require-verified` (or set `OASIS_REQUIRE_VERIFIED=1`) to make that exit 1 with `subtype: "error_not_verified"`, so a pipeline does not treat an unchecked change as a pass.
 
+A run that stops before finishing exits 1 with `"is_error": true`, as in Claude Code: `--max-turns` reached, or the repeat guard stopping a model that sends the same tool call again and again (both `error_max_turns`), a spending cap (`error_max_budget_usd`, `error_max_requests`, `error_max_total_tokens`), or a failure during the run (`error_during_execution`).
+
 If the model never answers (it returns empty replies three times, or the provider stops the reply with no text), the run exits 1 with `"is_error": true`, subtype `error_during_execution` and `"empty_reply": true`, and the result explains what happened.
 
 Subagents you or OASIS start show up in `/tasks`: running ones first, finished ones under **Earlier in this session**, even after a restart. `/tasks ID` shows a report, `/tasks send ID MESSAGE` steers or resumes one, and `/tasks stop ID` stops it.
