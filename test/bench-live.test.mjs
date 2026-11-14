@@ -332,3 +332,14 @@ test('the relay records message sizes, never contents', async () => {
   assert.ok(!JSON.stringify(sizes).includes('abc'));
   assert.deepEqual(messageSizes({}), {});
 });
+
+test('the relay names the tool behind a large result (chat, Responses and Anthropic shapes), not its arguments', async () => {
+  const { messageSizes } = await import('../scripts/bench-gateway.mjs');
+  const chat = messageSizes({ messages: [{ role: 'assistant', content: null, tool_calls: [{ id: 'c1', type: 'function', function: { name: 'read_file', arguments: '{"path":"secret/plan.md"}' } }] }, { role: 'tool', tool_call_id: 'c1', content: 'y'.repeat(900) }] });
+  assert.deepEqual(chat.largestMessage, { role: 'tool', chars: 900, tool: 'read_file' });
+  assert.ok(!JSON.stringify(chat).includes('plan.md'));
+  const responses = messageSizes({ input: [{ type: 'function_call', call_id: 'r1', name: 'shell', arguments: '{}' }, { type: 'function_call_output', call_id: 'r1', output: 'z'.repeat(700) }] });
+  assert.deepEqual(responses.lastMessage, { role: 'function_call_output', chars: 700, tool: 'shell' });
+  const anthropic = messageSizes({ messages: [{ role: 'assistant', content: [{ type: 'tool_use', id: 't1', name: 'Read', input: { file_path: '/x' } }] }, { role: 'user', content: [{ type: 'tool_result', tool_use_id: 't1', content: 'w'.repeat(800) }] }] });
+  assert.equal(anthropic.largestMessage.tool, 'Read');
+});
