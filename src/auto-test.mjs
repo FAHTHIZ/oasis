@@ -55,6 +55,8 @@ export async function runAutoTest(root, command, { timeoutMs = 600000, signal, e
     let timedOut = false;
     let cancelled = false;
     const append = (chunk) => { output += chunk.toString('utf8'); if (output.length > MAX_OUTPUT * 4) output = output.slice(-MAX_OUTPUT * 2); };
+    child.stdout.setEncoding('utf8');
+    child.stderr.setEncoding('utf8');
     child.stdout.on('data', append);
     child.stderr.on('data', append);
     const kill = () => {
