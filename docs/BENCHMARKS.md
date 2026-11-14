@@ -118,6 +118,12 @@ Held-out v2 still misses one secret pattern (4/5); it is kept as measured. First
 
 This shows the hardware, not the harness: a 3B model on two CPU cores generates a few tokens per second, so one small task does not fit in 30 minutes. The earlier same-gateway run against Claude Code is in [live-2026-11-08-omniroute](../bench/results/live-2026-11-08-omniroute/README.md). SWE-bench and Terminal-Bench scores (the adapter is in `bench/harbor`) need a capable hosted model and a paid budget, so none are published yet.
 
+### Recorded same-model gateway (14 November 2026)
+
+`npm run bench:live -- --upstream URL --model ID` starts a local gateway, routes every agent through its own tagged path (`/a/<agent>/v1`), relays chat completions, Anthropic Messages and OpenAI Responses calls, forces the one model on all of them, and writes `gateway.jsonl` with the model and provider the upstream reports for each call. The summary calls a run "same model verified" only when every scored agent was served one identical model; otherwise it says so in the interpretation limits.
+
+First run, files in [live-2026-11-14-openrouter-gateway](../bench/results/live-2026-11-14-openrouter-gateway/README.md): OASIS passed `clamp-integer` in 190.9 s (22 calls, all served by `nvidia/nemotron-3-ultra-550b-a55b:free` via Nvidia). Codex CLI ran 20 calls on the same served model before OpenRouter's free-tier daily limit (50 requests) stopped it; Claude Code sent nothing because it routed loopback calls through `HTTPS_PROXY` (fixed). A scored head-to-head needs a key with credits: OpenRouter raises the free-model limit to 1,000 requests a day once 10 credits are added.
+
 ## Normal-user runs
 
 Separate from scored benchmarks, OASIS is used the way a person would: type a request, approve steps, read the answer. These runs use real providers and no scripted model, so they show speed, wording and rough edges a harness does not.
