@@ -256,10 +256,27 @@ export function messageSizes(body) {
   const list = Array.isArray(body && body.messages) ? body.messages : Array.isArray(body && body.input) ? body.input : null;
   if (!list || !list.length) return {};
   const size = (item) => { const c = item && (item.content ?? item.output ?? item.arguments); return typeof c === 'string' ? c.length : c ? JSON.stringify(c).length : 0; };
+  // Which tool a result came from: names only, never arguments or output.
+  const names = new Map();
+  for (const item of list) {
+    if (!item) continue;
+    for (const call of Array.isArray(item.tool_calls) ? item.tool_calls : []) if (call && call.id) names.set(call.id, call.function && call.function.name);
+    if (item.type === 'function_call' && item.call_id) names.set(item.call_id, item.name);
+    for (const block of Array.isArray(item.content) ? item.content : []) if (block && block.type === 'tool_use' && block.id) names.set(block.id, block.name);
+  }
+  const toolOf = (item) => {
+    if (!item) return undefined;
+    const id = item.tool_call_id || (item.type === 'function_call_output' ? item.call_id : undefined);
+    if (id) return names.get(id) || undefined;
+    const used = (Array.isArray(item.content) ? item.content : []).filter((block) => block && block.type === 'tool_result').map((block) => names.get(block.tool_use_id)).filter(Boolean);
+    return used.length ? [...new Set(used)].join(',') : undefined;
+  };
+  const describe = (item, chars) => { const tool = toolOf(item); return { role: item && (item.role || item.type) || null, chars, ...(tool ? { tool } : {}) }; };
   let largest = { role: null, chars: -1 };
-  for (const item of list) { const chars = size(item); if (chars > largest.chars) largest = { role: item && (item.role || item.type) || null, chars }; }
+  let largestItem = null;
+  for (const item of list) { const chars = size(item); if (chars > largest.chars) { largest = { chars }; largestItem = item; } }
   const last = list[list.length - 1];
-  return { largestMessage: largest, lastMessage: { role: last && (last.role || last.type) || null, chars: size(last) } };
+  return { largestMessage: describe(largestItem, largest.chars), lastMessage: describe(last, size(last)) };
 }
 
 /**
