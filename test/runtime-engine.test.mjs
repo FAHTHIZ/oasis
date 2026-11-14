@@ -120,12 +120,12 @@ test('undelivered runtime steering is preserved as bounded session state', async
   assert.equal(restored.messages[0].role, 'system');
   assert.deepEqual(restored.pendingSteering, carried);
 
-  const invalid = [...Array.from({ length: 22 }, (_, i) => 'saved ' + i), 'x'.repeat(25_000), 42, '   '];
+  const invalid = [...Array.from({ length: 22 }, (_, i) => 'saved ' + i), 'x'.repeat(250_000), 42, '   '];
   const second = await saveSession({ ...session, pendingSteering: invalid }, { env });
   const bounded = await loadSession(root, second.id, { env });
   assert.equal(bounded.pendingSteering.length, 20);
   assert.deepEqual(bounded.pendingSteering.slice(0, -1), Array.from({ length: 19 }, (_, i) => 'saved ' + (i + 3)));
-  assert.equal(bounded.pendingSteering.at(-1), 'x'.repeat(20_000));
+  assert.equal(bounded.pendingSteering.at(-1), 'x'.repeat(200_000));
 });
 
 test('!commands are split like a shell, and anything needing a real shell goes through sh -c', async () => {
