@@ -21,9 +21,13 @@ const SECRET_PATTERNS = [
 ];
 
 export function redactArtifactText(value) {
-  let text = String(redactAuditValue(String(value ?? '').slice(0, MAX_TEXT * 4)));
+  return redactSecretPatterns(String(value ?? '').slice(0, MAX_TEXT * 4)).slice(0, MAX_TEXT);
+}
+/** Known secret shapes removed, without truncating. */
+export function redactSecretPatterns(value) {
+  let text = String(redactAuditValue(String(value ?? '')));
   for (const [pattern, replacement] of SECRET_PATTERNS) text = text.replace(pattern, replacement);
-  return text.slice(0, MAX_TEXT);
+  return text;
 }
 function artifactSlug(value) {
   const slug = String(value || '').normalize('NFKC').trim().toLowerCase().replace(/[^a-z0-9._-]+/g, '-').replace(/^[.-]+|[.-]+$/g, '').slice(0, 64);
