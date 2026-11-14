@@ -195,3 +195,19 @@ test('live summary verifies same-model only from the gateway record', async () =
   assert.ok(none.caveats.some((c) => /do not prove/.test(c)));
   assert.throws(() => parseBenchArgs(['--router', 'http://x', '--upstream', 'https://y']), /either/);
 });
+
+test('an agent skipped after a few gateway calls does not void same-model verification', async () => {
+  const { gatewayReport } = await import('../scripts/bench-gateway.mjs');
+  const options = parseBenchArgs(['--agents', 'oasis,codex,claude', '--model', 'm', '--upstream', 'https://openrouter.ai/api/v1']);
+  const make = (agent) => ({ agent, name: agent, summary: { label: agent }, results: [{ taskId: 't', taskFingerprint: 'a'.repeat(64), category: 'c', difficulty: 'small', trial: 1, status: 'passed' }] });
+  const report = gatewayReport([{ agent: 'oasis', status: 200, servedModel: 'm', provider: 'P' }, { agent: 'claude', status: 200, servedModel: 'm', provider: 'P' }, { agent: 'codex', status: 429 }, { agent: 'codex', status: 200, servedModel: 'm-other' }]);
+  const summary = summarize([make('oasis'), make('claude'), { agent: 'codex', name: 'codex', skipped: 'rate limited' }], options, new Date(), report);
+  assert.equal(summary.sameModelVerified, true);
+  assert.equal(summary.servedModel, 'm');
+});
+
+test('gateway runs keep loopback out of the agents\' HTTPS proxy', async () => {
+  const { withLoopback } = await import('../scripts/bench-live.mjs');
+  assert.equal(withLoopback(''), '127.0.0.1,localhost,::1');
+  assert.equal(withLoopback('corp.example, localhost'), 'corp.example,localhost,127.0.0.1,::1');
+});
