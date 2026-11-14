@@ -117,6 +117,16 @@ const SCHEMA = `
   CREATE VIRTUAL TABLE IF NOT EXISTS msgs USING fts5(body, content='', contentless_delete=1, tokenize="unicode61 remove_diacritics 0 tokenchars '_'");
 `;
 
+// FTS5 writes its own internal rows, so SQLite's last-insert rowid (kept per
+// connection) can exceed 2^53 after any statement touching msgs, and
+// node:sqlite on Node 26 throws while building run()'s result. Statements that
+// are run() report it as a BigInt instead.
+function writeStatement(db, sql) {
+  const statement = db.prepare(sql);
+  statement.setReadBigInts(true);
+  return statement;
+}
+
 function openIndex(file) {
   const { DatabaseSync } = loadSqlite();
   const open = (target) => {
@@ -126,7 +136,7 @@ function openIndex(file) {
       const version = (() => { try { return db.prepare("SELECT value FROM meta WHERE key = 'version'").get()?.value; } catch { return null; } })();
       if (version !== INDEX_VERSION) db.exec('DROP TABLE IF EXISTS msgs; DROP TABLE IF EXISTS rows; DROP TABLE IF EXISTS files; DROP TABLE IF EXISTS meta;');
       db.exec(SCHEMA);
-      db.prepare("INSERT OR REPLACE INTO meta (key, value) VALUES ('version', ?)").run(INDEX_VERSION);
+      writeStatement(db, "INSERT OR REPLACE INTO meta (key, value) VALUES ('version', ?)").run(INDEX_VERSION);
       return db;
     } catch (error) { db.close(); throw error; }
   };
@@ -143,10 +153,13 @@ async function syncIndex(db, dirs, files) {
   const inScope = new Set(dirs.map((dir) => path.resolve(dir)));
   const known = new Map(db.prepare('SELECT path, mtime, size FROM files').all().map((row) => [row.path, row]));
   const present = new Set(files);
+  const deleteText = writeStatement(db, 'DELETE FROM msgs WHERE rowid = ?');
+  const deleteRows = writeStatement(db, 'DELETE FROM rows WHERE path = ?');
+  const deleteFile = writeStatement(db, 'DELETE FROM files WHERE path = ?');
   const drop = (file) => {
-    for (const row of db.prepare('SELECT id FROM rows WHERE path = ?').all(file)) db.prepare('DELETE FROM msgs WHERE rowid = ?').run(row.id);
-    db.prepare('DELETE FROM rows WHERE path = ?').run(file);
-    db.prepare('DELETE FROM files WHERE path = ?').run(file);
+    for (const row of db.prepare('SELECT id FROM rows WHERE path = ?').all(file)) deleteText.run(row.id);
+    deleteRows.run(file);
+    deleteFile.run(file);
   };
   const changed = [];
   for (const file of files) {
@@ -157,9 +170,9 @@ async function syncIndex(db, dirs, files) {
   }
   const gone = [...known.keys()].filter((file) => inScope.has(path.dirname(file)) && !present.has(file));
   if (!changed.length && !gone.length) return 0;
-  const insertFile = db.prepare('INSERT INTO files (path, mtime, size, session_id, updated_at, title, workspace) VALUES (?, ?, ?, ?, ?, ?, ?)');
-  const insertRow = db.prepare('INSERT INTO rows (path, idx, role) VALUES (?, ?, ?)');
-  const insertText = db.prepare('INSERT INTO msgs (rowid, body) VALUES (?, ?)');
+  const insertFile = writeStatement(db, 'INSERT INTO files (path, mtime, size, session_id, updated_at, title, workspace) VALUES (?, ?, ?, ?, ?, ?, ?)');
+  const insertRow = writeStatement(db, 'INSERT INTO rows (path, idx, role) VALUES (?, ?, ?)');
+  const insertText = writeStatement(db, 'INSERT INTO msgs (rowid, body) VALUES (?, ?)');
   db.exec('BEGIN IMMEDIATE');
   try {
     for (const file of gone) drop(file);
