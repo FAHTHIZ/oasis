@@ -4,6 +4,7 @@ User-facing change history grouped by package version. A version heading does no
 
 ## Unreleased
 
+- Shell output inside custom commands and skills (!`cmd` and ```! blocks) keeps up to 30,000 characters, as Claude Code's Bash output does, with its start and end and a note when it is longer. It used to be cut at 16 KiB with no note, and multi-byte characters split across output chunks came out garbled. Custom command files of up to 1 MiB load (was 64 KiB, silently skipped past that).
 - Results of MCP tasks that finish in the background keep their start and end with a note, up to the normal tool-result size. They used to keep only the first 12,000 characters with no note. Specialist review text keeps up to 1,000,000 characters (was 12,000), a subagent's output_schema is sent whole instead of being cut into invalid JSON at 12,000 characters (schemas over 100,000 characters are refused), and steering notes restored from a saved session keep 200,000 characters.
 - `oasis import` no longer replaces an mcp.json or .mcp.json that has a syntax error. The destination is now read strictly before the first write, so the import stops with an error naming the file and nothing is changed.
 - Adding an MCP server with /add or `oasis add` no longer replaces an mcp.json or .mcp.json that has a syntax error. The file used to be read as empty and rewritten with only the new server; OASIS now stops with an error, as `oasis mcp add` already did. Those writes are now atomic.

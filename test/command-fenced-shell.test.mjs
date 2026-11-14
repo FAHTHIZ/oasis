@@ -42,3 +42,16 @@ test('inline !`cmd` runs only at the start of a line or after whitespace', async
   const result = await expandInlineShell('KEY=!`echo no`\n!`echo yes` and (x) !`echo also`', { root, allowed: true });
   assert.equal(result.text, 'KEY=!`echo no`\nyes and (x) also');
 });
+
+// Output was cut at 16 KiB with no note, and each chunk was decoded alone,
+// which split multi-byte characters across chunks.
+test('long inline shell output keeps its start and end with a note', async (t) => {
+  const root = await tmp(t);
+  const script = 'process.stdout.write("START" + "é".repeat(200000) + "END")';
+  const result = await expandInlineShell('!`' + JSON.stringify(process.execPath) + ' -e ' + "'" + script + "'" + '`', { root, allowed: true });
+  assert.ok(result.text.startsWith('START'));
+  assert.ok(result.text.endsWith('END'));
+  assert.match(result.text, /cut from the middle/);
+  assert.ok(result.text.length <= 30000);
+  assert.doesNotMatch(result.text, /\uFFFD/);
+});
