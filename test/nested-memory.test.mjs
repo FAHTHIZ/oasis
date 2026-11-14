@@ -86,15 +86,26 @@ test('oversize or clipped nested instructions are reported, not skipped silently
   const env = { ...process.env, OASIS_DISABLE_NESTED_MEMORY: '' };
   await mkdir(path.join(root, 'big'), { recursive: true });
   await mkdir(path.join(root, 'long'), { recursive: true });
-  await writeFile(path.join(root, 'big', 'AGENTS.md'), 'x'.repeat(50 * 1024));
-  await writeFile(path.join(root, 'long', 'AGENTS.md'), 'rule\n'.repeat(3000));
+  await writeFile(path.join(root, 'big', 'AGENTS.md'), 'x'.repeat(1100 * 1024));
+  await writeFile(path.join(root, 'long', 'AGENTS.md'), 'rule\n'.repeat(31000));
   const big = await nestedMemoryFor(root, 'big/a.js', new Set(), { env, home: root });
   assert.equal(big.length, 1);
-  assert.match(big[0].text, /over the 40960-byte limit, so it was not loaded/);
+  assert.match(big[0].text, /over the 1048576-byte limit, so it was not loaded/);
   const long = await nestedMemoryFor(root, 'long/a.js', new Set(), { env, home: root });
-  assert.match(long[0].text, /truncated: \d+ more characters not loaded/);
+  assert.match(long[0].text, /nested-instruction budget reached: \d+ characters of long\/AGENTS\.md not loaded/);
   await writeFile(path.join(root, 'CLAUDE.md'), '@huge.md\n');
-  await writeFile(path.join(root, 'huge.md'), 'y'.repeat(50 * 1024));
+  await writeFile(path.join(root, 'huge.md'), 'y'.repeat(1100 * 1024));
   const memory = await loadMemory(root, { env, home: root });
-  assert.match(memory, /not imported: huge\.md is 51200 bytes/);
+  assert.match(memory, /not imported: huge\.md is 1126400 bytes/);
+});
+
+// The nested budget was 12,000 characters, which cut ordinary files short.
+test('an ordinary nested AGENTS.md loads whole', async (t) => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'oasis-nested-whole-'));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const env = { ...process.env, OASIS_DISABLE_NESTED_MEMORY: '' };
+  await mkdir(path.join(root, 'pkg'), { recursive: true });
+  await writeFile(path.join(root, 'pkg', 'AGENTS.md'), 'rule line\n'.repeat(3000) + 'LAST RULE');
+  const found = await nestedMemoryFor(root, 'pkg/a.js', new Set(), { env, home: root });
+  assert.match(found[0].text, /LAST RULE$/);
 });
