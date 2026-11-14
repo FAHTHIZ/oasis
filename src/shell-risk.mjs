@@ -261,6 +261,10 @@ function analyzeSimple(cmd, ctx = {}) {
     // `cd .. && rm -rf .`: OASIS does not know how deep the workspace is, so a
     // person decides whether wiping the parent folder is intended.
     if (recursive && ctx.cwdParent && ops.some((a) => /^(\.|\*|\.\*|\.\/\*?)$/.test(a))) return { highRisk: 'recursively deletes everything in ' + ctx.cwdParent + ', outside the workspace' };
+    // `rm -rf *` or `rm -rf ./*` in the workspace itself: every project file
+    // at once. A person confirms it even in bypass mode. After a cd into a
+    // subfolder (`cd dist && rm -rf *`) it is an ordinary cleanup.
+    if (recursive && !ctx.cwdParent && !ctx.cwdCritical && !ctx.cwdChanged && ops.some((a) => /^(\.|\.\/|\*|\.\*|\.\/\*|\.\/\.\*|\$PWD\/?\*?|\$\{PWD\}\/?\*?)$/.test(a))) return { highRisk: 'recursively deletes every file in the workspace' };
   }
   if (name === 'rm' && cmd.tokens.some((t) => base(t) === 'xargs') && (f.short.has('r') || f.short.has('R') || f.long.has('--recursive'))) {
     return { highRisk: 'deletes every path fed to it through xargs, recursively' };
@@ -363,6 +367,16 @@ function analyzeGit(args, f, ops) {
     if (sub === 'update-ref' && f.short.has('d')) return { highRisk: 'deletes a Git ref' };
     if (sub === 'reset' && (f.long.has('--hard') || f.long.has('--merge') || f.long.has('--keep'))) return { highRisk: 'git reset ' + [...f.long].join(' ') + ' discards uncommitted work (OASIS saves a safety snapshot under refs/oasis/safety first)' };
     if (sub === 'clean' && (f.short.has('x') || f.short.has('X'))) return { highRisk: 'git clean -x deletes ignored files (.env, local config, caches) that the safety snapshot does not keep' };
+    // Discarding every uncommitted change at once is as destructive as
+    // reset --hard (run_command already asked for these). Reverting one named
+    // file stays a normal command: the safety snapshot covers it.
+    const paths = ops.slice(1);
+    const everything = paths.some((a) => /^(\.|\.\/|:\/|:\/\.|\*|\.\/\*|:\/\*)$/.test(a));
+    if ((sub === 'checkout' || sub === 'restore') && (everything || ((sub === 'checkout') && (f.short.has('f') || f.long.has('--force')))) && !(sub === 'restore' && (f.long.has('--staged') || f.short.has('S')) && !f.long.has('--worktree') && !f.short.has('W'))) {
+      return { highRisk: 'git ' + sub + ' discards every uncommitted change in the working tree (OASIS saves a safety snapshot under refs/oasis/safety first)' };
+    }
+    if (sub === 'switch' && (f.short.has('f') || f.long.has('--force') || f.long.has('--discard-changes'))) return { highRisk: 'git switch ' + (f.long.has('--discard-changes') ? '--discard-changes' : '--force') + ' discards uncommitted changes (OASIS saves a safety snapshot under refs/oasis/safety first)' };
+    if (sub === 'stash' && ops[1] === 'clear') return { highRisk: 'git stash clear deletes every stash' };
   }
   return null;
 }
@@ -617,7 +631,7 @@ function analyze(line, depth) {
     if (r.blocked) return { blocked: r.blocked + ' (inside a command substitution)' };
     note(r);
   }
-  const ctx = { cwdCritical: '', cwdParent: '' };
+  const ctx = { cwdCritical: '', cwdParent: '', cwdChanged: '' };
   const vars = new Map();
   const aliases = new Map();
   const parsed = bashDialect(line) ? parseShellCommands(line) : null;
@@ -653,6 +667,7 @@ function analyzeCommands(commands, depth, substitutions, ctx, vars, aliases, not
       const dir = operands(args)[0];
       ctx.cwdCritical = dir === undefined || dir === '~' ? '~' : (isCriticalPath(dir) && !/^\.\./.test(dir) ? dir : '');
       ctx.cwdParent = dir !== undefined && /^\.\.(\/|\\|$)/.test(dir) ? dir : (ctx.cwdParent && dir !== undefined && !/^[\/~$]|^[A-Za-z]:/.test(dir) ? ctx.cwdParent : '');
+      ctx.cwdChanged = dir === undefined ? '~' : dir;
       continue;
     }
     for (const nested of nestedLines(cmd)) {
