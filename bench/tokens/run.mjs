@@ -45,6 +45,9 @@ const BASELINE = baselineArg || path.join(repoRoot, 'bench', 'results', 'tokens-
 const CHECK_TOLERANCE = 0.02;
 const MAX_REQUESTS = 40;
 const TOKEN_COUNTER = 'o200k_base BPE (gpt-tokenizer)';
+// Bump when the counting rules change (see hostIndependent), so --check never
+// compares numbers measured two different ways.
+const MEASUREMENT = 'host-independent v1';
 
 
 // Fixed paths keep path-dependent tool output the same length on every run.
@@ -64,6 +67,8 @@ globalThis.fetch = async (url) => { throw new Error('token bench: unexpected net
 const { createSession, runAgentTurn, closeSession } = await import('../../src/agent.mjs');
 const { evalAgentEnvironment } = await import('../../src/eval.mjs');
 const { countTextTokens } = await import('../../src/tokens.mjs');
+const { hostIndependent: normalizeHost } = await import('./normalize.mjs');
+const hostIndependent = (text) => normalizeHost(text, benchRoot);
 
 function sourceRevision() {
   const result = spawnSync('git', ['rev-parse', 'HEAD'], { cwd: repoRoot, encoding: 'utf8' });
@@ -135,7 +140,7 @@ function scriptedProvider(scenario) {
   const toolCalls = [];
   let lastBody = null;
   const fetchImpl = async (url, init = {}) => {
-    const bodyText = String(init.body || '');
+    const bodyText = hostIndependent(String(init.body || ''));
     const body = JSON.parse(bodyText);
     const measured = measureRequest(body, bodyText);
     const reused = commonPrefix(previousPrompt, measured.prompt);
@@ -279,6 +284,7 @@ const output = {
   sourceRevision: sourceRevision(),
   node: process.version,
   tokenCounter: TOKEN_COUNTER,
+  measurement: MEASUREMENT,
   scenarios: reports
 };
 if (jsonOut) {
@@ -294,6 +300,9 @@ if (checkMode) {
     const baseline = JSON.parse(await readFile(BASELINE, 'utf8'));
     if (baseline.tokenCounter !== TOKEN_COUNTER) {
       console.log('\nBaseline ' + path.relative(repoRoot, BASELINE) + ' was counted with ' + (baseline.tokenCounter || baseline.tokenEstimate || 'an unknown counter') + ', not ' + TOKEN_COUNTER + '; regenerate it with --json.');
+      failed = true;
+    } else if (baseline.measurement !== MEASUREMENT) {
+      console.log('\nBaseline ' + path.relative(repoRoot, BASELINE) + ' was measured with ' + (baseline.measurement || 'host-dependent counting') + ', not ' + MEASUREMENT + '; regenerate it with --json.');
       failed = true;
     }
     else for (const report of reports) {

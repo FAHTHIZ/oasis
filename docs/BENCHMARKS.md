@@ -48,7 +48,7 @@ node bench/tokens/run.mjs --json ./token-results.json
 node bench/tokens/run.mjs --check
 ```
 
-Counts use one vocabulary for every model, so they track but do not equal each provider's own tokenizer (Anthropic, Gemini and Qwen tokenize differently). `--check` refuses a baseline counted with a different counter instead of comparing incompatible numbers. The benchmark can compare prompt growth, tool-schema overhead and reusable request prefixes under its fixture assumptions; it does not establish real-world billing or model quality.
+Counts use one vocabulary for every model, so they track but do not equal each provider's own tokenizer (Anthropic, Gemini and Qwen tokenize differently). `--check` refuses a baseline counted with a different counter instead of comparing incompatible numbers. Host facts in the prompt (kernel release, Node version, date, temp path) and per-run ids and test timings are replaced with fixed stand-ins before counting ([bench/tokens/normalize.mjs](../bench/tokens/normalize.mjs)), so a laptop and CI measure the same code identically; `--check` also refuses a baseline measured under different counting rules. The benchmark can compare prompt growth, tool-schema overhead and reusable request prefixes under its fixture assumptions; it does not establish real-world billing or model quality.
 
 ## Memory retrieval benchmark
 
