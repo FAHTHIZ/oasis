@@ -235,3 +235,11 @@ test('/schedule accepts @daily-style macros as a single token', async () => {
   assert.equal(listCronJobs(session).jobs[1].prompt, 'summarize open PRs');
   stopCron(session);
 });
+
+test('a long scheduled prompt is kept whole and an oversized one is refused', () => {
+  const session = {};
+  const long = 'step\n'.repeat(2000) + 'FINAL STEP';
+  const made = createCronJob(session, { cron: '* * * * *', prompt: long }, { startTimer: false });
+  assert.equal(session.cron.jobs.get(made.id).prompt, long);
+  assert.throws(() => createCronJob(session, { cron: '* * * * *', prompt: 'x'.repeat(200_001) }, { startTimer: false }), /limit is 200,000/);
+});

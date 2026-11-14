@@ -128,8 +128,19 @@ export async function ideSelectionContext(session) {
   const lines = selection.endLine - selection.startLine + 1;
   return {
     label: 'Selected ' + lines + ' line' + (lines === 1 ? '' : 's') + ' from ' + file,
-    text: '<ide_selection>The user selected lines ' + selection.startLine + '-' + selection.endLine + ' of ' + file + ':\n```' + (selection.languageId || '') + '\n' + String(selection.text).slice(0, 20000) + '\n```\nThis may or may not relate to the request.</ide_selection>'
+    text: '<ide_selection>The user selected lines ' + selection.startLine + '-' + selection.endLine + ' of ' + file + ':\n```' + (selection.languageId || '') + '\n' + selectionText(selection, file) + '\n```\nThis may or may not relate to the request.</ide_selection>'
   };
+}
+
+// A selection over the limit keeps its start with a note naming the lines to read;
+// it was cut at 20,000 characters with nothing to say so.
+const MAX_IDE_SELECTION_CHARS = 100_000;
+function selectionText(selection, file) {
+  const text = String(selection.text);
+  if (text.length <= MAX_IDE_SELECTION_CHARS) return text;
+  const kept = text.slice(0, MAX_IDE_SELECTION_CHARS);
+  const lastLine = selection.startLine + (kept.match(/\n/g) || []).length;
+  return kept + '\n[selection cut: ' + (text.length - MAX_IDE_SELECTION_CHARS).toLocaleString('en-US') + ' more characters; read ' + file + ' from line ' + lastLine + ' to ' + selection.endLine + ' for the rest]';
 }
 
 /** Compute a proposed file's new content for an edit tool call, or null if not applicable. */

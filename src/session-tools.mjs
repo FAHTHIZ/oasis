@@ -215,6 +215,7 @@ export function nextCronRun(cron, from = new Date()) {
 }
 
 const MAX_CRON_JOBS = 20;
+const MAX_CRON_PROMPT_CHARS = 200_000;
 
 export function cronState(session) {
   return session.cron ||= { jobs: new Map(), timer: null, onFire: null, nextId: 1 };
@@ -225,10 +226,13 @@ export function createCronJob(session, args = {}, { now = () => new Date(), star
   if (state.jobs.size >= MAX_CRON_JOBS) throw new Error('This session already has ' + MAX_CRON_JOBS + ' scheduled prompts.');
   const prompt = String(args.prompt || '').trim();
   if (!prompt) throw new Error('cron_create needs a prompt.');
+  // A scheduled prompt runs later with no one watching, so it is kept whole
+  // (it was cut at 4,000 characters without a word) or refused.
+  if (prompt.length > MAX_CRON_PROMPT_CHARS) throw new Error('cron_create prompt is ' + prompt.length.toLocaleString('en-US') + ' characters; the limit is ' + MAX_CRON_PROMPT_CHARS.toLocaleString('en-US') + '. Put the details in a file and have the prompt read it.');
   const fields = parseCron(args.cron);
   const id = 'cron_' + state.nextId++;
   const next = nextCronRun(fields, now());
-  const job = { id, cron: String(args.cron).trim(), prompt: prompt.slice(0, 4000), recurring: args.recurring !== false, fields, nextRun: next, runs: 0 };
+  const job = { id, cron: String(args.cron).trim(), prompt, recurring: args.recurring !== false, fields, nextRun: next, runs: 0 };
   state.jobs.set(id, job);
   if (startTimer) ensureCronTimer(session);
   return { id, cron: job.cron, recurring: job.recurring, next_run: next ? next.toISOString() : null, message: 'Scheduled. It runs while this session is open.' };
