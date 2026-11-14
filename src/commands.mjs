@@ -295,8 +295,9 @@ export function commandOptions(meta = {}) {
 }
 
 // Claude Code forms: !`cmd` at the start of a line or after whitespace (KEY=!`cmd` stays
-// literal), and a fenced block opened with ```! whose body runs as one multi-line script.
-const INLINE_SHELL = /^```![ \t]*\r?\n([\s\S]{0,8000}?)\r?\n?^```[ \t]*$|(?<=^|\s)!`([^`\n]{1,2000})`/gm;
+// literal), and a fenced block opened with ```! whose body runs as one multi-line script
+// (up to 64,000 characters; a longer block was left unrun at 8,000).
+const INLINE_SHELL = /^```![ \t]*\r?\n([\s\S]{0,64000}?)\r?\n?^```[ \t]*$|(?<=^|\s)!`([^`\n]{1,2000})`/gm;
 // Like Claude Code's 30,000-character Bash output default. Longer output keeps
 // its start and end with a note; it used to be cut at 16 KiB with no note.
 const MAX_INLINE_OUTPUT = 30_000;
@@ -522,7 +523,9 @@ export async function resolveCustomCommand(root, rawInput, options = {}) {
   const commands = options.commands || await loadCustomCommands(root, options);
   const command = commands.get(match[1].toLowerCase());
   if (!command) return null;
-  const argumentText = String(match[2] || '').slice(0, 8000);
+  // The arguments are the user's own message (a pasted log, a long spec), already
+  // bounded by the chat message limit; cutting them at 8,000 characters lost the rest.
+  const argumentText = String(match[2] || '');
   if (command.gemini) {
     const rendered = await renderGeminiPrompt(root, command.body, argumentText, { rawInput: String(rawInput).trim(), env: options.env, allowed: command.scope === 'user' || Boolean(options.trusted), policy: options.policy, disabledByPolicy: options.disableShell === true });
     return { name: command.name, args: argumentText, command, prompt: rendered.text, mentions: rendered.files, shell: rendered.ran, grantTools: null };

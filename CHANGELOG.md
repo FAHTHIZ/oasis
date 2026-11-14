@@ -4,6 +4,7 @@ User-facing change history grouped by package version. A version heading does no
 
 ## Unreleased
 
+- Custom slash command arguments are no longer cut at 8,000 characters (a pasted log after /fix arrived incomplete), and fenced ```! shell blocks up to 64,000 characters now run instead of staying unrun past 8,000.
 - Nested AGENTS.md and CLAUDE.md files, loaded when OASIS works in their directory, share a 100,000-character budget per directory (was 12,000), so an ordinary nested file is no longer cut short.
 - Output from git, background processes, ast-grep, gh, auto-test runs, MCP headersHelper scripts, Chrome DevTools and the Codex app-server host is decoded as a stream. Each chunk used to be decoded alone, so a non-ASCII character split across two reads (common in paths, logs and test names) came out as two replacement characters and could break a JSON line.
 - Shell output inside custom commands and skills (!`cmd` and ```! blocks) keeps up to 30,000 characters, as Claude Code's Bash output does, with its start and end and a note when it is longer. It used to be cut at 16 KiB with no note, and multi-byte characters split across output chunks came out garbled. Custom command files of up to 1 MiB load (was 64 KiB, silently skipped past that).
