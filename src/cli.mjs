@@ -495,6 +495,12 @@ function expandLastToolResult() {
   const shown = verboseToolOutput(last.name, last.result, { color: colorEnabled(stdout), maxLines: 400 });
   noticeLine((colorEnabled(stdout) ? '\x1b[2m' : '') + '  ↳ Full output of ' + last.name + ':' + (colorEnabled(stdout) ? '\x1b[22m' : '') + '\n' + (shown || '  ⎿ (no output)'));
 }
+// Command results (/cost, /status, ...) are plain lines; on a terminal they
+// word-wrap like replies instead of breaking mid-word at the edge. A line
+// that fills the row exactly (pre-wrapped /help) is left alone.
+export function wrapCommandOutput(text, columns = 80) {
+  return String(text).split('\n').map((line) => wrapRendered(line, Number(columns) + 1)).join('\n');
+}
 export function lastOutputLine(text, max = 60) {
   const lines = stripAnsi(String(text || '')).split(/\r?\n|\r/).map((line) => line.trim()).filter(Boolean);
   const line = lines.at(-1) || '';
@@ -2313,7 +2319,7 @@ async function interactive(root, autoApprove, persistence = {}) {
         }
         const handled = await runBuiltinCommand(slash[1].toLowerCase(), String(slash[2] || '').trim(), { root, session, env: process.env, usage: USAGE, sessionOptions: SESSION_OPTIONS, autoApprove, print: (line) => stdout.write(line + '\n'), color: Boolean(stdout.isTTY && colorEnabled(stdout)), width: stdout.columns || 100, confirm: (question) => askApproval(question, true, {}), ...(stdin.isTTY && stdout.isTTY ? { askUser: (question) => askQuestionInTerminal(question) } : {}) });
         if (handled) {
-          if (handled.output) stdout.write(handled.output + '\n');
+          if (handled.output) stdout.write((stdout.isTTY ? wrapCommandOutput(handled.output, stdout.columns || 80) : handled.output) + '\n');
           if (handled.reload && session) {
             session = await reloadSessionComponents(session, root, handled.reload);
             continue;

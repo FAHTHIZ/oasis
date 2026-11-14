@@ -4,6 +4,8 @@ User-facing change history grouped by package version. A version heading does no
 
 ## Unreleased
 
+- `/cost` before the first message now prices the saved provider (a local server shows "$0.00 (local model)") instead of "Cost: unknown for this model". On a terminal, slash command output word-wraps instead of breaking mid-word at the edge. Tests in `test/cost-before-session.test.mjs`.
+
 - Terminal: when a completion gate re-prompts the model after a streamed reply, the reply's last line now ends before the next request's spinner starts. Previously the spinner erased that line, the next reply's first chunk was dropped ("ask!ion add…"), and the redraw could wipe an earlier line. PTY regression test in `test/stream-reply-after-gate.test.mjs`.
 - `oasis connect` sizes the wide Ollama variant to this computer's model memory (32K, 24K or 16K tokens from the model's layer and KV-head counts) when Ollama runs locally. On an 8 GB machine, qwen3:0.6b at 32K loaded at 4.4 GB, past the 3.3 GB budget. While streaming, text-format tool calls from local models (`<tools>{"name": …}`, `<tool_call>`, …) are no longer printed raw before they are recovered.
 - Setup's tool-calling probe now accepts a call the model writes as reply text (the format the agent loop already recovers), with a reliability note, instead of rejecting small local models such as qwen3:0.6b that intermittently answer that way. When Ollama is running with no models, setup suggests an `ollama pull` that fits this computer.
