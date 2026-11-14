@@ -34,6 +34,7 @@ import { beginCheckpoint, captureBeforeChange, checkpointPersistenceEnabled, FIL
 import { keywordRulesFor, nestedMemoryFor } from './memory.mjs';
 import { resolveModelAlias, isModelAlias, modelAllowed, modelDenied, modelRestrictionMessage, applyModelOverride, fastModeRequest } from './model-aliases.mjs';
 import { selectTaskModel } from './model-routing.mjs';
+import { canEscalate, escalate, newEscalation, thrashEvidence } from './escalation.mjs';
 import { readProviderStream, mergeAnthropicUsage, toolCallSlot, strayStreamError, uniqueToolCallIds } from './provider-stream.mjs';
 import { maxParallelReadsFrom, planToolBatches } from './tool-batch-scheduler.mjs';
 import { validateToolArguments } from './tool-schema-validation.mjs';
@@ -4383,6 +4384,15 @@ export async function runAgentTurn(session, prompt, options = {}) {
   }
   const temporarilyRouted = Boolean(route.enabled && originalConfig && selectedModel !== originalModel);
   if (temporarilyRouted) session.config = { ...originalConfig, model: selectedModel };
+  const escalation = options.isSubagent || !session ? null : newEscalation({ ...route, model: selectedModel }, {
+    session,
+    env: session.modelEnv || env,
+    allowed: (model) => !(session.availableModels || session.modelPolicy) || modelAllowed(model, session.availableModels, {
+      ...(session.modelPolicy || {}),
+      env: session.modelEnv || env,
+      protocol: originalConfig && originalConfig.protocol
+    })
+  });
   const taskUsage = {
     inputTokens: 0,
     outputTokens: 0,
@@ -4420,7 +4430,14 @@ export async function runAgentTurn(session, prompt, options = {}) {
     }
     if (typeof options.onUsage === 'function') options.onUsage(entry);
   };
-  const turnOptions = { ...options, onUsage };
+  const turnOptions = { ...options, onUsage, ...(escalation ? {
+    escalation,
+    onEscalate: (event) => {
+      const tel = getTelemetry(env);
+      if (tel) tel.event('oasis.model_escalation', { from: event.from, to: event.to, step: event.step, signal: event.signal });
+      if (typeof options.onEscalate === 'function') options.onEscalate(event);
+    }
+  } : {}) };
   let result;
   try {
     if (!options.isSubagent && session && session.root) {
@@ -4442,7 +4459,7 @@ export async function runAgentTurn(session, prompt, options = {}) {
     const savingsUSD = actualCostKnown && strongCostKnown
       ? taskUsage.strongModelCostUSD - taskUsage.costUSD
       : null;
-    if (session && session.webUsage && route.enabled && route.tier === 'easy' && taskUsage.requests > 0) {
+    if (session && session.webUsage && route.enabled && (route.tier === 'easy' || route.tier === 'work') && taskUsage.requests > 0) {
       session.webUsage.routingTasks = Number(session.webUsage.routingTasks || 0) + 1;
       if (savingsUSD !== null) session.webUsage.routingSavingsUSD = Number(session.webUsage.routingSavingsUSD || 0) + savingsUSD;
       else session.webUsage.routingSavingsKnown = false;
@@ -4451,10 +4468,12 @@ export async function runAgentTurn(session, prompt, options = {}) {
       ...result,
       modelRouting: {
         enabled: Boolean(route.enabled),
+        ...(route.mode ? { mode: route.mode } : {}),
         tier: route.tier,
         selectedModel,
         strongModel: route.strongModel || originalModel,
-        reason: route.reason
+        reason: route.reason,
+        ...(escalation ? { escalation: escalation.done, ...(escalation.skipped ? { escalationSkipped: escalation.skipped } : {}) } : {})
       },
       taskUsage: {
         ...taskUsage,
@@ -4470,6 +4489,9 @@ export async function runAgentTurn(session, prompt, options = {}) {
     // Preserve a genuine emergency fallback switch, but otherwise return the
     // session to its chosen default model after this routed task.
     if (temporarilyRouted && session.config && session.config.model === selectedModel) {
+      session.config = originalConfig;
+    } else if (escalation && escalation.done && session.config && session.config.model === escalation.to) {
+      // The escalation lasts for this task only, even when the session's own model was the cheaper one.
       session.config = originalConfig;
     }
   }
@@ -4684,6 +4706,10 @@ async function runAgentTurnRaw(session, prompt, options = {}) {
   // reads, or re-issuing the same batch of calls every step.
   const recentOutcomes = new Map();
   let loopBreakMessage = '';
+  // Cascade routing (src/escalation.mjs): the first stuck signal hands the
+  // rest of the turn to the strong model instead of stopping.
+  const escalation = options.escalation || null;
+  let pendingEscalation = null;
   // overwrittenPaths starts empty (not missing): an absent set means "not
   // tracked" to diffReviewComplete, which then wants every targeted edit
   // reread even after a passing check. That cost every successful turn an
@@ -5096,7 +5122,9 @@ async function runAgentTurnRaw(session, prompt, options = {}) {
               if (previous.editEpoch !== editEpoch) { previous.count += 1; previous.editEpoch = editEpoch; }
             } else persistentFailures.set(key, { signature, count: 1, editEpoch });
             const thrash = persistentFailures.get(key).count;
-            if (thrash >= THRASH_WARN_AT && typeof item.content === 'string') {
+            if (thrash >= THRASH_WARN_AT && canEscalate(escalation)) {
+              pendingEscalation ||= { evidence: thrashEvidence(commandText, thrash), signal: 'thrash' };
+            } else if (thrash >= THRASH_WARN_AT && typeof item.content === 'string') {
               item.content += thrash >= THRASH_ESCALATE_AT
                 ? '\n\n<system-reminder>' + thrash + ' rounds of edits have not changed this failure at all. Stop patching. Summarize for the user what you tried, what the failure says, and what you now suspect, then either try one clearly different approach backed by new evidence (logging, a minimal reproduction, reading the code that actually raises the error) or ask the user. Do not weaken or delete the test to make it pass.</system-reminder>'
                 : '\n\n<system-reminder>Your last ' + thrash + ' edits did not change this failure: the command fails the same way each time. The fix is not reaching the cause. Before editing again, re-read the exact error and the code it points to, state a specific hypothesis, and verify it (for example with a print, a smaller test, or by reading the caller) instead of trying another variation.</system-reminder>';
@@ -5295,6 +5323,26 @@ async function runAgentTurnRaw(session, prompt, options = {}) {
         };
       }
       if (batch.additionalContext.length) session.messages.push({ role: 'user', content: '<system-reminder>\nPostToolBatch hook context:\n' + capHookText(batch.additionalContext.join('\n'), 10000) + '\n</system-reminder>' });
+    }
+    if (!pendingEscalation && loopBreakMessage && canEscalate(escalation)) pendingEscalation = { evidence: loopBreakMessage, signal: 'loop-breaker' };
+    if (pendingEscalation) {
+      const note = escalate(escalation, { ...pendingEscalation, step: step + 1 });
+      pendingEscalation = null;
+      if (note) {
+        session.config = { ...session.config, model: escalation.to };
+        context.config = session.config;
+        loopBreakMessage = '';
+        // The new model starts with a clean slate of repeat counters; the
+        // conversation itself keeps everything that was tried.
+        lastToolOutcome = null;
+        recentOutcomes.clear();
+        failedCommandRuns.clear();
+        persistentFailures.clear();
+        const tail = session.messages[session.messages.length - 1];
+        if (tail && tail.role === 'tool' && typeof tail.content === 'string') tail.content += '\n\n' + note;
+        else session.messages.push({ role: 'user', content: note });
+        if (typeof options.onEscalate === 'function') { try { options.onEscalate(escalation.done); } catch { /* display only */ } }
+      }
     }
     if (loopBreakMessage) {
       session.messages.push({ role: 'assistant', content: loopBreakMessage });

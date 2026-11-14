@@ -1585,7 +1585,7 @@ async function runPrompt(prompt, root, autoApprove, session = null, persistence 
     USAGE.turns += 1;
     if (result.modelRouting && result.modelRouting.enabled) {
       const taskUsage = result.taskUsage || {};
-      if (result.modelRouting.tier === 'easy') {
+      if (result.modelRouting.tier === 'easy' || result.modelRouting.tier === 'work') {
         USAGE.routingTasks = Number(USAGE.routingTasks || 0) + 1;
         if (typeof taskUsage.savingsUSD === 'number') USAGE.routingSavingsUSD = Number(USAGE.routingSavingsUSD || 0) + taskUsage.savingsUSD;
       }
@@ -1597,6 +1597,9 @@ async function runPrompt(prompt, root, autoApprove, session = null, persistence 
       stdout.write('[routing] ' + result.modelRouting.tier + ' · ' + result.modelRouting.selectedModel +
         ' · ' + taskUsage.totalTokens + ' tokens · ' + costText + ' vs strong-model estimate ' + baselineText +
         ' · ' + savingsText + '\n');
+      const escalated = result.modelRouting.escalation;
+      if (escalated) stdout.write('[routing] escalated at step ' + escalated.step + ' from ' + escalated.from + ' to ' + escalated.to + ': ' + escalated.reason + '\n');
+      else if (result.modelRouting.escalationSkipped) stdout.write('[routing] no escalation available: ' + result.modelRouting.escalationSkipped + '\n');
     }
     if (result.verification && result.verification.required) {
       const evidence = result.verification;

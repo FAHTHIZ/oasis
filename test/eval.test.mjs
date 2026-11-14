@@ -286,6 +286,44 @@ test('OASIS eval records selected routed model, per-task cost and savings', asyn
   assert.equal(stored.routing.strongModel, 'strong-model');
 });
 
+test('a cascade eval sends no difficulty hint and records the escalation', async (t) => {
+  const tmp = await temporaryDirectory();
+  t.after(() => rm(tmp, { recursive: true, force: true }));
+  const resultsDir = path.join(tmp, 'eval-results');
+  const tasksDir = path.join(tmp, 'tasks');
+  await mkdir(tasksDir);
+  await createFixtureTask(tasksDir);
+  await writeFile(path.join(tasksDir, 'metadata.json'), JSON.stringify({
+    schemaVersion: 1,
+    categories: { 'utility-logic': 'Fixture category.' },
+    difficulties: ['small', 'medium', 'large'],
+    tasks: { 'fixture-task': { category: 'utility-logic', difficulty: 'large', rationale: 'A large task would be pinned strong by its hint.' } }
+  }));
+  const env = { ...process.env, OASIS_CONFIG_DIR: path.join(tmp, 'user-config'), GITHUB_SHA: 'e'.repeat(40) };
+  await saveConfig({ protocol: 'openai-compatible', baseURL: 'http://127.0.0.1:1/v1', model: 'strong-model', apiKey: '', maxSteps: 4 }, { env });
+  await assert.rejects(runEvalCommand(['--task', 'fixture-task', '--route-mode', 'cascade'], { autoApprove: true, env, tasksDir, resultsDir, output: { write() {} } }), /--route-mode cascade requires --route-easy-model/);
+  let capturedSessionRouting = null;
+  let capturedHint = 'unset';
+  const output = { text: '', write(value) { this.text += String(value); } };
+  const escalation = { step: 3, signal: 'thrash', from: 'cheap-model', to: 'strong-model', reason: 'the same failure of `npm test` survived 3 rounds of edits.' };
+  const result = await runEvalCommand(['--task', 'fixture-task', '--trials', '1', '--route-easy-model', 'cheap-model', '--route-strong-model', 'strong-model', '--route-mode', 'cascade'], {
+    autoApprove: true, env, tasksDir, resultsDir, output,
+    agentRunner: async (session, _prompt, options) => {
+      capturedSessionRouting = { ...session.settings.modelRouting };
+      capturedHint = options.routingHint;
+      await writeFile(path.join(session.root, 'demo.txt'), 'new\n');
+      return { finished: true, toolCalls: 4, modelRouting: { enabled: true, mode: 'cascade', tier: 'work', selectedModel: 'cheap-model', strongModel: 'strong-model', reason: 'cascade', escalation }, taskUsage: { inputTokens: 10, outputTokens: 2, totalTokens: 12, costUSD: null, costKnown: false, strongModelCostKnown: false, savingsUSD: null } };
+    }
+  });
+  assert.equal(result.ok, true, output.text);
+  assert.deepEqual(capturedSessionRouting, { enabled: true, mode: 'cascade', easyModel: 'cheap-model', strongModel: 'strong-model' });
+  assert.equal(capturedHint, undefined);
+  assert.deepEqual(result.results[0].escalation, escalation);
+  assert.equal(result.results[0].routeTier, 'work');
+  assert.equal(result.summary.routing.mode, 'cascade');
+  assert.match(output.text, /work\/cheap-model→strong-model \(step 3\)/);
+});
+
 test('evaluation metadata is validated and becomes part of task fingerprints', async (t) => {
   const tmp = await temporaryDirectory();
   t.after(() => rm(tmp, { recursive: true, force: true }));
