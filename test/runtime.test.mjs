@@ -632,7 +632,7 @@ test('public URL fetch rejects an oversized response before consuming its body a
       tooLarge: true
     })
   });
-  assert.match(result.error, /1 MiB limit/);
+  assert.match(result.error, /10 MiB limit/);
 });
 
 test('read-only Git tools inspect diffs while protecting sensitive paths', async (t) => {

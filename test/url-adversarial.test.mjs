@@ -74,5 +74,14 @@ test('provider/network failures surface as errors without leaking a partial resu
   const binary = await fetchPublicUrl('http://example.com/', { lookupImpl: publicLookup, requestImpl: async () => ({ status: 200, headers: new Map([['content-type', 'application/octet-stream']]), body: 'x' }) });
   assert.match(binary.error, /not an accepted text content type/);
   const huge = await fetchPublicUrl('http://example.com/', { lookupImpl: publicLookup, requestImpl: async () => ({ tooLarge: true }) });
-  assert.match(huge.error, /1 MiB/);
+  assert.match(huge.error, /10 MiB/);
+});
+
+test('a 3 MiB article page is fetched and converted, not refused', async () => {
+  const section = '<h2>History</h2><p>' + 'The quick brown fox jumps over the lazy dog. '.repeat(40) + '</p>';
+  const html = '<html><head><title>Big article</title><script>' + 'var x = 1;'.repeat(50000) + '</script></head><body><main><article><h1>Big article</h1>' + section.repeat(1200) + '</article></main></body></html>';
+  assert.ok(Buffer.byteLength(html) > 2.5 * 1024 * 1024);
+  const result = await fetchPublicUrl('http://example.com/big', { lookupImpl: publicLookup, requestImpl: async () => ({ status: 200, headers: new Map([['content-type', 'text/html; charset=utf-8']]), body: html }) });
+  assert.equal(result.error, undefined);
+  assert.match(result.content, /quick brown fox/);
 });

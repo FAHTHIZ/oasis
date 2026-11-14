@@ -9,7 +9,10 @@ import { proxyForUrl, openTunnel } from './proxy.mjs';
 import { htmlToMarkdown } from './html-markdown.mjs';
 
 const MAX_TOOL_OUTPUT = 24 * 1024;
-const MAX_PUBLIC_RESPONSE_BYTES = 1024 * 1024;
+// Matches Claude Code's WebFetch download cap. Large article pages are
+// several MiB of HTML (Wikipedia "United States" is ~3 MiB) but convert to a
+// fraction of that; the converter runs in a worker with a timeout.
+const MAX_PUBLIC_RESPONSE_BYTES = 10 * 1024 * 1024;
 
 async function validatePublicUrl(raw, options = {}) {
   let url;
@@ -76,7 +79,7 @@ export async function fetchPublicUrl(raw, options = {}) {
   const timer = setTimeout(() => controller.abort(), 15000);
   try {
     const response = await (options.requestImpl || requestPublicUrl)(url, addresses, controller.signal, options.env || process.env);
-    if (response.tooLarge) return { url: url.toString(), error: 'Response exceeds the 1 MiB limit.' };
+    if (response.tooLarge) return { url: url.toString(), error: 'Response exceeds the 10 MiB limit.' };
     const responseStatus = Number(response.status) || 0;
     if ([301, 302, 303, 307, 308].includes(responseStatus)) {
       const location = response.headers.get('location');
@@ -86,7 +89,7 @@ export async function fetchPublicUrl(raw, options = {}) {
     const type = response.headers.get('content-type') || '';
     if (!/(text\/|application\/json|application\/xml|application\/xhtml\+xml)/i.test(type)) return { url: url.toString(), status: responseStatus, contentType: type, error: 'The response is not an accepted text content type.' };
     const text = String(response.body || '');
-    if (Buffer.byteLength(text, 'utf8') > MAX_PUBLIC_RESPONSE_BYTES) return { url: url.toString(), error: 'Response exceeds the 1 MiB limit.' };
+    if (Buffer.byteLength(text, 'utf8') > MAX_PUBLIC_RESPONSE_BYTES) return { url: url.toString(), error: 'Response exceeds the 10 MiB limit.' };
     let content = text;
     let title;
     let extracted;

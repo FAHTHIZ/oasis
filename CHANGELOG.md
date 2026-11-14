@@ -4,6 +4,7 @@ User-facing change history grouped by package version. A version heading does no
 
 ## Unreleased
 
+- `fetch_url` now downloads pages up to 10 MiB (was 1 MiB), as Claude Code's WebFetch does. Long article pages are several MiB of HTML (Wikipedia's "United States" is about 3 MiB) and were refused with "Response exceeds the 1 MiB limit"; they now convert to Markdown in the existing worker, with the same timeout and plain-text fallback.
 - `/model --list` and the /model picker no longer drop models from large gateways. The list was capped at 500 models after sorting, and OpenRouter alone lists about 470, so a slightly larger gateway lost every model late in the alphabet (`qwen/`, `x-ai/`, `z-ai/`). The caps are now 5,000 models and 16 MiB.
 - Saved sessions now keep the whole conversation. Before, a save kept only the last 120 messages, so resuming after a long agentic turn (60+ tool calls) lost the earlier requests and work; a session over 3 MiB could not be saved at all, and a reply with more than 30 parallel tool calls made the save fail. The caps are now 5,000 messages, 64 MiB and 512 calls per reply, and a session over the size cap is saved with its oldest exchanges dropped instead of failing. Session search reads the same larger files.
 - Long model replies no longer fail partway through with "exceeded Oasis's 8 MiB response limit". The limit counted the raw stream, where every token carries 100-250 bytes of envelope, so replies of about 40,000+ output tokens tripped it. The stream limit is now 512 MiB, and a single event is limited to 32 MiB.
