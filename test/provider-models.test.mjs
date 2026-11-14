@@ -50,3 +50,12 @@ test('/model --list shows served models and respects availableModels', async (t)
   assert.match(result.output, /\* gpt-allowed/);
   assert.doesNotMatch(result.output, /gpt-blocked/);
 });
+
+test('a gateway list larger than 500 models keeps the models late in the alphabet', () => {
+  const data = [];
+  for (let i = 0; i < 900; i++) data.push({ id: 'aaa/model-' + String(i).padStart(4, '0') });
+  data.push({ id: 'x-ai/grok-5' }, { id: 'z-ai/glm-5' });
+  const ids = parseModelList({ data });
+  assert.equal(ids.length, 902);
+  assert.ok(ids.includes('x-ai/grok-5') && ids.includes('z-ai/glm-5'));
+});

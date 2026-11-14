@@ -5,8 +5,11 @@
 // than a guess. Results are cached per endpoint for a few minutes.
 
 const CACHE_MS = 5 * 60 * 1000;
-const MAX_BYTES = 2 * 1024 * 1024;
-const MAX_MODELS = 500;
+// OpenRouter alone lists ~470 models in ~850 KB (Nov 2026), and the list is
+// sorted before the cap, so a cap near that size silently drops whole
+// providers late in the alphabet (qwen/, x-ai/, z-ai/).
+const MAX_BYTES = 16 * 1024 * 1024;
+const MAX_MODELS = 5000;
 const cache = new Map();
 
 function trimBase(baseURL) {
