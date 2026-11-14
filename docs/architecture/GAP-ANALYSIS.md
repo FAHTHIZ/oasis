@@ -39,12 +39,21 @@ the rest of the turn moves to the strong model with a hand-over note,
 recorded in the run's routing record. Safety-sensitive and image tasks still
 start on the strong model; zero-budget mode never escalates to a paid model.
 
+Status: implemented in `39a6534e` (`modelRouting.mode = "cascade"`,
+`src/escalation.mjs`, tests in `test/model-escalation.test.mjs`). Escalation
+happens at most once per task; the cascade's cost benefit has not been
+measured against live providers yet (see gap 5).
+
 ### 2. Gateway budget notices accepted as answers (§5)
 
 Some free gateways answer HTTP 200 with assistant text such as "The API key
 used for this request has reached its budget". Oasis treats HTTP 200 error
 *bodies* as failures (`bdaabcd4`) but not this *content*, so the notice
 would be shown as the model's reply and no fallback would run.
+
+Status: implemented in `3c9d6cdd` (`gatewayBudgetNotice` in
+`src/api-error.mjs`; the notice counts as a 402 quota failure and triggers
+fallback). Only the exact Pollinations wording is matched.
 
 ### 3. No single per-task run report (§5 observability)
 
@@ -53,6 +62,12 @@ The data exists in pieces (`/usage`, `/cost`, quota ledger, OTel spans,
 whether it escalated, how many requests and tokens, estimated vs.
 provider-reported cost, which fallbacks fired, what caching avoided, and
 whether the task finished verified.
+
+Status: implemented in `b424594f` (`src/run-report.mjs`, `/report`,
+`result.runReport`). Cache-read tokens are shown; tokens saved by in-process
+de-duplication and masking are measured by `bench/tokens`, not per task. The
+fix also restored `onFallback` delivery from the turn loop, which had been
+silently dropped.
 
 ### 4. Documentation sprawl (§11)
 
@@ -70,6 +85,23 @@ scripted baselines. There is no same-model, same-task comparison against
 another open-source harness with repeated trials. Claude Code and Codex need
 paid access that this work does not have; that must be stated, not papered
 over.
+
+## Orchestration audit (§4)
+
+Checked in `runSubagent` and `runSpecialistReview` (`src/agent.mjs`):
+
+- Subagents and specialist reviews share the parent's budget ledger, so
+  `--max-budget-usd`, `--max-requests` and `--max-total-tokens` count their
+  requests; zero-budget mode and `freeModels` are inherited.
+- A requested or configured subagent model must pass `availableModels`.
+- Nesting is bounded by `subagentMaxDepth` (default 1); read-only agents
+  never get the `task` tool; background agents are capped.
+- Subagents run only when the model calls the `task` tool or a workflow asks
+  for one. Nothing spawns agents by default.
+
+Found and fixed: `/reload-plugins` rebuilt the session with a fresh ledger,
+so spend and request limits restarted from zero after a reload. The ledger,
+spend and last run report now carry over (`test/rebuild-session-budget.test.mjs`).
 
 ## Not gaps (checked and left alone)
 
