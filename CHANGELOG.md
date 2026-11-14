@@ -4,6 +4,7 @@ User-facing change history grouped by package version. A version heading does no
 
 ## Unreleased
 
+- `--append-system-prompt`, `--append-system-prompt-file` and `--from-pr` text is no longer cut at 20,000 characters (now 100,000, the same as `--system-prompt`). `--from-pr` lost most of the pull request diff it had just fetched.
 - Long skills load in full. `load_skill` and `read_skill_resource` cut skill text at 24,000 characters with no way to read the rest, though skill files may be 96 KiB. They now return pages that end on a line break, with an `offset` to continue from. `/skill-name` commands and `context: fork` skills get the whole body.
 - Fixed: a subagent whose definition lists `skills:` was given the text "[object Object]" instead of the skill.
 - `edit_file` and `multi_edit` now edit files up to 64 MiB (was 4 MiB). Lockfiles, SQL dumps and data fixtures over 4 MiB were refused, even after the model had read the part it needed.
