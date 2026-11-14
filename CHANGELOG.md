@@ -4,6 +4,7 @@ User-facing change history grouped by package version. A version heading does no
 
 ## Unreleased
 
+- Roo and Kilo mode rule folders: every file is read (the first 50 used to be the limit), and files past the 48 KiB budget are listed by path in the prompt instead of being skipped without a word.
 - Saved sessions keep their whole history. A 5,000-message cap used to drop the start of long sessions on save; only the 64 MiB byte cap remains, and a session near it is first written without indentation before any history is trimmed.
 - With a fallback model set, an HTTP 529 (overloaded) switches to it right away instead of retrying the overloaded model first. Without one, 529 is still retried.
 - An error event inside a streamed reply (Anthropic `overloaded_error`, `api_error`, `rate_limit_error`, `timeout_error`; Responses `server_error`, `rate_limit_exceeded`, `server_is_overloaded`) now restarts the stream instead of ending the turn. Authentication and invalid-request errors stay final.

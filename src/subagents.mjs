@@ -311,14 +311,18 @@ async function readRuleTree(dir, budget) {
   // Roo sorts by file name only, case-insensitively.
   files.sort((a, b) => path.basename(a).toLowerCase().localeCompare(path.basename(b).toLowerCase()));
   const parts = [];
+  const skipped = [];
   let used = 0;
-  for (const file of files.slice(0, 50)) {
+  for (const file of files) {
     let text;
     try { text = await readFile(file, 'utf8'); } catch { continue; }
-    if (!text.trim() || text.includes('\0') || used + text.length > budget) continue;
+    if (!text.trim() || text.includes('\0')) continue;
+    if (used + text.length > budget) { skipped.push(file); continue; }
     used += text.length;
     parts.push('# Rules from ' + file + ':\n' + text.trim());
   }
+  // Rules past the budget are named, not silently dropped, so the model can read them.
+  if (skipped.length) parts.push('# ' + skipped.length + ' more rule file' + (skipped.length === 1 ? '' : 's') + ' did not fit; read them with read_file if they apply:\n' + skipped.slice(0, 200).join('\n') + (skipped.length > 200 ? '\n[' + (skipped.length - 200) + ' more]' : ''));
   return parts;
 }
 
