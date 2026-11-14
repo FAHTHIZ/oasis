@@ -30,6 +30,25 @@ export function attachNeuronLineage(registry, record, requestedParentId = "main"
   return record;
 }
 
+/** Every agent below `id` in the lineage, nearest first. Cycles and stale links are ignored. */
+export function descendantRecords(registry, id) {
+  const agents = registry && registry.agents ? [...registry.agents.values()] : [];
+  const out = [];
+  const seen = new Set([id]);
+  let frontier = [id];
+  for (let depth = 0; depth < MAX_NEURON_DEPTH && frontier.length; depth++) {
+    const next = [];
+    for (const record of agents) {
+      if (seen.has(record.id) || !frontier.includes(record.parentId)) continue;
+      seen.add(record.id);
+      out.push(record);
+      next.push(record.id);
+    }
+    frontier = next;
+  }
+  return out;
+}
+
 function projectNode(record, children, contextOnly = false) {
   const id = clean(record.id, 100);
   const status = VALID_STATUSES.has(record.status) ? record.status : "interrupted";
