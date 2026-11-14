@@ -145,6 +145,18 @@ const MAX_SYSTEM_PROMPT_CHARS = 100000;
 // report) run past 24k characters; streaming stopped there and the CLI, ACP
 // and the browser showed a cut-off reply. The bound only limits the cost of
 // rebuilding the cumulative text on every delta.
+// A subagent's report was cut at 30,000 characters with no note, which also
+// dropped the JSON verdict an agent hook puts at the end. Reports reach the
+// parent through the normal paged tool-result path, so keep them whole up to
+// a high bound and say so when that bound is hit.
+export const MAX_SUBAGENT_REPORT_CHARS = 1_000_000;
+export function boundSubagentReport(text) {
+  const value = String(text == null ? '' : text);
+  if (value.length <= MAX_SUBAGENT_REPORT_CHARS) return value;
+  const keep = MAX_SUBAGENT_REPORT_CHARS / 2;
+  return value.slice(0, keep) + '\n[... ' + (value.length - keep * 2).toLocaleString('en-US') + ' characters of the report omitted ...]\n' + value.slice(-keep);
+}
+
 export const MAX_STREAMED_REPLY_CHARS = 1_000_000;
 
 
@@ -2679,7 +2691,7 @@ async function runChildTurnInner(parent, record, prompt, options, { foreground }
     if (record.stalled) {
       // Keep whatever the agent had written so far so the parent can still use it.
       const partial = [...(child.messages || [])].reverse().find((message) => message.role === 'assistant' && typeof message.content === 'string' && message.content.trim());
-      if (partial) record.report = String(partial.content).slice(0, 30000);
+      if (partial) record.report = boundSubagentReport(partial.content);
       error.message = record.stalled + (partial ? ' Partial report:\n' + record.report.slice(0, 6000) : '');
     }
     if (record.pane) record.pane.write('[' + record.status + '] ' + error.message);
@@ -2702,7 +2714,7 @@ async function runChildTurnInner(parent, record, prompt, options, { foreground }
   record.finishedAt = Date.now();
   record.status = 'completed';
   recordAgentEvent(parent, 'agent.completed', { agentId: record.id, teamId: record.teamId || undefined, description: record.description, detail: 'tool_calls=' + Math.max(0, Number(outcome.toolCalls) || 0) });
-  record.report = String(outcome.text || '').slice(0, 30000);
+  record.report = boundSubagentReport(outcome.text);
   if (record.pane) record.pane.write('[completed] ' + Math.max(0, Number(outcome.toolCalls) || 0) + ' tool calls');
   record.tokensUsed += Math.max(0, Number(outcome.tokensUsed) || 0);
   return {
