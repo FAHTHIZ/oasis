@@ -4,10 +4,11 @@
 // stores task state under the user's private Oasis config directory, never in the
 // project checkout, and uses restrictive permissions plus atomic replacement.
 import { isWorktreeBranchName } from './branch-names.mjs';
-import { createHash, randomUUID } from 'node:crypto';
-import { chmod, mkdir, readFile, readdir, rename, rmdir, unlink, writeFile } from 'node:fs/promises';
+import { createHash } from 'node:crypto';
+import { chmod, mkdir, readFile, readdir, rmdir, unlink } from 'node:fs/promises';
 import path from 'node:path';
 import { getConfigDirectory } from './config.mjs';
+import { replaceFileDurably } from './atomic-write.mjs';
 
 const TASK_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const TERMINAL = new Set(['completed', 'cancelled', 'error', 'interrupted']);
@@ -145,15 +146,7 @@ export function createTaskHistoryStore(root, options = {}) {
     await mkdir(directory, { recursive: true, mode: 0o700 });
     try { await chmod(directory, 0o700); } catch {}
     const destination = recordPath(safe.id);
-    const temporary = destination + '.' + randomUUID() + '.tmp';
-    await writeFile(temporary, body, { encoding: 'utf8', mode: 0o600, flag: 'wx' });
-    try {
-      await rename(temporary, destination);
-      try { await chmod(destination, 0o600); } catch {}
-    } catch (error) {
-      try { await unlink(temporary); } catch {}
-      throw error;
-    }
+    await replaceFileDurably(destination, body, { mode: 0o600 });
   }
 
   async function prune() {

@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
-import { mkdir, lstat, readFile, realpath, rename, rm, unlink, writeFile } from 'node:fs/promises';
+import { mkdir, lstat, readFile, realpath, rename, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { getConfigDirectory } from './config.mjs';
 import { pluginHome, readInstalledPlugins } from './claude-plugins.mjs';
@@ -9,6 +9,7 @@ import { userSettingsPath } from './settings.mjs';
 // Only the functions used: the semver index loads all 47 of its modules.
 import semverValid from 'semver/functions/valid.js';
 import semverCompare from 'semver/functions/compare.js';
+import { replaceFileDurably } from './atomic-write.mjs';
 const semver = { valid: semverValid, compare: semverCompare };
 
 const CAPABILITIES = new Set(['commands','skills','agents','subagents','hooks','mcp']);
@@ -35,9 +36,7 @@ async function readJsonSafe(file, fallback=null) {
 }
 async function atomicWrite(file,text) {
   await mkdir(path.dirname(file),{recursive:true,mode:0o700});
-  const temp=file+'.'+randomUUID()+'.tmp';
-  try{await writeFile(temp,text,{encoding:'utf8',mode:0o600,flag:'wx'});await rename(temp,file);}
-  finally{await unlink(temp).catch(()=>{});}
+  await replaceFileDurably(file,text,{mode:0o600});
 }
 async function readPackageFile(root, relative, label) {
   const rel=safeRelative(relative,label);
