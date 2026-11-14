@@ -3,6 +3,14 @@
 A short, dated record of changes, tests, benchmark results, blockers and known
 weaknesses. Newest first. Detailed user-facing notes go in the CHANGELOG.
 
+## 2026-11-14 (recorded same-model benchmarks; shell side doors)
+
+- Shell safety side doors (commit c483a962): `find . -delete` / `find . -exec rm -rf {} +` with no narrowing test, `docker|podman run` that mounts `/`, home, `/etc` or the Docker socket or runs `--privileged`/`--pid=host`, and `echo 'rm -rf *' | sh` ran without asking under bypass or a broad allow rule. All now need a person, in both `run_shell` and `run_command` (shared `src/container-risk.mjs`). Targeted finds, project mounts and harmless pipes stay ordinary. Test: `test/shell-escape-hatches.test.mjs` (2 of 3 failed before the fix).
+- `bench:live --upstream URL --model ID` (commits c862a916, 0d5cb3e1): the existing benchmark gateway now relays Anthropic Messages and OpenAI Responses as well as chat completions, tags calls per agent (`/a/<agent>/v1`), forces one model on every protocol, records the served model and provider the upstream reports, and tunnels through `HTTPS_PROXY` (Node's fetch ignores it). The summary marks a run same-model verified only from that record. Tests in `test/bench-gateway.test.mjs` and `test/bench-live.test.mjs`.
+- First recorded run through OpenRouter (`bench/results/live-2026-11-14-openrouter-gateway`): OASIS passed `clamp-integer` on `nvidia/nemotron-3-ultra-550b-a55b:free` (22 calls, 190.9 s); Codex CLI ran 20 calls on the same served model before the free tier's 50-requests-per-day limit stopped it. Claude Code sent nothing: it routes loopback calls through `HTTPS_PROXY`; fixed by adding loopback to `NO_PROXY` for gateway runs, verified with a fake upstream behind a dead proxy.
+- Blocker: the OpenRouter key has no credits, so a scored multi-task, three-trial head-to-head cannot run today. Adding 10 credits raises the free-model limit to 1,000 requests a day. A 52-task × 3-trial × 3-agent run on free models needs roughly 5,000–8,000 calls (several days at that limit), or a paid model.
+- Observation to follow up: OASIS sent about 12k input tokens per call on a small task (268k over 22 calls). Codex was similar (310k over 20). Context size per call is the next efficiency target once scored runs exist.
+
 ## 2026-11-14 (fault-injection pass on the agent loop)
 
 Probed `runAgentTurn` against a local SSE server that misbehaves on purpose: socket reset mid-reply, 500 then 200, 429 with `retry-after`, a stalled stream, an empty `choices` array, unknown tools, truncated tool arguments with `finish_reason: length`, an endlessly repeated tool call, context overflow, an HTML page with status 200, a path outside the workspace, cancellation during a running command. Those were already handled. Three were not:
