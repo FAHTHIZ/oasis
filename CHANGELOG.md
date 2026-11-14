@@ -3,6 +3,7 @@
 User-facing change history grouped by package version. A version heading does not imply that a GitHub Release or downloadable assets have been published; check the [Releases page](https://github.com/FAHTHIZ/oasis/releases) for current availability.
 
 ## Unreleased
+- A one-shot prompt (`oasis "…"`) with no model provider configured now exits 1 instead of 0. `oasis models` with no provider says "run oasis setup" without calling the network, and a 401/403 from the model list now points at the API key.
 
 - Rate limits: FreeLLMAPI reports when its pool frees up only in the error text ("Soonest reset ~28s"), with no Retry-After header. Oasis made two quick retries and then failed the task (seen in the OVH head-to-head). A stated reset of up to 90 seconds is now waited out, with the usual `[rate limit] Waiting …` notice.
 - Terminal: Oasis's own model-fallback, key-pool and session notices printed as `[hook] [fallback] …`, as if a user hook had acted. They now print with their own tag.

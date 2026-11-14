@@ -88,7 +88,7 @@ export async function listProviderModels(config = {}, { env = process.env, cwd =
   try {
     const headers = await headersFor(config, { env, cwd });
     const response = await fetchImpl(endpoint, { headers, signal: controller.signal, redirect: 'error' });
-    if (!response.ok) return { models: null, endpoint, reason: 'The provider answered HTTP ' + response.status + ' for ' + new URL(endpoint).pathname + '.' };
+    if (!response.ok) return { models: null, endpoint, reason: 'The provider answered HTTP ' + response.status + ' for ' + new URL(endpoint).pathname + '.' + (response.status === 401 || response.status === 403 ? ' Check the API key (oasis setup, or the provider\'s API-key environment variable).' : '') };
     const length = Number(response.headers && response.headers.get && response.headers.get('content-length') || 0);
     if (length > MAX_BYTES) return { models: null, endpoint, reason: 'The model list was too large.' };
     const text = await response.text();
