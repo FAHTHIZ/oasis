@@ -72,6 +72,19 @@ Subagents you or OASIS start show up in `/tasks`: running ones first, finished o
 
 `/diff --watch` opens a live diff beside the session: inside tmux it splits the window, otherwise run `oasis diff --watch` in a second terminal. The view redraws within a second of any edit and shows every changed and untracked file with a running +/- count. Keys: `j`/`k` scroll, space/`b` page, `n`/`p` jump between files, `s` toggles a per-file summary, `w` pauses and `q` closes it. `oasis diff --stat` prints the summary once.
 
+### Best-of-N attempts
+
+For a hard bug or a change with several reasonable designs, run the task more than once and keep the attempt that holds up:
+
+```bash
+oasis attempts 3 --verify "npm test" --apply "fix the date parsing bug in src/dates.js"
+oasis attempts --models gpt-5.1,claude-sonnet-4-5 --verify "pytest -q" "make the importer stream large files"
+```
+
+Each attempt is a separate `oasis -p` run in its own Git worktree, branched from `HEAD` (uncommitted changes are not included), and the attempts run in parallel (`--concurrency N` limits that). The main checkout's `node_modules` and any `worktree.symlinkDirectories` are shared so your check can run without a fresh install. When an attempt finishes, OASIS saves its patch, runs your `--verify` command in that attempt's worktree, and checks the patch for weakened tests (deleted tests or assertions, added skips, a test script that can no longer fail). Attempts are ranked: changes that pass the check without weakening tests come first, then smaller diffs, then faster runs.
+
+Only a verified attempt can win. `--apply` applies the winner's patch to your checkout (it needs a clean checkout of tracked files); without `--apply` OASIS prints the `git apply` command. Without `--verify` nothing counts as verified and nothing is applied. Patches for every attempt and a `report.json` stay in `.oasis/attempts/<run>/`, which Git ignores; the worktrees and branches are removed unless you pass `--keep`. `--model`, `--max-turns`, `--permission-mode` (default `acceptEdits` for attempts: they can edit their worktree and run read-only commands, and anything that would need approval is denied; use `auto` to let them run their own checks), `--timeout-seconds` and `--json` work as usual, and the command exits 1 when a check was given and no attempt passed.
+
 ### Deploy a static site
 
 `oasis deploy` publishes to GitHub Pages: it runs `npm run build` when `package.json` has one, takes the first of `dist`, `build`, `out`, `_site`, `public` or `site` that contains an `index.html` (or the project root, minus Git-ignored files), commits it to the `gh-pages` branch from a scratch index and pushes it. Your branch, working tree and staging area stay as they are, and secret-looking files such as `.env` and private keys are never published. It then turns Pages on through the GitHub CLI and prints the address. `oasis deploy DIR` picks the folder, `--dry-run` lists what would be published, `--no-build` skips the build and `--branch NAME` publishes elsewhere. Pages on private repositories needs a paid GitHub plan.
