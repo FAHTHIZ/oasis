@@ -4,6 +4,7 @@ User-facing change history grouped by package version. A version heading does no
 
 ## Unreleased
 
+- `/model` picker: providers that host more than chat models (OVH AI Endpoints lists Whisper, text-to-speech, embeddings, Stable Diffusion and guard classifiers) filled the picker with models that break a session when chosen. The picker now leaves them out. `/model ID`, `/model --list` and `oasis models` still show and accept every model.
 - Verification gate: when asked to "add a regression test", a model could add assertions to an existing test case, so no test reported on the fix by itself (seen in the live OVH benchmark). In files that declare test cases, the gate now asks for a separate case. Plain assertion scripts are not affected.
 - Streaming: through OmniRoute, the closing `}` of a tool call arrived in the finish chunk as a separate nameless call with a new id, so Oasis got a truncated call plus an `unknown_tool` error and the task stalled. A nameless call whose arguments complete the previous call's unfinished JSON is now merged back into it.
 - Benchmark gateway: OmniRoute's keepalive chunks (`"model":"keepalive"`) were recorded as the served model, so runs through OmniRoute reported "Same model NOT verified". They are now ignored.

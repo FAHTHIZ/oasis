@@ -27,6 +27,16 @@ export function modelsEndpoint(config = {}) {
 
 // Accepts the OpenAI ({data:[{id}]}), Anthropic ({data:[{id}]}), Ollama ({models:[{name}]})
 // and Gemini-style ({models:[{name:"models/x"}]}) shapes.
+// Providers list every model they host in /models: OVH includes Whisper,
+// text-to-speech, embeddings, Stable Diffusion and guard classifiers, and
+// picking one in /model broke the session. The name is the only signal most
+// providers give, so this is a name check for pickers, not a hard block:
+// `/model ID` still accepts any ID.
+const NON_CHAT_MODEL = /(?:^|[/_.:-])(?:embed\w*|bge|e5|gte|rerank\w*|whisper|tts|nvr-tts|asr|speech|transcribe|stable-diffusion|sdxl|flux|dall-e|imagen|image-gen\w*|moderation|\w*guard(?:-gen)?)(?=$|[/_.:-]|\d)/i;
+export function isLikelyChatModel(id) {
+  return !NON_CHAT_MODEL.test(String(id || ''));
+}
+
 export function parseModelList(body) {
   const items = Array.isArray(body) ? body : Array.isArray(body && body.data) ? body.data : Array.isArray(body && body.models) ? body.models : [];
   const ids = [];
