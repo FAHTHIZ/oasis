@@ -18,7 +18,7 @@ export function textOf(content) {
   return content.map((part) => (part && part.type === 'text' ? String(part.text ?? '') : part && part.type === 'image_url' ? '[image]' : '')).filter(Boolean).join('\n');
 }
 
-const DEFAULT_MAX_STEPS = 40;
+const DEFAULT_MAX_STEPS = 100;
 const MAX_STEERING_MESSAGES = 20;
 const MAX_STEERING_NOTE_CHARS = 12_000;
 const INSTRUCTION_FILES = ['OASIS.md', 'AGENTS.md', 'CLAUDE.md', '.oasis/instructions.md'];

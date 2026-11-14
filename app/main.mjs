@@ -44,7 +44,7 @@ const store = new IndexedDBStore();
 const sandbox = new FrameSandbox();
 const skills = new SkillLibrary({ baseURL: new URL('skills/', location.href).href });
 
-const DEFAULTS = { connections: [], activeConnection: '', activeModel: '', autoSwitch: true, projectPlugins: {}, mode: 'ask', maxSteps: 40, theme: 'system', githubToken: '', notify: false, sounds: false };
+const DEFAULTS = { connections: [], activeConnection: '', activeModel: '', autoSwitch: true, projectPlugins: {}, mode: 'ask', maxSteps: 100, theme: 'system', githubToken: '', notify: false, sounds: false };
 // Slow phones and old computers: fewer repaints while a reply streams, no
 // blur or animation, and a shorter transcript kept in the page.
 const sound = createSoundPlayer({ enabled: () => Boolean(settings && settings.sounds) });
@@ -557,7 +557,7 @@ async function send(text) {
   turnEdited = false;
   turnPage = '';
   turnSettled = new Promise((resolve) => { settle = resolve; });
-  try { await agent.send(message, { maxSteps: Number(settings.maxSteps) || 40, plugins, images }); }
+  try { await agent.send(message, { maxSteps: Number(settings.maxSteps) || 100, plugins, images }); }
   catch { /* shown through the error event */ }
   finally {
     setBusy(false);
@@ -3960,7 +3960,7 @@ function formSettings() {
     ...settings,
     autoSwitch: $('autoSwitch').checked,
     mode: $('modeSelect').value,
-    maxSteps: Math.min(200, Math.max(5, Number($('maxStepsInput').value) || 40)),
+    maxSteps: Math.min(500, Math.max(5, Number($('maxStepsInput').value) || 100)),
     theme: $('themeSelect').value,
     notify: $('notifyInput').checked,
     sounds: $('soundInput').checked,

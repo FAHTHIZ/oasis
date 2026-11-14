@@ -10,6 +10,11 @@ import { contextWindowSize, compactionThresholdChars } from './context.mjs';
 // smaller caps get a conservative default; a provider 400 that names the real
 // cap lowers it for the rest of the session instead of failing the turn.
 const MAX_TURN_TOOL_CALLS = 2000;
+// Model requests per user turn. 60 stopped real refactors halfway (Claude
+// Code and Codex have no step cap); the token and tool-call budgets still
+// bound a runaway turn.
+export const DEFAULT_TURN_STEPS = 150;
+export const MAX_TURN_STEPS = 1000;
 const DEFAULT_TURN_TOOL_CALLS = 300;
 const DEFAULT_OUTPUT_CEILING = 32000;
 const LEGACY_8K_MODELS = /claude-(instant|2)|claude-3-(opus|sonnet|haiku)|claude-3-5-|claude-3\.5|gpt-3\.5|gpt-4(?!o|\.1|-turbo)/i;
@@ -38,7 +43,7 @@ function boundedTurnInteger(primary, fallback, defaultValue, min, max) {
 
 export function resolveTurnLimits(options = {}, config = {}) {
   return {
-    maxSteps: boundedTurnInteger(options.maxSteps, config.maxSteps, 60, 1, 400),
+    maxSteps: boundedTurnInteger(options.maxSteps, config.maxSteps, DEFAULT_TURN_STEPS, 1, MAX_TURN_STEPS),
     tokenBudget: boundedTurnInteger(options.maxTokens, config.maxTokens, 2000000, 10000, 20000000),
     maxToolCalls: boundedTurnInteger(options.maxToolCalls, config.maxToolCalls, DEFAULT_TURN_TOOL_CALLS, 1, MAX_TURN_TOOL_CALLS)
   };
