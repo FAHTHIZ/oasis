@@ -60,3 +60,31 @@ test('the model sees more than 24,000 characters of an MCP result', async (t) =>
   assert.ok(toolMessage.content.length > 60000, 'length ' + toolMessage.content.length);
   assert.match(toolMessage.content, /TAIL_MARKER/);
 });
+
+test('an MCP call that asks for approval still gets the answer through the kernel', async (t) => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'oasis-mcp-approve-'));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const { config, requests } = await scriptedModel(t, [
+    toolCall('m1', 'mcp_docs_read', {}),
+    { content: 'done' }
+  ]);
+  const session = await createSession({ root, config, settings: { permissions: { allow: [], ask: [], deny: [] } }, bare: true });
+  let prompts = 0;
+  const client = {
+    tools: [{ name: 'read', description: 'Read docs.', inputSchema: { type: 'object', properties: {} } }],
+    toolFingerprints: new Map(),
+    async callTool(_name, _args, options) {
+      const ok = await options.approval('Call docs read?');
+      return { isError: false, content: ok ? 'APPROVED_BODY' : 'denied' };
+    }
+  };
+  const clients = new Map([['docs', client]]);
+  const dynamic = mcpToolDefinitions(clients);
+  session.mcpClients = clients;
+  session.mcpToolMap = dynamic.map;
+  session.toolDefinitions = session.toolDefinitions.concat(dynamic.definitions);
+  await runAgentTurn(session, 'Read the docs.', { approval: async () => { prompts++; await new Promise((resolve) => setTimeout(resolve, 50)); return true; } });
+  const toolMessage = requests[1].messages.find((message) => message.role === 'tool');
+  assert.match(toolMessage.content, /APPROVED_BODY/);
+  assert.ok(prompts >= 1);
+});
