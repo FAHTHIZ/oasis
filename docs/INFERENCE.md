@@ -160,6 +160,13 @@ meeting its expectation.
 - Some gateways answer failures with HTTP 200 and an error body. Oasis treats
   the status in the body as the real one, so fallback and quota tracking work
   the same as for a normal HTTP error.
+- "HTTP 402: The API key used for this request has reached its budget ...
+  (The gateway sent this as an HTTP 200 reply)": Pollinations' free tier sends
+  its budget notice as if it were the model's answer. Oasis recognises that
+  exact notice (its opening sentence plus the gateway's link or response id),
+  counts it as a quota failure and moves to the fallback model instead of
+  showing it as a reply. Other gateways' notices are not known yet; report
+  one with `/bug` if you see it.
 - "Request budget exceeded" / "token budget exceeded": the run hit
   `--max-requests` or `--max-total-tokens`. The conversation is kept;
   `oasis --resume` continues it with a higher limit.

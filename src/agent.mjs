@@ -115,7 +115,7 @@ import { applyAnthropicCacheBreakpoints, promptCachingEnabled, replaysReasoning,
 import { INTERRUPTED_REPLY, modelFacingResult, refreshTodoPrompt, repairInterruptedHistory, throwIfCancelled } from './tool-results.mjs';
 import { MAX_STEER_CHARS, deliverSteering, foldSteering, steeringMessage } from './steering.mjs';
 import { describeProject, fileLayout } from './project-profile.mjs';
-import { formatApiError, responseText } from './api-error.mjs';
+import { formatApiError, gatewayBudgetNotice, responseText } from './api-error.mjs';
 import { compactSystemPrompt, systemPrompt } from './system-prompt.mjs';
 import { verificationCommandKind, verificationSummary } from './verification-summary.mjs';
 import { ASK_USER_TOOL_DEFINITION, askUserQuestion, questionBudget } from './ask-user.mjs';
@@ -1924,6 +1924,14 @@ async function requestCompletionRawInner(session, options = {}) {
     // changes); ask again, as Gemini CLI does.
     if (/MALFORMED_FUNCTION_CALL/i.test(String(data.choices[0].finish_reason || '')) && !(typeof message.content === 'string' && message.content.trim()) && !(Array.isArray(message.tool_calls) && message.tool_calls.length)) {
       throw Object.assign(new Error('The model stream was interrupted: the model produced a malformed tool call (' + data.choices[0].finish_reason + ').'), { code: 'OASIS_STREAM_INTERRUPTED', malformedCall: true });
+    }
+    const budgetNotice = gatewayBudgetNotice(message, data);
+    if (budgetNotice) {
+      // HTTP 200, but the "reply" is the gateway saying its budget is spent:
+      // record and fail it as the 402 it is, so fallback runs.
+      const body = JSON.stringify({ error: { message: budgetNotice } });
+      recordQuotaFailure(route, { status: 402, headers: response.headers, body, env: providerEnv, retract: true });
+      throw Object.assign(new Error(formatApiError(402, body, config.protocol, config.baseURL) + ' (The gateway sent this as an HTTP 200 reply; OASIS did not use it as the answer.)'), { status: 402, gatewayBudgetNotice: true });
     }
     if (!streamed && typeof options.onReasoning === 'function') { const said = typeof message.reasoning_content === 'string' ? message.reasoning_content : typeof message.reasoning === 'string' ? message.reasoning : ''; if (said) options.onReasoning(said); }
     if (typeof options.onDelta === 'function' && !streamed && typeof message.content === 'string' && message.content) options.onDelta(message.content);
