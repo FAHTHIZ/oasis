@@ -141,15 +141,40 @@ function userIntent(messages = [], limit = 6) {
   return out;
 }
 
+// The classifier must see the whole action. The prompt used to be cut at
+// 24,000 characters, so a long command (or padding in front of one) hid its
+// tail from the classifier, which then judged only the harmless start.
+// File bodies are shortened to their head and tail (writing a file runs
+// nothing; running it later is classified on its own); anything else that
+// does not fit is asked about instead of judged on a part.
+export const MAX_CLASSIFIED_ACTION_CHARS = 20000;
+const FILE_BODY_KEYS = new Set(['content', 'new_string', 'old_string', 'new_source', 'text']);
+const FILE_BODY_KEEP = 3000;
+function classifierArgs(args) {
+  if (!args || typeof args !== 'object' || Array.isArray(args)) return args;
+  const out = {};
+  for (const [key, value] of Object.entries(args)) {
+    if (FILE_BODY_KEYS.has(key) && typeof value === 'string' && value.length > FILE_BODY_KEEP * 2) {
+      out[key] = value.slice(0, FILE_BODY_KEEP) + '\n[... ' + (value.length - FILE_BODY_KEEP * 2) + ' characters of file text omitted ...]\n' + value.slice(-FILE_BODY_KEEP);
+    } else if (key === 'edits' && Array.isArray(value)) out[key] = value.map(classifierArgs);
+    else out[key] = value;
+  }
+  return out;
+}
+
+export function classifiedActionSize({ toolName, args } = {}) {
+  try { return JSON.stringify({ tool: toolName, input: classifierArgs(args) }).length; } catch { return Infinity; }
+}
+
 export function buildClassifierPrompt({ toolName, args, messages, root, rules = [] }) {
   // `rules` are extra free-form policy lines (legacy autoMode.rules); sectioned rules live in the system prompt.
   const payload = {
     workspace: root,
     user_messages: userIntent(messages),
-    action: { tool: toolName, input: args },
+    action: { tool: toolName, input: classifierArgs(args) },
     ...(rules.length ? { user_policy: rules.slice(0, 30) } : {})
   };
-  return JSON.stringify(payload, null, 2).slice(0, 24000);
+  return JSON.stringify(payload, null, 2);
 }
 
 export function parseClassifierReply(text) {
@@ -224,6 +249,10 @@ export async function classifyAction(state, request, evaluate, options = {}) {
   if (effective.allow.includes(DEFAULT_AUTO_MODE.allow[0]) && !(request.rules && request.rules.length)) {
     const fast = obviousProjectCheck(request);
     if (fast) { state.blockedInRow = 0; state.fastAllowed = (state.fastAllowed || 0) + 1; return fast; }
+  }
+  const size = classifiedActionSize(request);
+  if (size > MAX_CLASSIFIED_ACTION_CHARS) {
+    return { decision: 'ask', reason: 'This action is too large for the auto mode classifier to read in full (' + (Number.isFinite(size) ? size.toLocaleString('en-US') + ' characters' : 'not serializable') + '); asking you instead.' };
   }
   let verdict = null;
   const timeoutSeconds = options.timeoutSeconds || 30;

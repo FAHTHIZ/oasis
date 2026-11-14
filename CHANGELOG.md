@@ -4,6 +4,7 @@ User-facing change history grouped by package version. A version heading does no
 
 ## Unreleased
 
+- Security: the auto mode classifier now always sees the whole action. Its prompt was cut at 24,000 characters, so padding in front of a long command hid the end of it, and the classifier judged only the harmless start. Long file bodies are shortened to their head and tail; any other action too large to show in full is asked about instead.
 - The browser app takes messages up to 200,000 characters (was 12,000). A pasted log or stack trace was cut in the app and refused by `oasis web`.
 - Reopened chats in the browser app and conversations read through the Cursor-compatible API show long messages in full; they were cut at 24,000 characters, as was the final result of a Cursor API run.
 - `--append-system-prompt`, `--append-system-prompt-file` and `--from-pr` text is no longer cut at 20,000 characters (now 100,000, the same as `--system-prompt`). `--from-pr` lost most of the pull request diff it had just fetched.
