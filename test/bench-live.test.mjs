@@ -267,3 +267,68 @@ test('Gemini CLI on a router gets a private home pinned to API-key auth; --upstr
   assert.equal(env.GEMINI_API_KEY, 'k');
   assert.throws(() => parseBenchArgs(['--agents', 'oasis,gemini', '--upstream', 'https://api.example.test/v1', '--model', 'm']), /wire format/);
 });
+
+test('a run stops when the upstream quota runs out, keeps its progress, and drops rate-limited tasks from the scores', async () => {
+  const http = await import('node:http');
+  const { quotaExhausted } = await import('../scripts/bench-gateway.mjs');
+  assert.equal(quotaExhausted(429, { 'x-should-retry': 'false' }), true);
+  assert.equal(quotaExhausted(429, {}, '{"error":{"code":"PROMOTION_MODEL_LIMIT_REACHED"}}'), true);
+  assert.equal(quotaExhausted(429, {}, 'slow down'), false);
+  assert.equal(quotaExhausted(500, { 'x-should-retry': 'false' }), false);
+  // Upstream: fine for task a, then a quota 429 on Claude Code's task b.
+  let calls = 0;
+  const upstream = http.createServer((req, res) => {
+    calls++;
+    req.resume();
+    req.on('end', () => {
+      if (calls <= 2) { res.writeHead(200, { 'content-type': 'application/json' }); res.end(JSON.stringify({ model: 'm', choices: [{ message: { content: 'ok' } }], usage: { prompt_tokens: 1, completion_tokens: 1 } })); return; }
+      res.writeHead(429, { 'content-type': 'application/json', 'x-should-retry': 'false' }); res.end('{"error":{"code":"PROMOTION_MODEL_LIMIT_REACHED"}}');
+    });
+  });
+  await new Promise((resolve) => upstream.listen(0, '127.0.0.1', resolve));
+  const out = await mkdtemp(path.join(os.tmpdir(), 'oasis-bench-live-quota-'));
+  const ran = [];
+  const runner = async (args, { env }) => {
+    const agent = args[0] === '--trials' ? 'oasis' : args[0];
+    const task = args[args.indexOf('--task') + 1];
+    ran.push(agent + ':' + task);
+    const base = env.OASIS_BASE_URL || env.ANTHROPIC_BASE_URL;
+    const response = await fetch(base.replace(/\/$/, '') + (env.OASIS_BASE_URL ? '/chat/completions' : '/v1/chat/completions'), { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ model: 'm', messages: [{ role: 'user', content: 'x' }] }) });
+    await response.text();
+    const passed = response.ok;
+    return { resultsPath: '', summary: { label: agent }, results: [{ taskId: task, taskFingerprint: task.repeat(64), category: 'c', difficulty: 'small', trial: 1, status: passed ? 'passed' : 'failed', wallTimeMs: 1, totalTokens: 2, costUSD: 0 }] };
+  };
+  try {
+    const options = parseBenchArgs(['--agents', 'oasis,claude', '--model', 'm', '--upstream', 'http://127.0.0.1:' + upstream.address().port + '/v1', '--task', 'a,b,c', '--interleave', '--out', out, '--yes']);
+    const { summary } = await runBenchmark(options, { env: {}, runner });
+    // oasis:b got the first 429 and is marked; the run stops before claude:b and task c.
+    assert.deepEqual(ran, ['oasis:a', '--claude-code:a', 'oasis:b']);
+    assert.match(summary.stoppedEarly, /quota ran out/);
+    assert.deepEqual(summary.notRun.map((u) => u.agent + ':' + u.task), ['claude:b', 'oasis:c', 'claude:c']);
+    assert.deepEqual(summary.sharedTasks, ['a']);
+    assert.ok(summary.caveats[0].startsWith('The run stopped early'));
+    const progress = JSON.parse(await readFile(path.join(out, 'progress.json'), 'utf8'));
+    assert.equal(progress.agents.oasis.results[1].upstreamQuotaExhausted, true);
+    assert.equal(progress.agents.oasis.results[1].upstreamRateLimited, 1);
+    // A failed trial that hit 429s is not scored against the agent.
+    const scored = summarize([
+      { agent: 'oasis', name: 'oasis', summary: {}, results: [{ taskId: 'b', taskFingerprint: 'b'.repeat(64), category: 'c', difficulty: 'small', trial: 1, status: 'failed', upstreamRateLimited: 3 }] },
+      { agent: 'claude', name: 'claude', summary: {}, results: [{ taskId: 'b', taskFingerprint: 'b'.repeat(64), category: 'c', difficulty: 'small', trial: 1, status: 'passed' }] }
+    ], parseBenchArgs(['--agents', 'oasis,claude', '--model', 'm']));
+    assert.deepEqual(scored.rateLimitedTasks, ['b']);
+    assert.deepEqual(scored.sharedTasks, []);
+    assert.ok(scored.caveats.some((c) => /HTTP 429: b\./.test(c)));
+  } finally {
+    upstream.close();
+    await rm(out, { recursive: true, force: true });
+  }
+});
+
+test('the relay records message sizes, never contents', async () => {
+  const { messageSizes } = await import('../scripts/bench-gateway.mjs');
+  const sizes = messageSizes({ messages: [{ role: 'system', content: 'abc' }, { role: 'tool', content: 'x'.repeat(50) }, { role: 'user', content: [{ type: 'text', text: 'hi' }] }] });
+  assert.deepEqual(sizes.largestMessage, { role: 'tool', chars: 50 });
+  assert.equal(sizes.lastMessage.role, 'user');
+  assert.ok(!JSON.stringify(sizes).includes('abc'));
+  assert.deepEqual(messageSizes({}), {});
+});

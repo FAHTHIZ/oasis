@@ -1,0 +1,44 @@
+
+== OASIS (nvidia/nemotron-3-ultra-550b-a55b:free) · clamp-integer
+    PASS clamp-integer trial 1 · nvidia/nemotron-3-ultra-550b-a55b:free · 245502 tokens · 307268 ms · $0.000000
+  Eval result: /tmp/oasis-bench-live-dOiVXp/run-2026-11-14T07-54-01-483Z-1979.json
+  Pass rate: 1/1 (100%)
+  Median time: 307268 ms
+  Cost per passed trial: $0.000000
+
+== Claude Code (nvidia/nemotron-3-ultra-550b-a55b:free) · clamp-integer
+    PASS clamp-integer trial 1 · 36581 tokens · 256635 ms · $0.174270
+  Claude Code eval result: /tmp/oasis-bench-live-dOiVXp/run-2026-11-14T07-58-18-231Z-1979.json
+  Pass rate: 1/1 (100%)
+  Median time: 256635 ms
+  Cost per passed trial: $0.174270
+
+== Codex CLI (nvidia/nemotron-3-ultra-550b-a55b:free) · clamp-integer
+    PASS clamp-integer trial 1 · 161349 tokens · 330174 ms · cost n/a
+  Codex CLI eval result: /tmp/oasis-bench-live-dOiVXp/run-2026-11-14T08-03-48-534Z-1979.json
+  Pass rate: 1/1 (100%)
+  Median time: 330174 ms
+  Cost per passed trial: n/a
+
+== OpenCode (bench/nvidia/nemotron-3-ultra-550b-a55b:free) · clamp-integer
+    PASS clamp-integer trial 1 · 37253 tokens · 228802 ms · $0.000000
+  OpenCode eval result: /tmp/oasis-bench-live-dOiVXp/run-2026-11-14T08-07-37-930Z-1979.json
+  Pass rate: 1/1 (100%)
+  Median time: 228802 ms
+  Cost per passed trial: $0.000000
+
+== Aider (openai/nvidia/nemotron-3-ultra-550b-a55b:free) · clamp-integer
+    PASS clamp-integer trial 1 · 2439 tokens · 44174 ms · cost n/a
+  Aider eval result: /tmp/oasis-bench-live-dOiVXp/run-2026-11-14T08-08-24-755Z-1979.json
+  Pass rate: 1/1 (100%)
+  Median time: 44174 ms
+  Cost per passed trial: n/a
+
+== OASIS (nvidia/nemotron-3-ultra-550b-a55b:free) · taskflow-emoji-truncate
+    FAIL taskflow-emoji-truncate trial 1 · nvidia/nemotron-3-ultra-550b-a55b:free · 107176 tokens · 326266 ms · $0.000000
+  Eval result: /tmp/oasis-bench-live-dOiVXp/run-2026-11-14T08-13-51-070Z-1979.json
+  Pass rate: 0/1 (0%)
+  Median time: 326266 ms
+  Cost per passed trial: n/a
+
+== Claude Code (nvidia/nemotron-3-ultra-550b-a55b:free) · taskflow-emoji-truncate

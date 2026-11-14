@@ -119,6 +119,8 @@ export async function runBenchmark(options, { env = process.env, runner = runEva
   await mkdir(outDir, { recursive: true });
   const rawDir = await mkdtemp(path.join(os.tmpdir(), 'oasis-bench-live-'));
   const runs = [];
+  let stopReason = '';
+  const notRun = [];
   // --upstream: a local recording relay sits in front of the provider, so the
   // summary can show which model actually served each agent's calls.
   if (options.upstream && !options.model) throw new Error('--upstream needs --model: the gateway sends that one model for every agent.');
@@ -133,7 +135,10 @@ export async function runBenchmark(options, { env = process.env, runner = runEva
     ? taskIds.flatMap((task) => options.agents.map((agent) => ({ agent, task })))
     : options.agents.map((agent) => ({ agent, task: options.task }));
   const collected = new Map(options.agents.map((agent) => [agent, { results: [], summary: null, errors: [] }]));
+  // Saved after every unit, so a run cut short (quota, crash, Ctrl-C) keeps what it measured.
+  const saveProgress = () => writeFile(path.join(outDir, 'progress.json'), JSON.stringify({ updatedAt: new Date().toISOString(), stoppedEarly: stopReason || null, notRun, agents: Object.fromEntries([...collected].map(([name, entry]) => [name, { results: entry.results, errors: entry.errors }])) }, null, 2) + '\n').catch(() => {});
   for (const { agent, task } of units) {
+    if (stopReason) { notRun.push({ agent, task: task || null }); continue; }
     const model = modelFor(agent, options, env);
     const args = [...(agent === 'oasis' ? [] : [EXTERNAL_AGENTS[agent].flag]), '--trials', String(options.trials), '--timeout-seconds', String(options.timeoutSeconds)];
     if (task) args.push('--task', task);
@@ -149,8 +154,12 @@ export async function runBenchmark(options, { env = process.env, runner = runEva
     if (agent === 'gemini' && options.router) Object.assign(agentEnv, await geminiGatewayEnv(rawDir, env));
     process.stdout.write('\n== ' + DISPLAY[agent] + (model ? ' (' + model + ')' : '') + (options.interleave ? ' · ' + task : '') + '\n');
     const entry = collected.get(agent);
+    const before = gateway ? gateway.records.length : 0;
     try {
       const result = await runner(args, { autoApprove: true, env: agentEnv, output: quietOutput('  '), resultsDir: rawDir });
+      // Mark trials the upstream rate-limited, so a refused request is not read as the agent's failure.
+      const limited = gateway ? gateway.records.slice(before).filter((r) => r.agent === agent && r.status === 429) : [];
+      if (limited.length) for (const row of result.results) { row.upstreamRateLimited = limited.length; if (limited.some((r) => r.quotaExhausted)) row.upstreamQuotaExhausted = true; }
       entry.results.push(...result.results);
       entry.summary = result.summary;
       if (!options.interleave) entry.resultsPath = result.resultsPath;
@@ -159,7 +168,13 @@ export async function runBenchmark(options, { env = process.env, runner = runEva
       process.stdout.write('  skipped: ' + message + '\n');
       entry.errors.push(message);
     }
+    if (gateway && gateway.records.slice(before).some((r) => r.quotaExhausted)) {
+      stopReason = 'the upstream quota ran out during ' + DISPLAY[agent] + (task ? ' · ' + task : '') + ' (HTTP 429 that the provider marks as not retryable)';
+      process.stdout.write('  stopping: ' + stopReason + '\n');
+    }
+    await saveProgress();
   }
+  if (notRun.length) process.stdout.write('\nNot run after the quota ran out: ' + notRun.map((u) => u.agent + (u.task ? ' · ' + u.task : '')).join(', ') + '\n');
   for (const agent of options.agents) {
     const entry = collected.get(agent);
     // An agent that never got going (not signed in, bad model, gateway down) has not
@@ -179,6 +194,7 @@ export async function runBenchmark(options, { env = process.env, runner = runEva
     if (gateway) await gateway.close();
   }
   const summary = summarize(runs, options, now, gateway ? gatewayReport(gateway.records) : null);
+  if (stopReason) { summary.stoppedEarly = stopReason; summary.notRun = notRun; summary.caveats.unshift('The run stopped early: ' + stopReason + '. ' + notRun.length + ' agent/task unit(s) did not run.'); }
   await writeFile(path.join(outDir, 'summary.json'), JSON.stringify(summary, null, 2) + '\n');
   await writeFile(path.join(outDir, 'SUMMARY.md'), renderSummary(summary));
   return { outDir, summary };
@@ -203,10 +219,12 @@ export function summarize(runs, options, now = new Date(), gateway = null) {
     if (!rows.length || categories.length !== 1 || difficulties.length !== 1 || !categories[0] || !['small', 'medium', 'large'].includes(difficulties[0])) return null;
     return { category: categories[0], difficulty: difficulties[0] };
   };
-  const verifiedTasks = [], unverifiedTasks = [], fingerprintMismatchTasks = [], metadataMismatchTasks = [], incompleteTasks = [], taskMetadata = {};
+  const verifiedTasks = [], unverifiedTasks = [], fingerprintMismatchTasks = [], metadataMismatchTasks = [], incompleteTasks = [], rateLimitedTasks = [], taskMetadata = {};
   for (const id of shared) {
     const groups = completed.map((run) => rowsFor(run, id));
     if (groups.some((rows) => rows.length !== options.trials || new Set(rows.map((row) => row.trial)).size !== options.trials || rows.some((row) => !Number.isInteger(row.trial) || row.trial < 1 || row.trial > options.trials))) { incompleteTasks.push(id); continue; }
+    // A failed trial whose requests the upstream refused (HTTP 429) measures the provider, not the agent.
+    if (groups.some((rows) => rows.some((row) => row.status !== 'passed' && row.upstreamRateLimited))) { rateLimitedTasks.push(id); continue; }
     const fingerprints = groups.map(fingerprintFor);
     if (fingerprints.some((value) => value === null)) { unverifiedTasks.push(id); continue; }
     if (fingerprints.some((value) => value === 'inconsistent') || new Set(fingerprints).size !== 1) { fingerprintMismatchTasks.push(id); continue; }
@@ -243,6 +261,7 @@ export function summarize(runs, options, now = new Date(), gateway = null) {
   if (unverifiedTasks.length) caveats.push(unverifiedTasks.length + ' shared task(s) lacked valid SHA-256 fingerprints in at least one agent report and were excluded.');
   if (fingerprintMismatchTasks.length) caveats.push(fingerprintMismatchTasks.length + ' shared task(s) had inconsistent or different fingerprints and were excluded.');
   if (metadataMismatchTasks.length) caveats.push(metadataMismatchTasks.length + ' shared task(s) had missing or conflicting category/difficulty metadata and were excluded.');
+  if (rateLimitedTasks.length) caveats.push(rateLimitedTasks.length + ' shared task(s) were excluded because an agent failed a trial while the upstream was refusing its requests with HTTP 429: ' + rateLimitedTasks.join(', ') + '.');
   if (incompleteTasks.length) caveats.push(incompleteTasks.length + ' shared task(s) did not have exactly ' + options.trials + ' distinct trial rows for every completed agent and were excluded.');
   const completedAgents = completed.map((run) => run.agent);
   // Trials that ended in an agent or provider error (rate limit, crash,
@@ -264,7 +283,7 @@ export function summarize(runs, options, now = new Date(), gateway = null) {
   else if (!sameProviderVerified) caveats.push('Every scored agent was served model ' + scoredModels[0][0] + ', but the gateway could not confirm one upstream provider for all of them (missing or different provider fields); serving stacks can differ in quantization and limits.');
   if (!options.router && !options.upstream) caveats.push('No shared gateway was configured. Model/provider differences mean results describe each product as configured, not a controlled same-model harness comparison.');
   if (distinctModels.length !== 1 || options.agents.some((agent) => !requestedModels[agent])) caveats.push('The selected agents do not all have one identical, explicitly requested model ID.');
-  return { date: now.toISOString(), oasisVersion: oasisVersion(), requestedModels, router: options.router ? new URL(options.router).host : options.upstream ? new URL(options.upstream).host + ' (recorded)' : null, sameModelVerified, servedModel: sameModelVerified ? scoredModels[0][0] : null, gateway, trialsPerTask: options.trials, requestedAgents: options.agents, sharedTaskIds: shared, sharedTasks: verifiedTasks, excludedTasks: [...new Set([...unverifiedTasks, ...fingerprintMismatchTasks, ...metadataMismatchTasks, ...incompleteTasks])].sort(), unverifiedTasks, fingerprintMismatchTasks, metadataMismatchTasks, incompleteTasks, taskMetadata, caveats, agents };
+  return { date: now.toISOString(), oasisVersion: oasisVersion(), requestedModels, router: options.router ? new URL(options.router).host : options.upstream ? new URL(options.upstream).host + ' (recorded)' : null, sameModelVerified, servedModel: sameModelVerified ? scoredModels[0][0] : null, gateway, trialsPerTask: options.trials, requestedAgents: options.agents, sharedTaskIds: shared, sharedTasks: verifiedTasks, excludedTasks: [...new Set([...unverifiedTasks, ...fingerprintMismatchTasks, ...metadataMismatchTasks, ...incompleteTasks, ...rateLimitedTasks])].sort(), unverifiedTasks, fingerprintMismatchTasks, metadataMismatchTasks, incompleteTasks, rateLimitedTasks, taskMetadata, caveats, agents };
 }
 export function renderSummary(summary) {
   const lines = [];
