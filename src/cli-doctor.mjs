@@ -94,7 +94,9 @@ export async function doctor(args = [], root = process.cwd(), { fallbackModel = 
     try {
       const { parseFallbackChain, describeFallbackChain } = await import('./fallback-chain.mjs');
       const loaded = await loadSettings(root).catch(() => ({}));
-      const chain = parseFallbackChain(fallbackModel || (loaded && loaded.fallbackModel) || '');
+      // Same precedence as createSession: flag, then settings, then the saved
+      // connection (where `oasis connect` stores its backup models).
+      const chain = parseFallbackChain(fallbackModel || (loaded && loaded.fallbackModel) || (config && typeof config.fallbackModel === 'string' ? config.fallbackModel : '') || '');
       detail('  Fallback models: ' + (chain.length ? describeFallbackChain(chain, config).map((item) => item.id + (item.usable ? '' : ' (skipped: set ' + item.missing + ')')).join(', ') : 'none (--fallback-model or fallbackModel in settings)') + '\n');
     } catch {}
     const proxyNote = currentProxy();
