@@ -387,7 +387,9 @@ export function resolveSandbox(settings = {}, root, force = false) {
   // A proxy port of your own also needs the domain-filtering runtime, which knows how to route to it.
   const filtered = backend === 'os' && (allowedDomains.length > 0 || sockets.httpProxyPort !== undefined || sockets.socksProxyPort !== undefined);
   const probe = filtered ? detectSandboxRuntime(force) : backend === 'os' ? detectSandbox(force) : backend === 'ssh' ? detectSshRuntime(ssh, force) : detectContainerRuntime(backend, force);
-  const additionalWritable = ((settings.permissions && settings.permissions.additionalDirectories) || []).map((dir) => path.resolve(root, dir));
+  // Under an admin-required sandbox a repository's additionalDirectories are not writable by commands.
+  const ignoredDirs = new Set(settings.sandbox.repoWritableDirectoriesIgnored || []);
+  const additionalWritable = ((settings.permissions && settings.permissions.additionalDirectories) || []).map((dir) => path.resolve(root, dir)).filter((dir) => !ignoredDirs.has(dir));
   const caches = settings.sandbox.writableCaches === false ? [] : collectCacheDirectories();
   // sandbox.filesystem (Claude Code): extra writable paths, read-only paths inside writable ones,
   // and paths hidden from reads. Only paths that exist can be mounted.

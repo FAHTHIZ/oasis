@@ -106,7 +106,7 @@ Gaps found by checking the [hooks reference](https://code.claude.com/docs/en/hoo
 | `sandbox.credentials` (`files`, `envVars`), `sandbox.filesystem.allowManagedReadPathsOnly` | done | `test/sandbox-credentials.test.mjs` (4 tests, real bubblewrap). `mask` entries are applied as `deny` (OASIS has no substituting egress proxy, so tools that need the secret stop working in the sandbox); `mask` from repository settings is ignored, as in Claude Code |
 | Unix-socket/proxy keys (`allowUnixSockets`, `allowAllUnixSockets`, `allowLocalBinding`, `allowMachLookup`, `httpProxyPort`, `socksProxyPort`) and the Unix-socket block they open | done | `test/sandbox-unix-sockets.test.mjs` (7 tests; live: a bubblewrap command reached a host socket before the fix and is refused after). macOS rules are unit-tested only (no Mac available) |
 | Two doctor implementations (`src/cli-doctor.mjs` for `oasis doctor`, `src/doctor.mjs` for `/doctor`) duplicate checks | open | both now report the Unix-socket block; merge them |
-| Admin-required repository locks | open | `allowUnsandboxedCommands` needs nothing: OASIS has no unsandboxed retry |
+| Admin-required repository locks (managed `allowManagedDomainsOnly`, or `allowUnsandboxedCommands: false` from policy or `--settings`) and the deny-read lock | done | `test/sandbox-unix-sockets.test.mjs` (10 tests). Under the lock a repository's `excludedCommands`, `allowedDomains`, `allowWrite` and `additionalDirectories` (for commands) are ignored, and it cannot switch off a sandbox you enabled. `allowUnsandboxedCommands` only locks: OASIS has no unsandboxed retry |
 
 ## 2e. Terminal-agent interoperability (Gemini CLI, OpenCode, Goose, Aider, Roo/Kilo/Cline)
 

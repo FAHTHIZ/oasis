@@ -128,3 +128,50 @@ test('bubblewrap: ordinary commands still run under the Unix-socket filter', { s
   assert.equal(result.status, 0, result.stderr);
   assert.match(result.stdout, /ran/);
 });
+
+test('a repository cannot reopen a path your own settings deny reading', async (t) => {
+  const s = await setup(t, {
+    user: { sandbox: { enabled: true, filesystem: { denyRead: ['~/.aws'] } } },
+    project: { sandbox: { filesystem: { allowRead: ['~/.aws/credentials', '~/notes'], allowWrite: ['~/.aws'] } } }
+  });
+  const settings = await loadSettings(s.root, { env: s.env });
+  assert.deepEqual(settings.sandbox.allowRead, [path.join(s.home, 'notes')]);
+  assert.deepEqual(settings.sandbox.allowWrite || [], []);
+  assert.equal(settings.sandbox.lockedRepoEntries.length, 2);
+  assert.equal(settings.sandbox.adminRequired, undefined);
+});
+
+test('admin-required sandbox: repository loosening keys are ignored, your own still apply', async (t) => {
+  const extra = await tmp(t);
+  const s = await setup(t, {
+    user: { sandbox: { enabled: true, failIfUnavailable: true, excludedCommands: ['make'] } },
+    project: {
+      permissions: { additionalDirectories: [extra] },
+      sandbox: { enabled: false, failIfUnavailable: false, excludedCommands: ['docker *', 'make'], network: { allowedDomains: ['repo.example'], allowAllUnixSockets: true }, filesystem: { allowWrite: ['./out'] } }
+    },
+    managed: { sandbox: { allowUnsandboxedCommands: false } }
+  });
+  const settings = await loadSettings(s.root, { env: s.env });
+  assert.equal(settings.sandbox.adminRequired, true);
+  assert.equal(settings.sandbox.enabled, true, 'the repository cannot switch the sandbox off');
+  assert.equal(settings.sandbox.failIfUnavailable, true);
+  assert.deepEqual(settings.sandbox.excludedCommands, ['make']);
+  assert.deepEqual(settings.sandbox.allowedDomains, []);
+  assert.deepEqual(settings.sandbox.allowWrite, []);
+  assert.equal(settings.sandbox.allowAllUnixSockets, undefined);
+  const sandbox = resolveSandbox(settings, s.root);
+  assert.ok(!sandbox.writable.includes(extra), 'repository additionalDirectories are not writable by commands');
+  assert.ok(settings.permissions.additionalDirectories.includes(extra), 'file tools still see the folder');
+});
+
+test('without an admin-required sandbox a trusted repository keeps its entries', async (t) => {
+  const s = await setup(t, { project: { sandbox: { enabled: true, excludedCommands: ['docker *'], network: { allowedDomains: ['repo.example'] } } } });
+  const settings = await loadSettings(s.root, { env: s.env });
+  assert.equal(settings.sandbox.adminRequired, undefined);
+  assert.deepEqual(settings.sandbox.excludedCommands, ['docker *']);
+  assert.deepEqual(settings.sandbox.allowedDomains, ['repo.example']);
+  // --settings with allowUnsandboxedCommands: false locks it, unless policy says true.
+  const flagged = await loadSettings(s.root, { env: s.env, extraSettings: [{ settings: { sandbox: { allowUnsandboxedCommands: false } } }] });
+  assert.equal(flagged.sandbox.adminRequired, true);
+  assert.deepEqual(flagged.sandbox.excludedCommands, []);
+});

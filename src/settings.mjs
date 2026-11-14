@@ -305,6 +305,47 @@ export function applySandboxCredentials(target, credentials, scope, root, env = 
   if (notes.length) target.credentialNotes = [...new Set(notes)].slice(0, 50);
 }
 
+/**
+ * Claude Code's repository locks for the sandbox, applied once every file has loaded.
+ *
+ * Always: a repository's allowRead/allowWrite entry at or under a path that your own settings,
+ * --settings or policy deny reading is dropped, so a cloned project cannot reopen ~/.aws.
+ *
+ * Admin-required (managed allowManagedDomainsOnly, or allowUnsandboxedCommands: false from policy or
+ * --settings unless policy says true): a repository's excludedCommands, allowedDomains, allowWrite and
+ * additionalDirectories give sandboxed commands nothing, and it cannot switch off a sandbox (or
+ * failIfUnavailable) that your own settings turned on. The widening network keys are never read from a
+ * repository at all (see the sandbox.network branch above).
+ */
+export function applySandboxLocks(sandbox, permissions, root) {
+  const inside = (parent, child) => { const rel = path.relative(parent, child); return rel === '' || (!rel.startsWith('..') && !path.isAbsolute(rel)); };
+  const denied = sandbox.denyReadPersonal || [];
+  const dropRepo = (key, repoKey) => {
+    const repo = new Set(sandbox[repoKey] || []);
+    const hit = (item) => repo.has(item) && denied.some((deny) => inside(deny, item));
+    if (Array.isArray(sandbox[key]) && sandbox[key].some(hit)) {
+      sandbox.lockedRepoEntries = [...(sandbox.lockedRepoEntries || []), ...sandbox[key].filter(hit).map((item) => key + ': ' + item)];
+      sandbox[key] = sandbox[key].filter((item) => !hit(item));
+    }
+  };
+  dropRepo('allowRead', 'allowReadRepo');
+  dropRepo('allowWrite', 'allowWriteRepo');
+  const managed = sandbox.allowUnsandboxedCommandsManaged;
+  const adminRequired = sandbox.allowManagedDomainsOnly === true || managed === false || (sandbox.allowUnsandboxedCommandsFlagOff === true && managed !== true);
+  if (!adminRequired) return;
+  sandbox.adminRequired = true;
+  // An entry that one of your own files also lists stays: only the repository's copy is ignored.
+  const without = (list, repo, personal) => { const keep = new Set(personal || []); const drop = new Set((repo || []).filter((item) => !keep.has(item))); return (Array.isArray(list) ? list : []).filter((item) => !drop.has(item)); };
+  sandbox.excludedCommands = without(sandbox.excludedCommands, sandbox.excludedCommandsRepo, sandbox.excludedCommandsPersonal);
+  if (!sandbox.allowManagedDomainsOnly) sandbox.allowedDomains = without(sandbox.allowedDomains, sandbox.allowedDomainsRepo, sandbox.allowedDomainsPersonal);
+  sandbox.allowWrite = without(sandbox.allowWrite, sandbox.allowWriteRepo, sandbox.allowWritePersonal);
+  // additionalDirectories from a repository stay usable by the file tools, not writable by commands.
+  const repoDirs = (permissions.repoAdditionalDirectories || []).map((dir) => path.resolve(root || '.', dir));
+  if (repoDirs.length) sandbox.repoWritableDirectoriesIgnored = repoDirs;
+  if (sandbox.enabledPersonal === true && sandbox.enabledByRepo === false) sandbox.enabled = true;
+  if (sandbox.failIfUnavailablePersonal && !sandbox.failIfUnavailableManaged) sandbox.failIfUnavailable = true;
+}
+
 export async function loadSettings(root, options = {}) {
   const env = options.env || process.env;
   const result = {
@@ -459,7 +500,7 @@ export async function loadSettings(root, options = {}) {
     result.permissions.allow.push(...stringList(permissions.allow));
     result.permissions.additionalDirectories.push(...stringList(permissions.additionalDirectories));
     // Folders a repository's own settings add do not count as working directories under the block keys.
-    if (scope === 'project') (result.permissions.repoAdditionalDirectories ||= []).push(...stringList(permissions.additionalDirectories));
+    if (scope === 'project' || scope === 'local') (result.permissions.repoAdditionalDirectories ||= []).push(...stringList(permissions.additionalDirectories));
     const configuredMode = normalizePermissionMode(permissions.defaultMode);
     if (configuredMode) result.permissions.defaultMode = configuredMode;
     mergeHooks(result.hooks, normalizeHooks(settings.hooks), scope, file);
@@ -476,7 +517,17 @@ export async function loadSettings(root, options = {}) {
     if (Array.isArray(settings.allowedHttpHookUrls)) result.allowedHttpHookUrls = [...(result.allowedHttpHookUrls || []), ...stringList(settings.allowedHttpHookUrls).map((item) => item.slice(0, 2000))];
     if (Array.isArray(settings.httpHookAllowedEnvVars)) result.httpHookAllowedEnvVars = [...(result.httpHookAllowedEnvVars || []), ...stringList(settings.httpHookAllowedEnvVars)];
     if (settings.sandbox && typeof settings.sandbox === 'object') {
-      if (typeof settings.sandbox.enabled === 'boolean') result.sandbox.enabled = settings.sandbox.enabled;
+      if (typeof settings.sandbox.enabled === 'boolean') {
+        result.sandbox.enabled = settings.sandbox.enabled;
+        // Remembered for the admin-required lock: a repository cannot switch off a sandbox you turned on.
+        if (scope === 'project' || scope === 'local') result.sandbox.enabledByRepo = settings.sandbox.enabled; else result.sandbox.enabledPersonal = settings.sandbox.enabled;
+      }
+      // allowUnsandboxedCommands: false (managed, or --settings unless managed says true) makes the
+      // sandbox admin-required. OASIS never retries a command outside the sandbox, so this key only locks.
+      if (typeof settings.sandbox.allowUnsandboxedCommands === 'boolean' && (scope === 'managed' || scope === 'flag')) {
+        if (scope === 'managed') result.sandbox.allowUnsandboxedCommandsManaged = settings.sandbox.allowUnsandboxedCommands;
+        else if (settings.sandbox.allowUnsandboxedCommands === false) result.sandbox.allowUnsandboxedCommandsFlagOff = true;
+      }
       if (typeof settings.sandbox.network === 'boolean') result.sandbox.network = settings.sandbox.network;
       if (Array.isArray(settings.sandbox.allowedDomains)) result.sandbox.allowedDomains = settings.sandbox.allowedDomains.filter((item) => typeof item === 'string');
       if (Array.isArray(settings.sandbox.deniedDomains)) result.sandbox.deniedDomains = settings.sandbox.deniedDomains.filter((item) => typeof item === 'string');
@@ -487,6 +538,8 @@ export async function loadSettings(root, options = {}) {
         const domains = (value) => Array.isArray(value) ? value.filter((item) => typeof item === 'string') : [];
         if (Array.isArray(network.allowedDomains)) {
           result.sandbox.allowedDomains = [...(result.sandbox.allowedDomains || []), ...domains(network.allowedDomains)];
+          const bucket = scope === 'project' || scope === 'local' ? 'allowedDomainsRepo' : 'allowedDomainsPersonal';
+          result.sandbox[bucket] = [...(result.sandbox[bucket] || []), ...domains(network.allowedDomains)];
           if (scope === 'managed') result.sandbox.managedAllowedDomains = [...(result.sandbox.managedAllowedDomains || []), ...domains(network.allowedDomains)];
         }
         if (Array.isArray(network.deniedDomains)) result.sandbox.deniedDomains = [...(result.sandbox.deniedDomains || []), ...domains(network.deniedDomains)];
@@ -514,6 +567,7 @@ export async function loadSettings(root, options = {}) {
       // failIfUnavailable: refuse to start when the sandbox is enabled but cannot run; managed wins.
       if (typeof settings.sandbox.failIfUnavailable === 'boolean' && !result.sandbox.failIfUnavailableManaged) {
         result.sandbox.failIfUnavailable = settings.sandbox.failIfUnavailable;
+        if (scope === 'user' && settings.sandbox.failIfUnavailable) result.sandbox.failIfUnavailablePersonal = true;
         if (scope === 'managed') result.sandbox.failIfUnavailableManaged = true;
       }
       // sandbox.filesystem.{allowWrite,denyWrite,denyRead}: path lists merged across scopes.
@@ -525,6 +579,8 @@ export async function loadSettings(root, options = {}) {
           result.sandbox[key] = [...new Set([...(result.sandbox[key] || []), ...resolved])];
           if (key === 'allowRead' && (scope === 'project' || scope === 'local')) result.sandbox.allowReadRepo = [...new Set([...(result.sandbox.allowReadRepo || []), ...resolved])];
           if (key === 'allowWrite' && (scope === 'project' || scope === 'local')) result.sandbox.allowWriteRepo = [...new Set([...(result.sandbox.allowWriteRepo || []), ...resolved])];
+          if (key === 'allowWrite' && !(scope === 'project' || scope === 'local')) result.sandbox.allowWritePersonal = [...new Set([...(result.sandbox.allowWritePersonal || []), ...resolved])];
+          if (key === 'denyRead' && !(scope === 'project' || scope === 'local')) result.sandbox.denyReadPersonal = [...new Set([...(result.sandbox.denyReadPersonal || []), ...resolved])];
           if (key === 'allowRead' && scope === 'managed') result.sandbox.managedAllowRead = [...new Set([...(result.sandbox.managedAllowRead || []), ...resolved])];
         }
         // allowManagedReadPathsOnly (managed): only managed allowRead entries re-open reads; denyRead still merges.
@@ -533,7 +589,12 @@ export async function loadSettings(root, options = {}) {
       applySandboxCredentials(result.sandbox, settings.sandbox.credentials, scope, path.resolve(root), env);
       if (typeof settings.sandbox.autoAllowCommands === 'boolean') result.sandbox.autoAllowCommands = settings.sandbox.autoAllowCommands;
       // sandbox.excludedCommands: Bash(...) rule contents run outside the sandbox; merged across trusted files.
-      if (Array.isArray(settings.sandbox.excludedCommands)) result.sandbox.excludedCommands = [...new Set([...(result.sandbox.excludedCommands || []), ...settings.sandbox.excludedCommands.filter((item) => typeof item === 'string' && item.trim() && item.length <= 500 && !/[\r\n\0]/.test(item)).map((item) => item.trim())])];
+      if (Array.isArray(settings.sandbox.excludedCommands)) {
+        const commands = settings.sandbox.excludedCommands.filter((item) => typeof item === 'string' && item.trim() && item.length <= 500 && !/[\r\n\0]/.test(item)).map((item) => item.trim());
+        result.sandbox.excludedCommands = [...new Set([...(result.sandbox.excludedCommands || []), ...commands])];
+        const bucket = scope === 'project' || scope === 'local' ? 'excludedCommandsRepo' : 'excludedCommandsPersonal';
+        result.sandbox[bucket] = [...new Set([...(result.sandbox[bucket] || []), ...commands])];
+      }
       if (typeof settings.sandbox.maskSensitivePaths === 'boolean') result.sandbox.maskSensitivePaths = settings.sandbox.maskSensitivePaths;
       if (typeof settings.sandbox.autoAllowShellCommands === 'boolean') result.sandbox.autoAllowShellCommands = settings.sandbox.autoAllowShellCommands;
       if (typeof settings.sandbox.writableCaches === 'boolean') result.sandbox.writableCaches = settings.sandbox.writableCaches;
@@ -675,6 +736,7 @@ export async function loadSettings(root, options = {}) {
   }
   for (const file of managedSettingsPaths(env)) apply(await readJsonFile(file).catch(() => null), 'managed', file, true);
   if (result.permissions.disableBypassPermissionsMode && result.permissions.defaultMode === 'bypassPermissions') result.permissions.defaultMode = 'default';
+  applySandboxLocks(result.sandbox, result.permissions, root);
   // Hooks from enabled Claude Code plugins run with CLAUDE_PLUGIN_ROOT in their environment.
   if (!options.skipPlugins) {
     try {
