@@ -25,6 +25,7 @@ export const PRESETS = {
   custom: { label: 'Custom (OpenAI-compatible)', protocol: 'openai', baseURL: '', model: '', keyHint: '' }
 };
 
+import { anthropicDefaultOutputTokens, outputCapFromError } from '../../src/output-cap.mjs';
 import { createParser } from 'eventsource-parser';
 import { splitThinking, createThinkFilter } from '../../src/think-tags.mjs';
 
@@ -206,6 +207,9 @@ function openAIHeaders(config) {
 }
 
 const openRouterOutputCaps = new Map();
+// Output limits Anthropic reported for a model (base URL + model), learned from a 400.
+const anthropicOutputCaps = new Map();
+const anthropicCapKey = (config) => trimSlash(config.baseURL || 'https://api.anthropic.com') + '\0' + String(config.model || '');
 
 function openRouterCapKey(config) {
   return [config.connectionId || config.provider || '', trimSlash(config.baseURL), config.model || ''].join('|');
@@ -383,22 +387,32 @@ async function chatAnthropic(config, { messages, tools, signal, onText, fetchImp
   const { system, messages: converted } = toAnthropic(messages);
   const body = {
     model: config.model,
-    max_tokens: Number(config.maxTokens) || 8192,
+    max_tokens: anthropicOutputCaps.get(anthropicCapKey(config)) || Number(config.maxTokens) || anthropicDefaultOutputTokens(config.model),
     system,
     messages: converted,
     stream: true,
     tools: (tools || []).map((tool) => ({ name: tool.function.name, description: tool.function.description, input_schema: tool.function.parameters }))
   };
   if (!body.tools.length) delete body.tools;
-  const response = await fetchImpl(trimSlash(config.baseURL || 'https://api.anthropic.com') + '/v1/messages', {
+  const send = () => fetchImpl(trimSlash(config.baseURL || 'https://api.anthropic.com') + '/v1/messages', {
     method: 'POST',
     headers: { 'content-type': 'application/json', 'x-api-key': config.apiKey || '', 'anthropic-version': '2023-06-01', 'anthropic-dangerous-direct-browser-access': 'true' },
     body: JSON.stringify(body),
     signal
   });
+  let response = await send();
   if (!response.ok) {
-    const errorBody = await response.text().catch(() => '');
-    throw new ProviderError(explain(response.status, errorBody, config), { status: response.status, ...retryPlan(response.status, errorBody, response.headers) });
+    let errorBody = await response.text().catch(() => '');
+    // "max_tokens: 32000 > 8192, which is the maximum allowed": retry once at
+    // the model's real limit and remember it for the rest of the session.
+    const cap = outputCapFromError(response.status, errorBody);
+    if (cap && cap < body.max_tokens) {
+      body.max_tokens = cap;
+      anthropicOutputCaps.set(anthropicCapKey(config), cap);
+      response = await send();
+      if (!response.ok) errorBody = await response.text().catch(() => '');
+    }
+    if (!response.ok) throw new ProviderError(explain(response.status, errorBody, config), { status: response.status, ...retryPlan(response.status, errorBody, response.headers) });
   }
   let content = '';
   const blocks = [];

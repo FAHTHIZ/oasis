@@ -63,15 +63,7 @@ export function maxOutputTokensFor(config = {}, env = process.env) {
   return 8192;
 }
 
-/** Parse the real maximum out of a provider "max_tokens too large" error, if any. */
-export function outputCapFromError(status, body) {
-  if (status !== 400) return 0;
-  const text = String(body || '');
-  if (!/max_tokens|max_output_tokens|max_completion_tokens|maximum (allowed )?(number of )?output tokens/i.test(text)) return 0;
-  const explicit = text.match(/>\s*(\d{3,6})\b/) || text.match(/(?:maximum|max|up to|at most|limit(?: is)?)[^\d]{0,60}(\d{3,6})/i);
-  const parsed = explicit ? Number.parseInt(explicit[1], 10) : 0;
-  return parsed >= 1024 ? parsed : 8192;
-}
+export { outputCapFromError } from './output-cap.mjs';
 
 export function isOpenRouterBaseURL(baseURL) {
   try {
