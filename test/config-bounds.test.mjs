@@ -22,7 +22,7 @@ test('configuration integer settings reject partial, fractional and exponent str
     }
   });
 
-  assert.equal(config.maxSteps, 60, 'partial integer input must use the safe default');
+  assert.equal(config.maxSteps, 150, 'partial integer input must use the safe default');
   assert.equal(config.maxToolCalls, 300, 'fractional input must not be parsed as an integer prefix');
   assert.equal(config.maxTokens, 2_000_000, 'scientific notation must not be parsed as a numeric prefix');
   assert.equal(config.maxCommandSeconds, 120, 'malformed saved settings must not be silently truncated');
@@ -66,9 +66,9 @@ test('agent turn budgets ignore malformed integer prefixes and fall back to vali
   ), { maxSteps: 32, tokenBudget: 120000, maxToolCalls: 80 });
 
   assert.deepEqual(resolveTurnLimits(
-    { maxSteps: '999', maxTokens: '999999999', maxToolCalls: '20' },
+    { maxSteps: '5000', maxTokens: '999999999', maxToolCalls: '20' },
     { maxSteps: 8, maxTokens: 50000, maxToolCalls: 40 }
-  ), { maxSteps: 400, tokenBudget: 20000000, maxToolCalls: 20 });
+  ), { maxSteps: 1000, tokenBudget: 20000000, maxToolCalls: 20 });
 });
 
 test('configuration integer settings retain valid values and enforce bounds', async (t) => {
@@ -79,13 +79,13 @@ test('configuration integer settings retain valid values and enforce bounds', as
     configPath: path.join(root, 'missing-config.json'),
     env: {
       OASIS_CONFIG_DIR: root,
-      OASIS_MAX_STEPS: '999',
+      OASIS_MAX_STEPS: '5000',
       OASIS_MAX_TOOL_CALLS: '1',
       OASIS_MAX_TOKENS: '9999'
     }
   });
 
-  assert.equal(config.maxSteps, 400, 'valid integers above the configured maximum are clamped');
+  assert.equal(config.maxSteps, 1000, 'valid integers above the configured maximum are clamped');
   assert.equal(config.maxToolCalls, 1, 'the minimum tool-call bound remains inclusive');
   assert.equal(config.maxTokens, 10_000, 'the minimum token budget remains inclusive');
 });

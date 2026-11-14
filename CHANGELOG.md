@@ -4,6 +4,7 @@ User-facing change history grouped by package version. A version heading does no
 
 ## Unreleased
 
+- Longer turns by default: up to 150 model requests per message in the terminal agent (was 60; `maxSteps` / `OASIS_MAX_STEPS` now go up to 1,000) and 100 in the browser app (was 40; settings allow up to 500). Real refactors stopped halfway at the old limits; the token and tool-call budgets still bound a runaway turn.
 - The per-turn token budget (`maxTokens`, default 2,000,000) no longer counts cache reads. Every step re-sends the whole conversation, so with prompt caching most input tokens are the same cached prefix read again; counting it stopped a long task in a large context after a dozen or so steps. The turn summary still reports every token.
 - The browser app has a stream watchdog like the terminal agent: a provider that stops sending, before the response or mid-stream, fails after 5 minutes of silence (`streamIdleSeconds` in the provider config) instead of spinning until Stop. A stall before any data is retried; one after text arrived is reported so the reply is not repeated.
 - Archiving a session from the web UI or `oasis sessions archive` while it is open elsewhere sticks: the live session's next save used to write its own (unarchived) flag back over it.

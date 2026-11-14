@@ -1,5 +1,6 @@
 import { atomicWriteFile } from './atomic-write.mjs';
 import { BUILTIN_PROVIDERS, providerForEndpoint } from './provider-registry.mjs';
+import { DEFAULT_TURN_STEPS, MAX_TURN_STEPS } from './model-budgets.mjs';
 import { mkdir, readFile, chmod, copyFile } from 'node:fs/promises';
 import { readFileSync } from 'node:fs';
 import { CLOUD_PROTOCOLS, cloudProtocolFromEnv, defaultCloudBaseURL, defaultCloudModel, cloudCredentialsPresent } from './cloud-providers.mjs';
@@ -208,7 +209,7 @@ export async function loadConfig(options = {}) {
   return {
     ...normalizedSaved, protocol, baseURL, model, apiKey, configPath, ...(apiKeyHelper ? { apiKeyHelper } : {}),
     configured: Boolean(apiKey) || Boolean(apiKeyHelper) || isLoopbackUrl(baseURL) || (cloud && cloudCredentialsPresent(protocol, env)) || (sameSavedTarget && saved.keyless === true),
-    maxSteps: clampInteger(env.OASIS_MAX_STEPS || saved.maxSteps, 60, 1, 400),
+    maxSteps: clampInteger(env.OASIS_MAX_STEPS || saved.maxSteps, DEFAULT_TURN_STEPS, 1, MAX_TURN_STEPS),
     maxToolCalls: clampInteger(env.OASIS_MAX_TOOL_CALLS || saved.maxToolCalls, 300, 1, 2000),
     maxTokens: clampInteger(env.OASIS_MAX_TOKENS || saved.maxTokens, 2000000, 10000, 20000000),
     maxCommandSeconds: clampInteger(saved.maxCommandSeconds, 120, 5, 600)
@@ -269,7 +270,7 @@ export async function saveConfig(config, options = {}) {
     baseURL: validateBaseUrl(config.baseURL || (CLOUD_PROTOCOLS.includes(protocol) ? defaultCloudBaseURL(protocol, env) : protocol === 'anthropic' ? DEFAULT_ANTHROPIC_BASE_URL : DEFAULT_BASE_URL)),
     model: String(config.model || (protocol === 'anthropic' ? 'claude-sonnet-5' : (protocol === 'openai-responses' ? DEFAULT_MODEL : ''))).trim(),
     apiKey: String(config.apiKey || ''),
-    maxSteps: clampInteger(config.maxSteps, 60, 1, 400),
+    maxSteps: clampInteger(config.maxSteps, DEFAULT_TURN_STEPS, 1, MAX_TURN_STEPS),
     maxToolCalls: clampInteger(config.maxToolCalls, 300, 1, 2000),
     maxTokens: clampInteger(config.maxTokens, 2000000, 10000, 20000000),
     maxCommandSeconds: clampInteger(config.maxCommandSeconds, 120, 5, 600)
