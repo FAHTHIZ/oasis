@@ -53,3 +53,11 @@ test('adding a rule keeps the existing ones past 500 and odd entries', async (t)
   assert.equal(saved.trustedWorkspaces.length, 601);
   assert.equal(saved.trustedWorkspaces[599], '/w599');
 });
+
+test('a hook in the 51st group of an event still runs', async () => {
+  const { normalizeHooks } = await import('../src/settings.mjs');
+  const groups = Array.from({ length: 60 }, (_, i) => ({ matcher: 'm' + i, hooks: [{ type: 'command', command: 'echo ' + i }] }));
+  const hooks = normalizeHooks({ PreToolUse: groups });
+  assert.equal(hooks.PreToolUse.length, 60);
+  assert.equal(hooks.PreToolUse[59].matcher, 'm59');
+});

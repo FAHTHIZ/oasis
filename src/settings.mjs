@@ -197,7 +197,7 @@ export function normalizeHooks(raw) {
   if (!raw || typeof raw !== 'object') return out;
   for (const [event, groups] of Object.entries(raw)) {
     if (!Array.isArray(groups)) continue;
-    for (const group of groups.slice(0, 50)) {
+    for (const group of groups) {
       if (!group || !Array.isArray(group.hooks)) continue;
       const matcher = typeof group.matcher === 'string' ? group.matcher : '';
       const hooks = group.hooks
