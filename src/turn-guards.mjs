@@ -188,6 +188,11 @@ export function announcesTerseStep(text) {
   return /^(?:now,?\s+|next,?\s+|then,?\s+)?(?:check|run|re-?run|read|open|inspect|view|look at|review|verify|test|search|grep|list|examine|diff|compare)\b(?:[^.!?]|\.(?=\w))*[.:]?$/i.test(reply);
 }
 
+// The user asked for a new test, the gate said so, and the model answered
+// that an existing test already covers the fix. That is not what was asked:
+// an existing test cannot show the new one fails before the fix. Asked once.
+export const NEW_TEST_FOLLOWUP_NUDGE = '<system-reminder>The user explicitly asked you to add a new test, and none was added. An existing test does not satisfy that request, even if it covers the fix. Add a separate test case for this change now (in the project\'s existing test file or a new one), run the tests, and then give your final answer. If you truly cannot add one, say so plainly to the user instead of reporting the task as done.</system-reminder>';
+
 export const GATE_FOLLOWUP_NUDGE = '<system-reminder>You named the next verification step but ended your turn without doing it. Do it now with a tool call; then give the user your final answer.</system-reminder>';
 
 // "I cannot proceed", "I'm unable to", "I apologize, but ..." after a tool error.
