@@ -32,3 +32,15 @@ test('a reply longer than 24k characters streams in full', async (t) => {
   assert.equal(result.text.trim(), full.trim());
   assert.equal(last.trim(), full.trim());
 });
+
+// Background MCP results kept only their first 12,000 characters with no
+// note; they now keep head and tail and say what was cut.
+test('headTailText keeps both ends and says how much was cut', async () => {
+  const { headTailText } = await import('../src/agent.mjs');
+  assert.equal(headTailText('short', 100), 'short');
+  const out = headTailText('HEAD' + 'x'.repeat(50000) + 'TAIL', 24000);
+  assert.ok(out.length <= 24000);
+  assert.ok(out.startsWith('HEAD'));
+  assert.ok(out.endsWith('TAIL'));
+  assert.match(out, /characters cut from the middle/);
+});
