@@ -49,7 +49,7 @@ import { resolveMcpPrompt, expandMcpResourceMentions } from './mcp-extras.mjs';
 import { autoMemoryEnabled, memoryIndexPrompt, recallForPrompt, MEMORY_TOOL_DEFINITIONS, listMemories, saveMemory } from './auto-memory.mjs';
 import { learningEnabled, LEARNING_TOOL_DEFINITIONS, assertLearningVerification } from './learning.mjs';
 import { countJsonTokens, countTextTokens } from './tokens.mjs';
-import { estimateTokens, microcompact, maskObservations, contextWindowSize, modelContextWindow, compactionThresholdChars, mustPreserveContextBlock, appendMustPreserveContext } from './context.mjs';
+import { estimateTokens, tokenUpperBound, microcompact, maskObservations, contextWindowSize, modelContextWindow, compactionThresholdChars, mustPreserveContextBlock, appendMustPreserveContext } from './context.mjs';
 import { genAiProviderName, genAiSpanNames, getTelemetry, lineChanges } from './telemetry.mjs';
 import { isAnthropicFamily } from './cloud-providers.mjs';
 import { loadSettings, normalizeLanguage } from './settings.mjs';
@@ -75,7 +75,7 @@ import { isLocalModelEndpoint, probeLocalContext, probeProviderModelWindow, appl
 import { ripgrepPathAddition } from './ripgrep.mjs';
 import { AUTO_LSP_EDIT_TOOLS, CYCLE_HALT_AT, CYCLE_WARN_AT, CYCLE_WINDOW_STEPS, FILE_EDITING_TOOL_NAMES, MAX_SESSION_TOOL_CALLS, PROTECTED_EDIT_TOOLS, RETRY_HALT_AT, RETRY_TRACKED_COMMANDS, RETRY_WARN_AT, THRASH_ESCALATE_AT, THRASH_WARN_AT, UNREADABLE_CALL_NUDGE, activeLspBaseline, asksForNewTests, failureSignature, isCompleteFileRead, isVerificationCommand, lspCallOptions, normalizeReviewPath, successfulMutation, verificationIssues, newModuleCandidate, markLoadedModules, markRanSources } from './turn-guards.mjs';
 import { MAX_OUTPUT_RECOVERIES, applyEffort, claudeEffortFor, thinkingTurnedOff, inlineEffortLevel, maxOutputTokensFor, reasoningEffortFor, resolveTurnLimits, stripInlineEffort, thinkingBudgetFor, truncationRecoveryPrompt } from './model-budgets.mjs';
-import { HISTORY_COMPACT_INPUT_LIMIT, HISTORY_COMPACT_THRESHOLD_CHARS, summaryTranscript, announceCompaction, compactionDeadline, compactionError, deterministicHistorySummary, findCompactionBoundary, historyBudgetSize, historyTextSize, reportCompaction, safeHistoryLine, supersedeBeforeCompaction, usableCompactionSummary } from './compaction-history.mjs';
+import { HISTORY_COMPACT_INPUT_LIMIT, HISTORY_COMPACT_THRESHOLD_CHARS, summaryTranscript, announceCompaction, compactionDeadline, compactionError, deterministicHistorySummary, findCompactionBoundary, historyBudgetSize, historyTextSize, historyWithinBudget, reportCompaction, safeHistoryLine, supersedeBeforeCompaction, usableCompactionSummary } from './compaction-history.mjs';
 import { replaysReasoning } from './provider-request.mjs';
 import { INTERRUPTED_REPLY, modelFacingResult, refreshTodoPrompt, repairInterruptedHistory, throwIfCancelled } from './tool-results.mjs';
 import { MAX_STEER_CHARS, deliverSteering, foldSteering, steeringMessage } from './steering.mjs';
@@ -148,12 +148,12 @@ export async function compactHistoryIfNeeded(session, options = {}) {
   let messages = session.messages || [];
   const thresholdChars = Number.isFinite(options.thresholdChars) && options.thresholdChars > 0 ? options.thresholdChars : compactionThresholdChars(session.config || {}, options.env || process.env);
   const messageLimit = thresholdChars > HISTORY_COMPACT_THRESHOLD_CHARS ? 400 : 60;
-  if (!options.force && messages.length <= messageLimit && historyBudgetSize(messages) <= thresholdChars) {
+  if (!options.force && messages.length <= messageLimit && historyWithinBudget(messages, thresholdChars)) {
     return { compacted: false, tokensUsed: 0 };
   }
   if (!options.force && supersedeBeforeCompaction(session, options)) {
     messages = session.messages;
-    if (messages.length <= messageLimit && historyBudgetSize(messages) <= thresholdChars) return { compacted: false, tokensUsed: 0 };
+    if (messages.length <= messageLimit && historyWithinBudget(messages, thresholdChars)) return { compacted: false, tokensUsed: 0 };
   }
   // A manual /compact summarizes the whole conversation so far.
   const boundary = options.force ? messages.length : findCompactionBoundary(messages);
@@ -293,12 +293,12 @@ async function recoverFromContextOverflow(session, requestIndex, options, attemp
 async function compactMidTurnHistoryIfNeeded(session, requestIndex, options = {}) {
   let messages = session.messages || [];
   const threshold = compactionThresholdChars(session.config || {}, options.env || process.env);
-  if ((!options.force && historyBudgetSize(messages) <= threshold) || messages.length < requestIndex + 5) {
+  if ((!options.force && historyWithinBudget(messages, threshold)) || messages.length < requestIndex + 5) {
     return { compacted: false, tokensUsed: 0 };
   }
   if (!options.force && supersedeBeforeCompaction(session, options)) {
     messages = session.messages;
-    if (historyBudgetSize(messages) <= threshold) return { compacted: false, tokensUsed: 0 };
+    if (historyWithinBudget(messages, threshold)) return { compacted: false, tokensUsed: 0 };
   }
   const beforeTokens = estimateTokens(messages);
   const beforeChars = historyTextSize(messages);
@@ -1048,6 +1048,7 @@ export function hookOptions(session, env) {
 // the tokens in and out. Sent to onModelTiming (the web app's debug view)
 // and to the debug log (OASIS_DEBUG=timing).
 function reportModelTiming(session, options, { step, started, ended, timing, usage, assistant, reasoningChars }) {
+  if (!debugEnabled('timing') && !debugEnabled('api') && typeof options.onModelTiming !== 'function') return null;
   const since = (at) => (at ? at - started : null);
   const record = {
     step,
@@ -3177,7 +3178,7 @@ async function runAgentTurnRaw(session, prompt, options = {}) {
     throwIfCancelled(options.signal);
     const pruneWindow = contextWindowSize(session.config, options.env || process.env);
     // microcompact's own trigger (half the window): try the lossless pass first.
-    if (estimateTokens(session.messages) > pruneWindow * 0.5) supersedeBeforeCompaction(session, options);
+    if (tokenUpperBound(session.messages) > pruneWindow * 0.5 && estimateTokens(session.messages) > pruneWindow * 0.5) supersedeBeforeCompaction(session, options);
     const maskTurns = Number.parseInt((options.env || process.env).OASIS_OBSERVATION_MASK_TURNS ?? '', 10);
     if (maskTurns > 0) {
       const maskBatch = Number.parseInt((options.env || process.env).OASIS_OBSERVATION_MASK_BATCH ?? '', 10);
@@ -3223,7 +3224,12 @@ async function runAgentTurnRaw(session, prompt, options = {}) {
     // Where a model request's time goes: first byte of reasoning or text,
     // the last visible byte, and the silent tail after it (tool-call
     // arguments or hidden reasoning; tools start only once the reply is whole).
-    const timing = { firstAt: 0, firstTextAt: 0, lastVisibleAt: 0, inputEstimate: estimateTokens(session.messages || []) };
+    // inputEstimate is counted only when read (debug timing, the web debug
+    // view, an interrupted stream's usage): counting it for every request
+    // loaded the tokenizer before a headless run's first call.
+    const sentMessages = (session.messages || []).slice();
+    let inputEstimate;
+    const timing = { firstAt: 0, firstTextAt: 0, lastVisibleAt: 0, get inputEstimate() { if (inputEstimate === undefined) inputEstimate = estimateTokens(sentMessages); return inputEstimate; } };
     const seen = (text) => { const now = Date.now(); if (!timing.firstAt) timing.firstAt = now; if (text && !timing.firstTextAt) timing.firstTextAt = now; timing.lastVisibleAt = now; };
     try {
       assistant = await requestCompletion(session, {

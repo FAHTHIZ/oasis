@@ -4,6 +4,7 @@ User-facing change history grouped by package version. A version heading does no
 
 ## Unreleased
 
+- Speed and memory: a short `oasis -p` run no longer loads the tokenizer. Context-budget checks first use the UTF-8 byte count, which is never below the token count, and tokenize only when it cannot settle the question; per-request timing estimates are counted only when something reads them. Peak RSS of a one-turn headless run fell from 175 MB to 120 MB and the first request leaves about 100 ms sooner (`test/tokenizer-lazy.test.mjs`).
 - Benchmarks: Codex CLI pointed at a custom endpoint now runs with its sub-agent tools (`multi_agent`) and hosted `web_search` off. Codex 0.169 sends them as OpenAI-only tool types, and OpenAI-compatible servers rejected every request (OVH: HTTP 422 "unknown variant `namespace`"). With OpenAI's own endpoint Codex runs as shipped.
 - Benchmarks: when an endpoint refuses every request an agent sends (for example HTTP 404 because it does not serve Claude Code's `/v1/messages`), the agent is reported as an endpoint mismatch and the task is excluded from the scores, instead of counting as the agent's failure.
 - `oasis bg logs ID --follow` reads only the lines added since its last poll. Before, it re-read the whole log every 700 ms, so following a long run cost more on every poll (`test/bg-logs-incremental.test.mjs`).
