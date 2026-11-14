@@ -12,6 +12,7 @@ import { spawn, spawnSync } from 'node:child_process';
 import { mkdtemp, readFile, rm, stat } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
+import { redactProviderDetail } from './api-error.mjs';
 import { assertZeroBudgetService } from './cost-policy.mjs';
 
 const MAX_RECORDING_MS = 5 * 60 * 1000;
@@ -174,7 +175,7 @@ export async function transcribeAudio(audio, { settings = {}, env = process.env,
     if (!response.ok) {
       let detail = '';
       try { detail = JSON.parse(body).error.message; } catch { detail = body.slice(0, 200); }
-      throw new Error('Transcription failed (HTTP ' + response.status + ')' + (detail ? ': ' + String(detail).slice(0, 200) : '.'));
+      throw new Error('Transcription failed (HTTP ' + response.status + ')' + (detail ? ': ' + redactProviderDetail(String(detail), [target.apiKey]).slice(0, 200) : '.'));
     }
     let text;
     try { text = JSON.parse(body).text; } catch { text = body; }
