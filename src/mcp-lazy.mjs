@@ -4,8 +4,8 @@
 // (and its memory) per stdio server even when the task never uses it. A lazy
 // server starts only when one of its tools is first called. Its tool list
 // comes from a manifest saved the last time the server started, so the model
-// can still see and choose its tools; the tool schemas themselves are still
-// deferred behind tool_search like any other MCP tool.
+// can still see and choose its tools. Large tool sets go behind tool_search as
+// usual (src/session-tools.mjs, deferMcpTools).
 //
 // Safety: a manifest only says which tools to advertise. When the server
 // starts, every call is checked against the live tool list. If the tool is
