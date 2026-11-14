@@ -976,6 +976,12 @@ export async function rebuildSession(session, createOptions = {}, what = 'plugin
   await closeSession(session);
   const next = await createSession({ ...createOptions, root, config, restore: snapshot });
   if (snapshot.name) next.sessionName = snapshot.name;
+  // A reload is the same session: spend, the request/token ledger and the last
+  // run report carry over, so --max-budget-usd and --max-requests keep counting
+  // from where they were instead of starting again at zero.
+  next.costUsd = Math.max(0, Number(session.costUsd) || 0);
+  if (session.budgetLedger && typeof session.budgetLedger === 'object') next.budgetLedger = session.budgetLedger;
+  if (session.lastRunReport) next.lastRunReport = session.lastRunReport;
   const after = { skills: await countSkills(), plugins: (next.settings && next.settings.plugins || []).length };
   const agents = next.agents ? Object.keys(next.agents).length : 0;
   const hooks = Object.values(next.hooks || {}).reduce((sum, groups) => sum + (Array.isArray(groups) ? groups.length : 0), 0);
