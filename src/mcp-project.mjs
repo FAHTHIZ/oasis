@@ -243,6 +243,14 @@ function sdkMessage(error) {
 // Streamable HTTP MCP client with the same surface as McpServerClient.
 // Grace period before a long MCP task moves to the background (ms); -1 waits.
 // OASIS_MCP_TASK_BACKGROUND=0 or CLAUDE_CODE_DISABLE_MCP_TASK_BACKGROUND=1 always waits.
+// How long one MCP tool call may run: MCP_TOOL_TIMEOUT (milliseconds, as in
+// Claude Code) or OASIS_MCP_TOOL_TIMEOUT_MS; two minutes by default, up to a day.
+export const MAX_MCP_TOOL_TIMEOUT_MS = 86400000;
+export function mcpToolTimeoutMs(env = process.env) {
+  const raw = Number((env || process.env).OASIS_MCP_TOOL_TIMEOUT_MS || (env || process.env).MCP_TOOL_TIMEOUT || 0);
+  return Number.isFinite(raw) && raw > 0 ? Math.min(MAX_MCP_TOOL_TIMEOUT_MS, Math.floor(raw)) : 120000;
+}
+
 export function mcpTaskBackgroundMs(env = process.env) {
   if (/^(0|false|off|no)$/i.test(String(env.OASIS_MCP_TASK_BACKGROUND || '')) || /^(1|true)$/i.test(String(env.CLAUDE_CODE_DISABLE_MCP_TASK_BACKGROUND || ''))) return -1;
   const raw = Number(env.OASIS_MCP_TASK_BACKGROUND_MS);
@@ -558,7 +566,7 @@ export class McpHttpClient {
     if (options.signal && options.signal.aborted) throw mcpAbortReason(options.signal);
     const requestedTimeout = Number(options.timeoutMs ?? 120000);
     const timeoutMs = Number.isFinite(requestedTimeout) && requestedTimeout > 0
-      ? Math.min(900000, Math.max(1, Math.floor(requestedTimeout)))
+      ? Math.min(MAX_MCP_TOOL_TIMEOUT_MS, Math.max(1, Math.floor(requestedTimeout)))
       : 120000;
     const result = useMcpTask(this, registeredTool)
       ? await this._callToolAsTask(registeredTool, args, options)
