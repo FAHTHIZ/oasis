@@ -103,6 +103,20 @@ export async function buildSystemPrompt({ workspace, skills, plugins = [], now =
   return lines.join('\n');
 }
 
+// Saved chats from older versions kept only their last 300 messages, which can
+// start on a tool result whose call was cut off; providers reject that. Drop
+// tool results that answer no earlier call.
+export function answeredHistory(messages) {
+  const calls = new Set();
+  const out = [];
+  for (const message of messages) {
+    if (message.role === 'assistant' && Array.isArray(message.tool_calls)) for (const call of message.tool_calls) if (call && call.id) calls.add(call.id);
+    if (message.role === 'tool' && !calls.has(message.tool_call_id)) continue;
+    out.push(message);
+  }
+  return out;
+}
+
 export class Agent {
   /**
    * @param {object} options
@@ -136,7 +150,7 @@ export class Agent {
   reset() { this.messages = []; this.todos = []; this.usage = { input: 0, output: 0 }; this.steering = []; }
 
   load(messages, pendingSteering = []) {
-    this.messages = Array.isArray(messages) ? messages.filter((m) => m && m.role !== 'system') : [];
+    this.messages = Array.isArray(messages) ? answeredHistory(messages.filter((m) => m && m.role !== 'system')) : [];
     // Persisted browser state is untrusted and may be stale or malformed.
     // Restore only bounded, non-empty string notes accepted by steer().
     this.steering = Array.isArray(pendingSteering)
