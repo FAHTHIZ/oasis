@@ -23,6 +23,10 @@ import { serverToolFilters } from './mcp-trust.mjs';
 import { loadMcpExtras } from './mcp-extras.mjs';
 import { redactAuditValue } from './tool-kernel.mjs';
 import { validateToolArguments } from './tool-schema-validation.mjs';
+
+// Bounds for a misbehaving server that pages forever.
+const MAX_LIST_PAGES = 100;
+const MAX_LISTED_ITEMS = 5000;
 import { authRequiredError, createOAuthFetch, getStoredToken, loadMcpClientSdk, OasisOAuthProvider, fetchMcpSameOrigin, refreshExpiringToken, rememberRequiredScope, routeMcpFetch, sameMcpEndpoint } from './mcp-oauth.mjs';
 
 import { clientCapabilities, handleServerNotification, handleServerRequest } from './mcp-client-features.mjs';
@@ -120,7 +124,7 @@ export function parseMcpServerEntries(parsed, env = process.env, source = 'proje
   const entries = parsed && typeof parsed.mcpServers === 'object' && !Array.isArray(parsed.mcpServers) ? Object.entries(parsed.mcpServers) : [];
   const servers = [];
   const failures = [];
-  for (const [rawName, spec] of entries.slice(0, 40)) {
+  for (const [rawName, spec] of entries) {
     const name = normalizeServerName(rawName);
     try {
       if (!spec || typeof spec !== 'object') throw new Error('entry must be an object');
@@ -514,11 +518,30 @@ export class McpHttpClient {
     return this.tools;
   }
 
+  // Every page of a paginated MCP list (tools/list, prompts/list, ...). The spec
+  // lets a server split any list with nextCursor; only the first page was read,
+  // and tools were then cut to 80, so large servers lost tools without a word.
+  async listAll(method, key, timeoutMs = 15000) {
+    const items = [];
+    const seen = new Set();
+    let cursor;
+    for (let page = 0; page < MAX_LIST_PAGES; page++) {
+      const listed = await this._request(method, cursor === undefined ? {} : { cursor }, timeoutMs);
+      if (Array.isArray(listed[key])) items.push(...listed[key]);
+      const next = listed.nextCursor;
+      if (typeof next !== 'string' || !next || seen.has(next) || items.length >= MAX_LISTED_ITEMS) break;
+      seen.add(next);
+      cursor = next;
+      if (page === MAX_LIST_PAGES - 1) debugLog('mcp', this.config.name + ' ' + method + ': stopped after ' + MAX_LIST_PAGES + ' pages');
+    }
+    if (items.length > MAX_LISTED_ITEMS) debugLog('mcp', this.config.name + ' ' + method + ': kept the first ' + MAX_LISTED_ITEMS + ' of ' + items.length + ' items');
+    return items.slice(0, MAX_LISTED_ITEMS);
+  }
+
   async refreshTools() {
-    const listed = await this._request('tools/list', {}, 15000);
-    this.tools = (Array.isArray(listed.tools) ? listed.tools : [])
-      .filter((tool) => tool && typeof tool.name === 'string' && /^[a-zA-Z0-9_.-]{1,80}$/.test(tool.name) && tool.name !== '__proto__')
-      .slice(0, 80);
+    const seen = new Set();
+    this.tools = (await this.listAll('tools/list', 'tools'))
+      .filter((tool) => tool && typeof tool.name === 'string' && /^[a-zA-Z0-9_.-]{1,80}$/.test(tool.name) && tool.name !== '__proto__' && !seen.has(tool.name) && seen.add(tool.name));
     return this.tools;
   }
 
