@@ -60,6 +60,7 @@ const SHORT_RATE_LIMIT_MAX_MS = 90000;
 // (seen live): an explicit hint of 90 s or less, with no daily, monthly or
 // credit wording, is a rate window, not an exhausted balance.
 const EXPLICIT_SHORT_WAIT = /\bretry (?:after|in) (\d+(?:\.\d+)?) ?s(?:ec(?:ond)?s?)?\b/i;
+const STATED_RESET = /\bsoonest (?:cooldown )?reset ~?(\d+(?:\.\d+)?) ?(s|m)\b/i;
 const LONG_LIMIT_WORDING = /PerDay|per ?day|daily|per ?month|monthly|credit|balance|insufficient|billing/i;
 const CONCURRENCY_LIMIT = /\bstill running\b|\b(?:1|one) request at a time\b|\btoo many concurrent\b|\bconcurren(?:t|cy) (?:request )?limit\b/i;
 export function shortRateLimitMs(body) {
@@ -67,6 +68,14 @@ export function shortRateLimitMs(body) {
   const explicit = EXPLICIT_SHORT_WAIT.exec(text);
   if (explicit && !/PerMinute|per ?minute/i.test(text) && !LONG_LIMIT_WORDING.test(text)) {
     const ms = Number(explicit[1]) * 1000;
+    return Number.isFinite(ms) && ms <= SHORT_RATE_LIMIT_MAX_MS ? Math.ceil(ms) + 500 : null;
+  }
+  // FreeLLMAPI states its pool's reset only in the body, with no Retry-After:
+  // "All models exhausted: ... Soonest reset ~28s." (seen live in the OVH
+  // head-to-head, where Oasis gave up after two quick retries).
+  const stated = STATED_RESET.exec(text);
+  if (stated && !LONG_LIMIT_WORDING.test(text)) {
+    const ms = Number(stated[1]) * (/^m/i.test(stated[2]) ? 60000 : 1000);
     return Number.isFinite(ms) && ms <= SHORT_RATE_LIMIT_MAX_MS ? Math.ceil(ms) + 500 : null;
   }
   // A concurrency cap, not a quota: Pollinations' keyless API answers 429

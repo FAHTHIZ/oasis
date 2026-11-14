@@ -4,6 +4,7 @@ User-facing change history grouped by package version. A version heading does no
 
 ## Unreleased
 
+- Rate limits: FreeLLMAPI reports when its pool frees up only in the error text ("Soonest reset ~28s"), with no Retry-After header. Oasis made two quick retries and then failed the task (seen in the OVH head-to-head). A stated reset of up to 90 seconds is now waited out, with the usual `[rate limit] Waiting …` notice.
 - Terminal: Oasis's own model-fallback, key-pool and session notices printed as `[hook] [fallback] …`, as if a user hook had acted. They now print with their own tag.
 - `oasis -p`: when the model failed and Oasis switched to a backup model (for example, a mistyped `--model` that the provider answers with 404), text output gave no sign of the switch. A `[fallback]` line now goes to stderr, and stream-json emits a `model_fallback` system event.
 - `/model` picker: providers that host more than chat models (OVH AI Endpoints lists Whisper, text-to-speech, embeddings, Stable Diffusion and guard classifiers) filled the picker with models that break a session when chosen. The picker now leaves them out. `/model ID`, `/model --list` and `oasis models` still show and accept every model.

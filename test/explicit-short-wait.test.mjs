@@ -61,3 +61,26 @@ test('a real billing 402 still fails fast without a retry', async (t) => {
   assert.equal(run.requests, 1);
   assert.match(run.out, /402|credits/i);
 });
+
+// FreeLLMAPI, as seen live in the OVH head-to-head on 2026-11-14: no
+// Retry-After header, only the pool's soonest reset in the body. Oasis made
+// two quick retries and failed the task while the stated reset was 28 s away.
+const freellmapi = (eta) => JSON.stringify({ error: { message: 'All models exhausted: 1 route checked (1 rate-limited or on cooldown). Add more API keys or wait for rate limits to reset. Soonest reset ~' + eta + '. 6 models skipped: no key configured for their platform.', type: 'rate_limit_error' } });
+
+test('FreeLLMAPI\'s "Soonest reset ~Ns" is a short wait; resets beyond 90 s are not', () => {
+  assert.equal(shortRateLimitMs(freellmapi('28s')), 28500);
+  assert.equal(shortRateLimitMs(freellmapi('1m')), 60500);
+  assert.equal(shortRateLimitMs('All models rate-limited after 1 attempt. Soonest cooldown reset ~45s.'), 45500);
+  assert.equal(shortRateLimitMs(freellmapi('2m')), null);
+  assert.equal(shortRateLimitMs(freellmapi('5h')), null);
+  assert.equal(isHardQuotaError(freellmapi('28s')), false);
+});
+
+test('a FreeLLMAPI 429 with "Soonest reset ~2s" is waited out and the run finishes', async (t) => {
+  const run = await runAgainst(t, 429, freellmapi('2s'));
+  assert.equal(run.code, 0, run.out);
+  assert.match(run.out, /finished after the wait/);
+  assert.match(run.out, /\[rate limit\] Waiting/);
+  assert.equal(run.requests, 2);
+  assert.ok(run.ms >= 2400, 'waited for the stated reset, not a quick retry');
+});
