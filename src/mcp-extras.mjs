@@ -11,11 +11,16 @@ function cleanList(items, key) {
   return (Array.isArray(items) ? items : []).filter((item) => item && typeof item[key] === 'string' && item[key].length <= 2000).slice(0, MAX_ITEMS);
 }
 
+const MAX_INSTRUCTIONS = 8000;
+const MAX_PROMPT_TEXT = 200_000;
+
 // Called after initialize + tools/list. Listing failures never break the server.
 export async function loadMcpExtras(client, init = {}) {
   const capabilities = init && init.capabilities || {};
   client.capabilities = capabilities;
-  client.instructions = init && typeof init.instructions === 'string' ? init.instructions.slice(0, 8000) : '';
+  // Server instructions go into every system prompt, so they keep a limit, but a
+  // cut one now says so (it ended mid-sentence with no sign of the rest).
+  client.instructions = init && typeof init.instructions === 'string' ? (init.instructions.length > MAX_INSTRUCTIONS ? init.instructions.slice(0, MAX_INSTRUCTIONS) + '\n[server instructions cut: ' + (init.instructions.length - MAX_INSTRUCTIONS).toLocaleString('en-US') + ' more characters not shown]' : init.instructions) : '';
   const info = init && init.serverInfo;
   client.serverInfo = info && typeof info.name === 'string' ? { name: info.name.slice(0, 200), version: String(info.version || '').slice(0, 100), ...(typeof info.title === 'string' ? { title: info.title.slice(0, 200) } : {}) } : null;
   client.resources = [];
@@ -63,7 +68,11 @@ export function renderPromptMessages(result) {
       else if (block.type === 'resource' && block.resource) lines.push(formatResourceContents({ contents: [block.resource] }));
     }
   }
-  return lines.join('\n\n').slice(0, 60000);
+  // An MCP prompt becomes the user's message, so it keeps up to the chat message
+  // limit; past that it ends with a note (it was cut at 60,000 without one).
+  const text = lines.join('\n\n');
+  if (text.length <= MAX_PROMPT_TEXT) return text;
+  return text.slice(0, MAX_PROMPT_TEXT) + '\n[MCP prompt cut: ' + (text.length - MAX_PROMPT_TEXT).toLocaleString('en-US') + ' more characters not shown]';
 }
 
 export function parsePromptArguments(prompt, argumentText) {
