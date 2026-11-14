@@ -140,7 +140,9 @@ export function sanitizeAgentHistory(agentTasks) {
   });
 }
 
-const MAX_TRANSCRIPT_BYTES = 1536 * 1024;
+// A resumed subagent continues from this transcript; like the session file it
+// only needs a runaway guard (it is trimmed from the oldest end to fit).
+const MAX_TRANSCRIPT_BYTES = 16 * 1024 * 1024;
 
 function resumableWorktree(record) {
   if (!record || typeof record !== 'object') return null;
