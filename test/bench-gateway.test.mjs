@@ -102,3 +102,43 @@ test('gateway spacing counts from the end of the previous reply, not its start',
   for (const response of responses) assert.equal(response.status, 200);
   assert.deepEqual(waits, [5000, 5000], 'a full interval after each 3 s reply, not 2 s');
 });
+
+test('gateway relays Messages and Responses calls per agent and records the served model', async (t) => {
+  const { startGateway, gatewayReport, inspectResponse, upstreamUrl } = await import('../scripts/bench-gateway.mjs');
+  assert.equal(upstreamUrl('https://openrouter.ai/api/v1', '/messages'), 'https://openrouter.ai/api/v1/messages');
+  assert.equal(upstreamUrl('https://openrouter.ai/api/v1', '/responses'), 'https://openrouter.ai/api/v1/responses');
+  assert.equal(upstreamUrl('https://openrouter.ai/api/v1', '/chat/completions'), 'https://openrouter.ai/api/v1/chat/completions');
+  assert.deepEqual(inspectResponse('event: message_start\ndata: {"type":"message_start","message":{"model":"m-1","usage":{"input_tokens":5}}}\n\n').servedModel, 'm-1');
+  assert.equal(inspectResponse('data: {"type":"response.created","response":{"model":"m-2"}}\n\n').servedModel, 'm-2');
+  const seen = [];
+  const fetchImpl = async (url, init) => {
+    const body = JSON.parse(init.body);
+    seen.push({ url, model: body.model, version: init.headers['anthropic-version'] });
+    if (url.endsWith('/messages')) return new Response('event: message_start\ndata: {"type":"message_start","message":{"model":"served-x","usage":{"input_tokens":7,"output_tokens":1}}}\n\n', { status: 200, headers: { 'content-type': 'text/event-stream' } });
+    if (url.endsWith('/responses')) return new Response(JSON.stringify({ model: 'served-x', provider: 'P', usage: { input_tokens: 3, output_tokens: 2 } }), { status: 200 });
+    return new Response(JSON.stringify({ model: 'served-x', provider: 'P', usage: { prompt_tokens: 4, completion_tokens: 1 } }), { status: 200 });
+  };
+  const gw = await startGateway({ upstream: 'https://up.example/api/v1', model: 'forced' }, { fetchImpl });
+  t.after(() => gw.close());
+  const post = (agent, p, body, headers = {}) => fetch(gw.agentUrl(agent) + p, { method: 'POST', headers: { 'content-type': 'application/json', ...headers }, body: JSON.stringify(body) }).then((r) => r.text().then(() => r.status));
+  assert.equal(await post('claude', '/messages', { model: 'claude-x', messages: [] }, { 'anthropic-version': '2023-06-01' }), 200);
+  assert.equal(await post('codex', '/responses', { model: 'gpt-x', input: [] }), 200);
+  assert.equal(await post('oasis', '/chat/completions', { model: 'o', messages: [] }), 200);
+  assert.deepEqual(seen.map((s) => s.model), ['forced', 'forced', 'forced'], 'every protocol gets the one benchmark model');
+  assert.equal(seen[0].url, 'https://up.example/api/v1/messages');
+  assert.equal(seen[0].version, '2023-06-01');
+  assert.deepEqual(gw.records.map((r) => [r.agent, r.endpoint, r.servedModel]), [['claude', '/messages', 'served-x'], ['codex', '/responses', 'served-x'], ['oasis', '/chat/completions', 'served-x']]);
+  const report = gatewayReport(gw.records);
+  assert.equal(report.sameModel, true);
+  assert.equal(report.servedModel, 'served-x');
+  assert.equal(report.agents.claude.inputTokens, 7);
+  assert.equal(report.sameProvider, false, 'claude call carried no provider, so the provider match is not claimed');
+});
+
+test('gateway report does not claim a same-model run when served models differ', async () => {
+  const { gatewayReport } = await import('../scripts/bench-gateway.mjs');
+  const r = gatewayReport([{ agent: 'oasis', status: 200, servedModel: 'a' }, { agent: 'claude', status: 200, servedModel: 'b' }]);
+  assert.equal(r.sameModel, false);
+  assert.equal(gatewayReport([{ agent: 'oasis', status: 200, servedModel: 'a' }, { agent: 'oasis', status: 200, servedModel: 'a-v2' }]).sameModel, false);
+  assert.equal(gatewayReport([{ agent: 'oasis', status: 500 }]).sameModel, false);
+});

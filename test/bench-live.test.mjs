@@ -179,3 +179,19 @@ test('Codex gets a gateway provider entry because it ignores OPENAI_BASE_URL', (
   assert.deepEqual(args.slice(-3), ['-m', 'm1', 'do it']);
   assert.ok(!buildCodexArgs({}, 'x', {}).includes('-c'));
 });
+
+test('live summary verifies same-model only from the gateway record', async () => {
+  const { gatewayReport } = await import('../scripts/bench-gateway.mjs');
+  const options = parseBenchArgs(['--agents', 'oasis,claude', '--model', 'm', '--upstream', 'https://openrouter.ai/api/v1']);
+  const make = (agent) => ({ agent, name: agent, summary: { label: agent }, results: [{ taskId: 't', taskFingerprint: 'a'.repeat(64), category: 'c', difficulty: 'small', trial: 1, status: 'passed' }] });
+  const ok = summarize([make('oasis'), make('claude')], options, new Date(), gatewayReport([{ agent: 'oasis', status: 200, servedModel: 'm', provider: 'P' }, { agent: 'claude', status: 200, servedModel: 'm', provider: 'P' }]));
+  assert.equal(ok.sameModelVerified, true);
+  assert.ok(!ok.caveats.some((c) => /do not prove/.test(c)));
+  assert.match(renderSummary(ok), /Same model verified/);
+  const bad = summarize([make('oasis'), make('claude')], options, new Date(), gatewayReport([{ agent: 'oasis', status: 200, servedModel: 'm' }, { agent: 'claude', status: 200, servedModel: 'other' }]));
+  assert.equal(bad.sameModelVerified, false);
+  assert.ok(bad.caveats.some((c) => /not a verified same-model/.test(c)));
+  const none = summarize([make('oasis'), make('claude')], parseBenchArgs(['--agents', 'oasis,claude', '--model', 'm']), new Date());
+  assert.ok(none.caveats.some((c) => /do not prove/.test(c)));
+  assert.throws(() => parseBenchArgs(['--router', 'http://x', '--upstream', 'https://y']), /either/);
+});

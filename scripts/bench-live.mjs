@@ -14,13 +14,14 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { runEvalCommand, EXTERNAL_AGENTS } from '../src/eval.mjs';
 import { oasisVersion } from '../src/version.mjs';
+import { startGateway, gatewayReport } from './bench-gateway.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const ALL_AGENTS = ['oasis', 'claude', 'codex', 'gemini', 'opencode', 'aider'];
 const DISPLAY = { oasis: 'OASIS', ...Object.fromEntries(Object.entries(EXTERNAL_AGENTS).map(([id, adapter]) => [id, adapter.name])) };
 
 export function parseBenchArgs(argv) {
-  const options = { agents: ALL_AGENTS.slice(), model: '', models: {}, trials: 1, task: null, router: '', outDir: '', yes: false, timeoutSeconds: 600, help: false };
+  const options = { agents: ALL_AGENTS.slice(), model: '', models: {}, trials: 1, task: null, router: '', upstream: '', gatewayIntervalMs: 0, outDir: '', yes: false, timeoutSeconds: 600, help: false };
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i];
     const value = () => { const next = argv[++i]; if (next === undefined || next.startsWith('--')) throw new Error(arg + ' needs a value.'); return next; };
@@ -32,6 +33,8 @@ export function parseBenchArgs(argv) {
     else if (arg === '--trials') options.trials = Number(value());
     else if (arg === '--task') options.task = value();
     else if (arg === '--router') options.router = value().replace(/\/+$/, '');
+    else if (arg === '--upstream') options.upstream = value().replace(/\/+$/, '');
+    else if (arg === '--gateway-interval-ms') options.gatewayIntervalMs = Number(value());
     else if (arg === '--out') options.outDir = value();
     else if (arg === '--timeout-seconds') options.timeoutSeconds = Number(value());
     else throw new Error('Unknown option ' + arg + '. Run with --help.');
@@ -41,6 +44,9 @@ export function parseBenchArgs(argv) {
   if (!options.agents.length) throw new Error('--agents must name at least one agent.');
   for (const [agent, model] of Object.entries(options.models)) { if (!ALL_AGENTS.includes(agent)) throw new Error('Unknown agent in --model-for: ' + agent + '.'); if (!model.trim()) throw new Error('--model-for needs a non-empty model ID.'); }
   if (!Number.isInteger(options.timeoutSeconds) || options.timeoutSeconds < 30 || options.timeoutSeconds > 3600) throw new Error('--timeout-seconds must be 30-3600.');
+  if (!Number.isInteger(options.gatewayIntervalMs) || options.gatewayIntervalMs < 0) throw new Error('--gateway-interval-ms must be a whole number of milliseconds.');
+  if (options.router && options.upstream) throw new Error('Use either --router or --upstream, not both.');
+  if (options.upstream) { let parsed; try { parsed = new URL(options.upstream); } catch { throw new Error('--upstream must be a valid HTTP(S) URL.'); } if (!['http:', 'https:'].includes(parsed.protocol) || !parsed.hostname) throw new Error('--upstream must be a valid HTTP(S) URL.'); }
   if (options.router) { let parsed; try { parsed = new URL(options.router); } catch { throw new Error('--router must be a valid HTTP(S) URL.'); } if (!['http:', 'https:'].includes(parsed.protocol) || !parsed.hostname) throw new Error('--router must be a valid HTTP(S) URL.'); }
   return options;
 }
@@ -77,8 +83,8 @@ function modelFor(agent, options, env = process.env) {
   // Aider and generated OpenCode gateway configs need their provider prefix.
   // Use the benchmark's injected environment, not the parent process: tests,
   // embedded callers and isolated runs may intentionally supply another config.
-  if (options.router && agent === 'aider' && !options.model.startsWith('openai/')) return 'openai/' + options.model;
-  if (options.router && agent === 'opencode' && !env.OPENCODE_CONFIG) return 'bench/' + options.model;
+  if ((options.router || options.upstream) && agent === 'aider' && !options.model.startsWith('openai/')) return 'openai/' + options.model;
+  if ((options.router || options.upstream) && agent === 'opencode' && !env.OPENCODE_CONFIG) return 'bench/' + options.model;
   return options.model;
 }
 
@@ -90,13 +96,19 @@ export async function runBenchmark(options, { env = process.env, runner = runEva
   await mkdir(outDir, { recursive: true });
   const rawDir = await mkdtemp(path.join(os.tmpdir(), 'oasis-bench-live-'));
   const runs = [];
+  // --upstream: a local recording relay sits in front of the provider, so the
+  // summary can show which model actually served each agent's calls.
+  if (options.upstream && !options.model) throw new Error('--upstream needs --model: the gateway sends that one model for every agent.');
+  const gateway = options.upstream ? await startGateway({ upstream: options.upstream, model: options.model, minIntervalMs: options.gatewayIntervalMs, log: path.join(outDir, 'gateway.jsonl') }) : null;
   try {
   for (const agent of options.agents) {
     const model = modelFor(agent, options, env);
     const args = [...(agent === 'oasis' ? [] : [EXTERNAL_AGENTS[agent].flag]), '--trials', String(options.trials), '--timeout-seconds', String(options.timeoutSeconds)];
     if (options.task) args.push('--task', options.task);
     if (model && agent !== 'oasis') args.push('--model', model);
-    const agentEnv = agentEnvironment(agent, options, env);
+    const agentEnv = gateway
+      ? agentEnvironment(agent, { ...options, router: gateway.agentUrl(agent) }, { ...env, OASIS_BENCH_API_KEY: 'bench-gateway' })
+      : agentEnvironment(agent, options, env);
     if (agent === 'oasis' && model) agentEnv.OASIS_MODEL = model;
     process.stdout.write('\n== ' + DISPLAY[agent] + (model ? ' (' + model + ')' : '') + '\n');
     try {
@@ -115,8 +127,9 @@ export async function runBenchmark(options, { env = process.env, runner = runEva
   }
   } finally {
     await rm(rawDir, { recursive: true, force: true }).catch(() => {});
+    if (gateway) await gateway.close();
   }
-  const summary = summarize(runs, options, now);
+  const summary = summarize(runs, options, now, gateway ? gatewayReport(gateway.records) : null);
   await writeFile(path.join(outDir, 'summary.json'), JSON.stringify(summary, null, 2) + '\n');
   await writeFile(path.join(outDir, 'SUMMARY.md'), renderSummary(summary));
   return { outDir, summary };
@@ -125,7 +138,7 @@ export async function runBenchmark(options, { env = process.env, runner = runEva
 const pct = (value) => value === null || value === undefined ? 'n/a' : Math.round(value * 1000) / 10 + '%';
 const seconds = (ms) => ms === null || ms === undefined ? 'n/a' : (ms / 1000).toFixed(1) + ' s';
 
-export function summarize(runs, options, now = new Date()) {
+export function summarize(runs, options, now = new Date(), gateway = null) {
   const completed = runs.filter((run) => !run.skipped && Array.isArray(run.results));
   const taskSets = completed.map((run) => new Set(run.results.map((row) => row.taskId)));
   const shared = taskSets.length ? [...taskSets[0]].filter((id) => taskSets.every((set) => set.has(id))).sort() : [];
@@ -172,7 +185,6 @@ export function summarize(runs, options, now = new Date()) {
   const distinctModels = [...new Set(Object.values(requestedModels).filter(Boolean))];
   const caveats = [
     'Agent adapters do not use identical tool surfaces, approval modes, or sandbox policies. This is a configured-product comparison, not an isolated measurement of harness code.',
-    'A shared gateway URL and requested model ID do not prove that every client was served the same underlying model or model version. Verify gateway/provider logs before calling this a same-model harness comparison.',
     'Token and cost fields are adapter-reported usage. Cost may be absent or calculated differently by providers; it is not a normalized billing audit.'
   ];
   if (completed.length < 2) caveats.push('Fewer than two agents completed a run; this is not a head-to-head comparison.');
@@ -183,9 +195,15 @@ export function summarize(runs, options, now = new Date()) {
   if (fingerprintMismatchTasks.length) caveats.push(fingerprintMismatchTasks.length + ' shared task(s) had inconsistent or different fingerprints and were excluded.');
   if (metadataMismatchTasks.length) caveats.push(metadataMismatchTasks.length + ' shared task(s) had missing or conflicting category/difficulty metadata and were excluded.');
   if (incompleteTasks.length) caveats.push(incompleteTasks.length + ' shared task(s) did not have exactly ' + options.trials + ' distinct trial rows for every completed agent and were excluded.');
-  if (!options.router) caveats.push('No shared gateway was configured. Model/provider differences mean results describe each product as configured, not a controlled same-model harness comparison.');
+  const completedAgents = completed.map((run) => run.agent);
+  const gatewayAgents = gateway ? Object.keys(gateway.agents) : [];
+  const sameModelVerified = Boolean(gateway && gateway.sameModel && completedAgents.length && completedAgents.every((agent) => gatewayAgents.includes(agent)) && gatewayAgents.every((agent) => completedAgents.includes(agent)));
+  if (!gateway) caveats.push('A shared gateway URL and requested model ID do not prove that every client was served the same underlying model or model version. Verify gateway/provider logs (or use --upstream, which records them) before calling this a same-model harness comparison.');
+  else if (!sameModelVerified) caveats.push('The recording gateway did not see every completed agent served by one identical model ID (see the gateway table); this is not a verified same-model comparison.');
+  else if (!gateway.sameProvider) caveats.push('Every agent was served model ' + gateway.servedModel + ', but by more than one upstream provider; serving stacks can differ in quantization and limits.');
+  if (!options.router && !options.upstream) caveats.push('No shared gateway was configured. Model/provider differences mean results describe each product as configured, not a controlled same-model harness comparison.');
   if (distinctModels.length !== 1 || options.agents.some((agent) => !requestedModels[agent])) caveats.push('The selected agents do not all have one identical, explicitly requested model ID.');
-  return { date: now.toISOString(), oasisVersion: oasisVersion(), requestedModels, router: options.router ? new URL(options.router).host : null, trialsPerTask: options.trials, requestedAgents: options.agents, sharedTaskIds: shared, sharedTasks: verifiedTasks, excludedTasks: [...new Set([...unverifiedTasks, ...fingerprintMismatchTasks, ...metadataMismatchTasks, ...incompleteTasks])].sort(), unverifiedTasks, fingerprintMismatchTasks, metadataMismatchTasks, incompleteTasks, taskMetadata, caveats, agents };
+  return { date: now.toISOString(), oasisVersion: oasisVersion(), requestedModels, router: options.router ? new URL(options.router).host : options.upstream ? new URL(options.upstream).host + ' (recorded)' : null, sameModelVerified, gateway, trialsPerTask: options.trials, requestedAgents: options.agents, sharedTaskIds: shared, sharedTasks: verifiedTasks, excludedTasks: [...new Set([...unverifiedTasks, ...fingerprintMismatchTasks, ...metadataMismatchTasks, ...incompleteTasks])].sort(), unverifiedTasks, fingerprintMismatchTasks, metadataMismatchTasks, incompleteTasks, taskMetadata, caveats, agents };
 }
 export function renderSummary(summary) {
   const lines = [];
@@ -199,6 +217,12 @@ export function renderSummary(summary) {
     // Requested model stays visible, so a timed-out local run is not mistaken for an unconfigured one.
     if (item.skipped) { lines.push('| ' + item.name + ' | ' + ((summary.requestedModels && summary.requestedModels[item.agent]) || 'CLI default') + ' | — | not run | — | — | — | — |'); continue; }
     lines.push('| ' + item.label + ' | ' + (item.requestedModel || 'CLI default') + ' | ' + (item.reportedModel || 'not reported') + ' | ' + pct(item.passRate) + ' | ' + item.passedTrials + '/' + item.trials + ' | ' + seconds(item.medianTrialTimeMs) + ' | ' + (item.totalTokens ?? 'n/a') + ' | ' + (item.totalReportedCostUSD === null ? 'n/a' : '$' + item.totalReportedCostUSD.toFixed(4)) + ' |');
+  }
+  if (summary.gateway) {
+    lines.push('', '## Gateway record', '', summary.sameModelVerified ? 'Same model verified: every completed agent\'s calls were served by `' + summary.gateway.servedModel + '`, as reported by the upstream.' : 'Same model NOT verified from the gateway record.', '');
+    lines.push('| Agent | Calls | Failed calls | Served model(s) | Provider(s) | Input tokens | Output tokens |', '|---|---:|---:|---|---|---:|---:|');
+    const list = (counts) => Object.entries(counts).map(([k, v]) => k + ' ×' + v).join(', ') || 'none reported';
+    for (const [agent, a] of Object.entries(summary.gateway.agents)) lines.push('| ' + agent + ' | ' + a.calls + ' | ' + a.errors + ' | ' + list(a.servedModels) + ' | ' + list(a.providers) + ' | ' + a.inputTokens + ' | ' + a.outputTokens + ' |');
   }
   if (summary.caveats.length) { lines.push('', '## Interpretation limits', ''); for (const caveat of summary.caveats) lines.push('- ' + caveat); }
   const skipped = summary.agents.filter((item) => item.skipped);
@@ -228,6 +252,11 @@ async function main() {
   --router URL         send every agent through one OpenAI/Anthropic-compatible gateway
                        (a self-hosted proxy, OpenRouter);
                        the key is read from OASIS_BENCH_API_KEY
+  --upstream URL       start a local recording gateway in front of URL (e.g.
+                       https://openrouter.ai/api) and route every agent through
+                       it; the summary then verifies the served model per agent
+                       (key: OASIS_GATEWAY_UPSTREAM_KEY, log: gateway.jsonl)
+  --gateway-interval-ms N  space upstream calls N ms apart (free-tier rate limits)
   --trials N           trials per task (default 1; use 3+ for publishable numbers)
   --task ID[,ID...]    run only these tasks
   --timeout-seconds N  per-task timeout (default 600)
