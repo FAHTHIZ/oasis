@@ -12,7 +12,7 @@ import { condenseOutputEnabled, createOutputCondenser } from './output-condense.
 import { isScratchPath } from './scratch.mjs';
 import { protectedShellWrite, protectedEditsAllowed, protectedConfigPath } from './protected-paths.mjs';
 import { assertFileFresh, recordFileState, forgetFileState } from './file-state.mjs';
-import { relaxedReplace, closestMatchHint, typographyWarning, preserveFileConventions } from './edit-match.mjs';
+import { relaxedReplace, closestMatchHint, typographyWarning, preserveFileConventions, matchLineEndings } from './edit-match.mjs';
 import { assertNoNewElision, shrinkWarning, recordAndDetectCircling, testTamperWarning, combineWarnings } from './change-guard.mjs';
 import { commentWarning } from './style-rules.mjs';
 import { loadMemory } from './memory.mjs';
@@ -1945,7 +1945,8 @@ async function executeToolUnlocked(name, args = {}, context = {}) {
         throw new Error('old_string was not found. It must match the file exactly, including whitespace and indentation.' + (hint ? '\n' + hint : ' Re-read the file and try again.'));
       }
       if (matches > 1 && args.replace_all !== true) throw new Error('old_string appears ' + matches + ' times. Add more surrounding context to make it unique, or set replace_all=true.');
-      const next = relaxed ? relaxed.next : args.replace_all === true ? current.split(args.old_string).join(args.new_string) : current.replace(args.old_string, () => args.new_string);
+      const insert = matchLineEndings(current, args.new_string);
+      const next = relaxed ? relaxed.next : args.replace_all === true ? current.split(args.old_string).join(insert) : current.replace(args.old_string, () => insert);
       if (Buffer.byteLength(next, 'utf8') > MAX_EDIT_FILE) throw new Error('The edited file would exceed the 64 MiB edit limit.');
       if (next === current) return { path: target.relative.split(path.sep).join('/'), changed: false, message: 'The replacement produced no changes.' };
       const editDisplayPath = target.relative.split(path.sep).join('/');
