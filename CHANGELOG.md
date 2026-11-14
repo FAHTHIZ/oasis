@@ -4,6 +4,7 @@ User-facing change history grouped by package version. A version heading does no
 
 ## Unreleased
 
+- `oasis bg logs ID --follow` reads only the lines added since its last poll. Before, it re-read the whole log every 700 ms, so following a long run cost more on every poll (`test/bg-logs-incremental.test.mjs`).
 - Speed: secret redaction of large tool results is up to 10 times faster. Five Gitleaks rules (Okta, Sumo Logic, Cohere, Cisco Meraki, Private AI) use a nested lazy prefix that Go's RE2 engine runs in linear time but JavaScript backtracks through 2,500 ways per position; it is now one equivalent quantifier. Redacting a 256 KB log that mentioned "okta" took 1,109 ms and now takes 117 ms. `scripts/update-secret-rules.mjs` applies the same rewrite to future rule updates (`test/secret-rules.test.mjs`).
 - Memory: `read_file` on a large file no longer loads the whole file to hash it for the stale-edit check and read dedup. Files above 4 MB are hashed in 1 MB chunks. Reading a 402 MB log used to take the process from 175 MB to 575 MB peak RSS; it now peaks at 222 MB (`test/big-file-hash-memory.test.mjs`).
 - Benchmarks: a failed trial of an external agent (Claude Code, Codex, Gemini CLI, OpenCode, Aider) keeps the last 3,000 characters of its output as `agentOutputTail`, with the credentials it was given and known secret formats removed. Before, nothing was kept, so a failure could not be diagnosed afterwards (`test/eval-agent-output-tail.test.mjs`).

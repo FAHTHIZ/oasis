@@ -1,7 +1,24 @@
 import { stdout } from 'node:process';
-import { readFile } from 'node:fs/promises';
+import { readFile, open } from 'node:fs/promises';
 import path from 'node:path';
 import { listSessions, deleteSession, staleSessions, pruneSessions, setSessionArchived, unarchivedSessions } from './sessions.mjs';
+
+// Complete lines appended to a log since byte `offset`. `logs --follow` used to
+// re-read the whole log every 700 ms, so a long run cost more on every poll.
+// Newline bytes never occur inside a UTF-8 sequence, so cutting there is safe.
+export async function readCompleteLinesFrom(file, offset = 0) {
+  let handle;
+  try { handle = await open(file, 'r'); } catch { return { text: '', offset }; }
+  try {
+    const { size } = await handle.stat();
+    if (size < offset) offset = 0;
+    if (size === offset) return { text: '', offset };
+    const buffer = Buffer.alloc(size - offset);
+    const { bytesRead } = await handle.read(buffer, 0, buffer.length, offset);
+    const end = buffer.subarray(0, bytesRead).lastIndexOf(0x0a) + 1;
+    return { text: buffer.subarray(0, end).toString('utf8'), offset: offset + end };
+  } finally { await handle.close(); }
+}
 
 // `oasis sessions` and `oasis bg` (background sessions) subcommands.
 export async function backgroundCommand(rest, { approve, interactive } = {}) {
@@ -39,11 +56,11 @@ export async function backgroundCommand(rest, { approve, interactive } = {}) {
   if (sub === 'logs') {
     const entry = await bg.readEntry(id, process.env);
     const follow = more.includes('--follow') || more.includes('-f');
-    let shown = 0;
+    let offset = 0;
     for (;;) {
-      const text = await readFile(entry.logFile, 'utf8').catch(() => '');
-      const complete = text.slice(0, text.lastIndexOf('\n') + 1);
-      if (complete.length > shown) { const out = bg.renderLog(complete.slice(shown)); if (out) stdout.write(out + '\n'); shown = complete.length; }
+      const next = await readCompleteLinesFrom(entry.logFile, offset);
+      offset = next.offset;
+      if (next.text) { const out = bg.renderLog(next.text); if (out) stdout.write(out + '\n'); }
       if (!follow || (await bg.readEntry(id, process.env)).status !== 'running') break;
       await new Promise((resolve) => setTimeout(resolve, 700));
     }
