@@ -92,7 +92,7 @@ export async function manageSessions(root, rest, { approve } = {}) {
     const shown = archivedOnly ? sessions.filter((item) => item.archived) : unarchivedSessions(sessions);
     stdout.write((archivedOnly ? 'Archived sessions for ' : 'Saved sessions for ') + path.resolve(root) + ':\n');
     if (!shown.length) { stdout.write(archivedOnly ? '  No archived sessions.\n' : '  No saved sessions. Use oasis --continue to save/resume a session.\n'); return; }
-    for (const item of shown) stdout.write('  ' + item.id + '  ' + item.updatedAt + '  ' + item.messages + ' messages  ' + (item.model || 'unknown model') + (item.name ? '  ' + item.name : '') + '\n');
+    for (const item of shown) stdout.write('  ' + item.id + '  ' + item.updatedAt + '  ' + item.messages + ' messages  ' + (item.model || 'unknown model') + (item.title ? '  ' + JSON.stringify(item.title.length > 60 ? item.title.slice(0, 59) + '…' : item.title) : '') + '\n');
     const hidden = sessions.length - shown.length;
     if (!archivedOnly && hidden) stdout.write('  (' + hidden + ' archived; oasis sessions list --archived shows them)\n');
     return;

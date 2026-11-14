@@ -204,7 +204,7 @@ test('/resume and oasis sessions list hide archived sessions but still resume th
   const text = output.join('');
   assert.match(text, new RegExp('Unarchived ' + kept.id));
   const [plain, archivedList] = text.split('Archived sessions for ');
-  assert.match(plain, new RegExp(kept.id));
+  assert.match(plain, new RegExp(kept.id + '.*"keep me"'), 'each listed session shows its title so the user can tell them apart');
   assert.match(plain, /1 archived; oasis sessions list --archived shows them/);
   assert.match(archivedList, new RegExp(old.id));
   assert.doesNotMatch(archivedList.split('\n').slice(0, 2).join('\n'), new RegExp(kept.id));
