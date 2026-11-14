@@ -132,6 +132,7 @@ export { applyAnthropicCacheBreakpoints, isGoogleGenerativeBaseURL, promptCachin
 export { undoCompaction, usableCompactionSummary } from './compaction-history.mjs';
 export { contextWindowFromError, isInputTokenRateLimit, useCompactToolProfile } from './context-window.mjs';
 import { adoptReportedContextWindow, isInputTokenRateLimit, useCompactToolProfile } from './context-window.mjs';
+import { wireToolCallIds, toolCallIdStyle } from './tool-call-ids.mjs';
 export { EFFORT_LEVELS, applyEffort, claudeEffortFor, claudeThinkingMode, inlineEffortLevel, maxOutputTokensFor, openRouterOutputCapFromError, openaiEffortFor, outputCapFromError, reasoningEffortFor, resolveTurnLimits, stripInlineEffort, thinkingBudgetFor } from './model-budgets.mjs';
 export { announcesNextStep, appendLspUnavailableNotice, asksForAction, asksForNewTests, assistedVerificationEnabled, claimsUnmadeChange, detectProjectTestCommand, diffReviewComplete, failureSignature, fencedFileFromReply, givesUpEarly, isVerificationCommand, parallelToolCalls, promptCacheKeyField, readsLikeInstructions, refusesSpuriously, requestedNewFile, samplingTemperature, targetFileHint, unreviewedPaths, untestedNewCode, verificationIssues, wrongFileNudge } from './turn-guards.mjs';
 export { formatWait, isHardQuotaError, isMalformedGenerationError, providerRetryDelayMs, providerRetryLimit, rateLimitResetMs, rateLimitWaitMs, shortRateLimitMs } from './provider-retry.mjs';
@@ -1414,7 +1415,7 @@ async function requestCompletionTracedInner(session, options = {}) {
 async function requestCompletionRaw(session, options = {}) {
   const config = withResolvedModel(session.config, options.env || session.providerEnv || session.modelEnv || process.env, Boolean(session.permissions && session.permissions.mode === 'plan'), session.settings && session.settings.modelOverrides);
   const textOnly = Boolean(session.textOnlyModels && session.textOnlyModels.has(String(config.model || '')));
-  const sentMessages = textOnly && hasImages(session.messages) ? withoutImages(session.messages, config.model) : session.messages;
+  const sentMessages = wireToolCallIds(textOnly && hasImages(session.messages) ? withoutImages(session.messages, config.model) : session.messages, { style: toolCallIdStyle(config) });
   const nativeAnthropic = isAnthropicFamily(config.protocol);
   const cloudAnthropic = config.protocol === 'bedrock' || config.protocol === 'vertex' || config.protocol === 'foundry';
   const providerEnv = options.env || session.providerEnv || process.env;
@@ -2008,6 +2009,17 @@ function normalizeAssistantToolCalls(session, assistant, step) {
       // pass as a final answer; the model is told which tools exist.
       const unknown = unknownTextToolCalls(assistant.content, availableToolNames(session));
       if (unknown.length) Object.defineProperty(assistant, 'unknownToolNames', { value: unknown, enumerable: false, configurable: true });
+    }
+  }
+  // Results are matched to calls by ID, so a reply that leaves an ID empty or
+  // repeats one in the same message (some local servers and gateways do) gets
+  // fresh IDs before anything runs; otherwise one result would overwrite another.
+  if (Array.isArray(assistant.tool_calls) && !Array.isArray(assistant.responseItems)) {
+    const seen = new Set();
+    for (const call of assistant.tool_calls) {
+      if (!call || typeof call !== 'object') continue;
+      if (typeof call.id !== 'string' || !call.id || seen.has(call.id)) call.id = 'call_' + randomUUID().replace(/-/g, '').slice(0, 24);
+      seen.add(call.id);
     }
   }
   const knownNames = new Set(availableToolNames(session));
