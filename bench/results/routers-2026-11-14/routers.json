@@ -1,0 +1,400 @@
+{
+  "startedAt": "2026-11-14T08:51:29.052Z",
+  "finishedAt": "2026-11-14T09:02:10.403Z",
+  "node": "v22.21.0",
+  "rounds": 3,
+  "intervalMs": 31000,
+  "routes": [
+    {
+      "name": "direct",
+      "baseUrl": "https://oai.endpoints.kepler.ai.cloud.ovh.net/v1",
+      "model": "gpt-oss-20b",
+      "keyEnv": ""
+    },
+    {
+      "name": "freellmapi",
+      "baseUrl": "http://127.0.0.1:3001/v1",
+      "model": "gpt-oss-20b",
+      "keyEnv": "FREELLMAPI_API_KEY"
+    },
+    {
+      "name": "omniroute",
+      "baseUrl": "http://127.0.0.1:20128/v1",
+      "model": "ovh/gpt-oss-20b",
+      "keyEnv": "OMNIROUTE_API_KEY"
+    }
+  ],
+  "summary": [
+    {
+      "route": "direct",
+      "model": "gpt-oss-20b",
+      "toolCalls": "3/3",
+      "toolMedianMs": 1907,
+      "usageReported": "6/6",
+      "streams": "3/3",
+      "ttftMedianMs": 522,
+      "streamMedianMs": 2316,
+      "statuses": "200",
+      "unknownModel": "404",
+      "listsModel": "yes"
+    },
+    {
+      "route": "freellmapi",
+      "model": "gpt-oss-20b",
+      "toolCalls": "3/3",
+      "toolMedianMs": 1263,
+      "usageReported": "6/6",
+      "streams": "3/3",
+      "ttftMedianMs": 2047,
+      "streamMedianMs": 2377,
+      "statuses": "200",
+      "unknownModel": "404",
+      "listsModel": "yes"
+    },
+    {
+      "route": "omniroute",
+      "model": "ovh/gpt-oss-20b",
+      "toolCalls": "3/3",
+      "toolMedianMs": 1875,
+      "usageReported": "6/6",
+      "streams": "3/3",
+      "ttftMedianMs": 6441,
+      "streamMedianMs": 12787,
+      "statuses": "200",
+      "unknownModel": "400",
+      "listsModel": "no"
+    }
+  ],
+  "rows": {
+    "direct": [
+      {
+        "kind": "models",
+        "ok": true,
+        "ms": 490,
+        "status": 200,
+        "count": 21,
+        "listsModel": true
+      },
+      {
+        "kind": "unknown-model",
+        "ok": true,
+        "ms": 415,
+        "status": 404,
+        "message": "The model `oasis-no-such-model-0` does not exist."
+      },
+      {
+        "round": 1,
+        "kind": "tool",
+        "ok": true,
+        "ms": 1907,
+        "status": 200,
+        "routedVia": "",
+        "toolName": "read_file",
+        "argsPath": "package.json",
+        "finishReason": "tool_calls",
+        "usage": {
+          "prompt": 136,
+          "completion": 44
+        },
+        "servedModel": "gpt-oss-20b"
+      },
+      {
+        "round": 1,
+        "kind": "stream",
+        "ok": true,
+        "status": 200,
+        "ttftMs": 522,
+        "usage": {
+          "prompt": 79,
+          "completion": 121
+        },
+        "done": true,
+        "ms": 2316,
+        "chunks": 86,
+        "counted": true
+      },
+      {
+        "round": 2,
+        "kind": "tool",
+        "ok": true,
+        "ms": 1790,
+        "status": 200,
+        "routedVia": "",
+        "toolName": "read_file",
+        "argsPath": "package.json",
+        "finishReason": "tool_calls",
+        "usage": {
+          "prompt": 136,
+          "completion": 67
+        },
+        "servedModel": "gpt-oss-20b"
+      },
+      {
+        "round": 2,
+        "kind": "stream",
+        "ok": true,
+        "status": 200,
+        "ttftMs": 518,
+        "usage": {
+          "prompt": 79,
+          "completion": 85
+        },
+        "done": true,
+        "ms": 1516,
+        "chunks": 73,
+        "counted": true
+      },
+      {
+        "round": 3,
+        "kind": "tool",
+        "ok": true,
+        "ms": 3020,
+        "status": 200,
+        "routedVia": "",
+        "toolName": "read_file",
+        "argsPath": "./package.json",
+        "finishReason": "tool_calls",
+        "usage": {
+          "prompt": 136,
+          "completion": 63
+        },
+        "servedModel": "gpt-oss-20b"
+      },
+      {
+        "round": 3,
+        "kind": "stream",
+        "ok": true,
+        "status": 200,
+        "ttftMs": 570,
+        "usage": {
+          "prompt": 79,
+          "completion": 140
+        },
+        "done": true,
+        "ms": 3363,
+        "chunks": 105,
+        "counted": true
+      }
+    ],
+    "freellmapi": [
+      {
+        "kind": "models",
+        "ok": true,
+        "ms": 20,
+        "status": 200,
+        "count": 331,
+        "listsModel": true
+      },
+      {
+        "kind": "unknown-model",
+        "ok": true,
+        "ms": 16,
+        "status": 404,
+        "message": "Model 'oasis-no-such-model-0' is not in the catalog. Use 'auto' (or omit the 'model' field) to auto-route, or call /v1/models for the available list."
+      },
+      {
+        "round": 1,
+        "kind": "tool",
+        "ok": true,
+        "ms": 1172,
+        "status": 200,
+        "routedVia": "ovh/gpt-oss-20b",
+        "toolName": "read_file",
+        "argsPath": "package.json",
+        "finishReason": "tool_calls",
+        "usage": {
+          "prompt": 136,
+          "completion": 37
+        },
+        "servedModel": "gpt-oss-20b"
+      },
+      {
+        "round": 1,
+        "kind": "stream",
+        "ok": true,
+        "status": 200,
+        "ttftMs": 2047,
+        "usage": {
+          "prompt": 79,
+          "completion": 113
+        },
+        "done": true,
+        "ms": 2377,
+        "chunks": 79,
+        "counted": true
+      },
+      {
+        "round": 2,
+        "kind": "tool",
+        "ok": true,
+        "ms": 1263,
+        "status": 200,
+        "routedVia": "ovh/gpt-oss-20b",
+        "toolName": "read_file",
+        "argsPath": "package.json",
+        "finishReason": "tool_calls",
+        "usage": {
+          "prompt": 136,
+          "completion": 34
+        },
+        "servedModel": "gpt-oss-20b"
+      },
+      {
+        "round": 2,
+        "kind": "stream",
+        "ok": true,
+        "status": 200,
+        "ttftMs": 3597,
+        "usage": {
+          "prompt": 79,
+          "completion": 117
+        },
+        "done": true,
+        "ms": 4252,
+        "chunks": 82,
+        "counted": true
+      },
+      {
+        "round": 3,
+        "kind": "tool",
+        "ok": true,
+        "ms": 31478,
+        "status": 200,
+        "routedVia": "ovh/gpt-oss-20b",
+        "toolName": "read_file",
+        "argsPath": "package.json",
+        "finishReason": "tool_calls",
+        "usage": {
+          "prompt": 136,
+          "completion": 53
+        },
+        "servedModel": "gpt-oss-20b"
+      },
+      {
+        "round": 3,
+        "kind": "stream",
+        "ok": true,
+        "status": 200,
+        "ttftMs": 1271,
+        "usage": {
+          "prompt": 79,
+          "completion": 79
+        },
+        "done": true,
+        "ms": 2112,
+        "chunks": 69,
+        "counted": true
+      }
+    ],
+    "omniroute": [
+      {
+        "kind": "models",
+        "ok": false,
+        "ms": 594,
+        "status": 200,
+        "count": 486,
+        "listsModel": false
+      },
+      {
+        "kind": "unknown-model",
+        "ok": true,
+        "ms": 28,
+        "status": 400,
+        "message": "Unable to determine provider for model 'oasis-no-such-model-0'. Use a provider/model prefix (e.g. openai/oasis-no-such-model-0) or ensure the model is added as "
+      },
+      {
+        "round": 1,
+        "kind": "tool",
+        "ok": true,
+        "ms": 1372,
+        "status": 200,
+        "routedVia": "",
+        "toolName": "read_file",
+        "argsPath": "package.json",
+        "finishReason": "tool_calls",
+        "usage": {
+          "prompt": 136,
+          "completion": 46
+        },
+        "servedModel": "gpt-oss-20b"
+      },
+      {
+        "round": 1,
+        "kind": "stream",
+        "ok": true,
+        "status": 200,
+        "ttftMs": 18265,
+        "usage": {
+          "prompt": 79,
+          "completion": 159
+        },
+        "done": true,
+        "ms": 30847,
+        "chunks": 129,
+        "counted": true
+      },
+      {
+        "round": 2,
+        "kind": "tool",
+        "ok": true,
+        "ms": 1931,
+        "status": 200,
+        "routedVia": "",
+        "toolName": "read_file",
+        "argsPath": "package.json",
+        "finishReason": "tool_calls",
+        "usage": {
+          "prompt": 136,
+          "completion": 33
+        },
+        "servedModel": "gpt-oss-20b"
+      },
+      {
+        "round": 2,
+        "kind": "stream",
+        "ok": true,
+        "status": 200,
+        "ttftMs": 1543,
+        "usage": {
+          "prompt": 79,
+          "completion": 164
+        },
+        "done": true,
+        "ms": 7206,
+        "chunks": 124,
+        "counted": true
+      },
+      {
+        "round": 3,
+        "kind": "tool",
+        "ok": true,
+        "ms": 1875,
+        "status": 200,
+        "routedVia": "",
+        "toolName": "read_file",
+        "argsPath": "package.json",
+        "finishReason": "tool_calls",
+        "usage": {
+          "prompt": 136,
+          "completion": 61
+        },
+        "servedModel": "gpt-oss-20b"
+      },
+      {
+        "round": 3,
+        "kind": "stream",
+        "ok": true,
+        "status": 200,
+        "ttftMs": 6441,
+        "usage": {
+          "prompt": 79,
+          "completion": 142
+        },
+        "done": true,
+        "ms": 12787,
+        "chunks": 109,
+        "counted": true
+      }
+    ]
+  }
+}

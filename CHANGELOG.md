@@ -4,6 +4,7 @@ User-facing change history grouped by package version. A version heading does no
 
 ## Unreleased
 
+- `npm run bench:routers` compares one model reached directly and through gateways such as OmniRoute and FreeLLMAPI: tool-call integrity, streaming, usage reporting, unknown-model errors, model listing and latency, with keys taken from named environment variables only.
 - `oasis --help` (and `-h`, `help`, `help all`) answers in about 27 ms with 47 MB peak memory, down from 325 ms and 113 MB, by loading only the help text instead of the whole CLI. Set `OASIS_FULL_HELP_PATH=1` to use the full path.
 - htmlparser2 and the HTML entity tables load the first time a page is parsed rather than with the agent runtime: 38 fewer modules at startup, runtime import 245 → 217 ms and about 7 MB less memory after import.
 - `npm run bench:perf` measures CLI launch time and peak memory, runtime import and session creation, first-request token size, web workspace memory, routing cost and MCP server connect time, and can write JSON. It replaces `npm run bench:startup`.

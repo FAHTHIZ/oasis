@@ -25,6 +25,12 @@ For quantitative comparisons, use the controlled live-evaluation protocol below:
 
 These are single-machine numbers; they are not compared with other agents because their runtimes were not measured under the same harness. Most remaining memory is Oasis's own source modules loaded at import; splitting them further is open work.
 
+## Router comparison
+
+`npm run bench:routers -- --route name=baseUrl,model[,KEY_ENV] ...` sends the same requests to one model reached directly and through local gateways, and checks what an agent depends on: tool calls arriving with valid arguments, complete streams, usage reporting, a clear error for an unknown model, and the model appearing in `/models`. Keys are read from the named environment variables and never written out.
+
+Run on 14 November 2026 with OVH's anonymous `gpt-oss-20b`, direct, through FreeLLMAPI and through OmniRoute, over 3 rounds ([details and raw rows](../bench/results/routers-2026-11-14/README.md)). Both routers passed every tool-call, streaming, usage and unknown-model check. OmniRoute's streams were slower in all three rounds (median first token 6.4 s against 0.5 s direct and 2.0 s through FreeLLMAPI), and OmniRoute does not list `ovh/…` models in `/models`. Three rounds are an indication, not a measured router overhead.
+
 ## Model-free harness benchmark
 
 Run:
