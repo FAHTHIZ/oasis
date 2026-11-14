@@ -2217,7 +2217,10 @@ export function fitLargeResult(value, max = MAX_REPLY_CHARS) {
     let used = 0;
     let kept = 0;
     for (const line of lines) {
-      const cost = JSON.stringify(line).length - 1;
+      // The escaped line without its quotes, plus the escaped \n joining it
+      // (two characters). Counting one for the join overshot by a character
+      // a line, so a long read missed the bound and lost its line-aware cut.
+      const cost = JSON.stringify(line).length;
       if (shell + used + cost > max) break;
       used += cost;
       kept++;
