@@ -4,6 +4,7 @@ User-facing change history grouped by package version. A version heading does no
 
 ## Unreleased
 
+- The browser tool's snapshot says when the page text (12,000 characters) or the numbered element list (300) was cut, with how to read further, instead of silently presenting part of the page as the whole.
 - Plan approval shows the whole plan. The terminal and web approval text cut every plan to 1,800 characters, so the user approved a plan they could not fully read, and `exit_plan_mode` itself cut plans at 20,000 characters without a note; plans up to 100,000 characters now go through whole and a longer one is sent back to be shortened. Other long approval prompts say how many characters were not shown.
 - Time spent on an MCP tool's approval prompt no longer counts against the tool timeout, the same as workspace tools and questions.
 - MCP tool output follows `MAX_MCP_OUTPUT_TOKENS` (Claude Code's variable, also `OASIS_MAX_MCP_OUTPUT_TOKENS`; default 25,000 tokens, about 100,000 characters). It was a fixed 24,000 characters cut silently; a larger result now keeps its head and tail with a note saying how much was left out and how to raise the limit, and the model sees the whole budget instead of the general 24,000-character tool cap.
