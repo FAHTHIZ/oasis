@@ -3,6 +3,12 @@
 A short, dated record of changes, tests, benchmark results, blockers and known
 weaknesses. Newest first. Detailed user-facing notes go in the CHANGELOG.
 
+## 2026-11-14 (HTTP 200 error bodies are provider errors)
+
+- Found live: OpenRouter answers a withdrawn `:free` model with HTTP 200 and `{"error":{"code":404,"message":"This model is unavailable for free... use this slug instead: <paid slug>"}}`. Oasis reported "no assistant message" and never tried the backup.
+- Now a non-streamed error body is treated as the HTTP error it names (status from `error.code`, else 502), recorded in the quota ledger, and the fallback chain moves on. Oasis never follows the suggested paid slug.
+- test/provider-200-error.test.mjs (3; all fail without the fix). Provider, fallback and quota suites: 153 pass.
+
 ## 2026-11-14 (zero-budget mode covers image, speech, transcription and search)
 
 - `assertZeroBudgetService` (src/cost-policy.mjs) applies the same free/paid/unknown rule to generate_image, text_to_speech and voice transcription before anything is uploaded; declare with `image:`, `tts:`, `voice:` prefixes. `zeroBudgetSearchEnv` hides keyed, credit-based search backends unless declared (`search:tavily`).
