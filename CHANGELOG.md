@@ -4,6 +4,8 @@ User-facing change history grouped by package version. A version heading does no
 
 ## Unreleased
 
+- Long skills load in full. `load_skill` and `read_skill_resource` cut skill text at 24,000 characters with no way to read the rest, though skill files may be 96 KiB. They now return pages that end on a line break, with an `offset` to continue from. `/skill-name` commands and `context: fork` skills get the whole body.
+- Fixed: a subagent whose definition lists `skills:` was given the text "[object Object]" instead of the skill.
 - `edit_file` and `multi_edit` now edit files up to 64 MiB (was 4 MiB). Lockfiles, SQL dumps and data fixtures over 4 MiB were refused, even after the model had read the part it needed.
 - Earlier images stay in the conversation. Only images from the last 4 messages were resent, so a fifth screenshot in a debugging session made the model lose the first one, and each drop broke the prompt cache. Oasis now keeps the newest 20 images, up to 24 MiB of image data, which fits the provider request limits.
 - A reply stream that drops mid-response is now restarted up to 5 times (was 2), as Codex does, with a growing pause between tries. `OASIS_STREAM_MAX_RETRIES` (0-20) changes the count. A stream that goes silent is still restarted at most twice, since each stall already waited a full idle window.

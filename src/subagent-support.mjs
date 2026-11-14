@@ -95,7 +95,8 @@ export async function subagentDefinitionContext(parent, agent, options) {
     const missing = [];
     for (const name of agent.skills) {
       try {
-        const text = String(await loadSkillText(parent.root, name, { env })).slice(0, 24 * 1024);
+        // loadSkillText returns { content }; String() of it preloaded "[object Object]".
+        const text = String((await loadSkillText(parent.root, name, { env })).content || '');
         if (text.length > budget) { missing.push(name + ' (over the preload budget)'); continue; }
         budget -= text.length;
         loaded.push('<skill name="' + name + '">\n' + text + '\n</skill>');
