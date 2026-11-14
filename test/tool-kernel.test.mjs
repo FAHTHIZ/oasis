@@ -161,7 +161,8 @@ test('tool definitions clamp invalid and excessive timeouts', () => {
   const base = { name: 'bounded_timeout', capabilities: ['read'], run: async () => 'ok' };
   assert.equal(defineTool({ ...base, timeoutMs: -1 }).timeoutMs, 120000);
   assert.equal(defineTool({ ...base, timeoutMs: Number.NaN }).timeoutMs, 120000);
-  assert.equal(defineTool({ ...base, timeoutMs: 5_000_000 }).timeoutMs, 900000);
+  assert.equal(defineTool({ ...base, timeoutMs: 5_000_000 }).timeoutMs, 5_000_000);
+  assert.equal(defineTool({ ...base, timeoutMs: 10 * 86_400_000 }).timeoutMs, 2 * 86_400_000);
   assert.equal(defineTool({ ...base, timeoutMs: 25 }).timeoutMs, 25);
 });
 

@@ -3682,7 +3682,9 @@ function kernelTimeoutForTool(name, args, context) {
   if (['run_command', 'run_shell', 'powershell', 'monitor'].includes(name)) {
     const requested = Number(args && (args.timeoutSeconds || args.timeout_seconds) || context.maxCommandSeconds || 120);
     const seconds = Number.isFinite(requested) && requested > 0 ? requested : 120;
-    return Math.min(600_000, Math.max(5_000, Math.ceil(seconds * 1000) + 10_000));
+    // The command stops itself at its own timeout (600 s at most) and reports
+    // its output; the kernel limit sits past that so it never wins the race.
+    return Math.min(615_000, Math.max(5_000, Math.ceil(seconds * 1000) + 10_000));
   }
   if (['install_package', 'generate_image', 'text_to_speech'].includes(name)) return 600_000;
   if (name === 'web_search') return 60_000;
