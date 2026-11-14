@@ -149,3 +149,21 @@ test('long option labels are cut to one terminal row so redraws stay in place', 
   assert.ok(rows.length >= 2);
   for (const row of rows) { assert.ok(stringWidth(row) <= 19, row); assert.ok(row.endsWith('…'), row); }
 });
+
+// Seen live with OVH AI Endpoints: /model listed Whisper, text-to-speech,
+// embedding, Stable Diffusion and guard models next to the chat models.
+test('the /model picker leaves out models that cannot chat', async (t) => {
+  const http = await import('node:http');
+  const ids = ['Qwen3.5-397B-A17B', 'bge-m3', 'gpt-oss-120b', 'nvr-tts-en-us', 'Qwen3-Embedding-8B', 'Qwen3Guard-Gen-8B', 'stable-diffusion-xl-base-v10', 'whisper-large-v3', 'Qwen2.5-VL-72B-Instruct'];
+  const server = http.createServer((req, res) => { res.setHeader('content-type', 'application/json'); res.end(JSON.stringify({ data: ids.map((id) => ({ id })) })); });
+  await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
+  t.after(() => server.close());
+  const { pickerFor } = await import('../src/select-dialog.mjs');
+  const { clearProviderModelCache, isLikelyChatModel } = await import('../src/provider-models.mjs');
+  clearProviderModelCache();
+  const session = { config: { model: 'Qwen3.5-397B-A17B', protocol: 'openai-compatible', baseURL: 'http://127.0.0.1:' + server.address().port + '/v1', apiKey: '' }, root: process.cwd() };
+  const values = (await pickerFor('model', { session, env: {} })).options.map((o) => o.value);
+  assert.deepEqual(values, ['Qwen3.5-397B-A17B', 'gpt-oss-120b', 'Qwen2.5-VL-72B-Instruct', null]);
+  for (const id of ['claude-sonnet-4-5', 'gemini-2.5-pro', 'deepseek-chat', 'codestral-latest', 'guardian-x', 'Qwen3-Coder-480B']) assert.equal(isLikelyChatModel(id), true, id);
+  for (const id of ['text-embedding-3-small', 'mistral-embed', 'models/gemini-embedding-001', 'tts-1', 'gpt-4o-mini-tts', 'gpt-4o-transcribe', 'omni-moderation-latest', 'meta-llama/llama-guard-4-12b', 'dall-e-3']) assert.equal(isLikelyChatModel(id), false, id);
+});
