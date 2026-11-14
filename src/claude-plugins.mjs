@@ -214,7 +214,7 @@ export function pluginDependencyIds(manifest, ownId = '') {
   const market = ownId.includes('@') ? ownId.slice(ownId.indexOf('@') + 1) : '';
   const list = Array.isArray(manifest && manifest.dependencies) ? manifest.dependencies : [];
   const ids = [];
-  for (const entry of list.slice(0, 50)) {
+  for (const entry of list) {
     const name = typeof entry === 'string' ? entry : entry && typeof entry.name === 'string' ? entry.name + (entry.marketplace ? '@' + entry.marketplace : '') : '';
     if (!name) continue;
     ids.push(name.includes('@') || !market ? name : name + '@' + market);
