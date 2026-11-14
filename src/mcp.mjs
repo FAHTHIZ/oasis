@@ -11,6 +11,7 @@ import { getConfigDirectory } from './config.mjs';
 import { McpHttpClient, McpSseClient } from './mcp-project.mjs';
 import { RESOURCE_TOOL_DEFINITIONS, runResourceTool } from './mcp-extras.mjs';
 import { redactAuditValue } from './tool-kernel.mjs';
+import { serverStartOptions, loadManifest, saveManifest, createLazyClient } from './mcp-lazy.mjs';
 
 export function getMcpConfigPath(env = process.env) {
   return path.join(getConfigDirectory(env), 'mcp-servers.json');
@@ -91,7 +92,7 @@ export function validateMcpServerConfig(server) {
     passEnv: [...new Set(passEnv)],
     enabled: server.enabled !== false
   };
-  Object.assign(normalized, serverToolFilters(server));
+  Object.assign(normalized, serverToolFilters(server), serverStartOptions(server));
   if (server.origin !== undefined) normalized.origin = validateMcpServerOrigin(server.origin);
   if (server.cwd !== undefined) {
     if (typeof server.cwd !== 'string' || !server.cwd.trim() || server.cwd.length > 1000 || server.cwd.includes('\0')) throw new Error('MCP server cwd must be a directory path.');
@@ -306,12 +307,23 @@ export async function connectMcpServers(options = {}) {
       if (reason) { failures.push({ name: all[index].config.name, error: reason }); all.splice(index, 1); }
     }
   }
+  const env = options.env || process.env;
+  const makeClient = (config) => config.type === 'sse' ? new McpSseClient(config, options) : config.type === 'http' ? new McpHttpClient(config, options) : new McpServerClient(config, options);
   await Promise.all(all.map(async ({ config, source }) => {
     let client;
     try {
-      client = config.type === 'sse' ? new McpSseClient(config, options) : config.type === 'http' ? new McpHttpClient(config, options) : new McpServerClient(config, options);
+      // A lazy server with a saved manifest starts on its first tool call (src/mcp-lazy.mjs).
+      const manifest = config.lazy === true ? await loadManifest(config, env) : null;
+      if (manifest) {
+        const onStarted = () => { const session = options.host && options.host.session; if (session) refreshSessionMcpTools(session); };
+        clients.set(config.name, createLazyClient({ ...config, source }, { source, manifest, env, onStarted, factory: () => makeClient(config) }));
+        debugLog('mcp', 'deferred ' + config.name + ' until first use (lazy, ' + manifest.tools.length + ' tools from manifest)');
+        return;
+      }
+      client = makeClient(config);
       client.source = source;
       await client.start();
+      if (config.lazy === true) await saveManifest(client, env).catch(() => {});
       clients.set(config.name, client);
       debugLog('mcp', 'connected ' + config.name + ' (' + (config.type || 'stdio') + ', ' + source + ')');
     } catch (error) {
