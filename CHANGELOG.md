@@ -4,6 +4,7 @@ User-facing change history grouped by package version. A version heading does no
 
 ## Unreleased
 
+- Scheduled prompts (cron_create) are kept whole up to 200,000 characters and refused above that, instead of being cut at 4,000. IDE selections keep up to 100,000 characters (was 20,000) and a longer one ends with a note naming the lines to read.
 - Custom slash command arguments are no longer cut at 8,000 characters (a pasted log after /fix arrived incomplete), and fenced ```! shell blocks up to 64,000 characters now run instead of staying unrun past 8,000.
 - Nested AGENTS.md and CLAUDE.md files, loaded when OASIS works in their directory, share a 100,000-character budget per directory (was 12,000), so an ordinary nested file is no longer cut short.
 - Output from git, background processes, ast-grep, gh, auto-test runs, MCP headersHelper scripts, Chrome DevTools and the Codex app-server host is decoded as a stream. Each chunk used to be decoded alone, so a non-ASCII character split across two reads (common in paths, logs and test names) came out as two replacement characters and could break a JSON line.
