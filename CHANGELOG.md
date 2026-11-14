@@ -4,6 +4,7 @@ User-facing change history grouped by package version. A version heading does no
 
 ## Unreleased
 
+- Terminal: Oasis's own model-fallback, key-pool and session notices printed as `[hook] [fallback] …`, as if a user hook had acted. They now print with their own tag.
 - `oasis -p`: when the model failed and Oasis switched to a backup model (for example, a mistyped `--model` that the provider answers with 404), text output gave no sign of the switch. A `[fallback]` line now goes to stderr, and stream-json emits a `model_fallback` system event.
 - `/model` picker: providers that host more than chat models (OVH AI Endpoints lists Whisper, text-to-speech, embeddings, Stable Diffusion and guard classifiers) filled the picker with models that break a session when chosen. The picker now leaves them out. `/model ID`, `/model --list` and `oasis models` still show and accept every model.
 - Verification gate: when asked to "add a regression test", a model could add assertions to an existing test case, so no test reported on the fix by itself (seen in the live OVH benchmark). In files that declare test cases, the gate now asks for a separate case. Plain assertion scripts are not affected.
