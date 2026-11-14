@@ -80,7 +80,11 @@ export function formatApprovalMessage(prompt, meta = {}) {
   let message = '';
   let risky = false;
 
-  if (tool === 'delete_file' || /^delete (?:the workspace )?file\b/i.test(original)) {
+  if (tool === 'exit_plan_mode') {
+    // The whole plan: the user approves what they read, and it was cut at
+    // 1,800 characters (the generic branch), hiding most steps of a real plan.
+    message = redactApprovalSecrets(String(prompt == null ? '' : prompt).trim()).slice(0, 110_000) || 'The plan was not provided.';
+  } else if (tool === 'delete_file' || /^delete (?:the workspace )?file\b/i.test(original)) {
     const match = original.match(/^Delete the workspace file\s+(.+?)\?\s*/i);
     const target = path || (match && match[1]) || '';
     message = 'OASIS wants to delete the file ' + safeLabel(target) + '. A backup will be made first, but the file will be removed from your project. Approve only if that is what you intended.';
@@ -110,11 +114,12 @@ export function formatApprovalMessage(prompt, meta = {}) {
     // Keep the prompt's lines: an MCP server summary, a plan or a terminal
     // command collapsed into one run-on sentence. Lines indented two or more
     // spaces stay indented (the apps show those as code).
-    const normalized = original.split(/\r?\n/).map((line) => {
+    const normalized = redactApprovalSecrets(String(prompt == null ? '' : prompt).trim()).split(/\r?\n/).map((line) => {
       const body = line.trim().replace(/[ \t\f\v]+/g, ' ');
       return body && /^[ \t]{2,}\S/.test(line) ? '  ' + body : body;
-    }).join('\n').replace(/\n{3,}/g, '\n\n').slice(0, 1800);
-    message = 'OASIS is asking permission to take this action:\n' + (normalized || 'The action details were not provided.');
+    }).join('\n').replace(/\n{3,}/g, '\n\n');
+    const clipped = normalized.length > 1800 ? normalized.slice(0, 1800) + '\n… [' + (normalized.length - 1800) + ' more characters not shown]' : normalized;
+    message = 'OASIS is asking permission to take this action:\n' + (clipped || 'The action details were not provided.');
     risky = /\b(?:delete|remove|install|uninstall|overwrite|cannot be undone|high risk|format|drop database|sudo|rm\s+-rf|start the local.*gateway|detached background process|expose the local api)\b/i.test(original);
   }
 
