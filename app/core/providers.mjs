@@ -28,6 +28,9 @@ export const PRESETS = {
 import { createParser } from 'eventsource-parser';
 import { splitThinking, createThinkFilter } from '../../src/think-tags.mjs';
 
+const CUT_OFF_REPLY = 'The reply stream ended before the model finished; asking again.';
+const FINAL_STREAM_ERRORS = new Set(['authentication_error', 'permission_error', 'invalid_request_error', 'not_found_error', 'request_too_large', 'billing_error']);
+
 export class ProviderError extends Error {
   constructor(message, { status = 0, retryable = false, retryAfterMs = null, waitMs = null } = {}) {
     super(message);
@@ -286,9 +289,10 @@ async function chatOpenAI(config, { messages, tools, signal, onText: rawOnText, 
   let finished = false;
   let finishReason = '';
   let stray = '';
+  let sawDone = false;
   for await (const { event, data } of sseEvents(response, signal)) {
     if (event === 'stray') { if (stray.length < 16384) stray += data + '\n'; continue; }
-    if (data === '[DONE]') break;
+    if (data === '[DONE]') { sawDone = true; break; }
     let chunk;
     try { chunk = JSON.parse(data); } catch { continue; }
     if (chunk.error) throw new ProviderError('The provider reported an error mid-stream: ' + (chunk.error.message || JSON.stringify(chunk.error)), { retryable: true });
@@ -321,6 +325,9 @@ async function chatOpenAI(config, { messages, tools, signal, onText: rawOnText, 
   // reply is broken, so retry it instead of keeping the fragment.
   const broken = finished ? null : strayStreamError(stray);
   if (broken) throw new ProviderError('The provider reported an error mid-stream: ' + broken.message, { status: broken.status, retryable: true });
+  // No finish_reason and no [DONE]: the connection closed mid-reply. The
+  // fragment (often a half-written tool call) is not the answer; ask again.
+  if (!finished && !sawDone) throw new ProviderError(CUT_OFF_REPLY, { retryable: true });
   // Gemini ends with "function_call_filter: MALFORMED_FUNCTION_CALL" and no
   // output when its own tool call failed to parse; that is not an answer.
   if (malformedCallFinish(finishReason) && !content.trim() && !calls.filter(Boolean).length) throw new ProviderError('The model produced a malformed tool call; asking again.', { retryable: true });
@@ -396,10 +403,13 @@ async function chatAnthropic(config, { messages, tools, signal, onText, fetchImp
   let content = '';
   const blocks = [];
   const usage = { input: 0, output: 0 };
+  let stopped = false;
   for await (const { data } of sseEvents(response, signal)) {
     let event;
     try { event = JSON.parse(data); } catch { continue; }
-    if (event.type === 'error') throw new ProviderError('The provider reported an error mid-stream: ' + ((event.error && event.error.message) || data), { retryable: true });
+    // Overloaded and server errors clear on a retry; a bad key or request does not.
+    if (event.type === 'error') throw new ProviderError('The provider reported an error mid-stream: ' + ((event.error && event.error.message) || data), { retryable: !FINAL_STREAM_ERRORS.has(event.error && event.error.type) });
+    if (event.type === 'message_stop' || (event.type === 'message_delta' && event.delta && event.delta.stop_reason)) stopped = true;
     if (event.type === 'message_start' && event.message && event.message.usage) {
       const u = event.message.usage;
       usage.input = Number(u.input_tokens || 0) + Number(u.cache_read_input_tokens || 0) + Number(u.cache_creation_input_tokens || 0);
@@ -411,6 +421,7 @@ async function chatAnthropic(config, { messages, tools, signal, onText, fetchImp
     }
     if (event.type === 'message_delta' && event.usage) usage.output = Number(event.usage.output_tokens || 0);
   }
+  if (!stopped) throw new ProviderError(CUT_OFF_REPLY, { retryable: true });
   const tool_calls = blocks.filter(Boolean).map((block) => ({ id: block.id, type: 'function', function: { name: block.name, arguments: block.json || '{}' } }));
   return { content, tool_calls, usage };
 }
