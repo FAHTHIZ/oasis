@@ -4,6 +4,7 @@ User-facing change history grouped by package version. A version heading does no
 
 ## Unreleased
 
+- Browser app, Anthropic: replies are no longer limited to 8,192 output tokens. The default now follows the model (32,000 for Claude 3.7 / 4 and later, 8,192 for 3.5, 4,096 for Claude 3), and a "max_tokens ... > N" 400 is retried once at the reported limit, which is remembered for that model. `outputCapFromError` moved to the browser-safe `src/output-cap.mjs`, shared with the CLI.
 - `oasis bg send` no longer cuts messages at 20,000 characters (same 200,000 bound as steering), and the stream-json `permission_request` event carries the whole approval prompt instead of its first 300 characters.
 - `ask_user_question`: the user's typed answer is no longer cut at 2,000 characters (now the 200,000-character steering bound), and questions, option labels and descriptions allow 4,000 / 200 / 1,000 characters instead of 600 / 80 / 300.
 - PostCompact hooks receive the whole `compact_summary` instead of its first 20,000 characters.
