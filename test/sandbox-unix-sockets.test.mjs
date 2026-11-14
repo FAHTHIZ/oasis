@@ -7,10 +7,14 @@ import os from 'node:os';
 import net from 'node:net';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
 import { mkdtemp, mkdir, writeFile, rm, realpath } from 'node:fs/promises';
 import { loadSettings } from '../src/settings.mjs';
 import { resolveSandbox, wrapCommand, macProfile, detectSandbox, unixSocketFilterPath } from '../src/sandbox.mjs';
 import { srtConfig } from '../src/sandbox-runtime.mjs';
+
+// The test folder itself: a checkout is not under /tmp, and npm test's HOME is.
+const OUTSIDE_TMP = path.dirname(fileURLToPath(import.meta.url));
 
 async function tmp(t, base = os.tmpdir()) {
   const dir = await realpath(await mkdtemp(path.join(base, 'oasis-sock-')));
@@ -85,14 +89,15 @@ test('macOS profile refuses Unix sockets unless they are allowed', () => {
   assert.ok(one.indexOf('(deny network*)') < one.indexOf('(allow network-outbound (remote unix-socket (subpath'));
 });
 
-test('bubblewrap: a sandboxed command cannot reach a host Unix socket unless allowAllUnixSockets is set', { skip: !detectSandbox().available || detectSandbox().kind !== 'bubblewrap' || !unixSocketFilterPath() || spawnSync('sh', ['-c', 'command -v python3'], { stdio: 'ignore' }).status !== 0 }, async (t) => {
+test('bubblewrap: a sandboxed command cannot reach a host Unix socket unless allowAllUnixSockets is set', { skip: !detectSandbox().available || detectSandbox().kind !== 'bubblewrap' || !unixSocketFilterPath() || spawnSync('sh', ['-c', 'command -v python3'], { stdio: 'ignore' }).status !== 0 || OUTSIDE_TMP.startsWith(os.tmpdir()) }, async (t) => {
   // The socket lives outside /tmp (which the sandbox replaces with a tmpfs), like /var/run/docker.sock.
-  const sockDir = await tmp(t, os.homedir());
+  // Not under os.homedir(): `npm test` points HOME into its /tmp scratch folder.
+  const sockDir = await tmp(t, OUTSIDE_TMP);
   const sock = path.join(sockDir, 'daemon.sock');
   const server = net.createServer((conn) => conn.end('reached-host-daemon\n'));
   await new Promise((resolve) => server.listen(sock, resolve));
   t.after(() => server.close());
-  const root = await tmp(t, os.homedir());
+  const root = await tmp(t, OUTSIDE_TMP);
   const client = 'import socket,sys\ns=socket.socket(socket.AF_UNIX)\ns.connect(sys.argv[1])\nprint(s.recv(64).decode().strip())';
   const run = async (network) => {
     const sandbox = resolveSandbox({ sandbox: { enabled: true, writableCaches: false, ...(network ? { allowAllUnixSockets: true } : {}) } }, root);
