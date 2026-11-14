@@ -67,7 +67,7 @@ export async function buildSystemPrompt({ workspace, skills, plugins = [], now =
     for (const name of INSTRUCTION_FILES) {
       if (await workspace.exists(name)) {
         const text = await workspace.read(name);
-        lines.push('', 'Project instructions from ' + name + ':', text.slice(0, 12000));
+        lines.push('', 'Project instructions from ' + name + ':', text.length > 150000 ? text.slice(0, 150000) + '\n[... ' + name + ' truncated: ' + (text.length - 150000) + ' more characters not loaded. Read the file if the rest matters ...]' : text);
         break;
       }
     }

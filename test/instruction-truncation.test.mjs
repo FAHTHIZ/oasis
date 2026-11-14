@@ -10,13 +10,30 @@ const env = (home) => ({ HOME: home, OASIS_CONFIG_DIR: path.join(home, 'cfg'), C
 test('oversized instruction files are truncated visibly with a notice', async (t) => {
   const root = await mkdtemp(path.join(os.tmpdir(), 'oasis-trunc-'));
   t.after(() => rm(root, { recursive: true, force: true }));
-  await writeFile(path.join(root, 'CLAUDE.md'), 'start\n' + 'x'.repeat(12000) + '\nLAST RULE');
+  await writeFile(path.join(root, 'CLAUDE.md'), 'start\n' + 'x'.repeat(160000) + '\nLAST RULE');
   const notices = [];
   const text = await loadMemory(root, { env: env(root), home: root, notices });
   assert.match(text, /CLAUDE\.md truncated: \d+ more characters not loaded/);
   assert.doesNotMatch(text, /LAST RULE/);
   assert.equal(notices.length, 1);
-  assert.match(notices[0], /CLAUDE\.md is \d+ characters; only the first 9000/);
+  assert.match(notices[0], /CLAUDE\.md is \d+ characters; only the first 150000/);
+});
+
+// The old 9,000-character cap cut an ordinary AGENTS.md short.
+test('a long instruction file loads whole, with a size warning', async (t) => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'oasis-trunc-'));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  await writeFile(path.join(root, 'AGENTS.md'), 'start\n' + 'rule line\n'.repeat(5000) + 'LAST RULE');
+  const notices = [];
+  const text = await loadMemory(root, { env: env(root), home: root, notices });
+  assert.match(text, /LAST RULE/);
+  assert.doesNotMatch(text, /truncated/);
+  assert.equal(notices.length, 1);
+  assert.match(notices[0], /Large AGENTS\.md will use more context/);
+  await writeFile(path.join(root, 'AGENTS.md'), 'short\n' + 'rule line\n'.repeat(1000) + 'LAST RULE');
+  const quiet = [];
+  assert.match(await loadMemory(root, { env: env(root), home: root, notices: quiet }), /LAST RULE/);
+  assert.deepEqual(quiet, []);
 });
 
 test('README never crowds out real instruction files', async (t) => {
