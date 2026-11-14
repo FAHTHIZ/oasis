@@ -29,6 +29,15 @@ test('context preservation records are bounded, normalized, and retained in summ
   assert.deepEqual(sanitizeMustPreserve([{ kind: 'goal', text: 'x'.repeat(2000) }])[0].text.length, 600);
 });
 
+test('a long summary and a full set of must-preserve records are both kept whole', () => {
+  const summary = 'start ' + 'details '.repeat(4000) + 'NEXT STEPS: finish the migration.';
+  const records = Array.from({ length: 20 }, (_, index) => ({ kind: 'constraint', text: 'record ' + index + ' ' + 'r'.repeat(380) }));
+  assert.equal(sanitizeMustPreserve(records).length, 20);
+  const out = appendMustPreserveContext(summary, records);
+  assert.ok(out.startsWith(summary), 'summary is not cut');
+  assert.match(out, /record 19 r{380}$/);
+});
+
 test('compaction preview identifies summarization scope, paths, large messages, and redacts secrets', () => {
   const session = {
     messages: [

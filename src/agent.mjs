@@ -227,7 +227,7 @@ export async function compactHistoryIfNeeded(session, options = {}) {
     if (options.onCompactionError) options.onCompactionError(new Error('The model\'s compaction reply was not a usable summary; OASIS used its own digest of the earlier history instead.'));
   }
   summary = modelSummary || deterministicHistorySummary(oldMessages);
-  if (preserveBlock) summary = appendMustPreserveContext(summary, mustPreserve, 20000);
+  if (preserveBlock) summary = appendMustPreserveContext(summary, mustPreserve);
   const restored = await runPostCompactHooks(session, trigger, summary, options);
 
   const beforeCompaction = messages.slice();
@@ -378,8 +378,8 @@ async function compactMidTurnHistoryIfNeeded(session, requestIndex, options = {}
   }
   const modelSummary = usableCompactionSummary(summary);
   if (summary && !modelSummary && options.onCompactionError) options.onCompactionError(new Error('The model\'s compaction reply was not a usable summary; OASIS used its own digest of the earlier tool rounds instead.'));
-  summary = (modelSummary || deterministicHistorySummary(oldMessages)).slice(0, 12_000);
-  if (preserveBlock) summary = appendMustPreserveContext(summary, mustPreserve, 20000);
+  summary = modelSummary || deterministicHistorySummary(oldMessages);
+  if (preserveBlock) summary = appendMustPreserveContext(summary, mustPreserve);
   const restored = await runPostCompactHooks(session, 'auto', summary, options);
 
   const removedToolResults = oldMessages.filter((message) => message && message.role === 'tool').length;
