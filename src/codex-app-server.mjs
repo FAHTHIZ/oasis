@@ -123,8 +123,16 @@ export function toolPaths(root, name, args = {}) {
   return [...new Set(list)];
 }
 
+// null means the file does not exist. A file too large to diff returns
+// LARGE_FILE, so an edit to it is reported as an update (it was reported as
+// an "add", then an update with no change).
+export const LARGE_FILE = Object.freeze({ largeFile: true });
 export function readSmall(file) {
-  try { const info = statSync(file); return info.isFile() && info.size <= MAX_FILE ? readFileSync(file, 'utf8') : null; } catch { return null; }
+  let info;
+  try { info = statSync(file); } catch { return null; }
+  if (!info.isFile()) return null;
+  if (info.size > MAX_FILE) return LARGE_FILE;
+  try { return readFileSync(file, 'utf8'); } catch { return null; }
 }
 
 // config/read never returns credentials: values under keys that look like
@@ -423,7 +431,7 @@ export function createCodexAppServer(options = {}) {
               const newText = readSmall(file);
               const rel = path.relative(entry.root, file) || file;
               const kind = oldText === null && newText !== null ? 'add' : oldText !== null && newText === null ? 'delete' : 'update';
-              const diff = oldText === newText ? '' : createTwoFilesPatch('a/' + rel, 'b/' + rel, oldText || '', newText || '', '', '', { context: 3 });
+              const diff = oldText === newText || oldText === LARGE_FILE || newText === LARGE_FILE ? '' : createTwoFilesPatch('a/' + rel, 'b/' + rel, oldText || '', newText || '', '', '', { context: 3 });
               return { path: file, kind: { type: kind, movePath: null }, diff };
             });
           } else if (item.type === 'mcpToolCall') {
