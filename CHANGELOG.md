@@ -4,6 +4,7 @@ User-facing change history grouped by package version. A version heading does no
 
 ## Unreleased
 
+- `oasis doctor` said "Fallback models: none" right after `oasis connect` saved backup models, because it read only `--fallback-model` and settings. It now uses the same order as a session: the flag, then settings, then the saved connection.
 - `npm run bench:perf -- --compare` (Linux) times `--version` and `--help` of other agent CLIs on PATH (Claude Code, Codex, Gemini CLI, OpenCode, Aider) with the same method as OASIS, sampling the peak memory of each CLI's whole process tree.
 - `npm run bench:routers` compares one model reached directly and through gateways such as OmniRoute and FreeLLMAPI: tool-call integrity, streaming, usage reporting, unknown-model errors, model listing and latency, with keys taken from named environment variables only.
 - `oasis --help` (and `-h`, `help`, `help all`) answers in about 27 ms with 47 MB peak memory, down from 325 ms and 113 MB, by loading only the help text instead of the whole CLI. Set `OASIS_FULL_HELP_PATH=1` to use the full path.

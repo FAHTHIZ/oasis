@@ -23,7 +23,7 @@ Status: **done** (tested and pushed) · **doing** · **open** · **blocked**
 
 | Item | Status | Evidence / notes |
 | --- | --- | --- |
-| Reproducible bugs found while using the product | doing | Busy folder 409 dead end: fixed. Tests touching the real home folder (stale catalog, 155 leaked backups): fixed |
+| Reproducible bugs found while using the product | doing | Busy folder 409 dead end: fixed. `oasis doctor` ignoring the backup models saved by `oasis connect`: fixed, with a regression test. Tests touching the real home folder (stale catalog, 155 leaked backups): fixed |
 | Dependency refresh (patch/minor) | done | `859163c5`; undici 8 (major) deferred |
 | Dead-code removal (knip across src/, app/, ide/, desktop/, scripts/; each removal checked with `rg` for dynamic imports and string references) | done | Unused exports and re-exports removed, and 231 module-internal helpers un-exported: `test/dead-exports.test.mjs`. Stale doc references to removed files: `test/docs-file-references.test.mjs`. The five "unused" dependencies knip lists are loaded dynamically (`@highlightjs/cdn-assets`, `lowlight`, `@vscode/ripgrep`, `@xterm/*` via `scripts/vendor-terminal.mjs`) and stay |
 | FreeLLMAPI as a built-in gateway; gateway key variables; windows from loopback gateways; `cost_known`; one local-port list; missing key masks | done | `2c729bed`: `test/pricing-gateway.test.mjs`, `test/api-key-helper.test.mjs`, `test/local-context.test.mjs`, `test/app-connect.test.mjs`, `test/flags.test.mjs`, `test/eval.test.mjs`, `test/secret-shield.test.mjs` |
