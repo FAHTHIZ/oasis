@@ -120,3 +120,17 @@ test('validate reports marketplace and plugin structure', async (t) => {
   const bad = await validatePath(path.join(market, 'plugins', 'demo'));
   assert.equal(bad.ok, false);
 });
+
+// readJson falls back to {} on a file it cannot parse, and enabling a plugin
+// then wrote that {} back over the user's whole settings.json.
+test('plugin changes never replace a settings file that does not parse', async (t) => {
+  const { env, market, root } = await fixture(t);
+  await addMarketplace(market, { env, cwd: root });
+  await installPlugin('demo@demo-market', { env, root });
+  const { userSettingsPath } = await import('../src/settings.mjs');
+  const file = userSettingsPath(env);
+  const broken = '{ "permissions": { "deny": ["Bash(rm:*)"] }, }';
+  await put(file, broken);
+  await assert.rejects(setPluginEnabled('demo', false, { env }), /Not changing .* not valid JSON/);
+  assert.equal(await readFile(file, 'utf8'), broken);
+});

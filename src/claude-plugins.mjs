@@ -37,7 +37,8 @@ import { getConfigDirectory } from './config.mjs';
 import { nodeChildEnv } from './node-process.mjs';
 
 const NAME = /^[a-z0-9][a-z0-9._-]{0,63}$/i;
-const MAX_JSON = 1024 * 1024;
+// Large marketplaces list hundreds of plugins; 1 MiB was a silent cut-off.
+const MAX_JSON = 16 * 1024 * 1024;
 const MAX_MD = 256 * 1024;
 
 export function pluginHome(env = process.env) {
@@ -56,7 +57,25 @@ async function readJson(file, fallback = null) {
   } catch { return fallback; }
 }
 
+// Every write here is read-modify-write, and readJson falls back to {} on a
+// file it cannot use. Writing that {} back replaced the user's whole
+// settings.json (permissions, hooks, env) when it had a syntax error. Refuse
+// to replace an existing file that is not a JSON object.
+async function assertReplaceable(file) {
+  let info;
+  try { info = await stat(file); } catch (error) { if (error.code === 'ENOENT') return; throw error; }
+  const problem = !info.isFile() ? 'it is not a regular file'
+    : info.size > MAX_JSON ? 'it is larger than ' + MAX_JSON + ' bytes'
+      : await readFile(file, 'utf8').then((raw) => {
+        if (!raw.trim()) return '';
+        try { const parsed = JSON.parse(raw); return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? '' : 'it does not hold a JSON object'; }
+        catch (error) { return 'it is not valid JSON (' + error.message + ')'; }
+      });
+  if (problem) throw new Error('Not changing ' + file + ' because ' + problem + '. Fix or move the file, then try again.');
+}
+
 async function writeJson(file, value) {
+  await assertReplaceable(file);
   await mkdir(path.dirname(file), { recursive: true });
   await atomicWriteFile(file, JSON.stringify(value, null, 2) + '\n', { encoding: 'utf8', mode: 0o600 });
 }
