@@ -130,3 +130,32 @@ test('a long steer is delivered whole', async () => {
   assert.equal(session.pendingSteering[0], long);
   assert.ok(MAX_STEER_CHARS >= 200_000);
 });
+
+test('carried steering notes past the limit are merged, not dropped', async () => {
+  const { carryUndeliveredSteering, foldSteering, MAX_STEER_CHARS, STEERING_CUT_NOTE } = await import('../src/steering.mjs');
+  const session = { pendingSteering: Array.from({ length: STEER_LIMIT }, (_, index) => 'old ' + index), steering: [] };
+  for (let index = 0; index < 5; index += 1) steerSession(session, 'new ' + index);
+  carryUndeliveredSteering(session);
+  assert.equal(session.pendingSteering.length, STEER_LIMIT);
+  const all = session.pendingSteering.join('\n\n');
+  for (let index = 0; index < STEER_LIMIT; index += 1) assert.ok(all.includes('old ' + index), 'old ' + index + ' kept');
+  for (let index = 0; index < 5; index += 1) assert.ok(all.includes('new ' + index), 'new ' + index + ' kept');
+  assert.equal(session.pendingSteering.at(-1), 'new 4');
+  const huge = foldSteering(Array.from({ length: STEER_LIMIT + 3 }, (_, index) => String(index).repeat(MAX_STEER_CHARS / 2)));
+  assert.equal(huge.length, STEER_LIMIT);
+  assert.ok(huge[0].length <= MAX_STEER_CHARS && huge[0].startsWith(STEERING_CUT_NOTE));
+});
+
+test('saved sessions keep every carried steering note', async (t) => {
+  const { saveSession, loadSession } = await import('../src/sessions.mjs');
+  const root = await mkdtemp(path.join(os.tmpdir(), 'oasis-steer-save-'));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const env = { ...process.env, HOME: root, OASIS_CONFIG_DIR: path.join(root, 'cfg') };
+  const session = await createSession({ root, config: { protocol: 'openai-compatible', baseURL: 'http://127.0.0.1:9/v1', model: 'fixture', apiKey: '' }, env });
+  session.pendingSteering = Array.from({ length: 30 }, (_, index) => 'note ' + index);
+  const saved = await saveSession(session, { env });
+  const loaded = await loadSession(root, saved.id, { env });
+  const all = loaded.pendingSteering.join('\n\n');
+  assert.ok(loaded.pendingSteering.length <= STEER_LIMIT);
+  for (let index = 0; index < 30; index += 1) assert.ok(all.includes('note ' + index), 'note ' + index + ' kept');
+});

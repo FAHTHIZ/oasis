@@ -109,7 +109,7 @@ import { MAX_OUTPUT_RECOVERIES, applyEffort, claudeEffortFor, claudeThinkingMode
 import { HISTORY_COMPACT_INPUT_LIMIT, HISTORY_COMPACT_THRESHOLD_CHARS, announceCompaction, compactionDeadline, compactionError, deterministicHistorySummary, findCompactionBoundary, historyBudgetSize, historyTextSize, reportCompaction, safeHistoryLine, supersedeBeforeCompaction, usableCompactionSummary } from './compaction-history.mjs';
 import { applyAnthropicCacheBreakpoints, promptCachingEnabled, replaysReasoning, withProviderExtraContent } from './provider-request.mjs';
 import { INTERRUPTED_REPLY, modelFacingResult, refreshTodoPrompt, repairInterruptedHistory, throwIfCancelled } from './tool-results.mjs';
-import { STEER_LIMIT, MAX_STEER_CHARS, deliverSteering, steeringMessage } from './steering.mjs';
+import { MAX_STEER_CHARS, deliverSteering, foldSteering, steeringMessage } from './steering.mjs';
 import { describeProject, fileLayout } from './project-profile.mjs';
 import { formatApiError, responseText } from './api-error.mjs';
 import { compactSystemPrompt, systemPrompt } from './system-prompt.mjs';
@@ -618,7 +618,7 @@ export async function createSession({ root, config, restore = null, permissionMo
     pricing: pricing || loadedSettings.pricing || null,
     messages: [],
     pendingSteering: Array.isArray(restore && restore.pendingSteering)
-      ? restore.pendingSteering.filter((note) => typeof note === 'string').map((note) => note.trim().slice(0, MAX_STEER_CHARS)).filter(Boolean).slice(-20)
+      ? foldSteering(restore.pendingSteering.filter((note) => typeof note === 'string').map((note) => note.trim().slice(0, MAX_STEER_CHARS)).filter(Boolean))
       : [],
     interruptedTurn: restore && restore.turnInProgress && typeof restore.turnInProgress === 'object' ? restore.turnInProgress : null,
     mcpClients: mcp.clients,
@@ -936,7 +936,7 @@ export function sessionRestoreSnapshot(session) {
     messages: session.messages,
     todos: session.todos,
     sharedTasks: session.sharedTasks,
-    pendingSteering: Array.isArray(session.pendingSteering) ? session.pendingSteering.slice(-STEER_LIMIT) : []
+    pendingSteering: foldSteering(session.pendingSteering)
   };
 }
 
@@ -4394,7 +4394,7 @@ async function runAgentTurnRaw(session, prompt, options = {}) {
   if (compaction.tokensUsed && options.onUsage) options.onUsage({ inputTokens: 0, outputTokens: 0, totalTokens: compaction.tokensUsed, step: 0, phase: 'compaction', costUsd: Number(compaction.costUsd) || 0 });
   let userContent = request;
   const carriedSteering = !options.isSubagent && Array.isArray(session.pendingSteering)
-    ? session.pendingSteering.filter((note) => typeof note === 'string' && note.trim()).slice(-STEER_LIMIT)
+    ? foldSteering(session.pendingSteering)
     : [];
   if (carriedSteering.length) userContent = steeringMessage(carriedSteering) + '\n\n' + userContent;
   if (!options.isSubagent && session.interruptedTurn) {

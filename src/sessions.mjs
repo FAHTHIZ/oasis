@@ -1,6 +1,6 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { normalizeAgentUsage } from './agent-tasks.mjs';
-import { MAX_STEER_CHARS } from './steering.mjs';
+import { MAX_STEER_CHARS, foldSteering } from './steering.mjs';
 import { mkdir, readdir, unlink, rm } from 'node:fs/promises';
 import path from 'node:path';
 import { readBoundedRegularFile } from './safe-storage.mjs';
@@ -304,7 +304,7 @@ export async function saveSession(session, options = {}) {
     ...(session.archived === true ? { archived: true } : {}),
     messages,
     pendingSteering: Array.isArray(session.pendingSteering)
-      ? session.pendingSteering.filter((note) => typeof note === 'string').map((note) => safePersistedText(note.trim(), MAX_STEER_CHARS)).filter(Boolean).slice(-20)
+      ? foldSteering(session.pendingSteering.filter((note) => typeof note === 'string').map((note) => safePersistedText(note.trim(), MAX_STEER_CHARS)).filter(Boolean))
       : [],
     todos: sanitizeTodos(session.todos),
     sharedTasks: sanitizeSharedTaskStore(session.sharedTasks),
@@ -373,7 +373,7 @@ export async function loadSession(root, id, options = {}) {
     archived: payload.archived === true,
     messages: validateMessages(payload.messages),
     pendingSteering: Array.isArray(payload.pendingSteering)
-      ? payload.pendingSteering.filter((note) => typeof note === 'string').map((note) => safePersistedText(note.trim(), MAX_STEER_CHARS)).filter(Boolean).slice(-20)
+      ? foldSteering(payload.pendingSteering.filter((note) => typeof note === 'string').map((note) => safePersistedText(note.trim(), MAX_STEER_CHARS)).filter(Boolean))
       : [],
     todos: sanitizeTodos(payload.todos),
     sharedTasks: sanitizeSharedTaskStore(payload.sharedTasks),
