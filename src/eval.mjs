@@ -11,7 +11,8 @@ import { createSession, runAgentTurn, closeSession, isLoopbackProvider } from '.
 import { cloudModelBehindGateway, estimateCostUsd } from './pricing.mjs';
 import { renderComparisonHtml, saveComparisonArtifact } from './eval-report.mjs';
 import { oasisVersion } from './version.mjs';
-import { redactArtifactText } from './artifacts.mjs';
+import { redactArtifactText, redactSecretPatterns } from './artifacts.mjs';
+import { redactProviderDetail } from './api-error.mjs';
 
 // A compact, redacted record of what the agent did in a trial: tool, the
 // argument that identifies the step (path, command, pattern), result size and
@@ -1193,6 +1194,16 @@ export function buildAiderArgs(config, prompt) {
     ...(config.model ? ['--model', config.model] : [])];
 }
 
+const AGENT_OUTPUT_TAIL = 3000;
+/** The last part of an external agent's output, with credential values from its environment and known secret shapes removed. */
+export function agentOutputTail(text, env = {}) {
+  // Redact a window wider than the tail before cutting, so a secret that
+  // straddles the cut cannot leave a fragment behind.
+  let out = String(text || '').slice(-(AGENT_OUTPUT_TAIL + 1024));
+  const secrets = Object.entries(env || {}).filter(([name, value]) => /KEY|TOKEN|SECRET|PASSWORD|AUTH/i.test(name) && typeof value === 'string' && value.trim().length >= 8).map(([, value]) => value.trim()).sort((a, b) => b.length - a.length);
+  return redactSecretPatterns(redactProviderDetail(out, secrets)).slice(-AGENT_OUTPUT_TAIL);
+}
+
 export const EXTERNAL_AGENTS = {
   claude: { name: 'Claude Code', flag: '--claude-code', binEnv: 'OASIS_CLAUDE_CODE_BIN', bin: 'claude', protocol: 'claude-code-cli', tempPrefix: 'oasis-claude-eval-', buildArgs: (config, prompt) => buildClaudeCodeArgs(config, prompt), parse: (raw) => parseClaudeCodeOutput(raw), checkVersion: (v) => versionSupportsRestrictedMode(v) ? '' : 'Claude Code ' + (v || '(unknown version)') + ' is too old or unrecognized. This benchmark requires Claude Code v2.1.248 or newer for restricted mode.', install: 'Install Claude Code, ensure it is on PATH, and sign in.' },
   codex: { name: 'Codex CLI', flag: '--codex', binEnv: 'OASIS_CODEX_BIN', bin: 'codex', protocol: 'codex-cli', tempPrefix: 'oasis-codex-eval-', buildArgs: buildCodexArgs, parse: parseCodexOutput, checkVersion: () => '', install: 'Install the Codex CLI (npm i -g @openai/codex), ensure it is on PATH, and sign in.' },
@@ -1301,7 +1312,10 @@ async function runClaudeCodeEval(config, options = {}) {
         toolCalls: parsed ? parsed.numTurns : null,
         verification: { exitCode: verification.exitCode, output: verification.output },
         changes,
-        error: errorText
+        error: errorText,
+        // A failed trial keeps the end of what the agent printed, so the cause
+        // can be read later; secrets are removed first.
+        ...(!passed && cliResult && cliResult.output ? { agentOutputTail: agentOutputTail(cliResult.output, env) } : {})
       });
       output.write((passed ? '  PASS ' : '  FAIL ') + task.id + ' trial ' + trial +
         ' · ' + (trials[trials.length - 1].totalTokens === null ? 'tokens n/a' : trials[trials.length - 1].totalTokens + ' tokens') +

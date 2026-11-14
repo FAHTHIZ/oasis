@@ -4,6 +4,8 @@ User-facing change history grouped by package version. A version heading does no
 
 ## Unreleased
 
+- Benchmarks: a failed trial of an external agent (Claude Code, Codex, Gemini CLI, OpenCode, Aider) keeps the last 3,000 characters of its output as `agentOutputTail`, with the credentials it was given and known secret formats removed. Before, nothing was kept, so a failure could not be diagnosed afterwards (`test/eval-agent-output-tail.test.mjs`).
+- Benchmarks: a task that only some agents ran is listed in SUMMARY.md with each agent's outcome instead of disappearing.
 - Headless `tool_calls` now counts every tool call in the run. Before, it was 0 whenever an error or Ctrl+C stopped the run, and only the last turn counted when the run took several turns (goal, steering or schema-retry turns) (`test/headless-tool-call-count.test.mjs`).
 - Security: API keys that a provider echoes back in an error body (for example an Authorization header quoted in a 401) are now redacted in the terminal, logs and transcripts. Before, a server that quoted the header made OASIS print the full key. OpenAI masks keys itself, which had hidden the problem. Covers HTTP errors, stream error events, speech and transcription errors (`test/provider-error-key-echo.test.mjs`).
 - `OPENAI_BASE_URL` and `ANTHROPIC_BASE_URL` are honoured when no `OASIS_BASE_URL`, `OASIS_PROTOCOL` or saved setup exists. Before, they were ignored and the key went to the vendor's default endpoint.
