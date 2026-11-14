@@ -4,6 +4,7 @@ User-facing change history grouped by package version. A version heading does no
 
 ## Unreleased
 
+- `npm run bench:live -- --router <gateway>` runs Gemini CLI too: it gets a private home pinned to API-key auth (with `GOOGLE_GEMINI_BASE_URL` set, Gemini CLI 0.68 picks an auth type its own check rejects) and a trusted task folder. `--upstream` refuses Gemini CLI with a clear message, since the recording relay does not serve Google's wire format; FreeLLMAPI's `/v1beta` does.
 - FreeLLMAPI is a built-in gateway provider (`freellmapi`, `http://127.0.0.1:3001/v1`, `FREELLMAPI_API_KEY`). A pasted `freellmapi-…` key connects to it, and it is treated like OmniRoute: cloud timeouts, never priced or admitted by `--zero-budget` as free.
 - A built-in provider on its default loopback address reads its own key variable (`FREELLMAPI_API_KEY`, `OMNIROUTE_API_KEY`, `VLLM_API_KEY`); only `OASIS_LOCAL_API_KEY` or `OASIS_API_KEY` worked, so an exported gateway key was silently not sent and every request failed with 401.
 - Gateways on their default loopback ports (OmniRoute, FreeLLMAPI, LiteLLM 4000, vLLM 8000) are asked for each model's context window via `GET /models`, like hosted providers. Every loopback address was skipped, so a gateway model's window was guessed.

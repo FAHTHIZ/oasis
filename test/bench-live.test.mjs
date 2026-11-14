@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import os from 'node:os';
 import path from 'node:path';
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
-import { parseBenchArgs, agentEnvironment, runBenchmark, summarize, renderSummary } from '../scripts/bench-live.mjs';
+import { parseBenchArgs, agentEnvironment, geminiGatewayEnv, runBenchmark, summarize, renderSummary } from '../scripts/bench-live.mjs';
 import { parseAiderOutput, parseOpenCodeOutput, buildAiderArgs, buildOpenCodeArgs, buildCodexArgs, EXTERNAL_AGENTS } from '../src/eval.mjs';
 
 test('bench:live parses options and refuses unknown agents', () => {
@@ -249,4 +249,21 @@ test('trials that ended in an agent error are named in the caveats', () => {
   const summary = summarize(runs, parseBenchArgs(['--agents', 'oasis,codex', '--model', 'm', '--router', 'http://localhost:1/v1']));
   assert.ok(summary.caveats.some((line) => /^Codex CLI: 1 scored trial\(s\) ended in an agent or provider error.*429/.test(line)));
   assert.ok(!summary.caveats.some((line) => line.startsWith('OASIS:')));
+});
+
+test('Gemini CLI on a router gets a private home pinned to API-key auth; --upstream refuses it', async (t) => {
+  const dir = await mkdtemp(path.join(os.tmpdir(), 'oasis-bench-gemini-'));
+  t.after(() => rm(dir, { recursive: true, force: true }));
+  const out = await geminiGatewayEnv(dir, {});
+  assert.equal(out.GEMINI_CLI_TRUST_WORKSPACE, 'true');
+  assert.equal(out.GEMINI_SANDBOX, 'false');
+  const settings = JSON.parse(await readFile(path.join(out.GEMINI_CLI_HOME, '.gemini', 'settings.json'), 'utf8'));
+  assert.equal(settings.security.auth.selectedType, 'gemini-api-key');
+  const own = await geminiGatewayEnv(dir, { GEMINI_CLI_HOME: '/mine', GEMINI_SANDBOX: 'docker' });
+  assert.equal(own.GEMINI_CLI_HOME, undefined);
+  assert.equal(own.GEMINI_SANDBOX, undefined);
+  const env = agentEnvironment('gemini', parseBenchArgs(['--router', 'http://127.0.0.1:3001']), { OASIS_BENCH_API_KEY: 'k' });
+  assert.equal(env.GOOGLE_GEMINI_BASE_URL, 'http://127.0.0.1:3001');
+  assert.equal(env.GEMINI_API_KEY, 'k');
+  assert.throws(() => parseBenchArgs(['--agents', 'oasis,gemini', '--upstream', 'https://api.example.test/v1', '--model', 'm']), /wire format/);
 });
