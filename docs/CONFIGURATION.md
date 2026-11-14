@@ -422,6 +422,36 @@ A malformed list (spaces, `*` in the middle) stops that server from starting
 and is reported, instead of silently exposing every tool. Source:
 `src/mcp-trust.mjs` (`filterServerTools`).
 
+## Lazy MCP servers
+
+By default every MCP server starts with the session. Add `"lazy": true` to a
+server entry (in `.mcp.json`, plugin servers or `mcp-servers.json`) to start
+it only when one of its tools is first called. This saves a process per idle
+server, which matters on low-memory machines:
+
+```json
+{ "mcpServers": { "docs": { "command": "docs-mcp", "lazy": true } } }
+```
+
+How it works and what it does not do:
+
+- The first time, the server starts normally so OASIS can save its tool list
+  to `mcp-manifests.json` in the config directory. Later sessions advertise
+  those tools without starting the process. Changing the server's command,
+  arguments, URL or working directory makes the saved list stale, and the
+  server starts eagerly once more.
+- When the server starts, a call is checked against the live tool. If the
+  tool is gone or its definition differs from the saved one, the call is
+  refused and the tool list is refreshed, so description inspection and
+  pinning apply to the real tool.
+- Per-call approval works as before. Starting the process does not itself
+  need approval, as with eager servers.
+- Resources, prompts and server instructions are unavailable until the
+  server has started.
+- `/mcp` marks a server that has not started yet.
+
+Source: `src/mcp-lazy.mjs`.
+
 ## Stream retries
 
 A reply stream that drops mid-response is sent again, up to `OASIS_STREAM_MAX_RETRIES` times (default 5, as Codex's `stream_max_retries`; 0 to 20), with a growing pause between tries (0.25 s up to 10 s). A stream that goes silent fails after `OASIS_STREAM_IDLE_SECONDS` (default 300, or 600 at high, xhigh or max reasoning effort). Because each stall already took a full idle window, a stalled stream is restarted at most twice. A provider error of 500 or above reported mid-stream gets one extra try. A dropped stream never returns tool calls, so a restart cannot run a tool twice.

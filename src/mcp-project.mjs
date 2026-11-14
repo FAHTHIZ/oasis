@@ -20,6 +20,7 @@ import { processTreeSpawnOptions, signalProcessTree } from './process-tree.mjs';
 import path from 'node:path';
 import { isLoopbackUrl } from './config.mjs';
 import { serverToolFilters } from './mcp-trust.mjs';
+import { serverStartOptions } from './mcp-lazy.mjs';
 import { loadMcpExtras } from './mcp-extras.mjs';
 import { redactAuditValue } from './tool-kernel.mjs';
 import { validateToolArguments } from './tool-schema-validation.mjs';
@@ -129,7 +130,7 @@ export function parseMcpServerEntries(parsed, env = process.env, source = 'proje
     try {
       if (!spec || typeof spec !== 'object') throw new Error('entry must be an object');
       if (spec.disabled === true || spec.enabled === false) continue;
-      const toolFilters = serverToolFilters(spec);
+      const toolFilters = { ...serverToolFilters(spec), ...serverStartOptions(spec) };
       const type = String(spec.type || (spec.url ? 'http' : 'stdio')).toLowerCase();
       if (type === 'http' || type === 'streamable-http' || type === 'sse') {
         const url = new URL(expandVariables(spec.url, env));
@@ -277,7 +278,7 @@ export function mcpTaskBackgroundMs(env = process.env) {
 
 export class McpHttpClient {
   constructor(config, options = {}) {
-    this.config = { name: config.name, url: config.url, headers: config.headers || {}, enabled: true, type: config.type === 'sse' ? 'sse' : 'http', ...(config.oauth ? { oauth: config.oauth } : {}), ...(config.headersHelper ? { headersHelper: config.headersHelper, pluginRoot: config.pluginRoot } : {}), ...serverToolFilters(config) };
+    this.config = { name: config.name, url: config.url, headers: config.headers || {}, enabled: true, type: config.type === 'sse' ? 'sse' : 'http', ...(config.oauth ? { oauth: config.oauth } : {}), ...(config.headersHelper ? { headersHelper: config.headersHelper, pluginRoot: config.pluginRoot } : {}), ...serverToolFilters(config), ...serverStartOptions(config) };
     this.helperHeaders = null;
     this.fetch = options.fetch || fetch;
     this.env = options.env || process.env;
