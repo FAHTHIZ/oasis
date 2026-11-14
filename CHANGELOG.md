@@ -4,6 +4,7 @@ User-facing change history grouped by package version. A version heading does no
 
 ## Unreleased
 
+- In the browser app, long `run_javascript` output keeps its head and its end; it kept only the first 24,000 characters, so the error or failed assertion printed last was dropped and a failing run could look clean.
 - In the browser app, `read_file` cuts a long read at a whole line and says which offset comes next. It clipped the joined text at 24,000 characters, which split a line and dropped the continuation note, so the model guessed where to resume. An offset past the end now says how many lines the file has instead of returning nothing.
 - A prompt or agent hook whose event payload passes 30,000 characters (a long Stop reply, a large tool response) gets its longest strings shortened to head and tail, so the JSON stays valid and the end of the reply is shown; the serialized JSON was cut at 30,000 characters, which dropped the end and broke the JSON. Tool checks that cannot be shown whole are still refused.
 - `/btw`, the `/goal` check and the advisor size the transcript they send to the model's context window (about 60% of it); they always sent up to 150,000 characters, about 37,000 tokens, which overflowed 8K and 32K windows, so the request failed and a goal check could never pass on a small local model.
