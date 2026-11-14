@@ -4,6 +4,7 @@ User-facing change history grouped by package version. A version heading does no
 
 ## Unreleased
 
+- Saved sessions now keep the whole conversation. Before, a save kept only the last 120 messages, so resuming after a long agentic turn (60+ tool calls) lost the earlier requests and work; a session over 3 MiB could not be saved at all, and a reply with more than 30 parallel tool calls made the save fail. The caps are now 5,000 messages, 64 MiB and 512 calls per reply, and a session over the size cap is saved with its oldest exchanges dropped instead of failing. Session search reads the same larger files.
 - Long model replies no longer fail partway through with "exceeded Oasis's 8 MiB response limit". The limit counted the raw stream, where every token carries 100-250 bytes of envelope, so replies of about 40,000+ output tokens tripped it. The stream limit is now 512 MiB, and a single event is limited to 32 MiB.
 - The stream idle watchdog now waits 5 minutes for the first byte after a silence (10 minutes at high, xhigh or max effort), up from 2 minutes. Reasoning models send nothing while they think, so long high-effort steps were cut off, restarted and billed again. `OASIS_STREAM_IDLE_SECONDS` still overrides it.
 - Read-only tool calls in one reply now run at most 10 at a time (`OASIS_MAX_TOOL_CONCURRENCY`, or Claude Code's `CLAUDE_CODE_MAX_TOOL_USE_CONCURRENCY`, up to 64). A reply with dozens of reads or web fetches used to start them all at once. Results keep their order.
