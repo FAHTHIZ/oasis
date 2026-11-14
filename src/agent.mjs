@@ -80,7 +80,7 @@ import { effectivePhrases, normalizeCommentMode, withWritingRules } from './styl
 import { PermissionPolicy, suggestRule } from './permissions.mjs';
 import { loadShellParser } from './shell-ast.mjs';
 import { classifierTimeoutSeconds, classifyAction, newAutoModeState } from './auto-mode.mjs';
-import { runHooks, hasHooks, CLAUDE_TOOL_NAMES } from './hooks.mjs';
+import { runHooks, hasHooks, CLAUDE_TOOL_NAMES, capHookText } from './hooks.mjs';
 import { resolveSandbox } from './sandbox.mjs';
 import { webSearchEnabled, webSearchToolDefinition } from './web-search.mjs';
 import { loadProjectMcpServers } from './mcp-project.mjs';
@@ -3442,7 +3442,7 @@ async function runToolFailureHooks(session, name, args, error, context) {
     tool_input: args, error: String(error || '').slice(0, 8000)
   }, hookOptions(session, context.env));
   session.hookMessages.push(...failed.messages);
-  const feedback = [failed.reason, ...failed.additionalContext].filter(Boolean).join('\n').slice(0, 8000);
+  const feedback = capHookText([failed.reason, ...failed.additionalContext].filter(Boolean).join('\n'), 20_000);
   if (failed.updatedToolOutput === undefined) return feedback;
   const out = failed.updatedToolOutput;
   const replacement = out && typeof out === 'object' && !Array.isArray(out) ? out : { error: String(out).slice(0, 20000) };
@@ -4183,7 +4183,7 @@ async function executeOneCallRaw(session, call, context, options) {
       // updatedToolOutput replaces what the model sees (the tool already ran).
       if (post.updatedToolOutput !== undefined) result = post.updatedToolOutput && typeof post.updatedToolOutput === 'object' ? post.updatedToolOutput : { output: String(post.updatedToolOutput) };
       if ((post.blocked || post.additionalContext.length) && result && typeof result === 'object') {
-        result.hookFeedback = [post.reason, ...post.additionalContext].filter(Boolean).join('\n').slice(0, 8000);
+        result.hookFeedback = capHookText([post.reason, ...post.additionalContext].filter(Boolean).join('\n'), 20_000);
       }
     }
   } catch (error) {

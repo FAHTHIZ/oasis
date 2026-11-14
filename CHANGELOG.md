@@ -4,6 +4,7 @@ User-facing change history grouped by package version. A version heading does no
 
 ## Unreleased
 
+- A Stop, SubagentStop, or TeammateIdle hook's reason reaches the model with up to 10,000 characters (start and end, with a note) instead of being cut at 4,000, and tool hook feedback keeps 20,000 instead of 8,000.
 - Hook replies are read whole up to 10 MiB and decoded as a stream. A JSON reply over 64 KiB used to be cut, so its decision (a deny included) was dropped without a word, and non-ASCII text split across chunks came out garbled. A reply over the limit now counts as a failed hook (onFailure: "block" denies). Hook context over 10,000 characters keeps its start and end with a note instead of only the first 2,000 characters.
 - Scheduled prompts (cron_create) are kept whole up to 200,000 characters and refused above that, instead of being cut at 4,000. IDE selections keep up to 100,000 characters (was 20,000) and a longer one ends with a note naming the lines to read.
 - Custom slash command arguments are no longer cut at 8,000 characters (a pasted log after /fix arrived incomplete), and fenced ```! shell blocks up to 64,000 characters now run instead of staying unrun past 8,000.

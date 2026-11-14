@@ -340,11 +340,12 @@ export function describeHook(hook) {
 
 // Hook context reaching the model keeps 10,000 characters (Claude Code's cap): the
 // start and end with a note. It used to keep only the first 2,000.
-function capContext(text) {
+function capContext(text) { return capHookText(text, MAX_CONTEXT); }
+export function capHookText(text, max = MAX_CONTEXT) {
   const value = String(text || '').trim();
-  if (value.length <= MAX_CONTEXT) return value;
-  const note = '\n[hook output cut: ' + (value.length - MAX_CONTEXT).toLocaleString('en-US') + ' of ' + value.length.toLocaleString('en-US') + ' characters left out of the middle]\n';
-  const room = MAX_CONTEXT - note.length;
+  if (value.length <= max) return value;
+  const note = '\n[hook output cut: ' + (value.length - max).toLocaleString('en-US') + ' of ' + value.length.toLocaleString('en-US') + ' characters left out of the middle]\n';
+  const room = max - note.length;
   const head = Math.ceil(room * 0.7);
   return value.slice(0, head) + note + value.slice(value.length - (room - head));
 }

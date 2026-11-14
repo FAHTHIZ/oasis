@@ -224,3 +224,18 @@ test('a hook reply over 10 MiB counts as a failed hook, and onFailure block deni
   const strict = await runHooks('PreToolUse', { tool_name: 'Write', tool_input: {} }, { hooks: { PreToolUse: [group({ type: 'command', command, onFailure: 'block' })] }, root });
   assert.equal(strict.blocked, true);
 });
+
+// A Stop hook's reason was cut at 4,000 characters, losing the end of its checklist.
+test('a long Stop hook reason reaches the model with its end intact', async (t) => {
+  const root = await tmp(t);
+  const counter = path.join(root, 'count');
+  const reasonFile = path.join(root, 'reason.txt');
+  await writeFile(reasonFile, 'check item\n'.repeat(600) + 'LAST CHECK');
+  const hook = nodeHook('const fs=require("fs");if(fs.existsSync(' + JSON.stringify(counter) + '))process.exit(0);fs.writeFileSync(' + JSON.stringify(counter) + ',"1");process.stdout.write(JSON.stringify({decision:"block",reason:fs.readFileSync(' + JSON.stringify(reasonFile) + ',"utf8")}))');
+  const { config, requests } = await scriptedModel(t, [{ content: 'done' }, { content: 'really done' }]);
+  const session = await createSession({ root, config, settings: settingsWith({ Stop: [group({ type: 'command', command: hook })] }) });
+  t.after(() => closeSession(session));
+  await runAgentTurn(session, 'work');
+  assert.equal(requests.length, 2);
+  assert.ok(requests[1].messages.some((m) => m.role === 'user' && /asked you to continue[\s\S]*LAST CHECK$/.test(m.content)));
+});
