@@ -4,6 +4,7 @@ User-facing change history grouped by package version. A version heading does no
 
 ## Unreleased
 
+- With a fallback model set, an HTTP 529 (overloaded) switches to it right away instead of retrying the overloaded model first. Without one, 529 is still retried.
 - An error event inside a streamed reply (Anthropic `overloaded_error`, `api_error`, `rate_limit_error`, `timeout_error`; Responses `server_error`, `rate_limit_exceeded`, `server_is_overloaded`) now restarts the stream instead of ending the turn. Authentication and invalid-request errors stay final.
 - search_files searches files up to 16 MiB (was 256 KiB), so large single-file sources such as TypeScript's checker.ts no longer return "no matches". When ripgrep is missing, the fallback grep now says how many files over 1 MiB it skipped, or that it stopped after 8,000 files.
 - write_file, write_file with append, and edit_file strings accept up to 64 MiB, the same as editing an existing file (was 256 KiB). Overwriting a file over 256 KiB now keeps its line endings and encoding and runs the elision check; before, those were skipped for large files.
