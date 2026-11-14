@@ -865,7 +865,10 @@ export async function testProviderConnection(rawConfig, options = {}) {
       { role: 'user', content: 'Call oasis_connection_probe with {"ready":true} now.' }
     ]
   };
-  try {
+  // One answer without a usable call gets a single retry, as the agent loop
+  // gives the model one correction turn. Transport/HTTP errors are not retried.
+  class ProbeAnswerError extends Error {}
+  const attempt = async () => {
     const response = await requestCompletion(session, {
       forceTool: probeToolName,
       signal: options.signal,
@@ -877,7 +880,7 @@ export async function testProviderConnection(rawConfig, options = {}) {
     let fromText = false;
     if (toolCall) {
       try { args = JSON.parse(String(toolCall.function.arguments || '{}')); }
-      catch { throw new Error('The model returned malformed arguments for the validation tool.'); }
+      catch { throw new ProbeAnswerError('The model returned malformed arguments for the validation tool.'); }
     } else {
       // Small local models sometimes write the call as JSON in the reply text.
       // The agent loop recovers that format (tool-call-repair.mjs), so the
@@ -885,22 +888,37 @@ export async function testProviderConnection(rawConfig, options = {}) {
       const { extractTextToolCalls } = await import('./tool-call-repair.mjs');
       const recovered = extractTextToolCalls(response && response.content, [probeToolName]);
       const call = recovered && recovered.calls.find((entry) => entry.name === probeToolName);
-      if (!call) throw new Error('The model responded without calling the validation tool. Choose a model and provider endpoint that support tool calling.');
+      if (!call) throw new ProbeAnswerError('The model responded without calling the validation tool. Choose a model and provider endpoint that support tool calling.');
       args = call.args;
       fromText = true;
     }
     if (!args || args.ready !== true) {
-      throw new Error('The model did not return the expected validation-tool arguments. Check model and provider compatibility.');
+      throw new ProbeAnswerError('The model did not return the expected validation-tool arguments. Check model and provider compatibility.');
     }
+    return fromText;
+  };
+  try {
+    let fromText;
+    let attempts = 1;
+    try { fromText = await attempt(); }
+    catch (error) {
+      if (!(error instanceof ProbeAnswerError) || (options.signal && options.signal.aborted)) throw error;
+      attempts = 2;
+      fromText = await attempt();
+    }
+    const caveat = fromText || attempts > 1;
     return {
       ok: true,
       protocol,
       provider: new URL(baseURL).host,
       model,
+      attempts,
       toolCallsFromText: fromText,
-      note: fromText
-        ? 'The model wrote the tool call in its reply text instead of a native tool call; Oasis recovers that format, but tool use may be less reliable with this model. The inert validation tool was not executed.'
-        : 'A valid tool-call response was received. The inert validation tool was not executed.'
+      reliabilityWarning: caveat,
+      note: (fromText
+        ? 'The model wrote the tool call in its reply text instead of a native tool call; Oasis recovers that format, but tool use may be less reliable with this model. '
+        : attempts > 1 ? 'The model needed a second try to make a valid tool call, so tool use may be less reliable with this model. ' : 'A valid tool-call response was received. ') +
+        'The inert validation tool was not executed.'
     };
   } catch (error) {
     let message = String(error && error.message || error);

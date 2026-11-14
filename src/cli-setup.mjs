@@ -34,7 +34,8 @@ export async function autoSetup(root, { dryRun = false } = {}) {
   const candidate = { protocol: primary.protocol, baseURL: primary.baseURL, model: primary.model, apiKey: '', ...(rec.settings.contextWindow ? { contextWindow: rec.settings.contextWindow } : {}) };
   stdout.write('\nTesting ' + primary.serverName + ' with ' + primary.model + ' (local models can take a minute to load)…\n');
   try {
-    await testProviderConnection(candidate, { timeoutMs: 180000 });
+    const probe = await testProviderConnection(candidate, { timeoutMs: 180000 });
+    if (probe && probe.reliabilityWarning) stdout.write('Note: ' + probe.note + '\n');
   } catch (error) {
     stdout.write('The test request failed: ' + (error && error.message || error) + '\nNothing was saved. Check the server, then run oasis setup --auto again, or run oasis setup to choose manually.\n');
     process.exitCode = 1;
@@ -182,7 +183,7 @@ export async function configureProvider(root = process.cwd(), options = {}) {
   }
   stdout.write('\nTesting tool calling with an inert validation probe (the probe will not be executed)...\n');
   const probe = await testProviderConnection({ protocol, baseURL, model, apiKey }, { timeoutMs: 30000 });
-  if (probe && probe.toolCallsFromText) stdout.write('Note: ' + probe.note + '\n');
+  if (probe && probe.reliabilityWarning) stdout.write('Note: ' + probe.note + '\n');
   const configPath = await saveConfig({ protocol, baseURL, model, apiKey });
   stdout.write('Provider responded successfully. Saved settings to ' + configPath + '\n');
   stdout.write('Protocol: ' + protocol + '\n');
