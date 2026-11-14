@@ -9,6 +9,7 @@
 //   Bash(...), Edit(...), Write(...), Read(...), WebFetch(...), Grep, Glob are accepted aliases.
 // Precedence: deny > ask > allow > mode default.
 import { discardReason } from './git-safety.mjs';
+import { containerHostAccess } from './container-risk.mjs';
 import path from 'node:path';
 import fs from 'node:fs';
 import { normalizePermissionMode } from './permission-modes.mjs';
@@ -1043,6 +1044,8 @@ export function analyzeCommand(command, args = [], depth = 0) {
     return { highRisk: base + ' can close terminal sessions the user has open', effective: { base, args } };
   }
   if (['docker', 'podman', 'nerdctl'].includes(base)) {
+    const hostAccess = containerHostAccess(base, args.map(String));
+    if (hostAccess) return { highRisk: hostAccess, effective: { base, args } };
     const words = args.filter((a) => !String(a).startsWith('-'));
     const destructive = /^(stop|kill|rm|rmi|restart|down|prune|pause)$/i;
     const verb = ['compose', 'container', 'image', 'network', 'stack', 'service'].includes(words[0]) ? words[1] : words[0];
