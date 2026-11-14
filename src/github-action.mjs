@@ -5,6 +5,7 @@ import { readFile } from 'node:fs/promises';
 import { execFile } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
+import { commitIdentity, stripAiAttribution } from './commit-attribution.mjs';
 
 const TRUSTED_ASSOCIATIONS = ['OWNER', 'MEMBER', 'COLLABORATOR'];
 
@@ -210,8 +211,9 @@ export function formatVerificationReport(verification) {
 export async function publishChanges({ root, trigger, context, request, summary, verification = null }) {
   const status = await git(['status', '--porcelain'], root);
   if (!status) return { changed: false };
-  await git(['config', 'user.name', context.gitName], root).catch(() => {});
-  await git(['config', 'user.email', context.gitEmail], root).catch(() => {});
+  // Commit as the person who asked (their noreply address), never a bot account.
+  if (context.gitName) await git(['config', 'user.name', context.gitName], root).catch(() => {});
+  if (context.gitEmail) await git(['config', 'user.email', context.gitEmail], root).catch(() => {});
   let branch = context.branch;
   let pullRequest = null;
   const sameRepoPr = trigger.isPullRequest && context.prHeadRepo === context.repository && context.prHeadRef;
@@ -229,11 +231,11 @@ export async function publishChanges({ root, trigger, context, request, summary,
   }
   await git(['add', '-A'], root);
   const subject = (trigger.number ? (trigger.isPullRequest ? 'Address review on #' : 'Fix #') + trigger.number + ': ' : '') + String(trigger.title || trigger.request || 'OASIS changes').replace(/\s+/g, ' ').slice(0, 60);
-  await git(['commit', '-q', '-m', subject, '-m', 'Requested by @' + (trigger.author || 'unknown') + ' and made by Oasis.'], root);
+  await git(['commit', '-q', '-m', stripAiAttribution(subject) || 'Changes'], root);
   await git(['push', '-q', context.remote, 'HEAD:refs/heads/' + branch], root);
   if (!sameRepoPr && context.openPullRequest !== false) {
     const prBody = (trigger.number && !trigger.isPullRequest ? 'Closes #' + trigger.number + '\n\n' : '') +
-      summary.slice(0, 48000) + '\n\n' + formatVerificationReport(verification);
+      stripAiAttribution(summary.slice(0, 48000)) + '\n\n' + formatVerificationReport(verification);
     pullRequest = await request('POST', '/repos/' + context.repository + '/pulls', {
       title: subject,
       head: branch,
@@ -295,8 +297,7 @@ export async function runAction(options = {}) {
     defaultBranch: event.repository && event.repository.default_branch || 'main',
     branch: await git(['rev-parse', '--abbrev-ref', 'HEAD'], root).catch(() => ''),
     remote: input(env, 'remote', 'origin'),
-    gitName: input(env, 'git_name', 'oasis[bot]'),
-    gitEmail: input(env, 'git_email', 'oasis-bot@users.noreply.github.com'),
+    ...(({ name, email }) => ({ gitName: name, gitEmail: email }))(commitIdentity(env, { name: input(env, 'git_name'), email: input(env, 'git_email') })),
     prHeadRef: null, prHeadRepo: null, prBaseRef: null,
     pushBranch: /^[\w./-]{1,200}$/.test(input(env, 'branch')) && !input(env, 'branch').includes('..') ? input(env, 'branch') : '',
     openPullRequest: !/^(false|0|no)$/i.test(input(env, 'pull_request', 'true'))

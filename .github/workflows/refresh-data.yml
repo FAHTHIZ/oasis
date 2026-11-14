@@ -63,8 +63,11 @@ jobs:
             exit 0
           fi
           branch=automation/refresh-data
-          git config user.name 'github-actions[bot]'
-          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          # Commit as the repository owner or the person who started the run, never a bot account.
+          git_login="$GITHUB_ACTOR"; git_id="$GITHUB_ACTOR_ID"
+          case "$git_login" in *"[bot]"|"") git_login="$GITHUB_REPOSITORY_OWNER"; git_id="$GITHUB_REPOSITORY_OWNER_ID";; esac
+          git config user.name "$git_login"
+          git config user.email "${git_id}+${git_login}@users.noreply.github.com"
           git switch -c "$branch"
           git add src/data
           git commit -m "Refresh data snapshots ($(date -u +%Y-%m-%d))" -m "$(git diff --cached --stat)"

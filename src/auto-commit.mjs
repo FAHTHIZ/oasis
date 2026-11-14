@@ -5,6 +5,7 @@
 import { execFile } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import path from 'node:path';
+import { stripAiAttribution } from './commit-attribution.mjs';
 
 const TRUE = /^(?:1|true|yes|on)$/i;
 const FALSE = /^(?:0|false|no|off)$/i;
@@ -29,7 +30,8 @@ function git(args, cwd, { input } = {}) {
 export function commitSubject(prompt = '') {
   const line = String(prompt || '').split(/\r?\n/).map((item) => item.trim()).find(Boolean) || 'changes';
   const clean = line.replace(/\s+/g, ' ').replace(/^[/#!]+/, '').trim() || 'changes';
-  return 'oasis: ' + (clean.length > 64 ? clean.slice(0, 63).replace(/\s+\S*$/, '') + '…' : clean);
+  const subject = clean.length > 72 ? clean.slice(0, 71).replace(/\s+\S*$/, '') + '…' : clean;
+  return subject.charAt(0).toUpperCase() + subject.slice(1);
 }
 
 export async function autoCommitTurn({ root, paths = [], prompt = '' } = {}) {
@@ -54,8 +56,11 @@ export async function autoCommitTurn({ root, paths = [], prompt = '' } = {}) {
   const changed = pending.stdout.split('\n').map((item) => item.trim()).filter(Boolean);
   if (!changed.length) return { skipped: 'the files match the last commit' };
   const subject = commitSubject(prompt);
-  const body = 'Files changed by OASIS in this turn:\n' + changed.map((item) => '- ' + item).join('\n');
-  const commit = await git(['commit', '--only', '-m', subject, '-m', body, '--', ...changed], repo);
+  const body = 'Files changed:\n' + changed.map((item) => '- ' + item).join('\n');
+  // The message goes in on stdin with --cleanup=strip so a prepare-commit-msg
+  // or template cannot reintroduce credit lines; the user's own identity
+  // (git config) is the author.
+  const commit = await git(['commit', '--only', '--cleanup=strip', '-F', '-', '--', ...changed], repo, { input: stripAiAttribution(subject + '\n\n' + body) + '\n' });
   if (commit.code !== 0) {
     const reason = (commit.stderr.trim() || commit.stdout.trim()).split('\n').filter(Boolean).slice(-1)[0] || 'exit ' + commit.code;
     return { error: 'git commit failed (the files are staged): ' + reason };

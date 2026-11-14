@@ -917,7 +917,7 @@ export async function runBuiltinCommand(name, argument, state) {
       const want = !argument ? !current : /^(on|true|1|yes)$/i.test(argument) ? true : /^(off|false|0|no)$/i.test(argument) ? false : null;
       if (want === null) return { output: 'Usage: /auto-commit [on|off]' };
       if (session) session.autoCommit = want;
-      return { output: want ? 'Auto-commit on for this session: after each turn that changes files, OASIS commits exactly those files ("oasis: <your request>"). Other work in the tree is left alone. Set OASIS_AUTO_COMMIT=1 or "autoCommit": true in settings to keep it on.' : 'Auto-commit off for this session.' };
+      return { output: want ? 'Auto-commit on for this session: after each turn that changes files, OASIS commits exactly those files under your Git identity, with your request as the subject. Other work in the tree is left alone. Set OASIS_AUTO_COMMIT=1 or "autoCommit": true in settings to keep it on.' : 'Auto-commit off for this session.' };
     }
     case 'fast': {
       const { fastModeRequest } = await import('./model-aliases.mjs');
