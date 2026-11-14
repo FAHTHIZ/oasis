@@ -4,6 +4,7 @@ User-facing change history grouped by package version. A version heading does no
 
 ## Unreleased
 
+- write_file, write_file with append, and edit_file strings accept up to 64 MiB, the same as editing an existing file (was 256 KiB). Overwriting a file over 256 KiB now keeps its line endings and encoding and runs the elision check; before, those were skipped for large files.
 - Security: every hook group for an event is loaded. Before, groups past the 50th were dropped, so a PreToolUse guard there never ran. Plugin dependencies past the 50th were also ignored.
 - OpenCode/Kilo commands and agents defined in opencode.json are no longer cut to the first 200, Roo/Kilo custom modes to the first 50, and an @folder mention lists 500 entries (was 200) with a note saying how many more there are.
 - Custom agent files (.claude/agents, .oasis/agents, plugin agents and the OpenCode and Gemini formats) up to 1 MiB load. Before, any file over 64 KiB was skipped without a word. An agent prompt over 200,000 characters now ends with a note saying how much was cut.

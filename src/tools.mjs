@@ -1918,7 +1918,7 @@ async function executeToolUnlocked(name, args = {}, context = {}) {
       if (typeof args.old_string !== 'string' || typeof args.new_string !== 'string') throw new Error('old_string and new_string must be strings.');
       if (!args.old_string.length) throw new Error('old_string must not be empty. To create a new file, use write_file.');
       if (args.old_string === args.new_string) throw new Error('old_string and new_string are identical; nothing to change.');
-      if (Buffer.byteLength(args.old_string, 'utf8') > MAX_TEXT_FILE || Buffer.byteLength(args.new_string, 'utf8') > MAX_TEXT_FILE) throw new Error('The edit exceeds the 256 KiB text limit.');
+      if (Buffer.byteLength(args.old_string, 'utf8') > MAX_EDIT_FILE || Buffer.byteLength(args.new_string, 'utf8') > MAX_EDIT_FILE) throw new Error('The edit exceeds the 64 MiB text limit.');
       const target = await resolveWorkspacePath(root, args.path, { rejectSymlinks: true });
       let info;
       try { info = await lstat(target.absolute); } catch (error) {
@@ -1955,7 +1955,9 @@ async function executeToolUnlocked(name, args = {}, context = {}) {
     }
     case 'write_file': {
       if (typeof args.content !== 'string') throw new Error('File contents must be a string.');
-      if (Buffer.byteLength(args.content, 'utf8') > MAX_TEXT_FILE) throw new Error('New file content exceeds the 256 KiB limit.');
+      // Writes share edit_file's 64 MiB limit; at 256 KiB a large generated file
+      // (fixture, data file, bundle) could not be written at all.
+      if (Buffer.byteLength(args.content, 'utf8') > MAX_EDIT_FILE) throw new Error('New file content exceeds the 64 MiB limit.');
       const target = await resolveWorkspacePath(root, args.path, { rejectSymlinks: true });
       // append: true lets a model with a small output limit build a long file
       // over several calls instead of sending one call that gets cut off.
@@ -1969,13 +1971,13 @@ async function executeToolUnlocked(name, args = {}, context = {}) {
         const old = await lstat(target.absolute);
         if (old.isDirectory()) throw new Error('Refusing to replace a directory with a file.');
         await assertFileFresh(context, target.absolute, writeDisplayPath, { fullOverwrite: !appending });
-        if (old.isFile() && old.size <= MAX_TEXT_FILE) {
+        if (old.isFile() && old.size <= MAX_EDIT_FILE) {
           try { ({ text: previousContent, encoding: previousEncoding } = await readTextFile(target.absolute)); } catch { previousContent = null; }
         }
         if (appending) {
-          if (previousContent === null) throw new Error('Cannot append to ' + writeDisplayPath + ': it is not a readable text file under 256 KiB.');
+          if (previousContent === null) throw new Error('Cannot append to ' + writeDisplayPath + ': it is not a readable text file under 64 MiB.');
           newContent = previousContent + args.content;
-          if (Buffer.byteLength(newContent, 'utf8') > MAX_TEXT_FILE) throw new Error('Appending would make ' + writeDisplayPath + ' larger than the 256 KiB limit.');
+          if (Buffer.byteLength(newContent, 'utf8') > MAX_EDIT_FILE) throw new Error('Appending would make ' + writeDisplayPath + ' larger than the 64 MiB limit.');
         } else {
           assertNoNewElision(previousContent, args.content, writeDisplayPath);
         }
