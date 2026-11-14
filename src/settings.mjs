@@ -491,6 +491,23 @@ export async function loadSettings(root, options = {}) {
         }
         if (Array.isArray(network.deniedDomains)) result.sandbox.deniedDomains = [...(result.sandbox.deniedDomains || []), ...domains(network.deniedDomains)];
         if (scope === 'managed' && network.allowManagedDomainsOnly === true) result.sandbox.allowManagedDomainsOnly = true;
+        // Keys that widen the sandbox (Unix sockets, local binding, XPC services, your own proxy)
+        // come from your own settings, --settings or policy only: a repository cannot open a path
+        // such as /var/run/docker.sock to the commands it asks you to run.
+        if (['user', 'flag', 'managed'].includes(scope)) {
+          if (Array.isArray(network.allowUnixSockets)) {
+            const sockets = network.allowUnixSockets.map((entry) => typeof entry === 'string' && entry.trim() && !/[\r\n\0]/.test(entry) ? resolveSandboxSettingPath(entry.trim(), scope, path.resolve(root), env) : null).filter(Boolean);
+            result.sandbox.allowUnixSockets = [...new Set([...(result.sandbox.allowUnixSockets || []), ...sockets])].slice(0, 200);
+          }
+          if (typeof network.allowAllUnixSockets === 'boolean') result.sandbox.allowAllUnixSockets = network.allowAllUnixSockets;
+          if (typeof network.allowLocalBinding === 'boolean') result.sandbox.allowLocalBinding = network.allowLocalBinding;
+          if (Array.isArray(network.allowMachLookup)) result.sandbox.allowMachLookup = [...new Set([...(result.sandbox.allowMachLookup || []), ...network.allowMachLookup.filter((item) => typeof item === 'string' && /^[A-Za-z0-9._-]+\*?$|^\*$/.test(item))])].slice(0, 200);
+          for (const key of ['httpProxyPort', 'socksProxyPort']) {
+            if (!Number.isInteger(network[key]) || network[key] < 1 || network[key] > 65535) continue;
+            result.sandbox[key] = network[key];
+            if (scope === 'managed') result.sandbox[key + 'Managed'] = network[key];
+          }
+        }
       }
       // Claude Code's name for autoAllowCommands.
       if (typeof settings.sandbox.autoAllowBashIfSandboxed === 'boolean') result.sandbox.autoAllowCommands = settings.sandbox.autoAllowBashIfSandboxed;

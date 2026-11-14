@@ -283,11 +283,17 @@ async function doctorWorkspaceReport(root, status = {}) {
     problems.push('Fix the settings file: ' + error.message);
   }
   const sandboxOn = Boolean(settings && settings.sandbox && settings.sandbox.enabled);
-  const { domainList, detectSandboxRuntime } = await import('./sandbox.mjs');
+  const { domainList, detectSandboxRuntime, unixSocketFilterPath } = await import('./sandbox.mjs');
   const domains = settings && settings.sandbox && (!settings.sandbox.backend || settings.sandbox.backend === 'os') ? domainList(settings.sandbox.allowedDomains) : [];
   const sandbox = domains.length ? detectSandboxRuntime() : detectSandbox();
   if (domains.length) stdout.write('  Sandbox network: only ' + domains.join(', ') + ' (sandbox-runtime proxy)\n');
   stdout.write('  OS sandbox: ' + (sandbox.available ? sandbox.kind + ' available' : 'unavailable — ' + sandbox.reason) + '; ' + (sandboxOn ? 'enabled' : 'off (enable with "sandbox": {"enabled": true} or OASIS_SANDBOX=1)') + '\n');
+  if (sandbox.available && (!settings || !settings.sandbox.backend || settings.sandbox.backend === 'os')) {
+    const open = Boolean(settings && settings.sandbox.allowAllUnixSockets === true);
+    const filtered = sandbox.kind !== 'bubblewrap' || Boolean(unixSocketFilterPath());
+    stdout.write('  Sandbox Unix sockets: ' + (open ? 'allowed (sandbox.network.allowAllUnixSockets)' : filtered ? 'blocked' : 'NOT blocked (no seccomp helper for ' + process.arch + ')') + '\n');
+    if (sandboxOn && !open && !filtered) problems.push('Sandboxed commands can reach host Unix sockets such as /var/run/docker.sock: the seccomp helper from @anthropic-ai/sandbox-runtime is missing or cannot run here.');
+  }
   if (sandboxOn && !sandbox.available) problems.push('The sandbox is enabled but unavailable: ' + sandbox.reason);
   stdout.write('  User MCP config: ' + getMcpConfigPath() + '\n');
   try {

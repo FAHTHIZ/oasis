@@ -104,7 +104,9 @@ Gaps found by checking the [hooks reference](https://code.claude.com/docs/en/hoo
 | `fileSuggestion` | done | `test/file-suggestion-setting.test.mjs` (4 tests): terminal `@` completion, and the web composer's `@` through `GET /api/file-suggestions` (real server, token checked) |
 | `subagentStatusLine` | done | `test/subagent-status-line.test.mjs` (2 tests): payload with `columns` and `tasks` (id, type, agentType, status, description, label, startTime, model, effort, contextWindowSize, tokenCount, tokenSamples, cwd), `{"id","content"}` rows replace or hide `/tasks` rows and the running-subagent rows above the terminal prompt; trust and `disableAllHooks` gates. Not done: the web app's agent list does not run it |
 | `sandbox.credentials` (`files`, `envVars`), `sandbox.filesystem.allowManagedReadPathsOnly` | done | `test/sandbox-credentials.test.mjs` (4 tests, real bubblewrap). `mask` entries are applied as `deny` (OASIS has no substituting egress proxy, so tools that need the secret stop working in the sandbox); `mask` from repository settings is ignored, as in Claude Code |
-| Unix-socket/proxy keys, admin-required repository locks | open | `allowUnsandboxedCommands` needs nothing: OASIS has no unsandboxed retry |
+| Unix-socket/proxy keys (`allowUnixSockets`, `allowAllUnixSockets`, `allowLocalBinding`, `allowMachLookup`, `httpProxyPort`, `socksProxyPort`) and the Unix-socket block they open | done | `test/sandbox-unix-sockets.test.mjs` (7 tests; live: a bubblewrap command reached a host socket before the fix and is refused after). macOS rules are unit-tested only (no Mac available) |
+| Two doctor implementations (`src/cli-doctor.mjs` for `oasis doctor`, `src/doctor.mjs` for `/doctor`) duplicate checks | open | both now report the Unix-socket block; merge them |
+| Admin-required repository locks | open | `allowUnsandboxedCommands` needs nothing: OASIS has no unsandboxed retry |
 
 ## 2e. Terminal-agent interoperability (Gemini CLI, OpenCode, Goose, Aider, Roo/Kilo/Cline)
 
