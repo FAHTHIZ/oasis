@@ -47,3 +47,19 @@ test('plansDirectory is ignored in an untrusted repository', async () => {
   assert.equal((await loadSettings(root, { env })).plansDirectory, undefined);
   assert.equal((await loadSettings(root, { env: { ...env, OASIS_TRUST_WORKSPACE: '1' } })).plansDirectory, './plans');
 });
+
+test('a long plan is shown whole, and an oversized one is sent back instead of cut', async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'oasis-plans-'));
+  const env = { OASIS_CONFIG_DIR: path.join(root, 'cfg') };
+  const session = planSession(root, 'docs/plans', env);
+  const long = '1. Step\n'.repeat(4000) + 'LAST STEP';
+  let shown = '';
+  const result = await exitPlanMode(session, { plan: long }, { approval: async (prompt) => { shown = prompt; return false; } }, {});
+  assert.match(shown, /LAST STEP/);
+  assert.match(await readFile(result.plan_file, 'utf8'), /LAST STEP/);
+  let asked = false;
+  const huge = await exitPlanMode(session, { plan: 'x'.repeat(100_001) }, { approval: async () => { asked = true; return true; } }, {});
+  assert.equal(huge.approved, false);
+  assert.match(huge.error, /limit is 100000/);
+  assert.equal(asked, false);
+});

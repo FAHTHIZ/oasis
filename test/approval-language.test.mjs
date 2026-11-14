@@ -119,3 +119,14 @@ test('generic approval prompts keep their lines and indented command lines', asy
   const mcp = formatApprovalMessage('Configure and start this stdio MCP server now?\nName: gh\nExecutable: npx\n\n\n\nArguments: ["-y"]').message;
   assert.match(mcp, /now\?\nName: gh\nExecutable: npx\n\nArguments/);
 });
+
+test('a plan approval shows the whole plan; other long prompts say what was cut', async () => {
+  const { formatApprovalMessage } = await import('../src/approval-language.mjs');
+  const plan = 'Oasis has a plan:\n\n' + '1. Step\n'.repeat(1500) + 'FINAL STEP\n\nLeave plan mode and implement this plan?';
+  const shown = formatApprovalMessage(plan, { tool: 'exit_plan_mode' });
+  assert.match(shown.message, /FINAL STEP/);
+  assert.match(shown.message, /implement this plan\?$/);
+  const other = formatApprovalMessage('Call MCP server "x" tool "y" with arguments:\n' + 'z'.repeat(5000), { tool: 'mcp_x_y' });
+  assert.match(other.message, /\[\d+ more characters not shown\]$/);
+  assert.match(other.message, /\[3\d{3} more characters/);
+});
