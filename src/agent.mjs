@@ -1237,6 +1237,22 @@ const MAX_STREAM_RESTARTS = 2;
 const MAX_MALFORMED_CALL_RECOVERIES = 3;
 const MALFORMED_CALL_NUDGE = '<system-reminder>\nYour last tool call could not be parsed (the provider rejected it as a malformed function call), so nothing ran. Call the tool again with valid JSON arguments. If it carried a long file body, split the work: write a short file first, then add to it with edit_file.\n</system-reminder>';
 
+// Records a retry or recovery on the active trace (model request or turn span),
+// so a trace shows why a step took several attempts. No-op without telemetry.
+function traceRecovery(env, kind, details = {}) {
+  const tel = getTelemetry(env || process.env);
+  if (!tel) return;
+  const attrs = { kind };
+  for (const [key, value] of Object.entries(details)) {
+    if (value === undefined || value === null || value === '') continue;
+    attrs[key] = key === 'reason' ? redactSecretText(String(value)).slice(0, 300) : value;
+  }
+  try {
+    tel.add('oasis.recovery.count', 1, { kind }, '1', 'Retries and recoveries during model requests and turns');
+    tel.event('oasis.recovery', attrs);
+  } catch {}
+}
+
 async function requestCompletionWithStreamRestarts(session, options = {}) {
   for (let restart = 0; ; restart++) {
     try {
@@ -1250,6 +1266,7 @@ async function requestCompletionWithStreamRestarts(session, options = {}) {
       // A malformed tool call tends to repeat on the identical request, so the
       // turn loop retries it with a corrective note instead (see below).
       if (!error || error.code !== 'OASIS_STREAM_INTERRUPTED' || error.malformedCall || restart >= MAX_STREAM_RESTARTS + (overloaded ? 1 : 0) || (options.signal && options.signal.aborted)) throw error;
+      traceRecovery(options.env || session.providerEnv, 'stream_restart', { attempt: restart + 1, limit: MAX_STREAM_RESTARTS + (overloaded ? 1 : 0), status: Number(error.status) || undefined, reason: error.message });
       if (typeof options.onStreamRestart === 'function') options.onStreamRestart({ attempt: restart + 1, limit: MAX_STREAM_RESTARTS + (overloaded ? 1 : 0), reason: error.message, ...(error.status ? { status: Number(error.status) } : {}) });
       await waitForProviderRetry(providerRetryDelayMs(restart + (overloaded ? 3 : 1)), options.signal || new AbortController().signal);
     }
@@ -1628,6 +1645,7 @@ async function requestCompletionRaw(session, options = {}) {
         const networkLimit = unreachable ? Math.min(QUICK_PROVIDER_RETRIES, providerRetryLimit(0, options.env)) : providerRetryLimit(0, options.env);
         if (attempt < networkLimit && error instanceof TypeError && !controller.signal.aborted) {
           const delay = providerRetryDelayMs(attempt + 1);
+          traceRecovery(providerEnv, 'connection_retry', { attempt: attempt + 1, limit: networkLimit, wait_ms: delay, reason: error.message });
           notifyProviderRetry(options, { status: 0, attempt: attempt + 1, limit: networkLimit, waitMs: delay, reason: 'connection failed' });
           await waitBetweenAttempts(delay);
           continue;
@@ -1662,6 +1680,7 @@ async function requestCompletionRaw(session, options = {}) {
           session.rateLimitCompacted = true;
           compactTools = useCompactToolProfile(session, options.env || process.env);
         }
+        traceRecovery(providerEnv, 'rate_limit_wait', { status, attempt: shortWaits + 1, wait_ms: shortWait, per_minute: true });
         if (typeof options.onRateLimitWait === 'function') {
           try { options.onRateLimitWait({ waitMs: shortWait, until: new Date(Date.now() + shortWait).toISOString(), attempt: shortWaits + 1, perMinute: true, compactTools }); } catch {}
         }
@@ -1673,6 +1692,7 @@ async function requestCompletionRaw(session, options = {}) {
       }
       const retryDelay = providerRetryDelayMs(attempt + 1, response.headers.get('retry-after'));
       if (retryDelay !== null && attempt < providerRetryLimit(status, options.env) && (RETRYABLE_PROVIDER_STATUSES.has(status) || isMalformedGenerationError(status, errorBody)) && !isHardQuotaError(errorBody) && !isUnconfiguredRouteError(status, errorBody) && !isPromptTooLargeError(errorBody) && !(status === 429 && shortRateLimitMs(errorBody) !== null)) {
+        traceRecovery(providerEnv, 'provider_retry', { status, attempt: attempt + 1, limit: providerRetryLimit(status, options.env), wait_ms: retryDelay, reason: providerErrorSummary(errorBody) });
         notifyProviderRetry(options, { status, attempt: attempt + 1, limit: providerRetryLimit(status, options.env), waitMs: retryDelay, reason: providerErrorSummary(errorBody) });
         await waitBetweenAttempts(retryDelay);
         continue;
@@ -1682,6 +1702,7 @@ async function requestCompletionRaw(session, options = {}) {
         limitWaits++;
         // The header timeout must not fire while deliberately waiting for the reset.
         clearTimeout(timer);
+        traceRecovery(providerEnv, 'rate_limit_wait', { status, attempt: limitWaits, wait_ms: limitWait });
         if (typeof options.onRateLimitWait === 'function') {
           try { options.onRateLimitWait({ waitMs: limitWait, until: new Date(Date.now() + limitWait).toISOString(), attempt: limitWaits }); } catch {}
         }
@@ -4618,6 +4639,7 @@ async function runAgentTurnRaw(session, prompt, options = {}) {
       if (waitHook) { try { waitHook({ phase: 'end', step: step + 1, error: true }); } catch {} }
       if (error && error.malformedCall && malformedCallRecoveries < MAX_MALFORMED_CALL_RECOVERIES && !(options.signal && options.signal.aborted)) {
         malformedCallRecoveries++;
+        traceRecovery(options.env, 'malformed_call', { attempt: malformedCallRecoveries, limit: MAX_MALFORMED_CALL_RECOVERIES, reason: error.message });
         if (typeof options.onStreamRestart === 'function') { try { options.onStreamRestart({ attempt: malformedCallRecoveries, limit: MAX_MALFORMED_CALL_RECOVERIES, kind: 'malformed-call', reason: error.message }); } catch {} }
         session.messages.push({ role: 'user', content: MALFORMED_CALL_NUDGE });
         step--;
@@ -4628,6 +4650,7 @@ async function runAgentTurnRaw(session, prompt, options = {}) {
         const recovered = await recoverFromContextOverflow(session, activeRequestIndex, options, overflowRecoveries, error);
         tokensUsed += Number(recovered.tokensUsed || 0);
         if (recovered.changed) {
+          traceRecovery(options.env, 'context_overflow', { attempt: overflowRecoveries, limit: 2 });
           if (typeof options.onContextOverflow === 'function') { try { options.onContextOverflow({ attempt: overflowRecoveries, ...recovered }); } catch {} }
           step--;
           continue;
@@ -4676,6 +4699,7 @@ async function runAgentTurnRaw(session, prompt, options = {}) {
       }
       if (outputRecoveries <= MAX_OUTPUT_RECOVERIES) {
         truncationNotice = truncationRecoveryPrompt(assistant.outputLimit || maxOutputTokensFor(session.config, options.env || process.env), dropped && dropped.function && dropped.function.name);
+        traceRecovery(options.env, 'output_truncated', { attempt: outputRecoveries, limit: MAX_OUTPUT_RECOVERIES, tool: dropped && dropped.function && dropped.function.name || undefined });
         if (typeof options.onOutputTruncated === 'function') options.onOutputTruncated({ limit: assistant.outputLimit || 0, droppedTool: dropped && dropped.function && dropped.function.name || null, attempt: outputRecoveries });
       }
     }

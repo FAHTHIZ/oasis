@@ -227,3 +227,47 @@ test('an explicit exit (signal, double Ctrl+C, web shutdown) still delivers the 
   assert.equal(code, 3, 'the requested exit code is kept');
   assert.ok(paths.some((p) => p.includes('/v1/traces')), 'the span reached the collector before exit: ' + paths.join(','));
 });
+
+test('a provider retry is recorded on the model request span as an oasis.recovery event', async (t) => {
+  const received = { metrics: [], logs: [], traces: [] };
+  const collector = http.createServer((req, res) => {
+    let body = '';
+    req.on('data', (c) => { body += c; });
+    req.on('end', () => { received[req.url.split('/').pop()].push(JSON.parse(body)); res.end('{}'); });
+  });
+  await new Promise((r) => collector.listen(0, '127.0.0.1', r));
+  t.after(() => collector.close());
+  let calls = 0;
+  const model = http.createServer((req, res) => {
+    req.resume();
+    req.on('end', () => {
+      calls++;
+      res.setHeader('content-type', 'application/json');
+      if (calls === 1) { res.statusCode = 503; res.setHeader('retry-after', '0'); res.end(JSON.stringify({ error: { message: 'overloaded, key sk-abcdefghijklmnopqrstuvwxyz0123456789' } })); return; }
+      res.end(JSON.stringify({ choices: [{ message: { role: 'assistant', content: 'done' } }], usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 } }));
+    });
+  });
+  await new Promise((r) => model.listen(0, '127.0.0.1', r));
+  t.after(() => model.close());
+  const env = { ...process.env, OASIS_ENABLE_TELEMETRY: '1', OTEL_METRICS_EXPORTER: 'otlp', OTEL_LOGS_EXPORTER: 'otlp', OTEL_TRACES_EXPORTER: 'otlp', OTEL_EXPORTER_OTLP_HEADERS: '', OTEL_EXPORTER_OTLP_LOGS_HEADERS: '', OTEL_EXPORTER_OTLP_METRICS_HEADERS: '', OTEL_EXPORTER_OTLP_METRICS_ENDPOINT: '', OTEL_EXPORTER_OTLP_LOGS_ENDPOINT: '', OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: '', OTEL_EXPORTER_OTLP_ENDPOINT: 'http://127.0.0.1:' + collector.address().port, OTEL_LOG_USER_PROMPTS: '' };
+  const root = await mkdtemp(path.join(os.tmpdir(), 'oasis-otel-retry-'));
+  const config = { protocol: 'openai-compatible', baseURL: 'http://127.0.0.1:' + model.address().port + '/v1', model: 'fixture', apiKey: '', maxSteps: 4, maxCommandSeconds: 10 };
+  const session = await createSession({ root, config, settings, bare: true, env });
+  const result = await runAgentTurn(session, 'hello', { env, autoApprove: true });
+  assert.match(result.text, /done/);
+  assert.equal(calls, 2);
+  await shutdownTelemetry();
+  const spans = received.traces.flatMap((p) => p.resourceSpans[0].scopeSpans[0].spans);
+  const llm = spans.find((s) => s.name === 'oasis.llm_request');
+  const records = received.logs.flatMap((p) => p.resourceLogs[0].scopeLogs[0].logRecords);
+  const recovery = records.find((r) => r.body && r.body.stringValue === 'oasis.recovery');
+  assert.ok(recovery, 'an oasis.recovery event is exported');
+  assert.equal(recovery.spanId, llm.spanId, 'the event is attached to the model request span');
+  const attr = (key) => { const a = recovery.attributes.find((x) => x.key === key); return a && (a.value.stringValue ?? a.value.intValue); };
+  assert.equal(attr('kind'), 'provider_retry');
+  assert.equal(Number(attr('status')), 503);
+  assert.equal(Number(attr('attempt')), 1);
+  assert.doesNotMatch(JSON.stringify(recovery), /sk-abcdefghijklmnop/, 'secrets in the provider error are redacted');
+  const metricNames = received.metrics.flatMap((p) => p.resourceMetrics[0].scopeMetrics[0].metrics.map((m) => m.name));
+  assert.ok(metricNames.includes('oasis.recovery.count'));
+});

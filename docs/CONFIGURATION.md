@@ -387,6 +387,8 @@ and git remotes to suggest the apps a project uses. Nothing is executed.
 
 Telemetry is off unless `OASIS_ENABLE_TELEMETRY=1`. OASIS then sends metrics, log events and traces over OTLP/HTTP JSON to `OTEL_EXPORTER_OTLP_ENDPOINT` (per-signal `OTEL_EXPORTER_OTLP_{METRICS,LOGS,TRACES}_ENDPOINT` and `_HEADERS` work too). `OTEL_{METRICS,LOGS,TRACES}_EXPORTER` takes `otlp`, `console` or `none`.
 
+Retries and recoveries are recorded too. Each one sends an `oasis.recovery` event, attached to the model request or turn span it happened in, and adds to the `oasis.recovery.count` counter. The event's `kind` is one of `connection_retry`, `provider_retry`, `rate_limit_wait`, `stream_restart`, `malformed_call`, `context_overflow` or `output_truncated`, and it carries the attempt number, the limit, the HTTP status and the wait where they apply. Secrets in provider error text are redacted.
+
 | Variable | Effect |
 | --- | --- |
 | `OTEL_LOG_USER_PROMPTS=1` | Include prompt text in the `oasis.user_prompt` event. Off by default; only the length is sent. |
