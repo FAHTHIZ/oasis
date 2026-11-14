@@ -62,8 +62,9 @@ export async function buildSystemPrompt({ workspace, skills, plugins = [], now =
     const paths = await workspace.paths();
     const source = workspace.project.source;
     lines.push('', 'Project: ' + workspace.project.name + (source && source.type === 'github' ? ' (GitHub ' + source.owner + '/' + source.repo + ', branch ' + source.branch + ')' : '') + ', ' + paths.length + ' files.');
-    const top = [...new Set(paths.map((p) => (p.includes('/') ? p.split('/')[0] + '/' : p)))].slice(0, 60);
-    if (top.length) lines.push('Top level: ' + top.join(', '));
+    const allTop = [...new Set(paths.map((p) => (p.includes('/') ? p.split('/')[0] + '/' : p)))];
+    const top = allTop.slice(0, 60);
+    if (top.length) lines.push('Top level: ' + top.join(', ') + (allTop.length > top.length ? ', and ' + (allTop.length - top.length) + ' more top-level entries (use list_files to see them)' : ''));
     for (const name of INSTRUCTION_FILES) {
       if (await workspace.exists(name)) {
         const text = await workspace.read(name);

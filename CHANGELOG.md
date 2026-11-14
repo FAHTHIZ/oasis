@@ -4,6 +4,7 @@ User-facing change history grouped by package version. A version heading does no
 
 ## Unreleased
 
+- Browser app: the system prompt's "Top level" list now says how many entries past the first 60 were left out, instead of silently ending the list.
 - Steering notes are no longer dropped. When more than 20 undelivered steering messages piled up across turns (or in a saved session), the oldest were silently discarded on carry, save and load; they are now merged into the first carried note, so every instruction still reaches the next turn.
 - Waiting for a person no longer uses up a tool's timeout. Approval prompts inside a tool (for example "Run this command?") and `ask_user_question` answers paused nothing before, so a user who took more than two minutes to answer saw the tool fail with "Tool timed out". The tool kernel now pauses its timer while it waits for the user and resumes it with the time that was left; cancellation still works during the wait.
 - The tool kernel no longer cuts tool timeouts to 15 minutes (it would have stopped a long `MCP_TOOL_TIMEOUT` call), and a `run_command` given the full 600 seconds now stops on its own timeout, with its output, instead of racing the kernel limit set at the same 600 seconds.

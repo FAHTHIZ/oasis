@@ -384,6 +384,12 @@ test('system prompt includes project instructions and skills', async () => {
   assert.match(prompt, /- testing: Write tests\./);
 });
 
+test('system prompt says how many top-level entries were left out', async () => {
+  const ws = await project(Array.from({ length: 75 }, (_, i) => ({ path: 'f' + String(i).padStart(2, '0') + '.txt', content: '' })));
+  const prompt = await buildSystemPrompt({ workspace: ws });
+  assert.match(prompt, /and 15 more top-level entries \(use list_files to see them\)/);
+});
+
 test('a streaming tail renders unfinished formatting closed (remend)', async () => {
   const { renderMarkdown, renderPartialMarkdown } = await import('../app/markdown.mjs');
   assert.match(renderPartialMarkdown('This is **bold'), /<strong>bold<\/strong>/);
