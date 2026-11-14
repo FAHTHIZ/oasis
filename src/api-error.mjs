@@ -65,3 +65,24 @@ export function responseText(output) {
   }
   return parts.join('\n').trim();
 }
+
+// Some free gateways report an exhausted budget as an ordinary HTTP 200 reply
+// whose assistant text is the notice. Seen live from Pollinations' anonymous
+// tier (response id "pllns_..."): "The API key used for this request has
+// reached its budget. Please [raise the key budget](https://enter.pollinations.ai/
+// edit-key?...), then try again." Used as an answer, it ends the task with a
+// billing message and skips the fallback chain. Only exact gateway notices
+// match: the opening sentence plus the gateway's own link or response id, and
+// no tool calls, so a model talking about API budgets is not affected.
+const GATEWAY_BUDGET_NOTICES = [
+  { opening: /^The API key used for this request has reached its budget\./, gateway: /\benter\.pollinations\.ai\b/, id: /^pllns_/ }
+];
+
+export function gatewayBudgetNotice(message, data = {}) {
+  if (!message || (Array.isArray(message.tool_calls) && message.tool_calls.length)) return '';
+  const text = typeof message.content === 'string' ? message.content.trim() : '';
+  if (!text || text.length > 4000) return '';
+  const id = String(data && data.id || '');
+  const notice = GATEWAY_BUDGET_NOTICES.find((item) => item.opening.test(text) && (item.gateway.test(text) || item.id.test(id)));
+  return notice ? text.split('\n')[0].slice(0, 300) : '';
+}
