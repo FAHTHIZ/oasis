@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import os from 'node:os';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
-import { mkdtemp, writeFile, rm } from 'node:fs/promises';
+import { mkdtemp, writeFile, readFile, rm } from 'node:fs/promises';
 import { executeTool, nonInteractiveEnvironment } from '../src/tools.mjs';
 import { executePowerTool } from '../src/power-tools.mjs';
 
@@ -79,7 +79,7 @@ test('write_file refuses to overwrite a file the agent only partly read', async 
   assert.equal(written.backedUpExistingFile, true);
 });
 
-test('edit_file and multi_edit handle files larger than one read (up to 4 MiB)', async (t) => {
+test('edit_file and multi_edit handle files larger than one read', async (t) => {
   const root = await mkdtemp(path.join(os.tmpdir(), 'oasis-bigedit-'));
   t.after(() => rm(root, { recursive: true, force: true }));
   const lines = Array.from({ length: 12000 }, (_, i) => 'export const v' + i + ' = ' + i + '; // generated value padding');
@@ -91,4 +91,22 @@ test('edit_file and multi_edit handle files larger than one read (up to 4 MiB)',
   assert.ok(edited.beforeBytes > 256 * 1024);
   const multi = await executePowerTool('multi_edit', { path: 'gen.js', edits: [{ old_string: 'v11006 = 11006;', new_string: 'v11006 = -2;' }] }, ctx, root);
   assert.equal(multi.changed ?? true, true);
+});
+
+// Lockfiles, SQL dumps and data fixtures run past 4 MiB, which edits refused.
+test('edit_file and multi_edit edit a file over 4 MiB', async (t) => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'oasis-hugeedit-'));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const lines = Array.from({ length: 120000 }, (_, i) => 'INSERT INTO t VALUES (' + i + ', \'padding padding padding\');');
+  await writeFile(path.join(root, 'dump.sql'), lines.join('\n') + '\n');
+  const ctx = { root, session: { config: {} }, autoApprove: true, approval: async () => true, env: process.env };
+  await executeTool('read_file', { path: 'dump.sql', offset: 110000, limit: 20 }, ctx);
+  const edited = await executeTool('edit_file', { path: 'dump.sql', old_string: 'VALUES (110005,', new_string: 'VALUES (-1,' }, ctx);
+  assert.equal(edited.changed, true);
+  assert.ok(edited.beforeBytes > 4 * 1024 * 1024);
+  const multi = await executePowerTool('multi_edit', { path: 'dump.sql', edits: [{ old_string: 'VALUES (110006,', new_string: 'VALUES (-2,' }] }, ctx, root);
+  assert.equal(multi.changed ?? true, true);
+  const text = await readFile(path.join(root, 'dump.sql'), 'utf8');
+  assert.match(text, /VALUES \(-1,/);
+  assert.match(text, /VALUES \(-2,/);
 });
