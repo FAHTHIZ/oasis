@@ -4513,7 +4513,7 @@ export async function runAgentTurn(session, prompt, options = {}) {
   } catch (error) {
     if (session && !options.isSubagent) {
       session.lastRunReport = buildRunReport(runTracker, { result: {}, route: reportRoute, escalation });
-      session.lastRunReport.outcome = error && error.name === 'AbortError' ? 'cancelled' : 'failed: ' + String(error && error.message || error).split('\n')[0].slice(0, 200);
+      session.lastRunReport.outcome = error && error.name === 'AbortError' ? 'cancelled' : 'failed: ' + redactSecretText(String(error && error.message || error).split('\n')[0]).slice(0, 200);
     }
     throw error;
   } finally {
