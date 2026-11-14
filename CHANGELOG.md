@@ -4,6 +4,7 @@ User-facing change history grouped by package version. A version heading does no
 
 ## Unreleased
 
+- Browser app: a reply stream that ends before the model finished (no `finish_reason`/`[DONE]`, or no Anthropic `message_stop`) is retried instead of being kept as the answer, which could run a half-written tool call. Anthropic authentication and invalid-request errors inside a stream are no longer retried.
 - Copying browser chats to the computer sends the whole chat (newest turns first, up to the 4 MiB import limit) and every chat in every project. It used to stop at the last 300 turns, 60 chats per project and 100 projects.
 - Browser app: chats are saved whole (they were cut to the last 300 messages and 200 shown entries), and the chat list keeps every chat (it dropped all past 50). If storage is full, the recent part is kept. Chats saved by older versions load without a tool result whose call was cut off, which providers rejected.
 - Roo and Kilo mode rule folders: every file is read (the first 50 used to be the limit), and files past the 48 KiB budget are listed by path in the prompt instead of being skipped without a word.
