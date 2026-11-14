@@ -163,6 +163,30 @@ test('provider connection probe accepts a tool call the model wrote as reply tex
   await assert.rejects(testProviderConnection(cfg, { timeoutMs: 1000 }), /expected validation-tool arguments/);
 });
 
+test('provider connection probe retries once after an unusable answer, but not after an HTTP error', async (t) => {
+  const originalFetch = globalThis.fetch;
+  t.after(() => { globalThis.fetch = originalFetch; });
+  const cfg = { protocol: 'openai-compatible', baseURL: 'http://127.0.0.1:9/v1', model: 'qwen3:0.6b', apiKey: '' };
+  const replies = ['{"name": "oasis_connection_probe", "arguments": {"ready": "true"}}', null];
+  let calls = 0;
+  globalThis.fetch = async () => {
+    const content = replies[calls++];
+    const message = content === null
+      ? { role: 'assistant', content: '', tool_calls: [{ id: 'c1', type: 'function', function: { name: 'oasis_connection_probe', arguments: '{"ready":true}' } }] }
+      : { role: 'assistant', content };
+    return new Response(JSON.stringify({ choices: [{ message }] }), { status: 200, headers: { 'content-type': 'application/json' } });
+  };
+  const result = await testProviderConnection(cfg, { timeoutMs: 1000 });
+  assert.equal(calls, 2);
+  assert.equal(result.attempts, 2);
+  assert.equal(result.reliabilityWarning, true);
+  assert.match(result.note, /second try/);
+  calls = 0;
+  globalThis.fetch = async () => { calls++; return new Response('{"error":{"message":"bad key"}}', { status: 401, headers: { 'content-type': 'application/json' } }); };
+  await assert.rejects(testProviderConnection(cfg, { timeoutMs: 1000 }), /connection test failed/i);
+  assert.equal(calls, 1);
+});
+
 test('provider connection probe redacts credentials and does not treat an HTTP error as success', async (t) => {
   const originalFetch = globalThis.fetch;
   globalThis.fetch = async () => new Response(JSON.stringify({
