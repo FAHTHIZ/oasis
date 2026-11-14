@@ -534,7 +534,7 @@ export function savedSessionDisplay(messages = [], { maxEntries = 400 } = {}) {
     const text = typeof item.content === 'string' ? item.content : '';
     if (item.role === 'user') {
       if (!text.trim() || text.startsWith('<system-reminder>')) continue;
-      display.push({ role: 'user', content: text.slice(0, 24000), at: 0 });
+      display.push({ role: 'user', content: text.slice(0, MAX_STREAMED_REPLY_CHARS), at: 0 });
     } else if (item.role === 'assistant') {
       const calls = Array.isArray(item.tool_calls) ? item.tool_calls : [];
       const tools = [];
@@ -547,7 +547,7 @@ export function savedSessionDisplay(messages = [], { maxEntries = 400 } = {}) {
         tools.push(tool);
       }
       if (!text.trim() && !tools.length) continue;
-      display.push({ role: 'assistant', content: text.slice(0, 24000), tools, at: 0 });
+      display.push({ role: 'assistant', content: text.slice(0, MAX_STREAMED_REPLY_CHARS), tools, at: 0 });
     } else if (item.role === 'tool') {
       const tool = byCall.get(String(item.tool_call_id || ''));
       if (!tool) continue;
@@ -2584,7 +2584,7 @@ export function createOasisWebServer(options = {}) {
       if (!key || key.length > 200) { json(res, 400, { error: 'An imported chat needs a key of up to 200 characters.' }); return; }
       const turns = (Array.isArray(body.messages) ? body.messages : []).slice(-300)
         .filter((item) => item && (item.role === 'user' || item.role === 'assistant') && typeof item.content === 'string' && item.content.trim() && !item.content.includes('\0'))
-        .map((item) => ({ role: item.role, content: item.content.slice(0, 24000) }));
+        .map((item) => ({ role: item.role, content: item.content.slice(0, MAX_STREAMED_REPLY_CHARS) }));
       if (!turns.some((item) => item.role === 'user')) { json(res, 400, { error: 'An imported chat needs at least one message from you.' }); return; }
       const digest = createHash('sha256').update(path.resolve(activeRoot) + '\0' + key).digest('hex');
       const id = [digest.slice(0, 8), digest.slice(8, 12), '4' + digest.slice(13, 16), '8' + digest.slice(17, 20), digest.slice(20, 32)].join('-');
@@ -2608,7 +2608,7 @@ export function createOasisWebServer(options = {}) {
       catch (error) { json(res, error && error.code === 'ENOENT' ? 404 : 400, { error: error && error.code === 'ENOENT' ? 'That session is not saved yet or no longer exists.' : 'Could not open that session: ' + (error && error.message || 'unknown error') }); return; }
       // System reminders (checklist, hook feedback) are for the model, not the chat view.
       const messages = saved.messages.filter((item) => ['user', 'assistant'].includes(item.role) && typeof item.content === 'string' && item.content.trim() && !item.content.startsWith('<system-reminder>'))
-        .map((item) => ({ role: item.role, content: item.content.slice(0, 24000) }));
+        .map((item) => ({ role: item.role, content: item.content.slice(0, MAX_STREAMED_REPLY_CHARS) }));
       json(res, 200, { id, updatedAt: saved.updatedAt, messages, display: savedSessionDisplay(saved.messages) });
       return;
     }
