@@ -13,11 +13,10 @@ import { chmod, mkdir, readdir, stat } from 'node:fs/promises';
 import { createRequire } from 'node:module';
 import path from 'node:path';
 import { getConfigDirectory } from './config.mjs';
-import { getSessionDirectory } from './sessions.mjs';
+import { MAX_SESSION_BYTES, getSessionDirectory } from './sessions.mjs';
 import { readBoundedRegularFile } from './safe-storage.mjs';
 import { redactSecrets } from './auto-memory.mjs';
 
-const MAX_SESSION_BYTES = 3 * 1024 * 1024;
 const MAX_FILES = 2000;
 const INDEX_VERSION = '1';
 const CANDIDATES = 150;

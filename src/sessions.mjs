@@ -11,8 +11,14 @@ import { atomicWriteFile, replaceFileDurably } from './atomic-write.mjs';
 import { appendEvent, clearEvents } from './event-stream.mjs';
 import { recoveredToolContent } from './tool-results.mjs';
 
-const MAX_SESSION_BYTES = 3 * 1024 * 1024;
-const MAX_MESSAGES = 120;
+// A saved session holds the whole live transcript, which the agent already
+// keeps inside the model's context window by compacting. A long agentic turn
+// is hundreds of messages, and a 1M-token window is several MiB of text, so
+// these caps only stop runaway files; a session over the byte cap is saved
+// with its oldest exchanges dropped rather than not saved at all.
+export const MAX_SESSION_BYTES = 64 * 1024 * 1024;
+const MAX_MESSAGES = 5000;
+const MAX_TOOL_CALLS_PER_MESSAGE = 512;
 
 export function workspaceSessionKey(root) {
   return createHash('sha256').update(path.resolve(root)).digest('hex').slice(0, 20);
@@ -36,7 +42,7 @@ function validateMessages(messages) {
   for (const item of messages) {
     if (!item || typeof item !== 'object' || !['system', 'user', 'assistant', 'tool'].includes(item.role)) throw new Error('Session history contains an invalid message.');
     if (item.content !== undefined && item.content !== null && typeof item.content !== 'string') throw new Error('Session history contains non-text message content.');
-    if (item.tool_calls !== undefined && (!Array.isArray(item.tool_calls) || item.tool_calls.length > 30)) throw new Error('Session history contains invalid tool calls.');
+    if (item.tool_calls !== undefined && (!Array.isArray(item.tool_calls) || item.tool_calls.length > MAX_TOOL_CALLS_PER_MESSAGE)) throw new Error('Session history contains invalid tool calls.');
     if (item.role === 'tool' && typeof item.tool_call_id !== 'string') throw new Error('Session history contains a tool result without an ID.');
   }
   if (messages[0].role !== 'system') throw new Error('Session history must begin with system context.');
@@ -242,10 +248,10 @@ export function completeExchanges(messages, pendingOutputs = null) {
   return list;
 }
 
-function boundedHistory(messages) {
-  if (messages.length <= MAX_MESSAGES || !messages[0] || messages[0].role !== 'system') return messages.slice(-MAX_MESSAGES);
+function boundedHistory(messages, limit = MAX_MESSAGES) {
+  if (messages.length <= limit || !messages[0] || messages[0].role !== 'system') return messages.slice(-limit);
   const rest = messages.slice(1);
-  let start = rest.length - (MAX_MESSAGES - 2);
+  let start = rest.length - (limit - 2);
   while (start < rest.length && rest[start].role === 'tool') start++;
   const tail = rest.slice(start);
   let anchor = [];
@@ -276,7 +282,8 @@ export async function saveSession(session, options = {}) {
   if (!session || !Array.isArray(session.messages)) throw new Error('There is no active session to save.');
   const env = options.env || process.env;
   const id = session.sessionId && validateId(session.sessionId) || randomUUID();
-  const messages = validateMessages(boundedHistory(completeExchanges(session.messages, session.pendingToolOutputs)).map((message) => message && message.images ? (({ images, ...rest }) => rest)(message) : message));
+  const complete = completeExchanges(session.messages, session.pendingToolOutputs).map((message) => message && message.images ? (({ images, ...rest }) => rest)(message) : message);
+  let messages = validateMessages(boundedHistory(complete));
   await saveAgentTranscripts(session, id, env);
   const payload = {
     schemaVersion: 1,
@@ -314,7 +321,13 @@ export async function saveSession(session, options = {}) {
         : session.agentTasks && session.agentTasks.autoDispatchCheckpoint
     )
   };
-  const body = JSON.stringify(payload, null, 2) + '\n';
+  let body = JSON.stringify(payload, null, 2) + '\n';
+  // Over the byte cap: keep the most recent exchanges that fit.
+  while (Buffer.byteLength(body, 'utf8') > MAX_SESSION_BYTES && messages.length > 3) {
+    messages = validateMessages(boundedHistory(complete, Math.max(3, Math.floor(messages.length / 2))));
+    payload.messages = messages;
+    body = JSON.stringify(payload, null, 2) + '\n';
+  }
   if (Buffer.byteLength(body, 'utf8') > MAX_SESSION_BYTES) throw new Error('Session is too large to save safely. Start a fresh session or disable persistence.');
   const directory = getSessionDirectory(session.root, env);
   await mkdir(directory, { recursive: true, mode: 0o700 });
