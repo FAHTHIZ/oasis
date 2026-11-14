@@ -29,12 +29,14 @@ import { createParser } from 'eventsource-parser';
 import { splitThinking, createThinkFilter } from '../../src/think-tags.mjs';
 
 export class ProviderError extends Error {
-  constructor(message, { status = 0, retryable = false, retryAfterMs = null } = {}) {
+  constructor(message, { status = 0, retryable = false, retryAfterMs = null, waitMs = null } = {}) {
     super(message);
     this.name = 'ProviderError';
     this.status = status;
     this.retryable = retryable;
     this.retryAfterMs = retryAfterMs;
+    // A server-advised wait for an ordinary retry (it does not end the retries).
+    this.waitMs = waitMs;
   }
 }
 
@@ -44,7 +46,32 @@ export class ProviderError extends Error {
  * fall back). Gemini words per-minute limits like exhausted quota; its
  * quota id and RetryInfo say how long to wait.
  */
-export function retryPlan(status, body = '') {
+export function retryPlan(status, body = '', headers = null) {
+  const plan = bodyRetryPlan(status, body);
+  // OpenAI and Anthropic send x-should-retry and retry-after-ms / Retry-After
+  // with errors; their SDKs follow both, and so does this.
+  const header = (name) => (headers && typeof headers.get === 'function' ? headers.get(name) : null);
+  const advice = String(header('x-should-retry') || '').trim().toLowerCase();
+  if (advice === 'false') return { retryable: false };
+  if (advice === 'true') plan.retryable = true;
+  if (plan.retryable && !Number.isFinite(plan.retryAfterMs)) {
+    const ms = advisedWaitMs(header('retry-after-ms'), header('retry-after'));
+    if (ms !== null && ms <= 60000) plan.waitMs = ms;
+  }
+  return plan;
+}
+
+function advisedWaitMs(retryAfterMs, retryAfter) {
+  const ms = Number.parseFloat(String(retryAfterMs ?? ''));
+  if (Number.isFinite(ms) && ms >= 0) return Math.ceil(ms);
+  const raw = String(retryAfter ?? '').trim();
+  if (!raw) return null;
+  if (/^\d+(?:\.\d+)?$/.test(raw)) return Math.ceil(Number(raw) * 1000);
+  const at = Date.parse(raw);
+  return Number.isFinite(at) ? Math.max(0, at - Date.now()) : null;
+}
+
+function bodyRetryPlan(status, body) {
   const text = String(body || '');
   if (status === 429) {
     const perMinute = /PerMinute|per ?minute/i.test(text) && !/PerDay|per ?day/i.test(text);
@@ -234,15 +261,15 @@ async function chatOpenAI(config, { messages, tools, signal, onText: rawOnText, 
       response = await fetchImpl(url, { method: 'POST', headers, body: JSON.stringify(body), signal });
       if (!response.ok) {
         const retryBody = await response.text().catch(() => '');
-        throw new ProviderError(explain(response.status, retryBody, config), { status: response.status, ...retryPlan(response.status, retryBody) });
+        throw new ProviderError(explain(response.status, retryBody, config), { status: response.status, ...retryPlan(response.status, retryBody, response.headers) });
       }
     } else {
-      throw new ProviderError(explain(response.status, errorBody, config), { status: response.status, ...retryPlan(response.status, errorBody) });
+      throw new ProviderError(explain(response.status, errorBody, config), { status: response.status, ...retryPlan(response.status, errorBody, response.headers) });
     }
   }
   if (!response.ok) {
     const errorBody = await response.text().catch(() => '');
-    throw new ProviderError(explain(response.status, errorBody, config), { status: response.status, ...retryPlan(response.status, errorBody) });
+    throw new ProviderError(explain(response.status, errorBody, config), { status: response.status, ...retryPlan(response.status, errorBody, response.headers) });
   }
   const type = response.headers.get('content-type') || '';
   if (!type.includes('event-stream')) {
@@ -364,7 +391,7 @@ async function chatAnthropic(config, { messages, tools, signal, onText, fetchImp
   });
   if (!response.ok) {
     const errorBody = await response.text().catch(() => '');
-    throw new ProviderError(explain(response.status, errorBody, config), { status: response.status, ...retryPlan(response.status, errorBody) });
+    throw new ProviderError(explain(response.status, errorBody, config), { status: response.status, ...retryPlan(response.status, errorBody, response.headers) });
   }
   let content = '';
   const blocks = [];
@@ -411,7 +438,7 @@ export async function chat(config, request) {
       }
       attempt += 1;
       if (request.onRetry) request.onRetry(attempt, error);
-      const wait = error && Number.isFinite(error.retryAfterMs) ? error.retryAfterMs : 800 * 2 ** attempt;
+      const wait = error && Number.isFinite(error.retryAfterMs) ? error.retryAfterMs : error && Number.isFinite(error.waitMs) ? error.waitMs : 800 * 2 ** attempt;
       if (error && Number.isFinite(error.retryAfterMs)) attempt = Math.max(attempt, Number.isInteger(config.maxRetries) ? config.maxRetries : 3);
       await new Promise((resolve, reject) => {
         const timer = setTimeout(resolve, wait);
