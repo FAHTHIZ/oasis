@@ -140,6 +140,7 @@ export { formatWait, isHardQuotaError, isMalformedGenerationError, providerRetry
 const MAX_REPLY_CHARS = 24000;
 // Reasoning shown on the page for one model step (characters).
 const MAX_REASONING_SHOWN = 8000;
+const MAX_SYSTEM_PROMPT_CHARS = 100000;
 // How much of a reply is streamed live. Long answers (a full file, a long
 // report) run past 24k characters; streaming stopped there and the CLI, ACP
 // and the browser showed a cut-off reply. The bound only limits the cost of
@@ -573,7 +574,7 @@ export async function createSession({ root, config, restore = null, permissionMo
   const contextProbe = { config, localContextNotices: [] };
   await detectLocalContextWindow(contextProbe, { env });
   const smallContext = !bare && contextWindowSize(contextProbe.config, env) <= SMALL_CONTEXT_TOKENS && !/^(?:0|false|off|no)$/i.test(String(env.OASIS_SMALL_CONTEXT_TOOLS || ''));
-  let systemText = systemPromptOverride ? String(systemPromptOverride).slice(0, 100000) : (smallContext ? compactSystemPrompt : systemPrompt)(dynamicOut ? '(given in the first user message)' : root, projectContext, visibleSkills, dynamicOut ? '' : environmentText);
+  let systemText = systemPromptOverride ? String(systemPromptOverride).slice(0, MAX_SYSTEM_PROMPT_CHARS) : (smallContext ? compactSystemPrompt : systemPrompt)(dynamicOut ? '(given in the first user message)' : root, projectContext, visibleSkills, dynamicOut ? '' : environmentText);
   const dynamicSections = dynamicOut ? ['The current workspace root is: ' + root, 'Environment:\n' + environmentText] : null;
   // If an overflow later reveals a small window, swap the base prompt for the compact one.
   const compactPromptSwap = !smallContext && !systemPromptOverride && !dynamicOut && !bare ? { full: systemText, compact: compactSystemPrompt(root, projectContext, visibleSkills, environmentText) } : null;
@@ -584,7 +585,10 @@ export async function createSession({ root, config, restore = null, permissionMo
   if (!systemPromptOverride && !bare && !dynamicOut && !restricted && env.OASIS_NO_APP_HINTS !== '1') {
     try { systemText += await (await import('./connectors.mjs')).projectAppsSection(root, env); } catch {}
   }
-  if (appendSystemPrompt) systemText += '\n\n' + String(appendSystemPrompt).slice(0, 20000);
+  // Same bound as a replacement prompt. At 20,000 characters the --from-pr
+  // context (description, file list and up to 40,000 characters of diff) lost
+  // most of its diff, and longer --append-system-prompt-file text was cut.
+  if (appendSystemPrompt) systemText += '\n\n' + String(appendSystemPrompt).slice(0, MAX_SYSTEM_PROMPT_CHARS);
   const session = {
     projectContextText: projectContext || '',
     createEnv: env,
