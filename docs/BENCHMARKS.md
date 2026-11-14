@@ -23,7 +23,7 @@ For quantitative comparisons, use the controlled live-evaluation protocol below:
 | Task routing decision | 29 µs | per `selectTaskModel` call |
 | stdio MCP server connect | 24 ms | p90 136 ms, 20 tools listed |
 
-Most remaining memory comes from Oasis's own source modules, which load at import. Splitting them further is open work.
+Most remaining memory comes from Oasis's own source modules, which load at import. Splitting them further is open work. Importing `src/agent.mjs` loads 345 modules (+59 MB RSS). The third-party packages among them (`yaml`, `jsonc-parser`, `unbash`, `cockatiel`, `image-size` and five small ones) add about 17 MB together. Loading any one of them lazily would save at most 3.5 MB (`yaml`), so they still load at import (measured 14 November 2026).
 
 About 45 MB of the session's RSS appears on the first token count, which loads the tokenizer's BPE table. Measured 14 November 2026 in a fresh Node 22 process (RSS after loading and encoding one string): `gpt-tokenizer` o200k (what OASIS uses) +68 MB / 284 ms, `gpt-tokenizer` cl100k +46 MB, `js-tiktoken` o200k +153 MB, `tiktoken` (WASM) o200k +65 MB. `gpt-tokenizer` is within 3 MB of the WASM build and needs no binary, and `js-tiktoken` uses more than twice as much, so no change was made. The table loads on the first token count, not at startup (`--version` and `--help` stay at 46 MB).
 
