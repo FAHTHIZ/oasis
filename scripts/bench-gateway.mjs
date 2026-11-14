@@ -235,7 +235,7 @@ export function createGateway(options, { fetchImpl = proxyAwareFetch(), now = Da
       const usage = seen.usage || {};
       const promptTokens = usage.prompt_tokens ?? usage.input_tokens ?? null;
       const completionTokens = usage.completion_tokens ?? usage.output_tokens ?? null;
-      await log({ id, agent, endpoint: rest, at: new Date(started).toISOString(), ms: now() - started, status: upstream.status, requestedModel, sentModel: options.model, servedModel: seen.servedModel || null, provider: seen.provider || null, stream: Boolean(body.stream), messages: Array.isArray(body.messages) ? body.messages.length : Array.isArray(body.input) ? body.input.length : null, tools: Array.isArray(body.tools) ? body.tools.length : 0, promptTokens, completionTokens, error: upstream.status >= 400 ? redactSecretText(text.slice(0, 2000)).slice(0, 300) : undefined });
+      await log({ id, agent, endpoint: rest, at: new Date(started).toISOString(), ms: now() - started, status: upstream.status, requestedModel, sentModel: options.model, servedModel: seen.servedModel || null, provider: seen.provider || null, stream: Boolean(body.stream), messages: Array.isArray(body.messages) ? body.messages.length : Array.isArray(body.input) ? body.input.length : null, tools: Array.isArray(body.tools) ? body.tools.length : 0, promptTokens, completionTokens, ...messageSizes(body), error: upstream.status >= 400 ? redactSecretText(text.slice(0, 2000)).slice(0, 300) : undefined, ...(quotaExhausted(upstream.status, upstream.headers, text) ? { quotaExhausted: true } : {}) });
       res.end();
     } catch (error) {
       if (!res.headersSent) res.writeHead(502, { 'content-type': 'application/json' });
@@ -248,6 +248,30 @@ export function createGateway(options, { fetchImpl = proxyAwareFetch(), now = Da
 }
 
 /** Starts a gateway on a free loopback port; records are also kept in memory. */
+/**
+ * Sizes, never contents: the largest message and the newest one, in characters, so a run can show
+ * what grew an agent's prompt (a big file read, test output carried for many turns).
+ */
+export function messageSizes(body) {
+  const list = Array.isArray(body && body.messages) ? body.messages : Array.isArray(body && body.input) ? body.input : null;
+  if (!list || !list.length) return {};
+  const size = (item) => { const c = item && (item.content ?? item.output ?? item.arguments); return typeof c === 'string' ? c.length : c ? JSON.stringify(c).length : 0; };
+  let largest = { role: null, chars: -1 };
+  for (const item of list) { const chars = size(item); if (chars > largest.chars) largest = { role: item && (item.role || item.type) || null, chars }; }
+  const last = list[list.length - 1];
+  return { largestMessage: largest, lastMessage: { role: last && (last.role || last.type) || null, chars: size(last) } };
+}
+
+/**
+ * A 429 that will not clear by retrying: the provider says so (x-should-retry: false, as Kilo
+ * sends) or names a used-up quota. Every later trial would fail the same way, so the run stops.
+ */
+export function quotaExhausted(status, headers, text = '') {
+  if (status !== 429) return false;
+  const header = headers && typeof headers.get === 'function' ? headers.get('x-should-retry') : headers && headers['x-should-retry'];
+  return String(header || '').toLowerCase() === 'false' || /LIMIT_REACHED|insufficient_quota|quota (?:exceeded|exhausted)|daily limit/i.test(String(text).slice(0, 4000));
+}
+
 export async function startGateway(options, deps) {
   const records = [];
   const server = createGateway({ host: '127.0.0.1', minIntervalMs: 0, ...options, records }, deps);
