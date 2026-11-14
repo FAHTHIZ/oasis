@@ -129,7 +129,7 @@ export async function configureProvider(root = process.cwd(), options = {}) {
           // another terminal and retry instead of being forced to guess an ID.
           while (!detected.available || !detected.models.length) {
             stdout.write(detected.message + '\n');
-            stdout.write('Install/start Ollama from https://ollama.com/download. If it is running but has no model, use another terminal to run: ollama pull <model-name>\n');
+            stdout.write((detected.available ? await ollamaPullHint() : 'Install/start Ollama from https://ollama.com/download, then press Enter here.') + '\n');
             const answer = (await rl.question('Enter a model ID to continue, press Enter to check again, or type later to stop: ')).trim();
             if (/^(?:later|skip|cancel)$/i.test(answer)) {
               throw new Error('Local model setup was stopped. No provider settings were changed. Install and start Ollama, then run oasis setup again.');
@@ -339,4 +339,17 @@ export async function ensureModelProviderSetup(root, options = {}) {
     stdout.write('Guided setup did not complete: ' + String(error && error.message || error) + '. Nothing new was saved unless the provider test succeeded. Run oasis setup to try again.\n');
   }
   try { return Boolean((await loadConfig()).configured); } catch { return false; }
+}
+
+// Ollama is up but empty: name a model that fits this machine instead of a
+// placeholder, so the next command is copy-pasteable.
+export async function ollamaPullHint({ detect } = {}) {
+  try {
+    const { detectHardware, modelMemoryBudget, localModelTier } = await import('./hardware.mjs');
+    const tier = localModelTier(modelMemoryBudget(await (detect || detectHardware)()));
+    if (tier && tier.model) return 'In another terminal run: ollama pull ' + tier.model + '  (fits this computer), then press Enter here.';
+    return 'This computer has little memory for a local model; a hosted model will work better. To try anyway, run ollama pull <model-name> in another terminal.';
+  } catch {
+    return 'In another terminal run: ollama pull <model-name>, then press Enter here.';
+  }
 }
