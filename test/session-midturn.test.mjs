@@ -110,3 +110,15 @@ test('a session saved mid-turn is marked unfinished, and the next turn warns the
   await saveSession(session, { env });
   assert.equal((await loadSession(dir, session.sessionId, { env })).turnInProgress, null);
 });
+
+test('a damaged session file gives a plain error and is left in place', async (t) => {
+  const { writeFile, readFile } = await import('node:fs/promises');
+  const dir = await mkdtemp(path.join(os.tmpdir(), 'oasis-damaged-'));
+  t.after(() => rm(dir, { recursive: true, force: true }));
+  const env = { ...process.env, OASIS_CONFIG_DIR: path.join(dir, 'cfg') };
+  const saved = await saveSession({ root: dir, config: { model: 'm' }, messages: [{ role: 'system', content: 's' }, { role: 'user', content: 'hi' }] }, { env });
+  const text = await readFile(saved.path, 'utf8');
+  await writeFile(saved.path, text.slice(0, Math.floor(text.length / 2)));
+  await assert.rejects(loadSession(dir, saved.id, { env }), (error) => error.code === 'OASIS_SESSION_DAMAGED' && error.message.includes(saved.path));
+  assert.ok((await readFile(saved.path, 'utf8')).length > 0);
+});

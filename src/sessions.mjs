@@ -335,8 +335,13 @@ export async function saveSession(session, options = {}) {
 
 export async function loadSession(root, id, options = {}) {
   const env = options.env || process.env;
-  const source = await readBoundedRegularFile(sessionPath(root, id, env), MAX_SESSION_BYTES, { label: 'Saved session', tooLargeMessage: 'Stored session is too large.' });
-  const payload = JSON.parse(source);
+  const file = sessionPath(root, id, env);
+  const source = await readBoundedRegularFile(file, MAX_SESSION_BYTES, { label: 'Saved session', tooLargeMessage: 'Stored session is too large.' });
+  let payload;
+  try { payload = JSON.parse(source); } catch {
+    // Left in place so it can be inspected or repaired by hand.
+    throw Object.assign(new Error('Saved session ' + id + ' is damaged (its file is not valid JSON) and cannot be resumed. The file was left at ' + file + '.'), { code: 'OASIS_SESSION_DAMAGED' });
+  }
   if (!payload || payload.schemaVersion !== 1 || payload.id !== id || path.resolve(payload.workspaceRoot || '') !== path.resolve(root)) {
     throw new Error('That saved session does not belong to this workspace or uses an unsupported format.');
   }
