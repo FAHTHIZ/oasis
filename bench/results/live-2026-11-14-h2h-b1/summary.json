@@ -1,0 +1,253 @@
+{
+  "date": "2026-11-14T13:13:13.211Z",
+  "oasisVersion": "1.3.0",
+  "requestedModels": {
+    "oasis": "nvidia/nemotron-3-ultra-550b-a55b:free",
+    "claude": "nvidia/nemotron-3-ultra-550b-a55b:free",
+    "codex": "nvidia/nemotron-3-ultra-550b-a55b:free",
+    "opencode": "bench/nvidia/nemotron-3-ultra-550b-a55b:free"
+  },
+  "router": "api.kilo.ai (recorded)",
+  "sameModelVerified": true,
+  "servedModel": "nvidia/nemotron-3-ultra-550b-a55b:free",
+  "gateway": {
+    "agents": {
+      "oasis": {
+        "calls": 31,
+        "errors": 0,
+        "servedModels": {
+          "nvidia/nemotron-3-ultra-550b-a55b:free": 31
+        },
+        "providers": {
+          "Nvidia": 31
+        },
+        "inputTokens": 608994,
+        "outputTokens": 5509
+      },
+      "claude": {
+        "calls": 25,
+        "errors": 8,
+        "servedModels": {
+          "nvidia/nemotron-3-ultra-550b-a55b:free": 17
+        },
+        "providers": {},
+        "inputTokens": 69400,
+        "outputTokens": 5512
+      },
+      "codex": {
+        "calls": 29,
+        "errors": 1,
+        "servedModels": {
+          "nvidia/nemotron-3-ultra-550b-a55b:free": 28
+        },
+        "providers": {},
+        "inputTokens": 339454,
+        "outputTokens": 4100
+      },
+      "opencode": {
+        "calls": 11,
+        "errors": 0,
+        "servedModels": {
+          "nvidia/nemotron-3-ultra-550b-a55b:free": 11
+        },
+        "providers": {
+          "Nvidia": 11
+        },
+        "inputTokens": 130117,
+        "outputTokens": 2768
+      }
+    },
+    "sameModel": true,
+    "sameProvider": false,
+    "servedModel": "nvidia/nemotron-3-ultra-550b-a55b:free"
+  },
+  "trialsPerTask": 1,
+  "requestedAgents": [
+    "oasis",
+    "claude",
+    "codex",
+    "opencode"
+  ],
+  "sharedTaskIds": [
+    "taskflow-priority-sort"
+  ],
+  "sharedTasks": [
+    "taskflow-priority-sort"
+  ],
+  "excludedTasks": [],
+  "unverifiedTasks": [],
+  "fingerprintMismatchTasks": [],
+  "metadataMismatchTasks": [],
+  "incompleteTasks": [],
+  "rateLimitedTasks": [],
+  "partialTasks": {
+    "safe-relative-path": {
+      "oasis": "passed 1/1",
+      "claude": "passed 1/1",
+      "codex": "failed 0/1 (upstream HTTP 429)",
+      "opencode": "not run"
+    }
+  },
+  "taskMetadata": {
+    "taskflow-priority-sort": {
+      "category": "data-structures",
+      "difficulty": "small"
+    }
+  },
+  "caveats": [
+    "The run stopped early: the upstream quota ran out during Codex CLI · safe-relative-path (HTTP 429 that the provider marks as not retryable). 9 agent/task unit(s) did not run.",
+    "Agent adapters do not use identical tool surfaces, approval modes, or sandbox policies. This is a configured-product comparison, not an isolated measurement of harness code.",
+    "Token and cost fields are adapter-reported usage. Cost may be absent or calculated differently by providers; it is not a normalized billing audit.",
+    "Only 1 task(s) have complete, identical SHA-256 fingerprints and the requested number of trials across all completed agents; the guide targets at least 50 representative tasks.",
+    "Only 1 trial(s) per task were requested. One trial is a smoke test; three trials are a minimum diagnostic repeat, not a confidence interval or significance test.",
+    "No verified matched task is labeled large; this run does not test larger repository-level work.",
+    "1 task(s) were not run by every completed agent and are not scored: safe-relative-path. Their outcomes are listed under Task coverage.",
+    "Every scored agent was served model nvidia/nemotron-3-ultra-550b-a55b:free, but the gateway could not confirm one upstream provider for all of them (missing or different provider fields); serving stacks can differ in quantization and limits.",
+    "The selected agents do not all have one identical, explicitly requested model ID."
+  ],
+  "agents": [
+    {
+      "agent": "oasis",
+      "name": "OASIS",
+      "label": "OASIS 1.3.0 (nvidia/nemotron-3-ultra-550b-a55b:free)",
+      "file": "oasis.json",
+      "requestedModel": "nvidia/nemotron-3-ultra-550b-a55b:free",
+      "reportedModel": "nvidia/nemotron-3-ultra-550b-a55b:free",
+      "cliVersion": "1.3.0",
+      "sourceRevision": "5743ce4d1b348ada5bad2bfe74dabb304bac2f5f",
+      "sourceRevisionAtEnd": "dc02de567c5aab53d1c2830e4e7f85ae0b8bb6a7",
+      "sourceChangedDuringRun": true,
+      "runtime": {
+        "node": "v22.21.1",
+        "platform": "linux",
+        "arch": "x64"
+      },
+      "passRate": 0,
+      "passedTrials": 0,
+      "trials": 1,
+      "medianTrialTimeMs": 266841,
+      "totalTokens": 120960,
+      "totalReportedCostUSD": 0,
+      "perTask": {
+        "taskflow-priority-sort": 0
+      }
+    },
+    {
+      "agent": "claude",
+      "name": "Claude Code",
+      "label": "Claude Code 2.1.325 (Claude Code) (nvidia/nemotron-3-ultra-550b-a55b:free)",
+      "file": "claude.json",
+      "requestedModel": "nvidia/nemotron-3-ultra-550b-a55b:free",
+      "reportedModel": "nvidia/nemotron-3-ultra-550b-a55b:free",
+      "cliVersion": "2.1.325 (Claude Code)",
+      "sourceRevision": "5743ce4d1b348ada5bad2bfe74dabb304bac2f5f",
+      "sourceRevisionAtEnd": "cab908ced457dad70f25b232e4baed2c710de314",
+      "sourceChangedDuringRun": true,
+      "runtime": {
+        "node": "v22.21.1",
+        "platform": "linux",
+        "arch": "x64"
+      },
+      "passRate": 0,
+      "passedTrials": 0,
+      "trials": 1,
+      "medianTrialTimeMs": 270499,
+      "totalTokens": 36240,
+      "totalReportedCostUSD": 0.20559,
+      "perTask": {
+        "taskflow-priority-sort": 0
+      }
+    },
+    {
+      "agent": "codex",
+      "name": "Codex CLI",
+      "label": "Codex CLI codex-cli 0.169.0 (nvidia/nemotron-3-ultra-550b-a55b:free)",
+      "file": "codex.json",
+      "requestedModel": "nvidia/nemotron-3-ultra-550b-a55b:free",
+      "reportedModel": "nvidia/nemotron-3-ultra-550b-a55b:free",
+      "cliVersion": "codex-cli 0.169.0",
+      "sourceRevision": "5743ce4d1b348ada5bad2bfe74dabb304bac2f5f",
+      "sourceRevisionAtEnd": "cab908ced457dad70f25b232e4baed2c710de314",
+      "sourceChangedDuringRun": true,
+      "runtime": {
+        "node": "v22.21.1",
+        "platform": "linux",
+        "arch": "x64"
+      },
+      "passRate": 0,
+      "passedTrials": 0,
+      "trials": 1,
+      "medianTrialTimeMs": 522909,
+      "totalTokens": 304276,
+      "totalReportedCostUSD": null,
+      "perTask": {
+        "taskflow-priority-sort": 0
+      }
+    },
+    {
+      "agent": "opencode",
+      "name": "OpenCode",
+      "label": "OpenCode 1.19.5 (bench/nvidia/nemotron-3-ultra-550b-a55b:free)",
+      "file": "opencode.json",
+      "requestedModel": "bench/nvidia/nemotron-3-ultra-550b-a55b:free",
+      "reportedModel": "bench/nvidia/nemotron-3-ultra-550b-a55b:free",
+      "cliVersion": "1.19.5",
+      "sourceRevision": "5743ce4d1b348ada5bad2bfe74dabb304bac2f5f",
+      "sourceRevisionAtEnd": "5922de4893e1c4271215bbe93168af6d7e8f8499",
+      "sourceChangedDuringRun": true,
+      "runtime": {
+        "node": "v22.21.1",
+        "platform": "linux",
+        "arch": "x64"
+      },
+      "passRate": 0,
+      "passedTrials": 0,
+      "trials": 1,
+      "medianTrialTimeMs": 263675,
+      "totalTokens": 48713,
+      "totalReportedCostUSD": 0,
+      "perTask": {
+        "taskflow-priority-sort": 0
+      }
+    }
+  ],
+  "stoppedEarly": "the upstream quota ran out during Codex CLI · safe-relative-path (HTTP 429 that the provider marks as not retryable)",
+  "notRun": [
+    {
+      "agent": "opencode",
+      "task": "safe-relative-path"
+    },
+    {
+      "agent": "oasis",
+      "task": "taskflow-search"
+    },
+    {
+      "agent": "claude",
+      "task": "taskflow-search"
+    },
+    {
+      "agent": "codex",
+      "task": "taskflow-search"
+    },
+    {
+      "agent": "opencode",
+      "task": "taskflow-search"
+    },
+    {
+      "agent": "oasis",
+      "task": "taskflow-dependencies"
+    },
+    {
+      "agent": "claude",
+      "task": "taskflow-dependencies"
+    },
+    {
+      "agent": "codex",
+      "task": "taskflow-dependencies"
+    },
+    {
+      "agent": "opencode",
+      "task": "taskflow-dependencies"
+    }
+  ]
+}
