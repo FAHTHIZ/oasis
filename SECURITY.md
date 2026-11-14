@@ -12,6 +12,8 @@ If private vulnerability reporting is unavailable, contact the repository mainta
 
 ## Security boundaries
 
+The full security model (what OASIS enforces, where, and what it does not cover) is in [docs/SECURITY.md](docs/SECURITY.md).
+
 - Approval prompts do not provide OS-level isolation.
 - Optional sandbox backends differ by platform and configuration. Verify that a sandbox is active before relying on it.
 - MCP servers, hooks, plugins and imported extensions may execute third-party code.

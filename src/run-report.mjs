@@ -9,6 +9,8 @@
 // provider-reported. The report covers requests made by this OASIS process;
 // external CLIs, MCP servers and hooks that call models themselves are not in it.
 
+import { redactSecretText } from './secret-shield.mjs';
+
 export function newRunTracker() {
   return { models: new Map(), requests: 0, sideRequests: 0, estimatedRequests: 0, inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheCreationTokens: 0, estimatedCostUsd: 0, costKnown: true, providerCostUsd: 0, providerCostRequests: 0, fallbacks: [], started: Date.now() };
 }
@@ -38,7 +40,7 @@ export function trackUsage(tracker, entry = {}, fallbackModel = '') {
 
 export function trackFallback(tracker, event = {}) {
   if (!tracker || !event) return;
-  tracker.fallbacks.push({ from: String(event.from || ''), to: String(event.to || ''), kind: String(event.kind || ''), reason: String(event.reason || '').slice(0, 200) });
+  tracker.fallbacks.push({ from: String(event.from || ''), to: String(event.to || ''), kind: String(event.kind || ''), reason: redactSecretText(String(event.reason || '')).slice(0, 200) });
 }
 
 export function buildRunReport(tracker, { result = {}, route = {}, escalation = null, now = Date.now() } = {}) {

@@ -42,6 +42,10 @@ test('cost is provider-reported only when every request carried the provider cha
   assert.match(text, /Cost: unknown/);
   assert.match(text, /External CLIs, MCP servers and hooks/);
   assert.equal(formatRunReport(null), 'No task has run in this session yet.');
+
+  const leaky = newRunTracker();
+  trackFallback(leaky, { from: 'a', to: 'b', kind: 'auth', reason: 'HTTP 401: Incorrect API key provided: sk-proj-abcdefghijklmnopqrstuvwxyz0123456789ABCD' });
+  assert.doesNotMatch(formatRunReport(buildRunReport(leaky, {})), /abcdefghijklmnop/);
 });
 
 test('a real turn records its fallback, provider-reported cost and outcome, and /report shows them', async () => {
