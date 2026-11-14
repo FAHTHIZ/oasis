@@ -89,7 +89,7 @@ import { access, mkdir, readdir, readFile, realpath, writeFile } from 'node:fs/p
 async function pathExists(file) { try { await access(file); return true; } catch { return false; } }
 import { SHELL_TOOL_DEFINITION, POWERSHELL_TOOL_DEFINITION, findPowerShell, killAllBackground } from './power-tools.mjs';
 import { serverForFile, verifyEditedFileWithLsp, stopLspClients } from './lsp.mjs';
-import { AGENT_TOOL_DEFINITIONS, AGENT_TOOL_NAMES, MAX_BACKGROUND_AGENTS, agentRegistry, registerAgent, addAgentUsage, restoreAgentHistory, runningBackgroundCount, notifyParent, takeQueuedText, drainInbox, agentStatus, agentEvents, neuronNetworkSnapshot, recordAgentEvent, sendTeamMessage, stopAgent, stopAllAgents, getAgent, getAgentTeam, createAgentTeam, agentTeamStatus, shutdownAgentTeam } from './agent-tasks.mjs';
+import { AGENT_TOOL_DEFINITIONS, AGENT_TOOL_NAMES, MAX_BACKGROUND_AGENTS, stopDescendants, agentRegistry, registerAgent, addAgentUsage, restoreAgentHistory, runningBackgroundCount, notifyParent, takeQueuedText, drainInbox, agentStatus, agentEvents, neuronNetworkSnapshot, recordAgentEvent, sendTeamMessage, stopAgent, stopAllAgents, getAgent, getAgentTeam, createAgentTeam, agentTeamStatus, shutdownAgentTeam } from './agent-tasks.mjs';
 import { subagentStepLimit, subagentDefinitionContext, verifyResumeWorktree, backgroundUsageSink, subagentMaxDepth, watchForStall, agentScopedHooks, withoutProjectInstructions, agentMcpSpec, connectAgentMcp, closeAgentMcp } from './subagent-support.mjs';
 export { subagentMaxDepth, subagentStallLimits } from './subagent-support.mjs';
 import { loadAgentDefinitions, taskToolDefinition, BUILTIN_AGENTS, MAX_PARALLEL_SUBAGENTS, runPool, parseFrontMatter, mapToolNames, normalizeAgentDefinition } from './subagents.mjs';
@@ -2742,6 +2742,7 @@ async function runChildTurnInner(parent, record, prompt, options, { foreground }
     record.tokensUsed += runTokens;
     record.finishedAt = Date.now();
     record.status = record.stalled ? 'stalled' : record.cancelRequested || error.name === 'AbortError' ? 'cancelled' : 'failed';
+    stopDescendants(parent, record, 'the agent that started it ' + (record.status === 'cancelled' ? 'was stopped' : record.status === 'stalled' ? 'stalled' : 'failed'));
     record.error = record.stalled ? record.stalled : error.message;
     if (record.stalled) {
       // Keep whatever the agent had written so far so the parent can still use it.
@@ -2768,6 +2769,8 @@ async function runChildTurnInner(parent, record, prompt, options, { foreground }
   }
   record.finishedAt = Date.now();
   record.status = 'completed';
+  // Background agents it started and did not wait for would report to a finished conversation.
+  const orphans = stopDescendants(parent, record, 'the agent that started it finished without waiting for it');
   recordAgentEvent(parent, 'agent.completed', { agentId: record.id, teamId: record.teamId || undefined, description: record.description, detail: 'tool_calls=' + Math.max(0, Number(outcome.toolCalls) || 0) });
   record.report = boundSubagentReport(outcome.text);
   // Long reports go to a scratch file; the parent gets a preview and the path (src/report-handoff.mjs).
@@ -2782,6 +2785,7 @@ async function runChildTurnInner(parent, record, prompt, options, { foreground }
     finished: outcome.finished === true,
     report: handoff ? handoff.preview : record.report,
     ...(handoff ? { report_file: handoff.file, report_chars: handoff.chars } : {}),
+    ...(orphans.length ? { stopped_unfinished_agents: orphans, note_on_agents: 'This agent finished while agents it had started were still running; they were stopped. Ask it (send_message) to wait for them with agent_status if their results are needed.' } : {}),
     ...(outcome.limitReached ? { partial: true, note: 'The agent hit its ' + (record.maxTurns ? 'maxTurns (' + record.maxTurns + ')' : 'step') + ' limit; the report may be incomplete. send_message resumes it.' } : {}),
     ...(record.outputSchema ? (outcome.schemaErrors && outcome.schemaErrors.length ? { schema_errors: outcome.schemaErrors } : { structured: outcome.structured }) : {}),
     toolCalls: Math.max(0, Number(outcome.toolCalls) || 0),
