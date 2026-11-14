@@ -88,6 +88,8 @@ function modelFor(agent, options, env = process.env) {
   return options.model;
 }
 
+export const withLoopback = (value) => [...new Set([...String(value || '').split(',').map((h) => h.trim()).filter(Boolean), '127.0.0.1', 'localhost', '::1'])].join(',');
+
 const quietOutput = (prefix) => ({ write(text) { for (const line of String(text).split('\n')) if (line.trim()) process.stdout.write(prefix + line + '\n'); return true; } });
 
 export async function runBenchmark(options, { env = process.env, runner = runEvalCommand, now = new Date() } = {}) {
@@ -109,6 +111,10 @@ export async function runBenchmark(options, { env = process.env, runner = runEva
     const agentEnv = gateway
       ? agentEnvironment(agent, { ...options, router: gateway.agentUrl(agent) }, { ...env, OASIS_BENCH_API_KEY: 'bench-gateway' })
       : agentEnvironment(agent, options, env);
+    // The gateway is on loopback. Agents that honour HTTPS_PROXY (Claude Code
+    // does) would otherwise send their calls to the proxy, which cannot reach
+    // 127.0.0.1, and fail before the first request.
+    if (gateway) for (const name of ['NO_PROXY', 'no_proxy']) agentEnv[name] = withLoopback(env[name]);
     if (agent === 'oasis' && model) agentEnv.OASIS_MODEL = model;
     process.stdout.write('\n== ' + DISPLAY[agent] + (model ? ' (' + model + ')' : '') + '\n');
     try {
@@ -196,14 +202,19 @@ export function summarize(runs, options, now = new Date(), gateway = null) {
   if (metadataMismatchTasks.length) caveats.push(metadataMismatchTasks.length + ' shared task(s) had missing or conflicting category/difficulty metadata and were excluded.');
   if (incompleteTasks.length) caveats.push(incompleteTasks.length + ' shared task(s) did not have exactly ' + options.trials + ' distinct trial rows for every completed agent and were excluded.');
   const completedAgents = completed.map((run) => run.agent);
-  const gatewayAgents = gateway ? Object.keys(gateway.agents) : [];
-  const sameModelVerified = Boolean(gateway && gateway.sameModel && completedAgents.length && completedAgents.every((agent) => gatewayAgents.includes(agent)) && gatewayAgents.every((agent) => completedAgents.includes(agent)));
+  // Only agents that produced scored trials count: an agent skipped after a
+  // few calls (rate limit, crash) does not affect what the scores rest on.
+  const servedFor = (agent) => gateway && gateway.agents[agent] ? Object.keys(gateway.agents[agent].servedModels) : [];
+  const scoredModels = completedAgents.map(servedFor);
+  const sameModelVerified = Boolean(gateway && completedAgents.length && scoredModels.every((list) => list.length === 1) && new Set(scoredModels.map((list) => list[0])).size === 1);
+  const scoredProviders = completedAgents.map((agent) => Object.keys(gateway && gateway.agents[agent] ? gateway.agents[agent].providers : {}).sort().join(','));
+  const sameProviderVerified = sameModelVerified && scoredProviders.every((p) => p && !p.includes(',') && p === scoredProviders[0]);
   if (!gateway) caveats.push('A shared gateway URL and requested model ID do not prove that every client was served the same underlying model or model version. Verify gateway/provider logs (or use --upstream, which records them) before calling this a same-model harness comparison.');
   else if (!sameModelVerified) caveats.push('The recording gateway did not see every completed agent served by one identical model ID (see the gateway table); this is not a verified same-model comparison.');
-  else if (!gateway.sameProvider) caveats.push('Every agent was served model ' + gateway.servedModel + ', but by more than one upstream provider; serving stacks can differ in quantization and limits.');
+  else if (!sameProviderVerified) caveats.push('Every scored agent was served model ' + scoredModels[0][0] + ', but the gateway could not confirm one upstream provider for all of them (missing or different provider fields); serving stacks can differ in quantization and limits.');
   if (!options.router && !options.upstream) caveats.push('No shared gateway was configured. Model/provider differences mean results describe each product as configured, not a controlled same-model harness comparison.');
   if (distinctModels.length !== 1 || options.agents.some((agent) => !requestedModels[agent])) caveats.push('The selected agents do not all have one identical, explicitly requested model ID.');
-  return { date: now.toISOString(), oasisVersion: oasisVersion(), requestedModels, router: options.router ? new URL(options.router).host : options.upstream ? new URL(options.upstream).host + ' (recorded)' : null, sameModelVerified, gateway, trialsPerTask: options.trials, requestedAgents: options.agents, sharedTaskIds: shared, sharedTasks: verifiedTasks, excludedTasks: [...new Set([...unverifiedTasks, ...fingerprintMismatchTasks, ...metadataMismatchTasks, ...incompleteTasks])].sort(), unverifiedTasks, fingerprintMismatchTasks, metadataMismatchTasks, incompleteTasks, taskMetadata, caveats, agents };
+  return { date: now.toISOString(), oasisVersion: oasisVersion(), requestedModels, router: options.router ? new URL(options.router).host : options.upstream ? new URL(options.upstream).host + ' (recorded)' : null, sameModelVerified, servedModel: sameModelVerified ? scoredModels[0][0] : null, gateway, trialsPerTask: options.trials, requestedAgents: options.agents, sharedTaskIds: shared, sharedTasks: verifiedTasks, excludedTasks: [...new Set([...unverifiedTasks, ...fingerprintMismatchTasks, ...metadataMismatchTasks, ...incompleteTasks])].sort(), unverifiedTasks, fingerprintMismatchTasks, metadataMismatchTasks, incompleteTasks, taskMetadata, caveats, agents };
 }
 export function renderSummary(summary) {
   const lines = [];
@@ -219,7 +230,7 @@ export function renderSummary(summary) {
     lines.push('| ' + item.label + ' | ' + (item.requestedModel || 'CLI default') + ' | ' + (item.reportedModel || 'not reported') + ' | ' + pct(item.passRate) + ' | ' + item.passedTrials + '/' + item.trials + ' | ' + seconds(item.medianTrialTimeMs) + ' | ' + (item.totalTokens ?? 'n/a') + ' | ' + (item.totalReportedCostUSD === null ? 'n/a' : '$' + item.totalReportedCostUSD.toFixed(4)) + ' |');
   }
   if (summary.gateway) {
-    lines.push('', '## Gateway record', '', summary.sameModelVerified ? 'Same model verified: every completed agent\'s calls were served by `' + summary.gateway.servedModel + '`, as reported by the upstream.' : 'Same model NOT verified from the gateway record.', '');
+    lines.push('', '## Gateway record', '', summary.sameModelVerified ? 'Same model verified: every scored agent\'s calls were served by `' + summary.servedModel + '`, as reported by the upstream.' : 'Same model NOT verified from the gateway record.', '');
     lines.push('| Agent | Calls | Failed calls | Served model(s) | Provider(s) | Input tokens | Output tokens |', '|---|---:|---:|---|---|---:|---:|');
     const list = (counts) => Object.entries(counts).map(([k, v]) => k + ' ×' + v).join(', ') || 'none reported';
     for (const [agent, a] of Object.entries(summary.gateway.agents)) lines.push('| ' + agent + ' | ' + a.calls + ' | ' + a.errors + ' | ' + list(a.servedModels) + ' | ' + list(a.providers) + ' | ' + a.inputTokens + ' | ' + a.outputTokens + ' |');
