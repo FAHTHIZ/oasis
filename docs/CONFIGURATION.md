@@ -182,6 +182,8 @@ free: free tiers are not proof a route cannot bill), and reports
 model's price is not known. Respect each provider's own free-tier terms; the
 gateway's combined allowance is not guaranteed.
 
+With one upstream key, FreeLLMAPI can bench that key on its own. Seen on 2026-11-14: after three empty completions in a row (HTTP 200 from the upstream, no text and no tool call) it set a 10-minute heuristic cooldown, and every client got HTTP 429 "All models exhausted ... Soonest reset ~10m" with `Retry-After` until it expired. Add a second key or model in FreeLLMAPI, or set `OASIS_WAIT_FOR_RATE_LIMIT_MINUTES` (see [Rate-limit waits](#rate-limit-waits)) so OASIS waits instead of stopping.
+
 Tested on 2026-11-14 with FreeLLMAPI from source and its keyless Kilo platform:
 `oasis -p` fixed a one-line bug through `nemotron-3-ultra-550b` in 4 requests
 (13 s, 26,531 input tokens), with the key read from `FREELLMAPI_API_KEY` alone.
@@ -510,6 +512,12 @@ Source: `src/mcp-lazy.mjs`.
 ## Stream retries
 
 A reply stream that drops mid-response is sent again, up to `OASIS_STREAM_MAX_RETRIES` times (default 5, as Codex's `stream_max_retries`; 0 to 20), with a growing pause between tries (0.25 s up to 10 s). A stream that goes silent fails after `OASIS_STREAM_IDLE_SECONDS` (default 300, or 600 at high, xhigh or max reasoning effort). Because each stall already took a full idle window, a stalled stream is restarted at most twice. A provider error of 500 or above reported mid-stream gets one extra try. A dropped stream never returns tool calls, so a restart cannot run a tool twice.
+
+## Rate-limit waits
+
+A per-minute limit with a short stated wait (90 s or less, from the body or a hint such as FreeLLMAPI's "Soonest reset ~28s") is waited out automatically: up to 6 times with no backup model, once when a fallback chain is set. A longer reset is not waited for by default, so an interactive run is not left silent for minutes. For unattended runs set `OASIS_WAIT_FOR_RATE_LIMIT_MINUTES=N`: a request that is still rate-limited after the normal retries sleeps until the reset the provider advertises (`Retry-After`, Anthropic's or OpenAI's reset headers) when it is at most N minutes away (maximum 1440), and tries again, up to 3 times. Billing and out-of-credit errors never wait. When OASIS stops on a 429 whose reset it could have waited for, the error names the setting and a value that covers it.
+
+Source: `src/provider-retry.mjs` (`shortRateLimitMs`, `rateLimitWaitMs`, `rateLimitWaitHint`).
 
 ## Model circuit breaker
 
