@@ -355,6 +355,20 @@ async function runVerifier(task, workspace, env, timeoutMs = 60000) {
   return { exitCode: result.exitCode, output: result.output, timedOut: result.timedOut, error: result.error || null };
 }
 
+// Every agent starts in a git repository holding one baseline commit, as in a
+// real project. A bare folder put agents that find files through git at a
+// disadvantage: Aider created its own empty repo and saw no files at all. The
+// user's global and system git config (hooks, signing) are not used.
+export async function initBaselineRepo(workspace, env) {
+  const gitEnv = { ...scrubEnvironment(env), GIT_CONFIG_GLOBAL: os.devNull, GIT_CONFIG_NOSYSTEM: '1' };
+  const config = ['-c', 'user.name=OASIS eval', '-c', 'user.email=eval@oasis.invalid', '-c', 'commit.gpgsign=false', '-c', 'core.hooksPath=' + os.devNull];
+  for (const args of [['init', '--quiet'], ['add', '--all'], [...config, 'commit', '--quiet', '--no-verify', '--allow-empty', '-m', 'Task baseline']]) {
+    const result = await runEvalProcess('git', args, { cwd: workspace, env: gitEnv, timeoutMs: 30000 });
+    if (result.exitCode !== 0) return false;
+  }
+  return true;
+}
+
 async function applyReferencePatch(task, workspace, env) {
   // The disposable copy intentionally excludes the source repository's .git directory.
   // Initialize a throwaway repo so git apply has consistent work-tree semantics.
@@ -1265,8 +1279,10 @@ async function runClaudeCodeEval(config, options = {}) {
       let cliResult = null;
       let parsed = null;
       let verification = { exitCode: 1, output: 'Agent did not complete.' };
+      let gitBaseline = false;
       try {
         await copySnapshot(task.repoDir, workspace);
+        gitBaseline = await initBaselineRepo(workspace, env);
         const prompt = task.taskText.trim() + '\n\nBenchmark constraints: solve this task using only the current workspace. Do not access files outside this workspace, use the network, change the task harness, or bypass verification. The harness runs the task verifier independently after you finish.';
         cliResult = await runCli(adapter.buildArgs(config, prompt, env), {
           cwd: workspace,
@@ -1304,6 +1320,7 @@ async function runClaudeCodeEval(config, options = {}) {
         category: task.category,
         difficulty: task.difficulty,
         trial,
+        gitBaseline,
         status: passed ? 'passed' : 'failed',
         passed,
         model: parsed && parsed.model ? parsed.model : config.model || null,
@@ -1464,6 +1481,7 @@ export async function runEvalCommand(args = [], options = {}) {
         const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'oasis-eval-run-'));
         const workspace = path.join(tempRoot, 'workspace');
         await copySnapshot(task.repoDir, workspace);
+        const gitBaseline = await initBaselineRepo(workspace, env);
         const isolatedConfigDir = path.join(tempRoot, 'oasis-config');
         await mkdir(isolatedConfigDir, { recursive: true, mode: 0o700 });
         let session = null;
@@ -1582,6 +1600,7 @@ export async function runEvalCommand(args = [], options = {}) {
           trace, requestTokens,
           verification: { exitCode: verification.exitCode, output: verification.output },
           changes,
+          gitBaseline,
           error: errorText,
           ...(agentResult && !agentResult.finished ? { unfinished: unfinishedReason(agentResult) } : {})
         });
