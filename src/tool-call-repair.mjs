@@ -474,3 +474,46 @@ export function unknownTextToolCalls(content, availableNames) {
   }
   return [...new Set(names)];
 }
+
+// Streaming display: once a model starts writing a text-format tool call
+// (local models: `<tools>{"name": …}`, `<tool_call>`, Kimi/DeepSeek/Mistral
+// tokens), stop showing the text there. The call is recovered after the
+// reply ends and shown as a normal tool step; the raw markup is noise.
+// A marker inside a code fence is quoted, not invoked, so it stays visible,
+// and a half-received marker at the end (`<too`) is held back until it is
+// known not to be one.
+const STREAM_CALL_MARKERS = /<tool_call>|<tools>|<function_calls>|<function=[\w.-]|<\|tool_call_begin\|>|<\|tool_calls_section_begin\|>|<｜tool▁calls?▁begin｜>|\[TOOL_CALLS\]|<\|start\|>assistant|to=functions\.[\w.-]|```tool_code/;
+const STREAM_MARKER_PREFIXES = ['<tool_call>', '<tools>', '<function_calls>', '<function=', '<|tool_call', '[TOOL_CALLS]'];
+export function hideStreamingToolCalls(text, availableNames = null) {
+  if (typeof text !== 'string' || !text) return text;
+  const names = availableNames instanceof Set ? availableNames : new Set(availableNames || []);
+  const lines = text.split('\n');
+  let inFence = false;
+  let offset = 0;
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    const last = i === lines.length - 1;
+    if (/^\s*```/.test(line) && !/^\s*```tool_code/.test(line)) inFence = !inFence;
+    else if (!inFence) {
+      const m = STREAM_CALL_MARKERS.exec(line);
+      if (m) return text.slice(0, offset + m.index).trimEnd();
+      // A line opening with {"name": "<tool>" is a call being written. While
+      // the name is still arriving, hold the line back; a name that is not a
+      // tool (package.json, say) is shown.
+      const bare = /^\s*\[?\s*\{\s*"(?:name|function)"\s*:\s*("?)([\w.-]*)("?)/.exec(line);
+      if (bare) {
+        const complete = bare[3] === '"';
+        if (complete ? names.has(bare[2]) : last) return text.slice(0, offset).trimEnd();
+      }
+    }
+    offset += line.length + 1;
+  }
+  if (inFence) return text;
+  // Hold back a marker that is still arriving (`<too`), one chunk at most.
+  for (const marker of STREAM_MARKER_PREFIXES) {
+    for (let k = marker.length - 1; k > 0; k--) {
+      if (text.endsWith(marker.slice(0, k))) return text.slice(0, text.length - k);
+    }
+  }
+  return text;
+}

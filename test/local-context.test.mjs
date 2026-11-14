@@ -228,3 +228,31 @@ test('connect gives an Ollama model with a small default window a wide variant t
   assert.equal(await widenOllamaContext(config, { fetchImpl: refused }), null, 'a refused create leaves the original model in place');
   assert.equal(created.length, 1);
 });
+
+// Regression: on an 8 GB, 2-core machine `oasis connect` made a 32K variant of
+// qwen3:0.6b that Ollama loaded at 4.4 GB, past the 3.3 GB model budget that
+// `oasis setup --auto` uses (and slow enough to stall a terminal session).
+test('the wide Ollama variant is sized to fit this computer\'s model memory', async () => {
+  const { widenOllamaContext, kvCacheBytesPerToken, fittingContext } = await import('../src/local-context.mjs');
+  const info = { 'qwen3.block_count': 28, 'qwen3.attention.head_count': 16, 'qwen3.attention.head_count_kv': 8, 'qwen3.attention.key_length': 128, 'qwen3.attention.value_length': 128, 'qwen3.context_length': 40960, 'qwen3.embedding_length': 1024 };
+  assert.equal(kvCacheBytesPerToken(info), 114688);
+  assert.equal(kvCacheBytesPerToken({}), 0);
+  assert.equal(fittingContext({ target: 32768, nativeContext: 40960, kvBytesPerToken: 114688, weightsBytes: 522653767, budgetGB: 3.3 }), 24576);
+  assert.equal(fittingContext({ target: 32768, nativeContext: 40960, kvBytesPerToken: 114688, weightsBytes: 522653767, budgetGB: 9.6 }), 32768);
+  assert.equal(fittingContext({ target: 32768, nativeContext: 40960, kvBytesPerToken: 114688, weightsBytes: 522653767, budgetGB: 1 }), 16384);
+  assert.equal(fittingContext({ target: 32768, nativeContext: 40960, kvBytesPerToken: 0, budgetGB: 1 }), 32768, 'unknown cache size keeps the old behaviour');
+  const created = [];
+  const fetchImpl = async (url, init = {}) => {
+    if (url.endsWith('/api/ps')) return Response.json({ models: [] });
+    if (url.endsWith('/api/show')) return Response.json({ model_info: info, parameters: '' });
+    if (url.endsWith('/api/tags')) return Response.json({ models: [{ name: 'qwen3:0.6b', size: 522653767 }] });
+    if (url.endsWith('/api/create')) { created.push(JSON.parse(init.body)); return Response.json({ status: 'success' }); }
+    return new Response('no', { status: 404 });
+  };
+  const statuses = [];
+  const config = { protocol: 'openai-compatible', baseURL: 'http://localhost:11434/v1', model: 'qwen3:0.6b' };
+  const wide = await widenOllamaContext(config, { fetchImpl, memoryBudgetGB: 3.3, onStatus: (status) => statuses.push(status.text) });
+  assert.equal(wide.contextLength, 24576);
+  assert.equal(created[0].parameters.num_ctx, 24576);
+  assert.match(statuses[0], /24,576-token window, sized to fit about 3\.3 GB of model memory on this computer \(32,768 would not fit\)/);
+});
