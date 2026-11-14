@@ -2120,7 +2120,10 @@ function handleRunEvent(event) {
     }
     case 'notices': for (const note of event.notices || []) addMessage('note', note); break;
     case 'compacting': showThinking(); break;
-    case 'compacted': addMessage('note', event.mode === 'summary' ? 'Earlier conversation summarised to save context.' : 'Older tool output trimmed to save context.'); break;
+    case 'compacted': addMessage('note', event.mode === 'summary' ? 'Earlier conversation summarised to save context.' : event.mode === 'digest' ? 'Earlier conversation condensed to a short digest (the model could not summarise it).' : 'Older tool output trimmed to save context.'); break;
+    case 'compaction_error': toast('Could not summarise the earlier conversation: ' + event.message); break;
+    case 'context_overflow': toast('The conversation was too long for the model; condensed it and asked again.'); break;
+    case 'empty_reply': toast('The model sent an empty reply; asking again.'); break;
     case 'stopped':
       endTurn('stopped');
       finishRun('Stopped after');
