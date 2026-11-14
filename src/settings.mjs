@@ -83,7 +83,7 @@ async function readJsonFile(file) {
 }
 
 function stringList(value) {
-  return Array.isArray(value) ? value.filter((item) => typeof item === 'string' && item.trim()).map((item) => item.trim()).slice(0, 500) : [];
+  return Array.isArray(value) ? value.filter((item) => typeof item === 'string' && item.trim()).map((item) => item.trim()) : [];
 }
 
 export async function workspaceIdentity(root) {
@@ -127,9 +127,10 @@ export async function updateUserSettings(mutator, env = process.env) {
 export async function setWorkspaceTrust(root, trusted, env = process.env) {
   const id = await workspaceIdentity(root);
   await updateUserSettings((settings) => {
-    const list = new Set(stringList(settings.trustedWorkspaces));
-    if (trusted) list.add(id); else list.delete(id);
-    settings.trustedWorkspaces = [...list];
+    const list = Array.isArray(settings.trustedWorkspaces) ? settings.trustedWorkspaces : [];
+    const kept = list.filter((item) => !(typeof item === 'string' && item.trim() === id));
+    if (trusted) kept.push(id);
+    settings.trustedWorkspaces = kept;
     return settings;
   }, env);
   return id;
@@ -141,9 +142,11 @@ export async function addPermissionRule(scope, kind, rule, root, env = process.e
   const write = async (file, mode) => {
     await mutateSettingsFile(file, (current) => {
       current.permissions = current.permissions && typeof current.permissions === 'object' && !Array.isArray(current.permissions) ? current.permissions : {};
-      const list = new Set(stringList(current.permissions[kind]));
-      list.add(rule.trim());
-      current.permissions[kind] = [...list];
+      // Entries already in the file are kept exactly as written; the rule is
+      // added once.
+      const list = Array.isArray(current.permissions[kind]) ? current.permissions[kind] : [];
+      if (!list.some((item) => typeof item === 'string' && item.trim() === rule.trim())) list.push(rule.trim());
+      current.permissions[kind] = list;
       return current;
     }, mode);
     return file;
@@ -284,20 +287,20 @@ export function applySandboxCredentials(target, credentials, scope, root, env = 
   };
   if (Array.isArray(credentials.files)) {
     const files = [];
-    for (const entry of credentials.files.slice(0, 200)) {
+    for (const entry of credentials.files) {
       if (!accept(entry, 'sandbox.credentials.files ' + String(entry && entry.path || '').slice(0, 200))) continue;
       const resolved = resolveSandboxSettingPath(entry.path, scope, root, env);
       if (resolved) files.push(resolved);
     }
-    target.credentialFiles = [...new Set([...(target.credentialFiles || []), ...files])].slice(0, 500);
+    target.credentialFiles = [...new Set([...(target.credentialFiles || []), ...files])];
   }
   if (Array.isArray(credentials.envVars)) {
     const names = [];
-    for (const entry of credentials.envVars.slice(0, 200)) {
+    for (const entry of credentials.envVars) {
       if (!entry || typeof entry.name !== 'string' || !CREDENTIAL_ENV_NAME.test(entry.name)) continue;
       if (accept(entry, 'sandbox.credentials.envVars ' + entry.name)) names.push(entry.name);
     }
-    target.credentialEnv = [...new Set([...(target.credentialEnv || []), ...names])].slice(0, 500);
+    target.credentialEnv = [...new Set([...(target.credentialEnv || []), ...names])];
   }
   if (notes.length) target.credentialNotes = [...new Set(notes)].slice(0, 50);
 }
@@ -352,7 +355,7 @@ export async function loadSettings(root, options = {}) {
     // and disableBundledSkills. Both only hide skills, so any file may set them.
     if (settings.skillOverrides && typeof settings.skillOverrides === 'object' && !Array.isArray(settings.skillOverrides)) {
       result.skillOverrides = { ...(result.skillOverrides || {}) };
-      for (const [name, mode] of Object.entries(settings.skillOverrides).slice(0, 500)) if (/^[A-Za-z0-9][A-Za-z0-9:_-]{0,100}$/.test(name) && ['on', 'name-only', 'user-invocable-only', 'off'].includes(mode)) result.skillOverrides[name] = mode;
+      for (const [name, mode] of Object.entries(settings.skillOverrides)) if (/^[A-Za-z0-9][A-Za-z0-9:_-]{0,100}$/.test(name) && ['on', 'name-only', 'user-invocable-only', 'off'].includes(mode)) result.skillOverrides[name] = mode;
     }
     if (typeof settings.disableBundledSkills === 'boolean') result.disableBundledSkills = settings.disableBundledSkills;
     // disableSkillShellExecution: a true from any file turns command-file shell off; a managed true
@@ -421,7 +424,7 @@ export async function loadSettings(root, options = {}) {
     // "includeGitInstructions": false leaves the git snapshot out of the prompt (removing context only, so any file).
     if (typeof settings.includeGitInstructions === 'boolean') result.includeGitInstructions = settings.includeGitInstructions;
     // "claudeMdExcludes": instruction files to skip. Arrays merge from every file (skipping only tightens).
-    if (Array.isArray(settings.claudeMdExcludes)) result.claudeMdExcludes = [...(result.claudeMdExcludes || []), ...settings.claudeMdExcludes.filter((item) => typeof item === 'string' && item.trim()).map((item) => item.trim().slice(0, 1000)).slice(0, 200)];
+    if (Array.isArray(settings.claudeMdExcludes)) result.claudeMdExcludes = [...(result.claudeMdExcludes || []), ...settings.claudeMdExcludes.filter((item) => typeof item === 'string' && item.trim()).map((item) => item.trim().slice(0, 1000))];
     if (!trusted) {
       const routingEnabled = settings.modelRouting && typeof settings.modelRouting === 'object' && (settings.modelRouting.enabled === true || Boolean(String(settings.modelRouting.easyModel || '').trim()) || Boolean(String(settings.modelRouting.strongModel || '').trim()));
       const loosening = stringList(permissions.allow).length || settings.hooks || permissions.defaultMode || settings.sandbox || settings.shell || settings.statusLine || settings.subagentStatusLine || settings.fileSuggestion || settings.lspServers || settings.autoMode || routingEnabled || settings.env || settings.apiKeyHelper || settings.customHeadersHelper || settings.autoTest;
@@ -467,26 +470,26 @@ export async function loadSettings(root, options = {}) {
     }
     if (scope === 'managed' && settings.allowManagedHooksOnly === true) result.allowManagedHooksOnly = true;
     // Claude Code model policy: deniedModels and availableModelsMatch come from managed settings only.
-    if (scope === 'managed' && Array.isArray(settings.deniedModels)) result.deniedModels = [...new Set([...(result.deniedModels || []), ...settings.deniedModels.filter((item) => typeof item === 'string' && item.trim()).map((item) => item.trim())])].slice(0, 200);
+    if (scope === 'managed' && Array.isArray(settings.deniedModels)) result.deniedModels = [...new Set([...(result.deniedModels || []), ...settings.deniedModels.filter((item) => typeof item === 'string' && item.trim()).map((item) => item.trim())])];
     if (scope === 'managed' && (settings.availableModelsMatch === 'exact' || settings.availableModelsMatch === 'prefix')) result.availableModelsMatch = settings.availableModelsMatch;
     // HTTP hook allowlists merge across scopes; once defined, an empty list allows nothing.
-    if (Array.isArray(settings.allowedHttpHookUrls)) result.allowedHttpHookUrls = [...(result.allowedHttpHookUrls || []), ...stringList(settings.allowedHttpHookUrls).map((item) => item.slice(0, 2000))].slice(0, 500);
-    if (Array.isArray(settings.httpHookAllowedEnvVars)) result.httpHookAllowedEnvVars = [...(result.httpHookAllowedEnvVars || []), ...stringList(settings.httpHookAllowedEnvVars)].slice(0, 500);
+    if (Array.isArray(settings.allowedHttpHookUrls)) result.allowedHttpHookUrls = [...(result.allowedHttpHookUrls || []), ...stringList(settings.allowedHttpHookUrls).map((item) => item.slice(0, 2000))];
+    if (Array.isArray(settings.httpHookAllowedEnvVars)) result.httpHookAllowedEnvVars = [...(result.httpHookAllowedEnvVars || []), ...stringList(settings.httpHookAllowedEnvVars)];
     if (settings.sandbox && typeof settings.sandbox === 'object') {
       if (typeof settings.sandbox.enabled === 'boolean') result.sandbox.enabled = settings.sandbox.enabled;
       if (typeof settings.sandbox.network === 'boolean') result.sandbox.network = settings.sandbox.network;
-      if (Array.isArray(settings.sandbox.allowedDomains)) result.sandbox.allowedDomains = settings.sandbox.allowedDomains.filter((item) => typeof item === 'string').slice(0, 500);
-      if (Array.isArray(settings.sandbox.deniedDomains)) result.sandbox.deniedDomains = settings.sandbox.deniedDomains.filter((item) => typeof item === 'string').slice(0, 500);
+      if (Array.isArray(settings.sandbox.allowedDomains)) result.sandbox.allowedDomains = settings.sandbox.allowedDomains.filter((item) => typeof item === 'string');
+      if (Array.isArray(settings.sandbox.deniedDomains)) result.sandbox.deniedDomains = settings.sandbox.deniedDomains.filter((item) => typeof item === 'string');
       // Claude Code's layout: sandbox.network.{allowedDomains,deniedDomains} merge across scopes;
       // allowManagedDomainsOnly (managed) keeps only the managed allowed domains.
       const network = settings.sandbox.network && typeof settings.sandbox.network === 'object' && !Array.isArray(settings.sandbox.network) ? settings.sandbox.network : null;
       if (network) {
         const domains = (value) => Array.isArray(value) ? value.filter((item) => typeof item === 'string') : [];
         if (Array.isArray(network.allowedDomains)) {
-          result.sandbox.allowedDomains = [...(result.sandbox.allowedDomains || []), ...domains(network.allowedDomains)].slice(0, 500);
-          if (scope === 'managed') result.sandbox.managedAllowedDomains = [...(result.sandbox.managedAllowedDomains || []), ...domains(network.allowedDomains)].slice(0, 500);
+          result.sandbox.allowedDomains = [...(result.sandbox.allowedDomains || []), ...domains(network.allowedDomains)];
+          if (scope === 'managed') result.sandbox.managedAllowedDomains = [...(result.sandbox.managedAllowedDomains || []), ...domains(network.allowedDomains)];
         }
-        if (Array.isArray(network.deniedDomains)) result.sandbox.deniedDomains = [...(result.sandbox.deniedDomains || []), ...domains(network.deniedDomains)].slice(0, 500);
+        if (Array.isArray(network.deniedDomains)) result.sandbox.deniedDomains = [...(result.sandbox.deniedDomains || []), ...domains(network.deniedDomains)];
         if (scope === 'managed' && network.allowManagedDomainsOnly === true) result.sandbox.allowManagedDomainsOnly = true;
       }
       // Claude Code's name for autoAllowCommands.
@@ -501,11 +504,11 @@ export async function loadSettings(root, options = {}) {
       if (filesystem) {
         for (const key of ['allowWrite', 'denyWrite', 'denyRead', 'allowRead']) {
           if (!Array.isArray(filesystem[key])) continue;
-          const resolved = filesystem[key].slice(0, 200).map((entry) => resolveSandboxSettingPath(entry, scope, path.resolve(root), env)).filter(Boolean);
-          result.sandbox[key] = [...new Set([...(result.sandbox[key] || []), ...resolved])].slice(0, 500);
-          if (key === 'allowRead' && (scope === 'project' || scope === 'local')) result.sandbox.allowReadRepo = [...new Set([...(result.sandbox.allowReadRepo || []), ...resolved])].slice(0, 500);
-          if (key === 'allowWrite' && (scope === 'project' || scope === 'local')) result.sandbox.allowWriteRepo = [...new Set([...(result.sandbox.allowWriteRepo || []), ...resolved])].slice(0, 500);
-          if (key === 'allowRead' && scope === 'managed') result.sandbox.managedAllowRead = [...new Set([...(result.sandbox.managedAllowRead || []), ...resolved])].slice(0, 500);
+          const resolved = filesystem[key].map((entry) => resolveSandboxSettingPath(entry, scope, path.resolve(root), env)).filter(Boolean);
+          result.sandbox[key] = [...new Set([...(result.sandbox[key] || []), ...resolved])];
+          if (key === 'allowRead' && (scope === 'project' || scope === 'local')) result.sandbox.allowReadRepo = [...new Set([...(result.sandbox.allowReadRepo || []), ...resolved])];
+          if (key === 'allowWrite' && (scope === 'project' || scope === 'local')) result.sandbox.allowWriteRepo = [...new Set([...(result.sandbox.allowWriteRepo || []), ...resolved])];
+          if (key === 'allowRead' && scope === 'managed') result.sandbox.managedAllowRead = [...new Set([...(result.sandbox.managedAllowRead || []), ...resolved])];
         }
         // allowManagedReadPathsOnly (managed): only managed allowRead entries re-open reads; denyRead still merges.
         if (scope === 'managed' && filesystem.allowManagedReadPathsOnly === true) result.sandbox.allowManagedReadPathsOnly = true;
@@ -513,7 +516,7 @@ export async function loadSettings(root, options = {}) {
       applySandboxCredentials(result.sandbox, settings.sandbox.credentials, scope, path.resolve(root), env);
       if (typeof settings.sandbox.autoAllowCommands === 'boolean') result.sandbox.autoAllowCommands = settings.sandbox.autoAllowCommands;
       // sandbox.excludedCommands: Bash(...) rule contents run outside the sandbox; merged across trusted files.
-      if (Array.isArray(settings.sandbox.excludedCommands)) result.sandbox.excludedCommands = [...new Set([...(result.sandbox.excludedCommands || []), ...settings.sandbox.excludedCommands.filter((item) => typeof item === 'string' && item.trim() && item.length <= 500 && !/[\r\n\0]/.test(item)).map((item) => item.trim())])].slice(0, 200);
+      if (Array.isArray(settings.sandbox.excludedCommands)) result.sandbox.excludedCommands = [...new Set([...(result.sandbox.excludedCommands || []), ...settings.sandbox.excludedCommands.filter((item) => typeof item === 'string' && item.trim() && item.length <= 500 && !/[\r\n\0]/.test(item)).map((item) => item.trim())])];
       if (typeof settings.sandbox.maskSensitivePaths === 'boolean') result.sandbox.maskSensitivePaths = settings.sandbox.maskSensitivePaths;
       if (typeof settings.sandbox.autoAllowShellCommands === 'boolean') result.sandbox.autoAllowShellCommands = settings.sandbox.autoAllowShellCommands;
       if (typeof settings.sandbox.writableCaches === 'boolean') result.sandbox.writableCaches = settings.sandbox.writableCaches;
@@ -537,7 +540,7 @@ export async function loadSettings(root, options = {}) {
     // modelOverrides: { "claude-opus-4-6": "arn:aws:bedrock:..." } maps model ids to provider ids.
     if (settings.modelOverrides && typeof settings.modelOverrides === 'object' && !Array.isArray(settings.modelOverrides)) {
       result.modelOverrides = { ...(result.modelOverrides || {}) };
-      for (const [key, value] of Object.entries(settings.modelOverrides).slice(0, 100)) if (key.trim() && typeof value === 'string' && value.trim() && !/[\r\n\0]/.test(value)) result.modelOverrides[key.trim()] = value.trim().slice(0, 500);
+      for (const [key, value] of Object.entries(settings.modelOverrides)) if (key.trim() && typeof value === 'string' && value.trim() && !/[\r\n\0]/.test(value)) result.modelOverrides[key.trim()] = value.trim().slice(0, 500);
     }
     if (settings.defaultShell === 'powershell' || settings.defaultShell === 'bash') result.defaultShell = settings.defaultShell;
     if (typeof settings.advisorModel === 'string' && settings.advisorModel.trim()) result.advisorModel = settings.advisorModel.trim().slice(0, 200);
@@ -587,14 +590,14 @@ export async function loadSettings(root, options = {}) {
       result.autoMode ||= { model: null, rules: [] };
       const personal = scope === 'user' || scope === 'managed' || scope === 'flag';
       if (personal && typeof settings.autoMode.model === 'string' && settings.autoMode.model.trim()) result.autoMode.model = settings.autoMode.model.trim();
-      result.autoMode.rules.push(...stringList(settings.autoMode.rules).map((rule) => rule.slice(0, 500)));
+      result.autoMode.rules.push(...stringList(settings.autoMode.rules).map((rule) => rule.slice(0, 4000)));
       // A longer wait only changes how long a check may take, not what it allows.
       if (personal && Number.isFinite(Number(settings.autoMode.timeoutSeconds)) && Number(settings.autoMode.timeoutSeconds) > 0) result.autoMode.timeoutSeconds = Math.min(600, Number(settings.autoMode.timeoutSeconds));
       if (typeof settings.autoMode.classifyAllShell === 'boolean' && (personal || settings.autoMode.classifyAllShell)) result.autoMode.classifyAllShell = settings.autoMode.classifyAllShell;
       for (const section of ['environment', 'allow', 'soft_deny', 'hard_deny']) {
         const list = settings.autoMode[section];
         if (!Array.isArray(list)) continue;
-        const clean = list.filter((item) => typeof item === 'string' && item.trim()).map((item) => item.trim().slice(0, 1000)).slice(0, 200);
+        const clean = list.filter((item) => typeof item === 'string' && item.trim()).map((item) => item.trim().slice(0, 4000));
         if (personal) { result.autoMode[section] = clean; (result.autoMode.sources ||= {})[section] = file; }
         else if (section === 'soft_deny' || section === 'hard_deny') { result.autoMode.project ||= {}; (result.autoMode.project[section] ||= []).push(...clean.filter((item) => item !== '$defaults')); }
       }
