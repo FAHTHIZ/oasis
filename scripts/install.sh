@@ -34,7 +34,9 @@ ask_yes_no() {
     return 0
   fi
   printf '%s [y/N] ' "$question"
-  if [ ! -r /dev/tty ]; then
+  # -r is true for /dev/tty even with no controlling terminal (curl | sh in
+  # CI, setsid, cron), where opening it fails; so try to open it.
+  if ! (: < /dev/tty) 2>/dev/null; then
     say "I cannot ask for permission here, so I will not make this change."
     return 1
   fi
