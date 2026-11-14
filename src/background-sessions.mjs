@@ -15,11 +15,12 @@ import { randomUUID } from 'node:crypto';
 import { closeSync, openSync, readFileSync } from 'node:fs';
 import { appendFile, open as openFile } from 'node:fs/promises';
 import os from 'node:os';
-import { mkdir, readFile, readdir, rename, unlink, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, readdir, rename, unlink } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { getConfigDirectory } from './config.mjs';
 import { nodeChildEnv } from './node-process.mjs';
+import { replaceFileDurably } from './atomic-write.mjs';
 
 const CLI = fileURLToPath(new URL('./cli.mjs', import.meta.url));
 const ID = /^bg-[a-z0-9]{6,12}$/;
@@ -38,13 +39,7 @@ async function writeEntry(entry, env) {
   // A unique same-directory temp file prevents overlapping writers in one
   // process from sharing a pathname. Rename publishes a complete JSON snapshot
   // so readers never observe an empty/truncated registry entry.
-  const temp = file + '.' + process.pid + '.' + randomUUID() + '.tmp';
-  try {
-    await writeFile(temp, JSON.stringify(entry, null, 2) + '\n', { mode: 0o600, flag: 'wx' });
-    await rename(temp, file);
-  } finally {
-    await unlink(temp).catch(() => {});
-  }
+  await replaceFileDurably(file, JSON.stringify(entry, null, 2) + '\n', { mode: 0o600 });
 }
 
 export async function readEntry(id, env = process.env) {
@@ -154,11 +149,7 @@ function decisionPath(id, env) {
 }
 
 async function writeAtomic(file, value) {
-  const temp = file + '.' + process.pid + '.' + randomUUID() + '.tmp';
-  try {
-    await writeFile(temp, JSON.stringify(value, null, 2) + '\n', { mode: 0o600, flag: 'wx' });
-    await rename(temp, file);
-  } finally { await unlink(temp).catch(() => {}); }
+  await replaceFileDurably(file, JSON.stringify(value, null, 2) + '\n', { mode: 0o600 });
 }
 
 export async function pendingApproval(id, env = process.env) {

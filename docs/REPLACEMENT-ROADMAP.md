@@ -228,6 +228,7 @@ Filled in as replacements land on `main`.
 | `2aa64c3c` | `src/session-search.mjs` MiniSearch → SQLite FTS5 (`node:sqlite`), incremental cached index | `test/session-search.test.mjs` 6/6 plus 36 importer tests |
 | (this commit) | `src/circuit-breaker.mjs` → cockatiel 4.0.0 `ConsecutiveBreaker` + exponential half-open cooldown; wired into `requestCompletion` and `remainingFallbacks` | `test/circuit-breaker` 6/6, `fallback-chain`, `fallback-retry-delay` |
 | `d321abba` | Web-app diffs mark changed words (shared `src/word-diff.mjs`, jsdiff) | `test/word-diff`, `markdown`, `app-core`, `app-markdown-browser` |
+| (this commit) | One durable replace (`replaceFileDurably` / `replaceFileDurablySync` in `src/atomic-write.mjs`: random temp name, fsync, Windows rename retry, directory fsync, temp always removed) used by 20 state stores that each had their own temp+rename; pid-only temp names collided on concurrent saves and several leaked temps on failure | `test/atomic-write` (concurrency, cleanup, mode), 186 store tests |
 
 ## Components to retain unless evidence says otherwise
 

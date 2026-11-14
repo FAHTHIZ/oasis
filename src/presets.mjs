@@ -4,6 +4,7 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { getConfigDirectory } from './config.mjs';
+import { replaceFileDurably } from './atomic-write.mjs';
 
 const PRESET_SLOTS = 10;
 const MAX_TEXT = 8000;
@@ -29,9 +30,7 @@ export async function loadPresets(env = process.env) {
 async function savePresets(slots, env) {
   const file = presetsFile(env);
   await fs.mkdir(path.dirname(file), { recursive: true });
-  const temp = file + '.' + process.pid + '.tmp';
-  await fs.writeFile(temp, JSON.stringify({ version: 1, slots }, null, 2) + '\n', { mode: 0o600 });
-  await fs.rename(temp, file);
+  await replaceFileDurably(file, JSON.stringify({ version: 1, slots }, null, 2) + '\n', { mode: 0o600 });
 }
 
 export function parseSlot(value) {

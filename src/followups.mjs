@@ -4,9 +4,10 @@
 // transcript. Open items are surfaced once at the start of the next session
 // and can be listed or resolved with /followups.
 
-import { mkdir, readFile, writeFile, rename } from 'node:fs/promises';
+import { mkdir, readFile } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
 import path from 'node:path';
+import { replaceFileDurably } from './atomic-write.mjs';
 
 const HEADINGS = [
   'not sure about', 'didn\u2019t check', "didn't check", 'did not check', 'not verified', 'unverified',
@@ -73,9 +74,7 @@ export async function loadFollowups(root) {
 async function saveFollowups(root, items) {
   const file = followupsPath(root);
   await mkdir(path.dirname(file), { recursive: true });
-  const tmp = file + '.' + process.pid + '.tmp';
-  await writeFile(tmp, JSON.stringify({ version: 1, items: items.slice(-MAX_ITEMS) }, null, 2) + '\n', { encoding: 'utf8', mode: 0o600 });
-  await rename(tmp, file);
+  await replaceFileDurably(file, JSON.stringify({ version: 1, items: items.slice(-MAX_ITEMS) }, null, 2) + '\n', { mode: 0o600 });
 }
 
 /** Merge newly extracted items into the ledger. Returns the newly added items. */

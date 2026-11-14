@@ -1,9 +1,10 @@
-import { createHash, randomUUID } from 'node:crypto';
+import { createHash } from 'node:crypto';
 import { redactAuditValue } from './tool-kernel.mjs';
-import { mkdir, lstat, readdir, readFile, rename, unlink, writeFile } from 'node:fs/promises';
+import { mkdir, lstat, readdir, readFile, unlink } from 'node:fs/promises';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { getConfigDirectory } from './config.mjs';
+import { replaceFileDurably } from './atomic-write.mjs';
 
 const MAX_BYTES = 512 * 1024;
 const MAX_EVENTS = 250;
@@ -44,11 +45,7 @@ async function ensureDirectory(dir) {
   if (!info.isDirectory() || info.isSymbolicLink()) throw new Error('Refusing an unsafe artifact directory.');
 }
 async function atomicWrite(file, content) {
-  const temp = file + '.' + randomUUID() + '.tmp';
-  try {
-    await writeFile(temp, content, { encoding: 'utf8', mode: 0o600, flag: 'wx' });
-    await rename(temp, file);
-  } finally { await unlink(temp).catch(() => {}); }
+  await replaceFileDurably(file, content, { mode: 0o600 });
 }
 async function readState(file) {
   let info;

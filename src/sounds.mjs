@@ -16,9 +16,10 @@
 //   /sounds on|off|test|volume N
 
 import { spawn } from 'node:child_process';
-import { existsSync, mkdirSync, writeFileSync, renameSync, accessSync, constants } from 'node:fs';
+import { existsSync, mkdirSync, accessSync, constants } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { replaceFileDurablySync } from './atomic-write.mjs';
 
 export const SOUND_NAMES = ['done', 'attention', 'error', 'task'];
 const DEFAULT_SOUND_VOLUME = 50;
@@ -92,9 +93,7 @@ export function soundFile(name, volume, env = process.env) {
   const file = path.join(dir, name + '-v' + clampVolume(volume) + '-s' + SYNTH_VERSION + '.wav');
   if (!existsSync(file)) {
     mkdirSync(dir, { recursive: true });
-    const temp = file + '.' + process.pid + '.tmp';
-    writeFileSync(temp, encodeWav(synthesize(name, volume)));
-    renameSync(temp, file);
+    replaceFileDurablySync(file, encodeWav(synthesize(name, volume)), { mode: 0o644 });
   }
   return file;
 }

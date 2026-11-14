@@ -11,6 +11,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { getConfigDirectory } from './config.mjs';
 import { getProvider, providerForEndpoint } from './provider-registry.mjs';
+import { replaceFileDurablySync } from './atomic-write.mjs';
 
 export const MODEL_CATALOG_URL = 'https://models.dev/api.json';
 const SNAPSHOT = new URL('./data/model-catalog.json', import.meta.url);
@@ -294,14 +295,12 @@ export async function refreshModelCatalog({ env = process.env, fetchImpl = globa
     // A caller that stopped waiting (a closing server) must not find a new file afterwards.
     if (signal && signal.aborted) return false;
     fs.mkdirSync(path.dirname(file), { recursive: true });
-    const temp = file + '.' + process.pid + '.tmp';
-    fs.writeFileSync(temp, JSON.stringify({
+    replaceFileDurablySync(file, JSON.stringify({
       source: MODEL_CATALOG_URL,
       schemaVersion: CACHE_SCHEMA_VERSION,
       fetchedAt: new Date(now).toISOString(),
       providers
-    }));
-    fs.renameSync(temp, file);
+    }), { mode: 0o644 });
     resetModelCatalogForTest();
     return true;
   } catch {

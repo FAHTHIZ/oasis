@@ -2,11 +2,12 @@
 // Proposals stay local and inert until the user explicitly promotes them with
 // /learning approve <id>. Skill text never changes runtime permissions.
 import { createHash, randomBytes } from 'node:crypto';
-import { lstat, mkdir, readFile, readdir, realpath, rename, rm, writeFile } from 'node:fs/promises';
+import { lstat, mkdir, readFile, readdir, realpath, rm } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { getConfigDirectory } from './config.mjs';
 import { redactSecrets } from './auto-memory.mjs';
+import { replaceFileDurably } from './atomic-write.mjs';
 
 const MAX_PROPOSALS_PER_SCOPE = 50;
 const MAX_BODY_CHARS = 20_000;
@@ -82,14 +83,7 @@ async function ensureProposalDirectory(root, scope, env) {
 }
 
 async function atomicWrite(file, content) {
-  const temporary = file + '.' + process.pid + '.' + randomBytes(6).toString('hex') + '.tmp';
-  try {
-    await writeFile(temporary, content, { encoding: 'utf8', flag: 'wx', mode: 0o600 });
-    await rename(temporary, file);
-  } catch (error) {
-    await rm(temporary, { force: true }).catch(() => {});
-    throw error;
-  }
+  await replaceFileDurably(file, content, { mode: 0o600 });
 }
 
 function oneLine(value, max) {

@@ -6,15 +6,16 @@
 // passes the MCP conformance suite. OASIS adds the endpoint guard below, the
 // loopback callback, and the token store: tokens are kept per server URL in
 // <config>/mcp-auth.json with 0600 permissions and are never shown to the model.
-import { randomBytes, randomUUID } from 'node:crypto';
+import { randomBytes } from 'node:crypto';
 import { createServer } from 'node:http';
-import { chmod, mkdir, readFile, rename, writeFile, unlink } from 'node:fs/promises';
+import { mkdir, readFile } from 'node:fs/promises';
 import { spawn } from 'node:child_process';
 import { lookup } from 'node:dns/promises';
 import { isIP } from 'node:net';
 import { isBlockedAddress, isLocalHostname, normalizeHostname, pinnedRequest, readBoundedBody, resolvePublicAddresses } from './safe-http.mjs';
 import path from 'node:path';
 import { getConfigDirectory, isLoopbackUrl } from './config.mjs';
+import { replaceFileDurably } from './atomic-write.mjs';
 
 const LOGIN_TIMEOUT_MS = 5 * 60 * 1000;
 const OAUTH_METADATA_TIMEOUT_MS = 10 * 1000;
@@ -66,14 +67,7 @@ function updateStore(env, mutate) {
 async function writeStore(store, env) {
   const file = authFile(env);
   await mkdir(path.dirname(file), { recursive: true, mode: 0o700 });
-  const temp = file + '.' + process.pid + '.' + randomUUID() + '.tmp';
-  try {
-    await writeFile(temp, JSON.stringify(store, null, 2) + '\n', { encoding: 'utf8', mode: 0o600, flag: 'wx' });
-    await rename(temp, file);
-  } finally {
-    await unlink(temp).catch(() => {});
-  }
-  try { await chmod(file, 0o600); } catch {}
+  await replaceFileDurably(file, JSON.stringify(store, null, 2) + '\n', { mode: 0o600 });
 }
 
 export function canonicalResource(url) {

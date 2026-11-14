@@ -1,13 +1,13 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { normalizeAgentUsage } from './agent-tasks.mjs';
-import { mkdir, readdir, rename, writeFile, chmod, unlink, rm } from 'node:fs/promises';
+import { mkdir, readdir, unlink, rm } from 'node:fs/promises';
 import path from 'node:path';
 import { readBoundedRegularFile } from './safe-storage.mjs';
 import { getConfigDirectory } from './config.mjs';
 import { sanitizeSharedTaskStore } from './shared-tasks.mjs';
 import { sanitizeMustPreserve } from './context.mjs';
 import { redactSecrets } from './auto-memory.mjs';
-import { atomicWriteFile } from './atomic-write.mjs';
+import { atomicWriteFile, replaceFileDurably } from './atomic-write.mjs';
 import { appendEvent, clearEvents } from './event-stream.mjs';
 
 const MAX_SESSION_BYTES = 3 * 1024 * 1024;
@@ -295,15 +295,7 @@ export async function saveSession(session, options = {}) {
   const directory = getSessionDirectory(session.root, env);
   await mkdir(directory, { recursive: true, mode: 0o700 });
   const destination = sessionPath(session.root, id, env);
-  const temp = destination + '.' + randomUUID() + '.tmp';
-  await writeFile(temp, body, { encoding: 'utf8', mode: 0o600, flag: 'wx' });
-  try {
-    await rename(temp, destination);
-    try { await chmod(destination, 0o600); } catch {}
-  } catch (error) {
-    try { await unlink(temp); } catch {}
-    throw error;
-  }
+  await replaceFileDurably(destination, body, { mode: 0o600 });
   session.sessionId = id;
   try {
     await appendEvent(session.root, id, { type: 'session_saved', at: payload.updatedAt }, { env });
@@ -385,9 +377,7 @@ export async function setSessionArchived(root, id, archived, options = {}) {
   const payload = JSON.parse(await readBoundedRegularFile(target, MAX_SESSION_BYTES, { label: 'Saved session', tooLargeMessage: 'Stored session is too large.' }));
   if (!payload || payload.schemaVersion !== 1 || payload.id !== id || path.resolve(payload.workspaceRoot || '') !== path.resolve(root)) throw new Error('That saved session does not belong to this workspace or uses an unsupported format.');
   if (archived) payload.archived = true; else delete payload.archived;
-  const temp = target + '.' + randomUUID() + '.tmp';
-  await writeFile(temp, JSON.stringify(payload, null, 2) + '\n', { encoding: 'utf8', mode: 0o600, flag: 'wx' });
-  try { await rename(temp, target); } catch (error) { try { await unlink(temp); } catch {} throw error; }
+  await replaceFileDurably(target, JSON.stringify(payload, null, 2) + '\n', { mode: 0o600 });
   return { id, archived: Boolean(archived), updatedAt: String(payload.updatedAt || ''), name: typeof payload.name === 'string' ? payload.name : '' };
 }
 

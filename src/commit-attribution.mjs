@@ -91,10 +91,6 @@ export function commitIdentity(env = process.env, { name = '', email = '' } = {}
   return { name: resolvedName, email: resolvedEmail };
 }
 
-// The rule given to the model so commits and pull requests it writes credit
-// only the user. Settings-provided attribution text overrides it.
-export const NO_AI_ATTRIBUTION_RULE = 'Never add Co-authored-by, Generated-by, Signed-off-by or similar trailers, or "Generated with ..." footers, that credit an AI, a tool, a model or a bot (including OASIS) to commit messages, tags or pull request descriptions, and never commit as a bot identity. Commits belong to the user.';
-
 // `git commit` argv as the agent wrote it, with AI credit removed from -m /
 // --message values and AI --trailer entries dropped. Returns the same array
 // when nothing changed. Only the arguments after `commit` are touched.

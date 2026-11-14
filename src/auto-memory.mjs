@@ -17,12 +17,13 @@
 import { createHash } from 'node:crypto';
 import { splitFrontMatter } from './frontmatter.mjs';
 import { redactAuditValue } from './tool-kernel.mjs';
-import { mkdir, readFile, readdir, rename, rm, stat, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, readdir, rename, rm, stat } from 'node:fs/promises';
 import { existsSync, readFileSync, statSync } from 'node:fs';
 import path from 'node:path';
 import { getConfigDirectory } from './config.mjs';
 import MiniSearch from 'minisearch';
 import stemmer from 'wink-porter2-stemmer';
+import { replaceFileDurably } from './atomic-write.mjs';
 
 const MEMORY_CATEGORIES = ['preferences', 'project', 'decisions', 'lessons', 'people', 'reference'];
 const MAX_MEMORIES = 500;
@@ -185,9 +186,7 @@ export async function listMemories(root, { env = process.env, scope = null } = {
 
 async function atomicWrite(file, text) {
   await mkdir(path.dirname(file), { recursive: true, mode: 0o700 });
-  const temp = file + '.' + process.pid + '.' + Date.now().toString(36) + '.tmp';
-  await writeFile(temp, text, { encoding: 'utf8', mode: 0o600 });
-  await rename(temp, file);
+  await replaceFileDurably(file, text, { mode: 0o600 });
 }
 
 async function writeIndex(root, scope, env) {
