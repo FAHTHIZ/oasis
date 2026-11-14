@@ -110,7 +110,7 @@ Useful upstream references:
 | 1. Network identity | Agent parent/depth lineage, graph inspection, persisted lineage | Existing top-level agent behavior unchanged; restored history preserves valid lineage |
 | 2. Bounded hierarchy | Recursive delegation with depth, fan-out, child, token, cost, and deadline budgets | Cannot exceed any parent or session budget; cancellation reaches descendants |
 | 3. Delegation trust | Intent/capability checks at spawn and result/artifact checks at return | No permission escalation; suspicious or out-of-scope output is quarantined |
-| 4. Artifact handoff | Durable worker artifacts and compact structured reports | Large outputs are referenced, not repeatedly copied through parent context |
+| 4. Artifact handoff | Durable worker artifacts and compact structured reports | Large outputs are referenced, not repeatedly copied through parent context. **Reports done (November 2026):** a report over 12,000 characters (`OASIS_SUBAGENT_HANDOFF_CHARS`, `off` to disable) is written whole to `<scratch>/agents/<id>.md` and the parent gets a head/tail preview plus `report_file`, foreground and background (`src/report-handoff.mjs`, `test/report-handoff.test.mjs`). |
 | 5. Unified scheduler | One coordination path for agents, teams, and workflow-created workers | Leases, retries, backpressure, shutdown, and recovery are consistent |
 | 6. Tool Kernel coverage | Route remaining session, IDE, MCP, and extension execution paths through shared policy contracts | Characterization tests prove parity for approvals, cancellation, audit, and errors |
 | 7. Learning fabric | Memory-provider contract and evidence-backed skill induction | No unverified or unapproved learning becomes active |
@@ -126,3 +126,7 @@ The first code slice introduces:
 - bounded graph output containing status, role, task/team links, workspace mode, and aggregate usage.
 
 It intentionally does not enable recursive worker spawning yet. That requires the budget and security layers above; removing the current recursion guard before those controls exist would be a regression, not an improvement.
+
+## Report handoff (phase 4, first slice)
+
+Before this slice a subagent report of up to a million characters came back as one tool result, and the parent's 24,000-character tool-result cap kept only its head and tail. In the regression test a 60,000-character report with a marker in the middle reached the parent without the marker. Now the full report is saved in the session scratch folder (git-ignored, symlinked folders refused) and the parent receives under 12,000 characters: the first ~6,000 and last ~2,000 characters and the file path, which it can read with `read_file` offset/limit or `grep`. Structured-output agents (`output_schema`) are unchanged because their result is the parsed object.

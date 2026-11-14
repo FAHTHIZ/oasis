@@ -105,6 +105,7 @@ import { ripgrepPathAddition } from './ripgrep.mjs';
 import { MAX_PROVIDER_RETRIES, QUICK_PROVIDER_RETRIES, RETRYABLE_PROVIDER_STATUSES, serverRetryAdvice, isHardQuotaError, isMalformedGenerationError, isUnconfiguredRouteError, isPromptTooLargeError, notifyProviderRetry, providerErrorSummary, providerRetryDelayMs, providerRetryLimit, rateLimitResetMs, rateLimitWaitMs, shortRateLimitMs, waitForProviderRetry } from './provider-retry.mjs';
 import { AUTO_LSP_EDIT_TOOLS, CYCLE_HALT_AT, CYCLE_WARN_AT, CYCLE_WINDOW_STEPS, FILE_EDITING_TOOL_NAMES, MAX_SESSION_TOOL_CALLS, PROTECTED_EDIT_TOOLS, RETRY_HALT_AT, RETRY_TRACKED_COMMANDS, RETRY_WARN_AT, THRASH_ESCALATE_AT, THRASH_WARN_AT, UNREADABLE_CALL_NUDGE, activeLspBaseline, asksForNewTests, failureSignature, isCompleteFileRead, isVerificationCommand, lspCallOptions, normalizeReviewPath, parallelToolCalls, promptCacheKeyField, samplingTemperature, successfulMutation, verificationIssues, newModuleCandidate, markLoadedModules, markRanSources } from './turn-guards.mjs';
 import { postModelSwitch } from './model-switch.mjs';
+import { handOffReport, reportPreview } from './report-handoff.mjs';
 import { MAX_OUTPUT_RECOVERIES, applyEffort, claudeEffortFor, claudeThinkingMode, thinkingTurnedOff, firstPositiveConfiguredInteger, inlineEffortLevel, isOpenRouterBaseURL, maxOutputTokensFor, openRouterOutputCapFromError, outputCapFromError, reasoningEffortFor, resolveTurnLimits, stripInlineEffort, subagentEffortConfig, thinkingBudgetFor, truncationRecoveryPrompt } from './model-budgets.mjs';
 import { HISTORY_COMPACT_INPUT_LIMIT, HISTORY_COMPACT_THRESHOLD_CHARS, summaryTranscript, announceCompaction, compactionDeadline, compactionError, deterministicHistorySummary, findCompactionBoundary, historyBudgetSize, historyTextSize, reportCompaction, safeHistoryLine, supersedeBeforeCompaction, usableCompactionSummary } from './compaction-history.mjs';
 import { applyAnthropicCacheBreakpoints, promptCachingEnabled, replaysReasoning, withProviderExtraContent } from './provider-request.mjs';
@@ -2769,6 +2770,9 @@ async function runChildTurnInner(parent, record, prompt, options, { foreground }
   record.status = 'completed';
   recordAgentEvent(parent, 'agent.completed', { agentId: record.id, teamId: record.teamId || undefined, description: record.description, detail: 'tool_calls=' + Math.max(0, Number(outcome.toolCalls) || 0) });
   record.report = boundSubagentReport(outcome.text);
+  // Long reports go to a scratch file; the parent gets a preview and the path (src/report-handoff.mjs).
+  const handoff = record.outputSchema ? null : await handOffReport({ root: parent.root, scratchDir: parent.scratchDir, agentId: record.id, run: record.runs, text: record.report, env: options.env || process.env });
+  record.reportFile = handoff ? handoff.file : null;
   if (record.pane) record.pane.write('[completed] ' + Math.max(0, Number(outcome.toolCalls) || 0) + ' tool calls');
   record.tokensUsed += Math.max(0, Number(outcome.tokensUsed) || 0);
   return {
@@ -2776,7 +2780,8 @@ async function runChildTurnInner(parent, record, prompt, options, { foreground }
     description,
     ...(worktreeResult ? { worktree: worktreeResult } : {}),
     finished: outcome.finished === true,
-    report: record.report,
+    report: handoff ? handoff.preview : record.report,
+    ...(handoff ? { report_file: handoff.file, report_chars: handoff.chars } : {}),
     ...(outcome.limitReached ? { partial: true, note: 'The agent hit its ' + (record.maxTurns ? 'maxTurns (' + record.maxTurns + ')' : 'step') + ' limit; the report may be incomplete. send_message resumes it.' } : {}),
     ...(record.outputSchema ? (outcome.schemaErrors && outcome.schemaErrors.length ? { schema_errors: outcome.schemaErrors } : { structured: outcome.structured }) : {}),
     toolCalls: Math.max(0, Number(outcome.toolCalls) || 0),
@@ -2826,7 +2831,7 @@ function startBackgroundRun(parent, record, prompt, options) {
   record.promise = runChildTurn(parent, record, prompt, detached, { foreground: false }).finally(stopWatch).then(async (result) => {
     const parts = ['Background agent ' + record.id + ' ("' + record.description + '") finished.'];
     if (result.worktree && result.worktree.branch) parts.push('Its changes are on branch ' + result.worktree.branch + '.');
-    parts.push('Report:\n' + record.report.slice(0, 6000) + (record.report.length > 6000 ? '\n[truncated; agent_status id ' + record.id + ' has the full report]' : ''));
+    parts.push('Report:\n' + (record.reportFile ? reportPreview(record.report, record.reportFile) : record.report.slice(0, 6000) + (record.report.length > 6000 ? '\n[truncated; agent_status id ' + record.id + ' has the full report]' : '')));
     notifyParent(parent, parts.join(' '), record);
     if (record.autoDispatchManaged || (parent.agentTasks && parent.agentTasks.autoDispatch && parent.agentTasks.autoDispatch.enabled)) {
       await advanceAutoDispatch(parent, record.autoDispatchManaged ? record : null);
