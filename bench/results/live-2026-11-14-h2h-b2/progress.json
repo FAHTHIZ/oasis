@@ -1,0 +1,1129 @@
+{
+  "updatedAt": "2026-11-14T15:29:45.582Z",
+  "stoppedEarly": null,
+  "notRun": [],
+  "agents": {
+    "oasis": {
+      "results": [
+        {
+          "taskId": "taskflow-priority-sort",
+          "taskFingerprint": "44c34580556645c4504f9aad04bd90113f116c134e675dd60a30f7a0c22f0efa",
+          "category": "data-structures",
+          "difficulty": "small",
+          "trial": 1,
+          "status": "passed",
+          "model": "gpt-oss-20b",
+          "requestedModel": "gpt-oss-20b",
+          "routeTier": "strong",
+          "escalation": null,
+          "routeReason": "automatic routing is disabled",
+          "strongModel": "gpt-oss-20b",
+          "protocol": "openai-compatible",
+          "baseURL": "http://127.0.0.1:39019/a/oasis/v1",
+          "maxSteps": 150,
+          "maxOutputTokens": null,
+          "inputTokens": 77949,
+          "outputTokens": 3063,
+          "totalTokens": 81012,
+          "costUSD": 0.0027366599999999997,
+          "strongModelCostUSD": 0.0027366599999999997,
+          "routingSavingsUSD": 0,
+          "costSource": "per-model list-price estimate (cloud model behind a localhost gateway; free-tier keys are not billed)",
+          "wallTimeMs": 491578,
+          "finished": true,
+          "toolCalls": 10,
+          "trace": [
+            {
+              "tool": "glob_files",
+              "arg": "src",
+              "resultChars": 56
+            },
+            {
+              "tool": "list_files",
+              "arg": "src",
+              "resultChars": 167
+            },
+            {
+              "tool": "read_file",
+              "arg": "src/query.mjs",
+              "resultChars": 1667
+            },
+            {
+              "tool": "list_files",
+              "arg": "test",
+              "resultChars": 192
+            },
+            {
+              "tool": "read_file",
+              "arg": "test/query.test.mjs",
+              "resultChars": 1641
+            },
+            {
+              "tool": "read_file",
+              "arg": "src/task.mjs",
+              "resultChars": 2445
+            },
+            {
+              "tool": "edit_file",
+              "arg": "src/query.mjs",
+              "resultChars": 384
+            },
+            {
+              "tool": "write_file",
+              "arg": "test/query_priority.test.mjs",
+              "resultChars": 372
+            },
+            {
+              "tool": "read_file",
+              "arg": "test/query_priority.test.mjs",
+              "resultChars": 640
+            },
+            {
+              "tool": "run_command",
+              "arg": "node --test test/query_priority.test.mjs test/query.test.mjs",
+              "resultChars": 786
+            }
+          ],
+          "requestTokens": [
+            [
+              4404,
+              42
+            ],
+            [
+              4455,
+              39
+            ],
+            [
+              4547,
+              34
+            ],
+            [
+              5111,
+              212
+            ],
+            [
+              5392,
+              25
+            ],
+            [
+              6024,
+              64
+            ],
+            [
+              6791,
+              1330
+            ],
+            [
+              7036,
+              832
+            ],
+            [
+              7926,
+              167
+            ],
+            [
+              8329,
+              202
+            ],
+            [
+              8831,
+              60
+            ],
+            [
+              9103,
+              56
+            ]
+          ],
+          "verification": {
+            "exitCode": 0,
+            "output": ""
+          },
+          "changes": [
+            {
+              "path": "src/query.mjs",
+              "status": "modified",
+              "content": "import { isOverdue } from './dates.mjs';\nimport { PRIORITIES, normalizeTag } from './task.mjs';\n\nexport function filterTasks(tasks, { status, tag, priority, overdue, now = new Date() } = {}) {\n  const wanted = tag ? normalizeTag(tag) : null;\n  return tasks.filter((task) => {\n    if (status && status !== 'all' && task.status !== status) return false;\n    if (wanted && !task.tags.includes(wanted)) return false;\n    if (priority && task.priority !== priority) return false;\n    if (overdue && !isOverdue(task, now)) return false;\n    return true;\n  });\n}\n\nconst SORTERS = {\n  id: (a, b) => a.id - b.id,\n  due: (a, b) => (a.due === b.due ? 0 : a.due === null ? 1 : b.due === null ? -1 : a.due < b.due ? -1 : 1),\n  // Sort by priority with high first, then normal, then low; ties by ID order\n  priority: (a, b) => {\n    const idxA = PRIORITIES.indexOf(a.priority);\n    const idxB = PRIORITIES.indexOf(b.priority);\n    return idxB - idxA; // descending order: high (index 2) before low (index 0)\n  },\n  title: (a, b) => a.title.localeCompare(b.title)\n};\n\n// Stable sort; ties keep ID order.\nexport function sortTasks(tasks, key = 'id') {\n  const compare = SORTERS[key];\n  if (!compare) throw new Error(`Unknown sort key: ${key}`);\n  return [...tasks].sort((a, b) => compare(a, b) || a.id - b.id);\n}\n\n// Pages are numbered from 1.\nexport function paginate(items, page = 1, size = 20) {\n  if (!Number.isInteger(page) || page < 1) throw new Error('Page must be a positive integer');\n  if (!Number.isInteger(size) || size < 1 || size > 100) throw new Error('Page size must be between 1 and 100');\n  const start = (page - 1) * size;\n  return { items: items.slice(start, start + size), page, pages: Math.max(1, Math.ceil(items.length / size)), total: items.length };\n}\n"
+            },
+            {
+              "path": "test/query_priority.test.mjs",
+              "status": "added",
+              "content": "import test from 'node:test';\nimport assert from 'node:assert/strict';\nimport { sortTasks } from '../src/query.mjs';\n\nconst tasks = [\n  { id: 1, priority: 'low', title: 'l', status: 'open', due: null, tags: [] },\n  { id: 2, priority: 'high', title: 'h', status: 'open', due: null, tags: [] },\n  { id: 3, priority: 'normal', title: 'n', status: 'open', due: null, tags: [] }\n];\n\ntest('sorts by priority high > normal > low', () => {\n  assert.deepEqual(sortTasks(tasks, 'priority').map((t) => t.id), [2, 3, 1]);\n});\n"
+            }
+          ],
+          "error": null
+        },
+        {
+          "taskId": "safe-relative-path",
+          "taskFingerprint": "84b5a93d17e947ba36816c9adcea89450ad3dc0f3ae5e3b9d6499f410027ed51",
+          "category": "security-boundaries",
+          "difficulty": "medium",
+          "trial": 1,
+          "status": "passed",
+          "model": "gpt-oss-20b",
+          "requestedModel": "gpt-oss-20b",
+          "routeTier": "strong",
+          "escalation": null,
+          "routeReason": "automatic routing is disabled",
+          "strongModel": "gpt-oss-20b",
+          "protocol": "openai-compatible",
+          "baseURL": "http://127.0.0.1:39019/a/oasis/v1",
+          "maxSteps": 150,
+          "maxOutputTokens": null,
+          "inputTokens": 231063,
+          "outputTokens": 4705,
+          "totalTokens": 235768,
+          "costUSD": 0.007543539999999999,
+          "strongModelCostUSD": 0.007543539999999999,
+          "routingSavingsUSD": 0,
+          "costSource": "per-model list-price estimate (cloud model behind a localhost gateway; free-tier keys are not billed)",
+          "wallTimeMs": 1005018,
+          "finished": true,
+          "toolCalls": 21,
+          "trace": [
+            {
+              "tool": "glob_files",
+              "arg": "src/*.mjs",
+              "resultChars": 187
+            },
+            {
+              "tool": "write_file",
+              "arg": "src/lib.mjs",
+              "resultChars": 338
+            },
+            {
+              "tool": "edit_file",
+              "arg": "src/lib.mjs",
+              "resultChars": 378
+            },
+            {
+              "tool": "run_command",
+              "arg": "npm test",
+              "resultChars": 2416
+            },
+            {
+              "tool": "run_command",
+              "arg": "npm test",
+              "resultChars": 2416
+            },
+            {
+              "tool": "run_command",
+              "arg": "node -e const {resolveRelative}=require('./src/lib.mjs'); console.log(resolveRelative('root','a/b'));",
+              "resultChars": 335,
+              "failed": true
+            },
+            {
+              "tool": "glob_files",
+              "arg": "test",
+              "resultChars": 78
+            },
+            {
+              "tool": "write_file",
+              "arg": "test/lib-resolve.test.mjs",
+              "resultChars": 366
+            },
+            {
+              "tool": "run_command",
+              "arg": "npm test",
+              "resultChars": 3333,
+              "failed": true
+            },
+            {
+              "tool": "edit_file",
+              "arg": "test/lib-resolve.test.mjs",
+              "resultChars": 406
+            },
+            {
+              "tool": "run_command",
+              "arg": "npm test",
+              "resultChars": 5895,
+              "failed": true
+            },
+            {
+              "tool": "edit_file",
+              "arg": "test/lib-resolve.test.mjs",
+              "resultChars": 406
+            },
+            {
+              "tool": "run_command",
+              "arg": "npm test",
+              "resultChars": 3357,
+              "failed": true
+            },
+            {
+              "tool": "read_file",
+              "arg": "test/lib-resolve.test.mjs",
+              "resultChars": 1042
+            },
+            {
+              "tool": "edit_file",
+              "arg": "test/lib-resolve.test.mjs",
+              "resultChars": 406
+            },
+            {
+              "tool": "grep",
+              "arg": "test/lib-resolve.test.mjs",
+              "resultChars": 296
+            },
+            {
+              "tool": "edit_file",
+              "arg": "test/lib-resolve.test.mjs",
+              "resultChars": 71,
+              "failed": true
+            },
+            {
+              "tool": "run_command",
+              "arg": "npm test",
+              "resultChars": 2562
+            },
+            {
+              "tool": "read_file",
+              "arg": "test/lib-resolve.test.mjs",
+              "resultChars": 1049
+            },
+            {
+              "tool": "write_file",
+              "arg": "test/lib-resolve.test.mjs",
+              "resultChars": 365
+            },
+            {
+              "tool": "run_command",
+              "arg": "npm test",
+              "resultChars": 2562
+            }
+          ],
+          "requestTokens": [
+            [
+              4831,
+              102
+            ],
+            [
+              4932,
+              555
+            ],
+            [
+              5239,
+              728
+            ],
+            [
+              5680,
+              54
+            ],
+            [
+              6273,
+              73
+            ],
+            [
+              6866,
+              304
+            ],
+            [
+              7246,
+              89
+            ],
+            [
+              7389,
+              150
+            ],
+            [
+              7451,
+              599
+            ],
+            [
+              7788,
+              50
+            ],
+            [
+              8678,
+              235
+            ],
+            [
+              8817,
+              28
+            ],
+            [
+              10506,
+              294
+            ],
+            [
+              10766,
+              79
+            ],
+            [
+              11655,
+              157
+            ],
+            [
+              11995,
+              125
+            ],
+            [
+              12152,
+              71
+            ],
+            [
+              12277,
+              134
+            ],
+            [
+              12394,
+              192
+            ],
+            [
+              13024,
+              80
+            ],
+            [
+              13180,
+              65
+            ],
+            [
+              13522,
+              435
+            ],
+            [
+              13884,
+              44
+            ],
+            [
+              14518,
+              62
+            ]
+          ],
+          "verification": {
+            "exitCode": 0,
+            "output": ""
+          },
+          "changes": [
+            {
+              "path": "src/lib.mjs",
+              "status": "added",
+              "content": "import path from 'node:path';\n\nexport function resolveRelative(root, value) {\n    if (typeof root !== 'string' || typeof value !== 'string') {\n        throw new Error('root and value must be strings');\n    }\n    // If value is absolute, throw\n    if (path.isAbsolute(value)) {\n        throw new Error(`Path escapes the workspace: ${value}`);\n    }\n\n    const resolved = path.resolve(root, value);\n    const rel = path.relative(root, resolved);\n    if (rel.startsWith('..') || path.isAbsolute(rel)) {\n        throw new Error(`Path escapes the workspace: ${value}`);\n    }\n    return resolved;\n}\n"
+            },
+            {
+              "path": "test/lib-resolve.test.mjs",
+              "status": "added",
+              "content": "import { test } from 'node:test';\nimport assert from 'node:assert';\n\nimport { resolveRelative } from '../src/lib.mjs';\n\nconst root = '/tmp/workspace';\n\nfunction assertResolve(value, expected) {\n    const result = resolveRelative(root, value);\n    assert.strictEqual(result, expected);\n}\n\nfunction assertThrows(value, snippet) {\n    assert.throws(\n        () => resolveRelative(root, value),\n        (err) => err instanceof Error && err.message.includes(snippet)\n    );\n}\n\ntest('resolves simple relative path', () => {\n    assertResolve('foo/bar.txt', '/tmp/workspace/foo/bar.txt');\n});\n\ntest('throws on absolute path', () => {\n    assertThrows('/etc/passwd', 'escapes');\n});\n\ntest('throws on ancestor traversal', () => {\n    assertThrows('../../secret', 'escapes');\n});\n\ntest('does not accept non-string', () => {\n    // @ts-expect-error\n    assert.throws(() => resolveRelative(root, 42), /error/i);\n});\n// Added comment to force file modification\n"
+            }
+          ],
+          "error": null
+        },
+        {
+          "taskId": "taskflow-search",
+          "taskFingerprint": "4f55003e0ebc832b3e58785e03f3bcf4a50aa333078647169e82fb649ce56596",
+          "category": "data-structures",
+          "difficulty": "medium",
+          "trial": 1,
+          "status": "passed",
+          "model": "gpt-oss-20b",
+          "requestedModel": "gpt-oss-20b",
+          "routeTier": "strong",
+          "escalation": null,
+          "routeReason": "automatic routing is disabled",
+          "strongModel": "gpt-oss-20b",
+          "protocol": "openai-compatible",
+          "baseURL": "http://127.0.0.1:39019/a/oasis/v1",
+          "maxSteps": 150,
+          "maxOutputTokens": null,
+          "inputTokens": 362956,
+          "outputTokens": 9996,
+          "totalTokens": 372952,
+          "costUSD": 0.01218816,
+          "strongModelCostUSD": 0.012188159999999998,
+          "routingSavingsUSD": 0,
+          "costSource": "per-model list-price estimate (cloud model behind a localhost gateway; free-tier keys are not billed)",
+          "wallTimeMs": 1389517,
+          "finished": true,
+          "toolCalls": 28,
+          "trace": [
+            {
+              "tool": "glob_files",
+              "arg": "src",
+              "resultChars": 181
+            },
+            {
+              "tool": "read_file",
+              "arg": "src/query.mjs",
+              "resultChars": 1694
+            },
+            {
+              "tool": "read_file",
+              "arg": "src/cli.mjs",
+              "resultChars": 4071
+            },
+            {
+              "tool": "glob_files",
+              "arg": "test",
+              "resultChars": 57
+            },
+            {
+              "tool": "list_files",
+              "arg": ".",
+              "resultChars": 369
+            },
+            {
+              "tool": "read_file",
+              "arg": "test/query.test.mjs",
+              "resultChars": 1740
+            },
+            {
+              "tool": "read_file",
+              "arg": "test/helpers.mjs",
+              "resultChars": 633
+            },
+            {
+              "tool": "edit_file",
+              "arg": "src/query.mjs",
+              "resultChars": 384
+            },
+            {
+              "tool": "edit_file",
+              "arg": "src/query.mjs",
+              "resultChars": 384
+            },
+            {
+              "tool": "edit_file",
+              "arg": "src/cli.mjs",
+              "resultChars": 380
+            },
+            {
+              "tool": "edit_file",
+              "arg": "src/cli.mjs",
+              "resultChars": 380
+            },
+            {
+              "tool": "edit_file",
+              "arg": "test/query.test.mjs",
+              "resultChars": 112,
+              "failed": true
+            },
+            {
+              "tool": "read_file",
+              "arg": "test/query.test.mjs",
+              "resultChars": 300
+            },
+            {
+              "tool": "read_file",
+              "arg": "test/query.test.mjs",
+              "resultChars": 1740
+            },
+            {
+              "tool": "edit_file",
+              "arg": "test/query.test.mjs",
+              "resultChars": 112,
+              "failed": true
+            },
+            {
+              "tool": "read_file",
+              "arg": "test/query.test.mjs",
+              "resultChars": 1740
+            },
+            {
+              "tool": "edit_file",
+              "arg": "test/query.test.mjs",
+              "resultChars": 112,
+              "failed": true
+            },
+            {
+              "tool": "write_file",
+              "arg": "test/search.test.mjs",
+              "resultChars": 357
+            },
+            {
+              "tool": "read_file",
+              "arg": "package.json",
+              "resultChars": 437
+            },
+            {
+              "tool": "run_command",
+              "arg": "node --test test/search.test.mjs test/cli.test.mjs test/query.test.mjs",
+              "resultChars": 1840,
+              "failed": true
+            },
+            {
+              "tool": "edit_file",
+              "arg": "test/search.test.mjs",
+              "resultChars": 398
+            },
+            {
+              "tool": "edit_file",
+              "arg": "test/search.test.mjs",
+              "resultChars": 342,
+              "failed": true
+            },
+            {
+              "tool": "read_file",
+              "arg": "src/query.mjs",
+              "resultChars": 2113
+            },
+            {
+              "tool": "read_file",
+              "arg": "test/search.test.mjs",
+              "resultChars": 1151
+            },
+            {
+              "tool": "run_command",
+              "arg": "node --test test/search.test.mjs test/cli.test.mjs test/query.test.mjs",
+              "resultChars": 978
+            },
+            {
+              "tool": "read_file",
+              "arg": "test/search.test.mjs",
+              "resultChars": 301
+            },
+            {
+              "tool": "write_file",
+              "arg": "test/search.test.mjs",
+              "resultChars": 356
+            },
+            {
+              "tool": "run_command",
+              "arg": "node --test test/search.test.mjs test/cli.test.mjs test/query.test.mjs",
+              "resultChars": 978
+            }
+          ],
+          "requestTokens": [
+            [
+              4421,
+              69
+            ],
+            [
+              4522,
+              70
+            ],
+            [
+              5098,
+              60
+            ],
+            [
+              6406,
+              560
+            ],
+            [
+              6461,
+              46
+            ],
+            [
+              6636,
+              29
+            ],
+            [
+              7309,
+              305
+            ],
+            [
+              7836,
+              618
+            ],
+            [
+              8559,
+              314
+            ],
+            [
+              8940,
+              130
+            ],
+            [
+              9143,
+              149
+            ],
+            [
+              9361,
+              483
+            ],
+            [
+              9883,
+              60
+            ],
+            [
+              10021,
+              50
+            ],
+            [
+              10715,
+              405
+            ],
+            [
+              11159,
+              108
+            ],
+            [
+              11885,
+              940
+            ],
+            [
+              12864,
+              537
+            ],
+            [
+              13461,
+              553
+            ],
+            [
+              13640,
+              923
+            ],
+            [
+              14885,
+              184
+            ],
+            [
+              15498,
+              1195
+            ],
+            [
+              15685,
+              587
+            ],
+            [
+              15921,
+              226
+            ],
+            [
+              16606,
+              285
+            ],
+            [
+              17032,
+              93
+            ],
+            [
+              17361,
+              93
+            ],
+            [
+              17532,
+              270
+            ],
+            [
+              17639,
+              457
+            ],
+            [
+              18074,
+              121
+            ],
+            [
+              18403,
+              76
+            ]
+          ],
+          "verification": {
+            "exitCode": 0,
+            "output": ""
+          },
+          "changes": [
+            {
+              "path": "src/cli.mjs",
+              "status": "modified",
+              "content": "#!/usr/bin/env node\nimport path from 'node:path';\nimport os from 'node:os';\nimport { pathToFileURL } from 'node:url';\nimport { openStore } from './store.mjs';\nimport { filterTasks, sortTasks, paginate } from './query.mjs';\nimport { formatList } from './format.mjs';\n\nconst VALUE_FLAGS = new Set(['priority', 'due', 'tag', 'status', 'sort', 'page', 'size', 'notes', 'file', 'search']);\nconst BOOLEAN_FLAGS = new Set(['overdue', 'help']);\n\n// Supports --flag value, --flag=value, and boolean --flag. \"--\" ends options.\nexport function parseArgs(argv) {\n  const positional = [];\n  const flags = {};\n  const tags = [];\n  for (let i = 0; i < argv.length; i++) {\n    const arg = argv[i];\n    if (arg === '--') { positional.push(...argv.slice(i + 1)); break; }\n    if (!arg.startsWith('--')) { positional.push(arg); continue; }\n    const eq = arg.indexOf('=');\n    const name = eq === -1 ? arg.slice(2) : arg.slice(2, eq);\n    if (BOOLEAN_FLAGS.has(name)) {\n      if (eq !== -1) throw new Error(`--${name} does not take a value`);\n      flags[name] = true;\n      continue;\n    }\n    if (!VALUE_FLAGS.has(name)) throw new Error(`Unknown option: --${name}`);\n    let value;\n    if (eq !== -1) value = arg.slice(eq + 1);\n    else {\n      value = argv[++i];\n      if (value === undefined) throw new Error(`--${name} needs a value`);\n    }\n    if (name === 'tag') tags.push(value);\n    else flags[name] = value;\n  }\n  if (tags.length) flags.tags = tags;\n  return { command: positional[0], args: positional.slice(1), flags };\n}\n\nfunction parseId(text) {\n  if (!/^[1-9]\\d*$/.test(String(text))) throw new Error(`Invalid task ID: ${text}`);\n  return Number(text);\n}\n\nexport async function run(argv, { stdout = process.stdout, env = process.env, now } = {}) {\n  const { command, args, flags } = parseArgs(argv);\n  const file = flags.file || env.TASKFLOW_FILE || path.join(os.homedir(), '.taskflow.json');\n  const store = await openStore(file, now ? { now } : {});\n  const print = (text) => stdout.write(text + '\\n');\n  const clock = now ? now() : new Date();\n  switch (command) {\n    case 'add': {\n      const task = await store.add({ title: args.join(' '), priority: flags.priority, due: flags.due, tags: flags.tags, notes: flags.notes });\n      print(`Added task ${task.id}.`);\n      return 0;\n    }\n    case 'list': {\n      const filtered = filterTasks(store.all(), { status: flags.status || 'open', tag: flags.tags && flags.tags[0], priority: flags.priority, overdue: flags.overdue, search: flags.search, now: clock });\n      const sorted = sortTasks(filtered, flags.sort || 'id');\n      const page = paginate(sorted, flags.page ? Number(flags.page) : 1, flags.size ? Number(flags.size) : 20);\n      print(formatList(page.items, { now: clock }));\n      if (page.pages > 1) print(`Page ${page.page} of ${page.pages} (${page.total} tasks)`);\n      return 0;\n    }\n    case 'done': {\n      for (const id of args.map(parseId)) await store.update(id, { status: 'done' });\n      print(`Completed ${args.length} task(s).`);\n      return 0;\n    }\n    case 'reopen': {\n      for (const id of args.map(parseId)) await store.update(id, { status: 'open' });\n      print(`Reopened ${args.length} task(s).`);\n      return 0;\n    }\n    case 'tag': {\n      const [id, ...tagList] = args;\n      await store.update(parseId(id), { addTags: tagList });\n      print(`Tagged task ${id}.`);\n      return 0;\n    }\n    case 'rm': {\n      for (const id of args.map(parseId)) await store.remove(id);\n      print(`Removed ${args.length} task(s).`);\n      return 0;\n    }\n    default:\n      print('Usage: taskflow <add|list|done|reopen|tag|rm> [options]');\n      return command ? 2 : 0;\n  }\n}\n\nif (import.meta.url === pathToFileURL(process.argv[1] || '').href) {\n  run(process.argv.slice(2)).then((code) => { process.exitCode = code; }, (error) => {\n    process.stderr.write(`taskflow: ${error.message}\\n`);\n    process.exitCode = 1;\n  });\n}\n"
+            },
+            {
+              "path": "src/query.mjs",
+              "status": "modified",
+              "content": "import { isOverdue } from './dates.mjs';\nimport { PRIORITIES, normalizeTag } from './task.mjs';\n\nexport function filterTasks(tasks, { status, tag, priority, overdue, now = new Date(), search } = {}) {\n  const wanted = tag ? normalizeTag(tag) : null;\n  return tasks.filter((task) => {\n    if (status && status !== 'all' && task.status !== status) return false;\n    if (wanted && !task.tags.includes(wanted)) return false;\n    if (priority && task.priority !== priority) return false;\n    if (overdue && !isOverdue(task, now)) return false;\n    if (search) {\n      const trimmed = String(search).trim();\n      if (trimmed.length > 0) {\n        const lower = trimmed.toLowerCase();\n        const title = typeof task.title === 'string' ? task.title.toLowerCase() : '';\n        const notes = typeof task.notes === 'string' ? task.notes.toLowerCase() : '';\n        if (!title.includes(lower) && !notes.includes(lower)) return false;\n      }\n    }\n    return true;\n  });\n}\n\nconst SORTERS = {\n  id: (a, b) => a.id - b.id,\n  due: (a, b) => (a.due === b.due ? 0 : a.due === null ? 1 : b.due === null ? -1 : a.due < b.due ? -1 : 1),\n  priority: (a, b) => PRIORITIES.indexOf(b.priority) - PRIORITIES.indexOf(a.priority),\n  title: (a, b) => a.title.localeCompare(b.title)\n};\n\n// Stable sort; ties keep ID order.\nexport function sortTasks(tasks, key = 'id') {\n  const compare = SORTERS[key];\n  if (!compare) throw new Error(`Unknown sort key: ${key}`);\n  return [...tasks].sort((a, b) => compare(a, b) || a.id - b.id);\n}\n\n// Pages are numbered from 1.\nexport function paginate(items, page = 1, size = 20) {\n  if (!Number.isInteger(page) || page < 1) throw new Error('Page must be a positive integer');\n  if (!Number.isInteger(size) || size < 1 || size > 100) throw new Error('Page size must be between 1 and 100');\n  const start = (page - 1) * size;\n  return { items: items.slice(start, start + size), page, pages: Math.max(1, Math.ceil(items.length / size)), total: items.length };\n}\n"
+            },
+            {
+              "path": "test/search.test.mjs",
+              "status": "added",
+              "content": "import test from 'node:test';\nimport assert from 'node:assert/strict';\nimport { filterTasks } from '../src/query.mjs';\n\nconst tasks = [\n  { id: 1, title: 'Buy milk', notes: 'Remember cheese', priority: 'low', status: 'open', due: '2026-11-05', tags: ['home'] },\n  { id: 2, title: 'Meeting', notes: 'Project kickoff', priority: 'high', status: 'done', due: null, tags: ['work'] },\n  { id: 3, title: 'Write report', notes: '', priority: 'normal', status: 'open', due: '2026-10-30', tags: ['work'] },\n  { id: 4, title: 'Call friend', notes: 'BR', priority: 'high', status: 'open', due: '2026-11-02', tags: [] }\n];\n\ntest('search matches title or notes (case-insensitive), whitespace-only ignored', () => {\n  assert.deepEqual(filterTasks(tasks, { search: 'milk' }).map(t => t.id), [1]);\n  assert.deepEqual(filterTasks(tasks, { search: 'project' }).map(t => t.id), [2]);\n  assert.deepEqual(filterTasks(tasks, { search: '  ' }).map(t => t.id), [1,2,3,4]);\n  assert.deepEqual(filterTasks(tasks, { search: 'BR' }).map(t => t.id), [4]);\n});"
+            }
+          ],
+          "error": null
+        }
+      ],
+      "errors": []
+    },
+    "claude": {
+      "results": [
+        {
+          "taskId": "taskflow-priority-sort",
+          "taskFingerprint": "44c34580556645c4504f9aad04bd90113f116c134e675dd60a30f7a0c22f0efa",
+          "category": "data-structures",
+          "difficulty": "small",
+          "trial": 1,
+          "status": "failed",
+          "passed": false,
+          "model": "gpt-oss-20b",
+          "inputTokens": 0,
+          "outputTokens": 0,
+          "totalTokens": 0,
+          "costUSD": 0,
+          "wallTimeMs": 62313,
+          "cliVersion": "2.1.325 (Claude Code)",
+          "finished": false,
+          "toolCalls": 1,
+          "verification": {
+            "exitCode": 1,
+            "output": "Agent did not complete."
+          },
+          "changes": [],
+          "error": "Claude Code exited with code 1: {\"duration_api_ms\":0,\"stop_reason\":\"stop_sequence\",\"session_id\":\"13769c12-05b5-4531-b0ca-12e3fd540790\",\"total_cost_usd\":0,\"usage\":{\"output_tokens_details\":{\"thinking_tokens\":0},\"input_tokens\":0,\"cache_creation_input_tokens\":0,\"cache_read_input_tokens\":0,\"output_tokens\":0,\"server_tool_use\":{\"web_search_requests\":0,\"web_fetch_requests\":0},\"service_tier\":\"standard\",\"cache_creation\":{\"ephemeral_1h_input_tokens\":0,\"ephemeral_5m_input_tokens\":0},\"inference_geo\":\"\",\"iterations\":[],\"speed\":\"standard\",\"fallback_credit\":null},\"modelUsage\":{},\"permission_denials\":[],\"terminal_reason\":\"api_error\",\"fast_mode_state\":\"off\",\"fast_mode_disabled_reason\":\"sdk_opt_in_required\",\"subagent_stats\":{\"spawned\":0,\"requested\":{\"background\":0,\"foreground\":0,\"unset\":0},\"started_in_background\":0,\"max_depth\":0,\"spawned_by_subagents\":0,\"completed\":0,\"failed\":0,\"killed\":{\"parent\":0,\"user\":0,\"system\":0},\"refused\":{\"depth_limit\":0,\"concurrency_limit\":0,\"budget\":0},\"by_type\":{}},\"safety_stops\":0,\"is_error\":true,\"num_turns\":1,\"subtype\":\"success\",\"api_error_status\":404,\"api_error_type\":\"invalid_request_error\",\"result\":\"There's an issue with the selected model (gpt-oss-20b). It may not exist or you may not have access to it. Run --model to pick a different model.\",\"type\":\"result\",\"duration_ms\":61775,\"uuid\":\"deea34b1-eb22-40d5-aa35-14a3928af1cd\",\"queued_turn_count\":0,\"result_index\":0}\n\n[claude-code:unrecognized_model] {\"model\":\"gpt-oss-20b\",\"query_source\":\"sdk\"}\n",
+          "agentOutputTail": "{\"duration_api_ms\":0,\"stop_reason\":\"stop_sequence\",\"session_id\":\"13769c12-05b5-4531-b0ca-12e3fd540790\",\"total_cost_usd\":0,\"usage\":{\"output_tokens_details\":{\"thinking_tokens\":0},\"input_tokens\":0,\"cache_creation_input_tokens\":0,\"cache_read_input_tokens\":0,\"output_tokens\":0,\"server_tool_use\":{\"web_search_requests\":0,\"web_fetch_requests\":0},\"service_tier\":\"standard\",\"cache_creation\":{\"ephemeral_1h_input_tokens\":0,\"ephemeral_5m_input_tokens\":0},\"inference_geo\":\"\",\"iterations\":[],\"speed\":\"standard\",\"fallback_credit\":null},\"modelUsage\":{},\"permission_denials\":[],\"terminal_reason\":\"api_error\",\"fast_mode_state\":\"off\",\"fast_mode_disabled_reason\":\"sdk_opt_in_required\",\"subagent_stats\":{\"spawned\":0,\"requested\":{\"background\":0,\"foreground\":0,\"unset\":0},\"started_in_background\":0,\"max_depth\":0,\"spawned_by_subagents\":0,\"completed\":0,\"failed\":0,\"killed\":{\"parent\":0,\"user\":0,\"system\":0},\"refused\":{\"depth_limit\":0,\"concurrency_limit\":0,\"budget\":0},\"by_type\":{}},\"safety_stops\":0,\"is_error\":true,\"num_turns\":1,\"subtype\":\"success\",\"api_error_status\":404,\"api_error_type\":\"invalid_request_error\",\"result\":\"There's an issue with the selected model (gpt-oss-20b). It may not exist or you may not have access to it. Run --model to pick a different model.\",\"type\":\"result\",\"duration_ms\":61775,\"uuid\":\"deea34b1-eb22-40d5-aa35-14a3928af1cd\",\"queued_turn_count\":0,\"result_index\":0}\n\n[claude-code:unrecognized_model] {\"model\":\"gpt-oss-20b\",\"query_source\":\"sdk\"}\n"
+        },
+        {
+          "taskId": "safe-relative-path",
+          "taskFingerprint": "84b5a93d17e947ba36816c9adcea89450ad3dc0f3ae5e3b9d6499f410027ed51",
+          "category": "security-boundaries",
+          "difficulty": "medium",
+          "trial": 1,
+          "status": "failed",
+          "passed": false,
+          "model": "gpt-oss-20b",
+          "inputTokens": 0,
+          "outputTokens": 0,
+          "totalTokens": 0,
+          "costUSD": 0,
+          "wallTimeMs": 62112,
+          "cliVersion": "2.1.325 (Claude Code)",
+          "finished": false,
+          "toolCalls": 1,
+          "verification": {
+            "exitCode": 1,
+            "output": "Agent did not complete."
+          },
+          "changes": [],
+          "error": "Claude Code exited with code 1: {\"duration_api_ms\":0,\"stop_reason\":\"stop_sequence\",\"session_id\":\"d026e756-e0c0-4a13-bf60-7009c3eb4ee3\",\"total_cost_usd\":0,\"usage\":{\"output_tokens_details\":{\"thinking_tokens\":0},\"input_tokens\":0,\"cache_creation_input_tokens\":0,\"cache_read_input_tokens\":0,\"output_tokens\":0,\"server_tool_use\":{\"web_search_requests\":0,\"web_fetch_requests\":0},\"service_tier\":\"standard\",\"cache_creation\":{\"ephemeral_1h_input_tokens\":0,\"ephemeral_5m_input_tokens\":0},\"inference_geo\":\"\",\"iterations\":[],\"speed\":\"standard\",\"fallback_credit\":null},\"modelUsage\":{},\"permission_denials\":[],\"terminal_reason\":\"api_error\",\"fast_mode_state\":\"off\",\"fast_mode_disabled_reason\":\"sdk_opt_in_required\",\"subagent_stats\":{\"spawned\":0,\"requested\":{\"background\":0,\"foreground\":0,\"unset\":0},\"started_in_background\":0,\"max_depth\":0,\"spawned_by_subagents\":0,\"completed\":0,\"failed\":0,\"killed\":{\"parent\":0,\"user\":0,\"system\":0},\"refused\":{\"depth_limit\":0,\"concurrency_limit\":0,\"budget\":0},\"by_type\":{}},\"safety_stops\":0,\"is_error\":true,\"num_turns\":1,\"subtype\":\"success\",\"api_error_status\":404,\"api_error_type\":\"invalid_request_error\",\"result\":\"There's an issue with the selected model (gpt-oss-20b). It may not exist or you may not have access to it. Run --model to pick a different model.\",\"type\":\"result\",\"duration_ms\":61537,\"uuid\":\"72789243-8f8c-411d-a884-8c23f3f4b055\",\"queued_turn_count\":0,\"result_index\":0}\n\n[claude-code:unrecognized_model] {\"model\":\"gpt-oss-20b\",\"query_source\":\"sdk\"}\n",
+          "agentOutputTail": "{\"duration_api_ms\":0,\"stop_reason\":\"stop_sequence\",\"session_id\":\"d026e756-e0c0-4a13-bf60-7009c3eb4ee3\",\"total_cost_usd\":0,\"usage\":{\"output_tokens_details\":{\"thinking_tokens\":0},\"input_tokens\":0,\"cache_creation_input_tokens\":0,\"cache_read_input_tokens\":0,\"output_tokens\":0,\"server_tool_use\":{\"web_search_requests\":0,\"web_fetch_requests\":0},\"service_tier\":\"standard\",\"cache_creation\":{\"ephemeral_1h_input_tokens\":0,\"ephemeral_5m_input_tokens\":0},\"inference_geo\":\"\",\"iterations\":[],\"speed\":\"standard\",\"fallback_credit\":null},\"modelUsage\":{},\"permission_denials\":[],\"terminal_reason\":\"api_error\",\"fast_mode_state\":\"off\",\"fast_mode_disabled_reason\":\"sdk_opt_in_required\",\"subagent_stats\":{\"spawned\":0,\"requested\":{\"background\":0,\"foreground\":0,\"unset\":0},\"started_in_background\":0,\"max_depth\":0,\"spawned_by_subagents\":0,\"completed\":0,\"failed\":0,\"killed\":{\"parent\":0,\"user\":0,\"system\":0},\"refused\":{\"depth_limit\":0,\"concurrency_limit\":0,\"budget\":0},\"by_type\":{}},\"safety_stops\":0,\"is_error\":true,\"num_turns\":1,\"subtype\":\"success\",\"api_error_status\":404,\"api_error_type\":\"invalid_request_error\",\"result\":\"There's an issue with the selected model (gpt-oss-20b). It may not exist or you may not have access to it. Run --model to pick a different model.\",\"type\":\"result\",\"duration_ms\":61537,\"uuid\":\"72789243-8f8c-411d-a884-8c23f3f4b055\",\"queued_turn_count\":0,\"result_index\":0}\n\n[claude-code:unrecognized_model] {\"model\":\"gpt-oss-20b\",\"query_source\":\"sdk\"}\n"
+        },
+        {
+          "taskId": "taskflow-search",
+          "taskFingerprint": "4f55003e0ebc832b3e58785e03f3bcf4a50aa333078647169e82fb649ce56596",
+          "category": "data-structures",
+          "difficulty": "medium",
+          "trial": 1,
+          "status": "failed",
+          "passed": false,
+          "model": "gpt-oss-20b",
+          "inputTokens": 0,
+          "outputTokens": 0,
+          "totalTokens": 0,
+          "costUSD": 0,
+          "wallTimeMs": 62302,
+          "cliVersion": "2.1.325 (Claude Code)",
+          "finished": false,
+          "toolCalls": 1,
+          "verification": {
+            "exitCode": 1,
+            "output": "Agent did not complete."
+          },
+          "changes": [],
+          "error": "Claude Code exited with code 1: {\"duration_api_ms\":0,\"stop_reason\":\"stop_sequence\",\"session_id\":\"2e527f49-aff7-43f9-b6b1-81af1d314c38\",\"total_cost_usd\":0,\"usage\":{\"output_tokens_details\":{\"thinking_tokens\":0},\"input_tokens\":0,\"cache_creation_input_tokens\":0,\"cache_read_input_tokens\":0,\"output_tokens\":0,\"server_tool_use\":{\"web_search_requests\":0,\"web_fetch_requests\":0},\"service_tier\":\"standard\",\"cache_creation\":{\"ephemeral_1h_input_tokens\":0,\"ephemeral_5m_input_tokens\":0},\"inference_geo\":\"\",\"iterations\":[],\"speed\":\"standard\",\"fallback_credit\":null},\"modelUsage\":{},\"permission_denials\":[],\"terminal_reason\":\"api_error\",\"fast_mode_state\":\"off\",\"fast_mode_disabled_reason\":\"sdk_opt_in_required\",\"subagent_stats\":{\"spawned\":0,\"requested\":{\"background\":0,\"foreground\":0,\"unset\":0},\"started_in_background\":0,\"max_depth\":0,\"spawned_by_subagents\":0,\"completed\":0,\"failed\":0,\"killed\":{\"parent\":0,\"user\":0,\"system\":0},\"refused\":{\"depth_limit\":0,\"concurrency_limit\":0,\"budget\":0},\"by_type\":{}},\"safety_stops\":0,\"is_error\":true,\"num_turns\":1,\"subtype\":\"success\",\"api_error_status\":404,\"api_error_type\":\"invalid_request_error\",\"result\":\"There's an issue with the selected model (gpt-oss-20b). It may not exist or you may not have access to it. Run --model to pick a different model.\",\"type\":\"result\",\"duration_ms\":61875,\"uuid\":\"a6412a3d-d91d-4d14-a3bb-87aadf4852b9\",\"queued_turn_count\":0,\"result_index\":0}\n\n[claude-code:unrecognized_model] {\"model\":\"gpt-oss-20b\",\"query_source\":\"sdk\"}\n",
+          "agentOutputTail": "{\"duration_api_ms\":0,\"stop_reason\":\"stop_sequence\",\"session_id\":\"2e527f49-aff7-43f9-b6b1-81af1d314c38\",\"total_cost_usd\":0,\"usage\":{\"output_tokens_details\":{\"thinking_tokens\":0},\"input_tokens\":0,\"cache_creation_input_tokens\":0,\"cache_read_input_tokens\":0,\"output_tokens\":0,\"server_tool_use\":{\"web_search_requests\":0,\"web_fetch_requests\":0},\"service_tier\":\"standard\",\"cache_creation\":{\"ephemeral_1h_input_tokens\":0,\"ephemeral_5m_input_tokens\":0},\"inference_geo\":\"\",\"iterations\":[],\"speed\":\"standard\",\"fallback_credit\":null},\"modelUsage\":{},\"permission_denials\":[],\"terminal_reason\":\"api_error\",\"fast_mode_state\":\"off\",\"fast_mode_disabled_reason\":\"sdk_opt_in_required\",\"subagent_stats\":{\"spawned\":0,\"requested\":{\"background\":0,\"foreground\":0,\"unset\":0},\"started_in_background\":0,\"max_depth\":0,\"spawned_by_subagents\":0,\"completed\":0,\"failed\":0,\"killed\":{\"parent\":0,\"user\":0,\"system\":0},\"refused\":{\"depth_limit\":0,\"concurrency_limit\":0,\"budget\":0},\"by_type\":{}},\"safety_stops\":0,\"is_error\":true,\"num_turns\":1,\"subtype\":\"success\",\"api_error_status\":404,\"api_error_type\":\"invalid_request_error\",\"result\":\"There's an issue with the selected model (gpt-oss-20b). It may not exist or you may not have access to it. Run --model to pick a different model.\",\"type\":\"result\",\"duration_ms\":61875,\"uuid\":\"a6412a3d-d91d-4d14-a3bb-87aadf4852b9\",\"queued_turn_count\":0,\"result_index\":0}\n\n[claude-code:unrecognized_model] {\"model\":\"gpt-oss-20b\",\"query_source\":\"sdk\"}\n"
+        }
+      ],
+      "errors": []
+    },
+    "codex": {
+      "results": [
+        {
+          "taskId": "taskflow-priority-sort",
+          "taskFingerprint": "44c34580556645c4504f9aad04bd90113f116c134e675dd60a30f7a0c22f0efa",
+          "category": "data-structures",
+          "difficulty": "small",
+          "trial": 1,
+          "status": "failed",
+          "passed": false,
+          "model": "gpt-oss-20b",
+          "inputTokens": null,
+          "outputTokens": null,
+          "totalTokens": null,
+          "costUSD": null,
+          "wallTimeMs": 188483,
+          "cliVersion": "codex-cli 0.169.0",
+          "finished": false,
+          "toolCalls": 0,
+          "verification": {
+            "exitCode": 1,
+            "output": "Agent did not complete."
+          },
+          "changes": [],
+          "error": "Codex CLI exited with code 1: unexpected status 422 Unprocessable Entity: Failed to deserialize the JSON body into the target type: tools[4].type: unknown variant `namespace`, expected one of `function`, `file_search`, `web_search_preview`, `mcp`, `image_generation`, `computer_use_preview`, `code_interpreter`, `shell`, `apply_patch`, `custom` at line 1 column 26308, url: http://127.0.0.1:39019/a/codex/v1/responses",
+          "agentOutputTail": "ntity: Failed to deserialize the JSON body into the target type: tools[4].type: unknown variant `namespace`, expected one of `function`, `file_search`, `web_search_preview`, `mcp`, `image_generation`, `computer_use_preview`, `code_interpreter`, `shell`, `apply_patch`, `custom` at line 1 column 26308, url: http://127.0.0.1:39019/a/codex/v1/responses)\"}\n{\"type\":\"error\",\"message\":\"Reconnecting... 2/5 (unexpected status 422 Unprocessable Entity: Failed to deserialize the JSON body into the target type: tools[4].type: unknown variant `namespace`, expected one of `function`, `file_search`, `web_search_preview`, `mcp`, `image_generation`, `computer_use_preview`, `code_interpreter`, `shell`, `apply_patch`, `custom` at line 1 column 26308, url: http://127.0.0.1:39019/a/codex/v1/responses)\"}\n{\"type\":\"error\",\"message\":\"Reconnecting... 3/5 (unexpected status 422 Unprocessable Entity: Failed to deserialize the JSON body into the target type: tools[4].type: unknown variant `namespace`, expected one of `function`, `file_search`, `web_search_preview`, `mcp`, `image_generation`, `computer_use_preview`, `code_interpreter`, `shell`, `apply_patch`, `custom` at line 1 column 26308, url: http://127.0.0.1:39019/a/codex/v1/responses)\"}\n{\"type\":\"error\",\"message\":\"Reconnecting... 4/5 (unexpected status 422 Unprocessable Entity: Failed to deserialize the JSON body into the target type: tools[4].type: unknown variant `namespace`, expected one of `function`, `file_search`, `web_search_preview`, `mcp`, `image_generation`, `computer_use_preview`, `code_interpreter`, `shell`, `apply_patch`, `custom` at line 1 column 26308, url: http://127.0.0.1:39019/a/codex/v1/responses)\"}\n{\"type\":\"error\",\"message\":\"Reconnecting... 5/5 (unexpected status 422 Unprocessable Entity: Failed to deserialize the JSON body into the target type: tools[4].type: unknown variant `namespace`, expected one of `function`, `file_search`, `web_search_preview`, `mcp`, `image_generation`, `computer_use_preview`, `code_interpreter`, `shell`, `apply_patch`, `custom` at line 1 column 26308, url: http://127.0.0.1:39019/a/codex/v1/responses)\"}\n{\"type\":\"error\",\"message\":\"unexpected status 422 Unprocessable Entity: Failed to deserialize the JSON body into the target type: tools[4].type: unknown variant `namespace`, expected one of `function`, `file_search`, `web_search_preview`, `mcp`, `image_generation`, `computer_use_preview`, `code_interpreter`, `shell`, `apply_patch`, `custom` at line 1 column 26308, url: http://127.0.0.1:39019/a/codex/v1/responses\"}\n{\"type\":\"turn.failed\",\"error\":{\"message\":\"unexpected status 422 Unprocessable Entity: Failed to deserialize the JSON body into the target type: tools[4].type: unknown variant `namespace`, expected one of `function`, `file_search`, `web_search_preview`, `mcp`, `image_generation`, `computer_use_preview`, `code_interpreter`, `shell`, `apply_patch`, `custom` at line 1 column 26308, url: http://127.0.0.1:39019/a/codex/v1/responses\"}}\n\nReading additional input from stdin...\n"
+        },
+        {
+          "taskId": "safe-relative-path",
+          "taskFingerprint": "84b5a93d17e947ba36816c9adcea89450ad3dc0f3ae5e3b9d6499f410027ed51",
+          "category": "security-boundaries",
+          "difficulty": "medium",
+          "trial": 1,
+          "status": "failed",
+          "passed": false,
+          "model": "gpt-oss-20b",
+          "inputTokens": null,
+          "outputTokens": null,
+          "totalTokens": null,
+          "costUSD": null,
+          "wallTimeMs": 188347,
+          "cliVersion": "codex-cli 0.169.0",
+          "finished": false,
+          "toolCalls": 0,
+          "verification": {
+            "exitCode": 1,
+            "output": "Agent did not complete."
+          },
+          "changes": [],
+          "error": "Codex CLI exited with code 1: unexpected status 422 Unprocessable Entity: Failed to deserialize the JSON body into the target type: tools[4].type: unknown variant `namespace`, expected one of `function`, `file_search`, `web_search_preview`, `mcp`, `image_generation`, `computer_use_preview`, `code_interpreter`, `shell`, `apply_patch`, `custom` at line 1 column 26606, url: http://127.0.0.1:39019/a/codex/v1/responses",
+          "agentOutputTail": "ntity: Failed to deserialize the JSON body into the target type: tools[4].type: unknown variant `namespace`, expected one of `function`, `file_search`, `web_search_preview`, `mcp`, `image_generation`, `computer_use_preview`, `code_interpreter`, `shell`, `apply_patch`, `custom` at line 1 column 26606, url: http://127.0.0.1:39019/a/codex/v1/responses)\"}\n{\"type\":\"error\",\"message\":\"Reconnecting... 2/5 (unexpected status 422 Unprocessable Entity: Failed to deserialize the JSON body into the target type: tools[4].type: unknown variant `namespace`, expected one of `function`, `file_search`, `web_search_preview`, `mcp`, `image_generation`, `computer_use_preview`, `code_interpreter`, `shell`, `apply_patch`, `custom` at line 1 column 26606, url: http://127.0.0.1:39019/a/codex/v1/responses)\"}\n{\"type\":\"error\",\"message\":\"Reconnecting... 3/5 (unexpected status 422 Unprocessable Entity: Failed to deserialize the JSON body into the target type: tools[4].type: unknown variant `namespace`, expected one of `function`, `file_search`, `web_search_preview`, `mcp`, `image_generation`, `computer_use_preview`, `code_interpreter`, `shell`, `apply_patch`, `custom` at line 1 column 26606, url: http://127.0.0.1:39019/a/codex/v1/responses)\"}\n{\"type\":\"error\",\"message\":\"Reconnecting... 4/5 (unexpected status 422 Unprocessable Entity: Failed to deserialize the JSON body into the target type: tools[4].type: unknown variant `namespace`, expected one of `function`, `file_search`, `web_search_preview`, `mcp`, `image_generation`, `computer_use_preview`, `code_interpreter`, `shell`, `apply_patch`, `custom` at line 1 column 26606, url: http://127.0.0.1:39019/a/codex/v1/responses)\"}\n{\"type\":\"error\",\"message\":\"Reconnecting... 5/5 (unexpected status 422 Unprocessable Entity: Failed to deserialize the JSON body into the target type: tools[4].type: unknown variant `namespace`, expected one of `function`, `file_search`, `web_search_preview`, `mcp`, `image_generation`, `computer_use_preview`, `code_interpreter`, `shell`, `apply_patch`, `custom` at line 1 column 26606, url: http://127.0.0.1:39019/a/codex/v1/responses)\"}\n{\"type\":\"error\",\"message\":\"unexpected status 422 Unprocessable Entity: Failed to deserialize the JSON body into the target type: tools[4].type: unknown variant `namespace`, expected one of `function`, `file_search`, `web_search_preview`, `mcp`, `image_generation`, `computer_use_preview`, `code_interpreter`, `shell`, `apply_patch`, `custom` at line 1 column 26606, url: http://127.0.0.1:39019/a/codex/v1/responses\"}\n{\"type\":\"turn.failed\",\"error\":{\"message\":\"unexpected status 422 Unprocessable Entity: Failed to deserialize the JSON body into the target type: tools[4].type: unknown variant `namespace`, expected one of `function`, `file_search`, `web_search_preview`, `mcp`, `image_generation`, `computer_use_preview`, `code_interpreter`, `shell`, `apply_patch`, `custom` at line 1 column 26606, url: http://127.0.0.1:39019/a/codex/v1/responses\"}}\n\nReading additional input from stdin...\n"
+        },
+        {
+          "taskId": "taskflow-search",
+          "taskFingerprint": "4f55003e0ebc832b3e58785e03f3bcf4a50aa333078647169e82fb649ce56596",
+          "category": "data-structures",
+          "difficulty": "medium",
+          "trial": 1,
+          "status": "failed",
+          "passed": false,
+          "model": "gpt-oss-20b",
+          "inputTokens": null,
+          "outputTokens": null,
+          "totalTokens": null,
+          "costUSD": null,
+          "wallTimeMs": 188311,
+          "cliVersion": "codex-cli 0.169.0",
+          "finished": false,
+          "toolCalls": 0,
+          "verification": {
+            "exitCode": 1,
+            "output": "Agent did not complete."
+          },
+          "changes": [],
+          "error": "Codex CLI exited with code 1: unexpected status 422 Unprocessable Entity: Failed to deserialize the JSON body into the target type: tools[4].type: unknown variant `namespace`, expected one of `function`, `file_search`, `web_search_preview`, `mcp`, `image_generation`, `computer_use_preview`, `code_interpreter`, `shell`, `apply_patch`, `custom` at line 1 column 26378, url: http://127.0.0.1:39019/a/codex/v1/responses",
+          "agentOutputTail": "ntity: Failed to deserialize the JSON body into the target type: tools[4].type: unknown variant `namespace`, expected one of `function`, `file_search`, `web_search_preview`, `mcp`, `image_generation`, `computer_use_preview`, `code_interpreter`, `shell`, `apply_patch`, `custom` at line 1 column 26378, url: http://127.0.0.1:39019/a/codex/v1/responses)\"}\n{\"type\":\"error\",\"message\":\"Reconnecting... 2/5 (unexpected status 422 Unprocessable Entity: Failed to deserialize the JSON body into the target type: tools[4].type: unknown variant `namespace`, expected one of `function`, `file_search`, `web_search_preview`, `mcp`, `image_generation`, `computer_use_preview`, `code_interpreter`, `shell`, `apply_patch`, `custom` at line 1 column 26378, url: http://127.0.0.1:39019/a/codex/v1/responses)\"}\n{\"type\":\"error\",\"message\":\"Reconnecting... 3/5 (unexpected status 422 Unprocessable Entity: Failed to deserialize the JSON body into the target type: tools[4].type: unknown variant `namespace`, expected one of `function`, `file_search`, `web_search_preview`, `mcp`, `image_generation`, `computer_use_preview`, `code_interpreter`, `shell`, `apply_patch`, `custom` at line 1 column 26378, url: http://127.0.0.1:39019/a/codex/v1/responses)\"}\n{\"type\":\"error\",\"message\":\"Reconnecting... 4/5 (unexpected status 422 Unprocessable Entity: Failed to deserialize the JSON body into the target type: tools[4].type: unknown variant `namespace`, expected one of `function`, `file_search`, `web_search_preview`, `mcp`, `image_generation`, `computer_use_preview`, `code_interpreter`, `shell`, `apply_patch`, `custom` at line 1 column 26378, url: http://127.0.0.1:39019/a/codex/v1/responses)\"}\n{\"type\":\"error\",\"message\":\"Reconnecting... 5/5 (unexpected status 422 Unprocessable Entity: Failed to deserialize the JSON body into the target type: tools[4].type: unknown variant `namespace`, expected one of `function`, `file_search`, `web_search_preview`, `mcp`, `image_generation`, `computer_use_preview`, `code_interpreter`, `shell`, `apply_patch`, `custom` at line 1 column 26378, url: http://127.0.0.1:39019/a/codex/v1/responses)\"}\n{\"type\":\"error\",\"message\":\"unexpected status 422 Unprocessable Entity: Failed to deserialize the JSON body into the target type: tools[4].type: unknown variant `namespace`, expected one of `function`, `file_search`, `web_search_preview`, `mcp`, `image_generation`, `computer_use_preview`, `code_interpreter`, `shell`, `apply_patch`, `custom` at line 1 column 26378, url: http://127.0.0.1:39019/a/codex/v1/responses\"}\n{\"type\":\"turn.failed\",\"error\":{\"message\":\"unexpected status 422 Unprocessable Entity: Failed to deserialize the JSON body into the target type: tools[4].type: unknown variant `namespace`, expected one of `function`, `file_search`, `web_search_preview`, `mcp`, `image_generation`, `computer_use_preview`, `code_interpreter`, `shell`, `apply_patch`, `custom` at line 1 column 26378, url: http://127.0.0.1:39019/a/codex/v1/responses\"}}\n\nReading additional input from stdin...\n"
+        }
+      ],
+      "errors": []
+    },
+    "opencode": {
+      "results": [
+        {
+          "taskId": "taskflow-priority-sort",
+          "taskFingerprint": "44c34580556645c4504f9aad04bd90113f116c134e675dd60a30f7a0c22f0efa",
+          "category": "data-structures",
+          "difficulty": "small",
+          "trial": 1,
+          "status": "failed",
+          "passed": false,
+          "model": "bench/gpt-oss-20b",
+          "inputTokens": 59475,
+          "outputTokens": 390,
+          "totalTokens": 59865,
+          "costUSD": 0,
+          "wallTimeMs": 368235,
+          "cliVersion": "1.19.5",
+          "finished": false,
+          "toolCalls": 9,
+          "verification": {
+            "exitCode": 1,
+            "output": "Agent did not complete."
+          },
+          "changes": [],
+          "error": "OpenCode exited with code 1: Expected 'id' to be a string.",
+          "agentOutputTail": "      return 0;\\n    }\\n    default:\\n      print('Usage: taskflow <add|list|done|reopen|tag|rm> [options]');\\n      return command ? 2 : 0;\\n  }\\n}\\n\\nif (import.meta.url === pathToFileURL(process.argv[1] || '').href) {\\n  run(process.argv.slice(2)).then((code) => { process.exitCode = code; }, (error) => {\\n    process.stderr.write(`taskflow: ${error.message}\\\\n`);\\n    process.exitCode = 1;\\n  });\\n}\",\"lineStart\":50,\"lineEnd\":99,\"totalLines\":99,\"truncated\":false}},\"title\":\"tmp/oasis-opencode-eval-s1sfhG/workspace/src/cli.mjs\",\"time\":{\"start\":1794666218765,\"end\":1794666218804}},\"id\":\"prt_1da7142b7001Lx1Yh8PqByR1QX\",\"sessionID\":\"ses_e25935056ffeAzgpphZNjZ98oq\",\"messageID\":\"msg_1da70c2a8001009wRhoamevfA2\"}}\n{\"type\":\"step_finish\",\"timestamp\":1794666218828,\"sessionID\":\"ses_e25935056ffeAzgpphZNjZ98oq\",\"part\":{\"id\":\"prt_1da714538001USdiHxcgCtbXFl\",\"reason\":\"tool-calls\",\"messageID\":\"msg_1da70c2a8001009wRhoamevfA2\",\"sessionID\":\"ses_e25935056ffeAzgpphZNjZ98oq\",\"type\":\"step-finish\",\"tokens\":{\"total\":8232,\"input\":8188,\"output\":44,\"reasoning\":0,\"cache\":{\"write\":0,\"read\":0}},\"cost\":0}}\n{\"type\":\"step_start\",\"timestamp\":1794666250637,\"sessionID\":\"ses_e25935056ffeAzgpphZNjZ98oq\",\"part\":{\"id\":\"prt_1da71c189001XafW7UmQSOZ266\",\"messageID\":\"msg_1da714546001YPh7jUhdVmMNMQ\",\"sessionID\":\"ses_e25935056ffeAzgpphZNjZ98oq\",\"type\":\"step-start\"}}\n{\"type\":\"tool_use\",\"timestamp\":1794666251317,\"sessionID\":\"ses_e25935056ffeAzgpphZNjZ98oq\",\"part\":{\"type\":\"tool\",\"tool\":\"grep\",\"callID\":\"chatcmpl-tool-a5378170ef6040f3\",\"state\":{\"status\":\"completed\",\"input\":{\"path\":\"src\",\"include\":\"*.mjs\",\"pattern\":\"sortTasks\"},\"output\":\"Found 3 matches\\n/tmp/oasis-opencode-eval-s1sfhG/workspace/src/query.mjs:\\n  Line 23: export function sortTasks(tasks, key = 'id') {\\n\\n\\n/tmp/oasis-opencode-eval-s1sfhG/workspace/src/cli.mjs:\\n  Line 6: import { filterTasks, sortTasks, paginate } from './query.mjs';\\n\\n  Line 61:       const sorted = sortTasks(filtered, flags.sort || 'id');\\n\",\"metadata\":{\"matches\":3,\"truncated\":false},\"title\":\"sortTasks\",\"time\":{\"start\":1794666251304,\"end\":1794666251315}},\"id\":\"prt_1da71c356001fhGGVnO5g1K308\",\"sessionID\":\"ses_e25935056ffeAzgpphZNjZ98oq\",\"messageID\":\"msg_1da714546001YPh7jUhdVmMNMQ\"}}\n{\"type\":\"step_finish\",\"timestamp\":1794666251342,\"sessionID\":\"ses_e25935056ffeAzgpphZNjZ98oq\",\"part\":{\"id\":\"prt_1da71c441001p2T0J9o3l6ql8g\",\"reason\":\"tool-calls\",\"messageID\":\"msg_1da714546001YPh7jUhdVmMNMQ\",\"sessionID\":\"ses_e25935056ffeAzgpphZNjZ98oq\",\"type\":\"step-finish\",\"tokens\":{\"total\":8980,\"input\":8939,\"output\":41,\"reasoning\":0,\"cache\":{\"write\":0,\"read\":0}},\"cost\":0}}\n{\"type\":\"step_start\",\"timestamp\":1794666283483,\"sessionID\":\"ses_e25935056ffeAzgpphZNjZ98oq\",\"part\":{\"id\":\"prt_1da7241d9001Wsb9RVC6LwsQxw\",\"messageID\":\"msg_1da71c44a001gd5WWXYV4lXO6q\",\"sessionID\":\"ses_e25935056ffeAzgpphZNjZ98oq\",\"type\":\"step-start\"}}\n{\"type\":\"error\",\"timestamp\":1794666284914,\"sessionID\":\"ses_e25935056ffeAzgpphZNjZ98oq\",\"error\":{\"name\":\"UnknownError\",\"data\":{\"message\":\"Expected 'id' to be a string.\"}}}\n"
+        },
+        {
+          "taskId": "safe-relative-path",
+          "taskFingerprint": "84b5a93d17e947ba36816c9adcea89450ad3dc0f3ae5e3b9d6499f410027ed51",
+          "category": "security-boundaries",
+          "difficulty": "medium",
+          "trial": 1,
+          "status": "passed",
+          "passed": true,
+          "model": "bench/gpt-oss-20b",
+          "inputTokens": 109381,
+          "outputTokens": 2932,
+          "totalTokens": 112313,
+          "costUSD": 0,
+          "wallTimeMs": 663930,
+          "cliVersion": "1.19.5",
+          "finished": true,
+          "toolCalls": 10,
+          "verification": {
+            "exitCode": 0,
+            "output": ""
+          },
+          "changes": [
+            {
+              "path": "src/lib.mjs",
+              "status": "added",
+              "content": "import path from 'node:path';\n\n/**\n * Resolve a relative path need not exist on disk, but ensures it does not escape the root.\n * @param {string} root - Base path\n * @param {string} value - Path to resolve relative to root\n * @returns {string} - Absolute resolved path\n * @throws {Error} - If value is absolute or escapes the root via `..`\n */\nexport function resolveRelative(root, value) {\n  if (path.isAbsolute(value)) {\n    throw new Error(`Path escapes the workspace: ${value}`);\n  }\n  const resolved = path.resolve(root, value);\n  const rel = path.relative(root, resolved);\n  // path.relative will give a leading '..' if resolved is outside root.\n  if (rel.startsWith('..' + path.sep) || rel === '..') {\n    throw new Error(`Path escapes the workspace: ${value}`);\n  }\n  // If resolved equals root, that's fine.\n  return resolved;\n}\n"
+            }
+          ],
+          "error": null
+        },
+        {
+          "taskId": "taskflow-search",
+          "taskFingerprint": "4f55003e0ebc832b3e58785e03f3bcf4a50aa333078647169e82fb649ce56596",
+          "category": "data-structures",
+          "difficulty": "medium",
+          "trial": 1,
+          "status": "failed",
+          "passed": false,
+          "model": "bench/gpt-oss-20b",
+          "inputTokens": 26393,
+          "outputTokens": 180,
+          "totalTokens": 26573,
+          "costUSD": 0,
+          "wallTimeMs": 218889,
+          "cliVersion": "1.19.5",
+          "finished": false,
+          "toolCalls": 4,
+          "verification": {
+            "exitCode": 1,
+            "output": "Agent did not complete."
+          },
+          "changes": [],
+          "error": "OpenCode exited with code 1: Expected 'id' to be a string.",
+          "agentOutputTail": "map(normalizeTag))];\\n  return {\\n    id,\\n    title,\\n    priority,\\n    status: 'open',\\n    due: fields.due ? parseDue(fields.due, now) : null,\\n    tags,\\n    notes: fields.notes ? String(fields.notes) : '',\\n    created: now.toISOString()\\n  };\\n}\\n\\n// Returns a new task; the input is never modified.\\nexport function updateTask(task, changes, { now = new Date() } = {}) {\\n  const next = { ...task, tags: [...task.tags] };\\n  if (changes.title !== undefined) {\\n    const title = String(changes.title).trim();\\n    if (!title) throw new Error('A task needs a title');\\n    next.title = title;\\n  }\\n  if (changes.priority !== undefined) {\\n    if (!PRIORITIES.includes(changes.priority)) throw new Error(`Unknown priority: ${changes.priority}`);\\n    next.priority = changes.priority;\\n  }\\n  if (changes.status !== undefined) {\\n    if (!STATUSES.includes(changes.status)) throw new Error(`Unknown status: ${changes.status}`);\\n    next.status = changes.status;\\n    if (changes.status === 'done') next.completed = now.toISOString();\\n    else delete next.completed;\\n  }\\n  if (changes.due !== undefined) next.due = changes.due === null ? null : parseDue(changes.due, now);\\n  if (changes.addTags) for (const tag of changes.addTags.map(normalizeTag)) if (!next.tags.includes(tag)) next.tags.push(tag);\\n  if (changes.removeTags) {\\n    const remove = new Set(changes.removeTags.map(normalizeTag));\\n    next.tags = next.tags.filter((tag) => !remove.has(tag));\\n  }\\n  if (changes.notes !== undefined) next.notes = String(changes.notes);\\n  return next;\\n}\",\"lineStart\":1,\"lineEnd\":57,\"totalLines\":57,\"truncated\":false}},\"title\":\"tmp/oasis-opencode-eval-6qgKeg/workspace/src/task.mjs\",\"time\":{\"start\":1794670115471,\"end\":1794670115480}},\"id\":\"prt_1daacb7a5001cb7uDpgMvSVZEO\",\"sessionID\":\"ses_e255612f0ffejIU5DHs64GZOfq\",\"messageID\":\"msg_1daac31cf001vkae7n0XSvwL9y\"}}\n{\"type\":\"text\",\"timestamp\":1794670115515,\"sessionID\":\"ses_e255612f0ffejIU5DHs64GZOfq\",\"part\":{\"id\":\"prt_1daacaf9b001afIwdp9hOxtHeF\",\"messageID\":\"msg_1daac31cf001vkae7n0XSvwL9y\",\"sessionID\":\"ses_e255612f0ffejIU5DHs64GZOfq\",\"type\":\"text\",\"text\":\"Open taskflow implementation.\",\"time\":{\"start\":1794670112667,\"end\":1794670115504}}}\n{\"type\":\"step_finish\",\"timestamp\":1794670115515,\"sessionID\":\"ses_e255612f0ffejIU5DHs64GZOfq\",\"part\":{\"id\":\"prt_1daacbab2001Gf2cc27wt75Hot\",\"reason\":\"tool-calls\",\"messageID\":\"msg_1daac31cf001vkae7n0XSvwL9y\",\"sessionID\":\"ses_e255612f0ffejIU5DHs64GZOfq\",\"type\":\"step-finish\",\"tokens\":{\"total\":6985,\"input\":6933,\"output\":52,\"reasoning\":0,\"cache\":{\"write\":0,\"read\":0}},\"cost\":0}}\n{\"type\":\"step_start\",\"timestamp\":1794670147464,\"sessionID\":\"ses_e255612f0ffejIU5DHs64GZOfq\",\"part\":{\"id\":\"prt_1daad3785001T8jPDFoOes3l2Y\",\"messageID\":\"msg_1daacbab7001qfSV8X4FZuPuZU\",\"sessionID\":\"ses_e255612f0ffejIU5DHs64GZOfq\",\"type\":\"step-start\"}}\n{\"type\":\"error\",\"timestamp\":1794670149320,\"sessionID\":\"ses_e255612f0ffejIU5DHs64GZOfq\",\"error\":{\"name\":\"UnknownError\",\"data\":{\"message\":\"Expected 'id' to be a string.\"}}}\n"
+        }
+      ],
+      "errors": []
+    },
+    "aider": {
+      "results": [
+        {
+          "taskId": "taskflow-priority-sort",
+          "taskFingerprint": "44c34580556645c4504f9aad04bd90113f116c134e675dd60a30f7a0c22f0efa",
+          "category": "data-structures",
+          "difficulty": "small",
+          "trial": 1,
+          "status": "failed",
+          "passed": false,
+          "model": "openai/gpt-oss-20b",
+          "inputTokens": 759,
+          "outputTokens": 35,
+          "totalTokens": 794,
+          "costUSD": null,
+          "wallTimeMs": 32866,
+          "cliVersion": "aider 0.86.2",
+          "finished": true,
+          "toolCalls": null,
+          "verification": {
+            "exitCode": 1,
+            "output": "\nnode:internal/modules/run_main:123\n    triggerUncaughtException(\n    ^\n\nAssertionError [ERR_ASSERTION]: expected at least 20 passing project tests (existing tests kept, plus new ones), found 19\n    at file:///tmp/oasis-pin/evals/tasks/taskflow-priority-sort/verify.mjs:12:8\n    at ModuleJob.run (node:internal/modules/esm/module_job:343:25)\n    at async onImport.tracePromise.__proto__ (node:internal/modules/esm/loader:665:26)\n    at async asyncRunEntryPointWithESMLoader (node:internal/modules/run_main:117:5) {\n  generatedMessage: false,\n  code: 'ERR_ASSERTION',\n  actual: false,\n  expected: true,\n  operator: '==',\n  diff: 'simple'\n}\n\nNode.js v22.21.1\n"
+          },
+          "changes": [
+            {
+              "path": ".aider.chat.history.md",
+              "status": "added",
+              "content": "\n# aider chat started at 2026-11-14 14:24:47\n\n> No git repo found, create one to track aider's changes (recommended)? (Y)es/(N)o [Yes]: y  \n> Added .aider* to .gitignore  \n> Git repository created in /tmp/oasis-aider-eval-p8TqNR/workspace  \n> Update git name with: git config user.name \"Your Name\"  \n> Update git email with: git config user.email \"you@example.com\"  \n> /home/user/.local/bin/aider --message Bug report for the taskflow project: `taskflow list --sort priority` lists low-priority tasks above normal-priority ones. The order must be high, then normal, then low, with ties kept in ID order. Find the root cause in the source, keep every existing test passing without weakening it, and add a regression test that fails before your fix.\n\nBenchmark constraints: solve this task using only the current workspace. Do not access files outside this workspace, use the network, change the task harness, or bypass verification. The harness runs the task verifier independently after you finish. --yes-always --no-auto-commits --no-dirty-commits --no-check-update --no-analytics --no-show-model-warnings --no-pretty --no-stream --timeout 1800 --model openai/gpt-oss-20b  \n> Aider v0.86.2  \n> Model: openai/gpt-oss-20b with whole edit format  \n> Git repo: .git with 0 files  \n> Repo-map: using 1024 tokens, auto refresh  \n\n#### Bug report for the taskflow project: `taskflow list --sort priority` lists low-priority tasks above normal-priority ones. The order must be high, then normal, then low, with ties kept in ID order. Find the root cause in the source, keep every existing test passing without weakening it, and add a regression test that fails before your fix.  \n####   \n#### Benchmark constraints: solve this task using only the current workspace. Do not access files outside this workspace, use the network, change the task harness, or bypass verification. The harness runs the task verifier independently after you finish.  \n> Tokens: 759 sent, 35 received.  \n"
+            },
+            {
+              "path": ".aider.input.history",
+              "status": "added",
+              "content": "\n# 2026-11-14 14:24:49.522350\n+Bug report for the taskflow project: `taskflow list --sort priority` lists low-priority tasks above normal-priority ones. The order must be high, then normal, then low, with ties kept in ID order. Find the root cause in the source, keep every existing test passing without weakening it, and add a regression test that fails before your fix.\n+\n+Benchmark constraints: solve this task using only the current workspace. Do not access files outside this workspace, use the network, change the task harness, or bypass verification. The harness runs the task verifier independently after you finish.\n\n# 2026-11-14 14:24:49.522667\n+Bug report for the taskflow project: `taskflow list --sort priority` lists low-priority tasks above normal-priority ones. The order must be high, then normal, then low, with ties kept in ID order. Find the root cause in the source, keep every existing test passing without weakening it, and add a regression test that fails before your fix.\n+\n+Benchmark constraints: solve this task using only the current workspace. Do not access files outside this workspace, use the network, change the task harness, or bypass verification. The harness runs the task verifier independently after you finish.\n"
+            },
+            {
+              "path": ".aider.tags.cache.v4/cache.db",
+              "status": "added",
+              "content": "(binary, 32768 bytes)"
+            },
+            {
+              "path": ".gitignore",
+              "status": "added",
+              "content": ".aider*\n"
+            }
+          ],
+          "error": null,
+          "agentOutputTail": "\nAdded .aider* to .gitignore\nGit repository created in /tmp/oasis-aider-eval-p8TqNR/workspace\nUpdate git name with: git config user.name \"Your Name\"\nUpdate git email with: git config user.email \"you@example.com\"\nAider v0.86.2\nModel: openai/gpt-oss-20b with whole edit format\nGit repo: .git with 0 files\nRepo-map: using 1024 tokens, auto refresh\n\n\n--------------\n► **THINKING**\n\nWe need to inspect the repository.\n{\"cmd\":[\"bash\",\"-lc\",\"ls -R\"]}\n\n------------\n► **ANSWER**\n\n\n\nTokens: 759 sent, 35 received.\n\nWarning: Input is not a terminal (fd=0).\n"
+        },
+        {
+          "taskId": "safe-relative-path",
+          "taskFingerprint": "84b5a93d17e947ba36816c9adcea89450ad3dc0f3ae5e3b9d6499f410027ed51",
+          "category": "security-boundaries",
+          "difficulty": "medium",
+          "trial": 1,
+          "status": "passed",
+          "passed": true,
+          "model": "openai/gpt-oss-20b",
+          "inputTokens": 811,
+          "outputTokens": 832,
+          "totalTokens": 1643,
+          "costUSD": null,
+          "wallTimeMs": 49667,
+          "cliVersion": "aider 0.86.2",
+          "finished": true,
+          "toolCalls": null,
+          "verification": {
+            "exitCode": 0,
+            "output": ""
+          },
+          "changes": [
+            {
+              "path": ".aider.chat.history.md",
+              "status": "added",
+              "content": "\n# aider chat started at 2026-11-14 14:57:21\n\n> No git repo found, create one to track aider's changes (recommended)? (Y)es/(N)o [Yes]: y  \n> Added .aider* to .gitignore  \n> Git repository created in /tmp/oasis-aider-eval-jt7uco/workspace  \n> Update git name with: git config user.name \"Your Name\"  \n> Update git email with: git config user.email \"you@example.com\"  \n> /home/user/.local/bin/aider --message Create src/lib.mjs exporting a synchronous resolveRelative(root, value) to solve this task: Resolve a relative path below the workspace root and return the absolute result as a string. Work on the path strings only: the root need not exist on disk, so do not touch the filesystem. If the value is an absolute path, or escapes the root via ../, throw an Error whose message contains the word \"escapes\" (for example \"Path escapes the workspace: ../secret\"). Use path.relative rather than string-prefix checks.\nThe verifier runs existing repository checks and then validates the helper. Preserve the existing repository's safety guards.\n\nBenchmark constraints: solve this task using only the current workspace. Do not access files outside this workspace, use the network, change the task harness, or bypass verification. The harness runs the task verifier independently after you finish. --yes-always --no-auto-commits --no-dirty-commits --no-check-update --no-analytics --no-show-model-warnings --no-pretty --no-stream --timeout 1800 --model openai/gpt-oss-20b  \n> Aider v0.86.2  \n> Model: openai/gpt-oss-20b with whole edit format  \n> Git repo: .git with 0 files  \n> Repo-map: using 1024 tokens, auto refresh  \n\n#### Create src/lib.mjs exporting a synchronous resolveRelative(root, value) to solve this task: Resolve a relative path below the workspace root and return the absolute result as a string. Work on the path strings only: the root need not exist on disk, so do not touch the filesystem. If the value is an absolute path, or escapes the root via ../, throw an Error whose message contains the word \"escapes\" (for example \"Path escapes the workspace: ../secret\"). Use path.relative rather than string-prefix checks.  \n#### The verifier runs existing repository checks and then validates the helper. Preserve the existing repository's safety guards.  \n####   \n#### Benchmark constraints: solve this task using only the current workspace. Do not access files outside this workspace, use the network, change the task harness, or bypass verification. The harness runs the task verifier independently after you finish.  \n\nsrc/lib.mjs\n```\nimport path from 'node:path';\n\n/**\n * Resolve a relative path below the workspace root and return the absolute result as a string.\n *\n * @param {string} root - The workspace root path. Can be absolute or relative.\n * @param {string} value - The relative path to resolve against the root.\n * @returns {string} The absolute resolved path.\n * @throws {Error} If the value is an absolute path or escapes the root via `..`.\n */\nexport function resolveRelative(root, value) {\n  // Reject absolute paths outright\n  if (path.isAbsolute(value)) {\n    throw new Error(`Path escapes the workspace: ${value}`);\n  }\n\n  // Resolve the path against the root\n  const resolved = path.resolve(root, value);\n\n  // Determine the relative path from root to the resolved path\n  const rel = path.relative(root, resolved);\n\n  // If the relative path starts with '..', the resolved path escapes the root\n  if (rel.startsWith('..')) {\n    throw new Error(`Path escapes the workspace: ${value}`);\n  }\n\n  return resolved;\n}\n```\n\n> Tokens: 811 sent, 832 received.  \n> src/lib.mjs  \n> Create new file? (Y)es/(N)o [Yes]: y  \n> Applied edit to src/lib.mjs  \n"
+            },
+            {
+              "path": ".aider.input.history",
+              "status": "added",
+              "content": "\n# 2026-11-14 14:57:22.852362\n+Create src/lib.mjs exporting a synchronous resolveRelative(root, value) to solve this task: Resolve a relative path below the workspace root and return the absolute result as a string. Work on the path strings only: the root need not exist on disk, so do not touch the filesystem. If the value is an absolute path, or escapes the root via ../, throw an Error whose message contains the word \"escapes\" (for example \"Path escapes the workspace: ../secret\"). Use path.relative rather than string-prefix checks.\n+The verifier runs existing repository checks and then validates the helper. Preserve the existing repository's safety guards.\n+\n+Benchmark constraints: solve this task using only the current workspace. Do not access files outside this workspace, use the network, change the task harness, or bypass verification. The harness runs the task verifier independently after you finish.\n\n# 2026-11-14 14:57:22.852694\n+Create src/lib.mjs exporting a synchronous resolveRelative(root, value) to solve this task: Resolve a relative path below the workspace root and return the absolute result as a string. Work on the path strings only: the root need not exist on disk, so do not touch the filesystem. If the value is an absolute path, or escapes the root via ../, throw an Error whose message contains the word \"escapes\" (for example \"Path escapes the workspace: ../secret\"). Use path.relative rather than string-prefix checks.\n+The verifier runs existing repository checks and then validates the helper. Preserve the existing repository's safety guards.\n+\n+Benchmark constraints: solve this task using only the current workspace. Do not access files outside this workspace, use the network, change the task harness, or bypass verification. The harness runs the task verifier independently after you finish.\n"
+            },
+            {
+              "path": ".aider.tags.cache.v4/cache.db",
+              "status": "added",
+              "content": "(binary, 32768 bytes)"
+            },
+            {
+              "path": ".gitignore",
+              "status": "modified",
+              "content": "# Node and package-manager output\nnode_modules/\nnpm-debug.log*\nyarn-debug.log*\npnpm-debug.log*\n\n# Local/editor noise\n.DS_Store\nThumbs.db\n.vscode/\n.idea/\n*.swp\n*.swo\n\n# Local tests and backup files\ncoverage/\nplaywright-report/\ntest-results/\n*.local\n.aider*\n"
+            },
+            {
+              "path": "src/lib.mjs",
+              "status": "added",
+              "content": "import path from 'node:path';\n\n/**\n * Resolve a relative path below the workspace root and return the absolute result as a string.\n *\n * @param {string} root - The workspace root path. Can be absolute or relative.\n * @param {string} value - The relative path to resolve against the root.\n * @returns {string} The absolute resolved path.\n * @throws {Error} If the value is an absolute path or escapes the root via `..`.\n */\nexport function resolveRelative(root, value) {\n  // Reject absolute paths outright\n  if (path.isAbsolute(value)) {\n    throw new Error(`Path escapes the workspace: ${value}`);\n  }\n\n  // Resolve the path against the root\n  const resolved = path.resolve(root, value);\n\n  // Determine the relative path from root to the resolved path\n  const rel = path.relative(root, resolved);\n\n  // If the relative path starts with '..', the resolved path escapes the root\n  if (rel.startsWith('..')) {\n    throw new Error(`Path escapes the workspace: ${value}`);\n  }\n\n  return resolved;\n}\n"
+            }
+          ],
+          "error": null
+        },
+        {
+          "taskId": "taskflow-search",
+          "taskFingerprint": "4f55003e0ebc832b3e58785e03f3bcf4a50aa333078647169e82fb649ce56596",
+          "category": "data-structures",
+          "difficulty": "medium",
+          "trial": 1,
+          "status": "failed",
+          "passed": false,
+          "model": "openai/gpt-oss-20b",
+          "inputTokens": 775,
+          "outputTokens": 108,
+          "totalTokens": 883,
+          "costUSD": null,
+          "wallTimeMs": 35063,
+          "cliVersion": "aider 0.86.2",
+          "finished": true,
+          "toolCalls": null,
+          "verification": {
+            "exitCode": 1,
+            "output": "\nnode:internal/modules/run_main:123\n    triggerUncaughtException(\n    ^\n\nAssertionError [ERR_ASSERTION]: expected at least 20 passing project tests (existing tests kept, plus new ones), found 19\n    at file:///tmp/oasis-pin/evals/tasks/taskflow-search/verify.mjs:12:8\n    at ModuleJob.run (node:internal/modules/esm/module_job:343:25)\n    at async onImport.tracePromise.__proto__ (node:internal/modules/esm/loader:665:26)\n    at async asyncRunEntryPointWithESMLoader (node:internal/modules/run_main:117:5) {\n  generatedMessage: false,\n  code: 'ERR_ASSERTION',\n  actual: false,\n  expected: true,\n  operator: '==',\n  diff: 'simple'\n}\n\nNode.js v22.21.1\n"
+          },
+          "changes": [
+            {
+              "path": ".aider.chat.history.md",
+              "status": "added",
+              "content": "\n# aider chat started at 2026-11-14 15:29:11\n\n> No git repo found, create one to track aider's changes (recommended)? (Y)es/(N)o [Yes]: y  \n> Added .aider* to .gitignore  \n> Git repository created in /tmp/oasis-aider-eval-6n44AF/workspace  \n> Update git name with: git config user.name \"Your Name\"  \n> Update git email with: git config user.email \"you@example.com\"  \n> /home/user/.local/bin/aider --message Add text search to the taskflow project in this repository. `filterTasks` gets a `search` option: a case-insensitive substring match against a task's title and notes, combined with the other filters (all must match). The CLI gets `taskflow list --search <text>` (and `--search=<text>`). An empty or whitespace-only search matches everything. Keep every existing test passing and add tests for the new behavior.\n\nBenchmark constraints: solve this task using only the current workspace. Do not access files outside this workspace, use the network, change the task harness, or bypass verification. The harness runs the task verifier independently after you finish. --yes-always --no-auto-commits --no-dirty-commits --no-check-update --no-analytics --no-show-model-warnings --no-pretty --no-stream --timeout 1800 --model openai/gpt-oss-20b  \n> Aider v0.86.2  \n> Model: openai/gpt-oss-20b with whole edit format  \n> Git repo: .git with 0 files  \n> Repo-map: using 1024 tokens, auto refresh  \n\n#### Add text search to the taskflow project in this repository. `filterTasks` gets a `search` option: a case-insensitive substring match against a task's title and notes, combined with the other filters (all must match). The CLI gets `taskflow list --search <text>` (and `--search=<text>`). An empty or whitespace-only search matches everything. Keep every existing test passing and add tests for the new behavior.  \n####   \n#### Benchmark constraints: solve this task using only the current workspace. Do not access files outside this workspace, use the network, change the task harness, or bypass verification. The harness runs the task verifier independently after you finish.  \n\nCould you provide the current file structure of the repository (e.g., a list of files and directories) so I can identify where to add the search functionality?\n\n> Tokens: 775 sent, 108 received.  \n"
+            },
+            {
+              "path": ".aider.input.history",
+              "status": "added",
+              "content": "\n# 2026-11-14 15:29:13.000085\n+Add text search to the taskflow project in this repository. `filterTasks` gets a `search` option: a case-insensitive substring match against a task's title and notes, combined with the other filters (all must match). The CLI gets `taskflow list --search <text>` (and `--search=<text>`). An empty or whitespace-only search matches everything. Keep every existing test passing and add tests for the new behavior.\n+\n+Benchmark constraints: solve this task using only the current workspace. Do not access files outside this workspace, use the network, change the task harness, or bypass verification. The harness runs the task verifier independently after you finish.\n\n# 2026-11-14 15:29:13.000187\n+Add text search to the taskflow project in this repository. `filterTasks` gets a `search` option: a case-insensitive substring match against a task's title and notes, combined with the other filters (all must match). The CLI gets `taskflow list --search <text>` (and `--search=<text>`). An empty or whitespace-only search matches everything. Keep every existing test passing and add tests for the new behavior.\n+\n+Benchmark constraints: solve this task using only the current workspace. Do not access files outside this workspace, use the network, change the task harness, or bypass verification. The harness runs the task verifier independently after you finish.\n"
+            },
+            {
+              "path": ".aider.tags.cache.v4/cache.db",
+              "status": "added",
+              "content": "(binary, 32768 bytes)"
+            },
+            {
+              "path": ".gitignore",
+              "status": "added",
+              "content": ".aider*\n"
+            }
+          ],
+          "error": null,
+          "agentOutputTail": "\nAdded .aider* to .gitignore\nGit repository created in /tmp/oasis-aider-eval-6n44AF/workspace\nUpdate git name with: git config user.name \"Your Name\"\nUpdate git email with: git config user.email \"you@example.com\"\nAider v0.86.2\nModel: openai/gpt-oss-20b with whole edit format\nGit repo: .git with 0 files\nRepo-map: using 1024 tokens, auto refresh\n\n\n--------------\n► **THINKING**\n\nWe need to inspect repository.\nWe need to list files.\nWe don't have repository listing. We need to assume typical structure. Let's \nrequest listing.\nWe can ask for file list.\nWe need to ask user.\n\n------------\n► **ANSWER**\n\nCould you provide the current file structure of the repository (e.g., a list of \nfiles and directories) so I can identify where to add the search functionality?\n\nTokens: 775 sent, 108 received.\n\nWarning: Input is not a terminal (fd=0).\n"
+        }
+      ],
+      "errors": []
+    }
+  }
+}
