@@ -1,0 +1,296 @@
+{
+  "label": "OASIS 1.3.0 (ovh/gpt-oss-20b)",
+  "sourceRevision": "b135fbc371394e6a8b7d4d9acdb91773643eaef7",
+  "runId": "2026-11-14T09-32-37-331Z-6154",
+  "startedAt": "2026-11-14T09:32:37.331Z",
+  "completedAt": "2026-11-14T09:46:49.247Z",
+  "taskCount": 2,
+  "taskIds": [
+    "clamp-integer",
+    "safe-relative-path"
+  ],
+  "trialsPerTask": 1,
+  "timeoutSeconds": 1500,
+  "runtime": {
+    "node": "v22.21.0",
+    "platform": "linux",
+    "arch": "x64"
+  },
+  "passRate": 0,
+  "passed": 0,
+  "failed": 2,
+  "medianTimeMs": 425908,
+  "totalCostUSD": 0.003308,
+  "costPerPassedTaskUSD": null,
+  "routing": {
+    "enabled": false
+  },
+  "provider": {
+    "model": "ovh/gpt-oss-20b",
+    "protocol": "openai-compatible",
+    "baseURL": "http://127.0.0.1:35587/a/oasis/v1",
+    "maxSteps": 150,
+    "maxOutputTokens": null
+  },
+  "pricing": {
+    "inputUsdPerMillionTokens": null,
+    "outputUsdPerMillionTokens": null,
+    "note": "Cost is a rough estimate from configured rates and does not distinguish cached tokens. Pass-rate differences under 10 percentage points are noisy with small task samples; run at least three trials per task when benchmarking."
+  },
+  "results": [
+    {
+      "taskId": "clamp-integer",
+      "taskFingerprint": "dab0c2159b42de21f3e8608ea63ea2036a332621147205eeab0bcc14e425d3d1",
+      "category": "utility-logic",
+      "difficulty": "small",
+      "trial": 1,
+      "status": "failed",
+      "model": "ovh/gpt-oss-20b",
+      "requestedModel": "ovh/gpt-oss-20b",
+      "routeTier": "strong",
+      "escalation": null,
+      "routeReason": "automatic routing is disabled",
+      "strongModel": "ovh/gpt-oss-20b",
+      "protocol": "openai-compatible",
+      "baseURL": "http://127.0.0.1:35587/a/oasis/v1",
+      "maxSteps": 150,
+      "maxOutputTokens": null,
+      "inputTokens": 70316,
+      "outputTokens": 1166,
+      "totalTokens": 71482,
+      "costUSD": 0.00226106,
+      "strongModelCostUSD": 0.00226106,
+      "routingSavingsUSD": 0,
+      "costSource": "per-model list-price estimate (cloud model behind a localhost gateway; free-tier keys are not billed)",
+      "wallTimeMs": 322954,
+      "finished": false,
+      "toolCalls": 15,
+      "trace": [
+        {
+          "tool": "list_files",
+          "arg": "src",
+          "resultChars": 176
+        },
+        {
+          "tool": "glob_files",
+          "arg": "src",
+          "resultChars": 187
+        },
+        {
+          "tool": "search_files",
+          "arg": "src",
+          "resultChars": 586
+        },
+        {
+          "tool": "read_file",
+          "arg": "src/config.mjs",
+          "resultChars": 6958
+        },
+        {
+          "tool": "list_files",
+          "arg": "test",
+          "resultChars": 67
+        },
+        {
+          "tool": "unknown_tool",
+          "resultChars": 230,
+          "failed": true
+        },
+        {
+          "tool": "list_files",
+          "arg": "test",
+          "resultChars": 67
+        },
+        {
+          "tool": "unknown_tool",
+          "resultChars": 197,
+          "failed": true
+        },
+        {
+          "tool": "list_files",
+          "arg": "test",
+          "resultChars": 67
+        },
+        {
+          "tool": "read_file",
+          "arg": "test/test/runtime.test.mjs",
+          "resultChars": 116,
+          "failed": true
+        },
+        {
+          "tool": "unknown_tool",
+          "resultChars": 197,
+          "failed": true
+        },
+        {
+          "tool": "read_file",
+          "arg": "test/test/runtime.test.mjs",
+          "resultChars": 116,
+          "failed": true
+        },
+        {
+          "tool": "unknown_tool",
+          "resultChars": 197,
+          "failed": true
+        },
+        {
+          "tool": "list_files",
+          "arg": "test",
+          "resultChars": 67
+        },
+        {
+          "tool": "unknown_tool",
+          "resultChars": 197,
+          "failed": true
+        }
+      ],
+      "requestTokens": [
+        [
+          4800,
+          45
+        ],
+        [
+          4894,
+          69
+        ],
+        [
+          5037,
+          42
+        ],
+        [
+          5447,
+          44
+        ],
+        [
+          7418,
+          751
+        ],
+        [
+          8277,
+          42
+        ],
+        [
+          8422,
+          38
+        ],
+        [
+          8491,
+          41
+        ],
+        [
+          8645,
+          57
+        ],
+        [
+          8885,
+          37
+        ]
+      ],
+      "verification": {
+        "exitCode": 1,
+        "output": "\nnode:internal/modules/esm/resolve:274\n    throw new ERR_MODULE_NOT_FOUND(\n          ^\n\nError [ERR_MODULE_NOT_FOUND]: Cannot find module '/tmp/oasis-eval-run-XHzsyF/workspace/src/lib.mjs' imported from /tmp/oasis-bench3/evals/tasks/clamp-integer/verify.mjs\n    at finalizeResolution (node:internal/modules/esm/resolve:274:11)\n    at moduleResolve (node:internal/modules/esm/resolve:859:10)\n    at defaultResolve (node:internal/modules/esm/resolve:983:11)\n    at #cachedDefaultResolve (node:internal/modules/esm/loader:731:20)\n    at ModuleLoader.resolve (node:internal/modules/esm/loader:708:38)\n    at ModuleLoader.getModuleJobForImport (node:internal/modules/esm/loader:310:38)\n    at onImport.tracePromise.__proto__ (node:internal/modules/esm/loader:664:36)\n    at TracingChannel.tracePromise (node:diagnostics_channel:350:14)\n    at ModuleLoader.import (node:internal/modules/esm/loader:663:21)\n    at defaultImportModuleDynamicallyForModule (node:internal/modules/esm/utils:222:31) {\n  code: 'ERR_MODULE_NOT_FOUND',\n  url: 'file:///tmp/oasis-eval-run-XHzsyF/workspace/src/lib.mjs'\n}\n\nNode.js v22.21.0\n"
+      },
+      "changes": [],
+      "error": null,
+      "unfinished": {
+        "flags": [],
+        "issues": [],
+        "text": "I’m stuck: I kept repeating the same unknown_tool call with the same inputs and getting the same result (4 times in the last 8 steps, with no file changes in between). I stopped instead of going round in circles. I need to try a different approach or get your guidance."
+      }
+    },
+    {
+      "taskId": "safe-relative-path",
+      "taskFingerprint": "84b5a93d17e947ba36816c9adcea89450ad3dc0f3ae5e3b9d6499f410027ed51",
+      "category": "security-boundaries",
+      "difficulty": "medium",
+      "trial": 1,
+      "status": "failed",
+      "model": "ovh/gpt-oss-20b",
+      "requestedModel": "ovh/gpt-oss-20b",
+      "routeTier": "strong",
+      "escalation": null,
+      "routeReason": null,
+      "strongModel": "ovh/gpt-oss-20b",
+      "protocol": "openai-compatible",
+      "baseURL": "http://127.0.0.1:35587/a/oasis/v1",
+      "maxSteps": 150,
+      "maxOutputTokens": null,
+      "inputTokens": 25454,
+      "outputTokens": 2180,
+      "totalTokens": 27634,
+      "costUSD": 0.00104702,
+      "strongModelCostUSD": null,
+      "routingSavingsUSD": null,
+      "costSource": "per-model list-price estimate (cloud model behind a localhost gateway; free-tier keys are not billed)",
+      "wallTimeMs": 528861,
+      "finished": false,
+      "toolCalls": 0,
+      "trace": [
+        {
+          "tool": "list_files",
+          "arg": "src",
+          "resultChars": 176
+        },
+        {
+          "tool": "check_output",
+          "resultChars": 117,
+          "failed": true
+        },
+        {
+          "tool": "list_files",
+          "arg": "src",
+          "resultChars": 176
+        },
+        {
+          "tool": "unknown_tool",
+          "resultChars": 197,
+          "failed": true
+        },
+        {
+          "tool": "write_file",
+          "arg": "src/lib.mjs",
+          "resultChars": 339
+        },
+        {
+          "tool": "run_command",
+          "resultChars": 129,
+          "failed": true
+        }
+      ],
+      "requestTokens": [
+        [
+          4833,
+          50
+        ],
+        [
+          4927,
+          940
+        ],
+        [
+          4995,
+          45
+        ],
+        [
+          5160,
+          1083
+        ],
+        [
+          5539,
+          62
+        ]
+      ],
+      "verification": {
+        "exitCode": 1,
+        "output": "Agent did not complete."
+      },
+      "changes": [
+        {
+          "path": "src/lib.mjs",
+          "status": "added",
+          "content": "import path from 'node:path'\n\n/**\n * Resolve a relative path below the workspace root.\n *\n * @param {string} root - The workspace root path. Can be abs or relative.\n * @param {string} value - The path to resolve. Must be relative.\n * @returns {string} The resolved absolute path.\n * @throws {Error} If `value` is absolute or would escape the root.\n */\nexport function resolveRelative(root, value) {\n  // If value is already absolute, disallow\n  if (path.isAbsolute(value)) {\n    throw new Error(`Path escapes the workspace: ${value}`)\n  }\n\n  // Resolve against the root; this yields an absolute path (based on cwd if root is relative)\n  const resolved = path.resolve(root, value)\n\n  // Determine if resolved path escapes the root\n  const relativeFromRoot = path.relative(root, resolved)\n  // path.relative may produce '..' at start if outside\n  if (relativeFromRoot.startsWith('..') || relativeFromRoot === '..') {\n    throw new Error(`Path escapes the workspace: ${value}`)\n  }\n\n  return resolved\n}\n"
+        }
+      ],
+      "error": "The model stream was interrupted: Provider returned empty content"
+    }
+  ]
+}
