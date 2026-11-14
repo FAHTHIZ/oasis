@@ -451,6 +451,56 @@ async function chatAnthropic(config, { messages, tools, signal, onText, fetchImp
   return { content, tool_calls, usage, truncated, ...(refused ? { providerStop: 'refusal' } : {}) };
 }
 
+// Stream watchdog, as in the terminal agent: a provider that stops sending
+// (before the response or mid-stream) fails after streamIdleSeconds (default
+// 300, like Codex) instead of leaving the app spinning until Stop. A stall
+// before any data is retried; one after text arrived is reported, since a
+// retry would repeat text already shown.
+export const DEFAULT_STREAM_IDLE_MS = 300_000;
+function streamWatchdog(config, fetchImpl, callerSignal) {
+  const idleMs = Math.max(50, Number(config.streamIdleMs) || Number(config.streamIdleSeconds) * 1000 || DEFAULT_STREAM_IDLE_MS);
+  let stalled = null;
+  let received = false;
+  let timer = null;
+  const failures = new Set();
+  const controllers = new Set();
+  const cleanups = new Set();
+  const done = () => { clearTimeout(timer); for (const cleanup of cleanups) cleanup(); cleanups.clear(); };
+  const stall = () => {
+    stalled = new ProviderError('The model stream stalled: no data arrived for ' + Math.round(idleMs / 1000) + ' seconds.' + (received ? ' Send "continue" to resume.' : ''), { retryable: !received });
+    for (const fail of failures) fail(stalled);
+    for (const controller of controllers) controller.abort(stalled);
+  };
+  const arm = () => { clearTimeout(timer); timer = setTimeout(stall, idleMs); };
+  const watched = async (url, init = {}) => {
+    const controller = new AbortController();
+    controllers.add(controller);
+    const forward = () => controller.abort(callerSignal.reason);
+    if (callerSignal) {
+      if (callerSignal.aborted) forward();
+      else { callerSignal.addEventListener('abort', forward, { once: true }); cleanups.add(() => callerSignal.removeEventListener('abort', forward)); }
+    }
+    arm();
+    let rejectStall;
+    const stalledEarly = new Promise((_, reject) => { rejectStall = reject; });
+    stalledEarly.catch(() => {});
+    failures.add(rejectStall);
+    let response;
+    try { response = await Promise.race([fetchImpl(url, { ...init, signal: controller.signal }), stalledEarly]); }
+    finally { failures.delete(rejectStall); }
+    if (!(typeof Response === 'function' && response instanceof Response) || !response.body || typeof response.body.pipeThrough !== 'function') { clearTimeout(timer); return response; }
+    arm();
+    let fail = null;
+    const body = response.body.pipeThrough(new TransformStream({
+      start(sink) { fail = (error) => { try { sink.error(error); } catch {} }; failures.add(fail); },
+      transform(chunk, sink) { received = true; arm(); sink.enqueue(chunk); },
+      flush() { clearTimeout(timer); failures.delete(fail); }
+    }));
+    return new Response(body, { status: response.status, statusText: response.statusText, headers: response.headers });
+  };
+  return { fetchImpl: watched, done, stallError: () => { done(); return stalled; } };
+}
+
 /**
  * One model call with retries on rate limits and server errors.
  * Returns { content, tool_calls, usage }.
@@ -462,9 +512,14 @@ export async function chat(config, request) {
   const run = config.protocol === 'anthropic' ? chatAnthropic : chatOpenAI;
   let attempt = 0;
   while (true) {
+    const watch = streamWatchdog(config, fetchImpl, request.signal);
     try {
-      return await run(config, { ...request, fetchImpl });
-    } catch (error) {
+      const result = await run(config, { ...request, fetchImpl: watch.fetchImpl });
+      watch.done();
+      return result;
+    } catch (caught) {
+      // A stall surfaces as the stream's error or as the abort it caused.
+      const error = watch.stallError() || caught;
       if (error && error.name === 'AbortError') throw error;
       const network = error instanceof TypeError;
       const retryable = network || (error instanceof ProviderError && error.retryable);
@@ -477,6 +532,7 @@ export async function chat(config, request) {
       const wait = error && Number.isFinite(error.retryAfterMs) ? error.retryAfterMs : error && Number.isFinite(error.waitMs) ? error.waitMs : 800 * 2 ** attempt;
       if (error && Number.isFinite(error.retryAfterMs)) attempt = Math.max(attempt, Number.isInteger(config.maxRetries) ? config.maxRetries : 3);
       await new Promise((resolve, reject) => {
+        if (request.signal && request.signal.aborted) { reject(Object.assign(new Error('Cancelled'), { name: 'AbortError' })); return; }
         const timer = setTimeout(resolve, wait);
         if (request.signal) request.signal.addEventListener('abort', () => { clearTimeout(timer); reject(Object.assign(new Error('Cancelled'), { name: 'AbortError' })); }, { once: true });
       });
