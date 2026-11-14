@@ -26,6 +26,7 @@ Status: **done** (tested and pushed) · **doing** · **open** · **blocked**
 | Reproducible bugs found while using the product | doing | Busy folder 409 dead end: fixed. Tests touching the real home folder (stale catalog, 155 leaked backups): fixed |
 | Dependency refresh (patch/minor) | done | `859163c5`; undici 8 (major) deferred |
 | Dead-code removal (knip across src/, app/, ide/, desktop/, scripts/; each removal checked with `rg` for dynamic imports and string references) | done | Unused exports and re-exports removed, and 231 module-internal helpers un-exported: `test/dead-exports.test.mjs`. Stale doc references to removed files: `test/docs-file-references.test.mjs`. The five "unused" dependencies knip lists are loaded dynamically (`@highlightjs/cdn-assets`, `lowlight`, `@vscode/ripgrep`, `@xterm/*` via `scripts/vendor-terminal.mjs`) and stay |
+| FreeLLMAPI as a built-in gateway; gateway key variables; windows from loopback gateways; `cost_known`; one local-port list; missing key masks | done | `2c729bed`: `test/pricing-gateway.test.mjs`, `test/api-key-helper.test.mjs`, `test/local-context.test.mjs`, `test/app-connect.test.mjs`, `test/flags.test.mjs`, `test/eval.test.mjs`, `test/secret-shield.test.mjs` |
 | Continue `src/agent.mjs` (5,105 lines) and `src/cli.mjs` (3,213) decomposition | open | Only with characterization tests first |
 
 ## 2b. Frontier-platform gaps (2026-11-11 cycle)
@@ -120,7 +121,10 @@ Gaps found by checking the [hooks reference](https://code.claude.com/docs/en/hoo
 
 | Item | Status | Evidence / notes |
 | --- | --- | --- |
-| Same-model, multi-trial benchmark vs Claude Code / Codex / OpenCode | blocked | Needs a model key usable from the sandbox; only a local CPU model is available. No results will be claimed without runs. |
+| Same-model, multi-trial benchmark vs Claude Code / Codex / OpenCode | doing | Unblocked 2026-11-14 by Kilo Gateway's documented anonymous `:free` routes (no key, 200 requests/hour per IP, prompts may be logged). Running: OASIS, Claude Code 2.1.325, Codex 0.169.0, OpenCode 1.19.5, Aider on `nvidia/nemotron-3-ultra-550b-a55b:free`, 12 tasks, interleaved, through the recording relay. No results are claimed until it finishes |
+| Gemini CLI in the same benchmark | doing | `bench:live --router` runs it through FreeLLMAPI's native `/v1beta` surface (`5ee05996`); smoke: passed clamp-integer in 17 s. Full run after the main one, so both stay inside Kilo's hourly limit |
+| Live check of both routers with OASIS | done | FreeLLMAPI (source, 2026-11-14) and OmniRoute 3.8.53: `oasis -p` fixed a bug through each on the same free Nemotron model, 4 requests each; `docs/CONFIGURATION.md` |
+| OASIS through OmniRoute vs FreeLLMAPI vs direct | open | Same tasks and model through each path, after the main benchmark (shared hourly limit) |
 
 ## 4. Desktop distribution (after core validation)
 
@@ -139,6 +143,6 @@ Gaps found by checking the [hooks reference](https://code.claude.com/docs/en/hoo
 
 ## Blockers
 
-- **Model access for benchmarks.** Keys pasted in chat are not used from the
-  shell; the secure credential form was declined twice. Real-user runs use a
-  local Ollama model, which limits task difficulty and speed.
+- **Model access for benchmarks.** Resolved for free models (Kilo's anonymous
+  routes, through FreeLLMAPI and OmniRoute too). Frontier paid models are still
+  not used: no paid inference without the owner's permission.
