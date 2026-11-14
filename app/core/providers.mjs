@@ -285,7 +285,8 @@ async function chatOpenAI(config, { messages, tools, signal, onText: rawOnText, 
     const plain = splitThinking(message.content || '').content;
     if (malformedCallFinish(data.choices && data.choices[0] && data.choices[0].finish_reason) && !plain.trim() && !(message.tool_calls || []).length) throw new ProviderError('The model produced a malformed tool call; asking again.', { retryable: true });
     if (plain && rawOnText) rawOnText(plain);
-    return { content: plain, tool_calls: message.tool_calls || [], usage: normalizeUsage(data.usage), truncated: (data.choices && data.choices[0] && data.choices[0].finish_reason) === 'length' };
+    const finish = String((data.choices && data.choices[0] && data.choices[0].finish_reason) || '');
+    return { content: plain, tool_calls: message.tool_calls || [], usage: normalizeUsage(data.usage), truncated: finish === 'length', ...(providerStopFor(finish) ? { providerStop: providerStopFor(finish) } : {}) };
   }
   let content = '';
   const calls = [];
@@ -337,7 +338,13 @@ async function chatOpenAI(config, { messages, tools, signal, onText: rawOnText, 
   if (malformedCallFinish(finishReason) && !content.trim() && !calls.filter(Boolean).length) throw new ProviderError('The model produced a malformed tool call; asking again.', { retryable: true });
   if (thinkFilter) thinkFilter.flush();
   const toolCalls = calls.filter(Boolean).map((call, i) => ({ ...call, id: call.id || 'call_' + Date.now().toString(36) + i }));
-  return { content: splitThinking(content).content, tool_calls: toolCalls, usage, truncated: finishReason === 'length' };
+  return { content: splitThinking(content).content, tool_calls: toolCalls, usage, truncated: finishReason === 'length', ...(providerStopFor(finishReason) ? { providerStop: providerStopFor(finishReason) } : {}) };
+}
+
+// A content filter or error finish: re-asking returns the same nothing, so the
+// agent reports it instead of nudging the model again.
+function providerStopFor(finishReason) {
+  return /^(content_filter|error)$/i.test(String(finishReason || '')) ? String(finishReason).toLowerCase() : '';
 }
 
 function normalizeUsage(usage) {
@@ -419,6 +426,7 @@ async function chatAnthropic(config, { messages, tools, signal, onText, fetchImp
   const usage = { input: 0, output: 0 };
   let stopped = false;
   let truncated = false;
+  let refused = false;
   for await (const { data } of sseEvents(response, signal)) {
     let event;
     try { event = JSON.parse(data); } catch { continue; }
@@ -426,6 +434,7 @@ async function chatAnthropic(config, { messages, tools, signal, onText, fetchImp
     if (event.type === 'error') throw new ProviderError('The provider reported an error mid-stream: ' + ((event.error && event.error.message) || data), { retryable: !FINAL_STREAM_ERRORS.has(event.error && event.error.type) });
     if (event.type === 'message_stop' || (event.type === 'message_delta' && event.delta && event.delta.stop_reason)) stopped = true;
     if (event.type === 'message_delta' && event.delta && event.delta.stop_reason === 'max_tokens') truncated = true;
+    if (event.type === 'message_delta' && event.delta && event.delta.stop_reason === 'refusal') refused = true;
     if (event.type === 'message_start' && event.message && event.message.usage) {
       const u = event.message.usage;
       usage.input = Number(u.input_tokens || 0) + Number(u.cache_read_input_tokens || 0) + Number(u.cache_creation_input_tokens || 0);
@@ -439,7 +448,7 @@ async function chatAnthropic(config, { messages, tools, signal, onText, fetchImp
   }
   if (!stopped) throw new ProviderError(CUT_OFF_REPLY, { retryable: true });
   const tool_calls = blocks.filter(Boolean).map((block) => ({ id: block.id, type: 'function', function: { name: block.name, arguments: block.json || '{}' } }));
-  return { content, tool_calls, usage, truncated };
+  return { content, tool_calls, usage, truncated, ...(refused ? { providerStop: 'refusal' } : {}) };
 }
 
 /**

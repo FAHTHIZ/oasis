@@ -28,7 +28,7 @@ import { deliverSteering, pendingSteering } from './steering.mjs';
 import { formatLspVerificationBlocker, verificationSummary } from './verification-summary.mjs';
 import { permissionMode } from './plan-mode.mjs';
 import {
-  ACTION_NUDGE, CONTINUE_NUDGE, EMPTY_REPLY_NOTICE, EMPTY_REPLY_NUDGE, FALSE_CLAIM_NUDGE, GIVE_UP_NUDGE, MAX_EMPTY_REPLY_NUDGES,
+  ACTION_NUDGE, CONTINUE_NUDGE, EMPTY_REPLY_NOTICE, EMPTY_REPLY_NUDGE, FALSE_CLAIM_NUDGE, GIVE_UP_NUDGE, MAX_EMPTY_REPLY_NUDGES, providerStopNotice,
   REFUSAL_NUDGE, SOURCE_EXTENSIONS, UNREADABLE_CALL_NUDGE, announcesNextStep, appendLspUnavailableNotice, asksForAction,
   assistedVerificationCalls, assistedVerificationEnabled, claimsUnmadeChange, fencedFileFromReply, givesUpEarly, normalizeReviewPath,
   readsLikeInstructions, refusesSpuriously, targetFileHint, untestedNewCode, verificationIssues, wrongFileNudge
@@ -338,7 +338,7 @@ export async function runCompletionGates(turn, host) {
       return CONTINUE;
     }
   }
-  const finalText = g.emptyReply ? (assistant.providerStop ? 'The provider ended the reply with no text (finish reason: ' + assistant.providerStop + '). Nothing was summarized; rephrase the request or try another model.' : EMPTY_REPLY_NOTICE) : appendFailedEditNotice(issues.length ? appendUnverifiedNotice(text, issues, verification, claimState) : appendLspUnavailableNotice(text, verification), claimState);
+  const finalText = g.emptyReply ? (assistant.providerStop ? providerStopNotice(assistant.providerStop) : EMPTY_REPLY_NOTICE) : appendFailedEditNotice(issues.length ? appendUnverifiedNotice(text, issues, verification, claimState) : appendLspUnavailableNotice(text, verification), claimState);
   assistantMessage.content = finalText;
   let followupsAdded = [];
   if (!options.isSubagent && !options.planOnly && followupsEnabled(session, options.env || process.env)) {

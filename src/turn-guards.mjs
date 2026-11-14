@@ -8,6 +8,7 @@ import { readFile, stat } from 'node:fs/promises';
 import { isTestPath } from './test-tamper.mjs';
 import { runLsp, serverForFile } from './lsp.mjs';
 import { isLocalModelEndpoint } from './local-context.mjs';
+export { MAX_EMPTY_REPLY_NUDGES, EMPTY_REPLY_NUDGE, EMPTY_REPLY_NOTICE, providerStopNotice } from './empty-reply.mjs';
 export const MAX_SESSION_TOOL_CALLS = 10000;
 
 export const SOURCE_EXTENSIONS = new Set([
@@ -260,9 +261,6 @@ export function claimsUnmadeChange(text) {
 
 export const FALSE_CLAIM_NUDGE = '<system-reminder>Your reply says you made a change, but no file has been changed in this turn: no write_file or edit_file call succeeded. Do not report work that did not happen. Make the change now with write_file or edit_file, then check it.</system-reminder>';
 
-export const MAX_EMPTY_REPLY_NUDGES = 2;
-export const EMPTY_REPLY_NUDGE = '<system-reminder>Your last reply was empty: no text and no tool call. Continue the task: call a tool, or give your final answer to the user in plain text.</system-reminder>';
-export const EMPTY_REPLY_NOTICE = 'The model ended its turn without a reply (it returned an empty response ' + (MAX_EMPTY_REPLY_NUDGES + 1) + ' times). Nothing was summarized; ask again or try another model.';
 export const CONTINUE_NUDGE = '<system-reminder>You said what you will do next but ended your turn without doing it, and nothing has changed yet. Do that step now with a tool call. If a tool failed, read its error and fix the call (for example, use write_file to create a file that does not exist yet).</system-reminder>';
 
 export const ACTION_NUDGE = '<system-reminder>You described the work instead of doing it. The user asked you to make this change, and you have tools to do it. Do it now: read what you need, then use write_file or edit_file to make the change and run_command to check it. Do not explain the steps again or ask the user to do them.</system-reminder>';
