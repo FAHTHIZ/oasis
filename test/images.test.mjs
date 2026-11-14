@@ -4,7 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { mkdtemp, writeFile, rm } from 'node:fs/promises';
 import { createSession, runAgentTurn, closeSession, toAnthropicRequest, toResponsesRequest } from '../src/agent.mjs';
-import { readImageFile, toChatMessagesWithImages } from '../src/images.mjs';
+import { readImageFile, toChatMessagesWithImages, recentImageSet, MAX_IMAGES_IN_REQUEST } from '../src/images.mjs';
 import { expandFileMentions } from '../src/commands.mjs';
 import { saveSession, loadSession } from '../src/sessions.mjs';
 import { estimateTokens } from '../src/context.mjs';
@@ -78,10 +78,10 @@ test('Anthropic and Responses conversions carry image blocks; only recent images
   assert.equal(responses.input.at(-1).content[1].type, 'input_image');
 
   const many = [{ role: 'system', content: 's' }];
-  for (let i = 0; i < 6; i++) many.push({ role: 'user', content: 'img ' + i, images: [image] }, { role: 'assistant', content: 'ok' });
+  for (let i = 0; i < MAX_IMAGES_IN_REQUEST + 2; i++) many.push({ role: 'user', content: 'img ' + i, images: [image] }, { role: 'assistant', content: 'ok' });
   const chat = toChatMessagesWithImages(many);
   const withImages = chat.filter((message) => Array.isArray(message.content));
-  assert.equal(withImages.length, 4);
+  assert.equal(withImages.length, MAX_IMAGES_IN_REQUEST);
   assert.match(chat[1].content, /no longer attached/);
 });
 
@@ -114,4 +114,27 @@ test('Anthropic requests get prompt-cache breakpoints on system, tools, and the 
   assert.equal(promptCachingEnabled({}, {}), true);
   assert.equal(promptCachingEnabled({}, { OASIS_PROMPT_CACHE: 'off' }), false);
   assert.equal(promptCachingEnabled({ promptCache: false }, {}), false);
+});
+
+test('images from more than four earlier messages are still sent', () => {
+  const png = { mediaType: 'image/png', data: 'iVBORw0KGgo=' };
+  const messages = [];
+  for (let i = 0; i < 8; i++) messages.push({ role: 'user', content: 'shot ' + i, images: [png] }, { role: 'assistant', content: 'ok' });
+  const keep = recentImageSet(messages);
+  assert.equal(keep.size, 8);
+  const chat = toChatMessagesWithImages(messages);
+  assert.ok(!chat.some((message) => typeof message.content === 'string' && /no longer attached/.test(message.content)));
+});
+
+test('the oldest images drop first once the request image budget is full', () => {
+  const big = { mediaType: 'image/png', data: 'A'.repeat(1000) };
+  const messages = Array.from({ length: MAX_IMAGES_IN_REQUEST + 5 }, (_, i) => ({ role: 'user', content: 'shot ' + i, images: [big] }));
+  const keep = recentImageSet(messages);
+  assert.equal(keep.size, MAX_IMAGES_IN_REQUEST);
+  assert.ok(keep.has(messages.length - 1) && !keep.has(0));
+  // By bytes: two 600-byte images fit in 1500, a third does not.
+  const sized = recentImageSet(messages.slice(0, 5).map((m) => ({ ...m, images: [{ mediaType: 'image/png', data: 'A'.repeat(600) }] })), { maxBytes: 1500 });
+  assert.deepEqual([...sized].sort(), [3, 4]);
+  // The newest image message is kept even when it alone is over the budget.
+  assert.deepEqual([...recentImageSet(messages.slice(0, 2), { maxBytes: 10 })], [1]);
 });

@@ -11,7 +11,14 @@ import { WEBP } from 'image-size/types/webp';
 
 const IMAGE_TYPES = { '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.gif': 'image/gif', '.webp': 'image/webp' };
 export const MAX_IMAGE_BYTES = 3_750_000; // ~5 MB once base64-encoded (Anthropic's per-image limit).
-const MAX_IMAGES_IN_REQUEST = 4;
+// Images resent with each request. Four dropped a fifth screenshot in a
+// normal debugging session, and every drop rewrote an earlier message, which
+// also broke the provider's prompt cache from that point on. The limits now
+// follow the APIs: Anthropic allows 100 images (20 before it shrinks their
+// size) in a request of at most 32 MB, so keep up to 20 images and 24 MiB
+// of base64 data, newest first.
+export const MAX_IMAGES_IN_REQUEST = 20;
+export const MAX_IMAGE_REQUEST_BYTES = 24 * 1024 * 1024;
 // Larger sources are accepted and downscaled with sharp (libvips) before upload.
 export const MAX_SOURCE_IMAGE_BYTES = 50 * 1024 * 1024;
 // Long-edge cap applied before upload. Claude Code downscales to 2000 px and
@@ -189,10 +196,20 @@ export async function readImageFile(root, rawPath, options = {}) {
 }
 
 // Only the most recent images are sent; older ones become a short text note.
-function recentImageSet(messages) {
+// A message's images are kept or dropped together. The newest message with
+// images is always kept (each image was checked against the per-image limit).
+function recentImageSet(messages, { maxImages = MAX_IMAGES_IN_REQUEST, maxBytes = MAX_IMAGE_REQUEST_BYTES } = {}) {
   const keep = new Set();
-  for (let i = messages.length - 1; i >= 0 && keep.size < MAX_IMAGES_IN_REQUEST; i--) {
-    if (Array.isArray(messages[i].images) && messages[i].images.length) keep.add(i);
+  let count = 0;
+  let bytes = 0;
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const images = messages[i] && messages[i].images;
+    if (!Array.isArray(images) || !images.length) continue;
+    const size = images.reduce((sum, image) => sum + String((image && image.data) || '').length, 0);
+    if (keep.size && (count + images.length > maxImages || bytes + size > maxBytes)) break;
+    keep.add(i);
+    count += images.length;
+    bytes += size;
   }
   return keep;
 }
