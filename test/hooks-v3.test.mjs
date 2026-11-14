@@ -193,3 +193,34 @@ test('ConfigChange sees nested SKILL.md edits and a skills directory created mid
   // The new directory is watched once its creation has been noticed.
   assert.ok(await waitFor(async () => { await writeFile(later, '---\nname: lint\n---\n' + Date.now()); await new Promise((resolve) => setTimeout(resolve, 300)); return (await readLog(log)).some((entry) => entry.file_path === later); }));
 });
+
+// Hook stdout was cut at 64 KiB, so a larger JSON reply failed to parse and its
+// deny was dropped; chunks were also decoded one by one, garbling split characters.
+test('a large JSON hook reply is read whole, decoded intact, and its deny holds', async (t) => {
+  const root = await tmp(t);
+  const reason = 'নিষিদ্ধ ফাইল '.repeat(12000) + 'END';
+  const context = 'context line\n'.repeat(3000) + 'CONTEXT END';
+  const reply = JSON.stringify({ hookSpecificOutput: { hookEventName: 'PreToolUse', permissionDecision: 'deny', permissionDecisionReason: reason, additionalContext: context } });
+  const file = path.join(root, 'reply.json');
+  await writeFile(file, reply);
+  const hook = { type: 'command', command: nodeHook('process.stdout.write(require("fs").readFileSync(' + JSON.stringify(file) + ', "utf8"))') };
+  const result = await runHooks('PreToolUse', { tool_name: 'Write', tool_input: {} }, { hooks: { PreToolUse: [group(hook)] }, root });
+  assert.equal(result.permissionDecision, 'deny');
+  assert.ok(result.reason.endsWith('END'));
+  assert.ok(!result.reason.includes('\uFFFD'), 'no replacement characters');
+  assert.equal(result.additionalContext.length, 1);
+  assert.ok(result.additionalContext[0].length <= 10000);
+  assert.match(result.additionalContext[0], /CONTEXT END$/);
+  assert.match(result.additionalContext[0], /\[hook output cut: [\d,]+ of [\d,]+ characters left out of the middle\]/);
+});
+
+test('a hook reply over 10 MiB counts as a failed hook, and onFailure block denies', async (t) => {
+  const root = await tmp(t);
+  const command = nodeHook('process.stdout.write("{\\"decision\\":\\"block\\",\\"reason\\":\\"" + "x".repeat(11 * 1024 * 1024) + "\\"}")');
+  const plain = await runHooks('PreToolUse', { tool_name: 'Write', tool_input: {} }, { hooks: { PreToolUse: [group({ type: 'command', command })] }, root });
+  assert.equal(plain.blocked, false);
+  assert.equal(plain.failed, true);
+  assert.ok(plain.messages.some((line) => /over 10 MiB and was not read/.test(line)), plain.messages.join('\n'));
+  const strict = await runHooks('PreToolUse', { tool_name: 'Write', tool_input: {} }, { hooks: { PreToolUse: [group({ type: 'command', command, onFailure: 'block' })] }, root });
+  assert.equal(strict.blocked, true);
+});
