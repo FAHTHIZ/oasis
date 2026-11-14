@@ -133,11 +133,26 @@ export function safeEnvironment(server, source = process.env, extra = {}) {
 }
 
 /** Rebuilds a session's MCP tool definitions after a server's tool list changed. */
+// Rebuilds the session's MCP tools from its clients (a server started,
+// reconnected or changed its tool list). When tool_search deferred MCP tools,
+// new and still-unloaded tools stay deferred and tools the model already
+// loaded stay loaded, so a refresh does not put every schema back in the prompt.
 export function refreshSessionMcpTools(session) {
   const oldNames = new Set(session.mcpToolMap ? session.mcpToolMap.keys() : []);
   const dynamic = mcpToolDefinitions(session.mcpClients, { pins: session.mcpPins });
   session.mcpToolMap = dynamic.map;
-  session.toolDefinitions = (session.toolDefinitions || []).filter((tool) => !oldNames.has(tool.function.name)).concat(dynamic.definitions);
+  const current = session.toolDefinitions || [];
+  const deferred = session.deferredTools instanceof Map ? session.deferredTools : null;
+  const deferring = Boolean(deferred && [...oldNames].some((name) => deferred.has(name)));
+  const loaded = new Set(current.filter((tool) => oldNames.has(tool.function.name)).map((tool) => tool.function.name));
+  if (deferred) for (const name of oldNames) deferred.delete(name);
+  const kept = current.filter((tool) => !oldNames.has(tool.function.name));
+  for (const definition of dynamic.definitions) {
+    const name = definition.function.name;
+    if (deferring && !loaded.has(name) && !dynamic.map.get(name).resourceTool) deferred.set(name, definition);
+    else kept.push(definition);
+  }
+  session.toolDefinitions = kept;
   if (session.allowedToolNames) for (const definition of dynamic.definitions) session.allowedToolNames.add(definition.function.name);
 }
 
@@ -416,11 +431,7 @@ export function attachToolServer(session, server) {
   const previous = session.mcpClients.get(server.config.name);
   if (previous && previous !== server) previous.close();
   session.mcpClients.set(server.config.name, server);
-  const oldNames = new Set(session.mcpToolMap ? session.mcpToolMap.keys() : []);
-  const dynamic = mcpToolDefinitions(session.mcpClients, { pins: session.mcpPins });
-  session.mcpToolMap = dynamic.map;
-  session.toolDefinitions = session.toolDefinitions.filter((tool) => !oldNames.has(tool.function.name)).concat(dynamic.definitions);
-  if (session.allowedToolNames) for (const definition of dynamic.definitions) session.allowedToolNames.add(definition.function.name);
+  refreshSessionMcpTools(session);
 }
 
 // Starts (or restarts) one server inside a running session and refreshes the
@@ -435,11 +446,7 @@ export async function reconnectMcpServer(session, config, options = {}) {
   if (previous && previous !== client) previous.close();
   session.mcpClients.set(config.name, client);
   session.mcpFailures = (session.mcpFailures || []).filter((failure) => failure.name !== config.name);
-  const oldNames = new Set(session.mcpToolMap ? session.mcpToolMap.keys() : []);
-  const dynamic = mcpToolDefinitions(session.mcpClients, { pins: session.mcpPins });
-  session.mcpToolMap = dynamic.map;
-  session.toolDefinitions = session.toolDefinitions.filter((tool) => !oldNames.has(tool.function.name)).concat(dynamic.definitions);
-  if (session.allowedToolNames) for (const definition of dynamic.definitions) session.allowedToolNames.add(definition.function.name);
+  refreshSessionMcpTools(session);
   return client;
 }
 
