@@ -38,6 +38,8 @@ const MODEL_ID = /^[A-Za-z0-9][\w.:/@+-]{0,199}$/;
 const ACTIVE_JOB = new Set(['running', 'waiting_approval', 'queued', 'starting']);
 const MAX_PROMPT = 12000;
 const MAX_IMAGES = 4;
+// The run's final reply; 24,000 cut long answers short.
+const MAX_RESULT_CHARS = 1_000_000;
 const MAX_AGENTS = 1000;
 const MAX_RUNS_PER_AGENT = 500;
 const HEARTBEAT_MS = 15000;
@@ -221,7 +223,7 @@ export function createCursorAgentsApi(options) {
     if (run.final || !job || ACTIVE_JOB.has(job.status)) return false;
     const status = statusOf(job, run);
     const endedAt = (job.events && job.events.at(-1) && job.events.at(-1).at) || new Date().toISOString();
-    const result = job.status === 'completed' ? String(job.result && job.result.text || '').slice(0, 24000)
+    const result = job.status === 'completed' ? String(job.result && job.result.text || '').slice(0, MAX_RESULT_CHARS)
       : job.status === 'cancelled' ? 'Stopped on request.'
       : String(job.error || 'The run failed.').slice(0, 4000);
     run.final = { status, endedAt, durationMs: Math.max(0, Date.parse(endedAt) - Date.parse(run.createdAt)) || 0, result };
@@ -643,7 +645,7 @@ export function createCursorAgentsApi(options) {
       try {
         const saved = await options.loadSession(agent.root, agent.sessionId, { env });
         messages = saved.messages.filter((item) => ['user', 'assistant'].includes(item.role) && typeof item.content === 'string' && item.content.trim() && !item.content.startsWith('<system-reminder>'))
-          .map((item, index) => ({ id: 'msg_' + String(index + 1).padStart(3, '0'), type: item.role === 'user' ? 'user_message' : 'assistant_message', text: item.content.slice(0, 24000) }));
+          .map((item, index) => ({ id: 'msg_' + String(index + 1).padStart(3, '0'), type: item.role === 'user' ? 'user_message' : 'assistant_message', text: item.content.slice(0, MAX_RESULT_CHARS) }));
       } catch { messages = []; }
     }
     if (!messages.length) {

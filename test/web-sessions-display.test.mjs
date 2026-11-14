@@ -23,3 +23,10 @@ test('a saved session reopens with its steps, not only the prose', () => {
   const kinds = buildTimeline(display).map((block) => block.type);
   assert.deepEqual(kinds, ['user', 'text', 'group', 'text']);
 });
+
+// Reopened chats showed long replies cut at 24,000 characters.
+test('a reopened chat shows a long reply in full', () => {
+  const long = 'Long answer line.\n'.repeat(3000) + 'REPLY-END';
+  const display = savedSessionDisplay([{ role: 'user', content: 'write it all' }, { role: 'assistant', content: long }]);
+  assert.equal(display.at(-1).content, long);
+});
