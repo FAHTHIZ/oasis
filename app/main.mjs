@@ -369,9 +369,10 @@ function openSheet(id) {
   // MIT); stacked sheets pause the one below. A docked approval does not trap.
   // With a mouse the first field takes focus; on touch the sheet itself does,
   // so no keyboard pops up.
-  const first = matchMedia('(pointer:fine)').matches && el.querySelector('input,select,textarea,button:not([data-close])');
+  // An approval never starts on a button (Enter would answer it unread).
+  const first = matchMedia('(pointer:fine)').matches && el.querySelector(id === 'approvalSheet' ? 'input:not([hidden]),textarea:not([hidden])' : 'input:not([hidden]),select,textarea,button:not([data-close])');
   sheetTraps.get(id)?.deactivate({ returnFocus: false });
-  if (docked) { if (first) first.focus(); } else {
+  if (docked) { if (first) first.focus(); else { if (!el.hasAttribute('tabindex')) el.tabIndex = -1; el.focus({ preventScroll: true }); } } else {
     if (!el.hasAttribute('tabindex')) el.tabIndex = -1;
     const trap = createFocusTrap(el, { initialFocus: () => first || el, fallbackFocus: el, escapeDeactivates: false, clickOutsideDeactivates: false, allowOutsideClick: true, returnFocusOnDeactivate: true, preventScroll: true });
     sheetTraps.set(id, trap);
@@ -2974,6 +2975,12 @@ async function requestApproval({ name, args, runtime = false }) {
   $('allowAllButton').textContent = 'Allow all edits';
   $('allowAllButton').hidden = !['write_file', 'edit_file'].includes(name) || settings.mode !== 'ask';
   approvalAlways = null;
+  // The "what to do instead" note goes to a running task. Approvals that no
+  // task is waiting on (opening the terminal panel) hide it, so typing meant
+  // for the terminal cannot land in it and deny with Enter.
+  $('approvalInstead').value = '';
+  $('approvalInstead').hidden = !(agent && agent.busy && typeof agent.steer === 'function');
+  $('denyButton').textContent = 'Deny';
   if (runtime) {
     // From the agent on this computer: its own wording, diff and "always" rule.
     // "WARNING — RISKY ACTION" becomes a badge; an indented line is the
@@ -3024,8 +3031,6 @@ async function requestApproval({ name, args, runtime = false }) {
     summary.textContent = 'Run ' + name;
     detail.textContent = JSON.stringify(args, null, 2);
   }
-  $('approvalInstead').value = '';
-  $('denyButton').textContent = 'Deny';
   openSheet('approvalSheet');
   if (navigator.vibrate) try { navigator.vibrate(12); } catch { /* not supported */ }
   return new Promise((resolve) => { approvalResolve = resolve; });
