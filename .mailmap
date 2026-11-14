@@ -1,0 +1,5 @@
+# One person, several historical identities (same e-mail or same GitHub
+# account id). Display only: commits are not rewritten. See git-check-mailmap(1).
+FAHTHIZ <252817169+FAHTHIZ@users.noreply.github.com> Fahim Hussain <gtxnrg@gmail.com>
+FAHTHIZ <252817169+FAHTHIZ@users.noreply.github.com> Thunder otter <gtxnrg@gmail.com>
+FAHTHIZ <252817169+FAHTHIZ@users.noreply.github.com> gtxnrg-ship-it <252817169+gtxnrg-ship-it@users.noreply.github.com>
