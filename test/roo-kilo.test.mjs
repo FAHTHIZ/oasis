@@ -97,3 +97,13 @@ test('Roo global rules, the .roorules fallback, Kilo rules and Roo commands', as
   const resolved = await resolveCustomCommand(root, '/review src/a.js', { env, home, commands });
   assert.equal(resolved.prompt, 'Review the staged changes.\n\nArguments: src/a.js');
 });
+
+test('Roo mode rules past the budget or the 50th file are named instead of dropped', async (t) => {
+  const files = { '.roomodes': ROOMODES };
+  for (let i = 0; i < 60; i++) files['.roo/rules-docs-writer/r' + String(i).padStart(2, '0') + '.md'] = 'RULE-' + i;
+  files['.roo/rules-docs-writer/zz-huge.md'] = 'x'.repeat(60 * 1024);
+  const { root, env } = await fixture(t, files);
+  const writer = (await loadAgentDefinitions(root, { env }))['docs-writer'];
+  assert.ok(writer.prompt.includes('RULE-59'), 'all 60 small rule files are read');
+  assert.match(writer.prompt, /1 more rule file did not fit[\s\S]*zz-huge\.md/);
+});
