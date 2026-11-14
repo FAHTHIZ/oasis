@@ -259,3 +259,16 @@ test('failed chat submission does not consume pending terminal output', async ()
   assert.ok(events.some((event) => event.type === 'error' && /offline/.test(event.message)));
   assert.equal(agent.pendingShell.length, 1);
 });
+
+test('a long request after a shell command reaches the model whole', async () => {
+  let chat = null;
+  const agent = new RuntimeAgent({ client: { api: async (url, { body } = {}) => {
+    if (url === '/api/chat') { chat = body; return { jobId: 'j', sessionId: 's' }; }
+    if (url.startsWith('/api/jobs/j?')) return { status: 'completed', events: [{ id: 1, type: 'completed', data: {} }] };
+    return {};
+  } }, pollMs: 1 });
+  agent.load({ pendingShell: [{ command: 'npm test', code: 1, output: 'one test failed' }] });
+  const request = 'Fix the failure. ' + 'Details. '.repeat(1000) + 'LAST REQUIREMENT: keep the API.';
+  await agent.send(request);
+  assert.ok(chat.message.endsWith('Your request:\n' + request));
+});
