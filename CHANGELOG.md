@@ -4,6 +4,8 @@ User-facing change history grouped by package version. A version heading does no
 
 ## Unreleased
 
+- Usage accounting: a request stopped with Esc or Ctrl+C after the provider began answering now counts toward `/cost`, the session token totals and `--max-budget-usd` (estimated from the prompt and the shown output, and marked as estimated). Previously two interrupted turns showed "0 tokens across 0 model requests". A request stopped before any response is not counted. Tests in `test/cancel-history.test.mjs`.
+
 - `/cost` before the first message now prices the saved provider (a local server shows "$0.00 (local model)") instead of "Cost: unknown for this model". On a terminal, slash command output word-wraps instead of breaking mid-word at the edge. Tests in `test/cost-before-session.test.mjs`.
 
 - Terminal: when a completion gate re-prompts the model after a streamed reply, the reply's last line now ends before the next request's spinner starts. Previously the spinner erased that line, the next reply's first chunk was dropped ("ask!ion add…"), and the redraw could wipe an earlier line. PTY regression test in `test/stream-reply-after-gate.test.mjs`.
