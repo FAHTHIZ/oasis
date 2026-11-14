@@ -104,4 +104,7 @@ existing chain (no SQLite, no server):
 | 1 | Zero-budget mode and request and token budgets, enforced before every request, including fallbacks, subagents and side requests | done |
 | 2 | Persistent quota ledger, pre-send skip of routes the provider said are exhausted, `oasis quota` report | done |
 | 3 | Gateway behaviour benchmark (bench/gateway/run.mjs): requests, failures, paid requests and estimated cost with each feature off and on | done |
-| 4 | Documentation: gateway setup, local inference, zero-budget mode, troubleshooting, limitations | planned |
+| 4 | Zero-budget gate for image generation, speech, transcription and keyed search backends | done |
+| 5 | Gateway responses verified live against OpenRouter: HTTP 200 error bodies (withdrawn `:free` model, daily limit) now drive fallback and the quota ledger; counted once | done |
+| 6 | Documentation: zero-budget mode, budgets, quota tracking, troubleshooting, limitations (docs/INFERENCE.md) | done |
+| 7 | Live same-model routing benchmark on Oasis workloads | blocked: the only key available is a free OpenRouter key with its 50 requests a day used up; no claim about cheap-vs-flagship equivalence is made |

@@ -3,6 +3,11 @@
 A short, dated record of changes, tests, benchmark results, blockers and known
 weaknesses. Newest first. Detailed user-facing notes go in the CHANGELOG.
 
+## 2026-11-14 (full suite after the inference overhaul)
+
+- `npm test`: 3185 tests, 3176 pass, 1 fail, 8 skipped. The failure was test/openai-effort.test.mjs: the catalog refresh (9332af54) gives OpenRouter's `minimax/minimax-m2.7` 196,608 tokens, matching OpenRouter's live /models list; MiniMax's own entry stays 204,800. Test updated to assert both; it passes.
+- Plan stages 4-6 done; stage 7 (live same-model routing benchmark) blocked: the only key is a free OpenRouter key whose 50 daily requests are used up.
+
 ## 2026-11-14 (live OpenRouter quota response: counted once, ladder kept)
 
 - Live check with the free key: OpenRouter's daily free limit also arrives as HTTP 200 with `{"error":{"code":429,...}}` and headers `x-ratelimit-limit: 50`, `x-ratelimit-remaining: 0`, `x-ratelimit-reset: <epoch ms>`. The ledger parses that format; replaying the exact response, the next session sends nothing until the stated reset.

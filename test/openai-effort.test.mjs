@@ -48,7 +48,10 @@ test('current open and xAI models get their published context windows', () => {
   assert.equal(modelContextWindow('z-ai/glm-5.3'), 1_048_576);
   assert.equal(modelContextWindow('glm-4.5-air'), 131_072);
   assert.equal(modelContextWindow('MiniMax-M3'), 512_000);
-  assert.equal(modelContextWindow('minimax/minimax-m2.7'), 204_800);
+  // MiniMax serves 204,800 itself; OpenRouter's slug serves 196,608 (its live
+  // /models list and models.dev, 2026-11-14). The smaller one is what fits.
+  assert.equal(modelContextWindow('MiniMax-M2.7'), 204_800);
+  assert.equal(modelContextWindow('minimax/minimax-m2.7'), 196_608);
   // 500K served; prompts of 200K+ bill at the higher rate.
   assert.equal(modelContextWindow('grok-4.7'), 200_000);
 });
