@@ -4,6 +4,8 @@ User-facing change history grouped by package version. A version heading does no
 
 ## Unreleased
 
+- Benchmarks: Codex CLI pointed at a custom endpoint now runs with its sub-agent tools (`multi_agent`) and hosted `web_search` off. Codex 0.169 sends them as OpenAI-only tool types, and OpenAI-compatible servers rejected every request (OVH: HTTP 422 "unknown variant `namespace`"). With OpenAI's own endpoint Codex runs as shipped.
+- Benchmarks: when an endpoint refuses every request an agent sends (for example HTTP 404 because it does not serve Claude Code's `/v1/messages`), the agent is reported as an endpoint mismatch and the task is excluded from the scores, instead of counting as the agent's failure.
 - `oasis bg logs ID --follow` reads only the lines added since its last poll. Before, it re-read the whole log every 700 ms, so following a long run cost more on every poll (`test/bg-logs-incremental.test.mjs`).
 - Speed: secret redaction of large tool results is up to 10 times faster. Five Gitleaks rules (Okta, Sumo Logic, Cohere, Cisco Meraki, Private AI) use a nested lazy prefix that Go's RE2 engine runs in linear time but JavaScript backtracks through 2,500 ways per position; it is now one equivalent quantifier. Redacting a 256 KB log that mentioned "okta" took 1,109 ms and now takes 117 ms. `scripts/update-secret-rules.mjs` applies the same rewrite to future rule updates (`test/secret-rules.test.mjs`).
 - Memory: `read_file` on a large file no longer loads the whole file to hash it for the stale-edit check and read dedup. Files above 4 MB are hashed in 1 MB chunks. Reading a 402 MB log used to take the process from 175 MB to 575 MB peak RSS; it now peaks at 222 MB (`test/big-file-hash-memory.test.mjs`).

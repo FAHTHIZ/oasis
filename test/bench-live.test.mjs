@@ -180,6 +180,59 @@ test('Codex gets a gateway provider entry because it ignores OPENAI_BASE_URL', (
   assert.ok(!buildCodexArgs({}, 'x', {}).includes('-c'));
 });
 
+test('Codex on a custom endpoint drops the OpenAI-only namespace and hosted web_search tools', () => {
+  // OVH rejected every Codex request: tools[4].type: unknown variant `namespace`.
+  const args = buildCodexArgs({ model: 'm1' }, 'do it', { OASIS_CODEX_BASE_URL: 'http://127.0.0.1:20128/v1' });
+  const at = args.indexOf('--disable');
+  assert.equal(args[at + 1], 'multi_agent');
+  assert.ok(args.includes('web_search="disabled"'));
+  const plain = buildCodexArgs({}, 'x', {});
+  assert.ok(!plain.includes('--disable') && !plain.includes('web_search="disabled"'), 'the default OpenAI setup keeps Codex as shipped');
+});
+
+test('an endpoint that refuses every request of an agent is reported as a mismatch, not a failure', async () => {
+  const http = await import('node:http');
+  // OVH serves only /chat/completions: Claude Code's /messages got 404 on every call.
+  const upstream = http.createServer((req, res) => {
+    req.resume();
+    req.on('end', () => {
+      if (req.url.endsWith('/chat/completions')) { res.writeHead(200, { 'content-type': 'application/json' }); res.end(JSON.stringify({ model: 'm', choices: [{ message: { content: 'ok' } }], usage: { prompt_tokens: 1, completion_tokens: 1 } })); return; }
+      res.writeHead(404, { 'content-type': 'application/json' }); res.end('{"error":{"code":"unknown_url","message":"Unknown request URL: POST /v1/messages."}}');
+    });
+  });
+  await new Promise((resolve) => upstream.listen(0, '127.0.0.1', resolve));
+  const out = await mkdtemp(path.join(os.tmpdir(), 'oasis-bench-live-reject-'));
+  const runner = async (args, { env }) => {
+    const agent = args[0] === '--trials' ? 'oasis' : args[0];
+    const task = args[args.indexOf('--task') + 1];
+    const url = env.OASIS_BASE_URL ? env.OASIS_BASE_URL.replace(/\/$/, '') + '/chat/completions' : env.ANTHROPIC_BASE_URL.replace(/\/$/, '') + '/v1/messages';
+    const response = await fetch(url, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ model: 'm', messages: [{ role: 'user', content: 'x' }] }) });
+    await response.text();
+    return { resultsPath: '', summary: { label: agent }, results: [{ taskId: task, taskFingerprint: task.repeat(64), category: 'c', difficulty: 'small', trial: 1, status: response.ok ? 'passed' : 'failed', wallTimeMs: 1, totalTokens: 2, costUSD: 0, ...(response.ok ? {} : { error: 'Claude Code exited with code 1' }) }] };
+  };
+  try {
+    const options = parseBenchArgs(['--agents', 'oasis,claude', '--model', 'm', '--upstream', 'http://127.0.0.1:' + upstream.address().port + '/v1', '--task', 'a', '--interleave', '--out', out, '--yes']);
+    const { summary } = await runBenchmark(options, { env: {}, runner });
+    const claude = summary.agents.find((a) => a.agent === 'claude');
+    assert.match(claude.skipped, /endpoint refused every request \(HTTP 404 on \/messages/);
+    assert.match(claude.skipped, /endpoint mismatch, not a result/);
+    // A refused trial next to scored ones (an agent whose endpoint changed
+    // part-way) drops that task from the scores with a caveat.
+    const row = (task, status, extra = {}) => ({ taskId: task, taskFingerprint: task.repeat(64), category: 'c', difficulty: 'small', trial: 1, status, ...extra });
+    const scored = summarize([
+      { agent: 'oasis', name: 'OASIS', summary: {}, results: [row('a', 'passed'), row('b', 'passed')] },
+      { agent: 'codex', name: 'Codex CLI', summary: {}, results: [row('a', 'failed', { upstreamRejected: { calls: 6, status: 422, endpoint: '/responses', error: 'unknown variant `namespace`' } }), row('b', 'failed')] }
+    ], parseBenchArgs(['--agents', 'oasis,codex', '--model', 'm']));
+    assert.deepEqual(scored.rejectedTasks, ['a']);
+    assert.deepEqual(scored.sharedTasks, ['b']);
+    assert.ok(scored.excludedTasks.includes('a'));
+    assert.ok(scored.caveats.some((c) => /Codex CLI \(HTTP 422 on \/responses\)/.test(c) && /endpoint compatibility, not the agent/.test(c)));
+  } finally {
+    upstream.close();
+    await rm(out, { recursive: true, force: true });
+  }
+});
+
 test('live summary verifies same-model only from the gateway record', async () => {
   const { gatewayReport } = await import('../scripts/bench-gateway.mjs');
   const options = parseBenchArgs(['--agents', 'oasis,claude', '--model', 'm', '--upstream', 'https://openrouter.ai/api/v1']);
