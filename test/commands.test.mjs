@@ -163,12 +163,21 @@ test('/resume lists saved sessions and picks one by number or id prefix', async 
   const { saveSession } = await import('../src/sessions.mjs');
   const saved = await saveSession({ root, config: { model: 'm' }, messages: [{ role: 'system', content: 's' }, { role: 'user', content: 'hi' }] }, { env });
   const state = { root, env, session: null };
-  assert.match((await runBuiltinCommand('resume', '', state)).output, new RegExp('1\\. ' + saved.id));
+  const listing = (await runBuiltinCommand('resume', '', state)).output;
+  assert.match(listing, new RegExp('1\\. ' + saved.id.slice(0, 8) + '  just now +hi  \\[m\\]'), 'short id, age and title on one row');
+  assert.doesNotMatch(listing, new RegExp(saved.id), 'the full 36-character id made long titles wrap');
   assert.equal((await runBuiltinCommand('resume', '1', state)).resume, saved.id);
   assert.equal((await runBuiltinCommand('resume', saved.id.slice(0, 8), state)).resume, saved.id);
   assert.match((await runBuiltinCommand('resume', 'zzzz', state)).output, /No saved session/);
   const numeric = await saveSession({ sessionId: '12345678-0000-4000-8000-000000000000', root, config: { model: 'm' }, messages: [{ role: 'system', content: 's' }, { role: 'user', content: 'x' }] }, { env });
   assert.equal((await runBuiltinCommand('resume', '12345678', state)).resume, numeric.id);
+  const twin = await saveSession({ sessionId: '12345678-1111-4000-8000-000000000000', root, config: { model: 'm' }, messages: [{ role: 'system', content: 's' }, { role: 'user', content: 'Fix the bug in math.mjs: add should return a + b, and also check the subtract function.' }] }, { env });
+  const rows = (await runBuiltinCommand('resume', '', state)).output.split('\n');
+  const twinRow = rows.find((row) => row.includes('12345678-1'));
+  assert.ok(twinRow, 'ids sharing 8 characters get a longer, still unique prefix');
+  assert.ok(twinRow.length <= 100, 'long titles are cut to one row: ' + twinRow);
+  assert.match(twinRow, /…/);
+  assert.equal((await runBuiltinCommand('resume', '12345678-1', state)).resume, twin.id);
 });
 
 test('/resume and oasis sessions list hide archived sessions but still resume them by id', async (t) => {
@@ -179,8 +188,8 @@ test('/resume and oasis sessions list hide archived sessions but still resume th
   await setSessionArchived(root, old.id, true, { env });
   const state = { root, env, session: null };
   const listing = (await runBuiltinCommand('resume', '', state)).output;
-  assert.match(listing, new RegExp('1\\. ' + kept.id));
-  assert.doesNotMatch(listing, new RegExp(old.id));
+  assert.match(listing, new RegExp('1\\. ' + kept.id.slice(0, 8)));
+  assert.doesNotMatch(listing, new RegExp(old.id.slice(0, 8)));
   assert.equal((await runBuiltinCommand('resume', '1', state)).resume, kept.id);
   assert.equal((await runBuiltinCommand('resume', old.id, state)).resume, old.id, 'an archived session resumes by full id');
   assert.equal((await runBuiltinCommand('resume', old.id.slice(0, 8), state)).resume, old.id, 'and by id prefix');

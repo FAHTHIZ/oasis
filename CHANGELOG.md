@@ -4,6 +4,8 @@ User-facing change history grouped by package version. A version heading does no
 
 ## Unreleased
 
+- `/resume` lists sessions on one row each: a short unique ID (any prefix still resumes), how long ago the session was saved, and a title cut to the terminal width. It shows the 20 most recent and says how many older ones `oasis sessions` lists. Before, full 36-character IDs made long titles wrap onto a second line.
+
 - `oasis sessions` now shows each session's title (its name or first prompt), so sessions can be told apart. `oasis doctor` no longer asks for `contextWindow` when the config already sets it; it names the configured window instead.
 
 - Chat titles (`oasis sessions`, the browser app sidebar, session search) now use what the user typed. A chat started with "look at @math.mjs please" was titled with the attached file contents ("Referenced files: <file path=…"). Test in `test/session-title-mentions.test.mjs`.
