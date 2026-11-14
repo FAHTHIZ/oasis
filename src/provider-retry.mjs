@@ -152,6 +152,21 @@ export function rateLimitWaitMs({ status, headers, body = '', maxMinutes = 0, no
   return Math.round(wait + 1000);
 }
 
+// The 429 message names the opt-in when the provider stated a reset that
+// OASIS did not wait for (seen live: FreeLLMAPI benching its only key for
+// 10 minutes, "Soonest reset ~10m" with Retry-After). Without it, a user with
+// one model saw "wait a little and try again" and no way to automate it.
+export function rateLimitWaitHint({ status, headers, body = '', maxMinutes = 0, now = Date.now() } = {}) {
+  if (rateLimitWaitMs({ status, headers, body, maxMinutes: 1440, now }) === null) return '';
+  const wait = rateLimitResetMs(headers, now);
+  const minutes = Math.max(1, Math.ceil(wait / 60000));
+  const configured = Math.max(0, Number(maxMinutes) || 0);
+  // Already allowed: the request waited (up to 3 times) and is still limited.
+  if (configured && wait <= configured * 60000) return '';
+  const when = wait < 90000 ? 'in about ' + Math.max(1, Math.round(wait / 1000)) + ' s' : 'in about ' + minutes + ' min';
+  return ' The provider says the limit resets ' + when + '. Set OASIS_WAIT_FOR_RATE_LIMIT_MINUTES=' + Math.max(minutes, configured + 1) + (configured ? ' (now ' + configured + ')' : '') + ' to wait for the reset automatically.';
+}
+
 // How many retries a failure gets. status 0 = the connection itself failed.
 // OASIS_PROVIDER_RETRIES caps the total (0 disables retries).
 // Tell the UI about retries long enough to notice (quick sub-second retries

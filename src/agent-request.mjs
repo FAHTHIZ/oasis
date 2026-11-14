@@ -26,7 +26,7 @@ import { quotaRoute, assertRouteAvailable, recordSuccess as recordQuotaSuccess, 
 import { parseFallbackChain, remainingFallbacks, fallbackReason, FALLBACK_REASON_TEXT } from './fallback-chain.mjs';
 import { runWithProviderBreaker, providerBreakerKey, isBreakerOpenError } from './circuit-breaker.mjs';
 import { promptToolCalling, toPromptToolMessages, foldSystemMessages, withSystemInUserTurn } from './prompt-tools.mjs';
-import { MAX_PROVIDER_RETRIES, QUICK_PROVIDER_RETRIES, RETRYABLE_PROVIDER_STATUSES, serverRetryAdvice, isHardQuotaError, isMalformedGenerationError, isUnconfiguredRouteError, isPromptTooLargeError, notifyProviderRetry, providerErrorSummary, providerRetryDelayMs, providerRetryLimit, rateLimitResetMs, rateLimitWaitMs, shortRateLimitMs, waitForProviderRetry } from './provider-retry.mjs';
+import { MAX_PROVIDER_RETRIES, QUICK_PROVIDER_RETRIES, RETRYABLE_PROVIDER_STATUSES, serverRetryAdvice, isHardQuotaError, isMalformedGenerationError, isUnconfiguredRouteError, isPromptTooLargeError, notifyProviderRetry, providerErrorSummary, providerRetryDelayMs, providerRetryLimit, rateLimitResetMs, rateLimitWaitMs, shortRateLimitMs, waitForProviderRetry , rateLimitWaitHint } from './provider-retry.mjs';
 import { parallelToolCalls, promptCacheKeyField, samplingTemperature } from './turn-guards.mjs';
 import { postModelSwitch } from './model-switch.mjs';
 import { claudeEffortFor, claudeThinkingMode, firstPositiveConfiguredInteger, isOpenRouterBaseURL, maxOutputTokensFor, openRouterOutputCapFromError, outputCapFromError } from './model-budgets.mjs';
@@ -722,7 +722,7 @@ async function requestCompletionRawInner(session, options = {}) {
         if (options.signal) options.signal.removeEventListener('abort', abortFromCaller);
         return requestCompletionRaw(session, options);
       }
-      throw Object.assign(new Error(formatApiError(status, errorBody, config.protocol, config.baseURL, { secrets: [config.apiKey] })), { status });
+      throw Object.assign(new Error(formatApiError(status, errorBody, config.protocol, config.baseURL, { secrets: [config.apiKey] }) + (status === 429 ? rateLimitWaitHint({ status, headers: response.headers, body: errorBody, maxMinutes: providerEnv.OASIS_WAIT_FOR_RATE_LIMIT_MINUTES }) : '')), { status });
     }
     if (!response || !response.ok) throw new Error('The model provider did not return a successful response after bounded retries.');
     responseStarted = true;
