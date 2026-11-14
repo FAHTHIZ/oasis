@@ -269,6 +269,9 @@ function helpText() {
     '  --fallback-model ID[,ID...]   Models to switch to, in order, when the main one runs out of credit, is rate-limited, overloaded or gone (provider:model for another provider)',
     '  --chrome, --no-chrome         Give the agent a Chrome browser tool (navigate, click, type, screenshot, console)',
     '  --max-budget-usd N            Stop once the estimated model cost reaches N dollars',
+    '  --zero-budget                 Only send requests to models proven free (local, keyless, OpenRouter :free, or declared in OASIS_FREE_MODELS)',
+    '  --max-requests N              Stop before model request N+1 (retries and subagents count)',
+    '  --max-total-tokens N          Stop before a request that would pass N input+output tokens',
     '  --tools "Read,Edit,Bash"      Only offer these tools (Claude or Oasis names; "" for none)',
     '  --plugin-dir DIR              Load a Claude Code plugin directory for this session (repeatable)',
     '  --mcp-config FILE|JSON        Load MCP servers ({"mcpServers": {...}}); --strict-mcp-config uses only these',
@@ -2999,6 +3002,15 @@ async function main() {
       const value = Number(needValue(arg));
       if (!Number.isFinite(value) || value <= 0) throw new Error('--max-budget-usd must be a positive dollar amount, for example 2.50.');
       SESSION_OPTIONS.maxBudgetUsd = value;
+      continue;
+    }
+    // Zero-budget mode and request/token budgets live in the environment so
+    // child agents (`oasis -p` subprocesses, best-of-N attempts) inherit them.
+    if (arg === '--zero-budget') { process.env.OASIS_ZERO_BUDGET = '1'; continue; }
+    if (arg === '--max-requests' || arg === '--max-total-tokens') {
+      const value = Number(needValue(arg));
+      if (!Number.isSafeInteger(value) || value <= 0) throw new Error(arg + ' must be a positive whole number.');
+      process.env[arg === '--max-requests' ? 'OASIS_MAX_REQUESTS' : 'OASIS_MAX_TOTAL_TOKENS'] = String(value);
       continue;
     }
     if (arg === '--agent') { SESSION_OPTIONS.agent = needValue(arg).trim().toLowerCase(); continue; }

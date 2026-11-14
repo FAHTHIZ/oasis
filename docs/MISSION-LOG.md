@@ -3,6 +3,14 @@
 A short, dated record of changes, tests, benchmark results, blockers and known
 weaknesses. Newest first. Detailed user-facing notes go in the CHANGELOG.
 
+## 2026-11-14 (inference overhaul stage 1: zero-budget mode, request and token budgets)
+
+- Audit and plan: docs/INFERENCE-GATEWAY-PLAN.md. Every chat request already goes through one chain (requestCompletion, then requestCompletionRaw); fallback, breaker, key pool, retries and pricing are kept. Gaps: no zero-budget guarantee, no request or token budget, no persistent quota state.
+- OmniRoute and FreeLLMAPI (both MIT) read in source. Adopted ideas, re-implemented without dependencies: STRICT_ZERO_COST's "unknown is never free" rule; FreeLLMAPI's provider-stated vs guessed cooldowns (stage 2). Rejected: OmniRoute's web-session executors, fingerprinting, header obfuscation and Turnstile solver (provider terms).
+- New src/cost-policy.mjs: routeCost (free, paid or unknown, with the evidence), zero-budget refusal before sending (fallback reason "paid", so the chain moves on without contacting the route), and per-attempt request and token budgets on the shared budgetLedger. Side requests charge their parent through `budgetParent`. Flags `--zero-budget`, `--max-requests`, `--max-total-tokens`; headless subtypes error_zero_budget, error_max_requests, error_max_total_tokens.
+- Tests: test/cost-policy.test.mjs (7, including end-to-end runs that count the requests a fixture provider actually received: 0 for a refused route, exactly N for --max-requests N). Fallback, pricing, headless, key-pool, breaker, usage and flag suites pass (94).
+- Docs: docs/INFERENCE.md.
+
 ## 2026-11-14 (cancellation reaches descendant agents)
 
 - Neuron Network phase 2 gap: a background agent started by another agent runs detached from its parent's turn, so `agent_stop` on the parent, or the parent finishing or failing, left it running and reporting into a finished conversation.

@@ -9,7 +9,7 @@ import { catalogPrice } from './model-catalog.mjs';
 // Prices come from the models.dev catalog (src/model-catalog.mjs). A catalog
 // context tier becomes `long`: a prompt (all input tokens, cached or not) over
 // `threshold` tokens is billed at the long-context prices.
-function isLocalProvider(config = {}) {
+export function isLocalProvider(config = {}) {
   const base = String(config.baseURL || '');
   return config.protocol === 'ollama' || /\/\/(localhost|127\.0\.0\.1|\[::1\]|0\.0\.0\.0)(:|\/|$)/i.test(base);
 }
