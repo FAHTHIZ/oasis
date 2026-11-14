@@ -2,8 +2,22 @@
 // usual causes (credit or quota limits, rate limits, wrong key or endpoint).
 import { openRouterCreditInfo } from './model-budgets.mjs';
 import { isUnconfiguredRouteError, isPromptTooLargeError } from './provider-retry.mjs';
+import { redactSecretText } from './secret-shield.mjs';
 
-export function formatApiError(status, body, protocol, baseURL = '') {
+// Some servers echo the Authorization header or the request back in their error
+// text, so the detail is redacted before it reaches the terminal, logs or a
+// transcript: known credential formats, plus the configured key verbatim
+// (`secrets`), whatever its format.
+export function redactProviderDetail(text, secrets = []) {
+  let output = redactSecretText(String(text || ''));
+  for (const secret of secrets) {
+    const value = typeof secret === 'string' ? secret.trim() : '';
+    if (value.length >= 8) output = output.split(value).join('[redacted]');
+  }
+  return output;
+}
+
+export function formatApiError(status, body, protocol, baseURL = '', { secrets = [] } = {}) {
   let detail = '';
   try {
     let parsed = JSON.parse(body);
@@ -25,7 +39,7 @@ export function formatApiError(status, body, protocol, baseURL = '') {
   }
   const mode = protocol === 'anthropic' ? 'native Anthropic Messages API' : protocol === 'bedrock' ? 'AWS Bedrock (Claude)' : protocol === 'vertex' ? 'Google Vertex AI (Claude)' : protocol === 'foundry' ? 'Microsoft Foundry (Claude)' :
     protocol === 'openai-responses' ? 'OpenAI Responses API' : 'OpenAI-compatible chat completions';
-  detail = detail.trim().replace(/\.+$/, '');
+  detail = redactProviderDetail(detail, secrets).trim().replace(/\.+$/, '');
   return 'Model provider returned HTTP ' + status + (detail ? ': ' + detail : '') + '. ' + apiErrorAdvice(status, detail, mode);
 }
 

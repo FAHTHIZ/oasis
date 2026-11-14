@@ -31,7 +31,7 @@ import { parallelToolCalls, promptCacheKeyField, samplingTemperature } from './t
 import { postModelSwitch } from './model-switch.mjs';
 import { claudeEffortFor, claudeThinkingMode, firstPositiveConfiguredInteger, isOpenRouterBaseURL, maxOutputTokensFor, openRouterOutputCapFromError, outputCapFromError } from './model-budgets.mjs';
 import { applyAnthropicCacheBreakpoints, promptCachingEnabled, withProviderExtraContent } from './provider-request.mjs';
-import { formatApiError, gatewayBudgetNotice, responseText } from './api-error.mjs';
+import { formatApiError, gatewayBudgetNotice, responseText, redactProviderDetail } from './api-error.mjs';
 import { normalizeUsage, usageOrEstimate } from './usage-estimate.mjs';
 import { isInputTokenRateLimit, useCompactToolProfile } from './context-window.mjs';
 import { wireToolCallIds, toolCallIdStyle } from './tool-call-ids.mjs';
@@ -362,6 +362,20 @@ async function requestCompletionTracedInner(session, options = {}) {
 // Records the reply's tokens against the provider, key and model that served
 // it (src/quota-ledger.mjs). Internal re-sends share one record.
 async function requestCompletionRaw(session, options = {}) {
+  try {
+    return await requestCompletionRawQuota(session, options);
+  } catch (error) {
+    // Stream error events and transport errors can quote the request or its
+    // Authorization header; redact before the message reaches any output.
+    if (error && typeof error.message === 'string') {
+      const clean = redactProviderDetail(error.message, [session.config && session.config.apiKey]);
+      if (clean !== error.message) try { error.message = clean; } catch { /* frozen error */ }
+    }
+    throw error;
+  }
+}
+
+async function requestCompletionRawQuota(session, options = {}) {
   if (options.quotaState) return requestCompletionRawInner(session, options);
   const quotaState = { route: null };
   const reply = await requestCompletionRawInner(session, { ...options, quotaState });
@@ -708,7 +722,7 @@ async function requestCompletionRawInner(session, options = {}) {
         if (options.signal) options.signal.removeEventListener('abort', abortFromCaller);
         return requestCompletionRaw(session, options);
       }
-      throw Object.assign(new Error(formatApiError(status, errorBody, config.protocol, config.baseURL)), { status });
+      throw Object.assign(new Error(formatApiError(status, errorBody, config.protocol, config.baseURL, { secrets: [config.apiKey] })), { status });
     }
     if (!response || !response.ok) throw new Error('The model provider did not return a successful response after bounded retries.');
     responseStarted = true;
@@ -738,7 +752,7 @@ async function requestCompletionRawInner(session, options = {}) {
         const code = Number(data.error.code || data.error.status);
         const status = code >= 400 && code <= 599 ? code : 502;
         recordQuotaFailure(route, { status, headers: response.headers, body, env: providerEnv, retract: true });
-        throw Object.assign(new Error(formatApiError(status, body, config.protocol, config.baseURL)), { status });
+        throw Object.assign(new Error(formatApiError(status, body, config.protocol, config.baseURL, { secrets: [config.apiKey] })), { status });
       }
     }
     if (nativeAnthropic) {
@@ -793,7 +807,7 @@ async function requestCompletionRawInner(session, options = {}) {
       // record and fail it as the 402 it is, so fallback runs.
       const body = JSON.stringify({ error: { message: budgetNotice } });
       recordQuotaFailure(route, { status: 402, headers: response.headers, body, env: providerEnv, retract: true });
-      throw Object.assign(new Error(formatApiError(402, body, config.protocol, config.baseURL) + ' (The gateway sent this as an HTTP 200 reply; OASIS did not use it as the answer.)'), { status: 402, gatewayBudgetNotice: true });
+      throw Object.assign(new Error(formatApiError(402, body, config.protocol, config.baseURL, { secrets: [config.apiKey] }) + ' (The gateway sent this as an HTTP 200 reply; OASIS did not use it as the answer.)'), { status: 402, gatewayBudgetNotice: true });
     }
     if (!streamed && typeof options.onReasoning === 'function') { const said = typeof message.reasoning_content === 'string' ? message.reasoning_content : typeof message.reasoning === 'string' ? message.reasoning : ''; if (said) options.onReasoning(said); }
     if (typeof options.onDelta === 'function' && !streamed && typeof message.content === 'string' && message.content) options.onDelta(message.content);

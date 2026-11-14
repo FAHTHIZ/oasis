@@ -8,6 +8,7 @@
 // OASIS_TTS_MODEL, OASIS_TTS_BASE_URL, OASIS_TTS_VOICE, OASIS_TTS=0. Each call asks
 // first (the text is sent to the provider and may cost money) unless a permission
 // rule allows text_to_speech.
+import { redactProviderDetail } from './api-error.mjs';
 import { saveGeneratedMedia } from './media-output.mjs';
 import { speakable } from '../app/core/voice-mode.mjs';
 
@@ -64,7 +65,7 @@ export async function synthesizeSpeech(config, { text, voice = config.voice, for
     const detail = await response.text().catch(() => '');
     let message = detail;
     try { const parsed = JSON.parse(detail); message = parsed.error && (parsed.error.message || parsed.error) || detail; } catch {}
-    throw new Error('Speech API error ' + response.status + ': ' + String(message || 'request failed').slice(0, 400));
+    throw new Error('Speech API error ' + response.status + ': ' + redactProviderDetail(String(message || 'request failed'), [config.apiKey]).slice(0, 400));
   }
   const type = String(response.headers.get('content-type') || '');
   if (/json|text\/html/.test(type)) throw new Error('The speech API returned ' + type.split(';')[0] + ' instead of audio.');
