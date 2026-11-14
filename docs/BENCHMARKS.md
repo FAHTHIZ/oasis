@@ -23,7 +23,22 @@ For quantitative comparisons, use the controlled live-evaluation protocol below:
 | Task routing decision | 29 µs | per `selectTaskModel` call |
 | stdio MCP server connect | 24 ms | p90 136 ms, 20 tools listed |
 
-These are single-machine numbers; they are not compared with other agents because their runtimes were not measured under the same harness. Most remaining memory is Oasis's own source modules loaded at import; splitting them further is open work.
+Most remaining memory comes from Oasis's own source modules, which load at import. Splitting them further is open work.
+
+### CLI launch against other agent CLIs
+
+`npm run bench:perf -- --compare` (Linux only) runs `--version` and `--help` for each agent CLI on PATH. Every CLI is measured the same way: the same machine, a scratch HOME, no provider keys, and no model calls. It samples peak RSS (`VmHWM`) for every process in the CLI's process tree every 2 ms. Recorded 14 November 2026, 5 runs each ([raw JSON](../bench/results/perf-compare-2026-11-14.json)):
+
+| CLI (version) | `--version` | `--help` | Peak RSS, largest process / tree sum |
+| --- | --- | --- | --- |
+| OASIS 1.3.0 | 28 ms | 29 ms | 46.8 / 46.8 MB |
+| Claude Code 2.1.325 (native binary) | 9 ms | 137 ms | 22.5 MB (`--version`), 101.1 MB (`--help`) |
+| Codex CLI 0.169.0 | 39 ms | 37 ms | 47.2 MB, Node wrapper only (see below) |
+| OpenCode 1.19.5 | 544 ms | 564 ms | 126.2 / 138.6 MB |
+| Aider 0.86.2 | 883 ms | 853 ms | 73.5 / 122.7 MB (21 processes) |
+| Gemini CLI 0.68.0 | 1,772 ms | 1,739 ms | 201.1 / 370.5 MB (2 processes) |
+
+These numbers measure launch cost only. They say nothing about how well an agent does on a task, and launch time hardly matters once a model call takes seconds. Sampling can miss very short-lived subprocesses, so the memory figures are lower bounds. Codex's Rust binary answers `--version` faster than the sampling interval, so only its Node wrapper was recorded.
 
 ## Router comparison
 
