@@ -57,9 +57,15 @@ export async function consumeServerSentEvents(response, onEvent, onStray) {
   }
 }
 
+// A data event that is not JSON is a corrupted stream (a gateway that cut a
+// chunk, or interleaved two writes), not a bad request: the same request
+// normally succeeds when sent again, so it restarts like a dropped connection.
 function parseProviderEvent(raw) {
   try { return JSON.parse(raw); }
-  catch { throw new Error('The model provider sent an invalid server-sent event payload.'); }
+  catch {
+    const sample = String(raw || '').replace(/\s+/g, ' ').slice(0, 80);
+    throw Object.assign(new Error('The model stream was interrupted: the provider sent an invalid server-sent event payload (' + JSON.stringify(sample) + ').'), { code: 'OASIS_STREAM_INTERRUPTED' });
+  }
 }
 
 const ANTHROPIC_USAGE_FIELDS = ['input_tokens', 'output_tokens', 'cache_creation_input_tokens', 'cache_read_input_tokens'];
@@ -85,15 +91,18 @@ export function mergeAnthropicUsage(target, source) {
 export function toolCallSlot(calls, part) {
   const next = calls.size ? Math.max(...calls.keys()) + 1 : 0;
   const id = part && typeof part.id === 'string' && part.id ? part.id : '';
-  if (id) for (const [slot, call] of calls) if (call.id === id) return slot;
   const hasIndex = part && part.index !== undefined && part.index !== null && Number.isFinite(Number(part.index));
+  const named = part && part.function && typeof part.function.name === 'string' && part.function.name;
+  // A matching id continues that call, unless this delta names a new call at
+  // another index: gateways that reuse one id for parallel calls otherwise
+  // merged read_file and list_files into one "read_filelist_files" call.
+  if (id) for (const [slot, call] of calls) if (call.id === id && !(named && call.function.name && hasIndex && Number(part.index) !== slot)) return slot;
   if (hasIndex) {
     const slot = Number(part.index);
     const existing = calls.get(slot);
     // A new index with no id and no name is a stray continuation: a live
     // Pollinations stream sent the closing "}" of call 0 as index 1. Keep it
     // with the previous call instead of opening a nameless one.
-    const named = part.function && typeof part.function.name === 'string' && part.function.name;
     if (!existing && !id && !named && calls.size) return next - 1;
     // Same index but a different, already-named call: some gateways number every call 0.
     if (id && existing && existing.function.name && existing.id && !existing.id.startsWith('stream-tool-') && existing.id !== id) return next;
@@ -101,6 +110,20 @@ export function toolCallSlot(calls, part) {
   }
   if (id) return next;
   return calls.size ? next - 1 : 0;
+}
+
+// Tool results are matched to calls by id, so two calls sharing one id would
+// make the next request ambiguous (providers reject it). Later duplicates get
+// a suffix; the assistant message and its results both use the new id.
+export function uniqueToolCallIds(toolCalls) {
+  const seen = new Set();
+  for (const call of toolCalls) {
+    let id = call.id;
+    for (let n = 2; seen.has(id); n++) id = call.id + '_' + n;
+    call.id = id;
+    seen.add(id);
+  }
+  return toolCalls;
 }
 
 // An error event inside a 200 chat stream. Gateways send one when their
@@ -295,6 +318,6 @@ export async function readProviderStream(response, protocol, onDelta, onProgress
   // A connection that closes with neither a finish_reason nor [DONE] was cut
   // off mid-reply. Its partial text used to be taken as the whole answer.
   if (!finishReason && !sawDone) throw Object.assign(new Error('The model stream was interrupted: the connection closed before the reply finished.'), { code: 'OASIS_STREAM_INTERRUPTED' });
-  const toolCalls = [...calls.entries()].sort((a, b) => a[0] - b[0]).map(([, call]) => call);
+  const toolCalls = uniqueToolCallIds([...calls.entries()].sort((a, b) => a[0] - b[0]).map(([, call]) => call));
   return { choices: [{ message: { role: 'assistant', content: content || null, ...(reasoning ? { reasoning_content: reasoning } : {}), ...(toolCalls.length ? { tool_calls: toolCalls } : {}) }, finish_reason: finishReason }], usage };
 }
