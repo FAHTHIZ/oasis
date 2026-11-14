@@ -40,6 +40,31 @@ function browserToolRisk(name) {
   return 'medium';
 }
 
+// Used when the model could not summarise: the user's requests, the tools
+// that ran, and the latest assistant notes, bounded to about 16,000 characters.
+export function historyDigest(messages) {
+  const asks = messages.filter((m) => m.role === 'user').map((m) => textOf(m.content).trim()).filter(Boolean);
+  const tools = [];
+  for (const m of messages) for (const call of m.tool_calls || []) {
+    let target = '';
+    try { const args = JSON.parse(call.function.arguments || '{}'); target = args.path || args.command || args.query || ''; } catch {}
+    tools.push(call.function.name + (target ? ' ' + String(target).slice(0, 120) : ''));
+  }
+  const notes = messages.filter((m) => m.role === 'assistant' && textOf(m.content).trim()).slice(-5).map((m) => textOf(m.content).trim().slice(0, 1500));
+  const clip = (text, max) => (text.length > max ? text.slice(0, max) + ' [...]' : text);
+  return [
+    'The model could not summarise the earlier conversation, so this is a plain digest.',
+    'User requests:\n' + asks.map((ask) => '- ' + clip(ask, 2000)).join('\n').slice(0, 6000),
+    tools.length ? 'Tools used (' + tools.length + '):\n' + tools.slice(-60).map((t) => '- ' + t).join('\n') : '',
+    notes.length ? 'Latest notes:\n' + notes.join('\n---\n').slice(-6000) : ''
+  ].filter(Boolean).join('\n\n');
+}
+
+const CONTEXT_OVERFLOW = /context.{0,20}(length|window|limit)|maximum context|prompt is too long|input is too long|too many (input )?tokens|exceeds? (the )?(model'?s? )?(maximum )?context|reduce the length of the messages/i;
+export function isContextOverflow(error) {
+  return Boolean(error && error.name !== 'AbortError' && (!error.status || error.status === 400 || error.status === 413) && CONTEXT_OVERFLOW.test(String(error.message || '')));
+}
+
 function estimateChars(messages) {
   let total = 0;
   for (const message of messages) {
@@ -167,8 +192,10 @@ export class Agent {
       : [];
   }
 
-  async compact(config, signal) {
-    const limit = Number(config.contextChars) || 240000;
+  async compact(config, signal, { force = false } = {}) {
+    // force: the provider rejected the request as too long for its context
+    // window, so shrink to half the current size whatever contextChars says.
+    const limit = force ? Math.floor(estimateChars(this.messages) / 2) : Number(config.contextChars) || 240000;
     if (estimateChars(this.messages) < limit) return false;
     // First, shrink old tool results; they are the bulk of long sessions.
     const keepFrom = Math.max(0, this.messages.length - 12);
@@ -181,8 +208,15 @@ export class Agent {
     let cut = Math.max(1, this.messages.length - 8);
     while (cut < this.messages.length && this.messages[cut].role === 'tool') cut++;
     const older = this.messages.slice(0, cut);
-    const transcript = older.map((m) => m.role.toUpperCase() + ': ' + textOf(m.content) + (m.tool_calls ? ' [called ' + m.tool_calls.map((c) => c.function.name).join(', ') + ']' : '')).join('\n').slice(-120000);
-    const summary = await this.chatImpl(config, {
+    const full = older.map((m) => m.role.toUpperCase() + ': ' + textOf(m.content) + (m.tool_calls ? ' [called ' + m.tool_calls.map((c) => c.function.name).join(', ') + ']' : '')).join('\n');
+    // Keep the start (the user's original goal and constraints) as well as the
+    // most recent work; only cutting the head lost what the task was.
+    const transcript = full.length > 120000
+      ? full.slice(0, 30000) + '\n[... ' + (full.length - 120000) + ' characters of the middle of the session left out ...]\n' + full.slice(-90000)
+      : full;
+    let summaryText = '';
+    try {
+      const summary = await this.chatImpl(config, {
       messages: [
         { role: 'system', content: 'Summarise this coding session for the agent that will continue it. Keep: the user\'s goals and constraints, decisions, files changed and why, current state, open problems and next steps. Be specific and brief.' },
         { role: 'user', content: transcript }
@@ -190,8 +224,17 @@ export class Agent {
       tools: [],
       signal
     });
-    this.messages = [{ role: 'user', content: '[Summary of the earlier conversation]\n' + summary.content }, { role: 'assistant', content: 'Understood. Continuing from that summary.' }, ...this.messages.slice(cut)];
-    this.onEvent({ type: 'compacted', mode: 'summary' });
+      summaryText = String(summary && summary.content || '').trim();
+    } catch (error) {
+      if (error && error.name === 'AbortError') throw error;
+      this.onEvent({ type: 'compaction_error', message: error && error.message || String(error) });
+    }
+    // A failed or empty summary must not wipe the history: fall back to a
+    // plain digest of what the user asked and what was done.
+    const mode = summaryText ? 'summary' : 'digest';
+    if (!summaryText) summaryText = historyDigest(older);
+    this.messages = [{ role: 'user', content: '[Summary of the earlier conversation]\n' + summaryText }, { role: 'assistant', content: 'Understood. Continuing from that summary.' }, ...this.messages.slice(cut)];
+    this.onEvent({ type: 'compacted', mode });
     return true;
   }
 
@@ -259,7 +302,7 @@ export class Agent {
         if (system === null) system = await buildSystemPrompt({ workspace: ctx.workspace, skills: ctx.skills, plugins });
         this.onEvent({ type: 'thinking', step });
         let streamed = '';
-        const { reply } = await this.callModel(config, () => {
+        const ask = () => this.callModel(config, () => {
           streamed = '';
           return {
             messages: [{ role: 'system', content: system }, ...this.messages],
@@ -270,6 +313,16 @@ export class Agent {
             onRetry: (attempt, error) => (streamed = '', this.onEvent({ type: 'retry', attempt, message: error.message, waitMs: error && Number.isFinite(error.retryAfterMs) ? error.retryAfterMs : error && Number.isFinite(error.waitMs) ? error.waitMs : 0 }))
           };
         }, step);
+        let reply;
+        try {
+          ({ reply } = await ask());
+        } catch (error) {
+          // "prompt is too long" / "maximum context length": compact hard
+          // and ask once more instead of failing the whole task.
+          if (!isContextOverflow(error) || signal.aborted || !(await this.compact(config, signal, { force: true }))) throw error;
+          this.onEvent({ type: 'context_overflow', step });
+          ({ reply } = await ask());
+        }
         if (reply.usage) {
           this.usage.input += reply.usage.input || 0;
           this.usage.output += reply.usage.output || 0;
