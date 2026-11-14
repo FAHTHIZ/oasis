@@ -1,4 +1,4 @@
-import { probeLocalContext, isLocalModelEndpoint, localContextAdvice, SMALL_CONTEXT_TOKENS, RECOMMENDED_LOCAL_CONTEXT } from './local-context.mjs';
+import { probeLocalContext, isLocalModelEndpoint, localContextAdvice, needsLocalContextAdvice, SMALL_CONTEXT_TOKENS } from './local-context.mjs';
 import { stdout as processStdout, stderr } from 'node:process';
 import { wrapTerminalText } from './term-wrap.mjs';
 
@@ -249,7 +249,7 @@ async function doctorLocalServer(config, write = (line) => stdout.write(line)) {
       ? 'small (essential tools up front, the rest behind tool_search) because the window is ' + SMALL_CONTEXT_TOKENS.toLocaleString('en-US') + ' tokens or less'
       : 'full') + '\n');
     if (!isLocalModelEndpoint(config, process.env)) write('  Note: OASIS reads this window during work only on default ports (Ollama 11434, LM Studio 1234, llama-server 8080). Set OASIS_LOCAL_CONTEXT_PROBE=1 for this server; otherwise the first request may overflow once and then resize itself.\n');
-    if (window < RECOMMENDED_LOCAL_CONTEXT) write('  Advice: ' + localContextAdvice(config.model, window, probe.server) + '\n');
+    if (needsLocalContextAdvice(config.model, window)) write('  Advice: ' + localContextAdvice(config.model, window, probe.server) + '\n');
   } catch (error) {
     write('  Local model server: not reachable (' + String(error && error.message || error).slice(0, 160) + ')\n');
   }

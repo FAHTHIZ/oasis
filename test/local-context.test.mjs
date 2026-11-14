@@ -256,3 +256,11 @@ test('the wide Ollama variant is sized to fit this computer\'s model memory', as
   assert.equal(created[0].parameters.num_ctx, 24576);
   assert.match(statuses[0], /24,576-token window, sized to fit about 3\.3 GB of model memory on this computer \(32,768 would not fit\)/);
 });
+
+test('no "widen the window" advice for a variant oasis connect already sized to memory', async () => {
+  const { needsLocalContextAdvice } = await import('../src/local-context.mjs');
+  assert.equal(needsLocalContextAdvice('qwen3:0.6b', 4096), true);
+  assert.equal(needsLocalContextAdvice('qwen3:0.6b-oasis', 24576), false);
+  assert.equal(needsLocalContextAdvice('qwen3:0.6b-oasis', 8192), true);
+  assert.equal(needsLocalContextAdvice('qwen3:8b', 32768), false);
+});

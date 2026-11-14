@@ -71,7 +71,7 @@ import { createSharedTaskStore, SHARED_TASK_TOOL_NAMES } from './shared-tasks.mj
 import { unrequestedGitWrite } from './git-intent.mjs';
 import { recordTokenUsage } from './cost-policy.mjs';
 import { repairToolArguments, extractTextToolCalls, unknownTextToolCalls, hideStreamingToolCalls } from './tool-call-repair.mjs';
-import { isLocalModelEndpoint, probeLocalContext, probeProviderModelWindow, applySmallContextProfile, localContextAdvice, SMALL_CONTEXT_TOKENS, RECOMMENDED_LOCAL_CONTEXT } from './local-context.mjs';
+import { isLocalModelEndpoint, probeLocalContext, probeProviderModelWindow, applySmallContextProfile, localContextAdvice, needsLocalContextAdvice, SMALL_CONTEXT_TOKENS } from './local-context.mjs';
 import { ripgrepPathAddition } from './ripgrep.mjs';
 import { AUTO_LSP_EDIT_TOOLS, CYCLE_HALT_AT, CYCLE_WARN_AT, CYCLE_WINDOW_STEPS, FILE_EDITING_TOOL_NAMES, MAX_SESSION_TOOL_CALLS, PROTECTED_EDIT_TOOLS, RETRY_HALT_AT, RETRY_TRACKED_COMMANDS, RETRY_WARN_AT, THRASH_ESCALATE_AT, THRASH_WARN_AT, UNREADABLE_CALL_NUDGE, activeLspBaseline, asksForNewTests, failureSignature, isCompleteFileRead, isVerificationCommand, lspCallOptions, normalizeReviewPath, successfulMutation, verificationIssues, newModuleCandidate, markLoadedModules, markRanSources } from './turn-guards.mjs';
 import { MAX_OUTPUT_RECOVERIES, applyEffort, claudeEffortFor, thinkingTurnedOff, inlineEffortLevel, maxOutputTokensFor, reasoningEffortFor, resolveTurnLimits, stripInlineEffort, thinkingBudgetFor, truncationRecoveryPrompt } from './model-budgets.mjs';
@@ -1770,7 +1770,7 @@ async function detectLocalContextWindow(session, { env = process.env, fetchImpl 
   session.localContext = probe;
   if (!probe || !probe.contextLength) return probe;
   session.config = { ...config, contextWindow: probe.contextLength };
-  if (probe.contextLength < RECOMMENDED_LOCAL_CONTEXT) session.localContextNotices.push(localContextAdvice(config.model, probe.contextLength, probe.server));
+  if (needsLocalContextAdvice(config.model, probe.contextLength)) session.localContextNotices.push(localContextAdvice(config.model, probe.contextLength, probe.server));
   return probe;
 }
 

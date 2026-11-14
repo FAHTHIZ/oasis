@@ -268,7 +268,11 @@ export const REFUSAL_NUDGE = '<system-reminder>This is an ordinary software task
 // "I have created clampInteger in src/lib.mjs" when no file changed this turn.
 export function claimsUnmadeChange(text) {
   return /\b(?:i(?:'ve|’ve| have)?|i've)\s+(?:now\s+|successfully\s+|already\s+)?(?:created|added|updated|modified|written|wrote|implemented|fixed|changed|edited|refactored|removed|deleted|renamed|made (?:the|these|those|this|all|your) (?:change|changes|edit|edits|update|updates)|completed the (?:change|task|implementation))\b(?!\s+(?:a\s+|an\s+|the\s+)?(?:new\s+)?(?:task|todo|to-do|plan|list|checklist)\b)/i.test(String(text || ''))
-    || /\b(?:has|have) been (?:created|added|updated|modified|written|implemented|fixed)\b/i.test(String(text || ''));
+    || /\b(?:has|have) been (?:created|added|updated|modified|written|implemented|fixed)\b/i.test(String(text || ''))
+    // Passive "X is fixed / was updated" (seen live: qwen3:0.6b answered "The
+    // function `sum` in math.mjs is fixed to return a + b." with no tool call).
+    // Conditions and plans ("is fixed once", "will be updated") do not count.
+    || /\b(?:is|are|was|were) (?:now |successfully )?(?:fixed|updated|modified|corrected|implemented|created|changed|edited)\b(?!\s+(?:when|once|if|after|by running|later)\b)/i.test(String(text || ''));
 }
 
 export const FALSE_CLAIM_NUDGE = '<system-reminder>Your reply says you made a change, but no file has been changed in this turn: no write_file or edit_file call succeeded. Do not report work that did not happen. Make the change now with write_file or edit_file, then check it.</system-reminder>';

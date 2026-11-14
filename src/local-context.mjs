@@ -220,6 +220,15 @@ export async function widenOllamaContext(config = {}, { fetchImpl = globalThis.f
   return { model: wide, contextLength: size, from: config.model };
 }
 
+// Below 32K the advice says to widen the window, except for a variant that
+// oasis connect already sized to this computer's memory (16K or more): the
+// advice would point back at the command that made it.
+export function needsLocalContextAdvice(model, contextLength) {
+  const size = Number(contextLength) || 0;
+  if (size >= RECOMMENDED_LOCAL_CONTEXT) return false;
+  return !(/-oasis$/i.test(String(model || '')) && size >= SMALL_CONTEXT_TOKENS);
+}
+
 export function localContextAdvice(model, contextLength, server = 'ollama') {
   const size = Number(contextLength).toLocaleString('en-US');
   const want = RECOMMENDED_LOCAL_CONTEXT;

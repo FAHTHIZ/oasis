@@ -29,6 +29,13 @@ test('claims of changes that did not happen are recognized', async () => {
   assert.ok(claimsUnmadeChange("I've updated the parser."));
   assert.ok(claimsUnmadeChange('The function has been implemented.'));
   assert.ok(!claimsUnmadeChange('The file does not exist yet.'));
+  assert.ok(claimsUnmadeChange('The function `sum` in math.mjs is fixed to return a + b.'));
+  assert.ok(claimsUnmadeChange('The file was updated successfully.'));
+  assert.ok(claimsUnmadeChange('math.mjs is now corrected.'));
+  assert.ok(!claimsUnmadeChange('The bug is fixed once add returns a + b.'));
+  assert.ok(!claimsUnmadeChange('The function will be updated after I read the file.'));
+  assert.ok(!claimsUnmadeChange('I will check which line needs to change.'));
+  assert.ok(!claimsUnmadeChange('add in math.mjs is already fixed: it returns a + b.'));
 });
 
 test('small windows drop non-blocking "language server missing" notes from tool results', async () => {
