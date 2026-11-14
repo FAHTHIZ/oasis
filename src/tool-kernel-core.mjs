@@ -3,6 +3,10 @@ import { validateToolArguments } from './tool-schema-validation.mjs';
 const TOOL_CAPABILITIES = Object.freeze(['read', 'write', 'execute', 'network', 'mcp', 'browser', 'git', 'secret']);
 const TOOL_RISK_LEVELS = Object.freeze(['low', 'medium', 'high', 'critical']);
 
+// Tools ask for their own limit (an MCP call may be allowed a day); this only
+// stops a runaway definition. It used to be 15 minutes, which cut those short.
+const MAX_TOOL_TIMEOUT_MS = 2 * 86_400_000;
+
 export function defineTool(definition) {
   if (!definition || typeof definition !== 'object') throw new TypeError('Tool definition must be an object.');
   const name = String(definition.name || '');
@@ -15,7 +19,7 @@ export function defineTool(definition) {
   if (!TOOL_RISK_LEVELS.includes(risk)) throw new Error('Unknown tool risk level: ' + risk);
   const requestedTimeout = Number(definition.timeoutMs);
   const timeoutMs = Number.isFinite(requestedTimeout) && requestedTimeout > 0
-    ? Math.min(900_000, Math.max(1, Math.floor(requestedTimeout)))
+    ? Math.min(MAX_TOOL_TIMEOUT_MS, Math.max(1, Math.floor(requestedTimeout)))
     : 120_000;
   if (typeof definition.run !== 'function') throw new Error('Tool must provide a run function.');
   return Object.freeze({
