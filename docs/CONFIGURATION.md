@@ -163,7 +163,12 @@ more) behind one unified key, with per-key rate-limit tracking and failover.
    the gateway answers cross-origin requests.
 
 `auto` lets FreeLLMAPI pick a healthy model per request; naming a model (for
-example `nemotron-3-ultra-550b`) keeps every request on that model. OASIS reads
+example `nemotron-3-ultra-550b`) keeps every request on that model. When OASIS
+connects, it skips models the gateway lists as unavailable (`available: false`,
+for example `no_key` when no upstream key is set). It moves models whose free
+tier is used up for now (`execution_status: "exhausted"`) behind ready ones. It
+puts alias slots such as `claude-opus-4-5` ("Opus slot (auto-routed to a free
+model)") last, because they are not the model their name suggests. OASIS reads
 each model's context window from the gateway's `GET /v1/models`, treats the
 gateway as cloud (cloud timeouts, never priced or admitted by `--zero-budget` as
 free: free tiers are not proof a route cannot bill), and reports

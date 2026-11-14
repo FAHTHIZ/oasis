@@ -732,6 +732,8 @@ async function runtimeConnect(text, { surface = 'welcome' } = {}) {
     if (parsed.rest && surface === 'chat') { connecting = false; await send(parsed.rest); }
     return true;
   } catch (error) {
+    // The "Checking…" line is finished; leave only the reason it failed.
+    lines.length = 0;
     say('error', error.message);
     return false;
   } finally {
