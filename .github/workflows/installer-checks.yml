@@ -35,7 +35,7 @@ jobs:
       - name: Check installed command version
         run: "$HOME/.local/bin/oasis --version"
       - name: Measure cold CLI startup
-        run: node scripts/measure-startup.mjs
+        run: node scripts/bench-perf.mjs --installed --runs 5
       - name: Check installed environment
         run: "$HOME/.local/bin/oasis doctor"
 
@@ -67,7 +67,7 @@ jobs:
         run: '& "$env:LOCALAPPDATA/OASIS/oasis.cmd" --version'
       - name: Measure cold CLI startup
         shell: pwsh
-        run: node scripts/measure-startup.mjs
+        run: node scripts/bench-perf.mjs --installed --runs 5
       - name: Check installed environment
         shell: pwsh
         run: '& "$env:LOCALAPPDATA/OASIS/oasis.cmd" doctor'

@@ -5,6 +5,7 @@
 import { execFile, spawn } from 'node:child_process';
 import { readFile, readdir, lstat, rm } from 'node:fs/promises';
 import path from 'node:path';
+import { endChildInput } from './node-process.mjs';
 
 const OUTPUT_DIRS = ['dist', 'build', 'out', '_site', 'public', 'site'];
 const SKIP_DIRS = new Set(['.git', '.oasis', 'node_modules', '.github', '.vscode', '.idea']);
@@ -19,7 +20,7 @@ function run(command, args, { cwd, env, input } = {}) {
         reject(Object.assign(new Error(message || command + ' failed'), { code: error.code }));
       } else resolve(String(stdout).trim());
     });
-    if (input !== undefined) child.stdin.end(input);
+    endChildInput(child, input);
   });
 }
 

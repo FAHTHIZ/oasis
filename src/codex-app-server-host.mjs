@@ -304,7 +304,8 @@ export function createAppServerHost(options = {}) {
           record.pty = term;
           record.kill = () => { try { term.kill(); } catch {} };
           term.onData((data) => stdout.push(data));
-          for (const chunk of record.pendingInput.splice(0)) if (chunk.data) term.write(chunk.data.toString('utf8'));
+          if (child.stdin) child.stdin.on('error', () => {});
+        for (const chunk of record.pendingInput.splice(0)) if (chunk.data) term.write(chunk.data.toString('utf8'));
           if (record.cancelled) record.kill();
           term.onExit(({ exitCode }) => finish(typeof exitCode === 'number' ? exitCode : 1));
         }).catch((error) => {

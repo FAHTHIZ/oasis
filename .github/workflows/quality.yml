@@ -68,7 +68,7 @@ jobs:
         run: |
           node scripts/bench-live.mjs --help
           node scripts/bench-web-search.mjs --help
-          node scripts/measure-startup.mjs --help
+          node scripts/bench-perf.mjs --help
       - name: Upload model-free harness report
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
