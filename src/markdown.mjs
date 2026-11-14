@@ -240,7 +240,9 @@ export function wrapRendered(text, columns, { offset = 0, indent = null } = {}) 
   const rest = firstPass.slice(1).join('').replace(LEADING_SPACE, '$1');
   const rows = [firstPass[0], ...(stripAnsi(rest) ? wrapAnsi(rest, Math.max(1, width - padWidth), options).split('\n') : [])];
   const pad = ' '.repeat(padWidth);
-  return rows.map((row, index) => (index ? pad : '') + row.replace(TRAILING_SPACE, '$1')).join('\n');
+  // Every continuation row starts at a break, so a space carried over from
+  // the break (wrap-ansi keeps it with trim: false) is dropped, not just on row 2.
+  return rows.map((row, index) => (index ? pad + row.replace(LEADING_SPACE, '$1') : row).replace(TRAILING_SPACE, '$1')).join('\n');
 }
 
 // Streaming renderer. push() receives new text; end() flushes.
@@ -381,8 +383,22 @@ function highlightedLine(segments, lineBg, wordBg) {
     : segment.text).join('');
 }
 
-export function renderDiff(before, after, { color = true, context = 2, maxLines = 40 } = {}) {
+export function renderDiff(before, after, { color = true, context = 2, maxLines = 40, startLine = 0 } = {}) {
   const ops = lineDiff(before, after);
+  // With startLine, each row carries its file line number (the old number for
+  // a removed line, the new one otherwise), as Claude Code's edit view does.
+  const numbers = [];
+  if (startLine > 0) {
+    let oldLine = startLine;
+    let newLine = startLine;
+    for (const op of ops) {
+      if (op.op === '-') numbers.push(oldLine++);
+      else if (op.op === '+') numbers.push(newLine++);
+      else { numbers.push(newLine); oldLine++; newLine++; }
+    }
+  }
+  const gutterWidth = numbers.length ? String(Math.max(...numbers)).length : 0;
+  const gutter = (index) => gutterWidth ? (color ? C.dim : '') + String(numbers[index]).padStart(gutterWidth) + (color ? C.noBold : '') + ' ' : '';
   const words = color ? wordHighlights(ops) : new Map();
   const keep = new Set();
   ops.forEach((op, index) => { if (op.op !== ' ') for (let k = index - context; k <= index + context; k += 1) keep.add(k); });
@@ -392,18 +408,19 @@ export function renderDiff(before, after, { color = true, context = 2, maxLines 
     if (!keep.has(index)) { if (!skipped && lines.length) lines.push(color ? C.dim + '    ⋮' + C.noBold : '    ...'); skipped = true; return; }
     skipped = false;
     const text = op.op + ' ' + op.line;
-    if (!color) lines.push('    ' + text);
+    const lead = '    ' + gutter(index);
+    if (!color) lines.push(lead + text);
     // On a tinted background the code stays in the normal text color so it is
     // readable; only the +/- sign carries the color. Themes without diff
     // backgrounds (ANSI, colorblind) color the whole line instead.
     else if (op.op === '+') {
       const body = words.has(index) ? highlightedLine(words.get(index), C.bgGreen, C.bgGreen && C.bgGreenWord) : op.line;
-      lines.push('    ' + (C.bgGreen ? C.bgGreen + C.green + C.bold + '+' + C.noBold + C.fg + ' ' + body : C.green + '+ ' + body) + C.fg + C.bg);
+      lines.push(lead + (C.bgGreen ? C.bgGreen + C.green + C.bold + '+' + C.noBold + C.fg + ' ' + body : C.green + '+ ' + body) + C.fg + C.bg);
     } else if (op.op === '-') {
       const body = words.has(index) ? highlightedLine(words.get(index), C.bgRed, C.bgRed && C.bgRedWord) : op.line;
-      lines.push('    ' + (C.bgRed ? C.bgRed + C.red + C.bold + '-' + C.noBold + C.fg + ' ' + body : C.red + '- ' + body) + C.fg + C.bg);
+      lines.push(lead + (C.bgRed ? C.bgRed + C.red + C.bold + '-' + C.noBold + C.fg + ' ' + body : C.red + '- ' + body) + C.fg + C.bg);
     }
-    else lines.push('    ' + C.dim + text + C.noBold);
+    else lines.push(lead + C.dim + text + C.noBold);
   });
   const stats = diffStats(ops);
   if (lines.length > maxLines) {
