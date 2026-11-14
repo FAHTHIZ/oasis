@@ -4,6 +4,8 @@ User-facing change history grouped by package version. A version heading does no
 
 ## Unreleased
 
+- `/compact` preview: "Detected likely paths" now lists files the conversation named, including bare source files (`math.mjs`) and dot-folders (`.github/workflows/ci.yml`). It no longer shows paths from Oasis's own reminders such as `oasis/followups.json`. Test in `test/compaction-preview-paths.test.mjs`.
+
 - Edit view: an `edit_file`/`multi_edit` result now shows the changed lines in full, with file line numbers and two lines of context (read from the file after the edit; display only, no extra model tokens). Before, only the replaced fragment was shown (`- a - b` / `+ a + b`).
 - Completion gate: inline code that imports or opens a changed file and exits 0 (`node -e "import('./math.mjs')…"`, `python -c "from pkg.parser import …"`) now counts as running it, like `node math.mjs`. Running every changed source cleanly also clears the diff-review step for targeted edits (overwrites still need a diff). Previously this forced an extra round trip in which the model repeated its answer.
 - Word wrap: continuation rows after the second no longer start with the space from the break.

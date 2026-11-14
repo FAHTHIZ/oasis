@@ -273,6 +273,9 @@ export function compactionPreviewIsCurrent(session, preview) {
     preview.fingerprint === compactionFingerprint(messages));
 }
 
+const PREVIEW_PATH = /(?<![\w./@:-])((?:\.?[\w-]+\/)*\.?[\w-][\w.-]*\.[A-Za-z][A-Za-z0-9]{0,7})(?![\w/-])/g;
+const PREVIEW_BARE_EXTENSIONS = new Set(['js', 'mjs', 'cjs', 'jsx', 'ts', 'mts', 'cts', 'tsx', 'py', 'go', 'rs', 'rb', 'java', 'kt', 'cs', 'php', 'swift', 'c', 'h', 'cc', 'cpp', 'hpp', 'json', 'yaml', 'yml', 'toml', 'md', 'html', 'css', 'scss', 'vue', 'svelte', 'sh', 'sql']);
+
 export function createCompactionPreview(session, focus = '') {
   const messages = Array.isArray(session && session.messages) ? session.messages : [];
   const history = messages.slice(1);
@@ -290,8 +293,14 @@ export function createCompactionPreview(session, focus = '') {
     if (tokens > 500) large.push({ index: i + 2, role: String(message.role || 'unknown'), name: String(message.name || ''), tokens, preview: previewSafeText(text) });
     if (/\b(error|failed|exception|timed out|not found)\b/i.test(text)) errors++;
     if (/\b(test|type.?check|lint|build|diagnostic|verification)\b/i.test(text)) checks++;
-    for (const match of text.matchAll(/\b((?:[A-Za-z0-9_.-]+\/)+[A-Za-z0-9_.-]+\.[A-Za-z0-9]+)\b/g)) {
-      if (paths.size < 30) paths.add(match[1]);
+    // Oasis's own reminders (open follow-ups, memory) are not paths the
+    // conversation worked on. Dot-folders keep their dot (.oasis/x.json), and
+    // a bare file name counts when its extension is a common source/doc one.
+    const spoken = text.replace(/<system-reminder>[\s\S]*?<\/system-reminder>/g, ' ');
+    for (const match of spoken.matchAll(PREVIEW_PATH)) {
+      const found = match[1];
+      if (!found.includes('/') && !PREVIEW_BARE_EXTENSIONS.has(found.slice(found.lastIndexOf('.') + 1).toLowerCase())) continue;
+      if (paths.size < 30) paths.add(found);
     }
   }
   const mustPreserve = sanitizeMustPreserve(session && session.mustPreserve);
