@@ -14,7 +14,7 @@ Status: **done** (tested and pushed) · **doing** · **open** · **blocked**
 | Codex TypeScript SDK drop-in (`oasis exec --json`, `codexPathOverride`) | done | `test/codex-exec-json.test.mjs` (5 tests: spawns OASIS with the SDK's exact argv, prompt on stdin, resume by thread id, output schema, setup error). Also checked by hand with the published `@openai/codex-sdk` 0.167.1 (`codexPathOverride` → a shell wrapper for `oasis`): `run`, `runStreamed` with `outputSchema`, and `resumeThread` all worked against a scripted model. |
 | Clone and inventory the repository | done | 2,865 commits, ~69k lines in `src/`, ~8k in `app/`, 458 test files (2026-11-10) |
 | Read history, mission log, scorecard, architecture docs | done | Desktop (Electron) app retired in `3114f599` on 2026-11-09; browser-only since |
-| Baseline: lint, audit, full test suite on Node 22 | done | oxlint 0 warnings; `npm audit` 0 vulnerabilities; 2,384 tests, 0 failures |
+| Baseline: lint, audit, full test suite on Node 22 | done | oxlint 0 warnings; `npm audit` 0 vulnerabilities; 2,384 tests, 0 failures at the start. Re-run 2026-11-14 on Node 22.21.1: 3,292 tests, 3,284 pass, 8 skipped, 0 fail |
 | Use the CLI as a new user (clean HOME) | done | `--help`, `doctor`, `connect` (Ollama) and a `-p` task with a local model |
 | Use the web workspace as a new user | done | Connected a local model, ran tasks in two tabs; found the busy-folder dead end (fixed) |
 | Current competitor scan (Claude Code, Codex, Gemini CLI, OpenCode, Aider) | done | Benchmarked versions are the latest published on 2026-11-14: Claude Code 2.1.325, Codex CLI 0.169.0, Gemini CLI 0.68.0, OpenCode 1.19.5 (npm `latest`), Aider 0.86.2 (PyPI). Feature comparison in [COMPARISON.md](COMPARISON.md) |
@@ -123,10 +123,10 @@ Gaps found by checking the [hooks reference](https://code.claude.com/docs/en/hoo
 
 | Item | Status | Evidence / notes |
 | --- | --- | --- |
-| Same-model, multi-trial benchmark vs Claude Code / Codex / OpenCode | partial | 2026-11-14 run on Kilo's keyless route: 1 of 12 tasks completed for all five agents (all passed `clamp-integer`) before Kilo's anonymous quota ran out (429 `PROMOTION_MODEL_LIMIT_REACHED`). Evidence: `bench/results/live-2026-11-14-kilo-h2h-partial/`. Resume when the quota resets, or with a free Kilo/OpenRouter/Groq account key from the owner |
+| Same-model, multi-trial benchmark vs Claude Code / Codex / OpenCode | partial | Two 2026-11-14 runs on Kilo's keyless route, one trial per task, both cut short by its anonymous quota (429 `PROMOTION_MODEL_LIMIT_REACHED`, about 70–96 calls per window). Run 1: all five agents passed `clamp-integer` (`bench/results/live-2026-11-14-kilo-h2h-partial/`). Batch 1 (`929de0c4`, `bench/results/live-2026-11-14-h2h-b1/`): all four agents failed `taskflow-priority-sort` on a task flaw since fixed (`9e763b83`); `safe-relative-path`: OASIS and Claude Code passed, Codex was cut by a 429, OpenCode not reached. Smoke scale only: no ranking can be drawn |
 | OASIS prompt-token use is the highest of five agents on `clamp-integer` (242,932 vs Codex 157,994, OpenCode 111,139; gateway counts) | explained | Not a harness defect. Base request is comparable (OASIS ~7.0k, Codex ~6.9k, OpenCode ~7.8k tokens). The jump is the model reading `test/runtime.test.mjs` (24,064 chars) whole at its 2nd call (OVH run trace), which every later request carries; Claude Code's Read would also return it whole (under 2,000 lines). The rest is request count: each extra round trip re-sends the context. The relay now names the tool behind the largest message (`adc35b81`) |
-| Benchmark harness: quota stop, rate-limited trials excluded, progress saved per unit, message sizes recorded | done | `test/bench-live.test.mjs` (26 pass, with a fake upstream that returns Kilo's quota 429) |
-| Gemini CLI in the same benchmark | doing | `bench:live --router` runs it through FreeLLMAPI's native `/v1beta` surface (`5ee05996`); smoke: passed clamp-integer in 17 s. Full run after the main one, so both stay inside Kilo's hourly limit |
+| Benchmark harness: quota stop, rate-limited trials excluded, progress saved per unit, message sizes recorded, partly-run tasks listed | done | `test/bench-live.test.mjs` (21 tests, with a fake upstream that returns Kilo's quota 429). `7f72d2e9`: a task only some agents ran was dropped from SUMMARY.md silently; it is now listed with each agent's outcome, still unscored |
+| Gemini CLI in the same benchmark | doing | `bench:live --router` runs it through FreeLLMAPI's native `/v1beta` surface (`5ee05996`); smoke: passed clamp-integer in 17 s. Route for the full run: Gemini CLI → FreeLLMAPI → the recording gateway → Kilo, so the gateway logs Gemini's calls like the others'. FreeLLMAPI must have every other model disabled and its Gemini model map pointed at the benchmark model, or `auto` and Gemini CLI's helper calls can be served by a different free model. Extra translation layer is a fairness caveat |
 | Live check of both routers with OASIS | done | FreeLLMAPI (source, 2026-11-14) and OmniRoute 3.8.53: `oasis -p` fixed a bug through each on the same free Nemotron model, 4 requests each; `docs/CONFIGURATION.md` |
 | OASIS through OmniRoute vs FreeLLMAPI vs direct | done (smoke scale) | Two tasks, OVH gpt-oss-20b, one trial each: direct 2/2, FreeLLMAPI 1/1 scored, OmniRoute 0/2, then 1/2 after fixing its split tool-call tail and keepalive handling (`bench/results/routers-2026-11-14/e2e/`). Too small to rank the routes |
 
@@ -143,7 +143,7 @@ Gaps found by checking the [hooks reference](https://code.claude.com/docs/en/hoo
 
 | Item | Status | Evidence / notes |
 | --- | --- | --- |
-| README revamp with real screenshots only | partial | `af1d2c8a`: hero labelled as an illustration (the demos are real recordings), test count, free-tier routers, a verified-vs-not status table. Benchmark summary to add when the OVH run ends |
+| README revamp with real screenshots only | partial | `af1d2c8a`: hero labelled as an illustration (the demos are real recordings), test count, free-tier routers, a verified-vs-not status table. 2026-11-14: the same-model summary is in "Tested like a real user", and the README no longer lists Gemini CLI as head-to-head tested (smoke run only). Still partial: the benchmark sample is too small for a results table |
 
 ## Blockers
 
