@@ -1,0 +1,71 @@
+{
+  "summary": {
+    "label": "OpenCode 1.19.5 (bench/nvidia/nemotron-3-ultra-550b-a55b:free)",
+    "sourceRevision": "5743ce4d1b348ada5bad2bfe74dabb304bac2f5f",
+    "sourceRevisionAtEnd": "5922de4893e1c4271215bbe93168af6d7e8f8499",
+    "sourceChangedDuringRun": true,
+    "runId": "2026-11-14T13-30-54-562Z-16344",
+    "startedAt": "2026-11-14T13:30:54.562Z",
+    "completedAt": "2026-11-14T13:35:18.269Z",
+    "taskCount": 1,
+    "taskIds": [
+      "taskflow-priority-sort"
+    ],
+    "trialsPerTask": 1,
+    "timeoutSeconds": 900,
+    "runtime": {
+      "node": "v22.21.1",
+      "platform": "linux",
+      "arch": "x64"
+    },
+    "passRate": 0,
+    "passed": 0,
+    "failed": 1,
+    "medianTimeMs": 263675,
+    "totalCostUSD": 0,
+    "costPerPassedTaskUSD": null,
+    "provider": {
+      "model": "bench/nvidia/nemotron-3-ultra-550b-a55b:free",
+      "protocol": "opencode-cli",
+      "cliVersion": "1.19.5",
+      "maxTurns": 30,
+      "timeoutSeconds": 900,
+      "budgetUSD": null
+    },
+    "pricing": {
+      "note": "Cost is taken only from OpenCode JSON usage metadata. If the CLI or sign-in method does not expose a per-run USD cost, costUSD remains null; this does not mean the run was free."
+    }
+  },
+  "results": [
+    {
+      "taskId": "taskflow-priority-sort",
+      "taskFingerprint": "85991ef9f042ed843b39fd6c826f354a14b88d6ccecdf57779eb50a174579773",
+      "category": "data-structures",
+      "difficulty": "small",
+      "trial": 1,
+      "status": "failed",
+      "passed": false,
+      "model": "bench/nvidia/nemotron-3-ultra-550b-a55b:free",
+      "inputTokens": 46151,
+      "outputTokens": 2562,
+      "totalTokens": 48713,
+      "costUSD": 0,
+      "wallTimeMs": 263675,
+      "cliVersion": "1.19.5",
+      "finished": true,
+      "toolCalls": 10,
+      "verification": {
+        "exitCode": 1,
+        "output": "\nnode:internal/modules/run_main:123\n    triggerUncaughtException(\n    ^\n\nAssertionError [ERR_ASSERTION]: expected at least 20 passing project tests (existing tests kept, plus new ones), found 19\n    at file:///home/user/workspace/Oasis/evals/tasks/taskflow-priority-sort/verify.mjs:12:8\n    at ModuleJob.run (node:internal/modules/esm/module_job:343:25)\n    at async onImport.tracePromise.__proto__ (node:internal/modules/esm/loader:665:26)\n    at async asyncRunEntryPointWithESMLoader (node:internal/modules/run_main:117:5) {\n  generatedMessage: false,\n  code: 'ERR_ASSERTION',\n  actual: false,\n  expected: true,\n  operator: '==',\n  diff: 'simple'\n}\n\nNode.js v22.21.1\n"
+      },
+      "changes": [
+        {
+          "path": "src/query.mjs",
+          "status": "modified",
+          "content": "import { isOverdue } from './dates.mjs';\nimport { PRIORITIES, normalizeTag } from './task.mjs';\n\nconst PRIORITY_RANK = { high: 3, normal: 2, low: 1 };\n\nexport function filterTasks(tasks, { status, tag, priority, overdue, now = new Date() } = {}) {\n  const wanted = tag ? normalizeTag(tag) : null;\n  return tasks.filter((task) => {\n    if (status && status !== 'all' && task.status !== status) return false;\n    if (wanted && !task.tags.includes(wanted)) return false;\n    if (priority && task.priority !== priority) return false;\n    if (overdue && !isOverdue(task, now)) return false;\n    return true;\n  });\n}\n\nconst SORTERS = {\n  id: (a, b) => a.id - b.id,\n  due: (a, b) => (a.due === b.due ? 0 : a.due === null ? 1 : b.due === null ? -1 : a.due < b.due ? -1 : 1),\n  priority: (a, b) => PRIORITY_RANK[b.priority] - PRIORITY_RANK[a.priority],\n  title: (a, b) => a.title.localeCompare(b.title)\n};\n\n// Stable sort; ties keep ID order.\nexport function sortTasks(tasks, key = 'id') {\n  const compare = SORTERS[key];\n  if (!compare) throw new Error(`Unknown sort key: ${key}`);\n  return [...tasks].sort((a, b) => compare(a, b) || a.id - b.id);\n}\n\n// Pages are numbered from 1.\nexport function paginate(items, page = 1, size = 20) {\n  if (!Number.isInteger(page) || page < 1) throw new Error('Page must be a positive integer');\n  if (!Number.isInteger(size) || size < 1 || size > 100) throw new Error('Page size must be between 1 and 100');\n  const start = (page - 1) * size;\n  return { items: items.slice(start, start + size), page, pages: Math.max(1, Math.ceil(items.length / size)), total: items.length };\n}\n"
+        }
+      ],
+      "error": null
+    }
+  ]
+}
