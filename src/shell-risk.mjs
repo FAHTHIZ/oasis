@@ -18,6 +18,7 @@
 // Everything else falls through to the normal approval policy.
 
 import { loadShellParser, parseShellCommands } from './shell-ast.mjs';
+import { containerHostAccess } from './container-risk.mjs';
 
 // Start loading the bash grammar now; analysis uses it once it is ready and
 // the legacy splitter until then. run_shell awaits shellAnalyzerReady().
@@ -304,6 +305,12 @@ function analyzeSimple(cmd, ctx = {}) {
     const start = ops[0];
     const deletes = args.includes('-delete') || args.some((a, i) => (a === '-exec' || a === '-execdir') && /^(rm|shred|unlink)$/.test(base(args[i + 1])));
     if (deletes && start && isCriticalPath(start)) return { blocked: 'find deletes files under ' + start };
+    // `find . -delete` or `find . -exec rm -rf {} +` with no test that narrows
+    // the match: the same as `rm -rf *` in the workspace. Any filter
+    // (-name, -type, -mtime, ...) makes it an ordinary targeted cleanup.
+    const root = start === undefined || /^(\.|\.\/|\$PWD\/?|\$\{PWD\}\/?)$/.test(start);
+    const narrowed = args.some((a) => /^-(i?name|i?path|i?wholename|i?regex|type|x?type|newer\w*|[amc](time|min)|size|empty|user|group|perm|links|inum|samefile|prune|not|maxdepth)$/.test(a) || a === '!');
+    if (deletes && root && !narrowed && !ctx.cwdParent && !ctx.cwdCritical && !ctx.cwdChanged) return { highRisk: 'find deletes every file in the workspace' };
   }
   if ((name === 'chmod' || name === 'chown' || name === 'chgrp') && (f.short.has('R') || f.long.has('--recursive'))) {
     const target = ops.slice(1).find(isCriticalPath);
@@ -390,6 +397,8 @@ function analyzeOther(name, args, lower, f, ops, cmd) {
     if ((words[0] === 'system' && words[1] === 'prune') || (words[0] === 'volume' && /^(rm|prune)$/.test(words[1] || '')) || (/^(image|container|network|builder)$/.test(words[0] || '') && words[1] === 'prune')) {
       return { highRisk: name + ' deletes containers, images or volumes (and their data)' };
     }
+    const hostAccess = containerHostAccess(name, args);
+    if (hostAccess) return { highRisk: hostAccess };
     if (words[0] === 'compose' && words.includes('down') && (f.short.has('v') || f.long.has('--volumes'))) return { highRisk: 'docker compose down -v deletes volumes and their data' };
   }
   if (name === 'kubectl' && /^(delete|drain|replace|scale)$/.test(ops[0] || '')) return { highRisk: 'kubectl ' + ops[0] + ' changes live cluster resources' };
@@ -533,6 +542,12 @@ function nestedLines(cmd) {
     if (enc !== -1 && args[enc + 1]) {
       try { out.push(Buffer.from(args[enc + 1], 'base64').toString('utf16le')); } catch {}
     }
+  }
+  // `echo 'rm -rf *' | sh`, `printf ... | bash`: the shell runs the text.
+  if (SHELLS.has(name) && cmd.pipedFrom && !operands(args).length) {
+    const up = programOf(cmd.pipedFrom.tokens);
+    if (up.name === 'echo') { let i = 0; while (/^-[neE]+$/.test(up.args[i] || '')) i++; out.push(up.args.slice(i).join(' ')); }
+    if (up.name === 'printf' && up.args[0] && !up.args[0].startsWith('-')) out.push(up.args.join(' ').replace(/\\n/g, '\n'));
   }
   if (name === 'su') { const at = args.findIndex((a) => a === '-c' || a === '--command'); if (at !== -1 && args[at + 1]) out.push(args[at + 1]); }
   for (let i = 0; i < cmd.tokens.length - 2; i++) {
