@@ -298,6 +298,9 @@ export async function runHeadless(options) {
       ...(forwardSubagentText || env.CLAUDE_CODE_FORWARD_SUBAGENT_TEXT === '1' || env.OASIS_FORWARD_SUBAGENT_TEXT === '1' ? { onSubagentText: ({ text, subagent, agentId, parentToolUseId }) => emit({ type: 'assistant', message: { role: 'assistant', content: [{ type: 'text', text }] }, parent_tool_use_id: parentToolUseId, subagent, agent_id: agentId, session_id: session.sessionId || null }) } : {}),
       onToolResult: ({ name, result: toolResult, subagent, call }) => { if (persistence.enabled) saveMidTurn(session, { env }); if (toolObserver && toolObserver.result) toolObserver.result({ name, result: toolResult, subagent, call }); emit({ type: 'tool_result', ...(call && call.id ? { tool_use_id: call.id } : {}), name, is_error: Boolean(toolResult && (toolResult.error || (toolResult.exitCode !== undefined && toolResult.exitCode !== 0))), content: truncateValue(toolResult), ...(subagent ? { subagent } : {}) }) },
       onText: (text) => emit({ type: 'assistant', text }),
+      // Text and JSON output print only the final reply, so earlier replies in
+      // the turn were not seen and the final answer has to stand on its own.
+      textShown: outputFormat === 'stream-json',
       onAutoMode: ({ tool, decision, reason }) => emit({ type: 'system', subtype: 'auto_mode', tool, decision, reason }),
       // Notice on stderr in every output format, so text results on stdout stay clean.
       onProviderRetry: ({ status, attempt, limit, waitMs, reason }) => { process.stderr.write('[retry] Provider ' + (status ? 'error ' + status : 'connection failed') + (reason && status ? ' (' + reason + ')' : '') + '; retrying in ' + formatWait(waitMs) + ' (' + attempt + '/' + limit + ').\n'); emit({ type: 'system', subtype: 'api_retry', attempt, max_retries: limit, retry_delay_ms: waitMs, error_status: status || null }); },

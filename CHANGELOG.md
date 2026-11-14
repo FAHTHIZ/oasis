@@ -4,6 +4,7 @@ User-facing change history grouped by package version. A version heading does no
 
 ## Unreleased
 
+- Verification gate: after the post-edit check reminder, a model could reply only "Check util diff." and the turn ended there, so `oasis -p` printed that fragment as the whole answer (seen with gpt-oss-20b through OmniRoute). A bare next-step reply now gets one more reminder naming what is still outstanding. In `-p` text and json output, the reminder no longer claims the user already saw the earlier summary, since only the final reply is printed.
 - Browser workspace terminal: the start hint and the "process exited" note wrapped mid-word ("shel" / "l") in the side panel. They now wrap at spaces to the panel width.
 - Browser workspace: the approval to open the terminal panel put focus in the "tell OASIS what to do instead" box, so text typed for the terminal went there and Enter denied the terminal. That box now appears only when a running task can receive the note, approvals never start focused on an answer, and the Deny button no longer keeps a stale "Deny and send" label from an earlier approval.
 - Terminal: when a reply started with blank lines (common with reasoning models such as Qwen 3.5), the reply bullet sat alone on its own line with the text below it. Leading blank lines are now dropped before the first words.
