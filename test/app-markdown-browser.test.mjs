@@ -19,12 +19,18 @@ test('app markdown highlights code and sanitizes HTML in the browser', { skip: c
   const page = await browser.newPage('about:blank');
   await page.send('Page.enable');
   await page.send('Page.navigate', { url: base });
-  await new Promise((resolve) => setTimeout(resolve, 1000));
   const evaluate = async (expression) => {
     const result = await page.send('Runtime.evaluate', { expression, awaitPromise: true, returnByValue: true });
     if (result.exceptionDetails) throw new Error((result.exceptionDetails.exception && result.exceptionDetails.exception.description) || result.exceptionDetails.text);
     return result.result.value;
   };
+  // Bare imports resolve only once the page's import map is in: wait for the
+  // page itself, not a fixed second (a slow CI runner needed longer).
+  for (let i = 0; i < 300; i++) {
+    const ready = await evaluate("location.pathname === '/app/' && document.readyState === 'complete' && Boolean(document.querySelector('script[type=importmap]'))").catch(() => false);
+    if (ready) break;
+    await new Promise((resolve) => setTimeout(resolve, 100));
+  }
   const out = await evaluate(`(async () => {
     const m = await import('/app/markdown.mjs');
     return {
