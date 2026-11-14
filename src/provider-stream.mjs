@@ -112,6 +112,30 @@ export function toolCallSlot(calls, part) {
   return calls.size ? next - 1 : 0;
 }
 
+function parsesAsJson(text) {
+  try { JSON.parse(text); return true; } catch { return false; }
+}
+
+// OmniRoute (seen live with ovh/gpt-oss-20b) sends the closing "}" of call 0
+// in its finish chunk as index 1 with a fresh id and no name, which left a
+// truncated read_file plus a nameless call that failed as unknown_tool. A
+// nameless call whose arguments complete the previous call's unparseable
+// JSON is that call's tail.
+export function mergeSplitToolCallTails(toolCalls) {
+  const merged = [];
+  for (const call of toolCalls) {
+    const previous = merged[merged.length - 1];
+    const args = call.function.arguments;
+    if (previous && !call.function.name && previous.function.name && args
+      && !parsesAsJson(previous.function.arguments) && parsesAsJson(previous.function.arguments + args)) {
+      previous.function.arguments += args;
+      continue;
+    }
+    merged.push(call);
+  }
+  return merged;
+}
+
 // Tool results are matched to calls by id, so two calls sharing one id would
 // make the next request ambiguous (providers reject it). Later duplicates get
 // a suffix; the assistant message and its results both use the new id.
@@ -321,6 +345,6 @@ export async function readProviderStream(response, protocol, onDelta, onProgress
   // A connection that closes with neither a finish_reason nor [DONE] was cut
   // off mid-reply. Its partial text used to be taken as the whole answer.
   if (!finishReason && !sawDone) throw Object.assign(new Error('The model stream was interrupted: the connection closed before the reply finished.'), { code: 'OASIS_STREAM_INTERRUPTED' });
-  const toolCalls = uniqueToolCallIds([...calls.entries()].sort((a, b) => a[0] - b[0]).map(([, call]) => call));
+  const toolCalls = uniqueToolCallIds(mergeSplitToolCallTails([...calls.entries()].sort((a, b) => a[0] - b[0]).map(([, call]) => call)));
   return { choices: [{ message: { role: 'assistant', content: content || null, ...(reasoning ? { reasoning_content: reasoning } : {}), ...(toolCalls.length ? { tool_calls: toolCalls } : {}) }, finish_reason: finishReason }], usage };
 }

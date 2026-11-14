@@ -142,3 +142,9 @@ test('gateway report does not claim a same-model run when served models differ',
   assert.equal(gatewayReport([{ agent: 'oasis', status: 200, servedModel: 'a' }, { agent: 'oasis', status: 200, servedModel: 'a-v2' }]).sameModel, false);
   assert.equal(gatewayReport([{ agent: 'oasis', status: 500 }]).sameModel, false);
 });
+
+test('OmniRoute keepalive chunks are not recorded as the served model', async () => {
+  const { inspectResponse } = await import('../scripts/bench-gateway.mjs');
+  const stream = 'data: {"model":"keepalive","choices":[]}\n\ndata: {"model":"gpt-oss-20b","choices":[{"index":0,"delta":{"content":"hi"}}]}\n\ndata: [DONE]\n\n';
+  assert.equal(inspectResponse(stream).servedModel, 'gpt-oss-20b');
+});
