@@ -88,6 +88,22 @@ async function readJson(file) {
   if (text === null) return null;
   try { return JSON.parse(text); } catch { return null; }
 }
+async function readMcpTarget(file) {
+  let text;
+  try {
+    const info = await lstat(file);
+    if (!info.isFile()) throw new Error(file + ' is not a regular file.');
+    text = await readFile(file, 'utf8');
+  } catch (error) {
+    if (error.code === 'ENOENT') return {};
+    throw error;
+  }
+  if (!text.trim()) return {};
+  let parsed;
+  try { parsed = JSON.parse(text); } catch (error) { throw new Error('Could not read ' + file + ': ' + error.message + '. Fix or move it, then import again.'); }
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) throw new Error(file + ' does not contain a JSON object.');
+  return parsed;
+}
 async function exists(file) { try { await lstat(file); return true; } catch { return false; } }
 async function listFiles(dir, ext, depth = 3, prefix = []) {
   const out = [];
@@ -514,12 +530,16 @@ export async function applyImport(plan) {
       continue;
     }
     await assertSafeImportTarget(plan, importItemTarget(plan, item));
+    // Read the MCP destination strictly, before any write: the lenient reader
+    // turned an mcp.json with a syntax error into {}, and the import then
+    // replaced it with only the imported servers.
+    if (item.kind === 'mcp' && !mcp[item.scope]) mcp[item.scope] = await readMcpTarget(importItemTarget(plan, item));
   }
   for (const item of plan.items) {
     if (item.action === 'skip') continue;
     if (item.kind === 'mcp') {
       const file = importItemTarget(plan, item);
-      if (!mcp[item.scope]) mcp[item.scope] = (await readJson(file)) || {};
+      if (!mcp[item.scope]) mcp[item.scope] = await readMcpTarget(file);
       mcp[item.scope].mcpServers ||= {};
       mcp[item.scope].mcpServers[item.name] = item.server;
       done.push(item);

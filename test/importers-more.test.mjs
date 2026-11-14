@@ -102,3 +102,21 @@ test('imports Hermes, OpenCode, Antigravity, Windsurf, Cline and Claude Code mem
   const again = await planImport(root, { env, sources: ['hermes', 'opencode', 'antigravity', 'windsurf', 'cline', 'claude'] });
   assert.equal(again.items.filter((item) => item.action !== 'skip').length, 0, describePlan(again));
 });
+
+// The lenient reader turned a broken mcp.json into {}, and the import then
+// replaced it with only the imported servers.
+test('import never replaces an mcp.json that does not parse', async (t) => {
+  const base = await mkdtemp(path.join(os.tmpdir(), 'oasis-import-broken-'));
+  t.after(() => rm(base, { recursive: true, force: true }));
+  const root = path.join(base, 'project');
+  const home = path.join(base, 'home');
+  await mkdir(root, { recursive: true });
+  await put(path.join(home, '.hermes', 'config.yaml'), 'mcp_servers:\n  github:\n    command: npx\n    args: ["-y", "@mcp/github"]\n');
+  await put(path.join(home, '.hermes', 'SOUL.md'), 'You are calm.');
+  const target = path.join(home, '.config', 'oasis', 'mcp.json');
+  const broken = '{ "mcpServers": { "keep": { "command": "x" } }, }';
+  await put(target, broken);
+  const plan = await planImport(root, { env: { HOME: home }, sources: ['hermes'] });
+  await assert.rejects(applyImport(plan), /Could not read .*mcp\.json/);
+  assert.equal(await readFile(target, 'utf8'), broken);
+});
