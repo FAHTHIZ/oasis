@@ -2119,7 +2119,9 @@ async function executeToolUnlocked(name, args = {}, context = {}) {
     case 'fetch_url':
       return await fetchPublicUrl(args.url, { lookupImpl: context.lookupImpl, requestImpl: context.requestImpl, startIndex: args.start_index, maxLength: args.max_length, raw: args.raw === true, extract: args.full_page !== true });
     case 'web_search':
-      return await webSearch(args, { env: context.env || process.env });
+      // Zero-budget mode searches only with keyless backends unless a keyed one is declared free.
+      { const { zeroBudgetSearchEnv } = await import('./cost-policy.mjs');
+        return await webSearch(args, { env: zeroBudgetSearchEnv(context.env || process.env, context.session || {}) }); }
     case 'worktree_inspect':
     case 'worktree_merge':
     case 'git_log':
@@ -2144,6 +2146,7 @@ async function executeToolUnlocked(name, args = {}, context = {}) {
       const { generateImage, imageGenerationConfig } = await import('./image-gen.mjs');
       const session = context.session || {};
       const config = session.imageGeneration || imageGenerationConfig(context.env || process.env, session.settings || {});
+      if (config) (await import('./cost-policy.mjs')).assertZeroBudgetService('image', config, { session, env: context.env || process.env });
       return await generateImage(args, {
         config, approval: context.approval, autoApprove: Boolean(context.autoApprove), signal: context.signal,
         resolvePath: (rel) => resolveWorkspacePath(root, rel, { rejectSymlinks: true }),
@@ -2156,6 +2159,7 @@ async function executeToolUnlocked(name, args = {}, context = {}) {
       const { textToSpeech, textToSpeechConfig } = await import('./tts.mjs');
       const session = context.session || {};
       const config = session.textToSpeech || textToSpeechConfig(context.env || process.env, session.settings || {});
+      if (config) (await import('./cost-policy.mjs')).assertZeroBudgetService('tts', config, { session, env: context.env || process.env });
       return await textToSpeech(args, {
         config, approval: context.approval, autoApprove: Boolean(context.autoApprove), signal: context.signal,
         resolvePath: (rel) => resolveWorkspacePath(root, rel, { rejectSymlinks: true }),

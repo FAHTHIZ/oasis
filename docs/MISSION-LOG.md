@@ -3,6 +3,11 @@
 A short, dated record of changes, tests, benchmark results, blockers and known
 weaknesses. Newest first. Detailed user-facing notes go in the CHANGELOG.
 
+## 2026-11-14 (zero-budget mode covers image, speech, transcription and search)
+
+- `assertZeroBudgetService` (src/cost-policy.mjs) applies the same free/paid/unknown rule to generate_image, text_to_speech and voice transcription before anything is uploaded; declare with `image:`, `tts:`, `voice:` prefixes. `zeroBudgetSearchEnv` hides keyed, credit-based search backends unless declared (`search:tavily`).
+- Tests: test/cost-policy.test.mjs now 8 (no audio upload happens when refused); voice, image, speech and search suites pass (51).
+
 ## 2026-11-14 (inference overhaul stage 3: gateway behaviour benchmark)
 
 - New bench/gateway/run.mjs (`npm run bench:gateway`, part of `check:quick`): five scenarios run the real agent loop over several sessions against simulated providers and count every request Oasis sends, feature off vs on. Simulated, not live; stated in the report and docs.

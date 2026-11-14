@@ -12,6 +12,7 @@ import { spawn, spawnSync } from 'node:child_process';
 import { mkdtemp, readFile, rm, stat } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
+import { assertZeroBudgetService } from './cost-policy.mjs';
 
 const MAX_RECORDING_MS = 5 * 60 * 1000;
 const MAX_UPLOAD_BYTES = 25 * 1024 * 1024; // OpenAI's limit for transcription uploads
@@ -147,6 +148,8 @@ export function transcriptionReady(settings = {}, env = process.env) {
 /** Uploads recorded audio (a Buffer) and returns the transcript text. */
 export async function transcribeAudio(audio, { settings = {}, env = process.env, fetchImpl = globalThis.fetch, timeoutMs = 60000, hints = [], mediaType = 'audio/wav' } = {}) {
   const target = transcriptionTarget(settings, env);
+  // Zero-budget mode: only a local Whisper server or a route declared free (voice:MODEL).
+  assertZeroBudgetService('voice', { baseUrl: target.url, model: target.model, apiKey: target.apiKey }, { session: { zeroBudget: settings && settings.zeroBudget === true, freeModels: settings && settings.freeModels }, env });
   if (!target.apiKey && new URL(target.url).hostname !== '127.0.0.1' && new URL(target.url).hostname !== 'localhost') {
     throw new Error('Voice transcription needs a key: set OPENAI_API_KEY (or OASIS_VOICE_API_KEY), or point voice.transcriptionUrl at a local Whisper server.');
   }
