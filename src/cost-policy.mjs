@@ -148,3 +148,32 @@ export function recordTokenUsage(session, usage = {}) {
 export function isBudgetStop(error) {
   return Boolean(error && (error.code === 'REQUEST_BUDGET_EXCEEDED' || error.code === 'TOKEN_BUDGET_EXCEEDED' || error.code === 'OASIS_ZERO_BUDGET_BLOCKED'));
 }
+
+/**
+ * Zero-budget check for a non-chat service (image generation, speech,
+ * transcription). `kind` prefixes the name you can declare free, for example
+ * OASIS_FREE_MODELS=image:flux or tts:*.
+ */
+export function assertZeroBudgetService(kind, { baseUrl = '', model = '', apiKey = '' } = {}, { session = {}, env = process.env } = {}) {
+  if (!zeroBudgetEnabled(session, env)) return null;
+  const config = { protocol: 'openai-compatible', baseURL: String(baseUrl || ''), model: String(model || ''), apiKey, keyless: !apiKey, fallbackProvider: kind };
+  const verdict = routeCost(config, { session, env });
+  if (verdict.cost !== 'free') throw new ZeroBudgetError(config, verdict);
+  return verdict;
+}
+
+// Search backends that need a key. Their free plans are credit-based and the
+// provider's billing settings are not visible here, so in zero-budget mode
+// they are used only when declared free (OASIS_FREE_MODELS=search:tavily).
+const KEYED_SEARCH = { tavily: 'TAVILY_API_KEY', brave: 'BRAVE_SEARCH_API_KEY', exa: 'EXA_API_KEY', firecrawl: 'FIRECRAWL_API_KEY' };
+
+/** The environment web search should see: keyed backends not declared free are hidden in zero-budget mode. */
+export function zeroBudgetSearchEnv(env = process.env, session = {}) {
+  if (!zeroBudgetEnabled(session, env)) return env;
+  const declared = declaredFreeModels(session, env).map((item) => item.toLowerCase());
+  const out = { ...env };
+  for (const [provider, variable] of Object.entries(KEYED_SEARCH)) {
+    if (!declared.includes('search:' + provider) && !declared.includes('search:*')) delete out[variable];
+  }
+  return out;
+}
