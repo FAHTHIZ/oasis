@@ -8,7 +8,7 @@ import { readFile, stat } from 'node:fs/promises';
 import { isTestPath } from './test-tamper.mjs';
 import { runLsp, serverForFile } from './lsp.mjs';
 import { isLocalModelEndpoint } from './local-context.mjs';
-export { MAX_EMPTY_REPLY_NUDGES, EMPTY_REPLY_NUDGE, EMPTY_REPLY_NOTICE, providerStopNotice } from './empty-reply.mjs';
+export { MAX_EMPTY_REPLY_NUDGES, EMPTY_REPLY_NUDGE, EMPTY_REPLY_NOTICE, providerStopNotice, providerCutNotice } from './empty-reply.mjs';
 export const MAX_SESSION_TOOL_CALLS = 10000;
 
 export const SOURCE_EXTENSIONS = new Set([
