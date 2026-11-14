@@ -4,9 +4,12 @@
 // the default tools, the web workspace's memory idle and after serving the
 // app, task-routing overhead, and stdio MCP server startup. Each measurement
 // that loads code runs in a fresh Node process, so module caches are cold.
-//   npm run bench:perf -- [--runs N] [--json FILE]
+//   npm run bench:perf -- [--runs N] [--json FILE] [--compare]
+// --compare (Linux) also times `--version` and `--help` of other coding-agent
+// CLIs found on PATH, measuring every CLI the same way: wall time, and the
+// peak resident memory of each process in its tree, sampled from /proc.
 import { spawn } from 'node:child_process';
-import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, mkdir, readdir, readFile, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -15,12 +18,13 @@ const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..'
 const cli = path.join(repoRoot, 'src', 'oasis.mjs');
 
 export function parseArgs(argv) {
-  const options = { runs: 7, json: '' };
+  const options = { runs: 7, json: '', compare: false };
   for (let i = 0; i < argv.length; i += 1) {
     const arg = argv[i];
     if (arg === '--help' || arg === '-h') return { ...options, help: true };
     if (arg === '--runs' && argv[i + 1]) { options.runs = Number(argv[++i]); continue; }
     if (arg === '--json' && argv[i + 1]) { options.json = argv[++i]; continue; }
+    if (arg === '--compare') { options.compare = true; continue; }
     throw new Error('Unknown or incomplete option: ' + arg);
   }
   if (!Number.isInteger(options.runs) || options.runs < 1 || options.runs > 50) throw new Error('--runs must be 1-50.');
@@ -79,6 +83,80 @@ async function launch(box, args, runs) {
     peaks.push(Number(await readFile(peakFile, 'utf8').catch(() => 'NaN')));
   }
   return { args: args.join(' '), wallMs: summarize(times), peakRssMb: summarize(peaks.map(mb)) };
+}
+
+// Other agent CLIs, timed and sampled exactly like OASIS in --compare mode.
+export const COMPARE_CLIS = [
+  { agent: 'oasis', command: process.execPath, prefix: [cli] },
+  { agent: 'claude', command: 'claude', prefix: [] },
+  { agent: 'codex', command: 'codex', prefix: [] },
+  { agent: 'gemini', command: 'gemini', prefix: [] },
+  { agent: 'opencode', command: 'opencode', prefix: [] },
+  { agent: 'aider', command: 'aider', prefix: [] },
+];
+
+async function processTree(root) {
+  const pids = [root];
+  for (let i = 0; i < pids.length; i += 1) {
+    let tasks = [];
+    try { tasks = await readdir('/proc/' + pids[i] + '/task'); } catch { continue; }
+    for (const task of tasks) {
+      const children = await readFile('/proc/' + pids[i] + '/task/' + task + '/children', 'utf8').catch(() => '');
+      for (const pid of children.trim().split(/\s+/).filter(Boolean)) pids.push(Number(pid));
+    }
+  }
+  return pids;
+}
+
+const peakOf = async (pid) => {
+  const status = await readFile('/proc/' + pid + '/status', 'utf8').catch(() => '');
+  const match = status.match(/VmHWM:\s+(\d+) kB/);
+  return match ? Number(match[1]) * 1024 : 0;
+};
+
+// Wall time plus each process's high-water RSS (VmHWM), sampled every few
+// milliseconds until the tree exits. A process that lives only between two
+// samples is missed, which can only under-report.
+export function sampledRun(command, args, { env, cwd } = {}) {
+  return new Promise((resolve) => {
+    const started = process.hrtime.bigint();
+    const child = spawn(command, args, { env, cwd, stdio: ['ignore', 'pipe', 'pipe'] });
+    const peaks = new Map();
+    let done = false;
+    let stdout = '';
+    let stderr = '';
+    child.stdout.on('data', (chunk) => { stdout += chunk; });
+    child.stderr.on('data', (chunk) => { stderr += chunk; });
+    child.on('error', (error) => { done = true; resolve({ status: null, error: error.message, ms: 0, largest: 0, total: 0, processes: 0, stdout, stderr }); });
+    (async () => {
+      while (!done) {
+        for (const pid of await processTree(child.pid)) peaks.set(pid, Math.max(peaks.get(pid) || 0, await peakOf(pid)));
+        await new Promise((r) => setTimeout(r, 2));
+      }
+    })();
+    child.on('close', (status) => {
+      if (done) return;
+      done = true;
+      const values = [...peaks.values()].filter(Boolean);
+      resolve({ status, ms: Number(process.hrtime.bigint() - started) / 1e6, largest: Math.max(0, ...values), total: values.reduce((a, b) => a + b, 0), processes: values.length, stdout, stderr });
+    });
+  });
+}
+
+async function compareClis(box, runs) {
+  const rows = [];
+  for (const entry of COMPARE_CLIS) {
+    const probe = await sampledRun(entry.command, [...entry.prefix, '--version'], { env: box.env, cwd: box.work });
+    if (probe.status !== 0) { rows.push({ agent: entry.agent, skipped: probe.error || 'exit ' + probe.status }); continue; }
+    const version = (probe.stdout || probe.stderr).trim().split('\n')[0].slice(0, 80);
+    for (const args of [['--version'], ['--help']]) {
+      const samples = [];
+      for (let i = 0; i < runs; i += 1) samples.push(await sampledRun(entry.command, [...entry.prefix, ...args], { env: box.env, cwd: box.work }));
+      const ok = samples.filter((sample) => sample.status === 0);
+      rows.push({ agent: entry.agent, version, args: args.join(' '), runs: ok.length, wallMs: summarize(ok.map((x) => x.ms)), largestProcessPeakMb: summarize(ok.map((x) => mb(x.largest))), treePeakSumMb: summarize(ok.map((x) => mb(x.total))), processes: Math.max(0, ...ok.map((x) => x.processes)) });
+    }
+  }
+  return rows;
 }
 
 // Runs in a child: import the runtime, create a session the way `oasis -p`
@@ -203,7 +281,7 @@ async function mcpStartup(box, runs) {
   return { server: 'stdio, Node.js, 20 tools', connectMs: summarize(times), toolsListed: tools };
 }
 
-export async function measure({ runs = 7 } = {}) {
+export async function measure({ runs = 7, compare = false } = {}) {
   const box = await scratch();
   try {
     const result = {
@@ -216,6 +294,10 @@ export async function measure({ runs = 7 } = {}) {
       routing: await routingOverhead(),
       mcp: await mcpStartup(box, runs)
     };
+    if (compare) {
+      if (process.platform !== 'linux') result.compare = { skipped: '--compare samples /proc and runs on Linux only' };
+      else result.compare = await compareClis(box, runs);
+    }
     return result;
   } finally {
     await rm(box.dir, { recursive: true, force: true });
@@ -234,12 +316,19 @@ function printReport(result) {
   else line('web workspace RSS', result.web.idleRssMb + ' MB idle, ' + result.web.afterServingRssMb + ' MB after serving ' + result.web.servedKb + ' KB');
   line('task routing decision', result.routing.perCallMicroseconds + ' µs per call');
   line('stdio MCP server connect', ms(result.mcp.connectMs) + ' (' + result.mcp.toolsListed + ' tools listed)');
+  if (Array.isArray(result.compare)) {
+    process.stdout.write('\nCLI launch, same method for every CLI (wall time; largest process peak RSS / sum over the process tree):\n');
+    for (const row of result.compare) {
+      if (row.skipped) { line(row.agent, 'not measured: ' + row.skipped); continue; }
+      line(row.agent + ' ' + row.args, ms(row.wallMs) + ', ' + row.largestProcessPeakMb.median + ' / ' + row.treePeakSumMb.median + ' MB (' + row.processes + ' processes) · ' + row.version);
+    }
+  } else if (result.compare) line('CLI comparison', result.compare.skipped);
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   const options = parseArgs(process.argv.slice(2));
   if (options.help) {
-    process.stdout.write('Usage: npm run bench:perf -- [--runs 1-50] [--json FILE]\n\nMeasures CLI launch, runtime import and session creation, web workspace memory,\ntask-routing overhead and stdio MCP startup. No model or network is used.\n');
+    process.stdout.write('Usage: npm run bench:perf -- [--runs 1-50] [--json FILE] [--compare]\n\nMeasures CLI launch, runtime import and session creation, web workspace memory,\ntask-routing overhead and stdio MCP startup. No model or network is used.\n--compare (Linux) also times --version and --help of other agent CLIs on PATH.\n');
   } else {
     const result = await measure(options);
     printReport(result);

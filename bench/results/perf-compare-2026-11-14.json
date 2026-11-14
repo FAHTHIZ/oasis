@@ -1,0 +1,448 @@
+{
+  "measuredAt": "2026-11-14T09:31:21.163Z",
+  "runtime": {
+    "node": "v22.21.0",
+    "platform": "linux",
+    "arch": "x64",
+    "cpus": 2,
+    "cpuModel": "Intel(R) Xeon(R) Processor @ 2.90GHz",
+    "memoryGb": 7.8,
+    "loadAverage": [
+      0.78,
+      1.92,
+      1.96
+    ]
+  },
+  "runs": 5,
+  "launch": [
+    {
+      "args": "--version",
+      "wallMs": {
+        "runs": 5,
+        "median": 27.615327,
+        "p90": 31.120375,
+        "min": 26.671381,
+        "max": 31.120375
+      },
+      "peakRssMb": {
+        "runs": 5,
+        "median": 46.3,
+        "p90": 46.3,
+        "min": 46.3,
+        "max": 46.3
+      }
+    },
+    {
+      "args": "--help",
+      "wallMs": {
+        "runs": 5,
+        "median": 29.189518,
+        "p90": 39.212427,
+        "min": 28.398456,
+        "max": 39.212427
+      },
+      "peakRssMb": {
+        "runs": 5,
+        "median": 46.8,
+        "p90": 46.8,
+        "min": 46.8,
+        "max": 46.8
+      }
+    }
+  ],
+  "session": {
+    "importMs": {
+      "runs": 5,
+      "median": 223.19536499999998,
+      "p90": 248.41528100000002,
+      "min": 204.436704,
+      "max": 248.41528100000002
+    },
+    "createSessionMs": {
+      "runs": 5,
+      "median": 164.608681,
+      "p90": 176.82714500000003,
+      "min": 158.02461999999997,
+      "max": 176.82714500000003
+    },
+    "rssMb": {
+      "runs": 5,
+      "median": 159.8,
+      "p90": 160.4,
+      "min": 156.4,
+      "max": 160.4
+    },
+    "heapUsedMb": {
+      "runs": 5,
+      "median": 53.2,
+      "p90": 53.5,
+      "min": 53.2,
+      "max": 53.5
+    },
+    "tools": 21,
+    "firstRequestTokens": {
+      "system": 2164,
+      "toolSchemas": 3063,
+      "total": 5227
+    }
+  },
+  "web": {
+    "idleRssMb": 158.4,
+    "afterServingRssMb": 159.8,
+    "servedKb": 174.8,
+    "idleAfterMs": 4076
+  },
+  "routing": {
+    "calls": 20000,
+    "perCallMicroseconds": 30.03
+  },
+  "mcp": {
+    "server": "stdio, Node.js, 20 tools",
+    "connectMs": {
+      "runs": 5,
+      "median": 25.340682,
+      "p90": 142.672873,
+      "min": 23.729202,
+      "max": 142.672873
+    },
+    "toolsListed": 20
+  },
+  "compare": [
+    {
+      "agent": "oasis",
+      "version": "OASIS 1.3.0",
+      "args": "--version",
+      "runs": 5,
+      "wallMs": {
+        "runs": 5,
+        "median": 27.6217,
+        "p90": 31.967133,
+        "min": 26.142363,
+        "max": 31.967133
+      },
+      "largestProcessPeakMb": {
+        "runs": 5,
+        "median": 46.8,
+        "p90": 46.8,
+        "min": 46.5,
+        "max": 46.8
+      },
+      "treePeakSumMb": {
+        "runs": 5,
+        "median": 46.8,
+        "p90": 46.8,
+        "min": 46.5,
+        "max": 46.8
+      },
+      "processes": 1
+    },
+    {
+      "agent": "oasis",
+      "version": "OASIS 1.3.0",
+      "args": "--help",
+      "runs": 5,
+      "wallMs": {
+        "runs": 5,
+        "median": 29.024039,
+        "p90": 30.662978,
+        "min": 27.492908,
+        "max": 30.662978
+      },
+      "largestProcessPeakMb": {
+        "runs": 5,
+        "median": 46.9,
+        "p90": 47.3,
+        "min": 46,
+        "max": 47.3
+      },
+      "treePeakSumMb": {
+        "runs": 5,
+        "median": 46.9,
+        "p90": 47.3,
+        "min": 46,
+        "max": 47.3
+      },
+      "processes": 1
+    },
+    {
+      "agent": "claude",
+      "version": "2.1.325 (Claude Code)",
+      "args": "--version",
+      "runs": 5,
+      "wallMs": {
+        "runs": 5,
+        "median": 8.790591,
+        "p90": 9.789947,
+        "min": 8.212911,
+        "max": 9.789947
+      },
+      "largestProcessPeakMb": {
+        "runs": 5,
+        "median": 22.5,
+        "p90": 22.6,
+        "min": 18.9,
+        "max": 22.6
+      },
+      "treePeakSumMb": {
+        "runs": 5,
+        "median": 22.5,
+        "p90": 22.6,
+        "min": 18.9,
+        "max": 22.6
+      },
+      "processes": 1
+    },
+    {
+      "agent": "claude",
+      "version": "2.1.325 (Claude Code)",
+      "args": "--help",
+      "runs": 5,
+      "wallMs": {
+        "runs": 5,
+        "median": 136.914049,
+        "p90": 179.354218,
+        "min": 125.945666,
+        "max": 179.354218
+      },
+      "largestProcessPeakMb": {
+        "runs": 5,
+        "median": 101.1,
+        "p90": 102.1,
+        "min": 99.8,
+        "max": 102.1
+      },
+      "treePeakSumMb": {
+        "runs": 5,
+        "median": 101.1,
+        "p90": 102.1,
+        "min": 99.8,
+        "max": 102.1
+      },
+      "processes": 1
+    },
+    {
+      "agent": "codex",
+      "version": "codex-cli 0.169.0",
+      "args": "--version",
+      "runs": 5,
+      "wallMs": {
+        "runs": 5,
+        "median": 38.822715,
+        "p90": 43.618079,
+        "min": 35.616647,
+        "max": 43.618079
+      },
+      "largestProcessPeakMb": {
+        "runs": 5,
+        "median": 47.2,
+        "p90": 47.2,
+        "min": 46.5,
+        "max": 47.2
+      },
+      "treePeakSumMb": {
+        "runs": 5,
+        "median": 47.2,
+        "p90": 47.2,
+        "min": 46.5,
+        "max": 47.2
+      },
+      "processes": 1
+    },
+    {
+      "agent": "codex",
+      "version": "codex-cli 0.169.0",
+      "args": "--help",
+      "runs": 5,
+      "wallMs": {
+        "runs": 5,
+        "median": 36.945689,
+        "p90": 49.87533,
+        "min": 35.405364,
+        "max": 49.87533
+      },
+      "largestProcessPeakMb": {
+        "runs": 5,
+        "median": 47.1,
+        "p90": 47.2,
+        "min": 46.5,
+        "max": 47.2
+      },
+      "treePeakSumMb": {
+        "runs": 5,
+        "median": 47.1,
+        "p90": 47.2,
+        "min": 46.5,
+        "max": 47.2
+      },
+      "processes": 1
+    },
+    {
+      "agent": "gemini",
+      "version": "0.68.0",
+      "args": "--version",
+      "runs": 5,
+      "wallMs": {
+        "runs": 5,
+        "median": 1772.404041,
+        "p90": 1840.158978,
+        "min": 1702.251665,
+        "max": 1840.158978
+      },
+      "largestProcessPeakMb": {
+        "runs": 5,
+        "median": 201.1,
+        "p90": 210.1,
+        "min": 200.1,
+        "max": 210.1
+      },
+      "treePeakSumMb": {
+        "runs": 5,
+        "median": 370.5,
+        "p90": 379.9,
+        "min": 365.2,
+        "max": 379.9
+      },
+      "processes": 2
+    },
+    {
+      "agent": "gemini",
+      "version": "0.68.0",
+      "args": "--help",
+      "runs": 5,
+      "wallMs": {
+        "runs": 5,
+        "median": 1739.161704,
+        "p90": 1799.99705,
+        "min": 1731.194838,
+        "max": 1799.99705
+      },
+      "largestProcessPeakMb": {
+        "runs": 5,
+        "median": 202.7,
+        "p90": 209.9,
+        "min": 200.8,
+        "max": 209.9
+      },
+      "treePeakSumMb": {
+        "runs": 5,
+        "median": 370.7,
+        "p90": 379.7,
+        "min": 367.1,
+        "max": 379.7
+      },
+      "processes": 2
+    },
+    {
+      "agent": "opencode",
+      "version": "1.19.5",
+      "args": "--version",
+      "runs": 5,
+      "wallMs": {
+        "runs": 5,
+        "median": 543.502134,
+        "p90": 555.979629,
+        "min": 510.979381,
+        "max": 555.979629
+      },
+      "largestProcessPeakMb": {
+        "runs": 5,
+        "median": 126.2,
+        "p90": 126.4,
+        "min": 125.7,
+        "max": 126.4
+      },
+      "treePeakSumMb": {
+        "runs": 5,
+        "median": 126.2,
+        "p90": 126.4,
+        "min": 125.7,
+        "max": 126.4
+      },
+      "processes": 1
+    },
+    {
+      "agent": "opencode",
+      "version": "1.19.5",
+      "args": "--help",
+      "runs": 5,
+      "wallMs": {
+        "runs": 5,
+        "median": 563.54207,
+        "p90": 638.447382,
+        "min": 561.400554,
+        "max": 638.447382
+      },
+      "largestProcessPeakMb": {
+        "runs": 5,
+        "median": 138.6,
+        "p90": 141.3,
+        "min": 137.4,
+        "max": 141.3
+      },
+      "treePeakSumMb": {
+        "runs": 5,
+        "median": 138.6,
+        "p90": 141.3,
+        "min": 137.4,
+        "max": 141.3
+      },
+      "processes": 1
+    },
+    {
+      "agent": "aider",
+      "version": "aider 0.86.2",
+      "args": "--version",
+      "runs": 5,
+      "wallMs": {
+        "runs": 5,
+        "median": 883.392352,
+        "p90": 904.029393,
+        "min": 809.102376,
+        "max": 904.029393
+      },
+      "largestProcessPeakMb": {
+        "runs": 5,
+        "median": 73.5,
+        "p90": 73.5,
+        "min": 73.3,
+        "max": 73.5
+      },
+      "treePeakSumMb": {
+        "runs": 5,
+        "median": 122.7,
+        "p90": 141.5,
+        "min": 119.4,
+        "max": 141.5
+      },
+      "processes": 21
+    },
+    {
+      "agent": "aider",
+      "version": "aider 0.86.2",
+      "args": "--help",
+      "runs": 5,
+      "wallMs": {
+        "runs": 5,
+        "median": 853.407242,
+        "p90": 856.900431,
+        "min": 838.416242,
+        "max": 856.900431
+      },
+      "largestProcessPeakMb": {
+        "runs": 5,
+        "median": 73.6,
+        "p90": 73.8,
+        "min": 73.5,
+        "max": 73.8
+      },
+      "treePeakSumMb": {
+        "runs": 5,
+        "median": 134.2,
+        "p90": 140.8,
+        "min": 115.6,
+        "max": 140.8
+      },
+      "processes": 22
+    }
+  ]
+}
