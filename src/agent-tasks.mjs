@@ -97,7 +97,7 @@ export function restoreAgentHistory(session, snapshots = []) {
       tokensUsed: Math.max(0, Math.min(1000000000, Number(snapshot.tokensUsed) || 0)),
       ...(snapshot.usage ? { usage: normalizeAgentUsage(snapshot.usage) } : {}),
       recentTools: Array.isArray(snapshot.recentTools) ? snapshot.recentTools.slice(-10) : [],
-      report: String(snapshot.report || '').slice(0, 8000),
+      report: String(snapshot.report || '').slice(0, 200000),
       error: wasRunning ? 'Runtime restarted; the live worker process and its private execution environment were not restored.' : String(snapshot.error || '').slice(0, 1500),
       readOnly: Boolean(snapshot.readOnly),
       teamId: typeof snapshot.teamId === 'string' ? snapshot.teamId : null,

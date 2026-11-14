@@ -123,7 +123,7 @@ export function sanitizeAgentHistory(agentTasks) {
       tokensUsed: Math.max(0, Math.min(1000000000, Number(record.tokensUsed) || 0)),
       ...(record.usage && record.usage.requests ? { usage: normalizeAgentUsage(record.usage) } : {}),
       recentTools,
-      report: safePersistedText(record.report || '', 8000),
+      report: safePersistedText(record.report || '', 200000),
       error: safePersistedText(record.error || '', 1500),
       readOnly: Boolean(record.readOnly),
       workspaceIsolation: (record.worktreeInfo || record.worktree || record.workspaceIsolation === 'worktree') ? 'worktree' : 'shared',
