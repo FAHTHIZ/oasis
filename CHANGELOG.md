@@ -3,6 +3,7 @@
 User-facing change history grouped by package version. A version heading does not imply that a GitHub Release or downloadable assets have been published; check the [Releases page](https://github.com/FAHTHIZ/oasis/releases) for current availability.
 
 ## Unreleased
+- Setup's tool-calling probe now accepts a call the model writes as reply text (the format the agent loop already recovers), with a reliability note, instead of rejecting small local models such as qwen3:0.6b that intermittently answer that way. When Ollama is running with no models, setup suggests an `ollama pull` that fits this computer.
 - A one-shot prompt (`oasis "…"`) with no model provider configured now exits 1 instead of 0. `oasis models` with no provider says "run oasis setup" without calling the network, and a 401/403 from the model list now points at the API key.
 
 - Rate limits: FreeLLMAPI reports when its pool frees up only in the error text ("Soonest reset ~28s"), with no Retry-After header. Oasis made two quick retries and then failed the task (seen in the OVH head-to-head). A stated reset of up to 90 seconds is now waited out, with the usual `[rate limit] Waiting …` notice.

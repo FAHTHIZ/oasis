@@ -873,12 +873,22 @@ export async function testProviderConnection(rawConfig, options = {}) {
     });
     const toolCall = (Array.isArray(response && response.tool_calls) ? response.tool_calls : [])
       .find((call) => call && call.function && call.function.name === probeToolName);
-    if (!toolCall) {
-      throw new Error('The model responded without calling the validation tool. Choose a model and provider endpoint that support tool calling.');
-    }
     let args;
-    try { args = JSON.parse(String(toolCall.function.arguments || '{}')); }
-    catch { throw new Error('The model returned malformed arguments for the validation tool.'); }
+    let fromText = false;
+    if (toolCall) {
+      try { args = JSON.parse(String(toolCall.function.arguments || '{}')); }
+      catch { throw new Error('The model returned malformed arguments for the validation tool.'); }
+    } else {
+      // Small local models sometimes write the call as JSON in the reply text.
+      // The agent loop recovers that format (tool-call-repair.mjs), so the
+      // probe accepts it too instead of rejecting a model that works.
+      const { extractTextToolCalls } = await import('./tool-call-repair.mjs');
+      const recovered = extractTextToolCalls(response && response.content, [probeToolName]);
+      const call = recovered && recovered.calls.find((entry) => entry.name === probeToolName);
+      if (!call) throw new Error('The model responded without calling the validation tool. Choose a model and provider endpoint that support tool calling.');
+      args = call.args;
+      fromText = true;
+    }
     if (!args || args.ready !== true) {
       throw new Error('The model did not return the expected validation-tool arguments. Check model and provider compatibility.');
     }
@@ -887,7 +897,10 @@ export async function testProviderConnection(rawConfig, options = {}) {
       protocol,
       provider: new URL(baseURL).host,
       model,
-      note: 'A valid tool-call response was received. The inert validation tool was not executed.'
+      toolCallsFromText: fromText,
+      note: fromText
+        ? 'The model wrote the tool call in its reply text instead of a native tool call; Oasis recovers that format, but tool use may be less reliable with this model. The inert validation tool was not executed.'
+        : 'A valid tool-call response was received. The inert validation tool was not executed.'
     };
   } catch (error) {
     let message = String(error && error.message || error);

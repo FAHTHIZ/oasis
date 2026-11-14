@@ -181,7 +181,8 @@ export async function configureProvider(root = process.cwd(), options = {}) {
     }
   }
   stdout.write('\nTesting tool calling with an inert validation probe (the probe will not be executed)...\n');
-  await testProviderConnection({ protocol, baseURL, model, apiKey }, { timeoutMs: 30000 });
+  const probe = await testProviderConnection({ protocol, baseURL, model, apiKey }, { timeoutMs: 30000 });
+  if (probe && probe.toolCallsFromText) stdout.write('Note: ' + probe.note + '\n');
   const configPath = await saveConfig({ protocol, baseURL, model, apiKey });
   stdout.write('Provider responded successfully. Saved settings to ' + configPath + '\n');
   stdout.write('Protocol: ' + protocol + '\n');

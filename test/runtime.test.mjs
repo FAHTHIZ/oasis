@@ -147,6 +147,22 @@ test('provider connection probe requires a valid inert tool call without executi
   assert.equal(JSON.stringify(result).includes('connection-probe-secret'), false);
 });
 
+test('provider connection probe accepts a tool call the model wrote as reply text', async (t) => {
+  const originalFetch = globalThis.fetch;
+  let content = '{"name": "oasis_connection_probe", "arguments": {"ready": true}}';
+  globalThis.fetch = async () => new Response(JSON.stringify({ choices: [{ message: { role: 'assistant', content } }] }), { status: 200, headers: { 'content-type': 'application/json' } });
+  t.after(() => { globalThis.fetch = originalFetch; });
+  const cfg = { protocol: 'openai-compatible', baseURL: 'http://127.0.0.1:9/v1', model: 'qwen3:0.6b', apiKey: '' };
+  const result = await testProviderConnection(cfg, { timeoutMs: 1000 });
+  assert.equal(result.ok, true);
+  assert.equal(result.toolCallsFromText, true);
+  assert.match(result.note, /reply text/);
+  content = 'Sure, I am ready.';
+  await assert.rejects(testProviderConnection(cfg, { timeoutMs: 1000 }), /without calling the validation tool/);
+  content = '{"name": "oasis_connection_probe", "arguments": {"ready": false}}';
+  await assert.rejects(testProviderConnection(cfg, { timeoutMs: 1000 }), /expected validation-tool arguments/);
+});
+
 test('provider connection probe redacts credentials and does not treat an HTTP error as success', async (t) => {
   const originalFetch = globalThis.fetch;
   globalThis.fetch = async () => new Response(JSON.stringify({
