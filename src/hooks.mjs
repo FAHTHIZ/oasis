@@ -64,7 +64,11 @@ export const CLAUDE_TOOL_NAMES = {
   command_output: 'BashOutput', kill_command: 'KillShell', lsp: 'LSP', monitor: 'Monitor', workflow: 'Workflow', enter_worktree: 'EnterWorktree', exit_worktree: 'ExitWorktree', schedule_wakeup: 'ScheduleWakeup', report_findings: 'ReportFindings', wait_for_mcp_servers: 'WaitForMcpServers'
 };
 
-const MAX_HOOK_OUTPUT = 64 * 1024;
+// A hook's whole reply is kept up to 10 MiB (a PostToolUse hook may return a
+// rewritten tool output). It was cut at 64 KiB, which broke the JSON of a larger
+// reply so its decision (a deny included) was dropped without a word. A reply
+// over the limit now counts as a failed hook (see outputTooLarge below).
+const MAX_HOOK_OUTPUT = 10 * 1024 * 1024;
 
 // Claude Code matcher rules: only letters, digits, _, -, spaces, "," and "|" means an
 // exact name or list of names; anything else is an unanchored regular expression.
@@ -134,10 +138,14 @@ export function runHookCommand(command, payload, options = {}) {
     }
     const finish = (value) => { if (settled) return; settled = true; if (timer) clearTimeout(timer); resolve(value); };
     const timer = timeoutMs ? setTimeout(() => { signalProcessTree(child, 'SIGKILL'); finish({ exitCode: null, stdout, stderr: stderr + '\nHook timed out.', timedOut: true }); }, timeoutMs) : null;
-    child.stdout.on('data', (chunk) => { stdout = (stdout + chunk).slice(0, MAX_HOOK_OUTPUT); });
-    child.stderr.on('data', (chunk) => { stderr = (stderr + chunk).slice(0, MAX_HOOK_OUTPUT); });
+    // Decoded as a stream so a character split across chunks is not garbled.
+    child.stdout.setEncoding('utf8');
+    child.stderr.setEncoding('utf8');
+    let tooLarge = false;
+    child.stdout.on('data', (chunk) => { if (stdout.length + chunk.length > MAX_HOOK_OUTPUT) { tooLarge = true; stdout = (stdout + chunk).slice(0, MAX_HOOK_OUTPUT); } else stdout += chunk; });
+    child.stderr.on('data', (chunk) => { if (stderr.length < MAX_HOOK_OUTPUT) stderr = (stderr + chunk).slice(0, MAX_HOOK_OUTPUT); });
     child.on('error', (error) => finish({ exitCode: null, stdout, stderr: error.message, failed: true }));
-    child.on('close', (code) => finish({ exitCode: code, stdout, stderr }));
+    child.on('close', (code) => finish({ exitCode: code, stdout, stderr, ...(tooLarge ? { outputTooLarge: true } : {}) }));
     child.stdin.on('error', () => {});
     child.stdin.end(JSON.stringify(payload));
   });
@@ -185,10 +193,11 @@ async function runHttpHook(hook, payload, options = {}) {
   for (const [key, value] of Object.entries(hook.headers || {})) headers[key] = interpolateHeader(value, allowed, env);
   try {
     const response = await fetch(hook.url, { method: 'POST', headers, body: JSON.stringify(payload), signal: AbortSignal.timeout(timeoutMs), redirect: 'error' });
-    const body = (await response.text()).slice(0, MAX_HOOK_OUTPUT);
+    const full = await response.text();
+    const body = full.slice(0, MAX_HOOK_OUTPUT);
     // Like Claude Code, a status code alone never blocks: only a JSON decision can.
     if (!response.ok) return { exitCode: 1, stdout: '', stderr: 'HTTP ' + response.status + (body ? ': ' + body.slice(0, 300) : '') };
-    return { exitCode: 0, stdout: body, stderr: '' };
+    return { exitCode: 0, stdout: body, stderr: '', ...(full.length > MAX_HOOK_OUTPUT ? { outputTooLarge: true } : {}) };
   } catch (error) {
     const timedOut = error && (error.name === 'TimeoutError' || error.name === 'AbortError');
     return { exitCode: null, stdout: '', stderr: timedOut ? 'Hook timed out.' : 'HTTP hook failed: ' + (error.message || error), timedOut };
@@ -282,9 +291,10 @@ async function runMcpToolHook(hook, payload, options = {}) {
       options.callMcpTool({ server: hook.server, tool: hook.tool, input: substitutePayload(hook.input || {}, payload) }),
       new Promise((_, reject) => setTimeout(() => reject(Object.assign(new Error('Hook timed out.'), { name: 'TimeoutError' })), timeoutMs).unref())
     ]);
-    const text = String(result && result.text || '').slice(0, MAX_HOOK_OUTPUT);
+    const full = String(result && result.text || '');
+    const text = full.slice(0, MAX_HOOK_OUTPUT);
     if (result && result.isError) return { exitCode: 1, stdout: '', stderr: text || 'MCP tool returned an error.' };
-    return { exitCode: 0, stdout: text, stderr: '' };
+    return { exitCode: 0, stdout: text, stderr: '', ...(full.length > MAX_HOOK_OUTPUT ? { outputTooLarge: true } : {}) };
   } catch (error) {
     const timedOut = error && error.name === 'TimeoutError';
     return { exitCode: null, stdout: '', stderr: timedOut ? 'Hook timed out.' : 'MCP tool hook failed: ' + (error.message || error), timedOut, failed: !timedOut };
@@ -328,9 +338,15 @@ export function describeHook(hook) {
   return hook.command + (Array.isArray(hook.args) && hook.args.length ? ' ' + hook.args.join(' ') : '');
 }
 
+// Hook context reaching the model keeps 10,000 characters (Claude Code's cap): the
+// start and end with a note. It used to keep only the first 2,000.
 function capContext(text) {
   const value = String(text || '').trim();
-  return value.length > MAX_CONTEXT ? value.slice(0, 2000) + '\n[hook output truncated from ' + value.length + ' characters]' : value;
+  if (value.length <= MAX_CONTEXT) return value;
+  const note = '\n[hook output cut: ' + (value.length - MAX_CONTEXT).toLocaleString('en-US') + ' of ' + value.length.toLocaleString('en-US') + ' characters left out of the middle]\n';
+  const room = MAX_CONTEXT - note.length;
+  const head = Math.ceil(room * 0.7);
+  return value.slice(0, head) + note + value.slice(value.length - (room - head));
 }
 
 // Folds a finished background hook into a message for the model's next request.
@@ -404,6 +420,9 @@ export async function runHooks(event, payload, options = {}) {
   for (let i = 0; i < outputs.length; i++) {
     let out = outputs[i];
     result.ran++;
+    // A reply over the limit cannot be read whole (its JSON would be cut), so the
+    // hook counts as failed rather than having its decision silently dropped.
+    if (out.outputTooLarge && out.exitCode === 0) out = { ...out, exitCode: 1, stderr: 'hook output was over ' + (MAX_HOOK_OUTPUT / 1024 / 1024) + ' MiB and was not read' + (out.stderr ? '; ' + out.stderr : '') };
     // onFailure: "block" turns a crash, timeout, HTTP error, or non-2 exit into a block.
     if (out.exitCode !== 0 && out.exitCode !== 2 && commands[i].onFailure === 'block' && (commands[i].type === 'command' || commands[i].type === 'http' || !commands[i].type) && !['Stop', 'SubagentStop', 'TaskCompleted', 'TeammateIdle'].includes(event)) {
       out = { ...out, exitCode: 2, stderr: event + ' hook failed and is configured to block (' + (out.timedOut ? 'timeout' : out.exitCode === null ? 'did not run' : 'exit ' + out.exitCode) + '): ' + (out.stderr.trim() || describeHook(commands[i])).slice(0, 500) };
