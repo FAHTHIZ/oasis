@@ -1347,7 +1347,7 @@ export function createOasisWebServer(options = {}) {
               const before = estimateTokens(target.messages);
               const outcome = await compactHistoryIfNeeded(target, { ...options, mustPreserve: target.mustPreserve });
               if (!outcome || !outcome.compacted) return outcome;
-              await saveSession(target, { env }).catch(() => {});
+              await saveSession(target, { env }).catch((error) => process.stderr.write('oasis web: could not save the compacted session: ' + (error && error.message || error) + '\n'));
               return { ...outcome, beforeTokens: before, afterTokens: estimateTokens(target.messages) };
             }
           });
