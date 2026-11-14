@@ -510,7 +510,7 @@ export async function runHeadless(options) {
   const mustVerify = requireVerified || env.OASIS_REQUIRE_VERIFIED === '1';
   const notVerified = mustVerify && !error && Boolean(result && result.verificationIncomplete);
   const isError = Boolean(error) || !result || result.blockedByHook === true || Boolean(schemaErrors) || Boolean(goalState && !goalState.met) || notVerified;
-  const subtype = error && error.code === 'BUDGET_EXCEEDED' ? 'error_max_budget_usd' : error ? 'error_during_execution' : schemaErrors ? 'error_max_structured_output_retries' : goalState && !goalState.met ? 'error_goal_not_met' : notVerified ? 'error_not_verified' : result && result.limitReached ? 'error_max_turns' : result && result.finished === false && !result.verificationIncomplete ? 'error_max_turns' : 'success';
+  const subtype = error && error.code === 'BUDGET_EXCEEDED' ? 'error_max_budget_usd' : error && error.code === 'REQUEST_BUDGET_EXCEEDED' ? 'error_max_requests' : error && error.code === 'TOKEN_BUDGET_EXCEEDED' ? 'error_max_total_tokens' : error && error.code === 'OASIS_ZERO_BUDGET_BLOCKED' ? 'error_zero_budget' : error ? 'error_during_execution' : schemaErrors ? 'error_max_structured_output_retries' : goalState && !goalState.met ? 'error_goal_not_met' : notVerified ? 'error_not_verified' : result && result.limitReached ? 'error_max_turns' : result && result.finished === false && !result.verificationIncomplete ? 'error_max_turns' : 'success';
   const summary = {
     type: 'result',
     subtype,

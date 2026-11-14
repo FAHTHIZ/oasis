@@ -70,6 +70,10 @@ const MODEL_GONE = /model[^.]{0,60}(?:not found|does not exist|not available|una
 // another provider: a missing or bad key there just means "skip this one".
 export function fallbackReason(error, { onFallbackProvider = false } = {}) {
   if (!error || error.name === 'AbortError') return '';
+  // Zero-budget mode refused this route before sending: try the next one.
+  if (error.code === 'OASIS_ZERO_BUDGET_BLOCKED') return 'paid';
+  // A request or token budget is a stop for the whole run, not this model.
+  if (error.code === 'REQUEST_BUDGET_EXCEEDED' || error.code === 'TOKEN_BUDGET_EXCEEDED') return '';
   // The provider's circuit breaker is open: it failed repeatedly just now.
   if (isBreakerOpenError(error)) return 'server';
   const status = Number(error.status || error.statusCode) || 0;
@@ -94,7 +98,8 @@ export const FALLBACK_REASON_TEXT = Object.freeze({
   rate: 'hit a rate limit',
   model: 'is not available',
   server: 'is overloaded or unreachable',
-  auth: 'rejected its API key'
+  auth: 'rejected its API key',
+  paid: 'is not proven free (zero-budget mode)'
 });
 
 // Exponential backoff with jitter for transient errors (429, 5xx, network
