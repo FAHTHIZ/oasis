@@ -112,14 +112,16 @@ const KEYS = {
 };
 
 // Runs in the page: numbers visible interactive elements and returns text plus the list.
-const SNAPSHOT_JS = `(() => {
+export const SNAPSHOT_JS = `(() => {
   const visible = (el) => { const r = el.getBoundingClientRect(); const s = getComputedStyle(el); return r.width > 0 && r.height > 0 && s.visibility !== 'hidden' && s.display !== 'none'; };
   document.querySelectorAll('[data-oasis-ref]').forEach((el) => el.removeAttribute('data-oasis-ref'));
   const sel = 'a[href], button, input:not([type=hidden]), textarea, select, summary, [role=button], [role=link], [role=checkbox], [role=tab], [role=menuitem], [role=option], [contenteditable=true], [onclick]';
   const items = [];
   let n = 0;
+  let skipped = 0;
   for (const el of document.querySelectorAll(sel)) {
-    if (!visible(el) || n >= 300) continue;
+    if (!visible(el)) continue;
+    if (n >= 300) { skipped++; continue; }
     n += 1;
     el.setAttribute('data-oasis-ref', String(n));
     const name = (el.getAttribute('aria-label') || el.innerText || el.value || el.getAttribute('placeholder') || el.getAttribute('title') || el.getAttribute('alt') || el.getAttribute('name') || '').trim().replace(/\\s+/g, ' ').slice(0, 80);
@@ -132,8 +134,14 @@ const SNAPSHOT_JS = `(() => {
     if (el.disabled) item.disabled = true;
     items.push(item);
   }
-  const text = (document.body ? document.body.innerText : '').replace(/\\n{3,}/g, '\\n\\n').slice(0, 12000);
-  return { url: location.href, title: document.title, text, elements: items, scroll: { y: Math.round(scrollY), height: document.documentElement.scrollHeight, viewport: innerHeight } };
+  const fullText = (document.body ? document.body.innerText : '').replace(/\\n{3,}/g, '\\n\\n');
+  const text = fullText.slice(0, 12000);
+  // Say when the page text or element list was cut, so the model scrolls or
+  // reads further instead of assuming it saw the whole page.
+  const more = {};
+  if (fullText.length > text.length) more.textNote = 'Page text cut at 12000 of ' + fullText.length + ' characters; use evaluate with document.body.innerText.slice(12000, 24000) (and so on) to read further.';
+  if (skipped) more.elementsNote = skipped + ' more visible interactive elements were not numbered; scroll or use a selector/text locator.';
+  return { url: location.href, title: document.title, text, ...more, elements: items, scroll: { y: Math.round(scrollY), height: document.documentElement.scrollHeight, viewport: innerHeight } };
 })()`;
 
 function locatorJs(args) {
