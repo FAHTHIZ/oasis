@@ -3755,7 +3755,9 @@ async function executeRegisteredToolWithKernel(session, name, args, context, opt
         session.turnQuestionCount = Number(session.turnQuestionCount || 0) + 1;
         return budget !== null && session.turnQuestionCount > budget
           ? { answered: false, questionBudgetExceeded: true, budget, message: 'Question limit for this turn (' + budget + ') is used up, so this question was not shown. Do not stop to ask more: choose the most reasonable option yourself, keep working, and list the assumption in one line in your final reply so the user can correct it.' }
-          : await askUserQuestion(session, validatedInput, options);
+          : await askUserQuestion(session, validatedInput, typeof options.askUser === 'function' && typeof runtime.waitForUser === 'function'
+            ? { ...options, askUser: (question) => runtime.waitForUser(() => options.askUser(question)) }
+            : options);
       }
       if (name === 'connect_service') {
         const { runConnectService } = await import('./connectors.mjs');
@@ -3779,6 +3781,11 @@ async function executeRegisteredToolWithKernel(session, name, args, context, opt
         env: runtime.env,
         signal: runtime.signal
       });
+      // Approval prompts wait for a person; that wait does not use up the tool's timeout.
+      if (typeof executionContext.approval === 'function' && typeof runtime.waitForUser === 'function') {
+        const ask = executionContext.approval;
+        executionContext.approval = (...prompt) => runtime.waitForUser(() => ask(...prompt));
+      }
       if (typeof options.prepare === 'function') await options.prepare({ input: validatedInput, context: executionContext });
       return await executeTool(name, validatedInput, executionContext);
     }
@@ -3915,6 +3922,11 @@ async function executeSessionToolWithKernel(session, name, args, context, option
         env: runtime.env,
         signal: runtime.signal
       });
+      // Approval prompts wait for a person; that wait does not use up the tool's timeout.
+      if (typeof executionContext.approval === 'function' && typeof runtime.waitForUser === 'function') {
+        const ask = executionContext.approval;
+        executionContext.approval = (...prompt) => runtime.waitForUser(() => ask(...prompt));
+      }
       if (typeof options.prepare === 'function') {
         await options.prepare({ input: validatedInput, context: executionContext });
       }
