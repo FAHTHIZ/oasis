@@ -46,6 +46,9 @@ const BUILTIN = {
   // OmniRoute is a self-hosted gateway on loopback that forwards to cloud
   // providers, so `gateway` keeps it from being priced or tuned as a local model.
   omniroute: { label: 'OmniRoute', protocol: 'openai-compatible', baseURL: 'http://127.0.0.1:20128/v1', keyEnv: ['OMNIROUTE_API_KEY'], model: 'auto', gateway: true },
+  // FreeLLMAPI (github.com/Azhan787/FreeLLMAPI) pools your own free-tier keys
+  // behind one unified key; `auto` lets it pick a healthy model per request.
+  freellmapi: { label: 'FreeLLMAPI', protocol: 'openai-compatible', baseURL: 'http://127.0.0.1:3001/v1', keyEnv: ['FREELLMAPI_API_KEY'], model: 'auto', gateway: true },
   vllm: { label: 'vLLM', protocol: 'openai-compatible', baseURL: 'http://127.0.0.1:8000/v1', keyEnv: ['VLLM_API_KEY'], model: '', local: { probe: '/v1/models', kind: 'openai' } }
 };
 
@@ -58,6 +61,20 @@ function freezeEntry(id, entry) {
 
 /** Built-in providers, frozen. Prefer providerRegistry() so user overrides apply. */
 export const BUILTIN_PROVIDERS = Object.freeze(Object.fromEntries(Object.entries(BUILTIN).map(([id, entry]) => [id, freezeEntry(id, entry)])));
+
+function defaultPort(entry) {
+  try { return new URL(entry.baseURL).port; } catch { return ''; }
+}
+
+/**
+ * Default ports of model servers that run the model on this machine (Ollama,
+ * LM Studio, llama.cpp, Jan, vLLM, plus KoboldCpp's 5001). Pricing, the
+ * zero-budget policy and the context probe all read this one list.
+ */
+export const LOCAL_MODEL_SERVER_PORTS = Object.freeze(new Set([...Object.values(BUILTIN).filter((entry) => entry.local).map(defaultPort).filter(Boolean), '5001']));
+
+/** Default ports of loopback gateways (OmniRoute, FreeLLMAPI) that forward to cloud providers. */
+export const GATEWAY_PORTS = Object.freeze(new Set(Object.values(BUILTIN).filter((entry) => entry.gateway).map(defaultPort).filter(Boolean)));
 
 let activeUserProviders = {};
 /** Record the user-scope settings.providers (settings.mjs calls this after loading). */

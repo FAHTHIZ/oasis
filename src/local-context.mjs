@@ -11,6 +11,8 @@
 // num_ctx from /api/show), so the session can compact at the real limit, send a
 // smaller tool set, and tell the user exactly how to raise the window.
 
+import { GATEWAY_PORTS } from './provider-registry.mjs';
+
 const PROBE_TIMEOUT_MS = 2000;
 
 // Agent prompts need room for instructions, tool schemas, file contents and the
@@ -39,6 +41,9 @@ export function isOllamaEndpoint(config = {}, env = process.env) {
 
 // Default ports: LM Studio 1234, llama-server 8080.
 const LOCAL_SERVER_PORTS = new Set(['1234', '8080']);
+// Loopback gateways whose GET /models lists context windows: the registry's
+// gateways (OmniRoute, FreeLLMAPI), LiteLLM's 4000 and vLLM's 8000.
+const LISTING_LOOPBACK_PORTS = new Set([...GATEWAY_PORTS, '4000', '8000']);
 
 // Local OpenAI-compatible servers whose loaded window can be probed: Ollama,
 // LM Studio and llama.cpp's llama-server. Other loopback ports are probed only
@@ -269,7 +274,12 @@ export async function probeProviderModelWindow(config = {}, { fetchImpl = global
   if (/^(?:0|false|off|no)$/i.test(String(env.OASIS_MODEL_INFO_PROBE || ''))) return 0;
   let url;
   try { url = new URL(String(config.baseURL || '')); } catch { return 0; }
-  if (LOCAL_HOSTS.has(url.hostname.toLowerCase()) && !/^(?:1|true|yes|on)$/i.test(String(env.OASIS_LOCAL_CONTEXT_PROBE || ''))) return 0;
+  // Local model servers (Ollama, LM Studio, llama-server) have their own probe
+  // for the window they actually loaded. A gateway on its default loopback port
+  // (OmniRoute, FreeLLMAPI, LiteLLM, vLLM) lists each model's window like a
+  // hosted provider, so it is asked the same way. Other loopback ports are
+  // left alone: they are as often a dev server as a model endpoint.
+  if (LOCAL_HOSTS.has(url.hostname.toLowerCase()) && !LISTING_LOOPBACK_PORTS.has(url.port) && !/^(?:1|true|yes|on)$/i.test(String(env.OASIS_LOCAL_CONTEXT_PROBE || ''))) return 0;
   const endpoint = url.origin + url.pathname.replace(/\/+$/, '') + '/models';
   const key = 'models\n' + endpoint + '\n' + config.model;
   const cached = cache && probeCache.get(key);

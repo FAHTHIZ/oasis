@@ -1,4 +1,5 @@
 import { catalogPrice } from './model-catalog.mjs';
+import { LOCAL_MODEL_SERVER_PORTS, GATEWAY_PORTS } from './provider-registry.mjs';
 
 // Approximate model pricing (USD per million tokens) used for /cost and
 // --max-budget-usd. Override or extend with settings `pricing`:
@@ -18,18 +19,17 @@ export function isLocalProvider(config = {}) {
 // but a gateway such as LiteLLM on localhost:4000 forwards to paid cloud
 // models. A cloud-only model name on a non-local-server port is priced as the
 // cloud model instead of shown as free.
-const LOCAL_MODEL_PORTS = new Set(['11434', '1234', '8080']);
 const CLOUD_ONLY_MODEL = /^(?:[\w.-]+\/)?(?:gpt-|o[1-9](?:-|$)|claude|gemini-|grok-)/i;
-// OmniRoute's default port: every model behind it is a routed cloud model,
-// whatever its name (llm7/codestral-latest), so it is never priced as free.
-const GATEWAY_PORTS = new Set(['20128']);
+// On a gateway's default port (OmniRoute 20128, FreeLLMAPI 3001) every model
+// is a routed cloud model, whatever its name (llm7/codestral-latest), so it is
+// never priced as free.
 export function cloudModelBehindGateway(model, config = {}) {
   if (config.protocol === 'ollama') return false;
   try { if (GATEWAY_PORTS.has(new URL(String(config.baseURL || '')).port)) return true; } catch { /* not a URL */ }
   if (!CLOUD_ONLY_MODEL.test(String(model || ''))) return false;
   try {
     const url = new URL(String(config.baseURL || ''));
-    return !LOCAL_MODEL_PORTS.has(url.port);
+    return !LOCAL_MODEL_SERVER_PORTS.has(url.port);
   } catch { return false; }
 }
 

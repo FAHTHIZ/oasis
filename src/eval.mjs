@@ -978,7 +978,9 @@ export function parseClaudeCodeOutput(rawOutput) {
     usage.output_tokens, usage.outputTokens, payload.output_tokens, payload.outputTokens
   );
   const modelCosts = sumUsageRecords(modelUsage, ['costUSD', 'cost_usd', 'total_cost_usd']);
-  const costUSD = finiteMetric(payload.total_cost_usd, payload.totalCostUSD, payload.costUSD, payload.cost_usd,
+  // cost_known: false (OASIS on an unpriced model) means the total counts only
+  // priced requests, so the trial's cost is unknown, not zero.
+  const costUSD = payload.cost_known === false ? null : finiteMetric(payload.total_cost_usd, payload.totalCostUSD, payload.costUSD, payload.cost_usd,
     usage.total_cost_usd, usage.costUSD, modelCosts);
   const model = typeof payload.model === 'string' && payload.model.trim()
     ? payload.model.trim()
