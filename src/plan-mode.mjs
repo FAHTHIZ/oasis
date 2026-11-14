@@ -31,9 +31,14 @@ async function savePlanFile(session, plan) {
 
 // Plan mode hand-off, like Claude Code's ExitPlanMode: show the plan, and on approval
 // leave plan mode so the same turn can start implementing.
+export const MAX_PLAN_CHARS = 100_000;
+
 export async function exitPlanMode(session, args, context, options) {
-  const plan = String(args.plan || '').trim().slice(0, 20000);
+  const plan = String(args.plan || '').trim();
   if (!plan) return { approved: false, error: 'Provide the plan to present.' };
+  // The plan was cut at 20,000 characters without a word, so the user approved
+  // (and the plan file kept) a plan missing its last steps.
+  if (plan.length > MAX_PLAN_CHARS) return { approved: false, error: 'The plan is ' + plan.length + ' characters; the limit is ' + MAX_PLAN_CHARS + '. Shorten it (summarise the steps, link files instead of quoting them) and call exit_plan_mode again.' };
   if (options.planOnly) return { approved: false, message: 'This is a plan-only run. Give the plan as your final answer; the user will start implementation separately.' };
   if (!session.permissions || session.permissions.mode !== 'plan') return { approved: true, message: 'Plan mode is not active; continue with the task.' };
   const planFile = await savePlanFile(session, plan);
