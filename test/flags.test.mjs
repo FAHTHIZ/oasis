@@ -180,3 +180,32 @@ test('oasis -p --input-format stream-json runs one turn per message in one sessi
   assert.equal(events.filter((event) => event.type === 'user').length, 2);
   assert.equal(requests.length, 2);
 });
+
+// Seen live: `oasis -p "hi" --model does-not-exist` answered from the backup
+// model saved by `oasis connect`; text output gave no sign of the switch.
+test('a headless fallback is announced on stderr and as a stream-json event', async (t) => {
+  const root = await tmp();
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const server = createServer(async (req, res) => {
+    let body = ''; for await (const chunk of req) body += chunk;
+    const payload = JSON.parse(body);
+    if (payload.model === 'does-not-exist') { res.statusCode = 404; res.end('{"error":{"message":"model does-not-exist not found"}}'); return; }
+    res.setHeader('content-type', 'application/json');
+    res.end(JSON.stringify({ choices: [{ message: { role: 'assistant', content: 'from backup' } }], usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 } }));
+  });
+  await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
+  t.after(() => new Promise((resolve) => server.close(resolve)));
+  const config = { protocol: 'openai-compatible', baseURL: 'http://127.0.0.1:' + server.address().port + '/v1', model: 'does-not-exist', apiKey: '', maxSteps: 4 };
+  const stderr = [];
+  const original = process.stderr.write;
+  process.stderr.write = (chunk, ...rest) => { stderr.push(String(chunk)); return typeof rest.at(-1) === 'function' ? (rest.at(-1)(), true) : true; };
+  const lines = [];
+  try {
+    await runHeadless({ prompt: 'hi', root, config, outputFormat: 'stream-json', sessionOptions: { settings, fallbackModel: 'backup' }, write: (line) => lines.push(String(line)) });
+  } finally { process.stderr.write = original; }
+  const notice = stderr.join('').split('\n').find((line) => line.startsWith('[fallback]'));
+  assert.ok(notice, stderr.join(''));
+  assert.match(notice, /^\[fallback\] does-not-exist .*not found.*; switched to backup\.$/);
+  const event = lines.join('\n').split('\n').filter(Boolean).map((line) => { try { return JSON.parse(line); } catch { return null; } }).find((item) => item && item.subtype === 'model_fallback');
+  assert.deepEqual({ from: event.from, to: event.to }, { from: 'does-not-exist', to: 'backup' });
+});
