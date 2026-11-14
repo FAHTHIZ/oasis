@@ -11,6 +11,7 @@
 //   }
 // "${VAR}" and "${VAR:-default}" expand from the host environment when the session
 // starts; expanded values are never written back to disk.
+import { StringDecoder } from 'node:string_decoder';
 import { debugLog } from './debug-log.mjs';
 import { readFile } from 'node:fs/promises';
 import { oasisVersion } from './version.mjs';
@@ -303,6 +304,8 @@ export class McpHttpClient {
         signalProcessTree(child, 'SIGKILL');
         finish(new Error('headersHelper timed out after ' + timeoutLabel));
       }, timeoutMs);
+      // Decoding each chunk alone split multi-byte characters across chunks.
+      const outDecoder = new StringDecoder('utf8');
       child.stdout.on('data', (chunk) => {
         if (oversized || settled) return;
         if (outBytes + chunk.byteLength > MAX_HEADERS_HELPER_OUTPUT_BYTES) {
@@ -314,7 +317,7 @@ export class McpHttpClient {
           finish(new Error('headersHelper output exceeded 64 KiB'));
           return;
         }
-        out += chunk.toString('utf8');
+        out += outDecoder.write(chunk);
         outBytes += chunk.byteLength;
       });
       child.stderr.on('data', (chunk) => {
@@ -332,7 +335,7 @@ export class McpHttpClient {
         this.activeHelpers.delete(child);
         if (this.closed) return finish(new Error('MCP server session closed.'));
         if (oversized) return finish(new Error('headersHelper output exceeded 64 KiB'));
-        if (code === 0) finish(null, out);
+        if (code === 0) finish(null, out + outDecoder.end());
         else finish(new Error('headersHelper exited with ' + code + (err.trim() ? ': ' + err.trim().slice(0, 300) : '')));
       });
     });

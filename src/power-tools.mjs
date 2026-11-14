@@ -137,6 +137,8 @@ function runRipgrep(rgPath, cwd, args, signal) {
       if (signal.aborted) abort();
       else signal.addEventListener('abort', abort, { once: true });
     }
+    child.stdout.setEncoding('utf8');
+    child.stderr.setEncoding('utf8');
     child.stdout.on('data', (chunk) => { if (out.length < 4 * 1024 * 1024) out += chunk; });
     child.stderr.on('data', (chunk) => { err = (err + chunk).slice(-4000); });
     child.on('error', (error) => finish({ code: null, error: error.message }));
@@ -493,7 +495,7 @@ export function startBackgroundProcess(registry, launch, options) {
   }
   const append = (chunk) => {
     entry.lastOutputAt = Date.now();
-    entry.output += chunk.toString();
+    entry.output += String(chunk);
     if (entry.output.length > MAX_BACKGROUND_BUFFER) {
       const cut = entry.output.length - MAX_BACKGROUND_BUFFER;
       entry.output = entry.output.slice(cut);
@@ -504,10 +506,14 @@ export function startBackgroundProcess(registry, launch, options) {
   // Optional line stream (stdout only) for monitors.
   let pending = '';
   const onLine = typeof options.onLine === 'function' ? options.onLine : null;
+  // Decode as a stream: decoding each chunk alone split multi-byte
+  // characters across chunks in background output.
+  child.stdout.setEncoding('utf8');
+  child.stderr.setEncoding('utf8');
   child.stdout.on('data', (chunk) => {
     append(chunk);
     if (!onLine) return;
-    pending += chunk.toString();
+    pending += chunk;
     const lines = pending.split(/\r?\n/);
     pending = lines.pop();
     if (pending.length > 8000) { lines.push(pending); pending = ''; }

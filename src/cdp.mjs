@@ -41,6 +41,7 @@ function getJson(port, pathname, method = 'GET') {
   return new Promise((resolve, reject) => {
     const req = http.request({ host: '127.0.0.1', port, path: pathname, method }, (res) => {
       let body = '';
+      res.setEncoding('utf8');
       res.on('data', (chunk) => { body += chunk; });
       res.on('end', () => { try { resolve(JSON.parse(body)); } catch (error) { reject(error); } });
     });

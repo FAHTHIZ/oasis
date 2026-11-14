@@ -421,6 +421,7 @@ export function createAppServerHost(options = {}) {
       let stderr = '';
       const timer = setTimeout(() => { try { child.kill('SIGKILL'); } catch {} }, 60_000);
       child.stdout.on('data', (chunk) => { size += chunk.length; if (size <= maxBytes) chunks.push(chunk); });
+      child.stderr.setEncoding('utf8');
       child.stderr.on('data', (chunk) => { stderr += chunk; });
       child.on('error', (error) => { clearTimeout(timer); reject(error); });
       child.on('close', (code) => {

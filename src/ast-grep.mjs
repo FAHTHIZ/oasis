@@ -83,6 +83,10 @@ function runBinary(binary, argv, { cwd, env, signal, maxResults }) {
     const finish = (code) => { if (done) return; done = true; clearTimeout(timer); resolve({ code, matches, stderr, truncated }); };
     const timer = setTimeout(() => { child.kill('SIGKILL'); stderr += '\nast-grep timed out after 60 seconds.'; finish(null); }, 60000);
     if (signal) signal.addEventListener('abort', () => { child.kill('SIGKILL'); finish(null); }, { once: true });
+    // Decode as a stream so a multi-byte character split across chunks
+    // does not corrupt a JSON line.
+    child.stdout.setEncoding('utf8');
+    child.stderr.setEncoding('utf8');
     child.stdout.on('data', (chunk) => {
       buffer += chunk;
       let index;

@@ -250,6 +250,7 @@ async function changedFiles(root) {
     let out = '';
     const child = spawn('git', ['status', '--porcelain', '--untracked-files=all', '-z'], { cwd: root, shell: false, stdio: ['ignore', 'pipe', 'ignore'], windowsHide: true, ...processTreeSpawnOptions() });
     const timer = setTimeout(() => signalProcessTree(child, 'SIGKILL'), 10000);
+    child.stdout.setEncoding('utf8');
     child.stdout.on('data', (chunk) => { if (out.length < 1024 * 1024) out += chunk; });
     child.on('error', () => { clearTimeout(timer); resolve(null); });
     child.on('close', (code) => {
