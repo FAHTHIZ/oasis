@@ -1543,12 +1543,7 @@ export async function runEvalCommand(args = [], options = {}) {
         const routingSavingsUSD = taskUsage && typeof taskUsage.savingsUSD === 'number'
           ? taskUsage.savingsUSD
           : null;
-        const costSource = config.routeEasyModel
-          ? (routedCostKnown ? 'per-model pricing estimate' : 'unknown: configure pricing for both routed models')
-          : localModel ? 'local model: no per-token API charge (hardware and power not counted)'
-          : gatewayCloud ? 'per-model list-price estimate (cloud model behind a localhost gateway; free-tier keys are not billed)'
-          : costUSD === null ? 'unknown: set OASIS_EVAL_*_USD_PER_MILLION_TOKENS'
-            : 'uniform benchmark token-rate estimate';
+        const costSource = benchmarkCostSource({ routed: Boolean(config.routeEasyModel), routedCostKnown, localModel, gatewayCloud, costUSD, model });
         // The same rule as every other agent: the hidden verifier passed and the run
         // ended without an error or timeout. OASIS's own "verification incomplete"
         // signal is kept in the record (finished / unfinished) but does not change the score.
@@ -1642,4 +1637,16 @@ export async function revisionFields(env = process.env) {
     sourceRevision: revision,
     ...(!explicit && loaded && now && loaded !== now ? { sourceRevisionAtEnd: now, sourceChangedDuringRun: true } : {})
   };
+}
+
+// Where a trial's cost figure came from. A loopback provider is usually a model on
+// this machine, but a benchmark gateway on 127.0.0.1 can forward a free-tier cloud
+// model (an OpenRouter-style `:free` id); that is labelled as free tier, not local.
+export function benchmarkCostSource({ routed = false, routedCostKnown = false, localModel = false, gatewayCloud = false, costUSD = null, model = '' } = {}) {
+  if (routed) return routedCostKnown ? 'per-model pricing estimate' : 'unknown: configure pricing for both routed models';
+  if (localModel && /:free$/i.test(String(model || ''))) return 'free-tier cloud model (":free" id) behind a localhost gateway: no per-token charge';
+  if (localModel) return 'local model: no per-token API charge (hardware and power not counted)';
+  if (gatewayCloud) return 'per-model list-price estimate (cloud model behind a localhost gateway; free-tier keys are not billed)';
+  if (costUSD === null) return 'unknown: set OASIS_EVAL_*_USD_PER_MILLION_TOKENS';
+  return 'uniform benchmark token-rate estimate';
 }
