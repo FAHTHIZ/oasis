@@ -466,6 +466,10 @@ function onModelWait(event = {}) {
   if (event.phase === 'progress') { if (waitIndicator) waitIndicator.update({ promptProgress: event.promptProgress }); return; }
   if (event.phase !== 'start') { stopWaitIndicator(); return; }
   flushExploration();
+  // A new request means the previous reply is over (a gate can re-prompt
+  // without onText). End its open line first: the spinner clears the current
+  // row, and the next reply must not be diffed against the old text.
+  endText();
   if (!waitIndicator) waitIndicator = createActivityIndicator({ stream: stdout, env: process.env, color: richOutput(), verbs: () => spinnerVerbsSetting });
   waitIndicator.start(turnDraft ? { ...event, draft: turnDraft } : event);
 }

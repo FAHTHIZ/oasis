@@ -3,6 +3,8 @@
 User-facing change history grouped by package version. A version heading does not imply that a GitHub Release or downloadable assets have been published; check the [Releases page](https://github.com/FAHTHIZ/oasis/releases) for current availability.
 
 ## Unreleased
+
+- Terminal: when a completion gate re-prompts the model after a streamed reply, the reply's last line now ends before the next request's spinner starts. Previously the spinner erased that line, the next reply's first chunk was dropped ("ask!ion add…"), and the redraw could wipe an earlier line. PTY regression test in `test/stream-reply-after-gate.test.mjs`.
 - `oasis connect` sizes the wide Ollama variant to this computer's model memory (32K, 24K or 16K tokens from the model's layer and KV-head counts) when Ollama runs locally. On an 8 GB machine, qwen3:0.6b at 32K loaded at 4.4 GB, past the 3.3 GB budget. While streaming, text-format tool calls from local models (`<tools>{"name": …}`, `<tool_call>`, …) are no longer printed raw before they are recovered.
 - Setup's tool-calling probe now accepts a call the model writes as reply text (the format the agent loop already recovers), with a reliability note, instead of rejecting small local models such as qwen3:0.6b that intermittently answer that way. When Ollama is running with no models, setup suggests an `ollama pull` that fits this computer.
 - A one-shot prompt (`oasis "…"`) with no model provider configured now exits 1 instead of 0. `oasis models` with no provider says "run oasis setup" without calling the network, and a 401/403 from the model list now points at the API key.
