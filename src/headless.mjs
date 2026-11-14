@@ -279,7 +279,7 @@ export async function runHeadless(options) {
           const answer = await requestBackgroundApproval(env.OASIS_BACKGROUND_ID, { tool: meta && meta.tool || null, message: String(message), canAlways: Boolean(meta && meta.suggestion) }, env, {
             timeoutMs,
             signal,
-            onRequest: (pending) => emit({ type: 'system', subtype: 'permission_request', tool: pending.tool, message: pending.message.slice(0, 300), expires_at: pending.expiresAt }),
+            onRequest: (pending) => emit({ type: 'system', subtype: 'permission_request', tool: pending.tool, message: pending.message, expires_at: pending.expiresAt }),
           }).catch(() => 'deny');
           const allowed = answer === 'allow' || answer === 'always';
           emit({ type: 'system', subtype: 'permission', tool: meta && meta.tool || null, allowed, via: 'background', ...(answer === 'timeout' ? { timed_out: true } : {}) });

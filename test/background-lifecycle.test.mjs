@@ -45,6 +45,9 @@ test('messages queue in the inbox, drain once, and are refused for stopped runs'
   await sendToBackgroundSession('bg-abc12345', 'second', env);
   assert.deepEqual(await drainInbox('bg-abc12345', env), ['first', 'second']);
   assert.deepEqual(await drainInbox('bg-abc12345', env), []);
+  const long = 'detail '.repeat(10000).trim();
+  await sendToBackgroundSession('bg-abc12345', long, env);
+  assert.deepEqual(await drainInbox('bg-abc12345', env), [long], 'a long message is not cut at 20,000 characters');
   await assert.rejects(sendToBackgroundSession('bg-abc12345', '   ', env), /Usage/);
   await fakeEntry(env, { status: 'completed' });
   await assert.rejects(sendToBackgroundSession('bg-abc12345', 'late', env), /completed/);

@@ -9,6 +9,7 @@
 //   oasis respawn ID|--all     restart with the conversation intact
 //   oasis --bg --exec 'cmd'    run a shell command as a background job (logs/stop/rm work the same)
 // attach/logs/stop/rm/respawn are also top-level commands and accept an id prefix or part of a name.
+import { MAX_STEER_CHARS } from './steering.mjs';
 import { spawn } from 'node:child_process';
 import { signalProcessTree } from './process-tree.mjs';
 import { randomUUID } from 'node:crypto';
@@ -105,7 +106,7 @@ export async function sendToBackgroundSession(id, text, env = process.env) {
   const entry = await readEntry(id, env);
   if (entry.kind === 'exec') throw new Error(id + ' is a shell job, not an agent; it cannot take messages.');
   if (entry.status !== 'running') throw new Error(id + ' is ' + entry.status + '. Use oasis respawn ' + id + ' to restart it, then send the message.');
-  await appendFile(inboxPath(id, env), JSON.stringify({ text: message.slice(0, 20000), at: new Date().toISOString() }) + '\n', { mode: 0o600 });
+  await appendFile(inboxPath(id, env), JSON.stringify({ text: message.slice(0, MAX_STEER_CHARS), at: new Date().toISOString() }) + '\n', { mode: 0o600 });
   return entry;
 }
 
