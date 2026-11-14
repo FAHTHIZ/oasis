@@ -250,6 +250,16 @@ export function helpEntry(label, description, width) {
   return body.map((line, index) => (index ? ' '.repeat(head.length) : head) + line);
 }
 
+const RESUME_LIST_LIMIT = 20;
+function sessionAge(iso) {
+  const ms = Date.now() - Date.parse(iso || '');
+  if (!Number.isFinite(ms)) return '';
+  if (ms < 60_000) return 'just now';
+  if (ms < 3_600_000) return Math.round(ms / 60_000) + 'm ago';
+  if (ms < 86_400_000) return Math.round(ms / 3_600_000) + 'h ago';
+  return Math.round(ms / 86_400_000) + 'd ago';
+}
+
 export async function runBuiltinCommand(name, argument, state) {
   if (name === 'ultrareview') { name = 'review'; argument = 'ultra ' + String(argument || '').trim(); }
   if (Object.hasOwn(COMMAND_ALIASES, name) && !Object.hasOwn(BUILTIN_COMMANDS, name)) name = COMMAND_ALIASES[name];
@@ -1748,9 +1758,19 @@ export async function runBuiltinCommand(name, argument, state) {
       if (!saved.length && !String(argument || '').trim()) return { output: 'All saved sessions in this workspace are archived. Use /resume ID to continue one, or oasis sessions unarchive ID.' };
       const requested = String(argument || '').trim();
       if (!requested) {
-        return { output: 'Saved sessions:\n' + saved.map((item, index) =>
-          '  ' + (index + 1) + '. ' + item.id + '  ' + (item.title || '(untitled)') + '  [' + (item.model || 'unknown model') + ']'
-        ).join('\n') + '\nType /resume NUMBER (or an ID prefix) to continue one.' };
+        // Short IDs (any unique prefix resumes), a relative time and a
+        // one-line title keep each entry on one row of an 80-column terminal.
+        const shown = saved.slice(0, RESUME_LIST_LIMIT);
+        const shortId = (id) => { let n = 8; while (n < id.length && everything.some((other) => other.id !== id && other.id.startsWith(id.slice(0, n)))) n++; return id.slice(0, n); };
+        const width = Number(process.stdout.columns) > 40 ? Number(process.stdout.columns) : 100;
+        const more = saved.length - shown.length;
+        return { output: 'Saved sessions:\n' + shown.map((item, index) => {
+          const head = '  ' + String(index + 1).padStart(String(shown.length).length) + '. ' + shortId(item.id) + '  ' + sessionAge(item.updatedAt).padEnd(8) + ' ';
+          const tag = '  [' + (item.model || 'unknown model') + ']';
+          const room = Math.max(16, width - 1 - head.length - tag.length);
+          const flat = String(item.title || '(untitled)').replace(/\s+/g, ' ').trim();
+          return head + (flat.length > room ? flat.slice(0, room - 1) + '…' : flat) + tag;
+        }).join('\n') + (more > 0 ? '\n  (' + more + ' older; oasis sessions lists them all)' : '') + '\nType /resume NUMBER (or an ID prefix) to continue one.' };
       }
       const number = Number(requested);
       const selected = Number.isInteger(number) && number >= 1 && number <= saved.length
