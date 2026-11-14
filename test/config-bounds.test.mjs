@@ -23,7 +23,7 @@ test('configuration integer settings reject partial, fractional and exponent str
   });
 
   assert.equal(config.maxSteps, 150, 'partial integer input must use the safe default');
-  assert.equal(config.maxToolCalls, 300, 'fractional input must not be parsed as an integer prefix');
+  assert.equal(config.maxToolCalls, 600, 'fractional input must not be parsed as an integer prefix');
   assert.equal(config.maxTokens, 2_000_000, 'scientific notation must not be parsed as a numeric prefix');
   assert.equal(config.maxCommandSeconds, 120, 'malformed saved settings must not be silently truncated');
   assert.equal(Object.hasOwn(config, 'contextWindow'), false, 'malformed saved context windows must be ignored');
