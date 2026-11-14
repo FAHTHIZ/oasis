@@ -11,6 +11,7 @@ import { execFile } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
+import { atomicWriteFile } from './atomic-write.mjs';
 
 export const CLOUD_WORKFLOW = 'oasis-cloud.yml';
 // OASIS's own folder is never handed off or counted as local changes.
@@ -99,12 +100,15 @@ export function createCloudClient({ cwd = process.cwd(), env = process.env, exec
     return stateFile;
   }
   async function readState() {
-    try { return JSON.parse(await readFile(await statePath(), 'utf8')); } catch { return { tasks: [] }; }
+    let state;
+    try { state = JSON.parse(await readFile(await statePath(), 'utf8')); } catch { state = null; }
+    return state && typeof state === 'object' && Array.isArray(state.tasks) ? state : { tasks: [] };
   }
   async function saveTask(task) {
     const state = await readState();
     state.tasks = [task, ...state.tasks.filter((item) => item.id !== task.id)].slice(0, 100);
-    await writeFile(await statePath(), JSON.stringify(state, null, 2) + '\n');
+    // Atomic so a crash mid-write cannot leave a truncated task list.
+    await atomicWriteFile(await statePath(), JSON.stringify(state, null, 2) + '\n');
   }
   async function findTask(id) {
     const state = await readState();
