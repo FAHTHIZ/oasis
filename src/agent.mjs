@@ -160,6 +160,15 @@ export function boundSubagentReport(text) {
 export const MAX_STREAMED_REPLY_CHARS = 1_000_000;
 
 
+// The summary request must fit the model's own window. The 32,000- and
+// 24,000-character floors are about 8,000 and 6,000 tokens, more than an 8K
+// local model holds with the instructions and the reply, so compaction
+// failed exactly when the window was full. The transcript is held to about
+// half the window (4 characters a token).
+function summaryWindowChars(session, env = process.env) {
+  return Math.max(6_000, Math.floor(contextWindowSize(session.config || {}, env) * 4 * 0.5));
+}
+
 export async function compactHistoryIfNeeded(session, options = {}) {
   let messages = session.messages || [];
   const thresholdChars = Number.isFinite(options.thresholdChars) && options.thresholdChars > 0 ? options.thresholdChars : compactionThresholdChars(session.config || {}, options.env || process.env);
@@ -180,7 +189,7 @@ export async function compactHistoryIfNeeded(session, options = {}) {
   if (preCompact.blocked) return { compacted: false, tokensUsed: 0, blockedByHook: true, reason: preCompact.reason };
 
   const oldMessages = messages.slice(1, boundary);
-  const transcript = summaryTranscript(oldMessages, Math.max(HISTORY_COMPACT_INPUT_LIMIT, Math.min(240000, Math.floor(thresholdChars / 2))));
+  const transcript = summaryTranscript(oldMessages, Math.min(summaryWindowChars(session, options.env), Math.max(HISTORY_COMPACT_INPUT_LIMIT, Math.min(240000, Math.floor(thresholdChars / 2)))));
   const mustPreserve = Array.isArray(session.mustPreserve) ? session.mustPreserve.slice(0, 20).map((item) => ({ kind: String(item.kind || 'rule').slice(0, 24), text: String(item.text || '').slice(0, 600) })).filter((item) => item.text.trim()) : [];
   const preserveBlock = mustPreserveContextBlock(mustPreserve);
   const summaryInstructions = [
@@ -337,7 +346,7 @@ async function compactMidTurnHistoryIfNeeded(session, requestIndex, options = {}
   if (oldChars < 8_000) return { compacted: false, tokensUsed: 0 };
 
   // Old tool rounds hold the findings; give the summarizer room for them.
-  const transcript = summaryTranscript(oldMessages, Math.max(24_000, Math.min(120_000, Math.floor(threshold / 4))));
+  const transcript = summaryTranscript(oldMessages, Math.min(summaryWindowChars(session, options.env), Math.max(24_000, Math.min(120_000, Math.floor(threshold / 4)))));
   const preCompact = await runPreCompactHooks(session, 'auto', options);
   const mustPreserve = Array.isArray(session.mustPreserve) ? session.mustPreserve.slice(0, 20).map((item) => ({ kind: String(item.kind || 'rule').slice(0, 24), text: String(item.text || '').slice(0, 600) })).filter((item) => item.text.trim()) : [];
   const preserveBlock = mustPreserveContextBlock(mustPreserve);
