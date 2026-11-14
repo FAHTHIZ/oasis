@@ -89,7 +89,7 @@ import { access, mkdir, readdir, readFile, realpath, writeFile } from 'node:fs/p
 async function pathExists(file) { try { await access(file); return true; } catch { return false; } }
 import { SHELL_TOOL_DEFINITION, POWERSHELL_TOOL_DEFINITION, findPowerShell, killAllBackground } from './power-tools.mjs';
 import { serverForFile, verifyEditedFileWithLsp, stopLspClients } from './lsp.mjs';
-import { AGENT_TOOL_DEFINITIONS, AGENT_TOOL_NAMES, MAX_BACKGROUND_AGENTS, agentRegistry, registerAgent, addAgentUsage, restoreAgentHistory, runningBackgroundCount, notifyParent, drainInbox, agentStatus, agentEvents, neuronNetworkSnapshot, recordAgentEvent, sendTeamMessage, stopAgent, stopAllAgents, getAgent, getAgentTeam, createAgentTeam, agentTeamStatus, shutdownAgentTeam } from './agent-tasks.mjs';
+import { AGENT_TOOL_DEFINITIONS, AGENT_TOOL_NAMES, MAX_BACKGROUND_AGENTS, agentRegistry, registerAgent, addAgentUsage, restoreAgentHistory, runningBackgroundCount, notifyParent, takeQueuedText, drainInbox, agentStatus, agentEvents, neuronNetworkSnapshot, recordAgentEvent, sendTeamMessage, stopAgent, stopAllAgents, getAgent, getAgentTeam, createAgentTeam, agentTeamStatus, shutdownAgentTeam } from './agent-tasks.mjs';
 import { subagentStepLimit, subagentDefinitionContext, verifyResumeWorktree, backgroundUsageSink, subagentMaxDepth, watchForStall, agentScopedHooks, withoutProjectInstructions, agentMcpSpec, connectAgentMcp, closeAgentMcp } from './subagent-support.mjs';
 export { subagentMaxDepth, subagentStallLimits } from './subagent-support.mjs';
 import { loadAgentDefinitions, taskToolDefinition, BUILTIN_AGENTS, MAX_PARALLEL_SUBAGENTS, runPool, parseFrontMatter, mapToolNames, normalizeAgentDefinition } from './subagents.mjs';
@@ -1168,8 +1168,8 @@ function queueBudgetNotice(session, spentUsd) {
 function flushAsyncHookFeedback(session) {
   const items = session.asyncHookFeedback;
   if (!items || !items.length) return;
-  session.asyncHookFeedback = [];
-  session.messages.push({ role: 'user', content: '<system-reminder>\n' + items.join('\n\n').slice(0, 20000) + '\n</system-reminder>' });
+  // Results that do not fit this request stay queued for the next one.
+  session.messages.push({ role: 'user', content: '<system-reminder>\n' + takeQueuedText(items, (item) => item, 20000) + '\n</system-reminder>' });
 }
 
 // PreCompact before a summary (can add focus instructions; exit 2 cancels a manual /compact),

@@ -328,10 +328,34 @@ export function notifyParent(session, text, record = null) {
 export function drainInbox(session) {
   if (!session.inbox || !session.inbox.length) return '';
   // Skip finish notices for agents whose report the model already read via agent_status.
-  const entries = session.inbox.splice(0).filter((entry) => !(entry.record && entry.record.noticeRead));
-  if (!entries.length) return '';
-  const text = entries.map((entry) => entry.text).join('\n\n');
-  return '<system-reminder>\n' + text.slice(0, 20000) + '\n</system-reminder>';
+  for (let i = session.inbox.length - 1; i >= 0; i--) if (session.inbox[i].record && session.inbox[i].record.noticeRead) session.inbox.splice(i, 1);
+  if (!session.inbox.length) return '';
+  const text = takeQueuedText(session.inbox, (entry) => entry.text, MAX_INBOX_DELIVERY_CHARS);
+  return '<system-reminder>\n' + text + '\n</system-reminder>';
+}
+
+// How much queued text one model request receives. Everything past the budget used
+// to be cut off and lost (the queue was emptied first); now whole items that do not
+// fit stay queued for the next request, and only a single item larger than the
+// whole budget is shortened (keeping its start and end, with a note).
+export const MAX_INBOX_DELIVERY_CHARS = 100_000;
+export function takeQueuedText(queue, textOf, max = MAX_INBOX_DELIVERY_CHARS) {
+  const parts = [];
+  let used = 0;
+  while (queue.length) {
+    const text = String(textOf(queue[0]) ?? '');
+    if (parts.length && used + text.length + 2 > max) break;
+    queue.shift();
+    if (text.length > max) {
+      const note = '\n[… ' + (text.length - max).toLocaleString('en-US') + ' characters of this message left out of the middle …]\n';
+      const room = max - note.length;
+      const head = Math.ceil(room * 0.6);
+      parts.push(text.slice(0, head) + note + text.slice(text.length - (room - head)));
+    } else parts.push(text);
+    used += Math.min(text.length, max) + 2;
+  }
+  if (queue.length) parts.push('[' + queue.length + ' more queued message' + (queue.length === 1 ? '' : 's') + ' will arrive with the next request.]');
+  return parts.join('\n\n');
 }
 
 function elapsed(record) {
