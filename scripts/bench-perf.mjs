@@ -18,13 +18,14 @@ const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..'
 const cli = path.join(repoRoot, 'src', 'oasis.mjs');
 
 export function parseArgs(argv) {
-  const options = { runs: 7, json: '', compare: false };
+  const options = { runs: 7, json: '', compare: false, installed: false };
   for (let i = 0; i < argv.length; i += 1) {
     const arg = argv[i];
     if (arg === '--help' || arg === '-h') return { ...options, help: true };
     if (arg === '--runs' && argv[i + 1]) { options.runs = Number(argv[++i]); continue; }
     if (arg === '--json' && argv[i + 1]) { options.json = argv[++i]; continue; }
     if (arg === '--compare') { options.compare = true; continue; }
+    if (arg === '--installed') { options.installed = true; continue; }
     throw new Error('Unknown or incomplete option: ' + arg);
   }
   if (!Number.isInteger(options.runs) || options.runs < 1 || options.runs > 50) throw new Error('--runs must be 1-50.');
@@ -304,6 +305,36 @@ export async function measure({ runs = 7, compare = false } = {}) {
   }
 }
 
+// The launcher a user installed with scripts/install.sh or install.ps1, timed
+// as the user runs it (shell wrapper included). Installer CI uses this to
+// record launch time on clean runners; it needs no repository checkout.
+export function installedCommand(platform = process.platform, env = process.env, home = os.homedir()) {
+  return platform === 'win32' ? path.join(env.LOCALAPPDATA || home, 'OASIS', 'oasis.cmd') : path.join(home, '.local', 'bin', 'oasis');
+}
+
+export async function measureInstalled({ runs = 7 } = {}) {
+  const command = installedCommand();
+  const times = [];
+  let version = '';
+  for (let i = 0; i < runs; i += 1) {
+    const result = await new Promise((resolve) => {
+      const started = process.hrtime.bigint();
+      const child = spawn(command, ['--version'], { windowsHide: true, shell: process.platform === 'win32', stdio: ['ignore', 'pipe', 'pipe'] });
+      let stdout = '';
+      let stderr = '';
+      child.stdout.on('data', (chunk) => { stdout += chunk; });
+      child.stderr.on('data', (chunk) => { stderr += chunk; });
+      child.on('error', (error) => resolve({ error }));
+      child.on('close', (status) => resolve({ status, stdout, stderr, ms: Number(process.hrtime.bigint() - started) / 1e6 }));
+    });
+    if (result.error) throw new Error('Could not run the installed OASIS command ' + command + ': ' + result.error.message);
+    if (result.status !== 0) throw new Error('Installed oasis --version exited ' + result.status + ': ' + result.stderr.slice(0, 400));
+    version = result.stdout.trim().split(/\r?\n/)[0];
+    times.push(result.ms);
+  }
+  return { measuredAt: new Date().toISOString(), command, version, runtime: { node: process.version, platform: process.platform, arch: process.arch }, wallMs: summarize(times) };
+}
+
 function printReport(result) {
   const line = (label, value) => process.stdout.write('  ' + label.padEnd(34) + value + '\n');
   const ms = (s) => (s ? s.median.toFixed(0) + ' ms median, p90 ' + s.p90.toFixed(0) : 'n/a');
@@ -328,7 +359,12 @@ function printReport(result) {
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   const options = parseArgs(process.argv.slice(2));
   if (options.help) {
-    process.stdout.write('Usage: npm run bench:perf -- [--runs 1-50] [--json FILE] [--compare]\n\nMeasures CLI launch, runtime import and session creation, web workspace memory,\ntask-routing overhead and stdio MCP startup. No model or network is used.\n--compare (Linux) also times --version and --help of other agent CLIs on PATH.\n');
+    process.stdout.write('Usage: npm run bench:perf -- [--runs 1-50] [--json FILE] [--compare | --installed]\n\nMeasures CLI launch, runtime import and session creation, web workspace memory,\ntask-routing overhead and stdio MCP startup. No model or network is used.\n--compare (Linux) also times --version and --help of other agent CLIs on PATH.\n--installed times only the installed launcher (~/.local/bin/oasis, or\n%LOCALAPPDATA%\\OASIS\\oasis.cmd on Windows) running --version.\n');
+  } else if (options.installed) {
+    const result = await measureInstalled(options);
+    const s = result.wallMs;
+    process.stdout.write('Installed OASIS ' + result.version + ' (' + result.command + ')\n  --version launch: ' + s.median.toFixed(0) + ' ms median, p90 ' + s.p90.toFixed(0) + ', min ' + s.min.toFixed(0) + ', max ' + s.max.toFixed(0) + ' (' + s.runs + ' sequential runs, warm file cache)\n');
+    if (options.json) await writeFile(options.json, JSON.stringify(result, null, 2) + '\n');
   } else {
     const result = await measure(options);
     printReport(result);

@@ -6,6 +6,7 @@ import { execFile } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import path from 'node:path';
 import { stripAiAttribution } from './commit-attribution.mjs';
+import { endChildInput } from './node-process.mjs';
 
 const TRUE = /^(?:1|true|yes|on)$/i;
 const FALSE = /^(?:0|false|no|off)$/i;
@@ -23,7 +24,7 @@ function git(args, cwd, { input } = {}) {
     const child = execFile('git', args, { cwd, maxBuffer: 4 * 1024 * 1024, env: { ...process.env, GIT_TERMINAL_PROMPT: '0' } }, (error, stdout, stderr) => {
       resolve({ code: error ? (typeof error.code === 'number' ? error.code : 1) : 0, stdout: String(stdout || ''), stderr: String(stderr || '') });
     });
-    if (input !== undefined) { child.stdin.end(input); }
+    endChildInput(child, input);
   });
 }
 

@@ -12,6 +12,7 @@ import { randomBytes } from 'node:crypto';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { atomicWriteFile } from './atomic-write.mjs';
+import { endChildInput } from './node-process.mjs';
 
 export const CLOUD_WORKFLOW = 'oasis-cloud.yml';
 // OASIS's own folder is never handed off or counted as local changes.
@@ -82,7 +83,7 @@ function run(command, args, { cwd, input, env } = {}) {
         reject(Object.assign(new Error(message || command + ' failed'), { code: error.code }));
       } else resolve(String(stdout).trim());
     });
-    if (input !== undefined) child.stdin.end(input);
+    endChildInput(child, input);
   });
 }
 

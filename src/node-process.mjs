@@ -9,3 +9,13 @@ export function nodeChildEnv(env = process.env, { versions = process.versions } 
   if (!versions || !versions.electron) return env;
   return { ...env, ELECTRON_RUN_AS_NODE: '1' };
 }
+
+// Give a child its stdin and close it without letting a child that exits
+// early (a failing git hook, a missing command) crash OASIS: writing to a
+// closed pipe raises EPIPE on the stream, and an unhandled stream error is an
+// uncaught exception. The child's exit status still reports the failure.
+export function endChildInput(child, input) {
+  if (!child || !child.stdin) return;
+  child.stdin.on('error', () => {});
+  if (input !== undefined) child.stdin.end(input);
+}
