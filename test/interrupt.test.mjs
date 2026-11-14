@@ -48,3 +48,18 @@ test('repair drops tool results that answer no preceding call and sends no extra
   for (const message of session.messages) assert.equal('result' in message, false, 'only wire fields go to the provider');
   assert.equal(repairInterruptedHistory(session), 0);
 });
+
+test('repairInterruptedHistory keeps the output of calls that finished before the stop', () => {
+  const call = (id) => ({ id, type: 'function', function: { name: 'write_file', arguments: '{}' } });
+  const session = {
+    messages: [{ role: 'system', content: 's' }, { role: 'user', content: 'go' }, { role: 'assistant', content: '', tool_calls: [call('done'), call('running')] }],
+    pendingToolOutputs: new Map([['done', { role: 'tool', tool_call_id: 'done', name: 'write_file', content: 'Wrote a.txt' }]])
+  };
+  repairInterruptedHistory(session);
+  const [done, running] = session.messages.slice(3, 5);
+  assert.equal(done.tool_call_id, 'done');
+  assert.match(done.content, /recovered[\s\S]*Wrote a\.txt$/);
+  assert.equal(running.tool_call_id, 'running');
+  assert.match(running.content, /Interrupted/);
+  assert.equal(session.pendingToolOutputs, null);
+});
