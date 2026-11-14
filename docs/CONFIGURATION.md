@@ -91,6 +91,12 @@ Built-in providers:
 Amazon Bedrock, Google Vertex AI and Microsoft Foundry are configured through
 `src/cloud-providers.mjs`, not this table.
 
+`OPENAI_BASE_URL` and `ANTHROPIC_BASE_URL` (the OpenAI SDK and Claude Code
+convention) are read only when `OASIS_BASE_URL`, `OASIS_PROTOCOL` and a saved
+setup are all absent, so a variable exported for another tool never overrides
+`oasis setup`. `ANTHROPIC_BASE_URL` selects the Anthropic protocol; any other
+host on `OPENAI_BASE_URL` uses Chat Completions (`openai-compatible`).
+
 Keys for local servers: OASIS never sends an ambient `OPENAI_API_KEY` or
 `ANTHROPIC_API_KEY` to a `localhost` address. A local gateway that needs a key
 (LiteLLM, OmniRoute with authentication) gets `OASIS_LOCAL_API_KEY`, or
