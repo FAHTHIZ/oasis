@@ -201,9 +201,37 @@ const PROMPT_HOOK_SYSTEM = [
   'Reply with only a JSON object: {"ok": true} if the policy is satisfied, or {"ok": false, "reason": "short explanation"} if not.'
 ].join('\n');
 
+const MAX_PROMPT_HOOK_PAYLOAD = 30000;
+const TOOL_CHECK_EVENTS = new Set(['PreToolUse', 'PermissionRequest']);
+const FILE_BODY_KEYS = new Set(['content', 'new_string', 'old_string', 'new_source', 'text']);
+const FILE_BODY_KEEP = 3000;
+function shortenFileBodies(input) {
+  if (!input || typeof input !== 'object' || Array.isArray(input)) return input;
+  const out = {};
+  for (const [key, value] of Object.entries(input)) {
+    if (FILE_BODY_KEYS.has(key) && typeof value === 'string' && value.length > FILE_BODY_KEEP * 2) out[key] = value.slice(0, FILE_BODY_KEEP) + '\n[... ' + (value.length - FILE_BODY_KEEP * 2) + ' characters of file text omitted ...]\n' + value.slice(-FILE_BODY_KEEP);
+    else if (key === 'edits' && Array.isArray(value)) out[key] = value.map(shortenFileBodies);
+    else out[key] = value;
+  }
+  return out;
+}
+export function promptHookPayload(payload) {
+  return payload && payload.tool_input && typeof payload.tool_input === 'object' ? { ...payload, tool_input: shortenFileBodies(payload.tool_input) } : payload;
+}
+
 async function runPromptHook(hook, payload, options = {}) {
   if (typeof options.evaluatePrompt !== 'function') return { exitCode: 1, stdout: '', stderr: 'Prompt hooks need a model, and none is available here.' };
-  const json = JSON.stringify(payload, null, 2).slice(0, 30000);
+  // The model must see the whole action it is asked to check. Cutting the
+  // payload at 30,000 characters let padding hide the end of a command.
+  // File bodies are shortened to head and tail; a tool action that still
+  // does not fit is refused rather than judged on a part.
+  let json = JSON.stringify(promptHookPayload(payload), null, 2);
+  if (json.length > MAX_PROMPT_HOOK_PAYLOAD) {
+    if (TOOL_CHECK_EVENTS.has(payload.hook_event_name)) {
+      return { exitCode: 2, stdout: '', stderr: 'The ' + (hook.type || 'prompt') + ' hook could not check this action: it is too large to show in full (' + json.length.toLocaleString('en-US') + ' characters).' };
+    }
+    json = json.slice(0, MAX_PROMPT_HOOK_PAYLOAD);
+  }
   const text = hook.prompt.includes('$ARGUMENTS') ? hook.prompt.split('$ARGUMENTS').join(json) : hook.prompt + '\n\nEvent payload:\n' + json;
   const timeoutMs = Math.max(1, Math.min(600, Number(hook.timeout) || 30)) * 1000;
   let reply;
