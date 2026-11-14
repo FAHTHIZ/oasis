@@ -124,7 +124,9 @@ test('undelivered runtime steering is preserved as bounded session state', async
   const second = await saveSession({ ...session, pendingSteering: invalid }, { env });
   const bounded = await loadSession(root, second.id, { env });
   assert.equal(bounded.pendingSteering.length, 20);
-  assert.deepEqual(bounded.pendingSteering.slice(0, -1), Array.from({ length: 19 }, (_, i) => 'saved ' + (i + 3)));
+  // The oldest notes are merged into the first entry instead of dropped.
+  assert.equal(bounded.pendingSteering[0], ['saved 0', 'saved 1', 'saved 2', 'saved 3'].join('\n\n'));
+  assert.deepEqual(bounded.pendingSteering.slice(1, -1), Array.from({ length: 18 }, (_, i) => 'saved ' + (i + 4)));
   assert.equal(bounded.pendingSteering.at(-1), 'x'.repeat(200_000));
 });
 

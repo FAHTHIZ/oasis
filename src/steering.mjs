@@ -11,6 +11,19 @@ export const STEER_LIMIT = 20;
 // Same bound as a web chat message: a steer is a user message too, and it
 // used to be cut at 20,000 characters with no note.
 export const MAX_STEER_CHARS = 200_000;
+/**
+ * Keep at most STEER_LIMIT carried notes without losing instructions: when
+ * there are more, the oldest ones are merged into the first entry (newest
+ * text kept if the merged note would pass MAX_STEER_CHARS).
+ */
+export const STEERING_CUT_NOTE = '[Older steering notes were shortened to fit.]\n';
+export function foldSteering(notes) {
+  const list = (Array.isArray(notes) ? notes : []).filter((note) => typeof note === 'string' && note.trim());
+  if (list.length <= STEER_LIMIT) return list;
+  let merged = list.slice(0, list.length - STEER_LIMIT + 1).join('\n\n');
+  if (merged.length > MAX_STEER_CHARS) merged = STEERING_CUT_NOTE + merged.slice(merged.length - (MAX_STEER_CHARS - STEERING_CUT_NOTE.length));
+  return [merged, ...list.slice(list.length - STEER_LIMIT + 1)];
+}
 export function steerSession(session, text) {
   const value = String(text == null ? '' : text).trim();
   if (!session || !value) return false;
@@ -47,9 +60,9 @@ export function carryUndeliveredSteering(session) {
     .filter((text) => typeof text === 'string')
     .map((text) => text.trim().slice(0, MAX_STEER_CHARS))
     .filter(Boolean);
-  // Keep the most recent instructions without changing or truncating the
+  // Keep every instruction (older ones merged) without changing or truncating the
   // existing conversation, which may contain an open tool-call sequence.
-  session.pendingSteering = combined.slice(-STEER_LIMIT);
+  session.pendingSteering = foldSteering(combined);
   return texts;
 }
 export function deliverSteering(session, options) {
