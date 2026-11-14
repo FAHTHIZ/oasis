@@ -131,12 +131,22 @@ export function translateGoRegex(source) {
 
 const lowerList = (list) => (Array.isArray(list) ? list.map((item) => String(item).toLowerCase()) : []);
 
+// Gitleaks builds some rules as [\w.-]{0,50}?(?:[\w.-]{0,50}?<keyword>...). RE2
+// runs that in linear time, but a backtracking engine tries up to 2,500 splits
+// of the two quantifiers at every position: one 256 KB tool result containing
+// "okta" took 550 ms for that rule alone. A single {0,100}? quantifier
+// matches exactly the same strings, at the same positions.
+const NESTED_LAZY_PREFIX = '[\\w.-]{0,50}?(?:[\\w.-]{0,50}?';
+export function flattenNestedLazyPrefix(source) {
+  return source.startsWith(NESTED_LAZY_PREFIX) ? '(?:[\\w.-]{0,100}?' + source.slice(NESTED_LAZY_PREFIX.length) : source;
+}
+
 export function convertGitleaks(config) {
   const rules = [];
   const skipped = [];
   for (const rule of config.rules || []) {
     if (!rule.regex || EXCLUDED_RULES.has(rule.id)) { skipped.push(rule.id); continue; }
-    const entry = { id: rule.id, regex: translateGoRegex(rule.regex) };
+    const entry = { id: rule.id, regex: flattenNestedLazyPrefix(translateGoRegex(rule.regex)) };
     // Rules scoped to file types (e.g. *.tf, nuget.config) run only when the
     // caller knows the text came from a matching path.
     if (rule.path) entry.path = translateGoRegex(rule.path);
