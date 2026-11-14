@@ -97,8 +97,10 @@ test('long tool results are shortened to fit a small window, keeping head and ta
   await runAgentTurn(session, 'read big.txt', { approval: async () => true });
   const tool = requests[1].messages.find((m) => m.role === 'tool').content;
   assert.ok(tool.length <= Math.floor(8192 * 4 * 0.2), String(tool.length));
-  assert.match(tool, /shortened this .*8,192-token context window/);
+  // A file read is cut at a whole line with where to continue.
+  assert.match(tool, /Continue with read_file offset=\d+/);
   assert.match(tool, /line 0/);
+  assert.doesNotMatch(tool, /\[Tool result truncated\.\]/);
 });
 
 async function jsonServer(t, routes) {
