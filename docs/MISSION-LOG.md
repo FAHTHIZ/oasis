@@ -9,6 +9,7 @@ Probed `runAgentTurn` against a local SSE server that misbehaves on purpose: soc
 
 - A single non-JSON SSE data event (a gateway that cuts or interleaves a chunk) failed the whole turn. It is now an `OASIS_STREAM_INTERRUPTED` restart like a dropped connection. Test: `test/stream-corrupt-event.test.mjs`.
 - Parallel calls that reuse one id (index 0 and 1, both id `x`) were merged into one `read_filelist_files` call with mixed arguments. A delta that names a new call at another index now opens its own call, and duplicate ids get a `_2` suffix in both streamed and non-streamed replies so each result answers its own call. Test: `test/stream-duplicate-call-ids.test.mjs`.
+- A Responses API stream that closed before `response.completed` failed the turn; chat and Anthropic cut-offs already restarted. It now restarts too (Codex retries the same case). Test: `test/stream-disconnect.test.mjs` now covers all three protocols.
 - Text stopped by a provider content filter (`finish_reason: content_filter` / `error`) was returned as a complete answer. It now ends with a note that it may be incomplete. Test: `test/provider-stop-partial.test.mjs`.
 
 ## 2026-11-12 (browser-only chats in the session store)

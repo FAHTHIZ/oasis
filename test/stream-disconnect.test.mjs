@@ -18,7 +18,10 @@ async function run(t, protocol) {
     res.writeHead(200, { 'content-type': 'text/event-stream' });
     const send = (event) => res.write('data: ' + JSON.stringify(event) + '\n\n');
     const cut = requests === 1;
-    if (protocol === 'anthropic') {
+    if (protocol === 'openai-responses') {
+      send({ type: 'response.output_text.delta', delta: cut ? 'The answer is that the fun' : 'Full answer.' });
+      if (!cut) send({ type: 'response.completed', response: { id: 'r' + requests, status: 'completed', output: [{ type: 'message', role: 'assistant', content: [{ type: 'output_text', text: 'Full answer.' }] }], usage: { input_tokens: 5, output_tokens: 3 } } });
+    } else if (protocol === 'anthropic') {
       send({ type: 'message_start', message: { id: 'm' + requests, model: 'fixture', usage: { input_tokens: 5, output_tokens: 0 } } });
       send({ type: 'content_block_start', index: 0, content_block: { type: 'text', text: '' } });
       send({ type: 'content_block_delta', index: 0, delta: { type: 'text_delta', text: cut ? 'The answer is that the fun' : 'Full answer.' } });
@@ -37,14 +40,14 @@ async function run(t, protocol) {
   const base = 'http://127.0.0.1:' + server.address().port;
   const config = protocol === 'anthropic'
     ? { protocol: 'anthropic', baseURL: base, model: 'claude-fixture', apiKey: 'k' }
-    : { protocol: 'openai-compatible', baseURL: base + '/v1', model: 'fixture', apiKey: '' };
+    : { protocol, baseURL: base + '/v1', model: 'fixture', apiKey: '' };
   const session = await createSession({ root, config, permissionMode: 'bypassPermissions', env: { ...process.env, HOME: root, OASIS_CONFIG_DIR: root } });
   t.after(async () => { closeSession(session); server.close(); await rm(root, { recursive: true, force: true }); });
   const result = await runAgentTurn(session, 'Explain the function.', { onDelta: () => {}, onText: () => {} });
   return { result, requests };
 }
 
-for (const protocol of ['openai-compatible', 'anthropic']) {
+for (const protocol of ['openai-compatible', 'anthropic', 'openai-responses']) {
   test(protocol + ': a stream cut off mid-reply is restarted, not returned as the answer', async (t) => {
     const { result, requests } = await run(t, protocol);
     assert.equal(result.text, 'Full answer.');

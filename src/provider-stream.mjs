@@ -265,7 +265,10 @@ export async function readProviderStream(response, protocol, onDelta, onProgress
         throw responsesStreamError(event);
       }
     });
-    if (!finalResponse) throw new Error('The Responses API stream ended without a completed response event.');
+    // Closed before response.completed: cut off like a chat stream without
+    // [DONE]. Codex retries this case too ("stream closed before
+    // response.completed").
+    if (!finalResponse) throw Object.assign(new Error('The model stream was interrupted: the Responses API stream ended without a completed response event.'), { code: 'OASIS_STREAM_INTERRUPTED' });
     return finalResponse;
   }
 
