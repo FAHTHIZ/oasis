@@ -1673,7 +1673,20 @@ async function runReadOnlyGit(root, args) {
   });
 }
 
+// Outside a Git work tree, `git diff` prints its whole usage text (about 16 KB)
+// and `git status` a terse fatal line; either way the model learned nothing and
+// paid for the tokens. Answer with one line that says what to do instead.
+async function notAGitWorkTree(root, command) {
+  const probe = await runReadOnlyGit(root, ['rev-parse', '--is-inside-work-tree']);
+  if (probe && probe.exitCode === 0 && /true/.test(String(probe.stdout || ''))) return null;
+  if (probe && probe.exitCode === 127) return probe; // git itself is missing
+  const message = 'This workspace is not a Git repository, so ' + command + ' has nothing to compare against. Review your changes by reading the files you edited (read_file), and run the project\'s checks.';
+  return { command: 'git ' + command.replace(/^git /, ''), exitCode: 128, signal: null, timedOut: false, stdout: '', stderr: message, output: message, truncated: false, notGitRepository: true };
+}
+
 async function readGitStatus(root) {
+  const outside = await notAGitWorkTree(root, 'git status');
+  if (outside) return outside;
   return await runReadOnlyGit(root, ['status', '--short', '--branch', '--untracked-files=normal', '--no-ahead-behind']);
 }
 
@@ -1681,6 +1694,8 @@ const EMPTY_TREE_SHA1 = '4b825dc642cb6eb9a060e54bf8d69288fbee4904';
 const EMPTY_TREE_SHA256 = '6ef19b41225c5369f1c104d45d8d85efa9b057b53b14b4b9b939dd74decc5321';
 
 async function readGitDiff(root, args = {}) {
+  const outside = await notAGitWorkTree(root, 'git diff');
+  if (outside) return outside;
   const scope = ['unstaged', 'staged', 'all'].includes(args.scope) ? args.scope : 'all';
   const commandArgs = ['diff', '--no-ext-diff', '--no-textconv', '--no-color', '--unified=3'];
   if (scope === 'staged') commandArgs.push('--cached');
