@@ -16,6 +16,15 @@ export function questionBudget(session, options = {}) {
   return Number.isInteger(value) && value >= 0 ? value : 2;
 }
 
+// Display bounds only. They used to be 600 / 80 / 300 characters, and the
+// user's typed answer was cut at 2,000 with no note, so a pasted spec or a
+// long explanation reached the model half-finished. An answer has the same
+// bound as a steering message (MAX_STEER_CHARS).
+const MAX_QUESTION_CHARS = 4000;
+const MAX_LABEL_CHARS = 200;
+const MAX_DESCRIPTION_CHARS = 1000;
+const MAX_ANSWER_CHARS = 200_000;
+
 export const ASK_USER_TOOL_DEFINITION = { type: 'function', function: {
   name: 'ask_user_question',
   description: 'Ask the user a multiple-choice question when a decision really changes the work. Options may be strings or objects with a label and optional description. Not for permission or things you can find out yourself.',
@@ -34,11 +43,11 @@ export const ASK_USER_TOOL_DEFINITION = { type: 'function', function: {
 } };
 
 export function normalizeQuestion(args = {}) {
-  const question = String(args.question || '').trim().slice(0, 600);
+  const question = String(args.question || '').trim().slice(0, MAX_QUESTION_CHARS);
   if (!question) throw new Error('ask_user_question needs a question.');
   const options = (Array.isArray(args.options) ? args.options : []).slice(0, 4).map((item) => typeof item === 'string'
-    ? { label: item.trim().slice(0, 80), description: '' }
-    : { label: String(item && item.label || '').trim().slice(0, 80), description: String(item && item.description || '').trim().slice(0, 300) }).filter((item) => item.label);
+    ? { label: item.trim().slice(0, MAX_LABEL_CHARS), description: '' }
+    : { label: String(item && item.label || '').trim().slice(0, MAX_LABEL_CHARS), description: String(item && item.description || '').trim().slice(0, MAX_DESCRIPTION_CHARS) }).filter((item) => item.label);
   if (options.length < 2) throw new Error('ask_user_question needs 2-4 options.');
   return { question, header: String(args.header || '').trim().slice(0, 12), options, multiSelect: Boolean(args.multiSelect) };
 }
@@ -64,5 +73,5 @@ export async function askUserQuestion(session, args, options) {
   if (answer === null || answer === undefined || String(answer).trim() === '') {
     return { answered: false, message: 'The user did not answer. Pick the safest reasonable option, say which one you picked, and continue.' };
   }
-  return { answered: true, question: question.question, answer: String(answer).slice(0, 2000) };
+  return { answered: true, question: question.question, answer: String(answer).slice(0, MAX_ANSWER_CHARS) };
 }
