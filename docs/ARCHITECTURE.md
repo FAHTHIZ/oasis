@@ -28,6 +28,8 @@ The model proposes responses and tool calls. OASIS owns the runtime decisions ar
 | Area | Main source locations | Responsibility |
 |---|---|---|
 | Agent orchestration | `src/agent.mjs` | Creates sessions, coordinates streamed turns, dispatches tool calls, handles retries and context recovery. |
+| Model requests | `src/agent-request.mjs` | Builds and sends each model request: timeouts, stream restarts, model fallback, tracing, usage accounting. |
+| Subagents and dispatch | `src/agent-subagents.mjs` | Subagents, specialist reviews, workflows, background runs and shared-task dispatch: everything that starts a child turn. |
 | Turn support | `src/system-prompt.mjs`, `src/project-profile.mjs`, `src/steering.mjs`, `src/turn-guards.mjs`, `src/verification-summary.mjs`, `src/tool-results.mjs`, `src/compaction-history.mjs`, `src/context-window.mjs`, `src/plan-mode.mjs`, `src/ask-user.mjs`, `src/web-access.mjs` | The pieces of a turn that do not need the loop itself: the system prompt and project profile, mid-turn steering, verification and nudges, what the model sees from each tool, compaction helpers, context-window discovery from provider overflow errors, plan-mode hand-off, user questions and per-site web approval. |
 | Provider policy | `src/provider-request.mjs`, `src/provider-retry.mjs`, `src/model-budgets.mjs`, `src/usage-estimate.mjs`, `src/api-error.mjs` | Prompt-cache breakpoints and reasoning replay, retry and backoff, per-model output and thinking budgets, token usage normalization and readable provider errors. |
 | Provider request adapters | `src/provider-requests.mjs` | Builds OpenAI Chat Completions, OpenAI Responses and Anthropic request bodies; normalizes endpoints and tool schemas. |
