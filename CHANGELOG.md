@@ -4,6 +4,7 @@ User-facing change history grouped by package version. A version heading does no
 
 ## Unreleased
 
+- Compaction summaries are written from a much fuller transcript. The summarizer saw every user message cut to 1,800 characters, assistant text to 1,300 and tool results to 650 (mid-task compaction also capped the whole transcript at 24,000), and the original request was the first thing dropped when the transcript was long. It now gets up to 20,000 / 6,000 / 4,000 characters per message (head and tail, with a marker), the first request is always kept, the newest whole lines fill the rest, and mid-task compaction scales with the context window up to 120,000 characters.
 - The browser tool's snapshot says when the page text (12,000 characters) or the numbered element list (300) was cut, with how to read further, instead of silently presenting part of the page as the whole.
 - Plan approval shows the whole plan. The terminal and web approval text cut every plan to 1,800 characters, so the user approved a plan they could not fully read, and `exit_plan_mode` itself cut plans at 20,000 characters without a note; plans up to 100,000 characters now go through whole and a longer one is sent back to be shortened. Other long approval prompts say how many characters were not shown.
 - Time spent on an MCP tool's approval prompt no longer counts against the tool timeout, the same as workspace tools and questions.
