@@ -182,3 +182,12 @@ test('an empty reply to a request for changes gets a continue nudge, not an empt
   assert.equal(requests, 2);
   assert.match(result.text, /could not find/);
 });
+
+test('the stream idle watchdog defaults to 5 minutes, 10 at high reasoning effort', async () => {
+  const { defaultStreamIdleMs } = await import('../src/agent.mjs');
+  assert.equal(defaultStreamIdleMs(), 300000);
+  assert.equal(defaultStreamIdleMs('medium'), 300000);
+  assert.equal(defaultStreamIdleMs('high'), 600000);
+  assert.equal(defaultStreamIdleMs('xhigh'), 600000);
+  assert.equal(defaultStreamIdleMs('MAX'), 600000);
+});
