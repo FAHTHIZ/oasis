@@ -67,3 +67,23 @@ test('a headless run waits for the reset and then finishes', async (t) => {
   assert.match(on.out, /finished after reset/, on.out);
   assert.equal(requests, 4);
 });
+
+// Regression: a 429 with a stated reset that OASIS did not wait for (seen live:
+// FreeLLMAPI's "Soonest reset ~10m" with Retry-After: 600) said only "wait a
+// little and try again", with no mention of the opt-in that automates it.
+test('rateLimitWaitHint names the opt-in when the provider states a reset', async () => {
+  const { rateLimitWaitHint } = await import('../src/provider-retry.mjs');
+  const body = '{"error":{"message":"All models exhausted. Soonest reset ~10m."}}';
+  const hint = rateLimitWaitHint({ status: 429, headers: new Headers({ 'retry-after': '600' }), body });
+  assert.match(hint, /resets in about 10 min/);
+  assert.match(hint, /OASIS_WAIT_FOR_RATE_LIMIT_MINUTES=10\b/);
+  // Seconds for short resets.
+  assert.match(rateLimitWaitHint({ status: 429, headers: new Headers({ 'retry-after': '45' }), body: 'rate limit' }), /about 45 s.*=1\b/);
+  // A setting too small for this reset: suggest one that covers it.
+  assert.match(rateLimitWaitHint({ status: 429, headers: new Headers({ 'retry-after': '600' }), body, maxMinutes: 5 }), /=10 \(now 5\)/);
+  // Already allowed (it waited and is still limited), no reset stated, billing, or not a 429: no hint.
+  assert.equal(rateLimitWaitHint({ status: 429, headers: new Headers({ 'retry-after': '600' }), body, maxMinutes: 15 }), '');
+  assert.equal(rateLimitWaitHint({ status: 429, headers: new Headers(), body }), '');
+  assert.equal(rateLimitWaitHint({ status: 429, headers: new Headers({ 'retry-after': '600' }), body: '{"error":{"code":"insufficient_quota"}}' }), '');
+  assert.equal(rateLimitWaitHint({ status: 503, headers: new Headers({ 'retry-after': '600' }), body }), '');
+});

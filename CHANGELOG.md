@@ -4,6 +4,7 @@ User-facing change history grouped by package version. A version heading does no
 
 ## Unreleased
 
+- When a provider answers 429 with a reset time that OASIS did not wait for (for example FreeLLMAPI's "Soonest reset ~10m" with `Retry-After: 600`), the error now says when the limit resets and names `OASIS_WAIT_FOR_RATE_LIMIT_MINUTES=N`, which makes OASIS wait for it. That setting is now documented in docs/CONFIGURATION.md ("Rate-limit waits").
 - `oasis -p` now exits 1 with `"is_error": true` when it stops at `--max-turns` or when the repeat guard stops a model that keeps sending the same tool call (subtype `error_max_turns`), as Claude Code does. Before, it reported `error_max_turns` with `"is_error": false` and exit 0, so a script that checked either one took an unfinished run for a pass.
 - `oasis -p` now exits 1 when the model never answers (three empty replies, or a provider stop with no text), with `"is_error": true`, subtype `error_during_execution` and `"empty_reply": true`. Before, it reported subtype `success` and exited 0, so CI took a run that did nothing for a pass.
 - Installer: `curl ... | sh` with no controlling terminal (CI, cron, `setsid`) now prints "I cannot ask for permission here" and changes nothing. Before, the `/dev/tty` check passed, opening the terminal failed, and the user saw a raw `cannot open /dev/tty` shell error. Use `--yes` to install without prompts.
