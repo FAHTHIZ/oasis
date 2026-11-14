@@ -110,8 +110,12 @@ test('runAutoTest runs inside the OS sandbox when the session has one enabled', 
   const base = await mkdtemp(path.join(os.tmpdir(), 'oasis-autotest-sbx-'));
   t.after(() => rm(base, { recursive: true, force: true }));
   const root = path.join(base, 'ws');
-  const outside = path.join(base, 'outside');
-  await mkdir(root); await mkdir(outside);
+  // The target lives outside every sandbox-writable location. The temporary
+  // folder is writable inside the sandbox on purpose (macOS Seatbelt allows
+  // os.tmpdir() and /private/var/folders), so it cannot be the "outside".
+  const outside = await mkdtemp(path.join(os.homedir(), '.oasis-autotest-outside-'));
+  t.after(() => rm(outside, { recursive: true, force: true }));
+  await mkdir(root);
   const sandbox = resolveSandbox({ sandbox: { enabled: true } }, root);
   if (process.platform === 'win32' || !sandbox.available) { t.skip('no OS sandbox on this machine'); return; }
   const target = path.join(outside, 'escaped.txt');

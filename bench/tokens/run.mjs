@@ -205,7 +205,7 @@ async function runScenario(scenario) {
     error = caught && caught.message || String(caught);
   }
   const tools = toolOutcomes(session, provider.toolCalls);
-  if (dumpArg) await writeFile(path.join(dumpArg, scenario.id + '-last-request.json'), JSON.stringify(provider.lastBody(), null, 2) + '\n');
+  if (dumpArg) { await mkdir(path.resolve(dumpArg), { recursive: true }); await writeFile(path.join(dumpArg, scenario.id + '-last-request.json'), JSON.stringify(provider.lastBody(), null, 2) + '\n'); }
   closeSession(session);
   const verify = spawnSync(process.execPath, [path.join(taskDir, 'verify.mjs'), workspace], { cwd: workspace, encoding: 'utf8', timeout: 120000 });
   const requests = provider.requests;
