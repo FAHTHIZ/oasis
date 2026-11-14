@@ -17,9 +17,8 @@ test('filters by status, tag, priority and overdue', () => {
   assert.deepEqual(filterTasks(tasks, { overdue: true, now: NOW }).map((t) => t.id), [3]);
 });
 
-test('sorts by due date with undated tasks last, and by priority', () => {
+test('sorts by due date with undated tasks last', () => {
   assert.deepEqual(sortTasks(tasks, 'due').map((t) => t.id), [3, 4, 1, 2]);
-  assert.deepEqual(sortTasks(tasks, 'priority').map((t) => t.id), [2, 4, 3, 1]);
   assert.throws(() => sortTasks(tasks, 'color'), /Unknown sort key/);
 });
 

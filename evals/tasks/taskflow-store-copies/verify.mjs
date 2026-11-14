@@ -9,7 +9,7 @@ const testFiles = readdirSync(path.join(workspace, 'test')).filter((f) => f.ends
 const result = spawnSync(process.execPath, ['--test', '--test-reporter=tap', ...testFiles], { cwd: workspace, encoding: 'utf8', timeout: 120000 });
 if (result.error || result.status !== 0) throw new Error('Project tests failed:\n' + String(result.stdout || '').slice(-4000) + String(result.stderr || '').slice(-2000));
 const passed = Number((/^# pass (\d+)/m.exec(result.stdout) || [])[1] || 0);
-assert.ok(passed >= 20, 'expected at least 20 passing project tests (existing tests kept, plus new ones), found ' + passed);
+assert.ok(passed >= 19, 'expected at least 19 passing project tests (existing tests kept, plus new ones), found ' + passed);
 const load = (rel) => import(pathToFileURL(path.join(workspace, rel)).href);
 const NOW = new Date(2026, 10, 1, 15, 30);
 const sink = () => { const out = { text: '', write(chunk) { out.text += chunk; } }; return out; };

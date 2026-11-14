@@ -10,7 +10,7 @@ index 412a40b..a5ab571 100644
 +  return { items: items.slice(start, start + size), page, pages: Math.max(1, Math.ceil(items.length / size)), total: items.length };
  }
 diff --git a/test/query.test.mjs b/test/query.test.mjs
-index 7c5c148..8c015da 100644
+index 3f6edcd..497d69e 100644
 --- a/test/query.test.mjs
 +++ b/test/query.test.mjs
 @@ -29,3 +29,7 @@ test('paginates from page 1', () => {

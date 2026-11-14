@@ -12,10 +12,10 @@ index 970623e..a5ab571 100644
  };
  
 diff --git a/test/query.test.mjs b/test/query.test.mjs
-index 7c5c148..2744639 100644
+index 703b33e..11cf19e 100644
 --- a/test/query.test.mjs
 +++ b/test/query.test.mjs
-@@ -29,3 +29,8 @@ test('paginates from page 1', () => {
+@@ -28,3 +28,8 @@ test('paginates from page 1', () => {
    assert.deepEqual(paginate(items, 3, 2).items, [4]);
    assert.throws(() => paginate(items, 0, 2), /positive integer/);
  });
