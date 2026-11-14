@@ -2160,10 +2160,22 @@ export function headTailText(value, max) {
   return text.slice(0, head) + note + text.slice(text.length - (room - head));
 }
 
+// Room for one read_file result: up to 100,000 characters (Claude Code's
+// Read returns up to 25,000 tokens), never more than a fifth of the context
+// window. It was 24,000 characters, about 600 lines of code, so reading a
+// large file took four or five calls and as many model steps.
+export const MAX_READ_REPLY_CHARS = 100_000;
+function readResultLimit(session, env = process.env) {
+  const windowTokens = contextWindowSize(session.config || {}, env);
+  // The same fifth fitToolResultToWindow allows, so a small window gets the
+  // line-aware cut (with where to continue) rather than a head/tail cut.
+  return Math.max(2_000, Math.min(MAX_READ_REPLY_CHARS, Math.floor(windowTokens * 4 * 0.2) - 200));
+}
+
 function fitToolResultToWindow(session, content, env = process.env) {
   const windowTokens = contextWindowSize(session.config || {}, env);
   const limit = Math.max(2_000, Math.floor(windowTokens * 4 * 0.2));
-  if (limit >= MAX_REPLY_CHARS || content.length <= limit) return content;
+  if (content.length <= limit) return content;
   const note = '\n[OASIS shortened this ' + content.length.toLocaleString('en-US') + '-character result to fit the model\'s ' +
     windowTokens.toLocaleString('en-US') + '-token context window. Use read_file with offset/limit, grep, or a narrower command to see a specific part.]\n';
   const room = Math.max(0, limit - note.length);
@@ -4228,7 +4240,8 @@ async function executeOneCallRaw(session, call, context, options) {
     name,
     // MCP results get the MAX_MCP_OUTPUT_TOKENS budget (the server already
     // clipped with a note); the general 24,000-character cap would cut them again.
-    content: serializableResult(modelFacingResult(name, result, session), session.mcpToolMap && session.mcpToolMap.has(name) ? Math.max(MAX_REPLY_CHARS, mcpOutputLimitChars(options.env || process.env) + 2000) : MAX_REPLY_CHARS),
+    content: serializableResult(modelFacingResult(name, result, session), name === 'read_file' ? readResultLimit(session, options.env || process.env)
+      : session.mcpToolMap && session.mcpToolMap.has(name) ? Math.max(MAX_REPLY_CHARS, mcpOutputLimitChars(options.env || process.env) + 2000) : MAX_REPLY_CHARS),
     result
   };
 }
