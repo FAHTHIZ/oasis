@@ -38,8 +38,8 @@ export async function scriptedModel(t, script, { registerTeardown = true } = {})
     const message = typeof step === 'function' ? await step(payload, requests) : step;
     if (res.destroyed) return;
     res.setHeader('content-type', 'application/json');
-    const { finish_reason: finishReason, ...reply } = message || {};
-    res.end(JSON.stringify({ choices: [{ message: { role: 'assistant', ...reply }, ...(finishReason ? { finish_reason: finishReason } : {}) }], usage: { prompt_tokens: 10, completion_tokens: 5, total_tokens: 15 } }));
+    const { finish_reason: finishReason, usage: scriptedUsage, ...reply } = message || {};
+    res.end(JSON.stringify({ choices: [{ message: { role: 'assistant', ...reply }, ...(finishReason ? { finish_reason: finishReason } : {}) }], usage: scriptedUsage || { prompt_tokens: 10, completion_tokens: 5, total_tokens: 15 } }));
   });
   await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
   const close = () => new Promise((resolve) => {

@@ -4556,6 +4556,12 @@ async function runAgentTurnRaw(session, prompt, options = {}) {
   let malformedCallRecoveries = 0;
   let pendingTruncationNotice = '';
   const { maxSteps, tokenBudget, maxToolCalls } = resolveTurnLimits(options, session.config);
+  // The token budget counts tokens the provider processed anew: cache reads
+  // (the unchanged prompt prefix re-sent every step) are left out. Counting
+  // them stopped a long task in a large context after a dozen steps, since
+  // every step re-reads the whole conversation.
+  let cachedTokens = 0;
+  const budgetTokensUsed = () => Math.max(0, tokensUsed - cachedTokens);
   const context = {
     root: session.root,
     config: session.config,
@@ -4769,6 +4775,7 @@ async function runAgentTurnRaw(session, prompt, options = {}) {
     const usage = assistant.usage || { inputTokens: 0, outputTokens: 0, totalTokens: 0 };
     reportModelTiming(session, options, { step: step + 1, started: modelStarted, ended: Date.now(), timing, usage, assistant, reasoningChars: shownReasoning.length });
     tokensUsed += Number(usage.totalTokens || 0);
+    cachedTokens += Math.min(Number(usage.totalTokens || 0), Math.max(0, Number(usage.cacheReadTokens || 0)));
     const pricedModel = resolveModelAlias(session.config && session.config.model, {
       protocol: session.config && session.config.protocol,
       env: options.env || process.env
@@ -4841,7 +4848,7 @@ async function runAgentTurnRaw(session, prompt, options = {}) {
     }
     if (truncationNotice) pendingTruncationNotice = truncationNotice;
     if (!calls.length) {
-      const outcome = await runCompletionGates({ session, options, request, text, assistant, assistantMessage, verification, claimState, gates, totals: { toolCalls: totalToolCalls, tokensUsed, tokenBudget } }, COMPLETION_HOST);
+      const outcome = await runCompletionGates({ session, options, request, text, assistant, assistantMessage, verification, claimState, gates, totals: { toolCalls: totalToolCalls, tokensUsed, budgetTokensUsed: budgetTokensUsed(), tokenBudget } }, COMPLETION_HOST);
       if (outcome.type === 'continue') continue;
       if (outcome.type === 'finish') return outcome.result;
       calls = outcome.calls;
@@ -4852,7 +4859,7 @@ async function runAgentTurnRaw(session, prompt, options = {}) {
 
     // A model response may contain several calls at once. If the budget has run out,
     // return a matching error result for every call without executing any side effects.
-    if (tokensUsed > tokenBudget) {
+    if (budgetTokensUsed() > tokenBudget) {
       for (const call of calls) {
         session.messages.push({
           role: 'tool',
@@ -5259,7 +5266,7 @@ async function runAgentTurnRaw(session, prompt, options = {}) {
     verificationIncomplete: finalIssues.length > 0,
     verificationIssues: finalIssues,
     verification: verificationSummary(verification),
-    budgetExceeded: tokensUsed > tokenBudget
+    budgetExceeded: budgetTokensUsed() > tokenBudget
   };
 }
 

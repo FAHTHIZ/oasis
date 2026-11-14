@@ -249,7 +249,7 @@ export async function runCompletionGates(turn, host) {
       verificationIncomplete: true,
       verificationIssues: issues,
       verification: verificationSummary(verification),
-      budgetExceeded: totals.tokensUsed > totals.tokenBudget
+      budgetExceeded: (totals.budgetTokensUsed ?? totals.tokensUsed) > totals.tokenBudget
     } };
   }
   // Small and local models often fumble the mechanical part of the gate
@@ -355,7 +355,7 @@ export async function runCompletionGates(turn, host) {
     verificationIncomplete: issues.length > 0,
     verificationIssues: issues,
     verification: verificationSummary(verification),
-    budgetExceeded: totals.tokensUsed > totals.tokenBudget,
+    budgetExceeded: (totals.budgetTokensUsed ?? totals.tokensUsed) > totals.tokenBudget,
     ...(g.emptyReply ? { emptyReply: true } : {}),
     ...(followupsAdded.length ? { followupsAdded: followupsAdded.map((item) => ({ id: item.id, text: item.text })) } : {})
   } };

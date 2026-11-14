@@ -4,6 +4,7 @@ User-facing change history grouped by package version. A version heading does no
 
 ## Unreleased
 
+- The per-turn token budget (`maxTokens`, default 2,000,000) no longer counts cache reads. Every step re-sends the whole conversation, so with prompt caching most input tokens are the same cached prefix read again; counting it stopped a long task in a large context after a dozen or so steps. The turn summary still reports every token.
 - The browser app has a stream watchdog like the terminal agent: a provider that stops sending, before the response or mid-stream, fails after 5 minutes of silence (`streamIdleSeconds` in the provider config) instead of spinning until Stop. A stall before any data is retried; one after text arrived is reported so the reply is not repeated.
 - Archiving a session from the web UI or `oasis sessions archive` while it is open elsewhere sticks: the live session's next save used to write its own (unarchived) flag back over it.
 - The browser app gives empty or repeated tool-call IDs in one reply fresh ones (the terminal agent already did), so each tool result answers exactly one call instead of two results sharing an ID, which Anthropic rejects.
