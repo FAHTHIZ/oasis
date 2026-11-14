@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { randomBytes } from 'node:crypto';
+import fs from 'node:fs';
 import { parse } from 'smol-toml';
 import { findRuleSecrets, secretRuleCount, shannonEntropy } from '../src/secret-rules.mjs';
 import { maskSecrets, redactSecretText, findSecretsInText } from '../src/secret-shield.mjs';
@@ -88,4 +89,18 @@ test('entropy thresholds, allowlists and path scopes keep non-secrets visible', 
   const code = 'const apiKey = process.env.OPENAI_API_KEY;\nfunction tokenize(input) { return input.split(/\\s+/); }\n';
   assert.deepEqual(findRuleSecrets(code), []);
   assert.equal(maskSecrets({}, code).text, code);
+});
+
+test('no rule keeps the nested lazy prefix that backtracks quadratically in JavaScript', async () => {
+  const { flattenNestedLazyPrefix } = await import('../scripts/update-secret-rules.mjs');
+  const snapshot = JSON.parse(fs.readFileSync(new URL('../src/data/secret-rules.json', import.meta.url), 'utf8'));
+  const nested = snapshot.rules.filter((rule) => rule.regex.includes('[\\w.-]{0,50}?(?:[\\w.-]{0,50}?')).map((rule) => rule.id);
+  assert.deepEqual(nested, []);
+  const original = '[\\w.-]{0,50}?(?:[\\w.-]{0,50}?(?:okta)(?:[ \\t\\w.-]{0,20})[\\s\'"]{0,3})(?:=|:)[\\x60\'"\\s=]{0,5}(00[\\w=\\-]{40})(?:[\\x60\'"\\s;]|$)';
+  const flat = flattenNestedLazyPrefix(original);
+  assert.notEqual(flat, original);
+  const text = 'noise ' + 'a.b-c_'.repeat(30) + 'my_okta_token = 00' + 'Q'.repeat(40) + '\nshort okta: 00' + 'z'.repeat(40) + ';';
+  const spans = (source) => [...text.matchAll(new RegExp(source, 'gd'))].map((match) => [match.index, match[0], match.indices[1]]);
+  assert.deepEqual(spans(flat), spans(original));
+  assert.equal(spans(flat).length, 2);
 });
