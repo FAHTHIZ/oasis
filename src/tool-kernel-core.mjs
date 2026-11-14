@@ -196,10 +196,33 @@ export async function runTool(tool, input, options = {}) {
     if (externalSignal.aborted) forwardAbort();
     else externalSignal.addEventListener('abort', forwardAbort, { once: true });
   }
-  const timeout = setTimeout(() => {
-    timedOut = true;
-    if (!controller.signal.aborted) controller.abort(new Error('Tool timed out after ' + tool.timeoutMs + ' ms'));
-  }, tool.timeoutMs);
+  // The timeout bounds the tool's own work. Time spent waiting for a person
+  // (approval prompts, questions) is not counted: the timer pauses while a
+  // waitForUser hold is active and resumes with the time that was left.
+  let remainingMs = tool.timeoutMs;
+  let armedAt = 0;
+  let timeout = null;
+  let holds = 0;
+  const arm = () => {
+    armedAt = Date.now();
+    timeout = setTimeout(() => {
+      timedOut = true;
+      if (!controller.signal.aborted) controller.abort(new Error('Tool timed out after ' + tool.timeoutMs + ' ms'));
+    }, Math.max(0, remainingMs));
+  };
+  const waitForUser = async (wait) => {
+    if (holds++ === 0 && timeout) {
+      clearTimeout(timeout);
+      timeout = null;
+      remainingMs -= Date.now() - armedAt;
+    }
+    try {
+      return await wait();
+    } finally {
+      if (--holds === 0 && !timedOut && !controller.signal.aborted) arm();
+    }
+  };
+  arm();
   let onAbort;
   try {
     // Do not invoke a tool whose caller has already cancelled the request.
@@ -227,7 +250,8 @@ export async function runTool(tool, input, options = {}) {
       sandbox: decision.sandbox,
       env: options.env || (typeof process !== 'undefined' && process.env) || {},
       cwd: options.cwd || (typeof process !== 'undefined' && typeof process.cwd === 'function' ? process.cwd() : '.'),
-      authorizationContext
+      authorizationContext,
+      waitForUser
     }));
     const rawOutput = await Promise.race([running, aborted]);
     const output = await validateToolOutput(tool, rawOutput, validateArguments);
