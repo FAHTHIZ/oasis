@@ -123,7 +123,9 @@ Gaps found by checking the [hooks reference](https://code.claude.com/docs/en/hoo
 
 | Item | Status | Evidence / notes |
 | --- | --- | --- |
-| Same-model, multi-trial benchmark vs Claude Code / Codex / OpenCode | doing | Unblocked 2026-11-14 by Kilo Gateway's documented anonymous `:free` routes (no key, 200 requests/hour per IP, prompts may be logged). Running: OASIS, Claude Code 2.1.325, Codex 0.169.0, OpenCode 1.19.5, Aider on `nvidia/nemotron-3-ultra-550b-a55b:free`, 12 tasks, interleaved, through the recording relay. No results are claimed until it finishes |
+| Same-model, multi-trial benchmark vs Claude Code / Codex / OpenCode | partial | 2026-11-14 run on Kilo's keyless route: 1 of 12 tasks completed for all five agents (all passed `clamp-integer`) before Kilo's anonymous quota ran out (429 `PROMOTION_MODEL_LIMIT_REACHED`). Evidence: `bench/results/live-2026-11-14-kilo-h2h-partial/`. Resume when the quota resets, or with a free Kilo/OpenRouter/Groq account key from the owner |
+| OASIS prompt-token use is the highest of five agents on `clamp-integer` (242,932 vs Codex 157,994, OpenCode 111,139; gateway counts) | open | Prompt doubled at request 4 (7.6k → 16.1k) and stayed. The relay now records message sizes, so the next run shows which message it was |
+| Benchmark harness: quota stop, rate-limited trials excluded, progress saved per unit, message sizes recorded | done | `test/bench-live.test.mjs` (26 pass, with a fake upstream that returns Kilo's quota 429) |
 | Gemini CLI in the same benchmark | doing | `bench:live --router` runs it through FreeLLMAPI's native `/v1beta` surface (`5ee05996`); smoke: passed clamp-integer in 17 s. Full run after the main one, so both stay inside Kilo's hourly limit |
 | Live check of both routers with OASIS | done | FreeLLMAPI (source, 2026-11-14) and OmniRoute 3.8.53: `oasis -p` fixed a bug through each on the same free Nemotron model, 4 requests each; `docs/CONFIGURATION.md` |
 | OASIS through OmniRoute vs FreeLLMAPI vs direct | open | Same tasks and model through each path, after the main benchmark (shared hourly limit) |
@@ -145,6 +147,9 @@ Gaps found by checking the [hooks reference](https://code.claude.com/docs/en/hoo
 
 ## Blockers
 
-- **Model access for benchmarks.** Resolved for free models (Kilo's anonymous
-  routes, through FreeLLMAPI and OmniRoute too). Frontier paid models are still
+- **Model access for benchmarks.** Kilo's anonymous routes (also used through
+  FreeLLMAPI and OmniRoute) ran out on 2026-11-14 after about 70 requests
+  (`PROMOTION_MODEL_LIMIT_REACHED`, "sign up or come back later"). A free account
+  key (Kilo, OpenRouter, Groq, Google AI Studio, Cerebras) from the owner would
+  lift this; signing up is the owner's decision, not the agent's. Frontier paid models are still
   not used: no paid inference without the owner's permission.
