@@ -4,6 +4,7 @@ User-facing change history grouped by package version. A version heading does no
 
 ## Unreleased
 
+- `oasis -p --goal` and `oasis -p "/goal ..."` refuse a goal over 4,000 characters with the same message as the interactive `/goal`; they cut it at 4,000 characters without saying so, so the goal check judged a condition the user never wrote.
 - Stop and SubagentStop hooks get the whole final reply in `last_assistant_message`, as Claude Code sends it; it was cut to its first 4,000 characters, so a hook checking the end of a long reply (a test summary, a DONE marker) never saw it. A reply over 100,000 characters keeps its head and tail.
 - A task's default tool-call budget is 600 (was 300). With 150 steps by default, a model that runs two or three tools a step hit the 300-call cap at step 100 to 150 and stopped mid-task; `maxToolCalls` and `OASIS_MAX_TOOL_CALLS` still set it (1 to 2,000).
 - `read_file` results reach the model up to 100,000 characters (Claude Code's Read returns up to 25,000 tokens), bounded by a fifth of the context window; they were capped at 24,000 characters, about 600 lines, so a large file took four or five reads and as many model steps. On a small window the cut stays line-aware with where to continue, and a tool result too big for the window is now always shortened (one path skipped that check once the window allowed 24,000 characters).
