@@ -196,6 +196,15 @@ export function preserveFileConventions(previous, next) {
   return { content, kept };
 }
 
+// An exact edit in a file that uses CRLF throughout: models write LF, so the
+// inserted lines used to end in bare LF and the file came out mixed.
+export function matchLineEndings(current, text) {
+  if (typeof current !== 'string' || typeof text !== 'string' || !text.includes('\n')) return text;
+  const crlf = (current.match(/\r\n/g) || []).length;
+  const bareLf = (current.match(/(?<!\r)\n/g) || []).length;
+  return crlf > 0 && bareLf === 0 ? text.replace(/(?<!\r)\n/g, '\r\n') : text;
+}
+
 export function relaxedReplace(current, oldString, newString) {
   if (!oldString.trim()) return null;
   const eol = current.includes('\r\n') ? '\r\n' : '\n';
