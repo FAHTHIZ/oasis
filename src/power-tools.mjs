@@ -21,7 +21,7 @@ import path from 'node:path';
 import { existsSync } from 'node:fs';
 import { randomUUID } from 'node:crypto';
 import { snapshotFile } from './backups.mjs';
-import { relaxedReplace, closestMatchHint } from './edit-match.mjs';
+import { relaxedReplace, closestMatchHint, matchLineEndings } from './edit-match.mjs';
 import { analyzeShellLine, shellAnalyzerReady } from './shell-risk.mjs';
 import { maskedPipelineWarning } from './pipe-status.mjs';
 import { assertNoNewElision, shrinkWarning, recordAndDetectCircling, testTamperWarning, combineWarnings } from './change-guard.mjs';
@@ -413,7 +413,8 @@ export async function multiEditFile(root, args = {}, context = {}) {
       throw new Error(label + 'old_string was not found (after applying earlier edits). No edits were applied.' + (hint ? '\n' + hint : ''));
     }
     if (count > 1 && edit.replace_all !== true) throw new Error(label + 'old_string appears ' + count + ' times; add context or set replace_all. No edits were applied.');
-    next = edit.replace_all === true ? next.split(edit.old_string).join(edit.new_string) : next.replace(edit.old_string, () => edit.new_string);
+    const insert = matchLineEndings(next, edit.new_string);
+    next = edit.replace_all === true ? next.split(edit.old_string).join(insert) : next.replace(edit.old_string, () => insert);
     replacements += edit.replace_all === true ? count : 1;
   });
   if (Buffer.byteLength(next, 'utf8') > MAX_EDIT_FILE) throw new Error('The edited file would exceed the 64 MiB edit limit.');
