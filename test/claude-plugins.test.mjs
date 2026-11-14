@@ -131,6 +131,6 @@ test('plugin changes never replace a settings file that does not parse', async (
   const file = userSettingsPath(env);
   const broken = '{ "permissions": { "deny": ["Bash(rm:*)"] }, }';
   await put(file, broken);
-  await assert.rejects(setPluginEnabled('demo', false, { env }), /Not changing .* not valid JSON/);
+  await assert.rejects(setPluginEnabled('demo', false, { env }), /Invalid JSON in settings file/);
   assert.equal(await readFile(file, 'utf8'), broken);
 });

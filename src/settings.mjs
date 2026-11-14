@@ -72,6 +72,8 @@ async function readJsonFile(file) {
     if (error.code === 'ENOENT' || error.code === 'ENOTDIR') return null;
     throw error;
   }
+  // An empty file (for example one made with touch) is treated as no settings.
+  if (!raw.trim()) return null;
   try {
     const parsed = JSON.parse(raw);
     return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : null;
@@ -98,7 +100,10 @@ export async function isWorkspaceTrusted(root, env = process.env) {
 
 const settingsMutationQueues = new Map();
 
-function mutateSettingsFile(file, mutator, mode = 0o600) {
+// Serialized read-modify-write of one settings file. Refuses (throws) on a
+// file that is not valid JSON instead of replacing it. Exported so every
+// writer of a settings file shares the same queue.
+export function mutateSettingsFile(file, mutator, mode = 0o600) {
   const previous = settingsMutationQueues.get(file) || Promise.resolve();
   const operation = previous.catch(() => {}).then(async () => {
     const current = (await readJsonFile(file)) || {};

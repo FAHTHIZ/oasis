@@ -165,10 +165,12 @@ async function setEnabled(id, value, { env = process.env, root = null, scope = '
   const file = scope === 'project' ? path.join(root, '.claude', 'settings.json')
     : scope === 'local' ? path.join(root, '.claude', 'settings.local.json')
       : userSettingsPath(env);
-  const settings = (await readJson(file, {})) || {};
-  settings.enabledPlugins = settings.enabledPlugins && typeof settings.enabledPlugins === 'object' ? settings.enabledPlugins : {};
-  if (value === null) delete settings.enabledPlugins[id]; else settings.enabledPlugins[id] = value;
-  await writeJson(file, settings);
+  const { mutateSettingsFile } = await import('./settings.mjs');
+  await mutateSettingsFile(file, (settings) => {
+    settings.enabledPlugins = settings.enabledPlugins && typeof settings.enabledPlugins === 'object' && !Array.isArray(settings.enabledPlugins) ? settings.enabledPlugins : {};
+    if (value === null) delete settings.enabledPlugins[id]; else settings.enabledPlugins[id] = value;
+    return settings;
+  }, scope === 'project' ? 0o644 : 0o600);
   return file;
 }
 
@@ -341,12 +343,14 @@ export async function setPluginOption(plugin, key, value, options = {}) {
   }
   const { userSettingsPath } = await import('./settings.mjs');
   const file = userSettingsPath(env);
-  const settings = (await readJson(file, {})) || {};
-  settings.pluginConfigs = settings.pluginConfigs && typeof settings.pluginConfigs === 'object' ? settings.pluginConfigs : {};
-  const entry = settings.pluginConfigs[plugin.id] && typeof settings.pluginConfigs[plugin.id] === 'object' ? settings.pluginConfigs[plugin.id] : {};
-  entry.options = { ...(entry.options || {}), [key]: parsed };
-  settings.pluginConfigs[plugin.id] = entry;
-  await writeJson(file, settings);
+  const { mutateSettingsFile } = await import('./settings.mjs');
+  await mutateSettingsFile(file, (settings) => {
+    settings.pluginConfigs = settings.pluginConfigs && typeof settings.pluginConfigs === 'object' && !Array.isArray(settings.pluginConfigs) ? settings.pluginConfigs : {};
+    const entry = settings.pluginConfigs[plugin.id] && typeof settings.pluginConfigs[plugin.id] === 'object' ? settings.pluginConfigs[plugin.id] : {};
+    entry.options = { ...(entry.options || {}), [key]: parsed };
+    settings.pluginConfigs[plugin.id] = entry;
+    return settings;
+  }, 0o600);
   return { key, sensitive: false, value: parsed };
 }
 
