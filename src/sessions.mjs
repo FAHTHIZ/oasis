@@ -537,9 +537,58 @@ export async function settleMidTurnSave(session) {
 // A chat's title from its first prompt: what the user typed, without the file
 // contents an @mention attached ("Referenced files: <file path=...>") or
 // Oasis's own tagged blocks (<system-reminder>, <file path="...">...</file>).
+// Messages OASIS itself adds to the conversation as the user role: gate and
+// guard nudges, hook feedback, compaction digests. History views, exports and
+// the resume recap hide them, since the user never typed them. Keep in step
+// with completion-gates.mjs, turn-guards.mjs, claim-check.mjs, auto-test.mjs,
+// standing-corrections.mjs and agent.mjs (test/user-facing-prompt.test.mjs).
+const OASIS_AUTHORED_PROMPT = /^(?:<system-reminder>|<oasis-|Before finalizing, complete the post-edit verification gate\.|Auto-test: Oasis ran the configured test command|Your reply (?:says|uses) |A [\w-]+ hook asked you to (?:continue|keep working)|Context digest of completed work in the current task|Summarize (?:this bounded transcript|these completed tool rounds))/;
+
+export function isOasisAuthoredPrompt(content) {
+  return OASIS_AUTHORED_PROMPT.test(String(content || '').trimStart());
+}
+
+// What the user typed: '' for an OASIS-authored message, otherwise the text
+// without the reminder blocks and @file contents OASIS appended to it.
+export function userFacingPrompt(content) {
+  let text = String(content || '');
+  if (isOasisAuthoredPrompt(text)) return '';
+  const attached = text.indexOf('\n\nReferenced files:\n');
+  if (attached >= 0) text = text.slice(0, attached);
+  return text.replace(/<([a-z]+-[\w-]+|file|untrusted[\w-]*)(?:\s[^>]*)?>[\s\S]*?<\/\1>/gi, '').replace(/\n{3,}/g, '\n\n').trim();
+}
+
 export function promptTitle(content, max = 80) {
   let text = String(content || '');
   const attached = text.indexOf('\n\nReferenced files:\n');
   if (attached >= 0) text = text.slice(0, attached);
   return text.replace(/<([a-z]+-[\w-]+|file|untrusted[\w-]*)(?:\s[^>]*)?>[\s\S]*?<\/\1>/gi, ' ').replace(/\s+/g, ' ').trim().slice(0, max);
+}
+
+function messageText(content) {
+  if (typeof content === 'string') return content;
+  if (Array.isArray(content)) return content.map((part) => part && typeof part.text === 'string' ? part.text : '').join(' ');
+  return '';
+}
+
+function fitLine(text, width) {
+  const flat = String(text || '').replace(/\s+/g, ' ').trim();
+  return flat.length > width ? flat.slice(0, Math.max(1, width - 1)) + '…' : flat;
+}
+
+// What /resume and oasis -c print straight away, so the user sees which
+// conversation came back before typing: its title, age, and the last
+// request and reply, each cut to one terminal row.
+export function sessionRecap(saved, { width = 80, now = Date.now() } = {}) {
+  if (!saved || !Array.isArray(saved.messages)) return '';
+  const room = Math.max(20, Number(width) - 5);
+  const users = saved.messages.filter((m) => m && m.role === 'user').map((m) => userFacingPrompt(messageText(m.content))).filter(Boolean);
+  const replies = saved.messages.filter((m) => m && m.role === 'assistant').map((m) => messageText(m.content).trim()).filter(Boolean);
+  const title = saved.name || users[0] || '(untitled)';
+  const ms = now - Date.parse(saved.updatedAt || '');
+  const age = !Number.isFinite(ms) ? '' : ms < 60_000 ? 'just now' : ms < 3_600_000 ? Math.round(ms / 60_000) + ' min ago' : ms < 86_400_000 ? Math.round(ms / 3_600_000) + ' h ago' : Math.round(ms / 86_400_000) + ' days ago';
+  const lines = ['Resumed "' + fitLine(title, room - 20) + '" · ' + saved.messages.filter((m) => m && m.role !== 'system').length + ' messages' + (age ? ' · saved ' + age : '')];
+  if (users.length) lines.push('  ❯ ' + fitLine(users[users.length - 1], room));
+  if (replies.length) lines.push('  ● ' + fitLine(replies[replies.length - 1], room));
+  return lines.join('\n') + '\n';
 }

@@ -17,7 +17,7 @@ import { memoryFiles } from './memory.mjs';
 import { listCheckpoints, rewind } from './checkpoints.mjs';
 import { snapshotFile } from './backups.mjs';
 import { imageInputCapability } from './images.mjs';
-import { listSessions } from './sessions.mjs';
+import { listSessions, isOasisAuthoredPrompt } from './sessions.mjs';
 import { resolveWorkspacePath, setAdditionalDirectories } from './tools.mjs';
 import { loadOutputStyles, applyOutputStyle } from './output-styles.mjs';
 import { lstat, readFile, writeFile } from 'node:fs/promises';
@@ -2265,7 +2265,7 @@ function messageText(content) {
 export function conversationMarkdown(session) {
   const lines = ['# Oasis conversation', '', 'Workspace: ' + session.root, 'Model: ' + (session.config && session.config.model || 'unknown'), 'Exported: ' + new Date().toISOString(), ''];
   for (const message of session.messages.slice(1)) {
-    if (message.role === 'user' && typeof message.content === 'string' && message.content.startsWith('<system-reminder>')) continue;
+    if (message.role === 'user' && typeof message.content === 'string' && isOasisAuthoredPrompt(message.content)) continue;
     if (message.role === 'user') lines.push('## User', '', messageText(message.content), '');
     else if (message.role === 'assistant') {
       const text = messageText(message.content);

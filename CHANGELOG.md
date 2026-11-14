@@ -4,6 +4,9 @@ User-facing change history grouped by package version. A version heading does no
 
 ## Unreleased
 
+- `/resume` and `oasis -c` now show which conversation came back straight away: its title, message count, age, and the last request and reply. Before, nothing appeared until the next message, and the notice broke the timestamp mid-word.
+- Reopened web sessions, HTML and Markdown exports, and the resume recap no longer show OASIS's internal prompts (verification-gate and guard nudges, hook feedback, compaction digests) as if the user had typed them. They also drop the reminder and @file blocks appended to real prompts. One helper (`userFacingPrompt` in `src/sessions.mjs`) decides this, and its test checks it against each nudge's source.
+
 - `/resume` lists sessions on one row each: a short unique ID (any prefix still resumes), how long ago the session was saved, and a title cut to the terminal width. It shows the 20 most recent and says how many older ones `oasis sessions` lists. Before, full 36-character IDs made long titles wrap onto a second line.
 
 - `oasis sessions` now shows each session's title (its name or first prompt), so sessions can be told apart. `oasis doctor` no longer asks for `contextWindow` when the config already sets it; it names the configured window instead.

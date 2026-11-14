@@ -19,7 +19,7 @@ import { loadConfig, getProviderSummary, carryLearnedContextWindow } from './con
 import { startIdleCompaction, idleCompactMinutes, idleCompactionNote } from './idle-compaction.mjs';
 import { compactHistoryIfNeeded } from './agent.mjs';
 import { applyEffort, createSession, runAgentTurn, runAgentPlan, runForkedTurn, closeSession, repairInterruptedHistory, resolveQuestionAnswer, stopFailureType, formatWait, steerSession, takeSteering } from './agent.mjs';
-import { loadSession, saveSession, listSessions, pruneSessions, saveMidTurn, settleMidTurnSave } from './sessions.mjs';
+import { loadSession, saveSession, listSessions, pruneSessions, saveMidTurn, settleMidTurnSave, sessionRecap } from './sessions.mjs';
 import { executeTool, listAvailableSkills } from './tools.mjs';
 import { parseInstallIntent, planPackageInstall } from './installer.mjs';
 import { listBackups, restoreBackup } from './backups.mjs';
@@ -1204,7 +1204,9 @@ async function runPrompt(prompt, root, autoApprove, session = null, persistence 
     if (persistence.resumeId) {
       restored = await loadSession(root, persistence.resumeId);
       if (SESSION_OPTIONS.forkSession) { stdout.write('[session] Forking ' + restored.id + ' into a new session.\n'); restored = { ...restored, id: null }; }
-      stdout.write('[session] Resuming ' + restored.id + ' (' + restored.messages.length + ' saved messages, last updated ' + restored.updatedAt + ').\n');      const goalNote = pausedGoalNotice(restored.goal);
+      if (persistence.recapShown !== restored.id) stdout.write('[session] Resuming ' + restored.id + ' (' + restored.messages.length + ' saved messages, last updated ' + restored.updatedAt + ').\n');
+      persistence.recapShown = null;
+      const goalNote = pausedGoalNotice(restored.goal);
       if (goalNote) stdout.write(goalNote);
       if (restored.turnInProgress) stdout.write('[session] The last turn stopped before it finished; Oasis will ask the model to check the files before continuing.\n');
     }
@@ -2096,6 +2098,18 @@ async function applyThemeFromSettings(settings) {
   } catch {}
 }
 
+// Show which conversation came back as soon as it is picked, not on the next
+// message. The session itself still loads lazily with the first prompt.
+async function showResumeRecap(root, persistence) {
+  try {
+    const saved = await loadSession(root, persistence.resumeId);
+    const text = sessionRecap(saved, { width: stdout.columns || 80 });
+    if (!text) return;
+    stdout.write(text);
+    persistence.recapShown = saved.id;
+  } catch {}
+}
+
 async function interactive(root, autoApprove, persistence = {}) {
   let session = null;
   // Interactive mode reads from a terminal. Piped or redirected input used to
@@ -2169,6 +2183,7 @@ async function interactive(root, autoApprove, persistence = {}) {
     const definition = (await loadAgentDefinitions(root).catch(() => ({})))[String(mainAgentName).toLowerCase()];
     if (definition && definition.initialPrompt) { QUEUED_INPUT.push(definition.initialPrompt); SESSION_OPTIONS.agentInitialPromptSent = true; }
   }
+  if (persistence.resumeId && !session) await showResumeRecap(root, persistence);
   const inputState = { history: await loadHistory(root).catch(() => []), completer: createCompleter({ root, commands: () => interactiveCommandList(root), fileSuggestion: () => (session && session.settings || startupSettings || {}).fileSuggestion || null }) };
   const pendingShell = [];
   while (true) {
@@ -2345,7 +2360,7 @@ async function interactive(root, autoApprove, persistence = {}) {
             try { stdout.write((await (await import('./mcp-auth-commands.mjs')).mcpLogin(root, handled.mcpLogin, { env: process.env, session, print: (text) => stdout.write(text + '\n') })) + '\n'); }
             catch (error) { stdout.write('[mcp] ' + error.message + '\n'); }
           }
-          if (handled.resume) { closeSession(session); session = null; persistence.enabled = true; persistence.resumeId = handled.resume; }
+          if (handled.resume) { closeSession(session); session = null; persistence.enabled = true; persistence.resumeId = handled.resume; await showResumeRecap(root, persistence); }
           if (handled.focus) {
             if (stdout.isTTY) {
               stdout.write('\x1b[?1049h\x1b[H\x1b[2J' + handled.focus + '\n\n');
