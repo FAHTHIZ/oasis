@@ -111,7 +111,10 @@ routes to the providers you connect in its dashboard, with fallback, quota
 tracking and `auto/*` routing combos.
 
 1. Install and start it: `npm install -g omniroute`, then `omniroute` (Node.js 22.22.2+ or
-   24–26; the setup wizard sets an admin password).
+   24–26; the setup wizard sets an admin password). The package is about 900 MB
+   unpacked. By default it listens on `0.0.0.0` with no key required, so any
+   device on your network can spend your provider quota; start it with
+   `OMNIROUTE_SERVER_HOST=127.0.0.1 REQUIRE_API_KEY=true omniroute serve`.
 2. In its dashboard, connect at least one provider and create an API key under
    **Endpoints**.
 3. Connect OASIS. Paste the address, the key and (recommended) a model in one go:
@@ -135,6 +138,14 @@ Tested on 2026-11-08 with OmniRoute 3.8.53 and the keyless LLM7 upstream
 (`llm7/codestral-latest`, `llm7/gpt-oss:20b`): model discovery, streaming tool
 calls, the paste flow and the no-retry path. LLM7's free daily token quota runs
 out fast; OmniRoute passes its 429 through and OASIS reports it as a daily limit.
+
+Re-tested on 2026-11-14 with OmniRoute 3.8.53 (Node 24.22.3, loopback, keys
+required) and its `kilo-gateway` provider on Kilo's anonymous free routes:
+`oasis -p` fixed a one-line bug through `kg/nvidia/nemotron-3-ultra-550b-a55b:free`
+in 4 requests (9.4 s, 26,460 input tokens), with the key read from
+`OMNIROUTE_API_KEY` alone. The catalogue lists that `:free` model at $0, so the
+reported cost is $0; `--zero-budget` still refuses it, because a $0 listing is
+not proof the route cannot bill.
 
 ### FreeLLMAPI gateway
 
