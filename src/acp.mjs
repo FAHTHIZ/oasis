@@ -292,7 +292,7 @@ export function createAcpServer(options = {}) {
 
   async function closeEntry(entry, { save = true } = {}) {
     if (entry.controller) entry.controller.abort();
-    if (save) { try { const { saveSession } = await load('sessions'); await saveSession(entry.session, { env }); } catch {} }
+    if (save) { try { const { saveSession } = await load('sessions'); await saveSession(entry.session, { env }); } catch (error) { log('could not save the session: ' + (error && error.message || error)); } }
     try { const { closeSession } = await load('agent'); if (closeSession) await closeSession(entry.session); } catch {}
     sessions.delete(entry.session.sessionId);
   }
@@ -412,7 +412,7 @@ export function createAcpServer(options = {}) {
           return outcome.optionId === 'allow_once';
         }
       });
-      try { const { saveSession } = await load('sessions'); await saveSession(entry.session, { env }); } catch {}
+      try { const { saveSession } = await load('sessions'); await saveSession(entry.session, { env }); } catch (error) { log('could not save the session: ' + (error && error.message || error)); }
       if (firstPrompt) {
         const title = (entry.session.name || built.text || '').replace(/\s+/g, ' ').trim().slice(0, 80);
         if (title) update(sessionId, { sessionUpdate: 'session_info_update', title, updatedAt: new Date().toISOString() });
