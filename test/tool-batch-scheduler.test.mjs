@@ -59,3 +59,20 @@ test('read-only classification takes precedence over other predicates', () => {
   });
   assert.equal(batches[0].kind, 'read-only');
 });
+
+test('a long run of reads is capped at 10 concurrent calls by default', async () => {
+  const { DEFAULT_MAX_PARALLEL_READS, maxParallelReadsFrom } = await import('../src/tool-batch-scheduler.mjs');
+  const calls = Array.from({ length: 40 }, (_, i) => ({ id: 'r' + i }));
+  const [batch] = planToolBatches(calls, { isReadOnly: () => true });
+  assert.equal(batch.calls.length, 40, 'still one ordered batch');
+  assert.equal(batch.concurrency, DEFAULT_MAX_PARALLEL_READS);
+  assert.equal(DEFAULT_MAX_PARALLEL_READS, 10);
+  assert.equal(planToolBatches(calls.slice(0, 3), { isReadOnly: () => true })[0].concurrency, 3);
+  assert.equal(planToolBatches(calls, { isReadOnly: () => true, maxParallelReads: 4 })[0].concurrency, 4);
+  assert.equal(planToolBatches(calls, { isReadOnly: () => true, maxParallelReads: 0 })[0].concurrency, 10);
+  assert.equal(maxParallelReadsFrom({}), 10);
+  assert.equal(maxParallelReadsFrom({ OASIS_MAX_TOOL_CONCURRENCY: '3' }), 3);
+  assert.equal(maxParallelReadsFrom({ CLAUDE_CODE_MAX_TOOL_USE_CONCURRENCY: '6' }), 6);
+  assert.equal(maxParallelReadsFrom({ OASIS_MAX_TOOL_CONCURRENCY: '500' }), 64);
+  assert.equal(maxParallelReadsFrom({ OASIS_MAX_TOOL_CONCURRENCY: 'x' }), 10);
+});
