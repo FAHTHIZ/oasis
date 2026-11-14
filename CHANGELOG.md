@@ -4,6 +4,7 @@ User-facing change history grouped by package version. A version heading does no
 
 ## Unreleased
 
+- Instruction files (AGENTS.md, CLAUDE.md, rules, imports) load whole up to 150,000 characters each and 300,000 in all. They used to be cut at 9,000 characters per file and 40,000 in all, which cut an ordinary AGENTS.md short; files over 160 KiB were skipped and imports over 40 KiB were not imported. Files up to 4 MiB are now read, imports up to 1 MiB, and OASIS warns, as Claude Code does, when one file passes 40,000 characters or several pass 120,000. The browser-only app keeps 150,000 characters of project instructions (was 12,000).
 - Messages sent while a turn runs (steers) are kept whole up to 200,000 characters, the same bound as a web chat message. They were cut at 20,000 characters with no note, and the web steer endpoint refused anything over 12,000 characters (or about 32 KiB of body).
 - Subagent reports are kept whole up to 1,000,000 characters, with a note if that bound is hit. They used to be cut at 30,000 characters with no note, which also lost the JSON verdict an agent hook writes at the end. Saved reports keep 200,000 characters (was 8,000), and agent definition bodies keep 200,000 (was 30,000).
 - Prompt and agent hooks on PreToolUse and PermissionRequest now see the whole tool action. The payload used to be cut at 30,000 characters, so padding could hide the end of a command. File bodies are shortened to head and tail, and an action that still does not fit is blocked instead of judged on a part.

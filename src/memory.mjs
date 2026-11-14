@@ -25,7 +25,8 @@ import { getConfigDirectory } from './config.mjs';
 import { parseFrontMatter } from './frontmatter.mjs';
 import { parse as parseJsonc } from 'jsonc-parser';
 
-const MAX_MEMORY_FILE = 40 * 1024;
+// Files are read up to 4 x this (4 MiB, as Claude Code) and imports up to this.
+const MAX_MEMORY_FILE = 1024 * 1024;
 
 // Claude Code's "claudeMdExcludes": glob patterns (or absolute paths) matched
 // against a memory file's absolute path; the file is skipped if either its
@@ -48,8 +49,16 @@ function excludeMatcher(patterns) {
   return (...files) => files.some((file) => file && regexps.some((re) => re.test(path.resolve(file).split(path.sep).join('/'))));
 }
 
-const MAX_TOTAL = 40000;
-const PER_FILE_LIMIT = 9000;
+// Instruction files are the user's own rules, so they load whole up to a
+// high bound. The old 9,000-per-file and 40,000-total caps cut an ordinary
+// AGENTS.md short; Codex keeps 32 KiB and Claude Code loads files of up to
+// 4 MiB, warning above 40,000 characters for one file and 120,000 in all.
+// OASIS loads up to PER_FILE_LIMIT and MAX_TOTAL and gives the same
+// warnings, so a large file is visible but never silently cut.
+export const MAX_TOTAL = 300_000;
+export const PER_FILE_LIMIT = 150_000;
+export const LARGE_INSTRUCTION_FILE = 40_000;
+export const LARGE_INSTRUCTION_TOTAL = 120_000;
 // The README is background sent with every request; its opening (what the
 // project is, how to run it) is what helps. The model can read the rest.
 const README_LIMIT = 2500;
@@ -262,6 +271,7 @@ async function readImports(root, text, depth = 0) {
 }
 
 function clipInstruction(name, content, notices) {
+  if (content.length > LARGE_INSTRUCTION_FILE && content.length <= PER_FILE_LIMIT && notices) notices.push('Large ' + name + ' will use more context on every request (' + content.length.toLocaleString('en-US') + ' characters > ' + LARGE_INSTRUCTION_FILE.toLocaleString('en-US') + ').');
   if (content.length <= PER_FILE_LIMIT) return content;
   notices.push(name + ' is ' + content.length + ' characters; only the first ' + PER_FILE_LIMIT + ' were loaded into the prompt.');
   return content.slice(0, PER_FILE_LIMIT) + '\n[... ' + name + ' truncated: ' + (content.length - PER_FILE_LIMIT) + ' more characters not loaded. read_file it if the rest matters ...]';
@@ -326,6 +336,9 @@ export async function loadMemory(root, options = {}) {
   // README is background, not instructions: it only gets whatever budget the real instruction files leave.
   if (readmePart) parts.push(readmePart);
   const joined = parts.join('\n\n');
+  const instructionTotal = parts.slice(0, readmePart ? -1 : undefined).join('\n\n').length;
+  // One large file already has its own warning; the total one is for several.
+  if (instructionTotal > LARGE_INSTRUCTION_TOTAL && instructionTotal <= MAX_TOTAL && parts.length - (readmePart ? 1 : 0) > 1) notices.push('Instruction files will use more context on every request: ' + instructionTotal.toLocaleString('en-US') + ' characters in total > ' + LARGE_INSTRUCTION_TOTAL.toLocaleString('en-US') + '.');
   if (joined.length <= MAX_TOTAL) return joined;
   const marker = '\n[... instruction budget of ' + MAX_TOTAL + ' characters reached: ' + (joined.length - MAX_TOTAL) + ' characters of the files above were not loaded ...]';
   const instructionsOnly = parts.slice(0, readmePart ? -1 : undefined).join('\n\n');
