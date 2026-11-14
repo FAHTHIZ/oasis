@@ -5,7 +5,7 @@ import path from 'node:path';
 import { mkdtemp, writeFile, rm } from 'node:fs/promises';
 import { createSession, closeSession, runAgentTurn } from '../src/agent.mjs';
 import { setWorkspaceTrust } from '../src/settings.mjs';
-import { parsePromptArguments, renderPromptMessages, formatResourceContents } from '../src/mcp-extras.mjs';
+import { parsePromptArguments, renderPromptMessages, formatResourceContents, loadMcpExtras } from '../src/mcp-extras.mjs';
 import { runBuiltinCommand } from '../src/slash.mjs';
 import { scriptedModel, toolCall } from './helpers/scripted-model.mjs';
 
@@ -79,4 +79,13 @@ test('MCP resources and prompts work end to end in a session', async (t) => {
   assert.match(toolMessages.at(-2).content, /notes:\/\/todo/);
   assert.match(toolMessages.at(-2).content, /notes:\/\/\{name\}/);
   assert.match(toolMessages.at(-1).content, /CONTENT OF notes:\/\/ideas/);
+});
+
+test('long MCP prompts and server instructions keep more and say when they are cut', async () => {
+  const long = 'prompt line\n'.repeat(10000) + 'PROMPT END';
+  assert.match(renderPromptMessages({ messages: [{ role: 'user', content: { type: 'text', text: long } }] }), /PROMPT END$/);
+  assert.match(renderPromptMessages({ messages: [{ role: 'user', content: { type: 'text', text: 'x'.repeat(250_000) } }] }), /\[MCP prompt cut: 50,000 more characters not shown\]$/);
+  const client = { request: async () => { throw new Error('unsupported'); } };
+  await loadMcpExtras(client, { instructions: 'i'.repeat(9000) });
+  assert.match(client.instructions, /\[server instructions cut: 1,000 more characters not shown\]$/);
 });
