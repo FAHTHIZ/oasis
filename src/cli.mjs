@@ -3404,6 +3404,9 @@ async function main() {
   }
   await ensureModelProviderSetup(workspace);
   const session = await runPrompt(fullPrompt, workspace, autoApprove, null, persistence);
+  // No session means the prompt never ran (no provider configured); scripts
+  // must see that as a failure, not a silent success.
+  if (!session) process.exitCode = 1;
   closeSession(session);
 }
 
