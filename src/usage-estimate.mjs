@@ -38,5 +38,9 @@ export function normalizeUsage(usage = {}) {
   const outDetails = usage.completion_tokens_details || usage.output_tokens_details || {};
   const reasoning = Number(outDetails.reasoning_tokens || usage.reasoning_tokens || 0) || 0;
   if (reasoning > 0) out.reasoningTokens = reasoning;
+  // The provider's own charge for this request (OpenRouter reports usage.cost
+  // in USD). Kept apart from OASIS's price-table estimate so reports can say
+  // which figure is a measurement and which is a guess.
+  if (typeof usage.cost === 'number' && Number.isFinite(usage.cost) && usage.cost >= 0) out.providerCostUsd = usage.cost;
   return out;
 }
