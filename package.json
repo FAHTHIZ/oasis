@@ -46,7 +46,7 @@
     "bench:tokens": "node bench/tokens/run.mjs",
     "bench:gateway": "node bench/gateway/run.mjs",
     "bench:live": "node scripts/bench-live.mjs",
-    "bench:startup": "node scripts/measure-startup.mjs",
+    "bench:perf": "node scripts/bench-perf.mjs",
     "bench:memory": "node scripts/bench-memory.mjs",
     "lint": "oxlint --deny-warnings"
   },

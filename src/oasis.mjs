@@ -13,6 +13,18 @@ if (argv.length === 1 && (argv[0] === '--version' || argv[0] === '-v')) {
   process.stdout.write('OASIS ' + oasisVersion() + '\n');
   process.exit(0);
 }
+// Bare `oasis --help` / `-h` / `help` (and `help all`) likewise: only the help
+// text loads (about 325 ms and 113 MB peak -> the --version cost). Same output
+// as cli.mjs; OASIS_FULL_HELP_PATH=1 forces the full path (used by the test).
+const helpWord = argv[0] === '--help' || argv[0] === '-h' || argv[0] === 'help';
+const helpAll = argv.length === 2 && (argv[1] === 'all' || argv[1] === '--all');
+if (helpWord && (argv.length === 1 || helpAll) && !process.env.OASIS_FULL_HELP_PATH) {
+  const { printQuickHelp, printHelp } = await import('./cli-help.mjs');
+  if (helpAll) printHelp(); else printQuickHelp();
+  // Pipes are asynchronous on Windows: let the help text drain before exiting.
+  await new Promise((resolve) => process.stdout.write('', resolve));
+  process.exit(0);
+}
 
 if (!process.env.OASIS_NO_COMPILE_CACHE && typeof module.enableCompileCache === 'function') {
   try { module.enableCompileCache(); } catch {}

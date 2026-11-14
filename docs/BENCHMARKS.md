@@ -8,6 +8,23 @@ The README includes an unscripted `gpt-oss-20b` CLI recording, with a GIF, MP4 a
 
 For quantitative comparisons, use the controlled live-evaluation protocol below: pin the model, provider, task set, verifier, configuration and environment; record attempts, verified outcomes, interventions, failures, tokens, elapsed time and cost; and report repetitions and variance.
 
+## Runtime performance
+
+`npm run bench:perf -- --runs 7 --json FILE` measures the runtime without a model. Recorded 14 November 2026 on Linux x64, 2 CPUs, 8 GB RAM, Node 22.21, light load ([raw JSON](../bench/results/perf-2026-11-14.json)):
+
+| Measurement | Median | Notes |
+| --- | --- | --- |
+| `oasis --version` | 26 ms | peak RSS 46.3 MB |
+| `oasis --help` | 27 ms | peak RSS 46.8 MB (325 ms / 113 MB before the help fast path) |
+| Import agent runtime | 217 ms | 176 source modules, 149 dependency modules |
+| Create session (default tools) | 170 ms | 21 tools, RSS 158.8 MB |
+| First request size | ~5,228 tokens | system prompt 2,165, tool schemas 3,063 |
+| Web workspace server | 158.2 MB idle | 159.5 MB after serving the app (175 KB) |
+| Task routing decision | 29 µs | per `selectTaskModel` call |
+| stdio MCP server connect | 24 ms | p90 136 ms, 20 tools listed |
+
+These are single-machine numbers; they are not compared with other agents because their runtimes were not measured under the same harness. Most remaining memory is Oasis's own source modules loaded at import; splitting them further is open work.
+
 ## Model-free harness benchmark
 
 Run:
