@@ -1,7 +1,7 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { normalizeAgentUsage } from './agent-tasks.mjs';
 import { MAX_STEER_CHARS, foldSteering } from './steering.mjs';
-import { mkdir, readdir, unlink, rm } from 'node:fs/promises';
+import { mkdir, open, readdir, unlink, rm } from 'node:fs/promises';
 import path from 'node:path';
 import { readBoundedRegularFile } from './safe-storage.mjs';
 import { getConfigDirectory } from './config.mjs';
@@ -283,10 +283,35 @@ export function sanitizeGoal(goal) {
   };
 }
 
+// updatedAt of a saved session, read from the head of its file (it is one of
+// the first fields), or '' when the file is missing or unreadable.
+async function savedUpdatedAt(file) {
+  let handle;
+  try {
+    handle = await open(file, 'r');
+    const buffer = Buffer.alloc(64 * 1024);
+    const { bytesRead } = await handle.read(buffer, 0, buffer.length, 0);
+    const match = buffer.subarray(0, bytesRead).toString('utf8').match(/"updatedAt":\s*"([^"]{1,64})"/);
+    return match ? match[1] : '';
+  } catch { return ''; } finally { if (handle) await handle.close().catch(() => {}); }
+}
+
 export async function saveSession(session, options = {}) {
   if (!session || !Array.isArray(session.messages)) throw new Error('There is no active session to save.');
   const env = options.env || process.env;
-  const id = session.sessionId && validateId(session.sessionId) || randomUUID();
+  let id = session.sessionId && validateId(session.sessionId) || randomUUID();
+  // Another process (a second terminal on the same session, the web UI) may
+  // have saved this session since this one loaded or last saved it. Writing
+  // over it would silently lose that conversation, so save this one as a new
+  // session instead and say so; both stay resumable.
+  let forkedFrom = '';
+  if (session.sessionId && session.persistedUpdatedAt) {
+    const onDisk = await savedUpdatedAt(sessionPath(session.root, id, env));
+    if (onDisk && onDisk !== session.persistedUpdatedAt) {
+      forkedFrom = id;
+      id = randomUUID();
+    }
+  }
   const complete = completeExchanges(session.messages, session.pendingToolOutputs).map((message) => message && message.images ? (({ images, ...rest }) => rest)(message) : message);
   let messages = validateMessages(boundedHistory(complete));
   await saveAgentTranscripts(session, id, env);
@@ -341,8 +366,12 @@ export async function saveSession(session, options = {}) {
   const destination = sessionPath(session.root, id, env);
   await replaceFileDurably(destination, body, { mode: 0o600 });
   session.sessionId = id;
+  session.persistedUpdatedAt = payload.updatedAt;
+  if (forkedFrom) {
+    (session.hookMessages ||= []).push('[session] Another OASIS process saved session ' + forkedFrom + ' while this one was open. To keep both conversations, this one was saved as a new session: ' + id + ' (resume it with oasis --resume ' + id + ').');
+  }
   try {
-    await appendEvent(session.root, id, { type: 'session_saved', at: payload.updatedAt }, { env });
+    await appendEvent(session.root, id, { type: 'session_saved', at: payload.updatedAt, ...(forkedFrom ? { forkedFrom } : {}) }, { env });
   } catch { /* event log is a convenience; never fail the session save for it */ }
   if (session.checkpoints && options.checkpoints !== false) {
     try {
@@ -350,7 +379,7 @@ export async function saveSession(session, options = {}) {
       if (checkpointPersistenceEnabled(env)) await saveCheckpoints(session, checkpointDirectory(session.root, id, env));
     } catch { /* checkpoints are a convenience; never fail the session save for them */ }
   }
-  return { id, path: destination, updatedAt: payload.updatedAt };
+  return { id, path: destination, updatedAt: payload.updatedAt, ...(forkedFrom ? { forkedFrom } : {}) };
 }
 
 export async function loadSession(root, id, options = {}) {

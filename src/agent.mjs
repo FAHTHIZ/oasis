@@ -610,6 +610,8 @@ export async function createSession({ root, config, restore = null, permissionMo
     rejectedDirectories: extraDirs.rejected,
     config,
     sessionId: restore && restore.id || sessionId || null,
+    // Lets saveSession notice another process saving this session meanwhile.
+    persistedUpdatedAt: restore && restore.id && typeof restore.updatedAt === 'string' ? restore.updatedAt : '',
     sessionName: String(sessionName || restore && restore.name || '').slice(0, 120),
     archived: Boolean(restore && restore.archived === true),
     fallbackModel: fallbackModel || loadedSettings.fallbackModel || (config && typeof config.fallbackModel === 'string' ? config.fallbackModel : '') || '',
