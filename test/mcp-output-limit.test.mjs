@@ -43,7 +43,8 @@ test('the model sees more than 24,000 characters of an MCP result', async (t) =>
     toolCall('m1', 'mcp_docs_read', {}),
     { content: 'done' }
   ]);
-  const session = await createSession({ root, config, settings: { permissions: { allow: [], ask: [], deny: [] } }, bare: true });
+  // A 200K window: the result also has to fit a fifth of the window.
+  const session = await createSession({ root, config: { ...config, contextWindow: 200_000 }, settings: { permissions: { allow: [], ask: [], deny: [] } }, bare: true });
   const body = 'A'.repeat(60000) + 'TAIL_MARKER';
   const client = {
     tools: [{ name: 'read', description: 'Read docs.', inputSchema: { type: 'object', properties: {} } }],
