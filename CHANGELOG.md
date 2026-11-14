@@ -4,6 +4,7 @@ User-facing change history grouped by package version. A version heading does no
 
 ## Unreleased
 
+- PostCompact hooks receive the whole `compact_summary` instead of its first 20,000 characters.
 - Compaction summaries are no longer cut. With any must-preserve record set, a summary past about 12,000 characters lost its tail (usually the open work and next steps), the must-preserve block was clipped at 8,000 characters including labels, and mid-turn tool-round summaries were cut at 12,000 characters. All three are now kept whole; the records stay bounded by their own 20-item / 8,000-character limit.
 - The CLI and `oasis web` now report a failed session save after idle compaction on stderr instead of ignoring it.
 - Browser app: the system prompt's "Top level" list now says how many entries past the first 60 were left out, instead of silently ending the list.
