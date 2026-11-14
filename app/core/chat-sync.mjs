@@ -7,8 +7,21 @@
 export function chatTurns(messages) {
   return (Array.isArray(messages) ? messages : [])
     .filter((m) => m && (m.role === 'user' || m.role === 'assistant') && typeof m.content === 'string' && m.content.trim())
-    .slice(-300)
     .map((m) => ({ role: m.role, content: m.content.slice(0, 24000) }));
+}
+
+// The import endpoint takes up to 4 MiB; keep the newest turns that fit.
+const IMPORT_BUDGET_BYTES = 3.5 * 1024 * 1024;
+function newestThatFit(turns) {
+  let used = 0;
+  let start = turns.length;
+  while (start > 0) {
+    const size = new TextEncoder().encode(JSON.stringify(turns[start - 1].content)).length + 40;
+    if (used + size > IMPORT_BUDGET_BYTES) break;
+    used += size;
+    start--;
+  }
+  return start ? turns.slice(start) : turns;
 }
 
 /**
@@ -21,17 +34,17 @@ export async function syncBrowserChats({ store, api, chatIndex, chatKey }) {
   let failed = 0;
   let projects = [];
   try { projects = await store.listProjects(); } catch { projects = []; }
-  for (const project of projects.slice(0, 100)) {
+  for (const project of projects) {
     const index = await chatIndex(project.id);
     const items = index.list.some((item) => item.id === 'main') ? [...index.list] : [...index.list, { id: 'main', title: '', updatedAt: 0 }];
-    for (const item of items.slice(0, 60)) {
+    for (const item of items) {
       const key = chatKey(project.id, item.id);
       const saved = await store.getValue(key).catch(() => null);
       // Chats made while connected hold a session pointer, not a message array.
       if (!saved || !Array.isArray(saved.messages) || !saved.messages.length) continue;
       const stamp = Number(item.updatedAt) || 0;
       if (saved.serverCopy && (!stamp || Number(saved.serverCopy.updatedAt) >= stamp)) continue;
-      const messages = chatTurns(saved.messages);
+      const messages = newestThatFit(chatTurns(saved.messages));
       const firstUser = messages.find((m) => m.role === 'user');
       if (!firstUser) continue;
       try {

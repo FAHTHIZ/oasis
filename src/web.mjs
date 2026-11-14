@@ -2587,7 +2587,8 @@ export function createOasisWebServer(options = {}) {
       try { body = await readJsonBody(req, MAX_IMPORT_BYTES); } catch (error) { json(res, 400, { error: error.message }); return; }
       const key = typeof body.key === 'string' ? body.key.trim() : '';
       if (!key || key.length > 200) { json(res, 400, { error: 'An imported chat needs a key of up to 200 characters.' }); return; }
-      const turns = (Array.isArray(body.messages) ? body.messages : []).slice(-300)
+      // Bounded by MAX_IMPORT_BYTES; a count cap dropped the start of long chats.
+      const turns = (Array.isArray(body.messages) ? body.messages : [])
         .filter((item) => item && (item.role === 'user' || item.role === 'assistant') && typeof item.content === 'string' && item.content.trim() && !item.content.includes('\0'))
         .map((item) => ({ role: item.role, content: item.content.slice(0, MAX_STREAMED_REPLY_CHARS) }));
       if (!turns.some((item) => item.role === 'user')) { json(res, 400, { error: 'An imported chat needs at least one message from you.' }); return; }

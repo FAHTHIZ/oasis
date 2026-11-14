@@ -105,3 +105,23 @@ test('the app runs the copy after connecting to the computer', async () => {
   assert.match(start, /await restoreChat\(\);\n {2}void syncBrowserOnlyChats\(\);\n\}/);
   assert.match(app, /syncBrowserChats\(\{ store, api: \(path, options\) => RT\.client\.api\(path, options\), chatIndex, chatKey \}\)/);
 });
+
+test('a long browser chat is copied whole, not cut to its last 300 turns', async (t) => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'oasis-web-import-long-'));
+  const env = { OASIS_CONFIG_DIR: path.join(root, 'config') };
+  const token = 'test-runtime-token-0123456789';
+  const app = await startOasisWebServer({ root, host: '127.0.0.1', port: 0, env, token });
+  t.after(async () => { await app.close(); await rm(root, { recursive: true, force: true }); });
+  const { syncBrowserChats } = await import('../app/core/chat-sync.mjs');
+  const messages = [];
+  for (let i = 0; i < 400; i++) messages.push({ role: i % 2 ? 'assistant' : 'user', content: 'turn ' + i });
+  const values = new Map([['chats:p', { current: 'a', list: [{ id: 'a', title: 'Long', updatedAt: 1 }] }], ['chat:p:a', { messages, display: [] }]]);
+  const store = { listProjects: async () => [{ id: 'p', name: 'repo' }], getValue: async (key) => values.get(key) ?? null, setValue: async (key, value) => { values.set(key, value); } };
+  const api = async (url, options) => {
+    const response = await fetch('http://127.0.0.1:' + app.port + url, { method: options.method, headers: { 'content-type': 'application/json', authorization: 'Bearer ' + token }, body: JSON.stringify(options.body) });
+    return response.json();
+  };
+  assert.equal((await syncBrowserChats({ store, api, chatIndex: async (id) => values.get('chats:' + id), chatKey: (p, id) => 'chat:' + p + ':' + id })).copied, 1);
+  const listed = await listSessions(root, { env });
+  assert.equal(listed[0].messages, 401);
+});
