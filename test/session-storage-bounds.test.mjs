@@ -30,7 +30,7 @@ test('loadSession rejects oversized files and session listings skip oversized en
   const id = '0123456789abcdef01234567';
   const directory = getSessionDirectory(root, env);
   await mkdir(directory, { recursive: true });
-  await writeFile(path.join(directory, id + '.json'), ' '.repeat(3 * 1024 * 1024 + 1));
+  await writeFile(path.join(directory, id + '.json'), ' '.repeat(64 * 1024 * 1024 + 1));
   await assert.rejects(loadSession(root, id, { env }), /Stored session is too large/);
   assert.deepEqual(await listSessions(root, { env }), []);
 });
@@ -94,15 +94,15 @@ test('session save/load preserves bounded agent reports without persisting child
 
 test('a turn longer than the saved-message cap still saves a resumable transcript', async (t) => {
   const { root, env } = await fixture(t);
-  // One 60-step turn yields well over 120 messages with no user message in its tail.
+  // A 2,600-step turn yields more than the 5,000-message cap with no user message in its tail.
   const messages = [{ role: 'system', content: 'system' }, { role: 'user', content: 'earlier task' }, { role: 'assistant', content: 'done' }, { role: 'user', content: 'refactor everything' }];
-  for (let i = 0; i < 70; i++) {
+  for (let i = 0; i < 2600; i++) {
     messages.push({ role: 'assistant', content: null, tool_calls: [{ id: 'call_' + i, type: 'function', function: { name: 'read_file', arguments: '{}' } }] });
     messages.push({ role: 'tool', tool_call_id: 'call_' + i, name: 'read_file', content: 'ok ' + i });
   }
   const saved = await saveSession({ root, messages, config: {} }, { env });
   const loaded = await loadSession(root, saved.id, { env });
-  assert.ok(loaded.messages.length <= 120);
+  assert.ok(loaded.messages.length <= 5000);
   assert.equal(loaded.messages[0].role, 'system');
   assert.deepEqual(loaded.messages[1], { role: 'user', content: 'refactor everything' }, 'the task that the kept tail belongs to is kept');
   assert.equal(loaded.messages[2].role, 'assistant');
@@ -110,4 +110,41 @@ test('a turn longer than the saved-message cap still saves a resumable transcrip
   // Every kept tool result answers a kept tool call, so providers accept the resume.
   const calls = new Set(loaded.messages.flatMap((m) => (m.tool_calls || []).map((c) => c.id)));
   for (const m of loaded.messages.filter((item) => item.role === 'tool')) assert.ok(calls.has(m.tool_call_id), m.tool_call_id);
+});
+
+test('a long agentic turn is saved whole, not cut to the last 120 messages', async (t) => {
+  const { root, env } = await fixture(t);
+  const messages = [{ role: 'system', content: 'system' }, { role: 'user', content: 'first task' }, { role: 'assistant', content: 'done' }, { role: 'user', content: 'refactor everything' }];
+  for (let i = 0; i < 300; i++) {
+    messages.push({ role: 'assistant', content: null, tool_calls: [{ id: 'call_' + i, type: 'function', function: { name: 'read_file', arguments: '{}' } }] });
+    messages.push({ role: 'tool', tool_call_id: 'call_' + i, name: 'read_file', content: 'ok ' + i });
+  }
+  messages.push({ role: 'assistant', content: 'finished' });
+  const saved = await saveSession({ root, messages, config: {} }, { env });
+  const loaded = await loadSession(root, saved.id, { env });
+  assert.equal(loaded.messages.length, messages.length);
+  assert.deepEqual(loaded.messages[1], { role: 'user', content: 'first task' });
+});
+
+test('a reply with more than 30 parallel tool calls still saves', async (t) => {
+  const { root, env } = await fixture(t);
+  const calls = Array.from({ length: 48 }, (_, i) => ({ id: 'c' + i, type: 'function', function: { name: 'read_file', arguments: '{}' } }));
+  const messages = [{ role: 'system', content: 'system' }, { role: 'user', content: 'read all of them' }, { role: 'assistant', content: null, tool_calls: calls }, ...calls.map((c) => ({ role: 'tool', tool_call_id: c.id, name: 'read_file', content: 'ok' }))];
+  const saved = await saveSession({ root, messages, config: {} }, { env });
+  const loaded = await loadSession(root, saved.id, { env });
+  assert.equal(loaded.messages[2].tool_calls.length, 48);
+});
+
+test('a session over the byte cap is saved with its oldest exchanges dropped', async (t) => {
+  const { root, env } = await fixture(t);
+  const big = 'x'.repeat(4 * 1024 * 1024);
+  const messages = [{ role: 'system', content: 'system' }];
+  for (let i = 0; i < 20; i++) messages.push({ role: 'user', content: 'task ' + i + ' ' + big }, { role: 'assistant', content: 'answer ' + i });
+  const saved = await saveSession({ root, messages, config: {} }, { env });
+  const loaded = await loadSession(root, saved.id, { env });
+  assert.ok(loaded.messages.length < messages.length, 'something was dropped');
+  assert.ok(loaded.messages.length > 3, 'but not everything');
+  assert.equal(loaded.messages[0].role, 'system');
+  assert.equal(loaded.messages[1].role, 'user');
+  assert.deepEqual(loaded.messages.at(-1), messages.at(-1), 'the newest exchange is kept');
 });
