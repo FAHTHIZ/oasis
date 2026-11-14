@@ -2,7 +2,7 @@
 // compaction may cut, reporting and undoing a compaction, and lossless superseding first.
 // Extracted from agent.mjs, which re-exports the public names.
 import { supersedeHistory } from './superseded-results.mjs';
-import { estimateTokens } from './context.mjs';
+import { estimateTokens, tokenUpperBound } from './context.mjs';
 import { saveSessionNotes } from './session-notes.mjs';
 
 export const HISTORY_COMPACT_THRESHOLD_CHARS = 60000;
@@ -19,6 +19,15 @@ export function historyTextSize(messages) {
 // than English, so counting characters alone let them overflow the window.
 export function historyBudgetSize(messages) {
   return Math.max(historyTextSize(messages), estimateTokens(messages) * 4);
+}
+
+// historyBudgetSize(messages) <= limit, without loading the tokenizer when the
+// byte count already proves it: a short session's first turn used to spend
+// ~160 ms (and the vocabulary's memory) counting a prompt far below any limit.
+export function historyWithinBudget(messages, limit) {
+  if (historyTextSize(messages) > limit) return false;
+  if (tokenUpperBound(messages) * 4 <= limit) return true;
+  return historyBudgetSize(messages) <= limit;
 }
 
 export function safeHistoryLine(message) {

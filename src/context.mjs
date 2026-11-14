@@ -57,6 +57,26 @@ function messageTokens(message) {
   return tokens;
 }
 
+// An upper bound on estimateTokens without the tokenizer: every o200k token
+// covers at least one UTF-8 byte, so a text has at most as many tokens as bytes.
+// Images use the same estimate as messageTokens.
+export function tokenUpperBound(messages) {
+  let bytes = 0;
+  const size = (text) => Buffer.byteLength(String(text ?? ''), 'utf8');
+  for (const message of Array.isArray(messages) ? messages : []) {
+    if (!message || typeof message !== 'object') continue;
+    if (Array.isArray(message.responseItems)) {
+      try { bytes += size(JSON.stringify(message.responseItems)); } catch { bytes += size(message.content || ''); }
+      continue;
+    }
+    if (Array.isArray(message.images)) for (const image of message.images) bytes += imageTokenEstimate(image);
+    if (typeof message.content === 'string') bytes += size(message.content);
+    else if (Array.isArray(message.content)) { try { bytes += size(JSON.stringify(message.content)); } catch { /* not counted by messageTokens either */ } }
+    if (Array.isArray(message.tool_calls)) for (const call of message.tool_calls) bytes += size(call && call.function && call.function.name || '') + size(call && call.function && call.function.arguments || '');
+  }
+  return bytes;
+}
+
 export function estimateTokens(messages) {
   let tokens = 0;
   for (const message of Array.isArray(messages) ? messages : []) {
@@ -141,6 +161,13 @@ export function microcompact(messages, options = {}) {
   const keepRecentTokens = Math.max(0, Number.isFinite(options.keepRecentTokens)
     ? options.keepRecentTokens
     : Math.floor(windowTokens * 0.15));
+  // The byte bound settles the common case (well under the trigger) without
+  // the tokenizer; before/after are then counted only if a caller reads them.
+  if (tokenUpperBound(messages) <= windowTokens * triggerRatio) {
+    let counted;
+    const count = () => (counted === undefined ? (counted = estimateTokens(messages)) : counted);
+    return { messages, pruned: 0, get before() { return count(); }, get after() { return count(); } };
+  }
   const before = estimateTokens(messages);
   if (before <= windowTokens * triggerRatio) {
     return { messages, pruned: 0, before, after: before };
