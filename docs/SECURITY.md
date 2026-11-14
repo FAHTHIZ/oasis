@@ -48,6 +48,19 @@ Being explicit here matters more than claiming coverage:
 - Hosted model providers receive the prompts and tool output you send them.
   Use a local model when that is not acceptable.
 
+## Known dependency advisories
+
+`npm audit` on 14 November 2026: the CLI and agent runtime (`package-lock.json`)
+have no known advisories. The desktop app's build tooling (`desktop/`) has six
+moderate entries, all one advisory:
+[GHSA-g3hv-75wg-m249](https://github.com/advisories/GHSA-g3hv-75wg-m249),
+pattern amplification in `minimatch` 7.0.0–11.0.0, reached through
+`electron-builder` 26.18.0. It needs an attacker to supply the glob pattern;
+`electron-builder` only matches the project's own packaging globs at build time,
+and it is not part of the installed app. npm's suggested fix is a downgrade to
+`electron-builder` 24; it is not applied. An override to `minimatch` 11.0.1 would
+be checked by the release build on Windows, macOS and Linux before it is adopted.
+
 ## Recommended setup for untrusted code
 
 1. Do not trust the workspace (`oasis trust` is not run), so its hooks, MCP
