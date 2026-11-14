@@ -172,6 +172,7 @@ test('runtime engine end to end: app at /, paste to connect, approve a real edit
   await waitFor(page, `!document.getElementById('approvalSheet').hidden`, { label: 'approval sheet for the command', timeout: 30000 });
   assert.match(await evaluate(page, `document.querySelector('#approvalSummary .approval-command').textContent`), /^node -e/);
   assert.equal(await evaluate(page, `document.querySelector('#approvalSummary .risk-badge') ? 'risky' : 'plain'`), 'risky');
+  assert.equal(await evaluate(page, `!document.getElementById('approvalInstead').hidden && document.getElementById('denyButton').textContent`), 'Deny', 'a running task can be told what to do instead');
   await shot('3-approval');
   // The run clock says it is waiting and keeps counting wall time, the same
   // clock the step groups use, so the header and groups never disagree.
@@ -280,6 +281,22 @@ test('runtime engine end to end: app at /, paste to connect, approve a real edit
   await evaluate(page, type('What did that print?'));
   await evaluate(page, submit);
   await waitFor(page, `!${busy} && /Your command printed 42\\./.test(document.getElementById('transcript').textContent)`, { label: 'the next message carried the command output', timeout: 30000 });
+
+  // 11. Opening the terminal panel asks first. No task is waiting on that
+  // approval, so there is no "tell OASIS instead" box for terminal keystrokes
+  // to land in (Enter there would deny), and focus is not on any answer.
+  await waitFor(page, `!${busy}`, { label: 'idle before the terminal' });
+  await evaluate(page, `document.getElementById('approvalInstead').value = 'stale'; document.getElementById('denyButton').textContent = 'Deny and send'; true`);
+  await evaluate(page, `document.querySelector('[data-panel-tab="terminal"], #terminalTab, [aria-controls="terminalView"]')?.click(); true`);
+  await waitFor(page, `Boolean(document.getElementById('terminalStart')) && !document.getElementById('terminalView').hidden`, { label: 'terminal panel open', timeout: 15000 });
+  await evaluate(page, `document.getElementById('terminalStart').click(); true`);
+  await waitFor(page, `!document.getElementById('approvalSheet').hidden`, { label: 'approval to open the terminal', timeout: 30000 });
+  assert.match(await evaluate(page, `document.getElementById('approvalSummary').textContent`), /interactive terminal/);
+  assert.deepEqual(await evaluate(page, `[document.getElementById('approvalInstead').hidden, document.getElementById('approvalInstead').value, document.getElementById('denyButton').textContent, document.activeElement && document.activeElement.id]`).then((v) => v.slice(0, 3)), [true, '', 'Deny']);
+  assert.notEqual(await evaluate(page, `document.activeElement && document.activeElement.id`), 'approvalInstead');
+  await evaluate(page, `document.getElementById('allowButton').click(); true`);
+  await waitFor(page, `/running/.test(document.getElementById('terminalStatus').textContent)`, { label: 'terminal running after Allow', timeout: 30000 });
+  await evaluate(page, `document.getElementById('terminalStop').click(); true`);
 
   assert.deepEqual(errors, [], 'no uncaught errors in the app');
 });
