@@ -11,7 +11,9 @@
 export const MAX_PROVIDER_RETRIES = 8;
 export const QUICK_PROVIDER_RETRIES = 2;
 const PATIENT_RETRY_STEPS_MS = [2000, 5000, 10000, 20000, 30000, 30000];
-const PATIENT_RETRY_STATUSES = new Set([500, 502, 503, 504]);
+// 529 is Anthropic's "overloaded"; 520-524 are Cloudflare's origin errors in front of
+// many gateways. Both clear on their own, and neither was retried at all before.
+const PATIENT_RETRY_STATUSES = new Set([500, 502, 503, 504, 520, 521, 522, 523, 524, 529]);
 const MAX_PROVIDER_RETRY_DELAY_MS = 5000;
 // A Retry-After up to this long is waited out exactly (as the OpenAI and
 // Anthropic SDKs do). Longer ones are not retried inline: retrying before the
@@ -19,7 +21,7 @@ const MAX_PROVIDER_RETRY_DELAY_MS = 5000;
 // so the request falls through to the rate-limit wait, the fallback chain or
 // a clear error instead.
 const MAX_INLINE_RETRY_AFTER_MS = 60000;
-export const RETRYABLE_PROVIDER_STATUSES = new Set([408, 425, 429, 500, 502, 503, 504]);
+export const RETRYABLE_PROVIDER_STATUSES = new Set([408, 425, 429, ...PATIENT_RETRY_STATUSES]);
 // A 429 that means "out of quota / billing / account on hold" will not clear by
 // retrying; retrying only burns time (and, on some providers, more quota).
 const HARD_QUOTA_PATTERN = /insufficient_quota|exceeded your current quota|billing|credit balance|payment required|account[_ ](?:is )?(?:on[_ ]hold|suspended|disabled|deactivated)|usage limit reached|weekly limit|monthly limit|spend(?:ing)? limit/i;

@@ -4,6 +4,7 @@ User-facing change history grouped by package version. A version heading does no
 
 ## Unreleased
 
+- HTTP 529 (Anthropic overloaded) and the Cloudflare origin errors 520-524 are now retried with the patient 5xx backoff. Before, they failed the request on the first reply.
 - Provider retries follow the retry-after-ms header (milliseconds, read before Retry-After) and x-should-retry, as the OpenAI and Anthropic SDKs do: "true" retries a status that is not normally retried, such as a 409, and "false" stops retries of a 5xx the server says will not clear.
 - Queued messages for the model (teammate messages, finished-agent notices, background MCP results, background hook results) are no longer lost when they add up to more than 20,000 characters. Each request takes up to 100,000 characters of whole messages (20,000 for hook results); the rest stay queued for the next request, with a note saying how many are waiting.
 - MCP prompts used as commands keep up to 200,000 characters (was 60,000, cut without a note) and end with a note past that; MCP server instructions over 8,000 characters now say they were cut.

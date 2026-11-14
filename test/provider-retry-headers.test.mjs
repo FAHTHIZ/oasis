@@ -50,3 +50,9 @@ test('x-should-retry: false stops retries of a 503', async (t) => {
   const { calls } = await run(t, { status: 503, headers: { 'x-should-retry': 'false' }, message: 'gone for good' });
   assert.equal(calls, 1);
 });
+
+test('an HTTP 529 overloaded reply is retried', async (t) => {
+  const { calls, result } = await run(t, { status: 529, headers: { 'retry-after-ms': '10' }, message: 'Overloaded' });
+  assert.equal(calls, 2);
+  assert.match(String(result.text), /All set/);
+});
