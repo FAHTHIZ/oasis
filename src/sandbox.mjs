@@ -22,6 +22,7 @@ import { spawnSync } from 'node:child_process';
 import { realpathSync, statSync, lstatSync, rmdirSync, unlinkSync, readFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { createRequire } from 'node:module';
 
 const SENSITIVE_HOME_PATHS = [
   '.ssh', '.aws', '.azure', '.kube', '.docker', '.gnupg',
@@ -335,6 +336,46 @@ export function detectSandboxRuntime(force = false) {
   return cachedRuntimeProbe;
 }
 
+let seccompHelper;
+/**
+ * apply-seccomp from @anthropic-ai/sandbox-runtime (Apache-2.0): a prebuilt x64/arm64 helper that
+ * installs a BPF filter refusing socket(AF_UNIX, ...) and then execs the command. Inside the plain
+ * bubblewrap sandbox it keeps commands from reaching host daemons over Unix sockets
+ * (/var/run/docker.sock, an SSH agent, D-Bus), which a read-only bind mount does not prevent.
+ * Returns null when the helper is missing, as on other architectures.
+ */
+export function unixSocketFilterPath() {
+  if (seccompHelper !== undefined) return seccompHelper;
+  seccompHelper = null;
+  const arch = process.arch === 'x64' ? 'x64' : process.arch === 'arm64' ? 'arm64' : null;
+  if (process.platform !== 'linux' || !arch) return seccompHelper;
+  try {
+    const pkg = createRequire(import.meta.url).resolve('@anthropic-ai/sandbox-runtime/package.json');
+    const candidate = path.join(path.dirname(pkg), 'vendor', 'seccomp', arch, 'apply-seccomp');
+    const info = statSync(candidate);
+    // Run it once: a kernel without seccomp, or a foreign build, must not break every command.
+    if (info.isFile() && (info.mode & 0o111) && spawnSync(candidate, ['/bin/true'], { stdio: 'ignore', timeout: 5000 }).status === 0) seccompHelper = realpathSync(candidate);
+  } catch {}
+  return seccompHelper;
+}
+
+/** The sandbox.network keys that widen access, as the backends consume them. */
+function socketPolicy(settings) {
+  const sandbox = settings.sandbox || {};
+  const managedOnly = Boolean(sandbox.allowManagedDomainsOnly);
+  // While allowManagedDomainsOnly is on, only managed settings can point the sandbox at a proxy.
+  const port = (key) => managedOnly ? sandbox[key + 'Managed'] : sandbox[key];
+  const sockets = (Array.isArray(sandbox.allowUnixSockets) ? sandbox.allowUnixSockets : []).filter((item) => typeof item === 'string' && path.isAbsolute(item));
+  return {
+    allowAllUnixSockets: sandbox.allowAllUnixSockets === true,
+    allowUnixSockets: sockets,
+    allowLocalBinding: sandbox.allowLocalBinding === true,
+    allowMachLookup: Array.isArray(sandbox.allowMachLookup) ? sandbox.allowMachLookup : [],
+    ...(Number.isInteger(port('httpProxyPort')) ? { httpProxyPort: port('httpProxyPort') } : {}),
+    ...(Number.isInteger(port('socksProxyPort')) ? { socksProxyPort: port('socksProxyPort') } : {})
+  };
+}
+
 export function resolveSandbox(settings = {}, root, force = false) {
   const wanted = settings.sandbox && settings.sandbox.enabled;
   if (!wanted) return { enabled: false, available: false, kind: 'none' };
@@ -342,7 +383,9 @@ export function resolveSandbox(settings = {}, root, force = false) {
   const ssh = backend === 'ssh' ? normalizeSshSettings(settings.sandbox.ssh || {}, process.env, root) : null;
   const allowedDomains = domainList(settings.sandbox.allowManagedDomainsOnly ? settings.sandbox.managedAllowedDomains || [] : settings.sandbox.allowedDomains);
   const deniedDomains = domainList(settings.sandbox.deniedDomains);
-  const filtered = backend === 'os' && allowedDomains.length > 0;
+  const sockets = socketPolicy(settings);
+  // A proxy port of your own also needs the domain-filtering runtime, which knows how to route to it.
+  const filtered = backend === 'os' && (allowedDomains.length > 0 || sockets.httpProxyPort !== undefined || sockets.socksProxyPort !== undefined);
   const probe = filtered ? detectSandboxRuntime(force) : backend === 'os' ? detectSandbox(force) : backend === 'ssh' ? detectSshRuntime(ssh, force) : detectContainerRuntime(backend, force);
   const additionalWritable = ((settings.permissions && settings.permissions.additionalDirectories) || []).map((dir) => path.resolve(root, dir));
   const caches = settings.sandbox.writableCaches === false ? [] : collectCacheDirectories();
@@ -380,6 +423,10 @@ export function resolveSandbox(settings = {}, root, force = false) {
     reason: probe.reason,
     network: Boolean(settings.sandbox.network),
     ...(filtered ? { allowedDomains, deniedDomains } : {}),
+    ...sockets,
+    // Linux bubblewrap: path-based Unix sockets are refused unless allowAllUnixSockets is on
+    // (seccomp cannot inspect paths, so allowUnixSockets is honored on macOS only, as in Claude Code).
+    unixSocketFilter: probe.kind === 'bubblewrap' && !sockets.allowAllUnixSockets ? unixSocketFilterPath() : null,
     autoAllowCommands: settings.sandbox.autoAllowCommands !== false,
     autoAllowShellCommands: settings.sandbox.autoAllowShellCommands === true,
     maskSensitivePaths: settings.sandbox.maskSensitivePaths !== false,
@@ -441,6 +488,19 @@ function protectedSeatbeltRules(roots) {
   return rules;
 }
 
+// Unix sockets reach host daemons (Docker, SSH agents), so the profile refuses them unless
+// allowAllUnixSockets or allowUnixSockets open them; allowLocalBinding re-opens localhost.
+function macSocketRules(sandbox) {
+  const rules = ['(deny network-outbound (remote unix-socket))', '(deny network-bind (local unix-socket))'];
+  if (sandbox.allowAllUnixSockets) return ['(allow network-bind (local unix-socket (path-regex #"^/")))', '(allow network-outbound (remote unix-socket (path-regex #"^/")))'];
+  for (const socket of sandbox.allowUnixSockets || []) {
+    const quoted = seatbeltString(socket);
+    rules.push('(allow network-bind (local unix-socket (subpath ' + quoted + ')))', '(allow network-outbound (remote unix-socket (subpath ' + quoted + ')))');
+  }
+  if (sandbox.allowLocalBinding && !sandbox.network) rules.push('(allow network-bind (local ip "*:*"))', '(allow network-inbound (local ip "*:*"))', '(allow network-outbound (remote ip "localhost:*"))');
+  return rules;
+}
+
 export function macProfile(sandbox) {
   const writable = [...sandbox.writable, ...(sandbox.readBlock ? sandbox.readBlock.reopen.filter((item) => item.writable).map((item) => item.path) : []), os.tmpdir(), '/private/tmp', '/private/var/folders'];
   return [
@@ -458,7 +518,8 @@ export function macProfile(sandbox) {
     '(allow file-write* ' + writable.map((dir) => '(subpath ' + seatbeltString(dir) + ')').join(' ') + ' (literal "/dev/null") (literal "/dev/stdout") (literal "/dev/stderr") (regex #"^/dev/tty"))',
     ...protectedSeatbeltRules(sandbox.protectedRoots || []),
     ...((sandbox.readOnlyPaths || []).map((item) => '(deny file-write* (' + (item.type === 'directory' ? 'subpath ' : 'literal ') + seatbeltString(item.path) + '))')),
-    sandbox.network ? '' : '(deny network*) (allow network* (remote unix-socket))'
+    sandbox.network ? '' : '(deny network*)',
+    ...macSocketRules(sandbox)
   ].join('\n');
 }
 
@@ -536,7 +597,10 @@ export function wrapCommand(command, args, sandbox, cwd, options = {}) {
     }
     if (!sandbox.network) wrapped.push('--unshare-net');
     for (const name of sandbox.deniedEnv || []) wrapped.push('--unsetenv', name);
-    wrapped.push('--chdir', cwd, '--', command, ...args);
+    // The helper may live under a folder the read block hid, so mount it back read-only.
+    const filter = sandbox.unixSocketFilter;
+    if (filter) wrapped.push('--ro-bind', filter, filter);
+    wrapped.push('--chdir', cwd, '--', ...(filter ? [filter] : []), command, ...args);
     return { command: 'bwrap', args: wrapped, release: trackPlaceholders(guarded.missing) };
   }
   if (sandbox.kind === 'sandbox-exec') {

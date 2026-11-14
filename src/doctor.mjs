@@ -1,7 +1,7 @@
 // /doctor inside a session: a compact health report for the current workspace.
 import { loadSettings } from './settings.mjs';
 import { isNodeVersionSupported, MIN_NODE_VERSION } from './config.mjs';
-import { detectSandbox, detectContainerRuntime, detectSandboxRuntime, domainList } from './sandbox.mjs';
+import { detectSandbox, detectContainerRuntime, detectSandboxRuntime, domainList, unixSocketFilterPath } from './sandbox.mjs';
 import { detectCheckers, findBinary } from './diagnostics.mjs';
 import { BUILTIN_SERVERS } from './lsp.mjs';
 import { onPathSync } from './clipboard-path.mjs';
@@ -38,6 +38,12 @@ export async function workspaceDoctor(root, { env = process.env, session = null 
     lines.push('  Command isolation: ' + (settings.sandbox.enabled && sandbox.available
       ? (backend === 'os' ? 'OS sandbox active' : backend === 'ssh' ? 'remote execution over SSH (' + String(settings.sandbox.ssh && settings.sandbox.ssh.host || env.OASIS_SSH_HOST || '') + ')' : 'container sandbox active (' + backend + ', image ' + (settings.sandbox.image || 'node:22-bookworm') + ')')
       : 'not active; approval controls are not OS isolation'));
+    if (backend === 'os' && sandbox.available) {
+      const open = settings.sandbox.allowAllUnixSockets === true;
+      const filtered = sandbox.kind !== 'bubblewrap' || Boolean(unixSocketFilterPath());
+      lines.push('  Unix sockets: ' + (open ? 'allowed (sandbox.network.allowAllUnixSockets)' : filtered ? 'blocked' : 'NOT blocked (no seccomp helper for ' + process.arch + ')'));
+      if (settings.sandbox.enabled && !open && !filtered) problems.push('Sandboxed commands can reach host Unix sockets such as /var/run/docker.sock: the seccomp helper from @anthropic-ai/sandbox-runtime is missing or cannot run here.');
+    }
     if (settings.sandbox.enabled && !sandbox.available) problems.push('The sandbox is enabled but unavailable: ' + sandbox.reason);
     else if (!settings.sandbox.enabled && sandbox.available) lines.push('  Tip: commands can run inside the ' + sandbox.kind + ' sandbox (workspace writable, rest of the system read-only, credentials hidden, package caches writable). Try /sandbox on, or add "sandbox": {"enabled": true} to settings.');
     // Unified security posture (secret scan, permissions, sandbox, sensitive paths).
