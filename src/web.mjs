@@ -15,7 +15,7 @@ import { startIdleCompaction, idleCompactMinutes } from './idle-compaction.mjs';
 import { loadConfig, saveConfig, getProviderSummary, validateProtocol, validateBaseUrl, isLoopbackUrl, getBaseConfigDirectory } from './config.mjs';
 import { cachedUpdateCheck, updateChecksDisabled, readUpdateState, writeUpdateState, RELEASES_PAGE } from './app-update.mjs';
 import { oasisVersion } from './version.mjs';
-import { saveSession, loadSession, listSessions, deleteSession, saveMidTurn, settleMidTurnSave, setSessionArchived } from './sessions.mjs';
+import { saveSession, loadSession, listSessions, deleteSession, saveMidTurn, settleMidTurnSave, setSessionArchived, userFacingPrompt } from './sessions.mjs';
 import { executeTool, resolveWorkspacePath, sensitivePath } from './tools.mjs';
 import { inspectGitHubExtension, inspectGitHubMcpServers, selectReviewedMcpServers, resolveImportedSlashCommand, installGitHubExtension, updateGitHubExtension, rollbackGitHubExtension, listInstalledExtensions, removeGitHubExtension } from './extensions.mjs';
 import { loadMcpServers, saveMcpServers } from './mcp.mjs';
@@ -537,8 +537,9 @@ export function savedSessionDisplay(messages = [], { maxEntries = 400 } = {}) {
     if (!item || typeof item !== 'object') continue;
     const text = typeof item.content === 'string' ? item.content : '';
     if (item.role === 'user') {
-      if (!text.trim() || text.startsWith('<system-reminder>')) continue;
-      display.push({ role: 'user', content: text.slice(0, MAX_STREAMED_REPLY_CHARS), at: 0 });
+      const typed = userFacingPrompt(text);
+      if (!typed) continue;
+      display.push({ role: 'user', content: typed.slice(0, MAX_STREAMED_REPLY_CHARS), at: 0 });
     } else if (item.role === 'assistant') {
       const calls = Array.isArray(item.tool_calls) ? item.tool_calls : [];
       const tools = [];
@@ -2613,8 +2614,9 @@ export function createOasisWebServer(options = {}) {
       try { saved = await loadSession(activeRoot, id, { env }); }
       catch (error) { json(res, error && error.code === 'ENOENT' ? 404 : 400, { error: error && error.code === 'ENOENT' ? 'That session is not saved yet or no longer exists.' : 'Could not open that session: ' + (error && error.message || 'unknown error') }); return; }
       // System reminders (checklist, hook feedback) are for the model, not the chat view.
-      const messages = saved.messages.filter((item) => ['user', 'assistant'].includes(item.role) && typeof item.content === 'string' && item.content.trim() && !item.content.startsWith('<system-reminder>'))
-        .map((item) => ({ role: item.role, content: item.content.slice(0, MAX_STREAMED_REPLY_CHARS) }));
+      const messages = saved.messages.filter((item) => ['user', 'assistant'].includes(item.role) && typeof item.content === 'string')
+        .map((item) => ({ role: item.role, content: (item.role === 'user' ? userFacingPrompt(item.content) : item.content.trim() ? item.content : '').slice(0, MAX_STREAMED_REPLY_CHARS) }))
+        .filter((item) => item.content);
       json(res, 200, { id, updatedAt: saved.updatedAt, messages, display: savedSessionDisplay(saved.messages) });
       return;
     }

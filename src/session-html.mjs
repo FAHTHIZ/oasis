@@ -6,6 +6,7 @@
 
 import { renderMarkdown } from '../app/markdown.mjs';
 import { redactSecretText } from './secret-shield.mjs';
+import { isOasisAuthoredPrompt } from './sessions.mjs';
 
 const MAX_TOOL_TEXT = 20000;
 const MAX_IMAGE_URL = 4 * 1024 * 1024;
@@ -41,7 +42,7 @@ function imagesOf(content) {
 
 function isReminder(message) {
   const text = textOf(message.content).trim();
-  return message.role === 'user' && (text.startsWith('<system-reminder>') || text.startsWith('<oasis-'));
+  return message.role === 'user' && isOasisAuthoredPrompt(text);
 }
 
 function prettyArguments(raw) {
