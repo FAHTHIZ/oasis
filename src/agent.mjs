@@ -2203,7 +2203,9 @@ const EXIT_PLAN_TOOL_DEFINITION = { type: 'function', function: {
 
 const SPECIALIST_REVIEW_TOOLS = new Set(['git_status', 'git_diff', 'git_log', 'lsp', 'list_files', 'glob_files', 'repo_map', 'read_file', 'search_files', 'grep', 'ast_grep']);
 const MAX_SPECIALIST_REVIEWS_PER_TASK = 2;
-const MAX_TOOL_BATCH = 16;
+// Models fan out wide read batches (Claude often sends 20+ reads at once);
+// the read scheduler caps how many run concurrently.
+const MAX_TOOL_BATCH = 64;
 
 const SPECIALIST_ROLES = {
   'code-review': 'Review likely regressions, correctness, edge cases, compatibility, and maintainability. Prioritize actionable findings supported by specific paths and line numbers.',
