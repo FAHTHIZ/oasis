@@ -1,0 +1,768 @@
+{
+  "summary": {
+    "label": "OASIS 1.3.0 (gpt-oss-20b)",
+    "sourceRevision": "ce21f0131672870c67f5fab7d2469f1be84b3b12",
+    "runId": "2026-11-14T14-58-09-911Z-29785",
+    "startedAt": "2026-11-14T14:58:09.911Z",
+    "completedAt": "2026-11-14T15:21:19.466Z",
+    "taskCount": 1,
+    "taskIds": [
+      "taskflow-search"
+    ],
+    "trialsPerTask": 1,
+    "timeoutSeconds": 1800,
+    "runtime": {
+      "node": "v22.21.1",
+      "platform": "linux",
+      "arch": "x64"
+    },
+    "passRate": 1,
+    "passed": 1,
+    "failed": 0,
+    "medianTimeMs": 1389517,
+    "totalCostUSD": 0.012188,
+    "costPerPassedTaskUSD": 0.012188,
+    "routing": {
+      "enabled": false
+    },
+    "provider": {
+      "model": "gpt-oss-20b",
+      "protocol": "openai-compatible",
+      "baseURL": "http://127.0.0.1:39019/a/oasis/v1",
+      "maxSteps": 150,
+      "maxOutputTokens": null
+    },
+    "pricing": {
+      "inputUsdPerMillionTokens": null,
+      "outputUsdPerMillionTokens": null,
+      "note": "Cost is a rough estimate from configured rates and does not distinguish cached tokens. Pass-rate differences under 10 percentage points are noisy with small task samples; run at least three trials per task when benchmarking."
+    }
+  },
+  "results": [
+    {
+      "taskId": "taskflow-priority-sort",
+      "taskFingerprint": "44c34580556645c4504f9aad04bd90113f116c134e675dd60a30f7a0c22f0efa",
+      "category": "data-structures",
+      "difficulty": "small",
+      "trial": 1,
+      "status": "passed",
+      "model": "gpt-oss-20b",
+      "requestedModel": "gpt-oss-20b",
+      "routeTier": "strong",
+      "escalation": null,
+      "routeReason": "automatic routing is disabled",
+      "strongModel": "gpt-oss-20b",
+      "protocol": "openai-compatible",
+      "baseURL": "http://127.0.0.1:39019/a/oasis/v1",
+      "maxSteps": 150,
+      "maxOutputTokens": null,
+      "inputTokens": 77949,
+      "outputTokens": 3063,
+      "totalTokens": 81012,
+      "costUSD": 0.0027366599999999997,
+      "strongModelCostUSD": 0.0027366599999999997,
+      "routingSavingsUSD": 0,
+      "costSource": "per-model list-price estimate (cloud model behind a localhost gateway; free-tier keys are not billed)",
+      "wallTimeMs": 491578,
+      "finished": true,
+      "toolCalls": 10,
+      "trace": [
+        {
+          "tool": "glob_files",
+          "arg": "src",
+          "resultChars": 56
+        },
+        {
+          "tool": "list_files",
+          "arg": "src",
+          "resultChars": 167
+        },
+        {
+          "tool": "read_file",
+          "arg": "src/query.mjs",
+          "resultChars": 1667
+        },
+        {
+          "tool": "list_files",
+          "arg": "test",
+          "resultChars": 192
+        },
+        {
+          "tool": "read_file",
+          "arg": "test/query.test.mjs",
+          "resultChars": 1641
+        },
+        {
+          "tool": "read_file",
+          "arg": "src/task.mjs",
+          "resultChars": 2445
+        },
+        {
+          "tool": "edit_file",
+          "arg": "src/query.mjs",
+          "resultChars": 384
+        },
+        {
+          "tool": "write_file",
+          "arg": "test/query_priority.test.mjs",
+          "resultChars": 372
+        },
+        {
+          "tool": "read_file",
+          "arg": "test/query_priority.test.mjs",
+          "resultChars": 640
+        },
+        {
+          "tool": "run_command",
+          "arg": "node --test test/query_priority.test.mjs test/query.test.mjs",
+          "resultChars": 786
+        }
+      ],
+      "requestTokens": [
+        [
+          4404,
+          42
+        ],
+        [
+          4455,
+          39
+        ],
+        [
+          4547,
+          34
+        ],
+        [
+          5111,
+          212
+        ],
+        [
+          5392,
+          25
+        ],
+        [
+          6024,
+          64
+        ],
+        [
+          6791,
+          1330
+        ],
+        [
+          7036,
+          832
+        ],
+        [
+          7926,
+          167
+        ],
+        [
+          8329,
+          202
+        ],
+        [
+          8831,
+          60
+        ],
+        [
+          9103,
+          56
+        ]
+      ],
+      "verification": {
+        "exitCode": 0,
+        "output": ""
+      },
+      "changes": [
+        {
+          "path": "src/query.mjs",
+          "status": "modified",
+          "content": "import { isOverdue } from './dates.mjs';\nimport { PRIORITIES, normalizeTag } from './task.mjs';\n\nexport function filterTasks(tasks, { status, tag, priority, overdue, now = new Date() } = {}) {\n  const wanted = tag ? normalizeTag(tag) : null;\n  return tasks.filter((task) => {\n    if (status && status !== 'all' && task.status !== status) return false;\n    if (wanted && !task.tags.includes(wanted)) return false;\n    if (priority && task.priority !== priority) return false;\n    if (overdue && !isOverdue(task, now)) return false;\n    return true;\n  });\n}\n\nconst SORTERS = {\n  id: (a, b) => a.id - b.id,\n  due: (a, b) => (a.due === b.due ? 0 : a.due === null ? 1 : b.due === null ? -1 : a.due < b.due ? -1 : 1),\n  // Sort by priority with high first, then normal, then low; ties by ID order\n  priority: (a, b) => {\n    const idxA = PRIORITIES.indexOf(a.priority);\n    const idxB = PRIORITIES.indexOf(b.priority);\n    return idxB - idxA; // descending order: high (index 2) before low (index 0)\n  },\n  title: (a, b) => a.title.localeCompare(b.title)\n};\n\n// Stable sort; ties keep ID order.\nexport function sortTasks(tasks, key = 'id') {\n  const compare = SORTERS[key];\n  if (!compare) throw new Error(`Unknown sort key: ${key}`);\n  return [...tasks].sort((a, b) => compare(a, b) || a.id - b.id);\n}\n\n// Pages are numbered from 1.\nexport function paginate(items, page = 1, size = 20) {\n  if (!Number.isInteger(page) || page < 1) throw new Error('Page must be a positive integer');\n  if (!Number.isInteger(size) || size < 1 || size > 100) throw new Error('Page size must be between 1 and 100');\n  const start = (page - 1) * size;\n  return { items: items.slice(start, start + size), page, pages: Math.max(1, Math.ceil(items.length / size)), total: items.length };\n}\n"
+        },
+        {
+          "path": "test/query_priority.test.mjs",
+          "status": "added",
+          "content": "import test from 'node:test';\nimport assert from 'node:assert/strict';\nimport { sortTasks } from '../src/query.mjs';\n\nconst tasks = [\n  { id: 1, priority: 'low', title: 'l', status: 'open', due: null, tags: [] },\n  { id: 2, priority: 'high', title: 'h', status: 'open', due: null, tags: [] },\n  { id: 3, priority: 'normal', title: 'n', status: 'open', due: null, tags: [] }\n];\n\ntest('sorts by priority high > normal > low', () => {\n  assert.deepEqual(sortTasks(tasks, 'priority').map((t) => t.id), [2, 3, 1]);\n});\n"
+        }
+      ],
+      "error": null
+    },
+    {
+      "taskId": "safe-relative-path",
+      "taskFingerprint": "84b5a93d17e947ba36816c9adcea89450ad3dc0f3ae5e3b9d6499f410027ed51",
+      "category": "security-boundaries",
+      "difficulty": "medium",
+      "trial": 1,
+      "status": "passed",
+      "model": "gpt-oss-20b",
+      "requestedModel": "gpt-oss-20b",
+      "routeTier": "strong",
+      "escalation": null,
+      "routeReason": "automatic routing is disabled",
+      "strongModel": "gpt-oss-20b",
+      "protocol": "openai-compatible",
+      "baseURL": "http://127.0.0.1:39019/a/oasis/v1",
+      "maxSteps": 150,
+      "maxOutputTokens": null,
+      "inputTokens": 231063,
+      "outputTokens": 4705,
+      "totalTokens": 235768,
+      "costUSD": 0.007543539999999999,
+      "strongModelCostUSD": 0.007543539999999999,
+      "routingSavingsUSD": 0,
+      "costSource": "per-model list-price estimate (cloud model behind a localhost gateway; free-tier keys are not billed)",
+      "wallTimeMs": 1005018,
+      "finished": true,
+      "toolCalls": 21,
+      "trace": [
+        {
+          "tool": "glob_files",
+          "arg": "src/*.mjs",
+          "resultChars": 187
+        },
+        {
+          "tool": "write_file",
+          "arg": "src/lib.mjs",
+          "resultChars": 338
+        },
+        {
+          "tool": "edit_file",
+          "arg": "src/lib.mjs",
+          "resultChars": 378
+        },
+        {
+          "tool": "run_command",
+          "arg": "npm test",
+          "resultChars": 2416
+        },
+        {
+          "tool": "run_command",
+          "arg": "npm test",
+          "resultChars": 2416
+        },
+        {
+          "tool": "run_command",
+          "arg": "node -e const {resolveRelative}=require('./src/lib.mjs'); console.log(resolveRelative('root','a/b'));",
+          "resultChars": 335,
+          "failed": true
+        },
+        {
+          "tool": "glob_files",
+          "arg": "test",
+          "resultChars": 78
+        },
+        {
+          "tool": "write_file",
+          "arg": "test/lib-resolve.test.mjs",
+          "resultChars": 366
+        },
+        {
+          "tool": "run_command",
+          "arg": "npm test",
+          "resultChars": 3333,
+          "failed": true
+        },
+        {
+          "tool": "edit_file",
+          "arg": "test/lib-resolve.test.mjs",
+          "resultChars": 406
+        },
+        {
+          "tool": "run_command",
+          "arg": "npm test",
+          "resultChars": 5895,
+          "failed": true
+        },
+        {
+          "tool": "edit_file",
+          "arg": "test/lib-resolve.test.mjs",
+          "resultChars": 406
+        },
+        {
+          "tool": "run_command",
+          "arg": "npm test",
+          "resultChars": 3357,
+          "failed": true
+        },
+        {
+          "tool": "read_file",
+          "arg": "test/lib-resolve.test.mjs",
+          "resultChars": 1042
+        },
+        {
+          "tool": "edit_file",
+          "arg": "test/lib-resolve.test.mjs",
+          "resultChars": 406
+        },
+        {
+          "tool": "grep",
+          "arg": "test/lib-resolve.test.mjs",
+          "resultChars": 296
+        },
+        {
+          "tool": "edit_file",
+          "arg": "test/lib-resolve.test.mjs",
+          "resultChars": 71,
+          "failed": true
+        },
+        {
+          "tool": "run_command",
+          "arg": "npm test",
+          "resultChars": 2562
+        },
+        {
+          "tool": "read_file",
+          "arg": "test/lib-resolve.test.mjs",
+          "resultChars": 1049
+        },
+        {
+          "tool": "write_file",
+          "arg": "test/lib-resolve.test.mjs",
+          "resultChars": 365
+        },
+        {
+          "tool": "run_command",
+          "arg": "npm test",
+          "resultChars": 2562
+        }
+      ],
+      "requestTokens": [
+        [
+          4831,
+          102
+        ],
+        [
+          4932,
+          555
+        ],
+        [
+          5239,
+          728
+        ],
+        [
+          5680,
+          54
+        ],
+        [
+          6273,
+          73
+        ],
+        [
+          6866,
+          304
+        ],
+        [
+          7246,
+          89
+        ],
+        [
+          7389,
+          150
+        ],
+        [
+          7451,
+          599
+        ],
+        [
+          7788,
+          50
+        ],
+        [
+          8678,
+          235
+        ],
+        [
+          8817,
+          28
+        ],
+        [
+          10506,
+          294
+        ],
+        [
+          10766,
+          79
+        ],
+        [
+          11655,
+          157
+        ],
+        [
+          11995,
+          125
+        ],
+        [
+          12152,
+          71
+        ],
+        [
+          12277,
+          134
+        ],
+        [
+          12394,
+          192
+        ],
+        [
+          13024,
+          80
+        ],
+        [
+          13180,
+          65
+        ],
+        [
+          13522,
+          435
+        ],
+        [
+          13884,
+          44
+        ],
+        [
+          14518,
+          62
+        ]
+      ],
+      "verification": {
+        "exitCode": 0,
+        "output": ""
+      },
+      "changes": [
+        {
+          "path": "src/lib.mjs",
+          "status": "added",
+          "content": "import path from 'node:path';\n\nexport function resolveRelative(root, value) {\n    if (typeof root !== 'string' || typeof value !== 'string') {\n        throw new Error('root and value must be strings');\n    }\n    // If value is absolute, throw\n    if (path.isAbsolute(value)) {\n        throw new Error(`Path escapes the workspace: ${value}`);\n    }\n\n    const resolved = path.resolve(root, value);\n    const rel = path.relative(root, resolved);\n    if (rel.startsWith('..') || path.isAbsolute(rel)) {\n        throw new Error(`Path escapes the workspace: ${value}`);\n    }\n    return resolved;\n}\n"
+        },
+        {
+          "path": "test/lib-resolve.test.mjs",
+          "status": "added",
+          "content": "import { test } from 'node:test';\nimport assert from 'node:assert';\n\nimport { resolveRelative } from '../src/lib.mjs';\n\nconst root = '/tmp/workspace';\n\nfunction assertResolve(value, expected) {\n    const result = resolveRelative(root, value);\n    assert.strictEqual(result, expected);\n}\n\nfunction assertThrows(value, snippet) {\n    assert.throws(\n        () => resolveRelative(root, value),\n        (err) => err instanceof Error && err.message.includes(snippet)\n    );\n}\n\ntest('resolves simple relative path', () => {\n    assertResolve('foo/bar.txt', '/tmp/workspace/foo/bar.txt');\n});\n\ntest('throws on absolute path', () => {\n    assertThrows('/etc/passwd', 'escapes');\n});\n\ntest('throws on ancestor traversal', () => {\n    assertThrows('../../secret', 'escapes');\n});\n\ntest('does not accept non-string', () => {\n    // @ts-expect-error\n    assert.throws(() => resolveRelative(root, 42), /error/i);\n});\n// Added comment to force file modification\n"
+        }
+      ],
+      "error": null
+    },
+    {
+      "taskId": "taskflow-search",
+      "taskFingerprint": "4f55003e0ebc832b3e58785e03f3bcf4a50aa333078647169e82fb649ce56596",
+      "category": "data-structures",
+      "difficulty": "medium",
+      "trial": 1,
+      "status": "passed",
+      "model": "gpt-oss-20b",
+      "requestedModel": "gpt-oss-20b",
+      "routeTier": "strong",
+      "escalation": null,
+      "routeReason": "automatic routing is disabled",
+      "strongModel": "gpt-oss-20b",
+      "protocol": "openai-compatible",
+      "baseURL": "http://127.0.0.1:39019/a/oasis/v1",
+      "maxSteps": 150,
+      "maxOutputTokens": null,
+      "inputTokens": 362956,
+      "outputTokens": 9996,
+      "totalTokens": 372952,
+      "costUSD": 0.01218816,
+      "strongModelCostUSD": 0.012188159999999998,
+      "routingSavingsUSD": 0,
+      "costSource": "per-model list-price estimate (cloud model behind a localhost gateway; free-tier keys are not billed)",
+      "wallTimeMs": 1389517,
+      "finished": true,
+      "toolCalls": 28,
+      "trace": [
+        {
+          "tool": "glob_files",
+          "arg": "src",
+          "resultChars": 181
+        },
+        {
+          "tool": "read_file",
+          "arg": "src/query.mjs",
+          "resultChars": 1694
+        },
+        {
+          "tool": "read_file",
+          "arg": "src/cli.mjs",
+          "resultChars": 4071
+        },
+        {
+          "tool": "glob_files",
+          "arg": "test",
+          "resultChars": 57
+        },
+        {
+          "tool": "list_files",
+          "arg": ".",
+          "resultChars": 369
+        },
+        {
+          "tool": "read_file",
+          "arg": "test/query.test.mjs",
+          "resultChars": 1740
+        },
+        {
+          "tool": "read_file",
+          "arg": "test/helpers.mjs",
+          "resultChars": 633
+        },
+        {
+          "tool": "edit_file",
+          "arg": "src/query.mjs",
+          "resultChars": 384
+        },
+        {
+          "tool": "edit_file",
+          "arg": "src/query.mjs",
+          "resultChars": 384
+        },
+        {
+          "tool": "edit_file",
+          "arg": "src/cli.mjs",
+          "resultChars": 380
+        },
+        {
+          "tool": "edit_file",
+          "arg": "src/cli.mjs",
+          "resultChars": 380
+        },
+        {
+          "tool": "edit_file",
+          "arg": "test/query.test.mjs",
+          "resultChars": 112,
+          "failed": true
+        },
+        {
+          "tool": "read_file",
+          "arg": "test/query.test.mjs",
+          "resultChars": 300
+        },
+        {
+          "tool": "read_file",
+          "arg": "test/query.test.mjs",
+          "resultChars": 1740
+        },
+        {
+          "tool": "edit_file",
+          "arg": "test/query.test.mjs",
+          "resultChars": 112,
+          "failed": true
+        },
+        {
+          "tool": "read_file",
+          "arg": "test/query.test.mjs",
+          "resultChars": 1740
+        },
+        {
+          "tool": "edit_file",
+          "arg": "test/query.test.mjs",
+          "resultChars": 112,
+          "failed": true
+        },
+        {
+          "tool": "write_file",
+          "arg": "test/search.test.mjs",
+          "resultChars": 357
+        },
+        {
+          "tool": "read_file",
+          "arg": "package.json",
+          "resultChars": 437
+        },
+        {
+          "tool": "run_command",
+          "arg": "node --test test/search.test.mjs test/cli.test.mjs test/query.test.mjs",
+          "resultChars": 1840,
+          "failed": true
+        },
+        {
+          "tool": "edit_file",
+          "arg": "test/search.test.mjs",
+          "resultChars": 398
+        },
+        {
+          "tool": "edit_file",
+          "arg": "test/search.test.mjs",
+          "resultChars": 342,
+          "failed": true
+        },
+        {
+          "tool": "read_file",
+          "arg": "src/query.mjs",
+          "resultChars": 2113
+        },
+        {
+          "tool": "read_file",
+          "arg": "test/search.test.mjs",
+          "resultChars": 1151
+        },
+        {
+          "tool": "run_command",
+          "arg": "node --test test/search.test.mjs test/cli.test.mjs test/query.test.mjs",
+          "resultChars": 978
+        },
+        {
+          "tool": "read_file",
+          "arg": "test/search.test.mjs",
+          "resultChars": 301
+        },
+        {
+          "tool": "write_file",
+          "arg": "test/search.test.mjs",
+          "resultChars": 356
+        },
+        {
+          "tool": "run_command",
+          "arg": "node --test test/search.test.mjs test/cli.test.mjs test/query.test.mjs",
+          "resultChars": 978
+        }
+      ],
+      "requestTokens": [
+        [
+          4421,
+          69
+        ],
+        [
+          4522,
+          70
+        ],
+        [
+          5098,
+          60
+        ],
+        [
+          6406,
+          560
+        ],
+        [
+          6461,
+          46
+        ],
+        [
+          6636,
+          29
+        ],
+        [
+          7309,
+          305
+        ],
+        [
+          7836,
+          618
+        ],
+        [
+          8559,
+          314
+        ],
+        [
+          8940,
+          130
+        ],
+        [
+          9143,
+          149
+        ],
+        [
+          9361,
+          483
+        ],
+        [
+          9883,
+          60
+        ],
+        [
+          10021,
+          50
+        ],
+        [
+          10715,
+          405
+        ],
+        [
+          11159,
+          108
+        ],
+        [
+          11885,
+          940
+        ],
+        [
+          12864,
+          537
+        ],
+        [
+          13461,
+          553
+        ],
+        [
+          13640,
+          923
+        ],
+        [
+          14885,
+          184
+        ],
+        [
+          15498,
+          1195
+        ],
+        [
+          15685,
+          587
+        ],
+        [
+          15921,
+          226
+        ],
+        [
+          16606,
+          285
+        ],
+        [
+          17032,
+          93
+        ],
+        [
+          17361,
+          93
+        ],
+        [
+          17532,
+          270
+        ],
+        [
+          17639,
+          457
+        ],
+        [
+          18074,
+          121
+        ],
+        [
+          18403,
+          76
+        ]
+      ],
+      "verification": {
+        "exitCode": 0,
+        "output": ""
+      },
+      "changes": [
+        {
+          "path": "src/cli.mjs",
+          "status": "modified",
+          "content": "#!/usr/bin/env node\nimport path from 'node:path';\nimport os from 'node:os';\nimport { pathToFileURL } from 'node:url';\nimport { openStore } from './store.mjs';\nimport { filterTasks, sortTasks, paginate } from './query.mjs';\nimport { formatList } from './format.mjs';\n\nconst VALUE_FLAGS = new Set(['priority', 'due', 'tag', 'status', 'sort', 'page', 'size', 'notes', 'file', 'search']);\nconst BOOLEAN_FLAGS = new Set(['overdue', 'help']);\n\n// Supports --flag value, --flag=value, and boolean --flag. \"--\" ends options.\nexport function parseArgs(argv) {\n  const positional = [];\n  const flags = {};\n  const tags = [];\n  for (let i = 0; i < argv.length; i++) {\n    const arg = argv[i];\n    if (arg === '--') { positional.push(...argv.slice(i + 1)); break; }\n    if (!arg.startsWith('--')) { positional.push(arg); continue; }\n    const eq = arg.indexOf('=');\n    const name = eq === -1 ? arg.slice(2) : arg.slice(2, eq);\n    if (BOOLEAN_FLAGS.has(name)) {\n      if (eq !== -1) throw new Error(`--${name} does not take a value`);\n      flags[name] = true;\n      continue;\n    }\n    if (!VALUE_FLAGS.has(name)) throw new Error(`Unknown option: --${name}`);\n    let value;\n    if (eq !== -1) value = arg.slice(eq + 1);\n    else {\n      value = argv[++i];\n      if (value === undefined) throw new Error(`--${name} needs a value`);\n    }\n    if (name === 'tag') tags.push(value);\n    else flags[name] = value;\n  }\n  if (tags.length) flags.tags = tags;\n  return { command: positional[0], args: positional.slice(1), flags };\n}\n\nfunction parseId(text) {\n  if (!/^[1-9]\\d*$/.test(String(text))) throw new Error(`Invalid task ID: ${text}`);\n  return Number(text);\n}\n\nexport async function run(argv, { stdout = process.stdout, env = process.env, now } = {}) {\n  const { command, args, flags } = parseArgs(argv);\n  const file = flags.file || env.TASKFLOW_FILE || path.join(os.homedir(), '.taskflow.json');\n  const store = await openStore(file, now ? { now } : {});\n  const print = (text) => stdout.write(text + '\\n');\n  const clock = now ? now() : new Date();\n  switch (command) {\n    case 'add': {\n      const task = await store.add({ title: args.join(' '), priority: flags.priority, due: flags.due, tags: flags.tags, notes: flags.notes });\n      print(`Added task ${task.id}.`);\n      return 0;\n    }\n    case 'list': {\n      const filtered = filterTasks(store.all(), { status: flags.status || 'open', tag: flags.tags && flags.tags[0], priority: flags.priority, overdue: flags.overdue, search: flags.search, now: clock });\n      const sorted = sortTasks(filtered, flags.sort || 'id');\n      const page = paginate(sorted, flags.page ? Number(flags.page) : 1, flags.size ? Number(flags.size) : 20);\n      print(formatList(page.items, { now: clock }));\n      if (page.pages > 1) print(`Page ${page.page} of ${page.pages} (${page.total} tasks)`);\n      return 0;\n    }\n    case 'done': {\n      for (const id of args.map(parseId)) await store.update(id, { status: 'done' });\n      print(`Completed ${args.length} task(s).`);\n      return 0;\n    }\n    case 'reopen': {\n      for (const id of args.map(parseId)) await store.update(id, { status: 'open' });\n      print(`Reopened ${args.length} task(s).`);\n      return 0;\n    }\n    case 'tag': {\n      const [id, ...tagList] = args;\n      await store.update(parseId(id), { addTags: tagList });\n      print(`Tagged task ${id}.`);\n      return 0;\n    }\n    case 'rm': {\n      for (const id of args.map(parseId)) await store.remove(id);\n      print(`Removed ${args.length} task(s).`);\n      return 0;\n    }\n    default:\n      print('Usage: taskflow <add|list|done|reopen|tag|rm> [options]');\n      return command ? 2 : 0;\n  }\n}\n\nif (import.meta.url === pathToFileURL(process.argv[1] || '').href) {\n  run(process.argv.slice(2)).then((code) => { process.exitCode = code; }, (error) => {\n    process.stderr.write(`taskflow: ${error.message}\\n`);\n    process.exitCode = 1;\n  });\n}\n"
+        },
+        {
+          "path": "src/query.mjs",
+          "status": "modified",
+          "content": "import { isOverdue } from './dates.mjs';\nimport { PRIORITIES, normalizeTag } from './task.mjs';\n\nexport function filterTasks(tasks, { status, tag, priority, overdue, now = new Date(), search } = {}) {\n  const wanted = tag ? normalizeTag(tag) : null;\n  return tasks.filter((task) => {\n    if (status && status !== 'all' && task.status !== status) return false;\n    if (wanted && !task.tags.includes(wanted)) return false;\n    if (priority && task.priority !== priority) return false;\n    if (overdue && !isOverdue(task, now)) return false;\n    if (search) {\n      const trimmed = String(search).trim();\n      if (trimmed.length > 0) {\n        const lower = trimmed.toLowerCase();\n        const title = typeof task.title === 'string' ? task.title.toLowerCase() : '';\n        const notes = typeof task.notes === 'string' ? task.notes.toLowerCase() : '';\n        if (!title.includes(lower) && !notes.includes(lower)) return false;\n      }\n    }\n    return true;\n  });\n}\n\nconst SORTERS = {\n  id: (a, b) => a.id - b.id,\n  due: (a, b) => (a.due === b.due ? 0 : a.due === null ? 1 : b.due === null ? -1 : a.due < b.due ? -1 : 1),\n  priority: (a, b) => PRIORITIES.indexOf(b.priority) - PRIORITIES.indexOf(a.priority),\n  title: (a, b) => a.title.localeCompare(b.title)\n};\n\n// Stable sort; ties keep ID order.\nexport function sortTasks(tasks, key = 'id') {\n  const compare = SORTERS[key];\n  if (!compare) throw new Error(`Unknown sort key: ${key}`);\n  return [...tasks].sort((a, b) => compare(a, b) || a.id - b.id);\n}\n\n// Pages are numbered from 1.\nexport function paginate(items, page = 1, size = 20) {\n  if (!Number.isInteger(page) || page < 1) throw new Error('Page must be a positive integer');\n  if (!Number.isInteger(size) || size < 1 || size > 100) throw new Error('Page size must be between 1 and 100');\n  const start = (page - 1) * size;\n  return { items: items.slice(start, start + size), page, pages: Math.max(1, Math.ceil(items.length / size)), total: items.length };\n}\n"
+        },
+        {
+          "path": "test/search.test.mjs",
+          "status": "added",
+          "content": "import test from 'node:test';\nimport assert from 'node:assert/strict';\nimport { filterTasks } from '../src/query.mjs';\n\nconst tasks = [\n  { id: 1, title: 'Buy milk', notes: 'Remember cheese', priority: 'low', status: 'open', due: '2026-11-05', tags: ['home'] },\n  { id: 2, title: 'Meeting', notes: 'Project kickoff', priority: 'high', status: 'done', due: null, tags: ['work'] },\n  { id: 3, title: 'Write report', notes: '', priority: 'normal', status: 'open', due: '2026-10-30', tags: ['work'] },\n  { id: 4, title: 'Call friend', notes: 'BR', priority: 'high', status: 'open', due: '2026-11-02', tags: [] }\n];\n\ntest('search matches title or notes (case-insensitive), whitespace-only ignored', () => {\n  assert.deepEqual(filterTasks(tasks, { search: 'milk' }).map(t => t.id), [1]);\n  assert.deepEqual(filterTasks(tasks, { search: 'project' }).map(t => t.id), [2]);\n  assert.deepEqual(filterTasks(tasks, { search: '  ' }).map(t => t.id), [1,2,3,4]);\n  assert.deepEqual(filterTasks(tasks, { search: 'BR' }).map(t => t.id), [4]);\n});"
+        }
+      ],
+      "error": null
+    }
+  ]
+}
