@@ -74,10 +74,26 @@ export async function executeTool(name, args, ctx) {
       const lines = text.split('\n');
       const offset = Math.max(1, Number(args.offset) || 1);
       const limit = Math.min(2000, Math.max(1, Number(args.limit) || 400));
-      const slice = lines.slice(offset - 1, offset - 1 + limit);
-      const body = slice.map((line, i) => String(offset + i).padStart(5) + '  ' + line).join('\n');
-      const more = offset - 1 + limit < lines.length ? '\n… lines ' + (offset + limit) + '–' + lines.length + ' not shown; read again with offset.' : '';
-      return clip(body + more);
+      // Cut at a whole line inside the result budget and say where to go on.
+      // Clipping the joined text cut a line in half and dropped the
+      // continuation note, so the model did not know which offset was next.
+      if (offset > lines.length) return args.path + ' has ' + lines.length + ' line' + (lines.length === 1 ? '' : 's') + '; offset ' + offset + ' is past the end.';
+      const out = [];
+      let used = 0;
+      let next = offset;
+      const end = Math.min(lines.length, offset - 1 + limit);
+      for (let n = offset; n <= end; n++) {
+        let row = String(n).padStart(5) + '  ' + lines[n - 1];
+        if (used + row.length + 1 > MAX_RESULT - 200) {
+          if (out.length) break;
+          row = row.slice(0, MAX_RESULT - 400) + ' … (line cut; it is ' + lines[n - 1].length + ' characters long)';
+        }
+        out.push(row);
+        used += row.length + 1;
+        next = n + 1;
+      }
+      const more = next <= lines.length ? '\n… lines ' + next + '–' + lines.length + ' not shown; read again with offset ' + next + '.' : '';
+      return out.join('\n') + more;
     }
     case 'write_file': {
       const before = (await ws.exists(args.path)) ? await ws.read(args.path) : null;
