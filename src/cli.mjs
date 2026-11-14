@@ -2405,7 +2405,7 @@ async function interactive(root, autoApprove, persistence = {}) {
       });
       try { input = await readMainInput(root, session, inputState); } catch { await idle.settle(); break; }
       const idleResult = await idle.settle();
-      if (idleResult) { stdout.write(idleCompactionNote(idleResult) + '\n'); saveSession(session).catch(() => {}); }
+      if (idleResult) { stdout.write(idleCompactionNote(idleResult) + '\n'); saveSession(session).catch((error) => stderr.write('Could not save the compacted session: ' + (error && error.message || error) + '\n')); }
     }
     let text = input.trim();
     if (!text) continue;
