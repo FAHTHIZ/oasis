@@ -4,6 +4,7 @@ User-facing change history grouped by package version. A version heading does no
 
 ## Unreleased
 
+- /btw side questions and the advisor see the newest 150,000 characters of the transcript (was 60,000 for /btw) as whole lines, with a note saying how many older lines were left out. The question itself is kept up to 100,000 characters (was 8,000, cut silently). Hook context from SessionStart, UserPromptSubmit, SubagentStart and PostToolBatch, the SubagentStart prompt and the PostToolUseFailure error are now cut from the middle with a note instead of at a silent limit.
 - The browser app's provider client follows x-should-retry and retry-after-ms / Retry-After, as the CLI does. A server-advised wait of up to 60 s replaces the fixed backoff, and "false" stops a retry the server says will not help.
 - HTTP 529 (Anthropic overloaded) and the Cloudflare origin errors 520-524 are now retried with the patient 5xx backoff. Before, they failed the request on the first reply.
 - Provider retries follow the retry-after-ms header (milliseconds, read before Retry-After) and x-should-retry, as the OpenAI and Anthropic SDKs do: "true" retries a status that is not normally retried, such as a 409, and "false" stops retries of a 5xx the server says will not clear.
