@@ -103,6 +103,10 @@ export function ifAccepts(condition, event, payload) {
   return false;
 }
 
+// A hook's own timeout is honoured up to a day (it was capped at 600 seconds
+// without a word, so a 30-minute deploy check was killed at 10 minutes).
+export const MAX_HOOK_TIMEOUT_SECONDS = 86400;
+
 function hookEnvironment(baseEnv, root) {
   const env = {};
   for (const [key, value] of Object.entries(baseEnv || process.env)) {
@@ -115,7 +119,7 @@ function hookEnvironment(baseEnv, root) {
 }
 
 export function runHookCommand(command, payload, options = {}) {
-  const timeoutMs = options.timeout === Infinity ? 0 : Math.max(1, Math.min(600, Number(options.timeout) || 600)) * 1000;
+  const timeoutMs = options.timeout === Infinity ? 0 : Math.max(1, Math.min(MAX_HOOK_TIMEOUT_SECONDS, Number(options.timeout) || 600)) * 1000;
   const vars = { CLAUDE_PROJECT_DIR: options.root, OASIS_PROJECT_DIR: options.root, ...(options.pluginEnv || {}) };
   const substitute = (text) => String(text).replace(/\$\{([A-Za-z_][A-Za-z0-9_]*)\}/g, (match, name) => vars[name] ?? match)
     .replace(/\$\{user_config\.([A-Za-z_][A-Za-z0-9_]*)\}/g, (match, key) => vars['CLAUDE_PLUGIN_OPTION_' + key.toUpperCase()] ?? '');
@@ -184,7 +188,7 @@ export function httpHookUrlAllowed(url, patterns) {
 
 async function runHttpHook(hook, payload, options = {}) {
   const env = options.env || process.env;
-  const timeoutMs = Math.max(1, Math.min(600, Number(hook.timeout) || 30)) * 1000;
+  const timeoutMs = Math.max(1, Math.min(MAX_HOOK_TIMEOUT_SECONDS, Number(hook.timeout) || 30)) * 1000;
   const headers = { 'content-type': 'application/json' };
   if (!httpHookUrlAllowed(hook.url, options.allowedHttpHookUrls)) return { exitCode: 1, stdout: '', stderr: 'HTTP hook not run: ' + hook.url + ' is not in allowedHttpHookUrls.', failed: true };
   // httpHookAllowedEnvVars is an outer limit on every hook's own allowedEnvVars.
@@ -242,7 +246,7 @@ async function runPromptHook(hook, payload, options = {}) {
     json = json.slice(0, MAX_PROMPT_HOOK_PAYLOAD);
   }
   const text = hook.prompt.includes('$ARGUMENTS') ? hook.prompt.split('$ARGUMENTS').join(json) : hook.prompt + '\n\nEvent payload:\n' + json;
-  const timeoutMs = Math.max(1, Math.min(600, Number(hook.timeout) || 30)) * 1000;
+  const timeoutMs = Math.max(1, Math.min(MAX_HOOK_TIMEOUT_SECONDS, Number(hook.timeout) || 30)) * 1000;
   let reply;
   try {
     reply = await Promise.race([
@@ -285,7 +289,7 @@ function substitutePayload(value, payload) {
 
 async function runMcpToolHook(hook, payload, options = {}) {
   if (typeof options.callMcpTool !== 'function') return { exitCode: 1, stdout: '', stderr: 'MCP tool hook: no MCP servers are connected in this session.' };
-  const timeoutMs = Math.max(1, Math.min(600, Number(hook.timeout) || 600)) * 1000;
+  const timeoutMs = Math.max(1, Math.min(MAX_HOOK_TIMEOUT_SECONDS, Number(hook.timeout) || 600)) * 1000;
   try {
     const result = await Promise.race([
       options.callMcpTool({ server: hook.server, tool: hook.tool, input: substitutePayload(hook.input || {}, payload) }),

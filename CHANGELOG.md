@@ -4,6 +4,7 @@ User-facing change history grouped by package version. A version heading does no
 
 ## Unreleased
 
+- A hook's `timeout` is honoured up to a day. It was cut to 600 seconds without a word, so a longer check was killed at 10 minutes.
 - `oasis acp`, the Codex app server and the Telegram gateway log a failed session save (disk full, a session over the size cap) instead of dropping the error.
 - Browser app: a reply cut off by the output token limit never runs the tool call that was still being written. The model is told the call did not run and to split large writes, and continues a cut-off answer (up to three times per request).
 - `/compact preserve` refuses a record over 600 characters with the length and limit, instead of saving it cut off at 600.
