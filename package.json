@@ -158,8 +158,8 @@
     "sucrase": "3.35.1"
   },
   "author": {
-    "name": "OASIS Contributors",
-    "email": "noreply@github.com"
+    "name": "Fahim Hussain",
+    "url": "https://github.com/FAHTHIZ"
   },
   "oasisRelease": {
     "channel": "stable",
