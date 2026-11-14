@@ -45,3 +45,25 @@ test('formatModelTable aligns columns and leaves unknown facts blank', () => {
   assert.match(lines[1], /^\*\s+a\s+200K\s+\$3\s+\$15\s+yes\s+yes$/);
   assert.match(lines[2], /^\s+long-model-name$/);
 });
+
+test('oasis models with no provider configured says so without a network call', async () => {
+  clearProviderModelCache();
+  let called = 0;
+  const spy = async () => { called += 1; return new Response('{}', { status: 401 }); };
+  const out = sink(); const err = sink();
+  const unconfigured = { protocol: 'openai-responses', baseURL: 'https://api.openai.com/v1', model: 'gpt-x', configured: false };
+  assert.equal(await modelsCommand([], { env, stdout: out, stderr: err, fetchImpl: spy, configOverride: unconfigured, root: '/tmp' }), 1);
+  assert.equal(called, 0);
+  assert.match(err.text, /No model provider is configured\. Run oasis setup/);
+  const json = sink();
+  assert.equal(await modelsCommand(['--json'], { env, stdout: json, stderr: sink(), fetchImpl: spy, configOverride: unconfigured, root: '/tmp' }), 1);
+  assert.equal(JSON.parse(json.text).models, null);
+});
+
+test('oasis models explains a 401 as an API-key problem', async () => {
+  clearProviderModelCache();
+  const err = sink();
+  const denied = async () => new Response('{"error":"bad key"}', { status: 401 });
+  assert.equal(await modelsCommand([], { env, stdout: sink(), stderr: err, fetchImpl: denied, configOverride: config, root: '/tmp' }), 1);
+  assert.match(err.text, /HTTP 401 .*Check the API key/);
+});

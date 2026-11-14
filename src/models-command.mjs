@@ -76,6 +76,12 @@ export async function modelsCommand(args = [], { root = process.cwd(), env = pro
     policy = { denied: loaded.deniedModels || [], match: loaded.availableModelsMatch || 'prefix' };
   } catch { allowed = []; }
   const current = config.model || '';
+  if (config.configured === false) {
+    const reason = 'No model provider is configured. Run oasis setup first.';
+    if (json) stdout.write(JSON.stringify({ current, models: null, reason }, null, 2) + '\n');
+    else stderr.write(reason + '\n');
+    return 1;
+  }
   const listed = await listProviderModels(config, { env, cwd: root, refresh: args.includes('--refresh'), ...(fetchImpl ? { fetchImpl } : {}) });
   if (!listed.models) {
     if (json) stdout.write(JSON.stringify({ current, models: null, reason: listed.reason }, null, 2) + '\n');
