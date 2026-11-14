@@ -90,3 +90,20 @@ test('wrapped rows close and reopen styles so the continuation indent is never c
   for (const row of rows.slice(1)) assert.match(row, /^ {2}\x1b\[44m/, JSON.stringify(row));
   assert.equal(wrapped.replace(/\x1b\[[0-9;]*m/g, '').replace(/\n +/g, ' '), 'one two three four five six seven eight nine ten eleven');
 });
+
+test('streamed replies that open with blank lines keep the first words next to the bullet', async () => {
+  const { MarkdownStream } = await import('../src/markdown.mjs');
+  const out = [];
+  const stream = new MarkdownStream({ write: (chunk) => out.push(chunk), color: false, columns: () => 80, prefix: '● ' });
+  stream.push('\n');
+  stream.push('\r\n\nPONG');
+  stream.end();
+  const text = out.join('');
+  assert.doesNotMatch(text, /● \r?\n/, 'the bullet must not sit alone on its line');
+  assert.match(text, /● PONG\n$/);
+  const indented = [];
+  const code = new MarkdownStream({ write: (chunk) => indented.push(chunk), color: false, columns: () => 80, prefix: '● ' });
+  code.push('  two leading spaces stay');
+  code.end();
+  assert.match(indented.join(''), /●   two leading spaces stay\n$/);
+});
