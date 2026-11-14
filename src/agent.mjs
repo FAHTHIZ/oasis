@@ -1874,7 +1874,7 @@ async function requestCompletionRawInner(session, options = {}) {
       if (data && data.error && !data.choices && !Array.isArray(data.content) && !Array.isArray(data.output)) {
         const code = Number(data.error.code || data.error.status);
         const status = code >= 400 && code <= 599 ? code : 502;
-        recordQuotaFailure(route, { status, headers: response.headers, body, env: providerEnv });
+        recordQuotaFailure(route, { status, headers: response.headers, body, env: providerEnv, retract: true });
         throw Object.assign(new Error(formatApiError(status, body, config.protocol, config.baseURL)), { status });
       }
     }

@@ -3,6 +3,12 @@
 A short, dated record of changes, tests, benchmark results, blockers and known
 weaknesses. Newest first. Detailed user-facing notes go in the CHANGELOG.
 
+## 2026-11-14 (live OpenRouter quota response: counted once, ladder kept)
+
+- Live check with the free key: OpenRouter's daily free limit also arrives as HTTP 200 with `{"error":{"code":429,...}}` and headers `x-ratelimit-limit: 50`, `x-ratelimit-remaining: 0`, `x-ratelimit-reset: <epoch ms>`. The ledger parses that format; replaying the exact response, the next session sends nothing until the stated reset.
+- Fixed: such a response was counted as two requests (success, then failure), and the success cleared the recent-quota history, so guessed cooldowns never climbed. `recordFailure(..., { retract: true })` now undoes the success record.
+- Tests: provider-200-error 4 (2 fail without the change); 141 related pass; `bench:gateway --check` passes.
+
 ## 2026-11-14 (HTTP 200 error bodies are provider errors)
 
 - Found live: OpenRouter answers a withdrawn `:free` model with HTTP 200 and `{"error":{"code":404,"message":"This model is unavailable for free... use this slug instead: <paid slug>"}}`. Oasis reported "no assistant message" and never tried the backup.

@@ -169,7 +169,10 @@ export function recordSuccess(route, { headers, env = process.env, now = Date.no
     record.lastStatus = 200;
     const reported = reportedLimits(headers, now);
     if (reported) record.reported = reported;
-    // A served request proves the quota is not used up right now.
+    // A served request proves the quota is not used up right now. The cleared
+    // state is kept until the body is read: a gateway can still turn out to
+    // have answered 200 with an error body (see recordFailure's retract).
+    record.retractable = { cooldown: record.cooldown || null, recentQuotaHits: record.recentQuotaHits || [] };
     delete record.cooldown;
     record.recentQuotaHits = [];
   });
@@ -184,9 +187,16 @@ export function recordTokens(route, usage = {}, { env = process.env, now = Date.
 }
 
 /** Records a failed response and, for a quota failure, a cooldown. */
-export function recordFailure(route, { status = 0, headers, body = '', env = process.env, now = Date.now() } = {}) {
+//   retract: the same response was first recorded as a success (HTTP 200 with
+//   an error body). It is not counted twice, and the quota history the success
+//   cleared is restored so repeated quota errors still climb the ladder.
+export function recordFailure(route, { status = 0, headers, body = '', env = process.env, now = Date.now(), retract = false } = {}) {
   return update(route, env, now, (record) => {
-    record.requests += 1;
+    if (retract && record.retractable) {
+      if (record.retractable.cooldown) record.cooldown = record.retractable.cooldown;
+      record.recentQuotaHits = record.retractable.recentQuotaHits;
+    } else record.requests += 1;
+    delete record.retractable;
     record.failures += 1;
     record.lastStatus = status;
     const reported = reportedLimits(headers, now);
