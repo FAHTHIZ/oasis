@@ -2,6 +2,7 @@
 // isolation: "worktree" works on its own branch in .oasis/worktrees/<name>,
 // so several agents can edit in parallel without touching the user's checkout.
 // Afterwards its changes are committed on that branch for review and merge.
+import { StringDecoder } from 'node:string_decoder';
 import path from 'node:path';
 import { execFile, spawn } from 'node:child_process';
 import { processTreeSpawnOptions, signalProcessTree } from './process-tree.mjs';
@@ -70,20 +71,24 @@ export function runWorktreeCommand(command, args, options = {}) {
         finish({ exitCode: 125, outputExceeded: true });
       }
     };
+    // One decoder per stream: decoding each chunk alone split multi-byte
+    // characters (non-ASCII paths in git output) across chunks.
+    const decoders = { stdout: new StringDecoder('utf8'), stderr: new StringDecoder('utf8') };
     const collect = (stream, chunk) => {
       if (settled) return;
       const isStdout = stream === 'stdout';
+      const decoder = decoders[stream];
       const currentBytes = isStdout ? stdoutBytes : stderrBytes;
       if (currentBytes + chunk.byteLength > MAX_GIT_OUTPUT_BYTES) {
         const remaining = Math.max(0, MAX_GIT_OUTPUT_BYTES - currentBytes);
-        const text = remaining ? chunk.subarray(0, remaining).toString('utf8') : '';
+        const text = (remaining ? decoder.write(chunk.subarray(0, remaining)) : '') + decoder.end();
         if (isStdout) { stdout += text; stdoutBytes += remaining; }
         else { stderr += text; stderrBytes += remaining; }
         terminate('output');
         return;
       }
-      if (isStdout) { stdout += chunk.toString('utf8'); stdoutBytes += chunk.byteLength; }
-      else { stderr += chunk.toString('utf8'); stderrBytes += chunk.byteLength; }
+      if (isStdout) { stdout += decoder.write(chunk); stdoutBytes += chunk.byteLength; }
+      else { stderr += decoder.write(chunk); stderrBytes += chunk.byteLength; }
     };
 
     try {

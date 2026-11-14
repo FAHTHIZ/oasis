@@ -196,6 +196,8 @@ function runGh(args, { env, timeoutMs = 15000, spawnImpl = spawn, onStderr } = {
     catch (error) { resolve({ code: -1, out: '', err: String(error.message || error) }); return; }
     const timer = setTimeout(() => { try { child.kill(); } catch {} }, timeoutMs);
     timer.unref?.();
+    child.stdout.setEncoding?.('utf8');
+    child.stderr.setEncoding?.('utf8');
     child.stdout.on('data', (chunk) => { out += chunk; });
     child.stderr.on('data', (chunk) => { err += chunk; if (onStderr) onStderr(err); });
     child.on('error', (error) => { clearTimeout(timer); resolve({ code: -1, out, err: err + String(error.message || error), child }); });
