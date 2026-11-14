@@ -4,6 +4,7 @@ User-facing change history grouped by package version. A version heading does no
 
 ## Unreleased
 
+- Security: settings lists are read in full. Permission deny and ask rules past 500, sandbox deniedDomains past 500, denyRead/denyWrite paths past 200, credential masks past 200, managed deniedModels past 200, skillOverrides past 500 and auto-mode hard_deny rules past 200 were dropped silently, which let the extra entries through. Settings files keep their byte limit. Adding a permission rule or trusting a folder no longer rewrites the list to its first 500 entries, and it no longer drops entries it does not recognize.
 - /btw side questions and the advisor see the newest 150,000 characters of the transcript (was 60,000 for /btw) as whole lines, with a note saying how many older lines were left out. The question itself is kept up to 100,000 characters (was 8,000, cut silently). Hook context from SessionStart, UserPromptSubmit, SubagentStart and PostToolBatch, the SubagentStart prompt and the PostToolUseFailure error are now cut from the middle with a note instead of at a silent limit.
 - The browser app's provider client follows x-should-retry and retry-after-ms / Retry-After, as the CLI does. A server-advised wait of up to 60 s replaces the fixed backoff, and "false" stops a retry the server says will not help.
 - HTTP 529 (Anthropic overloaded) and the Cloudflare origin errors 520-524 are now retried with the patient 5xx backoff. Before, they failed the request on the first reply.
