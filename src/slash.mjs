@@ -1824,7 +1824,8 @@ export async function runBuiltinCommand(name, argument, state) {
         const source = client.source || (client.config && client.config.source) || 'user';
         const type = client.config && client.config.type || 'stdio';
         const tools = Array.isArray(client.tools) ? client.tools.map((item) => item.name).filter(Boolean) : [];
-        lines.push('  ' + name + ' [' + source + ', ' + type + '] ' + tools.length + ' tool(s): ' + (tools.join(', ') || 'none'));
+        const waiting = client.lazy === true && !client.started ? ' (lazy: starts on first use; tools from its last start)' : '';
+        lines.push('  ' + name + ' [' + source + ', ' + type + '] ' + tools.length + ' tool(s): ' + (tools.join(', ') || 'none') + waiting);
         const resources = (client.resources || []).length + (client.resourceTemplates || []).length;
         if (resources) lines.push('    resources: ' + resources);
         for (const prompt of client.prompts || []) {
