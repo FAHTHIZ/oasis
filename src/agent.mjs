@@ -2455,8 +2455,6 @@ async function runWorkflowTool(session, args, context, options) {
 const LIVE_OUTPUT_TOOLS = new Set(['run_command', 'run_shell', 'powershell']);
 export const RESTRICTED_TOOL_NAMES = new Set(['run_command', 'powershell', 'monitor', 'command_output', 'kill_command', 'list_background', 'fetch_url', 'web_search', 'browser', 'install_package', 'install_extension', 'install_plugin', 'add_extension', 'install_external_skill', 'configure_mcp_server', 'git_push', 'create_pull_request']);
 
-// The step cap for one subagent run: its definition's maxTurns, bounded by the
-// session-wide --subagent-max-steps when both are set.
 // Hermes-style structured output: validate the final report against the caller's
 // JSON Schema and give the agent exactly one correction turn.
 async function enforceOutputSchema(child, record, outcome, runOptions, options) {
