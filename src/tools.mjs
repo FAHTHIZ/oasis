@@ -509,6 +509,24 @@ function emptySearchHint(needle, prefix) {
     '. Use grep for a regex, glob_files to find files by name, or list_files to see what exists. If the code does not exist yet, stop searching and create it.';
 }
 
+// The per-call hint did not stop gpt-oss-120b from running ~20 differently
+// worded empty searches in a row (live head-to-head, 14 Nov 2026, ~200k
+// tokens). After three misses in a row the hint names them and says plainly
+// what to do next. Any search with a match resets the count.
+const SEARCH_MISS_ESCALATE = 3;
+export function trackSearchMisses(session, result) {
+  if (!session || !result || !Array.isArray(result.matches)) return result;
+  if (result.matches.length) { session.searchMisses = []; return result; }
+  const misses = (session.searchMisses = [...(session.searchMisses || []), String(result.query || '')].slice(-8));
+  if (misses.length < SEARCH_MISS_ESCALATE) return result;
+  return {
+    ...result,
+    hint: misses.length + ' searches in a row found nothing (' + misses.slice(-5).map((q) => JSON.stringify(q.slice(0, 40))).join(', ') + '). ' +
+      'What you are looking for most likely does not exist in this workspace yet. Stop searching: create it where the task says, ' +
+      'or run list_files once on the folder you expect it in.'
+  };
+}
+
 // Large single-file sources (TypeScript's checker.ts is 2.8 MB, sqlite3.c 9 MB)
 // must be searchable; at 256 KiB they returned no matches without a word.
 const SEARCH_MAX_BYTES = 16 * 1024 * 1024;
@@ -1847,7 +1865,7 @@ async function executeToolUnlocked(name, args = {}, context = {}) {
       return await buildRepoMap(root, { path: args.path, focus: args.focus, maxChars: args.max_chars });
     }
     case 'search_files':
-      return await searchWorkspaceFiles(root, args.query, args.limit ?? args.max_results, args.path);
+      return trackSearchMisses(context.session, await searchWorkspaceFiles(root, args.query, args.limit ?? args.max_results, args.path));
     case 'list_skills':
       return { skills: await listAvailableSkills(root, { env: context.env || process.env }) };
     case 'load_skill':
