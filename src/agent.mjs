@@ -3350,7 +3350,9 @@ async function authorizeCall(session, name, args, context, options) {
 // Skills with "context: fork" in their front matter run in a subagent; the model gets
 // the report instead of the instructions, so the main context stays small.
 async function maybeForkSkill(session, skill, args, context, options) {
-  const { data, body } = parseFrontMatter(skill.content);
+  // A later page (offset) is a plain read of the text, never a fork.
+  if (Number(args && args.offset) > 0) return skill;
+  const { data, body } = parseFrontMatter(typeof skill.fullContent === 'string' ? skill.fullContent : skill.content);
   if (String(data.context || '').toLowerCase() !== 'fork') return skill;
   const request = String(args.arguments || '').trim();
   const prompt = body.trim().replace(/\$ARGUMENTS/g, request) + (request && !body.includes('$ARGUMENTS') ? '\n\nTask: ' + request : '');

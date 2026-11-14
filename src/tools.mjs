@@ -170,8 +170,8 @@ export const TOOL_DEFINITIONS = [
 
   { type: 'function', function: { name: 'edit_file', description: 'Edit an existing file by replacing an exact string (preferred over write_file). old_string must match exactly and be unique unless replace_all. Contents are checkpointed first.', parameters: { type: 'object', properties: { path: { type: 'string', description: 'Workspace-relative path' }, old_string: { type: 'string', description: 'Exact current text, non-empty' }, new_string: { type: 'string', description: 'Replacement' }, replace_all: { type: 'boolean', description: 'Replace every occurrence' } }, required: ['path', 'old_string', 'new_string'] } } },
   { type: 'function', function: { name: 'list_skills', description: 'List available built-in and workspace skill names with one-line descriptions. Skills are loaded on demand to keep the main context compact.', parameters: { type: 'object', properties: {} } } },
-  { type: 'function', function: { name: 'load_skill', description: 'Load a skill\'s full instructions before work that matches its description.', parameters: { type: 'object', properties: { name: { type: 'string', description: 'Skill name' }, arguments: { type: 'string', description: 'Task details; a context: fork skill runs in a subagent with them and returns its report' } }, required: ['name'] } } },
-  { type: 'function', function: { name: 'read_skill_resource', description: 'Read a text reference or asset shipped with an installed portable Agent Skill. Only integrity-verified files under that skill’s references/ or assets/ folders can be read; scripts are not exposed by this tool.', parameters: { type: 'object', properties: { name: { type: 'string', description: 'Installed skill name returned by list_skills or load_skill' }, path: { type: 'string', description: 'Relative path under references/ or assets/, such as references/checklist.md' } }, required: ['name', 'path'] } } },
+  { type: 'function', function: { name: 'load_skill', description: 'Load a skill\'s full instructions before work that matches its description.', parameters: { type: 'object', properties: { name: { type: 'string', description: 'Skill name' }, arguments: { type: 'string', description: 'Task details; a context: fork skill runs in a subagent with them and returns its report' }, offset: { type: 'integer', minimum: 0, description: 'Character offset to continue a long skill from (the nextOffset of the previous result)' } }, required: ['name'] } } },
+  { type: 'function', function: { name: 'read_skill_resource', description: 'Read a text reference or asset shipped with an installed portable Agent Skill. Only integrity-verified files under that skill’s references/ or assets/ folders can be read; scripts are not exposed by this tool.', parameters: { type: 'object', properties: { name: { type: 'string', description: 'Installed skill name returned by list_skills or load_skill' }, path: { type: 'string', description: 'Relative path under references/ or assets/, such as references/checklist.md' }, offset: { type: 'integer', minimum: 0, description: 'Character offset to continue a long file from (the nextOffset of the previous result)' } }, required: ['name', 'path'] } } },
   { type: 'function', function: { name: 'run_specialist_review', description: 'Run one bounded specialist review in a separate read-only model session. Available roles: code-review, security-review, architecture, and test-strategy. The reviewer can inspect workspace files and Git diffs, but cannot edit files, run commands, install packages, access MCP tools, or perform external side effects. Up to two reviews are allowed per task; use for an independent second opinion, not for changes.', parameters: { type: 'object', properties: { specialist: { type: 'string', enum: ['code-review', 'security-review', 'architecture', 'test-strategy'], description: 'Focus of the independent review' }, task: { type: 'string', description: 'A bounded review request; include relevant files or the question to investigate' } }, required: ['specialist', 'task'], additionalProperties: false } } },
   { type: 'function', function: { name: 'install_extension', description: 'Inspect and import a public GitHub repository containing Markdown specialist-agent or skill prompts. Import only the selected Markdown prompts; do not execute scripts, install dependencies, or enable MCP servers. Scope self installs into Oasis user configuration, project installs into the current workspace, and both installs to both locations. Always obtain approval before importing an external repository.', parameters: { type: 'object', properties: { url: { type: 'string', description: 'Public GitHub repository URL, for example https://github.com/msitarzewski/agency-agents' }, scope: { type: 'string', enum: ['self', 'project', 'both'], description: 'Install into Oasis itself, the current project, or both' } }, required: ['url', 'scope'] } } },
   { type: 'function', function: { name: 'configure_provider', description: 'Connect Oasis to a known model provider and switch the current chat to it only after an inert tool-call probe succeeds. Providers: ' + Object.keys(BUILTIN_PROVIDERS).join(', ') + ', plus any defined under "providers" in user settings. This tool never accepts API keys; it may use only the matching saved credential or provider-specific environment variable.', parameters: { type: 'object', properties: { provider: { type: 'string', maxLength: 40, description: 'Provider id, e.g. openai, anthropic, openrouter, gemini, groq, ollama' }, model: { type: 'string', maxLength: 200, description: 'Optional exact model ID; Ollama/OpenRouter-compatible models may require an account- or server-specific ID.' } }, required: ['provider'], additionalProperties: false } } },
@@ -1436,7 +1436,32 @@ export async function loadSkillText(root, rawName, options = {}) {
     content = await readFile(target, 'utf8');
   }
   if (content.includes('\0')) throw new Error('Skill content is not valid text.');
-  return { name: skill.name, source: skill.source, content: content.slice(0, 24000), truncated: content.length > 24000 };
+  return { name: skill.name, source: skill.source, content };
+}
+
+// Skill files reach 96 KiB but one tool result holds about 24k characters,
+// so load_skill and read_skill_resource return pages that end on a line
+// break, with the offset to continue from. They used to cut at 24k with no
+// way to read the rest.
+const SKILL_PAGE_CHARS = 20000;
+export function pageSkillText(result, rawOffset) {
+  const content = String(result.content || '');
+  const offset = Math.min(content.length, Math.max(0, Number.isInteger(Number(rawOffset)) ? Number(rawOffset) : 0));
+  let end = Math.min(content.length, offset + SKILL_PAGE_CHARS);
+  if (end < content.length) {
+    const lineEnd = content.lastIndexOf('\n', end - 1);
+    if (lineEnd > offset + SKILL_PAGE_CHARS / 2) end = lineEnd + 1;
+  }
+  const more = end < content.length;
+  const page = {
+    ...result,
+    content: content.slice(offset, end),
+    ...(offset ? { offset } : {}),
+    ...(more ? { truncated: true, nextOffset: end, totalChars: content.length, note: 'Showing characters ' + offset + '-' + end + ' of ' + content.length + '. Call again with offset=' + end + ' for the rest.' } : {})
+  };
+  // A context: fork skill hands its whole body to the subagent.
+  Object.defineProperty(page, 'fullContent', { value: content, enumerable: false });
+  return page;
 }
 
 
@@ -1478,7 +1503,7 @@ export async function loadSkillResource(root, rawName, rawRelativePath, options 
     if (!inside(skillRootReal, targetReal)) throw new Error('Portable skill resource resolves outside its skill directory.');
     const content = await readFile(targetReal, 'utf8');
     if (content.includes('\0')) throw new Error('Skill resource is not valid text.');
-    return { name: skill.name, path: relativePath, content: content.slice(0, MAX_TOOL_OUTPUT), truncated: content.length > MAX_TOOL_OUTPUT, trust: 'external-untrusted-text' };
+    return { name: skill.name, path: relativePath, content, trust: 'external-untrusted-text' };
   }
   if (!['global-extension', 'project-extension'].includes(skill.source)) throw new Error('This skill does not expose managed portable resources.');
   let extensionDirectory;
@@ -1516,7 +1541,7 @@ export async function loadSkillResource(root, rawName, rawRelativePath, options 
   if (content.includes('\0')) throw new Error('Skill resource is not valid text.');
   const hash = createHash('sha256').update(content).digest('hex');
   if (hash !== record.sha256) throw new Error('Skill resource integrity verification failed; inspect the extension before using it.');
-  return { name: skill.name, path: relativePath, content: content.slice(0, MAX_TOOL_OUTPUT), truncated: content.length > MAX_TOOL_OUTPUT, trust: 'external-untrusted-text' };
+  return { name: skill.name, path: relativePath, content, trust: 'external-untrusted-text' };
 }
 
 export async function loadSkillDescriptions(root, options = {}) {
@@ -1821,9 +1846,9 @@ async function executeToolUnlocked(name, args = {}, context = {}) {
     case 'list_skills':
       return { skills: await listAvailableSkills(root, { env: context.env || process.env }) };
     case 'load_skill':
-      return await loadSkillText(root, args.name, { env: context.env || process.env });
+      return pageSkillText(await loadSkillText(root, args.name, { env: context.env || process.env }), args.offset);
     case 'read_skill_resource':
-      return await loadSkillResource(root, args.name, args.path, { env: context.env || process.env });
+      return pageSkillText(await loadSkillResource(root, args.name, args.path, { env: context.env || process.env }), args.offset);
     case 'configure_provider':
       return await configureProviderFromChat(args, context);
     case 'install_external_skill':
