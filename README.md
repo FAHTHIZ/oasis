@@ -1,7 +1,8 @@
 <p align="center">
   <a href="https://github.com/FAHTHIZ/oasis">
-    <img src="assets/oasis-readme-hero.svg" alt="OASIS. The open-source coding agent for any model. A terminal window shows OASIS fixing a failing login test: it finds the bug, shows a one-line diff, runs npm test with 42 passing and finishes with a checked summary." width="100%">
+    <img src="assets/oasis-readme-hero.svg" alt="Illustration: OASIS. The open-source coding agent for any model. A drawn terminal window shows OASIS fixing a failing login test: it finds the bug, shows a one-line diff, runs npm test with 42 passing and finishes with a checked summary." width="100%">
   </a>
+  <br><sub>Illustration. The recordings under <a href="#work-where-you-work">Work where you work</a> are real, unscripted runs.</sub>
 </p>
 
 <p align="center">
@@ -12,7 +13,7 @@
 <p align="center">
   <a href="https://github.com/FAHTHIZ/oasis/actions/workflows/quality.yml"><img alt="Quality checks" src="https://img.shields.io/github/actions/workflow/status/FAHTHIZ/oasis/quality.yml?branch=main&style=flat-square&label=quality&labelColor=0B0F0C&color=32E07A"></a>
   <a href="https://github.com/FAHTHIZ/oasis/releases/latest"><img alt="Latest release" src="https://img.shields.io/github/v/release/FAHTHIZ/oasis?style=flat-square&labelColor=0B0F0C&color=7CFF5E"></a>
-  <img alt="More than 2,700 tests" src="https://img.shields.io/badge/tests-2%2C700%2B-0ED168?style=flat-square&labelColor=0B0F0C">
+  <img alt="More than 3,200 tests" src="https://img.shields.io/badge/tests-3%2C200%2B-0ED168?style=flat-square&labelColor=0B0F0C">
   <img alt="Windows, macOS and Linux" src="https://img.shields.io/badge/platforms-windows%20%C2%B7%20macos%20%C2%B7%20linux-1A1F1B?style=flat-square&labelColor=0B0F0C">
   <a href="LICENSE"><img alt="Apache 2.0 license" src="https://img.shields.io/github/license/FAHTHIZ/oasis?style=flat-square&labelColor=0B0F0C&color=1A1F1B"></a>
   <a href="https://github.com/FAHTHIZ/oasis/stargazers"><img alt="GitHub stars" src="https://img.shields.io/github/stars/FAHTHIZ/oasis?style=flat-square&labelColor=0B0F0C&color=32E07A"></a>
@@ -203,6 +204,8 @@ oasis plugin validate ./my-plugin     # Claude Code or OASIS plugin; list, updat
 
 **Models.** `oasis connect` takes an API key, a model page link or a server address, works out the provider, tests the best models with a real tool call and saves the first that works plus backups. Prompt caching, automatic compaction and spend limits are built in. See [Model providers](docs/CONFIGURATION.md#model-providers).
 
+**Free-tier routers.** [OmniRoute](https://github.com/cheaper-inference/OmniRoute) and [FreeLLMAPI](https://github.com/Azhan787/FreeLLMAPI) are built-in gateway providers: run either on your machine, add your own free provider accounts there, and `oasis connect http://127.0.0.1:20128/v1` (OmniRoute) or `http://127.0.0.1:3001/v1` (FreeLLMAPI). OASIS treats a model behind them as a cloud model (timeouts, context window from `GET /models`, list-price cost estimates) and zero-budget mode refuses any route it cannot prove is free. Each free tier has its own limits and terms; aggregate "free token" numbers are not a guarantee. Setup: [OmniRoute](docs/CONFIGURATION.md#omniroute-gateway), [FreeLLMAPI](docs/CONFIGURATION.md#freellmapi-gateway).
+
 <details>
 <summary><b>MCP and model commands</b></summary>
 
@@ -237,7 +240,7 @@ OASIS is checked the way a person uses it: real providers, no scripted model, ap
 | Read an uploaded PDF | Web app, gpt-oss-20b | Passed in 49 s |
 | Install 16 Claude Code plugins and use them | Web app and terminal | All installed; hooks, skills and MCP servers ran |
 
-Every run, plugin check and rough edge is in [Real-world runs](docs/REAL-WORLD-RUNS.md). The model-free harness recovers 26/26 malformed tool calls (3/26 without OASIS), applies 14/14 edits (4/14), stops 49/49 risky commands under auto-approve and catches 10/10 secrets before commit: see [Benchmarks](docs/BENCHMARKS.md#latest-results-12-november-2026). There are no head-to-head model results yet, and OASIS does not guarantee that every model will solve every task: on a given task the model matters more than the harness.
+Every run, plugin check and rough edge is in [Real-world runs](docs/REAL-WORLD-RUNS.md). The model-free harness recovers 26/26 malformed tool calls (3/26 without OASIS), applies 14/14 edits (4/14), stops 49/49 risky commands under auto-approve and catches 10/10 secrets before commit: see [Benchmarks](docs/BENCHMARKS.md#latest-results-12-november-2026). Head-to-head runs against Claude Code, Codex, OpenCode, Aider and Gemini CLI, all on the same free model through one recording relay, are in [Benchmarks](docs/BENCHMARKS.md#recorded-same-model-gateway-14-november-2026). They are small samples on free tiers, so read them as evidence, not a ranking. OASIS does not guarantee that every model will solve every task: on a given task the model matters more than the harness.
 
 ## How it compares
 
@@ -265,11 +268,22 @@ OASIS can read and change files, run commands and send context to your model pro
 
 Read the [security policy](SECURITY.md) before using OASIS on sensitive code.
 
+## Project status
+
+What is verified and what is not, kept current in the [completion checklist](docs/COMPLETION-CHECKLIST.md):
+
+| Status | Areas |
+| --- | --- |
+| Verified on Linux by tests and live runs | Terminal agent and `-p`/`exec`, the web app (browser-driven tests), sessions, checkpoints and undo, permission modes, the bubblewrap and Docker sandboxes (including the host Unix-socket block), MCP, Claude Code plugins, OpenAI-compatible providers and the OmniRoute and FreeLLMAPI gateways |
+| Tested in CI on Windows and macOS, not by hand | Security and runtime regression tests, installer scripts; the macOS Seatbelt profile is unit-tested only |
+| Implemented, lightly tested | Desktop app (installers are built, not code-signed), editor integrations (ACP, VS Code family), chat gateways, cloud runs |
+| Not claimed | Production readiness for untrusted code without the OS sandbox or a container; results with paid frontier models (none were run) |
+
 ## Development
 
 ```sh
 npm install
-npm test           # 2,700+ tests
+npm test           # 3,200+ tests
 npm run check      # tests, benchmark regressions, eval validation
 npm run lint
 ```
