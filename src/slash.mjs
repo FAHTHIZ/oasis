@@ -822,8 +822,15 @@ export async function runBuiltinCommand(name, argument, state) {
     case 'cost': {
       const u = usage || createUsageTracker();
       const { formatUsd, priceFor } = await import('./pricing.mjs');
-      const model = session && session.config && session.config.model || '';
-      const priced = priceFor(model, { config: session && session.config || {}, overrides: session && session.pricing || {} });
+      // Before the first message there is no session yet; price the saved
+      // provider (a local server is free) instead of saying "unknown".
+      let config = session && session.config;
+      if (!config) {
+        try { const { loadConfig } = await import('./config.mjs'); config = await loadConfig(); } catch { config = {}; }
+        if (state.sessionOptions && state.sessionOptions.model) config = { ...config, model: state.sessionOptions.model };
+      }
+      const model = config && config.model || '';
+      const priced = priceFor(model, { config: config || {}, overrides: session && session.pricing || {} });
       const hasTrackedRequests = Number(u.costRequests || 0) > 0;
       const trackingUnknown = hasTrackedRequests && u.costKnown === false;
       const trackedCost = hasTrackedRequests && !trackingUnknown;
