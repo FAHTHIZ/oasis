@@ -3,7 +3,7 @@
 // configured engines in parallel and merges independent rankings using RRF.
 // Credentials are read only from the process environment and are never returned.
 import { oasisVersion } from './version.mjs';
-import { DomUtils, parseDocument } from 'htmlparser2';
+import { createRequire } from 'node:module';
 
 export const WEB_SEARCH_TOOL_DEFINITION = {
   type: 'function',
@@ -67,11 +67,17 @@ export function searchBackends(env = process.env) {
 // Result pages are parsed by htmlparser2 (the forgiving, spec-following parser
 // behind cheerio): attributes in any order or quote style, character references
 // decoded, nested markup in titles and snippets reduced to its text.
-const { findAll, findOne, textContent } = DomUtils;
+// Loaded on the first parse, not with the agent runtime (htmlparser2 and its
+// entities tables are about 370 KB of source that most sessions never use).
+let htmlparser2 = null;
+const parser = () => (htmlparser2 ||= createRequire(import.meta.url)('htmlparser2'));
+const findAll = (...args) => parser().DomUtils.findAll(...args);
+const findOne = (...args) => parser().DomUtils.findOne(...args);
+const textContent = (node) => parser().DomUtils.textContent(node);
 const hasClass = (node, name) => String(node.attribs && node.attribs.class || '').split(/\s+/).includes(name);
 const isTag = (node, tag) => node.name === tag;
 const text = (node) => (node ? textContent(node).replace(/\s+/g, ' ').trim() : '');
-const elements = (html) => parseDocument(String(html || '')).children;
+const elements = (html) => parser().parseDocument(String(html || '')).children;
 
 export function parseDuckDuckGoHtml(html) {
   const results = [];

@@ -1,0 +1,110 @@
+{
+  "measuredAt": "2026-11-14T08:48:27.109Z",
+  "runtime": {
+    "node": "v22.21.0",
+    "platform": "linux",
+    "arch": "x64",
+    "cpus": 2,
+    "cpuModel": "Intel(R) Xeon(R) Processor @ 2.90GHz",
+    "memoryGb": 7.8,
+    "loadAverage": [
+      0.35,
+      0.87,
+      1.44
+    ]
+  },
+  "runs": 7,
+  "launch": [
+    {
+      "args": "--version",
+      "wallMs": {
+        "runs": 7,
+        "median": 25.982943,
+        "p90": 29.716035,
+        "min": 25.247458,
+        "max": 29.716035
+      },
+      "peakRssMb": {
+        "runs": 7,
+        "median": 46.3,
+        "p90": 46.3,
+        "min": 46.2,
+        "max": 46.3
+      }
+    },
+    {
+      "args": "--help",
+      "wallMs": {
+        "runs": 7,
+        "median": 27.193666,
+        "p90": 28.827596,
+        "min": 26.465254,
+        "max": 28.827596
+      },
+      "peakRssMb": {
+        "runs": 7,
+        "median": 46.8,
+        "p90": 46.8,
+        "min": 46.7,
+        "max": 46.8
+      }
+    }
+  ],
+  "session": {
+    "importMs": {
+      "runs": 7,
+      "median": 217.132559,
+      "p90": 270.225838,
+      "min": 192.200666,
+      "max": 270.225838
+    },
+    "createSessionMs": {
+      "runs": 7,
+      "median": 170.470464,
+      "p90": 196.07924299999996,
+      "min": 159.30994,
+      "max": 196.07924299999996
+    },
+    "rssMb": {
+      "runs": 7,
+      "median": 158.8,
+      "p90": 162.3,
+      "min": 157.8,
+      "max": 162.3
+    },
+    "heapUsedMb": {
+      "runs": 7,
+      "median": 55.3,
+      "p90": 55.6,
+      "min": 52.3,
+      "max": 55.6
+    },
+    "tools": 21,
+    "firstRequestTokens": {
+      "system": 2165,
+      "toolSchemas": 3063,
+      "total": 5228
+    }
+  },
+  "web": {
+    "idleRssMb": 158.2,
+    "afterServingRssMb": 159.5,
+    "servedKb": 174.8,
+    "idleAfterMs": 4073
+  },
+  "routing": {
+    "calls": 20000,
+    "perCallMicroseconds": 28.87
+  },
+  "mcp": {
+    "server": "stdio, Node.js, 20 tools",
+    "connectMs": {
+      "runs": 7,
+      "median": 24.125139,
+      "p90": 135.595475,
+      "min": 23.031242,
+      "max": 135.595475
+    },
+    "toolsListed": 20
+  }
+}

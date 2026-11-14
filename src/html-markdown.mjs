@@ -17,7 +17,11 @@
 // as plain text.
 
 import { Worker } from 'node:worker_threads';
-import { decodeHTML } from 'entities';
+import { createRequire } from 'node:module';
+
+// The entity tables load on the first page that needs decoding, not with the agent runtime.
+let entities = null;
+const decodeHTML = (value) => (entities ||= createRequire(import.meta.url)('entities/decode')).decodeHTML(value);
 
 // linkedom and Defuddle cost ~200 ms to import, so they load on the first
 // conversion rather than with every OASIS start.

@@ -4,6 +4,10 @@ User-facing change history grouped by package version. A version heading does no
 
 ## Unreleased
 
+- `oasis --help` (and `-h`, `help`, `help all`) answers in about 27 ms with 47 MB peak memory, down from 325 ms and 113 MB, by loading only the help text instead of the whole CLI. Set `OASIS_FULL_HELP_PATH=1` to use the full path.
+- htmlparser2 and the HTML entity tables load the first time a page is parsed rather than with the agent runtime: 38 fewer modules at startup, runtime import 245 → 217 ms and about 7 MB less memory after import.
+- `npm run bench:perf` measures CLI launch time and peak memory, runtime import and session creation, first-request token size, web workspace memory, routing cost and MCP server connect time, and can write JSON. It replaces `npm run bench:startup`.
+
 - The error shown when no model provider is configured linked to `#quick-start`, a README heading that no longer exists; it links to `#install`, and a test checks that every README anchor the CLI links to is a real heading.
 - `npm run bench:live -- --upstream` records which tool produced the largest and the last message of each request (tool names only, never arguments or output), so a jump in prompt tokens can be traced to the call that caused it.
 - `oasis doctor` reported the OS sandbox (bubblewrap) even when settings chose the `docker`, `podman` or `ssh` backend, and ignored `allowManagedDomainsOnly` and proxy ports. It and `/doctor` now share one sandbox check built on what commands actually get, and both show proxy ports, the Unix-socket policy and an admin-required lock.

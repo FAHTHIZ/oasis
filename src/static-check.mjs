@@ -10,7 +10,7 @@
 
 import path from 'node:path';
 import { readFile, stat } from 'node:fs/promises';
-import { Parser as HtmlParser } from 'htmlparser2';
+import { createRequire } from 'node:module';
 import { parse as parseJsonc, printParseErrorCode } from 'jsonc-parser';
 import { parseAllDocuments } from 'yaml';
 import { parse as parseToml } from 'smol-toml';
@@ -77,6 +77,8 @@ async function checkHtml(root, file, text, info = { scripts: [], ids: new Set() 
   const refs = [];
   let current = null;
   const lineAt = (index) => text.slice(0, index).split('\n').length;
+  // Loaded when an HTML file is checked, not with the agent runtime.
+  const { Parser: HtmlParser } = createRequire(import.meta.url)('htmlparser2');
   const parser = new HtmlParser({
     onopentag(name, attrs) {
       const tag = name.toLowerCase();
