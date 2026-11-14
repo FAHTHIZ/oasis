@@ -4,6 +4,7 @@ User-facing change history grouped by package version. A version heading does no
 
 ## Unreleased
 
+- `npm run bench:live -- --task a,b --interleave` runs task by task (every agent on task 1, then task 2) instead of agent by agent, so a free tier that slows or runs out part-way through hits every agent alike. Summaries now list trials that ended in an agent or provider error (rate limit, crash, timeout) instead of folding them silently into the pass rate.
 - In the browser app, a message sent after a `!` shell command reaches the model whole; with terminal output carried in, the request was cut to 6,500 characters without notice.
 - In the browser app, the repeated-call guard resets after a file is written, edited or deleted. It counted identical calls across the whole task, so the third identical test run or search was refused even when the code had changed between runs, breaking the fix-and-verify loop.
 - Checkpoints are written crash-safely: the index and file copies are replaced in one step, and a file copy left short by a crash is rewritten on the next save (it was kept because its name existed, so that `/rewind` point was lost for good). `/rewind` restores files in one step too, so a crash mid-rewind cannot leave a file half-written.

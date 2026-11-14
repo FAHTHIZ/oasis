@@ -211,3 +211,42 @@ test('gateway runs keep loopback out of the agents\' HTTPS proxy', async () => {
   assert.equal(withLoopback(''), '127.0.0.1,localhost,::1');
   assert.equal(withLoopback('corp.example, localhost'), 'corp.example,localhost,127.0.0.1,::1');
 });
+
+test('--interleave runs task by task across agents and merges each agent\'s trials', async () => {
+  const out = await mkdtemp(path.join(os.tmpdir(), 'oasis-bench-live-interleave-'));
+  const order = [];
+  const meta = { a: ['utility-logic', 'small'], b: ['agent-operations', 'large'] };
+  const runner = async (args) => {
+    const agent = args[0] === '--trials' ? 'oasis' : args[0];
+    const task = args[args.indexOf('--task') + 1];
+    order.push(agent + ':' + task);
+    if (agent === '--aider' && task === 'b') throw new Error('Aider exited with code 1: 429 Too Many Requests');
+    const failed = agent === '--claude-code' && task === 'b';
+    const rows = [{ taskId: task, taskFingerprint: task.repeat(64), category: meta[task][0], difficulty: meta[task][1], trial: 1, status: failed ? 'failed' : 'passed', wallTimeMs: 10, totalTokens: 5, costUSD: 0, ...(failed ? { error: 'Claude Code exited with code 1: overloaded' } : {}) }];
+    return { resultsPath: '', summary: { label: agent }, results: rows };
+  };
+  try {
+    assert.throws(() => parseBenchArgs(['--interleave']), /--interleave needs --task/);
+    const options = parseBenchArgs(['--agents', 'oasis,claude,aider', '--model', 'm', '--router', 'http://localhost:1/v1', '--task', 'a,b', '--interleave', '--out', out, '--yes']);
+    const { summary } = await runBenchmark(options, { env: {}, runner });
+    assert.deepEqual(order, ['oasis:a', '--claude-code:a', '--aider:a', 'oasis:b', '--claude-code:b', '--aider:b']);
+    // Aider has no row for b, so b is not a matched task; a is.
+    assert.deepEqual(summary.sharedTasks, ['a']);
+    assert.deepEqual(summary.sharedTaskIds, ['a']);
+    const saved = JSON.parse(await readFile(path.join(out, 'oasis.json'), 'utf8'));
+    assert.deepEqual(saved.results.map((row) => row.taskId), ['a', 'b']);
+  } finally {
+    await rm(out, { recursive: true, force: true });
+  }
+});
+
+test('trials that ended in an agent error are named in the caveats', () => {
+  const row = (status, error) => ({ taskId: 'a', taskFingerprint: 'a'.repeat(64), category: 'utility-logic', difficulty: 'small', trial: 1, status, wallTimeMs: 1, totalTokens: 1, costUSD: 0, ...(error ? { error } : {}) });
+  const runs = [
+    { agent: 'oasis', name: 'OASIS', summary: {}, results: [row('passed')] },
+    { agent: 'codex', name: 'Codex CLI', summary: {}, results: [row('failed', 'Codex CLI exited with code 1: 429 Too Many Requests')] }
+  ];
+  const summary = summarize(runs, parseBenchArgs(['--agents', 'oasis,codex', '--model', 'm', '--router', 'http://localhost:1/v1']));
+  assert.ok(summary.caveats.some((line) => /^Codex CLI: 1 scored trial\(s\) ended in an agent or provider error.*429/.test(line)));
+  assert.ok(!summary.caveats.some((line) => line.startsWith('OASIS:')));
+});
