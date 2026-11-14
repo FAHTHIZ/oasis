@@ -104,6 +104,20 @@ export function getConfigPath(env = process.env, home = os.homedir()) {
   return path.join(getConfigDirectory(env, home), 'config.json');
 }
 
+// OPENAI_API_KEY as a key for OpenAI itself (images, speech, transcription on
+// api.openai.com). It is not one when it serves another provider: OPENAI_BASE_URL
+// names a different host, or OASIS_BASE_URL does and no OASIS_API_KEY is set (the
+// chat client then sends OPENAI_API_KEY there). Sending it to OpenAI in those
+// cases leaked a gateway's key (OpenRouter, OVH, a company proxy) to a third party.
+export function openAIPlatformKey(env = process.env) {
+  const key = String(env.OPENAI_API_KEY || '');
+  if (!key) return '';
+  const foreign = (raw) => { try { return new URL(String(raw)).hostname.toLowerCase() !== 'api.openai.com'; } catch { return true; } };
+  if (env.OPENAI_BASE_URL && foreign(env.OPENAI_BASE_URL)) return '';
+  if (env.OASIS_BASE_URL && !env.OASIS_API_KEY && foreign(env.OASIS_BASE_URL)) return '';
+  return key;
+}
+
 export function isLoopbackUrl(raw) {
   try {
     const url = new URL(raw);
