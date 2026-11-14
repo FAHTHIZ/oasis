@@ -4,6 +4,14 @@ User-facing change history grouped by package version. A version heading does no
 
 ## Unreleased
 
+- Security: API keys that a provider echoes back in an error body (for example an Authorization header quoted in a 401) are now redacted in the terminal, logs and transcripts. Before, a server that quoted the header made OASIS print the full key. OpenAI masks keys itself, which had hidden the problem. Covers HTTP errors, stream error events, speech and transcription errors (`test/provider-error-key-echo.test.mjs`).
+- `OPENAI_BASE_URL` and `ANTHROPIC_BASE_URL` are honoured when no `OASIS_BASE_URL`, `OASIS_PROTOCOL` or saved setup exists. Before, they were ignored and the key went to the vendor's default endpoint.
+- `oasis -p ... --model X` now works when only `OASIS_BASE_URL` is set. Before, it failed with "No model is configured".
+- `git_diff` and `git_status` outside a Git repository return one line instead of 16 KB of git usage text.
+- When a task asks for a new test and none was added, the completion gate sends one follow-up asking for it.
+- Benchmarks: free-tier `:free` cloud models behind the local benchmark gateway are labelled as free tier, not as local models. Four taskflow tasks whose starting tests already failed were corrected (see `docs/BENCHMARKS.md`).
+- CI: workflows no longer call a deleted startup script, and an uncaught EPIPE when a child process closed its stdin early is handled.
+
 - Smart connect reads FreeLLMAPI's model metadata. Models the gateway cannot serve (`available: false`, such as `no_key`) are no longer tried or saved as backups. Models with a used-up free tier go behind ready ones, and alias slots go last. Before, pasting a FreeLLMAPI key saved `claude-opus-4-5` (an alias the gateway routes to a free model), with two unservable backups. Now a named model (`qwen3.5-397b` on 14 November 2026) is chosen.
 - The browser connect panel clears its "Checking…" line when a connection fails. The missing-key message now shows the exact format: `ADDRESS YOUR_KEY`.
 
