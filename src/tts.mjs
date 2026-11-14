@@ -3,7 +3,7 @@
 // such as Kokoro-FastAPI and openedai-speech that serve /v1/audio/speech).
 //
 // Enabled when a key is available (OASIS_TTS_API_KEY, or OPENAI_API_KEY with the
-// default OpenAI endpoint) or the endpoint is on localhost. Settings:
+// default OpenAI endpoint, unless it is another provider's key) or the endpoint is on localhost. Settings:
 // "textToSpeech": { "model", "baseUrl", "voice", "format" } or false; env
 // OASIS_TTS_MODEL, OASIS_TTS_BASE_URL, OASIS_TTS_VOICE, OASIS_TTS=0. Each call asks
 // first (the text is sent to the provider and may cost money) unless a permission
@@ -11,6 +11,7 @@
 import { redactProviderDetail } from './api-error.mjs';
 import { saveGeneratedMedia } from './media-output.mjs';
 import { speakable } from '../app/core/voice-mode.mjs';
+import { openAIPlatformKey } from './config.mjs';
 
 const DEFAULT_BASE = 'https://api.openai.com/v1';
 const MAX_INPUT_CHARS = 4096;
@@ -42,7 +43,7 @@ export function textToSpeechConfig(env = process.env, settings = {}) {
   if (fromSettings === false || /^(0|false|off|no)$/i.test(String(env.OASIS_TTS || '').trim())) return null;
   const options = fromSettings && typeof fromSettings === 'object' ? fromSettings : {};
   const baseUrl = String(env.OASIS_TTS_BASE_URL || options.baseUrl || DEFAULT_BASE).replace(/\/+$/, '');
-  const apiKey = env.OASIS_TTS_API_KEY || (baseUrl === DEFAULT_BASE ? env.OPENAI_API_KEY : '') || '';
+  const apiKey = env.OASIS_TTS_API_KEY || (baseUrl === DEFAULT_BASE ? openAIPlatformKey(env) : '') || '';
   const local = /^https?:\/\/(localhost|127\.0\.0\.1|\[::1\])(:\d+)?\//.test(baseUrl + '/');
   if (!apiKey && !local) return null;
   const format = String(options.format || 'mp3').toLowerCase();

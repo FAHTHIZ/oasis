@@ -14,6 +14,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { redactProviderDetail } from './api-error.mjs';
 import { assertZeroBudgetService } from './cost-policy.mjs';
+import { openAIPlatformKey } from './config.mjs';
 
 const MAX_RECORDING_MS = 5 * 60 * 1000;
 const MAX_UPLOAD_BYTES = 25 * 1024 * 1024; // OpenAI's limit for transcription uploads
@@ -121,7 +122,7 @@ export function transcriptionTarget(settings = {}, env = process.env) {
   const parsed = new URL(url);
   const loopback = ['127.0.0.1', 'localhost', '::1', '[::1]'].includes(parsed.hostname);
   if (parsed.protocol !== 'https:' && !(parsed.protocol === 'http:' && loopback)) throw new Error('voice.transcriptionUrl must use https (plain http is only allowed for a local server).');
-  const apiKey = env.OASIS_VOICE_API_KEY || (parsed.hostname === 'api.openai.com' ? env.OPENAI_API_KEY : parsed.hostname === 'api.groq.com' ? env.GROQ_API_KEY : '') || '';
+  const apiKey = env.OASIS_VOICE_API_KEY || (parsed.hostname === 'api.openai.com' ? openAIPlatformKey(env) : parsed.hostname === 'api.groq.com' ? env.GROQ_API_KEY : '') || '';
   return {
     url,
     apiKey,

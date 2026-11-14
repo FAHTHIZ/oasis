@@ -4,7 +4,8 @@
 // into the workspace.
 //
 // Enabled when an image key is available: OASIS_IMAGE_API_KEY, or OPENAI_API_KEY with
-// the default OpenAI endpoint. Settings: "imageGeneration": { "model", "baseUrl", "size" }
+// the default OpenAI endpoint, unless that key belongs to another provider
+// (openAIPlatformKey in config.mjs). Settings: "imageGeneration": { "model", "baseUrl", "size" }
 // or false to turn it off; env OASIS_IMAGE_MODEL, OASIS_IMAGE_BASE_URL,
 // OASIS_IMAGE_GENERATION=0. Each call asks first (it sends the prompt to the provider
 // and may cost money) unless a permission rule allows generate_image.
@@ -12,6 +13,7 @@ import { readFile, stat } from 'node:fs/promises';
 import path from 'node:path';
 import { saveGeneratedMedia } from './media-output.mjs';
 import { sniffImageType } from './images.mjs';
+import { openAIPlatformKey } from './config.mjs';
 
 const DEFAULT_BASE = 'https://api.openai.com/v1';
 const MAX_INPUT_IMAGE = 20 * 1024 * 1024;
@@ -43,7 +45,7 @@ export function imageGenerationConfig(env = process.env, settings = {}) {
   if (fromSettings === false || env.OASIS_IMAGE_GENERATION === '0') return null;
   const options = fromSettings && typeof fromSettings === 'object' ? fromSettings : {};
   const baseUrl = String(env.OASIS_IMAGE_BASE_URL || options.baseUrl || DEFAULT_BASE).replace(/\/+$/, '');
-  const apiKey = env.OASIS_IMAGE_API_KEY || (baseUrl === DEFAULT_BASE ? env.OPENAI_API_KEY : '') || '';
+  const apiKey = env.OASIS_IMAGE_API_KEY || (baseUrl === DEFAULT_BASE ? openAIPlatformKey(env) : '') || '';
   const local = /^https?:\/\/(localhost|127\.0\.0\.1|\[::1\])(:\d+)?\//.test(baseUrl + '/');
   if (!apiKey && !local) return null;
   return { baseUrl, apiKey, model: String(env.OASIS_IMAGE_MODEL || options.model || 'gpt-image-1'), size: String(options.size || 'auto') };
