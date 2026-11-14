@@ -1,7 +1,8 @@
 import { randomUUID } from 'node:crypto';
-import { mkdir, readdir, readFile, rename, unlink, writeFile } from 'node:fs/promises';
+import { mkdir, readdir, readFile, unlink } from 'node:fs/promises';
 import path from 'node:path';
 import { getConfigDirectory } from './config.mjs';
+import { replaceFileDurably } from './atomic-write.mjs';
 
 const MAX_MESSAGE_CHARS = 4000;
 const MAX_MESSAGES_PER_MINUTE = 12;
@@ -25,9 +26,7 @@ async function ensureDirectory(directory) {
 
 async function atomicJsonWrite(file, value) {
   await ensureDirectory(path.dirname(file));
-  const temp = file + '.' + randomUUID() + '.tmp';
-  await writeFile(temp, JSON.stringify(value, null, 2) + '\n', { encoding: 'utf8', mode: 0o600, flag: 'wx' });
-  await rename(temp, file);
+  await replaceFileDurably(file, JSON.stringify(value, null, 2) + '\n', { mode: 0o600 });
 }
 
 async function readJson(file) {

@@ -1,8 +1,8 @@
-import { randomUUID } from 'node:crypto';
-import { chmod, lstat, mkdir, realpath, rename, unlink, writeFile } from 'node:fs/promises';
+import { lstat, mkdir, realpath } from 'node:fs/promises';
 import path from 'node:path';
 import { readBoundedRegularFile } from './safe-storage.mjs';
 import { redactApprovalSecrets } from './approval-language.mjs';
+import { replaceFileDurably } from './atomic-write.mjs';
 
 const NOTES_DIRECTORY = '.oasis';
 const NOTES_FILE = 'session-notes.md';
@@ -92,13 +92,9 @@ export async function saveSessionNotes(root, summary, options = {}) {
     throw new Error('The updated session notes would exceed 32 KiB; the existing file was left unchanged.');
   }
 
-  const temporary = destination + '.' + randomUUID() + '.tmp';
-  await writeFile(temporary, body, { encoding: 'utf8', mode: 0o600, flag: 'wx' });
   try {
-    await rename(temporary, destination);
-    try { await chmod(destination, 0o600); } catch {}
+    await replaceFileDurably(destination, body, { mode: 0o600 });
   } catch (error) {
-    try { await unlink(temporary); } catch {}
     throw new Error('Could not safely replace the generated session notes: ' + String(error && error.message || error).slice(0, 300));
   }
 

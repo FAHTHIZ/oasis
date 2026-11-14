@@ -17,10 +17,11 @@
 //  - Optional per-server allowedTools list restricts which tools an MCP server
 //    may expose; default (no list) allows all, preserving existing behavior.
 import { createHash } from 'node:crypto';
-import { readFileSync, writeFileSync, mkdirSync, renameSync } from 'node:fs';
+import { readFileSync, mkdirSync } from 'node:fs';
 import path from 'node:path';
 import { stripInvisible, detectInjection } from './untrusted-content.mjs';
 import { getConfigDirectory } from './config.mjs';
+import { replaceFileDurablySync } from './atomic-write.mjs';
 
 const POISON_SIGNALS = [
   [/<\s*(important|secret|hidden|system|instructions?)\s*>/i, 'contains hidden <IMPORTANT>-style instructions'],
@@ -88,9 +89,7 @@ export function savePins(pins, env = process.env) {
   try {
     const file = pinsFile(env);
     mkdirSync(path.dirname(file), { recursive: true, mode: 0o700 });
-    const temp = file + '.' + process.pid + '.tmp';
-    writeFileSync(temp, JSON.stringify(pins, null, 2) + '\n', { mode: 0o600 });
-    renameSync(temp, file);
+    replaceFileDurablySync(file, JSON.stringify(pins, null, 2) + '\n', { mode: 0o600 });
   } catch {
     // Pinning is best effort; an unwritable config dir must not break MCP.
   }

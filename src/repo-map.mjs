@@ -7,13 +7,14 @@
 // the "uses a symbol defined in" graph, so central modules come first and,
 // with a focus, the files around it rise with it. With a grammar, symbol uses
 // are counted outside comments and string literals only.
-import { mkdir, readFile, rename, stat, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, stat } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
 import { createRequire } from 'node:module';
 import path from 'node:path';
 import { walkFiles } from './tools.mjs';
 import { analyzeCode, grammarForFile, loadCodeGrammar } from './code-ast.mjs';
 import { getBaseConfigDirectory } from './config.mjs';
+import { replaceFileDurably } from './atomic-write.mjs';
 
 const MAX_FILES = 4000;
 const MAX_FILE_BYTES = 1536 * 1024;
@@ -158,9 +159,7 @@ async function saveDiskCache(state, keep) {
   state.dirty = false;
   try {
     await mkdir(path.dirname(state.file), { recursive: true });
-    const tmp = state.file + '.' + process.pid + '.tmp';
-    await writeFile(tmp, JSON.stringify({ version: state.version, entries }));
-    await rename(tmp, state.file);
+    await replaceFileDurably(state.file, JSON.stringify({ version: state.version, entries }), { mode: 0o644 });
   } catch {}
 }
 

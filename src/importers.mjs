@@ -31,8 +31,7 @@
 //   Cline   cline_mcp_settings.json (VS Code global storage), ~/Documents/Cline/Rules
 //           .clinerules (file or folder), .clinerules/workflows/*.md
 //   Codex also: ~/.codex/memories/*.md -> user memories, ~/.codex/skills -> user skills
-import { mkdir, readFile, readdir, writeFile, lstat, rename, unlink, cp } from 'node:fs/promises';
-import { randomUUID } from 'node:crypto';
+import { mkdir, readFile, readdir, writeFile, lstat, cp } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { getConfigDirectory } from './config.mjs';
@@ -40,6 +39,7 @@ import { parse as parseTomlText } from 'smol-toml';
 import { parse as parseYamlText } from 'yaml';
 import { parse as parseJsoncText, printParseErrorCode } from 'jsonc-parser';
 import { parseYamlMapping, splitFrontMatter } from './frontmatter.mjs';
+import { replaceFileDurably } from './atomic-write.mjs';
 
 const IMPORT_SOURCES = ['codex', 'gemini', 'cursor', 'claude', 'hermes', 'opencode', 'antigravity', 'windsurf', 'cline'];
 const MAX_SKILL_BYTES = 4 * 1024 * 1024;
@@ -231,13 +231,7 @@ async function assertSafeImportTarget(plan, rawTarget) {
 }
 
 async function writeImportFileAtomically(file, content, mode) {
-  const temp = file + '.' + process.pid + '.' + randomUUID() + '.tmp';
-  try {
-    await writeFile(temp, content, { encoding: 'utf8', mode, flag: 'wx' });
-    await rename(temp, file);
-  } finally {
-    await unlink(temp).catch(() => {});
-  }
+  await replaceFileDurably(file, content, { mode });
 }
 
 function importItemTarget(plan, item) {

@@ -7,7 +7,7 @@
 // file matches the SHA256SUMS published with the release.
 import { createHash } from 'node:crypto';
 import { createReadStream, createWriteStream } from 'node:fs';
-import { mkdir, readFile, rename, rm, stat, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, rename, rm, stat } from 'node:fs/promises';
 import path from 'node:path';
 import { Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
@@ -15,6 +15,7 @@ import { fetchLatestRelease, githubApiHeaders } from './github-release.mjs';
 // Only the functions used: the semver index loads all 47 of its modules.
 import semverParse from 'semver/functions/parse.js';
 import semverCompare from 'semver/functions/compare.js';
+import { replaceFileDurably } from './atomic-write.mjs';
 const semver = { parse: semverParse, compare: semverCompare };
 
 const UPDATE_REPOSITORY = 'FAHTHIZ/oasis';
@@ -243,9 +244,7 @@ export async function readUpdateState(filePath) {
 
 export async function writeUpdateState(filePath, state) {
   await mkdir(path.dirname(filePath), { recursive: true });
-  const temp = filePath + '.' + process.pid + '.tmp';
-  await writeFile(temp, JSON.stringify(state, null, 2) + '\n', { mode: 0o600 });
-  await rename(temp, filePath);
+  await replaceFileDurably(filePath, JSON.stringify(state, null, 2) + '\n', { mode: 0o600 });
 }
 
 export function updateChecksDisabled(env = process.env, settings = {}) {

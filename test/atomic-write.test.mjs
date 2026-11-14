@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { mkdtemp, writeFile, readFile, stat, symlink, lstat, link, readdir, chmod } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import { atomicWriteFile } from '../src/atomic-write.mjs';
+import { atomicWriteFile, replaceFileDurably, replaceFileDurablySync } from '../src/atomic-write.mjs';
 
 const tmp = () => mkdtemp(path.join(os.tmpdir(), 'oasis-atomic-'));
 
@@ -53,4 +53,35 @@ test('atomicWriteFile creates new files with the requested mode', { skip: proces
   const file = path.join(dir, '.env');
   await atomicWriteFile(file, 'KEY=1', { encoding: 'utf8', mode: 0o600 });
   assert.equal((await stat(file)).mode & 0o777, 0o600);
+});
+
+test('replaceFileDurably survives concurrent saves in one process and leaves no temporaries', async () => {
+  const dir = await tmp();
+  const file = path.join(dir, 'state.json');
+  await Promise.all(Array.from({ length: 25 }, (_, i) => replaceFileDurably(file, JSON.stringify({ i }))));
+  const value = JSON.parse(await readFile(file, 'utf8'));
+  assert.equal(typeof value.i, 'number');
+  assert.deepEqual(await readdir(dir), ['state.json']);
+  if (process.platform !== 'win32') assert.equal((await stat(file)).mode & 0o777, 0o600);
+});
+
+test('replaceFileDurably removes its temporary and keeps the old file when the rename fails', async () => {
+  const dir = await tmp();
+  const target = path.join(dir, 'target');
+  const { mkdir } = await import('node:fs/promises');
+  await mkdir(target);
+  await writeFile(path.join(target, 'keep'), 'x');
+  await assert.rejects(replaceFileDurably(target, 'data'));
+  assert.deepEqual((await readdir(dir)).sort(), ['target']);
+});
+
+test('replaceFileDurablySync writes with the requested mode and cleans up on failure', async () => {
+  const dir = await tmp();
+  const file = path.join(dir, 'cache.json');
+  replaceFileDurablySync(file, 'one', { mode: 0o644 });
+  replaceFileDurablySync(file, Buffer.from('two'), { mode: 0o644 });
+  assert.equal(await readFile(file, 'utf8'), 'two');
+  if (process.platform !== 'win32') assert.equal((await stat(file)).mode & 0o777, 0o644);
+  assert.throws(() => replaceFileDurablySync(path.join(dir, 'missing', 'x'), 'y'));
+  assert.deepEqual(await readdir(dir), ['cache.json']);
 });

@@ -12,17 +12,17 @@
 // defaultMode, sandbox opt-outs) apply only after the user trusts the workspace
 // with `oasis trust` or `/trust`. User-level settings always apply.
 import { normalizePhrases, normalizeCommentMode } from './style-rules.mjs';
-import { writeFile, mkdir, realpath, chmod, rename, unlink } from 'node:fs/promises';
+import { mkdir, realpath } from 'node:fs/promises';
 import { readBoundedRegularFile } from './safe-storage.mjs';
 import { sanitizeModelRouting } from './model-routing.mjs';
 import { normalizeAutoTestSetting } from './auto-test.mjs';
 import { collectMcpPolicy } from './mcp-policy.mjs';
 import path from 'node:path';
-import { randomUUID } from 'node:crypto';
 import os from 'node:os';
 import { getConfigDirectory } from './config.mjs';
 import { useProviderSettings } from './provider-registry.mjs';
 import { normalizePermissionMode } from './permission-modes.mjs';
+import { replaceFileDurably } from './atomic-write.mjs';
 export { PERMISSION_MODES, normalizePermissionMode } from './permission-modes.mjs';
 
 const MAX_SETTINGS_BYTES = 256 * 1024;
@@ -104,14 +104,7 @@ function mutateSettingsFile(file, mutator, mode = 0o600) {
     const current = (await readJsonFile(file)) || {};
     const next = mutator(structuredClone(current)) || current;
     await mkdir(path.dirname(file), { recursive: true, mode: mode === 0o600 ? 0o700 : 0o755 });
-    const temp = file + '.' + process.pid + '.' + randomUUID() + '.tmp';
-    try {
-      await writeFile(temp, JSON.stringify(next, null, 2) + '\n', { encoding: 'utf8', mode, flag: 'wx' });
-      await rename(temp, file);
-    } finally {
-      await unlink(temp).catch(() => {});
-    }
-    if (mode === 0o600) { try { await chmod(file, 0o600); } catch {} }
+    await replaceFileDurably(file, JSON.stringify(next, null, 2) + '\n', { mode });
     return next;
   });
   let queued;
