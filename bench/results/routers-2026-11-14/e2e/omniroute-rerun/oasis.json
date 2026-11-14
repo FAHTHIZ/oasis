@@ -1,0 +1,357 @@
+{
+  "label": "OASIS 1.3.0 (ovh/gpt-oss-20b)",
+  "sourceRevision": "98b411d09645e3d98b729d633f937b3a4b9007b9",
+  "runId": "2026-11-14T10-03-58-711Z-7000",
+  "startedAt": "2026-11-14T10:03:58.711Z",
+  "completedAt": "2026-11-14T10:22:53.939Z",
+  "taskCount": 2,
+  "taskIds": [
+    "clamp-integer",
+    "safe-relative-path"
+  ],
+  "trialsPerTask": 1,
+  "timeoutSeconds": 1500,
+  "runtime": {
+    "node": "v22.21.0",
+    "platform": "linux",
+    "arch": "x64"
+  },
+  "passRate": 0.5,
+  "passed": 1,
+  "failed": 1,
+  "medianTimeMs": 567568,
+  "totalCostUSD": 0.008937,
+  "costPerPassedTaskUSD": 0.008937,
+  "routing": {
+    "enabled": false
+  },
+  "provider": {
+    "model": "ovh/gpt-oss-20b",
+    "protocol": "openai-compatible",
+    "baseURL": "http://127.0.0.1:33945/a/oasis/v1",
+    "maxSteps": 150,
+    "maxOutputTokens": null
+  },
+  "pricing": {
+    "inputUsdPerMillionTokens": null,
+    "outputUsdPerMillionTokens": null,
+    "note": "Cost is a rough estimate from configured rates and does not distinguish cached tokens. Pass-rate differences under 10 percentage points are noisy with small task samples; run at least three trials per task when benchmarking."
+  },
+  "results": [
+    {
+      "taskId": "clamp-integer",
+      "taskFingerprint": "dab0c2159b42de21f3e8608ea63ea2036a332621147205eeab0bcc14e425d3d1",
+      "category": "utility-logic",
+      "difficulty": "small",
+      "trial": 1,
+      "status": "passed",
+      "model": "ovh/gpt-oss-20b",
+      "requestedModel": "ovh/gpt-oss-20b",
+      "routeTier": "strong",
+      "escalation": null,
+      "routeReason": "automatic routing is disabled",
+      "strongModel": "ovh/gpt-oss-20b",
+      "protocol": "openai-compatible",
+      "baseURL": "http://127.0.0.1:33945/a/oasis/v1",
+      "maxSteps": 150,
+      "maxOutputTokens": null,
+      "inputTokens": 146875,
+      "outputTokens": 3230,
+      "totalTokens": 150105,
+      "costUSD": 0.0048261499999999995,
+      "strongModelCostUSD": 0.0048261499999999995,
+      "routingSavingsUSD": 0,
+      "costSource": "per-model list-price estimate (cloud model behind a localhost gateway; free-tier keys are not billed)",
+      "wallTimeMs": 551287,
+      "finished": true,
+      "toolCalls": 12,
+      "trace": [
+        {
+          "tool": "list_files",
+          "resultChars": 552
+        },
+        {
+          "tool": "grep",
+          "arg": "src",
+          "resultChars": 509
+        },
+        {
+          "tool": "read_file",
+          "arg": "src/config.mjs",
+          "resultChars": 6958
+        },
+        {
+          "tool": "list_files",
+          "arg": "test",
+          "resultChars": 67
+        },
+        {
+          "tool": "read_file",
+          "arg": "test/runtime.test.mjs",
+          "resultChars": 13425
+        },
+        {
+          "tool": "write_file",
+          "arg": "src/lib.mjs",
+          "resultChars": 338
+        },
+        {
+          "tool": "run_command",
+          "arg": "npm test",
+          "resultChars": 2417
+        },
+        {
+          "tool": "read_file",
+          "arg": "package.json",
+          "resultChars": 940
+        },
+        {
+          "tool": "read_file",
+          "arg": "scripts/check-site.mjs",
+          "resultChars": 2605
+        },
+        {
+          "tool": "run_command",
+          "arg": "npm run check",
+          "resultChars": 2580
+        },
+        {
+          "tool": "write_file",
+          "arg": "test/clamp.test.mjs",
+          "resultChars": 355
+        },
+        {
+          "tool": "run_command",
+          "arg": "npm test",
+          "resultChars": 2543
+        }
+      ],
+      "requestTokens": [
+        [
+          4800,
+          75
+        ],
+        [
+          4995,
+          85
+        ],
+        [
+          5197,
+          51
+        ],
+        [
+          7152,
+          133
+        ],
+        [
+          7206,
+          29
+        ],
+        [
+          11184,
+          887
+        ],
+        [
+          11405,
+          562
+        ],
+        [
+          11863,
+          63
+        ],
+        [
+          12466,
+          95
+        ],
+        [
+          12820,
+          241
+        ],
+        [
+          13581,
+          201
+        ],
+        [
+          14207,
+          659
+        ],
+        [
+          14688,
+          42
+        ],
+        [
+          15311,
+          107
+        ]
+      ],
+      "verification": {
+        "exitCode": 0,
+        "output": ""
+      },
+      "changes": [
+        {
+          "path": "src/lib.mjs",
+          "status": "added",
+          "content": "export function clampInteger(value, fallback, min, max) {\n  // Convert value to a base‑10 integer. Accept number inputs or strings.\n  const parsed = Number.parseInt(value, 10);\n  // If parsing fails (NaN), return the provided fallback.\n  if (!Number.isFinite(parsed)) return fallback;\n  // Clamp the parsed value between min and max (inclusive).\n  return Math.min(max, Math.max(min, parsed));\n}\n"
+        },
+        {
+          "path": "test/clamp.test.mjs",
+          "status": "added",
+          "content": "import test from 'node:test';\nimport assert from 'node:assert/strict';\nimport { clampInteger } from '../src/lib.mjs';\n\n// Helper to simplify calls\nfunction run(val, fallback, min, max, expected){\n  const result = clampInteger(val, fallback, min, max);\n  assert.equal(result, expected, `clampInteger(${JSON.stringify(val)},${fallback},${min},${max}) → ${result}, expected ${expected}`);\n}\n\ntest('clampInteger parses numeric strings and clamps inclusively', t => {\n  run('8', -1, 1, 10, 8);\n  run('0', -1, 1, 10, 1); // below min\n  run('-5', -1, -10, 0, -5); // within\n  run('-15', -1, -10, 0, -10); // below min\n  run('20', -1, 1, 10, 10); // above max\n});\n\ntest('clampInteger handles explicit zeros and fallback', t => {\n  run(0, -1, 1, 10, 1);\n  run('0', -1, 1, 10, 1);\n  run('', -1, 1, 10, -1); // empty string -> fallback\n  run('  ', -1, 1, 10, -1); // whitespace\n  run('abc', -1, 1, 10, -1); // invalid string\n  run(null, 5, 1, 10, 5); // null -> fallback\n  run(undefined, 5, 1, 10, 5); // undefined -> fallback\n});\n\n"
+        }
+      ],
+      "error": null
+    },
+    {
+      "taskId": "safe-relative-path",
+      "taskFingerprint": "84b5a93d17e947ba36816c9adcea89450ad3dc0f3ae5e3b9d6499f410027ed51",
+      "category": "security-boundaries",
+      "difficulty": "medium",
+      "trial": 1,
+      "status": "failed",
+      "model": "ovh/gpt-oss-20b",
+      "requestedModel": "ovh/gpt-oss-20b",
+      "routeTier": "strong",
+      "escalation": null,
+      "routeReason": "automatic routing is disabled",
+      "strongModel": "ovh/gpt-oss-20b",
+      "protocol": "openai-compatible",
+      "baseURL": "http://127.0.0.1:33945/a/oasis/v1",
+      "maxSteps": 150,
+      "maxOutputTokens": null,
+      "inputTokens": 116357,
+      "outputTokens": 4771,
+      "totalTokens": 121128,
+      "costUSD": 0.00411094,
+      "strongModelCostUSD": 0.0041109399999999996,
+      "routingSavingsUSD": 0,
+      "costSource": "per-model list-price estimate (cloud model behind a localhost gateway; free-tier keys are not billed)",
+      "wallTimeMs": 583849,
+      "finished": true,
+      "toolCalls": 11,
+      "trace": [
+        {
+          "tool": "list_files",
+          "resultChars": 655
+        },
+        {
+          "tool": "file_exists",
+          "resultChars": 208,
+          "failed": true
+        },
+        {
+          "tool": "list_files",
+          "arg": "src",
+          "resultChars": 176
+        },
+        {
+          "tool": "search_files",
+          "arg": "src",
+          "resultChars": 2370
+        },
+        {
+          "tool": "read_file",
+          "arg": "src/tools.mjs",
+          "resultChars": 16203
+        },
+        {
+          "tool": "write_file",
+          "arg": "src/lib.mjs",
+          "resultChars": 339
+        },
+        {
+          "tool": "run_command",
+          "arg": "npm test",
+          "resultChars": 2417
+        },
+        {
+          "tool": "write_file",
+          "arg": "test/tmp_test.mjs",
+          "resultChars": 350
+        },
+        {
+          "tool": "run_command",
+          "arg": "node test/tmp_test.mjs",
+          "resultChars": 501
+        },
+        {
+          "tool": "read_file",
+          "arg": "package.json",
+          "resultChars": 940
+        },
+        {
+          "tool": "run_command",
+          "arg": "npm test",
+          "resultChars": 2788
+        }
+      ],
+      "requestTokens": [
+        [
+          4830,
+          835
+        ],
+        [
+          5050,
+          593
+        ],
+        [
+          5218,
+          73
+        ],
+        [
+          6063,
+          860
+        ],
+        [
+          10436,
+          1084
+        ],
+        [
+          10875,
+          55
+        ],
+        [
+          11472,
+          291
+        ],
+        [
+          11842,
+          440
+        ],
+        [
+          12170,
+          61
+        ],
+        [
+          12324,
+          74
+        ],
+        [
+          12680,
+          311
+        ],
+        [
+          13397,
+          94
+        ]
+      ],
+      "verification": {
+        "exitCode": 1,
+        "output": "\nnode:internal/modules/run_main:123\n    triggerUncaughtException(\n    ^\n\nAssertionError [ERR_ASSERTION]: The input did not match the regular expression /escapes/. Input:\n\n'Error: Absolute paths are forbidden: /etc/passwd'\n\n    at file:///tmp/oasis-bench3/evals/tasks/safe-relative-path/verify.mjs:14:8 {\n  generatedMessage: true,\n  code: 'ERR_ASSERTION',\n  actual: Error: Absolute paths are forbidden: /etc/passwd\n      at Module.resolveRelative (file:///tmp/oasis-eval-run-M1KlpS/workspace/src/lib.mjs:14:11)\n      at file:///tmp/oasis-bench3/evals/tasks/safe-relative-path/verify.mjs:14:23\n      at getActual (node:assert:609:5)\n      at Function.throws (node:assert:757:24)\n      at file:///tmp/oasis-bench3/evals/tasks/safe-relative-path/verify.mjs:14:8,\n  expected: /escapes/,\n  operator: 'throws',\n  diff: 'simple'\n}\n\nNode.js v22.21.0\n"
+      },
+      "changes": [
+        {
+          "path": "src/lib.mjs",
+          "status": "added",
+          "content": "import path from 'node:path';\n\n/**\n * Resolve a relative to absolute path strictly within a given workspace root.\n *\n * @param {string} root - The root directory of the workspace.\n * @param {string} value - The path to resolve.\n * @returns {string} The absolute resolved path.\n * @throws {Error} If `value` is absolute or escapes the workspace root.\n */\nexport function resolveRelative(root, value) {\n  // Guard against absolute paths – user can intentionally provide them only if they refer to root.\n  if (path.isAbsolute(value)) {\n    throw new Error(`Absolute paths are forbidden: ${value}`);\n  }\n\n  // Resolve the path relative to the workspace root. Since we are not touching the fs,\n  // path.resolve behaves purely as a string manipulation.\n  const resolvedAbsolute = path.resolve(root, value);\n\n  // Determine the relative path from the root to the resolved path.\n  const relativeFromRoot = path.relative(root, resolvedAbsolute);\n\n  // If the relative path begins with '..' then the resolved path is outside the root.\n  const components = relativeFromRoot.split(path.sep).filter(Boolean);\n  if (components[0] === '..' || relativeFromRoot.startsWith('..' + path.sep) || relativeFromRoot === '..') {\n    throw new Error(`Path escapes the workspace: ${value}`);\n  }\n\n  return resolvedAbsolute;\n}\n"
+        },
+        {
+          "path": "test/tmp_test.mjs",
+          "status": "added",
+          "content": "import { resolveRelative } from '../src/lib.mjs';\n\nfunction test(name, root, value, expected) {\n  try {\n    const result = resolveRelative(root, value);\n    console.log(name, '→', result, 'expected:', expected, result===expected ? '✓' : '✗');\n  } catch (e) {\n    console.log(name, '→', 'Error:', e.message);\n  }\n}\n\nconst root = \"/tmp/workspace\";\n\n// Normal relative\ntest('1', root, 'subdir/file.txt', '/tmp/workspace/subdir/file.txt');\n// absolute path should error\ntest('2', root, '/etc/passwd', null);\n// escape via .. should error\ntest('3', root, '../outside.txt', null);\n// empty string -> root\ntest('4', root, '', root);\n// single dot -> root\ntest('5', root, '.', root);\n// dot-notation\ntest('6', root, './a/../b', '/tmp/workspace/b');\n"
+        }
+      ],
+      "error": null
+    }
+  ]
+}

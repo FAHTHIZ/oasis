@@ -128,7 +128,7 @@ Gaps found by checking the [hooks reference](https://code.claude.com/docs/en/hoo
 | Benchmark harness: quota stop, rate-limited trials excluded, progress saved per unit, message sizes recorded | done | `test/bench-live.test.mjs` (26 pass, with a fake upstream that returns Kilo's quota 429) |
 | Gemini CLI in the same benchmark | doing | `bench:live --router` runs it through FreeLLMAPI's native `/v1beta` surface (`5ee05996`); smoke: passed clamp-integer in 17 s. Full run after the main one, so both stay inside Kilo's hourly limit |
 | Live check of both routers with OASIS | done | FreeLLMAPI (source, 2026-11-14) and OmniRoute 3.8.53: `oasis -p` fixed a bug through each on the same free Nemotron model, 4 requests each; `docs/CONFIGURATION.md` |
-| OASIS through OmniRoute vs FreeLLMAPI vs direct | open | Same tasks and model through each path, after the main benchmark (shared hourly limit) |
+| OASIS through OmniRoute vs FreeLLMAPI vs direct | done (smoke scale) | Two tasks, OVH gpt-oss-20b, one trial each: direct 2/2, FreeLLMAPI 1/1 scored, OmniRoute 0/2, then 1/2 after fixing its split tool-call tail and keepalive handling (`bench/results/routers-2026-11-14/e2e/`). Too small to rank the routes |
 
 ## 4. Desktop distribution (after core validation)
 

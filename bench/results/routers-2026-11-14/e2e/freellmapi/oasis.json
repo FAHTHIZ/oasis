@@ -1,0 +1,218 @@
+{
+  "label": "OASIS 1.3.0 (gpt-oss-20b)",
+  "sourceRevision": "b135fbc371394e6a8b7d4d9acdb91773643eaef7",
+  "runId": "2026-11-14T09-25-11-274Z-2885",
+  "startedAt": "2026-11-14T09:25:11.274Z",
+  "completedAt": "2026-11-14T09:32:37.016Z",
+  "taskCount": 2,
+  "taskIds": [
+    "clamp-integer",
+    "safe-relative-path"
+  ],
+  "trialsPerTask": 1,
+  "timeoutSeconds": 1500,
+  "runtime": {
+    "node": "v22.21.0",
+    "platform": "linux",
+    "arch": "x64"
+  },
+  "passRate": 0.5,
+  "passed": 1,
+  "failed": 1,
+  "medianTimeMs": 222826,
+  "totalCostUSD": 0.002191,
+  "costPerPassedTaskUSD": 0.002191,
+  "routing": {
+    "enabled": false
+  },
+  "provider": {
+    "model": "gpt-oss-20b",
+    "protocol": "openai-compatible",
+    "baseURL": "http://127.0.0.1:46829/a/oasis/v1",
+    "maxSteps": 150,
+    "maxOutputTokens": null
+  },
+  "pricing": {
+    "inputUsdPerMillionTokens": null,
+    "outputUsdPerMillionTokens": null,
+    "note": "Cost is a rough estimate from configured rates and does not distinguish cached tokens. Pass-rate differences under 10 percentage points are noisy with small task samples; run at least three trials per task when benchmarking."
+  },
+  "results": [
+    {
+      "taskId": "clamp-integer",
+      "taskFingerprint": "dab0c2159b42de21f3e8608ea63ea2036a332621147205eeab0bcc14e425d3d1",
+      "category": "utility-logic",
+      "difficulty": "small",
+      "trial": 1,
+      "status": "failed",
+      "model": "gpt-oss-20b",
+      "requestedModel": "gpt-oss-20b",
+      "routeTier": "strong",
+      "escalation": null,
+      "routeReason": null,
+      "strongModel": "gpt-oss-20b",
+      "protocol": "openai-compatible",
+      "baseURL": "http://127.0.0.1:46829/a/oasis/v1",
+      "maxSteps": 150,
+      "maxOutputTokens": null,
+      "inputTokens": 4800,
+      "outputTokens": 51,
+      "totalTokens": 4851,
+      "costUSD": 0.00015062999999999999,
+      "strongModelCostUSD": null,
+      "routingSavingsUSD": null,
+      "costSource": "per-model list-price estimate (cloud model behind a localhost gateway; free-tier keys are not billed)",
+      "wallTimeMs": 96077,
+      "finished": false,
+      "toolCalls": 0,
+      "trace": [
+        {
+          "tool": "list_files",
+          "resultChars": 552
+        }
+      ],
+      "requestTokens": [
+        [
+          4800,
+          51
+        ]
+      ],
+      "verification": {
+        "exitCode": 1,
+        "output": "Agent did not complete."
+      },
+      "changes": [],
+      "error": "Model provider returned HTTP 429: All models exhausted: 1 route checked (1 rate-limited or on cooldown). Add more API keys or wait for rate limits to reset. Soonest reset ~28s. 9 models skipped: no key configured for their platform. The provider is rate-limiting requests. Wait a little and try again, or lower the request rate."
+    },
+    {
+      "taskId": "safe-relative-path",
+      "taskFingerprint": "84b5a93d17e947ba36816c9adcea89450ad3dc0f3ae5e3b9d6499f410027ed51",
+      "category": "security-boundaries",
+      "difficulty": "medium",
+      "trial": 1,
+      "status": "passed",
+      "model": "gpt-oss-20b",
+      "requestedModel": "gpt-oss-20b",
+      "routeTier": "strong",
+      "escalation": null,
+      "routeReason": "automatic routing is disabled",
+      "strongModel": "gpt-oss-20b",
+      "protocol": "openai-compatible",
+      "baseURL": "http://127.0.0.1:46829/a/oasis/v1",
+      "maxSteps": 150,
+      "maxOutputTokens": null,
+      "inputTokens": 57910,
+      "outputTokens": 2332,
+      "totalTokens": 60242,
+      "costUSD": 0.00204046,
+      "strongModelCostUSD": 0.00204046,
+      "routingSavingsUSD": 0,
+      "costSource": "per-model list-price estimate (cloud model behind a localhost gateway; free-tier keys are not billed)",
+      "wallTimeMs": 349574,
+      "finished": false,
+      "toolCalls": 7,
+      "trace": [
+        {
+          "tool": "write_file",
+          "arg": "src/lib.mjs",
+          "resultChars": 338
+        },
+        {
+          "tool": "read_file",
+          "arg": "package.json",
+          "resultChars": 940
+        },
+        {
+          "tool": "run_command",
+          "arg": "npm test",
+          "resultChars": 2417
+        },
+        {
+          "tool": "run_command",
+          "arg": "npm run check",
+          "resultChars": 2580
+        },
+        {
+          "tool": "run_command",
+          "arg": "node -e import {resolveRelative} from './src/lib.mjs';\nconst root = '/tmp/workspace';\nconst tests = [\n  {root,'/tmp/work",
+          "resultChars": 401,
+          "failed": true
+        },
+        {
+          "tool": "write_file",
+          "arg": "test-resolve.mjs",
+          "resultChars": 348
+        },
+        {
+          "tool": "run_command",
+          "arg": "node --test test-resolve.mjs",
+          "resultChars": 745
+        }
+      ],
+      "requestTokens": [
+        [
+          4829,
+          929
+        ],
+        [
+          5187,
+          349
+        ],
+        [
+          5533,
+          54
+        ],
+        [
+          5888,
+          66
+        ],
+        [
+          6483,
+          82
+        ],
+        [
+          7119,
+          175
+        ],
+        [
+          7319,
+          434
+        ],
+        [
+          7645,
+          71
+        ],
+        [
+          7907,
+          172
+        ]
+      ],
+      "verification": {
+        "exitCode": 0,
+        "output": ""
+      },
+      "changes": [
+        {
+          "path": "src/lib.mjs",
+          "status": "added",
+          "content": "import path from 'path';\n\n/**\n * Resolve a relative path below the workspace root and return the absolute result as a string.\n *\n * @param {string} root - The workspace root path.\n * @param {string} value - The path to resolve, which may be relative or absolute.\n * @returns {string} The absolute resolved path.\n * @throws {Error} If `value` is an absolute path or if it escapes the workspace root.\n */\nexport function resolveRelative(root, value) {\n  // Reject absolute paths\n  if (path.isAbsolute(value)) {\n    throw new Error(`Path escapes the workspace: ${value}`);\n  }\n\n  // Resolve to an absolute path based on the root\n  const resolved = path.resolve(root, value);\n\n  // Determine if the resolved path is still within the root\n  const relative = path.relative(root, resolved);\n  if (relative.startsWith('..') || path.isAbsolute(relative)) {\n    throw new Error(`Path escapes the workspace: ${value}`);\n  }\n\n  return resolved;\n}\n"
+        },
+        {
+          "path": "test-resolve.mjs",
+          "status": "added",
+          "content": "import { resolveRelative } from './src/lib.mjs';\n\nconst root = '/workspace';\nconst cases = [\n  {value: 'a/b', expect: '/workspace/a/b'},\n  {value: './a', expect: '/workspace/a'},\n  {value: '../outside', expectError: true},\n  {value: '/abs', expectError: true},\n  {value: 'nested/../file', expect: '/workspace/file'},\n];\n\ncases.forEach(({value, expect, expectError})=>{\n  try {\n    const res = resolveRelative(root, value);\n    if(expectError){ console.error('Expected error for', value,'but got',res); }\n    else if(res!==expect){ console.error('Mismatch:', value,'=>',res,'expected',expect); }\n    else console.log('✓', value);\n  } catch(e){\n    if(expectError){ console.log('✓', value,'error thrown as expected');}\n    else console.error('Error for', value,':',e.message);\n  }\n});\n"
+        }
+      ],
+      "error": null,
+      "unfinished": {
+        "flags": [
+          "verificationIncomplete"
+        ],
+        "issues": [
+          "the new module src/lib.mjs was not loaded or run by any check after the latest edit, so the passing check says nothing about it; import or run it (or add a test that does)"
+        ],
+        "text": "I added a new file `src/lib.mjs` that exports `resolveRelative(root, value)`.\n\nThe function:\n\n1. Checks if `value` is an absolute path and throws an error containing “escapes”.\n2. Resolves `value` against `root` with `path.resolve`.\n3. Uses `path.relative` to verify the resolved path is still inside `root`; if not, throws an error with “escapes”.\n4. Returns the resolved absolute path.\n\nAll existing project tests (`npm test` and `npm run check`) pass.  \nI also created a short test file `test-resolve.mjs` that exercises typical cases, confirming that relative paths are resolved correctly, absolute paths trigger an error, and attempts to escape the root via `..` also throw the expected error. All custom tests pass."
+      }
+    }
+  ]
+}
