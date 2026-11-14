@@ -4,6 +4,7 @@ User-facing change history grouped by package version. A version heading does no
 
 ## Unreleased
 
+- A reply stream that drops mid-response is now restarted up to 5 times (was 2), as Codex does, with a growing pause between tries. `OASIS_STREAM_MAX_RETRIES` (0-20) changes the count. A stream that goes silent is still restarted at most twice, since each stall already waited a full idle window.
 - One model message can now run up to 64 tool calls (was 16). Wide read batches went past 16, and the extra calls came back as "Not executed", so the model spent another step asking for them again. At most 10 read-only calls still run at once.
 - Long replies now stream in full. The live stream stopped at 24,000 characters, so a long answer (a whole file, a long report) showed cut off in the CLI, over ACP (Zed and other editors) and in the browser app. Streaming now runs to 1,000,000 characters, and the CLI and ACP append any remainder from the final reply.
 - `fetch_url` now downloads pages up to 10 MiB (was 1 MiB), as Claude Code's WebFetch does. Long article pages are several MiB of HTML (Wikipedia's "United States" is about 3 MiB) and were refused with "Response exceeds the 1 MiB limit"; they now convert to Markdown in the existing worker, with the same timeout and plain-text fallback.

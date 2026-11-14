@@ -349,6 +349,10 @@ A malformed list (spaces, `*` in the middle) stops that server from starting
 and is reported, instead of silently exposing every tool. Source:
 `src/mcp-trust.mjs` (`filterServerTools`).
 
+## Stream retries
+
+A reply stream that drops mid-response is sent again, up to `OASIS_STREAM_MAX_RETRIES` times (default 5, as Codex's `stream_max_retries`; 0 to 20), with a growing pause between tries (0.25 s up to 10 s). A stream that goes silent fails after `OASIS_STREAM_IDLE_SECONDS` (default 300, or 600 at high, xhigh or max reasoning effort). Because each stall already took a full idle window, a stalled stream is restarted at most twice. A provider error of 500 or above reported mid-stream gets one extra try. A dropped stream never returns tool calls, so a restart cannot run a tool twice.
+
 ## Model circuit breaker
 
 When a fallback chain is set, each model gets a circuit breaker. After `OASIS_BREAKER_THRESHOLD` (default 2) consecutive provider failures (5xx, rate limit, out of credit, rejected fallback key) the chain skips that model. After `OASIS_BREAKER_COOLDOWN_SECONDS` (default 30) one probe request is allowed; each failed probe doubles the wait, up to 30 minutes. A success closes the breaker.

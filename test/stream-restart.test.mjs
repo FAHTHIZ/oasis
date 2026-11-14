@@ -4,7 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { createServer } from 'node:http';
 import { mkdtemp, rm } from 'node:fs/promises';
-import { createSession, runAgentTurn, closeSession } from '../src/agent.mjs';
+import { createSession, runAgentTurn, closeSession, streamRestartLimit } from '../src/agent.mjs';
 
 const sse = (obj) => 'data: ' + JSON.stringify(obj) + '\n\n';
 
@@ -60,8 +60,23 @@ test('a stream that drops mid-response is retried on the same model', async (t) 
 
 test('repeated mid-stream drops give up with a clear error after bounded restarts', async (t) => {
   const server = await flakyStreamServer(t, 10);
-  await assert.rejects(runAgentTurn(await session(t, server.config), 'hi', { onDelta: () => {}, onStreamRestart: () => {} }), /stream was interrupted/);
+  await assert.rejects(runAgentTurn(await session(t, server.config), 'hi', { env: { ...process.env, OASIS_STREAM_MAX_RETRIES: '2' }, onDelta: () => {}, onStreamRestart: () => {} }), /stream was interrupted/);
   assert.equal(server.count(), 3);
+});
+
+test('OASIS_STREAM_MAX_RETRIES=0 turns stream restarts off', async (t) => {
+  const server = await flakyStreamServer(t, 10);
+  await assert.rejects(runAgentTurn(await session(t, server.config), 'hi', { env: { ...process.env, OASIS_STREAM_MAX_RETRIES: '0' }, onDelta: () => {}, onStreamRestart: () => {} }), /stream was interrupted/);
+  assert.equal(server.count(), 1);
+});
+
+test('a dropped stream is restarted up to 5 times by default, like Codex', () => {
+  assert.equal(streamRestartLimit({}), 5);
+  assert.equal(streamRestartLimit({ OASIS_STREAM_MAX_RETRIES: '' }), 5);
+  assert.equal(streamRestartLimit({ OASIS_STREAM_MAX_RETRIES: 'lots' }), 5);
+  assert.equal(streamRestartLimit({ OASIS_STREAM_MAX_RETRIES: '-1' }), 5);
+  assert.equal(streamRestartLimit({ OASIS_STREAM_MAX_RETRIES: '3' }), 3);
+  assert.equal(streamRestartLimit({ OASIS_STREAM_MAX_RETRIES: '99' }), 20);
 });
 
 // Seen live on Gemini's OpenAI endpoint: a few data events, then a plain JSON
