@@ -1,0 +1,119 @@
+{
+  "summary": {
+    "label": "OpenCode 1.19.5 (bench/gpt-oss-20b)",
+    "sourceRevision": "ce21f0131672870c67f5fab7d2469f1be84b3b12",
+    "runId": "2026-11-14T15-25-30-735Z-29785",
+    "startedAt": "2026-11-14T15:25:30.735Z",
+    "completedAt": "2026-11-14T15:29:09.656Z",
+    "taskCount": 1,
+    "taskIds": [
+      "taskflow-search"
+    ],
+    "trialsPerTask": 1,
+    "timeoutSeconds": 1800,
+    "runtime": {
+      "node": "v22.21.1",
+      "platform": "linux",
+      "arch": "x64"
+    },
+    "passRate": 0,
+    "passed": 0,
+    "failed": 1,
+    "medianTimeMs": 218889,
+    "totalCostUSD": 0,
+    "costPerPassedTaskUSD": null,
+    "provider": {
+      "model": "bench/gpt-oss-20b",
+      "protocol": "opencode-cli",
+      "cliVersion": "1.19.5",
+      "maxTurns": 30,
+      "timeoutSeconds": 1800,
+      "budgetUSD": null
+    },
+    "pricing": {
+      "note": "Cost is taken only from OpenCode JSON usage metadata. If the CLI or sign-in method does not expose a per-run USD cost, costUSD remains null; this does not mean the run was free."
+    }
+  },
+  "results": [
+    {
+      "taskId": "taskflow-priority-sort",
+      "taskFingerprint": "44c34580556645c4504f9aad04bd90113f116c134e675dd60a30f7a0c22f0efa",
+      "category": "data-structures",
+      "difficulty": "small",
+      "trial": 1,
+      "status": "failed",
+      "passed": false,
+      "model": "bench/gpt-oss-20b",
+      "inputTokens": 59475,
+      "outputTokens": 390,
+      "totalTokens": 59865,
+      "costUSD": 0,
+      "wallTimeMs": 368235,
+      "cliVersion": "1.19.5",
+      "finished": false,
+      "toolCalls": 9,
+      "verification": {
+        "exitCode": 1,
+        "output": "Agent did not complete."
+      },
+      "changes": [],
+      "error": "OpenCode exited with code 1: Expected 'id' to be a string.",
+      "agentOutputTail": "      return 0;\\n    }\\n    default:\\n      print('Usage: taskflow <add|list|done|reopen|tag|rm> [options]');\\n      return command ? 2 : 0;\\n  }\\n}\\n\\nif (import.meta.url === pathToFileURL(process.argv[1] || '').href) {\\n  run(process.argv.slice(2)).then((code) => { process.exitCode = code; }, (error) => {\\n    process.stderr.write(`taskflow: ${error.message}\\\\n`);\\n    process.exitCode = 1;\\n  });\\n}\",\"lineStart\":50,\"lineEnd\":99,\"totalLines\":99,\"truncated\":false}},\"title\":\"tmp/oasis-opencode-eval-s1sfhG/workspace/src/cli.mjs\",\"time\":{\"start\":1794666218765,\"end\":1794666218804}},\"id\":\"prt_1da7142b7001Lx1Yh8PqByR1QX\",\"sessionID\":\"ses_e25935056ffeAzgpphZNjZ98oq\",\"messageID\":\"msg_1da70c2a8001009wRhoamevfA2\"}}\n{\"type\":\"step_finish\",\"timestamp\":1794666218828,\"sessionID\":\"ses_e25935056ffeAzgpphZNjZ98oq\",\"part\":{\"id\":\"prt_1da714538001USdiHxcgCtbXFl\",\"reason\":\"tool-calls\",\"messageID\":\"msg_1da70c2a8001009wRhoamevfA2\",\"sessionID\":\"ses_e25935056ffeAzgpphZNjZ98oq\",\"type\":\"step-finish\",\"tokens\":{\"total\":8232,\"input\":8188,\"output\":44,\"reasoning\":0,\"cache\":{\"write\":0,\"read\":0}},\"cost\":0}}\n{\"type\":\"step_start\",\"timestamp\":1794666250637,\"sessionID\":\"ses_e25935056ffeAzgpphZNjZ98oq\",\"part\":{\"id\":\"prt_1da71c189001XafW7UmQSOZ266\",\"messageID\":\"msg_1da714546001YPh7jUhdVmMNMQ\",\"sessionID\":\"ses_e25935056ffeAzgpphZNjZ98oq\",\"type\":\"step-start\"}}\n{\"type\":\"tool_use\",\"timestamp\":1794666251317,\"sessionID\":\"ses_e25935056ffeAzgpphZNjZ98oq\",\"part\":{\"type\":\"tool\",\"tool\":\"grep\",\"callID\":\"chatcmpl-tool-a5378170ef6040f3\",\"state\":{\"status\":\"completed\",\"input\":{\"path\":\"src\",\"include\":\"*.mjs\",\"pattern\":\"sortTasks\"},\"output\":\"Found 3 matches\\n/tmp/oasis-opencode-eval-s1sfhG/workspace/src/query.mjs:\\n  Line 23: export function sortTasks(tasks, key = 'id') {\\n\\n\\n/tmp/oasis-opencode-eval-s1sfhG/workspace/src/cli.mjs:\\n  Line 6: import { filterTasks, sortTasks, paginate } from './query.mjs';\\n\\n  Line 61:       const sorted = sortTasks(filtered, flags.sort || 'id');\\n\",\"metadata\":{\"matches\":3,\"truncated\":false},\"title\":\"sortTasks\",\"time\":{\"start\":1794666251304,\"end\":1794666251315}},\"id\":\"prt_1da71c356001fhGGVnO5g1K308\",\"sessionID\":\"ses_e25935056ffeAzgpphZNjZ98oq\",\"messageID\":\"msg_1da714546001YPh7jUhdVmMNMQ\"}}\n{\"type\":\"step_finish\",\"timestamp\":1794666251342,\"sessionID\":\"ses_e25935056ffeAzgpphZNjZ98oq\",\"part\":{\"id\":\"prt_1da71c441001p2T0J9o3l6ql8g\",\"reason\":\"tool-calls\",\"messageID\":\"msg_1da714546001YPh7jUhdVmMNMQ\",\"sessionID\":\"ses_e25935056ffeAzgpphZNjZ98oq\",\"type\":\"step-finish\",\"tokens\":{\"total\":8980,\"input\":8939,\"output\":41,\"reasoning\":0,\"cache\":{\"write\":0,\"read\":0}},\"cost\":0}}\n{\"type\":\"step_start\",\"timestamp\":1794666283483,\"sessionID\":\"ses_e25935056ffeAzgpphZNjZ98oq\",\"part\":{\"id\":\"prt_1da7241d9001Wsb9RVC6LwsQxw\",\"messageID\":\"msg_1da71c44a001gd5WWXYV4lXO6q\",\"sessionID\":\"ses_e25935056ffeAzgpphZNjZ98oq\",\"type\":\"step-start\"}}\n{\"type\":\"error\",\"timestamp\":1794666284914,\"sessionID\":\"ses_e25935056ffeAzgpphZNjZ98oq\",\"error\":{\"name\":\"UnknownError\",\"data\":{\"message\":\"Expected 'id' to be a string.\"}}}\n"
+    },
+    {
+      "taskId": "safe-relative-path",
+      "taskFingerprint": "84b5a93d17e947ba36816c9adcea89450ad3dc0f3ae5e3b9d6499f410027ed51",
+      "category": "security-boundaries",
+      "difficulty": "medium",
+      "trial": 1,
+      "status": "passed",
+      "passed": true,
+      "model": "bench/gpt-oss-20b",
+      "inputTokens": 109381,
+      "outputTokens": 2932,
+      "totalTokens": 112313,
+      "costUSD": 0,
+      "wallTimeMs": 663930,
+      "cliVersion": "1.19.5",
+      "finished": true,
+      "toolCalls": 10,
+      "verification": {
+        "exitCode": 0,
+        "output": ""
+      },
+      "changes": [
+        {
+          "path": "src/lib.mjs",
+          "status": "added",
+          "content": "import path from 'node:path';\n\n/**\n * Resolve a relative path need not exist on disk, but ensures it does not escape the root.\n * @param {string} root - Base path\n * @param {string} value - Path to resolve relative to root\n * @returns {string} - Absolute resolved path\n * @throws {Error} - If value is absolute or escapes the root via `..`\n */\nexport function resolveRelative(root, value) {\n  if (path.isAbsolute(value)) {\n    throw new Error(`Path escapes the workspace: ${value}`);\n  }\n  const resolved = path.resolve(root, value);\n  const rel = path.relative(root, resolved);\n  // path.relative will give a leading '..' if resolved is outside root.\n  if (rel.startsWith('..' + path.sep) || rel === '..') {\n    throw new Error(`Path escapes the workspace: ${value}`);\n  }\n  // If resolved equals root, that's fine.\n  return resolved;\n}\n"
+        }
+      ],
+      "error": null
+    },
+    {
+      "taskId": "taskflow-search",
+      "taskFingerprint": "4f55003e0ebc832b3e58785e03f3bcf4a50aa333078647169e82fb649ce56596",
+      "category": "data-structures",
+      "difficulty": "medium",
+      "trial": 1,
+      "status": "failed",
+      "passed": false,
+      "model": "bench/gpt-oss-20b",
+      "inputTokens": 26393,
+      "outputTokens": 180,
+      "totalTokens": 26573,
+      "costUSD": 0,
+      "wallTimeMs": 218889,
+      "cliVersion": "1.19.5",
+      "finished": false,
+      "toolCalls": 4,
+      "verification": {
+        "exitCode": 1,
+        "output": "Agent did not complete."
+      },
+      "changes": [],
+      "error": "OpenCode exited with code 1: Expected 'id' to be a string.",
+      "agentOutputTail": "map(normalizeTag))];\\n  return {\\n    id,\\n    title,\\n    priority,\\n    status: 'open',\\n    due: fields.due ? parseDue(fields.due, now) : null,\\n    tags,\\n    notes: fields.notes ? String(fields.notes) : '',\\n    created: now.toISOString()\\n  };\\n}\\n\\n// Returns a new task; the input is never modified.\\nexport function updateTask(task, changes, { now = new Date() } = {}) {\\n  const next = { ...task, tags: [...task.tags] };\\n  if (changes.title !== undefined) {\\n    const title = String(changes.title).trim();\\n    if (!title) throw new Error('A task needs a title');\\n    next.title = title;\\n  }\\n  if (changes.priority !== undefined) {\\n    if (!PRIORITIES.includes(changes.priority)) throw new Error(`Unknown priority: ${changes.priority}`);\\n    next.priority = changes.priority;\\n  }\\n  if (changes.status !== undefined) {\\n    if (!STATUSES.includes(changes.status)) throw new Error(`Unknown status: ${changes.status}`);\\n    next.status = changes.status;\\n    if (changes.status === 'done') next.completed = now.toISOString();\\n    else delete next.completed;\\n  }\\n  if (changes.due !== undefined) next.due = changes.due === null ? null : parseDue(changes.due, now);\\n  if (changes.addTags) for (const tag of changes.addTags.map(normalizeTag)) if (!next.tags.includes(tag)) next.tags.push(tag);\\n  if (changes.removeTags) {\\n    const remove = new Set(changes.removeTags.map(normalizeTag));\\n    next.tags = next.tags.filter((tag) => !remove.has(tag));\\n  }\\n  if (changes.notes !== undefined) next.notes = String(changes.notes);\\n  return next;\\n}\",\"lineStart\":1,\"lineEnd\":57,\"totalLines\":57,\"truncated\":false}},\"title\":\"tmp/oasis-opencode-eval-6qgKeg/workspace/src/task.mjs\",\"time\":{\"start\":1794670115471,\"end\":1794670115480}},\"id\":\"prt_1daacb7a5001cb7uDpgMvSVZEO\",\"sessionID\":\"ses_e255612f0ffejIU5DHs64GZOfq\",\"messageID\":\"msg_1daac31cf001vkae7n0XSvwL9y\"}}\n{\"type\":\"text\",\"timestamp\":1794670115515,\"sessionID\":\"ses_e255612f0ffejIU5DHs64GZOfq\",\"part\":{\"id\":\"prt_1daacaf9b001afIwdp9hOxtHeF\",\"messageID\":\"msg_1daac31cf001vkae7n0XSvwL9y\",\"sessionID\":\"ses_e255612f0ffejIU5DHs64GZOfq\",\"type\":\"text\",\"text\":\"Open taskflow implementation.\",\"time\":{\"start\":1794670112667,\"end\":1794670115504}}}\n{\"type\":\"step_finish\",\"timestamp\":1794670115515,\"sessionID\":\"ses_e255612f0ffejIU5DHs64GZOfq\",\"part\":{\"id\":\"prt_1daacbab2001Gf2cc27wt75Hot\",\"reason\":\"tool-calls\",\"messageID\":\"msg_1daac31cf001vkae7n0XSvwL9y\",\"sessionID\":\"ses_e255612f0ffejIU5DHs64GZOfq\",\"type\":\"step-finish\",\"tokens\":{\"total\":6985,\"input\":6933,\"output\":52,\"reasoning\":0,\"cache\":{\"write\":0,\"read\":0}},\"cost\":0}}\n{\"type\":\"step_start\",\"timestamp\":1794670147464,\"sessionID\":\"ses_e255612f0ffejIU5DHs64GZOfq\",\"part\":{\"id\":\"prt_1daad3785001T8jPDFoOes3l2Y\",\"messageID\":\"msg_1daacbab7001qfSV8X4FZuPuZU\",\"sessionID\":\"ses_e255612f0ffejIU5DHs64GZOfq\",\"type\":\"step-start\"}}\n{\"type\":\"error\",\"timestamp\":1794670149320,\"sessionID\":\"ses_e255612f0ffejIU5DHs64GZOfq\",\"error\":{\"name\":\"UnknownError\",\"data\":{\"message\":\"Expected 'id' to be a string.\"}}}\n"
+    }
+  ]
+}

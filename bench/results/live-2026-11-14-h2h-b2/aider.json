@@ -1,0 +1,181 @@
+{
+  "summary": {
+    "label": "Aider aider 0.86.2 (openai/gpt-oss-20b)",
+    "sourceRevision": "ce21f0131672870c67f5fab7d2469f1be84b3b12",
+    "runId": "2026-11-14T15-29-10-489Z-29785",
+    "startedAt": "2026-11-14T15:29:10.489Z",
+    "completedAt": "2026-11-14T15:29:45.582Z",
+    "taskCount": 1,
+    "taskIds": [
+      "taskflow-search"
+    ],
+    "trialsPerTask": 1,
+    "timeoutSeconds": 1800,
+    "runtime": {
+      "node": "v22.21.1",
+      "platform": "linux",
+      "arch": "x64"
+    },
+    "passRate": 0,
+    "passed": 0,
+    "failed": 1,
+    "medianTimeMs": 35063,
+    "totalCostUSD": null,
+    "costPerPassedTaskUSD": null,
+    "provider": {
+      "model": "openai/gpt-oss-20b",
+      "protocol": "aider-cli",
+      "cliVersion": "aider 0.86.2",
+      "maxTurns": 30,
+      "timeoutSeconds": 1800,
+      "budgetUSD": null
+    },
+    "pricing": {
+      "note": "Cost is taken only from Aider JSON usage metadata. If the CLI or sign-in method does not expose a per-run USD cost, costUSD remains null; this does not mean the run was free."
+    }
+  },
+  "results": [
+    {
+      "taskId": "taskflow-priority-sort",
+      "taskFingerprint": "44c34580556645c4504f9aad04bd90113f116c134e675dd60a30f7a0c22f0efa",
+      "category": "data-structures",
+      "difficulty": "small",
+      "trial": 1,
+      "status": "failed",
+      "passed": false,
+      "model": "openai/gpt-oss-20b",
+      "inputTokens": 759,
+      "outputTokens": 35,
+      "totalTokens": 794,
+      "costUSD": null,
+      "wallTimeMs": 32866,
+      "cliVersion": "aider 0.86.2",
+      "finished": true,
+      "toolCalls": null,
+      "verification": {
+        "exitCode": 1,
+        "output": "\nnode:internal/modules/run_main:123\n    triggerUncaughtException(\n    ^\n\nAssertionError [ERR_ASSERTION]: expected at least 20 passing project tests (existing tests kept, plus new ones), found 19\n    at file:///tmp/oasis-pin/evals/tasks/taskflow-priority-sort/verify.mjs:12:8\n    at ModuleJob.run (node:internal/modules/esm/module_job:343:25)\n    at async onImport.tracePromise.__proto__ (node:internal/modules/esm/loader:665:26)\n    at async asyncRunEntryPointWithESMLoader (node:internal/modules/run_main:117:5) {\n  generatedMessage: false,\n  code: 'ERR_ASSERTION',\n  actual: false,\n  expected: true,\n  operator: '==',\n  diff: 'simple'\n}\n\nNode.js v22.21.1\n"
+      },
+      "changes": [
+        {
+          "path": ".aider.chat.history.md",
+          "status": "added",
+          "content": "\n# aider chat started at 2026-11-14 14:24:47\n\n> No git repo found, create one to track aider's changes (recommended)? (Y)es/(N)o [Yes]: y  \n> Added .aider* to .gitignore  \n> Git repository created in /tmp/oasis-aider-eval-p8TqNR/workspace  \n> Update git name with: git config user.name \"Your Name\"  \n> Update git email with: git config user.email \"you@example.com\"  \n> /home/user/.local/bin/aider --message Bug report for the taskflow project: `taskflow list --sort priority` lists low-priority tasks above normal-priority ones. The order must be high, then normal, then low, with ties kept in ID order. Find the root cause in the source, keep every existing test passing without weakening it, and add a regression test that fails before your fix.\n\nBenchmark constraints: solve this task using only the current workspace. Do not access files outside this workspace, use the network, change the task harness, or bypass verification. The harness runs the task verifier independently after you finish. --yes-always --no-auto-commits --no-dirty-commits --no-check-update --no-analytics --no-show-model-warnings --no-pretty --no-stream --timeout 1800 --model openai/gpt-oss-20b  \n> Aider v0.86.2  \n> Model: openai/gpt-oss-20b with whole edit format  \n> Git repo: .git with 0 files  \n> Repo-map: using 1024 tokens, auto refresh  \n\n#### Bug report for the taskflow project: `taskflow list --sort priority` lists low-priority tasks above normal-priority ones. The order must be high, then normal, then low, with ties kept in ID order. Find the root cause in the source, keep every existing test passing without weakening it, and add a regression test that fails before your fix.  \n####   \n#### Benchmark constraints: solve this task using only the current workspace. Do not access files outside this workspace, use the network, change the task harness, or bypass verification. The harness runs the task verifier independently after you finish.  \n> Tokens: 759 sent, 35 received.  \n"
+        },
+        {
+          "path": ".aider.input.history",
+          "status": "added",
+          "content": "\n# 2026-11-14 14:24:49.522350\n+Bug report for the taskflow project: `taskflow list --sort priority` lists low-priority tasks above normal-priority ones. The order must be high, then normal, then low, with ties kept in ID order. Find the root cause in the source, keep every existing test passing without weakening it, and add a regression test that fails before your fix.\n+\n+Benchmark constraints: solve this task using only the current workspace. Do not access files outside this workspace, use the network, change the task harness, or bypass verification. The harness runs the task verifier independently after you finish.\n\n# 2026-11-14 14:24:49.522667\n+Bug report for the taskflow project: `taskflow list --sort priority` lists low-priority tasks above normal-priority ones. The order must be high, then normal, then low, with ties kept in ID order. Find the root cause in the source, keep every existing test passing without weakening it, and add a regression test that fails before your fix.\n+\n+Benchmark constraints: solve this task using only the current workspace. Do not access files outside this workspace, use the network, change the task harness, or bypass verification. The harness runs the task verifier independently after you finish.\n"
+        },
+        {
+          "path": ".aider.tags.cache.v4/cache.db",
+          "status": "added",
+          "content": "(binary, 32768 bytes)"
+        },
+        {
+          "path": ".gitignore",
+          "status": "added",
+          "content": ".aider*\n"
+        }
+      ],
+      "error": null,
+      "agentOutputTail": "\nAdded .aider* to .gitignore\nGit repository created in /tmp/oasis-aider-eval-p8TqNR/workspace\nUpdate git name with: git config user.name \"Your Name\"\nUpdate git email with: git config user.email \"you@example.com\"\nAider v0.86.2\nModel: openai/gpt-oss-20b with whole edit format\nGit repo: .git with 0 files\nRepo-map: using 1024 tokens, auto refresh\n\n\n--------------\n► **THINKING**\n\nWe need to inspect the repository.\n{\"cmd\":[\"bash\",\"-lc\",\"ls -R\"]}\n\n------------\n► **ANSWER**\n\n\n\nTokens: 759 sent, 35 received.\n\nWarning: Input is not a terminal (fd=0).\n"
+    },
+    {
+      "taskId": "safe-relative-path",
+      "taskFingerprint": "84b5a93d17e947ba36816c9adcea89450ad3dc0f3ae5e3b9d6499f410027ed51",
+      "category": "security-boundaries",
+      "difficulty": "medium",
+      "trial": 1,
+      "status": "passed",
+      "passed": true,
+      "model": "openai/gpt-oss-20b",
+      "inputTokens": 811,
+      "outputTokens": 832,
+      "totalTokens": 1643,
+      "costUSD": null,
+      "wallTimeMs": 49667,
+      "cliVersion": "aider 0.86.2",
+      "finished": true,
+      "toolCalls": null,
+      "verification": {
+        "exitCode": 0,
+        "output": ""
+      },
+      "changes": [
+        {
+          "path": ".aider.chat.history.md",
+          "status": "added",
+          "content": "\n# aider chat started at 2026-11-14 14:57:21\n\n> No git repo found, create one to track aider's changes (recommended)? (Y)es/(N)o [Yes]: y  \n> Added .aider* to .gitignore  \n> Git repository created in /tmp/oasis-aider-eval-jt7uco/workspace  \n> Update git name with: git config user.name \"Your Name\"  \n> Update git email with: git config user.email \"you@example.com\"  \n> /home/user/.local/bin/aider --message Create src/lib.mjs exporting a synchronous resolveRelative(root, value) to solve this task: Resolve a relative path below the workspace root and return the absolute result as a string. Work on the path strings only: the root need not exist on disk, so do not touch the filesystem. If the value is an absolute path, or escapes the root via ../, throw an Error whose message contains the word \"escapes\" (for example \"Path escapes the workspace: ../secret\"). Use path.relative rather than string-prefix checks.\nThe verifier runs existing repository checks and then validates the helper. Preserve the existing repository's safety guards.\n\nBenchmark constraints: solve this task using only the current workspace. Do not access files outside this workspace, use the network, change the task harness, or bypass verification. The harness runs the task verifier independently after you finish. --yes-always --no-auto-commits --no-dirty-commits --no-check-update --no-analytics --no-show-model-warnings --no-pretty --no-stream --timeout 1800 --model openai/gpt-oss-20b  \n> Aider v0.86.2  \n> Model: openai/gpt-oss-20b with whole edit format  \n> Git repo: .git with 0 files  \n> Repo-map: using 1024 tokens, auto refresh  \n\n#### Create src/lib.mjs exporting a synchronous resolveRelative(root, value) to solve this task: Resolve a relative path below the workspace root and return the absolute result as a string. Work on the path strings only: the root need not exist on disk, so do not touch the filesystem. If the value is an absolute path, or escapes the root via ../, throw an Error whose message contains the word \"escapes\" (for example \"Path escapes the workspace: ../secret\"). Use path.relative rather than string-prefix checks.  \n#### The verifier runs existing repository checks and then validates the helper. Preserve the existing repository's safety guards.  \n####   \n#### Benchmark constraints: solve this task using only the current workspace. Do not access files outside this workspace, use the network, change the task harness, or bypass verification. The harness runs the task verifier independently after you finish.  \n\nsrc/lib.mjs\n```\nimport path from 'node:path';\n\n/**\n * Resolve a relative path below the workspace root and return the absolute result as a string.\n *\n * @param {string} root - The workspace root path. Can be absolute or relative.\n * @param {string} value - The relative path to resolve against the root.\n * @returns {string} The absolute resolved path.\n * @throws {Error} If the value is an absolute path or escapes the root via `..`.\n */\nexport function resolveRelative(root, value) {\n  // Reject absolute paths outright\n  if (path.isAbsolute(value)) {\n    throw new Error(`Path escapes the workspace: ${value}`);\n  }\n\n  // Resolve the path against the root\n  const resolved = path.resolve(root, value);\n\n  // Determine the relative path from root to the resolved path\n  const rel = path.relative(root, resolved);\n\n  // If the relative path starts with '..', the resolved path escapes the root\n  if (rel.startsWith('..')) {\n    throw new Error(`Path escapes the workspace: ${value}`);\n  }\n\n  return resolved;\n}\n```\n\n> Tokens: 811 sent, 832 received.  \n> src/lib.mjs  \n> Create new file? (Y)es/(N)o [Yes]: y  \n> Applied edit to src/lib.mjs  \n"
+        },
+        {
+          "path": ".aider.input.history",
+          "status": "added",
+          "content": "\n# 2026-11-14 14:57:22.852362\n+Create src/lib.mjs exporting a synchronous resolveRelative(root, value) to solve this task: Resolve a relative path below the workspace root and return the absolute result as a string. Work on the path strings only: the root need not exist on disk, so do not touch the filesystem. If the value is an absolute path, or escapes the root via ../, throw an Error whose message contains the word \"escapes\" (for example \"Path escapes the workspace: ../secret\"). Use path.relative rather than string-prefix checks.\n+The verifier runs existing repository checks and then validates the helper. Preserve the existing repository's safety guards.\n+\n+Benchmark constraints: solve this task using only the current workspace. Do not access files outside this workspace, use the network, change the task harness, or bypass verification. The harness runs the task verifier independently after you finish.\n\n# 2026-11-14 14:57:22.852694\n+Create src/lib.mjs exporting a synchronous resolveRelative(root, value) to solve this task: Resolve a relative path below the workspace root and return the absolute result as a string. Work on the path strings only: the root need not exist on disk, so do not touch the filesystem. If the value is an absolute path, or escapes the root via ../, throw an Error whose message contains the word \"escapes\" (for example \"Path escapes the workspace: ../secret\"). Use path.relative rather than string-prefix checks.\n+The verifier runs existing repository checks and then validates the helper. Preserve the existing repository's safety guards.\n+\n+Benchmark constraints: solve this task using only the current workspace. Do not access files outside this workspace, use the network, change the task harness, or bypass verification. The harness runs the task verifier independently after you finish.\n"
+        },
+        {
+          "path": ".aider.tags.cache.v4/cache.db",
+          "status": "added",
+          "content": "(binary, 32768 bytes)"
+        },
+        {
+          "path": ".gitignore",
+          "status": "modified",
+          "content": "# Node and package-manager output\nnode_modules/\nnpm-debug.log*\nyarn-debug.log*\npnpm-debug.log*\n\n# Local/editor noise\n.DS_Store\nThumbs.db\n.vscode/\n.idea/\n*.swp\n*.swo\n\n# Local tests and backup files\ncoverage/\nplaywright-report/\ntest-results/\n*.local\n.aider*\n"
+        },
+        {
+          "path": "src/lib.mjs",
+          "status": "added",
+          "content": "import path from 'node:path';\n\n/**\n * Resolve a relative path below the workspace root and return the absolute result as a string.\n *\n * @param {string} root - The workspace root path. Can be absolute or relative.\n * @param {string} value - The relative path to resolve against the root.\n * @returns {string} The absolute resolved path.\n * @throws {Error} If the value is an absolute path or escapes the root via `..`.\n */\nexport function resolveRelative(root, value) {\n  // Reject absolute paths outright\n  if (path.isAbsolute(value)) {\n    throw new Error(`Path escapes the workspace: ${value}`);\n  }\n\n  // Resolve the path against the root\n  const resolved = path.resolve(root, value);\n\n  // Determine the relative path from root to the resolved path\n  const rel = path.relative(root, resolved);\n\n  // If the relative path starts with '..', the resolved path escapes the root\n  if (rel.startsWith('..')) {\n    throw new Error(`Path escapes the workspace: ${value}`);\n  }\n\n  return resolved;\n}\n"
+        }
+      ],
+      "error": null
+    },
+    {
+      "taskId": "taskflow-search",
+      "taskFingerprint": "4f55003e0ebc832b3e58785e03f3bcf4a50aa333078647169e82fb649ce56596",
+      "category": "data-structures",
+      "difficulty": "medium",
+      "trial": 1,
+      "status": "failed",
+      "passed": false,
+      "model": "openai/gpt-oss-20b",
+      "inputTokens": 775,
+      "outputTokens": 108,
+      "totalTokens": 883,
+      "costUSD": null,
+      "wallTimeMs": 35063,
+      "cliVersion": "aider 0.86.2",
+      "finished": true,
+      "toolCalls": null,
+      "verification": {
+        "exitCode": 1,
+        "output": "\nnode:internal/modules/run_main:123\n    triggerUncaughtException(\n    ^\n\nAssertionError [ERR_ASSERTION]: expected at least 20 passing project tests (existing tests kept, plus new ones), found 19\n    at file:///tmp/oasis-pin/evals/tasks/taskflow-search/verify.mjs:12:8\n    at ModuleJob.run (node:internal/modules/esm/module_job:343:25)\n    at async onImport.tracePromise.__proto__ (node:internal/modules/esm/loader:665:26)\n    at async asyncRunEntryPointWithESMLoader (node:internal/modules/run_main:117:5) {\n  generatedMessage: false,\n  code: 'ERR_ASSERTION',\n  actual: false,\n  expected: true,\n  operator: '==',\n  diff: 'simple'\n}\n\nNode.js v22.21.1\n"
+      },
+      "changes": [
+        {
+          "path": ".aider.chat.history.md",
+          "status": "added",
+          "content": "\n# aider chat started at 2026-11-14 15:29:11\n\n> No git repo found, create one to track aider's changes (recommended)? (Y)es/(N)o [Yes]: y  \n> Added .aider* to .gitignore  \n> Git repository created in /tmp/oasis-aider-eval-6n44AF/workspace  \n> Update git name with: git config user.name \"Your Name\"  \n> Update git email with: git config user.email \"you@example.com\"  \n> /home/user/.local/bin/aider --message Add text search to the taskflow project in this repository. `filterTasks` gets a `search` option: a case-insensitive substring match against a task's title and notes, combined with the other filters (all must match). The CLI gets `taskflow list --search <text>` (and `--search=<text>`). An empty or whitespace-only search matches everything. Keep every existing test passing and add tests for the new behavior.\n\nBenchmark constraints: solve this task using only the current workspace. Do not access files outside this workspace, use the network, change the task harness, or bypass verification. The harness runs the task verifier independently after you finish. --yes-always --no-auto-commits --no-dirty-commits --no-check-update --no-analytics --no-show-model-warnings --no-pretty --no-stream --timeout 1800 --model openai/gpt-oss-20b  \n> Aider v0.86.2  \n> Model: openai/gpt-oss-20b with whole edit format  \n> Git repo: .git with 0 files  \n> Repo-map: using 1024 tokens, auto refresh  \n\n#### Add text search to the taskflow project in this repository. `filterTasks` gets a `search` option: a case-insensitive substring match against a task's title and notes, combined with the other filters (all must match). The CLI gets `taskflow list --search <text>` (and `--search=<text>`). An empty or whitespace-only search matches everything. Keep every existing test passing and add tests for the new behavior.  \n####   \n#### Benchmark constraints: solve this task using only the current workspace. Do not access files outside this workspace, use the network, change the task harness, or bypass verification. The harness runs the task verifier independently after you finish.  \n\nCould you provide the current file structure of the repository (e.g., a list of files and directories) so I can identify where to add the search functionality?\n\n> Tokens: 775 sent, 108 received.  \n"
+        },
+        {
+          "path": ".aider.input.history",
+          "status": "added",
+          "content": "\n# 2026-11-14 15:29:13.000085\n+Add text search to the taskflow project in this repository. `filterTasks` gets a `search` option: a case-insensitive substring match against a task's title and notes, combined with the other filters (all must match). The CLI gets `taskflow list --search <text>` (and `--search=<text>`). An empty or whitespace-only search matches everything. Keep every existing test passing and add tests for the new behavior.\n+\n+Benchmark constraints: solve this task using only the current workspace. Do not access files outside this workspace, use the network, change the task harness, or bypass verification. The harness runs the task verifier independently after you finish.\n\n# 2026-11-14 15:29:13.000187\n+Add text search to the taskflow project in this repository. `filterTasks` gets a `search` option: a case-insensitive substring match against a task's title and notes, combined with the other filters (all must match). The CLI gets `taskflow list --search <text>` (and `--search=<text>`). An empty or whitespace-only search matches everything. Keep every existing test passing and add tests for the new behavior.\n+\n+Benchmark constraints: solve this task using only the current workspace. Do not access files outside this workspace, use the network, change the task harness, or bypass verification. The harness runs the task verifier independently after you finish.\n"
+        },
+        {
+          "path": ".aider.tags.cache.v4/cache.db",
+          "status": "added",
+          "content": "(binary, 32768 bytes)"
+        },
+        {
+          "path": ".gitignore",
+          "status": "added",
+          "content": ".aider*\n"
+        }
+      ],
+      "error": null,
+      "agentOutputTail": "\nAdded .aider* to .gitignore\nGit repository created in /tmp/oasis-aider-eval-6n44AF/workspace\nUpdate git name with: git config user.name \"Your Name\"\nUpdate git email with: git config user.email \"you@example.com\"\nAider v0.86.2\nModel: openai/gpt-oss-20b with whole edit format\nGit repo: .git with 0 files\nRepo-map: using 1024 tokens, auto refresh\n\n\n--------------\n► **THINKING**\n\nWe need to inspect repository.\nWe need to list files.\nWe don't have repository listing. We need to assume typical structure. Let's \nrequest listing.\nWe can ask for file list.\nWe need to ask user.\n\n------------\n► **ANSWER**\n\nCould you provide the current file structure of the repository (e.g., a list of \nfiles and directories) so I can identify where to add the search functionality?\n\nTokens: 775 sent, 108 received.\n\nWarning: Input is not a terminal (fd=0).\n"
+    }
+  ]
+}
