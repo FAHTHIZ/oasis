@@ -1114,7 +1114,12 @@ export function buildCodexArgs(config, prompt, env = process.env) {
   // Codex 0.1xx ignores OPENAI_BASE_URL, so a gateway needs its own provider entry.
   const base = String(env.OASIS_CODEX_BASE_URL || '').trim();
   const provider = base ? ['-c', 'model_provider=bench', '-c', 'model_providers.bench.name=' + JSON.stringify('bench'), '-c', 'model_providers.bench.base_url=' + JSON.stringify(base), '-c', 'model_providers.bench.env_key=' + JSON.stringify('OPENAI_API_KEY'), '-c', 'model_providers.bench.wire_api=' + JSON.stringify('responses')] : [];
-  return ['exec', '--json', '--sandbox', 'workspace-write', '--skip-git-repo-check', ...provider, ...(config.model ? ['-m', config.model] : []), prompt];
+  // Codex 0.169 also sends two OpenAI-only tool types: its sub-agent tools as
+  // a `namespace` and the hosted `web_search`. OpenAI-compatible servers reject
+  // the whole request (OVH: HTTP 422 "unknown variant `namespace`"), so against
+  // a custom endpoint both are turned off. Benchmark tasks need neither.
+  const compat = base ? ['--disable', 'multi_agent', '-c', 'web_search=' + JSON.stringify('disabled')] : [];
+  return ['exec', '--json', '--sandbox', 'workspace-write', '--skip-git-repo-check', ...provider, ...compat, ...(config.model ? ['-m', config.model] : []), prompt];
 }
 
 function buildGeminiArgs(config, prompt) {

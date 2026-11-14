@@ -160,6 +160,14 @@ export async function runBenchmark(options, { env = process.env, runner = runEva
       // Mark trials the upstream rate-limited, so a refused request is not read as the agent's failure.
       const limited = gateway ? gateway.records.slice(before).filter((r) => r.agent === agent && r.status === 429) : [];
       if (limited.length) for (const row of result.results) { row.upstreamRateLimited = limited.length; if (limited.some((r) => r.quotaExhausted)) row.upstreamQuotaExhausted = true; }
+      // An endpoint that refused every request outright (404 for a protocol it
+      // does not serve, 422 for a request shape it cannot parse) never let the
+      // agent reach the model: that is an endpoint mismatch, not a result.
+      const calls = gateway ? gateway.records.slice(before).filter((r) => r.agent === agent) : [];
+      if (calls.length && calls.every((r) => r.status >= 400 && r.status < 500 && r.status !== 429)) {
+        const first = calls[0];
+        for (const row of result.results) if (row.status !== 'passed') row.upstreamRejected = { calls: calls.length, status: first.status, endpoint: first.endpoint, error: String(first.error || '').slice(0, 160) };
+      }
       entry.results.push(...result.results);
       entry.summary = result.summary;
       if (!options.interleave) entry.resultsPath = result.resultsPath;
@@ -180,7 +188,8 @@ export async function runBenchmark(options, { env = process.env, runner = runEva
     // An agent that never got going (not signed in, bad model, gateway down) has not
     // been measured; scoring it 0% would be misleading.
     if (!entry.results.length || entry.results.every((row) => row.error)) {
-      const reason = entry.errors[0] || (entry.results.length ? 'every trial ended in an agent error before verification (first: ' + String(entry.results[0].error).split('\n')[0].slice(0, 200) + ')' : 'no trials ran');
+      const refused = entry.results.find((row) => row.upstreamRejected);
+      const reason = entry.errors[0] || (refused ? 'the endpoint refused every request (HTTP ' + refused.upstreamRejected.status + ' on ' + refused.upstreamRejected.endpoint + ': ' + refused.upstreamRejected.error.split('\n')[0].slice(0, 120) + '), so the agent never reached the model; this is an endpoint mismatch, not a result' : '') || (entry.results.length ? 'every trial ended in an agent error before verification (first: ' + String(entry.results[0].error).split('\n')[0].slice(0, 200) + ')' : 'no trials ran');
       runs.push({ agent, name: DISPLAY[agent], skipped: reason });
       continue;
     }
@@ -227,15 +236,17 @@ export function summarize(runs, options, now = new Date(), gateway = null) {
       const rows = rowsFor(run, id);
       if (!rows.length) return [run.agent, 'not run'];
       const passed = rows.filter((row) => row.status === 'passed').length;
-      return [run.agent, (passed ? 'passed ' : 'failed ') + passed + '/' + rows.length + (rows.some((row) => row.status !== 'passed' && row.upstreamRateLimited) ? ' (upstream HTTP 429)' : '')];
+      const rejected = rows.find((row) => row.status !== 'passed' && row.upstreamRejected);
+      return [run.agent, (passed ? 'passed ' : 'failed ') + passed + '/' + rows.length + (rows.some((row) => row.status !== 'passed' && row.upstreamRateLimited) ? ' (upstream HTTP 429)' : rejected ? ' (endpoint refused every request: HTTP ' + rejected.upstreamRejected.status + ' on ' + rejected.upstreamRejected.endpoint + ')' : '')];
     }));
   }
-  const verifiedTasks = [], unverifiedTasks = [], fingerprintMismatchTasks = [], metadataMismatchTasks = [], incompleteTasks = [], rateLimitedTasks = [], taskMetadata = {};
+  const verifiedTasks = [], unverifiedTasks = [], fingerprintMismatchTasks = [], metadataMismatchTasks = [], incompleteTasks = [], rateLimitedTasks = [], rejectedTasks = [], taskMetadata = {};
   for (const id of shared) {
     const groups = completed.map((run) => rowsFor(run, id));
     if (groups.some((rows) => rows.length !== options.trials || new Set(rows.map((row) => row.trial)).size !== options.trials || rows.some((row) => !Number.isInteger(row.trial) || row.trial < 1 || row.trial > options.trials))) { incompleteTasks.push(id); continue; }
     // A failed trial whose requests the upstream refused (HTTP 429) measures the provider, not the agent.
     if (groups.some((rows) => rows.some((row) => row.status !== 'passed' && row.upstreamRateLimited))) { rateLimitedTasks.push(id); continue; }
+    if (groups.some((rows) => rows.some((row) => row.status !== 'passed' && row.upstreamRejected))) { rejectedTasks.push(id); continue; }
     const fingerprints = groups.map(fingerprintFor);
     if (fingerprints.some((value) => value === null)) { unverifiedTasks.push(id); continue; }
     if (fingerprints.some((value) => value === 'inconsistent') || new Set(fingerprints).size !== 1) { fingerprintMismatchTasks.push(id); continue; }
@@ -273,6 +284,10 @@ export function summarize(runs, options, now = new Date(), gateway = null) {
   if (fingerprintMismatchTasks.length) caveats.push(fingerprintMismatchTasks.length + ' shared task(s) had inconsistent or different fingerprints and were excluded.');
   if (metadataMismatchTasks.length) caveats.push(metadataMismatchTasks.length + ' shared task(s) had missing or conflicting category/difficulty metadata and were excluded.');
   if (rateLimitedTasks.length) caveats.push(rateLimitedTasks.length + ' shared task(s) were excluded because an agent failed a trial while the upstream was refusing its requests with HTTP 429: ' + rateLimitedTasks.join(', ') + '.');
+  if (rejectedTasks.length) {
+    const who = [...new Set(completed.flatMap((run) => run.results.filter((row) => rejectedTasks.includes(row.taskId) && row.status !== 'passed' && row.upstreamRejected).map((row) => run.name + ' (HTTP ' + row.upstreamRejected.status + ' on ' + row.upstreamRejected.endpoint + ')')))];
+    caveats.push(rejectedTasks.length + ' shared task(s) were excluded because the endpoint refused every request an agent sent, so it never reached the model: ' + who.join(', ') + '. This measures endpoint compatibility, not the agent: ' + rejectedTasks.join(', ') + '.');
+  }
   if (Object.keys(partialTasks).length) caveats.push(Object.keys(partialTasks).length + ' task(s) were not run by every completed agent and are not scored: ' + Object.keys(partialTasks).join(', ') + '. Their outcomes are listed under Task coverage.');
   if (incompleteTasks.length) caveats.push(incompleteTasks.length + ' shared task(s) did not have exactly ' + options.trials + ' distinct trial rows for every completed agent and were excluded.');
   const completedAgents = completed.map((run) => run.agent);
@@ -295,7 +310,7 @@ export function summarize(runs, options, now = new Date(), gateway = null) {
   else if (!sameProviderVerified) caveats.push('Every scored agent was served model ' + scoredModels[0][0] + ', but the gateway could not confirm one upstream provider for all of them (missing or different provider fields); serving stacks can differ in quantization and limits.');
   if (!options.router && !options.upstream) caveats.push('No shared gateway was configured. Model/provider differences mean results describe each product as configured, not a controlled same-model harness comparison.');
   if (distinctModels.length !== 1 || options.agents.some((agent) => !requestedModels[agent])) caveats.push('The selected agents do not all have one identical, explicitly requested model ID.');
-  return { date: now.toISOString(), oasisVersion: oasisVersion(), requestedModels, router: options.router ? new URL(options.router).host : options.upstream ? new URL(options.upstream).host + ' (recorded)' : null, sameModelVerified, servedModel: sameModelVerified ? scoredModels[0][0] : null, gateway, trialsPerTask: options.trials, requestedAgents: options.agents, sharedTaskIds: shared, sharedTasks: verifiedTasks, excludedTasks: [...new Set([...unverifiedTasks, ...fingerprintMismatchTasks, ...metadataMismatchTasks, ...incompleteTasks, ...rateLimitedTasks])].sort(), unverifiedTasks, fingerprintMismatchTasks, metadataMismatchTasks, incompleteTasks, rateLimitedTasks, partialTasks, taskMetadata, caveats, agents };
+  return { date: now.toISOString(), oasisVersion: oasisVersion(), requestedModels, router: options.router ? new URL(options.router).host : options.upstream ? new URL(options.upstream).host + ' (recorded)' : null, sameModelVerified, servedModel: sameModelVerified ? scoredModels[0][0] : null, gateway, trialsPerTask: options.trials, requestedAgents: options.agents, sharedTaskIds: shared, sharedTasks: verifiedTasks, excludedTasks: [...new Set([...unverifiedTasks, ...fingerprintMismatchTasks, ...metadataMismatchTasks, ...incompleteTasks, ...rateLimitedTasks, ...rejectedTasks])].sort(), unverifiedTasks, fingerprintMismatchTasks, metadataMismatchTasks, incompleteTasks, rateLimitedTasks, rejectedTasks, partialTasks, taskMetadata, caveats, agents };
 }
 export function renderSummary(summary) {
   const lines = [];
