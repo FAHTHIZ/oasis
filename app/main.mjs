@@ -20,7 +20,7 @@ import { PLUGINS, getPlugin, pluginsFor, suggestPlugins } from './core/plugins.m
 import { detectRuntime, RuntimeAgent, RuntimeWorkspace, tokenFromPaste, saveRuntimeToken, forgetRuntimeToken, deviceRemembered } from './core/runtime.mjs';
 import { APP_KEYBOARD_SHORTCUTS, searchAppCommands } from './core/command-palette.mjs';
 import { normalizeTaskProgress } from './core/task-progress.mjs';
-import { RuntimeTerminal, loadXterm } from './core/terminal.mjs';
+import { RuntimeTerminal, loadXterm, wrapWords } from './core/terminal.mjs';
 import { suggestToken, rankSuggestions, applySuggestion } from './core/composer-suggest.mjs';
 import { mcpServerFromForm, describeMcpServer } from './core/mcp.mjs';
 import { speakable, isStopPhrase, turnDetector, rmsLevel, lastReply } from './core/voice-mode.mjs';
@@ -4554,13 +4554,16 @@ async function openTerminal() {
     if (await terminal.attach(saved)) { setTerminalRunning(true); $('terminalStatus').textContent = 'Reconnected · running'; void terminal.resize(xterm.cols, xterm.rows); }
     else sessionStorage.removeItem('oasis.terminal');
   }
-  if (!(terminal && terminal.running)) terminalIdleHint();
+  if (!(terminal && terminal.running)) requestAnimationFrame(() => { if (fitTerminal) fitTerminal(); terminalIdleHint(); });
+}
+function terminalNote(text) {
+  for (const row of wrapWords(text, xterm.cols)) xterm.writeln('\x1b[2m' + row + '\x1b[0m');
 }
 let terminalHintShown = false;
 function terminalIdleHint() {
-  if (terminalHintShown || !xterm) return;
+  if (terminalHintShown || !xterm || (terminal && terminal.running)) return;
   terminalHintShown = true;
-  xterm.writeln('\x1b[2mPress Enter or select Start terminal to open a shell in this project.\x1b[0m');
+  terminalNote('Press Enter or select Start terminal to open a shell in this project.');
 }
 function setTerminalRunning(running) {
   $('terminalStart').hidden = running;
@@ -4598,7 +4601,8 @@ function ensureTerminal() {
         setTerminalRunning(false);
         if (lost) return; // The shell may still be running; reopening the tab reattaches.
         sessionStorage.removeItem('oasis.terminal');
-        xterm.writeln('\r\n\x1b[2m[process exited] Press Enter to start a new shell.\x1b[0m');
+        xterm.writeln('');
+        terminalNote('[process exited] Press Enter to start a new shell.');
       }
     });
   }
