@@ -132,7 +132,7 @@ export async function configureProvider(root = process.cwd(), options = {}) {
             stdout.write((detected.available ? await ollamaPullHint() : 'Install/start Ollama from https://ollama.com/download, then press Enter here.') + '\n');
             const answer = (await rl.question('Enter a model ID to continue, press Enter to check again, or type later to stop: ')).trim();
             if (/^(?:later|skip|cancel)$/i.test(answer)) {
-              throw new Error('Local model setup was stopped. No provider settings were changed. Install and start Ollama, then run oasis setup again.');
+              throw new Error('Local model setup was stopped. ' + (detected.available ? 'Pull a model with ollama pull first' : 'Install and start Ollama first'));
             }
             if (answer) {
               model = answer;
@@ -336,7 +336,7 @@ export async function ensureModelProviderSetup(root, options = {}) {
   try {
     await configureProvider(root, { defaultPreset: preset, skipPresetPrompt: true, chooseKeyProvider: preset === 'openai' });
   } catch (error) {
-    stdout.write('Guided setup did not complete: ' + String(error && error.message || error) + '. Nothing new was saved unless the provider test succeeded. Run oasis setup to try again.\n');
+    stdout.write('Guided setup did not complete: ' + String(error && error.message || error).replace(/[.\s]+$/, '') + '. Nothing new was saved unless the provider test succeeded. Run oasis setup to try again.\n');
   }
   try { return Boolean((await loadConfig()).configured); } catch { return false; }
 }
