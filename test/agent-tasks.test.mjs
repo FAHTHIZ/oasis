@@ -7,7 +7,7 @@ import { execFileSync } from 'node:child_process';
 import { createServer } from 'node:http';
 import { createSession, runAgentTurn, closeSession } from '../src/agent.mjs';
 import { runBuiltinCommand } from '../src/slash.mjs';
-import { agentRegistry, registerAgent, sendTeamMessage, drainInbox, createAgentTeam, listAgentTeams, shutdownAgentTeam, AGENT_TOOL_NAMES, agentEvents, recordAgentEvent, restoreAgentHistory, summarizeAgent, stopAgent, stopAllAgents } from '../src/agent-tasks.mjs';
+import { agentRegistry, registerAgent, sendTeamMessage, drainInbox, takeQueuedText, createAgentTeam, listAgentTeams, shutdownAgentTeam, AGENT_TOOL_NAMES, agentEvents, recordAgentEvent, restoreAgentHistory, summarizeAgent, stopAgent, stopAllAgents } from '../src/agent-tasks.mjs';
 import { runSharedTaskTool } from '../src/shared-tasks.mjs';
 import { isCommitIntegrated } from '../src/worktrees.mjs';
 import { BUILTIN_AGENTS, taskToolDefinition } from '../src/subagents.mjs';
@@ -899,4 +899,22 @@ test('agent lifecycle observers receive structured events without affecting orch
   assert.equal(record.child.ptyManager, undefined, 'a resumed worker receives a fresh PTY manager');
   assert.doesNotThrow(() => recordAgentEvent(session, 'agent.completed', { agentId: record.id, description: record.description }));
   assert.equal(agentEvents(session).events.length, 3);
+});
+
+// The inbox was emptied and its text cut at 20,000 characters, so later messages were lost.
+test('queued messages past one delivery wait for the next instead of being lost', () => {
+  const session = { inbox: [] };
+  for (let i = 0; i < 5; i++) session.inbox.push({ text: 'message ' + i + ' ' + 'x'.repeat(30_000) + ' end ' + i });
+  const first = drainInbox(session);
+  assert.match(first, /end 0[\s\S]*end 2/);
+  assert.doesNotMatch(first, /end 3/);
+  assert.match(first, /\[2 more queued messages will arrive with the next request\.\]/);
+  const second = drainInbox(session);
+  assert.match(second, /end 3[\s\S]*end 4/);
+  assert.equal(drainInbox(session), '');
+  const huge = [{ text: 'START' + 'y'.repeat(150_000) + 'FINISH' }];
+  const one = takeQueuedText(huge, (entry) => entry.text);
+  assert.ok(one.length <= 100_000);
+  assert.match(one, /^START[\s\S]*characters of this message left out of the middle[\s\S]*FINISH$/);
+  assert.equal(huge.length, 0);
 });
