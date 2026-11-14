@@ -20,7 +20,7 @@
 import path from 'node:path';
 import { existsSync } from 'node:fs';
 import { readFile, stat } from 'node:fs/promises';
-import { runHooks, hasHooks } from './hooks.mjs';
+import { runHooks, hasHooks, capHookText } from './hooks.mjs';
 import { claimIssue, recordCheck as recordClaimCheck, appendUnverifiedNotice, failedEditIssue, appendFailedEditNotice } from './claim-check.mjs';
 import { correctionViolations, correctionNudge } from './standing-corrections.mjs';
 import { extractFollowups, recordFollowups, followupsEnabled } from './followups.mjs';
@@ -323,7 +323,7 @@ export async function runCompletionGates(turn, host) {
     if (stop.blocked && !stop.stopContinuation) {
       g.stopHookContinuations++;
       if (text && options.onText) await emitDisplayText(session, options, text);
-      session.messages.push({ role: 'user', content: 'A ' + stopEvent + ' hook asked you to continue before finishing:\n' + stop.reason.slice(0, 4000) });
+      session.messages.push({ role: 'user', content: 'A ' + stopEvent + ' hook asked you to continue before finishing:\n' + capHookText(stop.reason) });
       return CONTINUE;
     }
   }
@@ -334,7 +334,7 @@ export async function runCompletionGates(turn, host) {
     if (idle.blocked && !idle.stopContinuation) {
       g.stopHookContinuations++;
       if (text && options.onText) await emitDisplayText(session, options, text);
-      session.messages.push({ role: 'user', content: 'A TeammateIdle hook asked you to keep working:\n' + idle.reason.slice(0, 4000) });
+      session.messages.push({ role: 'user', content: 'A TeammateIdle hook asked you to keep working:\n' + capHookText(idle.reason) });
       return CONTINUE;
     }
   }
