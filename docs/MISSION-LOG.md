@@ -3,6 +3,14 @@
 A short, dated record of changes, tests, benchmark results, blockers and known
 weaknesses. Newest first. Detailed user-facing notes go in the CHANGELOG.
 
+## 2026-11-14 (fault-injection pass on the agent loop)
+
+Probed `runAgentTurn` against a local SSE server that misbehaves on purpose: socket reset mid-reply, 500 then 200, 429 with `retry-after`, a stalled stream, an empty `choices` array, unknown tools, truncated tool arguments with `finish_reason: length`, an endlessly repeated tool call, context overflow, an HTML page with status 200, a path outside the workspace, cancellation during a running command. Those were already handled. Three were not:
+
+- A single non-JSON SSE data event (a gateway that cuts or interleaves a chunk) failed the whole turn. It is now an `OASIS_STREAM_INTERRUPTED` restart like a dropped connection. Test: `test/stream-corrupt-event.test.mjs`.
+- Parallel calls that reuse one id (index 0 and 1, both id `x`) were merged into one `read_filelist_files` call with mixed arguments. A delta that names a new call at another index now opens its own call, and duplicate ids get a `_2` suffix in both streamed and non-streamed replies so each result answers its own call. Test: `test/stream-duplicate-call-ids.test.mjs`.
+- Text stopped by a provider content filter (`finish_reason: content_filter` / `error`) was returned as a complete answer. It now ends with a note that it may be incomplete. Test: `test/provider-stop-partial.test.mjs`.
+
 ## 2026-11-12 (browser-only chats in the session store)
 
 - Browser-only chats (IndexedDB) are copied to the computer's session store when the app connects to `oasis web`: `app/core/chat-sync.mjs` sends each changed chat to the new `POST /api/sessions/import`, which keeps one session per browser chat (fixed id from the workspace and the chat key) and only its text turns. They then show under "Other devices and terminal" everywhere. Tests: `test/web-import-browser-chats.test.mjs` (real server with token; sync logic with a fake store).
