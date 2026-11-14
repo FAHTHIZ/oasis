@@ -92,9 +92,9 @@ test('session save/load preserves bounded agent reports without persisting child
   assert.equal(Object.hasOwn(restored.agents[0], 'child'), false);
 });
 
-test('a turn longer than the saved-message cap still saves a resumable transcript', async (t) => {
+test('a 2,600-step turn is saved whole and resumable', async (t) => {
   const { root, env } = await fixture(t);
-  // A 2,600-step turn yields more than the 5,000-message cap with no user message in its tail.
+  // More than 5,000 messages with no user message in the tail: once cut to a count cap, now kept whole.
   const messages = [{ role: 'system', content: 'system' }, { role: 'user', content: 'earlier task' }, { role: 'assistant', content: 'done' }, { role: 'user', content: 'refactor everything' }];
   for (let i = 0; i < 2600; i++) {
     messages.push({ role: 'assistant', content: null, tool_calls: [{ id: 'call_' + i, type: 'function', function: { name: 'read_file', arguments: '{}' } }] });
@@ -102,10 +102,9 @@ test('a turn longer than the saved-message cap still saves a resumable transcrip
   }
   const saved = await saveSession({ root, messages, config: {} }, { env });
   const loaded = await loadSession(root, saved.id, { env });
-  assert.ok(loaded.messages.length <= 5000);
+  assert.equal(loaded.messages.length, messages.length);
   assert.equal(loaded.messages[0].role, 'system');
-  assert.deepEqual(loaded.messages[1], { role: 'user', content: 'refactor everything' }, 'the task that the kept tail belongs to is kept');
-  assert.equal(loaded.messages[2].role, 'assistant');
+  assert.deepEqual(loaded.messages[3], { role: 'user', content: 'refactor everything' });
   assert.deepEqual(loaded.messages.at(-1), messages.at(-1));
   // Every kept tool result answers a kept tool call, so providers accept the resume.
   const calls = new Set(loaded.messages.flatMap((m) => (m.tool_calls || []).map((c) => c.id)));
@@ -147,4 +146,19 @@ test('a session over the byte cap is saved with its oldest exchanges dropped', a
   assert.equal(loaded.messages[0].role, 'system');
   assert.equal(loaded.messages[1].role, 'user');
   assert.deepEqual(loaded.messages.at(-1), messages.at(-1), 'the newest exchange is kept');
+});
+
+test('a long session keeps its whole history: no message-count cap below the byte cap', async (t) => {
+  const { root, env } = await fixture(t);
+  const messages = [{ role: 'system', content: 'system' }];
+  for (let i = 0; i < 4000; i++) {
+    messages.push({ role: 'user', content: 'step ' + i });
+    messages.push({ role: 'assistant', content: null, tool_calls: [{ id: 'c' + i, type: 'function', function: { name: 'read_file', arguments: '{}' } }] });
+    messages.push({ role: 'tool', tool_call_id: 'c' + i, content: 'ok ' + i });
+  }
+  const session = { root, messages, config: { model: 'fixture' } };
+  await saveSession(session, { env });
+  const loaded = await loadSession(root, session.sessionId, { env });
+  assert.equal(loaded.messages.length, messages.length);
+  assert.equal(loaded.messages[1].content, 'step 0');
 });

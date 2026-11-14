@@ -18,7 +18,9 @@ import { recoveredToolContent } from './tool-results.mjs';
 // these caps only stop runaway files; a session over the byte cap is saved
 // with its oldest exchanges dropped rather than not saved at all.
 export const MAX_SESSION_BYTES = 64 * 1024 * 1024;
-const MAX_MESSAGES = 5000;
+// Message count is bounded by the byte cap; a count cap silently dropped the
+// start of long sessions (a 2,500-tool-call session is 5,000 messages).
+const MAX_MESSAGES = 1000000;
 const MAX_TOOL_CALLS_PER_MESSAGE = 512;
 
 export function workspaceSessionKey(root) {
@@ -325,11 +327,13 @@ export async function saveSession(session, options = {}) {
     )
   };
   let body = JSON.stringify(payload, null, 2) + '\n';
-  // Over the byte cap: keep the most recent exchanges that fit.
+  // Indentation can be a third of a large session: drop it before any history.
+  if (Buffer.byteLength(body, 'utf8') > MAX_SESSION_BYTES) body = JSON.stringify(payload) + '\n';
+  // Still over the byte cap: keep the most recent exchanges that fit.
   while (Buffer.byteLength(body, 'utf8') > MAX_SESSION_BYTES && messages.length > 3) {
     messages = validateMessages(boundedHistory(complete, Math.max(3, Math.floor(messages.length / 2))));
     payload.messages = messages;
-    body = JSON.stringify(payload, null, 2) + '\n';
+    body = JSON.stringify(payload) + '\n';
   }
   if (Buffer.byteLength(body, 'utf8') > MAX_SESSION_BYTES) throw new Error('Session is too large to save safely. Start a fresh session or disable persistence.');
   const directory = getSessionDirectory(session.root, env);
