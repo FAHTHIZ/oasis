@@ -33,3 +33,20 @@ test('a huge final reply keeps its head and tail for the Stop hook', () => {
   assert.match(out, /characters omitted/);
   assert.equal(stopHookMessage('short'), 'short');
 });
+
+test('a prompt Stop hook sees the end of a reply too long for its payload', async () => {
+  const { runHooks, fitPayloadJson } = await import('../src/hooks.mjs');
+  const reply = 'Start.\n' + 'line of work "quoted"\n'.repeat(3000) + 'Tests: 12 pass. DONE';
+  let seen = '';
+  const verdict = await runHooks('Stop', { hook_event_name: 'Stop', last_assistant_message: reply }, {
+    hooks: { Stop: [{ hooks: [{ type: 'prompt', prompt: 'Judge: $ARGUMENTS' }] }] },
+    root: os.tmpdir(),
+    evaluatePrompt: async ({ prompt }) => { seen = prompt; return '{"ok": true}'; }
+  });
+  assert.ok(verdict);
+  assert.match(seen, /Tests: 12 pass\. DONE/);
+  const json = seen.slice('Judge: '.length);
+  assert.ok(json.length <= 30000);
+  assert.match(JSON.parse(json).last_assistant_message, /characters omitted[\s\S]*DONE$/);
+  assert.equal(fitPayloadJson({ a: 'short' }, 1000), JSON.stringify({ a: 'short' }, null, 2));
+});
