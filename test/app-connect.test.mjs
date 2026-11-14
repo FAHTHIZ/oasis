@@ -462,6 +462,36 @@ test('smartConnect: a pasted FreeLLMAPI key connects to the local gateway, timed
   assert.ok(calls.every((c) => /:3001\//.test(c.url)), 'the key is only sent to the gateway');
 });
 
+test('smartConnect: FreeLLMAPI alias slots and models it cannot serve do not become the main model or backups', async () => {
+  const key = 'freellmapi-' + 'a1b2c3d4'.repeat(6);
+  const tools = ['temperature', 'max_tokens', 'tools', 'tool_choice'];
+  // The shape FreeLLMAPI's /v1/models returned on 14 November 2026.
+  const models = [
+    { id: 'claude-opus-4-5', owned_by: 'freellmapi', name: 'Opus slot (auto-routed to a free model)', available: true, unavailable_reason: null },
+    { id: 'claude-sonnet-4-5', owned_by: 'freellmapi', name: 'Sonnet slot (auto-routed to a free model)', available: true, unavailable_reason: null },
+    { id: 'gpt-5.6-luna', owned_by: 'freellmapi', name: 'GPT-5.6 Luna', available: false, unavailable_reason: 'no_key', execution_status: 'needsKey', supported_parameters: tools },
+    { id: 'qwen3.8-max', owned_by: 'freellmapi', name: 'Qwen3.8 Max', available: false, unavailable_reason: 'no_key', execution_status: 'needsKey', supported_parameters: tools },
+    { id: 'gpt-oss-120b', owned_by: 'freellmapi', name: 'GPT Oss 120B', available: true, execution_status: 'exhausted', supported_parameters: tools },
+    { id: 'qwen3.5-397b', owned_by: 'freellmapi', name: 'Qwen3.5 397B', available: true, execution_status: 'ready', supported_parameters: tools },
+    { id: 'llama-3.3-70b', owned_by: 'freellmapi', name: 'Llama 3.3 70B', available: true, execution_status: 'ready', supported_parameters: tools }
+  ];
+  const tested = [];
+  const { fetchImpl } = fakeFetch([
+    [/:3001\/v1\/models$/, () => ({ data: models })],
+    [/:3001\/v1\/chat\/completions$/, (url, options) => { tested.push(JSON.parse(options.body).model); return toolReply; }]
+  ]);
+  const result = await smartConnect('http://localhost:3001/v1 ' + key, { fetchImpl, retryDelayMs: 0 });
+  assert.equal(result.model, 'qwen3.5-397b', 'a named, available model beats an alias slot named after a model it is not');
+  assert.ok(!result.connection.models.includes('gpt-5.6-luna') && !result.connection.models.includes('qwen3.8-max'), 'models with no upstream key are dropped');
+  const order = result.connection.models;
+  assert.ok(order.indexOf('llama-3.3-70b') < order.indexOf('gpt-oss-120b'), 'a used-up free tier goes behind ready models');
+  assert.ok(order.indexOf('gpt-oss-120b') < order.indexOf('claude-opus-4-5'), 'alias slots go last');
+  assert.ok(!tested.includes('gpt-5.6-luna') && !tested.includes('qwen3.8-max'));
+  const { runtimeConfigFromConnection } = await import('../src/provider-connect.mjs');
+  const backups = runtimeConfigFromConnection(result).fallbackModel.split(',').filter(Boolean);
+  assert.ok(!backups.some((id) => ['gpt-5.6-luna', 'qwen3.8-max'].includes(id)), 'unservable models never become backups: ' + backups);
+});
+
 test('smartConnect: a rejected key at an address says so instead of asking for a key', async () => {
   const key = 'sk-' + 'a1b2c3d4'.repeat(4);
   const { fetchImpl } = fakeFetch([[/:20128\//, () => ({ status: 401, body: { error: { message: 'Invalid API key' } } })]]);

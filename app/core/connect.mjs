@@ -287,24 +287,39 @@ function modelHints(body) {
   const list = Array.isArray(body) ? body : body && (body.data || body.models || body.result || []);
   const paid = new Set();
   const noTools = new Set();
+  // Gateways (FreeLLMAPI) mark models they cannot serve right now: no
+  // upstream key at all (skip), or a free tier used up for now (try later).
+  const unavailable = new Set();
+  const exhausted = new Set();
+  // Alias slots ("claude-opus-4-5": "Opus slot (auto-routed to a free
+  // model)") are not the model their name suggests; prefer named models.
+  const alias = new Set();
   for (const item of Array.isArray(list) ? list : []) {
     if (!item || typeof item !== 'object') continue;
     const id = String(item.id || item.name || item.model || '').replace(/^models\//, '').trim();
     if (!id) continue;
+    if (item.available === false || /^(no_?key|needs_?key|disabled)$/i.test(String(item.unavailable_reason || '')) || /^needs_?key$/i.test(String(item.execution_status || ''))) unavailable.add(id);
+    if (/^(exhausted|rate_?limited|cooldown)$/i.test(String(item.execution_status || ''))) exhausted.add(id);
+    if (typeof item.name === 'string' && /auto-?routed|\balias\b|\bslot\b/i.test(item.name)) alias.add(id);
     const tier = String(item.tier || item.plan || '').toLowerCase();
     if (/^(pro|paid|premium|enterprise)$/.test(tier) || item.usage_based_only === true || item.requires_key === true) paid.add(id);
     const caps = item.capabilities && typeof item.capabilities === 'object' ? item.capabilities : {};
     if (item.tools_calling === false || caps.tools === false || caps.function_calling === false
       || (Array.isArray(item.supported_parameters) && item.supported_parameters.length && !item.supported_parameters.includes('tools'))) noTools.add(id);
   }
-  return { paid, noTools };
+  return { paid, noTools, unavailable, exhausted, alias };
 }
 
-/** Moves models a keyless connection cannot use, then models without tools, to the end. */
+/**
+ * Drops models the server says it cannot serve, then moves models a keyless
+ * connection cannot use, models without tools, alias slots and models whose
+ * free tier is used up for now towards the end, in that order of weight.
+ */
 function orderByHints(ranked, hints, { keyless = false } = {}) {
   if (!hints) return ranked;
-  const bucket = (id) => (keyless && hints.paid.has(id) ? 2 : 0) + (hints.noTools.has(id) ? 1 : 0);
-  return ranked.map((id, index) => ({ id, index, rank: bucket(id) })).sort((a, b) => a.rank - b.rank || a.index - b.index).map((entry) => entry.id);
+  const has = (set, id) => Boolean(set && set.has(id));
+  const bucket = (id) => (keyless && hints.paid.has(id) ? 8 : 0) + (hints.noTools.has(id) ? 4 : 0) + (has(hints.alias, id) ? 2 : 0) + (has(hints.exhausted, id) ? 1 : 0);
+  return ranked.filter((id) => !has(hints.unavailable, id)).map((id, index) => ({ id, index, rank: bucket(id) })).sort((a, b) => a.rank - b.rank || a.index - b.index).map((entry) => entry.id);
 }
 
 /**
@@ -507,7 +522,7 @@ async function lockIn(connection, ranked, { fetchImpl, onStatus, tries = 4, pref
   if (noTools) return { model: noTools, toolCalling: false, failures, unusable };
   if (!failures.length) throw new ProviderError('This connection has no chat models.');
   if (failures.every((failure) => failure.kind === 'needs-key')) {
-    throw new ProviderError('This server lists its models without a key but needs an API key to use them (' + failures.length + ' tried). Paste the key together with the address.', { status: 401 });
+    throw new ProviderError('This server lists its models without a key but needs an API key to use them (' + failures.length + ' tried). Paste the address and the key together, separated by a space.', { status: 401 });
   }
   const allCredits = failures.every((failure) => failure.kind === 'credits');
   const lines = failures.slice(0, 8).map((failure) => '  ' + failure.model + ': ' + briefFailure(failure.reason, failure.status));
@@ -676,7 +691,7 @@ async function probeEndpoint(raw, { apiKey = '', fetchImpl = globalThis.fetch.bi
       const provider = knownPreset ? knownPreset[0] : /:1234$/.test(origin) ? 'lmstudio' : /:8080$/.test(origin) ? 'llamacpp' : /:20128$/.test(origin) ? 'omniroute' : /:3001$/.test(origin) ? 'freellmapi' : 'custom';
       const label = knownPreset ? knownPreset[1].label : provider === 'custom' ? url.host : PRESETS[provider].label;
       // A gateway on localhost forwards to the cloud: time and label it as cloud.
-      return makeConnection(provider, { baseURL: attempt.base, apiKey, local: local && !GATEWAYS.has(provider), models: orderByHints(rankModels(ids), ids.hints, { keyless: !apiKey }), skipModels: ids.hints ? [...ids.hints.noTools, ...(apiKey ? [] : ids.hints.paid)] : [], label });
+      return makeConnection(provider, { baseURL: attempt.base, apiKey, local: local && !GATEWAYS.has(provider), models: orderByHints(rankModels(ids), ids.hints, { keyless: !apiKey }), skipModels: ids.hints ? [...ids.hints.noTools, ...(ids.hints.unavailable || []), ...(apiKey ? [] : ids.hints.paid)] : [], label });
     } catch (error) {
       // A gateway can guard an Ollama-style alias (/api/tags) as well as /v1, so an
       // auth failure on one probe must not stop the probes that carry the key.
@@ -687,7 +702,7 @@ async function probeEndpoint(raw, { apiKey = '', fetchImpl = globalThis.fetch.bi
   if (authError) {
     throw new ProviderError(apiKey
       ? url.host + ' did not accept that key. Check it was copied whole and is allowed to list models.'
-      : url.host + ' needs an API key. Paste the key together with the address.', { status: authError.status });
+      : url.host + ' needs an API key. Paste the address and the key together, separated by a space: ' + url.origin + url.pathname.replace(/\/$/, '') + ' YOUR_KEY', { status: authError.status });
   }
   const reason = lastError instanceof TypeError || (lastError && lastError.name === 'AbortError')
     ? (local ? 'Nothing answered there. Is the server running, and does it allow browser apps? (Ollama: OLLAMA_ORIGINS=* ollama serve)' : 'Nothing answered there, or the server does not allow browser apps (CORS).')

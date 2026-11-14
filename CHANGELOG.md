@@ -4,6 +4,9 @@ User-facing change history grouped by package version. A version heading does no
 
 ## Unreleased
 
+- Smart connect reads FreeLLMAPI's model metadata. Models the gateway cannot serve (`available: false`, such as `no_key`) are no longer tried or saved as backups. Models with a used-up free tier go behind ready ones, and alias slots go last. Before, pasting a FreeLLMAPI key saved `claude-opus-4-5` (an alias the gateway routes to a free model), with two unservable backups. Now a named model (`qwen3.5-397b` on 14 November 2026) is chosen.
+- The browser connect panel clears its "Checking…" line when a connection fails. The missing-key message now shows the exact format: `ADDRESS YOUR_KEY`.
+
 - A failed turn's `OASIS error:` message is word-wrapped to the terminal width. Before, the terminal split words across rows ("ref" / "used").
 
 - `/resume` and `oasis -c` now show which conversation came back straight away: its title, message count, age, and the last request and reply. Before, nothing appeared until the next message, and the notice broke the timestamp mid-word.
