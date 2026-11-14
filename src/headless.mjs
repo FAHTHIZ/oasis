@@ -190,6 +190,7 @@ export async function runHeadless(options) {
   };
   const denied = [];
   let session = null;
+  let toolCallsAtStart = 0;
   let result = null;
   let error = null;
   const usage = { input_tokens: 0, output_tokens: 0, total_tokens: 0 };
@@ -209,6 +210,7 @@ export async function runHeadless(options) {
     const hookObserver = outputFormat === 'stream-json' || onEvent ? (event) => { if (includeHookEvents || ['SessionStart', 'Setup'].includes(event.hook_event)) emit({ type: 'system', ...event, session_id: session && session.sessionId || null }); } : null;
     session = await createSession({ root, config, restore: restored, env, ...sessionOptions, ...(hookObserver ? { onHookEvent: hookObserver } : {}) });
     session.headless = true;
+    toolCallsAtStart = Number(session.toolCallsThisSession || 0);
     // Name a saved run up front, as Claude Code does: the init event and every
     // later event then carry the id a client needs for --resume, instead of
     // null until the end-of-run save.
@@ -532,7 +534,9 @@ export async function runHeadless(options) {
     session_id: sessionId,
     num_turns: requests,
     duration_ms: Date.now() - started,
-    tool_calls: result ? Number(result.toolCalls || 0) : 0,
+    // The session counter covers every turn of this run (goal, steering and
+    // schema-retry turns) and still counts when an error or SIGINT stopped it.
+    tool_calls: Math.max(result ? Number(result.toolCalls || 0) : 0, session ? Number(session.toolCallsThisSession || 0) - toolCallsAtStart : 0),
     usage,
     total_cost_usd: Number(costUsd.toFixed(6)),
     ...(costKnown ? {} : { cost_known: false }),
