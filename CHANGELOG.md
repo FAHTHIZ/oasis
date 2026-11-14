@@ -4,6 +4,7 @@ User-facing change history grouped by package version. A version heading does no
 
 ## Unreleased
 
+- Earlier images stay in the conversation. Only images from the last 4 messages were resent, so a fifth screenshot in a debugging session made the model lose the first one, and each drop broke the prompt cache. Oasis now keeps the newest 20 images, up to 24 MiB of image data, which fits the provider request limits.
 - A reply stream that drops mid-response is now restarted up to 5 times (was 2), as Codex does, with a growing pause between tries. `OASIS_STREAM_MAX_RETRIES` (0-20) changes the count. A stream that goes silent is still restarted at most twice, since each stall already waited a full idle window.
 - One model message can now run up to 64 tool calls (was 16). Wide read batches went past 16, and the extra calls came back as "Not executed", so the model spent another step asking for them again. At most 10 read-only calls still run at once.
 - Long replies now stream in full. The live stream stopped at 24,000 characters, so a long answer (a whole file, a long report) showed cut off in the CLI, over ACP (Zed and other editors) and in the browser app. Streaming now runs to 1,000,000 characters, and the CLI and ACP append any remainder from the final reply.
