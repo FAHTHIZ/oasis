@@ -2710,6 +2710,216 @@ async function runAgentTurnWithTelemetry(session, prompt, options = {}) {
 // What the completion gates may call back into (see completion-gates.mjs).
 const COMPLETION_HOST = Object.freeze({ emitDisplayText, pruneHistory, recordSessionEvent, hookOptions, availableToolNames });
 
+// Records each tool call's result in the conversation, in the model's order: output
+// limits, guards and gates, verification evidence, escalation and loop checks.
+// Reassigned turn state (tokens, last outcome, loop break, escalation, edit
+// epoch) is carried on `turn` and read back by the caller.
+async function applyToolResults(session, options, turn) {
+  const { recentOutcomes, escalation, verification, claimState, gates, failedCommandRuns, succeededCommands, persistentFailures, step, calls, outputs } = turn;
+  for (const call of calls) {
+    const item = outputs.get(call.id);
+    const name = call.function && call.function.name;
+    const result = item && item.result;
+    if (item) {
+      const args = safeToolArguments(call.function && call.function.arguments);
+      const outcome = JSON.stringify({ name, args, content: String(item.content || '') });
+      if (turn.lastToolOutcome && turn.lastToolOutcome.signature === outcome) {
+        // Several identical calls in one parallel batch are not repeated attempts.
+        // Only count a repeated outcome again when it recurs in a later model step.
+        if (turn.lastToolOutcome.step !== step) {
+          turn.lastToolOutcome.count += 1;
+          turn.lastToolOutcome.step = step;
+        }
+      } else {
+        turn.lastToolOutcome = { signature: outcome, count: 1, name, step };
+      }
+      if (turn.lastToolOutcome.count >= 3) {
+        turn.loopBreakMessage = 'I’m stuck: the same ' + turn.lastToolOutcome.name +
+          ' tool call with the same inputs produced the same result 3 times. I stopped instead of repeating it again. I need to try a different approach or get your guidance.';
+      }
+      const seenAt = (recentOutcomes.get(outcome) || []).filter((seenStep) => seenStep > step - CYCLE_WINDOW_STEPS);
+      if (seenAt[seenAt.length - 1] !== step) seenAt.push(step);
+      recentOutcomes.set(outcome, seenAt);
+      if (seenAt.length >= CYCLE_HALT_AT && !turn.loopBreakMessage) {
+        turn.loopBreakMessage = 'I’m stuck: I kept repeating the same ' + name + ' call with the same inputs and getting the same result (' + seenAt.length + ' times in the last ' + CYCLE_WINDOW_STEPS + ' steps, with no file changes in between). I stopped instead of going round in circles. I need to try a different approach or get your guidance.';
+      } else if (seenAt.length === CYCLE_WARN_AT && seenAt[seenAt.length - 1] === step && typeof item.content === 'string' && !item.cycleWarned) {
+        item.cycleWarned = true;
+        item.content += '\n\n<system-reminder>You have now made this exact ' + name + ' call ' + seenAt.length + ' times in the last few steps and got the same result each time, with no file changes in between. Repeating it will not tell you anything new. Use what you already have: make the change, try a different approach, or give your answer.</system-reminder>';
+      }
+      // Same failing command again and again with nothing changed in between
+      // (outputs differ by timestamps, so the identical-outcome check misses it).
+      const commandText = RETRY_TRACKED_COMMANDS.has(name) ? [args.command].concat(Array.isArray(args.args) ? args.args : []).join(' ') : '';
+      if ((FILE_EDITING_TOOL_NAMES.has(name) || (commandText && scriptedEditKind(commandText))) && result && typeof result === 'object' && !result.error && result.approved !== false && result.blocked !== true) { failedCommandRuns.clear(); recentOutcomes.clear(); turn.editEpoch++; }
+      if (name === 'todo_write' && result && typeof result === 'object' && !result.error) gates.todosWrittenThisTurn = true;
+      else if (RETRY_TRACKED_COMMANDS.has(name) && result && typeof result === 'object' && !result.background && !result.running) {
+        const key = name + ' ' + JSON.stringify({ command: args.command, args: args.args, cwd: args.cwd });
+        const failed = (Number.isInteger(result.exitCode) && result.exitCode !== 0) || result.timedOut === true;
+        // A denied or blocked call never started a process, so it neither "ran
+        // successfully" nor repeated any side effect.
+        const ran = result.approved !== false && result.blocked !== true && !result.error;
+        if (!failed && ran && typeof item.content === 'string') {
+          // Seen live: `node todo.mjs add milk` ran four times to "show the output",
+          // adding milk four times. A second identical successful run with no edit in
+          // between repeats its side effects; read-only commands and checks are fine.
+          const harmless = isVerificationCommand(args.command, args.args) || (name === 'run_command' ? readOnlyArgv(args.command, args.args, { root: session.root }) : name === 'run_shell' && readOnlyShellLine(String(args.command || ''), { root: session.root }));
+          if (!harmless) {
+            if (succeededCommands.get(key) === turn.editEpoch && !item.rerunWarned) {
+              item.rerunWarned = true;
+              item.content += '\n\n<system-reminder>You already ran this exact command successfully in this turn, with no file changes since. If it changes state (adds data, commits, sends, migrates), running it again repeated that effect. Do not run it again; use the output you already have, and tell the user if the repeat changed anything.</system-reminder>';
+            }
+            succeededCommands.set(key, turn.editEpoch);
+          }
+        }
+        if (!failed) persistentFailures.delete(key);
+        else {
+          const signature = failureSignature(result);
+          const previous = persistentFailures.get(key);
+          if (previous && previous.signature === signature) {
+            // Only count a repeat when the model changed files since the last run;
+            // unchanged retries are handled by failedCommandRuns below.
+            if (previous.editEpoch !== turn.editEpoch) { previous.count += 1; previous.editEpoch = turn.editEpoch; }
+          } else persistentFailures.set(key, { signature, count: 1, editEpoch: turn.editEpoch });
+          const thrash = persistentFailures.get(key).count;
+          if (thrash >= THRASH_WARN_AT && canEscalate(escalation)) {
+            turn.pendingEscalation ||= { evidence: thrashEvidence(commandText, thrash), signal: 'thrash' };
+          } else if (thrash >= THRASH_WARN_AT && typeof item.content === 'string') {
+            item.content += thrash >= THRASH_ESCALATE_AT
+              ? '\n\n<system-reminder>' + thrash + ' rounds of edits have not changed this failure at all. Stop patching. Summarize for the user what you tried, what the failure says, and what you now suspect, then either try one clearly different approach backed by new evidence (logging, a minimal reproduction, reading the code that actually raises the error) or ask the user. Do not weaken or delete the test to make it pass.</system-reminder>'
+              : '\n\n<system-reminder>Your last ' + thrash + ' edits did not change this failure: the command fails the same way each time. The fix is not reaching the cause. Before editing again, re-read the exact error and the code it points to, state a specific hypothesis, and verify it (for example with a print, a smaller test, or by reading the caller) instead of trying another variation.</system-reminder>';
+            if (typeof options.onThrash === 'function') { try { options.onThrash({ command: commandText.slice(0, 160), count: thrash }); } catch {} }
+          }
+        }
+        if (!failed) failedCommandRuns.delete(key);
+        else {
+          const count = (failedCommandRuns.get(key) || 0) + 1;
+          failedCommandRuns.set(key, count);
+          const label = commandText.slice(0, 160);
+          if (count >= RETRY_HALT_AT) {
+            turn.loopBreakMessage = 'I’m stuck: `' + label + '` has failed ' + count + ' times in a row with no file changes in between, so retrying it again will not help. I stopped here; I need to change approach or get your guidance.';
+          } else if (count >= RETRY_WARN_AT && typeof item.content === 'string') {
+            item.content += '\n\n<system-reminder>This exact command has now failed ' + count + ' times with no file changes in between. Do not run it again unchanged. Read the error, explain the cause, and change something (code, arguments, or approach) first; if it is interactive or waiting on input, use a non-interactive form.</system-reminder>';
+          }
+        }
+      }
+    }
+    if ((name === 'run_specialist_review' || name === 'task') && result && typeof result === 'object') {
+      const specialistTokens = Number(result.tokensUsed);
+      const specialistCalls = Number(result.toolCalls);
+      if (Number.isFinite(specialistTokens) && specialistTokens > 0) turn.tokensUsed += specialistTokens;
+      if (Number.isFinite(specialistCalls) && specialistCalls > 0) session.toolCallsThisSession += specialistCalls;
+    }
+    if (name === 'git_diff' && result && result.exitCode === 0 && result.truncated !== true) {
+      const args = safeToolArguments(call.function && call.function.arguments);
+      const scopedPath = normalizeReviewPath(args.path);
+      if (!scopedPath || scopedPath === '.') verification.diffReviewedAll = true;
+      else verification.diffReviewedPaths.add(scopedPath);
+    }
+    if (name === 'read_file' && result && result.path) {
+      const args = safeToolArguments(call.function && call.function.arguments);
+      if (isCompleteFileRead(args, result)) verification.diffReviewedPaths.add(normalizeReviewPath(result.path));
+    }
+    if (name === 'run_command' && result && verification.syntaxCheckIds && verification.syntaxCheckIds.has(call.id)) {
+      (verification.syntaxResults ||= new Map()).set(call.id, result.approved !== false ? result.exitCode : null);
+    }
+    if (name === 'run_command' && result) {
+      const args = safeToolArguments(call.function && call.function.arguments);
+      // A check that was not approved cannot be satisfied by asking again;
+      // remember it so the gate and the final answer say so honestly.
+      if (isVerificationCommand(args.command, args.args) && result.approved === false) verification.deniedCheck = [args.command].concat(Array.isArray(args.args) ? args.args : []).join(' ').slice(0, 200);
+      if (result.approved !== false) markLoadedModules(verification, [args.command].concat(Array.isArray(args.args) ? args.args : []).join(' '), result.exitCode);
+      if (result.approved !== false && !result.timedOut) markRanSources(verification, args.command, args.args, result.exitCode);
+      if (isVerificationCommand(args.command, args.args) && result.approved !== false) {
+        recordClaimCheck(claimState, { command: [args.command].concat(Array.isArray(args.args) ? args.args : []).join(' '), exitCode: result.exitCode });
+        verification.lastVerificationExitCode = result.exitCode;
+        verification.lastVerificationKind = verificationCommandKind(args.command, args.args);
+        recordSessionEvent(session, { type: 'verification', kind: verification.lastVerificationKind, command: [args.command].concat(Array.isArray(args.args) ? args.args : []).join(' ').slice(0, 300), exitCode: result.exitCode, passed: result.exitCode === 0 }, options.env);
+      }
+    }
+    if (name === 'run_shell' && result && result.approved === false) {
+      const deniedTarget = shellExitTarget(safeToolArguments(call.function && call.function.arguments).command);
+      if (deniedTarget && isVerificationCommand(deniedTarget.command, deniedTarget.args)) verification.deniedCheck = String(safeToolArguments(call.function && call.function.arguments).command || '').slice(0, 200);
+    }
+    if (name === 'run_shell' && result && result.approved !== false && (typeof result.exitCode === 'number' || result.timedOut || result.cancelled)) {
+      const shellCommand = safeToolArguments(call.function && call.function.arguments).command;
+      const target = shellExitTarget(shellCommand);
+      if (target && !target.piped && !result.exitCodeWarning) markLoadedModules(verification, shellCommand, result.exitCode);
+      if (target && !target.piped && !result.exitCodeWarning && !result.timedOut) markRanSources(verification, target.command, target.args, result.exitCode);
+      if (target && isVerificationCommand(target.command, target.args)) recordClaimCheck(claimState, { command: shellCommand, exitCode: result.exitCode, masked: Boolean(target.piped || result.exitCodeWarning) });
+      // A check whose status is masked by a pipe (npm test | tail) proves nothing.
+      if (target && typeof result.exitCode === 'number' && !target.piped && !result.exitCodeWarning && isVerificationCommand(target.command, target.args)) {
+        verification.lastVerificationExitCode = result.exitCode;
+        verification.lastVerificationKind = verificationCommandKind(target.command, target.args);
+        recordSessionEvent(session, { type: 'verification', kind: verification.lastVerificationKind, command: String(shellCommand || '').slice(0, 300), exitCode: result.exitCode, passed: result.exitCode === 0 }, options.env);
+      }
+    }
+    if (result && typeof result.error === 'string' && ['write_file', 'edit_file', 'multi_edit', 'notebook_edit', 'apply_patch'].includes(name)) {
+      const failedPath = safeToolArguments(call.function && call.function.arguments).path || result.path;
+      if (failedPath && !isScratchPath(normalizeReviewPath(failedPath))) recordEditFailure(claimState, { path: normalizeReviewPath(failedPath), error: result.error });
+    }
+    // Scratch-space files (.oasis/scratch/) are throwaway and do not count as project changes.
+    if (result && result.path && !isScratchPath(normalizeReviewPath(result.path)) && (
+      (name === 'edit_file' || name === 'multi_edit' || name === 'notebook_edit') && result.changed === true ||
+      name === 'write_file' && typeof result.writtenBytes === 'number' ||
+      name === 'delete_file' && result.deleted === true
+    )) {
+      const changedPath = normalizeReviewPath(result.path);
+      recordClaimEdit(claimState);
+      recordEditSuccess(claimState, changedPath);
+      verification.changedPaths.add(changedPath);
+      if (name === 'write_file' && result.backedUpExistingFile === false) (verification.createdPaths ||= new Set()).add(changedPath);
+      // New JavaScript modules must be loaded once after their last edit.
+      if (verification.loadedPaths) verification.loadedPaths.delete(changedPath);
+      if (verification.ranPaths) verification.ranPaths.delete(changedPath);
+      if (verification.createdPaths && verification.createdPaths.has(changedPath)) {
+        if (name === 'write_file') {
+          const written = safeToolArguments(call.function && call.function.arguments).content;
+          if (newModuleCandidate(changedPath, written)) (verification.moduleCandidates ||= new Set()).add(changedPath);
+          else if (verification.moduleCandidates) verification.moduleCandidates.delete(changedPath);
+        }
+      }
+      if (name === 'delete_file' && verification.moduleCandidates) verification.moduleCandidates.delete(changedPath);
+      if (name === 'write_file' && result.backedUpExistingFile === true && !(verification.createdPaths && verification.createdPaths.has(changedPath))) (verification.overwrittenPaths ||= new Set()).add(changedPath);
+      verification.lspVerificationByPath.delete(changedPath);
+      verification.diffReviewedAll = false;
+      verification.diffReviewedPaths.clear();
+      verification.lastVerificationExitCode = null;
+      verification.lastVerificationKind = null;
+      verification.autoTestPending = true;
+      verification.staticCheckPending = true;
+      verification.tamperCheckPending = true;
+    }
+    if (result && result.lspVerification && result.lspVerification.path) {
+      verification.lspVerificationByPath.set(normalizeReviewPath(result.lspVerification.path), result.lspVerification);
+    }
+    if (typeof item.content === 'string' && secretShieldEnabled(session, options.env || process.env)) {
+      const shielded = maskSecrets(session, item.content);
+      if (shielded.count) {
+        item.content = shielded.text + (session.secretShieldNoted ? '' : '\n\n[OASIS secret shield] ' + SECRET_SHIELD_NOTE);
+        session.secretShieldNoted = true;
+        session.secretsShielded = (session.secretsShielded || 0) + shielded.count;
+      }
+    }
+    if (typeof item.content === 'string' && untrustedGuardEnabled(session, options.env || process.env)) item.content = guardExternalContent(session, item.name || name, item.content);
+    if (typeof item.content === 'string') item.content = fitToolResultToWindow(session, leanToolContent(session, item.content, options.env || process.env), options.env || process.env);
+    let toolImages = null;
+    if (item.result && item.result.imageData) {
+      const fitted = await fitImages([item.result.imageData], { env: options.env || process.env });
+      if (fitted.images.length) toolImages = fitted.images;
+      if (fitted.notes.length && typeof item.content === 'string') item.content += '\n[Image not attached: ' + fitted.notes.join('; ') + ']';
+    }
+    session.messages.push({
+      role: 'tool',
+      tool_call_id: item.tool_call_id,
+      name: item.name,
+      content: item.content,
+      ...(toolImages ? { images: toolImages } : {})
+    });
+    if (name === 'read_file' && item.result && !item.result.error) {
+      await recordDedupedRead(session, safeToolArguments(call.function && call.function.arguments), item.tool_call_id, item, options.env || process.env).catch(() => {});
+    }
+  }
+}
+
 async function runAgentTurnRaw(session, prompt, options = {}) {
   if (!options.isSubagent) session.currentTurnId = randomUUID();
   const request = String(prompt || '').trim();
@@ -3252,208 +3462,9 @@ async function runAgentTurnRaw(session, prompt, options = {}) {
       });
     }
 
-    for (const call of calls) {
-      const item = outputs.get(call.id);
-      const name = call.function && call.function.name;
-      const result = item && item.result;
-      if (item) {
-        const args = safeToolArguments(call.function && call.function.arguments);
-        const outcome = JSON.stringify({ name, args, content: String(item.content || '') });
-        if (lastToolOutcome && lastToolOutcome.signature === outcome) {
-          // Several identical calls in one parallel batch are not repeated attempts.
-          // Only count a repeated outcome again when it recurs in a later model step.
-          if (lastToolOutcome.step !== step) {
-            lastToolOutcome.count += 1;
-            lastToolOutcome.step = step;
-          }
-        } else {
-          lastToolOutcome = { signature: outcome, count: 1, name, step };
-        }
-        if (lastToolOutcome.count >= 3) {
-          loopBreakMessage = 'I’m stuck: the same ' + lastToolOutcome.name +
-            ' tool call with the same inputs produced the same result 3 times. I stopped instead of repeating it again. I need to try a different approach or get your guidance.';
-        }
-        const seenAt = (recentOutcomes.get(outcome) || []).filter((seenStep) => seenStep > step - CYCLE_WINDOW_STEPS);
-        if (seenAt[seenAt.length - 1] !== step) seenAt.push(step);
-        recentOutcomes.set(outcome, seenAt);
-        if (seenAt.length >= CYCLE_HALT_AT && !loopBreakMessage) {
-          loopBreakMessage = 'I’m stuck: I kept repeating the same ' + name + ' call with the same inputs and getting the same result (' + seenAt.length + ' times in the last ' + CYCLE_WINDOW_STEPS + ' steps, with no file changes in between). I stopped instead of going round in circles. I need to try a different approach or get your guidance.';
-        } else if (seenAt.length === CYCLE_WARN_AT && seenAt[seenAt.length - 1] === step && typeof item.content === 'string' && !item.cycleWarned) {
-          item.cycleWarned = true;
-          item.content += '\n\n<system-reminder>You have now made this exact ' + name + ' call ' + seenAt.length + ' times in the last few steps and got the same result each time, with no file changes in between. Repeating it will not tell you anything new. Use what you already have: make the change, try a different approach, or give your answer.</system-reminder>';
-        }
-        // Same failing command again and again with nothing changed in between
-        // (outputs differ by timestamps, so the identical-outcome check misses it).
-        const commandText = RETRY_TRACKED_COMMANDS.has(name) ? [args.command].concat(Array.isArray(args.args) ? args.args : []).join(' ') : '';
-        if ((FILE_EDITING_TOOL_NAMES.has(name) || (commandText && scriptedEditKind(commandText))) && result && typeof result === 'object' && !result.error && result.approved !== false && result.blocked !== true) { failedCommandRuns.clear(); recentOutcomes.clear(); editEpoch++; }
-        if (name === 'todo_write' && result && typeof result === 'object' && !result.error) gates.todosWrittenThisTurn = true;
-        else if (RETRY_TRACKED_COMMANDS.has(name) && result && typeof result === 'object' && !result.background && !result.running) {
-          const key = name + ' ' + JSON.stringify({ command: args.command, args: args.args, cwd: args.cwd });
-          const failed = (Number.isInteger(result.exitCode) && result.exitCode !== 0) || result.timedOut === true;
-          // A denied or blocked call never started a process, so it neither "ran
-          // successfully" nor repeated any side effect.
-          const ran = result.approved !== false && result.blocked !== true && !result.error;
-          if (!failed && ran && typeof item.content === 'string') {
-            // Seen live: `node todo.mjs add milk` ran four times to "show the output",
-            // adding milk four times. A second identical successful run with no edit in
-            // between repeats its side effects; read-only commands and checks are fine.
-            const harmless = isVerificationCommand(args.command, args.args) || (name === 'run_command' ? readOnlyArgv(args.command, args.args, { root: session.root }) : name === 'run_shell' && readOnlyShellLine(String(args.command || ''), { root: session.root }));
-            if (!harmless) {
-              if (succeededCommands.get(key) === editEpoch && !item.rerunWarned) {
-                item.rerunWarned = true;
-                item.content += '\n\n<system-reminder>You already ran this exact command successfully in this turn, with no file changes since. If it changes state (adds data, commits, sends, migrates), running it again repeated that effect. Do not run it again; use the output you already have, and tell the user if the repeat changed anything.</system-reminder>';
-              }
-              succeededCommands.set(key, editEpoch);
-            }
-          }
-          if (!failed) persistentFailures.delete(key);
-          else {
-            const signature = failureSignature(result);
-            const previous = persistentFailures.get(key);
-            if (previous && previous.signature === signature) {
-              // Only count a repeat when the model changed files since the last run;
-              // unchanged retries are handled by failedCommandRuns below.
-              if (previous.editEpoch !== editEpoch) { previous.count += 1; previous.editEpoch = editEpoch; }
-            } else persistentFailures.set(key, { signature, count: 1, editEpoch });
-            const thrash = persistentFailures.get(key).count;
-            if (thrash >= THRASH_WARN_AT && canEscalate(escalation)) {
-              pendingEscalation ||= { evidence: thrashEvidence(commandText, thrash), signal: 'thrash' };
-            } else if (thrash >= THRASH_WARN_AT && typeof item.content === 'string') {
-              item.content += thrash >= THRASH_ESCALATE_AT
-                ? '\n\n<system-reminder>' + thrash + ' rounds of edits have not changed this failure at all. Stop patching. Summarize for the user what you tried, what the failure says, and what you now suspect, then either try one clearly different approach backed by new evidence (logging, a minimal reproduction, reading the code that actually raises the error) or ask the user. Do not weaken or delete the test to make it pass.</system-reminder>'
-                : '\n\n<system-reminder>Your last ' + thrash + ' edits did not change this failure: the command fails the same way each time. The fix is not reaching the cause. Before editing again, re-read the exact error and the code it points to, state a specific hypothesis, and verify it (for example with a print, a smaller test, or by reading the caller) instead of trying another variation.</system-reminder>';
-              if (typeof options.onThrash === 'function') { try { options.onThrash({ command: commandText.slice(0, 160), count: thrash }); } catch {} }
-            }
-          }
-          if (!failed) failedCommandRuns.delete(key);
-          else {
-            const count = (failedCommandRuns.get(key) || 0) + 1;
-            failedCommandRuns.set(key, count);
-            const label = commandText.slice(0, 160);
-            if (count >= RETRY_HALT_AT) {
-              loopBreakMessage = 'I’m stuck: `' + label + '` has failed ' + count + ' times in a row with no file changes in between, so retrying it again will not help. I stopped here; I need to change approach or get your guidance.';
-            } else if (count >= RETRY_WARN_AT && typeof item.content === 'string') {
-              item.content += '\n\n<system-reminder>This exact command has now failed ' + count + ' times with no file changes in between. Do not run it again unchanged. Read the error, explain the cause, and change something (code, arguments, or approach) first; if it is interactive or waiting on input, use a non-interactive form.</system-reminder>';
-            }
-          }
-        }
-      }
-      if ((name === 'run_specialist_review' || name === 'task') && result && typeof result === 'object') {
-        const specialistTokens = Number(result.tokensUsed);
-        const specialistCalls = Number(result.toolCalls);
-        if (Number.isFinite(specialistTokens) && specialistTokens > 0) tokensUsed += specialistTokens;
-        if (Number.isFinite(specialistCalls) && specialistCalls > 0) session.toolCallsThisSession += specialistCalls;
-      }
-      if (name === 'git_diff' && result && result.exitCode === 0 && result.truncated !== true) {
-        const args = safeToolArguments(call.function && call.function.arguments);
-        const scopedPath = normalizeReviewPath(args.path);
-        if (!scopedPath || scopedPath === '.') verification.diffReviewedAll = true;
-        else verification.diffReviewedPaths.add(scopedPath);
-      }
-      if (name === 'read_file' && result && result.path) {
-        const args = safeToolArguments(call.function && call.function.arguments);
-        if (isCompleteFileRead(args, result)) verification.diffReviewedPaths.add(normalizeReviewPath(result.path));
-      }
-      if (name === 'run_command' && result && verification.syntaxCheckIds && verification.syntaxCheckIds.has(call.id)) {
-        (verification.syntaxResults ||= new Map()).set(call.id, result.approved !== false ? result.exitCode : null);
-      }
-      if (name === 'run_command' && result) {
-        const args = safeToolArguments(call.function && call.function.arguments);
-        // A check that was not approved cannot be satisfied by asking again;
-        // remember it so the gate and the final answer say so honestly.
-        if (isVerificationCommand(args.command, args.args) && result.approved === false) verification.deniedCheck = [args.command].concat(Array.isArray(args.args) ? args.args : []).join(' ').slice(0, 200);
-        if (result.approved !== false) markLoadedModules(verification, [args.command].concat(Array.isArray(args.args) ? args.args : []).join(' '), result.exitCode);
-        if (result.approved !== false && !result.timedOut) markRanSources(verification, args.command, args.args, result.exitCode);
-        if (isVerificationCommand(args.command, args.args) && result.approved !== false) {
-          recordClaimCheck(claimState, { command: [args.command].concat(Array.isArray(args.args) ? args.args : []).join(' '), exitCode: result.exitCode });
-          verification.lastVerificationExitCode = result.exitCode;
-          verification.lastVerificationKind = verificationCommandKind(args.command, args.args);
-          recordSessionEvent(session, { type: 'verification', kind: verification.lastVerificationKind, command: [args.command].concat(Array.isArray(args.args) ? args.args : []).join(' ').slice(0, 300), exitCode: result.exitCode, passed: result.exitCode === 0 }, options.env);
-        }
-      }
-      if (name === 'run_shell' && result && result.approved === false) {
-        const deniedTarget = shellExitTarget(safeToolArguments(call.function && call.function.arguments).command);
-        if (deniedTarget && isVerificationCommand(deniedTarget.command, deniedTarget.args)) verification.deniedCheck = String(safeToolArguments(call.function && call.function.arguments).command || '').slice(0, 200);
-      }
-      if (name === 'run_shell' && result && result.approved !== false && (typeof result.exitCode === 'number' || result.timedOut || result.cancelled)) {
-        const shellCommand = safeToolArguments(call.function && call.function.arguments).command;
-        const target = shellExitTarget(shellCommand);
-        if (target && !target.piped && !result.exitCodeWarning) markLoadedModules(verification, shellCommand, result.exitCode);
-        if (target && !target.piped && !result.exitCodeWarning && !result.timedOut) markRanSources(verification, target.command, target.args, result.exitCode);
-        if (target && isVerificationCommand(target.command, target.args)) recordClaimCheck(claimState, { command: shellCommand, exitCode: result.exitCode, masked: Boolean(target.piped || result.exitCodeWarning) });
-        // A check whose status is masked by a pipe (npm test | tail) proves nothing.
-        if (target && typeof result.exitCode === 'number' && !target.piped && !result.exitCodeWarning && isVerificationCommand(target.command, target.args)) {
-          verification.lastVerificationExitCode = result.exitCode;
-          verification.lastVerificationKind = verificationCommandKind(target.command, target.args);
-          recordSessionEvent(session, { type: 'verification', kind: verification.lastVerificationKind, command: String(shellCommand || '').slice(0, 300), exitCode: result.exitCode, passed: result.exitCode === 0 }, options.env);
-        }
-      }
-      if (result && typeof result.error === 'string' && ['write_file', 'edit_file', 'multi_edit', 'notebook_edit', 'apply_patch'].includes(name)) {
-        const failedPath = safeToolArguments(call.function && call.function.arguments).path || result.path;
-        if (failedPath && !isScratchPath(normalizeReviewPath(failedPath))) recordEditFailure(claimState, { path: normalizeReviewPath(failedPath), error: result.error });
-      }
-      // Scratch-space files (.oasis/scratch/) are throwaway and do not count as project changes.
-      if (result && result.path && !isScratchPath(normalizeReviewPath(result.path)) && (
-        (name === 'edit_file' || name === 'multi_edit' || name === 'notebook_edit') && result.changed === true ||
-        name === 'write_file' && typeof result.writtenBytes === 'number' ||
-        name === 'delete_file' && result.deleted === true
-      )) {
-        const changedPath = normalizeReviewPath(result.path);
-        recordClaimEdit(claimState);
-        recordEditSuccess(claimState, changedPath);
-        verification.changedPaths.add(changedPath);
-        if (name === 'write_file' && result.backedUpExistingFile === false) (verification.createdPaths ||= new Set()).add(changedPath);
-        // New JavaScript modules must be loaded once after their last edit.
-        if (verification.loadedPaths) verification.loadedPaths.delete(changedPath);
-        if (verification.ranPaths) verification.ranPaths.delete(changedPath);
-        if (verification.createdPaths && verification.createdPaths.has(changedPath)) {
-          if (name === 'write_file') {
-            const written = safeToolArguments(call.function && call.function.arguments).content;
-            if (newModuleCandidate(changedPath, written)) (verification.moduleCandidates ||= new Set()).add(changedPath);
-            else if (verification.moduleCandidates) verification.moduleCandidates.delete(changedPath);
-          }
-        }
-        if (name === 'delete_file' && verification.moduleCandidates) verification.moduleCandidates.delete(changedPath);
-        if (name === 'write_file' && result.backedUpExistingFile === true && !(verification.createdPaths && verification.createdPaths.has(changedPath))) (verification.overwrittenPaths ||= new Set()).add(changedPath);
-        verification.lspVerificationByPath.delete(changedPath);
-        verification.diffReviewedAll = false;
-        verification.diffReviewedPaths.clear();
-        verification.lastVerificationExitCode = null;
-        verification.lastVerificationKind = null;
-        verification.autoTestPending = true;
-        verification.staticCheckPending = true;
-        verification.tamperCheckPending = true;
-      }
-      if (result && result.lspVerification && result.lspVerification.path) {
-        verification.lspVerificationByPath.set(normalizeReviewPath(result.lspVerification.path), result.lspVerification);
-      }
-      if (typeof item.content === 'string' && secretShieldEnabled(session, options.env || process.env)) {
-        const shielded = maskSecrets(session, item.content);
-        if (shielded.count) {
-          item.content = shielded.text + (session.secretShieldNoted ? '' : '\n\n[OASIS secret shield] ' + SECRET_SHIELD_NOTE);
-          session.secretShieldNoted = true;
-          session.secretsShielded = (session.secretsShielded || 0) + shielded.count;
-        }
-      }
-      if (typeof item.content === 'string' && untrustedGuardEnabled(session, options.env || process.env)) item.content = guardExternalContent(session, item.name || name, item.content);
-      if (typeof item.content === 'string') item.content = fitToolResultToWindow(session, leanToolContent(session, item.content, options.env || process.env), options.env || process.env);
-      let toolImages = null;
-      if (item.result && item.result.imageData) {
-        const fitted = await fitImages([item.result.imageData], { env: options.env || process.env });
-        if (fitted.images.length) toolImages = fitted.images;
-        if (fitted.notes.length && typeof item.content === 'string') item.content += '\n[Image not attached: ' + fitted.notes.join('; ') + ']';
-      }
-      session.messages.push({
-        role: 'tool',
-        tool_call_id: item.tool_call_id,
-        name: item.name,
-        content: item.content,
-        ...(toolImages ? { images: toolImages } : {})
-      });
-      if (name === 'read_file' && item.result && !item.result.error) {
-        await recordDedupedRead(session, safeToolArguments(call.function && call.function.arguments), item.tool_call_id, item, options.env || process.env).catch(() => {});
-      }
-    }
+    const resultTurn = { recentOutcomes, escalation, verification, claimState, gates, failedCommandRuns, succeededCommands, persistentFailures, step, calls, outputs, tokensUsed, lastToolOutcome, loopBreakMessage, pendingEscalation, editEpoch };
+    await applyToolResults(session, options, resultTurn);
+    ({ tokensUsed, lastToolOutcome, loopBreakMessage, pendingEscalation, editEpoch } = resultTurn);
 
     session.pendingToolOutputs = null;
 
