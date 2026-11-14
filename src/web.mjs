@@ -288,7 +288,10 @@ const MAX_UPLOAD_BODY_BYTES = 30 * 1024 * 1024;
 // Chat requests may carry pasted or dropped images (base64), so they get a
 // larger, still bounded body.
 export const MAX_WEB_IMAGES = 4;
-const MAX_CHAT_BODY_BYTES = 64 * 1024 + MAX_WEB_IMAGES * Math.ceil(MAX_IMAGE_BYTES * 4 / 3 + 1024);
+// A pasted log or stack trace easily passes 12,000 characters, which was the
+// old limit. 200,000 characters is about 50K tokens.
+export const MAX_CHAT_MESSAGE_CHARS = 200_000;
+const MAX_CHAT_BODY_BYTES = 4 * MAX_CHAT_MESSAGE_CHARS + 64 * 1024 + MAX_WEB_IMAGES * Math.ceil(MAX_IMAGE_BYTES * 4 / 3 + 1024);
 const WEB_IMAGE_TYPES = new Set(['image/png', 'image/jpeg', 'image/gif', 'image/webp']);
 
 /** Validates images attached in the browser: type, real file signature, size and count. */
@@ -887,7 +890,7 @@ export function createOasisWebServer(options = {}) {
   async function startAgentJob(input) {
     const incomingMessage = String(input.message || '').trim();
     if (!incomingMessage) throw Object.assign(new Error('Enter a task or question.'), { statusCode: 400 });
-    if (incomingMessage.length > 12000) throw Object.assign(new Error('Message is too long (12,000 characters maximum).'), { statusCode: 413 });
+    if (incomingMessage.length > MAX_CHAT_MESSAGE_CHARS) throw Object.assign(new Error('Message is too long (' + MAX_CHAT_MESSAGE_CHARS.toLocaleString('en-US') + ' characters maximum).'), { statusCode: 413 });
     const attachedImages = validateWebImages(input.images, { config: await loadConfig({ env }).catch(() => ({})), env });
     let sessionId = input.sessionId == null || input.sessionId === '' ? null : String(input.sessionId).toLowerCase();
     if (sessionId && !SESSION_ID_PATTERN.test(sessionId)) throw Object.assign(new Error('Invalid session ID.'), { statusCode: 400 });
@@ -945,7 +948,8 @@ export function createOasisWebServer(options = {}) {
         ? await expandWebSlashCommand(taskRoot, incomingMessage, env)
         : null;
       const message = importedCommand ? importedCommand.prompt : expandedCommand ? expandedCommand.prompt : incomingMessage;
-      if (message.length > 24000) throw Object.assign(new Error('The expanded imported command exceeds the supported prompt size.'), { statusCode: 413 });
+      // Room for a 96 KiB skill or command body around the user's text.
+      if (message.length > MAX_CHAT_MESSAGE_CHARS + 100_000) throw Object.assign(new Error('The expanded imported command exceeds the supported prompt size.'), { statusCode: 413 });
 
       let config = await getConfig();
       // The Cursor-compatible API can pick a model per agent; it uses the configured provider.
