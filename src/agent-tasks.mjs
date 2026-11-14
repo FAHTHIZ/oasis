@@ -1,4 +1,4 @@
-import { attachNeuronLineage, buildNeuronNetworkSnapshot } from './neuron-network.mjs';
+import { attachNeuronLineage, buildNeuronNetworkSnapshot, descendantRecords } from './neuron-network.mjs';
 
 // Background subagents, like Claude Code's background agents:
 //   task { run_in_background: true }  starts a subagent and returns its id at once
@@ -522,19 +522,39 @@ function stopAgentProcesses(record) {
   return result;
 }
 
+// Cancellation reaches descendants (Neuron Network phase 2). A background agent
+// started by another agent runs detached from its parent's turn, so stopping or
+// finishing the parent used to leave it running with nobody to read its report.
+export function stopDescendants(session, record, reason = 'its parent agent was stopped') {
+  const stopped = [];
+  for (const descendant of descendantRecords(agentRegistry(session), record.id)) {
+    stopAgentProcesses(descendant);
+    if (descendant.status !== 'running') continue;
+    descendant.cancelRequested = true;
+    descendant.stopReason = reason;
+    if (descendant.controller) descendant.controller.abort();
+    stopped.push(descendant.id);
+    recordAgentEvent(session, 'agent.stop_requested', { agentId: descendant.id, teamId: descendant.teamId || undefined, description: descendant.description, detail: 'Stopped because ' + reason + ' (' + record.id + ').' });
+  }
+  return stopped;
+}
+
 export function stopAgent(session, args = {}) {
   const record = getAgent(session, args.id);
   const cleaned = stopAgentProcesses(record);
   const processesStopped = cleaned.background + cleaned.terminals;
+  const descendants = stopDescendants(session, record);
+  const descendantNote = descendants.length ? ' Also stopped ' + descendants.length + ' agent(s) it had started: ' + descendants.join(', ') + '.' : '';
   if (record.status !== 'running') {
     return {
       id: record.id,
       status: record.status,
       backgroundProcessesStopped: cleaned.background,
       terminalsStopped: cleaned.terminals,
-      message: processesStopped
+      ...(descendants.length ? { descendantsStopped: descendants } : {}),
+      message: (processesStopped
         ? 'The agent is not running; stopped ' + cleaned.background + ' background process(es) and ' + cleaned.terminals + ' interactive terminal session(s) it left in its private environment.'
-        : 'The agent is not running.'
+        : 'The agent is not running.') + descendantNote
     };
   }
   record.cancelRequested = true;
@@ -550,7 +570,8 @@ export function stopAgent(session, args = {}) {
     status: 'stopping',
     backgroundProcessesStopped: cleaned.background,
     terminalsStopped: cleaned.terminals,
-    message: 'Stop requested; the agent will end at its next step.' + (processesStopped ? ' Stopped ' + cleaned.background + ' background process(es) and ' + cleaned.terminals + ' interactive terminal session(s).' : '')
+    ...(descendants.length ? { descendantsStopped: descendants } : {}),
+    message: 'Stop requested; the agent will end at its next step.' + (processesStopped ? ' Stopped ' + cleaned.background + ' background process(es) and ' + cleaned.terminals + ' interactive terminal session(s).' : '') + descendantNote
   };
 }
 

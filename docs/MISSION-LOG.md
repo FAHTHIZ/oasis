@@ -3,6 +3,12 @@
 A short, dated record of changes, tests, benchmark results, blockers and known
 weaknesses. Newest first. Detailed user-facing notes go in the CHANGELOG.
 
+## 2026-11-14 (cancellation reaches descendant agents)
+
+- Neuron Network phase 2 gap: a background agent started by another agent runs detached from its parent's turn, so `agent_stop` on the parent, or the parent finishing or failing, left it running and reporting into a finished conversation.
+- `descendantRecords` (src/neuron-network.mjs) walks the lineage; `stopDescendants` (src/agent-tasks.mjs) aborts running descendants and their processes. `agent_stop` reports `descendantsStopped`; a completed agent's result lists `stopped_unfinished_agents` with a note to ask it to wait with agent_status; failed, cancelled and stalled agents stop theirs too.
+- Tests: `test/agent-stop-descendants.test.mjs` (3); nesting, agent-task, neuron-network, usage and handoff suites pass (35).
+
 ## 2026-11-14 (related-test discovery in the verification gate)
 
 - Gap: Jest (`--findRelatedTests`) and Vitest (`vitest related`) can run only the tests a change reaches, but only inside those frameworks; the post-edit gate only said "run a relevant test", so models ran the whole suite or guessed.
