@@ -4,7 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { createSession, runAgentTurn, closeSession } from '../src/agent.mjs';
-import { readProviderStream, toolCallSlot, uniqueToolCallIds } from '../src/provider-stream.mjs';
+import { mergeSplitToolCallTails, readProviderStream, toolCallSlot, uniqueToolCallIds } from '../src/provider-stream.mjs';
 import { scriptedModel } from './helpers/scripted-model.mjs';
 
 function sse(events) {
@@ -24,6 +24,32 @@ test('parallel streamed calls that reuse one id stay separate calls with distinc
   assert.deepEqual(calls.map((call) => call.function.name), ['read_file', 'list_files']);
   assert.deepEqual(calls.map((call) => call.function.arguments), ['{"path":"a.txt"}', '{}']);
   assert.deepEqual(calls.map((call) => call.id), ['x', 'x_2']);
+});
+
+// Captured from OmniRoute (ovh/gpt-oss-20b): the finish chunk carries the
+// closing "}" as index 1 with a new id and no name.
+test('an OmniRoute finish chunk that splits off the arguments tail stays one call', async () => {
+  const delta = (part, extra = {}) => ({ model: 'gpt-oss-20b', choices: [{ index: 0, delta: { tool_calls: [part] }, ...extra }] });
+  const reply = await readProviderStream(sse([
+    { model: 'keepalive', choices: [] },
+    delta({ index: 0, id: 'chatcmpl-tool-8cff', type: 'function', function: { name: 'read_file', arguments: '' } }),
+    ...['{"', 'path', '":"', 'util.mjs', '","', 'line', '":1,"', 'limit":200'].map((piece) => delta({ index: 0, function: { arguments: piece } })),
+    delta({ index: 1, function: { arguments: '}' }, id: 'call_4e8b' }, { finish_reason: 'tool_calls' }),
+    '[DONE]'
+  ]), 'openai-compatible', () => {});
+  const calls = reply.choices[0].message.tool_calls;
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].function.name, 'read_file');
+  assert.deepEqual(JSON.parse(calls[0].function.arguments), { path: 'util.mjs', line: 1, limit: 200 });
+  assert.equal(calls[0].id, 'chatcmpl-tool-8cff');
+});
+
+test('a nameless call is kept when the previous call is already complete JSON', () => {
+  const calls = [
+    { id: 'a', function: { name: 'read_file', arguments: '{"path":"a"}' } },
+    { id: 'b', function: { name: '', arguments: '{}' } }
+  ];
+  assert.equal(mergeSplitToolCallTails(calls).length, 2);
 });
 
 test('an id-only continuation still appends to its call', () => {
