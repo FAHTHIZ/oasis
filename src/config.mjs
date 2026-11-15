@@ -261,6 +261,22 @@ const MODEL_CONFIG_KEYS = new Set(['contextWindow', 'maxOutputTokens', 'thinking
 // saveConfig validates these itself and drops invalid values rather than copying them.
 const VALIDATED_CONFIG_KEYS = new Set(['maxSteps', 'maxToolCalls', 'maxTokens', 'maxCommandSeconds', 'contextWindow', 'vision', 'promptCache', 'readDedup', 'maxQuestionsPerTurn', 'leanTools', 'followups', 'secretShield', 'parallelToolCalls', 'thinkingBudget', 'requireReadBeforeEdit', 'maxOutputTokens', 'reasoningEffort']);
 
+// Changes only the model of the saved provider (config.json), keeping every
+// other key. This is what sessions read; returns false when no provider is saved.
+export async function saveDefaultModel(model, options = {}) {
+  const env = options.env || process.env;
+  const configPath = options.configPath || getConfigPath(env);
+  let parsed;
+  try { parsed = JSON.parse(await readFile(configPath, 'utf8')); } catch (error) {
+    if (error.code === 'ENOENT') return false;
+    throw new Error('Could not read Oasis configuration: ' + error.message + ' (' + configPath + ').');
+  }
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed) || !(parsed.protocol || parsed.baseURL)) return false;
+  parsed.model = String(model).trim();
+  await atomicWriteFile(configPath, JSON.stringify(parsed, null, 2) + '\n', { encoding: 'utf8', mode: 0o600 });
+  return true;
+}
+
 export async function saveConfig(config, options = {}) {
   const env = options.env || process.env;
   const configPath = options.configPath || getConfigPath(env);

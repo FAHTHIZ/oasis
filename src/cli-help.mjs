@@ -168,6 +168,7 @@ export function helpText() {
     '  oasis eval [--task ID] [--trials N] --yes   Run agent evaluations (not OS-sandboxed)',
     '  oasis update                  Update the installed Oasis CLI from GitHub',
     '  oasis config                  Show provider settings (key is masked)',
+    '  oasis config list|get KEY|set KEY VALUE   Read or change settings (theme, model, verbose, ...), as /config does',
     '',
     'Options:',
     '  --workspace PATH              Choose the workspace root',
