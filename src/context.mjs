@@ -1,7 +1,7 @@
 // Within-turn context protection for coding sessions.
 import { catalogContextWindow } from './model-catalog.mjs';
 import { createHash } from 'node:crypto';
-import { countTextTokens } from './tokens.mjs';
+import { countTextTokens, countJsonTokens } from './tokens.mjs';
 // Token estimates use a real BPE vocabulary (src/tokens.mjs); exact counts for a
 // specific model are only known once its provider reports usage. Set
 // OASIS_CONTEXT_WINDOW to the selected model's real limit.
@@ -107,6 +107,25 @@ export function contextTokens(session) {
     return { tokens: anchor.inputTokens + estimateTokens(messages.slice(anchor.length)), reported: true };
   }
   return { tokens: estimateTokens(messages), reported: false };
+}
+
+// Tool schemas go with every request but are not in session.messages. When the
+// provider has not reported a count, add them so the footer and /context show
+// the same figure. Cached per definitions array: the footer redraws per key.
+const schemaTokenCache = new WeakMap();
+export function toolSchemaTokens(definitions) {
+  if (!Array.isArray(definitions) || !definitions.length) return 0;
+  const cached = schemaTokenCache.get(definitions);
+  if (cached && cached.length === definitions.length) return cached.tokens;
+  const tokens = countJsonTokens(definitions);
+  schemaTokenCache.set(definitions, { length: definitions.length, tokens });
+  return tokens;
+}
+
+export function contextUsage(session) {
+  const counted = contextTokens(session);
+  if (counted.reported) return counted;
+  return { tokens: counted.tokens + toolSchemaTokens(session && session.toolDefinitions), reported: false };
 }
 
 // Context windows come from the models.dev catalog (src/model-catalog.mjs), matched
