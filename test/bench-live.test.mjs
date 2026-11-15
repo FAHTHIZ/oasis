@@ -56,6 +56,11 @@ test('runBenchmark scores agents only on shared, identical tasks and never write
     assert.match(codex.skipped, /Could not start/);
     assert.equal(calls[0].env.OASIS_MODEL, 'opus');
     assert.ok(calls[1].args.includes('--claude-code') && calls[1].args.includes('opus'));
+    // Only the shared timeout bounds each agent: Claude Code used to get eval's
+    // default --max-turns 30, and stopped with error_max_turns where the
+    // others kept working.
+    assert.equal(calls[1].args[calls[1].args.indexOf('--max-turns') + 1], '200');
+    assert.ok(!calls[0].args.includes('--max-turns') && !calls[2].args.includes('--max-turns'));
     const markdown = await readFile(path.join(out, 'SUMMARY.md'), 'utf8');
     assert.match(markdown, /\| OASIS 1\.0\.0 \(opus\).*100%.*2\/2/);
     assert.match(markdown, /complete matching SHA-256 task fingerprints/);
