@@ -12,7 +12,7 @@ import { createInterface } from 'node:readline/promises';
 import { stdin, stdout, stderr } from 'node:process';
 import { spawn, spawnSync } from 'node:child_process';
 import { access, copyFile, mkdir, readFile, writeFile } from 'node:fs/promises';
-import { permissionModeName } from './permission-modes.mjs';
+import { permissionModeName, permissionModeList } from './permission-modes.mjs';
 import path from 'node:path';
 import { isIP } from 'node:net';
 import { fileURLToPath } from 'node:url';
@@ -28,7 +28,7 @@ import { runEvalCommand, evalModelPassthrough } from './eval.mjs';
 import { managePlugins } from './plugins.mjs';
 import { resolveImportedSlashCommand } from './extensions.mjs';
 import { startOasisWebServer } from './web.mjs';
-import { loadSettings, setWorkspaceTrust, addPermissionRule, PERMISSION_MODES, normalizePermissionMode, userSettingsPath } from './settings.mjs';
+import { loadSettings, setWorkspaceTrust, addPermissionRule, normalizePermissionMode, userSettingsPath } from './settings.mjs';
 import { detectSandbox, resolveSandbox } from './sandbox.mjs';
 import { resolveCustomCommand, expandFileMentions, loadCustomCommands, resolveSkillCommand } from './commands.mjs';
 import { visionEnabled } from './images.mjs';
@@ -2894,7 +2894,7 @@ async function parseMainFlags(rawArgs, flags) {
       // The Claude Agent SDK passes --permission-mode=MODE.
       const requestedMode = arg.includes('=') ? arg.slice(arg.indexOf('=') + 1) : takeValue();
       const mode = normalizePermissionMode(requestedMode);
-      if (!mode) throw new Error('--permission-mode must be one of ' + PERMISSION_MODES.join(', ') + ' (aliases: manual, accept-edits).');
+      if (!mode) throw new Error('--permission-mode must be one of ' + permissionModeList() + '. The camelCase names (acceptEdits, dontAsk, bypassPermissions) work too.');
       SESSION_OPTIONS.permissionMode = mode;
       if (mode === 'bypassPermissions') flags.autoApprove = true;
       continue;

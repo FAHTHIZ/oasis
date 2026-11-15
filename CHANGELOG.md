@@ -4,6 +4,7 @@ User-facing change history grouped by package version. A version heading does no
 
 ## Unreleased
 
+- `--permission-mode bypass-permissions` was rejected although `oasis permissions` shows the mode under that name; it is now accepted (as is `bypass_permissions`). `--permission-mode` errors and `/mode` list the modes as users type them (manual, accept-edits, plan, auto, dont-ask, bypass-permissions).
 - `oasis auth status` on a fresh install no longer reports the built-in default provider and model (api.openai.com, gpt-6.1-sol) as if they had been chosen; it reports null. A saved endpoint that needs no key now reports `loggedIn: true` with `authMethod: "keyless"` instead of "not signed in".
 - `oasis undo`, `oasis cost`, `oasis compact`, `oasis logout` and other chat-only commands typed as the only argument no longer go to the model as a one-word task (the agent could act on a bare "undo" with git); the CLI says to type `/undo` inside a chat (`oasis -c` continues the last one).
 - `oasis init` now writes a "Commands" section with the project's own test, lint, type-check, build and dev commands found on disk (package.json scripts with the right package manager, Go, Rust, Python and Makefile targets) instead of only "run relevant checks", and points to `/init` for a model-written guide.
