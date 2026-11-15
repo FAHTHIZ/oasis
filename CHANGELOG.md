@@ -4,6 +4,7 @@ User-facing change history grouped by package version. A version heading does no
 
 ## Unreleased
 
+- `oasis doctor --json` (or any unknown option) printed the text report and exited 0, so scripts parsing it got text; unknown options are now an error that lists `--test-provider` and `--network`. `oasis models --json` with no provider reports `"current": null` instead of the built-in default model.
 - `--permission-mode bypass-permissions` was rejected although `oasis permissions` shows the mode under that name; it is now accepted (as is `bypass_permissions`). `--permission-mode` errors and `/mode` list the modes as users type them (manual, accept-edits, plan, auto, dont-ask, bypass-permissions).
 - `oasis auth status` on a fresh install no longer reports the built-in default provider and model (api.openai.com, gpt-6.1-sol) as if they had been chosen; it reports null. A saved endpoint that needs no key now reports `loggedIn: true` with `authMethod: "keyless"` instead of "not signed in".
 - `oasis undo`, `oasis cost`, `oasis compact`, `oasis logout` and other chat-only commands typed as the only argument no longer go to the model as a one-word task (the agent could act on a bare "undo" with git); the CLI says to type `/undo` inside a chat (`oasis -c` continues the last one).
