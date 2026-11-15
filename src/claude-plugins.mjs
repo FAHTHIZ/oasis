@@ -866,6 +866,16 @@ export async function installPlugin(spec, options = {}) {
   } else {
     throw new Error('Plugin entry "' + name + '" has no source.');
   }
+  // Read every copied file before the plugin is registered or enabled; a
+  // high-risk line refuses the install unless the user passed --allow-risky.
+  const { auditPackageOrRefuse } = await import('./skill-audit.mjs');
+  let audit;
+  try {
+    audit = await auditPackageOrRefuse(installPath, id, { allowRisky: options.allowRisky === true, hint: options.overrideHint || 'oasis plugin install ' + id + ' --allow-risky' });
+  } catch (error) {
+    await rm(installPath, { recursive: true, force: true });
+    throw error;
+  }
   // strict: false marketplace entries may define components that the plugin has no manifest for.
   if (entry.strict === false && !(await exists(path.join(installPath, '.claude-plugin', 'plugin.json')))) {
     const { source: _source, strict: _strict, ...fields } = entry;
@@ -877,7 +887,7 @@ export async function installPlugin(spec, options = {}) {
   await writeInstalledPlugins(installed, env);
   await setEnabled(id, true, { env, root: options.root, scope: options.scope || 'user' });
   const plugin = { id, name, root: installPath, manifest: pluginManifest };
-  return { id, installPath, summary: await summarizePlugin(plugin, { env }) };
+  return { id, installPath, audit, summary: await summarizePlugin(plugin, { env }) };
 }
 
 export async function uninstallPlugin(spec, options = {}) {
@@ -1088,7 +1098,8 @@ export async function pluginCli(root, args = [], options = {}) {
   const out = options.write || ((text) => process.stdout.write(text));
   const scopeIndex = args.indexOf('--scope');
   const scope = scopeIndex >= 0 ? args[scopeIndex + 1] : 'user';
-  const rest = scopeIndex >= 0 ? args.filter((_, i) => i !== scopeIndex && i !== scopeIndex + 1) : args;
+  const allowRisky = args.includes('--allow-risky');
+  const rest = (scopeIndex >= 0 ? args.filter((_, i) => i !== scopeIndex && i !== scopeIndex + 1) : args).filter((arg) => arg !== '--allow-risky');
   const [action = 'list', ...params] = rest;
   if (action === 'marketplace' || action === 'marketplaces') {
     const [sub = 'list', arg] = params;
@@ -1111,8 +1122,12 @@ export async function pluginCli(root, args = [], options = {}) {
     return;
   }
   if (action === 'install' || action === 'i') {
-    const result = await installPlugin(params[0], { env, root, scope });
+    const result = await installPlugin(params[0], { env, root, scope, allowRisky });
     const s = result.summary;
+    if (result.audit && result.audit.findings.length) {
+      const { formatSkillAudit } = await import('./skill-audit.mjs');
+      out(formatSkillAudit(result.id, result.audit) + '\n');
+    }
     out('Installed and enabled ' + result.id + '\n  commands: ' + (s.commands.join(', ') || 'none') + '\n  agents: ' + (s.agents.join(', ') || 'none') + '\n  skills: ' + (s.skills.join(', ') || 'none') + '\n  hook groups: ' + s.hooks + '\n  MCP servers: ' + (s.mcpServers.join(', ') || 'none') + (s.lspServers.length ? '\n  LSP servers: ' + s.lspServers.join(', ') : '') + (s.outputStyles.length ? '\n  output styles: ' + s.outputStyles.join(', ') : '') + (s.options.length ? '\n  options: ' + s.options.join(', ') + ' (set with oasis plugin config ' + result.id + ' KEY=VALUE)' : '') + '\nStart a new session to load it. Plugins run hooks and MCP servers with your permissions.\n');
     return;
   }
@@ -1165,7 +1180,7 @@ export async function pluginCli(root, args = [], options = {}) {
     await updateMarketplace(null, { env }).catch(() => {});
     for (const id of ids) {
       if (installed[id] && installed[id].source === 'oasis-native') { out('Skipped ' + id + ': OASIS plugins update by reinstalling from their source (oasis add SOURCE).\n'); continue; }
-      await installPlugin(id, { env, root, scope }); out('Updated ' + id + '\n');
+      await installPlugin(id, { env, root, scope, allowRisky, overrideHint: 'oasis plugin update ' + id + ' --allow-risky' }); out('Updated ' + id + '\n');
     }
     return;
   }

@@ -24,6 +24,7 @@ import { handOffReport, reportPreview } from './report-handoff.mjs';
 import { isWorktreeBranchName } from './branch-names.mjs';
 import { loadAgentTranscript } from './sessions.mjs';
 import { repairInterruptedHistory } from './tool-results.mjs';
+import { unsupportedChildClaim } from './claim-check.mjs';
 import { runAgentTurn, headTailText, MAX_SUBAGENT_REPORT_CHARS, READ_ONLY_TOOLS, hookOptions, boundSubagentReport } from './agent.mjs';
 
 const SPECIALIST_REVIEW_TOOLS = new Set(['git_status', 'git_diff', 'git_log', 'lsp', 'list_files', 'glob_files', 'repo_map', 'read_file', 'search_files', 'grep', 'ast_grep']);
@@ -524,6 +525,9 @@ async function runChildTurnInner(parent, record, prompt, options, { foreground }
   const orphans = stopDescendants(parent, record, 'the agent that started it finished without waiting for it');
   recordAgentEvent(parent, 'agent.completed', { agentId: record.id, teamId: record.teamId || undefined, description: record.description, detail: 'tool_calls=' + Math.max(0, Number(outcome.toolCalls) || 0) });
   record.report = boundSubagentReport(outcome.text);
+  // The parent sees only this report: a passing claim the child's own tool
+  // results do not support is flagged to it with the reason.
+  record.unverifiedClaim = unsupportedChildClaim(outcome) || null;
   // Long reports go to a scratch file; the parent gets a preview and the path (src/report-handoff.mjs).
   const handoff = record.outputSchema ? null : await handOffReport({ root: parent.root, scratchDir: parent.scratchDir, agentId: record.id, run: record.runs, text: record.report, env: options.env || process.env });
   record.reportFile = handoff ? handoff.file : null;
@@ -537,6 +541,7 @@ async function runChildTurnInner(parent, record, prompt, options, { foreground }
     report: handoff ? handoff.preview : record.report,
     ...(handoff ? { report_file: handoff.file, report_chars: handoff.chars } : {}),
     ...(orphans.length ? { stopped_unfinished_agents: orphans, note_on_agents: 'This agent finished while agents it had started were still running; they were stopped. Ask it (send_message) to wait for them with agent_status if their results are needed.' } : {}),
+    ...(record.unverifiedClaim ? { unverified_claim: record.unverifiedClaim, note_on_report: 'OASIS did not observe a passing check behind this report (' + record.unverifiedClaim + '). Treat its test or build results as unverified; run the check yourself before relying on it.' } : {}),
     ...(outcome.limitReached ? { partial: true, note: 'The agent hit its ' + (record.maxTurns ? 'maxTurns (' + record.maxTurns + ')' : 'step') + ' limit; the report may be incomplete. send_message resumes it.' } : {}),
     ...(record.outputSchema ? (outcome.schemaErrors && outcome.schemaErrors.length ? { schema_errors: outcome.schemaErrors } : { structured: outcome.structured }) : {}),
     toolCalls: Math.max(0, Number(outcome.toolCalls) || 0),
@@ -586,6 +591,7 @@ function startBackgroundRun(parent, record, prompt, options) {
   record.promise = runChildTurn(parent, record, prompt, detached, { foreground: false }).finally(stopWatch).then(async (result) => {
     const parts = ['Background agent ' + record.id + ' ("' + record.description + '") finished.'];
     if (result.worktree && result.worktree.branch) parts.push('Its changes are on branch ' + result.worktree.branch + '.');
+    if (record.unverifiedClaim) parts.push('Unverified: ' + record.unverifiedClaim + '.');
     parts.push('Report:\n' + (record.reportFile ? reportPreview(record.report, record.reportFile) : record.report.slice(0, 6000) + (record.report.length > 6000 ? '\n[truncated; agent_status id ' + record.id + ' has the full report]' : '')));
     notifyParent(parent, parts.join(' '), record);
     if (record.autoDispatchManaged || (parent.agentTasks && parent.agentTasks.autoDispatch && parent.agentTasks.autoDispatch.enabled)) {
