@@ -7,6 +7,51 @@ import { loadProjectMcpServers } from './mcp-project.mjs';
 import { inspectGitHubExtension, inspectGitHubMcpServers, selectReviewedMcpServers, installGitHubExtension, updateGitHubExtension, rollbackGitHubExtension, listInstalledExtensions, removeGitHubExtension } from './extensions.mjs';
 import { loadSettings } from './settings.mjs';
 
+// https://host/mcp?key=… → https://host/mcp?… (query strings can carry keys).
+function hideUrlQuery(url) {
+  try { const parsed = new URL(String(url)); return parsed.origin + parsed.pathname + (parsed.search ? '?…' : ''); } catch { return String(url || '').replace(/\?.*$/s, '?…'); }
+}
+
+// `oasis mcp get NAME` (Claude Code's command): one server from any source the
+// runtime reads, first match in load order. Env and secret header values and
+// URL query strings are hidden; arguments are shown, as `mcp add` showed them.
+async function describeMcpServer(name, root, config) {
+  const lines = (server, source, file, enabled = true) => {
+    const remote = server.type === 'http' || server.type === 'sse' || server.url;
+    const out = [server.name + ':', '  Scope: ' + source, '  File: ' + file, '  Status: ' + (enabled ? 'enabled' : 'disabled'), '  Type: ' + (remote ? (server.type === 'sse' ? 'sse' : 'http') : 'stdio')];
+    if (remote) {
+      out.push('  URL: ' + hideUrlQuery(server.url));
+      const headers = Object.keys(server.headers || {});
+      if (headers.length) out.push('  Headers: ' + headers.join(', ') + ' (values hidden)');
+    } else {
+      out.push('  Command: ' + server.command);
+      out.push('  Args: ' + JSON.stringify(server.args || []));
+      const envNames = [...(server.passEnv || []), ...Object.keys(server.extraEnv || server.env || {})];
+      if (envNames.length) out.push('  Environment: ' + [...new Set(envNames)].join(', ') + ' (values hidden)');
+    }
+    out.push('To remove it: ' + (source === 'project (.mcp.json)' ? 'edit ' + file : source.startsWith('Claude Code') ? 'claude mcp remove ' + server.name : 'oasis mcp remove ' + server.name));
+    return out.join('\n');
+  };
+  const own = config.servers.find((server) => server.name === name);
+  if (own) return lines(own, 'user', config.configPath, own.enabled);
+  const { loadClaudeCodeMcpServers } = await import('./mcp-project.mjs');
+  const userFile = path.join(getConfigDirectory(process.env), 'mcp.json');
+  const rawUser = await readFile(userFile, 'utf8').then((text) => (JSON.parse(text) || {}).mcpServers || {}).catch(() => ({}));
+  const userKey = Object.keys(rawUser).find((key) => key === name || key.toLowerCase().replace(/[^a-z0-9_-]/g, '-') === name);
+  if (userKey) {
+    const spec = rawUser[userKey] || {};
+    const disabled = spec.disabled === true || spec.enabled === false;
+    return lines({ name: userKey, type: spec.type, url: spec.url, headers: spec.headers, command: spec.command, args: spec.args, env: spec.env }, 'user', userFile, !disabled);
+  }
+  const project = await loadProjectMcpServers(root, { env: process.env }).catch(() => ({ servers: [] }));
+  const fromProject = project.servers.find((server) => server.name === name);
+  if (fromProject) return lines(fromProject, 'project (.mcp.json)', path.join(root, '.mcp.json'));
+  const claude = await loadClaudeCodeMcpServers(root, { env: process.env }).catch(() => ({ local: [], user: [] }));
+  const fromClaude = [...claude.local, ...claude.user].find((server) => server.name === name);
+  if (fromClaude) return lines(fromClaude, 'Claude Code ' + (fromClaude.source === 'claude-local' ? 'local' : 'user') + ' scope', claude.file || '~/.claude.json');
+  return null;
+}
+
 // `oasis mcp` and `oasis extensions` subcommands.
 export async function manageMcp(rest, root = process.cwd(), { approve, askLine, askSecret } = {}) {
   const action = rest[0] || 'list';
@@ -29,7 +74,7 @@ export async function manageMcp(rest, root = process.cwd(), { approve, askLine, 
     if (project.servers.length || project.failures.length) {
       const trusted = (await loadSettings(root)).trusted;
       stdout.write('Project servers from .mcp.json' + (trusted ? '' : ' (ignored until you run oasis trust)') + ':\n');
-      for (const server of project.servers) stdout.write('  ' + server.name + ' — ' + (server.type === 'http' || server.type === 'sse' ? server.type + ' ' + server.url : 'stdio ' + server.command) + '\n');
+      for (const server of project.servers) stdout.write('  ' + server.name + ' — ' + (server.type === 'http' || server.type === 'sse' ? server.type + ' ' + hideUrlQuery(server.url) : 'stdio ' + server.command) + '\n');
       for (const failure of project.failures) stdout.write('  ' + failure.name + ' — not usable: ' + failure.error + '\n');
     }
     const { loadClaudeCodeMcpServers } = await import('./mcp-project.mjs');
@@ -43,13 +88,13 @@ export async function manageMcp(rest, root = process.cwd(), { approve, askLine, 
     }).catch(() => []);
     if (userJson.servers.length || userJson.failures.length || userJsonDisabled.length) {
       stdout.write('User servers from ' + (userJson.file || path.join(getConfigDirectory(process.env), 'mcp.json')) + ':\n');
-      for (const server of userJson.servers) stdout.write('  ' + server.name + ' — ' + (server.type === 'http' || server.type === 'sse' ? server.type + ' ' + server.url : 'stdio ' + server.command) + '\n');
+      for (const server of userJson.servers) stdout.write('  ' + server.name + ' — ' + (server.type === 'http' || server.type === 'sse' ? server.type + ' ' + hideUrlQuery(server.url) : 'stdio ' + server.command) + '\n');
       for (const name of userJsonDisabled) stdout.write('  ' + name + ' — disabled (oasis mcp enable ' + name + ')\n');
       for (const failure of userJson.failures) stdout.write('  ' + failure.name + ' — not usable: ' + failure.error + '\n');
     }
     if (claude.local.length || claude.user.length || claude.failures.length) {
       stdout.write('Claude Code servers from ' + (claude.file || '~/.claude.json') + ':\n');
-      for (const server of [...claude.local, ...claude.user]) stdout.write('  ' + server.name + ' — ' + (server.source === 'claude-local' ? 'local' : 'user') + ' scope, ' + (server.type === 'http' || server.type === 'sse' ? server.type + ' ' + server.url : 'stdio ' + server.command) + '\n');
+      for (const server of [...claude.local, ...claude.user]) stdout.write('  ' + server.name + ' — ' + (server.source === 'claude-local' ? 'local' : 'user') + ' scope, ' + (server.type === 'http' || server.type === 'sse' ? server.type + ' ' + hideUrlQuery(server.url) : 'stdio ' + server.command) + '\n');
       for (const failure of claude.failures) stdout.write('  ' + failure.name + ' — not usable: ' + failure.error + '\n');
     }
     stdout.write('Configured MCP servers start when a new agent session begins; each tool call asks for approval by default.\n');
@@ -89,17 +134,36 @@ export async function manageMcp(rest, root = process.cwd(), { approve, askLine, 
     stdout.write(await installFromRegistry(rest.slice(1), { root, env: process.env, approve: (text) => approve(text, true, false) }) + '\n');
     return;
   }
+  if (action === 'add-json') {
+    const { addMcpServerFromJson } = await import('./mcp-remote-add.mjs');
+    const result = await addMcpServerFromJson(rest.slice(1), { root, env: process.env, approve: (text) => approve(text, true, false) });
+    stdout.write(result.message + '\n');
+    if (result.cancelled) process.exitCode = 1;
+    return;
+  }
+  if (action === 'get') {
+    if (!rest[1]) throw new Error('Usage: oasis mcp get NAME');
+    const found = await describeMcpServer(rest[1], root, config);
+    if (!found) {
+      stdout.write('No MCP server named "' + rest[1] + '". oasis mcp list shows the configured ones.\n');
+      process.exitCode = 1;
+      return;
+    }
+    stdout.write(found + '\n');
+    return;
+  }
   if (action === 'add' && rest.some((arg, i) => arg === '--transport' && /^(?:http|sse|streamable-http)$/i.test(String(rest[i + 1] || '')) || /^--transport=(?:http|sse|streamable-http)$/i.test(arg))) {
     const { addRemoteMcpServer } = await import('./mcp-remote-add.mjs');
     const result = await addRemoteMcpServer(rest.slice(1), { root, env: process.env, approve: (text) => approve(text, true, false) });
     stdout.write(result + '\n');
+    if (/^MCP configuration cancelled/.test(result)) process.exitCode = 1;
     return;
   }
   if (action === 'add') {
     const name = rest[1];
     const separator = rest.indexOf('--');
     if (!name || separator < 2 || separator === rest.length - 1) {
-      throw new Error('Usage: oasis mcp add NAME [--env VAR1,VAR2] -- EXECUTABLE [ARG ...]\n       oasis mcp add --transport http|sse NAME URL [--header "Name: value"] [--scope user|project]');
+      throw new Error('Usage: oasis mcp add NAME [--env VAR1,VAR2] -- EXECUTABLE [ARG ...]\n       oasis mcp add --transport http|sse NAME URL [--header "Name: value"] [--scope user|project]\n       oasis mcp add-json NAME JSON [--scope user|project]');
     }
     let passEnv = [];
     for (let i = 2; i < separator; i++) {
@@ -116,6 +180,7 @@ export async function manageMcp(rest, root = process.cwd(), { approve, askLine, 
     const summary = 'Configure MCP server "' + name + '"?\nExecutable: ' + command + '\nArguments: ' + JSON.stringify(args) + '\nEnvironment passthrough: ' + (passEnv.join(', ') || 'none') + '\nThis starts third-party code inside your user account when Oasis sessions start. Review the server source and package identity before approving.';
     if (!(await approve(summary, true, false))) {
       stdout.write('MCP configuration cancelled. The previous configuration was kept.\n');
+      process.exitCode = 1;
       return;
     }
     const output = await saveMcpServers(config.servers.filter((server) => server.name !== name).concat(entry), { configPath: config.configPath });
@@ -156,7 +221,7 @@ export async function manageMcp(rest, root = process.cwd(), { approve, askLine, 
     stdout.write('MCP server "' + name + '" is now ' + (existing.enabled ? 'enabled' : 'disabled') + '. Saved ' + output + '\n');
     return;
   }
-  throw new Error('Unknown MCP action. Use oasis mcp list, search, install, add, remove, enable, or disable.');
+  throw new Error('Unknown MCP action. Use oasis mcp list, get, search, install, add, add-json, remove, enable, or disable.');
 }
 
 export async function manageExternalExtensions(root, args, autoApprove, { approve } = {}) {
