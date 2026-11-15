@@ -3,6 +3,15 @@
 A short, dated record of changes, tests, benchmark results, blockers and known
 weaknesses. Newest first. Detailed user-facing notes go in the CHANGELOG.
 
+## 2026-11-15 (used as a new user: build from scratch)
+
+- Fresh HOME, empty folder, Kilo's keyless gateway (free models, no paid calls). Details and numbers in docs/REAL-WORLD-RUNS.md.
+- `e532ad16`: `oasis connect` on a keyless gateway that prices its models probed 92 paid models (401 each) and failed. It now reads `isFree` and pricing, tries free models first and treats auto-routers as aliases; it connects in 4 s. New test in test/app-connect.test.mjs fails without the change; 74 connect tests pass.
+- Built a CLI expense tracker from an empty folder in 100 s; 13/13 of its tests pass, checked by hand.
+- `e0d9548e`: `--allowedTools A B` read only A, and B became part of the task; a single argument split only on commas, though the help says spaces work too; the refusal hint repeated rules. test/allowed-tools-args.test.mjs (3; fail without the change).
+- `4ba59893`: the `-p --output-format json` result now names `model` and per-model `modelUsage` (requests, tokens, cost). New test fails without the change.
+- Built a notes web app (97 s), added editing through `oasis -c` (105 s), then fixed the Edit bug its own tests missed after a user-style report (76 s). Checked separately with curl and headless Chromium. All runs $0.
+
 ## 2026-11-15 (live local-model run; interactive commands; docs guides)
 
 - Full suite on Node 22.21.1 before today's changes: 3392 tests, 3384 pass, 0 fail, 8 skipped (1,401 s on 2 CPUs).

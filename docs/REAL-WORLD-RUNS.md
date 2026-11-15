@@ -1,11 +1,16 @@
 # Real-world runs
 
-These runs used OASIS the way a person would: type a request, approve steps, read the answer. They used real providers with no scripted model, and were recorded 5–12 November 2026. The model-free harness numbers are in [Benchmarks](BENCHMARKS.md).
+These runs used OASIS the way a person would: type a request, approve steps, read the answer. They used real providers with no scripted model, and were recorded 5–15 November 2026. The model-free harness numbers are in [Benchmarks](BENCHMARKS.md).
 
 ## Tasks
 
 | What we asked | Where | Model | Result |
 | --- | --- | --- | --- |
+| New user, empty HOME: `oasis connect https://api.kilo.ai/api/gateway/v1` (no key) | Terminal | none yet | First try failed: 92 paid models probed, each 401. Fixed in `e532ad16`; now connects in 4 s to a free model with 3 free backups, 15 Nov |
+| "Create a small command-line expense tracker in Node.js from scratch in this empty folder" (add, list, summary, JSON storage, invalid-amount error, README, node:test tests) | `oasis -p`, accept-edits, `--allowedTools` for npm and node | nemotron-3-ultra-550b-a55b:free (Kilo, keyless) | Built from an empty folder in 100 s; its 13 tests pass, and the commands work when run by hand (invalid amount exits 1 with a clear message). The run exposed the `--allowedTools` parsing bug fixed in `e0d9548e`. 15 Nov |
+| "Build a small notes web app from scratch" (Node built-ins only, GET/POST/DELETE API with 400/404 cases, page with form and delete buttons, tests on port 0) | `oasis -p --output-format json` | same | Built in 97 s, 16 requests, 172,311 tokens (113,984 cached), $0. 11 of 11 tests pass; checked separately with curl and in headless Chromium (add and delete through the page) |
+| Same session (`oasis -c`): "Now add editing: PUT /api/notes/:id … and an Edit button on the page" | `oasis -c -p` | same | 105 s, 18 requests, 394,131 tokens, $0; 18 of 18 tests pass. In Chromium the Edit button was broken: the page called `GET /api/notes/:id`, which the server lacked, and saving created a duplicate. Its tests covered only the API |
+| Same session: the bug reported as a user would, with the console message | `oasis -c -p` | same | Found the missing route, added it with 3 tests; 76 s, 14 requests, $0. 21 of 21 pass, and Edit updates the note in Chromium with no console errors |
 | "npm test fails. Find the bug in cart.mjs, fix it, and run npm test to confirm." | Terminal, default mode, OASIS 1.3.0 | gpt-oss-20b (free) | Fixed the percentage discount, 2 of 2 tests passing; 3 m 04 s, 2 approvals, 12 Nov ([video](../assets/demo/oasis-real-model-demo.mp4)) |
 | "wordCount gives the wrong answer when there are double spaces or leading spaces. Fix it in stats.mjs, add a regression test, and run npm test." Sent while it worked: "Also handle tabs and newlines between words." | Web app, Ask first, OASIS 1.3.0 | gpt-oss-20b (free) | Fixed, note followed, regression test added, 3 of 3 passing; 6 m 47 s, 2 approvals answered in the waiting step, 12 Nov ([video](../assets/demo/oasis-web-real-model-demo.mp4), [screenshot](../assets/screenshots/real-model-web-task-dark.png)) |
 | "slugify() in slug.mjs only replaces the first space. Fix it, add a test, run the tests." | Terminal, default mode | gpt-oss-20b (free) | Fixed, test passing after the model corrected its own import twice; 7 m 34 s, 3 approvals, 12 Nov |
@@ -18,6 +23,8 @@ These runs used OASIS the way a person would: type a request, approve steps, rea
 | Call an MCP tool in auto mode | Terminal | gpt-oss-20b | Passed |
 | Delegate to an `explore` subagent in a worktree | Terminal | gpt-oss-20b | Passed; worktree removed afterwards |
 | Continue a terminal session in the browser | Web app | gpt-oss-20b | Passed |
+
+Lesson from the 15 November runs: a model's own tests passing is not proof that a page works. Ask for a test that drives the page, or check it in a browser.
 
 Everything that went wrong in these runs became a fix with a regression test: a streamed reply glued onto the next one, the agent telling the user about its internal checks, a keyless endpoint that kept asking for a key, activity cards that all said "Completed a project step". See the [Changelog](../CHANGELOG.md).
 
