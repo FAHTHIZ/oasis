@@ -4,6 +4,7 @@ User-facing change history grouped by package version. A version heading does no
 
 ## Unreleased
 
+- Post-edit check: in a folder with no tests and no test command, the note asking the model to verify its change now names a check that exists (`node math.mjs`, `python3 calc.py`) and says not to look for a test setup. Before, it only said to inspect the project scripts, and a small model searched for a package.json that was not there. One live trial each way with gpt-oss-20b; not a measured saving.
 - The grep tool searches a pattern that is not a valid regular expression (such as `add(`) as plain text and says so in a `note`, with both ripgrep and the built-in engine. Before, the call failed with `regex parse error` and small models spent another step on it.
 - `OASIS_PROTOCOL=openai` (and `protocol: "openai"` in settings) now means `openai-compatible` chat completions. Before, OASIS refused to start with "Provider protocol must be …", and the error did not say which value it got.
 - `oasis -p` with `OASIS_BASE_URL` set to a remote server but no API key now says the key is missing and names `OASIS_API_KEY`, and how to save a keyless server. Before, it said "No model provider is configured" although the variables were set.
