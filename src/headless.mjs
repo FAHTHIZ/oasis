@@ -301,7 +301,9 @@ export async function runHeadless(options) {
       onToolStart: ({ name, args, subagent, call }) => (toolObserver && toolObserver.start && toolObserver.start({ name, args, subagent, call }), progress && !subagent && progress(progressLine(name, args)), emit({ type: 'tool_use', ...(call && call.id ? { id: call.id } : {}), name, input: args, ...(subagent ? { subagent } : {}) })),
       ...(forwardSubagentText || env.CLAUDE_CODE_FORWARD_SUBAGENT_TEXT === '1' || env.OASIS_FORWARD_SUBAGENT_TEXT === '1' ? { onSubagentText: ({ text, subagent, agentId, parentToolUseId }) => emit({ type: 'assistant', message: { role: 'assistant', content: [{ type: 'text', text }] }, parent_tool_use_id: parentToolUseId, subagent, agent_id: agentId, session_id: session.sessionId || null }) } : {}),
       onToolResult: ({ name, result: toolResult, subagent, call }) => { if (persistence.enabled) saveMidTurn(session, { env }); if (toolObserver && toolObserver.result) toolObserver.result({ name, result: toolResult, subagent, call }); emit({ type: 'tool_result', ...(call && call.id ? { tool_use_id: call.id } : {}), name, is_error: Boolean(toolResult && (toolResult.error || (toolResult.exitCode !== undefined && toolResult.exitCode !== 0))), content: truncateValue(toolResult), ...(subagent ? { subagent } : {}) }) },
-      onText: (text) => emit({ type: 'assistant', text }),
+      // `text` is the OASIS field; `message` is the Claude Code stream-json shape,
+      // so consumers written for `claude -p --output-format stream-json` read it too.
+      onText: (text) => emit({ type: 'assistant', text, message: { role: 'assistant', content: [{ type: 'text', text }] }, session_id: session.sessionId || null }),
       // Text and JSON output print only the final reply, so earlier replies in
       // the turn were not seen and the final answer has to stand on its own.
       textShown: outputFormat === 'stream-json',
