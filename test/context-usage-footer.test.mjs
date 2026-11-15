@@ -20,3 +20,9 @@ test('a provider-reported count already includes tool schemas and is used as is'
   const session = { messages, toolDefinitions: tools, contextAnchor: { length: 2, last: messages[1], inputTokens: 9000 } };
   assert.deepEqual(contextUsage(session), { tokens: 9000, reported: true });
 });
+
+test('the web session state reports the same context figure', async () => {
+  const { webSessionState } = await import('../src/web.mjs');
+  const session = { messages: [{ role: 'system', content: 'sys' }, { role: 'user', content: 'hi' }], toolDefinitions: tools, config: {} };
+  assert.equal(webSessionState(session, {}).contextTokens, contextUsage(session).tokens);
+});
