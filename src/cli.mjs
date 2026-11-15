@@ -1227,7 +1227,7 @@ async function runPrompt(prompt, root, autoApprove, session = null, persistence 
     }
   } catch {}
   if (!config.configured) {
-    stdout.write('Oasis needs a model provider for general coding tasks. Run oasis setup first, or configure OASIS_PROTOCOL, OASIS_BASE_URL, OASIS_MODEL, and the matching API-key environment variable. Local Ollama-style endpoints can use a loopback URL without an API key.\n');
+    stdout.write('Oasis needs a model provider for general coding tasks. ' + (INTERACTIVE_SESSION ? 'Type /setup to connect one' : 'Run oasis setup first') + ', or configure OASIS_PROTOCOL, OASIS_BASE_URL, OASIS_MODEL, and the matching API-key environment variable. Local Ollama-style endpoints can use a loopback URL without an API key.\n');
     return session;
   }
   if (!session) {
@@ -2130,7 +2130,12 @@ async function showResumeRecap(root, persistence) {
 // Slash commands that act on the current conversation (see interactive()).
 export const RESUMED_SESSION_COMMANDS = new Set(['rewind', 'rollback', 'context', 'compact', 'export', 'cost', 'recap', 'rename', 'fork', 'branch', 'todos', 'undo', 'copy', 'usage', 'tasks', 'agents', 'goal']);
 
+// Set while the interactive prompt runs, so messages name /setup rather than
+// asking the user to leave and run `oasis setup`.
+let INTERACTIVE_SESSION = false;
+
 async function interactive(root, autoApprove, persistence = {}) {
+  INTERACTIVE_SESSION = true;
   let session = null;
   // Interactive mode reads from a terminal. Piped or redirected input used to
   // print "Oasis session closed." and exit without saying why.
@@ -2151,7 +2156,7 @@ async function interactive(root, autoApprove, persistence = {}) {
   if (stdout.isTTY && process.env.OASIS_DISABLE_THEME_RELOAD !== '1') {
     import('./themes.mjs').then(({ watchThemes }) => watchThemes({ env: process.env, plugins: (startupSettings && startupSettings.pluginThemeSources) || [], onReload: (theme) => stdout.write('\n[theme] reloaded ' + theme.name + '\n') })).catch(() => {});
   }
-  if (stdout.isTTY) await showStartupBanner({ root, model: SESSION_OPTIONS.model || (bannerConfig.configured === false ? 'not set up yet · exit and run oasis setup' : bannerConfig.model) || '', provider: bannerConfig.configured === false ? '' : bannerProviderLabel(bannerConfig), mode: SESSION_OPTIONS.permissionMode || 'default' }).catch(() => {});
+  if (stdout.isTTY) await showStartupBanner({ root, model: SESSION_OPTIONS.model || (bannerConfig.configured === false ? 'not set up yet · type /setup' : bannerConfig.model) || '', provider: bannerConfig.configured === false ? '' : bannerProviderLabel(bannerConfig), mode: SESSION_OPTIONS.permissionMode || 'default' }).catch(() => {});
   else stdout.write('\nOASIS — coding agent\nWorkspace: ' + root + '\nType your task in plain English. Use /help or /exit. Commands run locally; review permissions carefully.\n');
   if (stdout.isTTY) {
     try {
