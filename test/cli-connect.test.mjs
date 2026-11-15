@@ -97,3 +97,55 @@ test('a provider key already in the environment is pointed out and can be used',
     assert.match(wrong.out, /No key for mistral/);
   } finally { await rm(home, { recursive: true, force: true }); }
 });
+
+// `oasis connect URL --model NAME` ignored --model (the global flag parser took
+// it), so a gateway that lists no models could not be connected at all, and the
+// connection test's warnings (a model that did not call tools) never reached the
+// terminal.
+test('oasis connect --model: tests that model first, even when unlisted, and prints notes', async () => {
+  const seen = [];
+  const server = http.createServer(async (req, res) => {
+    let body = '';
+    for await (const chunk of req) body += chunk;
+    res.setHeader('content-type', 'application/json');
+    if (req.url.endsWith('/models')) return res.end(JSON.stringify({ object: 'list', data: [] }));
+    if (req.url.includes('chat/completions')) {
+      const request = JSON.parse(body || '{}');
+      seen.push(request.model);
+      return res.end(JSON.stringify({ id: '1', object: 'chat.completion', model: request.model, choices: [{ index: 0, message: { role: 'assistant', content: 'ok' }, finish_reason: 'stop' }], usage: { prompt_tokens: 1, completion_tokens: 1 } }));
+    }
+    res.statusCode = 404; res.end('{}');
+  });
+  await new Promise((r) => server.listen(0, '127.0.0.1', r));
+  const home = await mkdtemp(path.join(os.tmpdir(), 'oasis-connect-model-'));
+  try {
+    const url = 'http://127.0.0.1:' + server.address().port + '/v1';
+    const { code, out } = await run(['connect', url, '--model', 'unlisted-model'], '', home);
+    assert.equal(code, 0, out);
+    assert.match(out, /Locked in unlisted-model/);
+    assert.match(out, /Note: unlisted-model answered but did not call tools/);
+    assert.equal(seen[0], 'unlisted-model');
+    const config = JSON.parse(await readFile(path.join(home, '.oasis', 'config.json'), 'utf8'));
+    assert.equal(config.model, 'unlisted-model');
+  } finally {
+    server.close();
+    await rm(home, { recursive: true, force: true });
+  }
+});
+
+test('oasis connect --model: a listed model is preferred over the ranking', async () => {
+  const server = mockOllama();
+  await new Promise((r) => server.listen(0, '127.0.0.1', r));
+  const home = await mkdtemp(path.join(os.tmpdir(), 'oasis-connect-model2-'));
+  try {
+    const url = 'http://127.0.0.1:' + server.address().port + '/v1';
+    const { code, out } = await run(['connect', url, '--model', 'llama3.2:3b'], '', home);
+    assert.equal(code, 0, out);
+    assert.match(out, /Locked in llama3\.2:3b/);
+    const config = JSON.parse(await readFile(path.join(home, '.oasis', 'config.json'), 'utf8'));
+    assert.equal(config.model, 'llama3.2:3b');
+  } finally {
+    server.close();
+    await rm(home, { recursive: true, force: true });
+  }
+});

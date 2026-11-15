@@ -3259,7 +3259,7 @@ async function main() {
     }
     return await configureProvider(workspace);
   }
-  if (command === 'connect') return await connectCommand(rest, workspace);
+  if (command === 'connect') return await connectCommand(rest, workspace, { model: SESSION_OPTIONS.model || '' });
   if (command === 'models') {
     const { modelsCommand } = await import('./models-command.mjs');
     process.exitCode = await modelsCommand(rest, { root: workspace });
