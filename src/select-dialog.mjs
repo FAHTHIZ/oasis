@@ -112,9 +112,14 @@ export async function pickerFor(command, { session = null, env = process.env, se
     }
     // Claude aliases mean nothing to other providers unless ANTHROPIC_DEFAULT_*_MODEL maps them.
     const mapsAliases = Object.keys(env).some((name) => /^ANTHROPIC_DEFAULT_\w+_MODEL$/.test(name) && env[name]);
-    const aliases = session && session.config && session.config.protocol && !['anthropic', 'bedrock', 'vertex', 'foundry'].includes(session.config.protocol) && served.length && !mapsAliases ? [] : MODEL_ALIASES;
+    // Even when the model list could not be fetched: picking "opus" would send the
+    // literal name to an OpenAI-compatible server.
+    const aliases = session && session.config && session.config.protocol && !['anthropic', 'bedrock', 'vertex', 'foundry'].includes(session.config.protocol) && !mapsAliases ? [] : MODEL_ALIASES;
     const names = [...new Set([...(current ? [current] : []), ...aliases, ...(allowed || []), ...served])]
       .filter((name) => modelAllowed(name, allowed, { env, protocol: session && session.config && session.config.protocol, ...((session && session.modelPolicy) || {}) }));
+    // Nothing to choose between (the provider listed no models): the plain
+    // /model reply, which says how to type a name, is more useful.
+    if (names.length <= 1 && !aliases.length) return null;
     const options = names.map((name) => ({ label: name + (name === current ? ' (current)' : ''), value: name }));
     return { context: 'ModelPicker', options: [...options, cancel], initial: Math.max(0, names.indexOf(current)) };
   }
