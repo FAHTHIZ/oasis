@@ -10,6 +10,7 @@ import { lstat, mkdir, mkdtemp, readdir, readFile, rm, copyFile, rename } from '
 import os from 'node:os';
 import path from 'node:path';
 import { frontMatterValue, splitFrontMatter } from './frontmatter.mjs';
+import { auditSkillDirectory, formatSkillAudit } from './skill-audit.mjs';
 
 const MAX_DEPTH = 6;
 const MAX_FILES_PER_SKILL = 200;
@@ -134,7 +135,9 @@ async function copySkill(from, to) {
 
 /**
  * List or install skills from a source.
- * options: { skill?: name, all?: boolean, list?: boolean, targetDir: string, env, signal }
+ * options: { skill?: name, all?: boolean, list?: boolean, targetDir: string, env, signal, allowRisky?: boolean }
+ * Each package is audited (src/skill-audit.mjs) after staging; one with a
+ * high-risk finding is refused unless allowRisky is true.
  */
 export async function installSkillsFromSource(rawSource, options = {}) {
   const env = options.env || process.env;
@@ -151,7 +154,11 @@ export async function installSkillsFromSource(rawSource, options = {}) {
       root = fetched.root;
     }
     const packages = await findSkillPackages(root);
-    if (options.list) return { source: spec.display, available: packages.map(({ name, description }) => ({ name, description })) };
+    if (options.list) {
+      const available = [];
+      for (const { name, description, directory } of packages) available.push({ name, description, audit: await auditSkillDirectory(directory) });
+      return { source: spec.display, available };
+    }
     if (!packages.length) return { installed: [], source: spec.display, message: 'No SKILL.md packages were found in ' + spec.display + '.' };
     const wanted = options.all ? packages : packages.filter((item) => item.name.toLowerCase() === String(options.skill || '').toLowerCase());
     if (!wanted.length) {
@@ -160,16 +167,33 @@ export async function installSkillsFromSource(rawSource, options = {}) {
     const targetDir = path.resolve(options.targetDir);
     await mkdir(targetDir, { recursive: true });
     const installed = [];
+    const refused = [];
+    const reports = [];
     for (const item of wanted) {
       const destination = path.join(targetDir, item.name);
       const staging = destination + '.oasis-installing-' + process.pid;
       await rm(staging, { recursive: true, force: true });
       const stats = await copySkill(item.directory, staging);
+      // Audit exactly the files that would be installed (src/skill-audit.mjs).
+      const audit = await auditSkillDirectory(staging);
+      const report = formatSkillAudit(item.name, audit);
+      if (report) reports.push(report);
+      if (audit.blocked && options.allowRisky !== true) {
+        await rm(staging, { recursive: true, force: true });
+        refused.push({ name: item.name, description: item.description, audit });
+        continue;
+      }
       await rm(destination, { recursive: true, force: true });
       await rename(staging, destination);
-      installed.push({ name: item.name, description: item.description, path: destination, files: stats.files, skipped: stats.skipped });
+      installed.push({ name: item.name, description: item.description, path: destination, files: stats.files, skipped: stats.skipped, audit });
     }
-    return { installed, source: spec.display, message: 'Installed ' + installed.map((item) => item.name).join(', ') + ' into ' + targetDir + '. Review the instructions before relying on them.' };
+    const parts = [];
+    if (installed.length) parts.push('Installed ' + installed.map((item) => item.name).join(', ') + ' into ' + targetDir + '. Review the instructions before relying on them.');
+    // Only the user can override a refusal, from the command line; the agent
+    // tool has no override, so text in a skill cannot talk the agent into it.
+    if (refused.length) parts.push('Not installed: ' + refused.map((item) => item.name).join(', ') + '. The audit found high-risk lines (listed below). Read them first; to install anyway, run ' + refused.map((item) => '`oasis skills add ' + spec.display + ' --skill ' + item.name + ' --allow-risky`').join(' or ') + ' yourself.');
+    if (reports.length) parts.push(reports.join('\n'));
+    return { installed, refused, source: spec.display, message: parts.join('\n') };
   } finally {
     if (fetched) await fetched.cleanup().catch(() => {});
   }
