@@ -134,10 +134,15 @@ export function inferProtocol(baseURL, fallback = DEFAULT_PROTOCOL) {
   } catch { return fallback; }
 }
 
+// "openai" is what people type first. Chat completions is the protocol every
+// OpenAI-style server speaks (api.openai.com included), so it means that.
+const PROTOCOL_ALIASES = { openai: 'openai-compatible' };
+
 export function validateProtocol(raw) {
-  const protocol = String(raw || DEFAULT_PROTOCOL).trim().toLowerCase();
+  const given = String(raw || DEFAULT_PROTOCOL).trim().toLowerCase();
+  const protocol = PROTOCOL_ALIASES[given] || given;
   if (!['openai-responses', 'openai-compatible', 'anthropic', 'bedrock', 'vertex', 'foundry'].includes(protocol)) {
-    throw new Error('Provider protocol must be openai-responses, openai-compatible, anthropic, bedrock, vertex, or foundry.');
+    throw new Error('Provider protocol must be openai-compatible (or openai), openai-responses, anthropic, bedrock, vertex, or foundry; got "' + given.slice(0, 40) + '".');
   }
   return protocol;
 }
