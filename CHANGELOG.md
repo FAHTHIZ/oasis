@@ -4,6 +4,7 @@ User-facing change history grouped by package version. A version heading does no
 
 ## Unreleased
 
+- `oasis connect` in the terminal no longer blames browser CORS ("does it allow browser apps? OLLAMA_ORIGINS=*") when a server does not answer; that hint now appears only in the browser app, where it applies.
 - A one-word typo of a command (`oasis doctr`, `oasis sessons`, `oasis skill`) now suggests the command ("Did you mean oasis doctor?") instead of sending the word to the model as a task. Ordinary one-word tasks such as `oasis lint` still reach the agent.
 - `oasis plugins --help` and `oasis plugin --help` now show both spellings' lines. Before, `plugins --help` left out the marketplace and Claude Code plugin commands, even though both words run the same command. The same applies to `extension` and `extensions`.
 - `oasis -r` without an ID, and a bare `/resume` in a terminal, open an arrow-key picker of saved chats, like `/model` and `/rewind`. Before, they printed a numbered list and you had to type `/resume NUMBER`. Piped (non-terminal) input still gets the list.
