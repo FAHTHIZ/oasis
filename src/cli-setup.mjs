@@ -221,10 +221,11 @@ export async function configureProvider(root = process.cwd(), options = {}) {
 // Paste-to-connect in the terminal: the same smart connect the app uses. Works
 // out the provider from a key, model link or local server address, picks the
 // best tool-calling model, keeps the next ones as automatic backups and saves.
-async function connectFromTerminalPaste(text) {
+async function connectFromTerminalPaste(text, { model = '' } = {}) {
   const { connectFromPaste } = await import('./provider-connect.mjs');
   let last = '';
   const result = await connectFromPaste(text, {
+    model,
     onStatus: (status) => {
       const line = String(status && status.text || status || '').trim();
       if (!line || line === last || status && status.step === 'download' && last.startsWith(line.split(' — ')[0])) { if (status && status.step === 'download') last = line; return; }
@@ -236,6 +237,9 @@ async function connectFromTerminalPaste(text) {
   const backups = result.config.fallbackModel ? result.config.fallbackModel.split(',').filter(Boolean) : [];
   stdout.write('Locked in ' + result.config.model + ' on ' + result.label + '.' + (backups.length ? ' ' + backups.length + ' backup model' + (backups.length === 1 ? '' : 's') + ' ready if it runs out.' : '') + '\n');
   stdout.write('Saved to ' + configPath + (result.masked ? ' (key ' + result.masked + ')' : '') + '.\n');
+  // Warnings from the connection test (a model that did not call tools, a
+  // --model that failed, a wider Ollama window) were only shown in the web UI.
+  for (const note of result.notes || []) stdout.write('Note: ' + note + '\n');
   if (result.githubToken) stdout.write('A GitHub token was in the paste too. It was not saved; OASIS uses your git login for GitHub.\n');
   return result;
 }
@@ -270,8 +274,8 @@ function redactSecretText(message, secret) {
 
 
 const CONNECT_USAGE = [
-  'Usage: oasis connect [KEY | MODEL LINK | SERVER ADDRESS]',
-  '       oasis connect --from-env [PROVIDER]',
+  'Usage: oasis connect [KEY | MODEL LINK | SERVER ADDRESS] [--model NAME]',
+  '       oasis connect --from-env [PROVIDER] [--model NAME]',
   '',
   'Paste an API key, a model page link (Hugging Face, OpenRouter, Ollama) or a',
   'local server address. OASIS works out the provider, lists its models, tests',
@@ -280,7 +284,10 @@ const CONNECT_USAGE = [
   '',
   'With nothing after it, OASIS asks for the paste so the key stays out of your',
   'shell history. --from-env uses a key already in the environment, such as',
-  'GEMINI_API_KEY, OPENROUTER_API_KEY, GROQ_API_KEY or OPENAI_API_KEY.'
+  'GEMINI_API_KEY, OPENROUTER_API_KEY, GROQ_API_KEY or OPENAI_API_KEY.',
+  '',
+  '--model NAME tests that model first and saves it if it works, even when the',
+  'server does not list it.'
 ].join('\n') + '\n';
 
 
@@ -297,7 +304,7 @@ export function providerKeysInEnv(env = process.env) {
   return found;
 }
 
-async function connectFromEnvironment(wanted = '') {
+async function connectFromEnvironment(wanted = '', { model = '' } = {}) {
   const keys = providerKeysInEnv();
   const pick = wanted ? keys.find((item) => item.provider === wanted.toLowerCase() || item.name === wanted.toUpperCase()) : keys[0];
   if (!pick) {
@@ -307,15 +314,15 @@ async function connectFromEnvironment(wanted = '') {
   }
   if (keys.length > 1 && !wanted) stdout.write('Found keys for ' + keys.map((item) => item.provider).join(', ') + '; using ' + pick.name + ' (pass a provider name to choose).\n');
   else stdout.write('Using ' + pick.name + ' from the environment.\n');
-  await connectFromTerminalPaste(pick.value);
+  await connectFromTerminalPaste(pick.value, { model });
 }
 
-export async function connectCommand(rest, root) {
+export async function connectCommand(rest, root, { model = '' } = {}) {
   if (['--help', '-h', 'help'].includes(rest[0])) { stdout.write(CONNECT_USAGE); return; }
-  if (rest[0] === '--from-env') { await connectFromEnvironment(rest[1] || ''); return; }
+  if (rest[0] === '--from-env') { await connectFromEnvironment(rest[1] || '', { model }); return; }
   const inline = rest.join(' ').trim();
   if (inline) {
-    await connectFromTerminalPaste(inline);
+    await connectFromTerminalPaste(inline, { model });
     // Only a pasted key belongs out of shell history; an address or link does not.
     if (parsePaste(inline).keys.length) stdout.write('Tip: paste at the prompt next time (run oasis connect with nothing after it) so the key stays out of your shell history.\n');
     return;
@@ -324,9 +331,9 @@ export async function connectCommand(rest, root) {
     const chunks = [];
     for await (const chunk of stdin) chunks.push(chunk);
     const piped = Buffer.concat(chunks).toString('utf8').trim();
-    if (!piped && providerKeysInEnv().length) { await connectFromEnvironment(); return; }
+    if (!piped && providerKeysInEnv().length) { await connectFromEnvironment('', { model }); return; }
     if (!piped) throw new Error('Usage: oasis connect, then paste a model API key, a model link or a local server address (or run oasis connect --help).');
-    await connectFromTerminalPaste(piped);
+    await connectFromTerminalPaste(piped, { model });
     return;
   }
   const outcome = await pasteFirstSetup(root);

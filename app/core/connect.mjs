@@ -543,12 +543,16 @@ async function lockIn(connection, ranked, { fetchImpl, onStatus, tries = 4, pref
  *   { connection, model, toolCalling, notes, githubToken }
  * or throws ProviderError with a message written for the user.
  */
-export async function smartConnect(input, { fetchImpl = globalThis.fetch.bind(globalThis), onStatus = () => {}, known = [], test = true, allowPull = true, tries = 4, retryDelayMs, probeTimeoutMs } = {}) {
+export async function smartConnect(input, { fetchImpl = globalThis.fetch.bind(globalThis), onStatus = () => {}, known = [], test = true, allowPull = true, tries = 4, retryDelayMs, probeTimeoutMs, model: requestedModel = '' } = {}) {
   const parsed = parsePaste(input);
+  const wanted = String(requestedModel || '').trim();
   const notes = [];
   const githubToken = parsed.githubTokens[0] || '';
   const say = (text, step = 'info') => onStatus({ step, text });
   const finish = async (connection, preferred = []) => {
+    // An explicit model (oasis connect URL --model NAME) is tried first, even when
+    // the server does not list it (some gateways list nothing).
+    if (wanted) preferred = [wanted, ...preferred.filter((id) => id !== wanted)];
     say('Found ' + connection.models.length + ' model' + (connection.models.length === 1 ? '' : 's') + ' on ' + connection.label + '.', 'models');
     if (!connection.models.length && !preferred.length) throw new ProviderError(connection.label + ' answered but lists no chat models.');
     if (!test) return { connection, model: preferred[0] || connection.models[0], toolCalling: null, notes, githubToken };
@@ -558,6 +562,7 @@ export async function smartConnect(input, { fetchImpl = globalThis.fetch.bind(gl
     // Models that are retired or have no quota go last, so they never become fallbacks.
     connection.models = [locked.model, ...rest.filter((id) => !unusable.has(id)), ...rest.filter((id) => unusable.has(id))];
     if (!locked.toolCalling) notes.push(locked.model + ' answered but did not call tools in the test, so it may only chat. Paste another model to use as the agent.');
+    if (wanted && locked.model !== wanted) notes.push(wanted + ' did not pass the connection test, so ' + locked.model + ' was saved instead.');
     say('Ready: ' + locked.model + ' on ' + connection.label + '.', 'ready');
     return { connection, model: locked.model, toolCalling: locked.toolCalling, notes, githubToken, unusable: [...unusable] };
   };

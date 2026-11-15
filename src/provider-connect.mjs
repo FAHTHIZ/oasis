@@ -31,12 +31,12 @@ export function runtimeConfigFromConnection(result, { fallbackCount = 3 } = {}) 
  * Connect from pasted text. Returns { config, label, models, toolCalling, notes, githubToken }.
  * Throws a readable error when nothing in the text points at a model.
  */
-export async function connectFromPaste(text, { fetchImpl = globalThis.fetch.bind(globalThis), onStatus = () => {}, allowPull = true } = {}) {
+export async function connectFromPaste(text, { fetchImpl = globalThis.fetch.bind(globalThis), onStatus = () => {}, allowPull = true, model = '' } = {}) {
   const parsed = parsePaste(String(text || ''));
   if (!parsed.keys.length && !parsed.urls.length && !parsed.local) {
     throw new Error(parsed.githubTokens.length ? 'That is a GitHub token, not a model key. Paste a model API key or a model link.' : 'Paste an API key, a model page link or a local server address.');
   }
-  const result = await smartConnect(text, { fetchImpl, onStatus, allowPull });
+  const result = await smartConnect(text, { fetchImpl, onStatus, allowPull, model });
   const config = runtimeConfigFromConnection(result);
   const notes = [...(result.notes || [])];
   // Ollama serves models with a 4K window by default, which silently cuts the
