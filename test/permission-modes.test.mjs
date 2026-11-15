@@ -83,7 +83,7 @@ test('CLI --permission-mode accepts aliases and rejects unknown values', async (
   }
   const invalid = await run(['--permission-mode', 'unsafe-mode', '--help']);
   assert.notEqual(invalid.code, 0);
-  assert.match(invalid.output, /aliases: manual, accept-edits/);
+  assert.match(invalid.output, /manual \(default\), accept-edits, plan, auto, dont-ask, bypass-permissions/);
 });
 
 test('/help documents the permission-mode aliases', async (t) => {
@@ -100,7 +100,7 @@ test('/help documents the permission-mode aliases', async (t) => {
     hooks: {}
   };
   const help = await runBuiltinCommand('help', '', { root, session, env, sessionOptions: {} });
-  assert.match(help.output, /aliases: manual, accept-edits/);
+  assert.match(help.output, /\/mode manual\|accept-edits\|plan\|auto\|dont-ask\|bypass-permissions/);
 });
 
 test('layered settings normalize defaultMode aliases in user settings', async (t) => {
