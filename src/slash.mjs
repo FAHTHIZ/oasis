@@ -28,6 +28,33 @@ import path from 'node:path';
 import { listRecipes, recipePrompt } from './goose-recipes.mjs';
 
 // Claude Code aliases for built-in commands (and /swarm from Kimi Code, which is /batch here).
+// "/sttaus" -> "/status": the closest built-in or alias, for the unknown-command line.
+export function slashCommandHint(text) {
+  const match = /^\/([a-z][a-z0-9-]*)/i.exec(String(text || '').trim());
+  if (!match) return '';
+  const word = match[1].toLowerCase();
+  let best = '', bestDistance = Infinity;
+  for (const name of [...Object.keys(BUILTIN_COMMANDS), ...Object.keys(COMMAND_ALIASES)]) {
+    const d = editDistance(word, name);
+    if (d < bestDistance) { best = name; bestDistance = d; }
+  }
+  return best && bestDistance <= (word.length >= 6 ? 2 : 1) ? '/' + best : '';
+}
+
+function editDistance(a, b) {
+  // Optimal string alignment: a swapped pair of letters counts as one edit.
+  const d = Array.from({ length: a.length + 1 }, (_, i) => [i, ...Array(b.length).fill(0)]);
+  for (let j = 1; j <= b.length; j++) d[0][j] = j;
+  for (let i = 1; i <= a.length; i++) {
+    for (let j = 1; j <= b.length; j++) {
+      const cost = a[i - 1] === b[j - 1] ? 0 : 1;
+      d[i][j] = Math.min(d[i - 1][j] + 1, d[i][j - 1] + 1, d[i - 1][j - 1] + cost);
+      if (i > 1 && j > 1 && a[i - 1] === b[j - 2] && a[i - 2] === b[j - 1]) d[i][j] = Math.min(d[i][j], d[i - 2][j - 2] + 1);
+    }
+  }
+  return d[a.length][b.length];
+}
+
 export const COMMAND_ALIASES = { tokens: 'context', approvals: 'permissions', ask: 'plan', keybindings: 'keys', peers: 'list-agents', settings: 'config', checkpoint: 'rewind', continue: 'resume', 'allowed-tools': 'permissions', stats: 'usage', checkup: 'doctor', 'code-review': 'review', bg: 'background', proactive: 'loop', reset: 'clear', new: 'clear', quit: 'exit', routines: 'schedule', feedback: 'bug', share: 'export', 'install-github-action': 'install-github-app', swarm: 'batch', preset: 'presets' };
 
 export const BUILTIN_COMMANDS = {
