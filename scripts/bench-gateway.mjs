@@ -154,6 +154,15 @@ export function proxyAwareFetch(env = process.env) {
 
 // Endpoints relayed to the upstream, relative to its /v1 base.
 const RELAYED = /^\/(chat\/completions|messages|messages\/count_tokens|responses)$/;
+// Google's Gemini API (what Gemini CLI speaks): the model is in the path, so
+// the gateway rewrites the path instead of the body.
+const GEMINI_PATH = /^\/v1beta\/models\/([^/:]+):(generateContent|streamGenerateContent|countTokens)$/;
+
+/** Upstream URL for a Gemini API path, with the one benchmark model swapped in. */
+export function geminiUpstreamUrl(upstream, method, model, search = '') {
+  const base = upstream.replace(/\/chat\/completions$/, '').replace(/\/v1$/, '');
+  return base + '/v1beta/models/' + encodeURIComponent(model) + ':' + method + search;
+}
 const FORWARDED_HEADERS = ['accept', 'anthropic-version', 'anthropic-beta', 'openai-beta'];
 
 /** Upstream URL for a relayed /v1 path: the configured endpoint for chat completions, else base + path. */
@@ -206,9 +215,10 @@ export function createGateway(options, { fetchImpl = proxyAwareFetch(), now = Da
       res.end(JSON.stringify({ object: 'list', data: [{ id: 'bench-model', object: 'model', owned_by: 'gateway' }] }));
       return;
     }
-    if (req.method !== 'POST' || !RELAYED.test(rest)) {
+    const gemini = GEMINI_PATH.exec(rest);
+    if (req.method !== 'POST' || !(RELAYED.test(rest) || gemini)) {
       res.writeHead(404, { 'content-type': 'application/json' });
-      res.end(JSON.stringify({ error: { message: 'Only POST /v1/chat/completions, /v1/messages, /v1/responses and GET /v1/models are served.' } }));
+      res.end(JSON.stringify({ error: { message: 'Only POST /v1/chat/completions, /v1/messages, /v1/responses, /v1beta/models/MODEL:generateContent (and stream, countTokens) and GET /v1/models are served.' } }));
       return;
     }
     const chunks = [];
@@ -220,25 +230,26 @@ export function createGateway(options, { fetchImpl = proxyAwareFetch(), now = Da
       return;
     }
     const id = ++count;
-    const requestedModel = body.model;
-    body.model = options.model;
+    const requestedModel = gemini ? decodeURIComponent(gemini[1]) : body.model;
+    if (!gemini) body.model = options.model;
     const release = await slot();
     const started = now();
     const headers = { 'content-type': 'application/json' };
     for (const name of FORWARDED_HEADERS) if (req.headers[name]) headers[name] = String(req.headers[name]);
     const key = process.env.OASIS_GATEWAY_UPSTREAM_KEY;
-    if (key) { headers.authorization = 'Bearer ' + key; if (rest.startsWith('/messages')) headers['x-api-key'] = key; }
+    if (key) { headers.authorization = 'Bearer ' + key; if (rest.startsWith('/messages')) headers['x-api-key'] = key; if (gemini) headers['x-goog-api-key'] = key; }
+    const target = gemini ? geminiUpstreamUrl(options.upstream, gemini[2], options.model, url.search) : upstreamUrl(options.upstream, rest);
     try {
-      const upstream = await fetchImpl(upstreamUrl(options.upstream, rest), { method: 'POST', headers, body: JSON.stringify(body) });
+      const upstream = await fetchImpl(target, { method: 'POST', headers, body: JSON.stringify(body) });
       res.writeHead(upstream.status, { 'content-type': upstream.headers.get('content-type') || 'application/json' });
       let text = '';
       const decoder = new TextDecoder();
       if (upstream.body) for await (const chunk of upstream.body) { if (text.length < 8 * 1024 * 1024) text += decoder.decode(chunk, { stream: true }); res.write(chunk); }
       const seen = inspectResponse(text);
       const usage = seen.usage || {};
-      const promptTokens = usage.prompt_tokens ?? usage.input_tokens ?? null;
-      const completionTokens = usage.completion_tokens ?? usage.output_tokens ?? null;
-      await log({ id, agent, endpoint: rest, at: new Date(started).toISOString(), ms: now() - started, status: upstream.status, requestedModel, sentModel: options.model, servedModel: seen.servedModel || null, provider: seen.provider || null, stream: Boolean(body.stream), messages: Array.isArray(body.messages) ? body.messages.length : Array.isArray(body.input) ? body.input.length : null, tools: Array.isArray(body.tools) ? body.tools.length : 0, promptTokens, completionTokens, ...messageSizes(body), error: upstream.status >= 400 ? redactSecretText(text.slice(0, 2000)).slice(0, 300) : undefined, ...(quotaExhausted(upstream.status, upstream.headers, text) ? { quotaExhausted: true } : {}) });
+      const promptTokens = usage.prompt_tokens ?? usage.input_tokens ?? usage.promptTokenCount ?? null;
+      const completionTokens = usage.completion_tokens ?? usage.output_tokens ?? usage.candidatesTokenCount ?? null;
+      await log({ id, agent, endpoint: rest, at: new Date(started).toISOString(), ms: now() - started, status: upstream.status, requestedModel, sentModel: options.model, servedModel: seen.servedModel || null, provider: seen.provider || null, stream: Boolean(body.stream) || (gemini ? gemini[2] === 'streamGenerateContent' : false), messages: Array.isArray(body.messages) ? body.messages.length : Array.isArray(body.input) ? body.input.length : Array.isArray(body.contents) ? body.contents.length : null, tools: toolCount(body), promptTokens, completionTokens, ...messageSizes(body), error: upstream.status >= 400 ? redactSecretText(text.slice(0, 2000)).slice(0, 300) : undefined, ...(quotaExhausted(upstream.status, upstream.headers, text) ? { quotaExhausted: true } : {}) });
       res.end();
     } catch (error) {
       if (!res.headersSent) res.writeHead(502, { 'content-type': 'application/json' });
@@ -250,15 +261,21 @@ export function createGateway(options, { fetchImpl = proxyAwareFetch(), now = Da
   });
 }
 
+/** Tools offered in a request; Gemini groups them as tools[].functionDeclarations. */
+export function toolCount(body) {
+  if (!body || !Array.isArray(body.tools)) return 0;
+  return body.tools.reduce((sum, tool) => sum + (tool && Array.isArray(tool.functionDeclarations) ? tool.functionDeclarations.length : 1), 0);
+}
+
 /** Starts a gateway on a free loopback port; records are also kept in memory. */
 /**
  * Sizes, never contents: the largest message and the newest one, in characters, so a run can show
  * what grew an agent's prompt (a big file read, test output carried for many turns).
  */
 export function messageSizes(body) {
-  const list = Array.isArray(body && body.messages) ? body.messages : Array.isArray(body && body.input) ? body.input : null;
+  const list = Array.isArray(body && body.messages) ? body.messages : Array.isArray(body && body.input) ? body.input : Array.isArray(body && body.contents) ? body.contents : null;
   if (!list || !list.length) return {};
-  const size = (item) => { const c = item && (item.content ?? item.output ?? item.arguments); return typeof c === 'string' ? c.length : c ? JSON.stringify(c).length : 0; };
+  const size = (item) => { const c = item && (item.content ?? item.output ?? item.arguments ?? item.parts); return typeof c === 'string' ? c.length : c ? JSON.stringify(c).length : 0; };
   // Which tool a result came from: names only, never arguments or output.
   const names = new Map();
   for (const item of list) {
@@ -272,6 +289,8 @@ export function messageSizes(body) {
     const id = item.tool_call_id || (item.type === 'function_call_output' ? item.call_id : undefined);
     if (id) return names.get(id) || undefined;
     const used = (Array.isArray(item.content) ? item.content : []).filter((block) => block && block.type === 'tool_result').map((block) => names.get(block.tool_use_id)).filter(Boolean);
+    // Gemini: a tool result is a functionResponse part that carries the tool name.
+    for (const part of Array.isArray(item.parts) ? item.parts : []) if (part && part.functionResponse && part.functionResponse.name) used.push(part.functionResponse.name);
     return used.length ? [...new Set(used)].join(',') : undefined;
   };
   const describe = (item, chars) => { const tool = toolOf(item); return { role: item && (item.role || item.type) || null, chars, ...(tool ? { tool } : {}) }; };

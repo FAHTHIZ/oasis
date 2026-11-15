@@ -48,7 +48,6 @@ export function parseBenchArgs(argv) {
   if (!Number.isInteger(options.gatewayIntervalMs) || options.gatewayIntervalMs < 0) throw new Error('--gateway-interval-ms must be a whole number of milliseconds.');
   if (options.interleave && !options.task) throw new Error('--interleave needs --task with the task IDs to alternate over.');
   if (options.router && options.upstream) throw new Error('Use either --router or --upstream, not both.');
-  if (options.upstream && options.agents.includes('gemini')) throw new Error('Gemini CLI speaks Google\'s wire format, which the --upstream recording relay does not serve. Use --router with a gateway that serves /v1beta (FreeLLMAPI does).');
   if (options.upstream) { let parsed; try { parsed = new URL(options.upstream); } catch { throw new Error('--upstream must be a valid HTTP(S) URL.'); } if (!['http:', 'https:'].includes(parsed.protocol) || !parsed.hostname) throw new Error('--upstream must be a valid HTTP(S) URL.'); }
   if (options.router) { let parsed; try { parsed = new URL(options.router); } catch { throw new Error('--router must be a valid HTTP(S) URL.'); } if (!['http:', 'https:'].includes(parsed.protocol) || !parsed.hostname) throw new Error('--router must be a valid HTTP(S) URL.'); }
   return options;
@@ -151,7 +150,7 @@ export async function runBenchmark(options, { env = process.env, runner = runEva
     // 127.0.0.1, and fail before the first request.
     if (gateway) for (const name of ['NO_PROXY', 'no_proxy']) agentEnv[name] = withLoopback(env[name]);
     if (agent === 'oasis' && model) agentEnv.OASIS_MODEL = model;
-    if (agent === 'gemini' && options.router) Object.assign(agentEnv, await geminiGatewayEnv(rawDir, env));
+    if (agent === 'gemini' && (options.router || gateway)) Object.assign(agentEnv, await geminiGatewayEnv(rawDir, env));
     process.stdout.write('\n== ' + DISPLAY[agent] + (model ? ' (' + model + ')' : '') + (options.interleave ? ' · ' + task : '') + '\n');
     const entry = collected.get(agent);
     const before = gateway ? gateway.records.length : 0;

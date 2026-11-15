@@ -318,7 +318,8 @@ test('Gemini CLI on a router gets a private home pinned to API-key auth; --upstr
   const env = agentEnvironment('gemini', parseBenchArgs(['--router', 'http://127.0.0.1:3001']), { OASIS_BENCH_API_KEY: 'k' });
   assert.equal(env.GOOGLE_GEMINI_BASE_URL, 'http://127.0.0.1:3001');
   assert.equal(env.GEMINI_API_KEY, 'k');
-  assert.throws(() => parseBenchArgs(['--agents', 'oasis,gemini', '--upstream', 'https://api.example.test/v1', '--model', 'm']), /wire format/);
+  // The recording relay serves the Gemini API too, so Gemini CLI can run behind --upstream.
+  assert.deepEqual(parseBenchArgs(['--agents', 'oasis,gemini', '--upstream', 'https://api.example.test/v1', '--model', 'm']).agents, ['oasis', 'gemini']);
 });
 
 test('a run stops when the upstream quota runs out, keeps its progress, and drops rate-limited tasks from the scores', async () => {
