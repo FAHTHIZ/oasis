@@ -25,7 +25,7 @@ import { expandFileMentions, resolveCustomCommand, resolveSkillCommand, loadCust
 import { visionEnabled, imageInputCapability, sniffImageType, MAX_IMAGE_BYTES } from './images.mjs';
 import { loadSettings } from './settings.mjs';
 import { resolveSandbox } from './sandbox.mjs';
-import { estimateTokens, contextWindowSize, contextTokens as contextTokensFor } from './context.mjs';
+import { estimateTokens, contextWindowSize, contextUsage as contextTokensFor } from './context.mjs';
 import { PtySessionManager } from './pty-sessions.mjs';
 import { createTaskHistoryStore } from './task-history-store.mjs';
 import { createWorktree, finishWorktree, removeWorktree, readWorktreeDiff, readWorktreeWorkingDiff, readWorkspaceDiff, headFileVersion, inspectWorktree, mergeWorktree, isCommitIntegrated } from './worktrees.mjs';
