@@ -508,13 +508,19 @@ export async function planImport(root, options = {}) {
   return { root: workspace, sources, items, userMcpFile, projectMcpFile, userSkillsDir, env: { ...env, OASIS_CONFIG_DIR: configDir } };
 }
 
+// Claude Code's own files are read in place, so `oasis import claude` copies
+// only its auto-memories; say so instead of a bare "nothing to import".
+const CLAUDE_NATIVE_NOTE = 'Claude Code setup needs no import: OASIS reads CLAUDE.md, MCP servers in ~/.claude.json and .mcp.json, .claude/commands, .claude/skills, .claude/agents, hooks and settings where they are (check with oasis mcp list and /skills). oasis import claude copies only Claude Code memories from ~/.claude/projects.';
+
 export function describePlan(plan) {
   const adds = plan.items.filter((item) => item.action !== 'skip');
   const skips = plan.items.filter((item) => item.action === 'skip');
-  if (!plan.items.length) return 'Nothing to import from ' + plan.sources.join(', ') + '. Looked for Codex (~/.codex), Gemini CLI (~/.gemini, .gemini/, GEMINI.md), Cursor (~/.cursor, .cursor/, .cursorrules), Claude Code memories (~/.claude/projects), Hermes (~/.hermes), OpenCode (opencode.json, .opencode/), Antigravity (~/.gemini/config, .agents/), Windsurf (~/.codeium/windsurf, .windsurf/) and Cline (.clinerules) configuration.';
+  const note = plan.sources.includes('claude') ? '\n' + CLAUDE_NATIVE_NOTE : '';
+  if (!plan.items.length && plan.sources.length === 1 && plan.sources[0] === 'claude') return 'No Claude Code memories to import.' + note;
+  if (!plan.items.length) return 'Nothing to import from ' + plan.sources.join(', ') + '. Looked for Codex (~/.codex), Gemini CLI (~/.gemini, .gemini/, GEMINI.md), Cursor (~/.cursor, .cursor/, .cursorrules), Claude Code memories (~/.claude/projects), Hermes (~/.hermes), OpenCode (opencode.json, .opencode/), Antigravity (~/.gemini/config, .agents/), Windsurf (~/.codeium/windsurf, .windsurf/) and Cline (.clinerules) configuration.' + note;
   const label = { mcp: 'MCP server', instructions: 'Instructions', command: 'Command', rule: 'Rule', skill: 'Skill', memory: 'Memory', agent: 'Subagent' };
   const line = (item) => '  ' + (item.action === 'skip' ? '- ' : '+ ') + '[' + item.source + '] ' + label[item.kind] + ' ' + item.name + ((item.kind === 'mcp' || item.kind === 'memory') && item.scope ? ' (' + item.scope + ')' : '') + (item.target && item.action !== 'skip' ? ' -> ' + item.target : '') + (item.reason ? ' (skipped: ' + item.reason + ')' : '');
-  return [adds.length ? 'Will import ' + adds.length + ' item' + (adds.length === 1 ? '' : 's') + ':' : 'Nothing new to import.', ...adds.map(line), ...(skips.length ? ['Skipped:', ...skips.map(line)] : [])].join('\n');
+  return [adds.length ? 'Will import ' + adds.length + ' item' + (adds.length === 1 ? '' : 's') + ':' : 'Nothing new to import.', ...adds.map(line), ...(skips.length ? ['Skipped:', ...skips.map(line)] : [])].join('\n') + note;
 }
 
 export async function applyImport(plan) {
