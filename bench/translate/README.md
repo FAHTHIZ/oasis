@@ -39,3 +39,10 @@ Caveats that belong next to any result produced this way:
   setting and no longer fires (requests reach OVH as chat completions).
 - LiteLLM's Gemini responses carry no `modelVersion`; `ovh-hop.mjs` logs the
   model OVH reports serving (`STRIP_LOG`, default `/tmp/ll/ovh.jsonl`).
+- Codex CLI sends two leading `developer` messages, which become two system
+  messages. Qwen3.5's chat template rejects that ("System message must be at
+  the beginning."). On a streamed Responses call, LiteLLM turned the error into
+  an empty 200 reply, so before this fix Codex ended every Qwen3.5 task after
+  one request, with 0 tokens (about 31 s). `ovh-hop.mjs` now merges a leading
+  run of system messages into one, keeping the text and its order. gpt-oss
+  accepts several system messages, so its runs were not affected.
