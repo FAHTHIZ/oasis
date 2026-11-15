@@ -62,8 +62,22 @@ export async function installedVersion(appRoot, options = {}) {
   return { kind: 'unknown', commit: '', root: appRoot };
 }
 
+// A git checkout that already contains the release commit (a clone following
+// main) is newer than the release. Checking out the tag would move it back and
+// drop every later commit, so report how far ahead it is instead.
+export async function gitCommitsAheadOfRelease(installed, latest, options = {}) {
+  if (!installed || installed.kind !== 'git' || !installed.commit || !latest || !latest.sha || installed.commit === latest.sha) return null;
+  const exec = options.exec || run;
+  try {
+    await exec('git', ['merge-base', '--is-ancestor', latest.sha, installed.commit], { cwd: installed.root });
+  } catch { return null; }
+  const count = Number(await exec('git', ['rev-list', '--count', latest.sha + '..' + installed.commit], { cwd: installed.root }).catch(() => ''));
+  return Number.isFinite(count) && count > 0 ? count : null;
+}
+
 export function updatePlan(installed, latest) {
   if (installed.commit && installed.commit === latest.sha) return { upToDate: true };
+  if (installed.kind === 'git' && installed.aheadOfRelease) return { upToDate: true, ahead: installed.aheadOfRelease };
   if (installed.kind === 'homebrew') {
     if (installed.version && 'v' + installed.version === latest.tag) return { upToDate: true };
     return { upToDate: false, steps: [{ command: 'brew', args: ['upgrade', 'fahthiz/oasis/oasis-cli'] }] };
@@ -86,7 +100,8 @@ export function describeUpdate(installed, latest, plan) {
     'Installed: ' + (installed.commit ? installed.commit.slice(0, 7) : installed.version ? 'v' + installed.version : 'unknown commit') + ' (' + installed.kind + ' install)',
     'Latest stable release: ' + latest.tag + ' (' + latest.sha.slice(0, 7) + ')' + (latest.message ? ' - ' + latest.message : '') + (latest.date ? ' (' + latest.date.slice(0, 10) + ')' : '')
   ];
-  if (plan.upToDate) lines.push('Oasis is up to date.');
+  if (plan.ahead) lines.push('This checkout already includes ' + latest.tag + ' and is ' + plan.ahead + ' commit' + (plan.ahead === 1 ? '' : 's') + ' newer, so oasis update leaves it alone. To follow main, run: git -C ' + JSON.stringify(installed.root) + ' pull');
+  else if (plan.upToDate) lines.push('Oasis is up to date.');
   else if (plan.blocked) lines.push(plan.blocked);
   else {
     lines.push('Update with:');
