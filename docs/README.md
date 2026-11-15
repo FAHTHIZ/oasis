@@ -1,57 +1,58 @@
 # OASIS documentation
 
-Use this index to find the right guide without having to understand the repository first. The root [README](../README.md) is the project overview and download entry point.
+Find the right guide without knowing the repository. The root
+[README](../README.md) is the project overview and install entry point.
 
 ## Start here
 
-| If you need to… | Read |
-|---|---|
-| Install OASIS and complete a first task | [User guide](USER-GUIDE.md) |
-| Choose between the terminal, the web app and editor integrations | [Interfaces and deployment](INTERFACES.md) |
-| Download an installer and verify it | [Downloads and releases](RELEASES.md) |
-| Install the desktop app on Windows, macOS or Linux | [Desktop app](DESKTOP.md) |
-| Configure providers, models and routing | [Configuration reference](CONFIGURATION.md) |
-| Delegate work to subagents and agent teams | [Subagents](SUBAGENTS.md) |
-| Understand runtime architecture and security boundaries | [Architecture](ARCHITECTURE.md) |
+| If you want to… | Read |
+| --- | --- |
+| Install OASIS and finish a first task | [User guide](USER-GUIDE.md) · [First run](FIRST-RUN.md) |
+| Use the terminal agent day to day | [Terminal guide](TERMINAL.md) |
+| Choose between the terminal, web app, desktop app and editors | [Interfaces](INTERFACES.md) |
+| Connect a model, add backups, cap spend | [Configuration](CONFIGURATION.md) · [Inference](INFERENCE.md) |
+| Add skills, MCP servers, plugins or hooks | [Extending OASIS](EXTENDING.md) |
+| Fix something that does not work | [Troubleshooting](TROUBLESHOOTING.md) |
 
-## User and operator guides
+## Guides
 
-- [User guide](USER-GUIDE.md) — install, connect a provider, use each interface and review results.
-- [Downloads and releases](RELEASES.md) — the npm tarball, install scripts, Homebrew and checksums.
-- [First-run guide](FIRST-RUN.md) — provider setup, workspace trust, permissions and verification.
-- [Desktop app](DESKTOP.md) — installers, first launch on unsigned builds, key storage, updates, data folders and uninstall.
-- [Interfaces and deployment](INTERFACES.md) — terminal, web app and remote deployment, editor, ACP, SDK and automation.
-- [Configuration reference](CONFIGURATION.md) — provider registry, fallback models, output limits and search options.
-- [Comparison with other agent harnesses](COMPARISON.md) — Claude Code, Codex, Gemini CLI, OpenCode, Goose, Pi and Hermes: where OASIS matches, goes further and still lags.
-- [Subagents](SUBAGENTS.md) — built-in and custom agents, front matter, structured output, background agents and teams.
-- [Remote access](REMOTE-ACCESS.md) — connected browser sessions from another device, set up securely.
+- [User guide](USER-GUIDE.md): install, connect a provider, use each interface, review results.
+- [First run](FIRST-RUN.md): provider setup, workspace trust, permissions and verification.
+- [Terminal guide](TERMINAL.md): input prefixes, keys, permission modes, commands, scripts and CI.
+- [Interfaces](INTERFACES.md): web app, ACP editors, VS Code family, Codex App Server, Cursor Cloud Agents API, SDK, CI, chat gateways.
+- [Desktop app](DESKTOP.md): installers, unsigned first launch, key storage, updates, uninstall.
+- [Remote access](REMOTE-ACCESS.md): run the web app on a server and use connected browser sessions from another device, securely.
+- [Downloads and releases](RELEASES.md): npm tarball, install scripts, Homebrew, checksums.
+- [Configuration](CONFIGURATION.md): providers, gateways, fallback models, routing, output, search, MCP options, telemetry.
+- [Inference](INFERENCE.md): zero-budget mode, request and token budgets, the quota ledger.
+- [Extending OASIS](EXTENDING.md): project instructions, skills, MCP, connected apps, plugins, commands, hooks, settings files.
+- [Subagents](SUBAGENTS.md): built-in and custom agents, background agents, teams and worktrees.
+- [Troubleshooting](TROUBLESHOOTING.md): diagnostics and fixes for install, providers, the web app, the sandbox.
 
-## Engineering and architecture
+## How it works
 
-- [Architecture](ARCHITECTURE.md) — runtime components, request flow, persistence and trust boundaries.
-- [Engineering scorecard](ENGINEERING-SCORECARD.md) — evidence-backed readiness areas and exit criteria.
-- [Whole-system replacement roadmap](REPLACEMENT-ROADMAP.md) — ranked improvements and replacement acceptance gates.
-- [Architecture alternatives](ARCHITECTURE-ALTERNATIVES.md) — component alternatives and staged migrations.
-- [Agent runtime alternatives](AGENT-RUNTIME-ALTERNATIVES.md) — framework comparisons and OASIS-owned runtime contracts.
-- [OASIS Neuron Network](OASIS-NEURON-NETWORK.md) — current lineage projection and planned network architecture.
-- [New modules](NEW-MODULES.md) — module boundaries and implementation notes.
-- [Provider transport](architecture/provider-transport.md) — protocol-specific provider request and streaming behaviour.
+- [Architecture](ARCHITECTURE.md): runtime components, a typical turn, persistence and trust boundaries.
+- [Security model](SECURITY.md): what OASIS enforces, what is outside its controls, recommended setup.
+- [Provider transport](architecture/provider-transport.md): protocol-specific requests and streaming.
+- [OASIS Neuron Network](OASIS-NEURON-NETWORK.md): the agent lineage graph today and what is planned.
 
-## Quality and evaluation
+## Evidence
 
-- [Real-world runs](REAL-WORLD-RUNS.md) — unscripted tasks with real providers, plugins checked in OASIS, and what went wrong.
-- [Benchmark methodology](BENCHMARKS.md) — what model-free checks measure and what live evaluations must report.
-- [Project-quality benchmark](PROJECT-QUALITY-BENCHMARK.md) — historical repository presentation and engineering comparison against a 100-entry discovery index.
+- [Benchmarks](BENCHMARKS.md): model-free harness results, same-model head-to-head runs and their limits.
+- [Real-world runs](REAL-WORLD-RUNS.md): unscripted tasks with real providers, plugins checked, what went wrong.
+- [Comparison](COMPARISON.md): features against Claude Code, Codex, Gemini CLI, OpenCode, Goose and others, with sources.
+- [Research record](RESEARCH.md): projects and techniques reviewed, and what was adopted or rejected.
 
-## Project policies
+## Project records
 
-- [Security policy](../SECURITY.md)
-- [Contributing guide](../CONTRIBUTING.md)
-- [Code of Conduct](../CODE_OF_CONDUCT.md)
-- [Support and troubleshooting](../SUPPORT.md)
-- [Changelog](../CHANGELOG.md)
-- [Brand guidelines](../BRAND.md)
+- [Completion checklist](COMPLETION-CHECKLIST.md): what is done, open or blocked, with evidence.
+- [Mission log](MISSION-LOG.md): dated engineering record, newest first.
+- [Design archive](design/README.md): earlier plans, audits and scorecards, kept for history.
+- [Changelog](../CHANGELOG.md) · [Contributing](../CONTRIBUTING.md) · [Security policy](../SECURITY.md) · [Support](../SUPPORT.md) · [Code of Conduct](../CODE_OF_CONDUCT.md) · [Brand](../BRAND.md)
 
 ## Documentation policy
 
-Documentation must describe behaviour present in the source code and covered by tests or state an explicit limitation. Planned work must be labelled as planned. Release-specific availability belongs on GitHub Releases; never present a tag or temporary CI artifact as a published installer.
+Documentation describes behaviour that exists in the source and is covered by
+tests, or it states the limitation. Planned work is labelled as planned.
+`test/docs-file-references.test.mjs` fails when a current doc names a repository
+file that does not exist or links to a missing file or heading.
