@@ -2368,7 +2368,9 @@ async function interactive(root, autoApprove, persistence = {}) {
         // /context before the first message: start the session now (the first
         // prompt would anyway) so it shows the real system prompt and tool cost,
         // as Claude Code does, instead of "no conversation yet".
-        if (slash[1].toLowerCase() === 'context' && !session && !persistence.resumeId) {
+        // `/model` (typed, or picked from the picker) likewise needs the
+        // session, so availableModels policy and model-switch hooks apply.
+        if ((slash[1].toLowerCase() === 'context' || slash[1].toLowerCase() === 'model') && !session && !persistence.resumeId) {
           try {
             const config = await loadConfig();
             if (SESSION_OPTIONS.model) config.model = SESSION_OPTIONS.model;

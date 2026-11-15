@@ -347,7 +347,7 @@ export async function runBuiltinCommand(name, argument, state) {
       const available = session.availableModels || (session.settings && session.settings.availableModels) || [];
       const current = session.config && session.config.model || '(provider default)';
       if (!String(argument || '').trim()) {
-        return { output: 'Model: ' + current + (available.length ? '\nAvailable models: ' + available.join(', ') : '') + '\n/model --list shows the models your provider serves.' };
+        return { output: 'Model: ' + current + (available.length ? '\nAvailable models: ' + available.join(', ') : '') + '\n/model NAME switches to another model; /model --list shows the models your provider serves.' };
       }
       if (/^(--list|-l|--refresh)$/.test(String(argument).trim())) {
         // Ask the provider which models it serves, filtered by any availableModels policy.
