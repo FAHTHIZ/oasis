@@ -374,7 +374,7 @@ function chooseFromMarketplace(info, source) {
 }
 
 // Convert a Gemini, Codex or Agent Plugins plugin into a one-plugin marketplace and install it.
-async function installConverted(dir, foreign, source, { env, root, scope }) {
+async function installConverted(dir, foreign, source, { env, root, scope, risky = {} }) {
   const { convertToClaudePlugin } = await import('./plugin-convert.mjs');
   const { addMarketplace, installPlugin } = await import('./claude-plugins.mjs');
   const market = slug('repo-' + (source.owner ? source.owner + '-' + source.name : foreign.name) + (source.pick ? '-' + source.pick : ''));
@@ -383,7 +383,7 @@ async function installConverted(dir, foreign, source, { env, root, scope }) {
   const name = await convertToClaudePlugin(dir, path.join(marketDir, 'plugin'), foreign);
   await writeFile(path.join(marketDir, '.claude-plugin', 'marketplace.json'), JSON.stringify({ name: market, owner: { name: source.owner || 'local' }, plugins: [{ name, source: './plugin' }] }, null, 2) + '\n');
   await addMarketplace(marketDir, { env, cwd: root });
-  const result = await installPlugin(name + '@' + market, { env, root, scope });
+  const result = await installPlugin(name + '@' + market, { env, root, scope, ...risky });
   const options = foreign.format === 'gemini' && Array.isArray(foreign.manifest.settings) ? foreign.manifest.settings.map((s) => s && s.envVar).filter(Boolean) : [];
   return { installed: [result.id], message: 'Installed and enabled ' + result.id + ' (converted from a ' + foreign.label + ').' + (options.length ? ' It reads ' + options.join(', ') + ' from your environment, or set them with oasis plugin config ' + result.id + ' KEY=VALUE.' : ''), reload: true };
 }
@@ -395,10 +395,13 @@ async function planAddon(raw, options = {}) {
   const scope = options.scope === 'project' ? 'project' : 'user';
   const source = classifySource(raw);
   const plugins = () => import('./claude-plugins.mjs');
+  // Only `oasis add SOURCE --allow-risky` sets this; the agent's add_extension
+  // tool never does, so a refused package needs the user's own command.
+  const risky = { allowRisky: options.allowRisky === true, overrideHint: 'oasis add ' + String(raw).trim() + ' --allow-risky' };
 
   if (source.kind === 'plugin-spec') {
     return { kind: 'claude-plugin', title: 'Claude Code plugin ' + source.spec, summary: 'Install and enable the plugin ' + source.spec + ' from an added marketplace. Its commands, agents and skills load in new sessions; its hooks and MCP servers run as the plugin defines them.',
-      run: async () => { const { installPlugin } = await plugins(); const done = await installPlugin(source.spec, { env, root, scope }); return { installed: [done.id], message: 'Installed and enabled ' + done.id + '.', reload: true }; } };
+      run: async () => { const { installPlugin } = await plugins(); const done = await installPlugin(source.spec, { env, root, scope, ...risky }); return { installed: [done.id], message: 'Installed and enabled ' + done.id + '.', reload: true }; } };
   }
   if (source.kind === 'remote-mcp') {
     const name = slug(options.name || source.name, 'remote');
@@ -461,7 +464,7 @@ async function planAddon(raw, options = {}) {
         const { addMarketplace, installPlugin } = await plugins();
         const market = await addMarketplace(source.local ? fetched.dir : source.url.replace(/\.git$/, '') + '.git' + (source.ref ? '#' + source.ref : ''), { env, cwd: root });
         const installed = [];
-        for (const name of picks) installed.push((await installPlugin(name + '@' + market.name, { env, root, scope })).id);
+        for (const name of picks) installed.push((await installPlugin(name + '@' + market.name, { env, root, scope, ...risky })).id);
         return { installed, available: info.plugins.map((p) => p.name), message: 'Added marketplace ' + market.name + '.' + (installed.length ? ' Installed and enabled ' + installed.join(', ') + '.' : ' Available: ' + list + (info.plugins.length > 30 ? ', …' : '') + '. Say "add NAME@' + market.name + '" to install one.'), reload: installed.length > 0 };
       }) };
   }
@@ -483,7 +486,7 @@ async function planAddon(raw, options = {}) {
         }
         await writeFile(path.join(marketDir, '.claude-plugin', 'marketplace.json'), JSON.stringify({ name: market, owner: { name: source.owner || 'local' }, plugins: [{ name: info.name, source: pluginSource }] }, null, 2) + '\n');
         await addMarketplace(marketDir, { env, cwd: root });
-        const result = await installPlugin(info.name + '@' + market, { env, root, scope });
+        const result = await installPlugin(info.name + '@' + market, { env, root, scope, ...risky });
         return { installed: [result.id], message: 'Installed and enabled ' + result.id + '.', reload: true };
       }) };
   }
@@ -500,7 +503,7 @@ async function planAddon(raw, options = {}) {
     const contents = await convert.describeForeignPlugin(wanted.path, foreign);
     return { ...base, kind: 'foreign-plugin', title: foreign.label + ' ' + foreign.name,
       summary: 'Install and enable the ' + foreign.label + ' "' + foreign.name + '" from ' + repoLabel + (contents.length ? ': ' + contents.join(', ') : '') + '. OASIS runs it as a Claude Code plugin.',
-      run: () => done(() => installConverted(wanted.path, foreign, source, { env, root, scope })) };
+      run: () => done(() => installConverted(wanted.path, foreign, source, { env, root, scope, risky })) };
   }
   if (info.type === 'foreign-plugin') {
     const convert = await import('./plugin-convert.mjs');
@@ -514,14 +517,14 @@ async function planAddon(raw, options = {}) {
     return { ...base, kind: 'foreign-plugin', title: info.label + ' ' + info.name,
       cleanup: async () => { await fetched.cleanup(); if (release) await release.cleanup(); },
       summary: 'Install and enable the ' + info.label + ' "' + info.name + '" from ' + repoLabel + (release ? ' (release ' + release.tag + ', ' + release.asset + ')' : '') + (contents.length ? ': ' + contents.join(', ') : '') + '. OASIS runs it as a Claude Code plugin.',
-      run: () => done(async () => { try { return await installConverted(from, foreign, source, { env, root, scope }); } finally { if (release) await release.cleanup(); } }) };
+      run: () => done(async () => { try { return await installConverted(from, foreign, source, { env, root, scope, risky }); } finally { if (release) await release.cleanup(); } }) };
   }
   if (info.type === 'native-plugin') {
     return { ...base, kind: 'native-plugin', title: 'OASIS plugin ' + info.name,
       summary: 'Install the OASIS plugin "' + info.name + '" from ' + repoLabel + ' with the permissions it asks for: ' + (info.permissions.join(', ') || 'none') + '.',
       run: () => done(async () => {
         const { installNativePlugin } = await import('./native-plugins.mjs');
-        const result = await installNativePlugin(source.local ? fetched.dir : source.url + (source.ref ? '#' + source.ref : ''), { env, root, grantedPermissions: info.permissions, acceptPermissionDiff: true });
+        const result = await installNativePlugin(source.local ? fetched.dir : source.url + (source.ref ? '#' + source.ref : ''), { env, root, grantedPermissions: info.permissions, acceptPermissionDiff: true, ...risky });
         return { installed: [info.name], message: 'Installed ' + info.name + '.' + (result && result.message ? ' ' + result.message : ''), reload: true };
       }) };
   }
@@ -535,8 +538,8 @@ async function planAddon(raw, options = {}) {
       summary: 'Install ' + (chosen.length === 1 ? 'the skill ' + chosen[0] : chosen.length + ' skills (' + chosen.slice(0, 12).join(', ') + (chosen.length > 12 ? ', …' : '') + ')') + ' from ' + repoLabel + ' into ' + targetDir + '. Only the instruction files are copied; nothing runs.',
       run: () => done(async () => {
         const { installSkillsFromSource } = await import('./skill-install.mjs');
-        const result = await installSkillsFromSource(fetched.dir, { all: !want, skill: want || undefined, targetDir, env });
-        return { installed: result.installed.map((s) => s.name), message: result.message, reload: true };
+        const result = await installSkillsFromSource(fetched.dir, { all: !want, skill: want || undefined, targetDir, env, allowRisky: risky.allowRisky, overrideHint: risky.overrideHint });
+        return { installed: result.installed.map((s) => s.name), message: result.message, reload: true, ...(result.refused && result.refused.length ? { refused: result.refused.map((s) => s.name) } : {}) };
       }) };
   }
   if (info.type === 'mcp-server') {

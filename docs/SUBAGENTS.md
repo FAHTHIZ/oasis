@@ -78,6 +78,10 @@ Not read: `experimental` (its only option, `cacheTtl`, is specific to Anthropic'
 
 Pass `output_schema` (a JSON Schema object) to `task` when the parent needs machine-readable results. The child is told to reply with matching JSON. If its report does not validate, it gets exactly one correction turn. The result then carries either `structured` (the parsed value) or `schema_errors`.
 
+## Checked reports
+
+The parent sees only the child's report, so OASIS checks a report that says tests or builds pass against the child's own tool results. If the child ran no test, check, lint or build command, if its last one failed, or if it edited files after the last passing one, the `task` result carries `unverified_claim` with the reason and a note telling the parent to run the check itself. Background agents' completion notices include the same reason. The report text is not changed. This catches claims, not wrong code: a child that ran a passing but irrelevant test is not flagged.
+
 ## Background agents and teams
 
 - `run_in_background: true` returns an id immediately. The parent is notified when the agent finishes.

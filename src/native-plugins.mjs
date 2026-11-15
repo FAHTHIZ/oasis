@@ -300,6 +300,9 @@ async function installNativePluginFromDirectory(source,options={}){
   const grants=[...new Set(options.grantedPermissions)];
   if(grants.some(p=>!CAPABILITIES.has(p)))throw new Error('Unknown permission requested. Allowed capabilities: '+[...CAPABILITIES].join(', ')+'.');
   const validated=await validatePackage(source);
+  // Nothing has been written yet; a high-risk line stops here unless the user passed --allow-risky.
+  const {auditPackageOrRefuse}=await import('./skill-audit.mjs');
+  const audit=await auditPackageOrRefuse(source,validated.manifest.name,{allowRisky:options.allowRisky===true,hint:options.overrideHint||''});
   for(const grant of grants)if(!validated.manifest.permissions.includes(grant))throw new Error('Plugin did not request the '+grant+' permission; refusing an implicit grant.');
   const id=validated.manifest.name+'@oasis-native';
   const registry=await readRegistry(env);
@@ -348,7 +351,7 @@ async function installNativePluginFromDirectory(source,options={}){
     await rm(stage,{recursive:true,force:true}).catch(()=>{});
     throw error;
   }
-  return {installed:true,id,name:validated.manifest.name,version:validated.manifest.version,author:validated.manifest.author,license:validated.manifest.license,minimumOasisVersion:validated.manifest.minimumOasisVersion,installPath:target,grantedPermissions:grants,requestedPermissions:validated.manifest.permissions,components:{commands:grants.includes('commands')?validated.components.commands.map(x=>validated.manifest.name+':'+x.name):[],skills:grants.includes('skills')?validated.components.skills:[],agents:(grants.includes('agents')||grants.includes('subagents'))?validated.components.agents:[],hooks:grants.includes('hooks')?validated.components.hooks:null,hookFiles:grants.includes('hooks')?validated.components.hookFiles:[],mcpServers:grants.includes('mcp')?validated.components.mcp:null,mcpFiles:grants.includes('mcp')?validated.components.mcpFiles:[]}};
+  return {installed:true,id,audit,name:validated.manifest.name,version:validated.manifest.version,author:validated.manifest.author,license:validated.manifest.license,minimumOasisVersion:validated.manifest.minimumOasisVersion,installPath:target,grantedPermissions:grants,requestedPermissions:validated.manifest.permissions,components:{commands:grants.includes('commands')?validated.components.commands.map(x=>validated.manifest.name+':'+x.name):[],skills:grants.includes('skills')?validated.components.skills:[],agents:(grants.includes('agents')||grants.includes('subagents'))?validated.components.agents:[],hooks:grants.includes('hooks')?validated.components.hooks:null,hookFiles:grants.includes('hooks')?validated.components.hookFiles:[],mcpServers:grants.includes('mcp')?validated.components.mcp:null,mcpFiles:grants.includes('mcp')?validated.components.mcpFiles:[]}};
 }
 export async function installNativePlugin(source, options = {}) {
   const resolved = await resolveNativePluginSource(source, options.env || process.env);

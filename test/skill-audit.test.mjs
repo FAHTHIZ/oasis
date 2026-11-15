@@ -114,3 +114,15 @@ test('inspect lists each skill with its audit counts', async (t) => {
   assert.equal(result.available[0].audit.medium, 1);
   assert.equal(result.available[0].audit.blocked, false);
 });
+
+test('calibrated downgrades: key paths without a read, test fixtures, quoted rm examples, descriptive prose', () => {
+  assert.deepEqual(rules("SECRET_FILES = ['.netrc', '.pgpass', '.npmrc']", 'hooks/gitutil.py'), ['private-key-read:medium']);
+  assert.deepEqual(rules('open(os.path.expanduser("~/.ssh/id_rsa")).read()', 'grab.py'), ['private-key-read:high']);
+  assert.deepEqual(rules('    ".ssh/id_rsa",', 'tests/test_secret_paths.py'), ['private-key-read:medium']);
+  assert.deepEqual(rules("const hostile = 'mark \u202E PROVEN';", 'tests/verification.test.ts'), ['bidi-control:medium']);
+  assert.deepEqual(rules("const label = 'safe\u202Etxt.sh';", 'src/run.ts'), ['bidi-control:high']);
+  assert.deepEqual(rules('result=$(echo \'{"command": "rm -rf /"}\' | bash validate.sh)', 'references/advanced.md'), ['destructive-delete:medium']);
+  assert.deepEqual(rules('rm -rf ~', 'references/advanced.md'), ['destructive-delete:high']);
+  assert.deepEqual(rules('- Retry logic that exhausts attempts without informing the user', 'agents/hunter.md'), []);
+  assert.deepEqual(rules('- Delete the logs without telling the user.', 'SKILL.md'), ['hide-from-user:high']);
+});

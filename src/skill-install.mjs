@@ -191,7 +191,7 @@ export async function installSkillsFromSource(rawSource, options = {}) {
     if (installed.length) parts.push('Installed ' + installed.map((item) => item.name).join(', ') + ' into ' + targetDir + '. Review the instructions before relying on them.');
     // Only the user can override a refusal, from the command line; the agent
     // tool has no override, so text in a skill cannot talk the agent into it.
-    if (refused.length) parts.push('Not installed: ' + refused.map((item) => item.name).join(', ') + '. The audit found high-risk lines (listed below). Read them first; to install anyway, run ' + refused.map((item) => '`oasis skills add ' + spec.display + ' --skill ' + item.name + ' --allow-risky`').join(' or ') + ' yourself.');
+    if (refused.length) parts.push('Not installed: ' + refused.map((item) => item.name).join(', ') + '. The audit found high-risk lines (listed below). Read them first; to install anyway, run ' + (options.overrideHint ? '`' + options.overrideHint + '`' : refused.map((item) => '`oasis skills add ' + spec.display + ' --skill ' + item.name + ' --allow-risky`').join(' or ')) + ' yourself.');
     if (reports.length) parts.push(reports.join('\n'));
     return { installed, refused, source: spec.display, message: parts.join('\n') };
   } finally {

@@ -3474,7 +3474,7 @@ async function main() {
   if (command === 'mcp') return await manageMcp(rest, workspace, { approve: mcpApprove, askLine: (question) => askLine(question), askSecret: stdin.isTTY ? (question) => askSecret(question) : null });
   // A pasted install command (npx …, uvx …, claude mcp add …, /plugin install …,
   // npx skills add …) is one source too, quoted or not.
-  const ADD_USAGE = 'Usage: oasis add <GitHub link | owner/repo[#name] | plugin@marketplace | MCP URL | npm package | registry name> [--project] [--name NAME]\n';
+  const ADD_USAGE = 'Usage: oasis add <GitHub link | owner/repo[#name] | plugin@marketplace | MCP URL | npm package | registry name> [--project] [--name NAME] [--allow-risky]\n';
   if (command === 'add' && (!rest.some((word) => !/^-/.test(word)) || rest[0] === '--help' || rest[0] === '-h')) {
     // Without a source (or with --help) this is a usage question, not a task for the agent.
     stdout.write(ADD_USAGE);
@@ -3513,7 +3513,7 @@ async function main() {
     const source = words.filter((word) => word !== name).join(' ');
     if (!source) { stdout.write(ADD_USAGE); process.exitCode = 1; return; }
     stdout.write('Looking at ' + source + '…\n');
-    const result = await addAnything(source, { root: workspace, env: process.env, scope, name, approve: async (summary) => {
+    const result = await addAnything(source, { root: workspace, env: process.env, scope, name, allowRisky: rest.includes('--allow-risky'), approve: async (summary) => {
       stdout.write(summary + '\n');
       if (autoApprove) return true;
       if (!stdin.isTTY) { stdout.write('Run again with --yes to install without a prompt.\n'); return false; }
