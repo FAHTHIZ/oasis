@@ -26,6 +26,21 @@ if (helpWord && (argv.length === 1 || helpAll) && !process.env.OASIS_FULL_HELP_P
   process.exit(0);
 }
 
+// npm only warns about "engines", so an older Node.js used to start OASIS and
+// fail later in odd places (the terminal renderer, OpenTelemetry, require() of
+// ES modules). Stop with the fix instead. `doctor` and `uninstall` still run so
+// the user can see the full report or remove the package;
+// OASIS_ALLOW_UNSUPPORTED_NODE=1 skips the check.
+{
+  const { isNodeVersionSupported, MIN_NODE_VERSION } = await import('./config.mjs');
+  if (!isNodeVersionSupported() && !/^(?:1|true|yes)$/i.test(process.env.OASIS_ALLOW_UNSUPPORTED_NODE || '') && !['doctor', 'uninstall'].includes(argv[0])) {
+    process.stderr.write('OASIS needs Node.js ' + MIN_NODE_VERSION.replace(/\.0$/, '') + ' or newer; this is Node.js v' + process.versions.node + '.\n'
+      + '  Install a current Node.js LTS from https://nodejs.org/en/download (or with your version manager), then run oasis again.\n'
+      + '  oasis doctor shows the full report. OASIS_ALLOW_UNSUPPORTED_NODE=1 starts anyway (unsupported).\n');
+    process.exit(1);
+  }
+}
+
 if (!process.env.OASIS_NO_COMPILE_CACHE && typeof module.enableCompileCache === 'function') {
   try { module.enableCompileCache(); } catch {}
 }
