@@ -1944,6 +1944,32 @@ async function memoryCommand(args, root) {
   stdout.write(handled.output + '\n');
 }
 
+// `oasis config list|get KEY|set KEY VALUE`: the same settings as /config in a
+// session, saved to user settings. Without a word it shows the provider setup.
+async function configCommand(args, root) {
+  const pane = await import('./config-pane.mjs');
+  const { runBuiltinCommand } = await import('./slash.mjs');
+  const state = { root, env: process.env, sessionOptions: {} };
+  const run = (command, value) => runBuiltinCommand(command, value, state);
+  const [verb, key, ...rest] = args;
+  try {
+    if (verb === 'list' || verb === 'ls') return void stdout.write(await pane.describeConfig(state) + '\n');
+    if (verb === 'get' && key) {
+      const item = pane.findConfigItem(key);
+      if (!item) throw new Error('Unknown setting ' + key + '. Run oasis config list.');
+      const row = (await pane.configRows(state)).find((entry) => entry.item.key === item.key);
+      return void stdout.write(item.key + ' = ' + (row ? row.value : '') + '\n');
+    }
+    if (verb === 'set' && key) return void stdout.write(await pane.setConfigValue(key, rest.join(' '), state, run) + '\n');
+  } catch (error) {
+    stderr.write('OASIS error: ' + error.message + '\n');
+    process.exitCode = 1;
+    return;
+  }
+  stderr.write('Usage: oasis config [list | get KEY | set KEY VALUE]\n');
+  process.exitCode = 1;
+}
+
 async function interactiveCommandList(root) {
   const list = Object.entries(BUILTIN_COMMANDS).map(([name, description]) => ({ name, description }));
   list.push({ name: 'init', description: 'Create project instructions for this workspace' }, { name: 'quit', description: 'Exit Oasis' });
@@ -3267,6 +3293,7 @@ async function main() {
   }
   if (command === 'init') return await initWorkspace(workspace);
   if (command === 'update' || command === 'self-update') return await selfUpdate(autoApprove);
+  if (command === 'config' && rest.length) return await configCommand(rest, workspace);
   if (command === 'config' || command === 'status') return printConfig(await loadConfig());
   // An explicit --yes (not --auto, and not a -y after --) approves the MCP
   // configuration change it was typed for, so scripted setup works; the

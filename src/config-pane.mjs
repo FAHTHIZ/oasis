@@ -27,6 +27,11 @@ async function saveSetting(key, value, env) {
   }, env);
 }
 
+async function savedProviderModel(env) {
+  const { getConfigPath } = await import('./config.mjs');
+  try { const saved = JSON.parse(await readFile(getConfigPath(env), 'utf8')); return saved && typeof saved.model === 'string' ? saved.model : ''; } catch { return ''; }
+}
+
 const BOOL = ['true', 'false'];
 
 /** The settings shown in the pane. `choices` may be async; `apply` returns a message. */
@@ -41,8 +46,21 @@ export function configItems() {
     {
       key: 'model', label: 'Model', description: 'Default model for new sessions (also /model)',
       choices: async () => (await import('./model-aliases.mjs')).MODEL_ALIASES,
-      current: async (state, saved) => (state.session && state.session.config && state.session.config.model) || saved.model || '(provider default)',
-      apply: async (value, state, run) => { await saveSetting('model', value, state.env); return (state.session ? (await run('model', value)).output + ' ' : '') + 'Saved as the default model.'; }
+      current: async (state) => (state.session && state.session.config && state.session.config.model) || (await savedProviderModel(state.env)) || '(provider default)',
+      // Sessions take their model from the saved provider (config.json), so that is
+      // where the default goes. It used to be written to settings.json, which nothing
+      // read: "Saved as the default model" changed nothing.
+      apply: async (value, state, run) => {
+        const { saveDefaultModel } = await import('./config.mjs');
+        const live = state.session ? (await run('model', value)).output + ' ' : '';
+        if (!await saveDefaultModel(value, { env: state.env })) {
+          const why = 'No model provider is saved yet, so there is no default model to change. Run oasis connect or oasis setup first.';
+          if (!live) throw new Error(why);
+          return live + why;
+        }
+        const override = state.env && state.env.OASIS_MODEL ? ' OASIS_MODEL=' + state.env.OASIS_MODEL + ' is set in this environment and still wins while it is.' : '';
+        return live + 'Saved ' + value + ' as the default model.' + override;
+      }
     },
     {
       key: 'permissions.defaultMode', label: 'Default permission mode', description: 'Mode new sessions start in',
@@ -133,7 +151,7 @@ export async function configRows(state) {
 export async function describeConfig(state) {
   const rows = await configRows(state);
   const width = Math.max(...rows.map((row) => row.item.label.length));
-  return 'Settings (saved to ' + userSettingsPath(state.env) + '):\n' + rows.map((row) => '  ' + row.item.label.padEnd(width) + '  ' + row.value.padEnd(14) + ' ' + row.item.key).join('\n') + '\nChange one with /config set KEY VALUE, or run /config in a terminal for the interactive pane. /status shows where each setting comes from.';
+  return 'Settings (saved to ' + userSettingsPath(state.env) + '):\n' + rows.map((row) => '  ' + row.item.label.padEnd(width) + '  ' + row.value.padEnd(14) + ' ' + row.item.key).join('\n') + '\nChange one with /config set KEY VALUE (oasis config set KEY VALUE from a shell), or run /config in a terminal for the interactive pane. /status shows where each setting comes from.';
 }
 
 /** Applies KEY=VALUE through the item's handler. `run(name, arg)` runs a built-in slash command. */
