@@ -732,7 +732,10 @@ async function managePermissions(root, rest) {
     stdout.write('Added ' + kind + ' rule ' + rule + ' to ' + file + '\n');
     return;
   }
-  stdout.write('Usage: oasis permissions [list] | oasis permissions add allow|ask|deny "RULE" [--scope user|project|local]\n');
+  const usage = 'Usage: oasis permissions [list] | oasis permissions add allow|ask|deny "RULE" [--scope user|project|local]';
+  if (sub === 'help' || sub === '--help' || sub === '-h') { stdout.write(usage + '\n'); return; }
+  // An unknown action (`oasis permissions --json`) used to print the usage and exit 0.
+  throw new Error('Unknown permissions action "' + sub + '". ' + usage);
 }
 
 async function authCommand(root, rest) {

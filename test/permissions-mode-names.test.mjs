@@ -52,3 +52,15 @@ test('every displayed mode name is accepted by --permission-mode', async () => {
   const { permissionModeList } = await import('../src/permission-modes.mjs');
   assert.equal(permissionModeList(), 'manual (default), accept-edits, plan, auto, dont-ask, bypass-permissions');
 });
+
+test('oasis permissions with an unknown action fails instead of exiting 0', async () => {
+  const { mkdtemp, rm } = await import('node:fs/promises');
+  const home = await mkdtemp(path.join(os.tmpdir(), 'oasis-perm-action-'));
+  try {
+    const r = await oasis(['permissions', '--json'], home);
+    assert.equal(r.code, 1, r.out);
+    assert.match(r.out, /Unknown permissions action "--json"/);
+    const ok = await oasis(['permissions', 'list'], home);
+    assert.equal(ok.code, 0, ok.out);
+  } finally { await rm(home, { recursive: true, force: true }); }
+});
