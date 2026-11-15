@@ -4,6 +4,7 @@ User-facing change history grouped by package version. A version heading does no
 
 ## Unreleased
 
+- `oasis config` and `/status` say when `config.json` has not been created yet, and list the `OASIS_*` environment variables that set the provider (and override the file). Before, they printed the file path as if the file existed.
 - `/memory` lists only the instruction files that exist, plus a count of the other locations checked. In a new folder it used to print about 30 `[none]` lines. `/memory files` shows every checked location.
 - An empty `oasis sessions` list now says chats are saved automatically and points to `oasis -c` / `oasis -r ID`. Before, it said "Use oasis --continue to save/resume a session", which suggested chats are not saved by default.
 - `oasis doctor` with an unreadable `config.json` now names the file and the JSON error, and suggests fixing it. It used to say "CHECK — run oasis setup" and "Next step: run oasis setup to connect a model".
