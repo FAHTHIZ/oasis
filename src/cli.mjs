@@ -1126,6 +1126,13 @@ async function restoreOne(root, backupId) {
 function printConfig(config) {
   const summary = getProviderSummary(config);
   stdout.write('Oasis provider configuration\n');
+  // Before setup, baseURL/model hold built-in defaults; showing them as if
+  // chosen contradicted `oasis doctor` ("not set yet").
+  if (!config.configured) {
+    stdout.write('  Model provider: not set yet — run oasis setup or oasis connect\n');
+    stdout.write('  Config file: ' + config.configPath + '\n');
+    return;
+  }
   stdout.write('  Base URL: ' + config.baseURL + '\n');
   stdout.write('  Protocol: ' + (config.protocol || 'openai-compatible') + '\n');
   stdout.write('  Model: ' + config.model + '\n');
