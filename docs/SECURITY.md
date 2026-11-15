@@ -64,7 +64,9 @@ be checked by the release build on Windows, macOS and Linux before it is adopted
 ## Recommended setup for untrusted code
 
 1. Do not trust the workspace (`oasis trust` is not run), so its hooks, MCP
-   servers and permission settings stay off.
+   servers and permission settings stay off. `oasis trust` lists the hook
+   commands, allow rules, permission mode, status line and `.mcp.json` servers
+   it would turn on and asks first; without a terminal it needs `--yes`.
 2. Turn on the sandbox and leave its network off, or allow only the domains
    you need.
 3. Keep the default `ask` behaviour for edits and commands, or use plan mode
