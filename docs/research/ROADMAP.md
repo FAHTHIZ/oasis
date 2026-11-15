@@ -1,0 +1,75 @@
+# Implementation roadmap
+
+**Date:** 2026-11-15. Status: proposal for review. The rule from the
+research brief holds: no major system is integrated until the
+[general-purpose architecture](GENERAL-PURPOSE-ARCHITECTURE.md) and the
+[Neuron Network design](../OASIS-NEURON-NETWORK.md#detailed-design-proposal-2026-11)
+have been reviewed. Items are ordered so that each one is useful alone, can
+ship in a normal release, and builds on the existing OASIS runtime rather
+than beside it.
+
+Every item has acceptance criteria that a test or benchmark can check. An
+item is "done" only when its criteria pass in CI on Linux, macOS and
+Windows, the full test suite passes, and the docs describe what shipped
+(not what was planned). This file is updated in the same commit.
+
+Priorities:
+
+- **P0:** low cost, protects existing behaviour, or unblocks later items.
+- **P1:** the two core changes (scheduler + ledger, evidence contracts).
+- **P2:** capabilities that depend on P1.
+- **P3:** optional, benchmark-gated, or waiting for a user need.
+
+## P0: guards and small adoptions
+
+| # | Item | Source of the idea | Acceptance criteria |
+| --- | --- | --- | --- |
+| 0.1 | Prompt-surface snapshot test: the system prompt and tool list for fixed configs are snapshotted; any change needs an explicit snapshot update | Hermes Agent (MIT), [study](HERMES-AGENT.md) | Test fails when a tool description or prompt section changes without a snapshot update; covers default, plan mode, a subagent and a profile |
+| 0.2 | Delegation roles `leaf` / `orchestrator` on agent definitions; leaves cannot call `task` | Hermes `max_spawn_depth` and orchestrator role | A leaf that calls `task` gets a refusal tool result; existing agent definitions default to today's behaviour; existing subagent tests unchanged |
+| 0.3 | One-shot child cap: `oasis -p` runs default to at most 2 concurrent children unless configured | Hermes `oneshot_max_children` | Scripted-model test spawning 5 children in `-p` mode runs at most 2 at once; interactive mode unchanged |
+| 0.4 | Static audit of skill and plugin scripts at install (`src/skill-install.mjs`): report shell, network and file-write patterns before enabling | Hermes skills guard | Install of a fixture skill with `curl \| sh` shows a warning and requires confirmation; benign fixtures install without prompts; nothing is executed during the audit |
+| 0.5 | Trajectory export filter: `oasis sessions export --verified` keeps only sessions whose completion gates passed, and redacts secrets with the bundled rules | [Model strategy](MODEL-STRATEGY.md#path-2-fine-tune-an-existing-model-conditional) | Fixture sessions with a planted token export without it; unverified sessions are excluded; existing export formats unchanged |
+
+## P1: the two core changes
+
+| # | Item | Acceptance criteria |
+| --- | --- | --- |
+| 1.1 | Network ledger in `node:sqlite`: append-only state transitions and budget charges per neuron | Kill-at-every-write fault test: after restart no neuron is shown as running and the work graph matches a clean run; ledger writes add under 5 ms per spawn on a 2-CPU runner |
+| 1.2 | Scheduler: one start path for `task`, teams and workflow `agent()` | All existing subagent, team, workflow and task-board tests pass unchanged; global cap 8, per-parent `children` and per-provider slots enforced (property test); queued children get an explanatory tool result |
+| 1.3 | Budget algebra: reservations from parent to child, refunds on end, enforced in the scheduler and `src/cost-policy.mjs` | Property test with random concurrent spawn trees: no tree exceeds its root's tokens, dollars, steps or children; cancelled children refund unspent budget |
+| 1.4 | Cancellation and leases through the scheduler | Cancelling any neuron stops all descendants within 2 s (integration test with sleeping tools); interrupted neurons release shared-task leases |
+| 1.5 | Evidence ledger: the Tool Kernel records evidence events from tool results (test runs, fetches, executed cells, side effects) with digests | Events are produced from tool results only (a test where the model text claims a pass adds no event); edits after a test run mark earlier code evidence stale, matching `src/claim-check.mjs` |
+| 1.6 | Domain verification contracts: `code` reimplemented on the evidence ledger, then `research` and `analysis` | The existing claim-check and completion-gate tests pass against the `code` contract; a research answer with a citation to an unfetched URL is flagged; an analysis number with no producing execution is flagged |
+| 1.7 | Return-time gate: child reports reviewed against the child's evidence range | Scripted-model test: a child claiming passing tests with no test-run event is rejected with the reason |
+
+## P2: capabilities on top of P1
+
+| # | Item | Acceptance criteria |
+| --- | --- | --- |
+| 2.1 | Serializable approval state: a pending approval in a background neuron survives restart and can be answered later | Adapted from OpenAI Agents JS (MIT). Restart test: the approval is shown after restart, answering it resumes the neuron, and the tool runs exactly once |
+| 2.2 | Spawn-time scope check of the child's task against the parent's task and access | Read-only parent cannot create a child with write tools or a deploy step (test over permission combinations, including teams and workflows) |
+| 2.3 | Capability router: per-model results on `evals/tasks/` select the cheapest route above a quality floor per task class | Router decisions are reproducible from a stored results table; on the harness, cost drops with no task-class pass rate falling more than 2 points versus the current routing |
+| 2.4 | Compaction-triggered reflection: when a session compacts, propose memory and skill updates through `src/learning.mjs` (still inert until approved) | Adapted from Letta (Apache-2.0). Proposals appear after compaction in a fixture session; nothing is written without `/learning approve` |
+| 2.5 | Domain packs: `plugins/oasis-research` becomes the research pack with agent roles and a verification contract; an analysis pack follows | Pack installs through the existing plugin path; its contract is used by 1.6; removing the pack restores current behaviour |
+| 2.6 | Network observability: `neuron_network`, `/agents`, `/tasks` and the web app show state, budget and spent from the ledger | Snapshot tests of the projection; OpenTelemetry `invoke_agent` spans carry neuron id and parent id when telemetry is on |
+
+## P3: optional and benchmark-gated
+
+| # | Item | Gate before adoption |
+| --- | --- | --- |
+| 3.1 | Local embeddings plus `sqlite-vec` for memory and session recall | Beats FTS5 on `evals/memory-retrieval/` recall@5 by at least 10 points, adds under 150 MB installed size as an optional dependency, and OASIS works with it absent |
+| 3.2 | Optional in-process small model (`node-llama-cpp`, `transformers.js` or `onnxruntime-node`) for routing or injection screening | Measured gain on a labelled set; optional dependency only |
+| 3.3 | Offline prompt and skill optimisation with DSPy against the eval harness | Optimised text improves the held-out eval set and is reviewed like any other change; DSPy never becomes a runtime dependency |
+| 3.4 | First fine-tune of a small open-weight model (Apache-2.0 or MIT base) on verified trajectories | Criteria in the [model strategy](MODEL-STRATEGY.md#path-2-fine-tune-an-existing-model-conditional) |
+| 3.5 | Critic-based refinement loop for a domain | Adapted from OpenHands SDK (MIT); only when a benchmark shows a gain for that domain and the loop is bounded |
+| 3.6 | A2A protocol endpoint | A concrete user integration that MCP and ACP cannot serve |
+
+## Not on the roadmap
+
+- Replacing the OASIS turn loop, provider transport or permission engine
+  with another framework.
+- Bundling model weights.
+- An original pre-trained model (see the
+  [model strategy](MODEL-STRATEGY.md#path-3-an-original-model-not-justified-today)).
+- Dependencies rejected in the
+  [licensing assessment](DEPENDENCIES-AND-LICENSING.md#rejected-for-licence-reasons).
