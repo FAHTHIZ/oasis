@@ -217,6 +217,53 @@ export function microcompact(messages, options = {}) {
 }
 
 
+// Tool results that hold state the model keeps relying on, not observations.
+const KEEP_TOOL_OUTPUT = new Set(['todo_write', 'load_skill', 'skill', 'tool_search', 'exit_plan_mode']);
+
+/**
+ * Budget pruning of old tool output, as OpenCode does (PRUNE_PROTECT 40K,
+ * PRUNE_MINIMUM 20K): the newest `protectTokens` of tool output stay as they
+ * are; older outputs become re-run stubs, but only when that frees at least
+ * `minimumTokens`, so the cached prompt prefix is rebuilt rarely and for a
+ * large saving. Unlike microcompact it does not wait for the history to fill
+ * half the window, which on a 400K-token model is 200K tokens per request.
+ * Never mutates input.
+ */
+export function pruneOldToolOutput(messages, { protectTokens = 40_000, minimumTokens = 20_000 } = {}) {
+  if (!Array.isArray(messages) || !(protectTokens > 0)) return { messages, pruned: 0, savedTokens: 0 };
+  // Cheap bound first: nothing to do while all tool output fits the budget.
+  let toolChars = 0;
+  for (const message of messages) if (message && message.role === 'tool' && typeof message.content === 'string') toolChars += message.content.length;
+  if (toolChars / 2 <= protectTokens + minimumTokens) return { messages, pruned: 0, savedTokens: 0 };
+  let seen = 0;
+  let saved = 0;
+  const candidates = [];
+  for (let i = messages.length - 1; i >= 1; i--) {
+    const message = messages[i];
+    if (!message || message.role !== 'tool' || typeof message.content !== 'string') continue;
+    if (message.content.startsWith('[Older tool output compacted')) break;
+    const tokens = countTextTokens(message.content);
+    seen += tokens;
+    if (seen <= protectTokens) continue;
+    if (KEEP_TOOL_OUTPUT.has(message.name) || message.content.length < MIN_PRUNABLE_CHARS) continue;
+    const stub = stubFor(message);
+    candidates.push([i, stub]);
+    saved += Math.max(0, tokens - countTextTokens(stub));
+  }
+  if (saved < minimumTokens) return { messages, pruned: 0, savedTokens: 0 };
+  const output = messages.slice();
+  for (const [i, stub] of candidates) output[i] = { ...output[i], content: stub };
+  return { messages: output, pruned: candidates.length, savedTokens: saved };
+}
+
+export function toolOutputPruneSettings(config = {}, env = process.env) {
+  const raw = config.pruneToolOutputTokens ?? (env && env.OASIS_PRUNE_PROTECT_TOKENS);
+  if (raw === false || /^(0|false|off|no)$/i.test(String(raw ?? ''))) return null;
+  const protect = Number.parseInt(raw ?? '', 10);
+  const protectTokens = Number.isInteger(protect) && protect >= 4_000 ? protect : 40_000;
+  return { protectTokens, minimumTokens: Math.max(2_000, Math.floor(protectTokens / 2)) };
+}
+
 /**
  * Observation masking (Lindenbauer et al., "The Complexity Trap", arXiv
  * 2508.21433): tool outputs from more than `keepTurns` assistant turns ago are

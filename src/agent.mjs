@@ -49,7 +49,7 @@ import { resolveMcpPrompt, expandMcpResourceMentions } from './mcp-extras.mjs';
 import { autoMemoryEnabled, memoryIndexPrompt, recallForPrompt, MEMORY_TOOL_DEFINITIONS, listMemories, saveMemory } from './auto-memory.mjs';
 import { learningEnabled, LEARNING_TOOL_DEFINITIONS, assertLearningVerification } from './learning.mjs';
 import { countJsonTokens, countTextTokens } from './tokens.mjs';
-import { estimateTokens, tokenUpperBound, microcompact, maskObservations, contextWindowSize, modelContextWindow, compactionThresholdChars, mustPreserveContextBlock, appendMustPreserveContext } from './context.mjs';
+import { estimateTokens, tokenUpperBound, microcompact, maskObservations, pruneOldToolOutput, toolOutputPruneSettings, contextWindowSize, modelContextWindow, compactionThresholdChars, mustPreserveContextBlock, appendMustPreserveContext } from './context.mjs';
 import { genAiProviderName, genAiSpanNames, getTelemetry, lineChanges } from './telemetry.mjs';
 import { isAnthropicFamily } from './cloud-providers.mjs';
 import { loadSettings, normalizeLanguage } from './settings.mjs';
@@ -3234,6 +3234,16 @@ async function runAgentTurnRaw(session, prompt, options = {}) {
       const maskBatch = Number.parseInt((options.env || process.env).OASIS_OBSERVATION_MASK_BATCH ?? '', 10);
       const masked = maskObservations(session.messages, { keepTurns: maskTurns, batch: maskBatch > 0 ? maskBatch : 4 });
       if (masked.masked) session.messages = masked.messages;
+    }
+    const pruneSettings = toolOutputPruneSettings(session.config || {}, options.env || process.env);
+    if (pruneSettings) {
+      const trimmed = pruneOldToolOutput(session.messages, pruneSettings);
+      if (trimmed.pruned) {
+        const before = estimateTokens(session.messages);
+        session.messages = trimmed.messages;
+        session.prunedToolTokens = (session.prunedToolTokens || 0) + trimmed.savedTokens;
+        if (typeof options.onContextPruned === 'function') options.onContextPruned({ pruned: trimmed.pruned, before, after: Math.max(0, before - trimmed.savedTokens), savedTokens: trimmed.savedTokens, kind: 'tool-output-budget' });
+      }
     }
     const compacted = microcompact(session.messages, {
       windowTokens: pruneWindow
