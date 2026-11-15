@@ -301,7 +301,7 @@ CI also runs platform security tests, a live Docker sandbox test, native PTY tes
 | [User guide](docs/USER-GUIDE.md) | [Architecture](docs/ARCHITECTURE.md) | [Changelog](CHANGELOG.md) |
 | [First run](docs/FIRST-RUN.md) | [Configuration](docs/CONFIGURATION.md) | [Contributing](CONTRIBUTING.md) |
 | [Terminal guide](docs/TERMINAL.md) | [Skills, hooks, MCP and plugins](docs/EXTENDING.md) | [Security](SECURITY.md) |
-| [Interfaces](docs/INTERFACES.md) | [Subagents](docs/SUBAGENTS.md) | [Troubleshooting](docs/TROUBLESHOOTING.md) |
+| [Interfaces](docs/INTERFACES.md) | [Subagents](docs/SUBAGENTS.md) | [Troubleshooting](docs/TROUBLESHOOTING.md) · [FAQ](docs/FAQ.md) |
 | [Desktop app](docs/DESKTOP.md) | [Remote access](docs/REMOTE-ACCESS.md) | [Support](SUPPORT.md) |
 | [Downloads and releases](docs/RELEASES.md) | [Real-world runs](docs/REAL-WORLD-RUNS.md) | [Brand guidelines](BRAND.md) |
 | | [Benchmarks](docs/BENCHMARKS.md) · [Comparison](docs/COMPARISON.md) | [All docs](docs/README.md) |
@@ -316,4 +316,4 @@ Fen is the OASIS mascot: a fennec fox, the desert animal that always finds the w
 
 ## License
 
-[Apache License 2.0](LICENSE).
+[Apache License 2.0](LICENSE). Bundled third-party code, fonts and data keep their own licenses; see [Third-party notices](THIRD-PARTY-NOTICES.md).
