@@ -1557,9 +1557,9 @@ async function runPrompt(prompt, root, autoApprove, session = null, persistence 
         if (line) stdout.write((richOutput() ? '\x1b[2m  ' + line + '\x1b[22m' : '[auto-commit] ' + line) + '\n');
       }
     }
-    if (richOutput()) stdout.write('\x1b[2m  ' + formatTurnSummary({ ms: Math.max(0, Date.now() - turnStartedAt - CURRENT_TURN_WAITED_MS), toolCalls: result.toolCalls, tokens: result.tokensUsed, finished: result.finished !== false || Boolean(result.verificationIncomplete && result.text) }) + '\x1b[22m\n');
+    if (richOutput()) stdout.write('\x1b[2m  ' + formatTurnSummary({ ms: Math.max(0, Date.now() - turnStartedAt - CURRENT_TURN_WAITED_MS), toolCalls: result.toolCalls, tokens: result.tokensUsed, cachedTokens: session.turnCachedTokens, finished: result.finished !== false || Boolean(result.verificationIncomplete && result.text) }) + '\x1b[22m\n');
     const doneSound = Date.now() - turnStartedAt >= DONE_SOUND_AFTER_MS && playSound('done', { stream: stdout });
-    notifyAttention('OASIS · ' + formatTurnSummary({ ms: Date.now() - turnStartedAt, toolCalls: result.toolCalls, tokens: result.tokensUsed, finished: result.finished !== false || Boolean(result.verificationIncomplete && result.text) }), { elapsedMs: Date.now() - turnStartedAt, soundPlayed: doneSound, stream: stdout });
+    notifyAttention('OASIS · ' + formatTurnSummary({ ms: Date.now() - turnStartedAt, toolCalls: result.toolCalls, tokens: result.tokensUsed, cachedTokens: session.turnCachedTokens, finished: result.finished !== false || Boolean(result.verificationIncomplete && result.text) }), { elapsedMs: Date.now() - turnStartedAt, soundPlayed: doneSound, stream: stdout });
   } catch (error) {
     endStream();
     if (controller.signal.aborted || error.name === 'AbortError') {
