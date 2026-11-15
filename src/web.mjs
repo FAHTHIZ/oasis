@@ -19,6 +19,7 @@ import { saveSession, loadSession, listSessions, deleteSession, saveMidTurn, set
 import { executeTool, resolveWorkspacePath, sensitivePath } from './tools.mjs';
 import { inspectGitHubExtension, inspectGitHubMcpServers, selectReviewedMcpServers, resolveImportedSlashCommand, installGitHubExtension, updateGitHubExtension, rollbackGitHubExtension, listInstalledExtensions, removeGitHubExtension } from './extensions.mjs';
 import { loadMcpServers, saveMcpServers } from './mcp.mjs';
+import { listUserMcpJsonServers } from './mcp-remote-add.mjs';
 import { BUILTIN_COMMANDS, runBuiltinCommand, createUsageTracker, recordUsage } from './slash.mjs';
 import { expandFileMentions, resolveCustomCommand, resolveSkillCommand, loadCustomCommands } from './commands.mjs';
 import { visionEnabled, imageInputCapability, sniffImageType, MAX_IMAGE_BYTES } from './images.mjs';
@@ -1819,7 +1820,23 @@ export function createOasisWebServer(options = {}) {
       const config = await loadMcpServers({ env });
       json(res, 200, { servers: config.servers.map((server) => ({
         name: server.name, command: server.command, args: server.args, passEnv: server.passEnv, enabled: server.enabled, origin: server.origin
-      })) });
+      })), remote: await listUserMcpJsonServers({ env }) });
+      return;
+    }
+
+    // Servers in <config>/mcp.json (oasis mcp add --transport http|sse, and
+    // installs): turn on, turn off or remove one.
+    if (req.method === 'POST' && pathname === '/api/mcp/remote') {
+      const body = await readJsonBody(req);
+      const name = String(body.name || '');
+      const action = String(body.action || '');
+      if (!name || !['enable', 'disable', 'remove'].includes(action)) { json(res, 400, { error: 'name and action (enable, disable or remove) are required.' }); return; }
+      const { setUserMcpJsonServerEnabled, removeUserMcpJsonServer } = await import('./mcp-remote-add.mjs');
+      const message = action === 'remove'
+        ? await removeUserMcpJsonServer(name, { env })
+        : await setUserMcpJsonServerEnabled(name, action === 'enable', { env });
+      if (!message) { json(res, 404, { error: 'No server named ' + name + ' in mcp.json.' }); return; }
+      json(res, 200, { saved: true, message, remote: await listUserMcpJsonServers({ env }) });
       return;
     }
 
