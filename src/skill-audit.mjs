@@ -5,8 +5,8 @@
 // actions from the user, invisible Unicode that changes how text reads).
 //
 // Severity:
-//   high   - blocks the install unless the user explicitly allows it
-//            (`--allow-risky` on the CLI, allow_risky on the agent tool).
+//   high   - blocks the install unless the user explicitly allows it with
+//            `--allow-risky` on the CLI (the agent tools have no override).
 //   medium - reported with the install result; the install goes ahead.
 //
 // A regex audit is a tripwire, not a sandbox: a determined author can evade
@@ -31,7 +31,7 @@ export const SKILL_AUDIT_RULES = [
   { id: 'private-key-read', severity: 'high', pattern: /~\/\.ssh\/id_|\$HOME\/\.ssh\/id_|\.ssh[\\/]+id_(?:rsa|ed25519|ecdsa|dsa)\b|\.aws[\\/]+credentials\b|\.netrc\b|\.docker[\\/]+config\.json|\bsecurity\s+find-(?:generic|internet)-password\b|\.config[\\/]+gh[\\/]+hosts\.yml/i, description: 'Reads private keys or stored credentials' },
   { id: 'env-exfiltration', severity: 'high', pattern: /\b(?:env|printenv|set)\s*\|\s*(?:curl|wget|nc|ncat)\b|\b(?:curl|wget)\b[^\n]*(?:\$\(\s*(?:env|printenv)\s*\)|`(?:env|printenv)`|(?:-d|--data(?:-binary|-raw|-urlencode)?|-F|--form|-T|--upload-file)\s+["']?[\w=]*@["']?(?:~|\$HOME)?[\w./-]*(?:\.env\b|\.ssh\b|\.aws\b|credentials\b))|JSON\.stringify\(\s*process\.env\s*\)|os\.environ\.copy\(\)[^\n]*(?:post|send)|\bdict\(\s*os\.environ\s*\)[^\n]*(?:post|send)/i, description: 'Sends the environment or secret files over the network' },
   { id: 'destructive-delete', severity: 'high', pattern: /\brm\s+-(?:[a-z]*r[a-z]*f|[a-z]*f[a-z]*r)[a-z]*\s+(?:--no-preserve-root\s+)?(?:\/|~|\$HOME|\/\*|~\/\*)(?:\s|$|["'])/i, description: 'Deletes the root or home folder' },
-  { id: 'hide-from-user', severity: 'high', pattern: /\b(?:do not|don't|never)\s+(?:tell|inform|show|mention\s+(?:this\s+)?to|reveal\s+(?:this\s+)?to)\s+the\s+user\b(?!\s+to\b)|\bwithout\s+(?:telling|informing|notifying)\s+the\s+user\b|(?<!["'`\u201C])\bignore\s+(?:all\s+|any\s+)?(?:previous|prior|earlier|above)\s+(?:instructions|rules)\b|(?<!["'`\u201C])\bdisregard\s+(?:the\s+)?(?:system|previous)\s+(?:prompt|instructions)\b/i, description: 'Tells the agent to hide actions from the user or override its instructions' },
+  { id: 'hide-from-user', severity: 'high', pattern: /\b(?:do not|don't|never)\s+(?:tell|inform|show|mention\s+(?:this\s+)?to|reveal\s+(?:this\s+)?to)\s+the\s+user\b(?!\s+to\b)|(?:^|[.:;!]\s+|^\s*(?:[-*]|\d+\.)\s+)(?:silently\s+|quietly\s+)?(?:run|execute|install|send|upload|delete|remove|modify|change|edit|commit|push|proceed|continue|do)\b[^.\n]{0,80}\bwithout\s+(?:telling|informing|notifying)\s+the\s+user\b|(?<!["'`\u201C])\bignore\s+(?:all\s+|any\s+)?(?:previous|prior|earlier|above)\s+(?:instructions|rules)\b|(?<!["'`\u201C])\bdisregard\s+(?:the\s+)?(?:system|previous)\s+(?:prompt|instructions)\b/i, description: 'Tells the agent to hide actions from the user or override its instructions' },
   { id: 'bidi-control', severity: 'high', pattern: /[\u202A-\u202E\u2066-\u2069]/, description: 'Contains Unicode direction controls that can make text read differently than it runs' },
   { id: 'agent-config-tamper', severity: 'high', pattern: /(?:>>?|\btee\b(?:\s+-a)?|\bsed\s+-i\b|\bwrite(?:FileSync)?\b|\bappend)[^\n]*(?:\.oasis[\\/]+settings(?:\.local)?\.json|\.claude[\\/]+settings(?:\.local)?\.json|\.oasis[\\/]+hooks|trustedWorkspaces|defaultMode["']?\s*:\s*["']bypassPermissions)/i, description: 'Changes OASIS or Claude Code permissions, hooks or trust settings' },
   // medium
@@ -60,20 +60,36 @@ const clip = (text) => {
   return line.length > 160 ? line.slice(0, 157) + '...' : line;
 };
 
+// Test files and fixtures hold hostile strings on purpose (a secret
+// scanner's test lists key paths; an injection test contains bidi controls).
+const TEST_FILE = /(?:^|\/)(?:tests?|__tests__|spec|fixtures?)\/|(?:^|\/)test_[^/]*$|[._-](?:test|spec)\.[a-z]+$|_test\.[a-z]+$/i;
+// A key path counts as a read only next to something that reads, copies or
+// sends it; a bare path in a list or an ignore pattern is reported as medium.
+const KEY_READ_VERB = /\b(?:cat|less|more|head|tail|cp|scp|rsync|base64|curl|wget|xxd|Get-Content|type|open|readFile(?:Sync)?|read_text|read_bytes|createReadStream)\b|\bsecurity\s+find-/i;
+// "rm -rf /" written as a quoted string in documentation (a hook example
+// feeding it to a validator) rather than as a command.
+const QUOTED_RM = /["']rm\s+-[a-z]+\s+[^"'\n]*["']/i;
+
+function downgraded(rule, line, { prose, testFile }) {
+  if (rule === 'private-key-read') return prose || testFile || !KEY_READ_VERB.test(line);
+  if (rule === 'bidi-control') return testFile;
+  if (rule === 'destructive-delete') return prose && QUOTED_RM.test(line);
+  return false;
+}
+
 /** Audit one file's text. Returns findings with 1-based line numbers. */
 export function auditSkillText(text, file = 'SKILL.md') {
   const findings = [];
   const lines = String(text).split(/\r?\n/);
   const prose = /\.(?:md|markdown|txt|rst)$/i.test(file);
+  const testFile = TEST_FILE.test(file);
   for (let index = 0; index < lines.length && findings.length < MAX_FINDINGS; index++) {
     const line = lines[index];
     // The first character of a file may be a byte-order mark.
     const probe = index === 0 ? line.replace(/^\uFEFF/, '') : line;
     for (const rule of SKILL_AUDIT_RULES) {
       if (!rule.pattern.test(probe)) continue;
-      // A path named in prose is not a read: the agent's own permission rules
-      // still refuse secret files. In a script it runs with the user's rights.
-      const severity = rule.id === 'private-key-read' && prose ? 'medium' : rule.severity;
+      const severity = rule.severity === 'high' && downgraded(rule.id, probe, { prose, testFile }) ? 'medium' : rule.severity;
       findings.push({ rule: rule.id, severity, description: rule.description, file, line: index + 1, excerpt: clip(probe) });
     }
   }
@@ -119,4 +135,22 @@ export function formatSkillAudit(name, audit, { limit = 12 } = {}) {
   const lines = audit.findings.slice(0, limit).map((item) => '  [' + item.severity + '] ' + item.file + (item.line ? ':' + item.line : '') + ' ' + item.description + (item.excerpt ? ': ' + item.excerpt : ''));
   if (audit.findings.length > limit) lines.push('  ... and ' + (audit.findings.length - limit) + ' more');
   return 'Audit of ' + name + ': ' + audit.high + ' high, ' + audit.medium + ' medium\n' + lines.join('\n');
+}
+
+/**
+ * Audit a plugin or package folder that is about to be installed. Throws an
+ * error with code OASIS_AUDIT_REFUSED (and the report) when it has a
+ * high-risk line and the user has not passed allowRisky; otherwise returns
+ * the audit so the caller can show the warnings. `hint` is the command the
+ * user can re-run to install anyway.
+ */
+export async function auditPackageOrRefuse(directory, name, { allowRisky = false, hint = '' } = {}) {
+  const audit = await auditSkillDirectory(directory);
+  if (audit.blocked && allowRisky !== true) {
+    const error = new Error('Not installed: ' + name + '. The audit found high-risk lines (listed below). Read them first' + (hint ? '; to install anyway, run `' + hint + '` yourself' : '') + '.\n' + formatSkillAudit(name, audit));
+    error.code = 'OASIS_AUDIT_REFUSED';
+    error.audit = audit;
+    throw error;
+  }
+  return audit;
 }

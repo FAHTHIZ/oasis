@@ -144,3 +144,24 @@ export function appendFailedEditNotice(text, state) {
   const note = files.map(([file, error]) => 'Not done: the change to ' + file + ' did not apply (' + error + ').').join('\n');
   return (value.trim() ? value.replace(/\s+$/, '') + '\n\n' : '') + note;
 }
+
+const STALE_CHECK = /has passed after the latest code edit/;
+
+/**
+ * Return-time check of a subagent's report (roadmap P1.7). The parent reads
+ * only the child's final text, so a report saying the tests pass is checked
+ * against what the child's own turn recorded: a check must have run, the
+ * last one must have passed, and no edit may have come after it. Returns the
+ * reason when the claim is not supported, or '' when it is (or when the
+ * report makes no passing claim).
+ */
+export function unsupportedChildClaim(outcome) {
+  if (!outcome || !claimsPassing(outcome.text)) return '';
+  const verification = outcome.verification || {};
+  const last = verification.lastCheck;
+  if (!last) return 'the report says checks pass, but the agent ran no test, check, lint or build command';
+  if (!last.passed) return 'the report says checks pass, but the agent\'s last ' + last.kind + ' command exited with code ' + (last.exitCode === null ? 'unknown' : last.exitCode);
+  const issues = Array.isArray(outcome.verificationIssues) ? outcome.verificationIssues : Array.isArray(verification.issues) ? verification.issues : [];
+  if (issues.some((issue) => STALE_CHECK.test(issue))) return 'the report says checks pass, but the agent edited files after its last passing check';
+  return '';
+}

@@ -45,7 +45,7 @@ direction-control characters, or switching OASIS permissions to bypass) is not
 installed; the report shows each file and line. After reading it you can install
 anyway with `--allow-risky`. The agent's install tool has no such override. The
 audit matches patterns, so it does not prove a skill is safe; review what you
-install. Plugin installs are not audited yet.
+install. Plugin installs use the same audit (see [Plugins](#plugins)).
 
 In a session, `/skills` lists them and `/skill-doctor` checks a skill's front
 matter and file references.
@@ -102,6 +102,14 @@ oasis plugin list | show | enable | disable | update | uninstall NAME
 oasis plugin validate ./my-plugin
 oasis add OWNER/REPO                      # also converts Codex plugins and Gemini CLI extensions
 ```
+
+Plugins run hooks and MCP servers with your permissions, so OASIS reads every
+copied file before it registers or enables one, using the same rules as skills.
+Warnings are printed with the install; a high-risk line refuses it and removes
+the copy. After reading the report, `oasis plugin install NAME@MARKETPLACE
+--allow-risky` (or `oasis add SOURCE --allow-risky`, `oasis plugin update NAME
+--allow-risky`) installs it anyway. Installs started by the agent, the web app
+or `/add` have no override. A clean audit is not a safety review.
 
 The web app has the same catalogue under **Plugins**. Built-in capability bundles
 (`oasis plugins list`) are separate, smaller packs maintained in this repository
