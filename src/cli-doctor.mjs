@@ -81,6 +81,7 @@ export async function doctor(args = [], root = process.cwd(), { fallbackModel = 
     ? (ok ? '\x1b[32mOK\x1b[0m' : '\x1b[31mCHECK\x1b[0m')
     : (ok ? 'OK' : 'CHECK');
   let config = {};
+  let configError = '';
   try { config = await loadConfig(); } catch {}
   for (const item of probes) detail('  ' + doctorToolLine(item, commandAvailable(item), config) + '\n');
   try {
@@ -115,6 +116,7 @@ export async function doctor(args = [], root = process.cwd(), { fallbackModel = 
       detail('  Live model/tool-call verification: not run (use oasis doctor --test-provider; oasis doctor --network checks connectivity)\n');
     }
   } catch (error) {
+    configError = String(error && error.message || error);
     detail('  Provider config: invalid (' + error.message + ')\n');
     if (args.includes('--test-provider')) process.exitCode = 1;
   }
@@ -123,10 +125,12 @@ export async function doctor(args = [], root = process.cwd(), { fallbackModel = 
   stdout.write('OASIS check\n');
   stdout.write('  Node.js 22+: ' + statusLabel(nodeOK) + '\n');
   stdout.write('  Git: ' + (gitOK ? 'available (optional)' : 'not found (optional)') + '\n');
-  stdout.write('  Model connection: ' + (modelConfigured ? statusLabel(true) : statusLabel(false) + ' — run oasis setup') + '\n');
+  // An unreadable config.json is the problem to fix, not a missing setup.
+  stdout.write('  Model connection: ' + (modelConfigured ? statusLabel(true) : statusLabel(false) + (configError ? ' — ' + configError : ' — run oasis setup')) + '\n');
   stdout.write('  Native terminal panel (PTY): ' + (ptyAvailable ? 'available' : 'not available (optional native component)') + '\n');
   stdout.write('  Image downscaling (sharp): ' + (sharpAvailable ? 'available' : 'not available (optional; images over 3.75 MB are refused)') + '\n');
   const nextStep = !nodeOK ? 'install Node.js 22 or newer, then run oasis doctor again.'
+    : configError ? 'fix the configuration file named above, or run oasis setup to replace it (setup keeps a copy of the unreadable file).'
     : !modelConfigured ? 'run oasis setup to connect a model.'
     : 'run oasis in a project folder, or oasis web --open for the browser workspace.';
   stdout.write('\nNext step: ' + nextStep + '\n\n');
