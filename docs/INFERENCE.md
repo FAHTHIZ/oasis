@@ -2,7 +2,7 @@
 
 This page covers how Oasis chooses where a model request goes, what it may
 cost, and how to cap it. The design notes behind it are in
-[INFERENCE-GATEWAY-PLAN.md](INFERENCE-GATEWAY-PLAN.md).
+[the inference gateway plan](design/INFERENCE-GATEWAY-PLAN.md).
 
 ## Zero-budget mode
 

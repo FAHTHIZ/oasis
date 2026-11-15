@@ -26,7 +26,7 @@ Open your project and start OASIS:
     oasis connect
     oasis
 
-The complete installation path is in the [README](../README.md#download-and-install).
+The complete installation path is in the [README](../README.md#install).
 
 ## 3. Configure a model provider
 

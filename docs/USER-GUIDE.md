@@ -234,19 +234,14 @@ Read [SECURITY.md](../SECURITY.md) before connecting sensitive workspaces.
 
 ## Troubleshooting
 
-| Problem | What to check |
-|---|---|
-| "Paste your OASIS link" on every visit | Tick **Remember this device**, or start with `--public-url` / `--persistent-key` so the key survives restarts. |
-| "The saved access key no longer works" | The key was rotated or OASIS restarted without `--persistent-key`. Run `oasis web key` on the server. |
-| `421 Misdirected Request` | The host name is not allowed. Pass `--public-url` or `--allow-host`. |
-| Provider setup refused from another device | Use HTTPS; keys are accepted only from the same computer or over HTTPS. |
-| Provider connection fails | Check the endpoint, model name, network access and credentials. Never paste API keys into an issue. |
-| Free model stops answering | Free tiers have rate and daily limits. OASIS moves to a backup model when one runs out; add credits or another key for more. |
-| Sandbox unavailable | Do not assume isolation is active; check `oasis doctor`. |
-| The result is incorrect | Inspect the diff, ask for a narrow correction and rerun the relevant test. |
+Run `oasis doctor` first. Common problems with the web app, providers, the sandbox
+and sessions, and their fixes, are in [Troubleshooting](TROUBLESHOOTING.md).
 
 ## Further reading
 
+- [Terminal guide](TERMINAL.md)
+- [Extending OASIS](EXTENDING.md)
+- [Troubleshooting](TROUBLESHOOTING.md)
 - [Remote access](REMOTE-ACCESS.md)
 - [Interfaces and deployment](INTERFACES.md)
 - [Downloads and releases](RELEASES.md)

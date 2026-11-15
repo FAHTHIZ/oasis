@@ -36,7 +36,7 @@ test('README and package metadata describe the current product without unsupport
 test('architecture and readiness docs describe the normal session', async () => {
   const [architecture, scorecard, index] = await Promise.all([
     readFile(new URL('../docs/ARCHITECTURE.md', import.meta.url), 'utf8'),
-    readFile(new URL('../docs/ENGINEERING-SCORECARD.md', import.meta.url), 'utf8'),
+    readFile(new URL('../docs/design/ENGINEERING-SCORECARD.md', import.meta.url), 'utf8'),
     readFile(new URL('../docs/README.md', import.meta.url), 'utf8')
   ]);
   for (const doc of [architecture, scorecard, index]) {
