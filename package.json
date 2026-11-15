@@ -30,6 +30,7 @@
     "ide/",
     "README.md",
     "LICENSE",
+    "THIRD-PARTY-NOTICES.md",
     "evals/",
     "!assets/demo/",
     "!assets/screenshots/",
