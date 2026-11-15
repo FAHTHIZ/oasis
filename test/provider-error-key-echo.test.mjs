@@ -52,3 +52,11 @@ test('a mid-stream error event that echoes the key does not reach the user', asy
   const out = await runWith(t, baseURL, true);
   assert.ok(!out.includes(KEY), out);
 });
+
+test('a keyless gateway refusing a paid model is not reported as a bad key', () => {
+  // Exact body from https://api.kilo.ai/api/gateway/v1 with no key, 15 Nov 2026.
+  const body = '{"error":{"code":"PAID_MODEL_AUTH_REQUIRED","message":"You need to sign in to use this model."},"error_type":"paid_model_auth_required"}';
+  const message = formatApiError(401, body, 'openai-compatible', 'https://api.kilo.ai/api/gateway/v1');
+  assert.match(message, /^Model provider returned HTTP 401: You need to sign in to use this model\. This model needs an account or key/);
+  assert.doesNotMatch(message, /Check the API key/);
+});
