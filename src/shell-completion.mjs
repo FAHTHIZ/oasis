@@ -48,7 +48,7 @@ export const COMPLETION_COMMANDS = {
 
 const COMPLETION_SUBCOMMANDS = {
   mcp: ['list', 'search', 'install', 'add', 'remove', 'serve', 'login', 'logout'],
-  skills: ['list', 'find', 'inspect', 'add', 'install', 'eval'],
+  skills: ['list', 'find', 'inspect', 'add', 'install', 'remove', 'eval'],
   plugins: ['list', 'install', 'remove', 'eval'],
   plugin: ['eval'],
   gateway: ['telegram', 'discord', 'slack'],
