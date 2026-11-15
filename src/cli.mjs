@@ -34,7 +34,7 @@ import { resolveCustomCommand, expandFileMentions, loadCustomCommands, resolveSk
 import { visionEnabled } from './images.mjs';
 import { loadAgentDefinitions } from './subagents.mjs';
 import { renderStatusLine, statusLinePayload } from './status-line.mjs';
-import { BUILTIN_COMMANDS, COMMAND_ALIASES, runBuiltinCommand, subagentRows, createUsageTracker, recordUsage, formatInterval } from './slash.mjs';
+import { BUILTIN_COMMANDS, COMMAND_ALIASES, slashCommandHint, runBuiltinCommand, subagentRows, createUsageTracker, recordUsage, formatInterval } from './slash.mjs';
 import { appendMemoryNote } from './memory.mjs';
 import { runHeadless, OUTPUT_FORMATS, headlessSetupErrorOutput } from './headless.mjs';
 import { randomUUID } from 'node:crypto';
@@ -2595,7 +2595,7 @@ async function interactive(root, autoApprove, persistence = {}) {
         persistence.resumeId = null;
         continue;
       }
-      stdout.write('Unknown command. Type /help to list built-in and custom commands.\n');
+      { const hint = slashCommandHint(text); stdout.write('Unknown command.' + (hint ? ' Did you mean ' + hint + '?' : '') + ' Type /help to list built-in and custom commands.\n'); }
       continue;
     }
     const direct = parseInstallIntent(text);
