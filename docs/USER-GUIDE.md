@@ -56,7 +56,7 @@ cd /path/to/your/project
 oasis
 ```
 
-`oasis` starts the interactive session. `oasis -p "…"` and `oasis exec` run one task for scripts and CI. `oasis models` lists the models your provider serves, and `oasis update` updates a script-installed copy.
+`oasis` starts the interactive session. `oasis -p "…"` and `oasis exec` run one task for scripts and CI. `oasis models` lists the models your provider serves, and `oasis update` updates a script-installed copy to the latest stable release (a git clone already newer than that release is left alone; use `git pull` to follow main).
 
 ### Keep going until a goal holds
 
