@@ -1100,7 +1100,35 @@ async function installSkill(root, name) {
   stdout.write('Installed skill "' + name + '" into ' + destination + '. It will be loaded as project context in the next agent session.\n');
 }
 
-async function manageSkills(root, args, autoApprove) {
+// `oasis skills remove NAME [--global]`: the way back from skills add/install.
+// Only the folders OASIS installs into are touched; skills another tool owns
+// (~/.claude/skills and similar) are left to that tool.
+async function removeSkill(root, args, explicitYes) {
+  const global = args.includes('--global') || args.includes('-g');
+  const yes = explicitYes || args.includes('--yes') || args.includes('-y');
+  const names = args.filter((value) => !/^-/.test(value));
+  if (names.length !== 1) throw new Error('Usage: oasis skills remove NAME [--global] [--yes]');
+  const name = names[0];
+  if (!/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/.test(name)) throw new Error('Skill names use letters, digits, dots, dashes and underscores (for example pdf-tools).');
+  const { getUniversalGlobalSkillsDirectory } = await import('./tools.mjs');
+  const roots = global ? [getUniversalGlobalSkillsDirectory(process.env)] : [path.join(root, '.agents', 'skills'), path.join(root, '.oasis', 'skills')];
+  const found = [];
+  for (const base of roots) {
+    const dir = path.join(base, name);
+    try { await access(path.join(dir, 'SKILL.md')); found.push(dir); } catch {}
+  }
+  if (!found.length) throw new Error('No installed skill named "' + name + '" in ' + roots.join(' or ') + '.' + (global ? '' : ' For a user-level skill add --global.') + ' oasis skills list shows every skill and where it comes from.');
+  if (!yes) {
+    if (!stdin.isTTY || !stdout.isTTY) throw new Error('Removing a skill deletes ' + found.join(' and ') + '. Re-run with --yes to confirm.');
+    const answer = await askLine('Delete ' + found.join(' and ') + '? [y/N] ');
+    if (!/^y(?:es)?$/i.test(String(answer).trim())) { stdout.write('Kept the skill.\n'); return; }
+  }
+  const { rm } = await import('node:fs/promises');
+  for (const dir of found) await rm(dir, { recursive: true, force: true });
+  stdout.write('Removed skill "' + name + '" (' + found.join(', ') + '). New sessions will not load it.\n');
+}
+
+async function manageSkills(root, args, autoApprove, explicitYes = false) {
   const action = String(args[0] || 'list').toLowerCase();
   const rest = args.slice(1);
   if (action === 'list' || action === 'ls') return await listSkills(root);
@@ -1149,7 +1177,8 @@ async function manageSkills(root, args, autoApprove) {
     const result = await skillsFromSource(root, source, { skill: skillName, all: allSkills, targetDir }, autoApprove);
     return result;
   }
-  throw new Error('Unknown skills action. Use oasis skills list, find, inspect, add, or install.');
+  if (action === 'remove' || action === 'uninstall' || action === 'rm') return await removeSkill(root, rest, explicitYes);
+  throw new Error('Unknown skills action. Use oasis skills list, find, inspect, add, install, or remove.');
 }
 
 
@@ -3575,7 +3604,7 @@ async function main() {
     if (!result.ok || (result.report && result.report.summary.passRate < 1)) process.exitCode = 1;
     return;
   }
-  if (command === 'skills') return await manageSkills(workspace, rest, autoApprove);
+  if (command === 'skills') return await manageSkills(workspace, rest, autoApprove, explicitYes);
   if (command === 'permissions') return await managePermissions(workspace, rest);
   if (command === 'trust') return await manageTrust(workspace, rest, { approve: mcpApprove });
   if (command === 'import') return await importCommand(workspace, rest, autoApprove);
