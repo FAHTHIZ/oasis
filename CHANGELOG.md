@@ -4,6 +4,7 @@ User-facing change history grouped by package version. A version heading does no
 
 ## Unreleased
 
+- Eval traces now record why a step failed (exit code and the last lines of the error, at most 200 redacted characters), so a profile can tell a wrong self-check from a broken tool without storing file contents.
 - A mistyped slash command (`/sttaus`) now says "Did you mean /status?" instead of only "Unknown command".
 - `oasis insights` and `/insights` no longer write an empty HTML report when there are no saved sessions.
 - `oasis permissions` now leads with the mode in force, spelled as `--permission-mode` and the help spell it ("accept-edits (from --permission-mode; settings: manual)"), instead of "default (overridden: acceptEdits)".

@@ -33,7 +33,17 @@ function traceStep(event) {
   let chars = 0;
   try { chars = typeof result === 'string' ? result.length : JSON.stringify(result ?? null).length; } catch {}
   const failed = Boolean(result && typeof result === 'object' && (result.error || result.approved === false || result.blocked === true || (typeof result.exitCode === 'number' && result.exitCode !== 0)));
-  return { tool: String(event && event.name || '?'), ...(detail ? { arg: redactArtifactText(detail).slice(0, 120) } : {}), resultChars: chars, ...(failed ? { failed: true } : {}) };
+  return { tool: String(event && event.name || '?'), ...(detail ? { arg: redactArtifactText(detail).slice(0, 120) } : {}), resultChars: chars, ...(failed ? { failed: true, ...failureDetail(result) } : {}) };
+}
+// Why a step failed, in at most 200 redacted characters: the last lines of the
+// error or stderr (stdout when stderr is empty). Enough to tell a wrong check
+// from a broken tool when profiling, without storing file contents.
+function failureDetail(result) {
+  const out = {};
+  if (typeof result.exitCode === 'number') out.exitCode = result.exitCode;
+  const text = [result.error, result.message, result.stderr, result.stdout].find((value) => typeof value === 'string' && value.trim());
+  if (text) out.why = redactArtifactText(text.trim().split('\n').slice(-3).join(' | ')).slice(-200);
+  return out;
 }
 function recordTraceStep(trace, event) { if (trace.length < TRACE_LIMIT) trace.push(traceStep(event)); }
 
