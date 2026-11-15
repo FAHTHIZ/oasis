@@ -97,3 +97,12 @@ test('the post-edit gate names the tests that import the edited file', async (t)
   assert.match(gate.content, /Tests that import the changed files: test\/math\.test\.mjs/);
   assert.match(gate.content, /`node --test test\/math\.test\.mjs/);
 });
+
+test('with no tests and no test command the gate names a direct check', async (t) => {
+  const root = await project(t, { 'math.mjs': 'export function add(a, b) { return a + b; }\n' });
+  assert.match(await relatedTestsHint(root, new Set(['math.mjs'])), /no test setup.*`node math\.mjs`/);
+  const py = await project(t, { 'calc.py': 'def add(a, b):\n    return a + b\n' });
+  assert.match(await relatedTestsHint(py, new Set(['calc.py'])), /`python3 calc\.py`/);
+  const npm = await project(t, { 'math.mjs': 'export const x = 1;\n', 'package.json': JSON.stringify({ scripts: { test: 'node --test' } }) });
+  assert.equal(await relatedTestsHint(npm, new Set(['math.mjs'])), '', 'a project test command is left to the existing guidance');
+});

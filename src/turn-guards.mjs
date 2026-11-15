@@ -399,9 +399,22 @@ export async function relatedTestsHint(root, changedPaths) {
     related = await Promise.race([search, new Promise((resolve) => { timer = setTimeout(() => resolve([]), 3000); })]);
   } catch { return ''; } finally { clearTimeout(timer); }
   const tests = nearestRelatedTests(related);
-  if (!tests.length) return '';
+  if (!tests.length) return await directCheckHint(root, sources);
   const command = await relatedTestCommand(root, tests);
   return 'Tests that import the changed files: ' + tests.join(', ') + '.' + (command ? ' A quick first check: `' + [command.command, ...command.args].join(' ') + '`.' : '') + ' Then run the full suite if it is practical.';
+}
+
+// No tests and no test command: "inspect the project scripts" sends a small
+// model looking for a package.json that is not there (seen live: four extra
+// steps after a correct one-line fix). Name a check that exists instead.
+async function directCheckHint(root, sources) {
+  if (await detectProjectTestCommand(root)) return '';
+  const files = sources.slice(0, 3);
+  const runner = (file) => /\.py$/i.test(file) ? 'python3 ' + file : /\.(?:m?js|cjs)$/i.test(file) ? 'node ' + file : '';
+  const commands = files.map(runner);
+  if (!commands.length || commands.some((command) => !command)) return '';
+  // Not "node -e …": inline code is high risk and never auto-approved.
+  return 'This folder has no test setup, so do not look for one. Check the change directly: run `' + commands.join('` and `') + '` with run_command (it loads the file and catches syntax and import errors), then review the diff.';
 }
 
 export async function assistedVerificationCalls(root, verification) {
