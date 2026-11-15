@@ -751,6 +751,9 @@ export function classifyFailure(error) {
   if (/context length|context window|maximum context|too many tokens|prompt is too long|reduce the length/.test(text)) return 'context';
   if (status === 402 || /insufficient|credit|billing|payment|quota|exceeded your|balance/.test(text)) return 'credits';
   if (status === 401) return 'auth';
+  // Google answers a bad key with 400 INVALID_ARGUMENT "API key not valid" /
+  // "Please pass a valid API key" (API_KEY_INVALID).
+  if (status === 400 && /api[ _]key[ _]invalid|api key not valid|valid api key|invalid api key/.test(text)) return 'auth';
   if (status === 403) return /model|access|permission|not allowed|region/.test(text) && !/api key|invalid key|rejected the api key/.test(text.replace('the provider rejected the api key (403).', '')) ? 'model' : 'auth';
   if (status === 429 || /rate limit/.test(text)) return 'rate';
   if (status === 404 || /not found|does not exist|no endpoints|unknown model|model_not_found|decommissioned|deprecated|not supported|does not support tools|tool use|tool calling/.test(text)) return 'model';
