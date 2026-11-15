@@ -4,7 +4,7 @@
 // converts to and from Messages API blocks.
 
 export const PRESETS = {
-  openrouter: { label: 'OpenRouter', protocol: 'openai', baseURL: 'https://openrouter.ai/api/v1', model: 'qwen/qwen3-coder', keyHint: 'sk-or-…', note: 'One key for hundreds of models, including free ones.' },
+  openrouter: { label: 'OpenRouter', protocol: 'openai', baseURL: 'https://openrouter.ai/api/v1', model: 'qwen/qwen3-coder', keyHint: 'sk-or-…', note: 'One key for hundreds of models, including free ones.', publicModelList: true },
   anthropic: { label: 'Anthropic', protocol: 'anthropic', baseURL: 'https://api.anthropic.com', model: 'claude-sonnet-5', keyHint: 'sk-ant-…' },
   openai: { label: 'OpenAI', protocol: 'openai', baseURL: 'https://api.openai.com/v1', model: 'gpt-6.1-sol', keyHint: 'sk-…' },
   gemini: { label: 'Google Gemini', protocol: 'openai', baseURL: 'https://generativelanguage.googleapis.com/v1beta/openai', model: 'gemini-3.8-flash', keyHint: 'AQ.… or AIza…' },
