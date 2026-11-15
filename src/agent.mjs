@@ -3135,6 +3135,7 @@ async function runAgentTurnRaw(session, prompt, options = {}) {
   // them stopped a long task in a large context after a dozen steps, since
   // every step re-reads the whole conversation.
   let cachedTokens = 0;
+  session.turnCachedTokens = 0;
   const budgetTokensUsed = () => Math.max(0, tokensUsed - cachedTokens);
   const context = {
     root: session.root,
@@ -3382,6 +3383,7 @@ async function runAgentTurnRaw(session, prompt, options = {}) {
     tokensUsed += Number(usage.totalTokens || 0);
     cachedTokens += Math.min(Number(usage.totalTokens || 0), Math.max(0, Number(usage.cacheReadTokens || 0)));
     noteCacheUse(session, usage);
+    session.turnCachedTokens = cachedTokens;
     const pricedModel = resolveModelAlias(session.config && session.config.model, {
       protocol: session.config && session.config.protocol,
       env: options.env || process.env
