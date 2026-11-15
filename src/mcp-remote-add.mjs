@@ -130,8 +130,8 @@ async function writeMcpJsonServer(name, entry, { root, env, approve, scope }) {
 }
 
 // oasis mcp remove NAME for servers in <oasis config>/mcp.json. Returns null when absent.
-export async function removeUserMcpJsonServer(name, { env = process.env, approve = async () => true } = {}) {
-  const file = path.join(getConfigDirectory(env), 'mcp.json');
+// `file` defaults to the user mcp.json; pass a project .mcp.json to remove from it.
+export async function removeUserMcpJsonServer(name, { env = process.env, approve = async () => true, file = path.join(getConfigDirectory(env), 'mcp.json') } = {}) {
   let parsed;
   try { parsed = JSON.parse(await readFile(file, 'utf8')); } catch { return null; }
   const servers = parsed && parsed.mcpServers && typeof parsed.mcpServers === 'object' ? parsed.mcpServers : null;
