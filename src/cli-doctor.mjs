@@ -49,6 +49,10 @@ export function doctorToolLine(name, available, config = {}) {
 }
 
 export async function doctor(args = [], root = process.cwd(), { fallbackModel = '' } = {}) {
+  // `oasis doctor --json` printed the text report, which a script would then
+  // fail to parse. Unknown options are an error instead of being ignored.
+  const unknown = args.find((arg) => !['--network', '--network-only', '--test-provider'].includes(arg));
+  if (unknown) throw new Error('oasis doctor: unknown option ' + unknown + '. Options: --test-provider (send one live tool-calling request), --network (check provider, MCP and GitHub reachability).');
   if (args.includes('--network') || args.includes('--network-only')) {
     const { runNetworkDoctor, formatNetworkReport } = await import('./network-doctor.mjs');
     const { loadProjectMcpServers } = await import('./mcp-project.mjs');

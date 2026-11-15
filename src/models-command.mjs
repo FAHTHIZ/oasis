@@ -78,7 +78,7 @@ export async function modelsCommand(args = [], { root = process.cwd(), env = pro
   const current = config.model || '';
   if (config.configured === false) {
     const reason = 'No model provider is configured. Run oasis setup first.';
-    if (json) stdout.write(JSON.stringify({ current, models: null, reason }, null, 2) + '\n');
+    if (json) stdout.write(JSON.stringify({ current: null, models: null, reason }, null, 2) + '\n');
     else stderr.write(reason + '\n');
     return 1;
   }
