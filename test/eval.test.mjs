@@ -1145,7 +1145,7 @@ test('OASIS eval records a compact, redacted tool trace and per-request tokens f
       options.onUsage({ inputTokens: 100, outputTokens: 5 });
       options.onToolResult({ name: 'read_file', call: call('read_file', { path: 'src/a.mjs' }), result: { content: 'x'.repeat(50) } });
       options.onUsage({ inputTokens: 160, outputTokens: 9 });
-      options.onToolResult({ name: 'run_command', call: call('run_command', { command: 'node', args: ['--test', 'token=sk-abcdefghijklmnopqrstuvwx'] }), result: { exitCode: 1, stdout: '' } });
+      options.onToolResult({ name: 'run_command', call: call('run_command', { command: 'node', args: ['--test', 'token=sk-abcdefghijklmnopqrstuvwx'] }), result: { exitCode: 1, stdout: 'ok 1\n', stderr: 'AssertionError: expected 2, got 3 (key sk-abcdefghijklmnopqrstuvwx)\n' } });
       return { finished: true, toolCalls: 2 };
     }
   });
@@ -1157,6 +1157,12 @@ test('OASIS eval records a compact, redacted tool trace and per-request tokens f
   assert.equal(trial.trace[1].failed, true);
   assert.doesNotMatch(trial.trace[1].arg, /sk-abcdef/);
   assert.match(trial.trace[1].arg, /^node --test token=\[REDACTED/);
+  // A failed step says why, briefly and redacted, so a profile can tell a
+  // wrong check from a broken tool.
+  assert.equal(trial.trace[1].exitCode, 1);
+  assert.match(trial.trace[1].why, /AssertionError: expected 2, got 3/);
+  assert.doesNotMatch(trial.trace[1].why, /sk-abcdef/);
+  assert.equal(trial.trace[0].why, undefined);
 });
 
 test('a CLI result marked cost_known: false is an unknown cost, not a free run', async () => {
