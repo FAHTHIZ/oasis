@@ -58,6 +58,8 @@ test('oasis models with no provider configured says so without a network call', 
   const json = sink();
   assert.equal(await modelsCommand(['--json'], { env, stdout: json, stderr: sink(), fetchImpl: spy, configOverride: unconfigured, root: '/tmp' }), 1);
   assert.equal(JSON.parse(json.text).models, null);
+  // The built-in default model is not a choice the user made.
+  assert.equal(JSON.parse(json.text).current, null);
 });
 
 test('oasis models explains a 401 as an API-key problem', async () => {
