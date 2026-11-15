@@ -4,6 +4,7 @@ User-facing change history grouped by package version. A version heading does no
 
 ## Unreleased
 
+- `/add-dir`, `/rename`, `/autocompact`, `/sandbox`, `/advisor`, `/routing` and `/chrome` work before the first message too: they start the session, as `/model` and `/context` do, instead of replying "Start a conversation first".
 - `/model NAME` typed before the first message (or a model picked from the `/model` picker then) now switches the model instead of answering "No active session". The picker no longer offers Claude aliases (opus, sonnet, …) to OpenAI-compatible providers, which would have received the literal name. When the provider lists no models, `/model` says to type `/model NAME`.
 - The terminal footer's and the web app's context percentage now match `/context` when the provider does not report token usage. It used to leave out the tool schemas sent with every request (7% in the footer vs 16% in `/context` on a 32K local model).
 - A flag that needs a value no longer takes the next option as its value. Before, `oasis --model -p "hi"` used `-p` as the model ID and ran "hi" as a task; it and the other value flags (`--add-dir`, `--append-system-prompt`, `--workspace`, `--fallback-model`, …) now report the missing value.
