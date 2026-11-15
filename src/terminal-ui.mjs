@@ -642,14 +642,19 @@ export function verboseToolOutput(name, result, { color = false, maxLines = 400 
 }
 
 // One dim line after each interactive turn: how long it took and what it did.
-export function formatTurnSummary({ ms = 0, toolCalls = 0, tokens = 0, finished = true, stopped = false } = {}) {
+const shortCount = (value) => value >= 1000 ? (value / 1000).toFixed(value >= 100000 ? 0 : 1) + 'k' : String(value);
+
+export function formatTurnSummary({ ms = 0, toolCalls = 0, tokens = 0, cachedTokens = 0, finished = true, stopped = false } = {}) {
   const seconds = Math.max(0, Math.round(Number(ms || 0) / 1000));
   const time = seconds < 60 ? seconds + 's' : Math.floor(seconds / 60) + 'm ' + String(seconds % 60).padStart(2, '0') + 's';
   const parts = [(stopped ? 'Stopped' : finished ? 'Done' : 'Paused') + ' · ' + time];
   const calls = Number(toolCalls || 0);
   if (calls) parts.push(calls + ' tool call' + (calls === 1 ? '' : 's'));
   const used = Number(tokens || 0);
-  if (used) parts.push((used >= 1000 ? (used / 1000).toFixed(used >= 100000 ? 0 : 1) + 'k' : String(used)) + ' tokens');
+  // Cache reads are resent history billed at a fraction of the price; a bare
+  // total made a cheap turn on a caching provider look expensive.
+  const cached = Math.min(used, Math.max(0, Number(cachedTokens || 0)));
+  if (used) parts.push(shortCount(used) + ' tokens' + (cached >= used * 0.05 ? ' (' + shortCount(cached) + ' cached)' : ''));
   return parts.join(' · ');
 }
 
