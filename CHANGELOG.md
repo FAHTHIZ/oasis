@@ -4,6 +4,7 @@ User-facing change history grouped by package version. A version heading does no
 
 ## Unreleased
 
+- Web app: pressing Connect on text that is not an API key, model link or server address now says so and shows what a key or address looks like. Before, the button did nothing, so a mistyped or partial key looked like a frozen app.
 - Benchmarks: the recording gateway relays Gemini CLI's Gemini API calls (`/v1beta/models/MODEL:generateContent`, `streamGenerateContent`, `countTokens`), swapping the benchmark model into the path and recording usage and tool names, so `bench:live --upstream` can include Gemini CLI. Before, Gemini CLI could only run through an unrecorded `--router`.
 - `oasis config` (and `/status`) before setup says the model provider is not set yet. Before, it printed the built-in default OpenAI URL and model as if they had been chosen, contradicting `oasis doctor`.
 - When a provider answers 429 with a reset time that OASIS did not wait for (for example FreeLLMAPI's "Soonest reset ~10m" with `Retry-After: 600`), the error now says when the limit resets and names `OASIS_WAIT_FOR_RATE_LIMIT_MINUTES=N`, which makes OASIS wait for it. That setting is now documented in docs/CONFIGURATION.md ("Rate-limit waits").
