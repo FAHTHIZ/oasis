@@ -127,16 +127,17 @@ export async function doctor(args = [], root = process.cwd(), { fallbackModel = 
   const ptyAvailable = await import('node-pty').then(() => true).catch(() => false);
   const sharpAvailable = await import('sharp').then(() => true).catch(() => false);
   stdout.write('OASIS check\n');
-  stdout.write('  Node.js 22+: ' + statusLabel(nodeOK) + '\n');
+  stdout.write('  Node.js ' + MIN_NODE_VERSION.replace(/\.0$/, '') + '+: ' + statusLabel(nodeOK) + (nodeOK ? '' : ' — found ' + process.version) + '\n');
   stdout.write('  Git: ' + (gitOK ? 'available (optional)' : 'not found (optional)') + '\n');
   // An unreadable config.json is the problem to fix, not a missing setup.
   stdout.write('  Model connection: ' + (modelConfigured ? statusLabel(true) : statusLabel(false) + (configError ? ' — ' + configError : ' — run oasis setup')) + '\n');
   stdout.write('  Native terminal panel (PTY): ' + (ptyAvailable ? 'available' : 'not available (optional native component)') + '\n');
   stdout.write('  Image downscaling (sharp): ' + (sharpAvailable ? 'available' : 'not available (optional; images over 3.75 MB are refused)') + '\n');
-  const nextStep = !nodeOK ? 'install Node.js 22 or newer, then run oasis doctor again.'
+  const nextStep = !nodeOK ? 'install Node.js ' + MIN_NODE_VERSION.replace(/\.0$/, '') + ' or newer (https://nodejs.org/en/download), then run oasis doctor again.'
     : configError ? 'fix the configuration file named above, or run oasis setup to replace it (setup keeps a copy of the unreadable file).'
     : !modelConfigured ? 'run oasis setup to connect a model.'
     : 'run oasis in a project folder, or oasis web --open for the browser workspace.';
+  if (!nodeOK) process.exitCode = 1;
   stdout.write('\nNext step: ' + nextStep + '\n\n');
   stdout.write(details.join(''));
   await doctorWorkspaceReport(root, { modelConfigured, nodeOK });
@@ -316,7 +317,7 @@ async function doctorWorkspaceReport(root, status = {}) {
   ]);
   stdout.write('  Custom commands: ' + commands.size + '; agents: ' + Object.keys(agents).length + '; output styles: ' + Object.keys(styles).length + '\n');
   if (!commandAvailable('git')) problems.push('git is not installed; checkpoints still work, but git context and /review do not.');
-  const pending = status.nodeOK === false ? 'Install Node.js 22 or newer to finish.' : status.modelConfigured === false ? 'One step left: run oasis setup to connect a model.' : '';
+  const pending = status.nodeOK === false ? 'Install Node.js ' + MIN_NODE_VERSION.replace(/\.0$/, '') + ' or newer to finish.' : status.modelConfigured === false ? 'One step left: run oasis setup to connect a model.' : '';
   stdout.write('\n' + (problems.length ? 'Problems found:\n' + problems.map((item) => '  - ' + item).join('\n') : (pending ? 'No other problems found. ' + pending : 'No problems found.')) + '\n');
 }
 
