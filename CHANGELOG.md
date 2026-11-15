@@ -4,6 +4,7 @@ User-facing change history grouped by package version. A version heading does no
 
 ## Unreleased
 
+- `oasis init` now writes a "Commands" section with the project's own test, lint, type-check, build and dev commands found on disk (package.json scripts with the right package manager, Go, Rust, Python and Makefile targets) instead of only "run relevant checks", and points to `/init` for a model-written guide.
 - Eval traces now record why a step failed (exit code and the last lines of the error, at most 200 redacted characters), so a profile can tell a wrong self-check from a broken tool without storing file contents.
 - A mistyped slash command (`/sttaus`) now says "Did you mean /status?" instead of only "Unknown command".
 - `oasis insights` and `/insights` no longer write an empty HTML report when there are no saved sessions.
