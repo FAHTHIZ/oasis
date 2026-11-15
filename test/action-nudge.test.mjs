@@ -42,7 +42,13 @@ test('small windows drop non-blocking "language server missing" notes from tool 
   const { leanToolContent } = await import('../src/agent.mjs');
   const content = JSON.stringify({ path: 'a.mjs', writtenBytes: 3, lspVerification: { status: 'unavailable', blocking: false, reason: 'No typescript language server found.' } });
   assert.equal(leanToolContent({ config: { contextWindow: 16384 } }, content, {}), JSON.stringify({ path: 'a.mjs', writtenBytes: 3 }));
-  assert.equal(leanToolContent({ config: { contextWindow: 200000 } }, content, {}), content);
+  // Large windows: the note is kept once per language server, then dropped.
+  const large = { config: { contextWindow: 200000 } };
+  const withServer = JSON.stringify({ path: 'a.mjs', writtenBytes: 3, lspVerification: { status: 'unavailable', server: 'typescript', blocking: false, reason: 'No typescript language server found.' } });
+  assert.equal(leanToolContent(large, withServer, {}), withServer);
+  assert.equal(leanToolContent(large, withServer, {}), JSON.stringify({ path: 'a.mjs', writtenBytes: 3 }));
+  const python = JSON.stringify({ path: 'a.py', lspVerification: { status: 'unavailable', server: 'pyright', blocking: false, reason: 'No pyright language server found.' } });
+  assert.equal(leanToolContent(large, python, {}), python);
   const blocking = JSON.stringify({ path: 'a.mjs', lspVerification: { status: 'unavailable', blocking: true } });
   assert.equal(leanToolContent({ config: { contextWindow: 16384 } }, blocking, {}), blocking);
 });
