@@ -2829,7 +2829,9 @@ async function applyToolResults(session, options, turn) {
       if (isVerificationCommand(args.command, args.args) && result.approved === false) verification.deniedCheck = [args.command].concat(Array.isArray(args.args) ? args.args : []).join(' ').slice(0, 200);
       if (result.approved !== false) markLoadedModules(verification, [args.command].concat(Array.isArray(args.args) ? args.args : []).join(' '), result.exitCode);
       if (result.approved !== false && !result.timedOut) markRanSources(verification, args.command, args.args, result.exitCode);
-      if (isVerificationCommand(args.command, args.args) && result.approved !== false) {
+      // An interactive terminal that is still running has no exit code yet: it is
+      // neither a passed nor a failed check.
+      if (isVerificationCommand(args.command, args.args) && result.approved !== false && typeof result.exitCode === 'number') {
         recordClaimCheck(claimState, { command: [args.command].concat(Array.isArray(args.args) ? args.args : []).join(' '), exitCode: result.exitCode });
         verification.lastVerificationExitCode = result.exitCode;
         verification.lastVerificationKind = verificationCommandKind(args.command, args.args);

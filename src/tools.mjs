@@ -599,6 +599,27 @@ export function scrubEnvironment(source = process.env) {
   return env;
 }
 
+// interactive=true used to return "running" at once with no output, even for
+// `npm test`, which finishes in a second. Small models then started it again and
+// again without ever seeing a result. Wait briefly: a command that exits in the
+// window returns its output and exit code like an ordinary run; one that is
+// still running (a REPL, a prompt) returns what it printed so far.
+// OASIS_INTERACTIVE_SETTLE_MS sets the window (default 5000, 0 turns it off).
+const INTERACTIVE_SETTLE_MS = 5000;
+async function settleInteractive(manager, started, env = process.env) {
+  const raw = env.OASIS_INTERACTIVE_SETTLE_MS;
+  const settleMs = raw !== undefined && raw !== '' && Number.isFinite(Number(raw)) ? Math.max(0, Math.min(30000, Number(raw))) : INTERACTIVE_SETTLE_MS;
+  if (!started || !started.id || typeof manager.waitForExit !== 'function' || typeof manager.read !== 'function' || !settleMs) return started;
+  const status = await manager.waitForExit(started.id, settleMs).catch(() => null);
+  const exited = Boolean(status && !status.timedOut && (status.state === 'exited' || status.state === 'error'));
+  const seen = await manager.read(started.id, { offset: 0, maxChars: 12000 }).catch(() => null);
+  if (!seen) return started;
+  if (exited) {
+    return { ...seen, approved: true, message: 'The command finished within ' + Math.round(settleMs / 1000) + ' s. Its output and exit code are above; no terminal_read is needed.' };
+  }
+  return { ...started, output: seen.output, nextOffset: seen.nextOffset, ...(seen.moreOutput ? { moreOutput: true } : {}), message: started.message + ' Output so far is included; continue with terminal_read from nextOffset.' };
+}
+
 // Agent commands have no usable terminal: stdin is closed and nobody is watching
 // a pager or editor. Without these, `git log` / `git commit` (no -m) / a git clone
 // that wants a password can open /dev/tty and hang until the timeout. Applied to
@@ -718,11 +739,12 @@ export async function runWorkspaceCommand(root, command, args = [], options = {}
     if (!options.ptyManager) throw new Error('Interactive terminal sessions are not available in this context.');
     const launch = await launchCommand(command, args, sandbox, root, { tty: true });
     try {
-      return await options.ptyManager.start(launch.command, launch.args, {
+      const started = await options.ptyManager.start(launch.command, launch.args, {
         cwd: root, env, cols: options.cols, rows: options.rows, release: launch.release,
         display: String(command).split(/[\\/]/).pop(),
         sandboxed: sandbox && sandbox.available ? sandbox.kind : null
       });
+      return await settleInteractive(options.ptyManager, started, options.env || process.env);
     } catch (error) {
       if (typeof launch.release === 'function') launch.release();
       throw error;
