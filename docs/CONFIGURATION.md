@@ -437,6 +437,25 @@ output goes) and names the file; `run_shell` keeps no raw log. That directory
 contains a `.gitignore` with `*`, so logs do not appear in `git status`,
 `git_diff` or `git add -A`. Set `OASIS_CONDENSE_OUTPUT=0` to turn the filter off.
 
+`run_command` with `interactive: true` starts the command in a pseudo-terminal
+and waits up to `OASIS_INTERACTIVE_SETTLE_MS` (default `5000`, at most `30000`,
+`0` returns at once). A command that exits in that time returns its output and
+exit code like an ordinary run; one still running (a REPL, a prompt) returns
+its id, the output so far and `nextOffset` for `terminal_read`. A check still
+running has no exit code yet and does not count as passed or failed.
+
+## Edit checks
+
+Sources: `verifyEditedFileWithLsp` and `nodeSyntaxCheck` in `src/lsp.mjs`.
+
+After `write_file`, `edit_file` and `multi_edit`, OASIS asks the language
+server for that file type for new diagnostics. When no language server is
+running for a `.js`, `.mjs` or `.cjs` file, it runs `node --check` instead,
+which parses the file without running it. If the file does not parse, the
+edit result carries `syntaxCheck` and a `warning` with the `SyntaxError`, so
+the model can fix it before running anything. Set `OASIS_EDIT_SYNTAX_CHECK=0`
+to turn this off.
+
 ## Terminal progress
 
 While a turn runs, terminals that implement the OSC 9;4 progress sequence show a busy

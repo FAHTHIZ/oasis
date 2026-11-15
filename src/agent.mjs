@@ -64,7 +64,7 @@ import { webSearchEnabled, webSearchToolDefinition } from './web-search.mjs';
 import { loadProjectMcpServers, mcpOutputLimitChars, mcpToolTimeoutMs } from './mcp-project.mjs';
 import { access, readdir, realpath } from 'node:fs/promises';
 import { SHELL_TOOL_DEFINITION, POWERSHELL_TOOL_DEFINITION, findPowerShell, killAllBackground } from './power-tools.mjs';
-import { serverForFile, verifyEditedFileWithLsp, stopLspClients } from './lsp.mjs';
+import { serverForFile, verifyEditedFileWithLsp, nodeSyntaxCheck, stopLspClients } from './lsp.mjs';
 import { AGENT_TOOL_DEFINITIONS, AGENT_TOOL_NAMES, agentRegistry, restoreAgentHistory, takeQueuedText, drainInbox, recordAgentEvent, stopAllAgents } from './agent-tasks.mjs';
 import { loadAgentDefinitions, taskToolDefinition, BUILTIN_AGENTS, MAX_PARALLEL_SUBAGENTS, runPool, parseFrontMatter, mapToolNames, normalizeAgentDefinition } from './subagents.mjs';
 import { createSharedTaskStore, SHARED_TASK_TOOL_NAMES } from './shared-tasks.mjs';
@@ -2468,6 +2468,10 @@ async function executeOneCallRaw(session, call, context, options) {
       });
       if (result && typeof result === 'object') result = { ...result, lspVerification };
       else result = { output: String(result ?? ''), lspVerification };
+      if (lspVerification && (lspVerification.status === 'unavailable' || lspVerification.status === 'not_applicable')) {
+        const syntaxCheck = await nodeSyntaxCheck(session.root, fileMutationResult.path || lspVerificationPath, { env: callContext.env || options.env || process.env }).catch(() => null);
+        if (syntaxCheck) result = { ...result, syntaxCheck, warning: [result.warning, 'The file was written but does not parse: ' + syntaxCheck.output.split('\n').find((line) => /SyntaxError/.test(line)) + ' Fix it before running anything.'].filter(Boolean).join(' ') };
+      }
     }
     if (!options.isSubagent && session.activeArtifact) {
       try { const { recordArtifactToolEvent } = await import('./artifacts.mjs'); await recordArtifactToolEvent(session.root, session.activeArtifact, name, args, result, { env: options.env || process.env }); } catch {}
