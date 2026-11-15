@@ -4,6 +4,7 @@ User-facing change history grouped by package version. A version heading does no
 
 ## Unreleased
 
+- `oasis doctor` with an unreadable `config.json` now names the file and the JSON error, and suggests fixing it. It used to say "CHECK — run oasis setup" and "Next step: run oasis setup to connect a model".
 - Security: `oasis trust` lists what trust turns on (project hook commands, allow rules, default permission mode, status line command and `.mcp.json` servers) and asks before trusting. Without a terminal it needs `--yes`. Before, it trusted at once with no list, so a script, or an agent following a repository's instructions, could enable a project's `curl … | sh` hook unseen. A folder with none of these is trusted without a question, as before.
 - `oasis mcp remove NAME [--scope user|project]` can remove a project server from `.mcp.json`, as `claude mcp remove` does. It looks in user configuration first. It used to refuse with "edit that file", although `mcp add --scope project` writes there. A cancelled `mcp remove`, `enable` or `disable` exits 1.
 - `oasis -p /cost`, `/context`, `/help`, `/doctor`, `/skills` and `/release-notes` answer locally, without a model call and without needing a provider, as `claude -p /cost` does. They used to send the text "/cost" to the model. Custom commands with the same name, and unknown names, still go to the model.
