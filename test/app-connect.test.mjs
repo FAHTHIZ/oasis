@@ -553,6 +553,36 @@ test('smartConnect: a keyless server skips models it marks as paid and keeps goi
   for (const id of config.fallbackModel.split(',')) assert.ok(!['claude-opus-9', 'gpt-5.9', 'mistral-small-3'].includes(id), 'no paid or tool-less backups: ' + config.fallbackModel);
 });
 
+// Real run, 15 Nov 2026: `oasis connect https://api.kilo.ai/api/gateway/v1`
+// probed 92 priced models without a key, got 401 from each and gave up, though
+// the list marks 14 models isFree with zero prices.
+test('smartConnect: a keyless gateway that prices its models connects to a free one', async () => {
+  const tried = [];
+  const { fetchImpl } = fakeFetch([
+    [/gateway\.example\/v1\/models$/, () => ({ data: [
+      { id: 'moonshotai/kimi-k3.1-pro', isFree: false, pricing: { prompt: '0.0000002375', completion: '0.0000084114' }, supported_parameters: ['tools'] },
+      { id: 'openai/gpt-4.1', isFree: false, pricing: { prompt: '0.000002', completion: '0.000008' }, supported_parameters: ['tools'] },
+      { id: 'anthropic/claude-haiku-5.5', pricing: { prompt: '0.000001', completion: '0.000005' }, supported_parameters: ['tools'] },
+      { id: 'kilo-auto/free', isFree: true, autoRouting: { models: ['nvidia/nemotron-3-ultra-550b-a55b:free'] }, pricing: { prompt: '0', completion: '0' }, supported_parameters: ['tools'] },
+      { id: 'nvidia/nemotron-3-ultra-550b-a55b:free', isFree: true, pricing: { prompt: '0', completion: '0' }, supported_parameters: ['tools'] },
+      { id: 'cohere/north-mini-code:free', isFree: true, pricing: { prompt: '0', completion: '0' }, supported_parameters: ['tools'] }
+    ] })],
+    [/chat\/completions$/, (url, options) => {
+      const body = JSON.parse(options.body);
+      tried.push(body.model);
+      if (!/free/.test(body.model)) return { status: 401, body: { error: { message: 'You need an API key for paid models.' } } };
+      return toolReply;
+    }]
+  ]);
+  const result = await smartConnect('https://gateway.example/v1', { fetchImpl });
+  assert.equal(result.toolCalling, true);
+  assert.match(result.model, /:free$/, 'a named free model, not the auto-router: ' + result.model);
+  assert.ok(tried.every((id) => /free/.test(id)), 'no priced model is probed without a key: ' + tried.join(','));
+  const { runtimeConfigFromConnection } = await import('../src/provider-connect.mjs');
+  const config = runtimeConfigFromConnection(result);
+  for (const id of String(config.fallbackModel || '').split(',').filter(Boolean)) assert.match(id, /free/, 'only free backups: ' + config.fallbackModel);
+});
+
 test('smartConnect: a keyless server where every model needs a key says to paste one', async () => {
   const { fetchImpl } = fakeFetch([
     [/locked\.example\/v1\/models$/, () => ({ data: [{ id: 'model-a' }, { id: 'model-b' }] })],
