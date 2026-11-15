@@ -38,6 +38,8 @@ test('todo_write keeps the system prompt byte-stable and sends the checklist as 
   const reminders = last.filter((m) => m.role === 'user' && String(m.content).includes('Current task checklist'));
   assert.equal(reminders.length, 2);
   assert.match(reminders[1].content, /\[completed\] Read the parser[\s\S]*\[in_progress\] Fix the bug/);
+  // The list goes to the model once per update: the reminder, not the tool result too.
+  for (const message of last.filter((m) => m.role === 'tool')) assert.doesNotMatch(String(message.content), /Read the parser/, 'todo_write result repeats the checklist');
   // Each request's message list extends the previous one, so the cached prefix is reused.
   for (let index = 1; index < bodies.length; index++) {
     const before = JSON.stringify(bodies[index - 1].messages);
