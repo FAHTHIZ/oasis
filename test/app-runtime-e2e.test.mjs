@@ -156,6 +156,10 @@ test('runtime engine end to end: app at /, paste to connect, approve a real edit
   assert.equal(await evaluate(page, `document.getElementById('updateBar').hidden && sessionStorage.getItem('oasis.update.later') === '99.0.0'`), true);
 
   await shot('2-key');
+  // Connect on text that is not a key, link or address says so (it used to do nothing).
+  await evaluate(page, `document.getElementById('connectInput').value = 'not-a-real-key'; document.getElementById('connectForm').requestSubmit(); true`);
+  await waitFor(page, `/does not look like an API key/.test(document.getElementById('connectLog').textContent)`, { label: 'unrecognised paste explained', timeout: 5000 });
+  assert.equal(await evaluate(page, `document.getElementById('connectInput').value`), 'not-a-real-key', 'the text stays so it can be fixed');
   // 2. Paste the model server address: the runtime finds the best model and saves it.
   await evaluate(page, paste('#input', provider.url));
   await waitFor(page, `[...document.querySelectorAll('.connect-note li.ready')].some((li) => /Locked in acme\\/coder-pro/.test(li.textContent))`, { label: 'runtime locked in the best model' });

@@ -607,6 +607,9 @@ function showConnectLog(id, lines) {
 }
 
 let connecting = false;
+// Shown when Connect is pressed on text that is not a key, link or server
+// address; before this the button did nothing at all.
+const UNRECOGNIZED_PASTE = 'That does not look like an API key, a model link or a server address. Paste the whole key (for example sk-…, sk-or-…, AIza…, gsk_…), a link starting with https://, or a local address such as localhost:11434.';
 async function connectFromText(text, { surface = 'welcome' } = {}) {
   if (connecting) return false;
   if (RT) return runtimeConnect(text, { surface });
@@ -641,6 +644,7 @@ async function connectFromText(text, { surface = 'welcome' } = {}) {
   if (!parsed.keys.length && !parsed.urls.length && !parsed.local) {
     connecting = false;
     if (parsed.githubTokens.length) { renderWelcome(); return true; }
+    onStatus({ step: 'error', text: UNRECOGNIZED_PASTE });
     return false;
   }
   for (const id of ['connectButton', 'settingsConnectButton']) if ($(id)) $(id).disabled = true;
@@ -709,7 +713,7 @@ async function runtimeConnect(text, { surface = 'welcome' } = {}) {
     say('info', 'Not needed here: OASIS on this computer uses its own git and GitHub CLI sign-in.');
     return true;
   }
-  if (!parsed.keys.length && !parsed.urls.length && !parsed.local) return false;
+  if (!parsed.keys.length && !parsed.urls.length && !parsed.local) { say('error', UNRECOGNIZED_PASTE); return false; }
   if (RT.status && RT.status.providerSetupAvailable === false) { say('error', 'Connect a model on the computer running OASIS. Keys are never sent over the phone link.'); return false; }
   connecting = true;
   for (const id of ['connectButton', 'settingsConnectButton']) if ($(id)) $(id).disabled = true;
