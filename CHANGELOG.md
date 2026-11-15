@@ -4,6 +4,7 @@ User-facing change history grouped by package version. A version heading does no
 
 ## Unreleased
 
+- `oasis mcp enable|disable NAME` now works for remote servers added with `oasis mcp add --transport http|sse` (saved in `mcp.json` as `"disabled": true`), and `oasis mcp list` shows disabled ones. Before, both commands said "No configured MCP server" for them. `enable|disable` are now in `oasis mcp --help` and `oasis --help`.
 - Arguments after `--` are passed through untouched. `oasis mcp add fs -- npx -y PKG` used to save the server without its `-y` (OASIS read it as its own `--yes`), so npx stopped to ask before installing and the server never started. `oasis mcp add|remove|install --yes` now approves the change without a terminal, for scripted setup; without `--yes` and without a terminal, OASIS says to add `--yes` instead of only "action denied".
 - `/rewind`, `/context`, `/cost`, `/export`, `/todos` and other session commands typed first after `oasis -c` or `oasis -r ID` now act on the resumed conversation. Before, the conversation loaded only with the first prompt, so `/rewind` said "Nothing to rewind yet" although its checkpoints were saved.
 - Post-edit check: in a folder with no tests and no test command, the note asking the model to verify its change now names a check that exists (`node math.mjs`, `python3 calc.py`) and says not to look for a test setup. Before, it only said to inspect the project scripts, and a small model searched for a package.json that was not there. One live trial each way with gpt-oss-20b; not a measured saving.

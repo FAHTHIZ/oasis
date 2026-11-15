@@ -95,3 +95,20 @@ export async function removeUserMcpJsonServer(name, { env = process.env, approve
   await atomicWriteFile(file, JSON.stringify({ ...parsed, mcpServers: others }, null, 2) + '\n', { mode: 0o600 });
   return 'Removed MCP server "' + key + '" from ' + file + '.';
 }
+
+// oasis mcp enable|disable NAME for servers in <oasis config>/mcp.json
+// (`"disabled": true` is the Claude Code field). Returns null when absent.
+export async function setUserMcpJsonServerEnabled(name, enabled, { env = process.env, approve = async () => true } = {}) {
+  const file = path.join(getConfigDirectory(env), 'mcp.json');
+  let parsed;
+  try { parsed = JSON.parse(await readFile(file, 'utf8')); } catch { return null; }
+  const servers = parsed && parsed.mcpServers && typeof parsed.mcpServers === 'object' ? parsed.mcpServers : null;
+  const key = servers && Object.keys(servers).find((item) => item === name || item.toLowerCase().replace(/[^a-z0-9_-]/g, '-') === name);
+  if (!key) return null;
+  if (!(await approve((enabled ? 'Enable' : 'Disable') + ' MCP server "' + key + '" in ' + file + '?'))) return 'MCP change cancelled.';
+  const { disabled, enabled: legacyEnabled, ...spec } = servers[key] || {};
+  void disabled; void legacyEnabled;
+  const next = enabled ? spec : { ...spec, disabled: true };
+  await atomicWriteFile(file, JSON.stringify({ ...parsed, mcpServers: { ...servers, [key]: next } }, null, 2) + '\n', { mode: 0o600 });
+  return 'MCP server "' + key + '" is now ' + (enabled ? 'enabled' : 'disabled') + '. Saved ' + file;
+}

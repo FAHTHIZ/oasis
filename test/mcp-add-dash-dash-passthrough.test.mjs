@@ -44,3 +44,20 @@ test('a -y after -- does not approve the change', async (t) => {
   const removed = run('--yes', 'mcp', 'remove', 'nothing-here');
   assert.notEqual(removed.status, 0);
 });
+
+// Remote servers live in <config>/mcp.json; disable/enable used to say
+// "No configured MCP server" for them.
+test('oasis mcp disable|enable works for remote servers in mcp.json and list still shows them', async (t) => {
+  const { run, dir } = await home(t);
+  const json = path.join(dir, '.oasis', 'mcp.json');
+  assert.equal(run('--yes', 'mcp', 'add', '--transport', 'http', 'docs', 'https://example.com/mcp').status, 0);
+  const off = run('--yes', 'mcp', 'disable', 'docs');
+  assert.equal(off.status, 0, off.stdout + off.stderr);
+  assert.equal(JSON.parse(await readFile(json, 'utf8')).mcpServers.docs.disabled, true);
+  assert.match(run('mcp', 'list').stdout, /docs — disabled/);
+  assert.equal(run('--yes', 'mcp', 'enable', 'docs').status, 0);
+  const spec = JSON.parse(await readFile(json, 'utf8')).mcpServers.docs;
+  assert.equal(spec.disabled, undefined);
+  assert.equal(spec.url, 'https://example.com/mcp');
+  assert.match(run('mcp', 'list').stdout, /docs — http https:\/\/example\.com\/mcp/);
+});
