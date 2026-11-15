@@ -350,7 +350,8 @@ export async function runSubagent(parent, args, context, options) {
     agents: nested ? parent.agents || BUILTIN_AGENTS : {},
     subagentDepth: depth + 1,
     projectContextText: parent.projectContextText || '',
-    subagentMaxDepth: parent.subagentMaxDepth
+    subagentMaxDepth: parent.subagentMaxDepth,
+    subagentMaxParallel: parent.subagentMaxParallel
   };
   const mcpSpec = agentMcpSpec(parent, agent);
   if (mcpSpec) {

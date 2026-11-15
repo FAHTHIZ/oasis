@@ -4,6 +4,7 @@ User-facing change history grouped by package version. A version heading does no
 
 ## Unreleased
 
+- New `subagentMaxParallel` setting (1-6) and `OASIS_SUBAGENT_MAX_PARALLEL` lower how many subagents from one model reply run at once, for rate-limited providers. The default stays 6; extra `task` calls wait their turn. See [Subagents](docs/SUBAGENTS.md#safety-boundaries).
 - A browser approval prompt raised by a page event after the browser action had returned (a late redirect or form request) re-armed that tool call's timeout. Nothing cleared the timer, so a CLI or test process could stay alive until it fired. A settled tool call now ignores late waits. Test: `test/tool-timeout-user-wait.test.mjs`; `test/browser-navigation-e2e.test.mjs` now exits as soon as it passes when Chrome is installed.
 - New [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md), shipped in the npm package: the vendored xterm.js, Sucrase, Lucide, fonts, ponytail skills and data snapshots with their licenses, and the production dependency licenses that need attention (dompurify, node-forge, elkjs, sharp/libvips). `test/third-party-licenses.test.mjs` fails when a production dependency brings in a license that has not been reviewed.
 - New [FAQ](docs/FAQ.md). Removed stale ignore entries for an Android project and a website folder that no longer exist, and corrected the completion checklist, which still said the desktop app was retired.

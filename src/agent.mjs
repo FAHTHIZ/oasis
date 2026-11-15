@@ -28,7 +28,7 @@ import { selectTaskModel } from './model-routing.mjs';
 import { canEscalate, escalate, newEscalation, thrashEvidence } from './escalation.mjs';
 import { buildRunReport, newRunTracker, trackFallback, trackUsage } from './run-report.mjs';
 import { mergeAnthropicUsage, toolCallSlot, strayStreamError } from './provider-stream.mjs';
-import { maxParallelReadsFrom, planToolBatches } from './tool-batch-scheduler.mjs';
+import { maxParallelReadsFrom, maxParallelTasksFrom, planToolBatches } from './tool-batch-scheduler.mjs';
 import { validateToolArguments } from './tool-schema-validation.mjs';
 import { redactAuditValue, runTool } from './tool-kernel.mjs';
 import { toResponsesRequest, toAnthropicRequest, chatCompletionTool } from './provider-requests.mjs';
@@ -820,6 +820,7 @@ export async function createSession({ root, config, restore = null, permissionMo
   if (loadedSettings && Number.isInteger(loadedSettings.subagentAutoCompactPercent)) session.subagentAutoCompactPercent = loadedSettings.subagentAutoCompactPercent;
   if (loadedSettings && Number.isInteger(loadedSettings.subagentStallSeconds)) session.subagentStallSeconds = loadedSettings.subagentStallSeconds;
   if (loadedSettings && Number.isInteger(loadedSettings.subagentMaxDepth)) session.subagentMaxDepth = loadedSettings.subagentMaxDepth;
+  if (loadedSettings && Number.isInteger(loadedSettings.subagentMaxParallel)) session.subagentMaxParallel = loadedSettings.subagentMaxParallel;
   const deferredMcp = deferMcpTools(session, { threshold: Number(loadedSettings.toolSearchThreshold) || undefined, env });
   const deferredRare = deferRareBuiltinTools(session, { env, explicitTools: Array.isArray(tools) || typeof tools === 'string', settings: { leanTools: config && config.leanTools !== undefined ? config.leanTools : loadedSettings.leanTools } });
   session.localContextNotices = contextProbe.localContextNotices;
@@ -3519,7 +3520,7 @@ async function runAgentTurnRaw(session, prompt, options = {}) {
       isReadOnly,
       isSpecialistReview,
       isTask,
-      maxParallelTasks: MAX_PARALLEL_SUBAGENTS,
+      maxParallelTasks: maxParallelTasksFrom(session, options.env || process.env, MAX_PARALLEL_SUBAGENTS),
       maxParallelReads: maxParallelReadsFrom(options.env || process.env)
     });
     // A mid-turn save taken while the batch runs keeps finished results.
