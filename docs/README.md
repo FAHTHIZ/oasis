@@ -43,6 +43,7 @@ Find the right guide without knowing the repository. The root
 - [Real-world runs](REAL-WORLD-RUNS.md): unscripted tasks with real providers, plugins checked, what went wrong.
 - [Comparison](COMPARISON.md): features against Claude Code, Codex, Gemini CLI, OpenCode, Goose and others, with sources.
 - [Research record](RESEARCH.md): projects and techniques reviewed, and what was adopted or rejected.
+- [Research and proposals](research/README.md): Hermes Agent study, ecosystem comparison, general-purpose architecture, model strategy, licensing assessment and roadmap (proposals for review, not shipped behaviour).
 
 ## Project records
 
