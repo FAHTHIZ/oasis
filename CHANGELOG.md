@@ -4,6 +4,7 @@ User-facing change history grouped by package version. A version heading does no
 
 ## Unreleased
 
+- Benchmarks: the recording gateway relays Gemini CLI's Gemini API calls (`/v1beta/models/MODEL:generateContent`, `streamGenerateContent`, `countTokens`), swapping the benchmark model into the path and recording usage and tool names, so `bench:live --upstream` can include Gemini CLI. Before, Gemini CLI could only run through an unrecorded `--router`.
 - `oasis config` (and `/status`) before setup says the model provider is not set yet. Before, it printed the built-in default OpenAI URL and model as if they had been chosen, contradicting `oasis doctor`.
 - When a provider answers 429 with a reset time that OASIS did not wait for (for example FreeLLMAPI's "Soonest reset ~10m" with `Retry-After: 600`), the error now says when the limit resets and names `OASIS_WAIT_FOR_RATE_LIMIT_MINUTES=N`, which makes OASIS wait for it. That setting is now documented in docs/CONFIGURATION.md ("Rate-limit waits").
 - `oasis -p` now exits 1 with `"is_error": true` when it stops at `--max-turns` or when the repeat guard stops a model that keeps sending the same tool call (subtype `error_max_turns`), as Claude Code does. Before, it reported `error_max_turns` with `"is_error": false` and exit 0, so a script that checked either one took an unfinished run for a pass.

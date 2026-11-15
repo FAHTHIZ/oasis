@@ -148,3 +148,36 @@ test('OmniRoute keepalive chunks are not recorded as the served model', async ()
   const stream = 'data: {"model":"keepalive","choices":[]}\n\ndata: {"model":"gpt-oss-20b","choices":[{"index":0,"delta":{"content":"hi"}}]}\n\ndata: [DONE]\n\n';
   assert.equal(inspectResponse(stream).servedModel, 'gpt-oss-20b');
 });
+
+// Gemini CLI speaks Google's Gemini API, with the model in the URL path. The
+// recording relay used to refuse it, so Gemini CLI could only be benchmarked
+// through an unrecorded router and its served model could not be verified.
+test('gateway relays Gemini API calls, swaps the model in the path and records usage and tool names', async (t) => {
+  const { startGateway, gatewayReport, geminiUpstreamUrl, toolCount, messageSizes } = await import('../scripts/bench-gateway.mjs');
+  assert.equal(geminiUpstreamUrl('http://127.0.0.1:4000/v1', 'streamGenerateContent', 'forced/m', '?alt=sse'), 'http://127.0.0.1:4000/v1beta/models/forced%2Fm:streamGenerateContent?alt=sse');
+  assert.equal(toolCount({ tools: [{ functionDeclarations: [{ name: 'a' }, { name: 'b' }] }] }), 2);
+  assert.equal(toolCount({ tools: [{ type: 'function' }] }), 1);
+  assert.deepEqual(messageSizes({ contents: [{ role: 'user', parts: [{ text: 'hi' }] }, { role: 'user', parts: [{ functionResponse: { name: 'read_file', response: { output: 'x' } } }] }] }).lastMessage.tool, 'read_file');
+  const seen = [];
+  const fetchImpl = async (url, init) => {
+    seen.push({ url, key: init.headers['x-goog-api-key'], body: JSON.parse(init.body) });
+    return new Response('data: {"candidates":[{"content":{"parts":[{"text":"ok"}]}}],"modelVersion":"served-g","usageMetadata":{"promptTokenCount":11,"candidatesTokenCount":2}}\r\n\r\n', { status: 200, headers: { 'content-type': 'text/event-stream' } });
+  };
+  const previous = process.env.OASIS_GATEWAY_UPSTREAM_KEY;
+  process.env.OASIS_GATEWAY_UPSTREAM_KEY = 'up-key';
+  t.after(() => { if (previous === undefined) delete process.env.OASIS_GATEWAY_UPSTREAM_KEY; else process.env.OASIS_GATEWAY_UPSTREAM_KEY = previous; });
+  const gw = await startGateway({ upstream: 'http://up.example/v1', model: 'forced' }, { fetchImpl });
+  t.after(() => gw.close());
+  const base = gw.agentUrl('gemini').replace(/\/v1$/, '');
+  const response = await fetch(base + '/v1beta/models/gemini-2.5-flash:streamGenerateContent?alt=sse', { method: 'POST', headers: { 'content-type': 'application/json', 'x-goog-api-key': 'bench-gateway' }, body: JSON.stringify({ contents: [{ role: 'user', parts: [{ text: 'hi' }] }], tools: [{ functionDeclarations: [{ name: 'a' }, { name: 'b' }] }] }) });
+  assert.equal(response.status, 200);
+  assert.match(await response.text(), /served-g/);
+  assert.equal(seen[0].url, 'http://up.example/v1beta/models/forced:streamGenerateContent?alt=sse', 'the benchmark model replaces the one in the path');
+  assert.equal(seen[0].key, 'up-key');
+  assert.equal(seen[0].body.model, undefined, 'no model field is added to a Gemini body');
+  const [record] = gw.records;
+  assert.deepEqual([record.agent, record.endpoint, record.requestedModel, record.servedModel, record.stream, record.messages, record.tools, record.promptTokens, record.completionTokens], ['gemini', '/v1beta/models/gemini-2.5-flash:streamGenerateContent', 'gemini-2.5-flash', 'served-g', true, 1, 2, 11, 2]);
+  assert.equal(gatewayReport(gw.records).agents.gemini.inputTokens, 11);
+  const other = await fetch(base + '/v1beta/models/m:embedContent', { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}' });
+  assert.equal(other.status, 404, 'only generation and token counting are relayed');
+});
