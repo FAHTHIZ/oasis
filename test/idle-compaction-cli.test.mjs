@@ -57,7 +57,10 @@ test('the interactive terminal compacts a long conversation while you are idle',
   });
   await new Promise((resolve) => child.exitCode !== null ? resolve() : child.on('exit', resolve));
   clearTimeout(timer);
-  assert.ok(requests.some((r) => r.summary), 'a summary request was sent while idle\n' + out.slice(-2000));
+  // The tail of `out` is often just the 16,000-character first message, so say
+  // where the run stopped as well.
+  const where = 'stopped at step ' + step + ' of ' + steps.length + '; ' + requests.length + ' requests (' + requests.filter((r) => r.summary).length + ' summaries); exit ' + child.exitCode + '; markers: ' + ['reply 1', 'reply 2', 'reply 3', 'reply 4', 'Done ·'].map((m) => m + '=' + (out.split(m).length - 1)).join(', ');
+  assert.ok(requests.some((r) => r.summary), 'a summary request was sent while idle (' + where + ')\n' + out.replace(/(.)\1{200,}/g, (run) => run[0] + '×' + run.length).slice(-2000));
   assert.match(out, /While you were away, older history was summarized/);
   const turns = requests.filter((r) => !r.summary);
   const last = turns.at(-1); const beforeBreak = turns.at(-2);
