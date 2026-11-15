@@ -158,6 +158,16 @@ Held-out v2 still misses one secret pattern (4/5); it is kept as measured. First
 | --- | --- | --- |
 | `clamp-integer` (small) | qwen2.5-coder 3B, 32K window | Timed out at 1,800 s after 17,210 tokens, before verification |
 
+Second local run, 15 November 2026: `npm run bench:live -- --agents oasis --model qwen3:1.7b-oasis --router http://127.0.0.1:11434/v1 --task clamp-integer,dedupe-names,slice-lines --timeout-seconds 1500`, files in [live-2026-11-15-ollama](../bench/results/live-2026-11-15-ollama/SUMMARY.md). Ollama 0.40.16, qwen3 1.7B with a 16,384-token window, same 2 CPU cores, OASIS 1.3.0 at `e0179321`, one trial per task. No API charge; hardware and power not counted.
+
+| Task | Result | Time | Tokens | Why |
+| --- | --- | ---: | ---: | --- |
+| `clamp-integer` | fail | 1,500 s | 21,676 | Timed out before verification |
+| `dedupe-names` | pass | 426 s | 18,893 | Fixed and verified |
+| `slice-lines` | fail | 1,284 s | 35,200 | The model wrote a regex split across a real newline, so the module did not parse. OASIS's final check ran the module, found the error and reported the task unfinished rather than done |
+
+Pass rate 1/3. One trial per task is a smoke test, not a score. The `slice-lines` failure led to a change: an edit to a `.js`, `.mjs` or `.cjs` file with no language server running is now checked with `node --check` (parse only), so the write result itself says the file does not parse.
+
 This shows the hardware, not the harness: a 3B model on two CPU cores generates a few tokens per second, so one small task does not fit in 30 minutes. The earlier same-gateway run against Claude Code is in [live-2026-11-08-omniroute](../bench/results/live-2026-11-08-omniroute/README.md). SWE-bench and Terminal-Bench scores (the adapter is in `bench/harbor`) need a capable hosted model and a paid budget, so none are published yet.
 
 ### Recorded same-model gateway (14 November 2026)

@@ -22,7 +22,7 @@
 //
 // Starting a language server runs a local program, so it needs approval once per
 // server per session unless commands are auto-approved or a rule allows `lsp`.
-import { spawn } from 'node:child_process';
+import { spawn, execFile } from 'node:child_process';
 // vscode-jsonrpc loads when the first language server starts, not with OASIS.
 let rpc;
 const loadRpc = async () => (rpc ||= await import('vscode-jsonrpc/node'));
@@ -651,4 +651,29 @@ export async function verifyEditedFileWithLsp(root, file, options = {}) {
       reason
     };
   }
+}
+
+// Without a language server, an edit to a JavaScript file went unchecked until
+// the final verification. Seen live: qwen3 1.7B wrote a regex split across a
+// real newline and only learned of it from the end-of-turn check, too late to
+// fix. `node --check` parses the file without running it, so the result of the
+// write itself can say "this does not parse". Silent when the file parses or
+// the check cannot run; OASIS_EDIT_SYNTAX_CHECK=0 turns it off.
+const SYNTAX_CHECK_EXTENSIONS = new Set(['.js', '.mjs', '.cjs']);
+export async function nodeSyntaxCheck(root, file, { env = process.env, timeoutMs = 5000 } = {}) {
+  if (String(env.OASIS_EDIT_SYNTAX_CHECK || '').trim() === '0') return null;
+  if (!file || !SYNTAX_CHECK_EXTENSIONS.has(path.extname(String(file)).toLowerCase())) return null;
+  const absolute = path.resolve(root, String(file));
+  // NODE_OPTIONS could preload code (--import, --require); the check only parses.
+  const childEnv = { ...process.env };
+  delete childEnv.NODE_OPTIONS;
+  return await new Promise((resolve) => {
+    execFile(process.execPath, ['--check', absolute], { cwd: root, env: childEnv, timeout: timeoutMs, maxBuffer: 256 * 1024, windowsHide: true }, (error, _stdout, stderr) => {
+      if (!error) return resolve(null);
+      const text = String(stderr || '');
+      if (error.killed || !/SyntaxError/.test(text)) return resolve(null);
+      const output = text.split(absolute).join(path.relative(root, absolute) || String(file)).replace(/\n\s*at [\s\S]*$/, '').trim().slice(0, 800);
+      resolve({ status: 'error', checker: 'node --check', path: String(file), output });
+    });
+  });
 }
