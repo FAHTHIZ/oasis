@@ -13,7 +13,7 @@ Status: **done** (tested and pushed) · **doing** · **open** · **blocked**
 | --- | --- | --- |
 | Codex TypeScript SDK drop-in (`oasis exec --json`, `codexPathOverride`) | done | `test/codex-exec-json.test.mjs` (5 tests: spawns OASIS with the SDK's exact argv, prompt on stdin, resume by thread id, output schema, setup error). Also checked by hand with the published `@openai/codex-sdk` 0.167.1 (`codexPathOverride` → a shell wrapper for `oasis`): `run`, `runStreamed` with `outputSchema`, and `resumeThread` all worked against a scripted model. |
 | Clone and inventory the repository | done | 2,865 commits, ~69k lines in `src/`, ~8k in `app/`, 458 test files (2026-11-10) |
-| Read history, mission log, scorecard, architecture docs | done | Desktop (Electron) app retired in `3114f599` on 2026-11-09; browser-only since |
+| Read history, mission log, scorecard, architecture docs | done | Desktop (Electron) app was retired in `3114f599` on 2026-11-09 and later restored ([DESKTOP.md](DESKTOP.md)); it ships as unsigned installers built in CI |
 | Baseline: lint, audit, full test suite on Node 22 | done | oxlint 0 warnings; `npm audit` 0 vulnerabilities; 2,384 tests, 0 failures at the start. Re-run 2026-11-15 on Node 22.21.1 at `d8e834cb`: 3,403 tests, 3,395 pass, 8 skipped, 0 fail |
 | Use the CLI as a new user (clean HOME) | done | `--help`, `doctor`, `connect` (Ollama) and a `-p` task with a local model |
 | Use the web workspace as a new user | done | Connected a local model, ran tasks in two tabs; found the busy-folder dead end (fixed) |

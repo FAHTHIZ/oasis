@@ -4,6 +4,9 @@ User-facing change history grouped by package version. A version heading does no
 
 ## Unreleased
 
+- A browser approval prompt raised by a page event after the browser action had returned (a late redirect or form request) re-armed that tool call's timeout. Nothing cleared the timer, so a CLI or test process could stay alive until it fired. A settled tool call now ignores late waits. Test: `test/tool-timeout-user-wait.test.mjs`; `test/browser-navigation-e2e.test.mjs` now exits as soon as it passes when Chrome is installed.
+- New [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md), shipped in the npm package: the vendored xterm.js, Sucrase, Lucide, fonts, ponytail skills and data snapshots with their licenses, and the production dependency licenses that need attention (dompurify, node-forge, elkjs, sharp/libvips). `test/third-party-licenses.test.mjs` fails when a production dependency brings in a license that has not been reviewed.
+- New [FAQ](docs/FAQ.md). Removed stale ignore entries for an Android project and a website folder that no longer exist, and corrected the completion checklist, which still said the desktop app was retired.
 - `oasis insights` no longer prints an empty "Top tools: ." line when no tools ran, and `oasis permissions` with an unknown action (for example `--json`) exits 1 with an error instead of printing the usage and exiting 0.
 - `oasis doctor --json` (or any unknown option) printed the text report and exited 0, so scripts parsing it got text; unknown options are now an error that lists `--test-provider` and `--network`. `oasis models --json` with no provider reports `"current": null` instead of the built-in default model.
 - `--permission-mode bypass-permissions` was rejected although `oasis permissions` shows the mode under that name; it is now accepted (as is `bypass_permissions`). `--permission-mode` errors and `/mode` list the modes as users type them (manual, accept-edits, plan, auto, dont-ask, bypass-permissions).

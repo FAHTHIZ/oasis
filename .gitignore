@@ -22,17 +22,10 @@ test-results/
 *.local
 artifacts/
 
-# Demo videos are copied into the homepage by the Pages workflow
-site/assets/demo/
 __pycache__/
 *.pyc
 
-
-# Android build output
-android/.gradle/
-android/build/
-android/app/build/
-android/local.properties
+# Signing material must never be committed
 *.keystore
 *.p12
 .cache/

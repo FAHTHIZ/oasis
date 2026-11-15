@@ -12,7 +12,7 @@ Find the right guide without knowing the repository. The root
 | Choose between the terminal, web app, desktop app and editors | [Interfaces](INTERFACES.md) |
 | Connect a model, add backups, cap spend | [Configuration](CONFIGURATION.md) · [Inference](INFERENCE.md) |
 | Add skills, MCP servers, plugins or hooks | [Extending OASIS](EXTENDING.md) |
-| Fix something that does not work | [Troubleshooting](TROUBLESHOOTING.md) |
+| Fix something that does not work | [Troubleshooting](TROUBLESHOOTING.md) · [FAQ](FAQ.md) |
 
 ## Guides
 
@@ -28,6 +28,7 @@ Find the right guide without knowing the repository. The root
 - [Extending OASIS](EXTENDING.md): project instructions, skills, MCP, connected apps, plugins, commands, hooks, settings files.
 - [Subagents](SUBAGENTS.md): built-in and custom agents, background agents, teams and worktrees.
 - [Troubleshooting](TROUBLESHOOTING.md): diagnostics and fixes for install, providers, the web app, the sandbox.
+- [FAQ](FAQ.md): short answers on models, cost, data, safety and compatibility.
 
 ## How it works
 
@@ -48,7 +49,7 @@ Find the right guide without knowing the repository. The root
 - [Completion checklist](COMPLETION-CHECKLIST.md): what is done, open or blocked, with evidence.
 - [Mission log](MISSION-LOG.md): dated engineering record, newest first.
 - [Design archive](design/README.md): earlier plans, audits and scorecards, kept for history.
-- [Changelog](../CHANGELOG.md) · [Contributing](../CONTRIBUTING.md) · [Security policy](../SECURITY.md) · [Support](../SUPPORT.md) · [Code of Conduct](../CODE_OF_CONDUCT.md) · [Brand](../BRAND.md)
+- [Changelog](../CHANGELOG.md) · [Contributing](../CONTRIBUTING.md) · [Security policy](../SECURITY.md) · [Support](../SUPPORT.md) · [Code of Conduct](../CODE_OF_CONDUCT.md) · [Brand](../BRAND.md) · [Third-party notices](../THIRD-PARTY-NOTICES.md)
 
 ## Documentation policy
 
