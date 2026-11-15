@@ -19,3 +19,10 @@ export function normalizePermissionMode(value) {
   if (PERMISSION_MODES.includes(requested)) return requested;
   return MODE_ALIASES.get(requested.toLowerCase()) || null;
 }
+
+// The user-facing spelling of a mode, as --permission-mode and the help write it.
+const MODE_NAMES = { default: 'manual', acceptEdits: 'accept-edits', dontAsk: 'dont-ask', bypassPermissions: 'bypass-permissions' };
+export function permissionModeName(mode) {
+  const canonical = normalizePermissionMode(String(mode || '')) || String(mode || '');
+  return MODE_NAMES[canonical] || canonical;
+}
