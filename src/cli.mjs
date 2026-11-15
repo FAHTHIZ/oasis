@@ -2765,6 +2765,8 @@ async function startWebWorkspace(root, args) {
 
 
 
+const SAME_COMMAND = { plugin: ['plugins', 'plugin'], plugins: ['plugins', 'plugin'], extension: ['extensions', 'extension'], extensions: ['extensions', 'extension'] };
+
 // Commands that print their own detailed help for --help.
 const SELF_HELP_COMMANDS = new Set(['connect', 'setup', 'update', 'web']);
 
@@ -2777,7 +2779,11 @@ function subcommandHelp(rawArgs) {
   const end = rawArgs.indexOf('--');
   if (!rawArgs.slice(1, end === -1 ? undefined : end).some((arg) => arg === '--help' || arg === '-h')) return false;
   const lines = helpText().split('\n');
-  const pattern = new RegExp('^\\s+oasis ' + command.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '(\\s|$)');
+  // `plugin` and `plugins` (and `extension(s)`) run the same command, so show
+  // both spellings' lines: `plugins --help` used to omit marketplace and
+  // Claude Code plugin commands, which are listed as `oasis plugin ...`.
+  const names = SAME_COMMAND[command] || [command];
+  const pattern = new RegExp('^\\s+oasis (' + names.map((name) => name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|') + ')(\\s|$)');
   const matches = lines.filter((line) => pattern.test(line));
   if (!matches.length) return false;
   stdout.write('Usage:\n' + matches.join('\n') + '\n\nRun oasis --help for every command.\n');

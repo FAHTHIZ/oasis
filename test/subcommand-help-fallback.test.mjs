@@ -42,3 +42,14 @@ test('--help on bg, auth and non-commands prints help; --help after -- is passed
   const saved = JSON.parse(await readFile(path.join(home, '.config', 'oasis', 'mcp-servers.json'), 'utf8'));
   assert.deepEqual(saved.servers.find((server) => server.name === 'echoer').args, ['--help']);
 });
+
+test('plugins --help and plugin --help list both spellings (marketplace commands included)', async (t) => {
+  const home = await mkdtemp(path.join(os.tmpdir(), 'oasis-subhelp-plugins-'));
+  t.after(() => rm(home, { recursive: true, force: true }));
+  for (const word of ['plugins', 'plugin']) {
+    const r = await oasis([word, '--help'], home);
+    assert.equal(r.code, 0, r.out);
+    assert.match(r.out, /oasis plugins install NAME/, word);
+    assert.match(r.out, /oasis plugin marketplace add/, word);
+  }
+});
