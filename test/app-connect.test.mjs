@@ -147,7 +147,21 @@ test('smartConnect: a shared sk- prefix tries the providers in order', async () 
 
 test('smartConnect: a wrong key gives a plain answer', async () => {
   const { fetchImpl } = fakeFetch([[/models(\?|$)/, () => ({ status: 401, body: { error: { message: 'invalid x-api-key' } } })]]);
-  await assert.rejects(smartConnect(ANT_KEY, { fetchImpl }), (error) => error instanceof ProviderError && /did not accept|accepted this key/i.test(error.message) && error.status === 401);
+  await assert.rejects(smartConnect(ANT_KEY, { fetchImpl }), (error) => error instanceof ProviderError && /^Anthropic did not accept this key\./.test(error.message) && error.status === 401);
+});
+
+// OpenRouter lists models without checking the key. An invalid key used to get
+// "OpenRouter accepted the key." and then "OpenRouter accepted this key. Check
+// that it was copied whole…".
+test('smartConnect: an invalid OpenRouter key is not reported as accepted', async () => {
+  const { fetchImpl } = fakeFetch([
+    [/openrouter\.ai.*\/models/, () => ({ data: [{ id: 'qwen/qwen3-coder', supported_parameters: ['tools'] }] })],
+    [/openrouter\.ai.*chat\/completions$/, () => ({ status: 401, body: { error: { message: 'User not found.', code: 401 } } })]
+  ]);
+  const said = [];
+  await assert.rejects(smartConnect(OR_KEY, { fetchImpl, onStatus: (status) => said.push(status.text) }), (error) => /^OpenRouter did not accept this key\./.test(error.message));
+  assert.ok(said.includes('Looks like an OpenRouter key. Checking it…'), said.join('\n'));
+  assert.ok(!said.some((line) => /accepted/.test(line)), said.join('\n'));
 });
 
 test('smartConnect: a local server address is probed and a model without tool calls is still usable', async () => {
