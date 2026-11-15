@@ -27,7 +27,7 @@ function oasis(args, home) {
 test('a one-word typo of a command suggests the command instead of starting a task', async (t) => {
   const home = await mkdtemp(path.join(os.tmpdir(), 'oasis-typo-'));
   t.after(() => rm(home, { recursive: true, force: true }));
-  for (const [typo, command] of [['doctr', 'doctor'], ['sessons', 'sessions'], ['skill', 'skills'], ['udpate', 'update']]) {
+  for (const [typo, command] of [['doctr', 'doctor'], ['sessons', 'sessions'], ['skill', 'skills'], ['udpate', 'update'], ['shedule', 'schedule'], ['deplyo', 'deploy']]) {
     const r = await oasis([typo], home);
     assert.equal(r.code, 1, typo + ': ' + r.out);
     assert.match(r.out, new RegExp('Did you mean oasis ' + command + '\\?'), typo + ': ' + r.out);
