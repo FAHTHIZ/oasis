@@ -1,4 +1,7 @@
 import { stdout } from 'node:process';
+import { readFile } from 'node:fs/promises';
+import path from 'node:path';
+import { getConfigDirectory } from './config.mjs';
 import { loadMcpServers, saveMcpServers, validateMcpServerConfig } from './mcp.mjs';
 import { loadProjectMcpServers } from './mcp-project.mjs';
 import { inspectGitHubExtension, inspectGitHubMcpServers, selectReviewedMcpServers, installGitHubExtension, updateGitHubExtension, rollbackGitHubExtension, listInstalledExtensions, removeGitHubExtension } from './extensions.mjs';
@@ -33,9 +36,15 @@ export async function manageMcp(rest, root = process.cwd(), { approve, askLine, 
     const claude = await loadClaudeCodeMcpServers(root, { env: process.env }).catch((error) => ({ local: [], user: [], failures: [{ name: '~/.claude.json', error: error.message }] }));
     const { loadUserMcpJson } = await import('./mcp-project.mjs');
     const userJson = await loadUserMcpJson({ env: process.env }).catch(() => ({ servers: [], failures: [] }));
-    if (userJson.servers.length || userJson.failures.length) {
-      stdout.write('User servers from ' + userJson.file + ':\n');
+    // The loader skips "disabled": true servers; list them so they can be found again.
+    const userJsonDisabled = await readFile(userJson.file || path.join(getConfigDirectory(process.env), 'mcp.json'), 'utf8').then((text) => {
+      const servers = (JSON.parse(text) || {}).mcpServers || {};
+      return Object.keys(servers).filter((key) => servers[key] && (servers[key].disabled === true || servers[key].enabled === false));
+    }).catch(() => []);
+    if (userJson.servers.length || userJson.failures.length || userJsonDisabled.length) {
+      stdout.write('User servers from ' + (userJson.file || path.join(getConfigDirectory(process.env), 'mcp.json')) + ':\n');
       for (const server of userJson.servers) stdout.write('  ' + server.name + ' — ' + (server.type === 'http' || server.type === 'sse' ? server.type + ' ' + server.url : 'stdio ' + server.command) + '\n');
+      for (const name of userJsonDisabled) stdout.write('  ' + name + ' — disabled (oasis mcp enable ' + name + ')\n');
       for (const failure of userJson.failures) stdout.write('  ' + failure.name + ' — not usable: ' + failure.error + '\n');
     }
     if (claude.local.length || claude.user.length || claude.failures.length) {
@@ -133,8 +142,14 @@ export async function manageMcp(rest, root = process.cwd(), { approve, askLine, 
   }
   if (action === 'enable' || action === 'disable') {
     const name = rest[1];
+    if (!name) throw new Error('Usage: oasis mcp ' + action + ' NAME');
     const existing = config.servers.find((server) => server.name === name);
-    if (!existing) throw new Error('No configured MCP server named "' + name + '".');
+    if (!existing) {
+      const { setUserMcpJsonServerEnabled } = await import('./mcp-remote-add.mjs');
+      const changed = await setUserMcpJsonServerEnabled(name, action === 'enable', { env: process.env, approve: (text) => approve(text, true, false) });
+      if (changed) { stdout.write(changed + '\n'); return; }
+      throw new Error('No configured MCP server named "' + name + '". Project servers live in .mcp.json; edit that file to change one.');
+    }
     if (!(await approve((action === 'enable' ? 'Enable' : 'Disable') + ' MCP server "' + name + '"?', true, false))) return;
     existing.enabled = action === 'enable';
     const output = await saveMcpServers(config.servers, { configPath: config.configPath });
