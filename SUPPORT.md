@@ -8,7 +8,7 @@ Start with the built-in diagnostic:
 oasis doctor
 ```
 
-For a deeper provider check, run `oasis doctor --test-provider`. For connectivity and TLS issues, run `oasis doctor --network`.
+For a deeper provider check, run `oasis doctor --test-provider`. For connectivity and TLS issues, run `oasis doctor --network`. Common problems and their fixes are in the [troubleshooting guide](docs/TROUBLESHOOTING.md).
 
 ## Questions and feature ideas
 

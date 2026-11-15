@@ -255,4 +255,4 @@ Re-run this scorecard after major UI, packaging, release, documentation or CI ch
 
 After this historical audit, the public Pages-based marketing website was retired. Its source directory, deployment workflow and site-specific build/QA scripts were removed. This does **not** retire the browser product: the root browser application, app/, src/web.mjs and its browser-app integrity tests remain in the repository. The browser workspace continues to connect to a local OASIS runtime; it is not a hosted website.
 
-The new [user guide](USER-GUIDE.md), [interfaces guide](INTERFACES.md) and [release guide](RELEASES.md) are the maintained entry points for terminal, web app, remote access and download workflows.
+The new [user guide](../USER-GUIDE.md), [interfaces guide](../INTERFACES.md) and [release guide](../RELEASES.md) are the maintained entry points for terminal, web app, remote access and download workflows.
