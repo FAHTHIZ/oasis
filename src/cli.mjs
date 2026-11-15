@@ -768,6 +768,8 @@ async function authCommand(root, rest) {
 async function setupTokenCommand() {
   const auth = await import('./auth-cli.mjs');
   const status = await auth.authStatus(process.env);
+  // With nothing configured, show the Anthropic example (OASIS_PROTOCOL=anthropic below).
+  if (!status.protocol) status.protocol = 'anthropic';
   stdout.write([
     'OASIS uses your model provider\'s API key rather than an account token.',
     'For CI and scripts, store the key as a secret and expose it as an environment variable:',
