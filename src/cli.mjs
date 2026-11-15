@@ -1598,6 +1598,9 @@ async function printMode(root, headless, args, autoApprove, persistence) {
   }
 }
 
+// Built-ins that only read local state; `oasis -p /NAME` prints them without a model call.
+const HEADLESS_LOCAL_COMMANDS = new Set(['cost', 'context', 'help', 'doctor', 'skills', 'release-notes']);
+
 async function printModeRun(root, headless, args, autoApprove, persistence, state) {
   let prompt = [headless.prompt, ...args].filter(Boolean).join(' ').trim();
   if (headless.codexConfig && headless.codexConfig.length) {
@@ -1637,6 +1640,18 @@ async function printModeRun(root, headless, args, autoApprove, persistence, stat
       if (Array.isArray(custom.grantTools)) SESSION_OPTIONS.allowedTools.push(...custom.grantTools);
     } else {
       const skillCommand = await resolveSkillCommand(root, prompt.trim()).catch(() => null);
+      // Read-only built-ins answer locally, as `claude -p /cost` does, instead of
+      // sending "/cost" to the model to guess at.
+      const local = /^\/([a-z-]+)(?:\s+(.*))?$/s.exec(prompt.trim());
+      const localName = local && (Object.hasOwn(COMMAND_ALIASES, local[1]) && !Object.hasOwn(BUILTIN_COMMANDS, local[1]) ? COMMAND_ALIASES[local[1]] : local[1]);
+      if (!skillCommand && local && HEADLESS_LOCAL_COMMANDS.has(localName) && !SESSION_OPTIONS.disableSlashCommands) {
+        const started = Date.now();
+        const handled = await runBuiltinCommand(localName, String(local[2] || '').trim(), { root, env: process.env, usage: USAGE, sessionOptions: SESSION_OPTIONS });
+        const output = String(handled && handled.output || '');
+        if (headless.outputFormat === 'json' || headless.outputFormat === 'stream-json') stdout.write(JSON.stringify({ type: 'result', subtype: 'success', is_error: false, result: output, session_id: null, num_turns: 0, duration_ms: Date.now() - started, total_cost_usd: 0 }) + '\n');
+        else if (headless.outputFormat !== 'none') stdout.write(output + '\n');
+        return;
+      }
       if (skillCommand) prompt = skillCommand.options.fork ? 'Use the task tool with subagent_type "' + (skillCommand.options.fork.agent || 'general-purpose') + '" to run this, then report its result:\n\n' + skillCommand.prompt : skillCommand.prompt;
     }
   }

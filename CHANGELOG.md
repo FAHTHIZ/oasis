@@ -4,6 +4,7 @@ User-facing change history grouped by package version. A version heading does no
 
 ## Unreleased
 
+- `oasis -p /cost`, `/context`, `/help`, `/doctor`, `/skills` and `/release-notes` answer locally, without a model call and without needing a provider, as `claude -p /cost` does. They used to send the text "/cost" to the model. Custom commands with the same name, and unknown names, still go to the model.
 - `--output-format stream-json`: assistant events now also carry Claude Code's `message: {role, content: [{type: "text", text}]}` and `session_id`. A consumer written for `claude -p` reads `message.content` and used to get no text. The OASIS `text` field is unchanged. Tool calls are still OASIS's own `tool_use` / `tool_result` events, and docs/COMPARISON.md now says so instead of "the same output formats".
 - `oasis bg --help` and `oasis auth --help` print usage (exit 0) instead of an error. `oasis WORD --help`, where WORD is not a command, shows the main help instead of sending "WORD --help" to the model as a task. A `--help` after `--` now reaches the passed-through command: `oasis mcp add x -- server --help` used to print Oasis help.
 - `oasis connect URL --model NAME` (and `--from-env --model NAME`) tests that model first and saves it if it works, even when the server lists no models. `--model` used to be ignored, so a gateway with an empty model list could not be connected. The terminal now also prints the connection test's notes, for example that the saved model did not call tools and may only chat. Those notes were only shown in the web UI.
