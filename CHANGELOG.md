@@ -4,6 +4,7 @@ User-facing change history grouped by package version. A version heading does no
 
 ## Unreleased
 
+- A flag that needs a value no longer takes the next option as its value. Before, `oasis --model -p "hi"` used `-p` as the model ID and ran "hi" as a task; it and the other value flags (`--add-dir`, `--append-system-prompt`, `--workspace`, `--fallback-model`, …) now report the missing value.
 - `oasis update` no longer offers to check out the latest release tag on a git clone that is already newer (following main). That would have detached the checkout onto the older release and dropped every later commit. It now says how many commits ahead the clone is and suggests `git pull`.
 - `npm run bench:live` no longer caps Claude Code at 30 turns while every other agent runs until the shared timeout. It now passes `--max-turns 200` (the eval's maximum), so a Claude Code `error_max_turns` stop no longer counts as a failure against the agent.
 - With no model connected, the interactive prompt's banner and its reply to a task now say "type /setup" instead of telling you to exit and run `oasis setup` (`/setup` works inside the session). `oasis -p` keeps naming `oasis setup`.
