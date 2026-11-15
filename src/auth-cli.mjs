@@ -16,7 +16,8 @@ function keySource(config, env) {
 }
 
 // Claude's authMethod values are none | claude.ai | oauth_token | api_key | api_key_helper | third_party.
-// OASIS adds "local" for loopback endpoints that need no key.
+// OASIS adds "local" for loopback endpoints and "keyless" for saved remote
+// endpoints that need no key.
 export async function authStatus(env = process.env) {
   let config;
   try { config = await loadConfig({ env }); } catch (error) {
@@ -26,7 +27,13 @@ export async function authStatus(env = process.env) {
   const local = /^https?:\/\/(localhost|127\.|\[::1\])/i.test(config.baseURL || '');
   const authMethod = CLOUD.includes(config.protocol) ? (config.configured ? 'third_party' : 'none')
     : env.ANTHROPIC_AUTH_TOKEN || env.CLAUDE_CODE_OAUTH_TOKEN ? 'oauth_token'
-    : config.apiKey ? 'api_key' : config.apiKeyHelper ? 'api_key_helper' : local ? 'local' : 'none';
+    : config.apiKey ? 'api_key' : config.apiKeyHelper ? 'api_key_helper' : local ? 'local'
+    // A saved endpoint that needs no key (`oasis connect URL` on a keyless server).
+    : config.configured ? 'keyless' : 'none';
+  // Nothing set up: the built-in defaults are not a provider the user chose.
+  if (authMethod === 'none' && !config.configured) {
+    return { loggedIn: false, authMethod, apiProvider: null, protocol: null, baseURL: null, model: null, apiKeySource: null, authentication: 'not configured', configDirectory: getConfigDirectory(env), configFile: config.configPath };
+  }
   return {
     loggedIn: authMethod !== 'none',
     authMethod,
