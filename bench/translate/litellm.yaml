@@ -1,0 +1,18 @@
+# LiteLLM 1.109.1 config used by the 2026-11-15 head-to-head runs.
+# hosted_vllm/ + use_chat_completions_api force every request (Anthropic
+# /v1/messages, OpenAI /v1/responses, Gemini /v1beta) onto OVH chat completions.
+# The master key is a local placeholder, not a credential.
+model_list:
+  - model_name: gpt-oss-20b
+    litellm_params: { model: hosted_vllm/gpt-oss-20b, api_base: "http://127.0.0.1:4003/v1", api_key: none, use_chat_completions_api: true }
+  - model_name: gpt-oss-120b
+    litellm_params: { model: hosted_vllm/gpt-oss-120b, api_base: "http://127.0.0.1:4003/v1", api_key: none, use_chat_completions_api: true }
+  - model_name: Qwen3.5-397B-A17B
+    litellm_params: { model: hosted_vllm/Qwen3.5-397B-A17B, api_base: "http://127.0.0.1:4003/v1", api_key: none, use_chat_completions_api: true }
+  - model_name: Qwen3.8-27B
+    litellm_params: { model: hosted_vllm/Qwen3.8-27B, api_base: "http://127.0.0.1:4003/v1", api_key: none, use_chat_completions_api: true }
+litellm_settings:
+  drop_params: true
+  num_retries: 0
+general_settings:
+  master_key: sk-bench-local-0123456789abcdef
