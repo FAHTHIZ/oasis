@@ -4,6 +4,7 @@ User-facing change history grouped by package version. A version heading does no
 
 ## Unreleased
 
+- Eval task specs fixed: seven tasks (http-body-limit, normalize-request-headers, safe-archive-entry, same-origin-redirect, secret-log-redaction, transient-provider-retry, ttl-cache) had verifiers that import `src/lib.mjs`, which their task text never named. A correct solution in any other file failed. The task text now names the file and states the other requirements the verifiers check: the chainable `set`, throwing on reject, the word "ambiguous" in the error, and keeping the `Bearer` prefix. These tasks have new fingerprints, so earlier results for them are not comparable. A test now checks that every verifier only imports files that exist or are named in the task text.
 - `oasis config` and `/status` say when `config.json` has not been created yet, and list the `OASIS_*` environment variables that set the provider (and override the file). Before, they printed the file path as if the file existed.
 - `/memory` lists only the instruction files that exist, plus a count of the other locations checked. In a new folder it used to print about 30 `[none]` lines. `/memory files` shows every checked location.
 - An empty `oasis sessions` list now says chats are saved automatically and points to `oasis -c` / `oasis -r ID`. Before, it said "Use oasis --continue to save/resume a session", which suggested chats are not saved by default.
