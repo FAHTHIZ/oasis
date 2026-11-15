@@ -37,7 +37,7 @@ import { BUILTIN_COMMANDS, COMMAND_ALIASES, runBuiltinCommand, subagentRows, cre
 import { appendMemoryNote } from './memory.mjs';
 import { runHeadless, OUTPUT_FORMATS, headlessSetupErrorOutput } from './headless.mjs';
 import { randomUUID } from 'node:crypto';
-import { fstatSync, readFileSync, realpathSync, rmSync, statSync } from 'node:fs';
+import { existsSync, fstatSync, readFileSync, realpathSync, rmSync, statSync } from 'node:fs';
 import { runDiagnostics, formatDiagnostics, CHECKERS } from './diagnostics.mjs';
 import { readInput, KeyDecoder } from './line-editor.mjs';
 import { loadHistory, appendHistory } from './input-history.mjs';
@@ -1169,6 +1169,16 @@ async function restoreOne(root, backupId) {
   stdout.write('Restored ' + result.path + ' from snapshot ' + result.restoredFrom + '.\n');
 }
 
+// Say where the settings actually come from: the file path alone suggested a
+// file that may not exist when OASIS_* environment variables supply them.
+function configSourceLine(config, env = process.env) {
+  const fromEnv = ['OASIS_BASE_URL', 'OASIS_MODEL', 'OASIS_PROTOCOL', 'OASIS_API_KEY', 'OASIS_LOCAL_API_KEY', 'OASIS_API_KEY_HELPER'].filter((name) => env[name]);
+  const exists = Boolean(config.configPath) && existsSync(config.configPath);
+  let line = '  Config file: ' + config.configPath + (exists ? '' : ' (not created yet)');
+  if (fromEnv.length) line += '\n  Set by environment: ' + fromEnv.join(', ') + (exists ? ' (these override the file)' : '');
+  return line + '\n';
+}
+
 function printConfig(config) {
   const summary = getProviderSummary(config);
   stdout.write('Oasis provider configuration\n');
@@ -1176,7 +1186,7 @@ function printConfig(config) {
   // chosen contradicted `oasis doctor` ("not set yet").
   if (!config.configured) {
     stdout.write('  Model provider: not set yet — run oasis setup or oasis connect\n');
-    stdout.write('  Config file: ' + config.configPath + '\n');
+    stdout.write(configSourceLine(config));
     return;
   }
   stdout.write('  Base URL: ' + config.baseURL + '\n');
@@ -1184,7 +1194,7 @@ function printConfig(config) {
   stdout.write('  Model: ' + config.model + '\n');
   stdout.write('  Authentication: ' + summary.authentication + '\n');
   stdout.write('  API key: ' + (config.apiKey ? 'configured (masked)' : 'not set') + '\n');
-  stdout.write('  Config file: ' + config.configPath + '\n');
+  stdout.write(configSourceLine(config));
 }
 
 async function waitForBackgroundRegistration() {
