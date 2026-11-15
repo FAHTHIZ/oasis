@@ -4,6 +4,7 @@ User-facing change history grouped by package version. A version heading does no
 
 ## Unreleased
 
+- A one-word typo of a command (`oasis doctr`, `oasis sessons`, `oasis skill`) now suggests the command ("Did you mean oasis doctor?") instead of sending the word to the model as a task. Ordinary one-word tasks such as `oasis lint` still reach the agent.
 - `oasis plugins --help` and `oasis plugin --help` now show both spellings' lines. Before, `plugins --help` left out the marketplace and Claude Code plugin commands, even though both words run the same command. The same applies to `extension` and `extensions`.
 - `oasis -r` without an ID, and a bare `/resume` in a terminal, open an arrow-key picker of saved chats, like `/model` and `/rewind`. Before, they printed a numbered list and you had to type `/resume NUMBER`. Piped (non-terminal) input still gets the list.
 - Benchmark chain: `bench/translate/ovh-hop.mjs` merges a leading run of system messages into one. Codex CLI's two `developer` messages had made Qwen3.5 reject every request. LiteLLM's streamed Responses translation turned that rejection into an empty 200 reply, so Codex's 0-token "failures" on Qwen3.5 were caused by the chain, not by the agent.
