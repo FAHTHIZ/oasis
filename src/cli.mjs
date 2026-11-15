@@ -2804,6 +2804,15 @@ async function startWebWorkspace(root, args) {
 const TYPO_COMMANDS = ['acp', 'agents', 'app', 'auth', 'backups', 'batch', 'config', 'connect', 'diagnostics', 'doctor', 'eval', 'extensions', 'gateway', 'help', 'ide', 'import', 'init', 'insights', 'install', 'mcp', 'memory', 'models', 'permissions', 'plugins', 'purge', 'quota', 'restore', 'sessions', 'setup', 'skills', 'trust', 'ultrareview', 'uninstall', 'update', 'watch', 'web', 'completion', 'cloud', 'schedule', 'routines', 'exec', 'diff', 'deploy', 'profile', 'attempts'];
 // One-word tasks that sit close to a command name but are real requests.
 const ONE_WORD_TASKS = new Set(['lint', 'test', 'tests', 'build', 'run', 'fix', 'format', 'review', 'explain', 'commit', 'refactor', 'deploy', 'debug', 'docs', 'start', 'stop', 'clean', 'check', 'plan', 'status', 'resume']);
+// Chat controls that only make sense inside a session (`oasis undo` used to
+// send "undo" to the model as a task). Task-like slash commands (fix, review,
+// commit, test, simplify …) are left out: as a one-word task they are fine.
+const CHAT_ONLY_COMMANDS = new Set(['undo', 'rewind', 'cost', 'usage', 'compact', 'autocompact', 'clear', 'context', 'logout', 'login', 'exit', 'fork', 'rename', 'copy', 'export', 'recap', 'keys', 'theme', 'vim', 'statusline', 'todos', 'bashes', 'heapdump', 'effort', 'fast', 'model', 'style', 'output-style', 'language', 'color', 'sounds', 'voice', 'privacy-settings', 'terminal-setup', 'release-notes', 'tips', 'presets', 'add-dir', 'disconnect', 'focus', 'btw']);
+export function chatOnlyCommand(args) {
+  if (!Array.isArray(args) || args.length !== 1) return '';
+  const word = String(args[0] || '').toLowerCase();
+  return CHAT_ONLY_COMMANDS.has(word) ? word : '';
+}
 export function commandTypo(args) {
   if (!Array.isArray(args) || args.length !== 1) return '';
   const word = String(args[0] || '').toLowerCase();
@@ -3645,6 +3654,14 @@ async function main() {
   }
   // `oasis doctr` used to go to the model as a one-word task. A single word
   // one or two letters from a command is almost always a typo of it.
+  {
+    const chatCommand = chatOnlyCommand(args);
+    if (chatCommand) {
+      stderr.write('oasis: "' + args[0] + '" is a chat command, not a CLI command. Start a chat with oasis (or continue the last one with oasis -c) and type /' + chatCommand + '.\nTo give the agent a task instead, write it as a sentence, for example oasis "' + args[0] + ' …".\n');
+      process.exitCode = 1;
+      return;
+    }
+  }
   {
     const typo = commandTypo(args);
     if (typo) {
