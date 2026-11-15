@@ -15,7 +15,7 @@ import { access, copyFile, mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { isIP } from 'node:net';
 import { fileURLToPath } from 'node:url';
-import { loadConfig, getProviderSummary, carryLearnedContextWindow } from './config.mjs';
+import { loadConfig, getProviderSummary, carryLearnedContextWindow, isLoopbackUrl } from './config.mjs';
 import { startIdleCompaction, idleCompactMinutes, idleCompactionNote } from './idle-compaction.mjs';
 import { compactHistoryIfNeeded } from './agent.mjs';
 import { applyEffort, createSession, runAgentTurn, runAgentPlan, runForkedTurn, closeSession, repairInterruptedHistory, resolveQuestionAnswer, stopFailureType, formatWait, steerSession, takeSteering } from './agent.mjs';
@@ -1640,6 +1640,7 @@ async function printModeRun(root, headless, args, autoApprove, persistence, stat
     const envKeys = providerKeysInEnv();
     if (envKeys.length) throw new Error('No model provider is configured, but ' + envKeys.map((item) => item.name).join(', ') + (envKeys.length > 1 ? ' are' : ' is') + ' set.\n  Run: oasis connect --from-env' + (envKeys.length > 1 ? ' [' + envKeys.map((item) => item.provider).join('|') + ']' : '') + '\n  It finds a model that works with that key and saves it.');
   }
+  if (!config.configured && process.env.OASIS_BASE_URL && !isLoopbackUrl(config.baseURL)) throw new Error('OASIS_BASE_URL is set to ' + config.baseURL + ', but no API key was found for it.\n  Set OASIS_API_KEY (or OPENAI_API_KEY / ANTHROPIC_API_KEY for that protocol).\n  A server that needs no key: run oasis connect ' + config.baseURL + ' once; it is then saved as keyless.');
   if (!config.configured) throw new Error('No model provider is configured.\n  Pick one:\n    oasis connect        paste an API key, model link or local server address\n    oasis setup          guided setup in this terminal (API key, free gateway, or Ollama)\n    oasis setup --auto   detect this computer and any local model server, then configure the best fit\n    oasis web --open     set it up in the browser workspace instead\n    OASIS_PROTOCOL, OASIS_BASE_URL, OASIS_MODEL + API key variable   for CI and scripts\n  Guide: https://github.com/FAHTHIZ/oasis#install');
   if (SESSION_OPTIONS.channels.length || SESSION_OPTIONS.devChannels.length) stderr.write('[channels] Channels need an interactive session; ignored with -p.\n');
   // CI runners and supervisors stop jobs with SIGTERM. Commands run in their own
