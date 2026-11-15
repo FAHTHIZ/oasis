@@ -602,7 +602,7 @@ export function deniedHint(denied, { env = process.env } = {}) {
     } else if (item && item.tool_name && !tools.includes(item.tool_name)) tools.push(item.tool_name);
   }
   if (!commands.length && !tools.length) return '';
-  const rules = commands.slice(0, 3).map((line) => 'run_command(' + line.split(/\s+/).slice(0, 2).join(' ') + ':*)');
+  const rules = [...new Set(commands.map((line) => 'run_command(' + line.split(/\s+/).slice(0, 2).join(' ') + ':*)'))].slice(0, 3);
   const head = '\nNot approved in this run (nobody can approve in -p mode): ' + [...commands.map((line) => '`' + line + '`'), ...tools].slice(0, 6).join(', ') + '.\n';
   if (!rules.length) return head + 'To allow next time: --allowedTools, --yes or --permission-mode auto.\n';
   // Inline code, wrappers and the like ask even with --full-auto or --yes; only an allow rule lets them run.

@@ -2883,6 +2883,21 @@ export function unknownOptionMessage(arg) {
 // SESSION_OPTIONS and environment switches directly, and the run's own
 // choices (approval, persistence, resume, workspace, worktree, headless
 // settings, leftover words) on `flags`.
+/** Splits a permission rule list on commas or spaces outside parentheses. */
+export function splitRuleList(value) {
+  const rules = [];
+  let depth = 0;
+  let current = '';
+  for (const char of String(value || '')) {
+    if (char === '(') depth += 1;
+    else if (char === ')' && depth > 0) depth -= 1;
+    if (depth === 0 && (char === ',' || /\s/.test(char))) { if (current.trim()) rules.push(current.trim()); current = ''; continue; }
+    current += char;
+  }
+  if (current.trim()) rules.push(current.trim());
+  return rules;
+}
+
 async function parseMainFlags(rawArgs, flags) {
   for (let i = 0; i < rawArgs.length; i++) {
     const takeValue = () => { const value = rawArgs[i + 1]; if (value === undefined || looksLikeFlag(value)) return undefined; i += 1; return value; };
@@ -2904,7 +2919,12 @@ async function parseMainFlags(rawArgs, flags) {
     }
     if (arg === '--allowedTools' || arg === '--allowed-tools' || arg === '--disallowedTools' || arg === '--disallowed-tools') {
       if (!rawArgs[i + 1] || looksLikeFlag(rawArgs[i + 1])) throw new Error(arg + ' requires a comma- or space-separated rule list.');
-      const rules = takeValue().split(/,(?![^(]*\))/).map((rule) => rule.trim()).filter(Boolean);
+      const rules = splitRuleList(takeValue());
+      // Like Claude Code, the flag takes several space-separated arguments:
+      // `--allowedTools "run_command(npm:*)" "run_command(node:*)"`. Only
+      // arguments shaped like a rule, Tool(...), are taken; the next plain
+      // word is the task text.
+      while (rawArgs[i + 1] !== undefined && /^[A-Za-z_][\w.:-]*\(.*\)$/s.test(rawArgs[i + 1].trim())) rules.push(...splitRuleList(rawArgs[++i]));
       (arg.toLowerCase().includes('disallowed') ? SESSION_OPTIONS.disallowedTools : SESSION_OPTIONS.allowedTools).push(...rules);
       continue;
     }
