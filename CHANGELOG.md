@@ -4,6 +4,7 @@ User-facing change history grouped by package version. A version heading does no
 
 ## Unreleased
 
+- The grep tool searches a pattern that is not a valid regular expression (such as `add(`) as plain text and says so in a `note`, with both ripgrep and the built-in engine. Before, the call failed with `regex parse error` and small models spent another step on it.
 - `OASIS_PROTOCOL=openai` (and `protocol: "openai"` in settings) now means `openai-compatible` chat completions. Before, OASIS refused to start with "Provider protocol must be …", and the error did not say which value it got.
 - `oasis -p` with `OASIS_BASE_URL` set to a remote server but no API key now says the key is missing and names `OASIS_API_KEY`, and how to save a keyless server. Before, it said "No model provider is configured" although the variables were set.
 - Web app: pressing Connect on text that is not an API key, model link or server address now says so and shows what a key or address looks like. Before, the button did nothing, so a mistyped or partial key looked like a frozen app.

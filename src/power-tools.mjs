@@ -221,6 +221,11 @@ function windowLine(line, index, max = PREVIEW_COLUMNS) {
   return '…' + line.slice(index - WINDOW_BEFORE, index + WINDOW_AFTER) + '… [match at column ' + (index + 1) + ' of a long line]';
 }
 
+const LITERAL_RETRY_NOTE = 'The pattern is not a valid regular expression, so it was searched as plain text. To search with a regex, escape ( ) [ ] { } with a backslash.';
+
+// A pattern such as `add(` is meant as text far more often than as a broken
+// regex (seen live with a small model), so an invalid regex is retried as plain
+// text once, with a note, instead of failing the call.
 export async function grepWorkspace(root, args = {}, options = {}) {
   // Models also send the pattern as regex, query or search.
   const pattern = String(args.pattern || args.regex || args.query || args.search || '');
@@ -277,6 +282,7 @@ export async function grepWorkspace(root, args = {}, options = {}) {
     }
     if (out.timedOut) throw new Error('grep exceeded its 30-second time limit. Narrow the search path or pattern and retry.');
     if (out.error) throw new Error('grep could not start ripgrep: ' + out.error);
+    if (out.code === 2 && !out.out && !options.fixedStrings && /regex parse error/i.test(out.err)) return { ...(await grepWorkspace(root, args, { ...options, fixedStrings: true })), note: LITERAL_RETRY_NOTE };
     if (out.code === 2 && !out.out) throw new Error('grep failed: ' + out.err.trim() + (/unrecognized file type/i.test(out.err) ? ' Use a ripgrep type name (rg --type-list), or a glob such as *.ts.' : ''));
     let skipped = 0;
     const long = [];
@@ -308,6 +314,7 @@ export async function grepWorkspace(root, args = {}, options = {}) {
     await matcher.ready;
   } catch (error) {
     if (matcher) await matcher.close().catch(() => {});
+    if (!options.fixedStrings && /invalid regular expression/i.test(String(error && error.message))) return { ...(await grepWorkspace(root, args, { ...options, fixedStrings: true })), note: LITERAL_RETRY_NOTE };
     throw new Error('Invalid regular expression: ' + error.message);
   }
   const matchGlob = globMatcher(args.glob);
