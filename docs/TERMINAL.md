@@ -93,6 +93,11 @@ prompt and exits. Useful flags:
 | `--json-schema SCHEMA` | Return JSON matching a schema |
 | `--max-turns N`, `--max-budget-usd N`, `--max-requests N` | Hard limits |
 | `--zero-budget` | Only send requests to models proven free |
+| `--allowedTools "run_command(npm:*)" "Edit(src/**)"` | Extra allow rules; several arguments, or one comma- or space-separated list |
+
+The `json` result reports `usage` (tokens), `total_cost_usd`, the configured
+`model`, and `modelUsage`: requests, tokens and cost for each model that
+answered, including a fallback model, subagents and the advisor.
 
 Piped input is added to the prompt: `cat build.log | oasis -p "explain this error"`.
 

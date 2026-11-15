@@ -200,6 +200,9 @@ export async function runHeadless(options) {
   // the priced requests and is not evidence that the run was free.
   let costKnown = true;
   let requests = 0;
+  // Per-model totals in Claude Code's result shape, so a run's record names
+  // the models that actually answered (main, fallback, subagents, advisor).
+  const modelUsage = {};
   let structured;
   let schemaErrors = null;
   let goalState = null;
@@ -335,6 +338,15 @@ export async function runHeadless(options) {
         if (step.cacheReadTokens) usage.cache_read_input_tokens = (usage.cache_read_input_tokens || 0) + Number(step.cacheReadTokens);
         if (step.cacheCreationTokens) usage.cache_creation_input_tokens = (usage.cache_creation_input_tokens || 0) + Number(step.cacheCreationTokens);
         if (step.phase === undefined) requests += 1;
+        const name = String(step.model || '').trim();
+        if (name) {
+          const entry = modelUsage[name] || (modelUsage[name] = { requests: 0, inputTokens: 0, outputTokens: 0, cacheReadInputTokens: 0, costUSD: 0 });
+          entry.requests += 1;
+          entry.inputTokens += Number(step.inputTokens || 0);
+          entry.outputTokens += Number(step.outputTokens || 0);
+          entry.cacheReadInputTokens += Number(step.cacheReadTokens || 0);
+          entry.costUSD = Number((entry.costUSD + Number(step.costUsd || 0)).toFixed(6));
+        }
       }
     };
     // Background agents report here, also after the turn that started them.
@@ -542,6 +554,8 @@ export async function runHeadless(options) {
     ...(noReply ? { empty_reply: true } : {}),
     result: error ? (signal && signal.aborted && signal.reason && signal.reason.stopSignal ? signal.reason.message : String(error.message || error)) : String(result.text || ''),
     session_id: sessionId,
+    model: String(config && config.model || '') || null,
+    ...(Object.keys(modelUsage).length ? { modelUsage } : {}),
     num_turns: requests,
     duration_ms: Date.now() - started,
     // The session counter covers every turn of this run (goal, steering and
