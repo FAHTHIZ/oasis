@@ -12,7 +12,7 @@ export const PRESETS = {
   deepseek: { label: 'DeepSeek', protocol: 'openai', baseURL: 'https://api.deepseek.com/v1', model: 'deepseek-chat', keyHint: 'sk-…' },
   mistral: { label: 'Mistral', protocol: 'openai', baseURL: 'https://api.mistral.ai/v1', model: 'devstral-medium-latest', keyHint: '' },
   xai: { label: 'xAI', protocol: 'openai', baseURL: 'https://api.x.ai/v1', model: 'grok-code-fast-1', keyHint: 'xai-…' },
-  huggingface: { label: 'Hugging Face', protocol: 'openai', baseURL: 'https://router.huggingface.co/v1', model: 'Qwen/Qwen3-Coder-480B-A35B-Instruct', keyHint: 'hf_…', note: 'Any chat model served by Hugging Face Inference Providers.' },
+  huggingface: { label: 'Hugging Face', protocol: 'openai', baseURL: 'https://router.huggingface.co/v1', model: 'Qwen/Qwen3-Coder-480B-A35B-Instruct', keyHint: 'hf_…', note: 'Any chat model served by Hugging Face Inference Providers.', publicModelList: true },
   together: { label: 'Together AI', protocol: 'openai', baseURL: 'https://api.together.xyz/v1', model: '', keyHint: '' },
   fireworks: { label: 'Fireworks AI', protocol: 'openai', baseURL: 'https://api.fireworks.ai/inference/v1', model: '', keyHint: 'fw_…' },
   cerebras: { label: 'Cerebras', protocol: 'openai', baseURL: 'https://api.cerebras.ai/v1', model: '', keyHint: 'csk-…' },

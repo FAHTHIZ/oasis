@@ -573,3 +573,13 @@ test('smartConnect: a local thinking model too slow to finish says so instead of
   };
   await assert.rejects(smartConnect('http://localhost:11434', { fetchImpl, tries: 1, probeTimeoutMs: 50 }), (error) => /hidden thinking/.test(error.message) && !/busy/.test(error.message));
 });
+
+// Google answers a bad key with 400, not 401; OASIS used to print the raw
+// JSON error body instead of saying the key was not accepted.
+test('classifyFailure: Google\'s 400 "API key not valid" is an auth failure', async () => {
+  assert.equal(classifyFailure(new ProviderError('The server answered 400 when listing models. {"error":{"code":400,"message":"Please pass a valid API key","status":"INVALID_ARGUMENT"}}', { status: 400 })), 'auth');
+  assert.equal(classifyFailure(new ProviderError('API key not valid. Please pass a valid API key. [API_KEY_INVALID]', { status: 400 })), 'auth');
+  assert.equal(classifyFailure(new ProviderError('Invalid value for tool_choice', { status: 400 })), 'model');
+  const { fetchImpl } = fakeFetch([[/generativelanguage.*models/, () => ({ status: 400, body: { error: { code: 400, message: 'Please pass a valid API key', status: 'INVALID_ARGUMENT' } } })]]);
+  await assert.rejects(smartConnect(GEMINI_KEY, { fetchImpl }), (error) => /^Google Gemini did not accept this key\./.test(error.message));
+});
