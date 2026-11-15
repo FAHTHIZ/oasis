@@ -203,7 +203,12 @@ export async function runTool(tool, input, options = {}) {
   let armedAt = 0;
   let timeout = null;
   let holds = 0;
+  // Once the call has settled, a late waitForUser (for example an approval
+  // raised by a page event after the action returned) must not re-arm the
+  // timer: nothing would clear it and it would keep the process alive.
+  let settled = false;
   const arm = () => {
+    if (settled) return;
     armedAt = Date.now();
     timeout = setTimeout(() => {
       timedOut = true;
@@ -269,7 +274,9 @@ export async function runTool(tool, input, options = {}) {
     if (decision.audit) result.audit = buildAuditRecord(tool, normalizedInput, decision, result, options);
     return result;
   } finally {
+    settled = true;
     clearTimeout(timeout);
+    timeout = null;
     if (onAbort) controller.signal.removeEventListener('abort', onAbort);
     if (externalSignal) externalSignal.removeEventListener('abort', forwardAbort);
   }
