@@ -1179,6 +1179,30 @@ export function labelToolResult(summary, name, call) {
 }
 
 
+// Opens the conversation for this run: the one being resumed (persistence.resumeId,
+// forked with --fork-session) or a new one. Shared by the first prompt and by
+// slash commands that need the resumed conversation before it.
+async function openSession(root, config, persistence) {
+  let restored = null;
+  if (persistence.resumeId) {
+    restored = await loadSession(root, persistence.resumeId);
+    if (SESSION_OPTIONS.forkSession) { stdout.write('[session] Forking ' + restored.id + ' into a new session.\n'); restored = { ...restored, id: null }; }
+    if (persistence.recapShown !== restored.id) stdout.write('[session] Resuming ' + restored.id + ' (' + restored.messages.length + ' saved messages, last updated ' + restored.updatedAt + ').\n');
+    persistence.recapShown = null;
+    const goalNote = pausedGoalNotice(restored.goal);
+    if (goalNote) stdout.write(goalNote);
+    if (restored.turnInProgress) stdout.write('[session] The last turn stopped before it finished; Oasis will ask the model to check the files before continuing.\n');
+  }
+  const session = await createSession({ root, config, restore: restored, ...sessionCreateOptions(), watchFiles: true });
+  if (restored) {
+    let price = null;
+    try { price = priceFor(session.config && session.config.model || config.model, { config: session.config || config }); } catch {}
+    const note = resumeCostNotice({ tokens: estimateTokens(session.messages), updatedAt: restored.updatedAt, price });
+    if (note) stdout.write(note);
+  }
+  return session;
+}
+
 async function runPrompt(prompt, root, autoApprove, session = null, persistence = {}, modeOptions = {}) {
   const requestText = String(prompt || '');
   if (AUTO_HALT && !String(prompt || '').startsWith(WAKE_PREFIX) && !modeOptions.selfPacedLoop) AUTO_HALT = null;
@@ -1207,23 +1231,7 @@ async function runPrompt(prompt, root, autoApprove, session = null, persistence 
     return session;
   }
   if (!session) {
-    let restored = null;
-    if (persistence.resumeId) {
-      restored = await loadSession(root, persistence.resumeId);
-      if (SESSION_OPTIONS.forkSession) { stdout.write('[session] Forking ' + restored.id + ' into a new session.\n'); restored = { ...restored, id: null }; }
-      if (persistence.recapShown !== restored.id) stdout.write('[session] Resuming ' + restored.id + ' (' + restored.messages.length + ' saved messages, last updated ' + restored.updatedAt + ').\n');
-      persistence.recapShown = null;
-      const goalNote = pausedGoalNotice(restored.goal);
-      if (goalNote) stdout.write(goalNote);
-      if (restored.turnInProgress) stdout.write('[session] The last turn stopped before it finished; Oasis will ask the model to check the files before continuing.\n');
-    }
-    session = await createSession({ root, config, restore: restored, ...sessionCreateOptions(), watchFiles: true });
-    if (restored) {
-      let price = null;
-      try { price = priceFor(session.config && session.config.model || config.model, { config: session.config || config }); } catch {}
-      const note = resumeCostNotice({ tokens: estimateTokens(session.messages), updatedAt: restored.updatedAt, price });
-      if (note) stdout.write(note);
-    }
+    session = await openSession(root, config, persistence);
   } else if (path.resolve(session.worktreeSession ? session.worktreeSession.originalRoot : session.root) !== path.resolve(root)) {
     closeSession(session);
     session = await createSession({ root, config, ...sessionCreateOptions(), watchFiles: true });
@@ -2119,6 +2127,9 @@ async function showResumeRecap(root, persistence) {
   } catch {}
 }
 
+// Slash commands that act on the current conversation (see interactive()).
+export const RESUMED_SESSION_COMMANDS = new Set(['rewind', 'rollback', 'context', 'compact', 'export', 'cost', 'recap', 'rename', 'fork', 'branch', 'todos', 'undo', 'copy', 'usage', 'tasks', 'agents', 'goal']);
+
 async function interactive(root, autoApprove, persistence = {}) {
   let session = null;
   // Interactive mode reads from a terminal. Piped or redirected input used to
@@ -2276,6 +2287,19 @@ async function interactive(root, autoApprove, persistence = {}) {
     // Aliases yield to a custom command of the same name (a personal /ask.md stays yours).
     if (slash && !Object.hasOwn(BUILTIN_COMMANDS, slash[1].toLowerCase()) && Object.hasOwn(COMMAND_ALIASES, slash[1].toLowerCase()) && !(await loadCustomCommands(root, { env: process.env }).catch(() => new Map())).has(slash[1].toLowerCase())) slash[1] = COMMAND_ALIASES[slash[1].toLowerCase()];
     if (slash && Object.hasOwn(BUILTIN_COMMANDS, slash[1].toLowerCase())) {
+      // A resumed conversation loads with the first prompt. Commands about that
+      // conversation load it now: /rewind right after oasis -c said "Nothing
+      // to rewind yet" although its checkpoints were on disk.
+      if (!session && persistence.resumeId && RESUMED_SESSION_COMMANDS.has(slash[1].toLowerCase())) {
+        try {
+          const config = await loadConfig();
+          if (SESSION_OPTIONS.model) config.model = SESSION_OPTIONS.model;
+          if (config.configured) {
+            session = await openSession(root, config, persistence);
+            persistence.resumeId = null;
+          }
+        } catch (error) { stdout.write('[resume] ' + error.message + '\n'); }
+      }
       // /config without an argument opens the settings pane in a terminal.
       if (slash[1].toLowerCase() === 'config' && !String(slash[2] || '').trim() && stdin.isTTY && stdout.isTTY && typeof stdin.setRawMode === 'function' && process.env.OASIS_LINE_APPROVALS !== '1') {
         try {
