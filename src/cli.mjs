@@ -12,6 +12,7 @@ import { createInterface } from 'node:readline/promises';
 import { stdin, stdout, stderr } from 'node:process';
 import { spawn, spawnSync } from 'node:child_process';
 import { access, copyFile, mkdir, readFile, writeFile } from 'node:fs/promises';
+import { permissionModeName } from './permission-modes.mjs';
 import path from 'node:path';
 import { isIP } from 'node:net';
 import { fileURLToPath } from 'node:url';
@@ -709,7 +710,9 @@ async function managePermissions(root, rest) {
   const sub = rest[0] || 'list';
   if (sub === 'list') {
     const settings = await loadSettings(root);
-    stdout.write('Permission mode: ' + settings.permissions.defaultMode + (SESSION_OPTIONS.permissionMode ? ' (overridden: ' + SESSION_OPTIONS.permissionMode + ')' : '') + '\n');
+    const configured = permissionModeName(settings.permissions.defaultMode);
+    const flagged = SESSION_OPTIONS.permissionMode ? permissionModeName(SESSION_OPTIONS.permissionMode) : '';
+    stdout.write('Permission mode: ' + (flagged ? flagged + ' (from --permission-mode; settings: ' + configured + ')' : configured) + '\n');
     stdout.write('Workspace trusted: ' + (settings.trusted ? 'yes' : 'no') + '\n');
     for (const kind of ['allow', 'ask', 'deny']) stdout.write(kind + ': ' + (settings.permissions[kind].length ? settings.permissions[kind].join(', ') : '(none)') + '\n');
     const hookEvents = Object.entries(settings.hooks).map(([event, groups]) => event + ' x' + groups.reduce((n, g) => n + g.hooks.length, 0));
