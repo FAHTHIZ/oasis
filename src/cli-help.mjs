@@ -146,6 +146,7 @@ export function helpText() {
     '  oasis skills add SOURCE --skill NAME [--global]  Install a selected skill',
     '  oasis skills add SOURCE --all [--global]  Install all skills from a source',
     '  oasis skills install NAME      Install a bundled Oasis workflow skill',
+    '  oasis skills remove NAME [--global]  Delete an installed skill (asks first; --yes to skip)',
     '  oasis plugins list             Browse built-in capability bundles',
     '  oasis plugins install NAME    Install a reviewed capability bundle',
     '  oasis plugins remove NAME     Remove a bundle and its owned skills',
