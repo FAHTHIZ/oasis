@@ -115,3 +115,18 @@ test('imports Codex, Gemini CLI and Cursor configuration without overwriting', a
   const dry = await runBuiltinCommand('import', 'cursor --dry-run', { root, env });
   assert.match(dry.output, /Nothing new to import/);
 });
+
+// A Claude Code user with MCP servers, commands and CLAUDE.md ran
+// `oasis import claude` and was told "Nothing to import" with a list of other
+// tools, although OASIS already reads all of that in place.
+test('oasis import claude explains that Claude Code setup is read in place', () => {
+  const only = describePlan({ sources: ['claude'], items: [] });
+  assert.match(only, /^No Claude Code memories to import\./);
+  assert.match(only, /needs no import/);
+  assert.match(only, /~\/\.claude\.json/);
+  assert.doesNotMatch(only, /Looked for Codex/);
+  const all = describePlan({ sources: ['codex', 'claude'], items: [] });
+  assert.match(all, /Looked for Codex/);
+  assert.match(all, /needs no import/);
+  assert.doesNotMatch(describePlan({ sources: ['codex'], items: [] }), /Claude Code setup/);
+});
