@@ -16,6 +16,16 @@ export function maxParallelReadsFrom(env = process.env) {
   return Number.isInteger(value) && value > 0 ? Math.min(64, value) : DEFAULT_MAX_PARALLEL_READS;
 }
 
+// How many task (subagent) calls from one model reply run at once. The
+// subagentMaxParallel setting or OASIS_SUBAGENT_MAX_PARALLEL lowers it, for
+// example for a rate-limited provider; it never rises above `max`. Calls past
+// the cap wait for a free slot, in order.
+export function maxParallelTasksFrom(session, env = process.env, max = 6) {
+  const raw = env && env.OASIS_SUBAGENT_MAX_PARALLEL !== undefined && env.OASIS_SUBAGENT_MAX_PARALLEL !== '' ? env.OASIS_SUBAGENT_MAX_PARALLEL : session && session.subagentMaxParallel;
+  const value = Number(raw);
+  return raw !== undefined && raw !== null && Number.isInteger(value) && value >= 1 ? Math.min(max, value) : max;
+}
+
 export function planToolBatches(calls, {
   isReadOnly = () => false,
   isSpecialistReview = () => false,
