@@ -3,6 +3,15 @@
 A short, dated record of changes, tests, benchmark results, blockers and known
 weaknesses. Newest first. Detailed user-facing notes go in the CHANGELOG.
 
+## 2026-11-15 (live local-model run; interactive commands; docs guides)
+
+- Full suite on Node 22.21.1 before today's changes: 3392 tests, 3384 pass, 0 fail, 8 skipped (1,401 s on 2 CPUs).
+- `1b9af7cc`: on Node older than 22.19 the CLI stops with the fix instead of failing later; `oasis doctor` names the version found. test/node-version-gate.test.mjs (3; 2 fail without the change).
+- `33542ffd`: new docs/TERMINAL.md, docs/EXTENDING.md, docs/TROUBLESHOOTING.md (checked against the source); 8 planning documents moved to docs/design/; relative links and heading anchors in all Markdown are now checked by test/docs-file-references.test.mjs.
+- Live run (Ollama 0.40.16, qwen3:1.7b, 16,384-token context, 2 CPUs, no paid calls): "npm test fails, find the bug in m.mjs, fix it". First run fixed the bug but hit the 15-minute limit: `run_command` with `interactive: true` answered "running" with no output, so the model kept starting `npm test` again, and each start was logged as a failed check.
+- `21058b93`: an interactive command now waits up to OASIS_INTERACTIVE_SETTLE_MS (default 5 s) and, if it exited, returns output and exit code; a still-running one returns output so far. A running check is no longer recorded as failed. test/interactive-command-settle.test.mjs (4; all fail without the fix); 98 run_command suites 831 pass.
+- Re-run of the same task: done in 431 s, exit 0, `npm test` exit 0 with 1 pass, one passed verification event. This time the model ran the test non-interactively, so the live run does not exercise the new interactive path; the tests do.
+
 ## 2026-11-14 (full suite after the inference overhaul)
 
 - `npm test`: 3185 tests, 3176 pass, 1 fail, 8 skipped. The failure was test/openai-effort.test.mjs: the catalog refresh (9332af54) gives OpenRouter's `minimax/minimax-m2.7` 196,608 tokens, matching OpenRouter's live /models list; MiniMax's own entry stays 204,800. Test updated to assert both; it passes.

@@ -13,7 +13,7 @@
 <p align="center">
   <a href="https://github.com/FAHTHIZ/oasis/actions/workflows/quality.yml"><img alt="Quality checks" src="https://img.shields.io/github/actions/workflow/status/FAHTHIZ/oasis/quality.yml?branch=main&style=flat-square&label=quality&labelColor=0B0F0C&color=32E07A"></a>
   <a href="https://github.com/FAHTHIZ/oasis/releases/latest"><img alt="Latest release" src="https://img.shields.io/github/v/release/FAHTHIZ/oasis?style=flat-square&labelColor=0B0F0C&color=7CFF5E"></a>
-  <img alt="More than 3,200 tests" src="https://img.shields.io/badge/tests-3%2C200%2B-0ED168?style=flat-square&labelColor=0B0F0C">
+  <img alt="More than 3,300 tests" src="https://img.shields.io/badge/tests-3%2C300%2B-0ED168?style=flat-square&labelColor=0B0F0C">
   <img alt="Windows, macOS and Linux" src="https://img.shields.io/badge/platforms-windows%20%C2%B7%20macos%20%C2%B7%20linux-1A1F1B?style=flat-square&labelColor=0B0F0C">
   <a href="LICENSE"><img alt="Apache 2.0 license" src="https://img.shields.io/github/license/FAHTHIZ/oasis?style=flat-square&labelColor=0B0F0C&color=1A1F1B"></a>
   <a href="https://github.com/FAHTHIZ/oasis/stargazers"><img alt="GitHub stars" src="https://img.shields.io/github/stars/FAHTHIZ/oasis?style=flat-square&labelColor=0B0F0C&color=32E07A"></a>
@@ -287,7 +287,7 @@ What is verified and what is not, kept current in the [completion checklist](doc
 
 ```sh
 npm install
-npm test           # 3,200+ tests
+npm test           # 3,300+ tests
 npm run check      # tests, benchmark regressions, eval validation
 npm run lint
 ```
@@ -300,10 +300,11 @@ CI also runs platform security tests, a live Docker sandbox test, native PTY tes
 | --- | --- | --- |
 | [User guide](docs/USER-GUIDE.md) | [Architecture](docs/ARCHITECTURE.md) | [Changelog](CHANGELOG.md) |
 | [First run](docs/FIRST-RUN.md) | [Configuration](docs/CONFIGURATION.md) | [Contributing](CONTRIBUTING.md) |
-| [Interfaces](docs/INTERFACES.md) | [Subagents](docs/SUBAGENTS.md) | [Security](SECURITY.md) |
+| [Terminal guide](docs/TERMINAL.md) | [Skills, hooks, MCP and plugins](docs/EXTENDING.md) | [Security](SECURITY.md) |
+| [Interfaces](docs/INTERFACES.md) | [Subagents](docs/SUBAGENTS.md) | [Troubleshooting](docs/TROUBLESHOOTING.md) |
 | [Desktop app](docs/DESKTOP.md) | [Remote access](docs/REMOTE-ACCESS.md) | [Support](SUPPORT.md) |
 | [Downloads and releases](docs/RELEASES.md) | [Real-world runs](docs/REAL-WORLD-RUNS.md) | [Brand guidelines](BRAND.md) |
-| | [Benchmarks](docs/BENCHMARKS.md) · [Comparison](docs/COMPARISON.md) | |
+| | [Benchmarks](docs/BENCHMARKS.md) · [Comparison](docs/COMPARISON.md) | [All docs](docs/README.md) |
 
 ## Meet Fen
 
