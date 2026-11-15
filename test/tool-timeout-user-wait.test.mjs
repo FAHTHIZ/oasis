@@ -45,3 +45,18 @@ test('cancellation still stops a tool that is waiting for a person', async () =>
   assert.equal(result.ok, false);
   assert.equal(result.cancelled, true);
 });
+
+test('a wait that ends after the tool returned does not leave a timer behind', async () => {
+  let runtimeRef;
+  const tool = defineTool({
+    name: 'late_wait', capabilities: ['read'], risk: 'low', timeoutMs: 60000, inputSchema: { type: 'object' },
+    run: async (_input, runtime) => { runtimeRef = runtime; return { done: true }; }
+  });
+  const result = await runTool(tool, {}, { policy });
+  assert.equal(result.ok, true, result.error);
+  const before = process.getActiveResourcesInfo().filter((name) => name === 'Timeout').length;
+  // A page event can raise an approval after the action already returned.
+  await runtimeRef.waitForUser(() => delay(20));
+  const after = process.getActiveResourcesInfo().filter((name) => name === 'Timeout').length;
+  assert.ok(after <= before, 'late waitForUser re-armed the tool timeout (' + before + ' -> ' + after + ')');
+});
