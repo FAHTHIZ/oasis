@@ -76,7 +76,7 @@ export const BUILTIN_COMMANDS = {
   todos: 'Show the current todo list',
   scope: 'Lock file edits to paths for this session: /scope src/** test/** | /scope off',
   followups: 'List or resolve loose ends captured from earlier turns: /followups [all|done ID|drop ID|clear]',
-  memory: 'Show instruction files and auto memory (/memory search|show|forget|add|path)',
+  memory: 'Show instruction files and auto memory (/memory search|show|forget|add|files|path)',
   undo: 'Undo the last turn: restore files and conversation (/undo [N])',
   rewind: 'Undo recent turns: restore files and/or conversation, or fork from an earlier turn (/rewind [N] [code|chat|fork])',
   review: 'Review changes for correctness bugs (/review [low|medium|high|xhigh|max|ultra] [--fix] [--comment] [--max-findings N|all] [PR#|branch|path])',
@@ -2066,15 +2066,20 @@ export async function runBuiltinCommand(name, argument, state) {
         return { output: 'Memory ' + saved.action + ': ' + saved.id + (saved.redacted ? ' (secrets were redacted)' : '') };
       }
       const files = await memoryFiles(root, { env });
-      const lines = ['Instruction files:'];
-      lines.push(...files.map((file) => '  ' + (file.exists ? '[loaded] ' : '[none]   ') + file.label + ': ' + file.path));
+      if (sub === 'files') return { output: ['Instruction file locations OASIS checks:', ...files.map((file) => '  ' + (file.exists ? '[loaded] ' : '[none]   ') + file.label + ': ' + file.path)].join('\n') };
+      // Show only files that exist; the full list of checked locations
+      // (about 30) buried everything else in a new folder.
+      const found = files.filter((file) => file.exists);
+      const lines = ['Instruction files' + (found.length ? ':' : ': none found (create one with oasis init, or /init)')];
+      lines.push(...found.map((file) => '  [loaded] ' + file.label + ': ' + file.path));
+      if (files.length > found.length) lines.push('  ' + (files.length - found.length) + ' other locations checked and not found (/memory files lists them)');
       const items = await memory.listMemories(root, { env });
       const enabled = memory.autoMemoryEnabled(session && session.settings || {}, env);
       const pending = await memory.listPendingMemoryWrites(root, { env });
       lines.push('Auto memory (' + (enabled ? 'on' : 'off') + '): ' + items.length + ' saved' + (pending.length ? ', ' + pending.length + ' waiting for review (/memory pending)' : '') + '; write approval ' + memory.memoryWriteApproval(session && session.settings || {}, env));
       for (const item of items.slice(0, 40)) lines.push('  ' + item.id + ' - ' + item.description.slice(0, 100));
       if (items.length > 40) lines.push('  ... ' + (items.length - 40) + ' more (/memory search WORDS)');
-      lines.push('Commands: /memory search WORDS, /memory show ID, /memory forget ID, /memory add NOTE, /memory pending, /memory approve ID|all, /memory reject ID|all, /memory path, /remember [focus]. Turn it off with "autoMemory": false in settings or OASIS_AUTO_MEMORY=0.');
+      lines.push('Commands: /memory search WORDS, /memory show ID, /memory forget ID, /memory add NOTE, /memory pending, /memory approve ID|all, /memory reject ID|all, /memory files, /memory path, /remember [focus]. Turn it off with "autoMemory": false in settings or OASIS_AUTO_MEMORY=0.');
       lines.push('Start a message with # to save a note to the project OASIS.md instead (for example: # always run npm test before committing).');
       return { output: lines.join('\n') };
     }

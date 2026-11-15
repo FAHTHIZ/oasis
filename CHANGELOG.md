@@ -4,6 +4,7 @@ User-facing change history grouped by package version. A version heading does no
 
 ## Unreleased
 
+- `/memory` lists only the instruction files that exist, plus a count of the other locations checked. In a new folder it used to print about 30 `[none]` lines. `/memory files` shows every checked location.
 - An empty `oasis sessions` list now says chats are saved automatically and points to `oasis -c` / `oasis -r ID`. Before, it said "Use oasis --continue to save/resume a session", which suggested chats are not saved by default.
 - `oasis doctor` with an unreadable `config.json` now names the file and the JSON error, and suggests fixing it. It used to say "CHECK — run oasis setup" and "Next step: run oasis setup to connect a model".
 - Security: `oasis trust` lists what trust turns on (project hook commands, allow rules, default permission mode, status line command and `.mcp.json` servers) and asks before trusting. Without a terminal it needs `--yes`. Before, it trusted at once with no list, so a script, or an agent following a repository's instructions, could enable a project's `curl … | sh` hook unseen. A folder with none of these is trusted without a question, as before.
