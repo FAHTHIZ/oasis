@@ -96,8 +96,19 @@ export function selectDialog({ input = process.stdin, output = process.stdout, o
  * Options for the no-argument /model, /theme and /color pickers. Returns
  * { context, options, initial } or null when the command takes no picker.
  */
-export async function pickerFor(command, { session = null, env = process.env, settings = null } = {}) {
+export async function pickerFor(command, { session = null, env = process.env, settings = null, root = null } = {}) {
   const cancel = { label: 'Cancel', value: null, hotkey: 'no' };
+  if (command === 'resume') {
+    // Bare /resume (and oasis -r without an ID) in a terminal: pick a saved
+    // chat with the arrow keys instead of typing /resume NUMBER.
+    if (!root) return null;
+    const { listSessions } = await import('./sessions.mjs');
+    const { sessionAge, RESUME_LIST_LIMIT } = await import('./slash.mjs');
+    const saved = (await listSessions(root, { env }).catch(() => [])).filter((item) => !item.archived).slice(0, RESUME_LIST_LIMIT);
+    if (!saved.length) return null;
+    const options = saved.map((item) => ({ label: sessionAge(item.updatedAt).padEnd(9) + String(item.title || '(untitled)').replace(/\s+/g, ' ').trim() + '  [' + (item.model || 'unknown model') + ']', value: item.id }));
+    return { context: 'Select', options: [...options, cancel], initial: 0 };
+  }
   if (command === 'model') {
     const { MODEL_ALIASES, modelAllowed } = await import('./model-aliases.mjs');
     const current = session && session.config ? session.config.model : '';
