@@ -62,3 +62,38 @@ test('mcp add-json, get and list (secrets hidden), and refused adds fail', async
   assert.equal(r.code, 1, r.out);
   assert.match(r.out, /cancelled/);
 });
+
+test('mcp remove reaches the project .mcp.json; cancelled remove/disable exit 1', async (t) => {
+  const home = await mkdtemp(path.join(os.tmpdir(), 'oasis-mcprm-home-'));
+  const project = await mkdtemp(path.join(os.tmpdir(), 'oasis-mcprm-proj-'));
+  t.after(async () => { await rm(home, { recursive: true, force: true }); await rm(project, { recursive: true, force: true }); });
+  await oasis(['mcp', 'add-json', 'both', '{"command":"echo"}', '--yes'], home, project);
+  await oasis(['mcp', 'add-json', 'both', '{"type":"http","url":"https://x.example/mcp"}', '--scope', 'project', '--yes'], home, project);
+  await oasis(['mcp', 'add-json', 'proj', '{"type":"http","url":"https://y.example/mcp"}', '--scope', 'project', '--yes'], home, project);
+  await oasis(['mcp', 'add', 'plain', '--yes', '--', 'echo'], home, project);
+  const projectFile = path.join(project, '.mcp.json');
+  const userFile = path.join(home, '.config', 'oasis', 'mcp.json');
+
+  let r = await oasis(['mcp', 'remove', 'proj'], home, project);
+  assert.equal(r.code, 1, r.out);
+  assert.match(r.out, /cancelled/);
+  r = await oasis(['mcp', 'disable', 'plain'], home, project);
+  assert.equal(r.code, 1, r.out);
+  r = await oasis(['mcp', 'remove', 'plain'], home, project);
+  assert.equal(r.code, 1, r.out);
+
+  r = await oasis(['mcp', 'remove', 'proj', '--yes'], home, project);
+  assert.equal(r.code, 0, r.out);
+  assert.equal(JSON.parse(await readFile(projectFile, 'utf8')).mcpServers.proj, undefined);
+  // The same name in both places: user first, --scope project picks .mcp.json.
+  r = await oasis(['mcp', 'remove', 'both', '--scope', 'project', '--yes'], home, project);
+  assert.equal(r.code, 0, r.out);
+  assert.equal(JSON.parse(await readFile(projectFile, 'utf8')).mcpServers.both, undefined);
+  assert.ok(JSON.parse(await readFile(userFile, 'utf8')).mcpServers.both);
+  r = await oasis(['mcp', 'remove', 'both', '--scope', 'project', '--yes'], home, project);
+  assert.equal(r.code, 1);
+  assert.match(r.out, /in project scope/);
+  r = await oasis(['mcp', 'remove', 'both', '--yes'], home, project);
+  assert.equal(r.code, 0, r.out);
+  assert.equal(JSON.parse(await readFile(userFile, 'utf8')).mcpServers.both, undefined);
+});
