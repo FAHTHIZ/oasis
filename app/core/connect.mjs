@@ -294,6 +294,7 @@ function modelHints(body) {
   // Alias slots ("claude-opus-4-5": "Opus slot (auto-routed to a free
   // model)") are not the model their name suggests; prefer named models.
   const alias = new Set();
+  const free = new Set();
   for (const item of Array.isArray(list) ? list : []) {
     if (!item || typeof item !== 'object') continue;
     const id = String(item.id || item.name || item.model || '').replace(/^models\//, '').trim();
@@ -301,13 +302,21 @@ function modelHints(body) {
     if (item.available === false || /^(no_?key|needs_?key|disabled)$/i.test(String(item.unavailable_reason || '')) || /^needs_?key$/i.test(String(item.execution_status || ''))) unavailable.add(id);
     if (/^(exhausted|rate_?limited|cooldown)$/i.test(String(item.execution_status || ''))) exhausted.add(id);
     if (typeof item.name === 'string' && /auto-?routed|\balias\b|\bslot\b/i.test(item.name)) alias.add(id);
+    if (item.autoRouting || item.alias_target) alias.add(id);
     const tier = String(item.tier || item.plan || '').toLowerCase();
-    if (/^(pro|paid|premium|enterprise)$/.test(tier) || item.usage_based_only === true || item.requires_key === true) paid.add(id);
+    // OpenRouter-style lists (OpenRouter, Kilo Gateway) give per-token prices
+    // and Kilo an isFree flag. Seen live 15 Nov 2026: `oasis connect
+    // https://api.kilo.ai/api/gateway/v1` probed 92 paid models without a key,
+    // got 401 from each and gave up, though 14 free models work keyless.
+    const pricing = item.pricing && typeof item.pricing === 'object' ? item.pricing : null;
+    const priced = pricing && ['prompt', 'completion', 'request'].some((key) => Number(pricing[key]) > 0);
+    if (/^(pro|paid|premium|enterprise)$/.test(tier) || item.usage_based_only === true || item.requires_key === true || item.isFree === false || item.is_free === false || priced) paid.add(id);
+    else if (item.isFree === true || item.is_free === true || /:free$/.test(id) || (pricing && Number(pricing.prompt) === 0 && Number(pricing.completion) === 0)) free.add(id);
     const caps = item.capabilities && typeof item.capabilities === 'object' ? item.capabilities : {};
     if (item.tools_calling === false || caps.tools === false || caps.function_calling === false
       || (Array.isArray(item.supported_parameters) && item.supported_parameters.length && !item.supported_parameters.includes('tools'))) noTools.add(id);
   }
-  return { paid, noTools, unavailable, exhausted, alias };
+  return { paid, noTools, unavailable, exhausted, alias, free };
 }
 
 /**
@@ -318,7 +327,10 @@ function modelHints(body) {
 function orderByHints(ranked, hints, { keyless = false } = {}) {
   if (!hints) return ranked;
   const has = (set, id) => Boolean(set && set.has(id));
-  const bucket = (id) => (keyless && hints.paid.has(id) ? 8 : 0) + (hints.noTools.has(id) ? 4 : 0) + (has(hints.alias, id) ? 2 : 0) + (has(hints.exhausted, id) ? 1 : 0);
+  // Without a key, a list that marks some models free is saying the rest are not.
+  const marksFree = Boolean(hints.free && hints.free.size);
+  const keylessUnusable = (id) => hints.paid.has(id) || (marksFree && !hints.free.has(id));
+  const bucket = (id) => (keyless && keylessUnusable(id) ? 8 : 0) + (hints.noTools.has(id) ? 4 : 0) + (has(hints.alias, id) ? 2 : 0) + (has(hints.exhausted, id) ? 1 : 0);
   return ranked.filter((id) => !has(hints.unavailable, id)).map((id, index) => ({ id, index, rank: bucket(id) })).sort((a, b) => a.rank - b.rank || a.index - b.index).map((entry) => entry.id);
 }
 
