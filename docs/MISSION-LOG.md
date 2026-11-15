@@ -14,6 +14,7 @@ weaknesses. Newest first. Detailed user-facing notes go in the CHANGELOG.
 - `5b1ac07e`: Kilo's 401 PAID_MODEL_AUTH_REQUIRED for an unknown or paid model no longer says "check the API key". Tests use the exact body.
 - Web app: a tip calculator built from an empty folder (8/8 tests, checked in Chromium). Terminal: a feature with inline approvals (52 s); Esc mid-task, then `/rewind 1` restored both files exactly; the re-run finished in 1 m 35 s, 22/22. Plan mode on OASIS's own 1,729-file repo answered a code-location question correctly in 38 s.
 - Built a notes web app (97 s), added editing through `oasis -c` (105 s), then fixed the Edit bug its own tests missed after a user-style report (76 s). Checked separately with curl and headless Chromium. All runs $0.
+- Full suite at `90d7c2d1` (Node 22.21.1, 2 CPUs): 3409 tests, 3401 pass, 0 fail, 8 skipped (1,018 s). CI on `90d7c2d1`: Quality checks, Installer checks, Release and branch cleanup all pass. npm audit (production): 0 vulnerabilities.
 
 ## 2026-11-15 (live local-model run; interactive commands; docs guides)
 
