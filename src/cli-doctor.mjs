@@ -158,7 +158,7 @@ export async function updateOasis(args = [], { ask } = {}) {
     process.exitCode = 2;
     return;
   }
-  const { latestReleaseCommit, installedVersion, updatePlan, describeUpdate } = await import('./update.mjs');
+  const { latestReleaseCommit, installedVersion, gitCommitsAheadOfRelease, updatePlan, describeUpdate } = await import('./update.mjs');
   const checkOnly = args.includes('--check');
   const yes = args.includes('--yes') || args.includes('-y');
   const nodeModules = path.dirname(APP_ROOT);
@@ -171,6 +171,7 @@ export async function updateOasis(args = [], { ask } = {}) {
     installedVersion(APP_ROOT, { npmPrefix }),
     latestReleaseCommit()
   ]);
+  installed.aheadOfRelease = await gitCommitsAheadOfRelease(installed, latest);
   const plan = updatePlan(installed, latest);
   stdout.write(describeUpdate(installed, latest, plan) + '\n');
   if (plan.upToDate || plan.blocked || checkOnly) { if (plan.blocked) process.exitCode = 1; return; }

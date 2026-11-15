@@ -69,3 +69,30 @@ test('Homebrew installs update through brew, never by rewriting the Cellar with 
   assert.match(text, /Installed: v1\.1\.0 \(homebrew install\)/);
   assert.match(text, /brew "upgrade" "fahthiz\/oasis\/oasis-cli"/);
 });
+
+test('a git checkout newer than the release is not moved back to the release tag', async () => {
+  const { mkdtemp, writeFile: write } = await import('node:fs/promises');
+  const { tmpdir } = await import('node:os');
+  const { execFileSync } = await import('node:child_process');
+  const { join } = await import('node:path');
+  const { gitCommitsAheadOfRelease } = await import('../src/update.mjs');
+  const root = await mkdtemp(join(tmpdir(), 'oasis-update-ahead-'));
+  const git = (...a) => execFileSync('git', ['-C', root, '-c', 'user.name=t', '-c', 'user.email=t@t', ...a], { encoding: 'utf8' }).trim();
+  git('init', '-q');
+  await write(join(root, 'a'), '1'); git('add', 'a'); git('commit', '-qm', 'release');
+  const release = git('rev-parse', 'HEAD');
+  for (const n of ['2', '3']) { await write(join(root, 'a'), n); git('commit', '-qam', n); }
+  const head = git('rev-parse', 'HEAD');
+  const latest = { sha: release, tag: 'v1.3.0' };
+  const installed = { kind: 'git', commit: head, root };
+  installed.aheadOfRelease = await gitCommitsAheadOfRelease(installed, latest);
+  assert.equal(installed.aheadOfRelease, 2);
+  const plan = updatePlan(installed, latest);
+  assert.equal(plan.upToDate, true);
+  assert.equal(plan.steps, undefined);
+  assert.match(describeUpdate(installed, latest, plan), /already includes v1\.3\.0 and is 2 commits newer/);
+  // A checkout behind the release (release not an ancestor of HEAD) still updates.
+  const behind = { kind: 'git', commit: release, root };
+  assert.equal(await gitCommitsAheadOfRelease(behind, { sha: head, tag: 'v1.4.0' }), null);
+  assert.equal(updatePlan(behind, { sha: head, tag: 'v1.4.0' }).steps.length, 2);
+});
