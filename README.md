@@ -214,6 +214,7 @@ oasis plugin validate ./my-plugin     # Claude Code or OASIS plugin; list, updat
 ```sh
 oasis mcp search filesystem                            # the official MCP Registry
 oasis mcp add everything -- npx -y @modelcontextprotocol/server-everything
+oasis mcp add --yes fs -- npx -y @modelcontextprotocol/server-filesystem .   # scripted: no prompt
 oasis mcp add --transport http docs https://example.com/mcp
 oasis mcp connect linear                               # the Connect card flow from a shell
 

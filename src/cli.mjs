@@ -2702,6 +2702,10 @@ export function unknownOptionMessage(arg) {
 async function parseMainFlags(rawArgs, flags) {
   for (let i = 0; i < rawArgs.length; i++) {
     const arg = rawArgs[i];
+    // Everything after -- is passed through untouched: it is the task text or
+    // another program's command line (oasis mcp add fs -- npx -y PKG), whose
+    // own -y, --model or -p must not be read as OASIS options.
+    if (arg === '--') { flags.args.push(...rawArgs.slice(i)); break; }
     if (arg === '--yes' || arg === '-y' || arg === '--auto') { flags.autoApprove = true; if (arg !== '--auto') flags.explicitYes = true; continue; }
     if (arg === '--permission-mode' || arg.startsWith('--permission-mode=')) {
       // The Claude Agent SDK passes --permission-mode=MODE.
@@ -3249,7 +3253,13 @@ async function main() {
   if (command === 'init') return await initWorkspace(workspace);
   if (command === 'update' || command === 'self-update') return await selfUpdate(autoApprove);
   if (command === 'config' || command === 'status') return printConfig(await loadConfig());
-  if (command === 'mcp') return await manageMcp(rest, workspace, { approve, askLine: (question) => askLine(question), askSecret: stdin.isTTY ? (question) => askSecret(question) : null });
+  // An explicit --yes (not --auto, and not a -y after --) approves the MCP
+  // configuration change it was typed for, so scripted setup works; the
+  // summary of what is being added is still printed.
+  const mcpApprove = explicitYes ? async (text) => { stdout.write(text + '\nApproved by --yes.\n'); return true; }
+    : !stdin.isTTY ? async (text) => { stdout.write(text + '\nNot approved: there is no terminal to ask on. Run the same command with --yes to approve it.\n'); return false; }
+    : approve;
+  if (command === 'mcp') return await manageMcp(rest, workspace, { approve: mcpApprove, askLine: (question) => askLine(question), askSecret: stdin.isTTY ? (question) => askSecret(question) : null });
   // A pasted install command (npx …, uvx …, claude mcp add …, /plugin install …,
   // npx skills add …) is one source too, quoted or not.
   const ADD_USAGE = 'Usage: oasis add <GitHub link | owner/repo[#name] | plugin@marketplace | MCP URL | npm package | registry name> [--project] [--name NAME]\n';
