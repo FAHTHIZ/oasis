@@ -583,6 +583,29 @@ test('smartConnect: a keyless gateway that prices its models connects to a free 
   for (const id of String(config.fallbackModel || '').split(',').filter(Boolean)) assert.match(id, /free/, 'only free backups: ' + config.fallbackModel);
 });
 
+// Real list, 15 Nov 2026: Pollinations marks paid models `paid_only: true`;
+// OASIS probed them (and tool-less ones) without a key before free ones.
+test('smartConnect: a keyless Pollinations-style list skips paid_only and tool-less models', async () => {
+  const tried = [];
+  const { fetchImpl } = fakeFetch([
+    [/poll\.example\/v1\/models$/, () => ({ data: [
+      { id: 'anthropic/claude-fable-5.2', paid_only: true, tools: true },
+      { id: 'google/gemini-4-carbon', paid_only: true, tools: true },
+      { id: 'mistralai/mistral-large-4', paid_only: false, tools: false },
+      { id: 'openai-fast', tier: 'anonymous', tools: true, aliases: ['openai'] }
+    ] })],
+    [/chat\/completions$/, (url, options) => {
+      const body = JSON.parse(options.body);
+      tried.push(body.model);
+      if (body.model !== 'openai-fast') return { status: 401, body: { error: { message: 'A valid API key is required.' } } };
+      return toolReply;
+    }]
+  ]);
+  const result = await smartConnect('https://poll.example/v1', { fetchImpl });
+  assert.equal(result.model, 'openai-fast');
+  assert.deepEqual(tried.filter((id) => id !== 'openai-fast'), [], 'paid or tool-less models probed first: ' + tried.join(','));
+});
+
 test('smartConnect: a keyless server where every model needs a key says to paste one', async () => {
   const { fetchImpl } = fakeFetch([
     [/locked\.example\/v1\/models$/, () => ({ data: [{ id: 'model-a' }, { id: 'model-b' }] })],

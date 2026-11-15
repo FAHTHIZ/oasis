@@ -310,10 +310,12 @@ function modelHints(body) {
     // got 401 from each and gave up, though 14 free models work keyless.
     const pricing = item.pricing && typeof item.pricing === 'object' ? item.pricing : null;
     const priced = pricing && ['prompt', 'completion', 'request'].some((key) => Number(pricing[key]) > 0);
-    if (/^(pro|paid|premium|enterprise)$/.test(tier) || item.usage_based_only === true || item.requires_key === true || item.isFree === false || item.is_free === false || priced) paid.add(id);
-    else if (item.isFree === true || item.is_free === true || /:free$/.test(id) || (pricing && Number(pricing.prompt) === 0 && Number(pricing.completion) === 0)) free.add(id);
+    // Pollinations marks paid models `paid_only: true` and its keyless
+    // models `tier: "anonymous"`; checked live 15 Nov 2026.
+    if (/^(pro|paid|premium|enterprise)$/.test(tier) || item.paid_only === true || item.usage_based_only === true || item.requires_key === true || item.isFree === false || item.is_free === false || priced) paid.add(id);
+    else if (/^(anonymous|free)$/.test(tier) || item.isFree === true || item.is_free === true || /:free$/.test(id) || (pricing && Number(pricing.prompt) === 0 && Number(pricing.completion) === 0)) free.add(id);
     const caps = item.capabilities && typeof item.capabilities === 'object' ? item.capabilities : {};
-    if (item.tools_calling === false || caps.tools === false || caps.function_calling === false
+    if (item.tools_calling === false || item.tools === false || caps.tools === false || caps.function_calling === false
       || (Array.isArray(item.supported_parameters) && item.supported_parameters.length && !item.supported_parameters.includes('tools'))) noTools.add(id);
   }
   return { paid, noTools, unavailable, exhausted, alias, free };
