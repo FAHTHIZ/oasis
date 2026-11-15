@@ -1090,7 +1090,10 @@ async function skillsFromSource(root, source, options, autoApprove) {
   if (options.list) {
     if (!result.available.length) { stdout.write('No SKILL.md packages found in ' + source + '.\n'); return result; }
     stdout.write('Skills in ' + source + ':\n');
-    for (const item of result.available) stdout.write('  ' + item.name + (item.description ? ' — ' + item.description : '') + '\n');
+    for (const item of result.available) {
+      stdout.write('  ' + item.name + (item.description ? ' — ' + item.description : '') + '\n');
+      if (item.audit && item.audit.findings.length) stdout.write('    audit: ' + item.audit.high + ' high, ' + item.audit.medium + ' medium' + (item.audit.blocked ? ' (needs --allow-risky to install)' : '') + '\n');
+    }
     stdout.write('Install one with: oasis skills add ' + source + ' --skill NAME\n');
     return result;
   }
@@ -1164,9 +1167,12 @@ async function manageSkills(root, args, autoApprove, explicitYes = false) {
     let skillName = '';
     let allSkills = false;
     let global = false;
+    let allowRisky = false;
     for (let i = 1; i < rest.length; i++) {
       const value = rest[i];
-      if (value === '--skill') {
+      if (value === '--allow-risky') {
+        allowRisky = true;
+      } else if (value === '--skill') {
         if (!rest[i + 1]) throw new Error('--skill requires the exact skill name to install.');
         skillName = rest[++i];
       } else if (value.startsWith('--skill=')) {
@@ -1176,7 +1182,7 @@ async function manageSkills(root, args, autoApprove, explicitYes = false) {
       } else if (value === '--global' || value === '-g') {
         global = true;
       } else {
-        throw new Error('Usage: oasis skills add SOURCE --skill NAME [--global], or oasis skills add SOURCE --all [--global].');
+        throw new Error('Usage: oasis skills add SOURCE --skill NAME [--global] [--allow-risky], or oasis skills add SOURCE --all [--global] [--allow-risky].');
       }
     }
     if (Boolean(skillName) === allSkills) throw new Error('Choose exactly one of --skill NAME or --all. Use "oasis skills inspect SOURCE" to review available names first.');
@@ -1185,7 +1191,7 @@ async function manageSkills(root, args, autoApprove, explicitYes = false) {
     }
     const { getUniversalGlobalSkillsDirectory } = await import('./tools.mjs');
     const targetDir = global ? getUniversalGlobalSkillsDirectory(process.env) : path.join(root, '.agents', 'skills');
-    const result = await skillsFromSource(root, source, { skill: skillName, all: allSkills, targetDir }, autoApprove);
+    const result = await skillsFromSource(root, source, { skill: skillName, all: allSkills, targetDir, ...(allowRisky ? { allowRisky: true } : {}) }, autoApprove);
     return result;
   }
   if (action === 'remove' || action === 'uninstall' || action === 'rm') return await removeSkill(root, rest, explicitYes);

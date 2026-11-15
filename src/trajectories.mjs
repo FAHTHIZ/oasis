@@ -1,17 +1,20 @@
 // Trajectory export and batch runs, for evaluation and fine-tuning datasets.
 //
-//   oasis sessions export [ID...|--all] [--format sharegpt|openai] [--out FILE]
+//   oasis sessions export [ID...|--all] [--verified] [--format sharegpt|openai] [--out FILE]
 //   oasis batch PROMPTS.jsonl [--out FILE] [--format sharegpt|openai] [--concurrency N]
 //
 // Export writes one JSON object per line. "openai" keeps the chat-completions
 // message list (system, user, assistant with tool_calls, tool) plus the tool
 // schemas; "sharegpt" maps it to {from: system|human|gpt|function_call|observation, value}.
 // Secrets are redacted with the same patterns as auto memory.
+// --verified keeps only sessions whose audit trail ends in a passing check
+// (see sessionVerified).
 import { createWriteStream } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { redactSecrets } from './auto-memory.mjs';
 import { redactAuditValue } from './tool-kernel.mjs';
+import { FILE_EDITING_TOOL_NAMES } from './turn-guards.mjs';
 
 // Tool-call arguments arrive as JSON text; redact the decoded strings so
 // multi-line values (a .env body) are matched line by line.
@@ -73,6 +76,17 @@ function openOut(file, stdout) {
   return { write: (line) => stream.write(line), close: () => new Promise((resolve, reject) => stream.end((error) => error ? reject(error) : resolve())) };
 }
 
+// A session counts as verified when its event log records at least one
+// verification command (tests, build, lint, type check), the last one passed,
+// and no file was edited after it. A session that never ran a check, or ended
+// on a failing one or on unchecked edits, is not exported with --verified.
+export function sessionVerified(events = []) {
+  let lastCheck = -1;
+  for (let index = 0; index < events.length; index++) if (events[index] && events[index].type === 'verification') lastCheck = index;
+  if (lastCheck < 0 || events[lastCheck].passed !== true) return false;
+  return !events.slice(lastCheck + 1).some((event) => event && event.type === 'tool_result' && event.ok !== false && FILE_EDITING_TOOL_NAMES.has(event.tool));
+}
+
 export async function exportSessions(root, args = [], options = {}) {
   const env = options.env || process.env;
   const stdout = options.stdout || process.stdout;
@@ -82,17 +96,22 @@ export async function exportSessions(root, args = [], options = {}) {
   const flagValues = new Set([option(args, '--format'), option(args, '--out')].filter(Boolean));
   let ids = args.filter((arg) => !arg.startsWith('--') && !flagValues.has(arg));
   if (args.includes('--all') || !ids.length) {
-    if (!args.includes('--all')) throw new Error('Usage: oasis sessions export SESSION_ID... | --all [--format sharegpt|openai] [--out FILE]');
+    if (!args.includes('--all')) throw new Error('Usage: oasis sessions export SESSION_ID... | --all [--verified] [--format sharegpt|openai] [--out FILE]');
     ids = (await listSessions(root, { env })).map((item) => item.id);
   }
   const out = openOut(option(args, '--out'), stdout);
+  const verifiedOnly = args.includes('--verified');
+  const { readEvents } = verifiedOnly ? await import('./event-stream.mjs') : {};
   let count = 0;
+  let skipped = 0;
   for (const id of ids) {
     const data = await loadSession(root, id, { env });
+    if (verifiedOnly && !sessionVerified(await readEvents(root, data.id || id, { env }))) { skipped++; continue; }
     out.write(JSON.stringify(formatRecord({ ...data, id: data.id || id }, format)) + '\n');
     count++;
   }
   await out.close();
+  if (options.onSkipped) options.onSkipped(skipped);
   return count;
 }
 

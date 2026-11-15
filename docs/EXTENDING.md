@@ -36,6 +36,17 @@ oasis skills install verify               # one of the bundled skills in skills/
 oasis skills remove NAME
 ```
 
+`oasis skills add` reads every file of a skill before copying it and never runs
+any of them. Lines that pipe a download into a shell, use `sudo`, or edit shell
+start-up files are listed as warnings. A skill with a high-risk line (a reverse
+shell, decoding and running hidden code, reading SSH keys, sending environment
+variables away, `rm -rf ~`, telling the agent to hide what it does, invisible
+direction-control characters, or switching OASIS permissions to bypass) is not
+installed; the report shows each file and line. After reading it you can install
+anyway with `--allow-risky`. The agent's install tool has no such override. The
+audit matches patterns, so it does not prove a skill is safe; review what you
+install. Plugin installs are not audited yet.
+
 In a session, `/skills` lists them and `/skill-doctor` checks a skill's front
 matter and file references.
 
