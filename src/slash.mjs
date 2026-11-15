@@ -4,7 +4,7 @@ import { atomicWriteFile } from './atomic-write.mjs';
 // { resetSession: true } when the caller should drop the current session.
 import { compactHistoryIfNeeded, undoCompaction } from './agent.mjs';
 import { countTextTokens, countJsonTokens } from './tokens.mjs';
-import { estimateTokens, contextWindowSize, contextTokens, addMustPreserve, createCompactionPreview, compactionPreviewIsCurrent } from './context.mjs';
+import { estimateTokens, contextWindowSize, contextUsage, addMustPreserve, createCompactionPreview, compactionPreviewIsCurrent } from './context.mjs';
 import { loadCustomCommands } from './commands.mjs';
 import { loadSettings, PERMISSION_MODES, normalizePermissionMode, normalizeLanguage } from './settings.mjs';
 import { applyReplyLanguage } from './reply-language.mjs';
@@ -686,8 +686,8 @@ export async function runBuiltinCommand(name, argument, state) {
       // Tool schemas are sent with requests but are not represented in session.messages.
       // Include them in the displayed context estimate so a tool-heavy setup is visible.
       // The provider's own count (system prompt and tool schemas included) wins when it has reported one.
-      const reported = contextTokens(session);
-      const used = reported.reported ? reported.tokens : conversationTokens + localTools + mcpTools;
+      const reported = contextUsage(session);
+      const used = reported.tokens;
       const percent = windowSize ? Math.round(used / windowSize * 100) : 0;
       const bar = '#'.repeat(Math.min(30, Math.round(percent * 0.3))).padEnd(30, '.');
       if (String(argument || '').trim().toLowerCase() === 'all') {
