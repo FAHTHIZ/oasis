@@ -1015,12 +1015,15 @@ async function installRequest(request, root, autoApprove) {
 async function initWorkspace(root) {
   const target = path.join(root, 'OASIS.md');
   try { await access(target); stdout.write('OASIS.md already exists; leaving it unchanged.\n'); return; } catch {}
+  const { detectProjectCommands, projectCommandsSection } = await import('./project-commands.mjs');
+  const commands = await detectProjectCommands(root).catch(() => []);
   await writeFile(target, [
     '# Oasis workspace instructions',
     '',
     '## Project purpose',
     'Describe what this repository is for and its main constraints.',
     '',
+    ...projectCommandsSection(commands),
     '## Development workflow',
     '- Inspect existing code before changing it.',
     '- Prefer small, testable changes.',
@@ -1029,7 +1032,7 @@ async function initWorkspace(root) {
     '- Ask before destructive commands, remote publishing, or production changes.',
     ''
   ].join('\n'), { encoding: 'utf8', flag: 'wx' });
-  stdout.write('Created ' + target + '. Edit it to give Oasis persistent project context.\n');
+  stdout.write('Created ' + target + (commands.length ? ' with the ' + commands.length + ' project command' + (commands.length === 1 ? '' : 's') + ' found on disk' : '') + '. Edit it to give Oasis persistent project context, or run /init in a chat to have the agent read the project and write a fuller guide.\n');
 }
 
 async function listSkills(root) {
