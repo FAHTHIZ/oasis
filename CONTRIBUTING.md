@@ -30,6 +30,8 @@ npm run check
 
 For changes to the agent harness, also consider `npm run bench:harness` and `npm run bench:tokens`. Keep benchmark fixtures deterministic and do not tune runtime behaviour against a held-out set without recording the methodology.
 
+The system prompt and the tool list sent to the model are snapshotted in `test/fixtures/prompt-surface/`. Providers cache the prompt prefix and the model follows these words, so `test/prompt-surface.test.mjs` fails on any change to them. If the change is intended, regenerate the snapshots with `OASIS_UPDATE_PROMPT_SNAPSHOTS=1 node --test test/prompt-surface.test.mjs` and explain the diff in the pull request.
+
 Include focused tests for behaviour changes. For permission, sandbox, filesystem or network changes, add regression cases for both the intended behaviour and nearby safe behaviour that must continue to work.
 
 Review `git diff` before submitting. Explain the user-visible effect, relevant compatibility impact and exact checks you ran. Do not claim a test passed unless you ran it and observed a successful exit status.
