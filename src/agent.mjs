@@ -1337,11 +1337,21 @@ function normalizeAssistantToolCalls(session, assistant, step) {
 // In small windows, drop non-blocking diagnostics that only say a language
 // server is missing; small models read them as errors to act on. The gate
 // still sees the full result object.
+// In larger windows, the note is kept the first time for each language server
+// and dropped after that: repeating the install hint on every write cost
+// tokens and nudged models toward global installs (seen 15 Nov 2026).
 export function leanToolContent(session, content, env = process.env) {
-  if (contextWindowSize((session && session.config) || {}, env) > 32_768 || !content.includes('"lspVerification"')) return content;
+  if (!content.includes('"lspVerification"')) return content;
+  const small = contextWindowSize((session && session.config) || {}, env) <= 32_768;
   try {
     const value = JSON.parse(content);
-    if (value && value.lspVerification && value.lspVerification.status === 'unavailable' && value.lspVerification.blocking === false) {
+    const lsp = value && value.lspVerification;
+    if (lsp && lsp.status === 'unavailable' && lsp.blocking === false) {
+      if (!small) {
+        const noted = session ? (session.lspUnavailableNoted || (session.lspUnavailableNoted = new Set())) : new Set();
+        const key = String(lsp.server || lsp.reason || 'lsp');
+        if (!noted.has(key)) { noted.add(key); return content; }
+      }
       delete value.lspVerification;
       return JSON.stringify(value);
     }
