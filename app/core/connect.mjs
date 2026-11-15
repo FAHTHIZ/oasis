@@ -623,10 +623,12 @@ export async function smartConnect(input, { fetchImpl = globalThis.fetch.bind(gl
   const errors = [];
   for (const provider of key.providers) {
     const connection = makeConnection(provider, { apiKey: key.value });
-    say('Looks like a ' + connection.label + ' key. Checking it…', 'detect');
+    say('Looks like ' + (/^(?:[aeiou]|x[A-Z])/i.test(connection.label) ? 'an ' : 'a ') + connection.label + ' key. Checking it…', 'detect');
     try {
       connection.models = rankModels(await listModels(connection, { fetchImpl }));
-      say(connection.label + ' accepted the key.', 'detect');
+      // OpenRouter lists its models to anyone, so a model list proves nothing
+      // about the key there; the test call in finish() does.
+      if (!(PRESETS[provider] && PRESETS[provider].publicModelList)) say(connection.label + ' accepted the key.', 'detect');
       return await finish(connection, parsed.models);
     } catch (error) {
       errors.push({ provider, error });
@@ -634,7 +636,7 @@ export async function smartConnect(input, { fetchImpl = globalThis.fetch.bind(gl
     }
   }
   const auth = errors.find((entry) => classifyFailure(entry.error) === 'auth');
-  if (auth) throw new ProviderError((key.providers.length > 1 ? 'None of ' + key.providers.map((id) => PRESETS[id].label).join(', ') : PRESETS[key.providers[0]].label) + ' accepted this key. Check that it was copied whole and has not been revoked.', { status: 401 });
+  if (auth) throw new ProviderError((key.providers.length > 1 ? 'None of ' + key.providers.map((id) => PRESETS[id].label).join(', ') + ' accepted' : PRESETS[key.providers[0]].label + ' did not accept') + ' this key. Check that it was copied whole and has not been revoked.', { status: 401 });
   throw new ProviderError('Could not reach ' + PRESETS[key.providers[0]].label + ' from this device. Check the internet connection. ' + (errors[0] ? errors[0].error.message : ''));
 }
 
