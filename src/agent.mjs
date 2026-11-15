@@ -1358,7 +1358,20 @@ export function providerSkipsCache(session) {
   return Boolean(entry && entry.requests >= 2 && entry.cached === 0);
 }
 
+// Bookkeeping in edit results that the terminal shows but the model never
+// needs: byte counts and the backup flag (about 70 characters per edit).
+const UI_ONLY_EDIT_KEYS = ['beforeBytes', 'afterBytes', 'backupCreated'];
+
 export function leanToolContent(session, content, env = process.env) {
+  if (content.startsWith('{') && content.includes('"backupCreated":true')) {
+    try {
+      const value = JSON.parse(content);
+      if (value && (value.changed === true || value.deleted === true)) {
+        for (const key of UI_ONLY_EDIT_KEYS) delete value[key];
+        content = JSON.stringify(value);
+      }
+    } catch { /* has appended notes; leave it */ }
+  }
   if (!content.includes('"lspVerification"')) return content;
   const small = contextWindowSize((session && session.config) || {}, env) <= 32_768;
   try {

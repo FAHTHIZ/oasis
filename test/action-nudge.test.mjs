@@ -91,3 +91,11 @@ test('fencedFileFromReply never writes JSON tool calls into a file', async () =>
   const reply = '```\n{"name": "read_file", "arguments": {"path": "src/lib.mjs"}}\n{"name": "edit_file", "arguments": {"path": "src/lib.mjs"}}\n```';
   assert.equal(fencedFileFromReply('Create src/lib.mjs', reply), null);
 });
+
+test('leanToolContent drops edit bookkeeping the model does not need', async () => {
+  const { leanToolContent } = await import('../src/agent.mjs');
+  const lean = JSON.parse(leanToolContent(null, JSON.stringify({ path: 'a.js', changed: true, replacements: 1, beforeBytes: 10, afterBytes: 12, backupCreated: true })));
+  assert.deepEqual(lean, { path: 'a.js', changed: true, replacements: 1 });
+  const other = JSON.stringify({ path: 'a.js', content: 'backupCreated' });
+  assert.equal(leanToolContent(null, other), other);
+});
