@@ -543,6 +543,10 @@ async function lockIn(connection, ranked, { fetchImpl, onStatus, tries = 4, pref
  *   { connection, model, toolCalling, notes, githubToken }
  * or throws ProviderError with a message written for the user.
  */
+// CORS only limits the browser app; the terminal reaches any server it can route to.
+const IN_BROWSER = typeof document !== 'undefined';
+const OLLAMA_START = IN_BROWSER ? 'OLLAMA_ORIGINS=* ollama serve' : 'ollama serve';
+
 export async function smartConnect(input, { fetchImpl = globalThis.fetch.bind(globalThis), onStatus = () => {}, known = [], test = true, allowPull = true, tries = 4, retryDelayMs, probeTimeoutMs, model: requestedModel = '' } = {}) {
   const parsed = parsePaste(input);
   const wanted = String(requestedModel || '').trim();
@@ -618,7 +622,7 @@ export async function smartConnect(input, { fetchImpl = globalThis.fetch.bind(gl
   if (parsed.local && !parsed.keys.length) {
     say('Looking for a model server on this device…', 'detect');
     const found = await scanLocal({ fetchImpl });
-    if (!found.length) throw new ProviderError('No local model server answered. Start Ollama (OLLAMA_ORIGINS=* ollama serve) or LM Studio\'s server, then try again.');
+    if (!found.length) throw new ProviderError('No local model server answered. Start Ollama (' + OLLAMA_START + ') or LM Studio\'s server, then try again.');
     return finish(found[0], parsed.models);
   }
 
@@ -657,7 +661,7 @@ async function findOllama(fetchImpl, origins = ['http://localhost:11434', 'http:
 
 async function connectOllama({ want, fetchImpl, say, allowPull, finish, origin }) {
   const found = origin || (await findOllama(fetchImpl));
-  if (!found) throw new ProviderError('Ollama is not running on this device. Install it from ollama.com, start it with OLLAMA_ORIGINS=* ollama serve, then paste the link again. Or paste an API key to use a hosted model.');
+  if (!found) throw new ProviderError('Ollama is not running on this device. Install it from ollama.com, start it with ' + OLLAMA_START + ', then paste the link again. Or paste an API key to use a hosted model.');
   let models = await ollamaTags(found, fetchImpl, 4000);
   const has = models.some((name) => name === want || name === want + ':latest' || name.split(':')[0] === want);
   if (!has) {
@@ -712,7 +716,9 @@ async function probeEndpoint(raw, { apiKey = '', fetchImpl = globalThis.fetch.bi
       : url.host + ' needs an API key. Paste the address and the key together, separated by a space: ' + url.origin + url.pathname.replace(/\/$/, '') + ' YOUR_KEY', { status: authError.status });
   }
   const reason = lastError instanceof TypeError || (lastError && lastError.name === 'AbortError')
-    ? (local ? 'Nothing answered there. Is the server running, and does it allow browser apps? (Ollama: OLLAMA_ORIGINS=* ollama serve)' : 'Nothing answered there, or the server does not allow browser apps (CORS).')
+    ? (IN_BROWSER
+      ? (local ? 'Nothing answered there. Is the server running, and does it allow browser apps? (Ollama: OLLAMA_ORIGINS=* ollama serve)' : 'Nothing answered there, or the server does not allow browser apps (CORS).')
+      : (local ? 'Nothing answered there. Is the server running? (Ollama: ollama serve)' : 'Nothing answered there. Check the address and your network connection.'))
     : 'It did not answer like a model server. ' + (lastError ? lastError.message : '');
   throw new ProviderError('Could not connect to ' + url.host + '. ' + reason);
 }
