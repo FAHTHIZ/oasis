@@ -47,8 +47,14 @@ test('the interactive terminal compacts a long conversation while you are idle',
       // A 16,000-character line followed by Enter in one write reads as a paste
       // under load, so the Enter became part of the paste and the line was
       // never sent; press Enter separately, as a person would after pasting.
+      // Also wait for the prompt itself: the line editor switches the terminal
+      // to raw mode and then turns on bracketed paste (ESC[?2004h). Typed before
+      // that, the kernel's line buffer keeps only 4,095 bytes of the paste, the
+      // history stays under the idle threshold and no summary is ever sent.
       const done = out.split('Done ·').length - 1;
-      if (out.includes(marker) && done >= Number(marker.split(' ')[1])) {
+      const prompts = out.split('\x1b[?2004h').length - 1;
+      const turn = Number(marker.split(' ')[1]);
+      if (out.includes(marker) && done >= turn && prompts >= turn) {
         if (input) { const text = input; child.stdin.write(text); pending = setTimeout(() => child.stdin.write('\r'), 400); } else idleSince = Date.now();
         step++;
       }
