@@ -4,6 +4,7 @@ User-facing change history grouped by package version. A version heading does no
 
 ## Unreleased
 
+- Web app: Settings → Tools now lists remote MCP servers saved in `mcp.json` (added with `oasis mcp add --transport http|sse` or from the app's "Any other app" box) with Turn on/off and Remove. Before, only servers added in that panel appeared, so a remote server could not be seen or switched off from the app. URL query strings and headers are not shown.
 - `oasis mcp enable|disable NAME` now works for remote servers added with `oasis mcp add --transport http|sse` (saved in `mcp.json` as `"disabled": true`), and `oasis mcp list` shows disabled ones. Before, both commands said "No configured MCP server" for them. `enable|disable` are now in `oasis mcp --help` and `oasis --help`.
 - Arguments after `--` are passed through untouched. `oasis mcp add fs -- npx -y PKG` used to save the server without its `-y` (OASIS read it as its own `--yes`), so npx stopped to ask before installing and the server never started. `oasis mcp add|remove|install --yes` now approves the change without a terminal, for scripted setup; without `--yes` and without a terminal, OASIS says to add `--yes` instead of only "action denied".
 - `/rewind`, `/context`, `/cost`, `/export`, `/todos` and other session commands typed first after `oasis -c` or `oasis -r ID` now act on the resumed conversation. Before, the conversation loaded only with the first prompt, so `/rewind` said "Nothing to rewind yet" although its checkpoints were saved.

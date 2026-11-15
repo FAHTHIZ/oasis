@@ -3735,15 +3735,18 @@ function renderConnections() {
     list.appendChild(li);
   }
 }
-/* MCP servers live in the runtime's config (~/.oasis/mcp.json), so this
-   section only appears when the page is connected to `oasis web`. */
+/* MCP servers live in the runtime's config (mcp-servers.json for programs
+   added here, mcp.json for remote servers from oasis mcp add --transport and
+   installs), so this section only appears when the page is connected to
+   `oasis web`. */
 let mcpServers = [];
+let mcpRemote = [];
 function mcpAvailable() { return Boolean(RT && RT.client && !RT.needsToken); }
 function mcpSetStatus(text, kind = '') { const node = $('mcpStatus'); node.textContent = text; node.className = 'test-result' + (kind === 'error' ? ' fail' : ''); }
 function renderMcpList(message = '') {
   const list = $('mcpList');
   list.replaceChildren();
-  if (message || !mcpServers.length) {
+  if (message || (!mcpServers.length && !mcpRemote.length)) {
     const li = document.createElement('li');
     li.className = 'empty';
     li.textContent = message || 'No MCP servers yet. Servers in a project .mcp.json also load once you trust the project with oasis trust.';
@@ -3794,11 +3797,49 @@ function renderMcpList(message = '') {
     li.append(info, actions);
     list.appendChild(li);
   }
+  for (const server of mcpRemote) {
+    const li = document.createElement('li');
+    li.className = 'connection mcp-server' + (server.enabled ? ' current' : '');
+    const info = document.createElement('div');
+    info.className = 'connection-info';
+    const title = document.createElement('strong');
+    title.textContent = server.name + (server.enabled ? '' : ' (off)');
+    const detail = document.createElement('span');
+    detail.textContent = (server.url ? server.type + ' ' + server.url : 'stdio ' + server.command) + ' · mcp.json';
+    info.append(title, detail);
+    const button = (label, action, aria, className = 'btn small') => {
+      const node = document.createElement('button');
+      node.type = 'button';
+      node.className = className;
+      node.textContent = label;
+      node.setAttribute('aria-label', aria);
+      node.addEventListener('click', () => {
+        if (action === 'remove' && !confirm('Remove the MCP server "' + server.name + '"?')) return;
+        void changeRemoteMcp(server.name, action);
+      });
+      return node;
+    };
+    const actions = document.createElement('div');
+    actions.className = 'row';
+    actions.append(
+      button(server.enabled ? 'Turn off' : 'Turn on', server.enabled ? 'disable' : 'enable', (server.enabled ? 'Turn off ' : 'Turn on ') + server.name),
+      button('Remove', 'remove', 'Remove ' + server.name, 'btn small ghost'));
+    li.append(info, actions);
+    list.appendChild(li);
+  }
 }
 async function refreshMcp() {
   if (!mcpAvailable()) return;
-  try { mcpServers = (await RT.client.api('/api/mcp')).servers || []; renderMcpList(); }
-  catch (error) { mcpServers = []; renderMcpList('Could not load MCP servers: ' + error.message); }
+  try { const data = await RT.client.api('/api/mcp'); mcpServers = data.servers || []; mcpRemote = data.remote || []; renderMcpList(); }
+  catch (error) { mcpServers = []; mcpRemote = []; renderMcpList('Could not load MCP servers: ' + error.message); }
+}
+async function changeRemoteMcp(name, action) {
+  try {
+    const result = await RT.client.api('/api/mcp/remote', { method: 'POST', body: { name, action } });
+    mcpRemote = result.remote || [];
+    renderMcpList();
+    toast(name + (action === 'remove' ? ' removed.' : action === 'enable' ? ' turned on.' : ' turned off.') + ' Applies to new chats.');
+  } catch (error) { toast('Could not change ' + name + ': ' + error.message, 'error'); }
 }
 async function saveMcp(next, done) {
   try {
@@ -3813,7 +3854,7 @@ $('mcpAddButton').addEventListener('click', async () => {
   let server;
   try { server = mcpServerFromForm({ name: $('mcpName').value, command: $('mcpCommand').value, env: $('mcpEnv').value }); }
   catch (error) { mcpSetStatus(error.message, 'error'); return; }
-  if (mcpServers.some((s) => s.name === server.name)) { mcpSetStatus('A server named ' + server.name + ' already exists.', 'error'); return; }
+  if (mcpServers.some((s) => s.name === server.name) || mcpRemote.some((s) => s.name === server.name)) { mcpSetStatus('A server named ' + server.name + ' already exists.', 'error'); return; }
   if (!confirm('Add "' + server.name + '"? OASIS will run this program on your computer when a new chat starts:\n\n' + describeMcpServer(server))) return;
   mcpSetStatus('Saving…');
   if (await saveMcp([...mcpServers, server], server.name + ' added.')) {

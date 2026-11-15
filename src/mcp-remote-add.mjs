@@ -112,3 +112,21 @@ export async function setUserMcpJsonServerEnabled(name, enabled, { env = process
   await atomicWriteFile(file, JSON.stringify({ ...parsed, mcpServers: { ...servers, [key]: next } }, null, 2) + '\n', { mode: 0o600 });
   return 'MCP server "' + key + '" is now ' + (enabled ? 'enabled' : 'disabled') + '. Saved ' + file;
 }
+
+// Every server in <oasis config>/mcp.json, disabled ones included, for
+// listings. Header values and env are left out: they can hold secrets.
+export async function listUserMcpJsonServers({ env = process.env } = {}) {
+  const file = path.join(getConfigDirectory(env), 'mcp.json');
+  let parsed;
+  try { parsed = JSON.parse(await readFile(file, 'utf8')); } catch { return []; }
+  const servers = parsed && parsed.mcpServers && typeof parsed.mcpServers === 'object' ? parsed.mcpServers : {};
+  return Object.entries(servers).filter(([, spec]) => spec && typeof spec === 'object').map(([name, spec]) => {
+    const type = spec.type === 'sse' ? 'sse' : spec.url ? 'http' : 'stdio';
+    return { name, type, ...(spec.url ? { url: redactUrlQuery(String(spec.url)) } : { command: String(spec.command || '') }), enabled: !(spec.disabled === true || spec.enabled === false), file };
+  });
+}
+
+// https://host/mcp?key=… → https://host/mcp?… (query strings can carry keys).
+function redactUrlQuery(url) {
+  try { const parsed = new URL(url); return parsed.origin + parsed.pathname + (parsed.search ? '?…' : ''); } catch { return url.replace(/\?.*$/s, '?…'); }
+}
