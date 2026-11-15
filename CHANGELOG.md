@@ -4,6 +4,7 @@ User-facing change history grouped by package version. A version heading does no
 
 ## Unreleased
 
+- `oasis mcp add-json NAME JSON` and `oasis mcp get NAME` work as in Claude Code (they were "Unknown MCP action"). Secret values (env, headers, URL query strings) are hidden in their output, and `.mcp.json` refuses literal credentials. `oasis mcp list` no longer prints a remote URL's query string, which can hold a key. A refused or cancelled `oasis mcp add` now exits 1 instead of 0.
 - `oasis setup` with no input (`< /dev/null`, a CI job) used to print its first question and exit 0 with nothing saved. It now stops with an explanation and exit code 1. Setup can also be answered through a pipe, API key included: answers after the first used to be dropped, and the hidden key prompt needed a terminal. Piped keys are not echoed.
 - `/add-dir`, `/rename`, `/autocompact`, `/sandbox`, `/advisor`, `/routing` and `/chrome` work before the first message too: they start the session, as `/model` and `/context` do, instead of replying "Start a conversation first".
 - `/model NAME` typed before the first message (or a model picked from the `/model` picker then) now switches the model instead of answering "No active session". The picker no longer offers Claude aliases (opus, sonnet, …) to OpenAI-compatible providers, which would have received the literal name. When the provider lists no models, `/model` says to type `/model NAME`.
