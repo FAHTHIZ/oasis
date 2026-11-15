@@ -56,7 +56,7 @@ const runTty = async (args, home, port, steps) => {
   let step = 0;
   await new Promise((resolve) => {
     const iv = setInterval(() => {
-      while (step < steps.length && out.includes(steps[step][0])) { child.stdin.write(steps[step][1] + '\n'); step++; }
+      while (step < steps.length && out.includes(steps[step][0])) { child.stdin.write(steps[step][1] === '\r' ? '\r' : steps[step][1] + '\n'); step++; }
       if (step >= steps.length) { clearInterval(iv); resolve(); }
     }, 50);
     child.on('exit', () => { clearInterval(iv); resolve(); });
@@ -66,7 +66,7 @@ const runTty = async (args, home, port, steps) => {
   return out;
 };
 
-test('-r without an ID lists saved sessions; `oasis resume --last` continues the latest', { skip: process.platform !== 'linux' }, async (t) => {
+test('-r without an ID opens a picker of saved sessions; `oasis resume --last` continues the latest', { skip: process.platform !== 'linux' }, async (t) => {
   const home = await mkdtemp(path.join(os.tmpdir(), 'oasis-resume-'));
   t.after(() => rm(home, { recursive: true, force: true }));
   const seen = [];
@@ -81,8 +81,10 @@ test('-r without an ID lists saved sessions; `oasis resume --last` continues the
   t.after(() => server.close());
   const port = server.address().port;
   await runTty(['remember the word pelican'], home, port, [['noted 1', '/exit']]);
-  let out = await runTty(['-r'], home, port, [['Saved sessions:', '/exit']]);
-  assert.match(out, /Saved sessions:[\s\S]*remember the word pelican[\s\S]*\/resume NUMBER/, out);
+  // -r opens the arrow-key picker of saved chats; Enter picks the newest.
+  let out = await runTty(['-r'], home, port, [['Enter to confirm', '\r'], ['Resumed', '/exit']]);
+  assert.match(out, /Resume which chat\?[\s\S]*remember the word pelican/, out);
+  assert.match(out, /Resumed "remember the word pelican"/, out);
   out = await runTty(['resume', '--last'], home, port, [['>', 'what was the word'], ['noted 2', '/exit']]);
   assert.ok(seen[1].some((m) => /pelican/.test(m)), 'the resumed conversation was sent: ' + JSON.stringify(seen[1]));
 });

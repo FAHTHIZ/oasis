@@ -250,8 +250,8 @@ export function helpEntry(label, description, width) {
   return body.map((line, index) => (index ? ' '.repeat(head.length) : head) + line);
 }
 
-const RESUME_LIST_LIMIT = 20;
-function sessionAge(iso) {
+export const RESUME_LIST_LIMIT = 20;
+export function sessionAge(iso) {
   const ms = Date.now() - Date.parse(iso || '');
   if (!Number.isFinite(ms)) return '';
   if (ms < 60_000) return 'just now';
