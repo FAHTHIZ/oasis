@@ -260,6 +260,8 @@ test('error advice fits the error: a used-up daily quota is not blamed on the en
   assert.doesNotMatch(daily, /endpoint|tool-calling/);
   assert.match(apiErrorAdvice(429, 'Too many requests'), /rate-limiting/);
   assert.match(apiErrorAdvice(401, 'bad key'), /API key/);
+  // Kilo's keyless gateway, live 15 Nov 2026: a paid or unknown model answers 401.
+  assert.match(apiErrorAdvice(401, 'You need to sign in to use this model'), /needs an account or key with this provider.*free model with \/model/);
   assert.match(apiErrorAdvice(400, 'bad request'), /tool-calling support/);
 });
 

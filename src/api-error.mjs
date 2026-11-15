@@ -40,7 +40,10 @@ export function formatApiError(status, body, protocol, baseURL = '', { secrets =
   const mode = protocol === 'anthropic' ? 'native Anthropic Messages API' : protocol === 'bedrock' ? 'AWS Bedrock (Claude)' : protocol === 'vertex' ? 'Google Vertex AI (Claude)' : protocol === 'foundry' ? 'Microsoft Foundry (Claude)' :
     protocol === 'openai-responses' ? 'OpenAI Responses API' : 'OpenAI-compatible chat completions';
   detail = redactProviderDetail(detail, secrets).trim().replace(/\.+$/, '');
-  return 'Model provider returned HTTP ' + status + (detail ? ': ' + detail : '') + '. ' + apiErrorAdvice(status, detail, mode);
+  // The error code can say more than the message: Kilo's keyless gateway
+  // answers a paid or unknown model with PAID_MODEL_AUTH_REQUIRED.
+  const code = /\bpaid_model_auth_required\b/i.test(String(body || '')) ? ' [paid_model_auth_required]' : '';
+  return 'Model provider returned HTTP ' + status + (detail ? ': ' + detail : '') + '. ' + apiErrorAdvice(status, detail + code, mode);
 }
 
 // The closing hint fits the error: a used-up quota or a rate limit is not a
@@ -60,6 +63,10 @@ export function apiErrorAdvice(status, detail = '', mode = 'OpenAI-compatible ch
   }
   if (status === 429 && /quota|billing|insufficient/i.test(text)) return 'This is a quota or billing limit, not a wrong key or endpoint. Check the plan for this key, or switch models with /model.';
   if (status === 429) return 'The provider is rate-limiting requests. Wait a little and try again, or lower the request rate.';
+  // A keyless gateway refusing one model is not a bad key: the model needs an
+  // account there (or does not exist). Before, this said "check the API key"
+  // to a user who never needed one (seen live with Kilo, 15 Nov 2026).
+  if ((status === 401 || status === 403) && /paid_model_auth_required|sign in to use this model|requires? a paid|paid models? (?:require|need)/i.test(text)) return 'This model needs an account or key with this provider, or the model name does not exist there. Pick a free model with /model (or run oasis connect again), or add a key with oasis setup.';
   if (status === 401 || status === 403) return 'Check the API key for this provider (oasis setup, or the matching environment variable).';
   if (status === 404) return 'Check the model name and the ' + mode + ' endpoint URL.';
   if (isUnconfiguredRouteError(status, text)) return 'The gateway has no working account for this model\'s provider. Connect that provider in the gateway (for OmniRoute: its dashboard), or pick another model with /model.';
