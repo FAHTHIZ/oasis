@@ -41,3 +41,14 @@ test('oasis permissions leads with the mode in force', async (t) => {
   assert.match(r.out, /^Permission mode: accept-edits \(from --permission-mode; settings: manual\)\n/m, r.out);
   assert.doesNotMatch(r.out, /acceptEdits|overridden/);
 });
+
+// `oasis permissions` printed "bypass-permissions" as the mode's name, but
+// --permission-mode bypass-permissions was rejected. Every displayed name must
+// be accepted back, and the error must list the names users see.
+test('every displayed mode name is accepted by --permission-mode', async () => {
+  const { PERMISSION_MODES, normalizePermissionMode } = await import('../src/permission-modes.mjs');
+  for (const mode of PERMISSION_MODES) assert.equal(normalizePermissionMode(permissionModeName(mode)), mode, mode);
+  assert.equal(normalizePermissionMode('bypass_permissions'), 'bypassPermissions');
+  const { permissionModeList } = await import('../src/permission-modes.mjs');
+  assert.equal(permissionModeList(), 'manual (default), accept-edits, plan, auto, dont-ask, bypass-permissions');
+});

@@ -6,7 +6,8 @@ import { compactHistoryIfNeeded, undoCompaction } from './agent.mjs';
 import { countTextTokens, countJsonTokens } from './tokens.mjs';
 import { estimateTokens, contextWindowSize, contextUsage, addMustPreserve, createCompactionPreview, compactionPreviewIsCurrent } from './context.mjs';
 import { loadCustomCommands } from './commands.mjs';
-import { loadSettings, PERMISSION_MODES, normalizePermissionMode, normalizeLanguage } from './settings.mjs';
+import { loadSettings, normalizePermissionMode, normalizeLanguage } from './settings.mjs';
+import { permissionModeList, permissionModeName } from './permission-modes.mjs';
 import { applyReplyLanguage } from './reply-language.mjs';
 import { applyWritingRules, effectivePhrases, normalizePhrases, normalizeCommentMode, DEFAULT_AVOID_PHRASES } from './style-rules.mjs';
 import { modelAllowed, modelRestrictionMessage } from './model-aliases.mjs';
@@ -80,7 +81,7 @@ export const BUILTIN_COMMANDS = {
   model: 'Show or switch the model for this session (/model [id] [effort])',
   report: 'Show what the last task did: models and why, escalation, fallbacks, requests, tokens, cost (estimated or provider-reported) and outcome (/report json for raw data)',
   routing: 'Use a cheaper model for easy read-only tasks, or with cascade for all tasks, escalating to the strong model when stuck (/routing easy MODEL, strong MODEL, on|off|cascade|classify|status|reset)',
-  mode: 'Show or switch the permission mode (/mode ' + PERMISSION_MODES.join('|') + '; aliases: manual, accept-edits)',
+  mode: 'Show or switch the permission mode (/mode ' + permissionModeList().replace(' (default)', '').replace(/, /g, '|') + ')',
   permissions: 'Show permission rules, mode, and sandbox',
   agents: 'List available subagents',
   teams: 'List named agent teams and their member status',
@@ -454,9 +455,9 @@ export async function runBuiltinCommand(name, argument, state) {
     case 'mode': {
       const requested = String(argument || '').trim();
       const current = session && session.permissions && session.permissions.mode || sessionOptions.permissionMode || 'default';
-      if (!requested) return { output: 'Permission mode: ' + current + '. Available: ' + PERMISSION_MODES.join(', ') + '. Aliases: manual, accept-edits.' };
+      if (!requested) return { output: 'Permission mode: ' + permissionModeName(current) + '. Available: ' + permissionModeList() + '.' };
       const normalized = normalizePermissionMode(requested);
-      if (!normalized) return { output: 'Unknown mode "' + requested + '". Available: ' + PERMISSION_MODES.join(', ') + '. Aliases: manual, accept-edits.' };
+      if (!normalized) return { output: 'Unknown mode "' + requested + '". Available: ' + permissionModeList() + '.' };
       const permissions = session && session.settings && session.settings.permissions || {};
       const disableBypass = Boolean(sessionOptions.disableBypass || sessionOptions.disableBypassPermissions || permissions.disableBypassPermissionsMode);
       if (normalized === 'bypassPermissions' && disableBypass) return { output: 'bypassPermissions mode is disabled by settings.' };

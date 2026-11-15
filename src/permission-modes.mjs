@@ -10,7 +10,9 @@ const MODE_ALIASES = new Map([
   ['accept_edits', 'acceptEdits'],
   ['dont-ask', 'dontAsk'],
   ['dont_ask', 'dontAsk'],
-  ['dontask', 'dontAsk']
+  ['dontask', 'dontAsk'],
+  ['bypass-permissions', 'bypassPermissions'],
+  ['bypass_permissions', 'bypassPermissions']
 ]);
 
 export function normalizePermissionMode(value) {
@@ -25,4 +27,9 @@ const MODE_NAMES = { default: 'manual', acceptEdits: 'accept-edits', dontAsk: 'd
 export function permissionModeName(mode) {
   const canonical = normalizePermissionMode(String(mode || '')) || String(mode || '');
   return MODE_NAMES[canonical] || canonical;
+}
+
+// The modes as users type them, for usage and error messages.
+export function permissionModeList() {
+  return PERMISSION_MODES.map((mode) => mode === 'default' ? 'manual (default)' : permissionModeName(mode)).join(', ');
 }
