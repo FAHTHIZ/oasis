@@ -221,6 +221,8 @@ Pick a bounded first task with a visible outcome, such as explaining a function,
 
 Saved sessions keep an audit trail next to the conversation: every tool call and its result, each approval decision (yours, a hook's or auto mode's), the checks that ran, and automatic model fallbacks. `oasis sessions events ID` prints it (`--type approval` filters, `--json` for scripts). Secrets are redacted before writing, and `oasis sessions clear ID` deletes the trail with the session.
 
+`oasis sessions export ID...|--all --out FILE.jsonl` writes conversations as JSONL for evaluation or fine-tuning datasets (`--format openai`, the default, or `sharegpt`), with secrets redacted. Add `--verified` to keep only sessions whose last recorded check (tests, build, lint or type check) passed with no file edits after it; sessions that never ran a check are left out. That is a filter on recorded evidence, not proof the work is correct.
+
 ## 7. Security boundaries
 
 - Approval prompts are not a replacement for operating-system isolation.

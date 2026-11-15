@@ -1180,7 +1180,8 @@ async function installExternalSkill(args, context, root) {
   return {
     installed: result.installed.length > 0,
     source, scope, skill: all ? '*' : skill,
-    discovered: result.installed.map((item) => ({ name: item.name, description: item.description, path: item.path, files: item.files, skipped: item.skipped })),
+    discovered: result.installed.map((item) => ({ name: item.name, description: item.description, path: item.path, files: item.files, skipped: item.skipped, ...(item.audit && item.audit.findings.length ? { audit: { high: item.audit.high, medium: item.audit.medium } } : {}) })),
+    ...(result.refused && result.refused.length ? { refused: result.refused.map((item) => ({ name: item.name, high: item.audit.high, medium: item.audit.medium })) } : {}),
     ...(result.available ? { available: result.available } : {}),
     message: result.message
   };

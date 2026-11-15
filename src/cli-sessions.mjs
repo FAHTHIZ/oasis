@@ -151,8 +151,10 @@ export async function manageSessions(root, rest, { approve } = {}) {
   }
   if (action === 'export') {
     const { exportSessions } = await import('./trajectories.mjs');
-    const count = await exportSessions(root, rest.slice(1));
-    if (rest.includes('--out')) stdout.write('Exported ' + count + ' session(s).\n');
+    let skipped = 0;
+    const count = await exportSessions(root, rest.slice(1), { onSkipped: (value) => { skipped = value; } });
+    if (rest.includes('--out')) stdout.write('Exported ' + count + ' session(s).' + (skipped ? ' Skipped ' + skipped + ' without a passing final check.' : '') + '\n');
+    else if (skipped) process.stderr.write('Skipped ' + skipped + ' session(s) without a passing final check.\n');
     return;
   }
   if (action === 'events' || action === 'audit') {

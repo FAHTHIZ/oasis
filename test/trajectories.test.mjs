@@ -67,3 +67,41 @@ test('oasis batch runs each prompt in a fresh session and records failures', asy
     assert.equal(rows.find((row) => row.id === 'boom').ok, false);
   } finally { await rm(base, { recursive: true, force: true }); }
 });
+
+test('sessions export --verified keeps only sessions whose last check passed, redacted', async () => {
+  const { appendEvent } = await import('../src/event-stream.mjs');
+  const { sessionVerified } = await import('../src/trajectories.mjs');
+  const base = await mkdtemp(path.join(os.tmpdir(), 'oasis-traj-verified-'));
+  const env = { OASIS_CONFIG_DIR: path.join(base, 'cfg') };
+  const token = 'ghp_' + 'Q7'.repeat(18);
+  const messages = [{ role: 'system', content: 'sys' }, { role: 'user', content: 'fix it, my token is ' + token }, { role: 'assistant', content: 'Fixed; npm test passes.' }];
+  const check = (passed) => ({ type: 'verification', kind: 'test', command: 'npm test', exitCode: passed ? 0 : 1, passed });
+  try {
+    const passed = await saveSession({ root: base, messages, config: { model: 'm' } }, { env });
+    await appendEvent(base, passed.id, check(false), { env });
+    await appendEvent(base, passed.id, { type: 'tool_result', id: 'c1', tool: 'edit_file', ok: true }, { env });
+    await appendEvent(base, passed.id, check(true), { env });
+    const failed = await saveSession({ root: base, messages, config: { model: 'm' } }, { env });
+    await appendEvent(base, failed.id, check(false), { env });
+    const editedAfter = await saveSession({ root: base, messages, config: { model: 'm' } }, { env });
+    await appendEvent(base, editedAfter.id, check(true), { env });
+    await appendEvent(base, editedAfter.id, { type: 'tool_result', id: 'c2', tool: 'write_file', ok: true }, { env });
+    const neverChecked = await saveSession({ root: base, messages, config: { model: 'm' } }, { env });
+    const out = path.join(base, 'verified.jsonl');
+    let skipped = -1;
+    assert.equal(await exportSessions(base, ['--all', '--verified', '--out', out], { env, onSkipped: (value) => { skipped = value; } }), 1);
+    assert.equal(skipped, 3);
+    const text = await readFile(out, 'utf8');
+    const lines = text.trim().split('\n').map((line) => JSON.parse(line));
+    assert.deepEqual(lines.map((line) => line.id), [passed.id]);
+    assert.ok(!text.includes(token), 'planted token is redacted');
+    assert.equal(lines[0].messages.at(-1).content, 'Fixed; npm test passes.');
+    // Without --verified every session is exported, as before.
+    assert.equal(await exportSessions(base, ['--all', '--out', out], { env }), 4);
+    // Explicit IDs are filtered too.
+    assert.equal(await exportSessions(base, [neverChecked.id, failed.id, '--verified', '--out', out], { env }), 0);
+    assert.equal(sessionVerified([check(true), { type: 'tool_result', tool: 'edit_file', ok: false }]), true, 'a failed edit changes nothing');
+    assert.equal(sessionVerified([check(true), { type: 'tool_result', tool: 'read_file', ok: true }]), true);
+    assert.equal(sessionVerified([]), false);
+  } finally { await rm(base, { recursive: true, force: true }); }
+});
