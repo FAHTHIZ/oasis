@@ -898,8 +898,54 @@ async function importCommand(root, rest, autoApprove) {
   stdout.write('Imported ' + done.length + ' item' + (done.length === 1 ? '' : 's') + '. New MCP servers, commands and rules apply to new sessions.\n');
 }
 
-async function manageTrust(root, rest) {
+// What trusting this folder turns on: project hook commands, allow rules, a
+// permission mode, a status line command, and project MCP servers.
+export async function trustEffects(root) {
+  const { projectSettingsPaths } = await import('./settings.mjs');
+  const effects = [];
+  const read = async (file) => { try { const parsed = JSON.parse(await readFile(file, 'utf8')); return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : null; } catch { return null; } };
+  for (const { file } of projectSettingsPaths(root)) {
+    const settings = await read(file);
+    if (!settings) continue;
+    const where = path.relative(root, file);
+    for (const [event, groups] of Object.entries(settings.hooks && typeof settings.hooks === 'object' ? settings.hooks : {})) {
+      for (const group of Array.isArray(groups) ? groups : []) {
+        for (const hook of Array.isArray(group && group.hooks) ? group.hooks : []) {
+          if (hook && hook.command) effects.push(where + ': ' + event + ' hook runs: ' + String(hook.command).slice(0, 200));
+          else if (hook && hook.url) effects.push(where + ': ' + event + ' hook calls: ' + String(hook.url).slice(0, 200));
+        }
+      }
+    }
+    const permissions = settings.permissions && typeof settings.permissions === 'object' ? settings.permissions : {};
+    const allow = Array.isArray(permissions.allow) ? permissions.allow.filter((rule) => typeof rule === 'string') : [];
+    if (allow.length) effects.push(where + ': allows without asking: ' + allow.slice(0, 10).join(', ') + (allow.length > 10 ? ' (+' + (allow.length - 10) + ' more)' : ''));
+    if (permissions.defaultMode) effects.push(where + ': default permission mode ' + String(permissions.defaultMode));
+    if (settings.statusLine && settings.statusLine.command) effects.push(where + ': status line runs: ' + String(settings.statusLine.command).slice(0, 200));
+  }
+  const mcp = await read(path.join(root, '.mcp.json'));
+  for (const [name, server] of Object.entries(mcp && mcp.mcpServers && typeof mcp.mcpServers === 'object' ? mcp.mcpServers : {})) {
+    if (!server || typeof server !== 'object') continue;
+    effects.push('.mcp.json: MCP server ' + name + (server.command ? ' starts: ' + [server.command, ...(Array.isArray(server.args) ? server.args : [])].join(' ').slice(0, 200) : server.url ? ' at ' + String(server.url).replace(/\?.*$/, '?…') : ''));
+  }
+  return effects;
+}
+
+async function manageTrust(root, rest, { approve: approveTrust } = {}) {
   const revoke = rest.includes('--revoke');
+  if (!revoke) {
+    // Trust turns on commands the repository chose (hooks, MCP servers). Show
+    // them and ask; without a terminal it takes --yes, so a script or an agent
+    // cannot enable them unseen.
+    const effects = await trustEffects(root);
+    if (effects.length && approveTrust) {
+      const text = 'Trusting ' + root + ' turns on:\n' + effects.map((line) => '  ' + line).join('\n') + '\nTrust this folder?';
+      if (!(await approveTrust(text))) {
+        stdout.write('Not trusted. Nothing changed.\n');
+        process.exitCode = 1;
+        return;
+      }
+    }
+  }
   const id = await setWorkspaceTrust(root, !revoke);
   stdout.write((revoke ? 'Revoked trust for ' : 'Trusted ') + id + '. ' + (revoke ? 'Project allow rules and hooks are ignored again.' : 'Project allow rules, hooks, and sandbox/mode settings now apply. Review .oasis/ and .claude/ settings files before trusting a repository you did not write.') + '\n');
 }
@@ -3499,7 +3545,7 @@ async function main() {
   }
   if (command === 'skills') return await manageSkills(workspace, rest, autoApprove);
   if (command === 'permissions') return await managePermissions(workspace, rest);
-  if (command === 'trust') return await manageTrust(workspace, rest);
+  if (command === 'trust') return await manageTrust(workspace, rest, { approve: mcpApprove });
   if (command === 'import') return await importCommand(workspace, rest, autoApprove);
   if (command === 'bg' || command === 'background') return await backgroundCommand(rest, { approve, interactive });
   // Claude Code's top-level background commands: claude attach|logs|stop|kill|rm|respawn ID.
