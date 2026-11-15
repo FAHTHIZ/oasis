@@ -96,7 +96,8 @@ export function insightsSummaryText(stats) {
   return [
     stats.sessions + ' sessions, ' + stats.userTurns + ' prompts, ' + stats.toolCalls + ' tool calls in the last ' + stats.days + ' days.',
     'Top projects: ' + top(stats.projects, 5).map(([k, v]) => k + ' (' + v + ')').join(', ') + '.',
-    'Top tools: ' + top(stats.tools, 6).map(([k, v]) => k + ' ' + v).join(', ') + '.',
+    // With no tool calls this line used to read "Top tools: ."
+    ...(stats.toolCalls ? ['Top tools: ' + top(stats.tools, 6).map(([k, v]) => k + ' ' + v).join(', ') + '.'] : []),
     'Friction: ' + stats.toolErrors + ' tool errors (' + pct(stats.toolErrors, stats.toolCalls) + '), ' + stats.denials + ' denials, ' + stats.corrections + ' prompts that look like corrections.'
   ].join('\n');
 }

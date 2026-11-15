@@ -62,3 +62,11 @@ test('insights writes no report when there are no sessions', async () => {
   const { readdir } = await import('node:fs/promises');
   assert.deepEqual(await readdir(path.join(home, '.config', 'oasis', 'insights')).catch(() => []), []);
 });
+
+// Sessions with no tool calls printed "Top tools: ." with nothing listed.
+test('insights summary leaves out the tool line when no tools ran', async () => {
+  const { insightsSummaryText } = await import('../src/insights.mjs');
+  const text = insightsSummaryText({ sessions: 2, userTurns: 3, toolCalls: 0, days: 30, projects: new Map([['p', 2]]), tools: new Map(), toolErrors: 0, denials: 0, corrections: 0 });
+  assert.doesNotMatch(text, /Top tools/);
+  assert.match(text, /Top projects: p \(2\)\./);
+});
