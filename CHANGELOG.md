@@ -4,6 +4,7 @@ User-facing change history grouped by package version. A version heading does no
 
 ## Unreleased
 
+- `npm run bench:live` no longer caps Claude Code at 30 turns while every other agent runs until the shared timeout. It now passes `--max-turns 200` (the eval's maximum), so a Claude Code `error_max_turns` stop no longer counts as a failure against the agent.
 - With no model connected, the interactive prompt's banner and its reply to a task now say "type /setup" instead of telling you to exit and run `oasis setup` (`/setup` works inside the session). `oasis -p` keeps naming `oasis setup`.
 - Connecting an invalid Google Gemini key now says "Google Gemini did not accept this key" instead of printing Google's raw JSON error (Google answers a bad key with HTTP 400, not 401). An invalid Hugging Face key is no longer reported as accepted before the test call fails (its router lists models without a key).
 - Connecting an invalid OpenRouter key (terminal `oasis connect` and the web app) no longer says "OpenRouter accepted the key" — OpenRouter lists its models to anyone, so the test call is what checks the key — and the failure now reads "OpenRouter did not accept this key" instead of "OpenRouter accepted this key. Check that it was copied whole…". Also "an OpenRouter key", not "a OpenRouter key".

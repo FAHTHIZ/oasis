@@ -17,6 +17,7 @@ import { oasisVersion } from '../src/version.mjs';
 import { startGateway, gatewayReport } from './bench-gateway.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+export const BENCH_CLAUDE_MAX_TURNS = 200;
 const ALL_AGENTS = ['oasis', 'claude', 'codex', 'gemini', 'opencode', 'aider'];
 const DISPLAY = { oasis: 'OASIS', ...Object.fromEntries(Object.entries(EXTERNAL_AGENTS).map(([id, adapter]) => [id, adapter.name])) };
 
@@ -142,6 +143,10 @@ export async function runBenchmark(options, { env = process.env, runner = runEva
     const args = [...(agent === 'oasis' ? [] : [EXTERNAL_AGENTS[agent].flag]), '--trials', String(options.trials), '--timeout-seconds', String(options.timeoutSeconds)];
     if (task) args.push('--task', task);
     if (model && agent !== 'oasis') args.push('--model', model);
+    // `oasis eval --claude-code` caps Claude Code at 30 turns by default; no
+    // other agent has a turn cap here, only the shared timeout. Give Claude
+    // Code the eval's maximum so it is bounded by the same timeout.
+    if (agent === 'claude') args.push('--max-turns', String(BENCH_CLAUDE_MAX_TURNS));
     const agentEnv = gateway
       ? agentEnvironment(agent, { ...options, router: gateway.agentUrl(agent) }, { ...env, OASIS_BENCH_API_KEY: 'bench-gateway' })
       : agentEnvironment(agent, options, env);
