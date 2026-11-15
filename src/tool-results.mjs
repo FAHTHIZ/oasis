@@ -181,5 +181,17 @@ export function refreshTodoPrompt(session) {
   const body = TODO_REMINDER_MARK + '\n' + (checklist || '(empty: no open steps)') + '\n</system-reminder>';
   if (latest === body) return;
   if (!todos.length && latest === null) return;
+  // A todo_write result at the tail, not sent yet, repeats the same list in
+  // JSON; the reminder is the copy that stays (pruning keeps user messages).
+  for (let index = session.messages.length - 1; index > 0 && session.messages[index].role === 'tool'; index--) {
+    const message = session.messages[index];
+    if (message.name !== 'todo_write' || typeof message.content !== 'string' || !message.content.startsWith('{"todos":')) continue;
+    try {
+      const shown = JSON.parse(message.content).todos;
+      if (Array.isArray(shown) && shown.length === todos.length && shown.every((item, at) => item.content === todos[at].content && item.status === todos[at].status)) {
+        message.content = JSON.stringify({ updated: true, steps: todos.length, note: 'Checklist saved; the reminder below shows it.' });
+      }
+    } catch { /* has appended notes; leave it */ }
+  }
   session.messages.push({ role: 'user', content: body });
 }
