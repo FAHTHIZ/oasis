@@ -2680,6 +2680,9 @@ function subcommandHelp(rawArgs) {
 }
 
 // Common top-level flags, for the "did you mean" hint on a typo.
+// `--model -p hi` would otherwise take -p as the model id. A flag value never
+// looks like a lone option (`-p`, `--print`, `--max-turns=3`).
+export const looksLikeFlag = (value) => /^(?:-[a-zA-Z]|--[a-zA-Z][\w-]*(?:=.*)?)$/.test(String(value));
 const COMMON_FLAGS = ['--print', '--continue', '--resume', '--model', '--max-turns', '--output-format', '--yes', '--workspace', '--worktree',
   '--permission-mode', '--dangerously-skip-permissions', '--help', '--version', '--verbose', '--debug', '--name', '--bg', '--allowedTools',
   '--disallowedTools', '--add-dir', '--system-prompt', '--append-system-prompt', '--restricted', '--interactive', '--goal', '--effort',
@@ -2706,6 +2709,8 @@ export function unknownOptionMessage(arg) {
 // settings, leftover words) on `flags`.
 async function parseMainFlags(rawArgs, flags) {
   for (let i = 0; i < rawArgs.length; i++) {
+    const takeValue = () => { const value = rawArgs[i + 1]; if (value === undefined || looksLikeFlag(value)) return undefined; i += 1; return value; };
+    const needValue = (flag) => { const value = rawArgs[i + 1]; if (value === undefined || looksLikeFlag(value)) throw new Error(flag + ' requires a value.'); i += 1; return value; };
     const arg = rawArgs[i];
     // Everything after -- is passed through untouched: it is the task text or
     // another program's command line (oasis mcp add fs -- npx -y PKG), whose
@@ -2714,7 +2719,7 @@ async function parseMainFlags(rawArgs, flags) {
     if (arg === '--yes' || arg === '-y' || arg === '--auto') { flags.autoApprove = true; if (arg !== '--auto') flags.explicitYes = true; continue; }
     if (arg === '--permission-mode' || arg.startsWith('--permission-mode=')) {
       // The Claude Agent SDK passes --permission-mode=MODE.
-      const requestedMode = arg.includes('=') ? arg.slice(arg.indexOf('=') + 1) : rawArgs[++i];
+      const requestedMode = arg.includes('=') ? arg.slice(arg.indexOf('=') + 1) : takeValue();
       const mode = normalizePermissionMode(requestedMode);
       if (!mode) throw new Error('--permission-mode must be one of ' + PERMISSION_MODES.join(', ') + ' (aliases: manual, accept-edits).');
       SESSION_OPTIONS.permissionMode = mode;
@@ -2722,8 +2727,8 @@ async function parseMainFlags(rawArgs, flags) {
       continue;
     }
     if (arg === '--allowedTools' || arg === '--allowed-tools' || arg === '--disallowedTools' || arg === '--disallowed-tools') {
-      if (!rawArgs[i + 1]) throw new Error(arg + ' requires a comma- or space-separated rule list.');
-      const rules = rawArgs[++i].split(/,(?![^(]*\))/).map((rule) => rule.trim()).filter(Boolean);
+      if (!rawArgs[i + 1] || looksLikeFlag(rawArgs[i + 1])) throw new Error(arg + ' requires a comma- or space-separated rule list.');
+      const rules = takeValue().split(/,(?![^(]*\))/).map((rule) => rule.trim()).filter(Boolean);
       (arg.toLowerCase().includes('disallowed') ? SESSION_OPTIONS.disallowedTools : SESSION_OPTIONS.allowedTools).push(...rules);
       continue;
     }
@@ -2739,13 +2744,13 @@ async function parseMainFlags(rawArgs, flags) {
     if (arg === '--append-subagent-system-prompt') { const value = rawArgs[i + 1]; if (value === undefined) throw new Error(arg + ' requires a value.'); i += 1; SESSION_OPTIONS.subagentSystemAppend = [SESSION_OPTIONS.subagentSystemAppend, value].filter(Boolean).join('\n\n'); continue; }
     if (arg === '--append-subagent-system-prompt-file') { const value = rawArgs[i + 1]; if (value === undefined) throw new Error(arg + ' requires a file.'); i += 1; SESSION_OPTIONS.pendingFiles.push({ kind: 'subagent-append', file: value }); continue; }
     if (arg === '--permission-prompts') {
-      const value = String(rawArgs[++i] || '').toLowerCase();
+      const value = String(takeValue() || '').toLowerCase();
       if (!['none', 'host', 'default'].includes(value)) throw new Error('--permission-prompts must be none or host.');
       flags.headless.permissionPrompts = value; if (value === 'none') process.env.OASIS_PERMISSION_PROMPTS = 'none'; continue;
     }
     if (arg === '--autocompact') {
       // auto | off | PERCENT% (1-100) | a token window such as 500k or 1m (this session only).
-      const value = String(rawArgs[++i] || '').trim().toLowerCase();
+      const value = String(takeValue() || '').trim().toLowerCase();
       const tokens = /^(\d+(?:\.\d+)?)\s*([km])$/.exec(value);
       if (value === 'auto') { delete process.env.OASIS_AUTOCOMPACT_PCT; continue; }
       if (value === 'off' || value === '0') { process.env.OASIS_AUTOCOMPACT_PCT = '0'; continue; }
@@ -2759,8 +2764,7 @@ async function parseMainFlags(rawArgs, flags) {
       process.env.OASIS_AUTOCOMPACT_PCT = String(pct);
       continue;
     }
-    if (arg === '--append-system-prompt') { SESSION_OPTIONS.appendSystemPrompt = [SESSION_OPTIONS.appendSystemPrompt, rawArgs[++i] || ''].filter(Boolean).join('\n\n'); continue; }
-    const needValue = (flag) => { const value = rawArgs[i + 1]; if (value === undefined) throw new Error(flag + ' requires a value.'); i += 1; return value; };
+    if (arg === '--append-system-prompt') { SESSION_OPTIONS.appendSystemPrompt = [SESSION_OPTIONS.appendSystemPrompt, needValue(arg)].filter(Boolean).join('\n\n'); continue; }
     if (arg === '--system-prompt') { SESSION_OPTIONS.systemPromptOverride = needValue(arg); continue; }
     if (arg === '--output-style' || arg.startsWith('--output-style=')) { const value = arg.includes('=') ? arg.slice(arg.indexOf('=') + 1) : needValue(arg); if (!String(value).trim()) throw new Error('--output-style requires a style name.'); SESSION_OPTIONS.outputStyle = String(value).trim(); continue; }
     if (arg === '--system-prompt-file') { SESSION_OPTIONS.pendingFiles.push({ kind: 'system', file: needValue(arg) }); continue; }
@@ -2792,7 +2796,7 @@ async function parseMainFlags(rawArgs, flags) {
     if (arg === '--strict-mcp-config') { SESSION_OPTIONS.strictMcpConfig = true; continue; }
     if (arg === '--channels' || arg.startsWith('--channels=') || arg === '--dangerously-load-development-channels' || arg.startsWith('--dangerously-load-development-channels=')) {
       const dev = arg.startsWith('--dangerously');
-      const value = arg.includes('=') ? arg.slice(arg.indexOf('=') + 1) : rawArgs[++i];
+      const value = arg.includes('=') ? arg.slice(arg.indexOf('=') + 1) : takeValue();
       if (!value) throw new Error(arg + ' needs a list like server:webhook or plugin:telegram@claude-plugins-official.');
       const { parseChannelEntries } = await import('./channels.mjs');
       const entries = parseChannelEntries(value);
@@ -2839,51 +2843,51 @@ async function parseMainFlags(rawArgs, flags) {
       continue;
     }
     if (arg === '--output-format') {
-      flags.headless.outputFormat = rawArgs[++i];
+      flags.headless.outputFormat = takeValue();
       if (!OUTPUT_FORMATS.includes(flags.headless.outputFormat)) throw new Error('--output-format must be one of ' + OUTPUT_FORMATS.join(', ') + '.');
       continue;
     }
     if (arg.startsWith('--output-format=')) { flags.headless.outputFormat = arg.slice(16); continue; }
     if (arg === '--goal') {
-      if (!rawArgs[i + 1]) throw new Error('--goal requires a condition, e.g. --goal "npm test passes".');
-      flags.headless.goal = String(rawArgs[++i]);
+      if (!rawArgs[i + 1] || looksLikeFlag(rawArgs[i + 1])) throw new Error('--goal requires a condition, e.g. --goal "npm test passes".');
+      flags.headless.goal = String(takeValue());
       if (flags.headless.goal.length > 4000) throw new Error('A goal can be at most 4,000 characters. Put the details in a file and point the goal at it.');
       flags.headless.enabled = true;
       continue;
     }
     if (arg === '--require-verified') { flags.headless.requireVerified = true; continue; }
     if (arg === '--goal-turns') {
-      const value = Number.parseInt(rawArgs[++i], 10);
+      const value = Number.parseInt(takeValue(), 10);
       if (!Number.isInteger(value) || value < 1 || value > 100) throw new Error('--goal-turns must be a whole number from 1 to 100.');
       flags.headless.goalMaxTurns = value;
       continue;
     }
     if (arg === '--max-turns') {
-      const value = Number.parseInt(rawArgs[++i], 10);
+      const value = Number.parseInt(takeValue(), 10);
       if (!Number.isInteger(value) || value < 1 || value > 400) throw new Error('--max-turns must be a whole number from 1 to 400.');
       flags.headless.maxTurns = value;
       continue;
     }
     if (arg === '--model') {
-      if (!rawArgs[i + 1]) throw new Error('--model requires a model id.');
-      SESSION_OPTIONS.model = rawArgs[++i];
+      if (!rawArgs[i + 1] || looksLikeFlag(rawArgs[i + 1])) throw new Error('--model requires a model id.');
+      SESSION_OPTIONS.model = takeValue();
       continue;
     }
     if (arg === '--effort') {
-      const level = String(rawArgs[++i] || '').toLowerCase();
+      const level = String(takeValue() || '').toLowerCase();
       if (!['low', 'medium', 'high', 'max', 'auto'].includes(level)) throw new Error('--effort must be low, medium, high, max or auto.');
       SESSION_OPTIONS.effort = level === 'auto' ? null : level;
       continue;
     }
     if (arg === '--json-schema' || arg === '--output-schema') {
-      const value = rawArgs[++i];
+      const value = takeValue();
       if (!value) throw new Error(arg + ' needs a JSON Schema (inline JSON or @path/to/schema.json).');
       // Codex's --output-schema takes a plain file path.
       flags.headless.jsonSchemaSource = arg === '--output-schema' && !/^\s*[{@]/.test(value) ? '@' + value : value;
       continue;
     }
     if (arg === '-o' || arg === '--output-last-message') {
-      const value = rawArgs[++i];
+      const value = takeValue();
       if (!value || value.startsWith('-')) throw new Error(arg + ' needs a file path for the final message.');
       flags.headless.outputLastMessage = value;
       continue;
@@ -2896,7 +2900,7 @@ async function parseMainFlags(rawArgs, flags) {
     if (arg === '--tmux' || arg === '--tmux=classic') { SESSION_OPTIONS.tmux = true; continue; }
     if (arg === '--ide') { process.env.OASIS_IDE = 'auto'; continue; }
     if (arg === '--teammate-mode' || arg.startsWith('--teammate-mode=')) {
-      const value = arg.includes('=') ? arg.slice(arg.indexOf('=') + 1) : rawArgs[++i];
+      const value = arg.includes('=') ? arg.slice(arg.indexOf('=') + 1) : takeValue();
       if (!['auto', 'in-process', 'tmux'].includes(String(value))) throw new Error('--teammate-mode must be auto, in-process or tmux.');
       process.env.OASIS_TEAMMATE_MODE = value;
       continue;
@@ -2910,21 +2914,21 @@ async function parseMainFlags(rawArgs, flags) {
       continue;
     }
     if (arg === '--system-prompt-snapshot' || arg.startsWith('--system-prompt-snapshot=')) {
-      const value = (arg.includes('=') ? arg.split('=')[1] : rawArgs[++i] || '').toLowerCase();
+      const value = (arg.includes('=') ? arg.split('=')[1] : takeValue() || '').toLowerCase();
       if (!['on', 'off'].includes(value)) throw new Error('--system-prompt-snapshot must be on or off.');
       SESSION_OPTIONS.systemPromptSnapshot = value;
       continue;
     }
-    if (arg === '--plugin-url') { const url = rawArgs[++i]; if (!url) throw new Error('--plugin-url needs a URL.'); (SESSION_OPTIONS.pluginUrls ||= []).push(url); continue; }
-    if (arg === '--plugin-dir') { const dir = rawArgs[++i]; if (!dir) throw new Error('--plugin-dir needs a directory.'); process.env.OASIS_PLUGIN_DIRS = [process.env.OASIS_PLUGIN_DIRS, path.resolve(dir)].filter(Boolean).join(path.delimiter); continue; }
-    if (arg === '--add-dir') { const dir = rawArgs[++i]; if (!dir) throw new Error('--add-dir needs a directory.'); SESSION_OPTIONS.addDirs.push(path.resolve(dir)); continue; }
+    if (arg === '--plugin-url') { const url = takeValue(); if (!url) throw new Error('--plugin-url needs a URL.'); (SESSION_OPTIONS.pluginUrls ||= []).push(url); continue; }
+    if (arg === '--plugin-dir') { const dir = takeValue(); if (!dir) throw new Error('--plugin-dir needs a directory.'); process.env.OASIS_PLUGIN_DIRS = [process.env.OASIS_PLUGIN_DIRS, path.resolve(dir)].filter(Boolean).join(path.delimiter); continue; }
+    if (arg === '--add-dir') { const dir = takeValue(); if (!dir) throw new Error('--add-dir needs a directory.'); SESSION_OPTIONS.addDirs.push(path.resolve(dir)); continue; }
     if (arg === '--dangerously-skip-permissions') { SESSION_OPTIONS.permissionMode = 'bypassPermissions'; SESSION_OPTIONS.allowBypass = true; flags.autoApprove = true; continue; }
     // Codex and Gemini CLI flags, mapped to the nearest OASIS policy. The runtime's
     // hard refusals (home deletion, force pushes, reset --hard, ...) still apply.
     if (arg === '--yolo' || arg === '--dangerously-bypass-approvals-and-sandbox') { SESSION_OPTIONS.permissionMode = 'bypassPermissions'; SESSION_OPTIONS.allowBypass = true; flags.autoApprove = true; process.env.OASIS_SANDBOX = '0'; continue; }
     if (arg === '--full-auto') { SESSION_OPTIONS.permissionMode = 'acceptEdits'; process.env.OASIS_SANDBOX = '1'; continue; }
     if (arg === '--sandbox' || arg === '-s' || arg.startsWith('--sandbox=')) {
-      const value = arg.includes('=') ? arg.slice(arg.indexOf('=') + 1) : rawArgs[++i];
+      const value = arg.includes('=') ? arg.slice(arg.indexOf('=') + 1) : takeValue();
       flags.headless.codexSandbox = value;
       if (value === 'read-only') SESSION_OPTIONS.permissionMode = 'plan';
       else if (value === 'workspace-write') process.env.OASIS_SANDBOX = '1';
@@ -2933,7 +2937,7 @@ async function parseMainFlags(rawArgs, flags) {
       continue;
     }
     if (arg === '--ask-for-approval' || arg === '-a' || arg.startsWith('--ask-for-approval=')) {
-      const value = arg.includes('=') ? arg.slice(arg.indexOf('=') + 1) : rawArgs[++i];
+      const value = arg.includes('=') ? arg.slice(arg.indexOf('=') + 1) : takeValue();
       // never: no prompts, like Codex; OASIS uses auto mode, whose risk check still blocks dangerous commands.
       flags.headless.codexApproval = value;
       if (value === 'never') SESSION_OPTIONS.permissionMode = 'auto';
@@ -2942,7 +2946,7 @@ async function parseMainFlags(rawArgs, flags) {
       continue;
     }
     if (arg === '--approval-mode' || arg.startsWith('--approval-mode=')) {
-      const value = arg.includes('=') ? arg.slice(arg.indexOf('=') + 1) : rawArgs[++i];
+      const value = arg.includes('=') ? arg.slice(arg.indexOf('=') + 1) : takeValue();
       const mode = { default: 'default', auto_edit: 'acceptEdits', 'auto-edit': 'acceptEdits', yolo: 'bypassPermissions', plan: 'plan' }[value];
       if (!mode) throw new Error('--approval-mode must be default, auto_edit, yolo or plan.');
       SESSION_OPTIONS.permissionMode = mode;
@@ -2950,7 +2954,7 @@ async function parseMainFlags(rawArgs, flags) {
       continue;
     }
     if (arg === '--include-directories' || arg.startsWith('--include-directories=')) {
-      const value = arg.includes('=') ? arg.slice(arg.indexOf('=') + 1) : rawArgs[++i];
+      const value = arg.includes('=') ? arg.slice(arg.indexOf('=') + 1) : takeValue();
       if (!value) throw new Error('--include-directories needs a comma-separated list of directories.');
       for (const dir of value.split(',').map((item) => item.trim()).filter(Boolean)) SESSION_OPTIONS.addDirs.push(path.resolve(dir));
       continue;
@@ -2958,13 +2962,13 @@ async function parseMainFlags(rawArgs, flags) {
     if (arg === '--skip-git-repo-check') continue;
     if (flags.execMode && (arg === '--json' || arg === '--experimental-json')) { flags.headless.codexJson = true; continue; }
     if (flags.execMode && (arg === '--config' || arg.startsWith('--config=') || (arg === '-c' && /^[\w.-]+=/.test(rawArgs[i + 1] || '')))) {
-      const pair = arg.includes('=') && arg.startsWith('--config=') ? arg.slice('--config='.length) : rawArgs[++i];
+      const pair = arg.includes('=') && arg.startsWith('--config=') ? arg.slice('--config='.length) : takeValue();
       if (!pair || !pair.includes('=')) throw new Error('--config needs key=value.');
       (flags.headless.codexConfig ||= []).push(pair);
       continue;
     }
     if (arg === '--image' || (flags.execMode && arg === '-i') || arg.startsWith('--image=')) {
-      const value = arg.includes('=') ? arg.slice(arg.indexOf('=') + 1) : rawArgs[++i];
+      const value = arg.includes('=') ? arg.slice(arg.indexOf('=') + 1) : takeValue();
       if (!value) throw new Error('--image needs a file path.');
       for (const file of value.split(',').map((item) => item.trim()).filter(Boolean)) (flags.headless.images ||= []).push(path.resolve(file));
       continue;
@@ -2980,24 +2984,24 @@ async function parseMainFlags(rawArgs, flags) {
     }
     // Gemini CLI: start the interactive session with this first message.
     if (arg === '-i' || arg === '--prompt-interactive' || arg.startsWith('--prompt-interactive=')) {
-      const value = arg.includes('=') ? arg.slice(arg.indexOf('=') + 1) : rawArgs[++i];
+      const value = arg.includes('=') ? arg.slice(arg.indexOf('=') + 1) : takeValue();
       if (!value) throw new Error('--prompt-interactive needs a message.');
       SESSION_OPTIONS.initialPrompt = value; continue;
     }
     // Aider flags. --test-cmd plus --auto-test uses Oasis auto-test; commits use auto-commit.
     if (arg === '--yes-always') { flags.autoApprove = true; continue; }
     if (arg === '--message' || arg === '--msg' || arg.startsWith('--message=')) {
-      const value = arg.includes('=') ? arg.slice(arg.indexOf('=') + 1) : rawArgs[++i];
+      const value = arg.includes('=') ? arg.slice(arg.indexOf('=') + 1) : takeValue();
       if (!value) throw new Error(arg.split('=')[0] + ' needs a message.');
       flags.headless.enabled = true; flags.headless.prompt = value; continue;
     }
     if (arg === '--message-file' || arg.startsWith('--message-file=')) {
-      const file = arg.includes('=') ? arg.slice(arg.indexOf('=') + 1) : rawArgs[++i];
+      const file = arg.includes('=') ? arg.slice(arg.indexOf('=') + 1) : takeValue();
       if (!file) throw new Error('--message-file needs a file.');
       flags.headless.enabled = true; flags.headless.prompt = readFileSync(path.resolve(file), 'utf8'); continue;
     }
     if (arg === '--test-cmd' || arg.startsWith('--test-cmd=')) {
-      const value = arg.includes('=') ? arg.slice(arg.indexOf('=') + 1) : rawArgs[++i];
+      const value = arg.includes('=') ? arg.slice(arg.indexOf('=') + 1) : takeValue();
       if (!value) throw new Error('--test-cmd needs a command.');
       SESSION_OPTIONS.aiderTestCmd = value; continue;
     }
@@ -3010,11 +3014,11 @@ async function parseMainFlags(rawArgs, flags) {
     if (arg === '--resume' || arg === '-r') {
       // Without an ID (like `claude -r`), open the session picker.
       if (!rawArgs[i + 1] || rawArgs[i + 1].startsWith('-')) { SESSION_OPTIONS.resumePicker = true; flags.persistSession = true; continue; }
-      flags.resumeId = rawArgs[++i]; flags.persistSession = true; continue;
+      flags.resumeId = takeValue(); flags.persistSession = true; continue;
     }
     if (arg === '--workspace' || arg === '-C' || arg === '--cd') {
-      if (!rawArgs[i + 1]) throw new Error('--workspace requires a path.');
-      flags.workspace = path.resolve(rawArgs[++i]);
+      if (!rawArgs[i + 1] || looksLikeFlag(rawArgs[i + 1])) throw new Error('--workspace requires a path.');
+      flags.workspace = path.resolve(takeValue());
       continue;
     }
     if (arg.startsWith('--workspace=')) { flags.workspace = path.resolve(arg.slice('--workspace='.length)); continue; }
