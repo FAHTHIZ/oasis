@@ -188,17 +188,31 @@ export async function manageMcp(rest, root = process.cwd(), { approve, askLine, 
     return;
   }
   if (action === 'remove') {
-    const name = rest[1];
-    if (!name) throw new Error('Usage: oasis mcp remove NAME');
-    const existing = config.servers.find((server) => server.name === name);
+    // oasis mcp remove NAME [--scope user|project]: like `claude mcp remove`, it
+    // looks in user configuration first, then the project's .mcp.json.
+    const words = rest.slice(1);
+    let scope = '';
+    const scopeAt = words.findIndex((word) => word === '--scope' || word.startsWith('--scope='));
+    if (scopeAt !== -1) {
+      scope = words[scopeAt].startsWith('--scope=') ? words[scopeAt].slice(8) : String(words[scopeAt + 1] || '');
+      words.splice(scopeAt, words[scopeAt].startsWith('--scope=') ? 1 : 2);
+      if (scope === 'local') scope = 'user';
+      if (!['user', 'project'].includes(scope)) throw new Error('--scope must be user or project.');
+    }
+    const name = words.find((word) => !word.startsWith('-'));
+    if (!name) throw new Error('Usage: oasis mcp remove NAME [--scope user|project]');
+    const existing = scope === 'project' ? null : config.servers.find((server) => server.name === name);
     if (!existing) {
       const { removeUserMcpJsonServer } = await import('./mcp-remote-add.mjs');
-      const removed = await removeUserMcpJsonServer(name, { env: process.env, approve: (text) => approve(text, true, false) });
-      if (removed) { stdout.write(removed + '\n'); return; }
-      throw new Error('No configured MCP server named "' + name + '". Project servers live in .mcp.json; edit that file to remove one.');
+      const ask = (text) => approve(text, true, false);
+      const removed = (scope !== 'project' && await removeUserMcpJsonServer(name, { env: process.env, approve: ask }))
+        || (scope !== 'user' && await removeUserMcpJsonServer(name, { env: process.env, approve: ask, file: path.join(root, '.mcp.json') }));
+      if (removed) { stdout.write(removed + '\n'); if (/cancelled/.test(removed)) process.exitCode = 1; return; }
+      throw new Error('No configured MCP server named "' + name + '"' + (scope ? ' in ' + scope + ' scope' : '') + '. oasis mcp list shows every configured server.');
     }
     if (!(await approve('Remove MCP server "' + name + '" from the user-level configuration?', true, false))) {
       stdout.write('MCP removal cancelled.\n');
+      process.exitCode = 1;
       return;
     }
     const output = await saveMcpServers(config.servers.filter((server) => server.name !== name), { configPath: config.configPath });
@@ -212,10 +226,10 @@ export async function manageMcp(rest, root = process.cwd(), { approve, askLine, 
     if (!existing) {
       const { setUserMcpJsonServerEnabled } = await import('./mcp-remote-add.mjs');
       const changed = await setUserMcpJsonServerEnabled(name, action === 'enable', { env: process.env, approve: (text) => approve(text, true, false) });
-      if (changed) { stdout.write(changed + '\n'); return; }
+      if (changed) { stdout.write(changed + '\n'); if (/cancelled/.test(changed)) process.exitCode = 1; return; }
       throw new Error('No configured MCP server named "' + name + '". Project servers live in .mcp.json; edit that file to change one.');
     }
-    if (!(await approve((action === 'enable' ? 'Enable' : 'Disable') + ' MCP server "' + name + '"?', true, false))) return;
+    if (!(await approve((action === 'enable' ? 'Enable' : 'Disable') + ' MCP server "' + name + '"?', true, false))) { stdout.write('MCP change cancelled.\n'); process.exitCode = 1; return; }
     existing.enabled = action === 'enable';
     const output = await saveMcpServers(config.servers, { configPath: config.configPath });
     stdout.write('MCP server "' + name + '" is now ' + (existing.enabled ? 'enabled' : 'disabled') + '. Saved ' + output + '\n');
