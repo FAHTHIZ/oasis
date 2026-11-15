@@ -4,6 +4,7 @@ User-facing change history grouped by package version. A version heading does no
 
 ## Unreleased
 
+- `oasis insights` and `/insights` no longer write an empty HTML report when there are no saved sessions.
 - `oasis permissions` now leads with the mode in force, spelled as `--permission-mode` and the help spell it ("accept-edits (from --permission-mode; settings: manual)"), instead of "default (overridden: acceptEdits)".
 - New `oasis skills remove NAME [--global]` deletes a skill installed with `skills add` or `skills install` (it asks first, or takes `--yes`). Previously the only way back was finding and deleting the folder by hand.
 - `oasis connect` in the terminal no longer blames browser CORS ("does it allow browser apps? OLLAMA_ORIGINS=*") when a server does not answer; that hint now appears only in the browser app, where it applies.
