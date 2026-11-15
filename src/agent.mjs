@@ -1340,6 +1340,24 @@ function normalizeAssistantToolCalls(session, assistant, step) {
 // In larger windows, the note is kept the first time for each language server
 // and dropped after that: repeating the install hint on every write cost
 // tokens and nudged models toward global installs (seen 15 Nov 2026).
+// Prompt caching seen per model: requests answered and cached tokens reported.
+// Rewriting old history (superseding a stale read) costs a cache miss from
+// that point on where the provider caches, and nothing where it does not.
+export function noteCacheUse(session, usage) {
+  if (!session || !usage) return;
+  const key = String((session.config && session.config.model) || '');
+  const seen = session.cacheUse || (session.cacheUse = {});
+  const entry = seen[key] || (seen[key] = { requests: 0, cached: 0 });
+  entry.requests += 1;
+  entry.cached += Math.max(0, Number(usage.cacheReadTokens) || 0);
+}
+
+export function providerSkipsCache(session) {
+  const key = String((session && session.config && session.config.model) || '');
+  const entry = session && session.cacheUse && session.cacheUse[key];
+  return Boolean(entry && entry.requests >= 2 && entry.cached === 0);
+}
+
 export function leanToolContent(session, content, env = process.env) {
   if (!content.includes('"lspVerification"')) return content;
   const small = contextWindowSize((session && session.config) || {}, env) <= 32_768;
@@ -3194,7 +3212,9 @@ async function runAgentTurnRaw(session, prompt, options = {}) {
     throwIfCancelled(options.signal);
     const pruneWindow = contextWindowSize(session.config, options.env || process.env);
     // microcompact's own trigger (half the window): try the lossless pass first.
-    if (tokenUpperBound(session.messages) > pruneWindow * 0.5 && estimateTokens(session.messages) > pruneWindow * 0.5) supersedeBeforeCompaction(session, options);
+    // A provider that has never reported a cached token gains nothing from an
+    // unchanged history prefix, so stale reads and reruns go on every step.
+    if (providerSkipsCache(session) || (tokenUpperBound(session.messages) > pruneWindow * 0.5 && estimateTokens(session.messages) > pruneWindow * 0.5)) supersedeBeforeCompaction(session, options);
     const maskTurns = Number.parseInt((options.env || process.env).OASIS_OBSERVATION_MASK_TURNS ?? '', 10);
     if (maskTurns > 0) {
       const maskBatch = Number.parseInt((options.env || process.env).OASIS_OBSERVATION_MASK_BATCH ?? '', 10);
@@ -3348,6 +3368,7 @@ async function runAgentTurnRaw(session, prompt, options = {}) {
     reportModelTiming(session, options, { step: step + 1, started: modelStarted, ended: Date.now(), timing, usage, assistant, reasoningChars: shownReasoning.length });
     tokensUsed += Number(usage.totalTokens || 0);
     cachedTokens += Math.min(Number(usage.totalTokens || 0), Math.max(0, Number(usage.cacheReadTokens || 0)));
+    noteCacheUse(session, usage);
     const pricedModel = resolveModelAlias(session.config && session.config.model, {
       protocol: session.config && session.config.protocol,
       env: options.env || process.env
