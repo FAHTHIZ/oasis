@@ -117,6 +117,8 @@ export function helpText() {
     '  oasis mcp install NAME        Add a server from the MCP Registry (pinned version, asks first)',
     '  oasis mcp add NAME -- COMMAND Configure a stdio MCP server',
     '  oasis mcp add --transport http|sse NAME URL  Configure a remote MCP server',
+    '  oasis mcp add-json NAME JSON  Configure a server from Claude Code-style JSON (stdio or remote)',
+    '  oasis mcp get NAME            Show one server from any source (secret values hidden)',
     '  oasis insights [DAYS]          Write an HTML report about your recent sessions',
     '  oasis --bg "TASK"              Run a task in a background session; oasis bg list|logs|attach|stop|rm ID',
     '  oasis --bg --exec "CMD"        Run a shell command as a background job',

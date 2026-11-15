@@ -216,6 +216,8 @@ oasis mcp search filesystem                            # the official MCP Regist
 oasis mcp add everything -- npx -y @modelcontextprotocol/server-everything
 oasis mcp add --yes fs -- npx -y @modelcontextprotocol/server-filesystem .   # scripted: no prompt
 oasis mcp add --transport http docs https://example.com/mcp
+oasis mcp add-json gh '{"type":"http","url":"https://api.githubcopilot.com/mcp/"}'   # Claude Code's JSON form
+oasis mcp get gh                                       # one server, secret values hidden
 oasis mcp connect linear                               # the Connect card flow from a shell
 
 oasis connect                              # paste a key (kept out of shell history)
