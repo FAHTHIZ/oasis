@@ -1,7 +1,12 @@
 # Oasis Neuron Network
 
-**Status:** architecture and first runtime slice  
+**Status:** architecture and first runtime slice; the [detailed design](#detailed-design-proposal-2026-11) below is a proposal for review  
 **Scope:** a model-neutral coordination layer built into the existing Oasis runtime
+
+ONN is a coordination system for agents. It is not a neural network: no
+weights are trained by it, and the word "neuron" names an agent instance in
+a graph. Model choices (using, fine-tuning or training a model) are covered
+separately in [research/MODEL-STRATEGY.md](research/MODEL-STRATEGY.md).
 
 Oasis Neuron Network (ONN) is the coordination architecture for turning Oasis's current subagents, named teams, shared task board, workflows, memory, skills, and verification system into one coherent agent network.
 
@@ -130,3 +135,164 @@ This slice did not change spawning. Nested subagents were added separately (see 
 ## Report handoff (phase 4, first slice)
 
 Before this slice a subagent report of up to a million characters came back as one tool result, and the parent's 24,000-character tool-result cap kept only its head and tail. In the regression test a 60,000-character report with a marker in the middle reached the parent without the marker. Now the full report is saved in the session scratch folder (git-ignored, symlinked folders refused) and the parent receives under 12,000 characters: the first ~6,000 and last ~2,000 characters and the file path, which it can read with `read_file` offset/limit or `grep`. Structured-output agents (`output_schema`) are unchanged because their result is the parsed object.
+
+## Detailed design (proposal, 2026-11)
+
+This section turns phases 2 to 8 above into one design. It was written after
+the [Hermes Agent study](research/HERMES-AGENT.md) and the
+[ecosystem comparison](research/OSS-ECOSYSTEM.md), and it is the network
+half of the [general-purpose architecture](research/GENERAL-PURPOSE-ARCHITECTURE.md).
+Nothing in it is implemented until the [roadmap](research/ROADMAP.md) marks
+it done.
+
+### Components
+
+| Component | Responsibility | Built on |
+| --- | --- | --- |
+| Coordinator | The main session. Decides to work directly, delegate, run a workflow or form a team; integrates results; owns the user conversation | `src/agent.mjs` turn loop |
+| Scheduler (new) | The one place that starts, queues, pauses, cancels and recovers neurons, for subagents, teams and workflow-created workers alike | Replaces the separate start paths in `src/agent-subagents.mjs` and `src/agent-tasks.mjs`, keeping their behaviour |
+| Registry | Neuron records and lineage | Existing agent registry plus `src/neuron-network.mjs` |
+| Work graph | Tasks, dependencies, claims and leases | `src/shared-tasks.mjs`, unchanged |
+| Ledger (new) | Append-only journal of state transitions, budget charges and evidence events, persisted per session | `node:sqlite`, same file family as `src/session-search.mjs` |
+| Router | Model route per neuron from task domain, capabilities, context size, remaining budget and observed success | `src/model-routing.mjs`, `src/escalation.mjs`, `src/cost-policy.mjs` |
+| Gate | Spawn-time checks (authority, scope) and return-time checks (evidence, artifacts) | `src/permissions.mjs`, the evidence ledger in the general-purpose design |
+
+### Neuron record
+
+Fields marked new are additions to the existing agent record.
+
+```text
+id, parentId, depth                      existing (lineage)
+role, description, background            existing
+teamId, sharedTaskId                     existing
+workspace: shared | worktree             existing
+access: read-only | write-capable        existing
+kind: leaf | orchestrator                new (Hermes-style; leaves cannot spawn)
+domain: code | research | analysis | automation | writing   new
+tools: allowlist (subset of parent)      new as an explicit, persisted set
+route: { provider, model, reasoning }    existing in config; persisted
+budget: { steps, tokens, usd, deadline, toolCalls, children }   new
+spent:  { steps, tokens, usd, toolCalls, children }             new (usage exists)
+state, stateSince, attempt               new (state machine below)
+checkpoint, reportFile, artifacts[]      reportFile exists; others new
+evidence: ledger range for this neuron   new
+```
+
+### Lifecycle
+
+```text
+proposed --gate ok--> queued --slot free--> running --report--> reviewing --accepted--> done
+    |                   |                     |  ^                   |
+    |gate refused       |cancel               |  |resume             |rejected
+    v                   v                     v  |                   v
+ refused            cancelled              waiting (approval, input, child, lease)
+                                              |
+                       budget or deadline --> stopped(budget)
+                       error --------------> failed (retry if attempt < limit)
+                       process restart ----> interrupted (never "running")
+```
+
+Rules:
+
+- Every transition is a ledger entry written before the effect is visible.
+- On restart, every neuron whose last state was `running` or `waiting` is
+  moved to `interrupted`. It is never reported as running. Resuming it
+  starts a new attempt from its last checkpoint with the existing
+  `<interrupted-turn>` recovery note.
+- `reviewing` is where the coordinator (or a gate rule) checks the report
+  against the neuron's evidence. A report without the evidence its domain
+  requires is `rejected` with the reason, and the coordinator decides
+  whether to retry, re-scope or tell the user.
+
+### Budget algebra
+
+- A child's budget is reserved from the parent's remaining budget at spawn
+  and returned (unspent part) when the child ends. Budgets are never minted.
+- The session root's budget comes from the existing `--max-budget-usd`,
+  `--max-turns`, token budgets and zero-budget mode.
+- `children` bounds fan-out per parent; `depth` keeps the current
+  `subagentMaxDepth` (default 3, maximum 5); total live neurons keep the
+  current background cap of 8 per tree.
+- Defaults follow the evidence Hermes recorded: one-shot runs get at most 2
+  children unless the user raises it, because children re-pay the system
+  prompt and re-explore.
+- Enforcement is in the scheduler and the provider request path
+  (`src/cost-policy.mjs` already refuses a request that would break a
+  budget), not in prompts.
+
+### Scheduling
+
+- Queue ordered by: user-facing first (foreground before background), then
+  work-graph readiness (all dependencies done), then age.
+- Slots: global (8), per parent (`budget.children`), per provider (from the
+  quota ledger's reported limits, so a free tier is not flooded).
+- Backpressure: a parent that spawns past its slots gets `queued` children
+  and a tool result that says so; it is not blocked silently.
+- Cancellation propagates to all descendants (existing `stopDescendants`);
+  the scheduler adds the ledger entries and the budget refunds.
+- Leases: a neuron that holds a shared-task claim renews it while running;
+  `interrupted` neurons lose their lease, so another neuron can claim the
+  task (the store already refuses to restore live leases).
+
+### Messages
+
+Existing inbox messaging and team messages stay. Message kinds are fixed:
+
+```text
+assign      coordinator -> neuron   task, constraints, budget
+report      neuron -> parent        summary, reportFile, artifacts, evidence range
+question    neuron -> parent/user   needs input (moves the neuron to waiting)
+progress    neuron -> parent        optional heartbeat, never required for correctness
+cancel      parent -> neuron        propagates down
+```
+
+Message bodies are untrusted input to the receiver, like tool results.
+
+### Spawn-time and return-time checks
+
+At spawn (`proposed -> queued`):
+
+1. Tools, paths, network and approval authority are a subset of the
+   parent's (existing invariant 1, now checked on the persisted allowlist).
+2. The task text is checked against the user goal and the parent's task
+   for scope: a child of a read-only research task cannot be given a
+   deploy step. Mismatches are refused with a reason; the coordinator can
+   ask the user.
+3. The budget reservation succeeds.
+
+At return (`reviewing`):
+
+1. The domain contract finds the evidence the report's claims need in the
+   neuron's ledger range.
+2. Artifacts exist, are inside the neuron's workspace, and are referenced
+   by path and digest.
+3. Worktree changes are not merged; integration remains a separate,
+   verified step by the coordinator.
+
+### Observability
+
+- `neuron_network` (existing tool) gains state, budget and spent fields.
+- `/agents` and `/tasks` in the terminal, and the web app, will read the same projection (planned).
+- OpenTelemetry spans per neuron when telemetry is on, using the GenAI
+  `invoke_agent` naming already supported.
+- The ledger is the audit trail; it is redacted like transcripts.
+
+### Interfaces for workflows and the SDK
+
+Workflows (`src/workflows.mjs`) keep `agent()` and `pipeline()`. Under the
+scheduler they create neurons like the `task` tool does, so workflow fan-out
+is bounded by the same slots and budgets. The SDK (`src/sdk.mjs`) gets a
+read-only network view and a cancel call; no SDK caller can create a neuron
+with more authority than the session it belongs to.
+
+### Acceptance criteria
+
+| Area | Criterion | How it is checked |
+| --- | --- | --- |
+| Budgets | No neuron tree spends more tokens, dollars, steps or children than its root allows, under concurrent spawns | Property test with random spawn trees and a scripted model |
+| Recovery | After a kill at any ledger write, restart shows no neuron as running, and resumed work produces the same final work-graph state | Fault-injection test that kills the process at each write |
+| Cancellation | Cancelling any neuron stops all descendants within 2 seconds and refunds their unspent budget | Integration test with sleeping tools |
+| Authority | No spawned neuron has a tool, path or network permission its parent lacks, including through workflows and teams | Exhaustive test over permission combinations |
+| Evidence | A child report claiming passing tests without a matching ledger entry is rejected | Scripted-model test |
+| Parity | Existing subagent, team, workflow and task-board tests pass unchanged | The current test suite |
+| Overhead | Scheduler and ledger add under 5 ms per spawn and under 1% to a 30-step session on a 2-CPU machine | `bench/harness/run.mjs` timing |
