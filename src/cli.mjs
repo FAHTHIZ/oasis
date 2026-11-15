@@ -3623,7 +3623,7 @@ async function main() {
   if (command === 'insights') {
     const { writeInsightsReport, insightsSummaryText } = await import('./insights.mjs');
     const { file, stats } = await writeInsightsReport({ env: process.env, days: Math.min(365, Math.max(1, parseInt(rest[0], 10) || 30)) });
-    stdout.write(insightsSummaryText(stats) + '\nReport: ' + file + '\n');
+    stdout.write(insightsSummaryText(stats) + (file ? '\nReport: ' + file : '') + '\n');
     return;
   }
   if (command === 'backups') return await showBackups(workspace);

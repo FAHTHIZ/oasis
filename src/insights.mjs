@@ -159,6 +159,8 @@ ${narrative ? '<div class="card" style="margin-top:16px"><h2>Summary</h2>' + nar
 export async function writeInsightsReport(options = {}) {
   const env = options.env || process.env;
   const stats = await collectInsights(options);
+  // Nothing to report: do not leave an empty HTML file behind.
+  if (!stats.sessions) return { file: '', stats };
   let narrative = '';
   if (options.narrate && stats.sessions) { try { narrative = await options.narrate(insightsSummaryText(stats)); } catch {} }
   const dir = path.join(getConfigDirectory(env), 'insights');
