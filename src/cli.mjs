@@ -2702,7 +2702,9 @@ const SELF_HELP_COMMANDS = new Set(['connect', 'setup', 'update', 'web']);
 function subcommandHelp(rawArgs) {
   const command = rawArgs[0];
   if (!command || command.startsWith('-') || SELF_HELP_COMMANDS.has(command)) return false;
-  if (!rawArgs.slice(1).some((arg) => arg === '--help' || arg === '-h')) return false;
+  // A --help after `--` belongs to the command being passed through.
+  const end = rawArgs.indexOf('--');
+  if (!rawArgs.slice(1, end === -1 ? undefined : end).some((arg) => arg === '--help' || arg === '-h')) return false;
   const lines = helpText().split('\n');
   const pattern = new RegExp('^\\s+oasis ' + command.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '(\\s|$)');
   const matches = lines.filter((line) => pattern.test(line));
@@ -3506,6 +3508,12 @@ async function main() {
     const request = parseInstallIntent(args.join(' '));
     if (!request) throw new Error('Use one package name at a time. For compound setup requests, configure a provider and ask Oasis in plain English.');
     return await installRequest(request, workspace, autoApprove);
+  }
+  // `oasis review --help` (not a command): show the help rather than sending
+  // "review --help" to the model as a task. A --help after `--` stays in the task.
+  {
+    const end = args.indexOf('--');
+    if (args.slice(0, end === -1 ? undefined : end).some((word) => word === '--help' || word === '-h')) return printQuickHelp();
   }
   const fullPrompt = args.join(' ');
   {
