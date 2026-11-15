@@ -113,3 +113,20 @@ test('json output never writes progress lines', async (t) => {
   await runHeadless({ prompt: 'check', root, config, outputFormat: 'json', sessionOptions: { settings }, write: () => {}, progressWrite: (line) => lines.push(line) });
   assert.deepEqual(lines, []);
 });
+
+// The mission requires recording the actual model of every run; the JSON
+// result named tokens and cost but not which model produced them.
+test('the json result names the model and its per-model usage', async (t) => {
+  const root = await tmp();
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const { config } = await scriptedModel(t, [toolCall('m1', 'list_files', { path: '.' }), { content: 'Done.' }]);
+  let out = '';
+  await runHeadless({ prompt: 'look', root, config, outputFormat: 'json', sessionOptions: { settings }, write: (text) => { out += text; } });
+  const parsed = JSON.parse(out);
+  assert.equal(parsed.model, config.model);
+  const entry = parsed.modelUsage && parsed.modelUsage[config.model];
+  assert.ok(entry, JSON.stringify(parsed.modelUsage));
+  assert.equal(entry.requests, 2);
+  assert.equal(entry.inputTokens, parsed.usage.input_tokens);
+  assert.equal(entry.outputTokens, parsed.usage.output_tokens);
+});
