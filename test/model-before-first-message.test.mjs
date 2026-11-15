@@ -17,9 +17,11 @@ const hasPty = process.platform !== 'win32' && spawnSync('python3', ['-c', 'impo
 const DRIVER = String.raw`
 import os, pty, sys, time, select, fcntl, termios, struct
 pid, fd = pty.fork()
+import json
+steps = json.loads(sys.argv[2])
 if pid == 0:
     os.chdir(sys.argv[1])
-    os.execvp(sys.argv[2], sys.argv[2:])
+    os.execvp(sys.argv[3], sys.argv[3:])
 fcntl.ioctl(fd, termios.TIOCSWINSZ, struct.pack('HHHH', 30, 100, 0, 0))
 buf = b''
 def pump(t, until=None):
@@ -35,18 +37,33 @@ def send(text):
     for ch in text: os.write(fd, ch.encode()); time.sleep(0.01)
 pump(20, b'\x1b[?2004h')
 pump(1)
-send('/model other-model\r')
-pump(20, b'Model set to')
-pump(1)
-send('hi\r')
-pump(30, b'Done')
-pump(0.5)
+for text, until in steps:
+    send(text + '\r')
+    pump(30, until.encode())
+    pump(1)
 sys.stdout.buffer.write(buf)
 try: os.kill(pid, 9)
 except Exception: pass
 `;
 
 test('/model NAME before the first message switches the model for that conversation', { skip: !hasPty && 'needs python3 pty', timeout: 120000 }, async (t) => {
+  const { plain, models } = await drive(t, [['/model other-model', 'Model set to'], ['hi', 'Done']]);
+  assert.doesNotMatch(plain, /No active session/);
+  assert.match(plain, /Model set to other-model/);
+  assert.ok(models.length > 0, 'the task reached the model server\n' + plain.slice(-1500));
+  assert.equal(models[0], 'other-model');
+});
+
+test('/add-dir and /rename work before the first message', { skip: !hasPty && 'needs python3 pty', timeout: 120000 }, async (t) => {
+  const extra = await mkdtemp(path.join(os.tmpdir(), 'oasis-model-early-extra-'));
+  t.after(() => rm(extra, { recursive: true, force: true }));
+  const { plain } = await drive(t, [['/add-dir ' + extra, 'working directory'], ['/rename early-name', 'renamed']]);
+  assert.doesNotMatch(plain, /Start a session|Start a conversation/);
+  assert.match(plain, /Added additional working directory/);
+  assert.match(plain, /Session renamed to "early-name"/);
+});
+
+async function drive(t, steps) {
   const models = [];
   const server = http.createServer(async (req, res) => {
     let body = '';
@@ -66,18 +83,14 @@ test('/model NAME before the first message switches the model for that conversat
   for (const key of Object.keys(env)) if (/^OASIS_(MODEL|BASE_URL|PROTOCOL|LOCAL_API_KEY)$|_API_KEY$/.test(key)) delete env[key];
   delete env.OASIS_PLAIN_OUTPUT;
   const raw = await new Promise((resolve, reject) => {
-    const child = spawn('python3', ['-c', DRIVER, project, process.execPath, path.join(ROOT, 'src', 'oasis.mjs')], { env });
+    const child = spawn('python3', ['-c', DRIVER, project, JSON.stringify(steps), process.execPath, path.join(ROOT, 'src', 'oasis.mjs')], { env });
     const chunks = [];
     child.stdout.on('data', (c) => chunks.push(c));
     child.on('error', reject);
     child.on('close', () => resolve(Buffer.concat(chunks).toString('utf8')));
   });
-  const plain = raw.replace(/\x1b\[[0-9;?]*[A-Za-z]|\x1b\][^\x07]*\x07/g, '');
-  assert.doesNotMatch(plain, /No active session/);
-  assert.match(plain, /Model set to other-model/);
-  assert.ok(models.length > 0, 'the task reached the model server\n' + plain.slice(-1500));
-  assert.equal(models[0], 'other-model');
-});
+  return { plain: raw.replace(/\x1b\[[0-9;?]*[A-Za-z]|\x1b\][^\x07]*\x07/g, ''), models };
+}
 
 test('the /model picker offers no Claude aliases to an OpenAI-compatible provider', async () => {
   const { pickerFor } = await import('../src/select-dialog.mjs');

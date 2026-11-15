@@ -2128,6 +2128,10 @@ async function showResumeRecap(root, persistence) {
 }
 
 // Slash commands that act on the current conversation (see interactive()).
+// Commands that set up the conversation: typed before the first message they
+// start the session (as the first prompt would) instead of answering "start a
+// conversation first". Claude Code accepts /model, /add-dir and /rename then too.
+export const SESSION_START_COMMANDS = new Set(['context', 'model', 'add-dir', 'rename', 'autocompact', 'sandbox', 'advisor', 'routing', 'chrome']);
 export const RESUMED_SESSION_COMMANDS = new Set(['rewind', 'rollback', 'context', 'compact', 'export', 'cost', 'recap', 'rename', 'fork', 'branch', 'todos', 'undo', 'copy', 'usage', 'tasks', 'agents', 'goal']);
 
 // Set while the interactive prompt runs, so messages name /setup rather than
@@ -2370,7 +2374,7 @@ async function interactive(root, autoApprove, persistence = {}) {
         // as Claude Code does, instead of "no conversation yet".
         // `/model` (typed, or picked from the picker) likewise needs the
         // session, so availableModels policy and model-switch hooks apply.
-        if ((slash[1].toLowerCase() === 'context' || slash[1].toLowerCase() === 'model') && !session && !persistence.resumeId) {
+        if (SESSION_START_COMMANDS.has(slash[1].toLowerCase()) && !session && !persistence.resumeId) {
           try {
             const config = await loadConfig();
             if (SESSION_OPTIONS.model) config.model = SESSION_OPTIONS.model;
