@@ -4,6 +4,7 @@ User-facing change history grouped by package version. A version heading does no
 
 ## Unreleased
 
+- Security: `oasis trust` lists what trust turns on (project hook commands, allow rules, default permission mode, status line command and `.mcp.json` servers) and asks before trusting. Without a terminal it needs `--yes`. Before, it trusted at once with no list, so a script, or an agent following a repository's instructions, could enable a project's `curl … | sh` hook unseen. A folder with none of these is trusted without a question, as before.
 - `oasis mcp remove NAME [--scope user|project]` can remove a project server from `.mcp.json`, as `claude mcp remove` does. It looks in user configuration first. It used to refuse with "edit that file", although `mcp add --scope project` writes there. A cancelled `mcp remove`, `enable` or `disable` exits 1.
 - `oasis -p /cost`, `/context`, `/help`, `/doctor`, `/skills` and `/release-notes` answer locally, without a model call and without needing a provider, as `claude -p /cost` does. They used to send the text "/cost" to the model. Custom commands with the same name, and unknown names, still go to the model.
 - `--output-format stream-json`: assistant events now also carry Claude Code's `message: {role, content: [{type: "text", text}]}` and `session_id`. A consumer written for `claude -p` reads `message.content` and used to get no text. The OASIS `text` field is unchanged. Tool calls are still OASIS's own `tool_use` / `tool_result` events, and docs/COMPARISON.md now says so instead of "the same output formats".
