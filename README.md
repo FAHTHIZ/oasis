@@ -224,6 +224,7 @@ oasis connect                              # paste a key (kept out of shell hist
 oasis connect --from-env gemini            # use GEMINI_API_KEY
 oasis connect http://localhost:11434       # Ollama, LM Studio, llama.cpp or vLLM
 oasis connect http://127.0.0.1:20128/v1    # an OpenAI-compatible gateway such as OmniRoute
+oasis connect http://127.0.0.1:4000/v1 --model NAME   # try this model first, even if the server lists none
 ```
 
 GitHub uses your existing `gh` sign-in, or runs `gh auth login --web` and shows the one-time code on the card. The web app manages servers under **Settings → Tools** and apps under **Settings → Apps**.
