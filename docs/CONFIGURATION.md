@@ -444,6 +444,40 @@ exit code like an ordinary run; one still running (a REPL, a prompt) returns
 its id, the output so far and `nextOffset` for `terminal_read`. A check still
 running has no exit code yet and does not count as passed or failed.
 
+## Context trimming
+
+Sources: `supersedeHistory` in `src/superseded-results.mjs`,
+`pruneOldToolOutput` and `microcompact` in `src/context.mjs`,
+`leanToolContent` and `providerSkipsCache` in `src/agent.mjs`,
+`refreshTodoPrompt` in `src/tool-results.mjs`.
+
+Every request resends the whole conversation, so OASIS trims what the model
+no longer needs before each request, in this order:
+
+- Lossless: an older read of a file that was read again, or an earlier run of
+  the same command, becomes a one-line stub. This runs on every request once a
+  model has answered two requests without reporting any cached tokens.
+  Otherwise it waits until the history reaches half the context window, so
+  the provider's cached prompt prefix stays intact. Set
+  `OASIS_SUPERSEDE_RESULTS=0` to turn it off.
+- Budget pruning, as in OpenCode: the newest 40,000 tokens of tool output are
+  kept as they are. Older outputs become re-run stubs, but only when that
+  frees at least 20,000 tokens, so the cached prefix is rebuilt rarely and
+  only for a large saving. Checklist, skill and tool-search results are never
+  pruned. `OASIS_PRUNE_PROTECT_TOKENS=60000` (or `"pruneToolOutputTokens"` in
+  the config) changes the budget, and `0` turns it off. This only affects long
+  sessions: replayed recorded feature tasks of 12–32 requests never held 40K
+  tokens of tool output.
+- Microcompaction: at half the context window, old bulky tool output is
+  stubbed until the history is back to about 35%.
+- Edit, multi-edit and delete results reach the model without `beforeBytes`,
+  `afterBytes` and `backupCreated`; the terminal still shows them.
+- Each `todo_write` update reaches the model once, as the checklist reminder;
+  the tool result says the checklist was saved.
+
+The terminal's turn line separates cache reads: `Done · 9s · 126k tokens (98.4k
+cached)`.
+
 ## Edit checks
 
 Sources: `verifyEditedFileWithLsp` and `nodeSyntaxCheck` in `src/lsp.mjs`.
