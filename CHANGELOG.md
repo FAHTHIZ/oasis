@@ -4,6 +4,7 @@ User-facing change history grouped by package version. A version heading does no
 
 ## Unreleased
 
+- With no model connected, the interactive prompt's banner and its reply to a task now say "type /setup" instead of telling you to exit and run `oasis setup` (`/setup` works inside the session). `oasis -p` keeps naming `oasis setup`.
 - Connecting an invalid Google Gemini key now says "Google Gemini did not accept this key" instead of printing Google's raw JSON error (Google answers a bad key with HTTP 400, not 401). An invalid Hugging Face key is no longer reported as accepted before the test call fails (its router lists models without a key).
 - Connecting an invalid OpenRouter key (terminal `oasis connect` and the web app) no longer says "OpenRouter accepted the key" — OpenRouter lists its models to anyone, so the test call is what checks the key — and the failure now reads "OpenRouter did not accept this key" instead of "OpenRouter accepted this key. Check that it was copied whole…". Also "an OpenRouter key", not "a OpenRouter key".
 - `oasis import claude` now says that Claude Code's setup (CLAUDE.md, MCP servers in `~/.claude.json` and `.mcp.json`, commands, skills, subagents, hooks, settings) is already read in place and that only Claude Code memories are copied. Before, a Claude Code user got "Nothing to import" followed by a list of other tools' folders, which read as if their setup had been missed.
