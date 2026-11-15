@@ -50,3 +50,15 @@ test('/insights writes an escaped HTML report', async () => {
   const narrated = await writeInsightsReport({ env, narrate: async () => 'You mostly build the webapp.' });
   assert.match(await readFile(narrated.file, 'utf8'), /You mostly build the webapp/);
 });
+
+// With no saved sessions, `oasis insights` wrote an empty HTML report and
+// printed its path. Nothing is written now.
+test('insights writes no report when there are no sessions', async () => {
+  const home = await mkdtemp(path.join(os.tmpdir(), 'oasis-insights-empty-'));
+  const env = { HOME: home, XDG_CONFIG_HOME: path.join(home, '.config') };
+  const { file, stats } = await writeInsightsReport({ env });
+  assert.equal(stats.sessions, 0);
+  assert.equal(file, '');
+  const { readdir } = await import('node:fs/promises');
+  assert.deepEqual(await readdir(path.join(home, '.config', 'oasis', 'insights')).catch(() => []), []);
+});
