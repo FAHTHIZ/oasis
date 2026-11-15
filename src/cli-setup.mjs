@@ -46,10 +46,33 @@ export async function autoSetup(root, { dryRun = false } = {}) {
   return rec;
 }
 
+export const SETUP_INPUT_ENDED = 'Setup stopped: input ended before a choice was made, so nothing was saved. Run oasis setup in a terminal, or in a script use oasis connect KEY (or set OASIS_PROTOCOL, OASIS_BASE_URL, OASIS_MODEL and the API-key variable).';
+
 export async function configureProvider(root = process.cwd(), options = {}) {
   stdout.write('\nOasis setup — choose and verify your model provider\n');
   stdout.write('A successful model response is required before settings are saved or coding tools are used. Presets include OpenAI, Anthropic, OpenRouter, Gemini, local Ollama, AWS Bedrock, Google Vertex AI, and Microsoft Foundry.\n');
   const rl = createInterface({ input: stdin, output: stdout });
+  // Input that ends mid-setup (`oasis setup < /dev/null`, a short pipe) left the
+  // question pending: OASIS exited 0 with nothing saved and no explanation.
+  // Piped answers are queued: readline drops lines that arrive before the next
+  // question is asked, so `printf '1\n1\n' | oasis setup` lost the second one.
+  let inputEnded = false;
+  const queued = [];
+  let waiting = null;
+  if (!stdin.isTTY) rl.on('line', (line) => { if (waiting) { const { resolve } = waiting; waiting = null; resolve(line); } else queued.push(line); });
+  const ended = new Promise((_, reject) => rl.once('close', () => {
+    inputEnded = true;
+    if (waiting) { stdout.write('\n'); waiting.reject(new Error(SETUP_INPUT_ENDED)); waiting = null; }
+    reject(new Error(SETUP_INPUT_ENDED));
+  }));
+  ended.catch(() => {});
+  const ask = (question) => {
+    if (stdin.isTTY) return inputEnded ? Promise.reject(new Error(SETUP_INPUT_ENDED)) : Promise.race([rl.question(question), ended]);
+    stdout.write(question);
+    if (queued.length) { const line = queued.shift(); stdout.write(line.trim() && !/key|token|secret/i.test(question) ? line + '\n' : '\n'); return Promise.resolve(line); }
+    if (inputEnded) { stdout.write('\n'); return Promise.reject(new Error(SETUP_INPUT_ENDED)); }
+    return new Promise((resolve, reject) => { waiting = { resolve: (line) => { stdout.write('\n'); resolve(line); }, reject }; });
+  };
   let protocol, baseURL, model, presetName;
   const presets = {
     ...Object.fromEntries(['openai', 'anthropic', 'openrouter', 'gemini', 'ollama'].map((id) => {
@@ -64,7 +87,7 @@ export async function configureProvider(root = process.cwd(), options = {}) {
     stdout.write('\nChoose your API-key provider:\n');
     stdout.write('  1. OpenAI\n  2. Anthropic\n  3. OpenRouter\n  4. Gemini\n  5. Other / compatible endpoint\n');
     const preferred = ({ openai: '1', anthropic: '2', openrouter: '3', gemini: '4', custom: '5' })[preferredPreset] || '1';
-    const answer = (await rl.question('Choose [1/2/3/4/5] (default ' + preferred + '): ')).trim().toLowerCase() || preferred;
+    const answer = (await ask('Choose [1/2/3/4/5] (default ' + preferred + '): ')).trim().toLowerCase() || preferred;
     const providers = { '1': 'openai', '2': 'anthropic', '3': 'openrouter', '4': 'gemini', '5': 'custom' };
     const selected = providers[answer] || (['openai', 'anthropic', 'openrouter', 'gemini', 'custom'].includes(answer) ? answer : '');
     if (!selected) throw new Error('Choose a number from 1 to 5 for the API-key provider.');
@@ -86,7 +109,7 @@ export async function configureProvider(root = process.cwd(), options = {}) {
       stdout.write('  3. Advanced provider or custom endpoint\n');
       const defaultChoice = defaultPreset === 'ollama' ? '2'
         : ['bedrock', 'vertex', 'foundry', 'custom'].includes(defaultPreset) ? '3' : '1';
-      const answer = (await rl.question('Choose [1/2/3] (default ' + defaultChoice + '): ')).trim().toLowerCase() || defaultChoice;
+      const answer = (await ask('Choose [1/2/3] (default ' + defaultChoice + '): ')).trim().toLowerCase() || defaultChoice;
       const directPresets = ['openai', 'anthropic', 'openrouter', 'gemini', 'ollama', 'bedrock', 'vertex', 'foundry', 'custom'];
       if (directPresets.includes(answer)) {
         // Keep accepting named presets for existing scripts and experienced users.
@@ -99,7 +122,7 @@ export async function configureProvider(root = process.cwd(), options = {}) {
         stdout.write('\nChoose an advanced provider:\n');
         stdout.write('  1. AWS Bedrock\n  2. Google Vertex AI\n  3. Microsoft Foundry\n  4. Custom / compatible endpoint\n');
         const advancedDefault = ({ bedrock: '1', vertex: '2', foundry: '3', custom: '4' })[defaultPreset] || '4';
-        const advancedAnswer = (await rl.question('Choose [1/2/3/4] (default ' + advancedDefault + '): ')).trim().toLowerCase() || advancedDefault;
+        const advancedAnswer = (await ask('Choose [1/2/3/4] (default ' + advancedDefault + '): ')).trim().toLowerCase() || advancedDefault;
         const advancedProviders = { '1': 'bedrock', '2': 'vertex', '3': 'foundry', '4': 'custom' };
         presetName = advancedProviders[advancedAnswer] || (['bedrock', 'vertex', 'foundry', 'custom'].includes(advancedAnswer) ? advancedAnswer : '');
         if (!presetName) throw new Error('Choose a number from 1 to 4 for the advanced provider.');
@@ -108,12 +131,12 @@ export async function configureProvider(root = process.cwd(), options = {}) {
       }
     }
     if (shouldPromptForProviderBaseURL(presetName)) {
-      protocol = validateProtocol((await rl.question('Protocol [openai-responses / anthropic / openai-compatible / bedrock / vertex / foundry] (default openai-responses): ')).trim().toLowerCase() || 'openai-responses');
+      protocol = validateProtocol((await ask('Protocol [openai-responses / anthropic / openai-compatible / bedrock / vertex / foundry] (default openai-responses): ')).trim().toLowerCase() || 'openai-responses');
       const defaultBase = protocol === 'bedrock' || protocol === 'vertex' || protocol === 'foundry' ? defaultCloudBaseURL(protocol, process.env) : protocol === 'anthropic' ? DEFAULT_ANTHROPIC_BASE_URL : DEFAULT_BASE_URL;
-      baseURL = (await rl.question('Base URL [' + defaultBase + ']: ')).trim() || defaultBase;
+      baseURL = (await ask('Base URL [' + defaultBase + ']: ')).trim() || defaultBase;
       const defaultModel = protocol === 'anthropic' ? 'claude-sonnet-5' : (protocol === 'openai-responses' ? DEFAULT_MODEL : '');
       const modelPrompt = defaultModel ? 'Model name [' + defaultModel + ']: ' : 'Model name (exact model ID required): ';
-      model = (await rl.question(modelPrompt)).trim() || defaultModel;
+      model = (await ask(modelPrompt)).trim() || defaultModel;
     } else {
       const selected = presets[presetName];
       if (!selected) throw new Error('Unknown provider preset. Choose openai, anthropic, openrouter, gemini, ollama, bedrock, vertex, foundry, or custom.');
@@ -131,7 +154,7 @@ export async function configureProvider(root = process.cwd(), options = {}) {
           while (!detected.available || !detected.models.length) {
             stdout.write(detected.message + '\n');
             stdout.write((detected.available ? await ollamaPullHint() : 'Install/start Ollama from https://ollama.com/download, then press Enter here.') + '\n');
-            const answer = (await rl.question('Enter a model ID to continue, press Enter to check again, or type later to stop: ')).trim();
+            const answer = (await ask('Enter a model ID to continue, press Enter to check again, or type later to stop: ')).trim();
             if (/^(?:later|skip|cancel)$/i.test(answer)) {
               throw new Error('Local model setup was stopped. ' + (detected.available ? 'Pull a model with ollama pull first' : 'Install and start Ollama first'));
             }
@@ -149,10 +172,13 @@ export async function configureProvider(root = process.cwd(), options = {}) {
       }
       stdout.write('Using the standard ' + presetName + ' endpoint. To use a different URL, choose Advanced > Custom.\n');
       const modelPrompt = model ? 'Model name [' + model + ']: ' : 'Model name (exact model ID required, after installing a model): ';
-      model = (await rl.question(modelPrompt)).trim() || model;
+      model = (await ask(modelPrompt)).trim() || model;
     }
     if (!model) throw new Error('Enter the exact model name supported by this provider before continuing.');
-  } finally { rl.close(); }
+  } finally { if (stdin.isTTY) rl.close(); }
+  // Piped input keeps the queued reader for the key prompt (askSecret needs a terminal).
+  const askKey = (question) => (stdin.isTTY ? askSecret(question) : ask(question).then((line) => line.trim()));
+  try {
   protocol = validateProtocol(protocol);
   baseURL = validateBaseUrl(baseURL);
   const existing = await loadConfig().catch(() => ({ apiKey: '', baseURL: '', protocol: '' }));
@@ -160,7 +186,7 @@ export async function configureProvider(root = process.cwd(), options = {}) {
   const localEndpoint = isLoopbackUrl(baseURL);
   if (protocol === 'foundry') {
     stdout.write('Microsoft Foundry uses ANTHROPIC_FOUNDRY_AUTH_TOKEN, or an API key, or az login (Entra ID). Enter the model deployment name as the model.\n');
-    apiKey = await askSecret('Foundry API key (input hidden; leave empty to use az login or ANTHROPIC_FOUNDRY_AUTH_TOKEN): ');
+    apiKey = await askKey('Foundry API key (input hidden; leave empty to use az login or ANTHROPIC_FOUNDRY_AUTH_TOKEN): ');
     if (!apiKey) apiKey = process.env.ANTHROPIC_FOUNDRY_API_KEY || '';
   } else if (protocol === 'bedrock' || protocol === 'vertex') {
     stdout.write(protocol === 'bedrock'
@@ -168,7 +194,7 @@ export async function configureProvider(root = process.cwd(), options = {}) {
       : 'Vertex uses GOOGLE_OAUTH_ACCESS_TOKEN or gcloud auth print-access-token. Project: ' + (process.env.ANTHROPIC_VERTEX_PROJECT_ID || process.env.GOOGLE_CLOUD_PROJECT || '(set ANTHROPIC_VERTEX_PROJECT_ID)') + '.\n');
   } else if (!localEndpoint || presetName === 'custom') {
     const label = localEndpoint ? 'Optional local endpoint key' : (protocol === 'anthropic' ? 'ANTHROPIC API key' : 'API key');
-    apiKey = await askSecret(label + ' (input hidden; Enter keeps a key only if the endpoint is unchanged, otherwise use a matching environment variable): ');
+    apiKey = await askKey(label + ' (input hidden; Enter keeps a key only if the endpoint is unchanged, otherwise use a matching environment variable): ');
     if (!apiKey && existing.baseURL === baseURL && existing.protocol === protocol) apiKey = existing.apiKey || '';
     if (localEndpoint) {
       if (!apiKey) apiKey = process.env.OASIS_LOCAL_API_KEY || '';
@@ -189,6 +215,7 @@ export async function configureProvider(root = process.cwd(), options = {}) {
   stdout.write('Protocol: ' + protocol + '\n');
   stdout.write('Authentication: ' + (apiKey ? 'configured' : (isLoopbackUrl(baseURL) ? 'local endpoint; no API key required' : 'not configured')) + '\n');
   stdout.write('The provider is verified. Oasis can now inspect workspaces and use approved tools.\n');
+  } finally { rl.close(); }
 }
 
 // Paste-to-connect in the terminal: the same smart connect the app uses. Works
