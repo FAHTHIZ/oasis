@@ -76,3 +76,16 @@ test('telemetry: subagent invoke_agent spans carry the neuron id, parent id and 
   assert.equal(Number(attr(child, 'oasis.neuron.depth')), 1);
   assert.equal(child.traceId, turn.traceId, 'the child span is in the parent turn trace');
 });
+
+test('agent events carry the budget line the web app shows', async () => {
+  const { recordAgentEvent, agentRegistry } = await import('../src/agent-tasks.mjs');
+  const session = { agentId: 'main' };
+  const registry = agentRegistry(session);
+  registry.agents.set('agent_1', { id: 'agent_1', status: 'running', budgetLimits: { tokens: 50000 }, budgetSpent: { tokens: 1200 } });
+  const seen = [];
+  session.onAgentEvent = (event) => seen.push(event);
+  recordAgentEvent(session, 'agent.completed', { agentId: 'agent_1', description: 'x' });
+  assert.equal(seen[0].budget, 'tokens 1,200/50,000');
+  recordAgentEvent(session, 'team.created', {});
+  assert.equal(seen[1].budget, undefined);
+});
