@@ -7,7 +7,7 @@ import { SUBAGENT_STATUS_TEXT } from './core/subagents.mjs';
 import { createConnectorCard, connectIntent, splitServices, brandMark } from './core/connector-card.mjs';
 import { createSoundPlayer, soundAllowed } from './core/sound.mjs';
 import { sideWork, liveStatus, modelRequest, waitingLabel, thoughtMs, runSummary, reasoningHeadline, formatTokens } from './core/live-status.mjs';
-import { readableOutput, repeatsEarlierReply, stepOutcome, stepRan, stepLabel, summarizeArgs, toolKind, groupTitle, groupStats, formatDuration, thinkingLabel, thoughtLabel, splitTextToolCall, elapsedSince, describeInput, buildTimeline, groupTiming, runElapsed, timingSplit, stepResult, liveLabel } from './core/timeline.mjs';
+import { readableOutput, repeatsEarlierReply, stepOutcome, stepRan, stepLabel, summarizeArgs, toolKind, groupTitle, groupStats, formatDuration, thinkingLabel, thoughtLabel, splitTextToolCall, elapsedSince, describeInput, buildTimeline, groupTiming, runElapsed, timingSplit, stepResult, liveLabel, diffPreview } from './core/timeline.mjs';
 import { IndexedDBStore, Workspace, diffStat, lineDiff } from './core/workspace.mjs';
 import { wordHighlights } from '../src/word-diff.mjs';
 import { Agent, answeredHistory, textOf } from './core/agent.mjs';
@@ -995,7 +995,11 @@ function stepRow(tool, { enter = false } = {}) {
   const result = document.createElement('div');
   result.className = 'step-result';
   result.hidden = true;
-  item.append(details, result, tail, sources);
+  // An edit shows its change inline, a few lines, under the step.
+  const preview = document.createElement('div');
+  preview.className = 'diff step-diff';
+  preview.hidden = true;
+  item.append(details, result, preview, tail, sources);
   patchStepRow(item, tool);
   if (enter) item.classList.add('enter');
   return item;
@@ -1094,6 +1098,7 @@ function patchStepRow(item, tool) {
   patchSources(item.querySelector('.step-sources'), tool.sources);
   summary.setAttribute('aria-label', label + ', ' + stepStatus(tool).toLowerCase() + '. Expand to inspect input and output.');
   patchStepResult(item.querySelector('.step-result'), tool);
+  patchStepDiff(item.querySelector('.step-diff'), tool);
   patchStepTail(item, tool);
   patchStepAsk(item, tool);
   const details = item.querySelector('details');
@@ -1105,6 +1110,36 @@ function patchStepRow(item, tool) {
     if (out && tool.ok === undefined) out.textContent = inspectorOutput(tool);
     else { fillInspector(item.querySelector('.inspect'), tool); addTraceLink(item.querySelector('.inspect'), item); }
   }
+}
+const PREVIEW_LINES = 10;
+function patchStepDiff(el, tool) {
+  if (!el) return;
+  const show = toolKind(tool.name) === 'edit' && stepState(tool) === 'ok';
+  const key = show ? tool.id + ':ok' : '';
+  if (el.dataset.key === key) return;
+  el.dataset.key = key;
+  el.hidden = true;
+  el.replaceChildren();
+  if (!show) return;
+  const ops = [];
+  const parts = describeInput(tool).filter((part) => part.format === 'diff').slice(0, 4);
+  for (const part of parts) {
+    const rows = lineDiff(part.old, part.new);
+    if (rows.some((row) => row.type === 'note')) return;
+    if (ops.length && rows.length) ops.push({ type: 'gap-break', text: '' });
+    ops.push(...rows);
+  }
+  const { rows, more } = diffPreview(ops.map((op) => (op.type === 'gap-break' ? { type: 'same-break', text: '' } : op)), PREVIEW_LINES);
+  const shown = rows.filter((row) => row.type !== 'same-break');
+  if (!shown.some((row) => row.type === 'add' || row.type === 'del')) return;
+  renderDiff(el, shown.map((row) => (row.type === 'gap' ? { type: 'note', text: '⋯' } : row)));
+  if (more) {
+    const note = document.createElement('div');
+    note.className = 'note';
+    note.textContent = '… ' + more + ' more changed line' + (more === 1 ? '' : 's') + ', open the step for the full diff';
+    el.appendChild(note);
+  }
+  el.hidden = false;
 }
 function patchStepResult(el, tool) {
   if (!el) return;
@@ -1264,8 +1299,12 @@ function updateStepRow(group, tool) {
 function settleGroup(group) {
   if (!group || !group.live) return;
   group.live = false;
-  // Verbose keeps every step list open; Normal folds finished work to one line.
-  if (!group.touched && !verboseSteps()) setGroupOpen(group, false);
+  // Verbose keeps every step list open; Normal folds finished work to one
+  // line, except a group that changed files: its edits stay in view with
+  // their inline diffs (people want to see what changed without digging,
+  // the complaint about Codex's and Cursor's folded "Explored" rows).
+  const edited = group.steps.some((step) => toolKind(step.name) === 'edit' && stepState(step) === 'ok');
+  if (!group.touched && !verboseSteps() && !edited) setGroupOpen(group, false);
   updateGroupHead(group);
 }
 function verboseSteps() { return Boolean(settings && settings.density === 'verbose'); }
