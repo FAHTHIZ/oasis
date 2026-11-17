@@ -657,11 +657,15 @@ export function verboseToolOutput(name, result, { color = false, maxLines = 400 
 }
 
 // One dim line after each interactive turn: how long it took and what it did.
-const shortCount = (value) => value >= 1000 ? (value / 1000).toFixed(value >= 100000 ? 0 : 1) + 'k' : String(value);
+// A million and up reads "1.2M", not "1200k".
+const shortCount = (value) => value >= 999500 ? (value / 1e6).toFixed(value >= 99950000 ? 0 : 1) + 'M' : value >= 1000 ? (value / 1000).toFixed(value >= 100000 ? 0 : 1) + 'k' : String(value);
 
 export function formatTurnSummary({ ms = 0, toolCalls = 0, tokens = 0, cachedTokens = 0, finished = true, stopped = false } = {}) {
   const seconds = Math.max(0, Math.round(Number(ms || 0) / 1000));
-  const time = seconds < 60 ? seconds + 's' : Math.floor(seconds / 60) + 'm ' + String(seconds % 60).padStart(2, '0') + 's';
+  const minutes = Math.floor(seconds / 60);
+  const time = seconds < 60 ? seconds + 's'
+    : minutes >= 60 ? Math.floor(minutes / 60) + 'h ' + String(minutes % 60).padStart(2, '0') + 'm ' + String(seconds % 60).padStart(2, '0') + 's'
+      : minutes + 'm ' + String(seconds % 60).padStart(2, '0') + 's';
   const parts = [(stopped ? 'Stopped' : finished ? 'Done' : 'Paused') + ' · ' + time];
   const calls = Number(toolCalls || 0);
   if (calls) parts.push(calls + ' tool call' + (calls === 1 ? '' : 's'));

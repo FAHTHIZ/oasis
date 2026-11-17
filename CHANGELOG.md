@@ -25,6 +25,7 @@ User-facing change history grouped by package version. A version heading does no
 - The turn clock and "Worked for" line read in hours past an hour (`1h 02m 05s`, not `62m 05s`), and token counts read in millions (`1.2M`, not `1200k`; 999,500 tokens is `1M`, not `1000k`), in the terminal and the web app.
 - Web app: the context meter's tooltip uses the same short counts as the run status (`12.3k of 200k tokens`, not `12.3k of 200.0k`).
 - Web app: the file viewer has a Copy path button, and on a phone its header keeps the file name on its own line with the actions wrapped below it (the name and the close button used to be pushed off screen).
+- Terminal: the line after each turn and the `/tasks` agent list read in hours past an hour (`Done · 1h 02m 05s · 2.4M tokens`, `2h 05m`), not `62m 05s`, `2400k` or `125m`.
 - Sounds: one palette in `app/core/sound-palette.mjs` for both the terminal and the web app. The terminal writes its cached sound files before the first turn so the first chime plays at once.
 
 ## [1.5.0] - 2026-11-17
