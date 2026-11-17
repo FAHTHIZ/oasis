@@ -73,7 +73,7 @@ test('playSound launches the player with the cached file and rate-limits', () =>
   assert.equal(calls.length, 1);
   assert.equal(calls[0].command, '/bin/fake-player');
   assert.equal(calls[0].args[0], '-q');
-  assert.match(calls[0].args[1], /done-v50-s1\.wav$/);
+  assert.match(calls[0].args[1], /done-v50-s2\.wav$/);
   assert.equal(calls[0].options.stdio, 'ignore');
   assert.equal(playSound('done', { env: e, stream: tty, player, spawn, now: 10_100 }), false, 'no double chime');
   assert.equal(playSound('task', { env: e, stream: tty, player, spawn, now: 10_200 }), false, 'a tick never stacks on a chime');
