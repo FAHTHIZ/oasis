@@ -1266,7 +1266,11 @@ function updateGroupHead(group) {
   const current = running && [...group.steps].reverse().find((step) => step.ok === undefined && step.present);
   if (current) title = current.present;
   if (waiting) title = 'Waiting for your approval';
-  group.head.querySelector('.steps-title').textContent = title;
+  const titleEl = group.head.querySelector('.steps-title');
+  titleEl.textContent = title;
+  // Folded work still names every file it touched, on hover.
+  const files = running ? [] : [...new Set(group.steps.filter((step) => ['read', 'edit'].includes(toolKind(step.name))).map((step) => step.args && (step.args.path || step.args.file_path)).filter(Boolean))];
+  titleEl.title = files.length > 2 ? title + '\n' + files.slice(0, 30).join('\n') : title;
   const meta = [];
   // One finished step: what it returned stands in for "1 step" ("Read 48 lines").
   const outcome = single && stepRan(group.steps[0]) ? stepResult(group.steps[0]).text : '';
