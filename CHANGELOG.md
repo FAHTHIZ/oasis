@@ -4,6 +4,8 @@ User-facing change history grouped by package version. A version heading does no
 
 ## Unreleased
 
+## [1.6.0] - 2026-11-17
+
 ### Highlights
 
 - Web: opening a step shows a readable view instead of raw JSON: a plan update shows its checklist and "2 of 3 done", a read shows the file and the line range plus the file's text, a search lists "path:line  text" matches, and a listing shows one file per line.
