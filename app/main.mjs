@@ -987,7 +987,10 @@ function stepRow(tool, { enter = false } = {}) {
   details.addEventListener('toggle', () => { if (details.open) { fillInspector(box, item._tool || tool); addTraceLink(box, item); } });
   // A step the user opened or closed themselves keeps that state.
   summary.addEventListener('click', () => { details._singleOpened = false; });
-  item.append(details, tail);
+  const sources = document.createElement('div');
+  sources.className = 'step-sources';
+  sources.hidden = true;
+  item.append(details, tail, sources);
   patchStepRow(item, tool);
   if (enter) item.classList.add('enter');
   return item;
@@ -1001,6 +1004,60 @@ function addTraceLink(box, item) {
   link.textContent = 'Open in Activity';
   link.addEventListener('click', () => { toggleActivity(true); requestAnimationFrame(() => focusStep(item.dataset.id)); });
   box.appendChild(link);
+}
+// The pages a search or fetch looked at, as chips (site icon and name) that
+// open the page, the way Perplexity lists a step's sources. The icon comes
+// from the site itself; a letter stands in when it has none.
+const SOURCES_SHOWN = 5;
+function sourceHost(url) {
+  try { return new URL(url).hostname.replace(/^www\./, ''); } catch { return ''; }
+}
+function patchSources(el, sources) {
+  if (!el) return;
+  const list = Array.isArray(sources) ? sources.filter((source) => source && /^https?:\/\//.test(String(source.url || ''))) : [];
+  const key = list.map((source) => source.url).join('\n');
+  if (el.dataset.key === key) return;
+  el.dataset.key = key;
+  el.replaceChildren();
+  el.hidden = !list.length;
+  if (!list.length) return;
+  el.setAttribute('aria-label', list.length === 1 ? '1 source' : list.length + ' sources');
+  for (const source of list.slice(0, SOURCES_SHOWN)) {
+    const host = sourceHost(source.url);
+    const chip = document.createElement('a');
+    chip.className = 'source-chip';
+    chip.href = source.url;
+    chip.target = '_blank';
+    chip.rel = 'noopener noreferrer';
+    chip.title = (source.title ? source.title + '\n' : '') + source.url;
+    const mark = document.createElement('span');
+    mark.className = 'source-mark';
+    mark.textContent = (host[0] || '?').toUpperCase();
+    mark.setAttribute('aria-hidden', 'true');
+    if (!document.documentElement.classList.contains('lite')) {
+      const img = document.createElement('img');
+      img.alt = '';
+      img.loading = 'lazy';
+      img.referrerPolicy = 'no-referrer';
+      img.decoding = 'async';
+      img.addEventListener('load', () => { if (img.naturalWidth > 1) mark.classList.add('has-icon'); else img.remove(); }, { once: true });
+      img.addEventListener('error', () => img.remove(), { once: true });
+      try { img.src = new URL('/favicon.ico', source.url).toString(); } catch {}
+      mark.append(img);
+    }
+    const name = document.createElement('span');
+    name.className = 'source-name';
+    name.textContent = host || source.url;
+    chip.append(mark, name);
+    el.append(chip);
+  }
+  if (list.length > SOURCES_SHOWN) {
+    const more = document.createElement('span');
+    more.className = 'source-more';
+    more.textContent = '+' + (list.length - SOURCES_SHOWN);
+    more.title = list.slice(SOURCES_SHOWN).map((source) => source.title || source.url).join('\n');
+    el.append(more);
+  }
 }
 // "+12 −3" beside an edit, in the diff colours.
 function patchLineStats(el, lines) {
@@ -1029,6 +1086,7 @@ function patchStepRow(item, tool) {
   set('.tool-status', stepStatus(tool));
   set('.dur', stepDuration(tool));
   patchLineStats(summary.querySelector('.lines'), tool.lines);
+  patchSources(item.querySelector('.step-sources'), tool.sources);
   summary.setAttribute('aria-label', label + ', ' + stepStatus(tool).toLowerCase() + '. Expand to inspect input and output.');
   patchStepTail(item, tool);
   patchStepAsk(item, tool);
@@ -2328,6 +2386,7 @@ function handleRunEvent(event) {
       if (Number.isFinite(Number(event.durationMs))) tool.durationMs = Number(event.durationMs);
       if (event.label) tool.label = event.label;
       if (event.lines) tool.lines = { added: Number(event.lines.added) || 0, removed: Number(event.lines.removed) || 0 };
+      if (Array.isArray(event.sources) && event.sources.length) tool.sources = event.sources.slice(0, 8);
       if (event.ok !== false && /write|edit|patch|delete|move|rename|notebook/i.test(String(event.name || tool.name || ''))) turnEdited = true;
       if (event.ok !== false && /^(write_file|edit_file|multi_edit)$/.test(String(event.name || tool.name || '')) && /\.html?$/i.test(String((tool.args && tool.args.path) || ''))) turnPage = String(tool.args.path).replace(/^\.\//, '');
       if (RT && /^(write_file|edit_file|multi_edit|delete_file|notebook_edit|run_command|git_commit)$/.test(event.name || tool.name)) refreshFiles();
