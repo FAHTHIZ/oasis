@@ -285,7 +285,8 @@ function runPaletteCommand(id) {
   const actions = {
     'new-chat': () => newChat(),
     'open-chats': () => openChats(),
-    'open-files': () => toggleFiles(true),
+    'open-files': () => { toggleFiles(true); showPanelTab('files'); },
+    'open-changes': () => { toggleFiles(true); showPanelTab('changes'); },
     'open-plugins': () => { renderPluginGrid(); openSheet('pluginsSheet'); },
     'open-settings': () => openSettings(),
     'connect-app': () => { openSettings(); requestAnimationFrame(() => { const apps = $('appSettings'); if (apps && !apps.hidden) apps.scrollIntoView({ block: 'start', behavior: 'smooth' }); }); },
