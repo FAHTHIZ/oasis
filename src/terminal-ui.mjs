@@ -432,7 +432,17 @@ export function toolLabel(name) {
   return String(name).replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
-export function describeTool({ name, args = {}, subagent }, { color = true } = {}) {
+// A long command keeps its start and its end ("npm run build … --watch"),
+// so the header fits on one row instead of wrapping mid-word.
+export function middleEllipsis(text, max) {
+  const chars = [...String(text || '')];
+  if (!(max > 0) || chars.length <= max) return chars.join('');
+  if (max < 8) return chars.slice(0, Math.max(1, max - 1)).join('') + '…';
+  const head = Math.ceil((max - 1) * 0.6);
+  return chars.slice(0, head).join('') + '…' + chars.slice(chars.length - (max - 1 - head)).join('');
+}
+
+export function describeTool({ name, args = {}, subagent }, { color = true, columns = 0 } = {}) {
   let detail = '';
   if (name === 'run_command') detail = [args.command, ...(Array.isArray(args.args) ? args.args : [])].join(' ');
   else if (name === 'monitor') detail = (args.description ? args.description + ' · ' : '') + (args.ws ? String(args.ws.url || '') : [args.command, ...(Array.isArray(args.args) ? args.args : [])].join(' '));
@@ -444,6 +454,11 @@ export function describeTool({ name, args = {}, subagent }, { color = true } = {
   const indent = subagent ? '  ' : '';
   if (!color) return indent + (subagent ? '[' + subagent + '] ' : '[tool] ') + name + (detail ? ' ' + detail : '');
   const dot = (themeFg('claude') || '\x1b[36m') + '⏺\x1b[39m ';
+  if (detail && Number(columns) > 0) {
+    detail = detail.replace(/\s*\n\s*/g, ' ');
+    const used = indent.length + 2 + (subagent ? [...String(subagent)].length + 3 : 0) + [...toolLabel(name)].length + 2;
+    detail = middleEllipsis(detail, Math.max(12, Number(columns) - 1 - used));
+  }
   return indent + dot + (subagent ? ANSI.dim + subagent + ' › ' + ANSI.noBold : '') + ANSI.bold + toolLabel(name) + ANSI.noBold + (detail ? '(' + detail + ')' : '');
 }
 

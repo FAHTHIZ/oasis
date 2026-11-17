@@ -197,3 +197,30 @@ export function toolActivityWarning(result) {
   if (logWarnings.length) return text(logWarnings.slice(0, 3).join(' · '), 700);
   return '';
 }
+
+// The same step in the present tense, for the live row while it runs
+// ("Reading package.json", "Running npm test"); the past-tense label is
+// what stays in the transcript once it is done.
+const PRESENT = [
+  [/^Read /, 'Reading '], [/^Edited /, 'Editing '], [/^(?:Wrote|Created) /, 'Writing '], [/^Deleted /, 'Deleting '],
+  [/^Ran the tests$/, 'Running the tests'], [/^Ran /, 'Running '], [/^Searched/, 'Searching'], [/^Found /, 'Finding '],
+  [/^Mapped/, 'Mapping'], [/^Looked up/, 'Looking up'], [/^Checked/, 'Checking'], [/^Reviewed/, 'Reviewing'],
+  [/^Listed/, 'Listing'], [/^Used /, 'Using '], [/^Updated/, 'Updating'], [/^Started/, 'Starting'], [/^Asked/, 'Asking'],
+  [/^Connected/, 'Connecting'], [/^Presented/, 'Presenting'], [/^Sent/, 'Sending'], [/^Stopped/, 'Stopping'],
+  [/^Installed/, 'Installing'], [/^Added/, 'Adding'], [/^Made/, 'Making'], [/^Pushed/, 'Pushing'], [/^Opened/, 'Opening'],
+  [/^Merged/, 'Merging'], [/^Managed/, 'Managing'], [/^Set up/, 'Setting up'], [/^Prepared/, 'Preparing'],
+  [/^Fetched/, 'Fetching'], [/^Took/, 'Taking'], [/^Viewed/, 'Viewing'], [/^Loaded/, 'Loading'], [/^Saved/, 'Saving'],
+  [/^Moved/, 'Moving'], [/^Renamed/, 'Renaming'], [/^Copied/, 'Copying'], [/^Closed/, 'Closing'], [/^Clicked/, 'Clicking'],
+  [/^Typed/, 'Typing'], [/^Navigated/, 'Navigating'], [/^Captured/, 'Capturing'], [/^Generated/, 'Generating']
+];
+export function presentToolActivity(name, args = {}) {
+  const tool = String(name || '').toLowerCase();
+  if (['run_command', 'run_shell', 'powershell', 'auto_test'].includes(tool) && !(args && args.run_in_background)) {
+    const command = commandText(args);
+    if (command && command.length <= 48) return 'Running ' + command;
+  }
+  if (tool === 'todo_write') return 'Updating the plan';
+  const past = labelToolActivity(name, args);
+  for (const [pattern, replacement] of PRESENT) if (pattern.test(past)) return past.replace(pattern, replacement);
+  return past;
+}
