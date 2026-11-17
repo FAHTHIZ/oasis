@@ -6,6 +6,7 @@ User-facing change history grouped by package version. A version heading does no
 
 ### Highlights
 
+- Web: opening a step shows a readable view instead of raw JSON: a plan update shows its checklist and "2 of 3 done", a read shows the file and the line range plus the file's text, a search lists "path:line  text" matches, and a listing shows one file per line.
 - Web: the page no longer jumps at load or at the end of a run. The side panel's space is held from the first paint and the run clock keeps its line between runs (layout shift 0.109 to 0.015). An approval in a background tab blinks the tab title.
 - Terminal: a batch of reads and searches shows every lookup still in flight ("Reading package.json +2 more", "1 of 3 done") instead of waiting silently for the batch to end.
 - Web: a finished turn folds its steps, thoughts and narration under one "Worked for 1m 57s · 6 steps" line above the answer; click to open it. The answer stays in place on screen while the work folds.
