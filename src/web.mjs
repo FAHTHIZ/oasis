@@ -1003,6 +1003,12 @@ export function createOasisWebServer(options = {}) {
       job.worktreeBaseCommit = taskWorktree.base;
     }
     jobs.set(job.id, job);
+    // A hook that takes a while (tests on Stop, a linter after an edit) shows
+    // in the status line instead of looking like a hang: "Running Stop hook".
+    session.onHookStatus = (info) => {
+      if (!info || (info.phase !== 'start' && info.phase !== 'end')) return;
+      emit(job, 'hook_status', { phase: info.phase, event: String(info.event || '').slice(0, 60), ...(info.phase === 'start' ? { label: redactApprovalSecrets(String(info.label || 'Running a hook')).replace(/\s+/g, ' ').slice(0, 120) } : {}) });
+    };
     // Keep worker events attached to the task that launched each worker, even if
     // the parent starts a later turn before a background worker finishes.
     if (!(session.agentRunJobs instanceof Map)) session.agentRunJobs = new Map();

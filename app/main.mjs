@@ -1956,7 +1956,8 @@ const liveModel = {
   resuming: false,
   workers: [],
   compaction: null,
-  reset() { this.resuming = false; this.workers = []; this.compaction = null; this.request = null; this.turn = { outChars: 0, streamMs: 0 }; this.drafts.clear(); },
+  hook: null,
+  reset() { this.hook = null; this.resuming = false; this.workers = []; this.compaction = null; this.request = null; this.turn = { outChars: 0, streamMs: 0 }; this.drafts.clear(); },
   // Characters of output arrived (reply, reasoning or a drafted tool call).
   output(chars) {
     const n = Math.max(0, Number(chars) || 0);
@@ -2042,8 +2043,8 @@ const runClock = {
     // Nothing running, nothing streaming for a moment: show Thinking, so the
     // page never sits blank while the model works.
     if (!waiting && !agent.detached && now - lastActivity >= IDLE_THINKING_MS && !liveThinking() && !stepsRunning() && $('questionSheet').hidden) showThinking(lastActivity);
-    const phase = waiting ? 'approval' : connectionLost ? 'reconnecting' : stepsRunning() ? 'tool' : nowLabel === 'Thinking' ? 'thinking' : nowLabel === 'Responding' ? 'responding' : nowLabel ? 'draft' : 'waiting';
-    const status = liveStatus({ label: nowLabel === 'Thinking' ? '' : nowLabel, phase, compaction: liveModel.compaction, request: liveModel.request, turn: liveModel.turn, elapsedMs: this.worked(now) }, now);
+    const phase = waiting ? 'approval' : connectionLost ? 'reconnecting' : liveModel.hook ? 'hook' : stepsRunning() ? 'tool' : nowLabel === 'Thinking' ? 'thinking' : nowLabel === 'Responding' ? 'responding' : nowLabel ? 'draft' : 'waiting';
+    const status = liveStatus({ label: phase === 'hook' ? liveModel.hook.label : nowLabel === 'Thinking' ? '' : nowLabel, phase, hookStartedAt: liveModel.hook ? liveModel.hook.startedAt : 0, compaction: liveModel.compaction, request: liveModel.request, turn: liveModel.turn, elapsedMs: this.worked(now) }, now);
     this.label = waiting ? '' : status.label;
     this.stalled = Boolean(status.stalled) && !waiting;
     const label = el.querySelector('.run-status-text');
@@ -2493,6 +2494,10 @@ function handleRunEvent(event) {
     case 'compacting':
       liveModel.compaction = { startedAt: Number(event.at) || Date.now(), beforeTokens: Number(event.beforeTokens) || 0, outChars: 0, progress: null, progressAt: 0 };
       showThinking();
+      runClock.tick();
+      break;
+    case 'hook_status':
+      liveModel.hook = event.phase === 'start' ? { label: event.label || 'Running a hook', startedAt: Date.now() } : null;
       runClock.tick();
       break;
     case 'compacting_progress':
