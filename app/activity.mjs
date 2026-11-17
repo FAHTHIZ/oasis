@@ -102,11 +102,13 @@ function renderTaskBar(trace) {
   const waiting = last.status === 'running' && last.steps.some((step) => step.outcome === 'running' && step.tool.waiting);
   const status = waiting ? 'waiting' : last.status;
   bar.dataset.status = status;
-  // While it runs the bar says what is happening now ("Reading the prompt",
-  // "Editing src/app.js"), the same words as the status line under the chat.
-  const live = last.status === 'running' && !waiting && state.deps.liveLabel ? state.deps.liveLabel() : '';
-  const word = waiting ? 'Needs you' : live || BAR_WORDS[last.status] || 'Done';
-  bar.classList.toggle('stalled', Boolean(live) && Boolean(state.deps.stalled && state.deps.stalled()));
+  // While it runs the bar just says Working: what is happening right now is
+  // already in the feed and in the status line over the message box, and a
+  // third copy of "Thinking" up here read as noise (and lagged behind).
+  const live = last.status === 'running' && !waiting;
+  const stalled = live && Boolean(state.deps.stalled && state.deps.stalled());
+  const word = waiting ? 'Needs you' : stalled ? 'Waiting on the model' : BAR_WORDS[last.status] || 'Done';
+  bar.classList.toggle('stalled', stalled);
   if ($('taskStateText').textContent !== word) $('taskStateText').textContent = word;
   const parts = [];
   if (last.stats.steps) parts.push(last.stats.steps + ' step' + (last.stats.steps === 1 ? '' : 's'));
