@@ -6,7 +6,7 @@ import { alwaysAllowLabel } from './core/approval-rule.mjs';
 import { SUBAGENT_STATUS_TEXT } from './core/subagents.mjs';
 import { createConnectorCard, connectIntent, splitServices, brandMark } from './core/connector-card.mjs';
 import { createSoundPlayer, soundAllowed } from './core/sound.mjs';
-import { liveStatus, modelRequest, waitingLabel, thoughtMs } from './core/live-status.mjs';
+import { liveStatus, modelRequest, waitingLabel, thoughtMs, runSummary } from './core/live-status.mjs';
 import { readableOutput, repeatsEarlierReply, stepOutcome, stepRan, stepLabel, summarizeArgs, toolKind, groupTitle, groupStats, formatDuration, thinkingLabel, thoughtLabel, splitTextToolCall, elapsedSince, describeInput, buildTimeline, groupTiming, runElapsed, timingSplit } from './core/timeline.mjs';
 import { IndexedDBStore, Workspace, lineDiff } from './core/workspace.mjs';
 import { wordHighlights } from '../src/word-diff.mjs';
@@ -976,7 +976,7 @@ function stepRow(tool, { enter = false } = {}) {
   item.dataset.kind = toolKind(tool.name);
   const details = document.createElement('details');
   const summary = document.createElement('summary');
-  summary.innerHTML = '<span class="state" aria-hidden="true"></span><span class="kind-icon">' + kindIcon(toolKind(tool.name)) + '</span><span class="name"></span><span class="arg"></span><span class="tool-status"></span><span class="dur"></span><span class="chevron" aria-hidden="true">' + icon('chevron-right') + '</span>';
+  summary.innerHTML = '<span class="state" aria-hidden="true"></span><span class="kind-icon">' + kindIcon(toolKind(tool.name)) + '</span><span class="name"></span><span class="arg"></span><span class="lines" aria-hidden="true"></span><span class="tool-status"></span><span class="dur"></span><span class="chevron" aria-hidden="true">' + icon('chevron-right') + '</span>';
   const box = document.createElement('div');
   box.className = 'inspect';
   const tail = document.createElement('pre');
@@ -1002,6 +1002,19 @@ function addTraceLink(box, item) {
   link.addEventListener('click', () => { toggleActivity(true); requestAnimationFrame(() => focusStep(item.dataset.id)); });
   box.appendChild(link);
 }
+// "+12 −3" beside an edit, in the diff colours.
+function patchLineStats(el, lines) {
+  if (!el) return;
+  const added = lines ? Math.max(0, Number(lines.added) || 0) : 0;
+  const removed = lines ? Math.max(0, Number(lines.removed) || 0) : 0;
+  const key = added + '/' + removed;
+  if (el.dataset.key === key) return;
+  el.dataset.key = key;
+  el.replaceChildren();
+  if (added) { const add = document.createElement('span'); add.className = 'add'; add.textContent = '+' + added; el.append(add); }
+  if (removed) { const del = document.createElement('span'); del.className = 'del'; del.textContent = '−' + removed; el.append(del); }
+  el.hidden = !added && !removed;
+}
 function patchStepRow(item, tool) {
   item._tool = tool;
   const state = stepState(tool);
@@ -1015,6 +1028,7 @@ function patchStepRow(item, tool) {
   set('.arg', argText && label.toLowerCase().includes(argText.toLowerCase()) ? '' : argText);
   set('.tool-status', stepStatus(tool));
   set('.dur', stepDuration(tool));
+  patchLineStats(summary.querySelector('.lines'), tool.lines);
   summary.setAttribute('aria-label', label + ', ' + stepStatus(tool).toLowerCase() + '. Expand to inspect input and output.');
   patchStepTail(item, tool);
   patchStepAsk(item, tool);
@@ -1897,21 +1911,36 @@ function setNow(text) {
 // A step the model is still writing: one shimmering row at the end of the
 // transcript until the real step starts, so a long file write never looks
 // like the page froze on "Thinking".
-function showDraftRow(text) {
-  let row = document.querySelector('#transcript > .draft-row');
+// Several calls can be written in one reply ("read these three files"):
+// each gets its own row, keyed by its place in the reply, and a row that
+// already named its target keeps it (no "Editing" ↔ "Editing a.mjs" flicker).
+function showDraftRow(text, index = 0) {
+  const key = String(Number(index) || 0);
+  let row = document.querySelector('#transcript > .draft-row[data-index="' + key + '"]');
   if (!row) {
     row = document.createElement('div');
     row.className = 'draft-row';
+    row.dataset.index = key;
     row.setAttribute('aria-hidden', 'true');
     row.innerHTML = '<span class="steps-orb"></span><span class="draft-text shimmer"></span>';
-    $('transcript').appendChild(row);
+    // In reply order, after any rows for earlier calls.
+    const later = [...document.querySelectorAll('#transcript > .draft-row')].find((other) => Number(other.dataset.index) > Number(key));
+    if (later) later.before(row); else $('transcript').appendChild(row);
   }
   const label = row.querySelector('.draft-text');
   if (label.textContent !== text) label.textContent = text;
 }
-function clearDraftRow() {
-  const row = document.querySelector('#transcript > .draft-row');
-  if (row) row.remove();
+function clearDraftRow(index) {
+  const rows = document.querySelectorAll('#transcript > .draft-row' + (index === undefined ? '' : '[data-index="' + (Number(index) || 0) + '"]'));
+  for (const row of rows) row.remove();
+}
+// The newest words for each call being written, so the status line can say
+// "Writing a.mjs · +2 more" and a row never loses a target it already had.
+const draftTexts = new Map();
+function draftNowLabel() {
+  const texts = [...draftTexts.values()];
+  if (!texts.length) return '';
+  return texts.at(-1) + (texts.length > 1 ? ' · +' + (texts.length - 1) + ' more' : '');
 }
 // Between runs the clock line keeps its height, invisible: removing it would
 // make the message box shorter and shift the whole chat at the end of every
@@ -1983,6 +2012,7 @@ function finishRun(prefix) {
   liveModel.reset();
   connectionLost = false;
   clearDraftRow();
+  draftTexts.clear();
   const timings = runTimings;
   runTimings = [];
   for (const note of pendingInputs.take('steer')) showSteer(note);
@@ -2023,7 +2053,10 @@ function foldTurn(workedLine, { live = false } = {}) {
   head.className = 'work-fold-head';
   const label = document.createElement('span');
   label.className = 'work-fold-label';
-  label.textContent = workedLine.textContent + (steps ? ' · ' + steps + ' step' + (steps === 1 ? '' : 's') : '');
+  // What the work did ("Edited 2 files +13 −1 · read 3 files · ran 2
+  // commands"), or the step count when the steps are of other kinds.
+  const did = runSummary(work.flatMap((node) => [...node.querySelectorAll('.tool')].map((row) => row._tool).filter(Boolean)));
+  label.textContent = workedLine.textContent + (did ? ' · ' + did : steps ? ' · ' + steps + ' step' + (steps === 1 ? '' : 's') : '');
   head.append(label);
   if (workedLine.title) head.title = workedLine.title;
   const body = document.createElement('div');
@@ -2162,17 +2195,26 @@ function handleRunEvent(event) {
       const chars = Number(event.chars) || 0;
       liveModel.output(Math.max(0, chars - (liveModel.drafts.get(index) || 0)));
       liveModel.drafts.set(index, chars);
-      if (event.done) { clearDraftRow(); break; }
+      if (event.done) { clearDraftRow(index); draftTexts.delete(index); setNow(draftNowLabel() || nowLabel); break; }
       if (!currentTurn) startStep();
       removeThinking();
-      showDraftRow(event.text || 'Preparing a step');
-      setNow(event.text || 'Preparing a step');
+      // A report without a target after one with it (a later call reusing
+      // the slot, or a resend) keeps the words that named it.
+      const before = draftTexts.get(index) || '';
+      const text = event.text || 'Preparing a step';
+      const named = Boolean(event.path || event.command || event.query);
+      const keep = !named && before && before.split(' · ')[0].length > text.split(' · ')[0].length && before.startsWith(text.split(' · ')[0].split(' ')[0]);
+      const shown = keep ? before.split(' · ')[0] + (text.includes(' · ') ? ' · ' + text.split(' · ').slice(1).join(' · ') : '') : text;
+      draftTexts.set(index, shown);
+      showDraftRow(shown, index);
+      setNow(draftNowLabel());
       scrollDown();
       break;
     }
     case 'model_start':
       liveModel.request = modelRequest({ startedAt: serverTime(event.startedAt), step: event.step, inputTokens: event.inputTokens, model: event.model, local: event.local });
       liveModel.drafts.clear();
+      draftTexts.clear();
       // The model is working and nothing runs or streams: say so at once.
       if (!stepsRunning()) { showThinking(event.startedAt); scrollDown(); setNow('Thinking'); }
       break;
@@ -2188,6 +2230,7 @@ function handleRunEvent(event) {
       queueRender();
       removeThinking();
       clearDraftRow();
+      draftTexts.clear();
       if (nowLabel !== 'Responding') setNow('Responding');
       break;
     case 'retry':
@@ -2242,6 +2285,7 @@ function handleRunEvent(event) {
       if (!currentTurn) startStep();
       removeThinking();
       clearDraftRow();
+      draftTexts.clear();
       clearCursor();
       const group = ensureGroup();
       const tool = { id: event.id, name: event.name, args: event.args || {}, startedAt: serverTime(event.at), ...(event.label ? { label: event.label } : {}), ...(event.present ? { present: event.present } : {}), ...(event.open ? { open: true } : {}) };
@@ -2275,6 +2319,7 @@ function handleRunEvent(event) {
       tool.endedAt = Math.max(Number(tool.startedAt) || 0, serverTime(event.at));
       if (Number.isFinite(Number(event.durationMs))) tool.durationMs = Number(event.durationMs);
       if (event.label) tool.label = event.label;
+      if (event.lines) tool.lines = { added: Number(event.lines.added) || 0, removed: Number(event.lines.removed) || 0 };
       if (event.ok !== false && /write|edit|patch|delete|move|rename|notebook/i.test(String(event.name || tool.name || ''))) turnEdited = true;
       if (event.ok !== false && /^(write_file|edit_file|multi_edit)$/.test(String(event.name || tool.name || '')) && /\.html?$/i.test(String((tool.args && tool.args.path) || ''))) turnPage = String(tool.args.path).replace(/^\.\//, '');
       if (RT && /^(write_file|edit_file|multi_edit|delete_file|notebook_edit|run_command|git_commit)$/.test(event.name || tool.name)) refreshFiles();

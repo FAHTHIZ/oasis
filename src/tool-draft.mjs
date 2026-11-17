@@ -78,12 +78,23 @@ export function createDraftReporter(onDraft, { now = () => Date.now(), interval 
   };
 }
 
-// Words for a call still being written: "Writing src/app.mjs", "Preparing npm test".
+// Words for a call still being written: "Writing src/app.mjs", "Preparing
+// npm test", and what to say before its target has arrived ("Editing a
+// file" rather than a bare "Editing" that then jumps to the path).
 const DRAFT_VERBS = {
   write_file: 'Writing', edit_file: 'Editing', multi_edit: 'Editing', apply_patch: 'Patching', notebook_edit: 'Editing',
   run_command: 'Preparing', run_shell: 'Preparing', powershell: 'Preparing', auto_test: 'Preparing',
-  todo_write: 'Planning', task: 'Briefing a subagent', web_search: 'Preparing a search', fetch_url: 'Preparing to fetch'
+  todo_write: 'Planning', task: 'Briefing a subagent', web_search: 'Preparing a search', fetch_url: 'Preparing to fetch',
+  read_file: 'Reading', list_files: 'Listing', search_files: 'Searching for', grep: 'Searching for', glob_files: 'Finding',
+  git_status: 'Checking git status', git_diff: 'Reviewing changes', repo_map: 'Mapping the project', delete_file: 'Deleting'
 };
+const DRAFT_ALONE = {
+  write_file: 'Writing a file', edit_file: 'Editing a file', multi_edit: 'Editing a file', apply_patch: 'Writing a patch', notebook_edit: 'Editing a notebook',
+  run_command: 'Preparing a command', run_shell: 'Preparing a command', powershell: 'Preparing a command', auto_test: 'Preparing the tests',
+  read_file: 'Choosing a file to read', list_files: 'Listing files', search_files: 'Searching the project', grep: 'Searching the project', glob_files: 'Finding files', delete_file: 'Deleting a file'
+};
+// Verbs that take no target words after them.
+const WHOLE = new Set(['Briefing a subagent', 'Checking git status', 'Reviewing changes', 'Mapping the project']);
 
 export function formatBytes(chars) {
   const n = Math.max(0, Number(chars) || 0);
@@ -104,7 +115,10 @@ export function describeDraft(draft = {}) {
   const target = draft.path ? shortPath(draft.path) : draft.command ? String(draft.command).replace(/\s+/g, ' ').slice(0, 48) : draft.query ? String(draft.query).replace(/\s+/g, ' ').slice(0, 48) : '';
   let label;
   if (verb === 'Planning') label = 'Updating the plan';
-  else if (verb) label = verb + (target ? ' ' + target : '');
+  else if (verb && WHOLE.has(verb)) label = verb;
+  else if (name === 'web_search' && target) label = 'Searching the web for ' + target;
+  else if (name === 'fetch_url' && target) label = 'Fetching ' + target;
+  else if (verb) label = target ? verb + ' ' + target : DRAFT_ALONE[name] || verb;
   else label = 'Preparing ' + (name.replace(/^mcp__([^_]+)__/, '$1 ').replace(/[_-]+/g, ' ').trim() || 'a step');
   const size = Number(draft.chars) >= 512 && /^(Writing|Editing|Patching)$/.test(verb || '') ? formatBytes(draft.chars) : '';
   return { label, size, text: label + (size ? ' · ' + size : '') };

@@ -227,8 +227,17 @@ export function groupTitle(steps = []) {
   for (const [kind, list] of byKind) {
     if (kind === 'tests') { parts.push(list.length === 1 ? 'ran the tests' : 'ran the tests ' + list.length + ' times'); continue; }
     // Files touched: count distinct paths, so three edits to one file read as one.
-    const n = kind === 'read' || kind === 'edit' ? new Set(list.map((step) => baseName(step.args) || step.id)).size : list.length;
-    parts.push(n === 1 ? lower(activityLabel(list[0])) : KIND_PHRASES[kind](n));
+    const distinct = (steps) => kind === 'read' || kind === 'edit' ? new Set(steps.map((step) => baseName(step.args) || step.id)).size : steps.length;
+    // Only work that worked is claimed; a kind where every step failed says so
+    // ("couldn't edit 2 files"), never "edited 2 files" under a red cross.
+    const worked = list.filter((step) => step.ok !== false);
+    if (!worked.length) {
+      const n = distinct(list);
+      parts.push(n === 1 ? lower(stepLabel(list[0])) : lower(failingPhrase(sentence(KIND_PHRASES[kind](n)))));
+      continue;
+    }
+    const n = distinct(worked);
+    parts.push(n === 1 ? lower(activityLabel(worked[0])) : KIND_PHRASES[kind](n));
   }
   const shown = parts.length > 3 ? parts.slice(0, 3).concat(parts.length - 3 + ' more') : parts;
   const list = shown.length > 1 ? shown.slice(0, -1).join(', ') + ' and ' + shown.at(-1) : shown[0];
