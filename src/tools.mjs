@@ -1,4 +1,5 @@
 import { readOnlyArgv, readOnlyCommandsEnabled, readOnlyGitEnv, repoFilterOverrides } from './read-only-commands.mjs';
+import { lineStats } from './line-stats.mjs';
 import { credentialEnvName } from './credential-env.mjs';
 import { installSkillsFromSource, parseSkillSource } from './skill-install.mjs';
 import { securityWarning } from './security-patterns.mjs';
@@ -2016,7 +2017,7 @@ async function executeToolUnlocked(name, args = {}, context = {}) {
       await recordFileState(context, target.absolute);
       const moduleWarning = await moduleSystemWarning(root, target.absolute, editDisplayPath, current, next).catch(() => '');
       const editWarning = combineWarnings(moduleWarning, commentWarning(current, next, editDisplayPath, context.session && context.session.commentMode), shrinkWarning(current, next, editDisplayPath), testTamperWarning(current, next, editDisplayPath), securityWarning(current, next, editDisplayPath), recordAndDetectCircling(context.session || context, target.absolute, current, next, editDisplayPath));
-      return { path: editDisplayPath, changed: true, ...(relaxed ? { matchedBy: relaxed.strategy, matchedAtLine: relaxed.line, note: 'old_string did not match exactly; it matched uniquely after normalizing ' + relaxed.strategy + ' at line ' + relaxed.line + '.' } : {}), replacements: args.replace_all === true ? matches : 1, beforeBytes: Buffer.byteLength(current, 'utf8'), afterBytes: Buffer.byteLength(next, 'utf8'), backupCreated: true, ...(editWarning ? { warning: editWarning } : {}) };
+      return { path: editDisplayPath, changed: true, ...(relaxed ? { matchedBy: relaxed.strategy, matchedAtLine: relaxed.line, note: 'old_string did not match exactly; it matched uniquely after normalizing ' + relaxed.strategy + ' at line ' + relaxed.line + '.' } : {}), replacements: args.replace_all === true ? matches : 1, ...lineStats(current, next), beforeBytes: Buffer.byteLength(current, 'utf8'), afterBytes: Buffer.byteLength(next, 'utf8'), backupCreated: true, ...(editWarning ? { warning: editWarning } : {}) };
     }
     case 'write_file': {
       if (typeof args.content !== 'string') throw new Error('File contents must be a string.');
@@ -2061,7 +2062,7 @@ async function executeToolUnlocked(name, args = {}, context = {}) {
       const docWarning = backedUpExistingFile ? '' : unrequestedDocWarning(writeDisplayPath, context.session && context.session.currentRequest);
       const writeModuleWarning = await moduleSystemWarning(root, target.absolute, writeDisplayPath, previousContent, newContent).catch(() => '');
       const writeWarning = previousContent === null ? combineWarnings(writeModuleWarning, docWarning, commentWarning('', newContent, writeDisplayPath, context.session && context.session.commentMode), securityWarning('', newContent, writeDisplayPath)) : combineWarnings(writeModuleWarning, commentWarning(previousContent, newContent, writeDisplayPath, context.session && context.session.commentMode), shrinkWarning(previousContent, newContent, writeDisplayPath), testTamperWarning(previousContent, newContent, writeDisplayPath), typographyWarning(previousContent, newContent, writeDisplayPath), securityWarning(previousContent, newContent, writeDisplayPath), recordAndDetectCircling(context.session || context, target.absolute, previousContent, newContent, writeDisplayPath));
-      return { path: writeDisplayPath, writtenBytes: Buffer.byteLength(content, 'utf8'), backedUpExistingFile, ...(appending ? { appended: true, appendedBytes: Buffer.byteLength(args.content, 'utf8') } : {}), ...(conventions.kept.length ? { kept: conventions.kept } : {}), ...(writeWarning ? { warning: writeWarning } : {}) };
+      return { path: writeDisplayPath, writtenBytes: Buffer.byteLength(content, 'utf8'), backedUpExistingFile, ...lineStats(previousContent, content), ...(appending ? { appended: true, appendedBytes: Buffer.byteLength(args.content, 'utf8') } : {}), ...(conventions.kept.length ? { kept: conventions.kept } : {}), ...(writeWarning ? { warning: writeWarning } : {}) };
     }
     case 'delete_file': {
       const target = await resolveWorkspacePath(root, args.path, { rejectSymlinks: true });

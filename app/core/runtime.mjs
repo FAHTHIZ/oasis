@@ -590,7 +590,7 @@ export class RuntimeAgent {
               if (todos !== null) { this.todos = todos; this.emit('todos', { todos }); }
             }
             const text = String(content || data.label || '');
-            this.emit('tool_result', { id: data.callId || '', name: data.name, ok, ...(outcome ? { outcome } : {}), content: text.slice(0, MAX_RESULT_PREVIEW_CHARS), ...(text.length > MAX_RESULT_PREVIEW_CHARS || /… \[truncated\]$/.test(text) ? { more: true } : {}), ...(Number.isFinite(Number(data.durationMs)) ? { durationMs: Number(data.durationMs) } : {}), ...at });
+            this.emit('tool_result', { id: data.callId || '', name: data.name, ok, ...(outcome ? { outcome } : {}), content: text.slice(0, MAX_RESULT_PREVIEW_CHARS), ...(text.length > MAX_RESULT_PREVIEW_CHARS || /… \[truncated\]$/.test(text) ? { more: true } : {}), ...(Number.isFinite(Number(data.durationMs)) ? { durationMs: Number(data.durationMs) } : {}), ...(data.lines && (Number(data.lines.added) > 0 || Number(data.lines.removed) > 0) ? { lines: { added: Math.max(0, Number(data.lines.added) || 0), removed: Math.max(0, Number(data.lines.removed) || 0) } } : {}), ...at });
             break;
           }
           case 'plan':
