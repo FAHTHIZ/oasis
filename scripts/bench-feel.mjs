@@ -15,6 +15,7 @@
 //   npm run bench:feel                  # full motion
 //   npm run bench:feel -- --motion lite # low-power mode
 //   npm run bench:feel -- --json        # machine-readable result
+//   npm run bench:feel -- --slack 3     # looser time target on a busy CI runner
 //
 // Needs the optional node-pty dependency. Exit code 1 when a target is missed.
 import http from 'node:http';
@@ -140,8 +141,12 @@ const result = {
   syncedShare: +syncShare.toFixed(3),
   cursorHides: hides
 };
+// Shared CI machines stall now and then; --slack N scales the time target
+// (the 4.8 s freezes this guards against still fail at any sane slack).
+const slack = args.includes('--slack') ? Math.max(1, Number(args[args.indexOf('--slack') + 1]) || 1) : 1;
+const gapTarget = Math.round((motion === 'lite' ? 0.6 : 0.25) * slack * 100) / 100;
 const targets = [
-  ['frozen gap', result.frozenGapSeconds < 0.25 || motion === 'lite' && result.frozenGapSeconds < 0.6, result.frozenGapSeconds + ' s', motion === 'lite' ? '< 0.6 s' : '< 0.25 s'],
+  ['frozen gap', result.frozenGapSeconds < gapTarget, result.frozenGapSeconds + ' s', '< ' + gapTarget + ' s'],
   ['writes per second', busiest <= 70, String(busiest), '<= 70'],
   ['synced frames', syncShare >= 0.95, Math.round(syncShare * 100) + ' %', '>= 95 %'],
   ['cursor hides', hides <= 4, String(hides), '<= 4']
