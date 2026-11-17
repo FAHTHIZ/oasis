@@ -143,6 +143,20 @@ On restore, workers found only in the ledger come back as `interrupted` with the
 
 `test/neuron-ledger.test.mjs` checks this: a scripted network is cut after each of its writes and restored, and every cut has no running neuron and the same lineage as the clean run; a writer killed with `SIGKILL` leaves a ledger that reopens and recovers; and the median spawn with its ledger write stays under 5 ms.
 
+## Scheduler (roadmap 1.2)
+
+`task`, agent teams and a workflow's `agent()` all start a child through one path, and that path now asks the scheduler (`src/neuron-scheduler.mjs`) for a slot before the child's first model request. Slots are limited three ways:
+
+| Limit | Default | Change it with |
+| --- | --- | --- |
+| Agents working at once across the whole network | 8 | `OASIS_NETWORK_MAX_RUNNING` |
+| Children of one parent working at once | 8 | `OASIS_SUBAGENT_MAX_CHILDREN` |
+| Children on one provider host | no limit | `OASIS_PROVIDER_SLOTS=api.example.com=2,other.host=1` |
+
+A child past a limit waits its turn instead of failing. A foreground child's `task` result then carries `scheduler_note` (for example "Queued for 3.2 s before starting: 8 agents were already running across the network (limit 8)."), a background child is returned as `"status": "queued"` with the reason and starts by itself, and the timeline shows `agent.queued`. `agent_status` marks a waiting agent `queued: true`, the stall monitor does not count the wait, and `agent_stop` cancels it while it waits.
+
+A parent blocked on foreground children gives up its slot until the last of them returns, then takes one again. Only working agents hold slots, so a network full of parents waiting on their own children cannot deadlock. `test/neuron-scheduler.test.mjs` checks this with 40 random spawn trees (nested foreground and background children, random limits and providers): none exceeds a limit, all finish, and every slot is released.
+
 ## Detailed design (proposal, 2026-11)
 
 This section turns phases 2 to 8 above into one design. Nothing in it is

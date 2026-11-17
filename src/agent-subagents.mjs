@@ -25,6 +25,7 @@ import { isWorktreeBranchName } from './branch-names.mjs';
 import { loadAgentTranscript } from './sessions.mjs';
 import { repairInterruptedHistory } from './tool-results.mjs';
 import { unsupportedChildClaim } from './claim-check.mjs';
+import { schedulerForRegistry, providerKey, describeWait } from './neuron-scheduler.mjs';
 import { runAgentTurn, headTailText, MAX_SUBAGENT_REPORT_CHARS, READ_ONLY_TOOLS, hookOptions, boundSubagentReport } from './agent.mjs';
 
 const SPECIALIST_REVIEW_TOOLS = new Set(['git_status', 'git_diff', 'git_log', 'lsp', 'list_files', 'glob_files', 'repo_map', 'read_file', 'search_files', 'grep', 'ast_grep']);
@@ -396,7 +397,12 @@ export async function runSubagent(parent, args, context, options) {
     const result = await runChildTurn(parent, record, prompt, options, { foreground: true });
     return { id: record.id, ...result };
   }
+  const wait = networkScheduler(parent).wouldWait(slotRequest(record));
   startBackgroundRun(parent, record, prompt, options);
+  if (wait) return {
+    id: record.id, agent: type, description, status: 'queued', background: true,
+    message: 'Queued in the background: ' + describeWait(wait, 0).replace(/^Queued for [^:]+: /, '') + ' It starts by itself when a slot frees, and you will be told when it finishes. agent_status shows it; agent_stop cancels it.'
+  };
   if (resume) return { id: record.id, status: 'running', delivered: 'resumed', message: 'The agent was rebuilt from its saved conversation and resumed in the background. You will be told when it finishes.' };
   return {
     id: record.id, agent: type, description, status: 'running', background: true,
@@ -408,6 +414,46 @@ export async function runSubagent(parent, args, context, options) {
 // OASIS-made worktree on the recorded branch, inside this repository, with the same base
 // commit in its history. Anything else (removed, moved, switched, replaced by a symlink)
 // is refused rather than guessed at.
+// Scheduler slots (src/neuron-scheduler.mjs). Kept off the record so they are
+// never saved with the session.
+const neuronSlots = new WeakMap();
+
+function networkScheduler(parent) {
+  const registry = agentRegistry(parent);
+  let root = parent;
+  for (let hops = 0; hops < 40 && !root.createEnv && root.parentSessionRef; hops++) root = root.parentSessionRef;
+  const env = root.createEnv || process.env;
+  return schedulerForRegistry(registry, {
+    globalCap: env.OASIS_NETWORK_MAX_RUNNING,
+    childrenCap: env.OASIS_SUBAGENT_MAX_CHILDREN,
+    providerSlots: env.OASIS_PROVIDER_SLOTS
+  });
+}
+
+function slotRequest(record) {
+  return { id: record.id, parentId: record.parentId || 'main', provider: providerKey(record.child && record.child.config) };
+}
+
+async function admitNeuron(parent, record, signal, foreground, admission) {
+  // A neuron blocked on a foreground child gives up its slot until the child returns.
+  const registry = agentRegistry(parent);
+  const parentRecord = foreground && parent.agentId ? registry.agents.get(parent.agentId) : null;
+  const parentTicket = parentRecord ? neuronSlots.get(parentRecord) : null;
+  if (parentTicket) { parentTicket.park(); admission.parentTicket = parentTicket; }
+  const ticket = await networkScheduler(parent).acquire(slotRequest(record), {
+    signal,
+    onQueued: (blocked) => {
+      record.queued = true;
+      recordAgentEvent(parent, 'agent.queued', { agentId: record.id, teamId: record.teamId || undefined, description: record.description, detail: describeWait(blocked, 0) });
+    }
+  }).finally(() => { record.queued = false; });
+  record.schedulerNote = describeWait(ticket.waitedFor, ticket.waitedMs) || null;
+  record.lastActivityAt = Date.now();
+  neuronSlots.set(record, ticket);
+  admission.ticket = ticket;
+  return ticket;
+}
+
 // Runs one turn of a subagent's own conversation and records the outcome.
 // The agent's own MCP servers are connected for each turn and closed after it.
 async function runChildTurn(parent, record, prompt, options, flags) {
@@ -424,11 +470,16 @@ async function runChildTurn(parent, record, prompt, options, flags) {
       prompt += '\n\n(These MCP servers from your agent definition did not start: ' + connected.failures.map((failure) => failure.name + ': ' + String(failure.error || '').slice(0, 160)).join('; ') + '.)';
     }
   }
-  try { return await runChildTurnInner(parent, record, prompt, options, flags); }
-  finally { closeAgentMcp(record.child); }
+  const admission = { ticket: null, parentTicket: null };
+  try { return await runChildTurnInner(parent, record, prompt, options, flags, admission); }
+  finally {
+    closeAgentMcp(record.child);
+    if (admission.ticket) { neuronSlots.delete(record); admission.ticket.release(); }
+    if (admission.parentTicket) await admission.parentTicket.unpark({ signal: options.signal });
+  }
 }
 
-async function runChildTurnInner(parent, record, prompt, options, { foreground }) {
+async function runChildTurnInner(parent, record, prompt, options, { foreground }, admission = {}) {
   const { child, type, description } = record;
   const worktree = record.worktreeInfo;
   const tag = (event) => ({ ...event, subagent: description, agentType: type, agentId: record.id });
@@ -470,6 +521,8 @@ async function runChildTurnInner(parent, record, prompt, options, { foreground }
   if (record.pane) record.pane.write('\n> ' + String(prompt).replace(/\s+/g, ' ').slice(0, 400));
   let outcome;
   try {
+    // One admission point for task, teams and workflow agent(): wait for a slot.
+    await admitNeuron(parent, record, foreground ? options.signal : record.controller.signal, foreground, admission);
     outcome = await runAgentTurn(child, prompt, {
       ...mirrorToPane(record.pane, runOptions),
       autoApprove: Boolean(options.autoApprove),
@@ -544,6 +597,7 @@ async function runChildTurnInner(parent, record, prompt, options, { foreground }
     ...(record.unverifiedClaim ? { unverified_claim: record.unverifiedClaim, note_on_report: 'OASIS did not observe a passing check behind this report (' + record.unverifiedClaim + '). Treat its test or build results as unverified; run the check yourself before relying on it.' } : {}),
     ...(outcome.limitReached ? { partial: true, note: 'The agent hit its ' + (record.maxTurns ? 'maxTurns (' + record.maxTurns + ')' : 'step') + ' limit; the report may be incomplete. send_message resumes it.' } : {}),
     ...(record.outputSchema ? (outcome.schemaErrors && outcome.schemaErrors.length ? { schema_errors: outcome.schemaErrors } : { structured: outcome.structured }) : {}),
+    ...(record.schedulerNote ? { scheduler_note: record.schedulerNote } : {}),
     toolCalls: Math.max(0, Number(outcome.toolCalls) || 0),
     tokensUsed: Math.max(0, Number(outcome.tokensUsed) || 0),
     ...(record.usage && record.usage.requests ? { usage: { requests: record.usage.requests, inputTokens: record.usage.inputTokens, outputTokens: record.usage.outputTokens, costUsd: Number(Number(record.usage.costUsd || 0).toFixed(6)) } } : {})
