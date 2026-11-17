@@ -23,6 +23,7 @@ User-facing change history grouped by package version. A version heading does no
 - Web app: the tab icon gets a dot when OASIS needs you (amber) or is done (green) while the tab is in the background. With no saved sound choice, the finish and needs-you sounds play only while the tab is in the background; the setting turns every sound on or off.
 - Web app: a changed file's diff shows how many lines it adds and removes ("+3 −2") beside the file name. Test: `test/app-core.test.mjs`.
 - The turn clock and "Worked for" line read in hours past an hour (`1h 02m 05s`, not `62m 05s`), and token counts read in millions (`1.2M`, not `1200k`; 999,500 tokens is `1M`, not `1000k`), in the terminal and the web app.
+- Web app: the context meter's tooltip uses the same short counts as the run status (`12.3k of 200k tokens`, not `12.3k of 200.0k`).
 - Sounds: one palette in `app/core/sound-palette.mjs` for both the terminal and the web app. The terminal writes its cached sound files before the first turn so the first chime plays at once.
 
 ## [1.5.0] - 2026-11-17
