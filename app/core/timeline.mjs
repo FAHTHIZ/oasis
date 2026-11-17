@@ -357,6 +357,34 @@ export function thoughtLabel(elapsedMs) {
   return Number.isFinite(value) && value >= 1000 ? 'Thought for ' + formatDuration(value) : 'Thought';
 }
 
+// The headline of a settled thought, as Claude and Perplexity show it: the
+// summary's own bold title when it has one ("**Finding the bug**"), else its
+// first sentence, plain text, at most about one line. '' when there is none.
+export function thoughtHeadline(text, max = 96) {
+  const source = String(text || '').trim();
+  if (!source) return '';
+  const bold = source.match(/^\s*(?:#{1,6}\s*)?\*\*([^*\n]{3,120})\*\*\s*(?:\n|$)/);
+  let line = bold ? bold[1] : source
+    .replace(/```[\s\S]*?(```|$)/g, ' ')
+    .replace(/^#{1,6}\s+/gm, '')
+    .split(/\n/).find((row) => row.trim()) || '';
+  line = line
+    .replace(/!?\[([^\]]*)\]\([^)]*\)/g, '$1')
+    .replace(/[*_~`]+/g, '')
+    .replace(/^\s*(?:[-+>]|\d+[.)])\s+/gm, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+  if (!bold) {
+    // The first sentence; a period inside a name (dates.mjs, e.g.) does not end it.
+    const end = line.search(/[.!?](?=\s+[A-Z("'`]|$)/);
+    if (end > 0) line = line.slice(0, end + (line[end] === '.' ? 0 : 1));
+  }
+  line = line.replace(/[:;,]$/, '').trim();
+  if (/^[a-z]/.test(line)) line = line[0].toUpperCase() + line.slice(1);
+  if (line.length > max) line = line.slice(0, max - 1).replace(/\s+\S*$/, '') + '…';
+  return line;
+}
+
 // Small local models often write a tool call as JSON text instead of a native call,
 // sometimes after a sentence of prose. OASIS turns it into a real call when the reply
 // ends; while it streams, show the prose and which tool is being prepared instead of a

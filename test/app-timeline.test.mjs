@@ -305,3 +305,14 @@ test('an edit previews its change inline: changed lines with one line of context
   assert.equal(cut.more, 20);
   assert.equal(stepResult({ ok: true, name: 'write_file', args: { path: 'a', content: 'x\ny\n' }, content: 'ok' }).text, 'Wrote 2 lines');
 });
+
+test('a settled thought is titled by its headline', async () => {
+  const { thoughtHeadline } = await import('../app/core/timeline.mjs');
+  assert.equal(thoughtHeadline('grep shows isOverdue in src/dates.mjs. Read it.'), 'Grep shows isOverdue in src/dates.mjs');
+  assert.equal(thoughtHeadline('**Planning the fix**\n\nI will compare days.'), 'Planning the fix');
+  assert.equal(thoughtHeadline('1. Read the file\n2. Fix it'), 'Read the file');
+  assert.equal(thoughtHeadline('See [the docs](https://x.y) first: then edit.'), 'See the docs first: then edit');
+  assert.equal(thoughtHeadline(''), '');
+  assert.ok(thoughtHeadline('word '.repeat(60)).endsWith('…'));
+  assert.ok(thoughtHeadline('word '.repeat(60)).length <= 96);
+});

@@ -7,7 +7,7 @@ import { SUBAGENT_STATUS_TEXT } from './core/subagents.mjs';
 import { createConnectorCard, connectIntent, splitServices, brandMark } from './core/connector-card.mjs';
 import { createSoundPlayer, soundAllowed } from './core/sound.mjs';
 import { sideWork, liveStatus, modelRequest, waitingLabel, thoughtMs, runSummary, reasoningHeadline, formatTokens } from './core/live-status.mjs';
-import { readableOutput, repeatsEarlierReply, stepOutcome, stepRan, stepLabel, summarizeArgs, toolKind, groupTitle, groupStats, formatDuration, thinkingLabel, thoughtLabel, splitTextToolCall, elapsedSince, describeInput, buildTimeline, groupTiming, runElapsed, timingSplit, stepResult, liveLabel, diffPreview } from './core/timeline.mjs';
+import { readableOutput, repeatsEarlierReply, stepOutcome, stepRan, stepLabel, summarizeArgs, toolKind, groupTitle, groupStats, formatDuration, thinkingLabel, thoughtLabel, thoughtHeadline, splitTextToolCall, elapsedSince, describeInput, buildTimeline, groupTiming, runElapsed, timingSplit, stepResult, liveLabel, diffPreview } from './core/timeline.mjs';
 import { IndexedDBStore, Workspace, diffStat, lineDiff } from './core/workspace.mjs';
 import { wordHighlights } from '../src/word-diff.mjs';
 import { Agent, answeredHistory, textOf } from './core/agent.mjs';
@@ -1904,7 +1904,19 @@ function thinkingShell(open) {
 function thoughtBlock(text, ms) {
   const block = thinkingShell(false);
   block.classList.add('thought');
-  block.querySelector('.thinking-label').textContent = thoughtLabel(ms);
+  // The thought names itself by its headline ("Comparing calendar days"),
+  // as Claude and Perplexity do; how long it took sits beside it, dim.
+  const headline = thoughtHeadline(text);
+  const label = block.querySelector('.thinking-label');
+  label.textContent = headline || thoughtLabel(ms);
+  const took = formatDuration(ms);
+  if (headline) {
+    const meta = document.createElement('span');
+    meta.className = 'thinking-meta';
+    meta.textContent = Number(ms) >= 1000 ? took : '';
+    label.after(meta);
+    block.querySelector('.thinking-head').setAttribute('aria-label', thoughtLabel(ms) + ': ' + headline + '. Show the full thought.');
+  }
   block.querySelector('.thinking-text').innerHTML = renderMarkdown(text);
   return block;
 }
