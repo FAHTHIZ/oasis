@@ -901,7 +901,9 @@ export async function runBuiltinCommand(name, argument, state) {
       const words = String(argument || '').trim().split(/\s+/).filter(Boolean);
       const action = String(words[0] || 'status').toLowerCase();
       const current = { enabled: false, easyModel: '', strongModel: '', ...(session.settings && session.settings.modelRouting || {}) };
-      const describe = (value) => value.enabled && value.easyModel && value.mode === 'cascade'
+      const describe = (value) => value.enabled && value.mode === 'capability' && value.routes && Object.keys(value.routes).length
+        ? 'Capability routing is on (from an eval routing table). Routes: ' + Object.entries(value.routes).map(([name, model]) => name + ' → ' + model).join(', ') + '. Security-sensitive and hard tasks use ' + (value.strongModel || session.config.model) + ', and a stuck run moves there too. Rebuild the table with oasis eval --route-table.'
+        : value.enabled && value.easyModel && value.mode === 'cascade'
         ? 'Cascade routing is on. Tasks start on ' + value.easyModel + ' and move to ' + (value.strongModel || session.config.model) + ' for the rest of the task if the run gets stuck (the same failure after several edits, repeated failing commands, or repeated identical tool calls). Security-sensitive tasks start on the strong model. Run /routing classify for read-only-only routing.'
         : value.enabled && value.easyModel
         ? 'Automatic routing is on. Clearly read-only requests use ' + value.easyModel + '; hard, ambiguous, and change requests use ' + (value.strongModel || session.config.model) + '. Run /routing cascade to start coding tasks on ' + value.easyModel + ' too.'
