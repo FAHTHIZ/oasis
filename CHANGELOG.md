@@ -29,6 +29,7 @@ User-facing change history grouped by package version. A version heading does no
 - Terminal: session ages round down and read correctly: the resume recap says `saved 1 day ago` (was `1 days ago`) and `59 min ago` (was `60 min ago`), `/resume` lists no `60m ago`, and `oasis bg` shows background sessions older than two days in days.
 - Web app: the command palette has Review changes, which opens the side panel straight on the Changes tab (searching "diff" finds it), and Open files now always lands on the file list.
 - Terminal: the reasoning glimpse treats each finished line as a thought, so a numbered plan reads `Run the tests` instead of `first step 2.`, and it shows a markdown link's text, not its URL.
+- Web app: while a changed file is open, `[` and `]` step to the previous or next changed file, so a review goes file by file without closing the viewer. Listed in the keyboard guide.
 - Sounds: one palette in `app/core/sound-palette.mjs` for both the terminal and the web app. The terminal writes its cached sound files before the first turn so the first chime plays at once.
 
 ## [1.5.0] - 2026-11-17

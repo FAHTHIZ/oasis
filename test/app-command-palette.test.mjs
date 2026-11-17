@@ -55,5 +55,7 @@ test('keyboard guide documents only shortcuts wired by the browser workspace', (
     if (keys.includes(guide)) assert.ok(main.includes("'" + binding + "':"), guide + ' is wired as ' + binding);
   }
   assert.ok(main.includes("from 'tinykeys'"));
-  assert.equal(APP_KEYBOARD_SHORTCUTS.length, 15);
+  assert.ok(keys.includes('[ / ]'));
+  assert.ok(main.includes("$('editorSheet').addEventListener('keydown'"), '[ and ] are wired in the file viewer');
+  assert.equal(APP_KEYBOARD_SHORTCUTS.length, 16);
 });
