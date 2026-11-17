@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64" aria-hidden="true">
+<style>@media (prefers-reduced-motion: no-preference) {
+.e{stroke-dasharray:1;animation:e 3s ease-in-out infinite}@keyframes e{0%,10%{stroke-dashoffset:1}40%,85%{stroke-dashoffset:0}100%{stroke-dashoffset:1}}.k{transform-box:fill-box;transform-origin:center;animation:k 3s ease-in-out infinite}.k2{animation-delay:.15s}@keyframes k{0%,30%{transform:scale(0)}45%,85%{transform:scale(1)}100%{transform:scale(0)}}
+}</style>
+<rect x="1" y="1" width="62" height="62" rx="16" fill="#F2FBF4" stroke="#CFE6D6" stroke-width="1.5"/>
+<path class="e" d="M32 20L18 44M32 20L46 44" stroke="#0A7846" stroke-width="2.5" pathLength="1"/><circle cx="32" cy="18" r="7" fill="#18A957"/><circle class="k" cx="18" cy="46" r="6" fill="#0A7846"/><circle class="k k2" cx="46" cy="46" r="6" fill="#0A7846"/>
+</svg>
