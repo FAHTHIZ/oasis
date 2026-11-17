@@ -26,6 +26,7 @@ import { loadAgentTranscript } from './sessions.mjs';
 import { repairInterruptedHistory } from './tool-results.mjs';
 import { unsupportedChildClaim } from './claim-check.mjs';
 import { schedulerForRegistry, providerKey, describeWait } from './neuron-scheduler.mjs';
+import { childBudgetRequest, close as closeBudget, reserve as reserveBudget, sessionBudget } from './budget-algebra.mjs';
 import { runAgentTurn, headTailText, MAX_SUBAGENT_REPORT_CHARS, READ_ONLY_TOOLS, hookOptions, boundSubagentReport } from './agent.mjs';
 
 const SPECIALIST_REVIEW_TOOLS = new Set(['git_status', 'git_diff', 'git_log', 'lsp', 'list_files', 'glob_files', 'repo_map', 'read_file', 'search_files', 'grep', 'ast_grep']);
@@ -385,6 +386,7 @@ export async function runSubagent(parent, args, context, options) {
   }
   child.agentId = record.id;
   record.maxTurns = agent.maxTurns || null;
+  record.budgetRequest = agent.budget || null;
   record.outputSchema = outputSchema;
   let startPrompt = prompt;
   if (hasHooks(parent.hooks, 'SubagentStart')) {
@@ -454,6 +456,27 @@ async function admitNeuron(parent, record, signal, foreground, admission) {
   return ticket;
 }
 
+// Budget algebra (roadmap 1.3): each run reserves the agent's budget from its
+// parent's, minus what earlier runs of the same agent already spent, and
+// returns the unspent part when the run ends, however it ends.
+function openNeuronBudget(parent, record, env) {
+  const child = record.child;
+  if (!child) return;
+  const request = childBudgetRequest({ budget: record.budgetRequest }, env);
+  const spent = record.budgetSpent || {};
+  const remaining = request ? Object.fromEntries(Object.entries(request).map(([kind, value]) => [kind, Math.max(0, value - (Number(spent[kind]) || 0))])) : {};
+  child.budgetNode = reserveBudget(sessionBudget(parent), remaining, { name: record.id });
+}
+
+function closeNeuronBudget(record) {
+  const node = record.child && record.child.budgetNode;
+  if (!node) return;
+  closeBudget(node);
+  const spent = record.budgetSpent ||= {};
+  for (const [kind, value] of Object.entries(node.spent)) spent[kind] = (Number(spent[kind]) || 0) + value;
+  record.child.budgetNode = null;
+}
+
 // Runs one turn of a subagent's own conversation and records the outcome.
 // The agent's own MCP servers are connected for each turn and closed after it.
 async function runChildTurn(parent, record, prompt, options, flags) {
@@ -471,8 +494,10 @@ async function runChildTurn(parent, record, prompt, options, flags) {
     }
   }
   const admission = { ticket: null, parentTicket: null };
-  try { return await runChildTurnInner(parent, record, prompt, options, flags, admission); }
-  finally {
+  try {
+    return await runChildTurnInner(parent, record, prompt, options, flags, admission);
+  } finally {
+    closeNeuronBudget(record);
     closeAgentMcp(record.child);
     if (admission.ticket) { neuronSlots.delete(record); admission.ticket.release(); }
     if (admission.parentTicket) await admission.parentTicket.unpark({ signal: options.signal });
@@ -522,6 +547,7 @@ async function runChildTurnInner(parent, record, prompt, options, { foreground }
   let outcome;
   try {
     // One admission point for task, teams and workflow agent(): wait for a slot.
+    openNeuronBudget(parent, record, options.env || process.env);
     await admitNeuron(parent, record, foreground ? options.signal : record.controller.signal, foreground, admission);
     outcome = await runAgentTurn(child, prompt, {
       ...mirrorToPane(record.pane, runOptions),
