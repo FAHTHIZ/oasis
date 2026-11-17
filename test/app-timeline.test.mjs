@@ -259,3 +259,24 @@ test('formatDuration reads a long run in hours ("Worked for 1h 02m 05s")', () =>
   assert.equal(formatDuration(3540000), '59m 00s');
   assert.equal(formatDuration(3725000), '1h 02m 05s');
 });
+
+test('a finished step says what came back in one line, as Claude Code does', async () => {
+  const { stepResult, testSummary, readableOutput } = await import('../app/core/timeline.mjs');
+  const read = (value) => stepResult({ ok: true, content: JSON.stringify(value) }).text;
+  assert.equal(read({ path: 'a.js', content: 'x\ny\nz' }), 'Read 3 lines');
+  assert.equal(read({ path: 'a.js', content: 'x', startLine: 1, endLine: 200, totalLines: 1204, truncated: true }), 'Read lines 1–200 of 1,204');
+  assert.equal(read({ matches: [{ path: 'a', line: 1 }, { path: 'b', line: 2 }, { path: 'b', line: 9 }] }), '3 matches in 2 files');
+  assert.equal(read({ matches: [] }), 'No matches');
+  assert.equal(read({ files: ['a', 'b'] }), '2 files');
+  assert.equal(read({ todos: [] }), '');
+  assert.equal(read({ command: 'npm test', exitCode: 0, stdout: '# pass 12\n# fail 0\n', stderr: '' }), '12 passed');
+  assert.deepEqual(stepResult({ ok: false, content: JSON.stringify({ command: 'npm test', exitCode: 1, stdout: 'Tests: 1 failed, 11 passed, 12 total', stderr: '' }) }), { text: '11 passed · 1 failed · exit code 1', tone: 'fail' });
+  assert.deepEqual(stepResult({ ok: false, content: JSON.stringify({ command: 'foo', exitCode: 127, stdout: '', stderr: 'sh: foo: command not found' }) }), { text: 'Exit code 127 · sh: foo: command not found', tone: 'fail' });
+  assert.equal(read({ command: 'ls', exitCode: 0, stdout: 'a\nb\n', stderr: '' }), '2 lines of output');
+  assert.deepEqual(stepResult({ ok: false, content: '{"error":"File not found: x.js"}' }), { text: 'File not found: x.js', tone: 'fail' });
+  assert.equal(stepResult({ content: 'still running' }).text, '');
+  assert.equal(testSummary('===== 3 passed, 1 skipped in 0.2s ====='), '3 passed · 1 skipped');
+  assert.equal(testSummary('12 passing\n2 failing'), '12 passed · 2 failed');
+  // A ranged read shows the file text in the inspector, not its JSON envelope.
+  assert.equal(readableOutput(JSON.stringify({ path: 'a.js', content: 'x\ny', startLine: 1, endLine: 2, totalLines: 2, truncated: false })), 'x\ny');
+});
