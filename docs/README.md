@@ -42,15 +42,11 @@ Find the right guide without knowing the repository. The root
 - [Benchmarks](BENCHMARKS.md): model-free harness results, same-model head-to-head runs and their limits.
 - [Real-world runs](REAL-WORLD-RUNS.md): unscripted tasks with real providers, plugins checked, what went wrong.
 - [Comparison](COMPARISON.md): features against Claude Code, Codex, Gemini CLI, OpenCode, Goose and others, with sources.
-- [Research record](RESEARCH.md): projects and techniques reviewed, and what was adopted or rejected.
-- [Research and proposals](research/README.md): Hermes Agent study, ecosystem comparison, general-purpose architecture, model strategy, licensing assessment and roadmap (proposals for review, not shipped behaviour).
+- [Roadmap](ROADMAP.md): prioritised plan with measurable acceptance criteria and what is already done.
 
 ## Project records
 
-- [Completion checklist](COMPLETION-CHECKLIST.md): what is done, open or blocked, with evidence.
-- [Mission log](MISSION-LOG.md): dated engineering record, newest first.
-- [Design archive](design/README.md): earlier plans, audits and scorecards, kept for history.
-- [Changelog](../CHANGELOG.md) · [Contributing](../CONTRIBUTING.md) · [Security policy](../SECURITY.md) · [Support](../SUPPORT.md) · [Code of Conduct](../CODE_OF_CONDUCT.md) · [Brand](../BRAND.md) · [Third-party notices](../THIRD-PARTY-NOTICES.md)
+- [Changelog](../CHANGELOG.md) · [Contributing](../CONTRIBUTING.md) · [Security policy](../SECURITY.md) · [Support](../SUPPORT.md) · [Code of Conduct](../CODE_OF_CONDUCT.md) · [Brand](BRAND.md) · [Third-party notices](../THIRD-PARTY-NOTICES.md)
 
 ## Documentation policy
 

@@ -5,8 +5,7 @@
 
 ONN is a coordination system for agents. It is not a neural network: no
 weights are trained by it, and the word "neuron" names an agent instance in
-a graph. Model choices (using, fine-tuning or training a model) are covered
-separately in [research/MODEL-STRATEGY.md](research/MODEL-STRATEGY.md).
+a graph.
 
 Oasis Neuron Network (ONN) is the coordination architecture for turning Oasis's current subagents, named teams, shared task board, workflows, memory, skills, and verification system into one coherent agent network.
 
@@ -138,12 +137,8 @@ Before this slice a subagent report of up to a million characters came back as o
 
 ## Detailed design (proposal, 2026-11)
 
-This section turns phases 2 to 8 above into one design. It was written after
-the [Hermes Agent study](research/HERMES-AGENT.md) and the
-[ecosystem comparison](research/OSS-ECOSYSTEM.md), and it is the network
-half of the [general-purpose architecture](research/GENERAL-PURPOSE-ARCHITECTURE.md).
-Nothing in it is implemented until the [roadmap](research/ROADMAP.md) marks
-it done.
+This section turns phases 2 to 8 above into one design. Nothing in it is
+implemented until the [roadmap](ROADMAP.md) marks it done.
 
 ### Components
 

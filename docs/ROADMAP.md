@@ -2,9 +2,8 @@
 
 **Date:** 2026-11-15. Status: proposal for review. The rule from the
 research brief holds: no major system is integrated until the
-[general-purpose architecture](GENERAL-PURPOSE-ARCHITECTURE.md) and the
-[Neuron Network design](../OASIS-NEURON-NETWORK.md#detailed-design-proposal-2026-11)
-have been reviewed. Items are ordered so that each one is useful alone, can
+[Neuron Network design](OASIS-NEURON-NETWORK.md#detailed-design-proposal-2026-11)
+has been reviewed. Items are ordered so that each one is useful alone, can
 ship in a normal release, and builds on the existing OASIS runtime rather
 than beside it.
 
@@ -24,11 +23,11 @@ Priorities:
 
 | # | Item | Source of the idea | Acceptance criteria |
 | --- | --- | --- | --- |
-| 0.1 | Prompt-surface snapshot test: the system prompt and tool list for fixed configs are snapshotted; any change needs an explicit snapshot update | Hermes Agent (MIT), [study](HERMES-AGENT.md) | Done: `test/prompt-surface.test.mjs`. Fails when a tool description or prompt section changes without a snapshot update; covers default, a git repository with project instructions, plan mode, a small context window and the explore subagent, and checks the system prompt is byte-stable across requests of one turn |
-| 0.2 | Delegation roles `leaf` / `orchestrator` on agent definitions; leaves cannot call `task` | Hermes `max_spawn_depth` and orchestrator role | Covered by existing features, so no new field was added: `disallowedTools: task` (or leaving `Agent` out of `tools`) makes a leaf, read-only agents never get `task`, and `subagentMaxDepth` bounds nesting ([Subagents](../SUBAGENTS.md#safety-boundaries), `test/subagent-nesting.test.mjs`) |
+| 0.1 | Prompt-surface snapshot test: the system prompt and tool list for fixed configs are snapshotted; any change needs an explicit snapshot update | Hermes Agent (MIT), study | Done: `test/prompt-surface.test.mjs`. Fails when a tool description or prompt section changes without a snapshot update; covers default, a git repository with project instructions, plan mode, a small context window and the explore subagent, and checks the system prompt is byte-stable across requests of one turn |
+| 0.2 | Delegation roles `leaf` / `orchestrator` on agent definitions; leaves cannot call `task` | Hermes `max_spawn_depth` and orchestrator role | Covered by existing features, so no new field was added: `disallowedTools: task` (or leaving `Agent` out of `tools`) makes a leaf, read-only agents never get `task`, and `subagentMaxDepth` bounds nesting ([Subagents](SUBAGENTS.md#safety-boundaries), `test/subagent-nesting.test.mjs`) |
 | 0.3 | One-shot child cap: `oasis -p` runs default to at most 2 concurrent children unless configured | Hermes `oneshot_max_children` | Partly done: `subagentMaxParallel` / `OASIS_SUBAGENT_MAX_PARALLEL` caps children per reply (`test/subagent-max-parallel.test.mjs`: 5 requested, at most 2 overlap, all 5 run). The default stays 6 until a harness run shows a lower `-p` default saves tokens without losing pass rate |
 | 0.4 | Static audit of skill and plugin scripts at install (`src/skill-install.mjs`): report shell, network and file-write patterns before enabling | Hermes skills guard | Done: `src/skill-audit.mjs` runs in `oasis skills add`, `oasis plugin install`/`update` (Claude Code and native plugins), `oasis add` and the agent install tools (`test/skill-audit.test.mjs`, `test/claude-plugins.test.mjs`, `test/native-plugins.test.mjs`). `curl \| sh` is a warning and still installs; high-risk lines refuse the install, and the confirmation is re-running with `--allow-risky` (the agent tool cannot override). Benign fixtures report nothing; files are only read. Calibrated on 209 Oasis and Hermes skills (1 refused, a keychain read) and 58 Anthropic and Oasis plugins (none refused) |
-| 0.5 | Trajectory export filter: `oasis sessions export --verified` keeps only sessions whose completion gates passed, and redacts secrets with the bundled rules | [Model strategy](MODEL-STRATEGY.md#path-2-fine-tune-an-existing-model-conditional) | Done: `sessionVerified` in `src/trajectories.mjs` (`test/trajectories.test.mjs`). The completion gates themselves are not logged, so "verified" means the session's event log ends on a passing verification command with no successful edit after it. A planted token exports redacted; failing, never-checked and edited-after-check sessions are excluded; formats unchanged |
+| 0.5 | Trajectory export filter: `oasis sessions export --verified` keeps only sessions whose completion gates passed, and redacts secrets with the bundled rules | Model strategy | Done: `sessionVerified` in `src/trajectories.mjs` (`test/trajectories.test.mjs`). The completion gates themselves are not logged, so "verified" means the session's event log ends on a passing verification command with no successful edit after it. A planted token exports redacted; failing, never-checked and edited-after-check sessions are excluded; formats unchanged |
 
 ## P1: the two core changes
 
@@ -60,7 +59,7 @@ Priorities:
 | 3.1 | Local embeddings plus `sqlite-vec` for memory and session recall | Beats FTS5 on `evals/memory-retrieval/` recall@5 by at least 10 points, adds under 150 MB installed size as an optional dependency, and OASIS works with it absent |
 | 3.2 | Optional in-process small model (`node-llama-cpp`, `transformers.js` or `onnxruntime-node`) for routing or injection screening | Measured gain on a labelled set; optional dependency only |
 | 3.3 | Offline prompt and skill optimisation with DSPy against the eval harness | Optimised text improves the held-out eval set and is reviewed like any other change; DSPy never becomes a runtime dependency |
-| 3.4 | First fine-tune of a small open-weight model (Apache-2.0 or MIT base) on verified trajectories | Criteria in the [model strategy](MODEL-STRATEGY.md#path-2-fine-tune-an-existing-model-conditional) |
+| 3.4 | First fine-tune of a small open-weight model (Apache-2.0 or MIT base) on verified trajectories | Only with a measured gain on the held-out eval set and a permissive base licence |
 | 3.5 | Critic-based refinement loop for a domain | Adapted from OpenHands SDK (MIT); only when a benchmark shows a gain for that domain and the loop is bounded |
 | 3.6 | A2A protocol endpoint | A concrete user integration that MCP and ACP cannot serve |
 
@@ -69,7 +68,6 @@ Priorities:
 - Replacing the OASIS turn loop, provider transport or permission engine
   with another framework.
 - Bundling model weights.
-- An original pre-trained model (see the
-  [model strategy](MODEL-STRATEGY.md#path-3-an-original-model-not-justified-today)).
+- An original pre-trained model.
 - Dependencies rejected in the
-  [licensing assessment](DEPENDENCIES-AND-LICENSING.md#rejected-for-licence-reasons).
+  licensing review (Apache-2.0, MIT, BSD and ISC only; see [third-party notices](../THIRD-PARTY-NOTICES.md)).

@@ -274,7 +274,7 @@ Read the [security policy](SECURITY.md) before using OASIS on sensitive code.
 
 ## Project status
 
-What is verified and what is not, kept current in the [completion checklist](docs/COMPLETION-CHECKLIST.md):
+What is verified and what is not:
 
 | Status | Areas |
 | --- | --- |
@@ -303,7 +303,7 @@ CI also runs platform security tests, a live Docker sandbox test, native PTY tes
 | [Terminal guide](docs/TERMINAL.md) | [Skills, hooks, MCP and plugins](docs/EXTENDING.md) | [Security](SECURITY.md) |
 | [Interfaces](docs/INTERFACES.md) | [Subagents](docs/SUBAGENTS.md) | [Troubleshooting](docs/TROUBLESHOOTING.md) · [FAQ](docs/FAQ.md) |
 | [Desktop app](docs/DESKTOP.md) | [Remote access](docs/REMOTE-ACCESS.md) | [Support](SUPPORT.md) |
-| [Downloads and releases](docs/RELEASES.md) | [Real-world runs](docs/REAL-WORLD-RUNS.md) | [Brand guidelines](BRAND.md) |
+| [Downloads and releases](docs/RELEASES.md) | [Real-world runs](docs/REAL-WORLD-RUNS.md) | [Brand guidelines](docs/BRAND.md) |
 | | [Benchmarks](docs/BENCHMARKS.md) · [Comparison](docs/COMPARISON.md) | [All docs](docs/README.md) |
 
 ## Meet Fen

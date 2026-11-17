@@ -86,6 +86,3 @@ Editor and ACP integrations communicate with the runtime through their respectiv
 
 See [Interfaces and deployment](INTERFACES.md) for the practical differences.
 
-## Continuous improvement and replacement programme
-
-The system-wide inventory, ranked replacement candidates, upstream comparisons and acceptance gates are maintained in the [whole-system replacement roadmap](design/REPLACEMENT-ROADMAP.md). The roadmap distinguishes components to retain from candidates that need proof before replacement; it is not a claim that every proposed integration is already implemented.
