@@ -1006,6 +1006,7 @@ export function createOasisWebServer(options = {}) {
     // A hook that takes a while (tests on Stop, a linter after an edit) shows
     // in the status line instead of looking like a hang: "Running Stop hook".
     session.onHookStatus = (info) => {
+      if (info && info.phase === 'result') { emit(job, 'hook_result', { event: String(info.event || '').slice(0, 60), outcome: info.outcome === 'blocked' ? 'blocked' : 'failed', reason: redactApprovalSecrets(String(info.reason || '')).slice(0, 500) }); return; }
       if (!info || (info.phase !== 'start' && info.phase !== 'end')) return;
       emit(job, 'hook_status', { phase: info.phase, event: String(info.event || '').slice(0, 60), ...(info.phase === 'start' ? { label: redactApprovalSecrets(String(info.label || 'Running a hook')).replace(/\s+/g, ' ').slice(0, 120) } : {}) });
     };
