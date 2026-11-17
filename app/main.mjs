@@ -1118,6 +1118,12 @@ function patchStepRow(item, tool) {
   set('.arg', argText && label.toLowerCase().includes(argText.toLowerCase()) ? '' : argText);
   set('.tool-status', stepStatus(tool));
   set('.dur', stepDuration(tool));
+  // Hovering the time gives when the step ran, as Perplexity's "4:00 AM · 9s".
+  const started = Number(tool.startedAt);
+  const durEl = summary.querySelector('.dur');
+  const when = Number.isFinite(started) && started > 0 ? new Date(started).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit', second: '2-digit' }) : '';
+  const durTitle = when ? 'Started ' + when + (stepDuration(tool) ? ' · took ' + stepDuration(tool) : '') : '';
+  if (durEl.title !== durTitle) durEl.title = durTitle;
   patchLineStats(summary.querySelector('.lines'), tool.lines);
   patchSources(item.querySelector('.step-sources'), tool.sources);
   summary.setAttribute('aria-label', label + ', ' + stepStatus(tool).toLowerCase() + '. Expand to inspect input and output.');
