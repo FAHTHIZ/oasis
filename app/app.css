@@ -439,6 +439,8 @@ input[type="checkbox"]{width:18px;height:18px;accent-color:var(--accent)}
 .diff-stat{font-size:12px;white-space:nowrap;margin-right:auto;padding-left:10px}
 .diff-stat .add{color:var(--add)}
 .diff-stat .del{color:var(--del)}
+/* Phones: the file name keeps its own line and the actions wrap below it. */
+@media (max-width:640px){#editorSheet .sheet-head{flex-wrap:wrap;row-gap:8px}#editorSheet .sheet-head h2{flex:1 1 0}#editorSheet .sheet-head .diff-stat{margin-right:0}#editorSheet .sheet-head .row{flex:1 0 100%;flex-wrap:wrap;justify-content:flex-end}}
 .diff .note{color:var(--muted);padding:8px 14px}
 .approval-summary{font-size:14.5px}
 .approval-summary code{font:13px var(--mono);background:var(--raised);padding:.1em .35em;border-radius:5px}
