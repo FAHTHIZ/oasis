@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64" aria-hidden="true">
+<style>@media (prefers-reduced-motion: no-preference) {
+.scan{animation:scan 2.2s ease-in-out infinite alternate}@keyframes scan{from{transform:translateY(0)}to{transform:translateY(38px)}}
+}</style>
+<rect x="1" y="1" width="62" height="62" rx="16" fill="#F2FBF4" stroke="#CFE6D6" stroke-width="1.5"/>
+<path d="M32 12L48 18V31C48 41 41 48 32 52C23 48 16 41 16 31V18Z" fill="none" stroke="#0A7846" stroke-width="2.5" stroke-linejoin="round"/><clipPath id="sh"><path d="M32 12L48 18V31C48 41 41 48 32 52C23 48 16 41 16 31V18Z"/></clipPath><g clip-path="url(#sh)"><rect class="scan" x="14" y="12" width="36" height="3" fill="#18A957"/></g><path d="M26 32L30 36L38 27" fill="none" stroke="#18A957" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>
