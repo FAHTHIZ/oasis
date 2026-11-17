@@ -168,6 +168,8 @@ export function watchForStall(parent, record, env) {
   record.inTool = false;
   const timer = setInterval(() => {
     if (record.status !== 'running') return;
+    // Waiting for a scheduler slot is not a stall.
+    if (record.queued) { record.lastActivityAt = Date.now(); return; }
     const idle = Date.now() - (record.lastActivityAt || 0);
     const limit = record.inTool ? limits.inToolMs : limits.idleMs;
     if (idle < limit) return;
