@@ -432,7 +432,7 @@ export function describeEntry(entry, activity = '') {
   const age = Math.max(0, Math.round((Date.now() - Date.parse(entry.startedAt)) / 60000));
   const status = entry.pendingApproval ? 'needs-input' : entry.status;
   if (entry.pendingApproval) activity = 'waiting for approval: ' + String(entry.pendingApproval.message || entry.pendingApproval.tool || '').slice(0, 80) + '  (oasis bg approve ' + entry.id + ' | deny ' + entry.id + ')';
-  return entry.id + '  ' + status.padEnd(11) + (entry.kind === 'exec' ? ' [exec]' : '') + (entry.name ? ' ' + entry.name : '') + ' ' + (age < 60 ? age + 'm' : Math.round(age / 60) + 'h') + ' ago  ' + path.basename(entry.root) + '  ' + entry.prompt.replace(/\s+/g, ' ').slice(0, 60) + (activity ? '\n    └ ' + activity : '');
+  return entry.id + '  ' + status.padEnd(11) + (entry.kind === 'exec' ? ' [exec]' : '') + (entry.name ? ' ' + entry.name : '') + ' ' + (age < 60 ? age + 'm' : age < 2880 ? Math.floor(age / 60) + 'h' : Math.floor(age / 1440) + 'd') + ' ago  ' + path.basename(entry.root) + '  ' + entry.prompt.replace(/\s+/g, ' ').slice(0, 60) + (activity ? '\n    └ ' + activity : '');
 }
 
 // Shown when an interactive session starts: background runs that are waiting

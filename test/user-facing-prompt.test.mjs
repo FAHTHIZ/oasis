@@ -72,3 +72,11 @@ test('the resume recap names the conversation and its last real exchange', () =>
   assert.match(recap, /● Checked: add\(2, 3\) prints 5\.\n$/);
   for (const line of recap.trimEnd().split('\n')) assert.ok(line.length <= 80, line);
 });
+
+test('the resume recap says "1 day ago" and never rounds up to "60 min ago"', () => {
+  const at = Date.parse('2026-11-17T12:00:00Z');
+  const recap = (ms) => sessionRecap({ ...SAVED, updatedAt: new Date(at - ms).toISOString() }, { now: at }).split('\n')[0];
+  assert.match(recap(59 * 60_000 + 40_000), /saved 59 min ago$/);
+  assert.match(recap(26 * 3_600_000), /saved 1 day ago$/);
+  assert.match(recap(3 * 86_400_000), /saved 3 days ago$/);
+});
