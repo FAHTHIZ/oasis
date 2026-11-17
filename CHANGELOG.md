@@ -4,6 +4,7 @@ User-facing change history grouped by package version. A version heading does no
 
 ## Unreleased
 
+- Subagent reports are now checked against what the subagent's own tools showed before the parent sees them: passing tests need a finished, unpiped, passing check with no later edit; cited URLs need a fetch, not just a search hit; and for agents with `domain: analysis` (or that ran code without tests), every computed number needs an execution that printed it. A report that fails comes back with `report_status: "rejected"` and the reasons in `verification_issues`. See [Evidence and contracts](docs/OASIS-NEURON-NETWORK.md#evidence-and-contracts-roadmap-15-17). Tests: `test/evidence-ledger.test.mjs`, `test/subagent-claim-check.test.mjs`.
 - A subagent that is cancelled, fails or stalls now releases every shared task it claimed with `task_claim`, not only the one it was started for, so another agent can pick the task up at once instead of waiting out the 15-minute lease. See [Cancellation and leases](docs/OASIS-NEURON-NETWORK.md#cancellation-and-leases-roadmap-14). Test: `test/neuron-cancellation.test.mjs`.
 
 ## [1.4.0] - 2026-11-17

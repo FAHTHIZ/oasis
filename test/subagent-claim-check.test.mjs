@@ -62,6 +62,18 @@ test('a child that claims passing tests without running any is flagged to the pa
   const result = await delegate(t, [claim]);
   assert.match(result.unverified_claim, /ran no test, check, lint or build command/);
   assert.match(result.note_on_report, /did not observe a passing check/);
+  // Return-time gate (roadmap 1.7): the report is rejected with the reason.
+  assert.equal(result.report_status, 'rejected');
+  assert.deepEqual(result.verification_issues.map((issue) => issue.domain), ['code']);
+  assert.match(result.verification_issues[0].reason, /ran no test/);
+});
+
+test('a child that cites a page it never fetched has its report rejected (research contract)', async (t) => {
+  const result = await delegate(t, [{ role: 'assistant', content: 'The limit is documented at [the docs](https://example.com/limits?utm_source=x).' }]);
+  assert.equal(result.report_status, 'rejected');
+  assert.equal(result.verification_issues[0].domain, 'research');
+  assert.match(result.verification_issues[0].reason, /never fetched \(https:\/\/example\.com\/limits\)/);
+  assert.equal(result.unverified_claim, undefined, 'no code claim was made');
 });
 
 test('a child whose last test run failed cannot report a pass to the parent', async (t) => {
@@ -72,5 +84,6 @@ test('a child whose last test run failed cannot report a pass to the parent', as
 test('a child that ran passing tests reports without a flag', async (t) => {
   const result = await delegate(t, [runTest('pass.test.mjs'), claim]);
   assert.equal(result.unverified_claim, undefined);
+  assert.equal(result.report_status, undefined);
   assert.match(result.report, /All tests pass/);
 });
