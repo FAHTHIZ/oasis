@@ -121,8 +121,9 @@ test('a live run streams reasoning into a Thinking block that settles and surviv
   // The reasoning summary streams into the live block, opened.
   await waitFor(page, `(() => { const b = document.querySelector('#transcript .thinking.live'); return b && !b.querySelector('.thinking-text').hidden && /Reading notes\\.txt is enough/.test(b.textContent); })()`, { label: 'reasoning streams into the live Thinking block' });
   await shot('reasoning-live');
-  // When the model starts writing, the block settles into a collapsed "Thought for".
-  await waitFor(page, `(() => { const b = document.querySelector('#transcript .thinking.thought'); return b && /^Thought/.test(b.querySelector('.thinking-label').textContent) && b.querySelector('.thinking-text').hidden; })()`, { label: 'settled into Thought for Ns' });
+  // When the model starts writing, the block settles collapsed, titled by its
+  // headline (the first sentence of the reasoning), with "Thought for" in its label.
+  await waitFor(page, `(() => { const b = document.querySelector('#transcript .thinking.thought'); return b && /^The user wants the notes$|^Thought/.test(b.querySelector('.thinking-label').textContent) && /Thought/.test(b.querySelector('.thinking-head').getAttribute('aria-label') || b.querySelector('.thinking-label').textContent) && b.querySelector('.thinking-text').hidden; })()`, { label: 'settled into a titled thought' });
   // Step 2 waits 1.5 s with no reasoning: the Thinking timer shows right after the step ends.
   await waitFor(page, `document.querySelectorAll('#transcript .tool.ok').length === 1 && Boolean(document.querySelector('#transcript .thinking.live'))`, { label: 'Thinking shows while the model works with nothing streaming' });
   await waitFor(page, `!${busy} && /The notes say hello/.test(document.getElementById('transcript').textContent)`, { label: 'answer shown' });

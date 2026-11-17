@@ -278,6 +278,10 @@ code.inspect-text{font:12px var(--mono)}
 .thinking-orb::before{content:"";width:13px;height:13px;background:currentColor;-webkit-mask:url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"><path d="M8 1c.5 3.6 2.4 5.5 6 6-3.6.5-5.5 2.4-6 6-.5-3.6-2.4-5.5-6-6 3.6-.5 5.5-2.4 6-6z"/></svg>') center/contain no-repeat;mask:url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"><path d="M8 1c.5 3.6 2.4 5.5 6 6-3.6.5-5.5 2.4-6 6-.5-3.6-2.4-5.5-6-6 3.6-.5 5.5-2.4 6-6z"/></svg>') center/contain no-repeat;animation:breathe 1.6s ease-in-out infinite}
 .thinking.thought .thinking-orb{color:var(--faint)}
 .thinking.thought .thinking-orb::before{animation:none;width:12px;height:12px}
+.thinking.thought .thinking-label{color:var(--muted)}
+.thinking.thought .thinking-head:hover .thinking-label{color:var(--text-2)}
+.thinking-meta{flex:none;font-size:12px;color:var(--faint);font-variant-numeric:tabular-nums}
+.thinking-meta:empty{display:none}
 .thinking-label{min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-variant-numeric:tabular-nums}
 .thinking.live .thinking-label{background:linear-gradient(90deg,var(--muted) 0%,var(--muted) 40%,var(--text) 50%,var(--muted) 60%,var(--muted) 100%);background-size:250% 100%;-webkit-background-clip:text;background-clip:text;color:transparent;animation:shimmer 2.2s linear infinite}
 .thinking-chev{width:6px;height:6px;flex:none;border-right:1.5px solid currentColor;border-bottom:1.5px solid currentColor;transform:rotate(-45deg);margin:0 2px 0 1px;opacity:0;transition:transform .15s var(--ease),opacity .15s var(--ease)}
