@@ -207,6 +207,17 @@ export class Workspace {
   }
 }
 
+/** Added and removed line counts of a lineDiff result, for a "+3 −2" summary. */
+export function diffStat(lines) {
+  let added = 0;
+  let removed = 0;
+  for (const line of lines || []) {
+    if (line.type === 'add') added++;
+    else if (line.type === 'del') removed++;
+  }
+  return { added, removed };
+}
+
 /** Line diff for showing changes (jsdiff's Myers diff), with 3 lines of context around the changed span. */
 export function lineDiff(before, after, maxLines = 4000) {
   const a = String(before ?? '').split('\n');

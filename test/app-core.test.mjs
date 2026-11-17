@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
-import { MemoryStore, Workspace, cleanPath, lineDiff } from '../app/core/workspace.mjs';
+import { MemoryStore, Workspace, cleanPath, diffStat, lineDiff } from '../app/core/workspace.mjs';
 import { executeTool, globMatcher, needsApproval, TOOL_DEFINITIONS } from '../app/core/tools.mjs';
 import { InlineSandbox } from '../app/core/sandbox.mjs';
 import { Agent, buildSystemPrompt, textOf } from '../app/core/agent.mjs';
@@ -605,4 +605,10 @@ test('every import map entry loads through the app server\'s /vendor route', asy
   } finally {
     await new Promise((resolve) => server.close(resolve));
   }
+});
+
+test('diffStat counts added and removed lines for the file viewer summary', () => {
+  assert.deepEqual(diffStat(lineDiff('a\nb\nc', 'a\nB\nB2\nc')), { added: 2, removed: 1 });
+  assert.deepEqual(diffStat(lineDiff('same', 'same')), { added: 0, removed: 0 });
+  assert.deepEqual(diffStat(undefined), { added: 0, removed: 0 });
 });
