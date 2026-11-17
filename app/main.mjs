@@ -6,7 +6,7 @@ import { alwaysAllowLabel } from './core/approval-rule.mjs';
 import { SUBAGENT_STATUS_TEXT } from './core/subagents.mjs';
 import { createConnectorCard, connectIntent, splitServices, brandMark } from './core/connector-card.mjs';
 import { createSoundPlayer, soundAllowed } from './core/sound.mjs';
-import { sideWork, liveStatus, modelRequest, waitingLabel, thoughtMs, runSummary, reasoningHeadline } from './core/live-status.mjs';
+import { sideWork, liveStatus, modelRequest, waitingLabel, thoughtMs, runSummary, reasoningHeadline, formatTokens } from './core/live-status.mjs';
 import { readableOutput, repeatsEarlierReply, stepOutcome, stepRan, stepLabel, summarizeArgs, toolKind, groupTitle, groupStats, formatDuration, thinkingLabel, thoughtLabel, splitTextToolCall, elapsedSince, describeInput, buildTimeline, groupTiming, runElapsed, timingSplit } from './core/timeline.mjs';
 import { IndexedDBStore, Workspace, diffStat, lineDiff } from './core/workspace.mjs';
 import { wordHighlights } from '../src/word-diff.mjs';
@@ -2646,7 +2646,6 @@ function renderUsage() {
   }
 }
 function formatUsd(n) { return n < 0.01 ? '$' + n.toFixed(4) : '$' + n.toFixed(2); }
-function formatTokens(n) { return n >= 1e6 ? (n / 1e6).toFixed(1) + 'M' : n >= 1e3 ? (n / 1e3).toFixed(1) + 'k' : String(n); }
 
 // The last plan the agent wrote, so a run that ends with steps still open
 // can say so instead of showing one "In progress" forever (Codex's stale
