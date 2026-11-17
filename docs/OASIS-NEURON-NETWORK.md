@@ -201,6 +201,12 @@ Verification contracts (`src/verification-contracts.mjs`) read a report together
 
 When a subagent finishes, its report is checked against the evidence from that run before the parent sees it. A report with an unsupported claim comes back with `report_status: "rejected"` and `verification_issues` (domain and reason), and the timeline records `agent.report_rejected`. `unverified_claim` is still set for code claims. Background agents' completion notices list the reasons too.
 
+## Waiting approvals (roadmap 2.1)
+
+A background neuron has nobody to ask, so a call that needs approval used to be denied on the spot. Now `src/neuron-approvals.mjs` parks it on the agent's record (tool, redacted arguments, the prompt text) and tells the agent to go on without it and say in its report that the step is waiting. The main agent and the user are told too, and `/tasks` shows `waiting for approval`. Parked requests are saved with the session, so they survive a restart.
+
+`/tasks approve agent_N` or `/tasks deny agent_N` answers it (add the `approval_…` id when an agent has more than one). Approving stores a one-time grant for exactly that call, keyed by a hash of the tool and its arguments, then resumes the agent with the answer: straight into its inbox when it is still running, or through `send_message` from its saved conversation after a restart. The agent's next identical call uses the grant up, so the tool runs once; a repeat, or a call with other arguments, asks again. Denying resumes it with the refusal. The main agent cannot answer for the user. Ledger events: `agent.approval_pending`, `agent.approval_granted`, `agent.approval_denied`, `agent.approval_used`.
+
 ## Domain packs (roadmap 2.5)
 
 The research and analysis packs (`plugins/oasis-research`, `plugins/oasis-analysis`) are ordinary plugins whose agents declare `domain: research` or `domain: analysis`, so the contracts above run on their reports. The evidence ledger records the research pack's `oasis_fetch_url` and `oasis_web_search` MCP tools as fetches and searches, the same as `fetch_url` and `web_search`. See [Domain packs](EXTENDING.md#domain-packs). Test: `test/domain-packs.test.mjs`.

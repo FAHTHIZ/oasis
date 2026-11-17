@@ -1,3 +1,4 @@
+import { restoreApprovals } from './neuron-approvals.mjs';
 import { attachNeuronLineage, buildNeuronNetworkSnapshot, descendantRecords } from './neuron-network.mjs';
 import { ledgerAgentEvent, ledgerCharge, recoverLedgerNeurons } from './neuron-ledger.mjs';
 
@@ -99,6 +100,8 @@ export function restoreAgentHistory(session, snapshots = []) {
       ...(snapshot.usage ? { usage: normalizeAgentUsage(snapshot.usage) } : {}),
       recentTools: Array.isArray(snapshot.recentTools) ? snapshot.recentTools.slice(-10) : [],
       report: String(snapshot.report || '').slice(0, 200000),
+      // Requests parked while it ran in the background, still waiting for the user.
+      ...restoreApprovals(snapshot),
       error: wasRunning ? 'Runtime restarted; the live worker process and its private execution environment were not restored.' : String(snapshot.error || '').slice(0, 1500),
       readOnly: Boolean(snapshot.readOnly),
       teamId: typeof snapshot.teamId === 'string' ? snapshot.teamId : null,
@@ -476,6 +479,10 @@ export function summarizeAgent(record, { full = false } = {}) {
   const queuedMessages = Array.isArray(child.inbox) ? child.inbox.length : 0;
   if (queuedMessages) out.queuedMessages = queuedMessages;
   if (record.worktree) out.worktree = record.worktree;
+  if (Array.isArray(record.pendingApprovals) && record.pendingApprovals.length) {
+    out.waitingForApproval = record.pendingApprovals.map((item) => ({ id: item.id, tool: item.tool, requestedAt: item.requestedAt }));
+    out.note = 'Waiting for the user to answer with /tasks approve ' + record.id + ' or /tasks deny ' + record.id + '. You cannot approve it yourself.';
+  }
   if (record.error) out.error = record.error;
   if (full && record.status !== 'running') out.report = record.report;
   else if (record.report) out.reportPreview = record.report.slice(0, 300);
