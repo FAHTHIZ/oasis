@@ -4,6 +4,24 @@ User-facing change history grouped by package version. A version heading does no
 
 ## Unreleased
 
+## [1.7.1] - 2026-11-17
+
+### Highlights
+
+- Web: the activity feed is quieter and closer to Perplexity Computer. A finished run folds into one short line ("Worked for 22s · edited 1 file +1 −1 · 9 steps") with the full breakdown on hover, instead of a long sentence cut off mid-word.
+- Web: thoughts are titled by what they concluded ("Grep shows isOverdue in src/dates.mjs") instead of "Thought for 1s".
+- Web: plan updates no longer appear as feed steps; the Task plan card shows them.
+
+### All changes
+
+- Web: the connector ticks between groups and the per-group "tools 5s · thinking 0.9s" footer are gone (the split is on hover of the group's time).
+- Web: durations, line counts and the live status line use the UI font with tabular figures; the status line no longer turns `=>` into an arrow and ellipsizes long commands.
+- Web: a running command row reads "Running command" with the command in the code font beside it, matching its finished row.
+- Web: Done/Failed/Working chips are kept for screen readers only; the icon and result line already say it.
+- Web: group titles say what failed plainly ("Edited a.mjs and a command failed", "the tests failed") instead of claiming "ran the tests".
+- Web: hovering a step's time shows when it started and how long it took.
+- Web: "Jump to latest" is a small round arrow when idle, so it does not cover the transcript.
+
 ## [1.7.0] - 2026-11-17
 
 ### Highlights
