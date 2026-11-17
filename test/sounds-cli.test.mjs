@@ -41,7 +41,7 @@ test('a terminal turn plays the finish chime and a completed step plays a tick',
   await new Promise((resolve) => child.exitCode !== null ? resolve() : child.on('exit', resolve));
   clearTimeout(timer);
   const log = await readFile(played, 'utf8').catch(() => '');
-  assert.match(log, /^task-v50-s1\.wav$/m, 'tick for the completed step\n' + out.slice(-1500));
-  assert.match(log, /^done-v50-s1\.wav$/m, 'chime for a turn over 3 seconds');
+  assert.match(log, /^task-v50-s2\.wav$/m, 'tick for the completed step\n' + out.slice(-1500));
+  assert.match(log, /^done-v50-s2\.wav$/m, 'chime for a turn over 3 seconds');
   assert.doesNotMatch(log, /error/);
 });

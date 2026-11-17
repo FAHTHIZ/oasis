@@ -20,6 +20,7 @@ import { existsSync, mkdirSync, accessSync, constants } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { replaceFileDurablySync } from './atomic-write.mjs';
+import { SOUND_PALETTE, renderSound } from '../app/core/sound-palette.mjs';
 
 export const SOUND_NAMES = ['done', 'attention', 'error', 'task'];
 const DEFAULT_SOUND_VOLUME = 50;
@@ -27,42 +28,24 @@ const DEFAULT_SOUND_VOLUME = 50;
 export const DONE_SOUND_AFTER_MS = 3000;
 
 const SAMPLE_RATE = 22050;
-const SYNTH_VERSION = 1;
+const SYNTH_VERSION = 2;
 
-// Each note: frequency (Hz), start (s), length (s), level (0-1). Partials add
-// a little warmth so a sine does not sound like a test tone.
-const DESIGNS = {
-  done: { notes: [[783.99, 0, 0.34, 0.55], [1174.66, 0.1, 0.55, 0.5]], partials: [[2, 0.18], [3, 0.05]] },
-  attention: { notes: [[880, 0, 0.16, 0.5], [880, 0.17, 0.24, 0.45]], partials: [[2, 0.12]] },
-  error: { notes: [[392, 0, 0.22, 0.55], [311.13, 0.14, 0.36, 0.5]], partials: [[2, 0.1], [3, 0.08]] },
-  task: { notes: [[1567.98, 0, 0.1, 0.32]], partials: [[2, 0.08]] }
-};
+// The palette is shared with the web app (app/core/sound-palette.mjs): soft
+// FM bells with a gentle low-pass, the same in the terminal and the browser.
+const DESIGNS = Object.fromEntries(SOUND_NAMES.map((name) => [name, SOUND_PALETTE[name]]));
 
 /** Samples in [-1, 1] for one sound at a volume of 0-100. */
 export function synthesize(name, volume = DEFAULT_SOUND_VOLUME) {
-  const design = DESIGNS[name];
-  if (!design) throw new Error('Unknown sound: ' + name);
-  const end = Math.max(...design.notes.map(([, start, length]) => start + length)) + 0.02;
-  const samples = new Float32Array(Math.ceil(end * SAMPLE_RATE));
-  for (const [frequency, start, length, level] of design.notes) {
-    const first = Math.floor(start * SAMPLE_RATE);
-    const count = Math.floor(length * SAMPLE_RATE);
-    const attack = Math.floor(0.004 * SAMPLE_RATE);
-    for (let i = 0; i < count && first + i < samples.length; i++) {
-      const t = i / SAMPLE_RATE;
-      // Quick attack, exponential decay to about -50 dB, short fade so nothing clicks.
-      const envelope = (i < attack ? i / attack : 1) * Math.exp(-6 * (t / length)) * Math.min(1, (count - i) / (0.01 * SAMPLE_RATE));
-      let value = Math.sin(2 * Math.PI * frequency * t);
-      for (const [multiple, amount] of design.partials) value += amount * Math.sin(2 * Math.PI * frequency * multiple * t);
-      samples[first + i] += value * envelope * level;
-    }
-  }
-  let peak = 0;
-  for (const value of samples) peak = Math.max(peak, Math.abs(value));
-  const target = 0.7 * clampVolume(volume) / 100;
-  const scale = peak > 0 ? target / peak : 0;
-  for (let i = 0; i < samples.length; i++) samples[i] *= scale;
-  return samples;
+  if (!DESIGNS[name]) throw new Error('Unknown sound: ' + name);
+  return renderSound(name, { sampleRate: SAMPLE_RATE, peak: 0.7 * clampVolume(volume) / 100 });
+}
+
+/** Writes the cached WAV files ahead of time, so the first sound plays at once. */
+export function warmSounds(env = process.env) {
+  if (soundsOffReason({ env })) return false;
+  const volume = soundVolume(env);
+  for (const name of SOUND_NAMES) { try { soundFile(name, volume, env); } catch { return false; } }
+  return true;
 }
 
 /** 16-bit mono PCM WAV. */

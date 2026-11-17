@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { activityLabel, liveLabel, toolKind, groupTitle, groupStats, formatDuration, describeInput, buildTimeline, summarizeArgs, fallbackToolLabel } from '../app/core/timeline.mjs';
-import { createSoundPlayer, SOUND_KINDS } from '../app/core/sound.mjs';
+import { createSoundPlayer, SOUND_KINDS, soundAllowed } from '../app/core/sound.mjs';
 
 const main = readFileSync(new URL('../app/main.mjs', import.meta.url), 'utf8');
 const css = readFileSync(new URL('../app/app.css', import.meta.url), 'utf8');
@@ -101,23 +101,37 @@ test('the app renders live and saved turns through the same timeline', () => {
   assert.match(css, /prefers-reduced-motion/);
 });
 
-test('sounds are opt-in, short and never stack', () => {
+test('sounds are short, rendered once and never stack', () => {
   let enabled = false;
-  const made = [];
+  const sources = [];
+  const buffers = [];
   class FakeContext {
     constructor() { this.currentTime = 0; this.state = 'running'; this.destination = {}; }
-    createOscillator() { const osc = { frequency: {}, connect: (node) => node, start: () => {}, stop: () => {} }; made.push(osc); return osc; }
-    createGain() { const ramp = () => {}; return { gain: { setValueAtTime: ramp, exponentialRampToValueAtTime: ramp }, connect: (node) => node }; }
+    createBuffer(channels, length, rate) { const data = new Float32Array(length); const buffer = { length, rate, copyToChannel: (samples) => data.set(samples), getChannelData: () => data }; buffers.push(buffer); return buffer; }
+    createBufferSource() { const source = { connect: (node) => node, start: () => {} }; sources.push(source); return source; }
+    createGain() { return { gain: { value: 1 }, connect: (node) => node }; }
   }
   const play = createSoundPlayer({ enabled: () => enabled, win: { AudioContext: FakeContext } });
-  assert.equal(play('done'), false, 'off by default');
+  assert.equal(play('done'), false, 'off unless allowed');
   enabled = true;
   assert.equal(play('done'), true);
-  assert.equal(made.length, 2);
+  assert.equal(sources.length, 1);
+  assert.ok(buffers[0].length > 2000 && buffers[0].length < 22050, 'under a second');
   assert.equal(play('fail'), false, 'a second sound right away is dropped');
   assert.equal(play('nope'), false);
   assert.deepEqual(SOUND_KINDS.sort(), ['done', 'fail', 'input', 'send']);
   assert.equal(createSoundPlayer({ enabled: () => true, win: {} })('done'), false, 'no Web Audio, no sound, no error');
+});
+
+test('by default only done and needs-you play, and only in the background', () => {
+  const hidden = { hidden: true, hasFocus: () => false };
+  const shown = { hidden: false, hasFocus: () => true };
+  assert.equal(soundAllowed(null, 'done', hidden), true);
+  assert.equal(soundAllowed(undefined, 'input', hidden), true);
+  assert.equal(soundAllowed(null, 'send', hidden), false);
+  assert.equal(soundAllowed(null, 'done', shown), false);
+  assert.equal(soundAllowed(true, 'send', shown), true);
+  assert.equal(soundAllowed(false, 'done', hidden), false);
 });
 
 test('the thinking chip shows elapsed time after five seconds', async () => {
