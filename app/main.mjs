@@ -1683,7 +1683,13 @@ const follow = (() => {
     const away = !following && el.scrollHeight - el.scrollTop - el.clientHeight > 80;
     if (pill.hidden === !away) return;
     pill.hidden = !away;
-    $('jumpLatestText').textContent = document.body.classList.contains('busy') ? 'New activity below' : 'Jump to latest';
+    // Idle, it is a small round arrow (as in Claude and ChatGPT) so it never
+    // sits over a line of the transcript; during a run it says why it is there.
+    const busy = document.body.classList.contains('busy');
+    $('jumpLatestText').textContent = busy ? 'New activity below' : 'Jump to latest';
+    pill.classList.toggle('compact', !busy);
+    pill.setAttribute('aria-label', busy ? 'New activity below' : 'Jump to latest');
+    pill.title = busy ? '' : 'Jump to latest';
   };
   const apply = () => {
     frame = 0;
