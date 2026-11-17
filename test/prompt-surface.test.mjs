@@ -6,8 +6,7 @@
 //   OASIS_UPDATE_PROMPT_SNAPSHOTS=1 node --test test/prompt-surface.test.mjs
 //
 // and review the diff of test/fixtures/prompt-surface/ like any other change.
-// Idea adapted from Hermes Agent's prompt-caching rule (MIT); see
-// docs/research/HERMES-AGENT.md.
+// Idea adapted from Hermes Agent's prompt-caching rule (MIT).
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';

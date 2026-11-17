@@ -1,8 +1,7 @@
 # Inference: providers, budgets and zero-budget mode
 
 This page covers how Oasis chooses where a model request goes, what it may
-cost, and how to cap it. The design notes behind it are in
-[the inference gateway plan](design/INFERENCE-GATEWAY-PLAN.md).
+cost, and how to cap it.
 
 ## Zero-budget mode
 
