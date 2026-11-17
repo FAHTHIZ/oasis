@@ -879,6 +879,19 @@ function stepState(tool) {
   if (outcome === 'ok') return 'ok';
   return stepRan(tool) ? 'fail' : 'skip';
 }
+// A step still running counts up its own time once it has taken a moment,
+// as Claude Code's running Bash row does, so a slow command reads as alive.
+const LIVE_STEP_AFTER_MS = 2000;
+function tickRunningSteps(now = Date.now()) {
+  for (const row of document.querySelectorAll('#transcript .tool.running')) {
+    const tool = row._tool;
+    const dur = row.querySelector(':scope > details > summary .dur');
+    if (!tool || !dur || tool.waiting) continue;
+    const elapsed = now - Number(tool.startedAt);
+    const text = Number.isFinite(elapsed) && elapsed >= LIVE_STEP_AFTER_MS ? formatDuration(elapsed) : '';
+    if (dur.textContent !== text) dur.textContent = text;
+  }
+}
 function stepDuration(tool) {
   // Time spent waiting for approval is not run time (the Activity row shows it apart).
   const waited = Number(tool.waitedMs) || 0;
@@ -2141,6 +2154,7 @@ const runClock = {
     const stepNow = phase === 'tool' && (!nowLabel || nowLabel === 'Thinking') ? runningStepLabel() : '';
     const status = liveStatus({ label: phase === 'hook' ? liveModel.hook.label : stepNow || (nowLabel === 'Thinking' ? '' : nowLabel), phase, hookStartedAt: liveModel.hook ? liveModel.hook.startedAt : 0, compaction: liveModel.compaction, request: liveModel.request, turn: liveModel.turn, elapsedMs: this.worked(now) }, now);
     this.label = waiting ? '' : status.label;
+    tickRunningSteps(now);
     this.stalled = Boolean(status.stalled) && !waiting;
     const label = el.querySelector('.run-status-text');
     if (label.textContent !== status.label) label.textContent = status.label;
