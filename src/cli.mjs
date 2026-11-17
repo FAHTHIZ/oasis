@@ -473,7 +473,7 @@ let spinnerVerbsSetting = null;
 let liveTurn = null;
 function beginLiveTurn(session) {
   if (liveTurn || !richOutput() || !stdout.isTTY || /^(?:0|false|off|no)$/i.test(String(process.env.OASIS_LIVE_REGION || ''))) return null;
-  const level = motionLevel({ env: process.env, stream: stdout, setting: session && session.settings && session.settings.motion });
+  const level = motionLevel({ env: process.env, stream: stdout });
   if (level === 'off') return null;
   const region = createLiveRegion({ stream: stdout, mirrors: [process.stderr], env: process.env, frameMs: level === 'full' ? 16 : 50 });
   if (!region.attach()) return null;
