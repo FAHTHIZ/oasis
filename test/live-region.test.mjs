@@ -104,6 +104,8 @@ test('present-tense labels for live steps', () => {
 test('the reasoning glimpse is the latest full sentence', () => {
   assert.equal(reasoningGlimpse('First I read it. Then **I plan** the change. Then'), 'Then I plan the change.');
   assert.equal(reasoningGlimpse(''), '');
+  assert.equal(reasoningGlimpse('1. Read the file\n2. Run the tests\n3. Fi'), 'Run the tests', 'a finished list item is a thought; the half-written one is not');
+  assert.equal(reasoningGlimpse('I will check [the docs](https://example.com/a) first. Then'), 'I will check the docs first.');
 });
 
 test('the checklist window keeps the active item in view', () => {

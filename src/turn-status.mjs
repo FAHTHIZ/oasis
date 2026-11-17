@@ -28,12 +28,27 @@ const oneLine = (value, max = 160) => {
   return text.length > max ? text.slice(0, max - 1) + '…' : text;
 };
 
-// The last complete thought of the reasoning so far, as one short line.
+// The last complete thought of the reasoning so far, as one short line. A
+// finished line counts as a thought even without a full stop, so a numbered
+// plan reads "Run the tests", not "first step 2."; list markers, headings and
+// link targets are left out.
 export function reasoningGlimpse(text) {
-  const clean = String(text || '').replace(/\*\*|__|`/g, '').replace(/\s+/g, ' ').trim();
+  // Only the tail matters, and this runs on every streamed chunk.
+  const lines = String(text || '').slice(-4000)
+    .replace(/\[([^\]\n]*)\]\([^)\s]*\)/g, '$1')
+    .replace(/\*\*|__|`/g, '')
+    .split(/\r?\n/)
+    .map((line) => line.replace(/^\s*(?:#{1,6}\s+|>\s*|[-*+]\s+|\d+[.)]\s+)+/, '').replace(/\s+/g, ' ').trim());
+  const clean = lines.filter(Boolean).join(' ');
   if (!clean) return '';
-  const sentences = clean.match(/[^.!?]+[.!?]+(?=\s|$)/g);
-  const tail = sentences && sentences.length ? sentences.at(-1) : clean.slice(-160);
+  const pieces = [];
+  lines.forEach((line, index) => {
+    if (!line) return;
+    const sentences = line.match(/[^.!?]+[.!?]+(?=\s|$)/g) || [];
+    if (index < lines.length - 1) pieces.push(...(sentences.length && sentences.join('').length >= line.length - 1 ? sentences : [line]));
+    else pieces.push(...sentences);
+  });
+  const tail = pieces.length ? pieces.at(-1) : clean.slice(-160);
   return oneLine(tail.replace(/^[#>*\-\s]+/, ''), 140);
 }
 
