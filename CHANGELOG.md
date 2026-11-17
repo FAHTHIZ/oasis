@@ -4,6 +4,26 @@ User-facing change history grouped by package version. A version heading does no
 
 ## Unreleased
 
+## [1.7.0] - 2026-11-17
+
+### Highlights
+
+- Web: the live activity feed is redesigned as one continuous timeline, closer to Claude Code, Codex and Perplexity Computer. Steps sit on a thin rail with a small status orb instead of a bordered card each; thoughts, narration and steps read as one flow; a running group titles itself in the present tense ("Running npm test") and settles into the past tense ("Read dates.mjs and ran the tests").
+- Web: every step says what it returned in one line under it, as Claude Code's `⎿` line does: "19 passed", "Exit code 3", "Read 45 lines", "5 matches in 3 files", "7 files", "1 file changed · +1 −1", "2 of 4 done".
+- Web: edits show inline with their diff (up to 10 lines) and stay open when their group settles, so the change is visible without opening anything.
+- Web: one live status instead of three. The task bar says Working, Needs you or Waiting on the model; the status line names the running step; the old duplicate "Thinking" labels are gone. The live Thinking row is readable again (it was drawn at disabled opacity).
+- Web: a running step counts up its own time after two seconds ("Working 12s"), so a slow build reads as alive.
+- Terminal: auto mode no longer prints an "[auto] Allowed …" line for every allowed call (shown with verbose), Update Todos shows "2 of 4 done · now: …", and commands keep their quoting in tool headers.
+
+### All changes
+
+- Web: group titles name the files when there are two ("Read a.mjs and b.mjs"); the title tooltip lists every file.
+- Web: `Ctrl/Cmd+O` expands or folds every step in the chat (also in the command palette as "Expand or fold all steps").
+- Web: grep, ranged reads and edits show readable results in the step inspector instead of their raw JSON envelope.
+- Web: a run that recovered from a failed step (a probe, a test run before the fix) says Done in the task bar; the meta still counts "1 failed".
+- Web: an open single-step card no longer shows an empty strip, and long fold lines end with an ellipsis instead of wrapping.
+- Terminal: the footer no longer reads "context 164%" for a model whose context window is unknown; past the 32k fallback it shows the tokens the chat holds ("context 52.4k tokens").
+
 ## [1.6.0] - 2026-11-17
 
 ### Highlights
