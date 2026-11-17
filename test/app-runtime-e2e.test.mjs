@@ -180,7 +180,7 @@ test('runtime engine end to end: app at /, paste to connect, approve a real edit
   await shot('3-approval');
   // The run clock says it is waiting and keeps counting wall time, the same
   // clock the step groups use, so the header and groups never disagree.
-  const clockText = `document.querySelector('#runStatus .run-status-text').textContent`;
+  const clockText = `document.getElementById('runStatus').textContent`;
   await waitFor(page, `/^Waiting for you/.test(${clockText})`, { label: 'run clock shows waiting', timeout: 5000 });
   const frozen = await evaluate(page, clockText);
   await waitFor(page, `${clockText} !== ${JSON.stringify(frozen)}`, { label: 'the clock keeps counting while waiting', timeout: 4000 });
