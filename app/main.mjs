@@ -1920,7 +1920,59 @@ function finishRun(prefix) {
     display.push({ role: 'worked', content, ...(timings.length ? { timings } : {}) });
     const line = addMessage('worked', content);
     if (timings.length) line.title = timingSummary(timings);
+    foldTurn(line, { live: true });
   }
+}
+
+// A finished turn folds its work, as in Perplexity and ChatGPT: the steps,
+// thoughts and narration go under one "Worked for 1m 57s · 6 steps" line
+// that opens on click, and the answer stays outside, so a long run reads as
+// its result. The worked line stays in the transcript (hidden) for the
+// Activity panel. Turns without steps are left as they were.
+function foldTurn(workedLine, { live = false } = {}) {
+  if (!workedLine || !workedLine.isConnected || workedLine.dataset.folded) return null;
+  const items = [];
+  for (let node = workedLine.previousElementSibling; node; node = node.previousElementSibling) {
+    if (node.matches('.msg.user:not(.steer)')) break;
+    items.unshift(node);
+  }
+  if (!items.some((node) => node.matches('.steps'))) return null;
+  // The answer: the last reply with text after the last group of steps.
+  let answerAt = items.length;
+  for (let i = items.length - 1; i >= 0 && !items[i].matches('.steps'); i--) {
+    const body = items[i].matches('.msg.assistant') && items[i].querySelector('.body');
+    if (body && !body.hidden) { answerAt = i; break; }
+  }
+  const work = items.slice(0, answerAt);
+  if (!work.length) return null;
+  const steps = work.reduce((n, node) => n + node.querySelectorAll('.tool').length, 0);
+  const box = document.createElement('details');
+  box.className = 'work-fold';
+  const head = document.createElement('summary');
+  head.className = 'work-fold-head';
+  const label = document.createElement('span');
+  label.className = 'work-fold-label';
+  label.textContent = workedLine.textContent + (steps ? ' · ' + steps + ' step' + (steps === 1 ? '' : 's') : '');
+  head.append(label);
+  if (workedLine.title) head.title = workedLine.title;
+  const body = document.createElement('div');
+  body.className = 'work-fold-body';
+  // Stopped or failed before an answer: keep the work open, it is the result.
+  box.open = verboseSteps() || answerAt === items.length;
+  // Folding above the reader must not move what they are reading: the
+  // answer stays where it was on screen (only work scrolled past shrinks).
+  const chat = $('chat');
+  const anchor = items[answerAt] || workedLine;
+  const keep = Boolean(live && chat);
+  const before = keep ? anchor.getBoundingClientRect().top : 0;
+  work[0].before(box);
+  body.append(...work);
+  box.append(head, body);
+  workedLine.hidden = true;
+  workedLine.dataset.folded = '1';
+  if (keep) chat.scrollTop += anchor.getBoundingClientRect().top - before;
+  head.addEventListener('click', () => follow.keepInPlace(box));
+  return box;
 }
 
 // Messages typed while OASIS works, shown as chips above the message box:
@@ -2291,6 +2343,7 @@ function renderSavedDisplay(entries) {
     if (entry.role === 'user' && entry.images) addImageNote(el, entry.images, []);
     if (entry.role === 'user' && entry.steer) el.classList.add('steer');
     if (entry.role === 'worked' && Array.isArray(entry.timings)) el.title = timingSummary(entry.timings);
+    if (entry.role === 'worked') foldTurn(el);
   }
 }
 
