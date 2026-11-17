@@ -16,6 +16,7 @@
 import { priceFor, isLocalProvider, cloudModelBehindGateway } from './pricing.mjs';
 import { isOpenRouterBaseURL } from './model-budgets.mjs';
 import { LOCAL_MODEL_SERVER_PORTS } from './provider-registry.mjs';
+import { BudgetLimitError, canSpend, available, spend } from './budget-algebra.mjs';
 
 const ON = /^(?:1|true|yes|on)$/i;
 
@@ -133,6 +134,13 @@ export function chargeRequestAttempt(session, { estimatedInputTokens = 0, env = 
   if (maxRequests && ledger.requests >= maxRequests) throw new RequestBudgetError('requests', ledger.requests, maxRequests);
   const estimate = Math.max(0, Math.ceil(Number(estimatedInputTokens) || 0));
   if (maxTotalTokens && ledger.tokens + estimate > maxTotalTokens) throw new RequestBudgetError('tokens', ledger.tokens, maxTotalTokens, ' plus about ' + estimate + ' for this prompt');
+  // A subagent's own budget, reserved from its parent's (roadmap 1.3).
+  const node = session.budgetNode;
+  if (node) {
+    if (!canSpend(node, 'tokens', estimate)) throw new BudgetLimitError('tokens', node, estimate, available(node, 'tokens'));
+    if (!canSpend(node, 'usd', 0)) throw new BudgetLimitError('usd', node, 0, available(node, 'usd'));
+    spend(node, { requests: 1 });
+  }
   ledger.requests += 1;
 }
 
@@ -142,11 +150,12 @@ export function recordTokenUsage(session, usage = {}) {
   const ledger = ledgerOf(session);
   const total = Number(usage.totalTokens) || (Number(usage.inputTokens) || 0) + (Number(usage.outputTokens) || 0);
   ledger.tokens += Math.max(0, Math.round(total));
+  if (session.budgetNode) spend(session.budgetNode, { tokens: Math.max(0, Math.round(total)) }, { force: true });
   return ledger.tokens;
 }
 
 export function isBudgetStop(error) {
-  return Boolean(error && (error.code === 'REQUEST_BUDGET_EXCEEDED' || error.code === 'TOKEN_BUDGET_EXCEEDED' || error.code === 'OASIS_ZERO_BUDGET_BLOCKED'));
+  return Boolean(error && (error.code === 'REQUEST_BUDGET_EXCEEDED' || error.code === 'TOKEN_BUDGET_EXCEEDED' || error.code === 'OASIS_ZERO_BUDGET_BLOCKED' || error.code === 'NEURON_BUDGET_EXCEEDED'));
 }
 
 /**

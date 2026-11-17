@@ -70,6 +70,7 @@ import { loadAgentDefinitions, taskToolDefinition, BUILTIN_AGENTS, MAX_PARALLEL_
 import { createSharedTaskStore, SHARED_TASK_TOOL_NAMES } from './shared-tasks.mjs';
 import { unrequestedGitWrite } from './git-intent.mjs';
 import { recordTokenUsage } from './cost-policy.mjs';
+import { spend as spendBudget } from './budget-algebra.mjs';
 import { repairToolArguments, extractTextToolCalls, unknownTextToolCalls, hideStreamingToolCalls } from './tool-call-repair.mjs';
 import { isLocalModelEndpoint, probeLocalContext, probeProviderModelWindow, applySmallContextProfile, localContextAdvice, needsLocalContextAdvice, SMALL_CONTEXT_TOKENS } from './local-context.mjs';
 import { ripgrepPathAddition } from './ripgrep.mjs';
@@ -3189,6 +3190,8 @@ async function runAgentTurnRaw(session, prompt, options = {}) {
 
   for (let step = 0; step < maxSteps; step++) {
     throwIfCancelled(options.signal);
+    // A subagent's steps come out of its budget too (roadmap 1.3).
+    if (session.budgetNode) spendBudget(session.budgetNode, { steps: 1 });
     refreshTodoPrompt(session);
     // Local team notices and cross-session messages are delivered only at model-decision
     // boundaries. Cross-session content is labeled as untrusted data and never invokes tools.

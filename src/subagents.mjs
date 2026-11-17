@@ -11,6 +11,7 @@
 //   disallowedTools: Write                      (optional; removed after `tools`)
 //   model: inherit                              (optional model id override)
 //   maxTurns: 40                                (optional tool-step cap)
+//   budgetTokens: 200000, budgetUsd: 0.5        (optional; also budgetRequests, budgetSteps, budgetChildren)
 //   permissionMode: plan                        (optional; `plan` keeps it read-only)
 //   skills: [lint-rules]                        (optional; preloaded into its prompt)
 //   memory: project                             (optional; user | project | local)
@@ -162,6 +163,15 @@ export function normalizeAgentDefinition(raw, body, { name, source, plugin = fal
     isolation: lower(data.isolation) === 'worktree' ? 'worktree' : null,
     effort: EFFORTS.includes(lower(data.effort)) ? lower(data.effort) : null,
     maxTurns: Number.isInteger(maxTurns) && maxTurns > 0 ? Math.min(maxTurns, 400) : null,
+    // What this agent may spend per run, reserved from its parent's budget (roadmap 1.3).
+    budget: (() => {
+      const budget = {};
+      for (const kind of ['tokens', 'usd', 'requests', 'steps', 'children']) {
+        const value = Number(data['budget' + kind]);
+        if (data['budget' + kind] !== undefined && data['budget' + kind] !== '' && Number.isFinite(value) && value >= 0) budget[kind] = value;
+      }
+      return Object.keys(budget).length ? budget : null;
+    })(),
     // Plugin agents cannot change their permission mode (matches Claude Code).
     // Only `plan` is honoured: a definition file may tighten, never loosen, approvals.
     permissionMode: !plugin && lower(data.permissionmode) === 'plan' ? 'plan' : null,
