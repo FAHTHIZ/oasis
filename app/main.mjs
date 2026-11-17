@@ -1337,10 +1337,19 @@ function offerUndo() {
 // Tab title badge and optional desktop notification when a task finishes or
 // needs you while this tab is in the background.
 const BASE_TITLE = document.title;
+let titleBlink = 0;
 function attention(kind, text) {
   if (talk.on && kind === 'input' && window.speechSynthesis && typeof SpeechSynthesisUtterance !== 'undefined') window.speechSynthesis.speak(new SpeechSynthesisUtterance('OASIS needs you on screen.'));
   if (!document.hidden && document.hasFocus()) return;
   document.title = (kind === 'input' ? '(Needs you) ' : '● ') + BASE_TITLE;
+  // An approval in a background tab blinks the title (slowly, until you
+  // come back), so it stands out in a row of tabs; done stays a steady dot.
+  clearInterval(titleBlink);
+  titleBlink = 0;
+  if (kind === 'input') {
+    let on = true;
+    titleBlink = setInterval(() => { on = !on; document.title = (on ? '(Needs you) ' : '(!) ') + BASE_TITLE; }, 1200);
+  }
   badgeFavicon(kind === 'input' ? '#E8A33D' : '#3FB37F');
   if (!settings.notify || typeof Notification === 'undefined' || Notification.permission !== 'granted') return;
   try {
@@ -1373,7 +1382,7 @@ function badgeFavicon(color) {
   };
   img.src = BASE_FAVICON;
 }
-function clearAttention() { if (!document.hidden) { document.title = BASE_TITLE; if (FAVICON && BASE_FAVICON && FAVICON.href !== BASE_FAVICON) FAVICON.href = BASE_FAVICON; } }
+function clearAttention() { if (!document.hidden) { clearInterval(titleBlink); titleBlink = 0; document.title = BASE_TITLE; if (FAVICON && BASE_FAVICON && FAVICON.href !== BASE_FAVICON) FAVICON.href = BASE_FAVICON; } }
 document.addEventListener('visibilitychange', clearAttention);
 window.addEventListener('focus', clearAttention);
 // Files can change outside the page (the terminal, an editor): refresh the
@@ -1857,6 +1866,14 @@ function clearDraftRow() {
   const row = document.querySelector('#transcript > .draft-row');
   if (row) row.remove();
 }
+// Between runs the clock line keeps its height, invisible: removing it would
+// make the message box shorter and shift the whole chat at the end of every
+// run (the largest layout shift left on the page).
+function rest(el) {
+  if (!el || el.hidden || el.classList.contains('resting')) return;
+  el.classList.add('resting');
+  el.setAttribute('aria-hidden', 'true');
+}
 const runClock = {
   startedAt: 0,
   timer: 0,
@@ -1875,7 +1892,7 @@ const runClock = {
   tick() {
     const el = $('runStatus');
     if (!el) return;
-    if (!document.body.classList.contains('busy') || !this.startedAt) { if (!el.hidden) el.hidden = true; return; }
+    if (!document.body.classList.contains('busy') || !this.startedAt) { rest(el); return; }
     const waiting = !$('approvalSheet').hidden;
     const now = Date.now();
     // Nothing running, nothing streaming for a moment: show Thinking, so the
@@ -1885,6 +1902,7 @@ const runClock = {
     const label = el.querySelector('.run-status-text');
     if (label.textContent !== text) label.textContent = text;
     el.classList.toggle('waiting', waiting);
+    if (el.classList.contains('resting')) { el.classList.remove('resting'); el.removeAttribute('aria-hidden'); }
     if (el.hidden) el.hidden = false;
   },
   stop() {
@@ -1892,8 +1910,7 @@ const runClock = {
     this.timer = 0;
     const ms = this.worked();
     this.startedAt = 0;
-    const el = $('runStatus');
-    if (el) el.hidden = true;
+    rest($('runStatus'));
     return ms;
   }
 };
@@ -5404,6 +5421,7 @@ async function boot() {
   // The side panel comes back open only where it sits beside the chat; on a
   // phone it would cover the conversation.
   if (innerWidth >= 1024 && (localStorage.getItem('oasis.files') === '1' || (localStorage.getItem('oasis.files') === null && workspace))) toggleFiles(true);
+  document.documentElement.classList.remove('files-boot');
   { const tab = localStorage.getItem('oasis.panelTab'); if (tab === 'activity' || tab === 'changes') showPanelTab(tab); }
   refreshFiles();
   if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => {});
@@ -5413,7 +5431,7 @@ async function boot() {
   if (!modelReady() && !workspace) $('connectInput').focus({ preventScroll: true });
 }
 // data-ready tells automation (and tests) that boot finished on this page load.
-boot().catch((error) => toast(error.message, 'error')).finally(() => { document.documentElement.dataset.ready = '1'; $('welcome').classList.remove('booting'); });
+boot().catch((error) => toast(error.message, 'error')).finally(() => { document.documentElement.dataset.ready = '1'; document.documentElement.classList.remove('files-boot'); $('welcome').classList.remove('booting'); });
 
 // Images: paste, drop or attach (up to 4). Large photos are scaled down on the
 // device first, which keeps uploads small on slow connections and old phones.
