@@ -1,3 +1,4 @@
+import { createDraftReporter } from './tool-draft.mjs';
 import { createParser as createSseParser } from 'eventsource-parser';
 import { isAnthropicFamily } from './cloud-providers.mjs';
 
@@ -204,7 +205,15 @@ export function strayStreamError(text) {
 // onReasoning(chunk), when given, receives the provider's own reasoning as it
 // streams (Anthropic thinking summaries, Responses reasoning summaries,
 // reasoning_content). Nothing is shown for a model that sends none.
-export async function readProviderStream(response, protocol, onDelta, onProgress, onReasoning) {
+// onToolDraft(event), when given, hears about tool calls while the model is
+// still writing their arguments (see tool-draft.mjs).
+export async function readProviderStream(response, protocol, onDelta, onProgress, onReasoning, onToolDraft) {
+  const drafts = createDraftReporter(onToolDraft);
+  try { return await readProviderStreamInner(response, protocol, onDelta, onProgress, onReasoning, drafts); }
+  finally { drafts.finish(); }
+}
+
+async function readProviderStreamInner(response, protocol, onDelta, onProgress, onReasoning, drafts) {
   const reason = (chunk) => { if (chunk && typeof onReasoning === 'function') { try { onReasoning(chunk); } catch {} } };
   if (isAnthropicFamily(protocol)) {
     const blocks = new Map();
@@ -228,6 +237,7 @@ export async function readProviderStream(response, protocol, onDelta, onProgress
         if (block.type === 'text') block.text = String(block.text || '');
         if (block.type === 'thinking') { block.thinking = String(block.thinking || ''); block.signature = String(block.signature || ''); }
         blocks.set(Number(event.index || 0), block);
+        if (block.type === 'tool_use') drafts.update(Number(event.index || 0), { id: block.id, name: block.name, args: '' });
       } else if (type === 'content_block_delta') {
         const block = blocks.get(Number(event.index || 0));
         const delta = event.delta || {};
@@ -237,6 +247,7 @@ export async function readProviderStream(response, protocol, onDelta, onProgress
           onDelta(delta.text);
         } else if (delta.type === 'input_json_delta' && typeof delta.partial_json === 'string') {
           block.partialJson += delta.partial_json;
+          if (block.type === 'tool_use') drafts.update(Number(event.index || 0), { args: block.partialJson });
         } else if (delta.type === 'thinking_delta' && typeof delta.thinking === 'string') {
           block.thinking = String(block.thinking || '') + delta.thinking;
           reason(delta.thinking);
@@ -273,12 +284,21 @@ export async function readProviderStream(response, protocol, onDelta, onProgress
 
   if (protocol === 'openai-responses') {
     let finalResponse = null;
+    const responseArgs = new Map();
     await consumeServerSentEvents(response, ({ data, event: eventName }) => {
       if (data === '[DONE]') return;
       const event = parseProviderEvent(data);
       const type = event.type || eventName || '';
       if (type === 'response.output_text.delta' && typeof event.delta === 'string') {
         onDelta(event.delta);
+      } else if (type === 'response.output_item.added' && event.item && event.item.type === 'function_call') {
+        responseArgs.set(Number(event.output_index || 0), '');
+        drafts.update(Number(event.output_index || 0), { id: event.item.call_id || event.item.id, name: event.item.name, args: String(event.item.arguments || '') });
+      } else if (type === 'response.function_call_arguments.delta' && typeof event.delta === 'string') {
+        const index = Number(event.output_index || 0);
+        const args = (responseArgs.get(index) || '') + event.delta;
+        responseArgs.set(index, args);
+        drafts.update(index, { args });
       } else if ((type === 'response.reasoning_summary_text.delta' || type === 'response.reasoning_text.delta') && typeof event.delta === 'string') {
         reason(event.delta);
       } else if (type === 'response.reasoning_summary_part.added' && Number(event.summary_index) > 0) {
@@ -334,6 +354,7 @@ export async function readProviderStream(response, protocol, onDelta, onProgress
         // Gemini 3 sends a thought signature here and rejects the next turn without it.
         if (part.extra_content && typeof part.extra_content === 'object') tool.extra_content = mergeExtraContent(tool.extra_content, part.extra_content);
         calls.set(index, tool);
+        drafts.update(index, { id: tool.id, name: tool.function.name, args: tool.function.arguments });
       }
     }
   }, (line) => { if (stray.length < 16384) stray += line + '\n'; });

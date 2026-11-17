@@ -5,14 +5,16 @@ export function normalizeTaskProgress(value) {
   const items = (Array.isArray(value) ? value : []).slice(0, 50)
     .map((item) => ({
       content: String(item && (item.content || item.activeForm || item.title) || '').trim().slice(0, 300),
-      status: VALID_STATUSES.has(item && item.status) ? item.status : 'pending'
+      status: VALID_STATUSES.has(item && item.status) ? item.status : 'pending',
+      ...(item && typeof item.activeForm === 'string' && item.activeForm.trim() ? { active: item.activeForm.replace(/\s+/g, ' ').trim().slice(0, 300) } : {})
     }))
     .filter((item) => item.content);
   const total = items.length;
   const completed = items.filter((item) => item.status === 'completed').length;
   const activeIndex = items.findIndex((item) => item.status === 'in_progress');
   const nextIndex = items.findIndex((item) => item.status === 'pending');
-  return { items, total, completed, activeIndex, nextIndex, percent: total ? Math.round(completed / total * 100) : 0, finished: total > 0 && completed === total };
+  const activeLabel = activeIndex >= 0 ? (items[activeIndex].active || items[activeIndex].content) : '';
+  return { items, total, completed, activeIndex, nextIndex, activeLabel, percent: total ? Math.round(completed / total * 100) : 0, finished: total > 0 && completed === total };
 }
 
 export function extractRuntimeTodos(value, depth = 0) {
