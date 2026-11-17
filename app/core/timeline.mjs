@@ -555,6 +555,11 @@ export function stepResult(step = {}) {
   let value = null;
   if (first.startsWith('{"')) { try { value = JSON.parse(first); } catch { value = null; } }
   const none = { text: '', tone: '' };
+  const args = step.args && typeof step.args === 'object' ? step.args : {};
+  if (step.ok && step.name === 'write_file' && typeof args.content === 'string') {
+    const count = args.content ? args.content.replace(/\n$/, '').split('\n').length : 0;
+    return { text: count ? 'Wrote ' + plural(count, 'line') : 'Wrote an empty file', tone: '' };
+  }
   if (value && typeof value === 'object' && !Array.isArray(value)) {
     if (typeof value.error === 'string' && value.error) {
       const line = value.error.split('\n').find((row) => row.trim()) || '';
@@ -599,6 +604,32 @@ export function stepResult(step = {}) {
     return { text: line.length > 140 ? line.slice(0, 139) + '…' : line.trim(), tone: 'fail' };
   }
   return none;
+}
+
+// The few lines worth showing inline for an edit (Claude Code prints the
+// change under the step): every added and removed line with one line of
+// context around each change, up to `max` lines. ops are lineDiff() rows.
+// Returns { rows, more } where more counts the changed lines left out.
+export function diffPreview(ops = [], max = 10) {
+  const keep = new Set();
+  ops.forEach((op, index) => {
+    if (op.type !== 'add' && op.type !== 'del') return;
+    keep.add(index);
+    if (ops[index - 1] && ops[index - 1].type === 'same') keep.add(index - 1);
+    if (ops[index + 1] && ops[index + 1].type === 'same') keep.add(index + 1);
+  });
+  const rows = [];
+  let last = -1;
+  let more = 0;
+  for (const index of [...keep].sort((a, b) => a - b)) {
+    const op = ops[index];
+    if (rows.length >= max) { if (op.type !== 'same') more++; continue; }
+    if (last >= 0 && index > last + 1) rows.push({ type: 'gap', text: '⋯' });
+    rows.push(op);
+    last = index;
+  }
+  while (rows.length && (rows[rows.length - 1].type === 'gap' || (rows[rows.length - 1].type === 'same' && more))) rows.pop();
+  return { rows, more };
 }
 
 // True when a reply repeats, word for word, an earlier reply of the same
