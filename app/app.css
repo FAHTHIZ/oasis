@@ -936,6 +936,8 @@ html.lite .topbar{backdrop-filter:none;-webkit-backdrop-filter:none;background:v
 .jump-latest svg{width:14px;height:14px}
 .jump-latest:hover{color:var(--text);border-color:var(--accent-line)}
 .jump-latest[hidden]{display:none}
+.jump-latest.compact{width:32px;height:32px;padding:0;justify-content:center;gap:0}
+.jump-latest.compact span{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
 
 /* Run monitor: recent agent runs on the computer */
 .run-list{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:4px}
