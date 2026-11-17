@@ -7,7 +7,7 @@ import { SUBAGENT_STATUS_TEXT } from './core/subagents.mjs';
 import { createConnectorCard, connectIntent, splitServices, brandMark } from './core/connector-card.mjs';
 import { createSoundPlayer, soundAllowed } from './core/sound.mjs';
 import { sideWork, liveStatus, modelRequest, waitingLabel, thoughtMs, runSummary, reasoningHeadline, formatTokens } from './core/live-status.mjs';
-import { readableOutput, repeatsEarlierReply, stepOutcome, stepRan, stepLabel, summarizeArgs, toolKind, groupTitle, groupStats, formatDuration, thinkingLabel, thoughtLabel, splitTextToolCall, elapsedSince, describeInput, buildTimeline, groupTiming, runElapsed, timingSplit } from './core/timeline.mjs';
+import { readableOutput, repeatsEarlierReply, stepOutcome, stepRan, stepLabel, summarizeArgs, toolKind, groupTitle, groupStats, formatDuration, thinkingLabel, thoughtLabel, splitTextToolCall, elapsedSince, describeInput, buildTimeline, groupTiming, runElapsed, timingSplit, stepResult } from './core/timeline.mjs';
 import { IndexedDBStore, Workspace, diffStat, lineDiff } from './core/workspace.mjs';
 import { wordHighlights } from '../src/word-diff.mjs';
 import { Agent, answeredHistory, textOf } from './core/agent.mjs';
@@ -991,7 +991,11 @@ function stepRow(tool, { enter = false } = {}) {
   const sources = document.createElement('div');
   sources.className = 'step-sources';
   sources.hidden = true;
-  item.append(details, tail, sources);
+  // What came back, in one line under the step ("Read 48 lines").
+  const result = document.createElement('div');
+  result.className = 'step-result';
+  result.hidden = true;
+  item.append(details, result, tail, sources);
   patchStepRow(item, tool);
   if (enter) item.classList.add('enter');
   return item;
@@ -1089,6 +1093,7 @@ function patchStepRow(item, tool) {
   patchLineStats(summary.querySelector('.lines'), tool.lines);
   patchSources(item.querySelector('.step-sources'), tool.sources);
   summary.setAttribute('aria-label', label + ', ' + stepStatus(tool).toLowerCase() + '. Expand to inspect input and output.');
+  patchStepResult(item.querySelector('.step-result'), tool);
   patchStepTail(item, tool);
   patchStepAsk(item, tool);
   const details = item.querySelector('details');
@@ -1100,6 +1105,16 @@ function patchStepRow(item, tool) {
     if (out && tool.ok === undefined) out.textContent = inspectorOutput(tool);
     else { fillInspector(item.querySelector('.inspect'), tool); addTraceLink(item.querySelector('.inspect'), item); }
   }
+}
+function patchStepResult(el, tool) {
+  if (!el) return;
+  // A step that never ran already says why in its status.
+  const result = stepRan(tool) ? stepResult(tool) : { text: '', tone: '' };
+  if (el.dataset.key === result.tone + '|' + result.text) return;
+  el.dataset.key = result.tone + '|' + result.text;
+  el.textContent = result.text;
+  el.classList.toggle('fail', result.tone === 'fail');
+  el.hidden = !result.text;
 }
 // A step waiting for approval answers right in its row: Allow and Deny run
 // the same path as the approval sheet, which stays open for the full detail
@@ -1218,8 +1233,10 @@ function updateGroupHead(group) {
   if (waiting) title = 'Waiting for your approval';
   group.head.querySelector('.steps-title').textContent = title;
   const meta = [];
-  meta.push(stats.total + (stats.total === 1 ? ' step' : ' steps'));
-  if (stats.failed) meta.push(stats.failed + ' failed');
+  // One finished step: what it returned stands in for "1 step" ("Read 48 lines").
+  const outcome = single && stepRan(group.steps[0]) ? stepResult(group.steps[0]).text : '';
+  meta.push(outcome || stats.total + (stats.total === 1 ? ' step' : ' steps'));
+  if (stats.failed && !outcome) meta.push(stats.failed + ' failed');
   if (stats.declined) meta.push(stats.declined + ' declined');
   if (stats.blocked) meta.push(stats.blocked + ' blocked');
   if (stats.stopped) meta.push(stats.stopped + ' stopped');
