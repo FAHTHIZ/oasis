@@ -543,6 +543,8 @@ details.manual fieldset{margin:0}
 .run-status.resting{visibility:hidden}
 .run-status-dot{width:7px;height:7px;border-radius:50%;background:var(--accent);flex:none}
 .run-status.waiting .run-status-dot{background:var(--warn)}
+.run-status.stalled:not(.waiting) .run-status-dot{background:var(--warn);animation:none}
+.run-status.stalled:not(.waiting) .run-status-text{animation:none;background:none;color:var(--warn)}
 .run-status-text{flex:none;white-space:nowrap}
 .run-status-meta{margin-left:-8px;white-space:pre;overflow:hidden;text-overflow:ellipsis;min-width:0}
 .pending-inputs{max-width:var(--chat-w);margin:0 auto 6px;display:flex;flex-direction:column;gap:4px}

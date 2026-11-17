@@ -94,3 +94,27 @@ test('a group whose steps all failed never claims the work was done', async () =
   ]), "Couldn't edit 2 files");
   assert.equal(groupTitle([{ name: 'edit_file', args: { path: 'a.mjs' }, ok: false }, { name: 'edit_file', args: { path: 'b.mjs' }, ok: true }]), 'Edited b.mjs');
 });
+
+test('reasoning headlines come from bold titles or headings', async () => {
+  const { reasoningHeadline } = await import('../app/core/live-status.mjs');
+  assert.equal(reasoningHeadline('**Inspecting the project**\n\nI should list files.\n\n**Planning the edit**\n\nThen'), 'Planning the edit');
+  assert.equal(reasoningHeadline('## Checking tests\nmore'), 'Checking tests');
+  assert.equal(reasoningHeadline('Just thinking about **bold** words inline.'), '');
+  assert.equal(reasoningHeadline(''), '');
+});
+
+test('a silent model is shown as stalled', async () => {
+  const { STALLED_AFTER_MS } = await import('../app/core/live-status.mjs');
+  const cloud = modelRequest({ startedAt: 0, model: 'anthropic/claude-x' });
+  const status = liveStatus({ request: cloud }, STALLED_AFTER_MS + 1000);
+  assert.equal(status.label, 'No response from claude-x yet');
+  assert.equal(status.stalled, true);
+  // A local model reading a long prompt is working, not stalled.
+  const local = modelRequest({ startedAt: 0, local: true, inputTokens: 9000 });
+  assert.equal(liveStatus({ request: local }, STALLED_AFTER_MS + 1000).stalled, false);
+  // Mid-reply silence.
+  const mid = modelRequest({ startedAt: 0 });
+  mid.firstOutputAt = 1000; mid.lastOutputAt = 2000;
+  assert.equal(liveStatus({ label: 'Responding', phase: 'responding', request: mid }, 2000 + STALLED_AFTER_MS).stalled, true);
+  assert.equal(liveStatus({ label: 'Running npm test', phase: 'tool', request: mid }, 2000 + STALLED_AFTER_MS).stalled, false);
+});

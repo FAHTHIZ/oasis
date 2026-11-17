@@ -118,11 +118,38 @@ export function liveStatus(state = {}, now = Date.now()) {
   const rate = request && request.local ? outputRate(turn, now) : 0;
   if (rate >= 0.5) meta.push((rate < 10 ? rate.toFixed(1).replace(/\.0$/, '') : Math.round(rate)) + ' tok/s');
   // Mid-reply silence: the model started answering, then went quiet.
-  if (request && request.firstOutputAt && request.lastOutputAt && state.phase !== 'tool' && state.phase !== 'approval') {
+  let stalled = false;
+  const modelTurn = state.phase !== 'tool' && state.phase !== 'approval' && state.phase !== 'reconnecting';
+  if (request && request.firstOutputAt && request.lastOutputAt && modelTurn) {
     const quiet = now - request.lastOutputAt;
     if (quiet >= QUIET_AFTER_MS) meta.push('no new output for ' + formatElapsed(quiet));
+    if (quiet >= STALLED_AFTER_MS) stalled = true;
   }
-  return { label, meta };
+  // Nothing at all for a long time from a model that is not reading a
+  // prompt on this machine: say it plainly, the way a person would.
+  if (request && !request.firstOutputAt && modelTurn && !(Number(state.rateLimitUntil) > now)) {
+    const waited = now - request.startedAt;
+    const reading = label === 'Reading the prompt';
+    if (!reading && waited >= STALLED_AFTER_MS) { label = 'No response from ' + (shortModel(request.model) || 'the model') + ' yet'; stalled = true; }
+  }
+  return { label, meta, stalled };
+}
+
+// A model silent this long (before its first token, or mid-reply) is shown
+// as stalled: the dot turns amber and the words stop shimmering.
+export const STALLED_AFTER_MS = 90_000;
+
+// The headline of streaming reasoning, for the status line: OpenAI-style
+// summaries open each part with a bold title ("**Planning the edit**"),
+// others with a markdown heading. The latest one says what the model is
+// thinking about now; '' when there is none.
+export function reasoningHeadline(text) {
+  const value = String(text || '');
+  let found = '';
+  for (const match of value.matchAll(/(?:^|\n)\s*(?:\*\*([^*\n]{3,80})\*\*\s*(?:\n|$)|#{1,4}\s+([^\n]{3,80})(?:\n|$))/g)) found = (match[1] || match[2] || '').trim();
+  found = found.replace(/[:.\s]+$/, '');
+  if (!found || found.length > 70) return '';
+  return found;
 }
 
 // How long a finished reasoning block thought. A local model's wait before
