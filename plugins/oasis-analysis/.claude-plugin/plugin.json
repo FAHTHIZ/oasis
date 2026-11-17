@@ -1,0 +1,9 @@
+{
+  "name": "oasis-analysis",
+  "version": "0.1.0",
+  "description": "Analysis pack for OASIS: an analyst agent whose every reported number must come from code it ran, and a data-analysis skill.",
+  "author": {
+    "name": "OASIS Contributors"
+  },
+  "license": "MIT"
+}

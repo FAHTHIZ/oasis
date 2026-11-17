@@ -201,6 +201,10 @@ Verification contracts (`src/verification-contracts.mjs`) read a report together
 
 When a subagent finishes, its report is checked against the evidence from that run before the parent sees it. A report with an unsupported claim comes back with `report_status: "rejected"` and `verification_issues` (domain and reason), and the timeline records `agent.report_rejected`. `unverified_claim` is still set for code claims. Background agents' completion notices list the reasons too.
 
+## Domain packs (roadmap 2.5)
+
+The research and analysis packs (`plugins/oasis-research`, `plugins/oasis-analysis`) are ordinary plugins whose agents declare `domain: research` or `domain: analysis`, so the contracts above run on their reports. The evidence ledger records the research pack's `oasis_fetch_url` and `oasis_web_search` MCP tools as fetches and searches, the same as `fetch_url` and `web_search`. See [Domain packs](EXTENDING.md#domain-packs). Test: `test/domain-packs.test.mjs`.
+
 ## Spawn-time scope check (roadmap 2.2)
 
 A child never gets more reach than the agent that starts it. Its tools are already a subset of the parent's; `src/spawn-scope.mjs` adds two checks on the parent's mode, run for `task`, team members and workflow `agent()` alike because all three start through `runSubagent`:

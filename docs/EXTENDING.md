@@ -115,6 +115,27 @@ The web app has the same catalogue under **Plugins**. Built-in capability bundle
 (`oasis plugins list`) are separate, smaller packs maintained in this repository
 under `plugins/`.
 
+### Domain packs
+
+Two plugins in this repository add agents whose reports OASIS checks on return
+(see [Evidence and contracts](OASIS-NEURON-NETWORK.md#evidence-and-contracts-roadmap-15-17)):
+
+- `plugins/oasis-research`: `oasis_web_search` and `oasis_fetch_url` MCP tools,
+  the `oasis-research:researcher` and `oasis-research:fact-checker` agents
+  (`domain: research`, no write or shell tools), the deep-research skill and
+  `/oasis-research:research`. A report that cites a page the agent never
+  fetched comes back rejected.
+- `plugins/oasis-analysis`: the `oasis-analysis:analyst` agent
+  (`domain: analysis`), the data-analysis skill and `/oasis-analysis:analyze`.
+  Every decimal, percentage or larger number in its report must have been
+  printed by code it ran.
+
+Load one for a session with `oasis --plugin-dir plugins/oasis-research` (from
+the npm package, `$(npm root -g)/oasis-oss/plugins/...`), or install it from a
+marketplace that lists it. An installed copy finds OASIS's modules through
+`OASIS_PACKAGE_ROOT`, which OASIS sets for plugin MCP servers. Uninstalling a
+pack removes its agents and leaves everything else as it was.
+
 ## Custom slash commands and agents
 
 - Commands: Markdown files in `.oasis/commands/` or `.claude/commands/` (and the

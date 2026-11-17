@@ -95,8 +95,34 @@ const EXECUTION_COMMAND = /^(?:python3?|py|Rscript|julia|node|deno|bun|ruby|perl
  * already worked out: whether a command is a check (`isCheck`, `checkKind`)
  * and whether its exit status was hidden by a pipe (`masked`).
  */
+// The research pack's MCP tools (plugins/oasis-research) fetch and search
+// like the built-in tools; their result is { isError, content: text }.
+const PACK_FETCH = /^mcp__.+__oasis_fetch_url$/;
+const PACK_SEARCH = /^mcp__.+__oasis_web_search$/;
+
+function packJson(result) {
+  const text = typeof result.content === 'string' ? result.content : '';
+  try { return JSON.parse(text); } catch { return null; }
+}
+
+function packEvidence(name, args, result, digest) {
+  if (result.isError) return null;
+  const text = typeof result.content === 'string' ? result.content : '';
+  const data = packJson(result);
+  if (PACK_FETCH.test(name)) {
+    if (data && (typeof data.error === 'string' || (Number.isInteger(data.status) && (data.status < 200 || data.status >= 300)))) return null;
+    const url = normalizeUrl((data && data.url) || args.url);
+    return url ? { kind: 'fetch', tool: name, url, numbers: numbersIn(text), digest } : null;
+  }
+  // A clipped result is not valid JSON: read the "url" fields from the text.
+  const urls = (data && Array.isArray(data.results) ? data.results.map((item) => item && item.url) : [...text.matchAll(/"url"\s*:\s*"([^"]+)"/g)].map((match) => match[1]))
+    .map((url) => normalizeUrl(url)).filter(Boolean).slice(0, MAX_URLS_PER_EVENT);
+  return { kind: 'search', tool: name, query: String(args.query || '').slice(0, 200), urls, digest };
+}
+
 export function evidenceFromToolResult(name, args = {}, result = {}, context = {}) {
   if (!result || typeof result !== 'object') return null;
+  if (PACK_FETCH.test(name) || PACK_SEARCH.test(name)) return packEvidence(name, args || {}, result, digestOf(result));
   if (result.approved === false) return null;
   const digest = digestOf(result);
   if (name === 'run_command' || name === 'run_shell') {
