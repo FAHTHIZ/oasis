@@ -4,6 +4,19 @@ User-facing change history grouped by package version. A version heading does no
 
 ## Unreleased
 
+## [1.4.0] - 2026-11-17
+
+### Highlights
+
+- The neuron network is real infrastructure now. Every subagent's lifecycle and spend goes to a crash-safe `node:sqlite` ledger, one scheduler admits `task`, team and workflow agents with network, per-parent and per-provider limits, and subagents can carry their own token, dollar, request, step and child budgets reserved from their parent's. See [OASIS-NEURON-NETWORK.md](docs/OASIS-NEURON-NETWORK.md).
+- Subagent reports that claim passing tests or builds are checked against the child's own tool results, and `oasis sessions export --verified` keeps only sessions that ended on a passing check.
+- Skills and plugins are audited before they install; high-risk files are refused unless you pass `--allow-risky`.
+- Saved sessions keep the whole conversation, two processes on one session no longer overwrite each other, and checkpoints are written crash-safely.
+- Security fixes: sandboxed commands can no longer reach host Unix sockets, settings lists are read in full, permission globs use a linear-time matcher, and project agent files are protected.
+- A rebuilt README with animated light and dark art, and stale internal documents removed.
+
+### All changes
+
 - Subagents can now have their own budget: `budgetTokens`, `budgetUsd`, `budgetRequests`, `budgetSteps` and `budgetChildren` in an agent's front matter, or `OASIS_SUBAGENT_BUDGET` for all of them. Each run reserves its budget from its parent's, so siblings cannot overspend the same pool, and gives the unspent part back when it ends, including when it is cancelled. A subagent that runs out stops before the request that would pass its limit (`NEURON_BUDGET_EXCEEDED`). See [Budget algebra](docs/OASIS-NEURON-NETWORK.md#budget-algebra-roadmap-13). Test: `test/budget-algebra.test.mjs`.
 - Subagents from `task`, agent teams and workflows now share one scheduler: at most 8 work at once across the whole network, at most 8 per parent, and `OASIS_PROVIDER_SLOTS` can cap one provider host. Extra subagents wait instead of failing, and their result says how long and why (`scheduler_note`, or `"status": "queued"` for background agents). A parent waiting on its own subagents gives up its slot meanwhile, so nesting cannot deadlock. See [Scheduler](docs/OASIS-NEURON-NETWORK.md#scheduler-roadmap-12). Test: `test/neuron-scheduler.test.mjs`.
 - Subagents now survive a crash in the record: every worker's start, state changes and token and cost charges are appended to a `node:sqlite` ledger (`<config>/sessions/neuron-ledger.sqlite`). Before, a process killed mid-turn forgot the workers it had started since the session was last saved; now they come back as `interrupted` with what they spent. `OASIS_NEURON_LEDGER=0` turns it off. See [Network ledger](docs/OASIS-NEURON-NETWORK.md#network-ledger-roadmap-11). Test: `test/neuron-ledger.test.mjs`.
