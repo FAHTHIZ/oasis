@@ -187,6 +187,20 @@ Stopping a neuron stops its whole subtree: cancelling the main turn aborts every
 
 A neuron that ends without finishing (cancelled, failed or stalled) releases every shared-task lease it holds, not just the task it was started for, so the task goes back to `pending` and another agent can claim it at once instead of after the 15-minute lease. A restored session never restores a live lease, so neurons found `interrupted` after a crash hold none.
 
+## Evidence and contracts (roadmap 1.5-1.7)
+
+Each session keeps an evidence ledger (`src/evidence-ledger.mjs`). After every tool call the runtime records what the result showed: a check (test, build, lint or type-check) with its exit code and whether a pipe hid it, another command or a code execution with the numbers it printed, a fetched page, a search and the URLs it returned, a file edit, or a side effect such as an install or a commit. Each event has a sequence number and a SHA-256 digest of the result. Only tool results produce events, so a reply that says "all tests pass" adds nothing. An edit makes every earlier check stale.
+
+Verification contracts (`src/verification-contracts.mjs`) read a report together with the ledger range it was written from:
+
+| Contract | When it applies | A claim is supported when |
+| --- | --- | --- |
+| `code` | The report says tests, builds or checks pass | The last check finished with exit code 0, no pipe hid its status, and nothing was edited after it |
+| `research` | The report cites URLs | Every cited URL was fetched (`fetch_url` or the browser); a search hit alone does not count |
+| `analysis` | The agent declares `domain: analysis`, or it executed code without running any test | Every decimal, percentage or 3+ digit number (years aside) was printed by an execution, command or fetched page; rounding is allowed |
+
+When a subagent finishes, its report is checked against the evidence from that run before the parent sees it. A report with an unsupported claim comes back with `report_status: "rejected"` and `verification_issues` (domain and reason), and the timeline records `agent.report_rejected`. `unverified_claim` is still set for code claims. Background agents' completion notices list the reasons too.
+
 ## Detailed design (proposal, 2026-11)
 
 This section turns phases 2 to 8 above into one design. Nothing in it is

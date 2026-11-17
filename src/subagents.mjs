@@ -12,6 +12,7 @@
 //   model: inherit                              (optional model id override)
 //   maxTurns: 40                                (optional tool-step cap)
 //   budgetTokens: 200000, budgetUsd: 0.5        (optional; also budgetRequests, budgetSteps, budgetChildren)
+//   domain: research                            (optional; code, research or analysis report checks)
 //   permissionMode: plan                        (optional; `plan` keeps it read-only)
 //   skills: [lint-rules]                        (optional; preloaded into its prompt)
 //   memory: project                             (optional; user | project | local)
@@ -163,6 +164,8 @@ export function normalizeAgentDefinition(raw, body, { name, source, plugin = fal
     isolation: lower(data.isolation) === 'worktree' ? 'worktree' : null,
     effort: EFFORTS.includes(lower(data.effort)) ? lower(data.effort) : null,
     maxTurns: Number.isInteger(maxTurns) && maxTurns > 0 ? Math.min(maxTurns, 400) : null,
+    // What its reports are checked against on return: code, research, analysis (roadmap 1.6).
+    domains: listField(data.domain ?? data.domains).map((domain) => lower(domain)).filter((domain) => ['code', 'research', 'analysis'].includes(domain)),
     // What this agent may spend per run, reserved from its parent's budget (roadmap 1.3).
     budget: (() => {
       const budget = {};

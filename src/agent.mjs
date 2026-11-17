@@ -71,6 +71,7 @@ import { createSharedTaskStore, SHARED_TASK_TOOL_NAMES } from './shared-tasks.mj
 import { unrequestedGitWrite } from './git-intent.mjs';
 import { recordTokenUsage } from './cost-policy.mjs';
 import { spend as spendBudget } from './budget-algebra.mjs';
+import { evidenceFromToolResult, recordEvidence, sessionEvidence } from './evidence-ledger.mjs';
 import { repairToolArguments, extractTextToolCalls, unknownTextToolCalls, hideStreamingToolCalls } from './tool-call-repair.mjs';
 import { isLocalModelEndpoint, probeLocalContext, probeProviderModelWindow, applySmallContextProfile, localContextAdvice, needsLocalContextAdvice, SMALL_CONTEXT_TOKENS } from './local-context.mjs';
 import { ripgrepPathAddition } from './ripgrep.mjs';
@@ -2937,6 +2938,33 @@ async function applyToolResults(session, options, turn) {
       verification.autoTestPending = true;
       verification.staticCheckPending = true;
       verification.tamperCheckPending = true;
+    }
+    // Evidence ledger (roadmap 1.5): what this tool result showed, recorded by
+    // the runtime. Model text never adds evidence.
+    if (result && typeof result === 'object') {
+      try {
+        const evidenceArgs = safeToolArguments(call.function && call.function.arguments);
+        const context = {};
+        if (name === 'run_command') {
+          context.isCheck = isVerificationCommand(evidenceArgs.command, evidenceArgs.args);
+          if (context.isCheck) context.checkKind = verificationCommandKind(evidenceArgs.command, evidenceArgs.args);
+        } else if (name === 'run_shell') {
+          const target = shellExitTarget(evidenceArgs.command);
+          context.isCheck = Boolean(target && isVerificationCommand(target.command, target.args));
+          if (context.isCheck) context.checkKind = verificationCommandKind(target.command, target.args);
+          context.masked = Boolean(target && (target.piped || result.exitCodeWarning));
+        } else if (result.path && !isScratchPath(normalizeReviewPath(result.path)) && (
+          (name === 'edit_file' || name === 'multi_edit' || name === 'notebook_edit') && result.changed === true ||
+          name === 'write_file' && typeof result.writtenBytes === 'number' ||
+          name === 'delete_file' && result.deleted === true ||
+          name === 'apply_patch' && typeof result.error !== 'string'
+        )) {
+          context.edited = true;
+          context.path = normalizeReviewPath(result.path);
+        }
+        const event = evidenceFromToolResult(name, evidenceArgs, result, context);
+        if (event) recordEvidence(sessionEvidence(session), event);
+      } catch { /* evidence is advisory; a bad result shape cannot break the turn */ }
     }
     if (result && result.lspVerification && result.lspVerification.path) {
       verification.lspVerificationByPath.set(normalizeReviewPath(result.lspVerification.path), result.lspVerification);
