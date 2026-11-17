@@ -906,6 +906,16 @@ function fillInspector(box, tool) {
       diff.className = 'diff inspect-diff';
       renderDiff(diff, lineDiff(part.old, part.new));
       section(part.label, diff, () => copyText(part.new));
+    } else if (part.format === 'checklist') {
+      const list = document.createElement('ul');
+      list.className = 'inspect-checklist';
+      for (const item of part.items) {
+        const row = document.createElement('li');
+        row.className = item.status;
+        row.textContent = item.text;
+        list.appendChild(row);
+      }
+      section(part.label, list, () => copyText(part.items.map((item) => (item.status === 'completed' ? '[x] ' : '[ ] ') + item.text).join('\n')));
     } else if (part.format === 'prose' || part.format === 'text' || part.format === 'path') {
       const text = document.createElement(part.format === 'path' ? 'code' : 'div');
       text.className = 'inspect-text';
