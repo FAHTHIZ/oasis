@@ -3,6 +3,7 @@ import { createServer as createHttpsServer } from 'node:https';
 import { constants as fsConstants, readFileSync, statSync } from 'node:fs';
 import { formatApprovalMessage, redactApprovalSecrets } from './approval-language.mjs';
 import { describeDraft } from './tool-draft.mjs';
+import { toolSources } from './tool-sources.mjs';
 import { labelToolActivity, presentToolActivity, safeToolActivityArgs, toolActivityArtifacts, toolActivityCategory, toolActivityOutcome, toolActivityStatus, toolActivityWarning } from './tool-activity.mjs';
 import { createHash, randomBytes, randomUUID, timingSafeEqual } from 'node:crypto';
 import { clientAddress, createAuthLimiter, hostAllowed, isLoopbackAddress, parseAllowedHosts, requestIsSecure } from './remote-access.mjs';
@@ -1245,6 +1246,7 @@ export function createOasisWebServer(options = {}) {
               ...(tracked && Number.isFinite(tracked.startedAt) ? { durationMs: Math.max(0, Date.now() - tracked.startedAt) } : {}),
               result: summarizeToolResult(value),
               warning: toolActivityWarning(value),
+              ...(() => { const sources = toolSources(name, args, value).map((source) => ({ url: redactApprovalSecrets(source.url), ...(source.title ? { title: redactApprovalSecrets(source.title) } : {}) })); return sources.length ? { sources } : {}; })(),
               ...(value && typeof value === 'object' && !value.error && (Number(value.added) > 0 || Number(value.removed) > 0) ? { lines: { added: Math.max(0, Math.floor(Number(value.added) || 0)), removed: Math.max(0, Math.floor(Number(value.removed) || 0)) } } : {}),
               ...(artifacts.length ? { artifacts, previewJobId: job.id } : {}),
               ...(subagent ? { subagent: String(subagent).slice(0, 100) } : {})
