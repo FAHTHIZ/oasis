@@ -28,6 +28,7 @@ import { unsupportedChildClaim } from './claim-check.mjs';
 import { evidenceSince, evidenceSummary, sessionEvidence } from './evidence-ledger.mjs';
 import { checkReport } from './verification-contracts.mjs';
 import { spawnScope } from './spawn-scope.mjs';
+import { callDigest, consumeGrant, parkApproval } from './neuron-approvals.mjs';
 import { schedulerForRegistry, providerKey, describeWait } from './neuron-scheduler.mjs';
 import { childBudgetRequest, close as closeBudget, reserve as reserveBudget, sessionBudget } from './budget-algebra.mjs';
 import { runAgentTurn, headTailText, MAX_SUBAGENT_REPORT_CHARS, READ_ONLY_TOOLS, hookOptions, boundSubagentReport } from './agent.mjs';
@@ -534,11 +535,29 @@ async function runChildTurnInner(parent, record, prompt, options, { foreground }
     // --forward-subagent-text: the subagent's own messages, tagged with the spawning tool call.
     onText: options.onSubagentText ? (text) => { try { options.onSubagentText({ text, subagent: description, agentId: record.id, agentType: type, parentToolUseId: options.parentToolUseId || null }); } catch {} } : undefined
   } : {
-    // Nobody can answer a prompt while the agent works in the background.
-    approval: async () => false,
+    // Nobody can answer a prompt while the agent works in the background, so
+    // the request is parked for the user (roadmap 2.1) unless they already
+    // approved this exact call, in which case the one-time grant is used up.
+    approval: async (message, _force, extra = {}) => {
+      // One call can ask more than once (a new site, then the tool itself);
+      // the grant covers every prompt of the call it was used up on.
+      const digest = callDigest(extra.tool, extra.input);
+      if (record.grantInUse === digest) return true;
+      if (consumeGrant(record, extra.tool, extra.input)) {
+        record.grantInUse = digest;
+        recordAgentEvent(parent, 'agent.approval_used', { agentId: record.id, teamId: record.teamId || undefined, description: record.description, detail: String(extra.tool || '') });
+        return true;
+      }
+      return parkApproval(record, { message, tool: extra.tool, input: extra.input }, {
+        onParked: (entry) => {
+          recordAgentEvent(parent, 'agent.approval_pending', { agentId: record.id, teamId: record.teamId || undefined, description: record.description, detail: entry.id + ' ' + entry.tool });
+          notifyParent(parent, 'Agent ' + record.id + ' (' + record.description + ') is waiting for the user to approve ' + entry.tool + ' (' + entry.id + '). Only the user can answer, with /tasks approve ' + record.id + ' or /tasks deny ' + record.id + '; tell them.');
+        }
+      });
+    },
     signal: record.controller.signal,
     onToolStart: (event) => { track(event); record.lastActivityAt = Date.now(); record.inTool = true; },
-    onToolResult: () => { record.lastActivityAt = Date.now(); record.inTool = false; },
+    onToolResult: () => { record.lastActivityAt = Date.now(); record.inTool = false; record.grantInUse = null; },
     // The parent turn may be over, so usage goes to the session's background
     // sink (set by the CLI, headless and web front ends) instead.
     onUsage: (usage) => {
