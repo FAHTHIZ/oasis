@@ -135,6 +135,14 @@ This slice did not change spawning. Nested subagents were added separately (see 
 
 Before this slice a subagent report of up to a million characters came back as one tool result, and the parent's 24,000-character tool-result cap kept only its head and tail. In the regression test a 60,000-character report with a marker in the middle reached the parent without the marker. Now the full report is saved in the session scratch folder (git-ignored, symlinked folders refused) and the parent receives under 12,000 characters: the first ~6,000 and last ~2,000 characters and the file path, which it can read with `read_file` offset/limit or `grep`. Structured-output agents (`output_schema`) are unchanged because their result is the parsed object.
 
+## Network ledger (roadmap 1.1)
+
+Session files are saved between turns, so a process killed mid-turn used to forget every worker it had started since the last save. Every neuron's spawn, state changes and budget charges are now appended to a ledger in `node:sqlite` at `<config>/sessions/neuron-ledger.sqlite` (`src/neuron-ledger.mjs`). Rows are never edited (an `UPDATE` trigger refuses it); sessions with no activity for 30 days are dropped whole.
+
+On restore, workers found only in the ledger come back as `interrupted` with the tokens and cost they had already spent, and the recovery is itself recorded, so a second restart agrees with the first. No neuron is ever shown as running after a restart. Writes are best-effort: without `node:sqlite`, on a read-only disk or with `OASIS_NEURON_LEDGER=0` the ledger is off and orchestration is unchanged. `OASIS_NEURON_LEDGER_FILE` moves the file.
+
+`test/neuron-ledger.test.mjs` checks this: a scripted network is cut after each of its writes and restored, and every cut has no running neuron and the same lineage as the clean run; a writer killed with `SIGKILL` leaves a ledger that reopens and recovers; and the median spawn with its ledger write stays under 5 ms.
+
 ## Detailed design (proposal, 2026-11)
 
 This section turns phases 2 to 8 above into one design. Nothing in it is

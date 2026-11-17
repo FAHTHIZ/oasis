@@ -638,7 +638,7 @@ export async function createSession({ root, config, restore = null, permissionMo
     hookMessages: []
   };  if (typeof onHookEvent === 'function') session.onHookEvent = onHookEvent;
   if (typeof onHookStatus === 'function') session.onHookStatus = onHookStatus;
-  if (restore && Array.isArray(restore.agents) && restore.agents.length) restoreAgentHistory(session, restore.agents);
+  if (restore && restore.id) restoreAgentHistory(session, Array.isArray(restore.agents) ? restore.agents : []);
 
   if (restore && restore.workflowCheckpoint && restore.workflowCheckpoint.active === true) {
     const checkpoint = restore.workflowCheckpoint;
