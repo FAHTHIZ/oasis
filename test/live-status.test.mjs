@@ -151,3 +151,11 @@ test('compaction shows its own status: what it reads, then the summary tokens', 
   assert.ok(writing.meta.includes('compacting for 12s'));
   assert.equal(liveStatus({ phase: 'approval', compaction: { startedAt: now } }, now).label, 'Waiting for you');
 });
+
+test('a slow hook shows its own label and how long it has run', () => {
+  const now = 50_000;
+  const status = liveStatus({ phase: 'hook', label: 'Running Stop hook', hookStartedAt: now - 5000, request: modelRequest({ startedAt: now - 200_000 }) }, now);
+  assert.equal(status.label, 'Running Stop hook');
+  assert.ok(status.meta.includes('hook running for 5s'), status.meta.join('|'));
+  assert.equal(status.stalled, false);
+});

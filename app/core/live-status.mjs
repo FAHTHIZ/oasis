@@ -109,6 +109,7 @@ export function liveStatus(state = {}, now = Date.now()) {
   let label;
   if (state.phase === 'approval') label = 'Waiting for you';
   else if (state.phase === 'reconnecting') label = 'Reconnecting';
+  else if (state.phase === 'hook') { label = state.label || 'Running a hook'; if (Number(state.hookStartedAt) > 0 && now - state.hookStartedAt >= 2000) meta.push('hook running for ' + formatElapsed(now - state.hookStartedAt)); }
   else if (request && Number(request.retryUntil) > now) { label = request.retryStatus === 429 ? 'Rate limited' : request.retryStatus ? 'Provider error ' + request.retryStatus : 'Connection failed'; meta.push('retrying in ' + formatElapsed(Number(request.retryUntil) - now + 999)); }
   else if (Number(state.rateLimitUntil) > now) { label = 'Rate limited'; meta.push('retrying in ' + formatElapsed(Number(state.rateLimitUntil) - now + 999)); }
   else if (state.label && state.phase !== 'waiting' && state.phase !== 'thinking') label = state.label;
@@ -126,7 +127,7 @@ export function liveStatus(state = {}, now = Date.now()) {
   if (rate >= 0.5) meta.push((rate < 10 ? rate.toFixed(1).replace(/\.0$/, '') : Math.round(rate)) + ' tok/s');
   // Mid-reply silence: the model started answering, then went quiet.
   let stalled = false;
-  const modelTurn = state.phase !== 'tool' && state.phase !== 'approval' && state.phase !== 'reconnecting';
+  const modelTurn = state.phase !== 'tool' && state.phase !== 'approval' && state.phase !== 'reconnecting' && state.phase !== 'hook';
   if (request && request.firstOutputAt && request.lastOutputAt && modelTurn) {
     const quiet = now - request.lastOutputAt;
     if (quiet >= QUIET_AFTER_MS) meta.push('no new output for ' + formatElapsed(quiet));
