@@ -1161,7 +1161,15 @@ export function createOasisWebServer(options = {}) {
           onModelWait: (event) => {
             // Start and end of each model request: the page shows "Thinking"
             // from the moment the request goes out, not only once text arrives.
-            if (event && (event.phase === 'start' || event.phase === 'end')) { emit(job, 'model_wait', { phase: event.phase, step: Number(event.step) || 1 }); return; }
+            // The start also says how big the prompt is, which model, and
+            // whether it runs on this machine, so the page can tell a local
+            // model reading a long prompt from one that stopped answering.
+            if (event && event.phase === 'start') {
+              const inputTokens = Math.max(0, Math.round(Number(event.inputTokens) || 0));
+              emit(job, 'model_wait', { phase: 'start', step: Number(event.step) || 1, ...(inputTokens ? { inputTokens } : {}), ...(event.model ? { model: String(event.model).slice(0, 120) } : {}), ...(event.local ? { local: true } : {}) });
+              return;
+            }
+            if (event && event.phase === 'end') { emit(job, 'model_wait', { phase: 'end', step: Number(event.step) || 1 }); return; }
             if (!event || event.phase !== 'progress' || !event.promptProgress) return;
             const p = event.promptProgress;
             emit(job, 'model_wait', { phase: 'progress', step: Number(event.step) || 1, promptProgress: { total: Number(p.total) || 0, cache: Number(p.cache) || 0, processed: Number(p.processed) || 0, time_ms: Number(p.time_ms) || 0 } });

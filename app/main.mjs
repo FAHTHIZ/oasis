@@ -6,6 +6,7 @@ import { alwaysAllowLabel } from './core/approval-rule.mjs';
 import { SUBAGENT_STATUS_TEXT } from './core/subagents.mjs';
 import { createConnectorCard, connectIntent, splitServices, brandMark } from './core/connector-card.mjs';
 import { createSoundPlayer, soundAllowed } from './core/sound.mjs';
+import { liveStatus, modelRequest, waitingLabel, thoughtMs } from './core/live-status.mjs';
 import { readableOutput, repeatsEarlierReply, stepOutcome, stepRan, stepLabel, summarizeArgs, toolKind, groupTitle, groupStats, formatDuration, thinkingLabel, thoughtLabel, splitTextToolCall, elapsedSince, describeInput, buildTimeline, groupTiming, runElapsed, timingSplit } from './core/timeline.mjs';
 import { IndexedDBStore, Workspace, lineDiff } from './core/workspace.mjs';
 import { wordHighlights } from '../src/word-diff.mjs';
@@ -1682,7 +1683,7 @@ function settleThinking(block) {
   clearInterval(block._clock);
   const text = String(block._text || '').trim();
   if (!text) { block.remove(); return; }
-  const ms = Date.now() - block._started;
+  const ms = thoughtMs(liveModel.request, Date.now(), block._started);
   if (block._entry) block._entry.reasoning = { text, ms };
   block.replaceWith(thoughtBlock(text, ms));
 }
@@ -1716,6 +1717,19 @@ function thoughtBlock(text, ms) {
 function liveThinking() {
   return document.querySelector('#transcript .thinking.live');
 }
+// The live chip's words: before the first token, what the model is doing
+// ("Reading the prompt · 1m 10s" for a local model working through a long
+// prompt); once reasoning streams, "Thinking" timed from when it began.
+function chipLabel(block) {
+  const now = Date.now();
+  const request = liveModel.request && !liveModel.request.ended ? liveModel.request : null;
+  if (request && !request.firstOutputAt && !block._text) {
+    const words = waitingLabel(request, now);
+    const ms = now - Math.max(block._started, request.startedAt);
+    return ms >= 1000 ? words + ' · ' + formatDuration(ms) : words;
+  }
+  return thinkingLabel(thoughtMs(request, now, block._started));
+}
 function showThinking(at) {
   // Already thinking: keep the clock running instead of starting it over
   // (a new step took over, so its entry now owns the reasoning).
@@ -1740,10 +1754,10 @@ function showThinking(at) {
   const label = block.querySelector('.thinking-label');
   // Only the visible text changes; the status role is not re-announced every second.
   label.setAttribute('aria-hidden', 'true');
-  label.textContent = thinkingLabel(Date.now() - started);
+  label.textContent = chipLabel(block);
   block._clock = setInterval(() => {
     if (!block.isConnected) { clearInterval(block._clock); return; }
-    const next = thinkingLabel(Date.now() - started);
+    const next = chipLabel(block);
     if (label.textContent !== next) label.textContent = next;
   }, 1000);
   $('transcript').appendChild(block);
@@ -1843,6 +1857,29 @@ function serverTime(at) {
 // What OASIS is doing this moment, in the present tense ("Reading app.mjs",
 // "Writing src/server.mjs · 3.2 KB", "Responding"); shown in the run status.
 let nowLabel = '';
+let connectionLost = false;
+// The model request in flight and the output streamed this run, for the
+// honest live status (see core/live-status.mjs).
+const liveModel = {
+  request: null,
+  turn: { outChars: 0, streamMs: 0 },
+  drafts: new Map(),
+  reset() { this.request = null; this.turn = { outChars: 0, streamMs: 0 }; this.drafts.clear(); },
+  // Characters of output arrived (reply, reasoning or a drafted tool call).
+  output(chars) {
+    const n = Math.max(0, Number(chars) || 0);
+    if (!n) return;
+    const now = Date.now();
+    const request = this.request;
+    if (request && !request.ended) {
+      if (!request.firstOutputAt) request.firstOutputAt = now;
+      // Gaps under 5s count as streaming time, for the tok/s figure.
+      else if (now - request.lastOutputAt < 5000) this.turn.streamMs += now - request.lastOutputAt;
+      request.lastOutputAt = now;
+    }
+    this.turn.outChars += n;
+  }
+};
 function setNow(text) {
   nowLabel = String(text || '');
   runClock.tick();
@@ -1898,9 +1935,14 @@ const runClock = {
     // Nothing running, nothing streaming for a moment: show Thinking, so the
     // page never sits blank while the model works.
     if (!waiting && !agent.detached && now - lastActivity >= IDLE_THINKING_MS && !liveThinking() && !stepsRunning() && $('questionSheet').hidden) showThinking(lastActivity);
-    const text = (waiting ? 'Waiting for you' : nowLabel || 'Working') + ' · ' + formatDuration(this.worked(now)) + ' · Esc to stop';
+    const phase = waiting ? 'approval' : connectionLost ? 'reconnecting' : stepsRunning() ? 'tool' : nowLabel === 'Thinking' ? 'thinking' : nowLabel === 'Responding' ? 'responding' : nowLabel ? 'draft' : 'waiting';
+    const status = liveStatus({ label: nowLabel === 'Thinking' ? '' : nowLabel, phase, request: liveModel.request, turn: liveModel.turn, elapsedMs: this.worked(now) }, now);
     const label = el.querySelector('.run-status-text');
-    if (label.textContent !== text) label.textContent = text;
+    if (label.textContent !== status.label) label.textContent = status.label;
+    let meta = el.querySelector('.run-status-meta');
+    if (!meta) { meta = document.createElement('span'); meta.className = 'run-status-meta'; el.appendChild(meta); }
+    const rest = ' · ' + [...status.meta, 'Esc to stop'].join(' · ');
+    if (meta.textContent !== rest) meta.textContent = rest;
     el.classList.toggle('waiting', waiting);
     if (el.classList.contains('resting')) { el.classList.remove('resting'); el.removeAttribute('aria-hidden'); }
     if (el.hidden) el.hidden = false;
@@ -1928,6 +1970,8 @@ function timingSummary(records = []) {
 function finishRun(prefix) {
   const ms = runClock.stop();
   nowLabel = '';
+  liveModel.reset();
+  connectionLost = false;
   clearDraftRow();
   const timings = runTimings;
   runTimings = [];
@@ -2066,7 +2110,7 @@ function flushPendingInputs() {
 // When the page last showed something new from the run (text, a step, output).
 let lastActivity = Date.now();
 const IDLE_THINKING_MS = 1000;
-const QUIET_EVENTS = new Set(['usage', 'context', 'cost', 'model_end', 'run_clock', 'todos', 'model_timing']);
+const QUIET_EVENTS = new Set(['usage', 'context', 'cost', 'model_end', 'model_progress', 'run_clock', 'todos', 'model_timing']);
 function stepsRunning() {
   return Boolean(activeGroup && activeGroup.live && activeGroup.steps.some((step) => step.ok === undefined));
 }
@@ -2099,10 +2143,15 @@ function handleRunEvent(event) {
       scrollDown();
       break;
     case 'reasoning':
+      liveModel.output(String(event.delta || '').length);
       addReasoning(event.delta, event.reset);
       if (nowLabel !== 'Thinking') setNow('Thinking');
       break;
-    case 'tool_draft':
+    case 'tool_draft': {
+      const index = Number(event.index) || 0;
+      const chars = Number(event.chars) || 0;
+      liveModel.output(Math.max(0, chars - (liveModel.drafts.get(index) || 0)));
+      liveModel.drafts.set(index, chars);
       if (event.done) { clearDraftRow(); break; }
       if (!currentTurn) startStep();
       removeThinking();
@@ -2110,15 +2159,22 @@ function handleRunEvent(event) {
       setNow(event.text || 'Preparing a step');
       scrollDown();
       break;
+    }
     case 'model_start':
+      liveModel.request = modelRequest({ startedAt: serverTime(event.startedAt), step: event.step, inputTokens: event.inputTokens, model: event.model, local: event.local });
+      liveModel.drafts.clear();
       // The model is working and nothing runs or streams: say so at once.
       if (!stepsRunning()) { showThinking(event.startedAt); scrollDown(); setNow('Thinking'); }
       break;
-    case 'model_end': break;
+    case 'model_progress':
+      if (liveModel.request && !liveModel.request.ended) { liveModel.request.progress = event.promptProgress; liveModel.request.progressAt = Date.now(); runClock.tick(); }
+      break;
+    case 'model_end': if (liveModel.request) liveModel.request.ended = true; break;
     case 'delta':
       if (!currentTurn) startStep();
       ensureProse();
       currentTurn.text += event.delta;
+      liveModel.output(String(event.delta || '').length);
       queueRender();
       removeThinking();
       clearDraftRow();
@@ -2302,9 +2358,12 @@ function handleRunEvent(event) {
       toast('Reconnected to the task that was running.');
       break;
     case 'reconnecting':
+      connectionLost = true;
+      runClock.tick();
       toast('Connection lost. Reconnecting… The task keeps running on the computer.');
       break;
     case 'reconnected':
+      connectionLost = false;
       toast('Back online.');
       break;
     case 'answered_elsewhere':
