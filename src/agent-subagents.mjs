@@ -27,6 +27,7 @@ import { repairInterruptedHistory } from './tool-results.mjs';
 import { unsupportedChildClaim } from './claim-check.mjs';
 import { evidenceSince, evidenceSummary, sessionEvidence } from './evidence-ledger.mjs';
 import { checkReport } from './verification-contracts.mjs';
+import { spawnScope } from './spawn-scope.mjs';
 import { schedulerForRegistry, providerKey, describeWait } from './neuron-scheduler.mjs';
 import { childBudgetRequest, close as closeBudget, reserve as reserveBudget, sessionBudget } from './budget-algebra.mjs';
 import { runAgentTurn, headTailText, MAX_SUBAGENT_REPORT_CHARS, READ_ONLY_TOOLS, hookOptions, boundSubagentReport } from './agent.mjs';
@@ -290,7 +291,12 @@ export async function runSubagent(parent, args, context, options) {
   // Coordination tools can mutate the team board or inbox without editing the workspace.
   // permissionMode: plan in the definition keeps the agent read-only whatever its tools.
   // A nested task tool does not count against read-only; a read-only agent never gets it.
-  const readOnly = agent.permissionMode === 'plan' || definitions.every((definition) => definition.function.name === 'task' || READ_ONLY_TOOLS.has(definition.function.name) || SHARED_TASK_TOOL_NAMES.has(definition.function.name) || definition.function.name === 'team_send_message');
+  const ownReadOnly = agent.permissionMode === 'plan' || definitions.every((definition) => definition.function.name === 'task' || READ_ONLY_TOOLS.has(definition.function.name) || SHARED_TASK_TOOL_NAMES.has(definition.function.name) || definition.function.name === 'team_send_message');
+  // Spawn-time scope check (roadmap 2.2): a read-only parent starts only
+  // read-only children and cannot delegate a deploy or publish step.
+  const scope = spawnScope({ parent, options, prompt, childReadOnly: ownReadOnly });
+  if (scope.error) throw new Error(scope.error);
+  const readOnly = scope.readOnly;
   if (readOnly) {
     const index = definitions.findIndex((definition) => definition.function.name === 'task');
     if (index >= 0) definitions.splice(index, 1);
@@ -356,7 +362,9 @@ export async function runSubagent(parent, args, context, options) {
     subagentDepth: depth + 1,
     projectContextText: parent.projectContextText || '',
     subagentMaxDepth: parent.subagentMaxDepth,
-    subagentMaxParallel: parent.subagentMaxParallel
+    subagentMaxParallel: parent.subagentMaxParallel,
+    // A read-only child's own children are read-only too (roadmap 2.2).
+    scopeReadOnly: readOnly
   };
   const mcpSpec = agentMcpSpec(parent, agent);
   if (mcpSpec) {

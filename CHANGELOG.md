@@ -4,6 +4,7 @@ User-facing change history grouped by package version. A version heading does no
 
 ## Unreleased
 
+- A subagent started from plan mode, or by a read-only subagent, is now always read-only itself, including team members and workflow agents, and a read-only agent can no longer start a subagent for a deploy, publish, push or release step; the spawn is refused with the reason. See [Spawn-time scope check](docs/OASIS-NEURON-NETWORK.md#spawn-time-scope-check-roadmap-22). Test: `test/spawn-scope.test.mjs`.
 - Subagent reports are now checked against what the subagent's own tools showed before the parent sees them: passing tests need a finished, unpiped, passing check with no later edit; cited URLs need a fetch, not just a search hit; and for agents with `domain: analysis` (or that ran code without tests), every computed number needs an execution that printed it. A report that fails comes back with `report_status: "rejected"` and the reasons in `verification_issues`. See [Evidence and contracts](docs/OASIS-NEURON-NETWORK.md#evidence-and-contracts-roadmap-15-17). Tests: `test/evidence-ledger.test.mjs`, `test/subagent-claim-check.test.mjs`.
 - A subagent that is cancelled, fails or stalls now releases every shared task it claimed with `task_claim`, not only the one it was started for, so another agent can pick the task up at once instead of waiting out the 15-minute lease. See [Cancellation and leases](docs/OASIS-NEURON-NETWORK.md#cancellation-and-leases-roadmap-14). Test: `test/neuron-cancellation.test.mjs`.
 

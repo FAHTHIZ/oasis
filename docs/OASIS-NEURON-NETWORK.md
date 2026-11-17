@@ -201,6 +201,15 @@ Verification contracts (`src/verification-contracts.mjs`) read a report together
 
 When a subagent finishes, its report is checked against the evidence from that run before the parent sees it. A report with an unsupported claim comes back with `report_status: "rejected"` and `verification_issues` (domain and reason), and the timeline records `agent.report_rejected`. `unverified_claim` is still set for code claims. Background agents' completion notices list the reasons too.
 
+## Spawn-time scope check (roadmap 2.2)
+
+A child never gets more reach than the agent that starts it. Its tools are already a subset of the parent's; `src/spawn-scope.mjs` adds two checks on the parent's mode, run for `task`, team members and workflow `agent()` alike because all three start through `runSubagent`:
+
+- A read-only parent (plan mode, or a read-only subagent) starts only read-only children. The child runs in plan mode whatever its own definition says, and is marked `scopeReadOnly` so its own children inherit the limit.
+- A read-only parent cannot start a child whose task is a deploy, publish, push or release step (`npm publish`, `git push`, `kubectl apply`, "Deploy the app", "- release v2.1.0"). The spawn is refused with a reason instead of the child failing later at approval time. Research about deploys ("Explain our release process") is allowed.
+
+Test: `test/spawn-scope.test.mjs` (every combination of parent mode, child definition and task).
+
 ## Detailed design (proposal, 2026-11)
 
 This section turns phases 2 to 8 above into one design. Nothing in it is
