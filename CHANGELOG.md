@@ -4,6 +4,18 @@ User-facing change history grouped by package version. A version heading does no
 
 ## Unreleased
 
+## [1.5.0] - 2026-11-17
+
+### Highlights
+
+- Subagent reports are checked against the evidence the subagent's own tools produced: test results, fetched pages and printed numbers. A report that fails comes back marked rejected with the reasons.
+- Background agents can wait for your approval instead of being refused. The request survives a restart, and `/tasks approve` lets that exact call run once.
+- Read-only agents can no longer start a write-capable or deploying child, and cancelled agents release every task lease they held.
+- Research and analysis domain packs, skill proposals after compaction, and budgets in `/tasks`, `neuron_network`, telemetry and the web app.
+- `oasis eval --route-table` builds a reproducible per-class routing table from eval results for the opt-in `capability` routing mode.
+
+### All changes
+
 - `oasis eval --route-table` builds a per-task-class routing table from saved eval reports (cheapest model above a quality floor and within a set drop of the baseline), and `"modelRouting": { "mode": "capability", "routes": {...} }` uses it. Opt-in; the harness cost comparison has not been run yet. See [Capability routing](docs/CONFIGURATION.md#capability-routing-from-eval-results). Test: `test/capability-router.test.mjs`.
 - The web app's subagent list now shows each agent's spend and budget, and flags an agent that is waiting for your approval with the command that answers it.
 - A background subagent that needs approval no longer just gets a silent no. The request waits, is saved with the session and survives a restart; `/tasks` shows it, and `/tasks approve agent_N` or `/tasks deny agent_N` answers it and resumes the agent. Approving lets that exact call run once. See [Waiting approvals](docs/OASIS-NEURON-NETWORK.md#waiting-approvals-roadmap-21). Test: `test/neuron-approvals.test.mjs`.
