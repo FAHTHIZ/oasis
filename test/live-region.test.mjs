@@ -123,6 +123,10 @@ test('turn status draws the checklist with the active form', () => {
   status.update({ phase: 'tool', label: 'Reading a.mjs' });
   assert.match(sets.status[0], /Reading a\.mjs… \(5s · esc to stop\)/);
   assert.deepEqual(sets.todos, ['  ◼ Running tests', '  ☐ Ship']);
+  // A batch of lookups counts what is done on the row under the status.
+  status.update({ phase: 'tool', label: 'Reading a.mjs +2 more', output: '1 of 3 done' });
+  assert.match(sets.status[0], /Reading a\.mjs \+2 more…/);
+  assert.equal(sets.status[1], '  ⎿ 1 of 3 done');
   status.stop();
   assert.deepEqual(sets.status, []);
 });
