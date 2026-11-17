@@ -118,3 +118,18 @@ test('a silent model is shown as stalled', async () => {
   assert.equal(liveStatus({ label: 'Responding', phase: 'responding', request: mid }, 2000 + STALLED_AFTER_MS).stalled, true);
   assert.equal(liveStatus({ label: 'Running npm test', phase: 'tool', request: mid }, 2000 + STALLED_AFTER_MS).stalled, false);
 });
+
+test('a request that carries on a cut-off reply, or retries, says so', () => {
+  const now = 100_000;
+  const resumed = modelRequest({ startedAt: now - 2000, resumed: true });
+  assert.equal(liveStatus({ phase: 'waiting', request: resumed }, now).label, 'Picking the thought back up');
+  const limited = modelRequest({ startedAt: now - 1000 });
+  limited.attempt = 1; limited.retryUntil = now + 12_000; limited.retryStatus = 429;
+  const status = liveStatus({ phase: 'waiting', request: limited }, now);
+  assert.equal(status.label, 'Rate limited');
+  assert.ok(status.meta.includes('retrying in 12s'), status.meta.join('|'));
+  limited.retryUntil = 0;
+  const retrying = liveStatus({ phase: 'waiting', request: limited }, now);
+  assert.equal(retrying.label, 'Retrying');
+  assert.ok(retrying.meta.includes('attempt 2'));
+});

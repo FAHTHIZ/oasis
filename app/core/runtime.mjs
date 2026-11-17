@@ -550,6 +550,7 @@ export class RuntimeAgent {
           // edits. End that bubble so the next reply does not run into it.
           case 'verification_gate': if (stepText && !stepHasTools) stepTextFinal = true; break;
           case 'stream_restarted': stepText = ''; this.emit('retry', { attempt: data.attempt || 1 }); break;
+          case 'provider_retry': this.emit('retry', { attempt: Number(data.attempt) || 1, waitMs: Number(data.waitMs) || 0, ...(data.status ? { status: Number(data.status) } : {}) }); break;
           case 'compaction_started': this.emit('compacting', {}); break;
           case 'tool_start': {
             // A subagent's own steps show in its row, not the main timeline.

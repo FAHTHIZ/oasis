@@ -67,8 +67,8 @@ function shortModel(name) {
 }
 
 // A fresh state for one model request.
-export function modelRequest({ startedAt = Date.now(), step = 1, inputTokens = 0, model = '', local = false } = {}) {
-  return { startedAt: Number.isFinite(Number(startedAt)) ? Number(startedAt) : Date.now(), step: Number(step) || 1, inputTokens: Math.max(0, Number(inputTokens) || 0), model: String(model || ''), local: Boolean(local), firstOutputAt: 0, lastOutputAt: 0, progress: null, progressAt: 0, ended: false };
+export function modelRequest({ startedAt = Date.now(), step = 1, inputTokens = 0, model = '', local = false, resumed = false } = {}) {
+  return { startedAt: Number.isFinite(Number(startedAt)) ? Number(startedAt) : Date.now(), step: Number(step) || 1, inputTokens: Math.max(0, Number(inputTokens) || 0), model: String(model || ''), local: Boolean(local), resumed: Boolean(resumed), attempt: 0, retryUntil: 0, retryStatus: 0, firstOutputAt: 0, lastOutputAt: 0, progress: null, progressAt: 0, ended: false };
 }
 
 // The words for a model request nobody has heard back from yet.
@@ -78,6 +78,9 @@ export function waitingLabel(request, now = Date.now()) {
   const progress = request.progress;
   if (progress && Number(progress.total) > 0 && Number(progress.processed) < Number(progress.total)) return 'Reading the prompt';
   if (request.local && elapsed >= 15_000 && request.inputTokens > 2000) return 'Reading the prompt';
+  // The last reply hit the output limit and this request carries it on.
+  if (request.resumed) return 'Picking the thought back up';
+  if (request.attempt > 0) return 'Retrying';
   if (elapsed >= SLOW_FIRST_TOKEN_MS) return 'Still waiting for ' + (shortModel(request.model) || 'the model');
   return 'Thinking';
 }
@@ -104,12 +107,14 @@ export function liveStatus(state = {}, now = Date.now()) {
   let label;
   if (state.phase === 'approval') label = 'Waiting for you';
   else if (state.phase === 'reconnecting') label = 'Reconnecting';
+  else if (request && Number(request.retryUntil) > now) { label = request.retryStatus === 429 ? 'Rate limited' : request.retryStatus ? 'Provider error ' + request.retryStatus : 'Connection failed'; meta.push('retrying in ' + formatElapsed(Number(request.retryUntil) - now + 999)); }
   else if (Number(state.rateLimitUntil) > now) { label = 'Rate limited'; meta.push('retrying in ' + formatElapsed(Number(state.rateLimitUntil) - now + 999)); }
   else if (state.label && state.phase !== 'waiting' && state.phase !== 'thinking') label = state.label;
   else if (request && !request.firstOutputAt) {
     label = waitingLabel(request, now);
     const reading = promptProgressText(request.progress, request.progressAt ? now - request.progressAt : 0);
     if (reading) meta.push(reading);
+    else if (request.attempt > 0 && !request.resumed) meta.push('attempt ' + (request.attempt + 1));
     else if (request.inputTokens > 0) meta.push(formatTokens(request.inputTokens) + ' tokens sent');
   } else label = state.label || (state.phase === 'responding' ? 'Responding' : 'Thinking');
   if (Number(state.elapsedMs) >= 0 && state.elapsedMs !== undefined) meta.unshift(formatElapsed(state.elapsedMs));
@@ -127,7 +132,7 @@ export function liveStatus(state = {}, now = Date.now()) {
   }
   // Nothing at all for a long time from a model that is not reading a
   // prompt on this machine: say it plainly, the way a person would.
-  if (request && !request.firstOutputAt && modelTurn && !(Number(state.rateLimitUntil) > now)) {
+  if (request && !request.firstOutputAt && modelTurn && !(Number(state.rateLimitUntil) > now) && !(Number(request.retryUntil) > now)) {
     const waited = now - request.startedAt;
     const reading = label === 'Reading the prompt';
     if (!reading && waited >= STALLED_AFTER_MS) { label = 'No response from ' + (shortModel(request.model) || 'the model') + ' yet'; stalled = true; }

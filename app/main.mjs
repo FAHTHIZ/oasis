@@ -1946,7 +1946,8 @@ const liveModel = {
   request: null,
   turn: { outChars: 0, streamMs: 0 },
   drafts: new Map(),
-  reset() { this.request = null; this.turn = { outChars: 0, streamMs: 0 }; this.drafts.clear(); },
+  resuming: false,
+  reset() { this.resuming = false; this.request = null; this.turn = { outChars: 0, streamMs: 0 }; this.drafts.clear(); },
   // Characters of output arrived (reply, reasoning or a drafted tool call).
   output(chars) {
     const n = Math.max(0, Number(chars) || 0);
@@ -2291,7 +2292,8 @@ function handleRunEvent(event) {
       break;
     }
     case 'model_start':
-      liveModel.request = modelRequest({ startedAt: serverTime(event.startedAt), step: event.step, inputTokens: event.inputTokens, model: event.model, local: event.local });
+      liveModel.request = modelRequest({ startedAt: serverTime(event.startedAt), step: event.step, inputTokens: event.inputTokens, model: event.model, local: event.local, resumed: liveModel.resuming });
+      liveModel.resuming = false;
       liveModel.drafts.clear();
       draftTexts.clear();
       // The model is working and nothing runs or streams: say so at once.
@@ -2315,9 +2317,15 @@ function handleRunEvent(event) {
     case 'retry':
       // A retried request starts its reply over; drop any half-streamed text.
       if (currentTurn) { currentTurn.text = ''; resetStream(currentTurn); }
-      toast(event.waitMs ? 'Rate limited for a moment; retrying in ' + Math.ceil(event.waitMs / 1000) + 's…' : 'Provider busy, retrying (' + event.attempt + ')…');
+      // The status line counts down a rate limit and names the attempt.
+      if (liveModel.request && !liveModel.request.ended) {
+        Object.assign(liveModel.request, { attempt: Number(event.attempt) || liveModel.request.attempt + 1, retryUntil: event.waitMs ? Date.now() + Number(event.waitMs) : 0, retryStatus: Number(event.status) || 0, firstOutputAt: 0, lastOutputAt: 0, startedAt: Date.now() });
+        runClock.tick();
+      }
+      if (!event.waitMs) toast('Provider busy, retrying (' + event.attempt + ')…');
       break;
     case 'truncated':
+      liveModel.resuming = true;
       toast(event.tool ? 'The reply hit the output limit while writing ' + event.tool + '; asking the model to split it.' : 'The reply hit the output limit; asking the model to continue.');
       break;
     case 'model_switch': {
