@@ -247,8 +247,12 @@ export function wrapRendered(text, columns, { offset = 0, indent = null } = {}) 
 
 // Streaming renderer. push() receives new text; end() flushes.
 export class MarkdownStream {
-  constructor({ write, color = true, columns = () => 80, prefix = '' }) {
+  // live: an onPartial(rows) callback. The line still being written is not
+  // printed; it is handed to the live region as styled rows, and only
+  // finished lines are written (so nothing on screen is ever rewritten).
+  constructor({ write, color = true, columns = () => 80, prefix = '', onPartial = null }) {
     this.write = write;
+    this.onPartial = typeof onPartial === 'function' ? onPartial : null;
     this.color = color;
     this.columns = columns;
     this.prefix = prefix;
@@ -261,11 +265,41 @@ export class MarkdownStream {
   begin() {
     if (this.started) return;
     this.started = true;
-    this.write('\n' + this.prefix);
+    this.write(this.onPartial ? '\n' : '\n' + this.prefix);
+    this.prefixPending = Boolean(this.onPartial);
     this.lineStartWidth = stringWidth(this.prefix);
   }
 
+  // Live mode: the reply bullet goes out with the first finished line.
+  lead() {
+    if (!this.prefixPending) return '';
+    this.prefixPending = false;
+    return this.prefix;
+  }
+
+  // Live mode: the partial line, styled like it will look once finished.
+  // Unclosed ** or ` are left out so half a word never flashes bold or as
+  // code; table rows, fences and diagrams wait until they are complete.
+  showPartial() {
+    if (!this.onPartial) return;
+    const partial = this.partial;
+    if (!partial || this.state.mermaid || this.state.table || /^\s*(?:\||```|~~~)/.test(partial)) { this.onPartial([]); return; }
+    let text = partial;
+    if ((text.match(/\*\*/g) || []).length % 2) { const at = text.lastIndexOf('**'); text = text.slice(0, at) + text.slice(at + 2); }
+    if ((text.match(/`/g) || []).length % 2) { const at = text.lastIndexOf('`'); text = text.slice(0, at) + text.slice(at + 1); }
+    const state = { ...this.state };
+    let rendered;
+    try { rendered = renderMarkdownLine(text, state, { color: this.color, columns: this.columns() }); } catch { rendered = text; }
+    if (rendered === null || rendered === undefined) { this.onPartial([]); return; }
+    const offset = this.prefixPending ? stringWidth(this.prefix) : 0;
+    const wrapped = this.state.fence ? String(rendered) : wrapRendered(String(rendered), this.columns(), { offset });
+    const rows = wrapped.split('\n');
+    if (this.prefixPending) rows[0] = this.prefix + rows[0];
+    this.onPartial(rows);
+  }
+
   erasePartial() {
+    if (this.onPartial) { this.onPartial([]); this.shownPartialWidth = 0; this.shownChars = 0; return; }
     const width = this.shownPartialWidth + (this.lineStartWidth || 0);
     if (!this.shownPartialWidth) { this.shownChars = 0; return; }
     const cols = Math.max(10, this.columns());
@@ -280,6 +314,7 @@ export class MarkdownStream {
   // below it, so the reply is not left half above and repeated below.
   interject(line) {
     const text = String(line || '').replace(/\n+$/, '') + '\n';
+    if (this.onPartial) { this.write(text); return; }
     if (!this.started || (!this.shownPartialWidth && !this.lineStartWidth)) { this.write(text); return; }
     const width = this.shownPartialWidth + (this.lineStartWidth || 0);
     const cols = Math.max(10, this.columns());
@@ -304,7 +339,7 @@ export class MarkdownStream {
       const options = { color: this.color, columns: this.columns() };
       if (isTableRow(line, this.state, options)) {
         (this.state.table ||= []).push(line);
-        if (this.lineStartWidth) { this.write('\n'); this.lineStartWidth = 0; }
+        if (this.lineStartWidth) { this.write(this.lead() + '\n'); this.lineStartWidth = 0; }
         continue;
       }
       const table = flushTable(this.state, options);
@@ -315,10 +350,11 @@ export class MarkdownStream {
       // reply's trailing blank lines never print (no gap before tool lines).
       if (rendered !== null && prose && !line.trim() && !this.lineStartWidth) { this.pendingBlank = true; continue; }
       if (rendered !== null && this.pendingBlank) { this.write('\n'); this.pendingBlank = false; }
-      if (rendered !== null) this.write((prose ? wrapRendered(rendered, this.columns(), { offset: this.lineStartWidth || 0 }) : rendered) + '\n');
-      else if (this.lineStartWidth) this.write('\n');
+      if (rendered !== null) this.write(this.lead() + (prose ? wrapRendered(rendered, this.columns(), { offset: this.lineStartWidth || 0 }) : rendered) + '\n');
+      else if (this.lineStartWidth) this.write(this.lead() + '\n');
       this.lineStartWidth = 0;
     }
+    if (this.onPartial) { this.showPartial(); return; }
     if (this.partial) {
       const fresh = this.partial.slice(this.shownChars || 0);
       if (fresh) { this.write(fresh); this.shownPartialWidth += stringWidth(fresh); this.shownChars = this.partial.length; }
@@ -341,11 +377,13 @@ export class MarkdownStream {
       this.erasePartial();
       const prose = !this.state.fence && !/^\s*(```|~~~|\|)/.test(this.partial);
       const rendered = renderMarkdownLine(this.partial, this.state, { color: this.color, columns: this.columns() });
-      if (rendered !== null) this.write(prose ? wrapRendered(rendered, this.columns(), { offset: this.lineStartWidth || 0 }) : rendered);
+      if (rendered !== null) this.write(this.lead() + (prose ? wrapRendered(rendered, this.columns(), { offset: this.lineStartWidth || 0 }) : rendered));
     }
     // An unclosed mermaid fence: show what was buffered instead of dropping it.
-    if (this.state.mermaid && this.state.mermaid.length) this.write('\n' + this.state.mermaid.map((row) => '  ' + row).join('\n'));
-    this.write('\n');
+    if (this.state.mermaid && this.state.mermaid.length) this.write(this.lead() + '\n' + this.state.mermaid.map((row) => '  ' + row).join('\n'));
+    this.write(this.lead() + '\n');
+    if (this.onPartial) this.onPartial([]);
+    this.prefixPending = false;
     this.partial = '';
     this.shownPartialWidth = 0;
     this.shownChars = 0;

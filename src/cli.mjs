@@ -44,7 +44,10 @@ import { readInput, KeyDecoder } from './line-editor.mjs';
 import { loadHistory, appendHistory } from './input-history.mjs';
 import { createCompleter } from './completion.mjs';
 import { MarkdownStream, colorEnabled, wrapRendered } from './markdown.mjs';
-import { createActivityIndicator } from './activity-indicator.mjs';
+import { createActivityIndicator, motionLevel } from './activity-indicator.mjs';
+import { createLiveRegion } from './live-region.mjs';
+import { createTurnStatus } from './turn-status.mjs';
+import { presentToolActivity } from './tool-activity.mjs';
 import { formatApprovalMessage, redactApprovalSecrets } from './approval-language.mjs';
 import { formatTurnSummary, showStartupBanner, bannerProviderLabel, promptFor, footerFor, nextMode, runShellPassthrough, shellContextBlock, describeTool, describeEdit, describeToolResult, verboseToolOutput, describeExploration, EXPLORE_TOOLS } from './terminal-ui.mjs';
 import { estimateTokens, contextWindowSize, contextUsage } from './context.mjs';
@@ -203,10 +206,10 @@ function startTurnKeys(onInterrupt, onSteer = null) {
   };
   // Type-ahead is echoed in the live status line, so typing while Oasis
   // works never feels like the keys went nowhere.
-  const showDraft = () => { turnDraft = buffer; if (waitIndicator && waitIndicator.active) waitIndicator.update({ draft: buffer }); };
+  const showDraft = () => { turnDraft = buffer; if (liveTurn) liveTurn.status.update({ typed: buffer }); else if (waitIndicator && waitIndicator.active) waitIndicator.update({ draft: buffer }); };
   const handle = {
-    resume() { if (active) return; active = true; try { stdin.setRawMode(true); } catch {} stdin.setEncoding('utf8'); stdin.resume(); stdin.on('data', onData); },
-    suspend() { if (!active) return; active = false; stdin.off('data', onData); try { stdin.setRawMode(false); } catch {} stdin.pause(); },
+    resume() { if (active) return; active = true; if (liveTurn) liveTurn.region.resume(); try { stdin.setRawMode(true); } catch {} stdin.setEncoding('utf8'); stdin.resume(); stdin.on('data', onData); },
+    suspend() { if (!active) return; active = false; if (liveTurn) liveTurn.region.suspend(); stdin.off('data', onData); try { stdin.setRawMode(false); } catch {} stdin.pause(); },
     stop() { handle.suspend(); if (buffer.trim()) queuedDraft = buffer; buffer = ''; turnDraft = ''; }
   };
   handle.resume();
@@ -463,7 +466,58 @@ const richOutput = () => colorEnabled(stdout) && process.env.OASIS_PLAIN_OUTPUT 
 let waitIndicator = null;
 // Claude Code's spinnerVerbs, refreshed from the session settings before each prompt.
 let spinnerVerbsSetting = null;
+// The live region for a running turn (rich TTY output with motion on): the
+// partial reply line, the status line and the checklist drawn below the
+// transcript in one synchronized frame. null when output is plain.
+let liveTurn = null;
+function beginLiveTurn(session) {
+  if (liveTurn || !richOutput() || !stdout.isTTY || /^(?:0|false|off|no)$/i.test(String(process.env.OASIS_LIVE_REGION || ''))) return null;
+  const level = motionLevel({ env: process.env, stream: stdout, setting: session && session.settings && session.settings.motion });
+  if (level === 'off') return null;
+  const region = createLiveRegion({ stream: stdout, mirrors: [process.stderr], env: process.env, frameMs: level === 'full' ? 16 : 50 });
+  if (!region.attach()) return null;
+  const status = createTurnStatus({ region, level, color: true });
+  liveTurn = { region, status, reasoningAt: 0 };
+  status.start({ todos: activeTodos(session && session.todos), typed: turnDraft });
+  return liveTurn;
+}
+function endLiveTurn() {
+  if (!liveTurn) return;
+  const { region, status } = liveTurn;
+  liveTurn = null;
+  try { status.stop(); } catch {}
+  try { region.detach(); } catch {}
+}
+// A finished checklist is not shown in the next turn's live rows.
+function activeTodos(todos) {
+  const list = Array.isArray(todos) ? todos : [];
+  return list.length && list.every((item) => item && item.status === 'completed') ? [] : list;
+}
+function liveReasoning(text) {
+  if (!liveTurn) return;
+  liveTurn.status.addTokens(Math.max(0, String(text || '').length - (liveTurn.reasoningChars || 0)));
+  liveTurn.reasoningChars = String(text || '').length;
+  liveTurn.status.update({ reasoning: text, ...(liveTurn.status.info.phase === 'working' ? { phase: 'thinking' } : {}) });
+}
+function liveToolDraft(draft = {}) {
+  if (!liveTurn) return;
+  if (draft.done) { if (liveTurn.status.info.phase === 'draft') liveTurn.status.update({ phase: 'working', draftInfo: null }); return; }
+  const prev = liveTurn.status.info.draftInfo;
+  if (prev && prev.index === draft.index) liveTurn.status.addTokens(Math.max(0, Number(draft.chars || 0) - Number(prev.chars || 0)));
+  else liveTurn.status.addTokens(Number(draft.chars || 0));
+  liveTurn.status.update({ phase: 'draft', draftInfo: draft, step: draft.step || liveTurn.status.info.step });
+}
 function onModelWait(event = {}) {
+  if (liveTurn) {
+    if (event.phase === 'progress') { liveTurn.status.update({ promptProgress: event.promptProgress }); return; }
+    if (event.phase !== 'start') { flushExploration(); toolStatusCall = null; return; }
+    flushExploration();
+    endText();
+    const { phase, ...rest } = event;
+    liveTurn.reasoningChars = 0;
+    liveTurn.status.update({ label: null, detail: null, promptProgress: null, rateLimitMs: 0, reasoning: '', draftInfo: null, output: '', ...rest, phase: 'thinking', restart: true });
+    return;
+  }
   if (event.phase === 'progress') { if (waitIndicator) waitIndicator.update({ promptProgress: event.promptProgress }); return; }
   if (event.phase !== 'start') { stopWaitIndicator(); return; }
   flushExploration();
@@ -479,13 +533,19 @@ function onModelWait(event = {}) {
 // spinner (pipes, CI, reduced motion) every wait is still printed.
 let rateLimitWaitsThisTurn = 0;
 function onRateLimitWait(event = {}) {
+  if (liveTurn) {
+    flushExploration();
+    if (rateLimitWaitsThisTurn++ === 0 || (event.compactTools && !compactToolsNoticeShown)) process.stderr.write(rateLimitNotice(event, colorEnabled(process.stderr)) + '\n');
+    liveTurn.status.update({ phase: 'rate', rateLimitMs: Number(event.waitMs) || 0, restart: true });
+    return;
+  }
   stopWaitIndicator();
   if (!waitIndicator) waitIndicator = createActivityIndicator({ stream: stdout, env: process.env, color: richOutput(), verbs: () => spinnerVerbsSetting });
   const live = waitIndicator.level !== 'off';
   if (!live || rateLimitWaitsThisTurn++ === 0 || (event.compactTools && !compactToolsNoticeShown)) process.stderr.write(rateLimitNotice(event, colorEnabled(process.stderr)) + '\n');
   if (live) waitIndicator.start({ rateLimitMs: Number(event.waitMs) || 0 });
 }
-function stopWaitIndicator() { flushExploration(); toolStatusCall = null; if (waitIndicator) waitIndicator.stop(); }
+function stopWaitIndicator() { flushExploration(); toolStatusCall = null; if (waitIndicator && waitIndicator.active) waitIndicator.stop(); }
 // The status line while a command runs (started by its first output, which
 // comes only after any approval). Shows the newest output line.
 let toolStatusCall = null;
@@ -509,6 +569,12 @@ export function lastOutputLine(text, max = 60) {
 }
 function liveToolStatus(event = {}) {
   if (!event.call) return;
+  if (liveTurn) {
+    const line = lastOutputLine(event.text, 200);
+    if (toolStatusCall !== event.call.id) { toolStatusCall = event.call.id; liveTurn.status.update({ phase: 'command', label: presentToolActivity(event.name, safeArgs(event.call)), output: line, restart: true }); }
+    else if (line) liveTurn.status.update({ output: line });
+    return;
+  }
   if (!waitIndicator) waitIndicator = createActivityIndicator({ stream: stdout, env: process.env, color: richOutput(), verbs: () => spinnerVerbsSetting });
   if (waitIndicator.level === 'off') return;
   const line = lastOutputLine(event.text);
@@ -524,13 +590,14 @@ function liveToolStatus(event = {}) {
   } else if (line) waitIndicator.update({ detail: line });
 }
 function safeArgs(call) { try { return JSON.parse(call.function && call.function.arguments || '{}'); } catch { return {}; } }
-function stopToolStatus(call) { if (toolStatusCall && (!call || call.id === toolStatusCall)) { toolStatusCall = null; if (waitIndicator) waitIndicator.stop(); } }
+function stopToolStatus(call) { if (toolStatusCall && (!call || call.id === toolStatusCall)) { toolStatusCall = null; if (liveTurn) liveTurn.status.update({ phase: 'working', label: null, output: '' }); else if (waitIndicator) waitIndicator.stop(); } }
 // Read-only lookups (reads, searches, listings) are held until the batch ends,
 // then shown as one "Read 3 files, searched 1 pattern" line. Failures, and a
 // lone lookup, keep the usual header and result lines.
 let explorationBatch = [];
 function holdExploration(event) {
-  if (waitIndicator) waitIndicator.stop();
+  if (liveTurn) liveTurn.status.update({ phase: 'tool', label: presentToolActivity(event.name, event.args || {}), restart: true });
+  else if (waitIndicator) waitIndicator.stop();
   endText();
   explorationBatch.push({ id: event.call && event.call.id, name: event.name, args: event.args || {}, event, done: false, result: null });
 }
@@ -548,7 +615,7 @@ function flushExploration() {
   const failed = (item) => !item.done || (item.result && item.result.error);
   const ok = items.filter((item) => !failed(item));
   const single = (item) => {
-    stdout.write('\n' + describeTool(item.event, { color: true }) + '\n');
+    stdout.write('\n' + describeTool(item.event, { color: true, columns: stdout.columns || 0 }) + '\n');
     if (!item.done) return;
     const summary = describeToolResult(item.name, item.result, { color: true });
     if (summary) stdout.write(summary + '\n');
@@ -564,7 +631,13 @@ function streamDelta(accumulated) {
   // An empty update means the stream restarted; onStreamRestart ends the line.
   if (!text) return;
   if (richOutput()) {
-    if (!markdownStream) markdownStream = new MarkdownStream({ write: (chunk) => stdout.write(chunk), color: true, columns: () => stdout.columns || 80, prefix: '\x1b[38;2;251;191;36m●\x1b[39m ' });
+    const live = liveTurn;
+    if (!markdownStream) markdownStream = new MarkdownStream({ write: (chunk) => stdout.write(chunk), color: true, columns: () => stdout.columns || 80, prefix: '\x1b[38;2;251;191;36m●\x1b[39m ', ...(live ? { onPartial: (rows) => { if (liveTurn) liveTurn.region.set('partial', rows); } } : {}) });
+    if (live) {
+      const fresh = text.startsWith(streamedSoFar) ? text.length - streamedSoFar.length : text.length;
+      live.status.addTokens(fresh);
+      if (live.status.info.phase !== 'responding') live.status.update({ phase: 'responding', label: null, restart: true });
+    }
     if (text.startsWith(streamedSoFar)) markdownStream.push(text.slice(streamedSoFar.length));
     streamedSoFar = text || ' ';
     return;
@@ -1408,6 +1481,7 @@ async function runPrompt(prompt, root, autoApprove, session = null, persistence 
   let todosDone = completedTodoCount(session && session.todos);
   rateLimitWaitsThisTurn = 0;
   turnKeys = startTurnKeys(onInterrupt, (text) => !controller.signal.aborted && !modeOptions.fork && steerSession(session, text));
+  beginLiveTurn(session);
   try {
     const fork = modeOptions.fork;
     const runner = fork ? (s, p, o) => runForkedTurn(s, p, { ...o, agent: fork.agent, label: fork.label, env: process.env }) : modeOptions.planOnly ? runAgentPlan : runAgentTurn;
@@ -1425,6 +1499,7 @@ async function runPrompt(prompt, root, autoApprove, session = null, persistence 
       onMemoryRecall: (ids) => stdout.write('[memory] Recalled ' + ids.join(', ') + '\n'),
       onSteer: (info) => { endStream(); stdout.write((colorEnabled(stdout) ? '\x1b[2m' : '') + '  ↳ Oasis read your ' + (info.delivered === 1 ? 'message' : info.delivered + ' messages') + ' and is adjusting' + (colorEnabled(stdout) ? '\x1b[22m' : '') + '\n'); },
       ...(stdout.isTTY ? { onModelWait } : {}),
+      ...(liveTurn ? { onReasoning: liveReasoning, onToolDraft: liveToolDraft } : {}),
       onProviderRetry: (event) => { stopWaitIndicator(); const dim = colorEnabled(process.stderr); process.stderr.write((dim ? '\x1b[2m' : '') + '  ⎿ Provider ' + (event.status ? 'error ' + event.status : 'connection failed') + (event.reason && event.status ? ' (' + event.reason + ')' : '') + ' · retrying in ' + formatWait(event.waitMs) + ' (' + event.attempt + '/' + event.limit + ')' + (dim ? '\x1b[22m' : '') + '\n'); },
       onRateLimitWait: (event) => onRateLimitWait(event),
       approval: (message, forceInteractive = false, meta = {}) => approve(message, forceInteractive, autoApprove, meta),
@@ -1438,7 +1513,8 @@ async function runPrompt(prompt, root, autoApprove, session = null, persistence 
       } } : {}),
       onToolStart: (event) => {
         if (richOutput() && !verboseEnabled(session) && event && !event.subagent && EXPLORE_TOOLS.has(event.name)) { holdExploration(event); return; }
-        endStream(); lastToolHeader = event && event.call ? event.call.id : null; stdout.write('\n' + (richOutput() ? describeTool(event, { color: true }) : describeToolStart(event)) + '\n'); },
+        endStream(); if (liveTurn && event && !event.subagent) liveTurn.status.update({ phase: 'tool', label: presentToolActivity(event.name, event.args || {}), restart: true });
+        lastToolHeader = event && event.call ? event.call.id : null; stdout.write('\n' + (richOutput() ? describeTool(event, { color: true, columns: stdout.columns || 0 }) : describeToolStart(event)) + '\n'); },
       onAutoMode: (event) => { endStream(); stdout.write('[auto] ' + (event.decision === 'allow' ? 'Allowed' : event.decision === 'block' ? 'Blocked' : 'Asking you about') + ' ' + event.tool + (event.reason ? ': ' + event.reason : '') + '\n'); },
       onUsage: (usage) => recordUsage(USAGE, usage),
       onVerificationGate: (gate) => { endStream(); const dim = colorEnabled(stdout); stdout.write((dim ? '\x1b[2m' : '') + '  ⎿ Not finished yet: ' + gate.steps.join(', ') + (dim ? '\x1b[22m' : '') + '\n'); },
@@ -1455,6 +1531,7 @@ async function runPrompt(prompt, root, autoApprove, session = null, persistence 
       onToolResult: ({ name, result, call }) => {
         stopToolStatus(call);
         lastToolResult = { name, result };
+        if (liveTurn) { liveTurn.status.update({ phase: 'working', label: null, output: '', ...(name === 'todo_write' && result && Array.isArray(result.todos) ? { todos: activeTodos(result.todos) } : {}) }); }
         if (persistence.enabled) saveMidTurn(session);
         if (exploredResult(call, result)) return;
         if (name === 'todo_write' && result && !result.error) { const done = completedTodoCount(Array.isArray(result.todos) ? result.todos : session.todos); if (done > todosDone) playSound('task', { stream: stdout }); todosDone = done; }
@@ -1493,7 +1570,7 @@ async function runPrompt(prompt, root, autoApprove, session = null, persistence 
         if (richOutput()) { const md = new MarkdownStream({ write: (chunk) => stdout.write(chunk), color: true, columns: () => stdout.columns || 80, prefix: '\x1b[38;2;251;191;36m●\x1b[39m ' }); md.push(String(text)); md.end(); }
         else stdout.write('\nOasis> ' + text + '\n');
       }
-    }).finally(() => { flushExploration(); if (granted >= 0) session.permissions.sessionAllow.length = granted; });
+    }).finally(() => { flushExploration(); endText(); endLiveTurn(); if (granted >= 0) session.permissions.sessionAllow.length = granted; });
     USAGE.turns += 1;
     if (result.modelRouting && result.modelRouting.enabled) {
       const taskUsage = result.taskUsage || {};
@@ -1581,6 +1658,7 @@ async function runPrompt(prompt, root, autoApprove, session = null, persistence 
       haltAutoContinue(error);
     }
   } finally {
+    endLiveTurn();
     stopWaitIndicator();
     terminalProgress().set(turnFailed ? 'error' : 'clear');
     process.removeListener('SIGINT', onInterrupt);
