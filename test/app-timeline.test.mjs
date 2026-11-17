@@ -45,6 +45,7 @@ test('a finished group sums up its steps; a live group names the running step', 
   ];
   assert.equal(groupTitle(steps), 'Read a.mjs and b.mjs, edited a.mjs and ran the tests');
   assert.equal(groupTitle([...steps.slice(0, 2), { id: '6', name: 'read_file', args: { path: 'c.mjs' }, ok: true }]), 'Read 3 files');
+  assert.equal(groupTitle([steps[0], { id: '7', name: 'list_files', args: { path: 'test' }, ok: true }]), 'Read 2 files');
   assert.equal(groupTitle([{ id: 't', name: 'task', args: { subagent_type: 'explore' }, ok: true }, steps[0]]), 'Ran the explore agent and read a.mjs');
   assert.deepEqual(groupStats(steps), { total: 5, failed: 1, declined: 0, blocked: 0, stopped: 0, running: 0, durationMs: 12600 });
   assert.equal(groupTitle([steps[0]]), 'Read a.mjs');

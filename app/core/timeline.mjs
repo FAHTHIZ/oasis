@@ -278,7 +278,8 @@ export function groupTitle(steps = []) {
     const n = distinct(worked);
     // Two files are named, not counted ("read a.mjs and b.mjs"): a count
     // hides exactly what people look for in folded work.
-    const names = n === 2 && (kind === 'read' || kind === 'edit') ? [...new Set(worked.flatMap((step) => stepFiles(step)))].filter((name) => !worked.some((step) => step.id === name)) : [];
+    const fileTools = ['read_file', 'edit_file', 'multi_edit', 'write_file', 'notebook_edit', 'apply_patch'];
+    const names = n === 2 && (kind === 'read' || kind === 'edit') && worked.every((step) => fileTools.includes(step.name)) ? [...new Set(worked.flatMap((step) => stepFiles(step)))].filter((name) => !worked.some((step) => step.id === name)) : [];
     if (names.length === 2) { parts.push((kind === 'read' ? 'read ' : 'edited ') + names[0] + ' and ' + names[1]); continue; }
     parts.push(n === 1 ? lower(activityLabel(worked[0])) : KIND_PHRASES[kind](n));
   }

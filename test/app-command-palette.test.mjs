@@ -50,12 +50,13 @@ test('keyboard guide documents only shortcuts wired by the browser workspace', (
   assert.ok(keys.includes('MOD+B'));
   assert.ok(keys.includes('MOD+Shift+A'));
   // Each global chord in the guide has its tinykeys binding in main.mjs.
-  const bindings = { 'MOD+K': '$mod+KeyK', 'MOD+/': '$mod+[Shift]+Slash', 'Ctrl+`': 'Control+Backquote', 'MOD+B': '$mod+KeyB', 'MOD+Shift+A': '$mod+Shift+KeyA', '?': '[Shift]+?' };
+  const bindings = { 'MOD+K': '$mod+KeyK', 'MOD+/': '$mod+[Shift]+Slash', 'Ctrl+`': 'Control+Backquote', 'MOD+B': '$mod+KeyB', 'MOD+Shift+A': '$mod+Shift+KeyA', 'MOD+O': '$mod+KeyO', '?': '[Shift]+?' };
   for (const [guide, binding] of Object.entries(bindings)) {
     if (keys.includes(guide)) assert.ok(main.includes("'" + binding + "':"), guide + ' is wired as ' + binding);
   }
   assert.ok(main.includes("from 'tinykeys'"));
   assert.ok(keys.includes('[ / ]'));
   assert.ok(main.includes("$('editorSheet').addEventListener('keydown'"), '[ and ] are wired in the file viewer');
-  assert.equal(APP_KEYBOARD_SHORTCUTS.length, 16);
+  assert.ok(keys.includes('MOD+O'));
+  assert.equal(APP_KEYBOARD_SHORTCUTS.length, 17);
 });
