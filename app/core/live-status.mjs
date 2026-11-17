@@ -207,3 +207,17 @@ export function runSummary(tools = []) {
   parts[0] = parts[0][0].toUpperCase() + parts[0].slice(1);
   return parts.join(' · ');
 }
+
+// Work beside the main loop, as Codex and Cursor show it: subagents still
+// running, any parked on an approval, and messages queued behind the run.
+export function sideWork({ workers = [], queued = 0 } = {}) {
+  const out = [];
+  const list = Array.isArray(workers) ? workers : [];
+  const running = list.filter((worker) => worker && (worker.status === 'running' || worker.status === 'stopping')).length;
+  if (running) out.push(plural(running, 'agent') + ' running');
+  const parked = list.filter((worker) => worker && worker.waitingApproval).length;
+  if (parked) out.push(parked + ' waiting for approval');
+  const waiting = Math.max(0, Number(queued) || 0);
+  if (waiting) out.push(plural(waiting, 'message') + ' queued');
+  return out;
+}
