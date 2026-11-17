@@ -7,6 +7,8 @@
 // is pure (no DOM), so it is shared by the live view and by restored chats,
 // and it is unit tested in Node.
 
+import { commandIntent, commandActivityLabel } from './command-intent.mjs';
+
 const SHELL = new Set(['run_command', 'run_shell', 'powershell', 'auto_test', 'bash', 'shell', 'command_output', 'kill_command', 'list_background']);
 const READ = new Set(['read_file', 'read_notebook', 'notebook_read', 'list_files', 'list_directory', 'view_image']);
 const EDIT = new Set(['write_file', 'edit_file', 'multi_edit', 'notebook_edit', 'apply_patch', 'delete_file', 'move_file', 'rename_file']);
@@ -84,7 +86,11 @@ export function activityLabel(tool = {}) {
   const name = String(tool.name || '').toLowerCase();
   const args = tool.args || {};
   const file = baseName(args);
-  if (['run_command', 'run_shell', 'powershell', 'auto_test', 'bash', 'shell'].includes(name)) return isTestCommand(commandOf(args)) ? 'Ran the tests' : 'Ran a command';
+  if (['run_command', 'run_shell', 'powershell', 'auto_test', 'bash', 'shell'].includes(name)) {
+    const command = commandOf(args);
+    if (isTestCommand(command)) return 'Ran the tests';
+    return commandActivityLabel(commandIntent(command)) || 'Ran a command';
+  }
   if (name === 'read_file') return file ? 'Read ' + file : 'Read a file';
   if (name === 'list_files') return 'Listed project files';
   if (name === 'write_file') return file ? 'Wrote ' + file : 'Wrote a file';
@@ -122,6 +128,8 @@ export function liveLabel(tool = {}) {
   if (['run_command', 'run_shell', 'powershell', 'auto_test', 'bash', 'shell'].includes(name)) {
     const command = commandOf(args);
     if (isTestCommand(command)) return 'Running the tests';
+    const looking = commandActivityLabel(commandIntent(command), { live: true });
+    if (looking) return looking;
     return command ? 'Running ' + (command.length > 60 ? command.slice(0, 57) + '…' : command) : 'Running a command';
   }
   if (name === 'read_file') return file ? 'Reading ' + file : 'Reading a file';
@@ -208,6 +216,29 @@ function failingPhrase(label) {
 // file and ran the tests"), at most three kinds and then "and N more".
 // Steps that did not run (declined, blocked, stopped) are never counted as
 // work done; groupStats counts them for the header instead.
+// The kind of work for a group title: a shell command that only reads or
+// searches counts with the reads and searches ("Read 3 files", not "Ran 3
+// commands"); the tests are their own kind.
+function shellIntent(step) {
+  if (toolKind(step.name) !== 'shell' || !SHELL_RUNS.has(String(step.name || '').toLowerCase())) return null;
+  return commandIntent(commandOf(step.args || {}));
+}
+const SHELL_RUNS = new Set(['run_command', 'run_shell', 'powershell', 'auto_test', 'bash', 'shell']);
+function stepWorkKind(step) {
+  const kind = toolKind(step.name);
+  if (kind !== 'shell') return kind;
+  if (isTestCommand(commandOf(step.args || {}))) return 'tests';
+  const intent = shellIntent(step);
+  if (intent && intent.kind === 'read') return 'read';
+  if (intent && (intent.kind === 'search' || intent.kind === 'list')) return 'search';
+  return 'shell';
+}
+function stepFiles(step) {
+  const intent = shellIntent(step);
+  if (intent && intent.kind === 'read' && intent.targets.length) return intent.targets.map((target) => target.replace(/^\.\//, ''));
+  return [baseName(step.args) || step.id];
+}
+
 export function groupTitle(steps = []) {
   if (!steps.length) return 'Working';
   const running = steps.find((step) => step.ok === undefined);
@@ -218,7 +249,7 @@ export function groupTitle(steps = []) {
   // Kinds in the order the work happened; a kind done once is named exactly.
   const byKind = new Map();
   for (const step of ran) {
-    const kind = toolKind(step.name) === 'shell' && activityLabel(step) === 'Ran the tests' ? 'tests' : toolKind(step.name);
+    const kind = stepWorkKind(step);
     if (!byKind.has(kind)) byKind.set(kind, []);
     byKind.get(kind).push(step);
   }
@@ -227,7 +258,7 @@ export function groupTitle(steps = []) {
   for (const [kind, list] of byKind) {
     if (kind === 'tests') { parts.push(list.length === 1 ? 'ran the tests' : 'ran the tests ' + list.length + ' times'); continue; }
     // Files touched: count distinct paths, so three edits to one file read as one.
-    const distinct = (steps) => kind === 'read' || kind === 'edit' ? new Set(steps.map((step) => baseName(step.args) || step.id)).size : steps.length;
+    const distinct = (steps) => kind === 'read' || kind === 'edit' ? new Set(steps.flatMap((step) => stepFiles(step))).size : steps.length;
     // Only work that worked is claimed; a kind where every step failed says so
     // ("couldn't edit 2 files"), never "edited 2 files" under a red cross.
     const worked = list.filter((step) => step.ok !== false);
