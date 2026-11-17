@@ -90,7 +90,7 @@ function renderBadge(trace) {
 
 // The bar over the chat: which task this is, what it is doing now and what
 // the latest message has done so far. Its summary opens the full timeline.
-const BAR_WORDS = { running: 'Working', done: 'Done', issues: 'Done, with failures', error: 'Error', stopped: 'Stopped' };
+const BAR_WORDS = { running: 'Working', done: 'Done', issues: 'Done', error: 'Error', stopped: 'Stopped' };
 function renderTaskBar(trace) {
   const bar = $('taskBar');
   if (!bar) return;
@@ -100,7 +100,9 @@ function renderTaskBar(trace) {
   const title = state.deps.title();
   if ($('taskTitle').textContent !== title) { $('taskTitle').textContent = title; $('taskTitle').title = title; }
   const waiting = last.status === 'running' && last.steps.some((step) => step.outcome === 'running' && step.tool.waiting);
-  const status = waiting ? 'waiting' : last.status;
+  // A step that failed along the way (a probe, a test run before the fix) is
+  // normal agent work: the meta says "1 failed", the state still says Done.
+  const status = waiting ? 'waiting' : last.status === 'issues' ? 'done' : last.status;
   bar.dataset.status = status;
   // While it runs the bar just says Working: what is happening right now is
   // already in the feed and in the status line over the message box, and a
