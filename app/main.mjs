@@ -6,7 +6,7 @@ import { alwaysAllowLabel } from './core/approval-rule.mjs';
 import { SUBAGENT_STATUS_TEXT } from './core/subagents.mjs';
 import { createConnectorCard, connectIntent, splitServices, brandMark } from './core/connector-card.mjs';
 import { createSoundPlayer, soundAllowed } from './core/sound.mjs';
-import { liveStatus, modelRequest, waitingLabel, thoughtMs, runSummary, reasoningHeadline } from './core/live-status.mjs';
+import { sideWork, liveStatus, modelRequest, waitingLabel, thoughtMs, runSummary, reasoningHeadline } from './core/live-status.mjs';
 import { readableOutput, repeatsEarlierReply, stepOutcome, stepRan, stepLabel, summarizeArgs, toolKind, groupTitle, groupStats, formatDuration, thinkingLabel, thoughtLabel, splitTextToolCall, elapsedSince, describeInput, buildTimeline, groupTiming, runElapsed, timingSplit } from './core/timeline.mjs';
 import { IndexedDBStore, Workspace, lineDiff } from './core/workspace.mjs';
 import { wordHighlights } from '../src/word-diff.mjs';
@@ -1947,7 +1947,8 @@ const liveModel = {
   turn: { outChars: 0, streamMs: 0 },
   drafts: new Map(),
   resuming: false,
-  reset() { this.resuming = false; this.request = null; this.turn = { outChars: 0, streamMs: 0 }; this.drafts.clear(); },
+  workers: [],
+  reset() { this.resuming = false; this.workers = []; this.request = null; this.turn = { outChars: 0, streamMs: 0 }; this.drafts.clear(); },
   // Characters of output arrived (reply, reasoning or a drafted tool call).
   output(chars) {
     const n = Math.max(0, Number(chars) || 0);
@@ -2041,7 +2042,10 @@ const runClock = {
     if (label.textContent !== status.label) label.textContent = status.label;
     let meta = el.querySelector('.run-status-meta');
     if (!meta) { meta = document.createElement('span'); meta.className = 'run-status-meta'; el.appendChild(meta); }
-    const tail = ' · ' + [...status.meta, 'Esc to stop'].join(' · ');
+    // Work beside the main loop, as Codex and Cursor show it: subagents still
+    // running (and any parked on an approval) and messages queued behind it.
+    const extra = sideWork({ workers: liveModel.workers, queued: pendingInputs.items.filter((item) => item.kind !== 'steer').length });
+    const tail = ' · ' + [...status.meta, ...extra, 'Esc to stop'].join(' · ');
     if (meta.textContent !== tail) meta.textContent = tail;
     el.classList.toggle('waiting', waiting);
     el.classList.toggle('stalled', Boolean(status.stalled) && !waiting);
@@ -2177,6 +2181,7 @@ const pendingInputs = {
     this.render();
   },
   render() {
+    if (runClock.startedAt) queueMicrotask(() => runClock.tick());
     const box = $('pendingInputs');
     if (!box) return;
     const LABELS = { steer: 'Read at the next step', queued: 'Sends when this finishes', interrupt: 'Sends once stopped' };
@@ -2455,6 +2460,8 @@ function handleRunEvent(event) {
       const owner = group.taskEntry || (currentTurn && currentTurn.entry);
       if (owner) owner.subagents = event.workers;
       renderSubagents(group, event.workers);
+      liveModel.workers = Array.isArray(event.workers) ? event.workers : [];
+      runClock.tick();
       break;
     }
     case 'todos': renderTodos(event.todos); break;

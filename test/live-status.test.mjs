@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { liveStatus, modelRequest, waitingLabel, promptProgressText, thoughtMs, formatTokens, outputRate } from '../app/core/live-status.mjs';
+import { sideWork, liveStatus, modelRequest, waitingLabel, promptProgressText, thoughtMs, formatTokens, outputRate } from '../app/core/live-status.mjs';
 
 test('formatTokens is short', () => {
   assert.equal(formatTokens(812), '812');
@@ -132,4 +132,11 @@ test('a request that carries on a cut-off reply, or retries, says so', () => {
   const retrying = liveStatus({ phase: 'waiting', request: limited }, now);
   assert.equal(retrying.label, 'Retrying');
   assert.ok(retrying.meta.includes('attempt 2'));
+});
+
+test('side work names running agents, parked approvals and queued messages', () => {
+  assert.deepEqual(sideWork({}), []);
+  const workers = [{ status: 'running' }, { status: 'stopping' }, { status: 'completed', waitingApproval: true }];
+  assert.deepEqual(sideWork({ workers, queued: 1 }), ['2 agents running', '1 waiting for approval', '1 message queued']);
+  assert.deepEqual(sideWork({ workers: [{ status: 'running' }], queued: 3 }), ['1 agent running', '3 messages queued']);
 });
