@@ -6,7 +6,7 @@ import { alwaysAllowLabel } from './core/approval-rule.mjs';
 import { SUBAGENT_STATUS_TEXT } from './core/subagents.mjs';
 import { createConnectorCard, connectIntent, splitServices, brandMark } from './core/connector-card.mjs';
 import { createSoundPlayer, soundAllowed } from './core/sound.mjs';
-import { liveStatus, modelRequest, waitingLabel, thoughtMs, runSummary } from './core/live-status.mjs';
+import { liveStatus, modelRequest, waitingLabel, thoughtMs, runSummary, reasoningHeadline } from './core/live-status.mjs';
 import { readableOutput, repeatsEarlierReply, stepOutcome, stepRan, stepLabel, summarizeArgs, toolKind, groupTitle, groupStats, formatDuration, thinkingLabel, thoughtLabel, splitTextToolCall, elapsedSince, describeInput, buildTimeline, groupTiming, runElapsed, timingSplit } from './core/timeline.mjs';
 import { IndexedDBStore, Workspace, lineDiff } from './core/workspace.mjs';
 import { wordHighlights } from '../src/word-diff.mjs';
@@ -1983,6 +1983,7 @@ const runClock = {
     const tail = ' · ' + [...status.meta, 'Esc to stop'].join(' · ');
     if (meta.textContent !== tail) meta.textContent = tail;
     el.classList.toggle('waiting', waiting);
+    el.classList.toggle('stalled', Boolean(status.stalled) && !waiting);
     if (el.classList.contains('resting')) { el.classList.remove('resting'); el.removeAttribute('aria-hidden'); }
     if (el.hidden) el.hidden = false;
   },
@@ -2188,7 +2189,14 @@ function handleRunEvent(event) {
     case 'reasoning':
       liveModel.output(String(event.delta || '').length);
       addReasoning(event.delta, event.reset);
-      if (nowLabel !== 'Thinking') setNow('Thinking');
+      {
+        // The reasoning's latest bold title says what it is about now
+        // ("Planning the edit"), as Codex shows it; otherwise "Thinking".
+        const block = liveThinking();
+        const headline = reasoningHeadline(block && block._text);
+        const next = headline || 'Thinking';
+        if (nowLabel !== next) setNow(next);
+      }
       break;
     case 'tool_draft': {
       const index = Number(event.index) || 0;
