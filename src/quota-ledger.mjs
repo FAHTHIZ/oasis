@@ -267,7 +267,8 @@ export function resetLedger(env = process.env, match = '') {
 }
 
 function ago(ms) {
-  return ms < MINUTE ? Math.round(ms / 1000) + 's ago' : ms < 60 * MINUTE ? Math.round(ms / MINUTE) + ' min ago' : Math.round(ms / (60 * MINUTE)) + ' h ago';
+  // Rounded down, so 59.6 seconds is "59s ago", not "60s ago".
+  return ms < MINUTE ? Math.floor(ms / 1000) + 's ago' : ms < 60 * MINUTE ? Math.floor(ms / MINUTE) + ' min ago' : Math.floor(ms / (60 * MINUTE)) + ' h ago';
 }
 
 /** Human-readable report for `oasis quota`. */
