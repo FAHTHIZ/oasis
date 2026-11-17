@@ -490,7 +490,7 @@ export function readableOutput(content) {
     return rest && rest.includes(error.slice(0, 60)) ? rest : (error + (rest ? '\n' + rest : ''));
   }
   // A file read: its text, not the JSON envelope around it.
-  if (typeof value.content === 'string' && typeof value.path === 'string' && Object.keys(value).every((key) => ['path', 'content', 'truncated', 'lines', 'totalLines', 'offset', 'limit', 'size', 'encoding'].includes(key))) {
+  if (typeof value.content === 'string' && typeof value.path === 'string' && Object.keys(value).every((key) => ['path', 'content', 'truncated', 'lines', 'totalLines', 'startLine', 'endLine', 'note', 'offset', 'limit', 'size', 'encoding'].includes(key))) {
     return value.content + (value.truncated ? '\n… (cut short)' : '') + (rest ? '\n' + rest : '');
   }
   // Search matches: one "path:line  text" row each, as grep prints them.
@@ -523,6 +523,82 @@ export function readableOutput(content) {
     return parts.join('\n') || (value.exitCode === 0 ? 'Finished with no output.' : text);
   }
   return text;
+}
+
+// One quiet line under a finished step saying what came back, the way
+// Claude Code writes "⎿ Read 48 lines" under a tool call: "Read lines
+// 1–200 of 1,204", "3 matches in 2 files", "12 passed · 1 failed",
+// "Exit code 2". Empty when the row already says it all (or it is running).
+// Returns { text, tone } where tone is '' or 'fail'.
+const plural = (count, word, many = word + 's') => count.toLocaleString('en-US') + ' ' + (count === 1 ? word : many);
+export function testSummary(text) {
+  const out = String(text || '');
+  let passed, failed, skipped;
+  const last = (pattern) => { let found; for (const match of out.matchAll(pattern)) found = match; return found ? Number(found[1]) : undefined; };
+  passed = last(/^# pass (\d+)$/gm);
+  failed = last(/^# fail (\d+)$/gm);
+  if (passed === undefined) passed = last(/\b(\d+) (?:tests? )?(?:passed|passing)\b/gi);
+  if (failed === undefined) failed = last(/\b(\d+) (?:tests? )?(?:failed|failing)\b/gi);
+  skipped = last(/\b(\d+) (?:skipped|pending)\b/gi);
+  if (passed === undefined && failed === undefined) return '';
+  const parts = [];
+  if (passed !== undefined) parts.push(passed.toLocaleString('en-US') + ' passed');
+  if (failed) parts.push(failed.toLocaleString('en-US') + ' failed');
+  if (skipped) parts.push(skipped.toLocaleString('en-US') + ' skipped');
+  return parts.join(' · ');
+}
+export function stepResult(step = {}) {
+  if (!step || step.ok === undefined) return { text: '', tone: '' };
+  const text = String(step.content || '');
+  const newline = text.indexOf('\n');
+  const first = newline === -1 ? text : text.slice(0, newline);
+  let value = null;
+  if (first.startsWith('{"')) { try { value = JSON.parse(first); } catch { value = null; } }
+  const none = { text: '', tone: '' };
+  if (value && typeof value === 'object' && !Array.isArray(value)) {
+    if (typeof value.error === 'string' && value.error) {
+      const line = value.error.split('\n').find((row) => row.trim()) || '';
+      return { text: line.length > 140 ? line.slice(0, 139) + '…' : line, tone: 'fail' };
+    }
+    if (typeof value.content === 'string' && typeof value.path === 'string' && !('exitCode' in value)) {
+      const count = value.content ? value.content.split('\n').length : 0;
+      const total = Number(value.totalLines);
+      if (Number.isInteger(value.startLine) && Number.isInteger(value.endLine) && Number.isInteger(total) && (value.startLine > 1 || value.endLine < total)) {
+        return { text: 'Read lines ' + value.startLine.toLocaleString('en-US') + '–' + value.endLine.toLocaleString('en-US') + ' of ' + total.toLocaleString('en-US'), tone: '' };
+      }
+      return { text: count ? 'Read ' + plural(count, 'line') : 'The file is empty', tone: '' };
+    }
+    if (Array.isArray(value.matches)) {
+      if (!value.matches.length) return { text: 'No matches', tone: '' };
+      const files = new Set(value.matches.map((match) => match && match.path).filter(Boolean)).size;
+      const count = plural(value.matches.length, 'match', 'matches') + (value.truncated ? '+' : '');
+      return { text: files > 1 ? count + ' in ' + plural(files, 'file') : count, tone: '' };
+    }
+    if (Array.isArray(value.files)) return { text: value.files.length ? plural(value.files.length, 'file') + (value.truncated ? '+' : '') : 'No files', tone: '' };
+    if (Array.isArray(value.todos)) return none;
+    if ('exitCode' in value && ('stdout' in value || 'stderr' in value)) {
+      const output = String(value.stdout || '') + '\n' + String(value.stderr || '');
+      const tests = testSummary(output);
+      const failed = value.exitCode !== 0 && value.exitCode !== null && value.exitCode !== undefined;
+      if (value.movedToBackground) return { text: 'Still running in the background', tone: '' };
+      if (value.timedOut) return { text: 'Timed out', tone: 'fail' };
+      if (value.cancelled) return { text: 'Stopped', tone: 'fail' };
+      if (tests) return { text: tests + (failed ? ' · exit code ' + value.exitCode : ''), tone: failed || / failed/.test(tests) ? 'fail' : '' };
+      if (failed) {
+        const lines = String(value.stderr || value.stdout || '').split('\n').map((row) => row.trim()).filter(Boolean);
+        const why = lines.find((row) => /error|not found|cannot|denied|no such|fail/i.test(row)) || lines[lines.length - 1] || '';
+        const short = why.length > 110 ? why.slice(0, 109) + '…' : why;
+        return { text: 'Exit code ' + value.exitCode + (short ? ' · ' + short : ''), tone: 'fail' };
+      }
+      const rows = String(value.stdout || '').replace(/\s+$/, '');
+      return { text: rows ? plural(rows.split('\n').length, 'line') + ' of output' : 'No output', tone: '' };
+    }
+  }
+  if (step.ok === false && text.trim()) {
+    const line = text.split('\n').find((row) => row.trim()) || '';
+    return { text: line.length > 140 ? line.slice(0, 139) + '…' : line.trim(), tone: 'fail' };
+  }
+  return none;
 }
 
 // True when a reply repeats, word for word, an earlier reply of the same
