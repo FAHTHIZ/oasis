@@ -535,8 +535,10 @@ export class RuntimeAgent {
           case 'model_wait':
             if (data.phase === 'start') {
               const at = Date.parse(event.at || '');
-              this.emit('model_start', { step: Number(data.step) || 1, ...(Number.isFinite(at) && live ? { startedAt: at - (this.clockSkew || 0) } : {}) });
+              this.emit('model_start', { step: Number(data.step) || 1, ...(Number.isFinite(at) && live ? { startedAt: at - (this.clockSkew || 0) } : {}), ...(Number(data.inputTokens) > 0 ? { inputTokens: Number(data.inputTokens) } : {}), ...(data.model ? { model: String(data.model) } : {}), ...(data.local ? { local: true } : {}) });
             } else if (data.phase === 'end') this.emit('model_end', { step: Number(data.step) || 1 });
+            // How much of the prompt a local server has read (llama.cpp).
+            else if (data.phase === 'progress' && data.promptProgress && live) this.emit('model_progress', { step: Number(data.step) || 1, promptProgress: data.promptProgress });
             break;
           case 'reasoning_delta':
             if (!data.text) break;
