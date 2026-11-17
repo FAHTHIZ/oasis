@@ -1916,7 +1916,7 @@ function clearDraftRow() {
 // Between runs the clock line keeps its height, invisible: removing it would
 // make the message box shorter and shift the whole chat at the end of every
 // run (the largest layout shift left on the page).
-function rest(el) {
+function restStatus(el) {
   if (!el || el.hidden || el.classList.contains('resting')) return;
   el.classList.add('resting');
   el.setAttribute('aria-hidden', 'true');
@@ -1939,7 +1939,7 @@ const runClock = {
   tick() {
     const el = $('runStatus');
     if (!el) return;
-    if (!document.body.classList.contains('busy') || !this.startedAt) { rest(el); return; }
+    if (!document.body.classList.contains('busy') || !this.startedAt) { restStatus(el); return; }
     const waiting = !$('approvalSheet').hidden;
     const now = Date.now();
     // Nothing running, nothing streaming for a moment: show Thinking, so the
@@ -1951,8 +1951,8 @@ const runClock = {
     if (label.textContent !== status.label) label.textContent = status.label;
     let meta = el.querySelector('.run-status-meta');
     if (!meta) { meta = document.createElement('span'); meta.className = 'run-status-meta'; el.appendChild(meta); }
-    const rest = ' · ' + [...status.meta, 'Esc to stop'].join(' · ');
-    if (meta.textContent !== rest) meta.textContent = rest;
+    const tail = ' · ' + [...status.meta, 'Esc to stop'].join(' · ');
+    if (meta.textContent !== tail) meta.textContent = tail;
     el.classList.toggle('waiting', waiting);
     if (el.classList.contains('resting')) { el.classList.remove('resting'); el.removeAttribute('aria-hidden'); }
     if (el.hidden) el.hidden = false;
@@ -1962,7 +1962,7 @@ const runClock = {
     this.timer = 0;
     const ms = this.worked();
     this.startedAt = 0;
-    rest($('runStatus'));
+    restStatus($('runStatus'));
     return ms;
   }
 };
