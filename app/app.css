@@ -197,8 +197,9 @@ svg.icon.i-stop{fill:currentColor}
 .steps-body{margin:0 0 6px var(--rail-x);padding:2px 0 2px 12px;border-left:1px solid var(--line-strong)}
 .steps.running>.steps-body{border-left-color:color-mix(in srgb,var(--accent) 35%,var(--line-strong))}
 .steps.single .step-list>.tool>details>summary{display:none}
-.steps.single:not(:has(.tool>details[open]))>.steps-body{display:none}
-.steps.single:not(:has(.tool>details[open]))>.steps-head .chevron{transform:none}
+.steps.single:not(:has(.tool>details[open])):not(:has(.step-diff:not([hidden])))>.steps-body{display:none}
+.steps.single:not(:has(.tool>details[open]))>.steps-body{padding-top:0}
+.steps.single:not(:has(.tool>details[open])):not(:has(.step-diff:not([hidden])))>.steps-head .chevron{transform:none}
 .steps.single .step-list>.tool>details>.inspect{margin:4px 0 6px}
 .steps-timing{padding:4px 4px 0;color:var(--faint);font-size:11.5px;font-variant-numeric:tabular-nums}
 .step-list{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:0;position:relative}
@@ -229,6 +230,10 @@ svg.icon.i-stop{fill:currentColor}
 .step-result::before{content:"";position:absolute;left:2px;top:-1px;width:8px;height:8px;border-left:1px solid var(--line-strong);border-bottom:1px solid var(--line-strong);border-bottom-left-radius:3px}
 .step-result.fail{color:color-mix(in srgb,var(--danger) 85%,var(--muted))}
 .tool>details[open]~.step-result,.steps.single .step-result{display:none}
+.step-diff{margin:2px 8px 6px 30px;padding:4px 0;max-height:none;border:1px solid var(--line);border-radius:8px;font-size:11.5px;line-height:1.5;overflow:hidden;flex:none}
+.step-diff div{padding:0 10px;white-space:pre;overflow:hidden;text-overflow:ellipsis}
+.step-diff .note{color:var(--faint);font-family:var(--sans,inherit);font-size:11px;padding:1px 10px;white-space:nowrap}
+.tool>details[open]~.step-diff{display:none}
 .step-sources{display:flex;flex-wrap:wrap;gap:6px;padding:2px 0 8px 52px}
 .source-chip{display:inline-flex;align-items:center;gap:6px;max-width:200px;padding:3px 9px 3px 4px;border:1px solid var(--line);border-radius:999px;font-size:12px;color:var(--muted);text-decoration:none;background:var(--panel,transparent);transition:border-color .15s,color .15s}
 .source-chip:hover,.source-chip:focus-visible{color:var(--text);border-color:var(--accent-line,var(--line))}
@@ -1048,3 +1053,7 @@ html.lite .topbar{backdrop-filter:none;-webkit-backdrop-filter:none;background:v
 .lite .shimmer,.lite .steps.running .steps-title,.lite .run-status .run-status-text{animation:none;color:var(--muted);background:none}
 @media (prefers-reduced-motion:reduce){.steps.running .steps-orb::before{animation-duration:2.4s}.thinking-orb::before,.tool.running .kind-icon,.steps.waiting .steps-orb::after{animation:none}.thinking.live .thinking-label{animation:none;color:var(--muted);background:none}}
 .lite .thinking.live .thinking-label{animation:none;color:var(--muted);background:none}
+/* A group running its only step: the header already says what it does, so
+   the row under it would repeat the words; only its live output shows. */
+.steps.running .step-list>.tool:only-child>details:not([open])>summary{display:none}
+.steps.running:has(.step-list>.tool:only-child):not(:has(details[open])):not(:has(.step-tail:not([hidden]))):not(:has(.step-ask))>.steps-body{display:none}

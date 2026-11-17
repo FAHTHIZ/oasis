@@ -280,3 +280,19 @@ test('a finished step says what came back in one line, as Claude Code does', asy
   // A ranged read shows the file text in the inspector, not its JSON envelope.
   assert.equal(readableOutput(JSON.stringify({ path: 'a.js', content: 'x\ny', startLine: 1, endLine: 2, totalLines: 2, truncated: false })), 'x\ny');
 });
+
+test('an edit previews its change inline: changed lines with one line of context', async () => {
+  const { diffPreview, stepResult } = await import('../app/core/timeline.mjs');
+  const ops = [
+    { type: 'same', text: 'a' }, { type: 'same', text: 'b' }, { type: 'del', text: 'c' }, { type: 'add', text: 'C' },
+    { type: 'same', text: 'd' }, { type: 'same', text: 'e' }, { type: 'same', text: 'f' }, { type: 'add', text: 'g' },
+  ];
+  const { rows, more } = diffPreview(ops, 10);
+  assert.deepEqual(rows.map((row) => row.type === 'gap' ? '…' : row.text), ['b', 'c', 'C', 'd', '…', 'f', 'g']);
+  assert.equal(more, 0);
+  const many = Array.from({ length: 30 }, (_, index) => ({ type: 'add', text: String(index) }));
+  const cut = diffPreview(many, 10);
+  assert.equal(cut.rows.length, 10);
+  assert.equal(cut.more, 20);
+  assert.equal(stepResult({ ok: true, name: 'write_file', args: { path: 'a', content: 'x\ny\n' }, content: 'ok' }).text, 'Wrote 2 lines');
+});
