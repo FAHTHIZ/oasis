@@ -597,16 +597,29 @@ function stopToolStatus(call) { if (toolStatusCall && (!call || call.id === tool
 // lone lookup, keep the usual header and result lines.
 let explorationBatch = [];
 function holdExploration(event) {
-  if (liveTurn) liveTurn.status.update({ phase: 'tool', label: presentToolActivity(event.name, event.args || {}), restart: true });
-  else if (waitIndicator) waitIndicator.stop();
+  if (!liveTurn && waitIndicator) waitIndicator.stop();
   endText();
   explorationBatch.push({ id: event.call && event.call.id, name: event.name, args: event.args || {}, event, done: false, result: null });
+  showExploring(true);
+}
+// While a batch of lookups runs, the status names every one still in flight
+// ("Reading package.json +2 more") and the row under it counts what is done,
+// so a slow search or MCP call is never hidden behind the batch.
+function showExploring(restart = false) {
+  if (!liveTurn) return;
+  const running = explorationBatch.filter((item) => !item.done);
+  if (!running.length) return;
+  const first = presentToolActivity(running[0].name, running[0].args);
+  const label = running.length > 1 ? first + ' +' + (running.length - 1) + ' more' : first;
+  const finished = explorationBatch.length - running.length;
+  liveTurn.status.update({ phase: 'tool', label, output: explorationBatch.length > 1 ? finished + ' of ' + explorationBatch.length + ' done' : '', ...(restart ? { restart: true } : {}) });
 }
 function exploredResult(call, result) {
   const item = call && explorationBatch.find((entry) => entry.id === call.id && !entry.done);
   if (!item) return false;
   item.done = true;
   item.result = result;
+  showExploring();
   return true;
 }
 function flushExploration() {
@@ -1516,7 +1529,7 @@ async function runPrompt(prompt, root, autoApprove, session = null, persistence 
       } } : {}),
       onToolStart: (event) => {
         if (richOutput() && !verboseEnabled(session) && event && !event.subagent && EXPLORE_TOOLS.has(event.name)) { holdExploration(event); return; }
-        endStream(); if (liveTurn && event && !event.subagent) liveTurn.status.update({ phase: 'tool', label: presentToolActivity(event.name, event.args || {}), restart: true });
+        endStream(); if (liveTurn && event && !event.subagent) liveTurn.status.update({ phase: 'tool', label: presentToolActivity(event.name, event.args || {}), output: '', restart: true });
         lastToolHeader = event && event.call ? event.call.id : null; stdout.write('\n' + (richOutput() ? describeTool(event, { color: true, columns: stdout.columns || 0 }) : describeToolStart(event)) + '\n'); },
       onAutoMode: (event) => { endStream(); stdout.write('[auto] ' + (event.decision === 'allow' ? 'Allowed' : event.decision === 'block' ? 'Blocked' : 'Asking you about') + ' ' + event.tool + (event.reason ? ': ' + event.reason : '') + '\n'); },
       onUsage: (usage) => recordUsage(USAGE, usage),

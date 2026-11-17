@@ -97,7 +97,7 @@ export function createTurnStatus({ region, level = 'full', color = true, now = (
       line = paint('\x1b[36m', '*') + ' ' + paint('\x1b[36m', label) + ' ' + dim('(' + meta + ') ' + dots);
     }
     const rows = [line];
-    const detail = info.phase === 'command' ? oneLine(info.output, 200)
+    const detail = info.phase === 'command' || info.phase === 'tool' ? oneLine(info.output, 200)
       : info.phase === 'thinking' ? reasoningGlimpse(info.reasoning) : '';
     if (detail) rows.push(dim('  ⎿ ' + detail));
     return rows;
