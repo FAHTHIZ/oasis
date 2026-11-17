@@ -1,7 +1,22 @@
 #!/usr/bin/env node
 import readline from 'node:readline';
-import { webSearch, searchBackends } from '../../src/web-search.mjs';
-import { fetchPublicUrl } from '../../src/public-fetch.mjs';
+import { pathToFileURL } from 'node:url';
+import path from 'node:path';
+
+// Inside the OASIS repository or npm package the modules are two folders up.
+// A copy installed from a marketplace lives in the plugin cache instead, and
+// OASIS tells it where its package is through OASIS_PACKAGE_ROOT.
+async function oasisModule(name) {
+  const candidates = [new URL('../../src/' + name, import.meta.url).href];
+  if (process.env.OASIS_PACKAGE_ROOT) candidates.push(pathToFileURL(path.join(process.env.OASIS_PACKAGE_ROOT, 'src', name)).href);
+  let lastError;
+  for (const candidate of candidates) {
+    try { return await import(candidate); } catch (error) { lastError = error; }
+  }
+  throw new Error('OASIS Research MCP could not load ' + name + ' from OASIS. Run it through OASIS, or set OASIS_PACKAGE_ROOT. (' + (lastError && lastError.message) + ')');
+}
+const { webSearch, searchBackends } = await oasisModule('web-search.mjs');
+const { fetchPublicUrl } = await oasisModule('public-fetch.mjs');
 
 const tools = [
   {
@@ -57,7 +72,7 @@ async function handle(message) {
     return rpcResult(id, {
       protocolVersion: message.params && message.params.protocolVersion || '2024-11-05',
       capabilities: { tools: {} },
-      serverInfo: { name: 'oasis-research', version: '0.1.0' }
+      serverInfo: { name: 'oasis-research', version: '0.2.0' }
     });
   }
   if (method === 'ping') return rpcResult(id, {});
