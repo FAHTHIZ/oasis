@@ -1108,10 +1108,13 @@ function patchStepRow(item, tool) {
   // The entrance animation plays once, on a live mount; any later patch drops it.
   item.className = 'tool ' + state + (tool.waiting ? ' waiting' : '') + (isPlanStep(tool) ? ' plan' : '');
   const summary = item.querySelector('summary');
-  const label = stepLabel(tool);
+  const argText = summarizeArgs(tool.name, tool.args);
+  // A running command reads "Running command" with the command itself in the
+  // code font beside it, like its finished row ("Ran a command  npm test").
+  let label = stepLabel(tool);
+  if (state === 'running' && argText && /^Running /.test(label) && label.slice(8).startsWith(argText.slice(0, 24))) label = 'Running command';
   const set = (selector, text) => { const el = summary.querySelector(selector); if (el.textContent !== text) el.textContent = text; };
   set('.name', label);
-  const argText = summarizeArgs(tool.name, tool.args);
   set('.arg', argText && label.toLowerCase().includes(argText.toLowerCase()) ? '' : argText);
   set('.tool-status', stepStatus(tool));
   set('.dur', stepDuration(tool));
