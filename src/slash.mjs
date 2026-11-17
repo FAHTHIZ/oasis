@@ -109,7 +109,7 @@ export const BUILTIN_COMMANDS = {
   rewind: 'Undo recent turns: restore files and/or conversation, or fork from an earlier turn (/rewind [N] [code|chat|fork])',
   review: 'Review changes for correctness bugs (/review [low|medium|high|xhigh|max|ultra] [--fix] [--comment] [--max-findings N|all] [PR#|branch|path])',
   audit: 'Run isolated security, performance, test-coverage, and dependency reviewers, then merge and verify findings (/audit [path-or-scope])',
-  tasks: 'List background agents and processes (/tasks, /tasks ID, /tasks send ID MESSAGE, /tasks stop ID)',
+  tasks: 'List background agents and processes (/tasks, /tasks ID, /tasks send ID MESSAGE, /tasks stop ID, /tasks approve|deny ID)',
   workflows: 'List workflow runs and saved workflows (/workflows, /workflows ID, stop ID, save ID [--user])',
   commit: 'Commit the current changes with a well-written message (/commit [hint])',
   pr: 'Create a branch if needed, commit, push, and open a pull request (/pr [base])',
@@ -1989,6 +1989,26 @@ export async function runBuiltinCommand(name, argument, state) {
         // Resuming needs this turn's approvals and model settings, so the main agent sends it.
         return { prompt: 'Call send_message with id ' + JSON.stringify(id) + ' and exactly this message, then reply in one short sentence that it was sent. Do nothing else.\nMessage: ' + JSON.stringify(message) };
       }
+      if (session && (words[0] === 'approve' || words[0] === 'deny')) {
+        // Roadmap 2.1: answer a request a background agent parked for the user.
+        const { answerApproval } = await import('./neuron-approvals.mjs');
+        const waiting = listAgents(session).map((agent) => getAgent(session, agent.id)).filter((record) => record && Array.isArray(record.pendingApprovals) && record.pendingApprovals.length);
+        const id = words[1] || (waiting.length === 1 ? waiting[0].id : '');
+        if (!id) return { output: waiting.length ? 'Several agents are waiting: ' + waiting.map((record) => record.id).join(', ') + '. Usage: /tasks ' + words[0] + ' AGENT_ID [APPROVAL_ID]' : 'No agent is waiting for approval.' };
+        if (!session.agentTasks || !session.agentTasks.agents.has(id)) return { output: 'No subagent with id ' + id + '. /tasks lists them.' };
+        const record = getAgent(session, id);
+        let answer;
+        try { answer = answerApproval(record, { allow: words[0] === 'approve', approvalId: words[2] || '' }); } catch (error) { return { output: error.message }; }
+        const { recordAgentEvent } = await import('./agent-tasks.mjs');
+        recordAgentEvent(session, answer.allow ? 'agent.approval_granted' : 'agent.approval_denied', { agentId: record.id, teamId: record.teamId || undefined, description: record.description, detail: answer.entry.id + ' ' + answer.entry.tool });
+        const verdict = (answer.allow ? 'Approved ' : 'Denied ') + answer.entry.tool + ' for ' + id + ' (' + answer.entry.id + ')';
+        if (record.status === 'running' && record.child) {
+          (record.child.inbox || (record.child.inbox = [])).push({ text: answer.message });
+          return { output: verdict + '; it sees the answer at its next step.' };
+        }
+        if (!record.child && !record.restoredTranscript) return { output: verdict + ', but its conversation was not saved, so it cannot be resumed. Start a new task from its report: /tasks ' + id };
+        return { prompt: 'Call send_message with id ' + JSON.stringify(id) + ' and exactly this message, then reply in one short sentence that it was sent. Do nothing else.\nMessage: ' + JSON.stringify(answer.message) };
+      }
       if (session && words[0] && session.agentTasks && session.agentTasks.agents.has(words[0])) {
         const info = summarizeAgent(getAgent(session, words[0]), { full: true });
         return { output: [info.id + '  ' + info.status + '  ' + info.agent + '  ' + info.description + '  (' + info.elapsed + ', ' + info.toolCalls + ' tool calls' + (info.usage ? ', ' + info.usage.requests + ' requests, ' + info.usage.inputTokens.toLocaleString('en-US') + ' in / ' + info.usage.outputTokens.toLocaleString('en-US') + ' out tokens' + (info.usage.costUsd > 0 ? ', $' + info.usage.costUsd.toFixed(4) : '') : '') + ')', budgetOf(info.id) ? budgetOf(info.id).replace(/^budget/, 'Budget:') : '', info.error ? 'Error: ' + info.error : '', info.report || (info.recentTools ? 'Recent tools: ' + info.recentTools.join(', ') : '')].filter(Boolean).join('\n') };
@@ -1998,7 +2018,8 @@ export async function runBuiltinCommand(name, argument, state) {
       const mcpTasks = session && session.mcpBackgroundTasks ? [...session.mcpBackgroundTasks.entries()] : [];
       if (!agents.length && !procs.length && !mcpTasks.length) return { output: 'No subagents, background processes or MCP tasks in this session.' };
       const lines = [];
-      const agentLine = (agent) => '  ' + agent.id.padEnd(9) + ' ' + agent.status.padEnd(10) + ' ' + (agent.background ? 'bg ' : 'fg ') + agent.agent + ': ' + agent.description + '  (' + agent.elapsed + ', ' + agent.toolCalls + ' tool calls' + (budgetOf(agent.id) ? ', ' + budgetOf(agent.id) : '') + (agent.status === 'running' && agent.recentTools ? ', now: ' + agent.recentTools[agent.recentTools.length - 1] : '') + ')';
+      const waitingFor = (id) => { const record = getAgent(session, id); return record && Array.isArray(record.pendingApprovals) ? record.pendingApprovals.map((item) => item.tool).join(', ') : ''; };
+      const agentLine = (agent) => '  ' + agent.id.padEnd(9) + ' ' + agent.status.padEnd(10) + ' ' + (agent.background ? 'bg ' : 'fg ') + agent.agent + ': ' + agent.description + '  (' + agent.elapsed + ', ' + agent.toolCalls + ' tool calls' + (budgetOf(agent.id) ? ', ' + budgetOf(agent.id) : '') + (agent.status === 'running' && agent.recentTools ? ', now: ' + agent.recentTools[agent.recentTools.length - 1] : '') + ')' + (waitingFor(agent.id) ? '  waiting for approval: ' + waitingFor(agent.id) + ' (/tasks approve|deny ' + agent.id + ')' : '');
       const running = agents.filter((agent) => agent.status === 'running');
       const earlier = agents.filter((agent) => agent.status !== 'running');
       // subagentStatusLine may replace (or, with "", hide) the rows it is shown.
@@ -2021,7 +2042,7 @@ export async function runBuiltinCommand(name, argument, state) {
         lines.push('MCP tasks (result arrives as a notification):');
         for (const [id, task] of mcpTasks) lines.push('  ' + id + '  running  ' + task.server + ' ' + task.tool + '  (' + Math.max(1, Math.round((Date.now() - task.startedAt) / 1000)) + 's)');
       }
-      lines.push('Details: /tasks ID   Message or resume: /tasks send ID MESSAGE   Stop: /tasks stop ID');
+      lines.push('Details: /tasks ID   Message or resume: /tasks send ID MESSAGE   Stop: /tasks stop ID   Answer a waiting approval: /tasks approve|deny ID');
       return { output: lines.join('\n') };
     }
     case 'bashes': {

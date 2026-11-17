@@ -1,3 +1,4 @@
+import { approvalSnapshot } from './neuron-approvals.mjs';
 import { createHash, randomUUID } from 'node:crypto';
 import { normalizeAgentUsage } from './agent-tasks.mjs';
 import { MAX_STEER_CHARS, foldSteering } from './steering.mjs';
@@ -129,6 +130,7 @@ export function sanitizeAgentHistory(agentTasks) {
       report: safePersistedText(record.report || '', 200000),
       error: safePersistedText(record.error || '', 1500),
       readOnly: Boolean(record.readOnly),
+      ...approvalSnapshot(record),
       workspaceIsolation: (record.worktreeInfo || record.worktree || record.workspaceIsolation === 'worktree') ? 'worktree' : 'shared',
       ...(record.teamId && /^team_[1-9]\d{0,5}$/.test(String(record.teamId)) ? { teamId: String(record.teamId) } : {}),
       ...(record.sharedTaskId && /^task_[1-9]\d{0,8}$/.test(String(record.sharedTaskId)) ? { sharedTaskId: String(record.sharedTaskId) } : {}),
