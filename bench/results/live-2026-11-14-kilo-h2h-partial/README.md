@@ -26,7 +26,7 @@ Wall time is not reported as a result: the relay holds each request at least 18 
 ## What this shows, and what it does not
 
 - One task, one trial: a smoke test, not a ranking. All five agents solved it.
-- OASIS used the most prompt tokens of the five on this task: about 1.5× Codex and 2.2× OpenCode by the gateway count. Its first request is about the same size as Codex's (7,044 vs 6,876 tokens), but its prompt doubled at request 4 (7,610 → 16,114) and stayed above 16k. Something it read or ran early added about 8.5k tokens that it then carried for 11 more turns. That gap is real and is tracked in the checklist (`docs/COMPLETION-CHECKLIST.md`). The relay did not record message contents, so the cause is not identified from this run.
+- OASIS used the most prompt tokens of the five on this task: about 1.5× Codex and 2.2× OpenCode by the gateway count. Its first request is about the same size as Codex's (7,044 vs 6,876 tokens), but its prompt doubled at request 4 (7,610 → 16,114) and stayed above 16k. Something it read or ran early added about 8.5k tokens that it then carried for 11 more turns. That gap is real and is tracked in the [roadmap](../../../docs/ROADMAP.md). The relay did not record message contents, so the cause is not identified from this run.
 - Adapter-reported tokens are not comparable across agents: OpenCode reported 37,253 tokens while the gateway counted 111,139 prompt tokens for its calls. Use the gateway columns.
 - OASIS's taskflow-emoji-truncate result (fail, 107,176 tokens) is not a result: its last three requests got the quota 429, so it could not finish. The harness now excludes such trials from scores (see below).
 
