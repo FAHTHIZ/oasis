@@ -436,6 +436,9 @@ input[type="checkbox"]{width:18px;height:18px;accent-color:var(--accent)}
 .diff .add mark{background:color-mix(in srgb,var(--add) 30%,transparent)}
 .diff .del mark{background:color-mix(in srgb,var(--del) 30%,transparent)}
 .diff .same{color:var(--muted)}
+.diff-stat{font-size:12px;white-space:nowrap;margin-right:auto;padding-left:10px}
+.diff-stat .add{color:var(--add)}
+.diff-stat .del{color:var(--del)}
 .diff .note{color:var(--muted);padding:8px 14px}
 .approval-summary{font-size:14.5px}
 .approval-summary code{font:13px var(--mono);background:var(--raised);padding:.1em .35em;border-radius:5px}

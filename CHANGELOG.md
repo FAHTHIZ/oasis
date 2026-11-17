@@ -21,6 +21,7 @@ User-facing change history grouped by package version. A version heading does no
 - `todo_write` accepts an optional `activeForm` for each item: the label shown while it is in progress.
 - Web app: the run status names the current step in the present tense with a shimmer, a step the model is still writing appears as a live row, running groups title themselves in the present tense, and a finished single step no longer unfolds its raw input and output by itself (less layout shift). The task plan starts compact with the active step in its caption, and its progress bar animates with a transform.
 - Web app: the tab icon gets a dot when OASIS needs you (amber) or is done (green) while the tab is in the background. With no saved sound choice, the finish and needs-you sounds play only while the tab is in the background; the setting turns every sound on or off.
+- Web app: a changed file's diff shows how many lines it adds and removes ("+3 −2") beside the file name. Test: `test/app-core.test.mjs`.
 - Sounds: one palette in `app/core/sound-palette.mjs` for both the terminal and the web app. The terminal writes its cached sound files before the first turn so the first chime plays at once.
 
 ## [1.5.0] - 2026-11-17
