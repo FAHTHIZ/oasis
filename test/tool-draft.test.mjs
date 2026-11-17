@@ -86,3 +86,16 @@ test('todo_write keeps activeForm (Claude Code field) for the live label', () =>
   const progress = normalizeTaskProgress(out.todos);
   assert.equal(progress.activeLabel, 'Running the tests');
 });
+
+test('drafts count the lines they add and remove as they are written', async () => {
+  const { draftLines, describeDraft } = await import('../src/tool-draft.mjs');
+  const write = JSON.stringify({ path: 'a.js', content: 'l1\nl2\nl3\nl4' }).slice(0, -5);
+  assert.deepEqual(draftLines('write_file', write), { added: 3, removed: 0 });
+  const edit = JSON.stringify({ path: 'a.js', old_string: 'x\ny', new_string: 'a\nb\nc' });
+  assert.deepEqual(draftLines('edit_file', edit), { added: 3, removed: 2 });
+  assert.equal(describeDraft({ name: 'edit_file', path: 'a.js', chars: 40, lines: { added: 3, removed: 2 } }).text, 'Editing a.js · +3 −2');
+  const patch = JSON.stringify({ patch: '*** Begin Patch\n*** Update File: a\n@@\n-old\n+new\n+new2\n*** End Patch' });
+  assert.deepEqual(draftLines('apply_patch', patch), { added: 2, removed: 1 });
+  assert.deepEqual(draftLines('run_command', JSON.stringify({ command: 'a\nb' })), { added: 0, removed: 0 });
+  assert.equal(describeDraft({ name: 'write_file', path: 'a.js', chars: 2048 }).text, 'Writing a.js · 2 KB');
+});
