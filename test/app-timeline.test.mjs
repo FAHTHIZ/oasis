@@ -189,7 +189,10 @@ test('a group title names at most three kinds of work, then how many more', () =
     { id: '4', name: 'git_status', args: {}, ok: true },
     { id: '5', name: 'todo_write', args: {}, ok: true }
   ];
-  assert.equal(groupTitle(steps), 'Read a, edited b, searched the web and 2 more');
+  // Plan updates stay out of titles (the plan card shows them); a fourth kind is named.
+  assert.equal(groupTitle(steps), 'Read a, edited b, searched the web and checked project changes');
+  assert.equal(groupTitle([...steps, { id: '6', name: 'run_command', args: { command: 'ls -la' }, ok: true }]), 'Read a, edited b, searched the web and 2 more');
+  assert.equal(groupTitle([{ id: '5', name: 'todo_write', args: {}, ok: true }]), 'Updated the task plan');
 });
 
 test('a failed step says what did not happen instead of the past tense', async () => {
