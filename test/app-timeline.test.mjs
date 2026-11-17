@@ -222,3 +222,24 @@ test('a reply repeated word for word in the same turn is recognised', async () =
   const later = [...entries, { role: 'user', content: 'Again' }, second];
   assert.equal(repeatsEarlierReply(later, second, 'Changed notes.txt.'), false, 'an earlier turn does not count');
 });
+
+test('plan, read and search steps open to a readable view, not raw JSON', async () => {
+  const { readableOutput } = await import('../app/core/timeline.mjs');
+  const plan = describeInput({ name: 'todo_write', args: { todos: [{ content: 'Explore', status: 'completed' }, { content: 'Write it', activeForm: 'Writing it', status: 'in_progress' }, { content: 'Check', status: 'pending' }] } });
+  assert.equal(plan[0].format, 'checklist');
+  assert.deepEqual(plan[0].items.map((item) => item.text + ':' + item.status), ['Explore:completed', 'Writing it:in_progress', 'Check:pending']);
+  assert.deepEqual(describeInput({ name: 'read_file', args: { path: 'src/a.mjs', offset: 10, limit: 5 } }), [
+    { label: 'File', format: 'path', text: 'src/a.mjs' },
+    { label: 'Lines', format: 'text', text: '10–14' }
+  ]);
+  assert.equal(describeInput({ name: 'grep', args: { pattern: 'TODO', path: 'src' } })[0].text, 'TODO');
+  assert.equal(describeInput({ name: 'list_files', args: { path: '.' } })[0].text, 'Project folder');
+  assert.equal(readableOutput(JSON.stringify({ path: 'a.txt', content: 'hello\nworld' })), 'hello\nworld');
+  assert.equal(readableOutput(JSON.stringify({ todos: [{ status: 'completed' }, { status: 'pending' }], remaining: 1 })), '1 of 2 done.');
+  assert.equal(readableOutput(JSON.stringify({ query: 'x', matches: [{ path: 'a.mjs', line: 3, text: '  const x = 1;' }] })), 'a.mjs:3  const x = 1;');
+  assert.equal(readableOutput(JSON.stringify({ path: '.', files: ['a', 'b/c'], truncated: false })), 'a\nb/c');
+  assert.equal(describeInput({ name: 'list_files', args: { path: '.', _label: 'x' } })[0].format, 'path');
+  // Anything else keeps its exact text.
+  assert.equal(readableOutput(JSON.stringify({ path: 'a', content: 'x', extra: 1 })), JSON.stringify({ path: 'a', content: 'x', extra: 1 }));
+});
+

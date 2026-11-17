@@ -352,6 +352,20 @@ export function describeInput(tool = {}) {
   } else if (name === 'write_file' && typeof args.content === 'string') {
     sections.push({ label: 'File', format: 'path', text: String(args.path || args.file_path || '') });
     sections.push({ label: 'Content', format: 'code', text: args.content });
+  } else if (name === 'todo_write' && Array.isArray(args.todos)) {
+    // The plan as a checklist, not the JSON the model sent.
+    sections.push({ label: 'Plan', format: 'checklist', items: args.todos.filter((todo) => todo && typeof todo === 'object').map((todo) => ({ text: String(todo.status === 'in_progress' && todo.activeForm ? todo.activeForm : todo.content || ''), status: ['completed', 'in_progress'].includes(todo.status) ? todo.status : 'pending' })) });
+  } else if ((name === 'read_file' || name === 'read_notebook' || name === 'notebook_read' || name === 'view_image') && (args.path || args.file_path || args.notebook_path)) {
+    sections.push({ label: 'File', format: 'path', text: String(args.path || args.file_path || args.notebook_path) });
+    const from = Number(args.offset ?? args.start_line);
+    const count = Number(args.limit ?? (Number.isFinite(Number(args.end_line)) && Number.isFinite(from) ? Number(args.end_line) - from + 1 : NaN));
+    if (Number.isFinite(from) && from > 0) sections.push({ label: 'Lines', format: 'text', text: Number.isFinite(count) && count > 0 ? from + '–' + (from + count - 1) : 'from ' + from });
+  } else if ((name === 'grep' || name === 'search_files' || name === 'glob_files') && (args.pattern || args.query || args.glob)) {
+    sections.push({ label: name === 'glob_files' ? 'Files matching' : 'Search for', format: 'path', text: String(args.pattern || args.query || args.glob) });
+    if (args.path && args.path !== '.') sections.push({ label: 'In', format: 'path', text: String(args.path) });
+    if (args.include || args.glob && args.pattern) sections.push({ label: 'Only', format: 'path', text: String(args.include || args.glob) });
+  } else if ((name === 'list_files' || name === 'list_directory') && Object.keys(args).every((key) => key.startsWith('_') || ['path', 'depth', 'recursive'].includes(key))) {
+    sections.push({ label: 'Folder', format: 'path', text: !args.path || args.path === '.' ? 'Project folder' : String(args.path) });
   } else if (name === 'task') {
     if (args.description) sections.push({ label: 'Task', format: 'text', text: String(args.description) });
     if (args.subagent_type) sections.push({ label: 'Agent', format: 'text', text: String(args.subagent_type) });
@@ -424,6 +438,24 @@ export function readableOutput(content) {
     const error = value.error;
     if (!error) return text;
     return rest && rest.includes(error.slice(0, 60)) ? rest : (error + (rest ? '\n' + rest : ''));
+  }
+  // A file read: its text, not the JSON envelope around it.
+  if (typeof value.content === 'string' && typeof value.path === 'string' && Object.keys(value).every((key) => ['path', 'content', 'truncated', 'lines', 'totalLines', 'offset', 'limit', 'size', 'encoding'].includes(key))) {
+    return value.content + (value.truncated ? '\n… (cut short)' : '') + (rest ? '\n' + rest : '');
+  }
+  // Search matches: one "path:line  text" row each, as grep prints them.
+  if (Array.isArray(value.matches) && value.matches.every((match) => match && typeof match === 'object' && typeof match.path === 'string')) {
+    if (!value.matches.length) return 'No matches.' + (rest ? '\n' + rest : '');
+    return value.matches.map((match) => match.path + (match.line ? ':' + match.line : '') + (match.text !== undefined ? '  ' + String(match.text).trim() : '')).join('\n') + (value.truncated ? '\n… more matches not shown' : '') + (rest ? '\n' + rest : '');
+  }
+  // A listing: one file per line.
+  if (Array.isArray(value.files) && value.files.every((file) => typeof file === 'string')) {
+    return (value.files.join('\n') || 'No files.') + (value.truncated ? '\n… more files not shown' : '') + (rest ? '\n' + rest : '');
+  }
+  // A plan update: the checklist is above, so one line on where it stands.
+  if (Array.isArray(value.todos) && value.todos.every((todo) => todo && typeof todo === 'object')) {
+    const done = value.todos.filter((todo) => todo.status === 'completed').length;
+    return value.todos.length ? done + ' of ' + value.todos.length + ' done.' + (rest ? '\n' + rest : '') : 'The plan is empty.';
   }
   if ('exitCode' in value && ('stdout' in value || 'stderr' in value)) {
     const parts = [];
