@@ -247,7 +247,21 @@ function stepFiles(step) {
   return [baseName(step.args) || step.id];
 }
 
-export function groupTitle(steps = []) {
+// A task-plan update. The plan card over the message box already shows the
+// plan as it moves, so in the feed these steps stay out of sight (and out of
+// group titles and counts) unless one failed; the Activity panel lists them.
+export function isPlanStep(step = {}) {
+  return String(step.name || '') === 'todo_write' && step.ok !== false;
+}
+// The steps a group shows: all but plan updates, or the plan updates when
+// that is all the group did.
+export function feedSteps(steps = []) {
+  const shown = steps.filter((step) => !isPlanStep(step));
+  return shown.length ? shown : steps;
+}
+
+export function groupTitle(all = []) {
+  const steps = feedSteps(all);
   if (!steps.length) return 'Working';
   const running = steps.find((step) => step.ok === undefined);
   if (running) return liveLabel(running);
@@ -283,7 +297,8 @@ export function groupTitle(steps = []) {
     if (names.length === 2) { parts.push((kind === 'read' ? 'read ' : 'edited ') + names[0] + ' and ' + names[1]); continue; }
     parts.push(n === 1 ? lower(activityLabel(worked[0])) : KIND_PHRASES[kind](n));
   }
-  const shown = parts.length > 3 ? parts.slice(0, 3).concat(parts.length - 3 + ' more') : parts;
+  // "and 1 more" hides less than it costs: a fourth kind is named outright.
+  const shown = parts.length > 4 ? parts.slice(0, 3).concat(parts.length - 3 + ' more') : parts;
   const list = shown.length > 1 ? shown.slice(0, -1).join(', ') + ' and ' + shown.at(-1) : shown[0];
   return sentence(list);
 }
@@ -292,7 +307,8 @@ function notRunPhrase(steps) {
   return [counts.declined && counts.declined + ' declined', counts.blocked && counts.blocked + ' blocked', counts.stopped && counts.stopped + ' stopped'].filter(Boolean).join(', ');
 }
 
-export function groupStats(steps = []) {
+export function groupStats(all = []) {
+  const steps = feedSteps(all);
   const outcomes = steps.map(stepOutcome);
   const count = (...kinds) => outcomes.filter((outcome) => kinds.includes(outcome)).length;
   const running = count('running');

@@ -196,7 +196,8 @@ svg.icon.i-stop{fill:currentColor}
 .steps.open>.steps-head .chevron{transform:rotate(90deg)}
 .steps-body{margin:0 0 6px var(--rail-x);padding:2px 0 2px 12px;border-left:1px solid var(--line-strong)}
 .steps.running>.steps-body{border-left-color:color-mix(in srgb,var(--accent) 35%,var(--line-strong))}
-.steps.single .step-list>.tool>details>summary{display:none}
+.steps.plan-only,.steps:not(.plan-only) .step-list>.tool.plan{display:none}
+.steps.single .step-list>.tool:not(.plan)>details>summary{display:none}
 .steps.single:not(:has(.tool>details[open])):not(:has(.step-diff:not([hidden])))>.steps-body{display:none}
 .steps.single:not(:has(.tool>details[open]))>.steps-body{padding-top:0}
 .steps.single:not(:has(.tool>details[open])):not(:has(.step-diff:not([hidden])))>.steps-head .chevron{transform:none}

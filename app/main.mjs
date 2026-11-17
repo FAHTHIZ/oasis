@@ -7,7 +7,7 @@ import { SUBAGENT_STATUS_TEXT } from './core/subagents.mjs';
 import { createConnectorCard, connectIntent, splitServices, brandMark } from './core/connector-card.mjs';
 import { createSoundPlayer, soundAllowed } from './core/sound.mjs';
 import { sideWork, liveStatus, modelRequest, waitingLabel, thoughtMs, runSummary, reasoningHeadline, formatTokens } from './core/live-status.mjs';
-import { readableOutput, repeatsEarlierReply, stepOutcome, stepRan, stepLabel, summarizeArgs, toolKind, groupTitle, groupStats, formatDuration, thinkingLabel, thoughtLabel, thoughtHeadline, splitTextToolCall, elapsedSince, describeInput, buildTimeline, groupTiming, runElapsed, timingSplit, stepResult, liveLabel, diffPreview } from './core/timeline.mjs';
+import { readableOutput, repeatsEarlierReply, stepOutcome, stepRan, stepLabel, summarizeArgs, toolKind, groupTitle, groupStats, formatDuration, thinkingLabel, thoughtLabel, thoughtHeadline, splitTextToolCall, elapsedSince, describeInput, buildTimeline, groupTiming, runElapsed, timingSplit, stepResult, liveLabel, diffPreview, isPlanStep, feedSteps } from './core/timeline.mjs';
 import { IndexedDBStore, Workspace, diffStat, lineDiff } from './core/workspace.mjs';
 import { wordHighlights } from '../src/word-diff.mjs';
 import { Agent, answeredHistory, textOf } from './core/agent.mjs';
@@ -1106,7 +1106,7 @@ function patchStepRow(item, tool) {
   item._tool = tool;
   const state = stepState(tool);
   // The entrance animation plays once, on a live mount; any later patch drops it.
-  item.className = 'tool ' + state + (tool.waiting ? ' waiting' : '');
+  item.className = 'tool ' + state + (tool.waiting ? ' waiting' : '') + (isPlanStep(tool) ? ' plan' : '');
   const summary = item.querySelector('summary');
   const label = stepLabel(tool);
   const set = (selector, text) => { const el = summary.querySelector(selector); if (el.textContent !== text) el.textContent = text; };
@@ -1235,7 +1235,7 @@ function createGroup(steps = [], { live = false } = {}) {
     // A live group of one step is open with nothing shown under it (the
     // header already names the step): the first click shows its inspector
     // rather than closing an empty body.
-    const only = el.classList.contains('single') && el.classList.contains('open') && list.querySelector('.tool > details:not([open])');
+    const only = el.classList.contains('single') && el.classList.contains('open') && list.querySelector('.tool:not(.plan) > details:not([open])');
     if (only) { openSingleStep(group); return; }
     setGroupOpen(group, !el.classList.contains('open'));
   });
@@ -1254,7 +1254,7 @@ function setGroupOpen(group, open) {
 // so opening it shows that step's input and output directly, not a second
 // row with the same words.
 function openSingleStep(group) {
-  const details = group.list.querySelector('.tool > details');
+  const details = group.list.querySelector('.tool:not(.plan) > details');
   if (!details) return;
   if (!group.el.classList.contains('single') || !group.el.classList.contains('open')) {
     // The group grew past one step (or closed): fold back a step that only
@@ -1280,7 +1280,10 @@ function updateGroupHead(group) {
   group.el.classList.toggle('waiting', waiting);
   group.el.classList.toggle('failed', !running && stats.failed > 0);
   group.el.classList.toggle('done', !running && !waiting);
-  const single = !running && !waiting && group.steps.length === 1 && !group.subagents.length;
+  const shown = feedSteps(group.steps);
+  // Only plan updates: the plan card shows them, so the group stays hidden.
+  group.el.classList.toggle('plan-only', !group.subagents.length && group.steps.length > 0 && group.steps.every(isPlanStep));
+  const single = !running && !waiting && shown.length === 1 && !group.subagents.length;
   if (group.el.classList.contains('single') !== single) { group.el.classList.toggle('single', single); openSingleStep(group); }
   let title = groupTitle(group.steps);
   // While a step runs the header says what is happening now, in the present
@@ -1295,7 +1298,7 @@ function updateGroupHead(group) {
   titleEl.title = files.length > 2 ? title + '\n' + files.slice(0, 30).join('\n') : title;
   const meta = [];
   // One finished step: what it returned stands in for "1 step" ("Read 48 lines").
-  const outcome = single && stepRan(group.steps[0]) ? stepResult(group.steps[0]).text : '';
+  const outcome = single && stepRan(shown[0]) ? stepResult(shown[0]).text : '';
   meta.push(outcome || stats.total + (stats.total === 1 ? ' step' : ' steps'));
   if (stats.failed && !outcome) meta.push(stats.failed + ' failed');
   if (stats.declined) meta.push(stats.declined + ' declined');
