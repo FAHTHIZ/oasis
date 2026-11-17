@@ -50,7 +50,7 @@ import { createTurnStatus } from './turn-status.mjs';
 import { presentToolActivity } from './tool-activity.mjs';
 import { formatApprovalMessage, redactApprovalSecrets } from './approval-language.mjs';
 import { formatTurnSummary, showStartupBanner, bannerProviderLabel, promptFor, footerFor, nextMode, runShellPassthrough, shellContextBlock, describeTool, describeEdit, describeToolResult, autoModeLine, verboseToolOutput, describeExploration, EXPLORE_TOOLS } from './terminal-ui.mjs';
-import { estimateTokens, contextWindowSize, contextUsage } from './context.mjs';
+import { estimateTokens, contextWindowSize, contextUsage, modelContextWindow } from './context.mjs';
 import { formatUsd, priceFor } from './pricing.mjs';
 import { commandAvailable } from './command-lookup.mjs';
 import { installProxyFromEnv } from './proxy.mjs';
@@ -2244,14 +2244,18 @@ async function readMainInput(root, session, state) {
     prompt: (editor) => promptFor(editor.text, color),
     footer: (editor) => {
       const model = session && session.config && session.config.model || '';
-      const contextPercent = session && Array.isArray(session.messages)
-        ? contextUsage(session).tokens / Math.max(1, contextWindowSize(session.config, process.env)) * 100
-        : null;
+      const usedTokens = session && Array.isArray(session.messages) ? contextUsage(session).tokens : null;
+      // A window OASIS knows (set, or listed for the model) gets a percentage;
+      // the 32k fallback for an unknown model is a guess, so past it show tokens.
+      const knownWindow = session && session.config && (Number(session.config.contextWindow) > 0 || Number(process.env.OASIS_CONTEXT_WINDOW) > 0 || modelContextWindow(session.config.model, session.config, process.env));
+      const rawPercent = usedTokens == null ? null : usedTokens / Math.max(1, contextWindowSize(session.config, process.env)) * 100;
+      const contextPercent = rawPercent != null && (knownWindow || rawPercent <= 100) ? rawPercent : null;
+      const contextTokens = contextPercent == null ? usedTokens : null;
       const spentUsd = session && session.budgetLedger ? session.budgetLedger.spentUsd : (session && typeof session.costUsd === 'number' ? session.costUsd : null);
       const budgetUsd = session && Number(session.maxBudgetUsd) > 0 ? Number(session.maxBudgetUsd) : Number(SESSION_OPTIONS.maxBudgetUsd) || 0;
       const priced = session && session.config ? priceFor(model, { config: session.config, overrides: session.pricing || {}, env: process.env }) : null;
       const costLabel = session ? (priced ? formatUsd(spentUsd == null ? 0 : spentUsd) : 'unknown') : '';
-      return footerFor({ text: editor.text, mode: currentMode(), color, model, contextPercent, costLabel, budgetUsd, spentUsd });
+      return footerFor({ text: editor.text, mode: currentMode(), color, model, contextPercent, contextTokens, costLabel, budgetUsd, spentUsd });
     },
     complete: state.completer,
     onShiftTab: async () => {
