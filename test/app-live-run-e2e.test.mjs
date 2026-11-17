@@ -136,7 +136,7 @@ test('a live run streams reasoning into a Thinking block that settles and surviv
   assert.equal(order, 'user fold text');
   const folded = await evaluate(page, `[...document.querySelector('#transcript .work-fold-body').children].map(${kind}).filter(Boolean).join(' ')`);
   assert.equal(folded, 'thought text group text group');
-  assert.match(await evaluate(page, `document.querySelector('.work-fold-head').textContent`), /^Worked for \S+ · 2 steps$/);
+  assert.match(await evaluate(page, `document.querySelector('.work-fold-head').textContent`), /^Worked for \S+ · Read 1 file$/);
   assert.equal(await evaluate(page, `document.querySelector('.work-fold').open`), false);
   await evaluate(page, `document.querySelector('.work-fold-head').click(); true`);
   // Expanding shows the reasoning; a reload shows it again.

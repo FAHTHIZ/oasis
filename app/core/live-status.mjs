@@ -134,3 +134,44 @@ export function thoughtMs(request, settledAt = Date.now(), blockStartedAt = 0) {
   const from = request.local && request.firstOutputAt ? request.firstOutputAt : request.startedAt;
   return Math.max(0, end - Math.max(from, Number(blockStartedAt) || 0));
 }
+
+// What a finished run did, for the line under it: "Edited 2 files +14 −3 ·
+// read 3 files · ran 2 commands" (Cursor's "Edited 4 files, explored 3
+// files +73 −12"). Counts only steps that ran and succeeded; '' for a run
+// that only talked.
+const EDIT_TOOLS = new Set(['write_file', 'edit_file', 'multi_edit', 'notebook_edit', 'apply_patch']);
+const READ_TOOLS = new Set(['read_file', 'read_many_files', 'view_image', 'notebook_read']);
+const SEARCH_TOOLS = new Set(['grep', 'glob', 'glob_files', 'search_files', 'list_files', 'repo_map', 'codebase_search', 'find_files', 'session_search', 'memory_search']);
+const COMMAND_TOOLS = new Set(['run_command', 'bash', 'shell', 'run_tests']);
+const WEB_TOOLS = new Set(['web_search', 'fetch_url', 'web_fetch', 'browse']);
+function plural(n, one, many = one + 's') { return n + ' ' + (n === 1 ? one : many); }
+export function runSummary(tools = []) {
+  const edited = new Set(), deleted = new Set(), read = new Set();
+  let added = 0, removed = 0, searches = 0, commands = 0, web = 0, failed = 0;
+  for (const tool of tools) {
+    if (!tool || tool.ok === undefined) continue;
+    if (tool.ok === false) { if (!tool.outcome || tool.outcome === 'failed' || tool.outcome === 'timed_out') failed++; continue; }
+    const name = String(tool.name || '');
+    const args = tool.args || {};
+    const file = String(args.path || args.file_path || args.notebook_path || '').replace(/^\.\//, '');
+    if (EDIT_TOOLS.has(name)) {
+      edited.add(file || name + edited.size);
+      if (tool.lines) { added += Math.max(0, Number(tool.lines.added) || 0); removed += Math.max(0, Number(tool.lines.removed) || 0); }
+    } else if (name === 'delete_file') deleted.add(file || 'file' + deleted.size);
+    else if (READ_TOOLS.has(name)) read.add(file || name + read.size);
+    else if (SEARCH_TOOLS.has(name)) searches++;
+    else if (COMMAND_TOOLS.has(name)) commands++;
+    else if (WEB_TOOLS.has(name)) web++;
+  }
+  const parts = [];
+  if (edited.size) parts.push('edited ' + plural(edited.size, 'file') + ((added || removed) ? ' ' + [added ? '+' + added : '', removed ? '−' + removed : ''].filter(Boolean).join(' ') : ''));
+  if (deleted.size) parts.push('deleted ' + plural(deleted.size, 'file'));
+  if (read.size) parts.push('read ' + plural(read.size, 'file'));
+  if (searches) parts.push(plural(searches, 'search', 'searches'));
+  if (commands) parts.push('ran ' + plural(commands, 'command'));
+  if (web) parts.push(plural(web, 'web lookup'));
+  if (failed) parts.push(plural(failed, 'step') + ' failed');
+  if (!parts.length) return '';
+  parts[0] = parts[0][0].toUpperCase() + parts[0].slice(1);
+  return parts.join(' · ');
+}

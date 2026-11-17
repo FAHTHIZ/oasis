@@ -1245,6 +1245,7 @@ export function createOasisWebServer(options = {}) {
               ...(tracked && Number.isFinite(tracked.startedAt) ? { durationMs: Math.max(0, Date.now() - tracked.startedAt) } : {}),
               result: summarizeToolResult(value),
               warning: toolActivityWarning(value),
+              ...(value && typeof value === 'object' && !value.error && (Number(value.added) > 0 || Number(value.removed) > 0) ? { lines: { added: Math.max(0, Math.floor(Number(value.added) || 0)), removed: Math.max(0, Math.floor(Number(value.removed) || 0)) } } : {}),
               ...(artifacts.length ? { artifacts, previewJobId: job.id } : {}),
               ...(subagent ? { subagent: String(subagent).slice(0, 100) } : {})
             });

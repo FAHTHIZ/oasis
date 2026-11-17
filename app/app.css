@@ -206,6 +206,9 @@ svg.icon.i-stop{fill:currentColor}
 .tool.running .tool-status{color:var(--accent);border-color:var(--accent-line)}
 .tool.waiting .tool-status{color:var(--warn);border-color:color-mix(in srgb,var(--warn) 45%,transparent)}
 .tool.fail .tool-status{color:var(--danger);border-color:color-mix(in srgb,var(--danger) 40%,transparent)}
+.tool .lines{flex:none;display:inline-flex;gap:5px;font:11px var(--mono);font-variant-numeric:tabular-nums}
+.tool .lines .add{color:var(--add)}
+.tool .lines .del{color:var(--del)}
 .tool .dur{flex:none;font:11px var(--mono);color:var(--faint);font-variant-numeric:tabular-nums;min-width:3ch;text-align:right}
 .tool.ok .dur{margin-left:auto}
 .inspect{margin:4px 6px 8px 40px;display:grid;gap:8px;animation:rise .18s var(--ease) both}

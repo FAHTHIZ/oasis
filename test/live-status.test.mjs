@@ -67,3 +67,30 @@ test('thought time leaves out a local model reading the prompt', () => {
   assert.equal(thoughtMs(cloud, 30_000, 0), 30_000);
   assert.equal(thoughtMs(null, 5000, 1000), 4000);
 });
+
+test('a finished run sums what it did', async () => {
+  const { runSummary } = await import('../app/core/live-status.mjs');
+  assert.equal(runSummary([]), '');
+  assert.equal(runSummary([
+    { name: 'read_file', args: { path: 'a.mjs' }, ok: true },
+    { name: 'read_file', args: { path: './a.mjs' }, ok: true },
+    { name: 'grep', args: {}, ok: true },
+    { name: 'edit_file', args: { path: 'a.mjs' }, ok: true, lines: { added: 3, removed: 1 } },
+    { name: 'write_file', args: { path: 'b.mjs' }, ok: true, lines: { added: 10, removed: 0 } },
+    { name: 'edit_file', args: { path: 'c.mjs' }, ok: false },
+    { name: 'run_command', args: {}, ok: false, outcome: 'declined' },
+    { name: 'run_command', args: {}, ok: true },
+    { name: 'web_search', args: {}, ok: true },
+    { name: 'read_file', args: {} }
+  ]), 'Edited 2 files +13 −1 · read 1 file · 1 search · ran 1 command · 1 web lookup · 1 step failed');
+});
+
+test('a group whose steps all failed never claims the work was done', async () => {
+  const { groupTitle } = await import('../app/core/timeline.mjs');
+  assert.equal(groupTitle([
+    { name: 'edit_file', args: { path: 'src/greet.mjs' }, ok: false },
+    { name: 'edit_file', args: { path: 'src/index.js' }, ok: false },
+    { name: 'edit_file', args: { path: 'src/index.js' }, ok: false }
+  ]), "Couldn't edit 2 files");
+  assert.equal(groupTitle([{ name: 'edit_file', args: { path: 'a.mjs' }, ok: false }, { name: 'edit_file', args: { path: 'b.mjs' }, ok: true }]), 'Edited b.mjs');
+});

@@ -33,6 +33,13 @@ test('describeDraft speaks in the present tense', () => {
   assert.equal(describeDraft({ name: 'write_file', path: 'src/big.mjs', chars: 3300 }).text, 'Writing src/big.mjs · 3.2 KB');
   assert.equal(describeDraft({ name: 'run_command', command: 'npm test' }).text, 'Preparing npm test');
   assert.equal(describeDraft({ name: 'todo_write' }).text, 'Updating the plan');
+  assert.equal(describeDraft({ name: 'edit_file' }).text, 'Editing a file');
+  assert.equal(describeDraft({ name: 'list_files' }).text, 'Listing files');
+  assert.equal(describeDraft({ name: 'search_files', query: 'greet' }).text, 'Searching for greet');
+  assert.equal(describeDraft({ name: 'read_file', path: 'index.js' }).text, 'Reading index.js');
+  assert.equal(describeDraft({ name: 'web_search', query: 'node 22 release' }).text, 'Searching the web for node 22 release');
+  assert.equal(describeDraft({ name: 'git_status' }).text, 'Checking git status');
+  assert.equal(describeDraft({ name: 'mcp__github__create_issue' }).text, 'Preparing github create issue');
   assert.equal(formatBytes(20480), '20 KB');
 });
 
