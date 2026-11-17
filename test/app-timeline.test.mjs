@@ -319,3 +319,9 @@ test('a settled thought is titled by its headline', async () => {
   assert.ok(thoughtHeadline('word '.repeat(60)).endsWith('…'));
   assert.ok(thoughtHeadline('word '.repeat(60)).length <= 96);
 });
+
+test('a group names a failed command or test run plainly', async () => {
+  const { groupTitle } = await import('../app/core/timeline.mjs');
+  assert.equal(groupTitle([{ name: 'edit_file', args: { path: 'src/a.mjs' }, ok: true }, { name: 'run_command', args: { command: 'node x' }, ok: false }]), 'Edited a.mjs and a command failed');
+  assert.equal(groupTitle([{ name: 'read_file', args: { path: 'a.mjs' }, ok: true }, { name: 'run_command', args: { command: 'npm test' }, ok: false }]), 'Read a.mjs and the tests failed');
+});

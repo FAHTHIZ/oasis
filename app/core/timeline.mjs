@@ -278,7 +278,7 @@ export function groupTitle(all = []) {
   const lower = (text) => text ? text[0].toLowerCase() + text.slice(1) : text;
   const parts = [];
   for (const [kind, list] of byKind) {
-    if (kind === 'tests') { parts.push(list.length === 1 ? 'ran the tests' : 'ran the tests ' + list.length + ' times'); continue; }
+    if (kind === 'tests') { parts.push(list.every((step) => step.ok === false) ? 'the tests failed' : list.length === 1 ? 'ran the tests' : 'ran the tests ' + list.length + ' times'); continue; }
     // Files touched: count distinct paths, so three edits to one file read as one.
     const distinct = (steps) => kind === 'read' || kind === 'edit' ? new Set(steps.flatMap((step) => stepFiles(step))).size : steps.length;
     // Only work that worked is claimed; a kind where every step failed says so
@@ -286,7 +286,7 @@ export function groupTitle(all = []) {
     const worked = list.filter((step) => step.ok !== false);
     if (!worked.length) {
       const n = distinct(list);
-      parts.push(n === 1 ? lower(stepLabel(list[0])) : lower(failingPhrase(sentence(KIND_PHRASES[kind](n)))));
+      parts.push(n === 1 ? lower(stepLabel(list[0])).replace(/^command /, 'a command ').replace(/^tests /, 'the tests ') : lower(failingPhrase(sentence(KIND_PHRASES[kind](n)))));
       continue;
     }
     const n = distinct(worked);
