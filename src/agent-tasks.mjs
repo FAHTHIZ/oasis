@@ -407,7 +407,10 @@ export function takeQueuedText(queue, textOf, max = MAX_INBOX_DELIVERY_CHARS) {
 
 function elapsed(record) {
   const seconds = Math.round(((record.finishedAt || Date.now()) - record.startedAt) / 1000);
-  return seconds < 90 ? seconds + 's' : Math.round(seconds / 60) + 'm';
+  if (seconds < 90) return seconds + 's';
+  const minutes = Math.round(seconds / 60);
+  // A long-running agent reads "2h 05m", not "125m".
+  return minutes < 60 ? minutes + 'm' : Math.floor(minutes / 60) + 'h ' + String(minutes % 60).padStart(2, '0') + 'm';
 }
 
 // Per-agent provider usage, summed over every request the agent (and any
