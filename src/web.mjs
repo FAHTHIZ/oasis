@@ -1184,6 +1184,15 @@ export function createOasisWebServer(options = {}) {
             assistantDeltaBuffer = current;
             if (delta) emit(job, 'assistant_delta', { text: delta });
           },
+          // A tool call the model is still writing: "Writing src/app.mjs · 3.2 KB".
+          onToolDraft: (draft) => {
+            if (!draft || !draft.name) return;
+            const target = {};
+            if (draft.path) target.path = redactApprovalSecrets(String(draft.path)).slice(0, 300);
+            else if (draft.command) target.command = redactApprovalSecrets(String(draft.command)).slice(0, 200);
+            else if (draft.query) target.query = redactApprovalSecrets(String(draft.query)).slice(0, 200);
+            emit(job, 'tool_draft', { index: Math.max(0, Math.min(64, Number(draft.index) || 0)), name: String(draft.name).slice(0, 100), chars: Math.max(0, Math.min(50_000_000, Number(draft.chars) || 0)), ...target, ...(draft.done ? { done: true } : {}) });
+          },
           onToolOutput: ({ call, stream, text }) => {
             const callId = call && call.id ? String(call.id).slice(0, 160) : '';
             if (callId && text) liveOutput.push(callId, stream === 'stderr' ? 'stderr' : 'stdout', String(text));
