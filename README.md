@@ -11,16 +11,16 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/FAHTHIZ/oasis/actions/workflows/quality.yml"><img alt="Quality checks" src="https://img.shields.io/github/actions/workflow/status/FAHTHIZ/oasis/quality.yml?branch=main&style=for-the-badge&label=quality&labelColor=0B0F0C&color=32E07A"></a>
-  <a href="https://github.com/FAHTHIZ/oasis/releases/latest"><img alt="Latest release" src="https://img.shields.io/github/v/release/FAHTHIZ/oasis?style=for-the-badge&labelColor=0B0F0C&color=7CFF5E"></a>
-  <img alt="More than 3,400 tests" src="https://img.shields.io/badge/tests-3%2C400%2B-0ED168?style=for-the-badge&labelColor=0B0F0C">
-  <a href="LICENSE"><img alt="Apache 2.0 license" src="https://img.shields.io/github/license/FAHTHIZ/oasis?style=for-the-badge&labelColor=0B0F0C&color=1A1F1B"></a>
+  <a href="https://github.com/FAHTHIZ/oasis/actions/workflows/quality.yml"><img alt="Quality checks" src="https://img.shields.io/github/actions/workflow/status/FAHTHIZ/oasis/quality.yml?branch=main&style=flat&label=quality&labelColor=0B0F0C&color=32E07A"></a>
+  <a href="https://github.com/FAHTHIZ/oasis/releases/latest"><img alt="Latest release" src="https://img.shields.io/github/v/release/FAHTHIZ/oasis?style=flat&labelColor=0B0F0C&color=7CFF5E"></a>
+  <img alt="More than 3,400 tests" src="https://img.shields.io/badge/tests-3%2C400%2B-0ED168?style=flat&labelColor=0B0F0C">
+  <a href="LICENSE"><img alt="Apache 2.0 license" src="https://img.shields.io/github/license/FAHTHIZ/oasis?style=flat&labelColor=0B0F0C&color=1A1F1B"></a>
   <br>
-  <img alt="Windows, macOS and Linux" src="https://img.shields.io/badge/windows%20%C2%B7%20macos%20%C2%B7%20linux-1A1F1B?style=flat-square&logo=nodedotjs&logoColor=7CFF5E&labelColor=0B0F0C">
-  <img alt="Node.js 22.19 or newer" src="https://img.shields.io/badge/node-%E2%89%A522.19-1A1F1B?style=flat-square&labelColor=0B0F0C">
-  <a href="https://github.com/FAHTHIZ/oasis/stargazers"><img alt="GitHub stars" src="https://img.shields.io/github/stars/FAHTHIZ/oasis?style=flat-square&labelColor=0B0F0C&color=32E07A"></a>
-  <a href="https://github.com/FAHTHIZ/oasis/commits/main"><img alt="Last commit" src="https://img.shields.io/github/last-commit/FAHTHIZ/oasis/main?style=flat-square&labelColor=0B0F0C&color=1A1F1B"></a>
-  <a href="CONTRIBUTING.md"><img alt="Pull requests welcome" src="https://img.shields.io/badge/PRs-welcome-7CFF5E?style=flat-square&labelColor=0B0F0C"></a>
+  <img alt="Windows, macOS and Linux" src="https://img.shields.io/badge/windows%20%C2%B7%20macos%20%C2%B7%20linux-1A1F1B?style=flat&logo=nodedotjs&logoColor=7CFF5E&labelColor=0B0F0C">
+  <img alt="Node.js 22.19 or newer" src="https://img.shields.io/badge/node-%E2%89%A522.19-1A1F1B?style=flat&labelColor=0B0F0C">
+  <a href="https://github.com/FAHTHIZ/oasis/stargazers"><img alt="GitHub stars" src="https://img.shields.io/github/stars/FAHTHIZ/oasis?style=flat&labelColor=0B0F0C&color=32E07A"></a>
+  <a href="https://github.com/FAHTHIZ/oasis/commits/main"><img alt="Last commit" src="https://img.shields.io/github/last-commit/FAHTHIZ/oasis/main?style=flat&labelColor=0B0F0C&color=1A1F1B"></a>
+  <a href="CONTRIBUTING.md"><img alt="Pull requests welcome" src="https://img.shields.io/badge/PRs-welcome-7CFF5E?style=flat&labelColor=0B0F0C"></a>
 </p>
 
 <p align="center">
