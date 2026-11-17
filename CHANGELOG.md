@@ -6,6 +6,8 @@ User-facing change history grouped by package version. A version heading does no
 
 ### Highlights
 
+- Web: the page no longer jumps at load or at the end of a run. The side panel's space is held from the first paint and the run clock keeps its line between runs (layout shift 0.109 to 0.015). An approval in a background tab blinks the tab title.
+- Terminal: a batch of reads and searches shows every lookup still in flight ("Reading package.json +2 more", "1 of 3 done") instead of waiting silently for the batch to end.
 - Web: a finished turn folds its steps, thoughts and narration under one "Worked for 1m 57s · 6 steps" line above the answer; click to open it. The answer stays in place on screen while the work folds.
 - A live activity trace while OASIS works. The terminal status line says what is happening in the present tense (`Reading package.json`, `Running npm test`, `Writing src/server.mjs · 3.2 KB`, `Responding`), with a clock for the whole turn, the streamed token count, the step number, a one-line glimpse of the model's reasoning and the newest line of command output. The task checklist sits under it, with the item in progress shown by its present-tense `activeForm`.
 - No more frozen screens while the model writes a large file: tool calls report what they are preparing while their arguments stream, in the terminal and the web app.
