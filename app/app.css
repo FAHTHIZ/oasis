@@ -521,7 +521,9 @@ details.manual fieldset{margin:0}
 
 
 /* Long chats stay fast: the browser skips work for messages off screen */
-.msg,.steps.done:not(.open){content-visibility:auto;contain-intrinsic-size:auto 120px}
+/* (Not on folded step groups: their body is already hidden, and switching
+   them to skipped rendering as they fold counted as a layout shift.) */
+.msg{content-visibility:auto;contain-intrinsic-size:auto 120px}
 
 /* A step that never ran (declined, blocked, stopped first) */
 .tool.skip .kind-icon{color:var(--faint);border-style:dashed}
