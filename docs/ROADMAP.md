@@ -1,9 +1,11 @@
 # Implementation roadmap
 
-**Date:** 2026-11-15. Status: proposal for review. The rule from the
-research brief holds: no major system is integrated until the
-[Neuron Network design](OASIS-NEURON-NETWORK.md#detailed-design-proposal-2026-11)
-has been reviewed. Items are ordered so that each one is useful alone, can
+**Date:** 2026-11-15, updated 2026-11-17. Status: P0 to P2 are built, each
+row says what shipped. Two rows wait on a harness run with real models: the
+lower `-p` child default (0.3) and the cost gate for capability routing (2.3).
+P3 is waiting for benchmarks or a user need. The items follow the
+[Neuron Network design](OASIS-NEURON-NETWORK.md#detailed-design-proposal-2026-11).
+Items are ordered so that each one is useful alone, can
 ship in a normal release, and builds on the existing OASIS runtime rather
 than beside it.
 
