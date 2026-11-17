@@ -39,6 +39,12 @@ for (const args of [['init', '-q', '-b', 'main'], ['config', 'user.name', 'OASIS
 // requests (a verification reminder, a retry) get a sensible reply.
 const FIX = { path: 'math.mjs', old_string: 'return a - b;', new_string: 'return a + b;' };
 const TEST = { path: 'math.test.mjs', content: "import test from 'node:test';\nimport assert from 'node:assert/strict';\nimport { add } from './math.mjs';\n\ntest('add sums two numbers', () => {\n  assert.equal(add(2, 3), 5);\n});\n" };
+// Opens every folded 'Worked for' block the way a person would, by its header.
+async function openFolds(page) {
+  const heads = page.locator('#transcript > .work-fold:not([open]) > .work-fold-head');
+  for (let n = await heads.count(); n > 0; n--) await heads.first().click();
+}
+
 function nextStep(messages) {
   const called = new Set(messages.flatMap((m) => (m.tool_calls || []).map((c) => c.function.name + ':' + c.function.arguments)));
   const did = (name, args) => called.has(name + ':' + JSON.stringify(args));
@@ -197,9 +203,15 @@ try {
   // Finished work folds into execution groups; a person opens one to see
   // the subagent and the exact steps.
   await page.waitForFunction(() => /1 test passed/.test(document.getElementById('transcript').innerText), null, { timeout: timeoutMs });
-  // Prose updates and execution groups alternate, like a person narrating the work.
-  const flow = await page.evaluate(() => [...document.getElementById('transcript').children].map((el) => el.classList.contains('steps') ? 'steps' : el.classList.contains('assistant') ? 'text' : el.classList.contains('user') ? 'user' : 'other').filter((kind) => kind !== 'other'));
-  assert.deepEqual(flow, ['user', 'text', 'steps', 'text', 'steps', 'text', 'steps', 'text'], 'timeline order: ' + flow.join(' '));
+  // The finished turn folds its work under a 'Worked for' line and keeps the
+  // answer below it; inside, prose updates and execution groups alternate,
+  // like a person narrating the work.
+  const kinds = (selector) => page.evaluate((sel) => [...document.querySelectorAll(sel)].map((el) => el.classList.contains('work-fold') ? 'fold' : el.classList.contains('steps') ? 'steps' : el.classList.contains('assistant') ? 'text' : el.classList.contains('user') ? 'user' : 'other').filter((kind) => kind !== 'other'), selector);
+  const flow = await kinds('#transcript > *');
+  assert.deepEqual(flow, ['user', 'fold', 'text'], 'timeline order: ' + flow.join(' '));
+  await openFolds(page);
+  const work = await kinds('#transcript > .work-fold > .work-fold-body > *');
+  assert.deepEqual(work, ['text', 'steps', 'text', 'steps', 'text', 'steps'], 'folded work order: ' + work.join(' '));
   assert.equal(await page.locator('.steps.running').count(), 0, 'no group still says it is running');
   const firstGroup = page.locator('.steps').first();
   if ((await firstGroup.locator('.steps-head').getAttribute('aria-expanded')) !== 'true') await firstGroup.locator('.steps-head').click();
@@ -224,6 +236,7 @@ try {
     const hero = await open({ viewport: { width: 1440, height: 900 }, colorScheme: 'dark' });
     await hero.page.locator('#sideTasks .side-task, #sideSessions .side-task').first().click();
     await hero.page.waitForFunction(() => /1 test passed/.test(document.getElementById('transcript').innerText), null, { timeout: timeoutMs });
+    await openFolds(hero.page);
     const group = hero.page.locator('.steps').first();
     if (await group.count() && (await group.locator('.steps-head').getAttribute('aria-expanded')) !== 'true') await group.locator('.steps-head').click();
     await hero.page.locator('.toast').first().waitFor({ state: 'hidden', timeout: 8000 }).catch(() => {});

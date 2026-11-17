@@ -546,7 +546,7 @@ details.manual fieldset{margin:0}
 .work-fold{margin:0 0 14px}
 .work-fold-head{display:inline-flex;align-items:center;gap:8px;list-style:none;cursor:pointer;padding:5px 10px 5px 8px;margin-left:-8px;border-radius:8px;color:var(--muted);font:12px var(--mono);font-variant-numeric:tabular-nums;user-select:none}
 .work-fold-head::-webkit-details-marker{display:none}
-.work-fold-when{opacity:.7;flex:none;white-space:nowrap}
+.work-fold-when{flex:none;white-space:nowrap}
 .work-fold-when::before{content:"·";margin-right:8px}
 .work-fold-head::before{content:"";width:6px;height:6px;border-right:1.5px solid currentColor;border-bottom:1.5px solid currentColor;transform:rotate(-45deg);transition:transform .18s ease;flex:none}
 .work-fold[open]>.work-fold-head::before{transform:rotate(45deg)}
