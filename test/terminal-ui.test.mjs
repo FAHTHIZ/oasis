@@ -278,6 +278,7 @@ test('turn summary line reports time, tool calls and tokens', async () => {
   assert.equal(formatTurnSummary({ ms: 0, stopped: true }), 'Stopped · 0s');
   assert.equal(formatTurnSummary({ ms: 9000, toolCalls: 2, tokens: 126_000, cachedTokens: 98_400 }), 'Done · 9s · 2 tool calls · 126k tokens (98.4k cached)');
   assert.equal(formatTurnSummary({ ms: 9000, tokens: 10_000, cachedTokens: 100 }), 'Done · 9s · 10.0k tokens');
+  assert.equal(formatTurnSummary({ ms: 3_725_000, toolCalls: 40, tokens: 2_400_000, cachedTokens: 1_900_000 }), 'Done · 1h 02m 05s · 40 tool calls · 2.4M tokens (1.9M cached)');
 });
 
 test('edit summaries leave out a zero count', async () => {
