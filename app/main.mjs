@@ -8,7 +8,7 @@ import { createConnectorCard, connectIntent, splitServices, brandMark } from './
 import { createSoundPlayer, soundAllowed } from './core/sound.mjs';
 import { sideWork, liveStatus, modelRequest, waitingLabel, thoughtMs, runSummary, reasoningHeadline } from './core/live-status.mjs';
 import { readableOutput, repeatsEarlierReply, stepOutcome, stepRan, stepLabel, summarizeArgs, toolKind, groupTitle, groupStats, formatDuration, thinkingLabel, thoughtLabel, splitTextToolCall, elapsedSince, describeInput, buildTimeline, groupTiming, runElapsed, timingSplit } from './core/timeline.mjs';
-import { IndexedDBStore, Workspace, lineDiff } from './core/workspace.mjs';
+import { IndexedDBStore, Workspace, diffStat, lineDiff } from './core/workspace.mjs';
 import { wordHighlights } from '../src/word-diff.mjs';
 import { Agent, answeredHistory, textOf } from './core/agent.mjs';
 import { FrameSandbox } from './core/sandbox.mjs';
@@ -3570,6 +3570,19 @@ function answerQuestion(value) {
 }
 $('questionForm').addEventListener('submit', (event) => { event.preventDefault(); answerQuestion($('questionInput').value.trim()); });
 
+// "+3 −2" beside the file name while its diff is open; hidden for the plain file view.
+function showDiffStat(lines) {
+  const stat = $('diffStat');
+  if (!stat) return;
+  const { added, removed } = lines ? diffStat(lines) : { added: 0, removed: 0 };
+  stat.hidden = !lines || (!added && !removed);
+  stat.replaceChildren();
+  if (stat.hidden) return;
+  const add = Object.assign(document.createElement('span'), { className: 'add', textContent: '+' + added });
+  const del = Object.assign(document.createElement('span'), { className: 'del', textContent: '−' + removed });
+  stat.append(add, ' ', del);
+  stat.title = added + ' line' + (added === 1 ? '' : 's') + ' added, ' + removed + ' removed';
+}
 function renderDiff(container, diff) {
   const frag = document.createDocumentFragment();
   const shown = diff.slice(0, 1500);
@@ -5170,7 +5183,7 @@ async function openEditor(path, status) {
     $('revertButton').textContent = 'Discard';
     $('revertButton').title = 'Discard these changes and restore the last committed version';
     $('diffToggle').hidden = !status;
-    $('diffView').hidden = true; $('editorSheet').classList.remove('fit');
+    $('diffView').hidden = true; $('editorSheet').classList.remove('fit'); showDiffStat(null);
     $('editor').hidden = false;
     $('diffToggle').textContent = 'Diff';
     openSheet('editorSheet');
@@ -5189,7 +5202,7 @@ async function openEditor(path, status) {
   $('revertButton').title = '';
   $('deleteFileButton').hidden = Boolean(file && file.deleted);
   $('saveFileButton').hidden = Boolean(file && file.deleted);
-  $('diffView').hidden = true; $('editorSheet').classList.remove('fit');
+  $('diffView').hidden = true; $('editorSheet').classList.remove('fit'); showDiffStat(null);
   $('editor').hidden = false;
   $('diffToggle').textContent = 'Diff';
   if (status === 'deleted') showDiff();
@@ -5200,18 +5213,21 @@ async function showDiff() {
     let lines = workspace.fileDiff(editingPath);
     if (!lines.length) lines = $('editor').value.split('\n').map((text) => ({ type: 'add', text }));
     renderDiff($('diffView'), lines);
+    showDiffStat(lines);
     $('diffView').hidden = false; $('editorSheet').classList.add('fit');
     $('editor').hidden = true;
     $('diffToggle').textContent = 'File';
     return;
   }
   const file = (await workspace.load()).get(editingPath);
-  renderDiff($('diffView'), lineDiff(file.original || '', file.deleted ? '' : $('editor').value));
+  const lines = lineDiff(file.original || '', file.deleted ? '' : $('editor').value);
+  renderDiff($('diffView'), lines);
+  showDiffStat(lines);
   $('diffView').hidden = false; $('editorSheet').classList.add('fit');
   $('editor').hidden = true;
   $('diffToggle').textContent = 'Edit';
 }
-$('diffToggle').addEventListener('click', () => { if ($('diffView').hidden) showDiff(); else { $('diffView').hidden = true; $('editorSheet').classList.remove('fit'); $('editor').hidden = false; $('diffToggle').textContent = 'Diff'; } });
+$('diffToggle').addEventListener('click', () => { if ($('diffView').hidden) showDiff(); else { $('diffView').hidden = true; $('editorSheet').classList.remove('fit'); $('editor').hidden = false; $('diffToggle').textContent = 'Diff'; showDiffStat(null); } });
 $('saveFileButton').addEventListener('click', async () => { await workspace.write(editingPath, $('editor').value); refreshFiles(); toast('Saved ' + editingPath); closeSheet('editorSheet'); });
 $('revertButton').addEventListener('click', async () => {
   if (RT) {
