@@ -131,6 +131,10 @@ To keep a conversation's context, add `--from-session ID` (from `oasis sessions 
 
 You can also ask in a session, for example "check CI every weekday at 9 and send the summary to Telegram". The agent uses its `routine_manage` tool and shows you the exact routine before saving it; you approve every create, edit, resume, extra run or removal, even with `--yes`.
 
+### Skills it learns, with your approval
+
+When a task ends on a passing check and exposes a reusable procedure, the agent may propose it as a skill (`skill_propose`). OASIS also looks for one when a long session compacts: if the work being folded away ended on a passing test, one extra model request reads it and may propose up to two skills. Proposals are files under the config folder, not skills: `/learning` lists them, `/learning approve ID` installs one into `.agents/skills/`, and `/learning reject ID` drops it. A learned skill never grants permissions. Turn compaction proposals off with `"compactionReflection": false` or `OASIS_COMPACTION_REFLECTION=0`, and all learning with `"autoLearning": false` or `OASIS_AUTO_LEARNING=0`.
+
 ### Built-in browser and recordings
 
 `oasis --chrome` (or `/chrome on`) gives the agent a real Chrome through the DevTools Protocol: it opens pages, reads them, clicks, types, takes screenshots and checks the console and network. While it works, OASIS keeps a small screenshot after each step that changes the page, with a caption. Typed text is never written into captions, only its length. Ask for a recording (the `recording` browser action), or just close the browser or end the session, and the steps are saved as one self-contained HTML player in `.oasis/recordings/`. Open it in any browser to step through or play back what the agent saw. `OASIS_BROWSER_RECORD=0` turns recording off.
