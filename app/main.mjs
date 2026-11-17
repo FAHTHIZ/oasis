@@ -1158,7 +1158,15 @@ function createGroup(steps = [], { live = false } = {}) {
   body.appendChild(list);
   el.append(head, body);
   const group = { el, head, body, list, steps, subagents: [], live, touched: false, startedAt: Date.now() };
-  head.addEventListener('click', () => { group.touched = true; setGroupOpen(group, !el.classList.contains('open')); });
+  head.addEventListener('click', () => {
+    group.touched = true;
+    // A live group of one step is open with nothing shown under it (the
+    // header already names the step): the first click shows its inspector
+    // rather than closing an empty body.
+    const only = el.classList.contains('single') && el.classList.contains('open') && list.querySelector('.tool > details:not([open])');
+    if (only) { openSingleStep(group); return; }
+    setGroupOpen(group, !el.classList.contains('open'));
+  });
   for (const tool of steps) list.appendChild(stepRow(tool));
   setGroupOpen(group, live);
   updateGroupHead(group);
