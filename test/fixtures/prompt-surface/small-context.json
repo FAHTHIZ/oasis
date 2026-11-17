@@ -152,6 +152,11 @@
                     "in_progress",
                     "completed"
                   ]
+                },
+                "activeForm": {
+                  "type": "string",
+                  "maxLength": 200,
+                  "description": "Present-tense form shown while the item is in progress, e.g. \"Running the tests\"."
                 }
               },
               "required": [
