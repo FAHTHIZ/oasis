@@ -101,6 +101,7 @@ export function outputRate(turn, now = Date.now()) {
 //   rateLimitUntil, elapsedMs (the whole run) }
 // Returns { label, meta: [..] } so the label can shimmer and the rest stays dim.
 export function liveStatus(state = {}, now = Date.now()) {
+  if (state.compaction && state.phase !== 'approval' && state.phase !== 'reconnecting') return compactionStatus(state.compaction, state.elapsedMs, now);
   const meta = [];
   const request = state.request && !state.request.ended ? state.request : null;
   const turn = state.turn || { outChars: 0 };
@@ -220,4 +221,21 @@ export function sideWork({ workers = [], queued = 0 } = {}) {
   const waiting = Math.max(0, Number(queued) || 0);
   if (waiting) out.push(plural(waiting, 'message') + ' queued');
   return out;
+}
+
+// Summarising earlier history to make room: how long it has taken, how much
+// it is reading, then the summary's tokens as they stream (Claude Code's
+// compaction spinner counts them the same way).
+export function compactionStatus(compaction = {}, elapsedMs, now = Date.now()) {
+  const meta = [];
+  if (Number(elapsedMs) >= 0 && elapsedMs !== undefined) meta.push(formatElapsed(elapsedMs));
+  const reading = promptProgressText(compaction.progress, compaction.progressAt ? now - compaction.progressAt : 0);
+  const outTokens = charsToTokens(Number(compaction.outChars) || 0);
+  if (reading && !outTokens) meta.push(reading);
+  else if (!outTokens && Number(compaction.beforeTokens) > 0) meta.push('summarising ' + formatTokens(Number(compaction.beforeTokens)) + ' tokens');
+  if (outTokens >= 1) meta.push('↓ ' + formatTokens(outTokens) + ' tokens of summary');
+  const started = Number(compaction.startedAt) || now;
+  const took = Math.max(0, now - started);
+  if (took >= 5000) meta.push('compacting for ' + formatElapsed(took));
+  return { label: 'Compacting the conversation', meta, stalled: false };
 }

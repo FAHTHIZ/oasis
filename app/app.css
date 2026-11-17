@@ -336,6 +336,8 @@ code.inspect-text{font:12px var(--mono)}
 .task-progress-step.completed .task-progress-label{color:var(--faint)}
 .task-progress-state{flex:none;color:var(--faint);font-size:10.5px;white-space:nowrap}
 .task-progress-step.in_progress .task-progress-state{color:var(--accent-2);font-weight:700}
+.task-progress.ended .task-progress-caption{color:var(--warn)}
+.task-progress-step.unfinished .task-progress-state{color:var(--warn)}
 
 /* Files panel: overlay on phones, column on wide screens */
 .panel{position:fixed;inset:calc(var(--topbar) + var(--safe-top)) 0 0 auto;width:min(100vw,420px);background:var(--panel);border-left:1px solid var(--line);display:flex;flex-direction:column;z-index:20;box-shadow:var(--shadow);padding-bottom:var(--safe-bottom)}
