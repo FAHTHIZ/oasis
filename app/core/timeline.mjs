@@ -503,6 +503,19 @@ export function readableOutput(content) {
     if (!value.matches.length) return 'No matches.' + (rest ? '\n' + rest : '');
     return value.matches.map((match) => match.path + (match.line ? ':' + match.line : '') + (match.text !== undefined ? '  ' + String(match.text).trim() : '')).join('\n') + (value.truncated ? '\n… more matches not shown' : '') + (rest ? '\n' + rest : '');
   }
+  // An edit: what changed, in a sentence, plus any note about how it matched.
+  if (typeof value.path === 'string' && value.changed !== undefined && ('replacements' in value || 'added' in value || 'bytes' in value || 'created' in value)) {
+    const added = Number(value.added) || 0;
+    const removed = Number(value.removed) || 0;
+    const what = value.changed === false ? 'No change to ' + value.path + '.' : (value.created ? 'Created ' : 'Changed ') + value.path + (Number(value.replacements) > 1 ? ' in ' + value.replacements + ' places' : '') + ': ' + added + ' line' + (added === 1 ? '' : 's') + ' added, ' + removed + ' removed.';
+    const notes = [value.note, value.warning].filter((note) => typeof note === 'string' && note);
+    return [what, ...notes].join('\n') + (rest ? '\n' + rest : '');
+  }
+  // grep output: the lines as ripgrep prints them.
+  if (Array.isArray(value.results) && typeof value.pattern === 'string' && value.results.every((row) => typeof row === 'string')) {
+    const tail = [value.truncated ? '… more results not shown' : '', typeof value.note === 'string' ? value.note : '', typeof value.hint === 'string' ? value.hint : ''].filter(Boolean).join('\n');
+    return (value.results.join('\n') || 'No matches.') + (tail ? '\n' + tail : '') + (rest ? '\n' + rest : '');
+  }
   // A listing: one file per line.
   if (Array.isArray(value.files) && value.files.every((file) => typeof file === 'string')) {
     return (value.files.join('\n') || 'No files.') + (value.truncated ? '\n… more files not shown' : '') + (rest ? '\n' + rest : '');
@@ -584,8 +597,30 @@ export function stepResult(step = {}) {
       const count = plural(value.matches.length, 'match', 'matches') + (value.truncated ? '+' : '');
       return { text: files > 1 ? count + ' in ' + plural(files, 'file') : count, tone: '' };
     }
+    if (Array.isArray(value.results) && typeof value.pattern === 'string') {
+      const rows = value.results.filter((row) => typeof row === 'string');
+      const more = value.truncated ? '+' : '';
+      if (!rows.length) return { text: 'No matches', tone: '' };
+      if (value.mode === 'files_with_matches') return { text: plural(rows.length, 'file') + more, tone: '' };
+      if (value.mode === 'count') {
+        const total = rows.reduce((sum, row) => sum + (Number(/:(\d+)$/.exec(row)?.[1]) || 0), 0);
+        return { text: plural(total, 'match', 'matches') + ' in ' + plural(rows.length, 'file') + more, tone: '' };
+      }
+      // Content rows are "path:12:text"; "path-12-text" rows are context around them.
+      const hits = rows.map((row) => /^(.*?):\d+:/.exec(row)).filter(Boolean);
+      if (!hits.length) return { text: plural(rows.length, 'line') + more, tone: '' };
+      const files = new Set(hits.map((hit) => hit[1])).size;
+      const count = plural(hits.length, 'match', 'matches') + more;
+      return { text: files > 1 ? count + ' in ' + plural(files, 'file') : count, tone: '' };
+    }
     if (Array.isArray(value.files)) return { text: value.files.length ? plural(value.files.length, 'file') + (value.truncated ? '+' : '') : 'No files', tone: '' };
     if (Array.isArray(value.todos)) return none;
+    if (step.name === 'git_diff' && typeof value.stdout === 'string' && value.exitCode === 0) {
+      const files = (value.stdout.match(/^diff --git /gm) || []).length;
+      const added = (value.stdout.match(/^\+(?!\+\+)/gm) || []).length;
+      const removed = (value.stdout.match(/^-(?!--)/gm) || []).length;
+      return { text: files ? plural(files, 'file') + ' changed · +' + added + ' −' + removed : 'No changes', tone: '' };
+    }
     if ('exitCode' in value && ('stdout' in value || 'stderr' in value)) {
       const output = String(value.stdout || '') + '\n' + String(value.stderr || '');
       const tests = testSummary(output);
