@@ -5252,6 +5252,14 @@ $('newFileButton').addEventListener('click', async () => {
   catch (error) { toast(error.message, 'error'); }
 });
 
+$('copyPathButton').addEventListener('click', async () => {
+  if (!editingPath) return;
+  const ok = await copyText(editingPath);
+  if (!ok) { toast('Could not copy.'); return; }
+  const button = $('copyPathButton');
+  button.textContent = 'Copied';
+  setTimeout(() => { button.textContent = 'Copy path'; }, 1400);
+});
 $('downloadFileButton').addEventListener('click', async () => {
   if (!workspace || !editingPath) return;
   try {
