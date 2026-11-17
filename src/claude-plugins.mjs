@@ -1,4 +1,5 @@
 import { atomicWriteFile } from './atomic-write.mjs';
+import { fileURLToPath } from 'node:url';
 import { copyPluginTree } from './plugin-copy.mjs';
 // Native Claude Code plugin and marketplace support.
 //
@@ -254,12 +255,16 @@ export function pluginVariables(plugin, env = process.env, root = '') {
   const data = path.join(pluginHome(env), 'data', plugin.id.replace(/[^a-zA-Z0-9._-]/g, '-') || plugin.name);
   const options = {};
   for (const [key, value] of Object.entries(plugin.options || {})) options['CLAUDE_PLUGIN_OPTION_' + key.toUpperCase()] = Array.isArray(value) ? value.join(',') : String(value);
-  return { CLAUDE_PLUGIN_ROOT: plugin.root, CLAUDE_PLUGIN_DATA: data, ...(root ? { CLAUDE_PROJECT_DIR: root } : {}), ...options };
+  // OASIS_PACKAGE_ROOT lets a plugin copied out of this repository (the
+  // oasis-research and oasis-analysis packs) still find OASIS's own modules.
+  return { CLAUDE_PLUGIN_ROOT: plugin.root, CLAUDE_PLUGIN_DATA: data, OASIS_PACKAGE_ROOT: PACKAGE_ROOT, ...(root ? { CLAUDE_PROJECT_DIR: root } : {}), ...options };
 }
+
+const PACKAGE_ROOT = path.resolve(fileURLToPath(new URL('..', import.meta.url)));
 
 export function expandPluginVariables(text, vars) {
   return String(text)
-    .replace(/\$\{(CLAUDE_PLUGIN_ROOT|CLAUDE_PLUGIN_DATA|CLAUDE_PROJECT_DIR)\}/g, (match, name) => vars[name] ?? match)
+    .replace(/\$\{(CLAUDE_PLUGIN_ROOT|CLAUDE_PLUGIN_DATA|CLAUDE_PROJECT_DIR|OASIS_PACKAGE_ROOT)\}/g, (match, name) => vars[name] ?? match)
     .replace(/\$\{user_config\.([A-Za-z_][A-Za-z0-9_]*)\}/g, (match, key) => vars['CLAUDE_PLUGIN_OPTION_' + key.toUpperCase()] ?? (/^[A-Z][A-Z0-9_]*$/.test(key) ? process.env[key] : undefined) ?? '');
 }
 

@@ -1,7 +1,7 @@
 {
   "name": "oasis-research",
-  "version": "0.1.0",
-  "description": "Multi-provider web research for Claude Code, backed by the OASIS search engine.",
+  "version": "0.2.0",
+  "description": "Research pack for OASIS: multi-provider web search and fetch tools, researcher and fact-checker agents whose reports are checked against the pages they fetched, and the deep-research skill.",
   "author": {
     "name": "OASIS Contributors"
   },

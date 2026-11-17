@@ -5,7 +5,10 @@
       "command": "node",
       "args": [
         "${CLAUDE_PLUGIN_ROOT}/server.mjs"
-      ]
+      ],
+      "env": {
+        "OASIS_PACKAGE_ROOT": "${OASIS_PACKAGE_ROOT}"
+      }
     }
   }
 }
