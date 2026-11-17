@@ -270,6 +270,13 @@ test('a finished step says what came back in one line, as Claude Code does', asy
   assert.equal(read({ matches: [{ path: 'a', line: 1 }, { path: 'b', line: 2 }, { path: 'b', line: 9 }] }), '3 matches in 2 files');
   assert.equal(read({ matches: [] }), 'No matches');
   assert.equal(read({ files: ['a', 'b'] }), '2 files');
+  assert.equal(stepResult({ ok: true, name: 'git_diff', content: JSON.stringify({ exitCode: 0, stdout: 'diff --git a/x b/x\n--- a/x\n+++ b/x\n-old\n+new\n+more\n', stderr: '' }) }).text, '1 file changed · +2 −1');
+  assert.equal(readableOutput(JSON.stringify({ path: 'src/dates.mjs', changed: true, replacements: 1, added: 1, removed: 1, beforeBytes: 10, afterBytes: 12, backupCreated: true })), 'Changed src/dates.mjs: 1 line added, 1 removed.');
+  assert.equal(read({ pattern: 'x', mode: 'content', engine: 'ripgrep', results: ['src/a.mjs:1:x', 'src/a.mjs-2-ctx', 'src/b.mjs:9:x'], count: 3, truncated: false }), '2 matches in 2 files');
+  assert.equal(read({ pattern: 'x', mode: 'files_with_matches', results: ['a', 'b', 'c'], truncated: true }), '3 files+');
+  assert.equal(read({ pattern: 'x', mode: 'count', results: ['a:2', 'b:5'] }), '7 matches in 2 files');
+  assert.equal(read({ pattern: 'x', mode: 'content', results: [] }), 'No matches');
+  assert.equal(readableOutput(JSON.stringify({ pattern: 'x', mode: 'content', engine: 'ripgrep', results: ['a:1:x'], count: 1, truncated: false })), 'a:1:x');
   assert.equal(read({ todos: [] }), '');
   assert.equal(read({ command: 'npm test', exitCode: 0, stdout: '# pass 12\n# fail 0\n', stderr: '' }), '12 passed');
   assert.deepEqual(stepResult({ ok: false, content: JSON.stringify({ command: 'npm test', exitCode: 1, stdout: 'Tests: 1 failed, 11 passed, 12 total', stderr: '' }) }), { text: '11 passed · 1 failed · exit code 1', tone: 'fail' });
