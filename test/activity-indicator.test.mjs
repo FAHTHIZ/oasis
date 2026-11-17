@@ -138,3 +138,10 @@ test('a running command shows its newest output line in the status line', async 
   assert.equal(lastOutputLine('x'.repeat(100), 10), 'xxxxxxxxx…');
   assert.match(describeWait({ label: 'Running npm test', detail: 'ok 12 - parses' }, 3000), /^Running npm test… · 3s · ok 12 - parses · esc to stop$/);
 });
+
+test('a turn past an hour reads in hours, and a million tokens reads as 1M', () => {
+  assert.equal(formatElapsed(3599000), '59m 59s');
+  assert.equal(formatElapsed(3725000), '1h 02m 05s');
+  assert.equal(formatTokens(1000000), '1M');
+  assert.equal(formatTokens(1250000), '1.3M');
+});
