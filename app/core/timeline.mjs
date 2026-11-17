@@ -181,6 +181,10 @@ export function stepOutcome(step = {}) {
 const NOT_RUN = new Set(['declined', 'blocked', 'cancelled']);
 export function stepRan(step) { return !NOT_RUN.has(stepOutcome(step)); }
 const NOT_RUN_LABELS = { declined: 'You declined', blocked: 'Blocked', cancelled: 'Stopped before it ran' };
+function movedToBackground(step) {
+  const content = String(step.content || '');
+  return content.startsWith('{"') && content.slice(0, content.indexOf('\n') === -1 ? content.length : content.indexOf('\n')).includes('"movedToBackground":true');
+}
 // The label of one step, in the tense and outcome it actually had.
 export function stepLabel(step = {}) {
   const outcome = stepOutcome(step);
@@ -188,6 +192,10 @@ export function stepLabel(step = {}) {
   if (NOT_RUN.has(outcome)) {
     const what = summarizeArgs(step.name, step.args) || liveLabel(step).replace(/^\w+ing /, '').trim() || 'this step';
     return NOT_RUN_LABELS[outcome] + ': ' + (what.length > 70 ? what.slice(0, 67) + '…' : what);
+  }
+  if (outcome === 'ok' && movedToBackground(step)) {
+    const what = summarizeArgs(step.name, step.args) || 'a command';
+    return 'Moved to the background: ' + (what.length > 70 ? what.slice(0, 67) + '…' : what);
   }
   const done = step.label && !/^Used /.test(step.label) ? step.label : activityLabel(step);
   return outcome === 'failed' || outcome === 'timed_out' ? failedLabel(done, outcome) : done;
@@ -503,7 +511,10 @@ export function readableOutput(content) {
     const stderr = String(value.stderr || '').replace(/\s+$/, '');
     if (stdout) parts.push(stdout + (value.stdoutTruncated ? '\n… (output cut short)' : ''));
     if (stderr) parts.push(stderr + (value.stderrTruncated ? '\n… (output cut short)' : ''));
-    if (value.timedOut) parts.push('Timed out.');
+    // A command past its time limit keeps running in the background (as Claude
+    // Code and Codex do), so "Timed out" would be wrong: say where it went.
+    if (value.movedToBackground) parts.push('Still running in the background after the time limit' + (value.id ? ' (' + value.id + ')' : '') + '. OASIS will say when it exits.');
+    else if (value.timedOut) parts.push('Timed out.');
     else if (value.cancelled) parts.push('Stopped.');
     else if (!rest && value.exitCode !== 0 && value.exitCode !== null && value.exitCode !== undefined) parts.push('Exit code ' + value.exitCode + '.');
     if (rest) parts.push(rest);
