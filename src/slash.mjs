@@ -283,9 +283,10 @@ export function sessionAge(iso) {
   const ms = Date.now() - Date.parse(iso || '');
   if (!Number.isFinite(ms)) return '';
   if (ms < 60_000) return 'just now';
-  if (ms < 3_600_000) return Math.round(ms / 60_000) + 'm ago';
-  if (ms < 86_400_000) return Math.round(ms / 3_600_000) + 'h ago';
-  return Math.round(ms / 86_400_000) + 'd ago';
+  // Rounded down, so 59.6 minutes is "59m ago", not "60m ago".
+  if (ms < 3_600_000) return Math.floor(ms / 60_000) + 'm ago';
+  if (ms < 86_400_000) return Math.floor(ms / 3_600_000) + 'h ago';
+  return Math.floor(ms / 86_400_000) + 'd ago';
 }
 
 export async function runBuiltinCommand(name, argument, state) {
