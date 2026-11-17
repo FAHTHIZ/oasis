@@ -49,7 +49,7 @@ import { createLiveRegion } from './live-region.mjs';
 import { createTurnStatus } from './turn-status.mjs';
 import { presentToolActivity } from './tool-activity.mjs';
 import { formatApprovalMessage, redactApprovalSecrets } from './approval-language.mjs';
-import { formatTurnSummary, showStartupBanner, bannerProviderLabel, promptFor, footerFor, nextMode, runShellPassthrough, shellContextBlock, describeTool, describeEdit, describeToolResult, verboseToolOutput, describeExploration, EXPLORE_TOOLS } from './terminal-ui.mjs';
+import { formatTurnSummary, showStartupBanner, bannerProviderLabel, promptFor, footerFor, nextMode, runShellPassthrough, shellContextBlock, describeTool, describeEdit, describeToolResult, autoModeLine, verboseToolOutput, describeExploration, EXPLORE_TOOLS } from './terminal-ui.mjs';
 import { estimateTokens, contextWindowSize, contextUsage } from './context.mjs';
 import { formatUsd, priceFor } from './pricing.mjs';
 import { commandAvailable } from './command-lookup.mjs';
@@ -1531,7 +1531,11 @@ async function runPrompt(prompt, root, autoApprove, session = null, persistence 
         if (richOutput() && !verboseEnabled(session) && event && !event.subagent && EXPLORE_TOOLS.has(event.name)) { holdExploration(event); return; }
         endStream(); if (liveTurn && event && !event.subagent) liveTurn.status.update({ phase: 'tool', label: presentToolActivity(event.name, event.args || {}), output: '', restart: true });
         lastToolHeader = event && event.call ? event.call.id : null; stdout.write('\n' + (richOutput() ? describeTool(event, { color: true, columns: stdout.columns || 0 }) : describeToolStart(event)) + '\n'); },
-      onAutoMode: (event) => { endStream(); stdout.write('[auto] ' + (event.decision === 'allow' ? 'Allowed' : event.decision === 'block' ? 'Blocked' : 'Asking you about') + ' ' + event.tool + (event.reason ? ': ' + event.reason : '') + '\n'); },
+      onAutoMode: (event) => {
+        if (!richOutput()) { endStream(); stdout.write('[auto] ' + (event.decision === 'allow' ? 'Allowed' : event.decision === 'block' ? 'Blocked' : 'Asking you about') + ' ' + event.tool + (event.reason ? ': ' + event.reason : '') + '\n'); return; }
+        const line = autoModeLine(event, { color: colorEnabled(stdout), verbose: verboseEnabled(session) });
+        if (line) { endStream(); stdout.write(line + '\n'); }
+      },
       onUsage: (usage) => recordUsage(USAGE, usage),
       onVerificationGate: (gate) => { endStream(); const dim = colorEnabled(stdout); stdout.write((dim ? '\x1b[2m' : '') + '  ⎿ Not finished yet: ' + gate.steps.join(', ') + (dim ? '\x1b[22m' : '') + '\n'); },
       onThrash: (info) => { endStream(); stdout.write('[stuck?] `' + info.command + '` has failed the same way after ' + info.count + ' rounds of edits; Oasis asked the model to step back and diagnose before editing again.\n'); },

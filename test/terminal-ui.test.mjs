@@ -357,3 +357,14 @@ test('write summaries count a trailing newline as the end of the last line', asy
   assert.match(describeEdit({ name: 'write_file', args: { path: 'a.mjs', content: 'a\nb' }, result: {} }, { color: false }), /Wrote 2 lines/);
   assert.match(describeEdit({ name: 'write_file', args: { path: 'a.mjs', content: 'c\n', append: true }, result: {} }, { color: false }), /Appended 1 line/);
 });
+
+test('command headers keep their quoting, plans say where they stand, auto mode stays quiet when it allows', async () => {
+  const { describeTool, describeToolResult, autoModeLine, shellQuote } = await import('../src/terminal-ui.mjs');
+  assert.equal(describeTool({ name: 'run_command', args: { command: 'node', args: ['-e', 'process.exit(3)'] } }, { color: false }), '[tool] run_command node -e "process.exit(3)"');
+  assert.equal(shellQuote('src/a.mjs'), 'src/a.mjs');
+  assert.equal(shellQuote('say "hi"'), `'say "hi"'`);
+  assert.equal(describeToolResult('todo_write', { todos: [{ content: 'Find it', status: 'completed' }, { content: 'Fix it', status: 'in_progress', activeForm: 'Fixing it' }, { content: 'Test it', status: 'pending' }] }, { color: false }), '  ⎿ 1 of 3 done · now: Fixing it');
+  assert.equal(describeToolResult('todo_write', { todos: [{ content: 'Find it', status: 'completed' }] }, { color: false }), '  ⎿ Done');
+  assert.equal(autoModeLine({ decision: 'allow', reason: 'safe' }, { color: false }), '');
+  assert.equal(autoModeLine({ decision: 'block', reason: 'deletes files' }, { color: false }), '  ⎿ Auto mode blocked this: deletes files');
+});

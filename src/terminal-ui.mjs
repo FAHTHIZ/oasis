@@ -442,9 +442,17 @@ export function middleEllipsis(text, max) {
   return chars.slice(0, head).join('') + '…' + chars.slice(chars.length - (max - 1 - head)).join('');
 }
 
+// One argument as a shell would need it typed: `node -e "process.exit(3)"`,
+// not `node -e process.exit(3)` (the header must be a command you can rerun).
+export function shellQuote(arg) {
+  const text = String(arg ?? '');
+  if (text && /^[\w@%+=:,./~-]+$/.test(text)) return text;
+  if (!text.includes('"') && !/[$`\\!]/.test(text)) return '"' + text + '"';
+  return "'" + text.replace(/'/g, "'\\''") + "'";
+}
 export function describeTool({ name, args = {}, subagent }, { color = true, columns = 0 } = {}) {
   let detail = '';
-  if (name === 'run_command') detail = [args.command, ...(Array.isArray(args.args) ? args.args : [])].join(' ');
+  if (name === 'run_command') detail = [args.command, ...(Array.isArray(args.args) ? args.args.map(shellQuote) : [])].join(' ');
   else if (name === 'monitor') detail = (args.description ? args.description + ' · ' : '') + (args.ws ? String(args.ws.url || '') : [args.command, ...(Array.isArray(args.args) ? args.args : [])].join(' '));
   else if (name === 'run_shell' || name === 'auto_test') detail = String(args.command || '');
   else if (name === 'task') detail = (args.subagent_type || 'general-purpose') + ': ' + (args.description || '');
@@ -460,6 +468,18 @@ export function describeTool({ name, args = {}, subagent }, { color = true, colu
     detail = middleEllipsis(detail, Math.max(12, Number(columns) - 1 - used));
   }
   return indent + dot + (subagent ? ANSI.dim + subagent + ' › ' + ANSI.noBold : '') + ANSI.bold + toolLabel(name) + ANSI.noBold + (detail ? '(' + detail + ')' : '');
+}
+
+// An auto-mode decision, as one line under the step it is about. Allowed
+// steps say nothing (the step running is the answer) unless verbose is on.
+export function autoModeLine(event = {}, { color = true, verbose = false } = {}) {
+  const decision = event.decision;
+  if (decision === 'allow' && !verbose) return '';
+  const words = decision === 'allow' ? 'Auto mode allowed this' : decision === 'block' ? 'Auto mode blocked this' : 'Auto mode is asking you about this';
+  const reason = event.reason ? ': ' + String(event.reason).replace(/\s+/g, ' ').trim() : '';
+  if (!color) return '  ⎿ ' + words + reason;
+  const tone = decision === 'block' ? '\x1b[33m' : ANSI.dim;
+  return '  ⎿ ' + tone + words + reason + '\x1b[0m';
 }
 
 // Test-runner summaries recognised in command output: node --test / TAP,
@@ -525,6 +545,17 @@ export function describeToolResult(name, result, { color = true } = {}) {
   const clip = (text, max = 160) => { const t = String(text).replace(/\s+/g, ' ').trim(); return t.length > max ? t.slice(0, max - 1) + '…' : t; };
   if (result.error) return '  ⎿ ' + red + '✗ ' + clip(friendlyToolError(result.error), 300) + off;
   if (['edit_file', 'multi_edit', 'write_file'].includes(name)) return '';
+  // The plan: where it stands and what is next, under "Update Todos".
+  if (name === 'todo_write' && Array.isArray(result.todos)) {
+    const total = result.todos.length;
+    if (!total) return '  ⎿ ' + dim + 'Cleared the plan' + off;
+    const done = result.todos.filter((todo) => todo && todo.status === 'completed').length;
+    if (done === total) return '  ⎿ ' + dim + (total === 1 ? 'Done' : 'All ' + total + ' done') + off;
+    const now = result.todos.find((todo) => todo && todo.status === 'in_progress');
+    const next = now || result.todos.find((todo) => todo && todo.status === 'pending');
+    const label = next ? (now ? 'now: ' + clip(now.activeForm || now.content, 90) : 'next: ' + clip(next.content, 90)) : 'all done';
+    return '  ⎿ ' + dim + done + ' of ' + total + ' done · ' + label + off;
+  }
   if (['run_command', 'run_shell', 'auto_test'].includes(name) && result.exitCode !== undefined) {
     const combined = String(result.stdout || '') + '\n' + String(result.stderr || '');
     const tests = summarizeTestOutput(combined);
