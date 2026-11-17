@@ -1311,10 +1311,10 @@ function updateGroupHead(group) {
   group.head.querySelector('.steps-meta').textContent = meta.join(' · ');
   // Inside the open group: how much of that time was tools and how much was
   // the model working between them.
+  // (on hover of the time: the footer line it used to take read as clutter).
   const split = !running && !waiting && timing && timing.spanMs >= 1000 ? timingSplit(timing) : '';
-  let foot = group.body.querySelector('.steps-timing');
-  if (split && !foot) { foot = document.createElement('div'); foot.className = 'steps-timing'; group.body.appendChild(foot); }
-  if (foot) { if (!split) foot.remove(); else if (foot.textContent !== split) foot.textContent = split; }
+  const metaEl = group.head.querySelector('.steps-meta');
+  if (split) metaEl.title = split; else metaEl.removeAttribute('title');
   group.head.setAttribute('aria-label', title + ', ' + meta.join(', ') + '. ' + (group.el.classList.contains('open') ? 'Collapse' : 'Expand') + ' steps.');
 }
 function updateStepRow(group, tool) {
@@ -2252,7 +2252,7 @@ function foldTurn(workedLine, { live = false, at = 0 } = {}) {
   }
   const work = items.slice(0, answerAt);
   if (!work.length) return null;
-  const steps = work.reduce((n, node) => n + node.querySelectorAll('.tool').length, 0);
+  const steps = work.reduce((n, node) => n + node.querySelectorAll('.tool:not(.plan)').length, 0);
   const box = document.createElement('details');
   box.className = 'work-fold';
   const head = document.createElement('summary');
@@ -2261,9 +2261,15 @@ function foldTurn(workedLine, { live = false, at = 0 } = {}) {
   label.className = 'work-fold-label';
   // What the work did ("Edited 2 files +13 −1 · read 3 files · ran 2
   // commands"), or the step count when the steps are of other kinds.
+  // The line stays short enough to read at a glance ("Worked for 22s", then
+  // dim: "edited 1 file +1 −1 · 11 steps"); the full breakdown is on hover.
   const did = runSummary(work.flatMap((node) => [...node.querySelectorAll('.tool')].map((row) => row._tool).filter(Boolean)));
-  label.textContent = workedLine.textContent + (did ? ' · ' + did : steps ? ' · ' + steps + ' step' + (steps === 1 ? '' : 's') : '');
-  head.append(label);
+  label.textContent = workedLine.textContent;
+  const changed = did.split(' · ').filter((part) => /^(edited|deleted) /i.test(part)).map((part) => part[0].toLowerCase() + part.slice(1));
+  const meta = document.createElement('span');
+  meta.className = 'work-fold-meta';
+  meta.textContent = [...changed, steps ? steps + ' step' + (steps === 1 ? '' : 's') : ''].filter(Boolean).join('\u2002·\u2002');
+  head.append(label, meta);
   // When it finished ("done 14:05"), as Claude Code's turn duration does.
   if (at) {
     const when = document.createElement('span');
@@ -2272,7 +2278,7 @@ function foldTurn(workedLine, { live = false, at = 0 } = {}) {
     when.title = new Date(at).toLocaleString();
     head.append(when);
   }
-  if (workedLine.title) head.title = workedLine.title;
+  head.title = [did ? did[0].toUpperCase() + did.slice(1) : '', workedLine.title].filter(Boolean).join('\n\n');
   const body = document.createElement('div');
   body.className = 'work-fold-body';
   // Stopped or failed before an answer: keep the work open, it is the result.

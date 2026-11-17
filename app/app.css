@@ -172,7 +172,6 @@ svg.icon.i-stop{fill:currentColor}
    cards. Prose from the agent sits between rows at full width. */
 .steps,.thinking{--rail-x:11px;position:relative;margin:0 0 2px}
 .steps:has(+.msg),.thinking:has(+.msg),.steps:has(+.draft-row),.thinking:has(+.draft-row){margin-bottom:12px}
-:is(.steps,.thinking):has(+:is(.steps,.thinking))::after{content:"";position:absolute;left:calc(var(--rail-x) - .5px);top:26px;bottom:-4px;width:1px;background:var(--line-strong);pointer-events:none}
 .steps.enter{animation:rise .2s var(--ease) both}
 .steps-head{display:flex;align-items:center;gap:8px;width:100%;min-height:30px;padding:4px 8px 4px 0;border:0;border-radius:8px;background:none;text-align:left;font:inherit;font-size:13.5px;color:var(--text-2);cursor:pointer}
 .steps-head:hover .steps-title{color:var(--text)}
@@ -190,7 +189,7 @@ svg.icon.i-stop{fill:currentColor}
 @keyframes spin{to{transform:rotate(360deg)}}
 .steps-title{flex:0 1 auto;min-width:0;font-weight:500;color:var(--text-2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;transition:color .15s var(--ease)}
 .steps.waiting .steps-title{color:var(--warn)}
-.steps-meta{flex:0 1 auto;max-width:48%;overflow:hidden;text-overflow:ellipsis;margin-left:auto;font:11.5px/1.4 var(--mono);color:var(--faint);font-variant-numeric:tabular-nums;white-space:nowrap}
+.steps-meta{flex:0 1 auto;max-width:48%;overflow:hidden;text-overflow:ellipsis;margin-left:auto;font-size:12px;line-height:1.4;color:var(--faint);font-variant-numeric:tabular-nums;white-space:nowrap}
 .steps-head .chevron,.tool .chevron{flex:none;color:var(--faint);font-size:16px;line-height:1;opacity:0;transition:transform .18s var(--ease),opacity .15s var(--ease)}
 .steps-head:hover .chevron,.steps-head:focus-visible .chevron,.steps.open>.steps-head .chevron,.tool>details>summary:hover .chevron,.tool>details[open]>summary .chevron,.tool>details>summary:focus-visible .chevron{opacity:1}
 .steps.open>.steps-head .chevron{transform:rotate(90deg)}
@@ -202,7 +201,6 @@ svg.icon.i-stop{fill:currentColor}
 .steps.single:not(:has(.tool>details[open]))>.steps-body{padding-top:0}
 .steps.single:not(:has(.tool>details[open])):not(:has(.step-diff:not([hidden])))>.steps-head .chevron{transform:none}
 .steps.single .step-list>.tool>details>.inspect{margin:4px 0 6px}
-.steps-timing{padding:4px 4px 0;color:var(--faint);font-size:11.5px;font-variant-numeric:tabular-nums}
 .step-list{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:0;position:relative}
 .tool{position:relative;border-radius:var(--r-md)}
 .tool.enter{animation:rise .18s var(--ease) both}
@@ -243,10 +241,10 @@ svg.icon.i-stop{fill:currentColor}
 .source-mark.has-icon img{opacity:1}
 .source-name{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
 .source-more{align-self:center;font:11px var(--mono);color:var(--faint)}
-.tool .lines{flex:none;display:inline-flex;gap:5px;font:11px var(--mono);font-variant-numeric:tabular-nums}
+.tool .lines{flex:none;display:inline-flex;gap:5px;font-size:11.5px;font-variant-numeric:tabular-nums}
 .tool .lines .add{color:var(--add)}
 .tool .lines .del{color:var(--del)}
-.tool .dur{flex:none;font:11px var(--mono);color:var(--faint);font-variant-numeric:tabular-nums;min-width:3ch;text-align:right}
+.tool .dur{flex:none;font-size:11.5px;color:var(--faint);font-variant-numeric:tabular-nums;min-width:3ch;text-align:right}
 .tool.ok .dur{margin-left:auto}
 .inspect{margin:4px 4px 8px 30px;display:grid;gap:8px;animation:rise .18s var(--ease) both}
 .inspect-section{border:1px solid var(--line);border-radius:var(--r-md);background:var(--sunken);overflow:hidden}
@@ -592,7 +590,10 @@ details.manual fieldset{margin:0}
 .work-fold{margin:0 0 12px}
 .work-fold-head{display:inline-flex;align-items:center;max-width:100%;gap:8px;list-style:none;cursor:pointer;padding:5px 10px 5px 6px;margin-left:-6px;border-radius:8px;color:var(--muted);font-size:13px;font-variant-numeric:tabular-nums;user-select:none;transition:background .12s var(--ease),color .12s var(--ease)}
 .work-fold-head::-webkit-details-marker{display:none}
-.work-fold-label{min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.work-fold-label{flex:none;white-space:nowrap}
+.work-fold-meta{min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--faint)}
+.work-fold-meta:empty{display:none}
+.work-fold-meta::before{content:"·";margin-right:8px}
 .work-fold-when{flex:none;white-space:nowrap;color:var(--faint)}
 .work-fold-when::before{content:"·";margin-right:8px}
 .work-fold-head::before{content:"";width:6px;height:6px;border-right:1.5px solid currentColor;border-bottom:1.5px solid currentColor;transform:rotate(-45deg);transition:transform .18s ease;flex:none;margin-right:2px}
