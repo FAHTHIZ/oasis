@@ -1,4 +1,5 @@
 import { attachNeuronLineage, buildNeuronNetworkSnapshot, descendantRecords } from './neuron-network.mjs';
+import { ledgerAgentEvent, ledgerCharge, recoverLedgerNeurons } from './neuron-ledger.mjs';
 
 // Background subagents, like Claude Code's background agents:
 //   task { run_in_background: true }  starts a subagent and returns its id at once
@@ -129,6 +130,46 @@ export function restoreAgentHistory(session, snapshots = []) {
       });
     }
   }
+  // Workers started after the session file was last saved exist only in the
+  // neuron ledger (src/neuron-ledger.mjs). They come back interrupted.
+  for (const neuron of recoverLedgerNeurons(session, new Set(registry.agents.keys()))) {
+    const match = neuron.id.match(/^agent_([1-9]\d{0,8})$/);
+    if (!match) continue;
+    const record = {
+      id: neuron.id,
+      parentId: neuron.parentId,
+      depth: neuron.depth,
+      type: String(neuron.role).slice(0, 80),
+      description: String(neuron.description).slice(0, 120),
+      status: neuron.status,
+      background: false,
+      startedAt: neuron.startedAt || Date.now(),
+      finishedAt: neuron.finishedAt || Date.now(),
+      runs: 1,
+      toolCalls: 0,
+      tokensUsed: neuron.tokens,
+      usage: normalizeAgentUsage({ requests: neuron.requests, totalTokens: neuron.tokens, costUsd: neuron.costUsd }),
+      recentTools: [],
+      report: '',
+      error: neuron.recovered ? 'Runtime stopped before this worker finished or the session was saved; recovered from the neuron ledger.' : '',
+      readOnly: false,
+      teamId: neuron.teamId,
+      sharedTaskId: null,
+      workspaceIsolation: 'shared',
+      child: null,
+      controller: null,
+      promise: null,
+      resumable: false,
+      recoveredFromLedger: true
+    };
+    attachNeuronLineage(registry, record, record.parentId);
+    registry.agents.set(record.id, record);
+    registry.next = Math.max(Number(registry.next) || 1, Number(match[1]) + 1);
+    restored.push(record);
+    if (neuron.recovered) {
+      recordAgentEvent(session, 'agent.interrupted', { agentId: record.id, teamId: record.teamId || undefined, description: record.description, detail: record.error });
+    }
+  }
   return restored;
 }
 
@@ -172,6 +213,7 @@ export function recordAgentEvent(session, type, fields = {}) {
   if (typeof session.onAgentEvent === 'function') {
     try { session.onAgentEvent(event); } catch {}
   }
+  if (worker) ledgerAgentEvent(session, event.type, worker);
   return event;
 }
 
@@ -395,6 +437,7 @@ export function addAgentUsage(record, usage) {
     total.requests += 1;
     if (usage.costKnown === false) total.costKnown = false;
   }
+  ledgerCharge(record, usage);
 }
 
 export function summarizeAgent(record, { full = false } = {}) {
@@ -412,6 +455,7 @@ export function summarizeAgent(record, { full = false } = {}) {
     agent: record.type,
     description: record.description,
     status: record.status,
+    ...(record.queued ? { queued: true, note: 'Waiting for a free slot; it starts by itself.' } : {}),
     background: Boolean(record.background),
     elapsed: elapsed(record),
     runs: record.runs,

@@ -89,6 +89,7 @@ The parent sees only the child's report, so OASIS checks a report that says test
 - `team_create` groups agents around a shared task board. Members coordinate with `team_send_message` and the `task_*` tools.
 - Background agents cannot ask for approval. Any action outside the allowed rules is denied.
 - A stall monitor stops a background agent after 450 seconds with no model or tool activity (1200 seconds while a tool is still running). Its status becomes `stalled` and its last written text is kept as a partial report. Change the idle limit with `OASIS_SUBAGENT_STALL_SECONDS` or the `subagentStallSeconds` setting; `0` turns it off.
+- Every subagent's start, end and spending is also written to the [neuron ledger](OASIS-NEURON-NETWORK.md#network-ledger-roadmap-11). If OASIS is killed mid-turn, the workers it had started come back as `interrupted` when the session is resumed, never as running. `OASIS_NEURON_LEDGER=0` turns the ledger off.
 - Every subagent request streams, even with nothing on screen. If a provider goes silent mid-request, it fails after `OASIS_STREAM_IDLE_SECONDS` (default 300, or 600 at high reasoning effort) and is retried, instead of blocking for the 600-second header timeout. Set `OASIS_SUBAGENT_STREAM=0` for a provider that cannot stream.
 
 ## Safety boundaries
