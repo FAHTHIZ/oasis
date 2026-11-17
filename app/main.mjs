@@ -38,7 +38,7 @@ document.documentElement.dataset.booted = '1';
 // Composer autocomplete state (declared early: refreshFiles clears the file cache).
 const suggest = { token: null, items: [], index: 0, commands: null, files: null, noFileCommand: false, seq: 0 };
 
-const APP_VERSION = '1.4.0';
+const APP_VERSION = '1.5.0';
 const $ = (id) => document.getElementById(id);
 const store = new IndexedDBStore();
 const sandbox = new FrameSandbox();
