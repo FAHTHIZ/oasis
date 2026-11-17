@@ -27,6 +27,7 @@ User-facing change history grouped by package version. A version heading does no
 - Web app: the file viewer has a Copy path button, and on a phone its header keeps the file name on its own line with the actions wrapped below it (the name and the close button used to be pushed off screen).
 - Terminal: the line after each turn and the `/tasks` agent list read in hours past an hour (`Done · 1h 02m 05s · 2.4M tokens`, `2h 05m`), not `62m 05s`, `2400k` or `125m`.
 - Terminal: session ages round down and read correctly: the resume recap says `saved 1 day ago` (was `1 days ago`) and `59 min ago` (was `60 min ago`), `/resume` lists no `60m ago`, and `oasis bg` shows background sessions older than two days in days.
+- Web app: the command palette has Review changes, which opens the side panel straight on the Changes tab (searching "diff" finds it), and Open files now always lands on the file list.
 - Sounds: one palette in `app/core/sound-palette.mjs` for both the terminal and the web app. The terminal writes its cached sound files before the first turn so the first chime plays at once.
 
 ## [1.5.0] - 2026-11-17
