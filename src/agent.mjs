@@ -96,6 +96,24 @@ export { mergeAnthropicUsage, toolCallSlot, strayStreamError };
 export { chargeAuxiliaryUsage, defaultStreamIdleMs, fallbackCooldownMs, isContextOverflowError, isLoopbackProvider, requestTimeoutMs, restorePrimaryModel, shortProviderReason, stopFailureType, streamRestartLimit, suggestNextPrompt, summarizeFallbackFailure, testProviderConnection } from './agent-request.mjs';
 const NESTED_MEMORY_TOOLS = new Set(['read_file', 'write_file', 'edit_file', 'multi_edit', 'notebook_edit']);
 const execFileAsync = promisify(execFile);
+// While the summary of earlier history is written, the page shows how far
+// along it is (Claude Code counts the summary's tokens): the prompt being
+// read on a local server, then the summary's characters as they stream.
+function compactionStreamOptions(options = {}) {
+  if (typeof options.onCompactionProgress !== 'function') return {};
+  let chars = 0;
+  let sentAt = 0;
+  const report = (info) => { try { options.onCompactionProgress(info); } catch {} };
+  return {
+    onDelta: (delta) => {
+      chars += String(delta || '').length;
+      const now = Date.now();
+      if (now - sentAt >= 400) { sentAt = now; report({ outChars: chars }); }
+    },
+    onPromptProgress: (progress) => report({ promptProgress: { total: Number(progress && progress.total) || 0, cache: Number(progress && progress.cache) || 0, processed: Number(progress && progress.processed) || 0, time_ms: Number(progress && progress.time_ms) || 0 } })
+  };
+}
+
 async function pathExists(file) { try { await access(file); return true; } catch { return false; } }
 export { subagentMaxDepth, subagentStallLimits } from './subagent-support.mjs';
 export { usageOrEstimate } from './usage-estimate.mjs';
@@ -197,6 +215,7 @@ export async function compactHistoryIfNeeded(session, options = {}) {
     const completion = await requestCompletion(summarySession, {
       noTools: true,
       signal: deadline.signal,
+      ...compactionStreamOptions(options),
       ...(typeof options.fetchImpl === 'function' ? { fetchImpl: options.fetchImpl } : {})
     });
     summary = String(completion.content || '').trim();
@@ -367,6 +386,7 @@ async function compactMidTurnHistoryIfNeeded(session, requestIndex, options = {}
     const completion = await requestCompletion(summarySession, {
       noTools: true,
       signal: deadline.signal,
+      ...compactionStreamOptions(options),
       ...(typeof options.fetchImpl === 'function' ? { fetchImpl: options.fetchImpl } : {})
     });
     summary = String(completion.content || '').trim();
