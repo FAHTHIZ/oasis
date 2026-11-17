@@ -2496,6 +2496,20 @@ function handleRunEvent(event) {
       showThinking();
       runClock.tick();
       break;
+    case 'hook_result': {
+      // Claude Code 2.1.326: a hook that blocks shows in yellow with its reason,
+      // one that fails in red, instead of the turn silently changing course.
+      const name = (event.event || 'A') + ' hook';
+      const text = event.outcome === 'blocked' ? name + ' blocked' + (event.reason ? ': ' + event.reason : '') : (event.reason.startsWith(name + ' failed') ? event.reason : name + ' failed' + (event.reason ? ': ' + event.reason : ''));
+      const shown = text.length > 300 ? text.slice(0, 299) + '…' : text;
+      // Parallel tools hit the same hook at once; repeat notes merge into "× 2".
+      const last = $('transcript').lastElementChild;
+      if (last && last.classList.contains('hook-' + event.outcome) && last.dataset.hookText === shown) {
+        last.dataset.hookCount = String(Number(last.dataset.hookCount || 1) + 1);
+        last.textContent = shown + ' (× ' + last.dataset.hookCount + ')';
+      } else addMessage('note hook-' + event.outcome, shown).dataset.hookText = shown;
+      break;
+    }
     case 'hook_status':
       liveModel.hook = event.phase === 'start' ? { label: event.label || 'Running a hook', startedAt: Date.now() } : null;
       runClock.tick();

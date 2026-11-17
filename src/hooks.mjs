@@ -521,6 +521,12 @@ export async function runHooks(event, payload, options = {}) {
       result.additionalContext.push(capContext(out.stdout));
     }
   }
+  // Tell the status observer how the hooks ended when they blocked or failed, so
+  // the transcript can show it (yellow for a block, red for a failure).
+  if (status && (result.blocked || result.failed || result.permissionDecision === 'deny')) {
+    const failure = result.messages.find((line) => /hook failed/.test(line)) || '';
+    try { status({ phase: 'result', event, outcome: result.blocked || result.permissionDecision === 'deny' ? 'blocked' : 'failed', reason: String(result.blocked || result.permissionDecision === 'deny' ? result.reason : failure).trim().slice(0, 500) }); } catch {}
+  }
   return result;
 }
 
