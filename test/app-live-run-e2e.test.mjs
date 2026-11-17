@@ -129,9 +129,16 @@ test('a live run streams reasoning into a Thinking block that settles and surviv
   const live = await evaluate(page, `JSON.stringify(window.__live)`).then(JSON.parse);
   assert.ok(live.samples > 10);
   assert.ok(live.longestGap < 1500, 'never blank for long while the model works (longest gap ' + live.longestGap + ' ms)');
-  // Narration sits between the two groups as prose.
-  const order = await evaluate(page, `[...document.getElementById('transcript').children].map((el) => el.classList.contains('steps') ? 'group' : el.classList.contains('thought') ? 'thought' : el.classList.contains('assistant') ? 'text' : el.classList.contains('user') ? 'user' : '').filter(Boolean).join(' ')`);
-  assert.equal(order, 'user thought text group text group text');
+  // Narration sits between the two groups as prose; when the run ends, the
+  // work folds under one "Worked for" line and the answer stays outside.
+  const kind = `(el) => el.classList.contains('work-fold') ? 'fold' : el.classList.contains('steps') ? 'group' : el.classList.contains('thought') ? 'thought' : el.classList.contains('assistant') ? 'text' : el.classList.contains('user') ? 'user' : ''`;
+  const order = await evaluate(page, `[...document.getElementById('transcript').children].map(${kind}).filter(Boolean).join(' ')`);
+  assert.equal(order, 'user fold text');
+  const folded = await evaluate(page, `[...document.querySelector('#transcript .work-fold-body').children].map(${kind}).filter(Boolean).join(' ')`);
+  assert.equal(folded, 'thought text group text group');
+  assert.match(await evaluate(page, `document.querySelector('.work-fold-head').textContent`), /^Worked for \S+ · 2 steps$/);
+  assert.equal(await evaluate(page, `document.querySelector('.work-fold').open`), false);
+  await evaluate(page, `document.querySelector('.work-fold-head').click(); true`);
   // Expanding shows the reasoning; a reload shows it again.
   await evaluate(page, `document.querySelector('.thinking.thought .thinking-head').click(); true`);
   assert.equal(await evaluate(page, `!document.querySelector('.thinking.thought .thinking-text').hidden`), true);
