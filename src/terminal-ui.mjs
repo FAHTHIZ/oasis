@@ -1,6 +1,7 @@
 // Terminal presentation for the interactive CLI: the animated startup banner,
 // the prompt and footer, `!` shell mode, and tool activity lines with diffs.
 import { spawn } from 'node:child_process';
+import { formatTokens } from './activity-indicator.mjs';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -328,14 +329,18 @@ const MODE_LABELS = {
 
 export function footerFor({
   text = '', mode = 'default', queued = 0, color = true,
-  model = '', contextPercent = null, costLabel = '', budgetUsd = 0,
+  model = '', contextPercent = null, contextTokens = null, costLabel = '', budgetUsd = 0,
   spentUsd = null
 } = {}) {
   const parts = [];
   if (model) parts.push('model ' + String(model).slice(0, 32));
   if (Number.isFinite(contextPercent)) {
     const percent = Math.max(0, Math.min(999, Math.round(contextPercent)));
-    parts.push((percent >= 90 ? '! context ' : percent >= 50 ? 'context ' : 'context ') + percent + '%');
+    parts.push((percent >= 90 ? '! context ' : 'context ') + percent + '%');
+  } else if (Number(contextTokens) > 0) {
+    // The model's window is unknown: a percentage of a guess would read as
+    // "164%", so show how much the conversation holds instead.
+    parts.push('context ' + formatTokens(contextTokens) + ' tokens');
   }
   if (costLabel) {
     const budget = Number(budgetUsd) > 0 ? Number(budgetUsd) : 0;
