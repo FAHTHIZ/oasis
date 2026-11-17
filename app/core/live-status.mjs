@@ -15,6 +15,7 @@
 //   Thinking · ↓ 320 tokens
 //   Writing src/app.mjs · 3.2 KB · ↓ 1.1k tokens · 4 tok/s
 //   Responding · no new output for 25s
+import { commandIntent } from './command-intent.mjs';
 
 export function formatTokens(count) {
   const n = Math.max(0, Math.round(Number(count || 0)));
@@ -193,7 +194,13 @@ export function runSummary(tools = []) {
     } else if (name === 'delete_file') deleted.add(file || 'file' + deleted.size);
     else if (READ_TOOLS.has(name)) read.add(file || name + read.size);
     else if (SEARCH_TOOLS.has(name)) searches++;
-    else if (COMMAND_TOOLS.has(name)) commands++;
+    else if (COMMAND_TOOLS.has(name)) {
+      // A command that only read or searched counts as that (Codex's "Explored").
+      const intent = commandIntent([args.command, ...(Array.isArray(args.args) ? args.args : [])].filter(Boolean).join(' '));
+      if (intent.kind === 'read' && intent.targets.length) for (const target of intent.targets) read.add(target.replace(/^\.\//, ''));
+      else if (intent.kind === 'search' || intent.kind === 'list') searches++;
+      else commands++;
+    }
     else if (WEB_TOOLS.has(name)) web++;
   }
   const parts = [];

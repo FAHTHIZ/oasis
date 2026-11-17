@@ -12,8 +12,10 @@ test('steps read as finished work, and the running step reads as what is happeni
   assert.equal(liveLabel({ name: 'edit_file', args: { path: 'src/math.mjs' } }), 'Editing math.mjs');
   assert.equal(activityLabel({ name: 'run_command', args: { command: 'npm', args: ['test'] } }), 'Ran the tests');
   assert.equal(liveLabel({ name: 'run_command', args: { command: 'npm', args: ['test'] } }), 'Running the tests');
-  assert.equal(liveLabel({ name: 'run_command', args: { command: 'ls -la' } }), 'Running ls -la');
-  assert.equal(activityLabel({ name: 'run_command', args: { command: 'ls' } }), 'Ran a command');
+  assert.equal(liveLabel({ name: 'run_command', args: { command: 'ls -la' } }), 'Looking through the project');
+  assert.equal(liveLabel({ name: 'run_command', args: { command: 'node build.mjs' } }), 'Running node build.mjs');
+  assert.equal(activityLabel({ name: 'run_command', args: { command: 'ls' } }), 'Listed project files');
+  assert.equal(activityLabel({ name: 'run_command', args: { command: 'make build' } }), 'Ran a command');
   assert.equal(activityLabel({ name: 'task', args: { subagent_type: 'explore' } }), 'Ran the explore agent');
   assert.equal(liveLabel({ name: 'web_search', args: { query: 'node 22 release' } }), 'Searching the web for node 22 release');
   assert.equal(fallbackToolLabel('mcp__context7__resolve-library-id'), 'Used context7: resolve library id');
@@ -193,7 +195,8 @@ test('a failed step says what did not happen instead of the past tense', async (
   assert.equal(stepLabel({ id: 'a', name: 'write_file', args: { path: 'notes.txt' }, ok: false }), "Couldn't write notes.txt");
   assert.equal(groupTitle([{ id: 'a', name: 'write_file', args: { path: 'notes.txt' }, ok: false }]), "Couldn't write notes.txt");
   assert.equal(stepLabel({ id: 'b', name: 'run_command', args: { command: 'npm test' }, ok: false }), 'Tests failed');
-  assert.equal(stepLabel({ id: 'c', name: 'run_command', args: { command: 'ls' }, ok: false }), 'Command failed');
+  assert.equal(stepLabel({ id: 'c', name: 'run_command', args: { command: 'make' }, ok: false }), 'Command failed');
+  assert.equal(stepLabel({ id: 'c2', name: 'run_command', args: { command: 'cat missing.js' }, ok: false }), "Couldn't read missing.js");
   assert.equal(stepLabel({ id: 'd', name: 'edit_file', args: { path: 'a.js' }, ok: false, outcome: 'timed_out' }), 'Timed out trying to edit a.js');
   assert.equal(stepLabel({ id: 'e', name: 'write_file', args: { path: 'notes.txt' }, ok: true }), 'Wrote notes.txt');
 });
