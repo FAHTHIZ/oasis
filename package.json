@@ -1,6 +1,6 @@
 {
   "name": "oasis-oss",
-  "version": "1.6.0",
+  "version": "1.7.0",
   "description": "Open-source, model-agnostic coding-agent runtime with a remote-first browser workspace and terminal agent: real shell, files, MCP, subagents and approvals.",
   "type": "module",
   "main": "./src/sdk.mjs",
@@ -169,7 +169,7 @@
   },
   "oasisRelease": {
     "channel": "stable",
-    "stableTag": "v1.6.0",
+    "stableTag": "v1.7.0",
     "published": true
   },
   "homepage": "https://github.com/FAHTHIZ/oasis#readme",
