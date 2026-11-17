@@ -5147,10 +5147,29 @@ function refreshFiles() {
     const changesList = $('changesList');
     changesList.replaceChildren();
     if (!changes.length) changesList.innerHTML = '<p class="empty">' + (RT ? 'No uncommitted changes.' : 'No changes since this project was opened.') + '</p>';
-    for (const change of changes) changesList.appendChild(fileRow(change.path, change.status));
+    const stats = await changeStats(changes);
+    for (const change of changes) changesList.appendChild(fileRow(change.path, change.status, stats.get(change.path)));
   }, 60);
 }
-function fileRow(path, status) {
+// "+5 −2" for each row of the Changes list. The runtime's diff is already
+// fetched; in the browser workspace small change sets are diffed here.
+async function changeStats(changes) {
+  const stats = new Map();
+  if (!workspace || !changes.length || changes.length > 200) return stats;
+  try {
+    if (typeof workspace.fileDiff === 'function') {
+      for (const change of changes) stats.set(change.path, diffStat(workspace.fileDiff(change.path)));
+      return stats;
+    }
+    const files = await workspace.load();
+    for (const change of changes) {
+      const file = files.get(change.path);
+      if (file) stats.set(change.path, diffStat(lineDiff(file.original || '', file.deleted ? '' : file.content)));
+    }
+  } catch { /* Counts are a nicety; the list still shows. */ }
+  return stats;
+}
+function fileRow(path, status, stat) {
   const row = document.createElement('button');
   row.className = 'file-row';
   const slash = path.lastIndexOf('/');
@@ -5160,6 +5179,13 @@ function fileRow(path, status) {
   const base = document.createElement('span');
   base.textContent = path.slice(slash + 1);
   row.append(dir, base);
+  if (stat && (stat.added || stat.removed)) {
+    const counts = document.createElement('span');
+    counts.className = 'diff-stat';
+    counts.title = stat.added + ' line' + (stat.added === 1 ? '' : 's') + ' added, ' + stat.removed + ' removed';
+    counts.append(Object.assign(document.createElement('span'), { className: 'add', textContent: '+' + stat.added }), ' ', Object.assign(document.createElement('span'), { className: 'del', textContent: '−' + stat.removed }));
+    row.appendChild(counts);
+  }
   if (status) { const tag = document.createElement('span'); tag.className = 'tag ' + status; tag.textContent = status === 'added' ? 'A' : status === 'deleted' ? 'D' : 'M'; tag.title = status; row.appendChild(tag); }
   row.addEventListener('click', () => openEditor(path, status));
   return row;
