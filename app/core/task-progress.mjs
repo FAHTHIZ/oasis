@@ -6,7 +6,7 @@ export function normalizeTaskProgress(value) {
     .map((item) => ({
       content: String(item && (item.content || item.activeForm || item.title) || '').trim().slice(0, 300),
       status: VALID_STATUSES.has(item && item.status) ? item.status : 'pending',
-      ...(item && typeof item.activeForm === 'string' && item.activeForm.trim() ? { active: item.activeForm.replace(/\s+/g, ' ').trim().slice(0, 300) } : {})
+      ...(item && typeof (item.activeForm || item.active) === 'string' && String(item.activeForm || item.active).trim() ? { active: String(item.activeForm || item.active).replace(/\s+/g, ' ').trim().slice(0, 300) } : {})
     }))
     .filter((item) => item.content);
   const total = items.length;

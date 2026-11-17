@@ -2,7 +2,8 @@ import { createServer as createHttpServer } from 'node:http';
 import { createServer as createHttpsServer } from 'node:https';
 import { constants as fsConstants, readFileSync, statSync } from 'node:fs';
 import { formatApprovalMessage, redactApprovalSecrets } from './approval-language.mjs';
-import { labelToolActivity, safeToolActivityArgs, toolActivityArtifacts, toolActivityCategory, toolActivityOutcome, toolActivityStatus, toolActivityWarning } from './tool-activity.mjs';
+import { describeDraft } from './tool-draft.mjs';
+import { labelToolActivity, presentToolActivity, safeToolActivityArgs, toolActivityArtifacts, toolActivityCategory, toolActivityOutcome, toolActivityStatus, toolActivityWarning } from './tool-activity.mjs';
 import { createHash, randomBytes, randomUUID, timingSafeEqual } from 'node:crypto';
 import { clientAddress, createAuthLimiter, hostAllowed, isLoopbackAddress, parseAllowedHosts, requestIsSecure } from './remote-access.mjs';
 import { access, lstat, mkdir, open, readFile, realpath, rename, rm } from 'node:fs/promises';
@@ -1191,7 +1192,8 @@ export function createOasisWebServer(options = {}) {
             if (draft.path) target.path = redactApprovalSecrets(String(draft.path)).slice(0, 300);
             else if (draft.command) target.command = redactApprovalSecrets(String(draft.command)).slice(0, 200);
             else if (draft.query) target.query = redactApprovalSecrets(String(draft.query)).slice(0, 200);
-            emit(job, 'tool_draft', { index: Math.max(0, Math.min(64, Number(draft.index) || 0)), name: String(draft.name).slice(0, 100), chars: Math.max(0, Math.min(50_000_000, Number(draft.chars) || 0)), ...target, ...(draft.done ? { done: true } : {}) });
+            const shown = describeDraft({ name: draft.name, ...target, chars: draft.chars });
+            emit(job, 'tool_draft', { index: Math.max(0, Math.min(64, Number(draft.index) || 0)), name: String(draft.name).slice(0, 100), chars: Math.max(0, Math.min(50_000_000, Number(draft.chars) || 0)), ...target, text: shown.text, ...(draft.done ? { done: true } : {}) });
           },
           onToolOutput: ({ call, stream, text }) => {
             const callId = call && call.id ? String(call.id).slice(0, 160) : '';
@@ -1208,6 +1210,7 @@ export function createOasisWebServer(options = {}) {
               callId,
               args: safeArgs,
               label: labelToolActivity(name, safeArgs),
+              present: presentToolActivity(name, safeArgs),
               category: toolActivityCategory(name),
               detail: toolDetail(name, safeArgs),
               ...(subagent ? { subagent: String(subagent).slice(0, 100) } : {})
