@@ -1,5 +1,6 @@
 import { catalogPrice } from './model-catalog.mjs';
 import { LOCAL_MODEL_SERVER_PORTS, GATEWAY_PORTS } from './provider-registry.mjs';
+import { spend as spendBudget } from './budget-algebra.mjs';
 
 // Approximate model pricing (USD per million tokens) used for /cost and
 // --max-budget-usd. Override or extend with settings `pricing`:
@@ -110,6 +111,7 @@ export function recordBudgetSpend(session, amount, options = {}) {
   ledger.spentUsd = Math.max(0, Number(ledger.spentUsd) || 0) + delta;
   if (!Number.isSafeInteger(ledger.unknownRequests) || ledger.unknownRequests < 0) ledger.unknownRequests = 0;
   if (options.costKnown === false) ledger.unknownRequests += 1;
+  if (session.budgetNode && delta > 0) spendBudget(session.budgetNode, { usd: delta }, { force: true });
   const limit = Math.max(0, Number(session.maxBudgetUsd) || 0);
   if (options.enforce !== false && limit > 0 && ledger.spentUsd >= limit) throw new BudgetExceededError(ledger.spentUsd, limit);
   return ledger.spentUsd;

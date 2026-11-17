@@ -157,6 +157,30 @@ A child past a limit waits its turn instead of failing. A foreground child's `ta
 
 A parent blocked on foreground children gives up its slot until the last of them returns, then takes one again. Only working agents hold slots, so a network full of parents waiting on their own children cannot deadlock. `test/neuron-scheduler.test.mjs` checks this with 40 random spawn trees (nested foreground and background children, random limits and providers): none exceeds a limit, all finish, and every slot is released.
 
+## Budget algebra (roadmap 1.3)
+
+Every neuron has a budget (`src/budget-algebra.mjs`) with five kinds of spend: tokens, dollars, requests, steps and children. The main session's limits are its `--max-total-tokens`, `--max-budget-usd` and `--max-requests`; anything unset is unlimited.
+
+When a subagent run starts, it reserves its own budget from its parent's. The reservation counts against the parent at once, so siblings cannot spend the same money twice, and a grant is never more than the parent has left. When the run ends, however it ends (finished, failed, stopped or cancelled), the unspent part goes back to the parent. A resumed agent (`send_message`) reserves again, minus what its earlier runs spent. Every charge is checked against the neuron and every ancestor before it is applied: a model request (with its estimated prompt size), each agent step and each child spawned. The real token count and cost of a reply are recorded when it arrives, so one reply can pass a limit; the next request is then refused. Spawning counts one `children` against every ancestor, so a root limit caps the whole tree.
+
+Set a per-run budget in an agent's front matter:
+
+```yaml
+---
+name: scout
+description: Finds files
+budgetTokens: 200000
+budgetUsd: 0.5
+budgetRequests: 40
+budgetSteps: 30
+budgetChildren: 2
+---
+```
+
+or for every subagent with `OASIS_SUBAGENT_BUDGET="tokens=200000,usd=0.5"` (the definition wins per kind). A subagent that runs out stops with a `NEURON_BUDGET_EXCEEDED` error, which its parent sees as the `task` result. Without either setting nothing is reserved and subagents draw on the shared session budget as before.
+
+`test/budget-algebra.test.mjs` runs 60 random concurrent spawn trees with random limits, spends and cancellations. No tree passes its root's limit for any kind, a cancelled child refunds exactly what it had not spent, and after every neuron ends the root holds nothing back.
+
 ## Detailed design (proposal, 2026-11)
 
 This section turns phases 2 to 8 above into one design. Nothing in it is
