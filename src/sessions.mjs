@@ -588,7 +588,9 @@ export function sessionRecap(saved, { width = 80, now = Date.now() } = {}) {
   const replies = saved.messages.filter((m) => m && m.role === 'assistant').map((m) => messageText(m.content).trim()).filter(Boolean);
   const title = saved.name || users[0] || '(untitled)';
   const ms = now - Date.parse(saved.updatedAt || '');
-  const age = !Number.isFinite(ms) ? '' : ms < 60_000 ? 'just now' : ms < 3_600_000 ? Math.round(ms / 60_000) + ' min ago' : ms < 86_400_000 ? Math.round(ms / 3_600_000) + ' h ago' : Math.round(ms / 86_400_000) + ' days ago';
+  // Whole units, rounded down: 59.6 minutes is "59 min ago", not "60 min ago", and one day is "1 day ago".
+  const days = Math.floor(ms / 86_400_000);
+  const age = !Number.isFinite(ms) ? '' : ms < 60_000 ? 'just now' : ms < 3_600_000 ? Math.floor(ms / 60_000) + ' min ago' : ms < 86_400_000 ? Math.floor(ms / 3_600_000) + ' h ago' : days + (days === 1 ? ' day ago' : ' days ago');
   const lines = ['Resumed "' + fitLine(title, room - 20) + '" · ' + saved.messages.filter((m) => m && m.role !== 'system').length + ' messages' + (age ? ' · saved ' + age : '')];
   if (users.length) lines.push('  ❯ ' + fitLine(users[users.length - 1], room));
   if (replies.length) lines.push('  ● ' + fitLine(replies[replies.length - 1], room));
