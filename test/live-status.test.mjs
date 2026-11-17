@@ -140,3 +140,14 @@ test('side work names running agents, parked approvals and queued messages', () 
   assert.deepEqual(sideWork({ workers, queued: 1 }), ['2 agents running', '1 waiting for approval', '1 message queued']);
   assert.deepEqual(sideWork({ workers: [{ status: 'running' }], queued: 3 }), ['1 agent running', '3 messages queued']);
 });
+
+test('compaction shows its own status: what it reads, then the summary tokens', () => {
+  const now = 200_000;
+  const start = liveStatus({ phase: 'thinking', compaction: { startedAt: now - 2000, beforeTokens: 48_000 }, elapsedMs: 60_000 }, now);
+  assert.equal(start.label, 'Compacting the conversation');
+  assert.deepEqual(start.meta, ['1m 00s', 'summarising 48k tokens']);
+  const writing = liveStatus({ phase: 'thinking', compaction: { startedAt: now - 12_000, beforeTokens: 48_000, outChars: 4000 }, elapsedMs: 70_000 }, now);
+  assert.ok(writing.meta.some((part) => /^↓ 1k tokens of summary$/.test(part)), writing.meta.join('|'));
+  assert.ok(writing.meta.includes('compacting for 12s'));
+  assert.equal(liveStatus({ phase: 'approval', compaction: { startedAt: now } }, now).label, 'Waiting for you');
+});

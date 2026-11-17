@@ -551,7 +551,8 @@ export class RuntimeAgent {
           case 'verification_gate': if (stepText && !stepHasTools) stepTextFinal = true; break;
           case 'stream_restarted': stepText = ''; this.emit('retry', { attempt: data.attempt || 1 }); break;
           case 'provider_retry': this.emit('retry', { attempt: Number(data.attempt) || 1, waitMs: Number(data.waitMs) || 0, ...(data.status ? { status: Number(data.status) } : {}) }); break;
-          case 'compaction_started': this.emit('compacting', {}); break;
+          case 'compaction_started': this.emit('compacting', { beforeTokens: Number(data.beforeTokens) || 0, messages: Number(data.messages) || 0, timeoutSeconds: Number(data.timeoutSeconds) || 0, ...at }); break;
+          case 'compaction_progress': if (live) this.emit('compacting_progress', { outChars: Number(data.outChars) || 0, ...(data.promptProgress ? { promptProgress: data.promptProgress } : {}) }); break;
           case 'tool_start': {
             // A subagent's own steps show in its row, not the main timeline.
             if (data.subagent) break;

@@ -1955,7 +1955,8 @@ const liveModel = {
   drafts: new Map(),
   resuming: false,
   workers: [],
-  reset() { this.resuming = false; this.workers = []; this.request = null; this.turn = { outChars: 0, streamMs: 0 }; this.drafts.clear(); },
+  compaction: null,
+  reset() { this.resuming = false; this.workers = []; this.compaction = null; this.request = null; this.turn = { outChars: 0, streamMs: 0 }; this.drafts.clear(); },
   // Characters of output arrived (reply, reasoning or a drafted tool call).
   output(chars) {
     const n = Math.max(0, Number(chars) || 0);
@@ -2042,7 +2043,7 @@ const runClock = {
     // page never sits blank while the model works.
     if (!waiting && !agent.detached && now - lastActivity >= IDLE_THINKING_MS && !liveThinking() && !stepsRunning() && $('questionSheet').hidden) showThinking(lastActivity);
     const phase = waiting ? 'approval' : connectionLost ? 'reconnecting' : stepsRunning() ? 'tool' : nowLabel === 'Thinking' ? 'thinking' : nowLabel === 'Responding' ? 'responding' : nowLabel ? 'draft' : 'waiting';
-    const status = liveStatus({ label: nowLabel === 'Thinking' ? '' : nowLabel, phase, request: liveModel.request, turn: liveModel.turn, elapsedMs: this.worked(now) }, now);
+    const status = liveStatus({ label: nowLabel === 'Thinking' ? '' : nowLabel, phase, compaction: liveModel.compaction, request: liveModel.request, turn: liveModel.turn, elapsedMs: this.worked(now) }, now);
     this.label = waiting ? '' : status.label;
     this.stalled = Boolean(status.stalled) && !waiting;
     const label = el.querySelector('.run-status-text');
@@ -2082,7 +2083,11 @@ function timingSummary(records = []) {
   return records.map((r) => 'Model call ' + r.step + ': first token ' + sec(r.ttftMs) + ', total ' + sec(r.totalMs) + ', silent tail ' + sec(r.silentTailMs) + ', ' + (r.inputTokens || r.inputEstimate || 0) + ' in / ' + (r.outputTokens || 0) + ' out' + (r.toolCalls ? ', ' + r.toolCalls + ' tool call' + (r.toolCalls === 1 ? '' : 's') : '')).join('\n');
 }
 function finishRun(prefix) {
+  // A stop is followed by the run's own end; the first call says how it ended.
+  const active = Boolean(runClock.startedAt);
   const ms = runClock.stop();
+  const plan = normalizeTaskProgress(lastTodos);
+  if (active && plan.total && !plan.finished) renderTodos(lastTodos, { ended: prefix === 'Stopped after' ? 'Stopped' : prefix ? 'Run ended' : 'Run failed' });
   nowLabel = '';
   liveModel.reset();
   connectionLost = false;
@@ -2306,6 +2311,7 @@ function handleRunEvent(event) {
     case 'model_start':
       liveModel.request = modelRequest({ startedAt: serverTime(event.startedAt), step: event.step, inputTokens: event.inputTokens, model: event.model, local: event.local, resumed: liveModel.resuming });
       liveModel.resuming = false;
+      liveModel.compaction = null;
       liveModel.drafts.clear();
       draftTexts.clear();
       // The model is working and nothing runs or streams: say so at once.
@@ -2484,14 +2490,27 @@ function handleRunEvent(event) {
       break;
     }
     case 'notices': for (const note of event.notices || []) addMessage('note', note); break;
-    case 'compacting': showThinking(); break;
-    case 'compacted': addMessage('note', event.mode === 'summary' ? 'Earlier conversation summarised to save context.' : event.mode === 'digest' ? 'Earlier conversation condensed to a short digest (the model could not summarise it).' : 'Older tool output trimmed to save context.'); break;
+    case 'compacting':
+      liveModel.compaction = { startedAt: Number(event.at) || Date.now(), beforeTokens: Number(event.beforeTokens) || 0, outChars: 0, progress: null, progressAt: 0 };
+      showThinking();
+      runClock.tick();
+      break;
+    case 'compacting_progress':
+      if (liveModel.compaction) {
+        if (event.promptProgress) { liveModel.compaction.progress = event.promptProgress; liveModel.compaction.progressAt = Date.now(); }
+        if (event.outChars) liveModel.compaction.outChars = event.outChars;
+        runClock.tick();
+      }
+      break;
+    case 'compacted': liveModel.compaction = null; runClock.tick(); addMessage('note', event.mode === 'summary' ? 'Earlier conversation summarised to save context.' : event.mode === 'digest' ? 'Earlier conversation condensed to a short digest (the model could not summarise it).' : 'Older tool output trimmed to save context.'); break;
     case 'compaction_error': toast('Could not summarise the earlier conversation: ' + event.message); break;
     case 'context_overflow': toast('The conversation was too long for the model; condensed it and asked again.'); break;
     case 'empty_reply': toast('The model sent an empty reply; asking again.'); break;
     case 'stopped':
       endTurn('stopped');
       finishRun('Stopped after');
+      // Kept in the transcript, so the task bar and Activity read "Stopped".
+      display.push({ role: 'note', content: 'Stopped.' });
       addMessage('note', 'Stopped.');
       break;
     case 'error': {
@@ -2610,8 +2629,13 @@ function renderUsage() {
 function formatUsd(n) { return n < 0.01 ? '$' + n.toFixed(4) : '$' + n.toFixed(2); }
 function formatTokens(n) { return n >= 1e6 ? (n / 1e6).toFixed(1) + 'M' : n >= 1e3 ? (n / 1e3).toFixed(1) + 'k' : String(n); }
 
-function renderTodos(todos) {
+// The last plan the agent wrote, so a run that ends with steps still open
+// can say so instead of showing one "In progress" forever (Codex's stale
+// checklist, openai/codex#26261).
+let lastTodos = [];
+function renderTodos(todos, { ended = '' } = {}) {
   const box = $('todos');
+  if (!ended) lastTodos = Array.isArray(todos) ? todos : [];
   const progress = normalizeTaskProgress(todos);
   if (!progress.total) {
     if (box.hidden) return;
@@ -2626,7 +2650,7 @@ function renderTodos(todos) {
   const wasOpen = previous ? previous.open : false;
   const previousFill = previous ? Number(previous.dataset.fill || 0) : 0;
   const plan = document.createElement('details');
-  plan.className = 'task-progress';
+  plan.className = 'task-progress' + (ended ? ' ended' : '');
   plan.open = wasOpen;
 
   const summary = document.createElement('summary');
@@ -2637,7 +2661,9 @@ function renderTodos(todos) {
   title.textContent = 'Task plan';
   const caption = document.createElement('span');
   caption.className = 'task-progress-caption';
-  caption.textContent = progress.finished ? 'All steps completed' : progress.activeIndex >= 0
+  caption.textContent = progress.finished ? 'All steps completed' : ended
+    ? ended + ' · ' + progress.completed + ' of ' + progress.total + ' steps done'
+    : progress.activeIndex >= 0
     ? (progress.activeLabel ? progress.activeLabel + ' · step ' : 'Working on step ') + (progress.activeIndex + 1) + ' of ' + progress.total
     : progress.completed + ' of ' + progress.total + ' steps complete';
   heading.append(title, caption);
@@ -2673,18 +2699,18 @@ function renderTodos(todos) {
   list.className = 'task-progress-list';
   progress.items.forEach((todo, index) => {
     const row = document.createElement('li');
-    row.className = 'task-progress-step ' + todo.status;
-    if (index === progress.activeIndex) row.setAttribute('aria-current', 'step');
+    row.className = 'task-progress-step ' + (ended && todo.status !== 'completed' ? 'unfinished' : todo.status);
+    if (index === progress.activeIndex && !ended) row.setAttribute('aria-current', 'step');
     const marker = document.createElement('span');
     marker.className = 'task-progress-marker';
     marker.setAttribute('aria-hidden', 'true');
-    marker.textContent = todo.status === 'completed' ? '✓' : todo.status === 'in_progress' ? '●' : '○';
+    marker.textContent = todo.status === 'completed' ? '✓' : ended ? '–' : todo.status === 'in_progress' ? '●' : '○';
     const label = document.createElement('span');
     label.className = 'task-progress-label';
-    label.textContent = todo.status === 'in_progress' && todo.active ? todo.active : todo.content;
+    label.textContent = todo.status === 'in_progress' && todo.active && !ended ? todo.active : todo.content;
     const state = document.createElement('span');
     state.className = 'task-progress-state';
-    state.textContent = todo.status === 'completed' ? 'Done' : todo.status === 'in_progress' ? 'In progress' : index === progress.nextIndex ? 'Up next' : 'Queued';
+    state.textContent = todo.status === 'completed' ? 'Done' : ended ? (todo.status === 'in_progress' ? 'Not finished' : 'Not started') : todo.status === 'in_progress' ? 'In progress' : index === progress.nextIndex ? 'Up next' : 'Queued';
     row.append(marker, label, state);
     list.appendChild(row);
   });

@@ -1252,7 +1252,15 @@ export function createOasisWebServer(options = {}) {
               ...(subagent ? { subagent: String(subagent).slice(0, 100) } : {})
             });
           },
+          onCompactionProgress: (info) => {
+            const progress = info && info.promptProgress;
+            emit(job, 'compaction_progress', {
+              outChars: Math.max(0, Math.min(10_000_000, Math.floor(Number(info && info.outChars) || 0))),
+              ...(progress ? { promptProgress: { total: Math.max(0, Math.floor(Number(progress.total) || 0)), cache: Math.max(0, Math.floor(Number(progress.cache) || 0)), processed: Math.max(0, Math.floor(Number(progress.processed) || 0)), time_ms: Math.max(0, Math.floor(Number(progress.time_ms) || 0)) } } : {})
+            });
+          },
           onCompactionStart: (info) => emit(job, 'compaction_started', {
+            beforeTokens: Math.max(0, Math.min(10_000_000, Math.floor(Number(info && info.beforeTokens) || 0))),
             messages: Math.max(0, Math.min(10000, Math.floor(Number(info && info.messages) || 0))),
             timeoutSeconds: Math.max(0, Math.min(600, Math.floor(Number(info && info.timeoutSeconds) || 0)))
           }),
