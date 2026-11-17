@@ -50,7 +50,7 @@ Priorities:
 | 2.3 | Capability router: per-model results on `evals/tasks/` select the cheapest route above a quality floor per task class | Router decisions are reproducible from a stored results table; on the harness, cost drops with no task-class pass rate falling more than 2 points versus the current routing |
 | 2.4 | Compaction-triggered reflection: when a session compacts, propose memory and skill updates through `src/learning.mjs` (still inert until approved) | Adapted from Letta (Apache-2.0). Proposals appear after compaction in a fixture session; nothing is written without `/learning approve` |
 | 2.5 | Domain packs: `plugins/oasis-research` becomes the research pack with agent roles and a verification contract; an analysis pack follows | Pack installs through the existing plugin path; its contract is used by 1.6; removing the pack restores current behaviour |
-| 2.6 | Network observability: `neuron_network`, `/agents`, `/tasks` and the web app show state, budget and spent from the ledger | Snapshot tests of the projection; OpenTelemetry `invoke_agent` spans carry neuron id and parent id when telemetry is on |
+| 2.6 | Network observability: `neuron_network`, `/agents`, `/tasks` and the web app show state, budget and spent from the ledger | Snapshot tests of the projection; OpenTelemetry `invoke_agent` spans carry neuron id and parent id when telemetry is on. Done for `neuron_network`, `/tasks` and telemetry, see [Network observability](OASIS-NEURON-NETWORK.md#network-observability-roadmap-26); `test/neuron-observability.test.mjs`. The web app has no network view yet |
 
 ## P3: optional and benchmark-gated
 
