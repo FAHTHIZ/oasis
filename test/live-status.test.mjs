@@ -159,3 +159,11 @@ test('a slow hook shows its own label and how long it has run', () => {
   assert.ok(status.meta.includes('hook running for 5s'), status.meta.join('|'));
   assert.equal(status.stalled, false);
 });
+
+test('formatTokens switches to millions instead of showing "1000k"', () => {
+  assert.equal(formatTokens(999499), '999k');
+  assert.equal(formatTokens(999500), '1M');
+  assert.equal(formatTokens(1000000), '1M');
+  assert.equal(formatTokens(2400000), '2.4M');
+  assert.equal(formatTokens(123456789), '123M');
+});

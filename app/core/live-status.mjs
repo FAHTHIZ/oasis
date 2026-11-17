@@ -21,13 +21,17 @@ export function formatTokens(count) {
   const n = Math.max(0, Math.round(Number(count || 0)));
   if (n < 1000) return String(n);
   if (n < 100000) return (n / 1000).toFixed(1).replace(/\.0$/, '') + 'k';
-  return Math.round(n / 1000) + 'k';
+  // A million and up reads "1.2M", not "1200k"; 999,500 rounds to "1M", not "1000k".
+  if (n < 999500) return Math.round(n / 1000) + 'k';
+  return (n / 1e6).toFixed(n < 99950000 ? 1 : 0).replace(/\.0$/, '') + 'M';
 }
 
 export function formatElapsed(ms) {
   const seconds = Math.max(0, Math.floor(Number(ms || 0) / 1000));
   if (seconds < 60) return seconds + 's';
   const minutes = Math.floor(seconds / 60);
+  // Past an hour the clock reads "1h 02m 05s", not "62m 05s".
+  if (minutes >= 60) return Math.floor(minutes / 60) + 'h ' + String(minutes % 60).padStart(2, '0') + 'm ' + String(seconds % 60).padStart(2, '0') + 's';
   return minutes + 'm ' + String(seconds % 60).padStart(2, '0') + 's';
 }
 

@@ -254,3 +254,8 @@ test('a command moved to the background after its time limit says so, not "Timed
   assert.match(stepLabel({ name: 'run_command', args: { command: 'npm run dev' }, ok: true, outcome: 'ok', content }), /^Moved to the background: .*npm run dev/);
   assert.equal(readableOutput(JSON.stringify({ exitCode: null, stdout: '', stderr: '', timedOut: true })), 'Timed out.');
 });
+
+test('formatDuration reads a long run in hours ("Worked for 1h 02m 05s")', () => {
+  assert.equal(formatDuration(3540000), '59m 00s');
+  assert.equal(formatDuration(3725000), '1h 02m 05s');
+});
