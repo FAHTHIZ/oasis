@@ -246,3 +246,11 @@ test('plan, read and search steps open to a readable view, not raw JSON', async 
   assert.equal(readableOutput(JSON.stringify({ path: 'a', content: 'x', extra: 1 })), JSON.stringify({ path: 'a', content: 'x', extra: 1 }));
 });
 
+
+test('a command moved to the background after its time limit says so, not "Timed out"', async () => {
+  const { readableOutput, stepLabel } = await import('../app/core/timeline.mjs');
+  const content = JSON.stringify({ command: 'npm run dev', exitCode: null, stdout: 'listening on 3000\n', stderr: '', timedOut: true, movedToBackground: true, background: true, id: 'bg_3' });
+  assert.equal(readableOutput(content), 'listening on 3000\nStill running in the background after the time limit (bg_3). OASIS will say when it exits.');
+  assert.match(stepLabel({ name: 'run_command', args: { command: 'npm run dev' }, ok: true, outcome: 'ok', content }), /^Moved to the background: .*npm run dev/);
+  assert.equal(readableOutput(JSON.stringify({ exitCode: null, stdout: '', stderr: '', timedOut: true })), 'Timed out.');
+});
