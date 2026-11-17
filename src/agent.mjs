@@ -48,6 +48,7 @@ import { connectMcpServers, mcpToolDefinitions, callMappedMcpTool, closeMcpClien
 import { resolveMcpPrompt, expandMcpResourceMentions } from './mcp-extras.mjs';
 import { autoMemoryEnabled, memoryIndexPrompt, recallForPrompt, MEMORY_TOOL_DEFINITIONS, listMemories, saveMemory } from './auto-memory.mjs';
 import { learningEnabled, LEARNING_TOOL_DEFINITIONS, assertLearningVerification } from './learning.mjs';
+import { reflectOnCompaction } from './compaction-reflection.mjs';
 import { countJsonTokens, countTextTokens } from './tokens.mjs';
 import { estimateTokens, tokenUpperBound, microcompact, maskObservations, pruneOldToolOutput, toolOutputPruneSettings, contextWindowSize, modelContextWindow, compactionThresholdChars, mustPreserveContextBlock, appendMustPreserveContext } from './context.mjs';
 import { genAiProviderName, genAiSpanNames, getTelemetry, lineChanges } from './telemetry.mjs';
@@ -216,6 +217,15 @@ export async function compactHistoryIfNeeded(session, options = {}) {
   summary = modelSummary || deterministicHistorySummary(oldMessages);
   if (preserveBlock) summary = appendMustPreserveContext(summary, mustPreserve);
   const restored = await runPostCompactHooks(session, trigger, summary, options);
+  // Roadmap 2.4: propose skills from verified work before it leaves the context.
+  const reflection = options.isSubagent || options.discardOnAbort && options.signal && options.signal.aborted ? null : await reflectOnCompaction(session, transcript, {
+    env: options.env || process.env,
+    complete: (reflectionMessages) => requestCompletion({ budgetParent: session, config: session.config, toolDefinitions: [], messages: reflectionMessages }, { noTools: true, signal: compactionDeadline(options).signal, ...(typeof options.fetchImpl === 'function' ? { fetchImpl: options.fetchImpl } : {}) })
+  });
+  if (reflection && reflection.usage) {
+    tokensUsed += Number(reflection.usage.totalTokens || 0);
+    costUsd += chargeAuxiliaryUsage(session, reflection.usage, { env: options.env });
+  }
 
   const beforeCompaction = messages.slice();
   if (session.freshSystemText) { messages[0] = { ...messages[0], content: session.freshSystemText }; session.baseSystemPrompt = session.freshSystemText; session.freshSystemText = null; }
@@ -237,9 +247,10 @@ export async function compactHistoryIfNeeded(session, options = {}) {
     removedMessages: oldMessages.length,
     retainedMessages: session.messages.length - 1,
     summaryChars: summary.length,
-    usedModelSummary: Boolean(modelSummary)
+    usedModelSummary: Boolean(modelSummary),
+    ...(reflection && reflection.proposals.length ? { learningProposals: reflection.proposals } : {})
   });
-  return { compacted: true, tokensUsed, costUsd };
+  return { compacted: true, tokensUsed, costUsd, ...(reflection && reflection.ran ? { reflection: { proposals: reflection.proposals, refused: reflection.refused } } : {}) };
 }
 
 
