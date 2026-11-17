@@ -736,7 +736,7 @@ async function requestCompletionRawInner(session, options = {}) {
       const watched = response.body && typeof response.body.pipeThrough === 'function'
         ? new Response(response.body.pipeThrough(new TransformStream({ transform(chunk, sink) { armIdle(); sink.enqueue(chunk); } })), { status: response.status, headers: response.headers })
         : response;
-      data = await readProviderStream(watched, config.protocol, options.onDelta, options.onPromptProgress, options.onReasoning);
+      data = await readProviderStream(watched, config.protocol, options.onDelta, options.onPromptProgress, options.onReasoning, options.onToolDraft);
     } else {
       const body = await response.text();
       try { data = JSON.parse(body); } catch {

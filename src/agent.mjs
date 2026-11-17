@@ -3364,6 +3364,12 @@ async function runAgentTurnRaw(session, prompt, options = {}) {
         } : {}),
         // Deltas are cumulative, so a restarted stream replaces the partial text
         // instead of appending a second copy.
+        // Tool calls the model is still writing (a long write_file): the UI
+        // says "Writing src/app.mjs · 3.2 KB" instead of going quiet.
+        ...(typeof options.onToolDraft === 'function' ? { onToolDraft: (draft) => {
+          seen(false);
+          try { options.onToolDraft({ ...draft, step: step + 1 }); } catch {}
+        } } : {}),
         ...(waitHook ? { onPromptProgress: (progress) => {
           try { waitHook({ phase: 'progress', step: step + 1, promptProgress: { total: Number(progress.total) || 0, cache: Number(progress.cache) || 0, processed: Number(progress.processed) || 0, time_ms: Number(progress.time_ms) || 0 } }); } catch {}
         } } : {}),
