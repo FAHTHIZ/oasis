@@ -6,6 +6,7 @@ User-facing change history grouped by package version. A version heading does no
 
 ### Highlights
 
+- Web: a finished turn folds its steps, thoughts and narration under one "Worked for 1m 57s · 6 steps" line above the answer; click to open it. The answer stays in place on screen while the work folds.
 - A live activity trace while OASIS works. The terminal status line says what is happening in the present tense (`Reading package.json`, `Running npm test`, `Writing src/server.mjs · 3.2 KB`, `Responding`), with a clock for the whole turn, the streamed token count, the step number, a one-line glimpse of the model's reasoning and the newest line of command output. The task checklist sits under it, with the item in progress shown by its present-tense `activeForm`.
 - No more frozen screens while the model writes a large file: tool calls report what they are preparing while their arguments stream, in the terminal and the web app.
 - Smoother terminal output on any machine: the live rows are drawn in one synchronized frame (DEC mode 2026), at most once per display frame, with the cursor hidden once per turn. The partial line of a reply is styled like the finished line instead of showing raw `**markdown**`, and long tool headers fit on one row with a middle ellipsis.

@@ -515,6 +515,17 @@ details.manual fieldset{margin:0}
 /* How long a run took: one quiet line after it */
 .msg.worked{display:flex;align-items:center;gap:10px;color:var(--faint);font:11.5px var(--mono);font-variant-numeric:tabular-nums;margin:-6px 0 18px}
 .msg.worked::before,.msg.worked::after{content:"";flex:1;height:1px;background:var(--line)}
+/* A finished turn's work, folded under one line above its answer */
+.work-fold{margin:0 0 14px}
+.work-fold-head{display:inline-flex;align-items:center;gap:8px;list-style:none;cursor:pointer;padding:5px 10px 5px 8px;margin-left:-8px;border-radius:8px;color:var(--muted);font:12px var(--mono);font-variant-numeric:tabular-nums;user-select:none}
+.work-fold-head::-webkit-details-marker{display:none}
+.work-fold-head::before{content:"";width:6px;height:6px;border-right:1.5px solid currentColor;border-bottom:1.5px solid currentColor;transform:rotate(-45deg);transition:transform .18s ease;flex:none}
+.work-fold[open]>.work-fold-head::before{transform:rotate(45deg)}
+.work-fold-head:hover{background:var(--raised);color:var(--text)}
+.work-fold-head:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+.work-fold-body{margin:6px 0 0 3px;padding-left:14px;border-left:1px solid var(--line)}
+.work-fold[open]>.work-fold-body{animation:fold-in .18s ease-out}
+@keyframes fold-in{from{opacity:0;transform:translateY(-3px)}to{opacity:1;transform:none}}
 /* The run clock and waiting messages, just above the message box */
 .run-status{max-width:var(--chat-w);margin:0 auto 6px;padding:0 6px;display:flex;align-items:center;gap:8px;font:12px var(--mono);color:var(--muted);font-variant-numeric:tabular-nums}
 .run-status-dot{width:7px;height:7px;border-radius:50%;background:var(--accent);flex:none}
