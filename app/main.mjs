@@ -7,7 +7,7 @@ import { SUBAGENT_STATUS_TEXT } from './core/subagents.mjs';
 import { createConnectorCard, connectIntent, splitServices, brandMark } from './core/connector-card.mjs';
 import { createSoundPlayer, soundAllowed } from './core/sound.mjs';
 import { sideWork, liveStatus, modelRequest, waitingLabel, thoughtMs, runSummary, reasoningHeadline, formatTokens } from './core/live-status.mjs';
-import { readableOutput, repeatsEarlierReply, stepOutcome, stepRan, stepLabel, summarizeArgs, toolKind, groupTitle, groupStats, formatDuration, thinkingLabel, thoughtLabel, splitTextToolCall, elapsedSince, describeInput, buildTimeline, groupTiming, runElapsed, timingSplit, stepResult } from './core/timeline.mjs';
+import { readableOutput, repeatsEarlierReply, stepOutcome, stepRan, stepLabel, summarizeArgs, toolKind, groupTitle, groupStats, formatDuration, thinkingLabel, thoughtLabel, splitTextToolCall, elapsedSince, describeInput, buildTimeline, groupTiming, runElapsed, timingSplit, stepResult, liveLabel } from './core/timeline.mjs';
 import { IndexedDBStore, Workspace, diffStat, lineDiff } from './core/workspace.mjs';
 import { wordHighlights } from '../src/word-diff.mjs';
 import { Agent, answeredHistory, textOf } from './core/agent.mjs';
@@ -2070,7 +2070,10 @@ const runClock = {
     // page never sits blank while the model works.
     if (!waiting && !agent.detached && now - lastActivity >= IDLE_THINKING_MS && !liveThinking() && !stepsRunning() && $('questionSheet').hidden) showThinking(lastActivity);
     const phase = waiting ? 'approval' : connectionLost ? 'reconnecting' : liveModel.hook ? 'hook' : stepsRunning() ? 'tool' : nowLabel === 'Thinking' ? 'thinking' : nowLabel === 'Responding' ? 'responding' : nowLabel ? 'draft' : 'waiting';
-    const status = liveStatus({ label: phase === 'hook' ? liveModel.hook.label : nowLabel === 'Thinking' ? '' : nowLabel, phase, hookStartedAt: liveModel.hook ? liveModel.hook.startedAt : 0, compaction: liveModel.compaction, request: liveModel.request, turn: liveModel.turn, elapsedMs: this.worked(now) }, now);
+    // A running step always names itself, even when its start event had no
+    // present-tense label (the line must not say "Thinking" during a tool).
+    const stepNow = phase === 'tool' && (!nowLabel || nowLabel === 'Thinking') ? runningStepLabel() : '';
+    const status = liveStatus({ label: phase === 'hook' ? liveModel.hook.label : stepNow || (nowLabel === 'Thinking' ? '' : nowLabel), phase, hookStartedAt: liveModel.hook ? liveModel.hook.startedAt : 0, compaction: liveModel.compaction, request: liveModel.request, turn: liveModel.turn, elapsedMs: this.worked(now) }, now);
     this.label = waiting ? '' : status.label;
     this.stalled = Boolean(status.stalled) && !waiting;
     const label = el.querySelector('.run-status-text');
@@ -2271,6 +2274,11 @@ function flushPendingInputs() {
 let lastActivity = Date.now();
 const IDLE_THINKING_MS = 1000;
 const QUIET_EVENTS = new Set(['usage', 'context', 'cost', 'model_end', 'model_progress', 'run_clock', 'todos', 'model_timing']);
+function runningStepLabel() {
+  if (!activeGroup || !activeGroup.live) return '';
+  const step = [...activeGroup.steps].reverse().find((item) => item.ok === undefined);
+  return step ? step.present || liveLabel(step) : '';
+}
 function stepsRunning() {
   return Boolean(activeGroup && activeGroup.live && activeGroup.steps.some((step) => step.ok === undefined));
 }
