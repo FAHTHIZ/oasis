@@ -18,13 +18,17 @@ export class SubagentTracker {
     const id = String(data.agent_id || '').slice(0, 100);
     if (!id) return false;
     const type = String(data.type || '');
-    const current = this.workers.get(id) || { id, description: id, status: 'unknown', detail: '', teamId: '', order: this.workers.size };
+    const current = this.workers.get(id) || { id, description: id, status: 'unknown', detail: '', teamId: '', budget: '', waitingApproval: false, order: this.workers.size };
     if (data.description && type !== 'task.dispatched') current.description = String(data.description).slice(0, 200);
     if (data.team_id) current.teamId = String(data.team_id).slice(0, 100);
     if (STATE_FOR[type]) current.status = STATE_FOR[type];
+    // A parked approval (roadmap 2.1) stays flagged until the user answers it.
+    if (type === 'agent.approval_pending') current.waitingApproval = true;
+    if (type === 'agent.approval_granted' || type === 'agent.approval_denied') current.waitingApproval = false;
+    if (data.budget) current.budget = String(data.budget).slice(0, 200);
     const detail = String(data.detail || '').replace(/\s+/g, ' ').trim();
     // Skip runtime counters such as "tool_calls=0 duration_ms=812".
-    if (detail && !/^(?:[a-z_]+=\S+\s*)+$/i.test(detail)) current.detail = detail.slice(0, 240);
+    if (detail && !type.startsWith('agent.approval_') && !/^(?:[a-z_]+=\S+\s*)+$/i.test(detail)) current.detail = detail.slice(0, 240);
     this.workers.set(id, current);
     return true;
   }

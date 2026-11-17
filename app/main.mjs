@@ -1176,11 +1176,13 @@ function renderSubagents(group, workers = []) {
   const list = document.createElement('ul');
   for (const worker of workers) {
     const item = document.createElement('li');
-    item.className = 'subagent ' + worker.status;
-    item.innerHTML = '<span class="state" aria-hidden="true"></span><span class="sa-name"></span><span class="sa-status"></span><span class="sa-detail"></span>';
+    item.className = 'subagent ' + worker.status + (worker.waitingApproval ? ' waiting-approval' : '');
+    item.innerHTML = '<span class="state" aria-hidden="true"></span><span class="sa-name"></span><span class="sa-status"></span><span class="sa-detail"></span><span class="sa-budget"></span>';
     item.querySelector('.sa-name').textContent = worker.description || worker.id;
-    item.querySelector('.sa-status').textContent = SUBAGENT_STATUS_TEXT[worker.status] || worker.status;
-    item.querySelector('.sa-detail').textContent = worker.detail || '';
+    item.querySelector('.sa-status').textContent = (SUBAGENT_STATUS_TEXT[worker.status] || worker.status) + (worker.waitingApproval ? ' · needs approval' : '');
+    item.querySelector('.sa-detail').textContent = worker.waitingApproval ? 'Waiting for you: /tasks approve ' + worker.id + ' or /tasks deny ' + worker.id : (worker.detail || '');
+    // Spent and limit, from the same budget projection as /tasks.
+    item.querySelector('.sa-budget').textContent = worker.budget || '';
     list.appendChild(item);
   }
   box.replaceChildren(head, list);

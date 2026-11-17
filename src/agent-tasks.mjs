@@ -1,5 +1,5 @@
 import { restoreApprovals } from './neuron-approvals.mjs';
-import { attachNeuronLineage, buildNeuronNetworkSnapshot, descendantRecords } from './neuron-network.mjs';
+import { attachNeuronLineage, buildNeuronNetworkSnapshot, descendantRecords, formatBudget, projectBudget } from './neuron-network.mjs';
 import { ledgerAgentEvent, ledgerCharge, recoverLedgerNeurons } from './neuron-ledger.mjs';
 
 // Background subagents, like Claude Code's background agents:
@@ -206,7 +206,9 @@ export function recordAgentEvent(session, type, fields = {}) {
     ...(fields.agentId ? { agent_id: String(fields.agentId).slice(0, 100) } : {}),
     ...(fields.teamId ? { team_id: String(fields.teamId).slice(0, 100) } : {}),
     ...(fields.description ? { description: String(fields.description).slice(0, 200) } : {}),
-    ...(fields.detail ? { detail: String(fields.detail).slice(0, 500) } : {})
+    ...(fields.detail ? { detail: String(fields.detail).slice(0, 500) } : {}),
+    // The web app's subagent list shows spent and limit from the same projection as /tasks.
+    ...(worker && formatBudget(projectBudget(worker)) ? { budget: formatBudget(projectBudget(worker)).replace(/^budget /, '').slice(0, 200) } : {})
   };
   registry.events.push(event);
   if (registry.events.length > 500) registry.events.splice(0, registry.events.length - 500);
