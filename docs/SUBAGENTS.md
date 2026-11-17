@@ -84,6 +84,8 @@ The parent sees only the child's report, so OASIS checks a report that says test
 
 The same check covers sources and numbers. A report that cites a URL the child never fetched (a search result it did not open counts as not fetched) is flagged, and so is a computed number no execution printed when the agent declares `domain: analysis` in its definition or ran code without any test. A report with any of these comes back with `report_status: "rejected"` and `verification_issues` listing each reason. See [Evidence and contracts](OASIS-NEURON-NETWORK.md#evidence-and-contracts-roadmap-15-17).
 
+A subagent started from plan mode or by a read-only subagent is read-only too, and cannot be given a deploy, publish, push or release step. See [Spawn-time scope check](OASIS-NEURON-NETWORK.md#spawn-time-scope-check-roadmap-22).
+
 ## Background agents and teams
 
 - `run_in_background: true` returns an id immediately. The parent is notified when the agent finishes.

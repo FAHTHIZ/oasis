@@ -46,7 +46,7 @@ Priorities:
 | # | Item | Acceptance criteria |
 | --- | --- | --- |
 | 2.1 | Serializable approval state: a pending approval in a background neuron survives restart and can be answered later | Adapted from OpenAI Agents JS (MIT). Restart test: the approval is shown after restart, answering it resumes the neuron, and the tool runs exactly once |
-| 2.2 | Spawn-time scope check of the child's task against the parent's task and access | Read-only parent cannot create a child with write tools or a deploy step (test over permission combinations, including teams and workflows) |
+| 2.2 | Spawn-time scope check of the child's task against the parent's task and access | Read-only parent cannot create a child with write tools or a deploy step (test over permission combinations, including teams and workflows) Done: `src/spawn-scope.mjs`, `test/spawn-scope.test.mjs` |
 | 2.3 | Capability router: per-model results on `evals/tasks/` select the cheapest route above a quality floor per task class | Router decisions are reproducible from a stored results table; on the harness, cost drops with no task-class pass rate falling more than 2 points versus the current routing |
 | 2.4 | Compaction-triggered reflection: when a session compacts, propose memory and skill updates through `src/learning.mjs` (still inert until approved) | Adapted from Letta (Apache-2.0). Proposals appear after compaction in a fixture session; nothing is written without `/learning approve` |
 | 2.5 | Domain packs: `plugins/oasis-research` becomes the research pack with agent roles and a verification contract; an analysis pack follows | Pack installs through the existing plugin path; its contract is used by 1.6; removing the pack restores current behaviour |
