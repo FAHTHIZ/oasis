@@ -3570,6 +3570,12 @@ function answerQuestion(value) {
 }
 $('questionForm').addEventListener('submit', (event) => { event.preventDefault(); answerQuestion($('questionInput').value.trim()); });
 
+// "+3 −2", "+10" or "−4": a zero side is left out, as in the run summary.
+function appendLineCounts(el, added, removed) {
+  if (added) el.append(Object.assign(document.createElement('span'), { className: 'add', textContent: '+' + added }));
+  if (added && removed) el.append(' ');
+  if (removed) el.append(Object.assign(document.createElement('span'), { className: 'del', textContent: '−' + removed }));
+}
 // "+3 −2" beside the file name while its diff is open; hidden for the plain file view.
 function showDiffStat(lines) {
   const stat = $('diffStat');
@@ -3578,9 +3584,7 @@ function showDiffStat(lines) {
   stat.hidden = !lines || (!added && !removed);
   stat.replaceChildren();
   if (stat.hidden) return;
-  const add = Object.assign(document.createElement('span'), { className: 'add', textContent: '+' + added });
-  const del = Object.assign(document.createElement('span'), { className: 'del', textContent: '−' + removed });
-  stat.append(add, ' ', del);
+  appendLineCounts(stat, added, removed);
   stat.title = added + ' line' + (added === 1 ? '' : 's') + ' added, ' + removed + ' removed';
 }
 function renderDiff(container, diff) {
@@ -5184,7 +5188,7 @@ function fileRow(path, status, stat) {
     const counts = document.createElement('span');
     counts.className = 'diff-stat';
     counts.title = stat.added + ' line' + (stat.added === 1 ? '' : 's') + ' added, ' + stat.removed + ' removed';
-    counts.append(Object.assign(document.createElement('span'), { className: 'add', textContent: '+' + stat.added }), ' ', Object.assign(document.createElement('span'), { className: 'del', textContent: '−' + stat.removed }));
+    appendLineCounts(counts, stat.added, stat.removed);
     row.appendChild(counts);
   }
   if (status) { const tag = document.createElement('span'); tag.className = 'tag ' + status; tag.textContent = status === 'added' ? 'A' : status === 'deleted' ? 'D' : 'M'; tag.title = status; row.appendChild(tag); }
