@@ -51,7 +51,8 @@
     "bench:perf": "node scripts/bench-perf.mjs",
     "bench:routers": "node scripts/bench-routers.mjs",
     "bench:memory": "node scripts/bench-memory.mjs",
-    "lint": "oxlint --deny-warnings"
+    "lint": "oxlint --deny-warnings",
+    "bench:feel": "node scripts/bench-feel.mjs"
   },
   "repository": {
     "type": "git",
