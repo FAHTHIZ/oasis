@@ -1594,7 +1594,14 @@ const follow = (() => {
         if (following && el.scrollTop < pinned - 2) release();
         else showPill();
       }, { passive: true });
-      const observer = new ResizeObserver(() => pin());
+      // ResizeObserver callbacks run after layout and before paint: pinning
+      // right there, not a frame later, means the frame where content grew
+      // is never painted at the old scroll position (a one-frame hop).
+      const observer = new ResizeObserver(() => {
+        if (!following) { showPill(); return; }
+        if (frame) { cancelAnimationFrame(frame); frame = 0; }
+        apply();
+      });
       observer.observe($('transcript'));
       observer.observe(el);
       $('jumpLatest').addEventListener('click', () => { jump(); $('input').focus({ preventScroll: true }); });
@@ -2606,7 +2613,13 @@ function formatTokens(n) { return n >= 1e6 ? (n / 1e6).toFixed(1) + 'M' : n >= 1
 function renderTodos(todos) {
   const box = $('todos');
   const progress = normalizeTaskProgress(todos);
-  if (!progress.total) { box.replaceChildren(); box.hidden = true; return; }
+  if (!progress.total) {
+    if (box.hidden) return;
+    // Slides shut rather than dropping the composer 70px in one frame.
+    slideDock(box, false, () => { box.replaceChildren(); box.hidden = true; });
+    return;
+  }
+  const appearing = box.hidden || box.dataset.closing === '1';
 
   const previous = box.querySelector('.task-progress');
   // Compact by default: the caption already names the step in progress.
@@ -2679,6 +2692,26 @@ function renderTodos(todos) {
   plan.append(summary, track, list);
   box.replaceChildren(plan);
   box.hidden = false;
+  if (appearing) slideDock(box, true);
+}
+
+// The plan dock sits above the composer, so it opening or closing moves the
+// composer. Easing its height over a few frames turns that jump into a
+// glide (the chat re-pins each frame through the follow ResizeObserver).
+// Lite mode and reduced motion keep the instant switch.
+function slideDock(box, show, done) {
+  if (box.slide) { box.slide.cancel(); box.slide = null; }
+  delete box.dataset.closing;
+  const finish = () => { box.slide = null; delete box.dataset.closing; if (done) done(); };
+  if (LITE || typeof box.animate !== 'function') { finish(); return; }
+  const height = box.offsetHeight;
+  if (!height) { finish(); return; }
+  const open = { height: height + 'px', opacity: 1, marginBottom: getComputedStyle(box).marginBottom };
+  const shut = { height: '0px', opacity: 0, marginBottom: '0px' };
+  if (!show) box.dataset.closing = '1';
+  const animation = box.animate(show ? [shut, open] : [open, shut], { duration: show ? 200 : 160, easing: 'cubic-bezier(.2,.7,.2,1)' });
+  box.slide = animation;
+  animation.onfinish = () => { if (box.slide === animation) finish(); };
 }
 
 // Chats: each project keeps a list of chats. The first chat uses the
