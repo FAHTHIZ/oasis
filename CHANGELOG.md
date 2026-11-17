@@ -4,6 +4,8 @@ User-facing change history grouped by package version. A version heading does no
 
 ## Unreleased
 
+- A subagent that is cancelled, fails or stalls now releases every shared task it claimed with `task_claim`, not only the one it was started for, so another agent can pick the task up at once instead of waiting out the 15-minute lease. See [Cancellation and leases](docs/OASIS-NEURON-NETWORK.md#cancellation-and-leases-roadmap-14). Test: `test/neuron-cancellation.test.mjs`.
+
 ## [1.4.0] - 2026-11-17
 
 ### Highlights
