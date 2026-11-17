@@ -1032,7 +1032,8 @@ export function createOasisWebServer(options = {}) {
         ...(agentEvent && agentEvent.agent_id ? { agent_id: monitorText(agentEvent.agent_id, 100) } : {}),
         ...(agentEvent && agentEvent.team_id ? { team_id: monitorText(agentEvent.team_id, 100) } : {}),
         ...(agentEvent && agentEvent.description ? { description: monitorText(agentEvent.description, 200) } : {}),
-        ...(agentEvent && agentEvent.detail ? { detail: monitorText(agentEvent.detail, 500) } : {})
+        ...(agentEvent && agentEvent.detail ? { detail: monitorText(agentEvent.detail, 500) } : {}),
+        ...(agentEvent && agentEvent.budget ? { budget: monitorText(agentEvent.budget, 200) } : {})
       };
       emit(target, 'agent_activity', safeEvent);
     };

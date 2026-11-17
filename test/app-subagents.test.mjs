@@ -26,3 +26,18 @@ test('events without an agent id are ignored, and dispatches keep the descriptio
   tracker.update({ type: 'agent.completed', agent_id: 'w1', detail: 'tool_calls=0 duration_ms=812' });
   assert.equal(tracker.list()[0].detail, '');
 });
+
+test('the tracker shows budget and a waiting approval until it is answered', () => {
+  const tracker = new SubagentTracker();
+  tracker.update({ type: 'agent.background_started', agent_id: 'agent_1', description: 'Run the build', budget: 'tokens 1,200/50,000' });
+  tracker.update({ type: 'agent.approval_pending', agent_id: 'agent_1', detail: 'approval_0123abcd run_command' });
+  tracker.update({ type: 'agent.completed', agent_id: 'agent_1', detail: 'Build waits for approval', budget: 'tokens 4,000/50,000' });
+  let [worker] = tracker.list();
+  assert.equal(worker.status, 'completed');
+  assert.equal(worker.waitingApproval, true);
+  assert.equal(worker.budget, 'tokens 4,000/50,000');
+  assert.equal(worker.detail, 'Build waits for approval', 'approval ids stay out of the detail line');
+  tracker.update({ type: 'agent.approval_granted', agent_id: 'agent_1', detail: 'approval_0123abcd run_command' });
+  [worker] = tracker.list();
+  assert.equal(worker.waitingApproval, false);
+});

@@ -228,6 +228,8 @@ Test: `test/spawn-scope.test.mjs` (every combination of parent mode, child defin
 
 Test: `test/neuron-observability.test.mjs` (budget projection, a snapshot of the graph, and the span attributes from a real subagent run).
 
+In the web app, every agent event carries the same budget line, so the subagent list under a turn shows what each agent spent against its limit. An agent with a parked approval is marked "needs approval" with the `/tasks approve` or `/tasks deny` command until it is answered (`test/app-subagents.test.mjs`).
+
 ## Detailed design (proposal, 2026-11)
 
 This section turns phases 2 to 8 above into one design. Nothing in it is
