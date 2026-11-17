@@ -4,6 +4,21 @@ User-facing change history grouped by package version. A version heading does no
 
 ## Unreleased
 
+### Highlights
+
+- A live activity trace while OASIS works. The terminal status line says what is happening in the present tense (`Reading package.json`, `Running npm test`, `Writing src/server.mjs · 3.2 KB`, `Responding`), with a clock for the whole turn, the streamed token count, the step number, a one-line glimpse of the model's reasoning and the newest line of command output. The task checklist sits under it, with the item in progress shown by its present-tense `activeForm`.
+- No more frozen screens while the model writes a large file: tool calls report what they are preparing while their arguments stream, in the terminal and the web app.
+- Smoother terminal output on any machine: the live rows are drawn in one synchronized frame (DEC mode 2026), at most once per display frame, with the cursor hidden once per turn. The partial line of a reply is styled like the finished line instead of showing raw `**markdown**`, and long tool headers fit on one row with a middle ellipsis.
+- One soft sound palette (small FM bells) for the terminal and the browser.
+
+### All changes
+
+- Terminal: new live region (`src/live-region.mjs`) and turn status (`src/turn-status.mjs`). Plain output, pipes and CI are unchanged; `OASIS_LIVE_REGION=0` turns the live region off, `OASIS_SYNC_OUTPUT=0` turns off synchronized output, and `OASIS_MOTION=lite|off` reduces or removes animation. Tests: `test/live-region.test.mjs`, `test/tool-draft.test.mjs`.
+- `todo_write` accepts an optional `activeForm` for each item: the label shown while it is in progress.
+- Web app: the run status names the current step in the present tense with a shimmer, a step the model is still writing appears as a live row, running groups title themselves in the present tense, and a finished single step no longer unfolds its raw input and output by itself (less layout shift). The task plan starts compact with the active step in its caption, and its progress bar animates with a transform.
+- Web app: the tab icon gets a dot when OASIS needs you (amber) or is done (green) while the tab is in the background. With no saved sound choice, the finish and needs-you sounds play only while the tab is in the background; the setting turns every sound on or off.
+- Sounds: one palette in `app/core/sound-palette.mjs` for both the terminal and the web app. The terminal writes its cached sound files before the first turn so the first chime plays at once.
+
 ## [1.5.0] - 2026-11-17
 
 ### Highlights
