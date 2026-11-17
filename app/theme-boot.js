@@ -13,3 +13,17 @@
     }
   } catch (e) { /* storage blocked: main.mjs applies the theme */ }
 })();
+// The side panel too: when it was open last time, its space is held from the
+// first paint, so the chat column does not jump narrower once main.mjs opens
+// it (main.mjs drops the class when it takes over). Mirrors toggleFiles().
+(function () {
+  try {
+    // Never set yet: main.mjs opens it whenever a project is open, which is
+    // nearly always, so hold the space then too.
+    var files = localStorage.getItem('oasis.files');
+    if (innerWidth < 1024 || files === '0') return;
+    document.documentElement.classList.add('files-boot');
+    var width = Number(localStorage.getItem('oasis.panelWidth'));
+    if (width >= 280) document.documentElement.style.setProperty('--panel-w', Math.round(Math.min(width, Math.max(280, innerWidth * 0.6))) + 'px');
+  } catch (e) { /* storage blocked */ }
+})();
