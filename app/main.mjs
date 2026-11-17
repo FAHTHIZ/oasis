@@ -1103,7 +1103,9 @@ function openSingleStep(group) {
     }
     return;
   }
-  if (!details.open) { details.open = true; details._singleOpened = true; }
+  // Only when the person opened the group: a finished step never unfolds
+  // its raw input and output by itself (the page would jump).
+  if (!details.open && group.touched) { details.open = true; details._singleOpened = true; }
 }
 function updateGroupHead(group) {
   const stats = groupStats(group.steps);
@@ -1116,6 +1118,10 @@ function updateGroupHead(group) {
   const single = !running && !waiting && group.steps.length === 1 && !group.subagents.length;
   if (group.el.classList.contains('single') !== single) { group.el.classList.toggle('single', single); openSingleStep(group); }
   let title = groupTitle(group.steps);
+  // While a step runs the header says what is happening now, in the present
+  // tense ("Running npm test"), and settles on the summary when it is done.
+  const current = running && [...group.steps].reverse().find((step) => step.ok === undefined && step.present);
+  if (current) title = current.present;
   if (waiting) title = 'Waiting for your approval';
   group.head.querySelector('.steps-title').textContent = title;
   const meta = [];
@@ -1799,6 +1805,32 @@ function serverTime(at) {
   const value = Number(at);
   return Number.isFinite(value) && value > 0 ? Math.min(value, Date.now()) : Date.now();
 }
+// What OASIS is doing this moment, in the present tense ("Reading app.mjs",
+// "Writing src/server.mjs · 3.2 KB", "Responding"); shown in the run status.
+let nowLabel = '';
+function setNow(text) {
+  nowLabel = String(text || '');
+  runClock.tick();
+}
+// A step the model is still writing: one shimmering row at the end of the
+// transcript until the real step starts, so a long file write never looks
+// like the page froze on "Thinking".
+function showDraftRow(text) {
+  let row = document.querySelector('#transcript > .draft-row');
+  if (!row) {
+    row = document.createElement('div');
+    row.className = 'draft-row';
+    row.setAttribute('aria-hidden', 'true');
+    row.innerHTML = '<span class="steps-orb"></span><span class="draft-text shimmer"></span>';
+    $('transcript').appendChild(row);
+  }
+  const label = row.querySelector('.draft-text');
+  if (label.textContent !== text) label.textContent = text;
+}
+function clearDraftRow() {
+  const row = document.querySelector('#transcript > .draft-row');
+  if (row) row.remove();
+}
 const runClock = {
   startedAt: 0,
   timer: 0,
@@ -1823,7 +1855,7 @@ const runClock = {
     // Nothing running, nothing streaming for a moment: show Thinking, so the
     // page never sits blank while the model works.
     if (!waiting && !agent.detached && now - lastActivity >= IDLE_THINKING_MS && !liveThinking() && !stepsRunning() && $('questionSheet').hidden) showThinking(lastActivity);
-    const text = (waiting ? 'Waiting for you' : 'Working') + ' · ' + formatDuration(this.worked(now)) + ' · Esc to stop';
+    const text = (waiting ? 'Waiting for you' : nowLabel || 'Working') + ' · ' + formatDuration(this.worked(now)) + ' · Esc to stop';
     const label = el.querySelector('.run-status-text');
     if (label.textContent !== text) label.textContent = text;
     el.classList.toggle('waiting', waiting);
@@ -1852,6 +1884,8 @@ function timingSummary(records = []) {
 }
 function finishRun(prefix) {
   const ms = runClock.stop();
+  nowLabel = '';
+  clearDraftRow();
   const timings = runTimings;
   runTimings = [];
   for (const note of pendingInputs.take('steer')) showSteer(note);
@@ -1971,10 +2005,19 @@ function handleRunEvent(event) {
       break;
     case 'reasoning':
       addReasoning(event.delta, event.reset);
+      if (nowLabel !== 'Thinking') setNow('Thinking');
+      break;
+    case 'tool_draft':
+      if (event.done) { clearDraftRow(); break; }
+      if (!currentTurn) startStep();
+      removeThinking();
+      showDraftRow(event.text || 'Preparing a step');
+      setNow(event.text || 'Preparing a step');
+      scrollDown();
       break;
     case 'model_start':
       // The model is working and nothing runs or streams: say so at once.
-      if (!stepsRunning()) { showThinking(event.startedAt); scrollDown(); }
+      if (!stepsRunning()) { showThinking(event.startedAt); scrollDown(); setNow('Thinking'); }
       break;
     case 'model_end': break;
     case 'delta':
@@ -1983,6 +2026,8 @@ function handleRunEvent(event) {
       currentTurn.text += event.delta;
       queueRender();
       removeThinking();
+      clearDraftRow();
+      if (nowLabel !== 'Responding') setNow('Responding');
       break;
     case 'retry':
       // A retried request starts its reply over; drop any half-streamed text.
@@ -2035,9 +2080,11 @@ function handleRunEvent(event) {
       }
       if (!currentTurn) startStep();
       removeThinking();
+      clearDraftRow();
       clearCursor();
       const group = ensureGroup();
-      const tool = { id: event.id, name: event.name, args: event.args || {}, startedAt: serverTime(event.at), ...(event.label ? { label: event.label } : {}), ...(event.open ? { open: true } : {}) };
+      const tool = { id: event.id, name: event.name, args: event.args || {}, startedAt: serverTime(event.at), ...(event.label ? { label: event.label } : {}), ...(event.present ? { present: event.present } : {}), ...(event.open ? { open: true } : {}) };
+      setNow(event.present || '');
       liveStartedSteps.add(tool);
       currentTurn.entry.tools.push(tool);
       group.steps.push(tool);
@@ -2059,6 +2106,7 @@ function handleRunEvent(event) {
       }
       const { tool, group } = found;
       tool.ok = event.ok;
+      if (!group.steps.some((step) => step !== tool && step.ok === undefined)) setNow('');
       if (event.outcome) tool.outcome = event.outcome;
       if (event.more) tool.more = true;
       delete tool.live;
@@ -2256,7 +2304,9 @@ function renderTodos(todos) {
   if (!progress.total) { box.replaceChildren(); box.hidden = true; return; }
 
   const previous = box.querySelector('.task-progress');
-  const wasOpen = previous ? previous.open : !progress.finished;
+  // Compact by default: the caption already names the step in progress.
+  const wasOpen = previous ? previous.open : false;
+  const previousFill = previous ? Number(previous.dataset.fill || 0) : 0;
   const plan = document.createElement('details');
   plan.className = 'task-progress';
   plan.open = wasOpen;
@@ -2270,7 +2320,7 @@ function renderTodos(todos) {
   const caption = document.createElement('span');
   caption.className = 'task-progress-caption';
   caption.textContent = progress.finished ? 'All steps completed' : progress.activeIndex >= 0
-    ? 'Working on step ' + (progress.activeIndex + 1) + ' of ' + progress.total
+    ? (progress.activeLabel ? progress.activeLabel + ' · step ' : 'Working on step ') + (progress.activeIndex + 1) + ' of ' + progress.total
     : progress.completed + ' of ' + progress.total + ' steps complete';
   heading.append(title, caption);
 
@@ -2292,7 +2342,13 @@ function renderTodos(todos) {
   track.setAttribute('aria-valuenow', String(progress.completed));
   track.setAttribute('aria-valuetext', progress.completed + ' of ' + progress.total + ' steps complete');
   const fill = document.createElement('span');
-  fill.style.width = progress.percent + '%';
+  // Drawn with a transform from the previous value: animates on the
+  // compositor instead of re-laying out the bar on every change.
+  const target = Math.max(0, Math.min(1, progress.percent / 100));
+  fill.style.transform = 'scaleX(' + previousFill + ')';
+  plan.dataset.fill = String(target);
+  if (previousFill !== target) requestAnimationFrame(() => requestAnimationFrame(() => { fill.style.transform = 'scaleX(' + target + ')'; }));
+  else fill.style.transform = 'scaleX(' + target + ')';
   track.appendChild(fill);
 
   const list = document.createElement('ol');
@@ -2307,7 +2363,7 @@ function renderTodos(todos) {
     marker.textContent = todo.status === 'completed' ? '✓' : todo.status === 'in_progress' ? '●' : '○';
     const label = document.createElement('span');
     label.className = 'task-progress-label';
-    label.textContent = todo.content;
+    label.textContent = todo.status === 'in_progress' && todo.active ? todo.active : todo.content;
     const state = document.createElement('span');
     state.className = 'task-progress-state';
     state.textContent = todo.status === 'completed' ? 'Done' : todo.status === 'in_progress' ? 'In progress' : index === progress.nextIndex ? 'Up next' : 'Queued';

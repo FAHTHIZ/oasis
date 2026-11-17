@@ -560,12 +560,12 @@ export class RuntimeAgent {
             }
             // A tool call the model wrote as JSON text became this real call: drop the JSON.
             if (!stepHasTools) { this.emit('assistant', { content: splitTextToolCall(stepText).text, toolCalls: [call] }); stepHasTools = true; }
-            this.emit('tool_start', { id, name: data.name, args: call.args, ...at, ...(data.label ? { label: String(data.label).slice(0, 160) } : {}) });
+            this.emit('tool_start', { id, name: data.name, args: call.args, ...at, ...(data.label ? { label: String(data.label).slice(0, 160) } : {}), ...(data.present ? { present: String(data.present).slice(0, 160) } : {}) });
             break;
           }
           // A tool call the model is still writing ("Writing src/app.mjs · 3.2 KB").
           case 'tool_draft':
-            if (live && data.name) this.emit('tool_draft', { index: Number(data.index) || 0, name: String(data.name), chars: Number(data.chars) || 0, ...(data.path ? { path: String(data.path) } : {}), ...(data.command ? { command: String(data.command) } : {}), ...(data.query ? { query: String(data.query) } : {}), ...(data.done ? { done: true } : {}) });
+            if (live && data.name) this.emit('tool_draft', { index: Number(data.index) || 0, name: String(data.name), chars: Number(data.chars) || 0, ...(data.path ? { path: String(data.path) } : {}), ...(data.command ? { command: String(data.command) } : {}), ...(data.query ? { query: String(data.query) } : {}), ...(data.text ? { text: String(data.text).slice(0, 200) } : {}), ...(data.done ? { done: true } : {}) });
             break;
           case 'tool_output':
             if (data.callId && data.text) this.emit('tool_output', { id: String(data.callId), stream: data.stream === 'stderr' ? 'stderr' : 'stdout', text: String(data.text), ...(data.capped ? { capped: true } : {}) });
