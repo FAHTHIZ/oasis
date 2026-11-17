@@ -475,6 +475,7 @@ function openNeuronBudget(parent, record, env) {
   if (!child) return;
   const request = childBudgetRequest({ budget: record.budgetRequest }, env);
   const spent = record.budgetSpent || {};
+  record.budgetLimits = request || null;
   const remaining = request ? Object.fromEntries(Object.entries(request).map(([kind, value]) => [kind, Math.max(0, value - (Number(spent[kind]) || 0))])) : {};
   child.budgetNode = reserveBudget(sessionBudget(parent), remaining, { name: record.id });
 }
@@ -570,6 +571,8 @@ async function runChildTurnInner(parent, record, prompt, options, { foreground }
       isSubagent: true,
       agentType: type,
       agentId: record.id,
+      neuronParentId: record.parentId || 'main',
+      neuronDepth: record.depth || 1,
       teammate: record.teamId ? { name: record.description || record.id, team: (() => { try { const team = agentRegistry(parent).teams.get(record.teamId); return team ? team.name : record.teamId; } catch { return record.teamId; } })() } : null,
       maxSteps: subagentStepLimit(record, options)
     });

@@ -49,11 +49,42 @@ export function descendantRecords(registry, id) {
   return out;
 }
 
+const BUDGET_KINDS = ["tokens", "usd", "requests", "steps", "children"];
+
+// Budget view of one neuron (roadmap 2.6): its limits, what it spent and,
+// while it runs, what is left. Kinds with neither a limit nor any spend are
+// left out; an agent without a budget and without spend gets no field.
+export function projectBudget(record) {
+  const live = record?.child?.budgetNode;
+  const limits = record?.budgetLimits && typeof record.budgetLimits === "object" ? record.budgetLimits : {};
+  const spent = { ...(record?.budgetSpent || {}) };
+  if (live && live.spent) for (const [kind, value] of Object.entries(live.spent)) spent[kind] = safeNumber(spent[kind]) + safeNumber(value);
+  const out = {};
+  for (const kind of BUDGET_KINDS) {
+    const limit = Number(limits[kind]);
+    const used = safeNumber(spent[kind]);
+    const hasLimit = Number.isFinite(limit) && limit > 0;
+    if (!hasLimit && !used) continue;
+    const round = (value) => (kind === "usd" ? Number(value.toFixed(6)) : Math.floor(value));
+    out[kind] = { spent: round(used), ...(hasLimit ? { limit: round(limit), left: round(Math.max(0, limit - used)) } : {}) };
+  }
+  return Object.keys(out).length ? out : null;
+}
+
+/** One line for /tasks: "budget tokens 1,200/50,000 left 48,800, usd $0.01/$0.50". */
+export function formatBudget(budget) {
+  if (!budget) return "";
+  const show = (kind, value) => (kind === "usd" ? "$" + Number(value).toFixed(2) : Number(value).toLocaleString("en-US"));
+  const parts = Object.entries(budget).map(([kind, item]) => kind + " " + show(kind, item.spent) + (item.limit !== undefined ? "/" + show(kind, item.limit) : ""));
+  return parts.length ? "budget " + parts.join(", ") : "";
+}
+
 function projectNode(record, children, contextOnly = false) {
   const id = clean(record.id, 100);
   const status = VALID_STATUSES.has(record.status) ? record.status : "interrupted";
   const usage = record.usage && typeof record.usage === "object" ? record.usage : null;
   const model = clean(record.child?.config?.model || record.model, 120);
+  const budget = projectBudget(record);
   return {
     id,
     parent_id: clean(record.parentId || "main", 100),
@@ -72,6 +103,7 @@ function projectNode(record, children, contextOnly = false) {
     tokens_used: Math.floor(safeNumber(usage?.totalTokens, safeNumber(record.tokensUsed))),
     estimated_cost_usd: Number(safeNumber(usage?.costUsd).toFixed(6)),
     elapsed_seconds: Math.floor(Math.max(0, (safeNumber(record.finishedAt) || Date.now()) - safeNumber(record.startedAt)) / 1000),
+    ...(budget ? { budget } : {}),
     ...(contextOnly ? { context_only: true } : {})
   };
 }

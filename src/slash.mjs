@@ -1961,6 +1961,8 @@ export async function runBuiltinCommand(name, argument, state) {
     }
     case 'tasks': {
       const { listAgents, getAgent, stopAgent, summarizeAgent } = await import('./agent-tasks.mjs');
+      const { projectBudget, formatBudget } = await import('./neuron-network.mjs');
+      const budgetOf = (id) => { try { return formatBudget(projectBudget(getAgent(session, id))); } catch { return ''; } };
       const words = argument ? argument.split(/\s+/) : [];
       if (session && words[0] === 'stop' && words[1]) {
         if (session.agentTasks && session.agentTasks.agents.has(words[1])) return { output: stopAgent(session, { id: words[1] }).message };
@@ -1989,14 +1991,14 @@ export async function runBuiltinCommand(name, argument, state) {
       }
       if (session && words[0] && session.agentTasks && session.agentTasks.agents.has(words[0])) {
         const info = summarizeAgent(getAgent(session, words[0]), { full: true });
-        return { output: [info.id + '  ' + info.status + '  ' + info.agent + '  ' + info.description + '  (' + info.elapsed + ', ' + info.toolCalls + ' tool calls' + (info.usage ? ', ' + info.usage.requests + ' requests, ' + info.usage.inputTokens.toLocaleString('en-US') + ' in / ' + info.usage.outputTokens.toLocaleString('en-US') + ' out tokens' + (info.usage.costUsd > 0 ? ', $' + info.usage.costUsd.toFixed(4) : '') : '') + ')', info.error ? 'Error: ' + info.error : '', info.report || (info.recentTools ? 'Recent tools: ' + info.recentTools.join(', ') : '')].filter(Boolean).join('\n') };
+        return { output: [info.id + '  ' + info.status + '  ' + info.agent + '  ' + info.description + '  (' + info.elapsed + ', ' + info.toolCalls + ' tool calls' + (info.usage ? ', ' + info.usage.requests + ' requests, ' + info.usage.inputTokens.toLocaleString('en-US') + ' in / ' + info.usage.outputTokens.toLocaleString('en-US') + ' out tokens' + (info.usage.costUsd > 0 ? ', $' + info.usage.costUsd.toFixed(4) : '') : '') + ')', budgetOf(info.id) ? budgetOf(info.id).replace(/^budget/, 'Budget:') : '', info.error ? 'Error: ' + info.error : '', info.report || (info.recentTools ? 'Recent tools: ' + info.recentTools.join(', ') : '')].filter(Boolean).join('\n') };
       }
       const agents = session ? listAgents(session) : [];
       const procs = session && session.background ? [...session.background.values()] : [];
       const mcpTasks = session && session.mcpBackgroundTasks ? [...session.mcpBackgroundTasks.entries()] : [];
       if (!agents.length && !procs.length && !mcpTasks.length) return { output: 'No subagents, background processes or MCP tasks in this session.' };
       const lines = [];
-      const agentLine = (agent) => '  ' + agent.id.padEnd(9) + ' ' + agent.status.padEnd(10) + ' ' + (agent.background ? 'bg ' : 'fg ') + agent.agent + ': ' + agent.description + '  (' + agent.elapsed + ', ' + agent.toolCalls + ' tool calls' + (agent.status === 'running' && agent.recentTools ? ', now: ' + agent.recentTools[agent.recentTools.length - 1] : '') + ')';
+      const agentLine = (agent) => '  ' + agent.id.padEnd(9) + ' ' + agent.status.padEnd(10) + ' ' + (agent.background ? 'bg ' : 'fg ') + agent.agent + ': ' + agent.description + '  (' + agent.elapsed + ', ' + agent.toolCalls + ' tool calls' + (budgetOf(agent.id) ? ', ' + budgetOf(agent.id) : '') + (agent.status === 'running' && agent.recentTools ? ', now: ' + agent.recentTools[agent.recentTools.length - 1] : '') + ')';
       const running = agents.filter((agent) => agent.status === 'running');
       const earlier = agents.filter((agent) => agent.status !== 'running');
       // subagentStatusLine may replace (or, with "", hide) the rows it is shown.

@@ -210,6 +210,14 @@ A child never gets more reach than the agent that starts it. Its tools are alrea
 
 Test: `test/spawn-scope.test.mjs` (every combination of parent mode, child definition and task).
 
+## Network observability (roadmap 2.6)
+
+- `neuron_network` nodes carry a `budget` field for agents that have a budget or spent something: per kind (`tokens`, `usd`, `requests`, `steps`, `children`) the amount `spent`, and with a limit also `limit` and `left`. A running agent's figure includes its open reservation. Prompts, reports and tool arguments are still never included.
+- `/tasks` shows the same budget on each agent's row and in `/tasks agent_N`.
+- With telemetry on, every `invoke_agent` span has `oasis.neuron.id` (`main` for the top-level turn), and subagent spans add `oasis.neuron.parent_id` and `oasis.neuron.depth`, so a trace backend can rebuild the network.
+
+Test: `test/neuron-observability.test.mjs` (budget projection, a snapshot of the graph, and the span attributes from a real subagent run).
+
 ## Detailed design (proposal, 2026-11)
 
 This section turns phases 2 to 8 above into one design. Nothing in it is
