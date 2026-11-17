@@ -13,6 +13,7 @@ import { renderComparisonHtml, saveComparisonArtifact } from './eval-report.mjs'
 import { oasisVersion } from './version.mjs';
 import { redactArtifactText, redactSecretPatterns } from './artifacts.mjs';
 import { redactProviderDetail } from './api-error.mjs';
+import { buildRoutingTable, routesFromTable } from './capability-router.mjs';
 
 // A compact, redacted record of what the agent did in a trial: tool, the
 // argument that identifies the step (path, command, pattern), result size and
@@ -548,7 +549,7 @@ async function readComparisonRun(filePath) {
   const sourceRevision = typeof report.sourceRevision === 'string' && /^[a-f0-9]{40}$/i.test(report.sourceRevision)
     ? report.sourceRevision.toLowerCase()
     : null;
-  return { label, source: resolved, sourceRevision, results };
+  return { label, model: providerLabel || null, source: resolved, sourceRevision, results };
 }
 
 function summarizeComparisonTask(trials) {
@@ -1431,13 +1432,46 @@ function printValidation(report, output = process.stdout) {
   if (report.error) output.write(report.error + '\n');
 }
 
+// Roadmap 2.3: saved reports, one per model, become a per-task-class routing
+// table (src/capability-router.mjs). Report-only: nothing is run.
+async function routeTableCommand(args, output) {
+  const paths = [];
+  const opts = {};
+  let out = '';
+  for (let i = 0; i < args.length; i++) {
+    const arg = args[i];
+    if (arg === '--floor' || arg === '--max-drop') {
+      const value = Number(args[++i]);
+      if (!Number.isFinite(value)) throw new Error(arg + ' needs a number between 0 and 1.');
+      opts[arg === '--floor' ? 'floor' : 'maxDrop'] = value;
+    } else if (arg === '--baseline') opts.baseline = String(args[++i] || '');
+    else if (arg === '--out') out = String(args[++i] || '');
+    else if (arg.startsWith('--')) throw new Error('Unknown --route-table option: ' + arg);
+    else paths.push(arg);
+  }
+  if (paths.length < 2) throw new Error('Usage: oasis eval --route-table <run-a.json> <run-b.json>... [--floor 0.8] [--max-drop 0.02] [--baseline LABEL] [--out table.json]');
+  if (out && paths.some((item) => path.resolve(item) === path.resolve(out))) throw new Error('--out must differ from the input reports.');
+  const runs = await Promise.all(paths.map(readComparisonRun));
+  const table = buildRoutingTable(runs, opts);
+  const lines = ['Capability routing table (floor ' + Math.round(table.floor * 100) + '%, at most ' + Math.round(table.maxDrop * 1000) / 10 + ' points below ' + table.baseline + '):'];
+  for (const [name, entry] of Object.entries(table.classes)) {
+    lines.push('  ' + name.padEnd(26) + ' ' + entry.model + '  pass ' + Math.round(entry.passRate * 100) + '% (baseline ' + Math.round(entry.baselinePassRate * 100) + '%)' + (entry.meanCostUSD !== null ? '  $' + entry.meanCostUSD.toFixed(4) + '/task' : '  cost unknown'));
+  }
+  lines.push('Table digest: ' + table.digest);
+  lines.push('Settings: ' + JSON.stringify({ modelRouting: { enabled: true, mode: 'capability', strongModel: table.baselineModel, routes: routesFromTable(table) } }));
+  output.write(lines.join('\n') + '\n');
+  if (out) await writeFile(out, JSON.stringify(table, null, 2) + '\n', { mode: 0o600 });
+  return { ok: true, table };
+}
+
 export async function runEvalCommand(args = [], options = {}) {
   const output = options.output || process.stdout;
   const env = options.env || process.env;
   const tasksDir = options.tasksDir || DEFAULT_TASKS_DIR;
+  if (args[0] === '--route-table') return await routeTableCommand(args.slice(1), output);
   const config = parseArgs(args);
   if (config.help) {
-    output.write('Usage:\n  oasis eval --validate\n  oasis eval --negative-control\n  oasis eval [--task ID] [--trials N] [--timeout-seconds N] [--route-easy-model ID --route-strong-model ID [--route-mode cascade]] --yes\n  oasis eval --claude-code [--task ID] [--trials N] [--model MODEL] [--max-turns N] [--timeout-seconds N] [--budget-usd USD] --yes\n  oasis eval --codex | --gemini-cli | --opencode | --aider [--task ID] [--trials N] [--model MODEL] [--timeout-seconds N] --yes\n  oasis eval --compare <run-a.json> <run-b.json> [--out comparison.json] [--html comparison.html]\n\n');
+    output.write('Usage:\n  oasis eval --validate\n  oasis eval --negative-control\n  oasis eval [--task ID] [--trials N] [--timeout-seconds N] [--route-easy-model ID --route-strong-model ID [--route-mode cascade]] --yes\n  oasis eval --claude-code [--task ID] [--trials N] [--model MODEL] [--max-turns N] [--timeout-seconds N] [--budget-usd USD] --yes\n  oasis eval --codex | --gemini-cli | --opencode | --aider [--task ID] [--trials N] [--model MODEL] [--timeout-seconds N] --yes\n  oasis eval --compare <run-a.json> <run-b.json> [--out comparison.json] [--html comparison.html]\n  oasis eval --route-table <run.json>... [--floor 0.8] [--max-drop 0.02] [--baseline LABEL] [--out table.json]\n\n');
     output.write('Model evaluations execute coding agents in disposable copies. The verifier is external to the workspace, but this is not an OS-level sandbox. Review the task suite and only run with --yes in a controlled workspace. Claude Code mode requires the CLI and its authentication.\n');
     return { ok: true };
   }

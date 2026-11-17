@@ -4,6 +4,7 @@ import {
   inferToolRequirement
 } from './task-classifier.mjs';
 import { countTextTokens } from './tokens.mjs';
+import { classifyTaskClass, sanitizeRoutes } from './capability-router.mjs';
 import { catalogImageInput, catalogToolCalling } from './model-catalog.mjs';
 
 const SCORING = DEFAULT_ROUTING_CONFIG.scoring;
@@ -119,6 +120,8 @@ export function selectTaskModel(prompt, currentModel, routing = {}, options = {}
   const enabled = routing && routing.enabled === true;
   const easyModel = String(routing && routing.easyModel || '').trim();
   const strongModel = String(routing && routing.strongModel || baseModel).trim() || baseModel;
+  const routes = routing && routing.mode === 'capability' ? sanitizeRoutes(routing.routes) : {};
+  if (enabled && Object.keys(routes).length) return capabilityRoute(prompt, baseModel, strongModel, routes, options);
   if (!enabled || !easyModel) {
     return {
       enabled: false,
@@ -188,6 +191,36 @@ export function selectTaskModel(prompt, currentModel, routing = {}, options = {}
   };
 }
 
+// Roadmap 2.3: the model the eval-derived table picked for this task's class
+// (src/capability-router.mjs). Safety-pinned and hard-hinted tasks keep the
+// strong model; when the routed model differs from it, the run can still
+// escalate to the strong model on evidence of being stuck, as in cascade.
+function capabilityRoute(prompt, baseModel, strongModel, routes, options) {
+  const classification = classifyTask(prompt, options.hint);
+  const requiresTools = classification.requiresTools === true;
+  const requiresImages = options.requiresImages === true;
+  const done = (model, tier, reason, taskClass = '') => ({
+    enabled: true, mode: 'capability', tier, model: model || baseModel, strongModel,
+    ...(tier === 'work' ? { escalateTo: strongModel } : {}),
+    ...(taskClass ? { taskClass } : {}),
+    requiresTools, requiresImages, reason
+  });
+  if (classification.pinned) return done(strongModel, 'strong', classification.reason);
+  const taskClass = classifyTaskClass(prompt);
+  const routeName = taskClass && routes[taskClass] ? taskClass : 'overall';
+  const model = routes[routeName];
+  if (!model) return done(strongModel, 'strong', 'capability table has no route for ' + (taskClass || 'unclassified') + ' tasks and no overall route');
+  if (requiresTools || requiresImages) {
+    const catalogOptions = { baseURL: options.baseURL, provider: options.provider, env: options.env || process.env };
+    if ((requiresTools && catalogToolCalling(model, catalogOptions) === false) || (requiresImages && catalogImageInput(model, catalogOptions) === false)) {
+      return done(strongModel, 'strong', 'capability route ' + model + ' is catalogued without a capability this task needs; kept ' + strongModel, taskClass);
+    }
+  }
+  const label = routeName === 'overall' ? 'class unclear, overall route' : taskClass + ' route';
+  if (model === strongModel) return done(model, 'strong', 'capability table: ' + label + ' is ' + model, taskClass);
+  return done(model, 'work', 'capability table: ' + label + ' is ' + model + '; moves to ' + strongModel + ' if the run shows it is stuck', taskClass);
+}
+
 export function sanitizeModelRouting(value) {
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
     return { enabled: false, easyModel: '', strongModel: '' };
@@ -197,7 +230,8 @@ export function sanitizeModelRouting(value) {
     : '';
   return {
     enabled: value.enabled === true,
-    ...(value.mode === 'cascade' ? { mode: 'cascade' } : {}),
+    ...(value.mode === 'cascade' || value.mode === 'capability' ? { mode: value.mode } : {}),
+    ...(Object.keys(sanitizeRoutes(value.routes)).length ? { routes: sanitizeRoutes(value.routes) } : {}),
     easyModel: normalize(value.easyModel),
     strongModel: normalize(value.strongModel)
   };

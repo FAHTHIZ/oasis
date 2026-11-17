@@ -331,6 +331,36 @@ Limits, stated plainly:
   `availableModels` is never used.
 - `/routing classify` returns to read-only-only routing.
 
+### Capability routing from eval results
+
+`oasis eval --route-table` turns saved eval reports, one per model, into a
+routing table: for each task class in `evals/tasks/metadata.json`, the
+cheapest model whose pass rate is at or above a floor (default 80%) and no
+more than a set drop (default 2 points) below the baseline model. Nothing is
+run; the table is a pure function of the reports and the options, and its
+digest is printed so a decision can be reproduced.
+
+```sh
+oasis eval --trials 3 --yes > strong.json   # one report per model
+oasis eval --route-table strong.json mid.json cheap.json --floor 0.8 --max-drop 0.02 --out table.json
+```
+
+It prints the settings to paste:
+
+```json
+{ "modelRouting": { "enabled": true, "mode": "capability", "strongModel": "STRONG_MODEL", "routes": { "input-validation": "CHEAP_MODEL", "overall": "MID_MODEL" } } }
+```
+
+A task goes to the route for its class, or to `overall` when its class is
+unclear. Security-sensitive and hard-hinted tasks stay on the strong model, and
+a routed run that gets stuck moves to the strong model as in cascade mode.
+
+Limits, stated plainly: the class is guessed from the task text with keyword
+rules. On the 52 eval task prompts it names a class for 33 and gets 23 of
+those right; the rest use `overall`. The roadmap's cost gate (cost drops with
+no class falling more than 2 points on the harness) has not been measured, so
+this mode is off unless you turn it on.
+
 The model catalogue imports the upstream `tool_call` flag when it is present.
 For a task that needs tools, OASIS avoids selecting a model explicitly marked as
 not supporting tool calls and keeps the current model instead, unless the
