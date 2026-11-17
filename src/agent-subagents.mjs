@@ -10,7 +10,7 @@ import path from 'node:path';
 import { atomicWriteFile } from './atomic-write.mjs';
 import { extractJson, validateJsonSchema } from './json-schema.mjs';
 import { subagentMaxDepth, subagentDefinitionContext, withoutProjectInstructions, agentScopedHooks, agentMcpSpec, connectAgentMcp, closeAgentMcp, backgroundUsageSink, subagentStepLimit, watchForStall, verifyResumeWorktree } from './subagent-support.mjs';
-import { SHARED_TASK_TOOL_NAMES, runSharedTaskTool } from './shared-tasks.mjs';
+import { SHARED_TASK_TOOL_NAMES, runSharedTaskTool, releaseAgentLeases } from './shared-tasks.mjs';
 import { createWorktree, removeWorktree, finishWorktree, isCommitIntegrated } from './worktrees.mjs';
 import { worktreeSetupSummary } from './worktree-setup.mjs';
 import { modelAllowed, modelRestrictionMessage } from './model-aliases.mjs';
@@ -569,6 +569,8 @@ async function runChildTurnInner(parent, record, prompt, options, { foreground }
     if (record.sharedTaskId) {
       try { runSharedTaskTool(child, 'task_release', { task_id: record.sharedTaskId }); } catch {}
     }
+    // And any other task it claimed itself (roadmap 1.4).
+    try { const released = releaseAgentLeases(child, record.id); if (released.length) record.releasedLeases = released; } catch {}
     // Requests made before the failure were billed: keep them in the count.
     record.tokensUsed += runTokens;
     record.finishedAt = Date.now();

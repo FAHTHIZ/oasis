@@ -181,6 +181,12 @@ or for every subagent with `OASIS_SUBAGENT_BUDGET="tokens=200000,usd=0.5"` (the 
 
 `test/budget-algebra.test.mjs` runs 60 random concurrent spawn trees with random limits, spends and cancellations. No tree passes its root's limit for any kind, a cancelled child refunds exactly what it had not spent, and after every neuron ends the root holds nothing back.
 
+## Cancellation and leases (roadmap 1.4)
+
+Stopping a neuron stops its whole subtree: cancelling the main turn aborts every foreground descendant through the shared signal, and `agent_stop` (or a parent that fails or stalls) aborts every descendant's controller and kills the processes and terminals they own. A neuron waiting for a scheduler slot is cancelled while it waits. `test/neuron-cancellation.test.mjs` runs a main session, a lead and a worker that sits in a 47-second command, and checks both paths stop all of them in under 2 seconds with no process left over.
+
+A neuron that ends without finishing (cancelled, failed or stalled) releases every shared-task lease it holds, not just the task it was started for, so the task goes back to `pending` and another agent can claim it at once instead of after the 15-minute lease. A restored session never restores a live lease, so neurons found `interrupted` after a crash hold none.
+
 ## Detailed design (proposal, 2026-11)
 
 This section turns phases 2 to 8 above into one design. Nothing in it is

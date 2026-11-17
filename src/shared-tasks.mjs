@@ -388,3 +388,27 @@ export function runSharedTaskTool(session, name, args = {}) {
 
   throw new Error('Unknown shared task tool ' + name);
 }
+
+/**
+ * Releases every active lease `agentId` holds on the board (roadmap 1.4). Called
+ * when an agent is cancelled, fails, stalls or is found interrupted, so its
+ * claimed tasks become claimable at once instead of when the lease expires.
+ * Returns the released task IDs.
+ */
+export function releaseAgentLeases(session, agentId) {
+  if (!session || !agentId || agentId === 'main') return [];
+  let store;
+  try { store = ensureStore(session); } catch { return []; }
+  const released = [];
+  const at = new Date().toISOString();
+  for (const task of store.tasks) {
+    if (task.claimedBy !== agentId || task.status === 'completed') continue;
+    if (task.owner === task.claimedBy) task.owner = '';
+    task.claimedBy = '';
+    task.claimExpiresAt = null;
+    if (task.status === 'in_progress') task.status = 'pending';
+    task.updatedAt = at;
+    released.push(task.id);
+  }
+  return released;
+}
