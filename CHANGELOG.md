@@ -21,7 +21,7 @@ User-facing change history grouped by package version. A version heading does no
 - `todo_write` accepts an optional `activeForm` for each item: the label shown while it is in progress.
 - Web app: the run status names the current step in the present tense with a shimmer, a step the model is still writing appears as a live row, running groups title themselves in the present tense, and a finished single step no longer unfolds its raw input and output by itself (less layout shift). The task plan starts compact with the active step in its caption, and its progress bar animates with a transform.
 - Web app: the tab icon gets a dot when OASIS needs you (amber) or is done (green) while the tab is in the background. With no saved sound choice, the finish and needs-you sounds play only while the tab is in the background; the setting turns every sound on or off.
-- Web app: a changed file's diff shows how many lines it adds and removes ("+3 −2") beside the file name. Test: `test/app-core.test.mjs`.
+- Web app: each file in the Changes list, and a changed file's diff, shows how many lines it adds and removes ("+3 −2"). Test: `test/app-core.test.mjs`.
 - The turn clock and "Worked for" line read in hours past an hour (`1h 02m 05s`, not `62m 05s`), and token counts read in millions (`1.2M`, not `1200k`; 999,500 tokens is `1M`, not `1000k`), in the terminal and the web app.
 - Web app: the context meter's tooltip uses the same short counts as the run status (`12.3k of 200k tokens`, not `12.3k of 200.0k`).
 - Web app: the file viewer has a Copy path button, and on a phone its header keeps the file name on its own line with the actions wrapped below it (the name and the close button used to be pushed off screen).
