@@ -1201,8 +1201,9 @@ export function createOasisWebServer(options = {}) {
             if (draft.path) target.path = redactApprovalSecrets(String(draft.path)).slice(0, 300);
             else if (draft.command) target.command = redactApprovalSecrets(String(draft.command)).slice(0, 200);
             else if (draft.query) target.query = redactApprovalSecrets(String(draft.query)).slice(0, 200);
-            const shown = describeDraft({ name: draft.name, ...target, chars: draft.chars });
-            emit(job, 'tool_draft', { index: Math.max(0, Math.min(64, Number(draft.index) || 0)), name: String(draft.name).slice(0, 100), chars: Math.max(0, Math.min(50_000_000, Number(draft.chars) || 0)), ...target, text: shown.text, ...(draft.done ? { done: true } : {}) });
+            const lines = draft.lines ? { added: Math.max(0, Math.min(10_000_000, Math.floor(Number(draft.lines.added) || 0))), removed: Math.max(0, Math.min(10_000_000, Math.floor(Number(draft.lines.removed) || 0))) } : null;
+            const shown = describeDraft({ name: draft.name, ...target, chars: draft.chars, ...(lines ? { lines } : {}) });
+            emit(job, 'tool_draft', { index: Math.max(0, Math.min(64, Number(draft.index) || 0)), name: String(draft.name).slice(0, 100), chars: Math.max(0, Math.min(50_000_000, Number(draft.chars) || 0)), ...target, ...(lines ? { lines } : {}), text: shown.text, ...(draft.done ? { done: true } : {}) });
           },
           onToolOutput: ({ call, stream, text }) => {
             const callId = call && call.id ? String(call.id).slice(0, 160) : '';

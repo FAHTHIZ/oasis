@@ -45,6 +45,53 @@ export function draftTarget(partialJson) {
   return {};
 }
 
+// Lines a call still being written adds and removes, from its partial JSON:
+// the file body of a write, the new and old text of an edit, the + and -
+// lines of a patch. Cursor shows a step's +73 −12 as it is written; this is
+// the same count before the step runs. Escaped newlines (\\n) are counted
+// in the raw text, so nothing is parsed twice.
+const ADDED_FIELDS = ['content', 'new_string', 'new_text', 'replacement', 'new_source'];
+const REMOVED_FIELDS = ['old_string', 'old_text'];
+const ADDS = new Set(['write_file', 'edit_file', 'multi_edit', 'notebook_edit']);
+function fieldBodies(text, field) {
+  const out = [];
+  const regex = new RegExp('"' + field + '"\\s*:\\s*"', 'g');
+  let match;
+  while ((match = regex.exec(text))) {
+    let end = match.index + match[0].length;
+    const start = end;
+    while (end < text.length && text[end] !== '"') end += text[end] === '\\' ? 2 : 1;
+    out.push(text.slice(start, Math.min(end, text.length)));
+    regex.lastIndex = end;
+  }
+  return out;
+}
+function countLines(body) {
+  if (!body) return 0;
+  let n = 0;
+  for (let i = 0; i < body.length; i++) {
+    if (body[i] !== '\\') continue;
+    if (body[i + 1] === 'n') n++;
+    i++;
+  }
+  return n + 1;
+}
+export function draftLines(name, partialJson) {
+  const text = String(partialJson || '');
+  if (name === 'apply_patch') {
+    const body = fieldBodies(text, 'patch').concat(fieldBodies(text, 'input')).join('');
+    let added = 0, removed = 0;
+    for (const line of body.split('\\n').slice(1)) {
+      if (line.startsWith('+') && !line.startsWith('+++')) added++;
+      else if (line.startsWith('-') && !line.startsWith('---')) removed++;
+    }
+    return { added, removed };
+  }
+  if (!ADDS.has(name)) return { added: 0, removed: 0 };
+  const sum = (fields) => fields.reduce((n, field) => n + fieldBodies(text, field).reduce((m, body) => m + countLines(body), 0), 0);
+  return { added: sum(ADDED_FIELDS), removed: sum(REMOVED_FIELDS) };
+}
+
 // Builds a reporter for one model reply. update(index, { id, name, args })
 // takes the call's accumulated state; finish() sends a final report (done: true)
 // for every call so a UI never keeps a stale byte count.
@@ -53,7 +100,8 @@ export function createDraftReporter(onDraft, { now = () => Date.now(), interval 
   const calls = new Map();
   const send = (index, state, done = false) => {
     const target = draftTarget(state.args);
-    const event = { index, id: state.id || '', name: state.name || '', chars: state.args.length, ...target, ...(done ? { done: true } : {}) };
+    const lines = draftLines(state.name, state.args);
+    const event = { index, id: state.id || '', name: state.name || '', chars: state.args.length, ...target, ...(lines.added || lines.removed ? { lines } : {}), ...(done ? { done: true } : {}) };
     state.sentAt = now();
     state.key = event.name + '\u0000' + (target.path || target.command || target.query || '');
     state.sentChars = event.chars;
@@ -120,6 +168,12 @@ export function describeDraft(draft = {}) {
   else if (name === 'fetch_url' && target) label = 'Fetching ' + target;
   else if (verb) label = target ? verb + ' ' + target : DRAFT_ALONE[name] || verb;
   else label = 'Preparing ' + (name.replace(/^mcp__([^_]+)__/, '$1 ').replace(/[_-]+/g, ' ').trim() || 'a step');
-  const size = Number(draft.chars) >= 512 && /^(Writing|Editing|Patching)$/.test(verb || '') ? formatBytes(draft.chars) : '';
-  return { label, size, text: label + (size ? ' · ' + size : '') };
+  const writes = /^(Writing|Editing|Patching)$/.test(verb || '');
+  const size = Number(draft.chars) >= 512 && writes ? formatBytes(draft.chars) : '';
+  // "+120 −4" once a body has more than a line; the size is the fallback.
+  const added = Math.max(0, Number(draft.lines && draft.lines.added) || 0);
+  const removed = Math.max(0, Number(draft.lines && draft.lines.removed) || 0);
+  const diff = writes && added + removed >= 2 ? (removed ? '+' + added + ' −' + removed : '+' + added + ' lines') : '';
+  const extra = diff || size;
+  return { label, size, diff, text: label + (extra ? ' · ' + extra : '') };
 }
