@@ -33,7 +33,7 @@ Priorities:
 
 | # | Item | Acceptance criteria |
 | --- | --- | --- |
-| 1.1 | Network ledger in `node:sqlite`: append-only state transitions and budget charges per neuron | Kill-at-every-write fault test: after restart no neuron is shown as running and the work graph matches a clean run; ledger writes add under 5 ms per spawn on a 2-CPU runner |
+| 1.1 | Network ledger in `node:sqlite`: append-only state transitions and budget charges per neuron | Done: `src/neuron-ledger.mjs`, see [Network ledger](OASIS-NEURON-NETWORK.md#network-ledger-roadmap-11). `test/neuron-ledger.test.mjs` cuts a scripted network after every write: after restart no neuron is running and the lineage matches the clean run; a `SIGKILL`ed writer recovers; median spawn with the ledger write is under 5 ms. The ledger is written alongside the registry; the scheduler (1.2) will read it |
 | 1.2 | Scheduler: one start path for `task`, teams and workflow `agent()` | All existing subagent, team, workflow and task-board tests pass unchanged; global cap 8, per-parent `children` and per-provider slots enforced (property test); queued children get an explanatory tool result |
 | 1.3 | Budget algebra: reservations from parent to child, refunds on end, enforced in the scheduler and `src/cost-policy.mjs` | Property test with random concurrent spawn trees: no tree exceeds its root's tokens, dollars, steps or children; cancelled children refund unspent budget |
 | 1.4 | Cancellation and leases through the scheduler | Cancelling any neuron stops all descendants within 2 s (integration test with sleeping tools); interrupted neurons release shared-task leases |
