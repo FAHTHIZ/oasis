@@ -5126,6 +5126,8 @@ function toggleTerminal() {
 $('fileFilter').addEventListener('input', () => refreshFiles());
 
 let refreshQueued = false;
+// The last Changes list, for stepping through changed files with [ and ].
+let changedFiles = [];
 function refreshFiles() {
   if (refreshQueued) return;
   refreshQueued = true;
@@ -5134,6 +5136,7 @@ function refreshFiles() {
   setTimeout(async () => {
     refreshQueued = false;
     const changes = workspace ? await workspace.changes() : [];
+    changedFiles = changes;
     const status = new Map(changes.map((c) => [c.path, c.status]));
     $('changesBadge').hidden = !changes.length;
     $('changesBadge').textContent = String(changes.length);
@@ -5271,6 +5274,18 @@ $('revertButton').addEventListener('click', async () => {
   await workspace.revert(editingPath); refreshFiles(); closeSheet('editorSheet'); toast('Reverted ' + editingPath);
 });
 $('deleteFileButton').addEventListener('click', async () => { if (!confirm('Delete ' + editingPath + '?')) return; await workspace.remove(editingPath); refreshFiles(); closeSheet('editorSheet'); });
+// [ and ] step to the previous or next changed file while one is open, so a
+// review goes file by file without closing the viewer.
+$('editorSheet').addEventListener('keydown', (event) => {
+  if ((event.key !== '[' && event.key !== ']') || event.metaKey || event.ctrlKey || event.altKey) return;
+  const target = event.target;
+  if (target && (target.isContentEditable || (/^(INPUT|TEXTAREA|SELECT)$/.test(target.tagName) && !target.readOnly))) return;
+  const index = changedFiles.findIndex((change) => change.path === editingPath);
+  if (index < 0 || changedFiles.length < 2) return;
+  event.preventDefault();
+  const next = changedFiles[(index + (event.key === ']' ? 1 : -1) + changedFiles.length) % changedFiles.length];
+  void openEditor(next.path, next.status);
+});
 $('editor').addEventListener('keydown', (event) => {
   if (event.key === 'Tab' && !event.shiftKey) { event.preventDefault(); document.execCommand('insertText', false, '  '); }
   if ((event.metaKey || event.ctrlKey) && event.key === 's') { event.preventDefault(); if (!RT) $('saveFileButton').click(); }
