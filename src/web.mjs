@@ -1268,6 +1268,15 @@ export function createOasisWebServer(options = {}) {
             });
             emit(job, 'session_state', webSessionState(session, env));
           },
+          // A provider error the runtime waits out: the page counts it down.
+          onProviderRetry: (info) => {
+            emit(job, 'provider_retry', {
+              attempt: Math.max(0, Math.min(20, Math.floor(Number(info && info.attempt) || 0))),
+              limit: Math.max(0, Math.min(20, Math.floor(Number(info && info.limit) || 0))),
+              waitMs: Math.max(0, Math.min(600_000, Math.floor(Number(info && info.waitMs) || 0))),
+              ...(Number(info && info.status) > 0 ? { status: Math.floor(Number(info.status)) } : {})
+            });
+          },
           onStreamRestart: (info) => {
             assistantDeltaBuffer = '';
             emit(job, 'stream_restarted', { attempt: Math.max(0, Math.min(5, Math.floor(Number(info && info.attempt) || 0))) });
