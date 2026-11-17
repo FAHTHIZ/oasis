@@ -2034,6 +2034,8 @@ const runClock = {
     if (!waiting && !agent.detached && now - lastActivity >= IDLE_THINKING_MS && !liveThinking() && !stepsRunning() && $('questionSheet').hidden) showThinking(lastActivity);
     const phase = waiting ? 'approval' : connectionLost ? 'reconnecting' : stepsRunning() ? 'tool' : nowLabel === 'Thinking' ? 'thinking' : nowLabel === 'Responding' ? 'responding' : nowLabel ? 'draft' : 'waiting';
     const status = liveStatus({ label: nowLabel === 'Thinking' ? '' : nowLabel, phase, request: liveModel.request, turn: liveModel.turn, elapsedMs: this.worked(now) }, now);
+    this.label = waiting ? '' : status.label;
+    this.stalled = Boolean(status.stalled) && !waiting;
     const label = el.querySelector('.run-status-text');
     if (label.textContent !== status.label) label.textContent = status.label;
     let meta = el.querySelector('.run-status-meta');
@@ -2050,6 +2052,8 @@ const runClock = {
     this.timer = 0;
     const ms = this.worked();
     this.startedAt = 0;
+    this.label = '';
+    this.stalled = false;
     restStatus($('runStatus'));
     return ms;
   }
@@ -2077,10 +2081,11 @@ function finishRun(prefix) {
   for (const note of pendingInputs.take('steer')) showSteer(note);
   if (prefix && ms >= 1000) {
     const content = prefix + ' ' + formatDuration(ms);
-    display.push({ role: 'worked', content, ...(timings.length ? { timings } : {}) });
+    const at = Date.now();
+    display.push({ role: 'worked', content, at, ...(timings.length ? { timings } : {}) });
     const line = addMessage('worked', content);
     if (timings.length) line.title = timingSummary(timings);
-    foldTurn(line, { live: true });
+    foldTurn(line, { live: true, at });
   }
 }
 
@@ -2089,7 +2094,7 @@ function finishRun(prefix) {
 // that opens on click, and the answer stays outside, so a long run reads as
 // its result. The worked line stays in the transcript (hidden) for the
 // Activity panel. Turns without steps are left as they were.
-function foldTurn(workedLine, { live = false } = {}) {
+function foldTurn(workedLine, { live = false, at = 0 } = {}) {
   if (!workedLine || !workedLine.isConnected || workedLine.dataset.folded) return null;
   const items = [];
   for (let node = workedLine.previousElementSibling; node; node = node.previousElementSibling) {
@@ -2117,6 +2122,14 @@ function foldTurn(workedLine, { live = false } = {}) {
   const did = runSummary(work.flatMap((node) => [...node.querySelectorAll('.tool')].map((row) => row._tool).filter(Boolean)));
   label.textContent = workedLine.textContent + (did ? ' · ' + did : steps ? ' · ' + steps + ' step' + (steps === 1 ? '' : 's') : '');
   head.append(label);
+  // When it finished ("done 14:05"), as Claude Code's turn duration does.
+  if (at) {
+    const when = document.createElement('span');
+    when.className = 'work-fold-when';
+    when.textContent = 'done ' + messageTime(at);
+    when.title = new Date(at).toLocaleString();
+    head.append(when);
+  }
   if (workedLine.title) head.title = workedLine.title;
   const body = document.createElement('div');
   body.className = 'work-fold-body';
@@ -2541,7 +2554,7 @@ function renderSavedDisplay(entries) {
     if (entry.role === 'user' && entry.images) addImageNote(el, entry.images, []);
     if (entry.role === 'user' && entry.steer) el.classList.add('steer');
     if (entry.role === 'worked' && Array.isArray(entry.timings)) el.title = timingSummary(entry.timings);
-    if (entry.role === 'worked') foldTurn(el);
+    if (entry.role === 'worked') foldTurn(el, { at: Number(entry.at) || 0 });
   }
 }
 
@@ -4760,6 +4773,8 @@ initActivity({
   toast,
   download: downloadText,
   title: chatTitle,
+  liveLabel: () => (agent && agent.busy && runClock.label) || '',
+  stalled: () => Boolean(agent && agent.busy && runClock.stalled),
   openActivity: () => toggleActivity(true)
 });
 for (const tab of document.querySelectorAll('#filesPanel .tab')) tab.addEventListener('click', () => showPanelTab(tab.dataset.tab));

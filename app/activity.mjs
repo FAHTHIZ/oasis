@@ -102,7 +102,11 @@ function renderTaskBar(trace) {
   const waiting = last.status === 'running' && last.steps.some((step) => step.outcome === 'running' && step.tool.waiting);
   const status = waiting ? 'waiting' : last.status;
   bar.dataset.status = status;
-  const word = waiting ? 'Needs you' : BAR_WORDS[last.status] || 'Done';
+  // While it runs the bar says what is happening now ("Reading the prompt",
+  // "Editing src/app.js"), the same words as the status line under the chat.
+  const live = last.status === 'running' && !waiting && state.deps.liveLabel ? state.deps.liveLabel() : '';
+  const word = waiting ? 'Needs you' : live || BAR_WORDS[last.status] || 'Done';
+  bar.classList.toggle('stalled', Boolean(live) && Boolean(state.deps.stalled && state.deps.stalled()));
   if ($('taskStateText').textContent !== word) $('taskStateText').textContent = word;
   const parts = [];
   if (last.stats.steps) parts.push(last.stats.steps + ' step' + (last.stats.steps === 1 ? '' : 's'));
