@@ -33,6 +33,7 @@
     "THIRD-PARTY-NOTICES.md",
     "evals/",
     "!assets/demo/",
+    "!assets/readme/",
     "!assets/screenshots/",
     "!scripts/demo/"
   ],

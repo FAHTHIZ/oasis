@@ -1,6 +1,6 @@
 <p align="center">
   <a href="https://github.com/FAHTHIZ/oasis">
-    <img src="assets/oasis-readme-hero.svg" alt="Illustration: OASIS. The open-source coding agent for any model. A drawn terminal window shows OASIS fixing a failing login test: it finds the bug, shows a one-line diff, runs npm test with 42 passing and finishes with a checked summary." width="100%">
+    <img src="assets/readme/hero.svg" alt="Animated illustration: OASIS. The open-source coding agent for any model. A drawn terminal window shows OASIS fixing a failing login test: the request types itself out, the agent finds the bug, shows a one-line diff, runs npm test with 42 passing and finishes with a checked summary." width="100%">
   </a>
   <br><sub>Illustration. The recordings under <a href="#work-where-you-work">Work where you work</a> are real, unscripted runs.</sub>
 </p>
@@ -11,24 +11,29 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/FAHTHIZ/oasis/actions/workflows/quality.yml"><img alt="Quality checks" src="https://img.shields.io/github/actions/workflow/status/FAHTHIZ/oasis/quality.yml?branch=main&style=flat-square&label=quality&labelColor=0B0F0C&color=32E07A"></a>
-  <a href="https://github.com/FAHTHIZ/oasis/releases/latest"><img alt="Latest release" src="https://img.shields.io/github/v/release/FAHTHIZ/oasis?style=flat-square&labelColor=0B0F0C&color=7CFF5E"></a>
-  <img alt="More than 3,300 tests" src="https://img.shields.io/badge/tests-3%2C300%2B-0ED168?style=flat-square&labelColor=0B0F0C">
-  <img alt="Windows, macOS and Linux" src="https://img.shields.io/badge/platforms-windows%20%C2%B7%20macos%20%C2%B7%20linux-1A1F1B?style=flat-square&labelColor=0B0F0C">
-  <a href="LICENSE"><img alt="Apache 2.0 license" src="https://img.shields.io/github/license/FAHTHIZ/oasis?style=flat-square&labelColor=0B0F0C&color=1A1F1B"></a>
+  <a href="https://github.com/FAHTHIZ/oasis/actions/workflows/quality.yml"><img alt="Quality checks" src="https://img.shields.io/github/actions/workflow/status/FAHTHIZ/oasis/quality.yml?branch=main&style=for-the-badge&label=quality&labelColor=0B0F0C&color=32E07A"></a>
+  <a href="https://github.com/FAHTHIZ/oasis/releases/latest"><img alt="Latest release" src="https://img.shields.io/github/v/release/FAHTHIZ/oasis?style=for-the-badge&labelColor=0B0F0C&color=7CFF5E"></a>
+  <img alt="More than 3,400 tests" src="https://img.shields.io/badge/tests-3%2C400%2B-0ED168?style=for-the-badge&labelColor=0B0F0C">
+  <a href="LICENSE"><img alt="Apache 2.0 license" src="https://img.shields.io/github/license/FAHTHIZ/oasis?style=for-the-badge&labelColor=0B0F0C&color=1A1F1B"></a>
+  <br>
+  <img alt="Windows, macOS and Linux" src="https://img.shields.io/badge/windows%20%C2%B7%20macos%20%C2%B7%20linux-1A1F1B?style=flat-square&logo=nodedotjs&logoColor=7CFF5E&labelColor=0B0F0C">
+  <img alt="Node.js 22.19 or newer" src="https://img.shields.io/badge/node-%E2%89%A522.19-1A1F1B?style=flat-square&labelColor=0B0F0C">
   <a href="https://github.com/FAHTHIZ/oasis/stargazers"><img alt="GitHub stars" src="https://img.shields.io/github/stars/FAHTHIZ/oasis?style=flat-square&labelColor=0B0F0C&color=32E07A"></a>
+  <a href="https://github.com/FAHTHIZ/oasis/commits/main"><img alt="Last commit" src="https://img.shields.io/github/last-commit/FAHTHIZ/oasis/main?style=flat-square&labelColor=0B0F0C&color=1A1F1B"></a>
+  <a href="CONTRIBUTING.md"><img alt="Pull requests welcome" src="https://img.shields.io/badge/PRs-welcome-7CFF5E?style=flat-square&labelColor=0B0F0C"></a>
 </p>
 
 <p align="center">
-  <a href="#install"><b>Install</b></a> ·
-  <a href="#work-where-you-work"><b>Terminal and web</b></a> ·
-  <a href="#why-oasis">Why OASIS</a> ·
-  <a href="#plugins-mcp-and-models">Plugins and models</a> ·
-  <a href="#how-it-compares">Comparison</a> ·
+  <a href="#install"><b>Install</b></a> &nbsp;·&nbsp;
+  <a href="#work-where-you-work"><b>Terminal and web</b></a> &nbsp;·&nbsp;
+  <a href="#how-a-task-runs">How it works</a> &nbsp;·&nbsp;
+  <a href="#why-oasis">Why OASIS</a> &nbsp;·&nbsp;
+  <a href="#plugins-mcp-and-models">Plugins and models</a> &nbsp;·&nbsp;
+  <a href="#how-it-compares">Comparison</a> &nbsp;·&nbsp;
   <a href="docs/README.md">Docs</a>
 </p>
 
-<br>
+<p align="center"><picture><source media="(prefers-color-scheme: dark)" srcset="assets/readme/divider-dark.svg"><img src="assets/readme/divider-light.svg" alt="" aria-hidden="true" width="100%"></picture></p>
 
 ## Install
 
@@ -60,7 +65,9 @@ oasis                # 2. work in the terminal
 oasis web --open     #    …or open the web app on this folder
 ```
 
-Ask in plain words: "find out why the login test fails and fix it". OASIS reads the code, edits the files, runs the checks and shows you the diff. <kbd>Esc</kbd> <kbd>Esc</kbd> (or `/rewind`) undoes a turn.
+Ask in plain words: "find out why the login test fails and fix it". OASIS reads the code, edits the files, runs the checks and shows you the diff.
+
+<p align="center"><picture><source media="(prefers-color-scheme: dark)" srcset="assets/readme/divider-dark.svg"><img src="assets/readme/divider-light.svg" alt="" aria-hidden="true" width="100%"></picture></p>
 
 ## Work where you work
 
@@ -149,43 +156,61 @@ oasis -p --permission-mode auto --goal "npm test passes"              # keeps go
 
 </details>
 
+<p align="center"><picture><source media="(prefers-color-scheme: dark)" srcset="assets/readme/divider-dark.svg"><img src="assets/readme/divider-light.svg" alt="" aria-hidden="true" width="100%"></picture></p>
+
+## How a task runs
+
+<p align="center">
+  <picture><source media="(prefers-color-scheme: dark)" srcset="assets/readme/pipeline-dark.svg"><img src="assets/readme/pipeline-light.svg" alt="Animated diagram: a task moves from Ask to Read, Edit, Verify and Done. Verify is a gate: if a check failed or was skipped, the task goes back to work instead of finishing." width="100%"></picture>
+</p>
+
+You ask in plain words. OASIS reads the code, makes the edit, then has to pass the verification gate before it may say it is done: the diff was reviewed, the checks ran, and every claim like "tests pass" is backed by output it actually saw. If any of that is missing, the agent is sent back to work. Every edit is checkpointed, so <kbd>Esc</kbd> <kbd>Esc</kbd> or `/rewind` undoes a turn.
+
+<p align="center">
+  <img src="assets/readme/architecture.svg" alt="Animated diagram: six ways in (terminal, web app, desktop app, editors over ACP, Codex App Server clients, and the SDK, CI and GitHub Action) all drive one OASIS runtime with a turn loop, permissions and sandbox, subagents and teams, a verification gate, and checkpoints and memory. The runtime talks to any model provider, to tools such as MCP servers and Claude Code plugins, and to your project on your own machine." width="100%">
+  <br><sub>The model proposes replies and tool calls. OASIS decides which tools exist, which calls need approval and what counts as verified. See <a href="docs/ARCHITECTURE.md">Architecture</a> and the <a href="docs/OASIS-NEURON-NETWORK.md">OASIS Neuron Network</a> for multi-agent work.</sub>
+</p>
+
 ## Why OASIS
 
 <table>
   <tr>
     <td width="33%" valign="top">
+      <picture><source media="(prefers-color-scheme: dark)" srcset="assets/readme/icon-models-dark.svg"><img src="assets/readme/icon-models-light.svg" alt="" aria-hidden="true" width="48"></picture>
       <h4>Any model, no lock-in</h4>
       OpenAI, Anthropic, Gemini, Bedrock, Vertex AI, OpenRouter, Groq, DeepSeek, Mistral, xAI, any OpenAI-compatible endpoint, or a local Ollama, LM Studio, llama.cpp or vLLM. <code>oasis connect</code> finds a model that can call tools and keeps backups for failover.
     </td>
     <td width="33%" valign="top">
+      <picture><source media="(prefers-color-scheme: dark)" srcset="assets/readme/icon-plugins-dark.svg"><img src="assets/readme/icon-plugins-light.svg" alt="" aria-hidden="true" width="48"></picture>
       <h4>Your Claude Code setup, as is</h4>
       <code>CLAUDE.md</code>, <code>.claude/agents</code>, skills, slash commands, hooks, settings, <code>.mcp.json</code> and Claude Code plugins load without conversion. Codex plugins and Gemini CLI extensions are converted on install.
     </td>
     <td width="33%" valign="top">
+      <picture><source media="(prefers-color-scheme: dark)" srcset="assets/readme/icon-verified-dark.svg"><img src="assets/readme/icon-verified-light.svg" alt="" aria-hidden="true" width="48"></picture>
       <h4>It checks its own work</h4>
       A verification gate sends the agent back if it skipped the diff review or the checks, or claimed "tests pass" with nothing to back it. Every edit is checkpointed, so any turn can be undone.
     </td>
   </tr>
   <tr>
-    <td valign="top">
+    <td width="33%" valign="top">
+      <picture><source media="(prefers-color-scheme: dark)" srcset="assets/readme/icon-hosted-dark.svg"><img src="assets/readme/icon-hosted-light.svg" alt="" aria-hidden="true" width="48"></picture>
       <h4>Self-hosted, remote-ready</h4>
       Files, shell and model keys stay on your machine or server. Browsers sign in with a 256-bit access key, behind DNS-rebinding protection and brute-force lockout. Close the tab mid-task and it picks up where it was.
     </td>
-    <td valign="top">
+    <td width="33%" valign="top">
+      <picture><source media="(prefers-color-scheme: dark)" srcset="assets/readme/icon-agents-dark.svg"><img src="assets/readme/icon-agents-light.svg" alt="" aria-hidden="true" width="48"></picture>
       <h4>A real agent system</h4>
       Parallel, background and resumable subagents, agent teams with a shared task board, a git worktree per agent, <code>/goal</code> to keep going until a condition holds, scheduled routines, and memory across sessions.
     </td>
-    <td valign="top">
+    <td width="33%" valign="top">
+      <picture><source media="(prefers-color-scheme: dark)" srcset="assets/readme/icon-safety-dark.svg"><img src="assets/readme/icon-safety-light.svg" alt="" aria-hidden="true" width="48"></picture>
       <h4>Safety you can read</h4>
       Clear permission modes, shell-command risk analysis, protected paths, secret scanning and optional OS or container sandboxes. Project settings that loosen anything wait until you trust the workspace.
     </td>
   </tr>
 </table>
 
-<p align="center">
-  <img src="assets/oasis-architecture.svg" alt="Diagram: six ways in (terminal, web app, desktop app, editors over ACP, Codex App Server clients, and the SDK, CI and GitHub Action) all drive one OASIS runtime with a turn loop, permissions and sandbox, subagents and teams, a verification gate, and checkpoints and memory. The runtime talks to any model provider, to tools such as MCP servers and Claude Code plugins, and to your project on your own machine." width="100%">
-  <br><sub>The model proposes replies and tool calls. OASIS decides which tools exist, which calls need approval and what counts as verified. See <a href="docs/ARCHITECTURE.md">Architecture</a>.</sub>
-</p>
+<p align="center"><picture><source media="(prefers-color-scheme: dark)" srcset="assets/readme/divider-dark.svg"><img src="assets/readme/divider-light.svg" alt="" aria-hidden="true" width="100%"></picture></p>
 
 ## Plugins, MCP and models
 
@@ -261,6 +286,8 @@ Harness features from public documentation, not results.
 
 OASIS trails in model-specific tuning, a hosted zero-setup cloud, community size and real-world hours. The full comparison, with sources and dates, is in [Comparison](docs/COMPARISON.md).
 
+<p align="center"><picture><source media="(prefers-color-scheme: dark)" srcset="assets/readme/divider-dark.svg"><img src="assets/readme/divider-light.svg" alt="" aria-hidden="true" width="100%"></picture></p>
+
 ## Security
 
 OASIS can read and change files, run commands and send context to your model provider, with your account's permissions.
@@ -287,12 +314,13 @@ What is verified and what is not:
 
 ```sh
 npm install
-npm test           # 3,300+ tests
-npm run check      # tests, benchmark regressions, eval validation
+npm test                          # 3,400+ tests
+npm run check                     # tests, benchmark regressions, eval validation
 npm run lint
+node scripts/readme-art.mjs       # regenerate the animated README art in assets/readme/
 ```
 
-CI also runs platform security tests, a live Docker sandbox test, native PTY tests and a browser test that drives the web app like a person: approvals, a reload mid-task that must reattach, a second browser, Remember this device, and WCAG contrast checks. Contributions are welcome: start with the [Contributing guide](CONTRIBUTING.md).
+CI also runs platform security tests, a live Docker sandbox test, native PTY tests and a browser test that drives the web app like a person: approvals, a reload mid-task that must reattach, a second browser, Remember this device, and WCAG contrast checks. Contributions are welcome: start with the [Contributing guide](CONTRIBUTING.md). What comes next is in the [Roadmap](docs/ROADMAP.md).
 
 ## Documentation
 
@@ -306,14 +334,37 @@ CI also runs platform security tests, a live Docker sandbox test, native PTY tes
 | [Downloads and releases](docs/RELEASES.md) | [Real-world runs](docs/REAL-WORLD-RUNS.md) | [Brand guidelines](docs/BRAND.md) |
 | | [Benchmarks](docs/BENCHMARKS.md) · [Comparison](docs/COMPARISON.md) | [All docs](docs/README.md) |
 
+<p align="center"><picture><source media="(prefers-color-scheme: dark)" srcset="assets/readme/divider-dark.svg"><img src="assets/readme/divider-light.svg" alt="" aria-hidden="true" width="100%"></picture></p>
+
+## Community
+
+<p align="center">
+  <a href="https://star-history.com/#FAHTHIZ/oasis&Date">
+    <picture>
+      <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=fahthiz/oasis&type=Date&theme=dark">
+      <img alt="Star history of FAHTHIZ/oasis" src="https://api.star-history.com/svg?repos=fahthiz/oasis&type=Date" width="80%">
+    </picture>
+  </a>
+</p>
+
+<p align="center">
+  <a href="https://github.com/FAHTHIZ/oasis/graphs/contributors"><img alt="Contributors" src="https://contrib.rocks/image?repo=FAHTHIZ/oasis"></a>
+</p>
+
+<p align="center">
+  Questions and ideas go to <a href="https://github.com/FAHTHIZ/oasis/issues">Issues</a>. Code goes through the <a href="CONTRIBUTING.md">Contributing guide</a>. Help is in <a href="SUPPORT.md">Support</a>.
+</p>
+
 ## Meet Fen
 
 <img src="assets/fen.svg" alt="Fen, a pixel-art fennec fox in OASIS lime and green" width="96" align="left">
 
-Fen is the OASIS mascot: a fennec fox, the desert animal that always finds the water. Fen greets you when the terminal starts, sits on the web app's welcome screen and peeks over the terminal in the artwork above. Set `OASIS_NO_MASCOT=1` to show only the wordmark.
+Fen is the OASIS mascot: a fennec fox, the desert animal that always finds the water. Fen greets you when the terminal starts, sits on the web app's welcome screen and blinks at you from the terminal in the artwork above. Set `OASIS_NO_MASCOT=1` to show only the wordmark.
 
 <br clear="left">
 
 ## License
 
 [Apache License 2.0](LICENSE). Bundled third-party code, fonts and data keep their own licenses; see [Third-party notices](THIRD-PARTY-NOTICES.md).
+
+<p align="center"><br><sub>Made with care by the OASIS contributors. Fen says hi.</sub></p>
