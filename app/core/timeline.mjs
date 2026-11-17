@@ -376,6 +376,8 @@ export function formatDuration(ms) {
   const seconds = Math.round(value / 1000);
   if (seconds < 60) return seconds + 's';
   const minutes = Math.floor(seconds / 60);
+  // Past an hour the clock reads "1h 02m 05s", not "62m 05s".
+  if (minutes >= 60) return Math.floor(minutes / 60) + 'h ' + String(minutes % 60).padStart(2, '0') + 'm ' + String(seconds % 60).padStart(2, '0') + 's';
   return minutes + 'm ' + String(seconds % 60).padStart(2, '0') + 's';
 }
 
