@@ -296,7 +296,8 @@ function runPaletteCommand(id) {
     'export-chat': () => downloadChat(),
     'sign-out': () => { forgetRuntimeToken(); delete document.documentElement.dataset.ready; location.reload(); },
     'open-terminal': () => { toggleFiles(true); showPanelTab('terminal'); },
-    'open-activity': () => toggleActivity(true)
+    'open-activity': () => toggleActivity(true),
+    'toggle-steps': () => toggleAllSteps()
   };
   closeNativeDialog('commandPaletteDialog');
   const action = actions[id];
@@ -421,6 +422,13 @@ tinykeys(document, {
     if (inTerminal(event)) return;
     event.preventDefault();
     toggleActivity();
+  },
+  // Ctrl/Cmd+O expands every step and thought in the chat, or folds them all
+  // back (Claude Code's transcript toggle).
+  '$mod+KeyO': (event) => {
+    if (inTerminal(event)) return;
+    event.preventDefault();
+    toggleAllSteps();
   },
   '$mod+KeyB': (event) => {
     if (inTerminal(event) || !matchMedia('(min-width: 1100px)').matches) return;
@@ -1208,6 +1216,7 @@ function createGroup(steps = [], { live = false } = {}) {
   body.appendChild(list);
   el.append(head, body);
   const group = { el, head, body, list, steps, subagents: [], live, touched: false, startedAt: Date.now() };
+  el._group = group;
   head.addEventListener('click', () => {
     group.touched = true;
     // A live group of one step is open with nothing shown under it (the
@@ -1310,6 +1319,20 @@ function settleGroup(group) {
   const edited = group.steps.some((step) => toolKind(step.name) === 'edit' && stepState(step) === 'ok');
   if (!group.touched && !verboseSteps() && !edited) setGroupOpen(group, false);
   updateGroupHead(group);
+}
+// Expand every group, thought and folded turn in the chat, or fold them all
+// back when everything is already open. Returns true when it expanded.
+function toggleAllSteps() {
+  const root = $('transcript');
+  const groups = [...root.querySelectorAll('.steps')].map((el) => el._group).filter(Boolean);
+  const thoughts = [...root.querySelectorAll('.thinking:not(.live) > .thinking-head')];
+  const folds = [...root.querySelectorAll('details.work-fold')];
+  const expand = groups.some((group) => !group.el.classList.contains('open')) || thoughts.some((head) => head.getAttribute('aria-expanded') !== 'true') || folds.some((fold) => !fold.open);
+  for (const fold of folds) fold.open = expand;
+  for (const group of groups) { group.touched = true; setGroupOpen(group, expand); }
+  for (const head of thoughts) if ((head.getAttribute('aria-expanded') === 'true') !== expand) head.click();
+  toast(expand ? 'Showing every step. Ctrl+O folds them again.' : 'Steps folded.');
+  return expand;
 }
 function verboseSteps() { return Boolean(settings && settings.density === 'verbose'); }
 
