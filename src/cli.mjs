@@ -4,7 +4,7 @@ import stripAnsi from 'strip-ansi';
 import { distance as levenshtein } from 'fastest-levenshtein';
 import { notifyAttention } from './attention.mjs';
 import { createTerminalProgress } from './terminal-progress.mjs';
-import { playSound, configureSounds, completedTodoCount, DONE_SOUND_AFTER_MS } from './sounds.mjs';
+import { playSound, configureSounds, completedTodoCount, DONE_SOUND_AFTER_MS, warmSounds } from './sounds.mjs';
 import { cronState, formatFindings } from './session-tools.mjs';
 import { hasHooks as hasConfiguredHooks } from './hooks.mjs';
 import { startPluginMonitorsFor } from './monitors.mjs';
@@ -358,6 +358,7 @@ function approve(prompt, forceInteractive = false, autoApprove = false, meta = {
 }
 
 let CURRENT_TURN_STARTED_AT = 0;
+let soundsWarmed = false;
 let CURRENT_TURN_WAITED_MS = 0;
 
 async function askApproval(prompt, forceInteractive, meta) {
@@ -1477,6 +1478,8 @@ async function runPrompt(prompt, root, autoApprove, session = null, persistence 
   terminalProgress().set('busy');
   let turnFailed = false;
   if (session && session.settings) configureSounds({ enabled: typeof session.settings.sounds === 'boolean' ? session.settings.sounds : undefined, volume: session.settings.soundVolume });
+  // The sound files are written once ahead of time, so the first chime is instant.
+  if (!soundsWarmed) { soundsWarmed = true; setImmediate(() => { try { warmSounds(); } catch {} }); }
   let lastToolHeader = null;
   let todosDone = completedTodoCount(session && session.todos);
   rateLimitWaitsThisTurn = 0;

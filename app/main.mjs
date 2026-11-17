@@ -5,7 +5,7 @@ import { PRESETS, testProvider } from './core/providers.mjs';
 import { alwaysAllowLabel } from './core/approval-rule.mjs';
 import { SUBAGENT_STATUS_TEXT } from './core/subagents.mjs';
 import { createConnectorCard, connectIntent, splitServices, brandMark } from './core/connector-card.mjs';
-import { createSoundPlayer } from './core/sound.mjs';
+import { createSoundPlayer, soundAllowed } from './core/sound.mjs';
 import { readableOutput, repeatsEarlierReply, stepOutcome, stepRan, stepLabel, summarizeArgs, toolKind, groupTitle, groupStats, formatDuration, thinkingLabel, thoughtLabel, splitTextToolCall, elapsedSince, describeInput, buildTimeline, groupTiming, runElapsed, timingSplit } from './core/timeline.mjs';
 import { IndexedDBStore, Workspace, lineDiff } from './core/workspace.mjs';
 import { wordHighlights } from '../src/word-diff.mjs';
@@ -44,10 +44,11 @@ const store = new IndexedDBStore();
 const sandbox = new FrameSandbox();
 const skills = new SkillLibrary({ baseURL: new URL('skills/', location.href).href });
 
-const DEFAULTS = { connections: [], activeConnection: '', activeModel: '', autoSwitch: true, projectPlugins: {}, mode: 'ask', maxSteps: 100, theme: 'system', githubToken: '', notify: false, sounds: false };
+const DEFAULTS = { connections: [], activeConnection: '', activeModel: '', autoSwitch: true, projectPlugins: {}, mode: 'ask', maxSteps: 100, theme: 'system', githubToken: '', notify: false, sounds: null };
 // Slow phones and old computers: fewer repaints while a reply streams, no
 // blur or animation, and a shorter transcript kept in the page.
-const sound = createSoundPlayer({ enabled: () => Boolean(settings && settings.sounds) });
+// No saved choice: done and needs-you chime only while the tab is in the background.
+const sound = createSoundPlayer({ enabled: (kind) => soundAllowed(settings ? settings.sounds : null, kind) });
 const LITE_PARAM = new URLSearchParams(location.search).get('lite');
 const LITE = LITE_PARAM === '1' ? true : LITE_PARAM === '0' ? false : Boolean((navigator.deviceMemory && navigator.deviceMemory <= 2) || (navigator.hardwareConcurrency && navigator.hardwareConcurrency <= 2) || (navigator.connection && navigator.connection.saveData) || matchMedia('(prefers-reduced-motion: reduce)').matches);
 document.documentElement.classList.toggle('lite', LITE);
@@ -4030,7 +4031,7 @@ function openSettings() {
   $('themeSelect').value = settings.theme;
   $('notifyInput').checked = Boolean(settings.notify) && typeof Notification !== 'undefined' && Notification.permission === 'granted';
   $('notifyInput').closest('label').hidden = typeof Notification === 'undefined';
-  $('soundInput').checked = Boolean(settings.sounds);
+  $('soundInput').checked = settings.sounds === true;
   $('densityVerbose').checked = settings.density === 'verbose';
   $('githubToken').value = settings.githubToken;
   $('testResult').textContent = '';
@@ -4073,7 +4074,7 @@ function formSettings() {
     maxSteps: Math.min(500, Math.max(5, Number($('maxStepsInput').value) || 100)),
     theme: $('themeSelect').value,
     notify: $('notifyInput').checked,
-    sounds: $('soundInput').checked,
+    sounds: $('soundInput').checked ? true : settings.sounds === true ? false : settings.sounds ?? null,
     density: $('densityVerbose').checked ? 'verbose' : 'normal',
     githubToken: $('githubToken').value.trim()
   };
