@@ -1341,6 +1341,7 @@ function attention(kind, text) {
   if (talk.on && kind === 'input' && window.speechSynthesis && typeof SpeechSynthesisUtterance !== 'undefined') window.speechSynthesis.speak(new SpeechSynthesisUtterance('OASIS needs you on screen.'));
   if (!document.hidden && document.hasFocus()) return;
   document.title = (kind === 'input' ? '(Needs you) ' : '● ') + BASE_TITLE;
+  badgeFavicon(kind === 'input' ? '#E8A33D' : '#3FB37F');
   if (!settings.notify || typeof Notification === 'undefined' || Notification.permission !== 'granted') return;
   try {
     const body = kind === 'done' ? 'Finished: ' + String(text || '').replace(/\s+/g, ' ').slice(0, 120) : String(text || '');
@@ -1348,7 +1349,31 @@ function attention(kind, text) {
     note.onclick = () => { window.focus(); note.close(); };
   } catch { /* some browsers only allow notifications from a service worker */ }
 }
-function clearAttention() { if (!document.hidden) document.title = BASE_TITLE; }
+// A dot on the tab icon: amber when OASIS needs you, green when it is done.
+const FAVICON = document.querySelector('link[rel="icon"]');
+const BASE_FAVICON = FAVICON ? FAVICON.href : '';
+function badgeFavicon(color) {
+  if (!FAVICON || !BASE_FAVICON) return;
+  const img = new Image();
+  img.onload = () => {
+    try {
+      const canvas = document.createElement('canvas');
+      canvas.width = canvas.height = 64;
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(img, 0, 0, 64, 64);
+      ctx.beginPath();
+      ctx.arc(48, 16, 14, 0, Math.PI * 2);
+      ctx.fillStyle = color;
+      ctx.fill();
+      ctx.lineWidth = 4;
+      ctx.strokeStyle = '#0B0F0D';
+      ctx.stroke();
+      FAVICON.href = canvas.toDataURL('image/png');
+    } catch { /* a tainted canvas: keep the plain icon */ }
+  };
+  img.src = BASE_FAVICON;
+}
+function clearAttention() { if (!document.hidden) { document.title = BASE_TITLE; if (FAVICON && BASE_FAVICON && FAVICON.href !== BASE_FAVICON) FAVICON.href = BASE_FAVICON; } }
 document.addEventListener('visibilitychange', clearAttention);
 window.addEventListener('focus', clearAttention);
 // Files can change outside the page (the terminal, an editor): refresh the
