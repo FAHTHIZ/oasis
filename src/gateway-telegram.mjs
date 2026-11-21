@@ -20,6 +20,30 @@ const API = 'https://api.telegram.org';
 const MAX_MESSAGE = 4000;
 const APPROVAL_TIMEOUT_MS = 10 * 60000;
 
+// The menu Telegram shows when you type "/" (setMyCommands). Names are 1-32
+// lowercase letters, digits or underscores; every one is handled below or by
+// the shared chat commands.
+export const TELEGRAM_COMMANDS = [
+  { command: 'new', description: 'Start a fresh session' },
+  { command: 'stop', description: 'Cancel the running task' },
+  { command: 'status', description: 'Show the session, model and mode' },
+  { command: 'retry', description: 'Run the last request again' },
+  { command: 'undo', description: 'Remove the last turn' },
+  { command: 'model', description: 'Show or switch the model' },
+  { command: 'effort', description: 'Set the reasoning effort' },
+  { command: 'mode', description: 'Approvals: default, acceptEdits, plan or auto' },
+  { command: 'compress', description: 'Shrink the conversation context' },
+  { command: 'usage', description: 'Tokens and cost so far' },
+  { command: 'context', description: 'How full the context window is' },
+  { command: 'resume', description: 'Continue a saved session' },
+  { command: 'personality', description: 'List or switch the agent voice' },
+  { command: 'voice', description: 'Voice replies on or off' },
+  { command: 'skills', description: 'List skills (send /SKILL-NAME to use one)' },
+  { command: 'insights', description: 'Summary of recent sessions' },
+  { command: 'sethome', description: 'Send routine results to this chat' },
+  { command: 'help', description: 'What this bot can do' }
+];
+
 export function parseAllowedChats(value) {
   return new Set(String(value || '').split(/[\s,]+/).map((item) => item.trim()).filter((item) => /^-?\d{1,20}$/.test(item)));
 }
@@ -281,6 +305,7 @@ export function createTelegramGateway(options = {}) {
   async function run() {
     const me = await api('getMe', {});
     log('connected as @' + (me && me.username) + ' for ' + root + '; allowed chats: ' + [...allowed].join(', '));
+    if (!/^(0|false|off|no)$/i.test(String(env.OASIS_TELEGRAM_COMMAND_MENU || ''))) await api('setMyCommands', { commands: TELEGRAM_COMMANDS }).catch((error) => log('could not set the command menu: ' + error.message));
     let backoff = 1000;
     while (!stopped) {
       try { await pollOnce(30); backoff = 1000; } catch (error) {
