@@ -7,7 +7,7 @@ import { SUBAGENT_STATUS_TEXT } from './core/subagents.mjs';
 import { createConnectorCard, connectIntent, splitServices, brandMark } from './core/connector-card.mjs';
 import { createSoundPlayer, soundAllowed } from './core/sound.mjs';
 import { sideWork, liveStatus, modelRequest, waitingLabel, thoughtMs, runSummary, reasoningHeadline, formatTokens } from './core/live-status.mjs';
-import { readableOutput, repeatsEarlierReply, stepOutcome, stepRan, stepLabel, summarizeArgs, toolKind, groupTitle, groupStats, formatDuration, thinkingLabel, thoughtLabel, thoughtHeadline, splitTextToolCall, elapsedSince, describeInput, buildTimeline, groupTiming, runElapsed, timingSplit, stepResult, liveLabel, diffPreview, isPlanStep, feedSteps } from './core/timeline.mjs';
+import { readableOutput, repeatsEarlierReply, stepOutcome, stepRan, stepLabel, summarizeArgs, toolKind, groupTitle, groupStats, formatDuration, thinkingLabel, thoughtLabel, thoughtHeadline, splitTextToolCall, elapsedSince, describeInput, buildTimeline, groupTiming, runElapsed, timingSplit, stepResult, liveLabel, diffPreview, isPlanStep, feedSteps, loneCommandArg } from './core/timeline.mjs';
 import { IndexedDBStore, Workspace, diffStat, lineDiff } from './core/workspace.mjs';
 import { wordHighlights } from '../src/word-diff.mjs';
 import { Agent, answeredHistory, textOf } from './core/agent.mjs';
@@ -1228,7 +1228,7 @@ function createGroup(steps = [], { live = false } = {}) {
   const head = document.createElement('button');
   head.type = 'button';
   head.className = 'steps-head';
-  head.innerHTML = '<span class="steps-orb" aria-hidden="true"></span><span class="steps-title"></span><span class="steps-meta"></span><span class="chevron" aria-hidden="true">' + icon('chevron-right') + '</span>';
+  head.innerHTML = '<span class="steps-orb" aria-hidden="true"></span><span class="steps-title"></span><span class="steps-arg"></span><span class="steps-meta"></span><span class="chevron" aria-hidden="true">' + icon('chevron-right') + '</span>';
   const body = document.createElement('div');
   body.className = 'steps-body';
   body.id = 'steps-' + Math.random().toString(36).slice(2, 10);
@@ -1302,6 +1302,16 @@ function updateGroupHead(group) {
   if (waiting) title = 'Waiting for your approval';
   const titleEl = group.head.querySelector('.steps-title');
   titleEl.textContent = title;
+  // A group of one command whose title does not name it ("Running a
+  // command", "Ran a command", "Command failed") shows the command beside it
+  // in the code font, as Claude Code's Bash(npm run build) does: which
+  // command ran is the first thing people look for.
+  const argEl = group.head.querySelector('.steps-arg');
+  if (argEl) {
+    const arg = waiting ? '' : loneCommandArg(shown, title);
+    if (argEl.textContent !== arg) argEl.textContent = arg;
+    argEl.hidden = !arg;
+  }
   // Folded work still names every file it touched, on hover.
   const files = running ? [] : [...new Set(group.steps.filter((step) => ['read', 'edit'].includes(toolKind(step.name))).map((step) => step.args && (step.args.path || step.args.file_path)).filter(Boolean))];
   titleEl.title = files.length > 2 ? title + '\n' + files.slice(0, 30).join('\n') : title;

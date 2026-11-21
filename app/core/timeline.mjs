@@ -260,6 +260,16 @@ export function feedSteps(steps = []) {
   return shown.length ? shown : steps;
 }
 
+// The command to show beside a group title that does not name it: a group
+// of exactly one shell step titled "Running a command", "Ran a command" or
+// "Command failed". Empty when the title already says what ran.
+export function loneCommandArg(steps = [], title = '') {
+  if (steps.length !== 1 || toolKind(steps[0].name) !== 'shell') return '';
+  const arg = summarizeArgs(steps[0].name, steps[0].args);
+  if (!arg || !/\bcommand\b/i.test(title)) return '';
+  return String(title).toLowerCase().includes(arg.toLowerCase().slice(0, 24)) ? '' : arg;
+}
+
 export function groupTitle(all = []) {
   const steps = feedSteps(all);
   if (!steps.length) return 'Working';

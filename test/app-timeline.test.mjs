@@ -325,3 +325,14 @@ test('a group names a failed command or test run plainly', async () => {
   assert.equal(groupTitle([{ name: 'edit_file', args: { path: 'src/a.mjs' }, ok: true }, { name: 'run_command', args: { command: 'node x' }, ok: false }]), 'Edited a.mjs and a command failed');
   assert.equal(groupTitle([{ name: 'read_file', args: { path: 'a.mjs' }, ok: true }, { name: 'run_command', args: { command: 'npm test' }, ok: false }]), 'Read a.mjs and the tests failed');
 });
+
+test('a lone command group names its command beside a generic title', async () => {
+  const { loneCommandArg, groupTitle } = await import('../app/core/timeline.mjs');
+  const step = { id: 'c1', name: 'run_command', args: { command: 'node', args: ['-e', 'console.log(1)'] }, ok: true };
+  assert.equal(groupTitle([step]), 'Ran a command');
+  assert.match(loneCommandArg([step], groupTitle([step])), /^node -e/);
+  assert.equal(loneCommandArg([step], 'Running node -e console.log(1)'), '', 'a title that names the command needs nothing beside it');
+  assert.equal(loneCommandArg([step, { ...step, id: 'c2' }], 'Ran 2 commands'), '', 'groups of several steps keep their summary');
+  assert.equal(loneCommandArg([{ id: 'r', name: 'read_file', args: { path: 'a.js' }, ok: true }], 'Read a.js'), '');
+  assert.match(loneCommandArg([{ ...step, ok: false }], 'Command failed'), /^node -e/);
+});
