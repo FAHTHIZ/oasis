@@ -141,7 +141,22 @@ export function createTelegramGateway(options = {}) {
   async function command(chatId, text) {
     const [name, ...args] = text.trim().split(/\s+/);
     const cmd = name.replace(/@.*$/, '').toLowerCase();
-    if (cmd === '/start' || cmd === '/help') return say(chatId, 'OASIS agent for ' + root + '.\nSend a message to give it a task.\n/new starts a fresh session, /stop cancels the running task, /status shows the session, /mode default|acceptEdits|plan|auto changes approvals, /voice on|off|auto sets spoken replies, /sethome makes this chat the home channel for routine results.'), true;
+    if (cmd === '/start' || cmd === '/help') return say(chatId, 'OASIS agent for ' + root + '.\nSend a message to give it a task.\n/new starts a fresh session, /stop cancels the running task, /status shows the session, /mode default|acceptEdits|plan|auto changes approvals, /voice on|off|auto sets spoken replies, /resume continues a saved session, /sethome makes this chat the home channel for routine results.'), true;
+    if (cmd === '/resume') {
+      const current = chats.get(chatId);
+      if (current && current.controller) return say(chatId, 'Still working on the previous request. Send /stop first.'), true;
+      const { resumeCommand } = await import('./gateway-resume.mjs');
+      const result = await resumeCommand(args, { root, env, sessions: deps.sessions && deps.sessions.listSessions ? deps.sessions : undefined, currentId: current && current.session.sessionId });
+      if (result.restore) {
+        const { createSession } = deps.agent || await import('./agent.mjs');
+        const { loadConfig } = deps.config || await import('./config.mjs');
+        const config = options.config || await loadConfig({ env });
+        const session = await createSession({ root, config, env, restore: result.restore, permissionMode: options.permissionMode || null });
+        session.headless = true;
+        chats.set(chatId, { session, controller: null, queue: [], voiceReply: current ? current.voiceReply : defaultVoiceReply });
+      }
+      return say(chatId, result.text), true;
+    }
     if (cmd === '/sethome' || cmd === '/home') {
       const { homeCommand } = await import('./gateway-home.mjs');
       return say(chatId, homeCommand(cmd, { platform: 'telegram', chatKey: chatId, env })), true;
