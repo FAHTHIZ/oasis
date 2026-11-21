@@ -548,7 +548,16 @@ export class RuntimeAgent {
           case 'command_output': if (data.text) addText(String(data.text), true); break;
           // The runtime keeps working after a streamed reply to check its
           // edits. End that bubble so the next reply does not run into it.
-          case 'verification_gate': if (stepText && !stepHasTools) stepTextFinal = true; break;
+          // Say why, so a reply that read as final does not leave the user
+          // wondering what OASIS is still doing.
+          case 'verification_gate':
+            if (stepText && !stepHasTools) stepTextFinal = true;
+            if (live && Array.isArray(data.steps) && data.steps.length) this.emit('continuing', { note: 'Not finished yet: ' + data.steps.slice(0, 6).map(String).join(', ') });
+            break;
+          case 'action_nudge':
+            if (stepText && !stepHasTools) stepTextFinal = true;
+            if (live && data.note) this.emit('continuing', { note: 'Not finished yet: ' + String(data.note).slice(0, 160) });
+            break;
           case 'stream_restarted': stepText = ''; this.emit('retry', { attempt: data.attempt || 1 }); break;
           case 'provider_retry': this.emit('retry', { attempt: Number(data.attempt) || 1, waitMs: Number(data.waitMs) || 0, ...(data.status ? { status: Number(data.status) } : {}) }); break;
           case 'hook_result': if (live) this.emit('hook_result', { event: String(data.event || ''), outcome: data.outcome === 'blocked' ? 'blocked' : 'failed', reason: String(data.reason || '') }); break;

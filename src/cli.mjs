@@ -60,6 +60,7 @@ import { manageSessions, backgroundCommand } from './cli-sessions.mjs';
 import { autoSetup, configureProvider, pasteFirstSetup, providerKeysInEnv, connectCommand, ensureModelProviderSetup, configureSetupPrompts } from './cli-setup.mjs';
 import { exitAfterTelemetry } from './telemetry.mjs';
 import { printQuickHelp, printHelp, helpText } from './cli-help.mjs';
+import { actionNudgeNote } from './turn-guards.mjs';
 
 // Options that shape every agent session created by this process.
 const SESSION_OPTIONS = { permissionMode: null, allowedTools: [], disallowedTools: [], appendSystemPrompt: '', model: null, effort: null, outputStyle: null, addDirs: [], pendingFiles: [], mcpServers: [], settingsOverrides: [], tools: null, channels: [], devChannels: [] };
@@ -1538,6 +1539,7 @@ async function runPrompt(prompt, root, autoApprove, session = null, persistence 
       },
       onUsage: (usage) => recordUsage(USAGE, usage),
       onVerificationGate: (gate) => { endStream(); const dim = colorEnabled(stdout); stdout.write((dim ? '\x1b[2m' : '') + '  ⎿ Not finished yet: ' + gate.steps.join(', ') + (dim ? '\x1b[22m' : '') + '\n'); },
+      onActionNudge: (nudge) => { const note = actionNudgeNote(nudge && nudge.kind); if (!note) return; endStream(); const dim = colorEnabled(stdout); stdout.write((dim ? '\x1b[2m' : '') + '  ⎿ Not finished yet: ' + note + (dim ? '\x1b[22m' : '') + '\n'); },
       onThrash: (info) => { endStream(); stdout.write('[stuck?] `' + info.command + '` has failed the same way after ' + info.count + ' rounds of edits; Oasis asked the model to step back and diagnose before editing again.\n'); },
       onStreamRestart: (info) => { const ended = endStream(); stdout.write(streamRestartNotice(info, typeof info.partialShown === 'boolean' ? info.partialShown : ended) + '\n'); },
       onContextOverflow: (info) => { endStream(); stdout.write(info.smallContextTools ? '\n[context] ' + (info.contextWindow ? 'The model server has a ' + info.contextWindow + '-token window' : 'The provider said the first request was too large') + '; switched to the small-context tool set (others stay reachable through tool_search) and retrying.\n' : '\n[context] The provider said the request was too long for the context window; compacted (' + Math.round(info.beforeChars / 1000) + 'k → ' + Math.round(info.afterChars / 1000) + 'k chars) and retrying.\n'); },
