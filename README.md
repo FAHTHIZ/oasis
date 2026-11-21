@@ -168,7 +168,7 @@ You ask in plain words. OASIS reads the code, makes the edit, then has to pass t
 
 <p align="center">
   <img src="assets/readme/architecture.svg" alt="Animated diagram: six ways in (terminal, web app, desktop app, editors over ACP, Codex App Server clients, and the SDK, CI and GitHub Action) all drive one OASIS runtime with a turn loop, permissions and sandbox, subagents and teams, a verification gate, and checkpoints and memory. The runtime talks to any model provider, to tools such as MCP servers and Claude Code plugins, and to your project on your own machine." width="100%">
-  <br><sub>The model proposes replies and tool calls. OASIS decides which tools exist, which calls need approval and what counts as verified. See <a href="docs/ARCHITECTURE.md">Architecture</a> and the <a href="docs/OASIS-NEURON-NETWORK.md">OASIS Neuron Network</a> for multi-agent work.</sub>
+  <br><sub>The model proposes replies and tool calls. OASIS decides which tools exist, which calls need approval and what counts as verified. See <a href="docs/ARCHITECTURE.md">Architecture</a> and the <a href="docs/OASIS-NEURON-NETWORK.md">Agent network</a> for multi-agent work.</sub>
 </p>
 
 ## Why OASIS
@@ -320,7 +320,7 @@ npm run lint
 node scripts/readme-art.mjs       # regenerate the animated README art in assets/readme/
 ```
 
-CI also runs platform security tests, a live Docker sandbox test, native PTY tests and a browser test that drives the web app like a person: approvals, a reload mid-task that must reattach, a second browser, Remember this device, and WCAG contrast checks. Contributions are welcome: start with the [Contributing guide](CONTRIBUTING.md). What comes next is in the [Roadmap](docs/ROADMAP.md).
+CI also runs platform security tests, a live Docker sandbox test, native PTY tests and a browser test that drives the web app like a person: approvals, a reload mid-task that must reattach, a second browser, Remember this device, and WCAG contrast checks. Contributions are welcome: start with the [Contributing guide](CONTRIBUTING.md).
 
 ## Documentation
 

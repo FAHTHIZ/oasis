@@ -118,7 +118,7 @@ under `plugins/`.
 ### Domain packs
 
 Two plugins in this repository add agents whose reports OASIS checks on return
-(see [Evidence and contracts](OASIS-NEURON-NETWORK.md#evidence-and-contracts-roadmap-15-17)):
+(see [Evidence and contracts](OASIS-NEURON-NETWORK.md#evidence-and-contracts)):
 
 - `plugins/oasis-research`: `oasis_web_search` and `oasis_fetch_url` MCP tools,
   the `oasis-research:researcher` and `oasis-research:fact-checker` agents
