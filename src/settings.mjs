@@ -413,6 +413,14 @@ export async function loadSettings(root, options = {}) {
     // Personality (Hermes' /personality): a name, plus optional custom ones as { name: prompt }.
     if (typeof settings.personality === 'string' && /^[a-z0-9][a-z0-9_-]{0,40}$/i.test(settings.personality.trim())) result.personality = settings.personality.trim().toLowerCase();
     if (settings.personalities && typeof settings.personalities === 'object' && !Array.isArray(settings.personalities)) result.personalities = { ...(result.personalities || {}), ...settings.personalities };
+    // Honcho user modeling (trusted settings only: baseUrl decides where conversations go).
+    if (settings.honcho && typeof settings.honcho === 'object' && !Array.isArray(settings.honcho)) {
+      const honcho = {};
+      for (const key of ['workspace', 'peerName', 'aiPeer', 'recallMode', 'sessionStrategy', 'baseUrl']) if (typeof settings.honcho[key] === 'string' && settings.honcho[key].trim()) honcho[key] = settings.honcho[key].trim().slice(0, 200);
+      if (Number.isFinite(Number(settings.honcho.contextTokens))) honcho.contextTokens = Number(settings.honcho.contextTokens);
+      for (const key of ['enabled', 'sync']) if (typeof settings.honcho[key] === 'boolean') honcho[key] = settings.honcho[key];
+      result.honcho = { ...(result.honcho || {}), ...honcho };
+    }
     if (settings.worktree && typeof settings.worktree === 'object' && typeof settings.worktree.branchPrefix === 'string') result.worktree = { ...(result.worktree || {}), branchPrefix: settings.worktree.branchPrefix.trim().slice(0, 40) };
     // Claude Code's worktree.symlinkDirectories, sparsePaths (repository-relative folders) and baseRef.
     if (settings.worktree && typeof settings.worktree === 'object') {

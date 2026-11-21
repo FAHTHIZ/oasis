@@ -674,6 +674,33 @@ Set `OASIS_HASS_URL` (for example `http://homeassistant.local:8123`) and `OASIS_
 
 OASIS refuses services that run code or manage the host (`shell_command`, `command_line`, `python_script`, `pyscript`, `rest_command`, `hassio`, `recorder`, `homeassistant.restart` and `homeassistant.stop`). The token can do anything your Home Assistant user can, so give OASIS a dedicated non-admin user. With a gateway running you can then say "turn off the porch light" from Telegram or WhatsApp, or have a routine check the sensors every evening.
 
+## Honcho user modeling
+
+[Honcho](https://honcho.dev) (by Plastic Labs, Apache-2.0) keeps a long-term model of you across sessions, projects and chat platforms. When it is configured, OASIS sends every finished turn (your prompt and the final reply) to a Honcho session; Honcho reasons over them in the background and builds a peer card (key facts), conclusions and a representation of you. OASIS talks to the [v3 REST API](https://docs.honcho.dev/v3/api-reference/introduction) directly, so nothing extra is installed.
+
+Set `HONCHO_API_KEY` for Honcho cloud (`api.honcho.dev`, keys at [app.honcho.dev](https://app.honcho.dev)), or `HONCHO_URL` (also `OASIS_HONCHO_URL`) for a self-hosted server. `oasis honcho test` (or `/honcho test`) checks the connection; `oasis honcho` shows the workspace, peers, thread and sync state. `OASIS_HONCHO=0` turns it off for one run.
+
+| Tool | What it does |
+| --- | --- |
+| `honcho_profile` | Reads or replaces your peer card. |
+| `honcho_search` | Semantic search over what you said in earlier sessions; returns your own words. Read-only. |
+| `honcho_context` | The current thread's summary, your representation and card, and recent messages. Read-only. |
+| `honcho_reasoning` | Asks Honcho a question about you ("what testing style do I prefer?"), with `reasoning_level` minimal to max. Read-only. |
+| `honcho_conclude` | Records, lists or deletes conclusions about you. |
+
+Settings (user or trusted project settings only, because `baseUrl` decides where conversations go):
+
+```json
+{ "honcho": { "workspace": "oasis", "peerName": "fahim", "aiPeer": "oasis", "recallMode": "hybrid", "sessionStrategy": "per-directory", "contextTokens": 1200, "sync": true } }
+```
+
+- `recallMode`: `hybrid` (default) adds what Honcho knows about you to the system prompt and offers the tools; `context` only adds the prompt block; `tools` only offers the tools.
+- `sessionStrategy`: which Honcho thread a session writes to: `per-directory` (default), `per-repo` (the enclosing git repository), `per-session`, or `global`. Chat gateways always use one thread per chat (`telegram-123`, `discord-456`) under the same user peer, so what OASIS learns on Telegram carries over to the terminal.
+- `contextTokens` caps the system-prompt block (100–20000, default 1200). `sync: false` (or `OASIS_HONCHO_SYNC=0`) stops sending turns while keeping the tools.
+- Environment overrides: `OASIS_HONCHO_WORKSPACE` (or `HONCHO_WORKSPACE_ID`), `OASIS_HONCHO_PEER`, `OASIS_HONCHO_AI_PEER`, `OASIS_HONCHO_RECALL`, `OASIS_HONCHO_SESSION`, `OASIS_HONCHO_CONTEXT_TOKENS`.
+
+Credentials the secret shield recognises and `<private>...</private>` spans are redacted before anything is sent. Subagents do not sync, and only the main agent can change your card or conclusions. Honcho being slow or down never blocks a turn: sync waits at most four seconds and errors show in `oasis honcho`.
+
 ## Telemetry (OpenTelemetry)
 
 Telemetry is off unless `OASIS_ENABLE_TELEMETRY=1`. OASIS then sends metrics, log events and traces over OTLP/HTTP JSON to `OTEL_EXPORTER_OTLP_ENDPOINT` (per-signal `OTEL_EXPORTER_OTLP_{METRICS,LOGS,TRACES}_ENDPOINT` and `_HEADERS` work too). `OTEL_{METRICS,LOGS,TRACES}_EXPORTER` takes `otlp`, `console` or `none`.

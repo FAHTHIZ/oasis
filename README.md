@@ -223,7 +223,7 @@ The same loop that checks a code change checks any other deliverable. The harnes
 | Data | Numbers come from code it ran, not mental arithmetic: CSV and spreadsheet analysis, charts, notebooks. |
 | Media | `generate_image` and `text_to_speech` through any OpenAI-compatible images or speech API, local servers included. |
 | Automation | `oasis schedule add "every 1d" "..."` runs routines without a terminal open, cron or webhook triggered, and `oasis gateway` answers in Telegram, WhatsApp, Slack, Discord, Mattermost, Matrix, Signal or email. |
-| Memory that grows | Memory across sessions, full-text recall of past conversations (`session_search`), and repeatable work proposed as reviewable skills (`/learning`). `/insights` reports how you work. |
+| Memory that grows | Memory across sessions, full-text recall of past conversations (`session_search`), repeatable work proposed as reviewable skills (`/learning`), and an optional [Honcho](docs/CONFIGURATION.md#honcho-user-modeling) model of you that follows you across sessions and chats. `/insights` reports how you work. |
 | Bring your history | `oasis import` brings settings, memories, skills and commands from Claude Code, Codex, Gemini CLI, Cursor, Hermes, OpenClaw, OpenCode, Windsurf, Antigravity and Cline. |
 
 <p align="center"><picture><source media="(prefers-color-scheme: dark)" srcset="assets/readme/divider-dark.svg"><img src="assets/readme/divider-light.svg" alt="" aria-hidden="true" width="100%"></picture></p>
