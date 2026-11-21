@@ -2378,7 +2378,7 @@ async function showResumeRecap(root, persistence) {
 // Commands that set up the conversation: typed before the first message they
 // start the session (as the first prompt would) instead of answering "start a
 // conversation first". Claude Code accepts /model, /add-dir and /rename then too.
-export const SESSION_START_COMMANDS = new Set(['context', 'model', 'add-dir', 'rename', 'autocompact', 'sandbox', 'advisor', 'routing', 'chrome']);
+export const SESSION_START_COMMANDS = new Set(['context', 'model', 'add-dir', 'rename', 'autocompact', 'sandbox', 'advisor', 'mixture', 'routing', 'chrome']);
 export const RESUMED_SESSION_COMMANDS = new Set(['rewind', 'rollback', 'context', 'compact', 'export', 'cost', 'recap', 'rename', 'fork', 'branch', 'todos', 'undo', 'copy', 'usage', 'tasks', 'agents', 'goal']);
 
 // Set while the interactive prompt runs, so messages name /setup rather than

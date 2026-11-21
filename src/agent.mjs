@@ -94,6 +94,7 @@ import { webAccessSites, outboundEmailHit, userEmailAddresses } from './web-acce
 import { exitPlanMode, permissionMode } from './plan-mode.mjs';
 import { newGateState, runCompletionGates } from './completion-gates.mjs';
 import { adoptReportedContextWindow, useCompactToolProfile } from './context-window.mjs';
+import { MIXTURE_TOOL_DEFINITION, parseMixtureModels, runMixture } from './mixture.mjs';
 import { isContextOverflowError, stopFailureType, chargeAuxiliaryUsage, isLoopbackProvider, restorePrimaryModel, MAX_MALFORMED_CALL_RECOVERIES, MALFORMED_CALL_NUDGE, traceRecovery, requestCompletion, recordSessionEvent } from './agent-request.mjs';
 export { mergeAnthropicUsage, toolCallSlot, strayStreamError };
 export { chargeAuxiliaryUsage, defaultStreamIdleMs, fallbackCooldownMs, isContextOverflowError, isLoopbackProvider, requestTimeoutMs, restorePrimaryModel, shortProviderReason, stopFailureType, streamRestartLimit, suggestNextPrompt, summarizeFallbackFailure, testProviderConnection } from './agent-request.mjs';
@@ -750,6 +751,8 @@ export async function createSession({ root, config, restore = null, permissionMo
   if (chromeWanted && !restricted) setChrome(session, true);
   const advisorModel = String(advisor || env.OASIS_ADVISOR_MODEL || loadedSettings.advisorModel || '').trim();
   if (advisorModel && advisorModel !== 'off' && modelAllowed(advisorModel, session.availableModels, { env, protocol: session.config.protocol, ...(session.modelPolicy || {}) })) setAdvisor(session, advisorModel);
+  const mixtureSpec = String(env.OASIS_MIXTURE_MODELS || loadedSettings.mixtureModels || '').trim();
+  if (mixtureSpec && mixtureSpec !== 'off' && !restricted) { try { setMixture(session, mixtureSpec, String(env.OASIS_MIXTURE_AGGREGATOR || loadedSettings.mixtureAggregator || '')); } catch (error) { (session.hookMessages ||= []).push('[mixture] ' + error.message); } }
   if (autoMemoryEnabled(loadedSettings, env)) {
     session.autoMemory = true;
     session.recalledMemoryIds = new Set();
@@ -2351,12 +2354,12 @@ async function executeOrchestrationToolWithKernel(session, name, args, context, 
 
   const authorization = createKernelAuthorization(session, name, context, options);
   const readOnly = ['agent_status', 'neuron_network', 'agent_events', 'team_status'].includes(name);
-  const capabilities = name === 'advisor' ? ['network'] : readOnly ? ['read'] : ['execute', 'write'];
+  const capabilities = name === 'advisor' || name === 'mixture_of_agents' ? ['network'] : readOnly ? ['read'] : ['execute', 'write'];
   const tool = bridgeToolDefinition(definition, {
     capabilities,
     risk: readOnly ? 'low' : name === 'workflow' || name === 'execute_code' ? 'critical' : 'high',
     requiresApproval: false,
-    timeoutMs: name === 'advisor' ? 120_000 : 900_000,
+    timeoutMs: name === 'advisor' ? 120_000 : name === 'mixture_of_agents' ? 420_000 : 900_000,
     run: async (validatedInput, runtime) => {
       const contextChain = [];
       for (let current = runtime.authorizationContext; current && current !== Object.prototype; current = Object.getPrototypeOf(current)) {
@@ -2403,6 +2406,10 @@ async function executeOrchestrationToolWithKernel(session, name, args, context, 
         return await runWorkflowTool(session, validatedInput, executionContext, executionOptions);
       }
       if (name === 'exit_plan_mode') return await exitPlanMode(session, validatedInput, executionContext, executionOptions);
+      if (name === 'mixture_of_agents') {
+        if (options.isSubagent) throw new Error('Subagents cannot run a mixture of agents.');
+        return await consultMixture(session, validatedInput, { signal: runtime.signal, env: executionContext.env, onUsage: options.onUsage });
+      }
       if (name === 'advisor') {
         return await consultAdvisor(session, validatedInput, {
           signal: runtime.signal,
@@ -2509,7 +2516,8 @@ async function executeOneCallRaw(session, call, context, options) {
       || name === 'workflow'
       || name === 'exit_plan_mode'
       || AGENT_TOOL_NAMES.has(name)
-      || (name === 'advisor' && session.advisorModel);
+      || (name === 'advisor' && session.advisorModel)
+      || (name === 'mixture_of_agents' && session.mixtureModels);
     if (requiresKernelOrchestration) {
       result = await executeOrchestrationToolWithKernel(session, name, args, context, {
         ...options,
@@ -3859,6 +3867,46 @@ export function setChrome(session, on) {
   if (on) session.toolDefinitions = session.toolDefinitions.concat([BROWSER_TOOL_DEFINITION]);
   else closeBrowser(session).catch(() => {});
   return session.chromeEnabled;
+}
+
+// Mixture of agents (src/mixture.mjs): several models answer, one merges.
+export function setMixture(session, spec, aggregator = '') {
+  session.toolDefinitions = (session.toolDefinitions || []).filter((tool) => tool.function.name !== MIXTURE_TOOL_DEFINITION.function.name);
+  const text = Array.isArray(spec) ? spec.join(',') : String(spec || '').trim();
+  if (!text || text === 'off') { session.mixtureModels = null; session.mixtureAggregator = null; return null; }
+  const chain = parseMixtureModels(text);
+  if (chain.length < 2) throw new Error('A mixture needs at least two models, for example /mixture gpt-6.1,openrouter:deepseek/deepseek-r1.');
+  const policy = { env: session.modelEnv, protocol: session.config && session.config.protocol, ...(session.modelPolicy || {}) };
+  for (const entry of chain) if (!entry.provider && !modelAllowed(entry.model, session.availableModels, policy)) throw new Error(modelRestrictionMessage(entry.model, session.availableModels || [], { env: session.modelEnv, ...(session.modelPolicy || {}) }));
+  const aggregatorName = String(aggregator || '').trim();
+  if (aggregatorName && !modelAllowed(aggregatorName, session.availableModels, policy)) throw new Error(modelRestrictionMessage(aggregatorName, session.availableModels || [], { env: session.modelEnv, ...(session.modelPolicy || {}) }));
+  session.mixtureModels = chain;
+  session.mixtureAggregator = aggregatorName || null;
+  session.toolDefinitions = session.toolDefinitions.concat([MIXTURE_TOOL_DEFINITION]);
+  return chain.map((entry) => entry.id);
+}
+
+export async function consultMixture(session, args = {}, options = {}) {
+  if (!session.mixtureModels || !session.mixtureModels.length) throw new Error('No mixture is set. Use /mixture MODEL1,MODEL2 or the mixtureModels setting.');
+  const env = options.env || session.providerEnv || process.env;
+  const baseConfig = session.config;
+  const aggregatorConfig = session.mixtureAggregator ? { ...baseConfig, model: session.mixtureAggregator } : baseConfig;
+  const budget = sideRequestChars(baseConfig, options.env);
+  const question = headTailText(String(args.question || ''), Math.min(60_000, Math.floor(budget / 3)));
+  const usage = { calls: 0, input: 0, output: 0, costUsd: 0 };
+  const result = await runMixture({ chain: session.mixtureModels, baseConfig, aggregatorConfig, env }, { ...args, question }, {
+    signal: options.signal,
+    transcript: () => recentTranscript(session, options.maxChars || sideTranscriptChars(budget, question)),
+    request: (config, messages, signal) => requestCompletion({ budgetParent: session, config, toolDefinitions: [], providerEnv: session.providerEnv, permissions: session.permissions, root: session.root, messages }, { noTools: true, signal }),
+    charge: (spent, model) => {
+      const costUsd = chargeAuxiliaryUsage(session, spent, { env: options.env, model });
+      usage.calls++; usage.input += Number(spent.inputTokens) || 0; usage.output += Number(spent.outputTokens) || 0; usage.costUsd += costUsd;
+      if (typeof options.onUsage === 'function') { try { options.onUsage({ ...spent, costUsd, model, phase: 'mixture' }); } catch {} }
+    }
+  });
+  const previous = session.mixtureUsage || {};
+  session.mixtureUsage = { rounds: (previous.rounds || 0) + 1, calls: (previous.calls || 0) + usage.calls, input: (previous.input || 0) + usage.input, output: (previous.output || 0) + usage.output, costUsd: (previous.costUsd || 0) + usage.costUsd };
+  return result;
 }
 
 export function setAdvisor(session, model) {
