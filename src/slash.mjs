@@ -149,7 +149,7 @@ export const BUILTIN_COMMANDS = {
   logout: 'Remove the stored provider API key',
   'skill-doctor': 'Show each skill\'s context cost and recent usage so you can turn off unused ones (/skill-doctor [DAYS])',
   insights: 'Write an HTML report analyzing your recent sessions on this machine (/insights [DAYS])',
-  import: 'Import MCP servers, instructions, commands, rules, skills and memories from Codex, Gemini CLI, Cursor, Claude Code, Hermes, OpenCode, Antigravity, Windsurf or Cline (/import [SOURCE] [--dry-run] [--yes])',
+  import: 'Import MCP servers, instructions, commands, rules, skills and memories from Codex, Gemini CLI, Cursor, Claude Code, Hermes, OpenClaw, OpenCode, Antigravity, Windsurf or Cline (/import [SOURCE] [--dry-run] [--yes])',
   advisor: 'Let the agent consult a second, stronger model mid-task (/advisor MODEL, /advisor off)',
   mixture: 'Let the agent ask several models at once and merge their answers (/mixture MODEL1,MODEL2,..., /mixture off)',
   subtask: 'Run a task in a forked background subagent that inherits this conversation and reports back (/subtask TASK)',

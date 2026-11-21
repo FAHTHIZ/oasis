@@ -19,7 +19,7 @@ test('YAML subset, JSONC and memory splitting', () => {
   assert.deepEqual(parseJsonc('{ // c\n "a": [1, 2,], /* x */ "b": "http://x//y" ,}'), { a: [1, 2], b: 'http://x//y' });
   assert.deepEqual(splitMemoryEntries('# Memory\nUses pnpm not npm\n§\nDeploys from the release branch'), ['Uses pnpm not npm', 'Deploys from the release branch']);
   assert.deepEqual(parseImportArgs(['hermes', 'opencode', '--yes']).sources, ['hermes', 'opencode']);
-  assert.throws(() => parseImportArgs(['nope']), /hermes\|opencode/);
+  assert.throws(() => parseImportArgs(['nope']), /hermes\|openclaw\|opencode/);
 });
 
 test('imports Hermes, OpenCode, Antigravity, Windsurf, Cline and Claude Code memories without overwriting', async (t) => {
@@ -119,4 +119,35 @@ test('import never replaces an mcp.json that does not parse', async (t) => {
   const plan = await planImport(root, { env: { HOME: home }, sources: ['hermes'] });
   await assert.rejects(applyImport(plan), /Could not read .*mcp\.json/);
   assert.equal(await readFile(target, 'utf8'), broken);
+});
+
+test('imports OpenClaw MCP servers, persona, memories and skills but never secrets', async (t) => {
+  const base = await mkdtemp(path.join(os.tmpdir(), 'oasis-import-claw-'));
+  t.after(() => rm(base, { recursive: true, force: true }));
+  const root = path.join(base, 'project');
+  const home = path.join(base, 'home');
+  await mkdir(root, { recursive: true });
+  const claw = path.join(home, '.clawdbot');
+  await put(path.join(claw, 'clawdbot.json'), '{\n  // JSON5 config\n  mcp: { servers: { fs: { command: "npx", args: ["-y", "@mcp/fs"] }, docs: { url: "https://docs.example/mcp" } } },\n  models: { providers: { openrouter: { apiKey: "sk-or-secret" } } },\n  channels: { telegram: { botToken: "123:secret" } },\n}\n');
+  await put(path.join(claw, 'workspace', 'SOUL.md'), 'You are warm and concise.');
+  await put(path.join(claw, 'workspace', 'AGENTS.md'), 'Always run tests.');
+  await put(path.join(claw, 'workspace', 'MEMORY.md'), 'Owns a Raspberry Pi cluster\n§\nUses pnpm');
+  await put(path.join(claw, 'workspace', 'USER.md'), 'Lives in Dhaka');
+  await put(path.join(claw, 'workspace', 'memory', '2026-11-20.md'), '# Fixed the router\n\nRouter needed a firmware update.');
+  await put(path.join(claw, 'workspace', 'skills', 'weather', 'SKILL.md'), '---\nname: weather\ndescription: Weather\n---\nbody');
+  await put(path.join(claw, 'skills', 'notes', 'SKILL.md'), '---\nname: notes\ndescription: Notes\n---\nbody');
+  const env = { HOME: home };
+  const plan = await planImport(root, { env, sources: ['openclaw'] });
+  const added = (kind) => plan.items.filter((item) => item.kind === kind && item.action !== 'skip');
+  assert.deepEqual(added('mcp').map((item) => item.name).sort(), ['docs', 'fs']);
+  assert.deepEqual(added('mcp').find((item) => item.name === 'docs').server, { type: 'http', url: 'https://docs.example/mcp' });
+  assert.deepEqual(added('instructions').map((item) => item.name), ['SOUL.md', 'AGENTS.md']);
+  const memories = added('memory').map((item) => item.name);
+  assert.equal(memories.length, 4);
+  assert.ok(memories.some((name) => /^OpenClaw 2026-11-20: Fixed the router/.test(name)));
+  assert.ok(memories.some((name) => /OpenClaw user profile 1: Lives in Dhaka/.test(name)));
+  assert.deepEqual(added('skill').map((item) => item.name).sort(), ['notes', 'weather']);
+  assert.doesNotMatch(JSON.stringify(plan), /sk-or-secret|123:secret/);
+  assert.match(describePlan(plan), /API keys and channel tokens are not copied/);
+  assert.deepEqual(parseImportArgs(['openclaw']).sources, ['openclaw']);
 });

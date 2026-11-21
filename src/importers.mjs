@@ -31,6 +31,12 @@
 //   Cline   cline_mcp_settings.json (VS Code global storage), ~/Documents/Cline/Rules
 //           .clinerules (file or folder), .clinerules/workflows/*.md
 //   Codex also: ~/.codex/memories/*.md -> user memories, ~/.codex/skills -> user skills
+//   OpenClaw ~/.openclaw (or ~/.clawdbot, ~/.moltbot, $OPENCLAW_STATE_DIR):
+//           openclaw.json mcp.servers               -> user MCP servers
+//           workspace/SOUL.md, AGENTS.md, IDENTITY.md -> user instructions
+//           workspace/MEMORY.md, USER.md, memory/*.md -> OASIS user memories
+//           workspace/skills, skills/, workspace/.agents/skills -> user skills
+//           API keys and channel tokens are never copied (set them as OASIS env vars).
 import { mkdir, readFile, readdir, writeFile, lstat, cp } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
@@ -41,7 +47,7 @@ import { parse as parseJsoncText, printParseErrorCode } from 'jsonc-parser';
 import { parseYamlMapping, splitFrontMatter } from './frontmatter.mjs';
 import { replaceFileDurably } from './atomic-write.mjs';
 
-const IMPORT_SOURCES = ['codex', 'gemini', 'cursor', 'claude', 'hermes', 'opencode', 'antigravity', 'windsurf', 'cline'];
+const IMPORT_SOURCES = ['codex', 'gemini', 'cursor', 'claude', 'hermes', 'openclaw', 'opencode', 'antigravity', 'windsurf', 'cline'];
 const MAX_SKILL_BYTES = 4 * 1024 * 1024;
 const MAX_FILE = 256 * 1024;
 
@@ -72,6 +78,15 @@ export function parseJsonc(text) {
   const errors = [];
   const value = parseJsoncText(String(text), errors, { allowTrailingComma: true, disallowComments: false });
   if (errors.length) throw new SyntaxError('JSONC: ' + printParseErrorCode(errors[0].error) + ' at offset ' + errors[0].offset);
+  return value;
+}
+
+/** openclaw.json is JSON5: try JSON with comments first, then YAML flow syntax (unquoted keys). */
+export function parseJson5ish(text) {
+  try { return parseJsonc(text); } catch { /* JSON5 extras */ }
+  const stripped = String(text).replace(/("(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*')|\/\*[\s\S]*?\*\/|\/\/[^\n]*/g, (match, quoted) => quoted || '');
+  const value = parseYamlText(stripped);
+  if (!value || typeof value !== 'object' || Array.isArray(value)) throw new SyntaxError('not a JSON5 object');
   return value;
 }
 
@@ -422,6 +437,43 @@ export async function planImport(root, options = {}) {
       if (text) { await addFile('rule', 'hermes', path.join(workspace, name), path.join(workspace, '.claude', 'rules', 'hermes.md'), '<!-- imported from ' + name + ' -->\n' + text.trim() + '\n', name); break; }
     }
   }
+  if (sources.includes('openclaw')) {
+    const candidates = env.OPENCLAW_STATE_DIR ? [env.OPENCLAW_STATE_DIR] : ['.openclaw', '.clawdbot', '.moltbot'].map((name) => path.join(home, name));
+    let clawHome = null;
+    for (const dir of candidates) if (await exists(dir)) { clawHome = dir; break; }
+    if (clawHome) {
+      let config = {};
+      for (const name of ['openclaw.json', 'clawdbot.json', 'moltbot.json']) {
+        const text = await readText(path.join(clawHome, name));
+        if (!text) continue;
+        try { config = parseJson5ish(text) || {}; } catch (error) { items.push({ kind: 'mcp', source: 'openclaw', name, action: 'skip', reason: 'could not parse: ' + error.message }); }
+        break;
+      }
+      const mcp = config.mcp && typeof config.mcp === 'object' ? config.mcp.servers : null;
+      if (mcp && typeof mcp === 'object') addServers(mcp, 'openclaw', 'user', 'openclaw');
+      const configured = config.agents && config.agents.defaults && typeof config.agents.defaults.workspace === 'string' ? config.agents.defaults.workspace.replace(/^~(?=$|[\\/])/, home) : '';
+      let clawWorkspace = null;
+      for (const dir of [configured, path.join(clawHome, 'workspace'), path.join(clawHome, 'workspace-main'), path.join(clawHome, 'workspace.default')].filter(Boolean)) if (await exists(dir)) { clawWorkspace = dir; break; }
+      if (clawWorkspace) {
+        for (const name of ['SOUL.md', 'AGENTS.md', 'IDENTITY.md']) {
+          const file = path.join(clawWorkspace, name);
+          addInstructions('openclaw', file, await readText(file));
+        }
+        for (const [name, category, label] of [['MEMORY.md', 'reference', 'OpenClaw memory'], ['USER.md', 'preferences', 'OpenClaw user profile']]) {
+          const file = path.join(clawWorkspace, name);
+          splitMemoryEntries(await readText(file)).forEach((entry, index) => addMemory('openclaw', file, 'user', label + ' ' + (index + 1) + ': ' + entry.split('\n')[0].slice(0, 50), entry, category));
+        }
+        for (const { file, parts } of (await listFiles(path.join(clawWorkspace, 'memory'), '.md', 0)).slice(-60)) {
+          // A daily log stays one memory, named after its date and first line.
+          const text = String((await readText(file)) || '').trim();
+          if (text) addMemory('openclaw', file, 'user', 'OpenClaw ' + parts[0] + ': ' + text.replace(/^#+\s*/, '').split('\n')[0].slice(0, 40), text, 'reference');
+        }
+        await addSkills('openclaw', path.join(clawWorkspace, 'skills'), userSkillsDir, 1);
+        await addSkills('openclaw', path.join(clawWorkspace, '.agents', 'skills'), userSkillsDir, 1);
+      }
+      await addSkills('openclaw', path.join(clawHome, 'skills'), userSkillsDir, 1);
+    }
+  }
   if (sources.includes('opencode')) {
     const globalDir = path.join(env.XDG_CONFIG_HOME || path.join(home, '.config'), 'opencode');
     const configs = [[path.join(globalDir, 'opencode.json'), 'user'], [path.join(globalDir, 'opencode.jsonc'), 'user'], [path.join(workspace, 'opencode.json'), 'project'], [path.join(workspace, 'opencode.jsonc'), 'project'], [path.join(workspace, '.opencode', 'opencode.json'), 'project'], [path.join(workspace, '.opencode', 'opencode.jsonc'), 'project']];
@@ -512,12 +564,14 @@ export async function planImport(root, options = {}) {
 // only its auto-memories; say so instead of a bare "nothing to import".
 const CLAUDE_NATIVE_NOTE = 'Claude Code setup needs no import: OASIS reads CLAUDE.md, MCP servers in ~/.claude.json and .mcp.json, .claude/commands, .claude/skills, .claude/agents, hooks and settings where they are (check with oasis mcp list and /skills). oasis import claude copies only Claude Code memories from ~/.claude/projects.';
 
+const OPENCLAW_NOTE = 'OpenClaw API keys and channel tokens are not copied. Set them for OASIS yourself (for example OPENROUTER_API_KEY or OASIS_TELEGRAM_BOT_TOKEN), then run oasis gateway to reconnect your chats.';
+
 export function describePlan(plan) {
   const adds = plan.items.filter((item) => item.action !== 'skip');
   const skips = plan.items.filter((item) => item.action === 'skip');
-  const note = plan.sources.includes('claude') ? '\n' + CLAUDE_NATIVE_NOTE : '';
+  const note = (plan.sources.includes('claude') ? '\n' + CLAUDE_NATIVE_NOTE : '') + (plan.sources.includes('openclaw') && plan.items.some((item) => item.source === 'openclaw') ? '\n' + OPENCLAW_NOTE : '');
   if (!plan.items.length && plan.sources.length === 1 && plan.sources[0] === 'claude') return 'No Claude Code memories to import.' + note;
-  if (!plan.items.length) return 'Nothing to import from ' + plan.sources.join(', ') + '. Looked for Codex (~/.codex), Gemini CLI (~/.gemini, .gemini/, GEMINI.md), Cursor (~/.cursor, .cursor/, .cursorrules), Claude Code memories (~/.claude/projects), Hermes (~/.hermes), OpenCode (opencode.json, .opencode/), Antigravity (~/.gemini/config, .agents/), Windsurf (~/.codeium/windsurf, .windsurf/) and Cline (.clinerules) configuration.' + note;
+  if (!plan.items.length) return 'Nothing to import from ' + plan.sources.join(', ') + '. Looked for Codex (~/.codex), Gemini CLI (~/.gemini, .gemini/, GEMINI.md), Cursor (~/.cursor, .cursor/, .cursorrules), Claude Code memories (~/.claude/projects), Hermes (~/.hermes), OpenClaw (~/.openclaw), OpenCode (opencode.json, .opencode/), Antigravity (~/.gemini/config, .agents/), Windsurf (~/.codeium/windsurf, .windsurf/) and Cline (.clinerules) configuration.' + note;
   const label = { mcp: 'MCP server', instructions: 'Instructions', command: 'Command', rule: 'Rule', skill: 'Skill', memory: 'Memory', agent: 'Subagent' };
   const line = (item) => '  ' + (item.action === 'skip' ? '- ' : '+ ') + '[' + item.source + '] ' + label[item.kind] + ' ' + item.name + ((item.kind === 'mcp' || item.kind === 'memory') && item.scope ? ' (' + item.scope + ')' : '') + (item.target && item.action !== 'skip' ? ' -> ' + item.target : '') + (item.reason ? ' (skipped: ' + item.reason + ')' : '');
   return [adds.length ? 'Will import ' + adds.length + ' item' + (adds.length === 1 ? '' : 's') + ':' : 'Nothing new to import.', ...adds.map(line), ...(skips.length ? ['Skipped:', ...skips.map(line)] : [])].join('\n') + note;
@@ -612,7 +666,7 @@ export function parseImportArgs(args) {
   return { sources, dryRun, yes };
 }
 
-const SOURCE_LABELS = { codex: 'Codex', gemini: 'Gemini CLI', cursor: 'Cursor', claude: 'Claude Code', hermes: 'Hermes', opencode: 'OpenCode', antigravity: 'Antigravity', windsurf: 'Windsurf', cline: 'Cline' };
+const SOURCE_LABELS = { codex: 'Codex', gemini: 'Gemini CLI', cursor: 'Cursor', claude: 'Claude Code', hermes: 'Hermes', openclaw: 'OpenClaw', opencode: 'OpenCode', antigravity: 'Antigravity', windsurf: 'Windsurf', cline: 'Cline' };
 
 // Startup hint for people arriving from another agent: name what /import would
 // bring over. Shown once for a given set of items; a new item shows it again.
