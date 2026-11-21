@@ -34,7 +34,8 @@ import { validateToolArguments } from './tool-schema-validation.mjs';
 import { redactAuditValue, runTool } from './tool-kernel.mjs';
 import { toResponsesRequest, toAnthropicRequest, chatCompletionTool } from './provider-requests.mjs';
 import { startHookWatchers, needsHookWatchers } from './file-watch.mjs';
-import { externalChangesReminder } from './file-state.mjs';
+import { externalChangesReminder, restoreFilesAfterCompaction } from './file-state.mjs';
+import { realpathSync } from 'node:fs';
 import { BROWSER_TOOL_DEFINITION, closeBrowser } from './browser-tool.mjs';
 import { WORKFLOW_TOOL_DEFINITION } from './workflows.mjs';
 import { debugLog, debugEnabled } from './debug-log.mjs';
@@ -167,6 +168,37 @@ function summaryWindowChars(session, env = process.env) {
   return Math.max(6_000, Math.floor(contextWindowSize(session.config || {}, env) * 4 * 0.5));
 }
 
+const FILE_TOOL_NAMES_FOR_COMPACTION = new Set(['read_file', 'edit_file', 'write_file', 'multi_edit', 'notebook_edit']);
+
+// After a compaction: files whose reads were folded into the summary are
+// re-attached (the few most recent, small and unchanged ones) or marked as
+// only partly seen, so a whole-file overwrite needs a fresh read. Files used in
+// the retained messages keep their state.
+async function fileContextAfterCompaction(session, retained, options = {}, { attach = true } = {}) {
+  try {
+    const keep = new Set();
+    for (const message of retained || []) {
+      if (!message || message.role !== 'assistant' || !Array.isArray(message.tool_calls)) continue;
+      for (const call of message.tool_calls) {
+        if (!call || !call.function || !FILE_TOOL_NAMES_FOR_COMPACTION.has(call.function.name)) continue;
+        const args = safeToolArguments(call.function.arguments);
+        const target = typeof args.path === 'string' ? args.path : typeof args.notebook_path === 'string' ? args.notebook_path : '';
+        if (!target) continue;
+        const absolute = path.resolve(session.root || '.', target);
+        keep.add(absolute);
+        try { keep.add(realpathSync(absolute)); } catch {}
+      }
+    }
+    const threshold = compactionThresholdChars(session.config || {}, options.env || process.env);
+    const maxTotalChars = Math.min(50000, Math.floor(threshold * 0.1));
+    let root = session.root || '';
+    try { root = realpathSync(root); } catch {}
+    return await restoreFilesAfterCompaction({ session, env: options.env || process.env }, { root, keep, attach: attach && maxTotalChars >= 4000, maxTotalChars, maxFileChars: Math.min(20000, maxTotalChars) });
+  } catch {
+    return { text: '', files: [] };
+  }
+}
+
 export async function compactHistoryIfNeeded(session, options = {}) {
   let messages = session.messages || [];
   const thresholdChars = Number.isFinite(options.thresholdChars) && options.thresholdChars > 0 ? options.thresholdChars : compactionThresholdChars(session.config || {}, options.env || process.env);
@@ -248,13 +280,14 @@ export async function compactHistoryIfNeeded(session, options = {}) {
     costUsd += chargeAuxiliaryUsage(session, reflection.usage, { env: options.env });
   }
 
+  const reattached = await fileContextAfterCompaction(session, messages.slice(boundary), options, { attach: options.restoreFiles !== false });
   const beforeCompaction = messages.slice();
   if (session.freshSystemText) { messages[0] = { ...messages[0], content: session.freshSystemText }; session.baseSystemPrompt = session.freshSystemText; session.freshSystemText = null; }
   session.messages = [
     messages[0],
     {
       role: 'user',
-      content: 'Context digest of earlier conversation (historical summary, not a new request):\n' + summary + (restored ? '\n\nContext from SessionStart hooks after compaction:\n' + restored : '')
+      content: 'Context digest of earlier conversation (historical summary, not a new request):\n' + summary + (restored ? '\n\nContext from SessionStart hooks after compaction:\n' + restored : '') + (reattached.text ? '\n\n' + reattached.text : '')
     },
     {
       role: 'assistant',
@@ -296,11 +329,11 @@ async function recoverFromContextOverflow(session, requestIndex, options, attemp
   }
   let tokensUsed = 0;
   try {
-    const earlier = await compactHistoryIfNeeded(session, { ...options, force: true });
+    const earlier = await compactHistoryIfNeeded(session, { ...options, force: true, restoreFiles: false });
     tokensUsed += Number(earlier.tokensUsed || 0);
   } catch {}
   try {
-    const midTurn = await compactMidTurnHistoryIfNeeded(session, requestIndex, { ...options, force: true });
+    const midTurn = await compactMidTurnHistoryIfNeeded(session, requestIndex, { ...options, force: true, restoreFiles: false });
     tokensUsed += Number(midTurn.tokensUsed || 0);
   } catch {}
   const window = contextWindowSize(session.config, options.env || process.env);
@@ -405,9 +438,10 @@ async function compactMidTurnHistoryIfNeeded(session, requestIndex, options = {}
   const restored = await runPostCompactHooks(session, 'auto', summary, options);
 
   const removedToolResults = oldMessages.filter((message) => message && message.role === 'tool').length;
+  const reattached = await fileContextAfterCompaction(session, [...messages.slice(0, requestIndex + 1), ...messages.slice(boundary)], options, { attach: options.restoreFiles !== false });
   session.messages = [
     ...messages.slice(0, requestIndex + 1),
-    { role: 'user', content: 'Context digest of completed work in the current task (historical summary, not a new request):\n' + summary + (restored ? '\n\nContext from SessionStart hooks after compaction:\n' + restored : '') },
+    { role: 'user', content: 'Context digest of completed work in the current task (historical summary, not a new request):\n' + summary + (restored ? '\n\nContext from SessionStart hooks after compaction:\n' + restored : '') + (reattached.text ? '\n\n' + reattached.text : '') },
     { role: 'assistant', content: 'I will continue the original active task. The preceding digest is context only; I will rely on current tool results for current state.' },
     ...messages.slice(boundary)
   ];
