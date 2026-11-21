@@ -35,7 +35,9 @@ Set `OASIS_GATEWAY_PAIRING=0` to turn pairing off: strangers then only see their
 
 ## Chat commands
 
-`/new` starts a fresh session, `/stop` cancels the running task, `/status` shows the session, `/mode default|acceptEdits|plan|auto` changes how approvals work, `/resume` [continues a saved session](#continue-anywhere), `/sethome` makes the chat your [home channel](#home-channel), `/home` shows which chat that is, `/personality NAME` changes the agent's [voice](CONFIGURATION.md#personalities) for that chat, and `/help` lists these. Every command also works with `!` instead of `/` (Slack reserves `/`).
+`/new` (or `/reset`) starts a fresh session, `/stop` cancels the running task, `/status` shows the session, `/mode default|acceptEdits|plan|auto` changes how approvals work, `/resume` [continues a saved session](#continue-anywhere), `/sethome` makes the chat your [home channel](#home-channel), `/home` shows which chat that is, `/personality NAME` changes the agent's [voice](CONFIGURATION.md#personalities) for that chat, and `/help` lists these.
+
+The session commands from the terminal work in chats too: `/model [NAME]` shows or switches the model, `/effort LEVEL` sets reasoning effort, `/compress` (or `/compact`) shrinks the context at once, `/usage` shows that chat's tokens and cost, `/context` shows what fills the context, `/insights [DAYS]` summarizes recent sessions, `/undo` removes the last turn and its file edits, and `/retry` runs your last request again (its edits stay; send `/undo` first to drop them). `/skills` lists skills, and `/SKILL-NAME [request]` runs one, as in the terminal. Every command also works with `!` instead of `/` (Slack reserves `/`).
 
 On platforms without buttons, answer an approval by replying `yes` or `no`. When more than one approval is waiting, include its number: `allow 3`, `always 3` or `reject 3`.
 
