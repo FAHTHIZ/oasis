@@ -62,7 +62,11 @@ export async function recordFileState(context, absolute, options = {}) {
     const partial = options.partial && !(previous && previous.sha256 === sha256 && !previous.partial) ? options.partial : '';
     const records = store(context);
     records.delete(absolute);
-    records.set(absolute, { mtimeMs: info.mtimeMs, size: info.size, sha256, ...(partial ? { partial } : {}), ...(snapshot !== undefined ? { snapshot } : {}) });
+    // A read remembers which reply it came from (session.toolBatch): the model
+    // only sees the content once that reply's results come back to it.
+    // A re-read of content it already saw earlier does not count as unseen.
+    const batch = options.read && !(previous && previous.sha256 === sha256 && (previous.readBatch === undefined || previous.readBatch !== (context.session && context.session.toolBatch))) && context.session && Number.isInteger(context.session.toolBatch) ? context.session.toolBatch : undefined;
+    records.set(absolute, { mtimeMs: info.mtimeMs, size: info.size, sha256, ...(partial ? { partial } : {}), ...(snapshot !== undefined ? { snapshot } : {}), ...(batch !== undefined ? { readBatch: batch } : {}) });
     trimSnapshots(records);
   } catch { /* unreadable files simply stay untracked */ }
 }
@@ -152,6 +156,12 @@ export async function assertFileFresh(context, absolute, relative, options = {})
     // full overwrites (and every edit in strict mode) require a prior read.
     if (options.exactMatch && !strict) return;
     throw new Error('File has not been read yet: ' + relative + '. Read it with read_file before editing or overwriting it, so the change is based on its current contents.');
+  }
+  // read_file and write_file in the same reply: the read ran first, but the
+  // model wrote the new content before it saw what the read returned, so the
+  // overwrite would replace code it never saw (a 3B model lost an export this way).
+  if (!options.exactMatch && record.readBatch !== undefined && context.session && record.readBatch === context.session.toolBatch) {
+    throw new Error(relative + ' was read in this same reply, so this change was written before you saw its contents. No change was made. The read_file result is now in front of you; base the change on it in your next reply (prefer edit_file to keep the existing code).');
   }
   if (options.fullOverwrite && record.partial) {
     throw new Error('Only part of ' + relative + ' has been read (' + record.partial + '). Overwriting it with write_file would replace lines you have not seen. ' +

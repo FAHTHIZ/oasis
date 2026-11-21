@@ -138,9 +138,11 @@ export function resolveToolAlias(requested, args, available) {
   const plural = [...names].filter((name) => squash(name) === key + 's' || squash(name) + 's' === key);
   if (plural.length === 1) return { name: plural[0], args, aliasedFrom: requested };
   const ranked = [...names]
-    .map((name) => ({ name, score: Math.min(levenshtein(key, squash(name)), squash(name).includes(key) || key.includes(squash(name)) ? 1 : Infinity, sharesEveryWord(requested, name) ? 3 : Infinity) }))
+    .map((name) => ({ name, score: Math.min(levenshtein(key, squash(name)), (key.length >= 4 && squash(name).includes(key)) || (squash(name).length >= 4 && key.includes(squash(name))) ? 1 : Infinity, sharesEveryWord(requested, name) ? 3 : Infinity) }))
     .sort((a, b) => a.score - b.score || a.name.localeCompare(b.name))
-    .filter((item) => item.score <= Math.max(3, Math.floor(key.length / 3)))
+    // Short names are close to everything ("add" is three edits from "lsp"),
+    // so the allowed distance grows with the name.
+    .filter((item) => item.score <= Math.max(key.length <= 4 ? 1 : 3, Math.floor(key.length / 3)))
     .slice(0, 3)
     .map((item) => item.name);
   return { error: 'There is no tool named "' + requested + '".' + (ranked.length ? ' Did you mean: ' + ranked.join(', ') + '?' : '') + ' Only call tools from your tool list.' };

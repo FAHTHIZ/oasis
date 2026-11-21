@@ -1887,7 +1887,7 @@ async function executeToolUnlocked(name, args = {}, context = {}) {
         const range = readRangeArgs(args);
         const read = await readWorkspaceFile(root, args.path, { offset: range.offset, limit: range.limit, context });
         const partial = read && read.totalLines && (read.startLine > 1 || read.truncated) ? 'lines ' + read.startLine + '-' + read.endLine + ' of ' + read.totalLines : '';
-        await recordFileState(context, (await resolveWorkspacePath(root, args.path)).absolute, { partial });
+        await recordFileState(context, (await resolveWorkspacePath(root, args.path)).absolute, { partial, read: true });
         return read;
       }
     case 'glob_files':
