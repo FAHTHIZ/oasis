@@ -13,10 +13,11 @@ While a gateway is running it also hosts your [routines](USER-GUIDE.md#routines-
 | Signal (through signal-cli REST API) | `oasis gateway signal` | Typed replies | `signal:+NUMBER` or `signal:group.ID` |
 | Email (IMAP and SMTP) | `oasis gateway email` | Typed replies | `email:ADDRESS` |
 | WhatsApp (official Cloud API) | `oasis gateway whatsapp` | Buttons | `whatsapp:+NUMBER` |
+| Mattermost | `oasis gateway mattermost` | Typed replies | `mattermost:CHANNEL_ID` |
 
 ## Every platform at once
 
-`oasis gateway all` starts every platform whose token is set (`OASIS_TELEGRAM_BOT_TOKEN`, `OASIS_DISCORD_BOT_TOKEN`, `OASIS_SLACK_BOT_TOKEN`, `OASIS_MATRIX_ACCESS_TOKEN`, `OASIS_SIGNAL_NUMBER`, `OASIS_EMAIL_USER` or `OASIS_WHATSAPP_TOKEN`) in one process, with one routine scheduler. Log lines are prefixed with the platform. If a platform is only half configured, startup stops with that platform's error, and if one platform loses its connection later, the others keep answering.
+`oasis gateway all` starts every platform whose token is set (`OASIS_TELEGRAM_BOT_TOKEN`, `OASIS_DISCORD_BOT_TOKEN`, `OASIS_SLACK_BOT_TOKEN`, `OASIS_MATRIX_ACCESS_TOKEN`, `OASIS_SIGNAL_NUMBER`, `OASIS_EMAIL_USER`, `OASIS_WHATSAPP_TOKEN` or `OASIS_MATTERMOST_TOKEN`) in one process, with one routine scheduler. Log lines are prefixed with the platform. If a platform is only half configured, startup stops with that platform's error, and if one platform loses its connection later, the others keep answering.
 
 ## Chat commands
 
@@ -117,3 +118,15 @@ OASIS talks to WhatsApp through Meta's official [WhatsApp Business Cloud API](ht
 Approvals arrive as Allow, Always and Reject buttons. Photos, voice notes and documents are downloaded to `.oasis/inbox/`; voice notes are transcribed when a transcription model is configured. Webhook calls without a valid `X-Hub-Signature-256` signature are rejected, and Meta's retries are processed only once.
 
 WhatsApp only lets a business send free-form messages within 24 hours of the person's last message. A routine delivered with `whatsapp:+NUMBER` therefore reaches you only if you wrote to the agent in the last day; otherwise the delivery fails with a clear error.
+
+## Mattermost
+
+1. In Mattermost, open Integrations, Bot Accounts, add a bot and copy its access token. (Bot accounts must be enabled by an admin in System Console, Integrations, Bot Accounts; a personal access token also works.) Add the bot to the teams and channels where it should answer.
+2. Set:
+   - `OASIS_MATTERMOST_URL`: your server, for example `https://chat.example.com`
+   - `OASIS_MATTERMOST_TOKEN`
+   - `OASIS_MATTERMOST_ALLOWED_USERS`: usernames (`alice`) or user IDs
+   - optional: `OASIS_MATTERMOST_CHANNELS`: channel IDs where every message is a task
+3. Run `oasis gateway mattermost`.
+
+The bot answers direct messages and posts that @mention it; in a channel listed in `OASIS_MATTERMOST_CHANNELS` it answers every post. A direct message chat is one session. In a channel, each thread is its own session and the agent replies inside the thread. Approvals are typed replies. Attached files are saved to `.oasis/inbox/`.
