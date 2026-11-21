@@ -1,7 +1,11 @@
 // Trajectory export and batch runs, for evaluation and fine-tuning datasets.
 //
-//   oasis sessions export [ID...|--all] [--verified] [--format sharegpt|openai] [--out FILE]
-//   oasis batch PROMPTS.jsonl [--out FILE] [--format sharegpt|openai] [--concurrency N]
+//   oasis sessions export [ID...|--all] [--verified] [--format sharegpt|openai] [--out FILE] [--compress [TOKENS]]
+//   oasis batch PROMPTS.jsonl [--out FILE] [--format sharegpt|openai] [--concurrency N] [--compress [TOKENS]]
+//
+// --compress cuts each trajectory to TOKENS (default 15250) the way Hermes'
+// trajectory compressor does (see trajectory-compress.mjs); --summary-tokens N,
+// --keep-last N and --metrics FILE tune and report it.
 //
 // Export writes one JSON object per line. "openai" keeps the chat-completions
 // message list (system, user, assistant with tool_calls, tool) plus the tool
@@ -42,7 +46,10 @@ export function toOpenAIRecord(data, tools = []) {
 }
 
 export function toShareGPTRecord(data, tools = []) {
-  const record = toOpenAIRecord(data, tools);
+  return shareGPTFromRecord(toOpenAIRecord(data, tools));
+}
+
+export function shareGPTFromRecord(record) {
   const conversations = [];
   for (const message of record.messages) {
     if (message.role === 'system') conversations.push({ from: 'system', value: message.content });
@@ -56,7 +63,7 @@ export function toShareGPTRecord(data, tools = []) {
       }
     } else if (message.role === 'tool') conversations.push({ from: 'observation', value: message.content });
   }
-  return { id: record.id, conversations, tools: JSON.stringify(record.tools.map((tool) => tool.function || tool)), metadata: record.metadata };
+  return { id: record.id, conversations, tools: JSON.stringify(record.tools.map((tool) => tool.function || tool)), metadata: record.metadata, ...(record.compression_metrics ? { compression_metrics: record.compression_metrics } : {}) };
 }
 
 function formatRecord(data, format = 'openai', tools = []) {
@@ -68,6 +75,68 @@ function formatRecord(data, format = 'openai', tools = []) {
 function option(args, name, fallback = null) {
   const at = args.indexOf(name);
   return at >= 0 && args[at + 1] && !args[at + 1].startsWith('--') ? args[at + 1] : fallback;
+}
+
+const NUMBER = /^\d+$/;
+
+// --compress [TOKENS] (the number is optional), --summary-tokens N, --keep-last N, --metrics FILE.
+export function compressionOptions(args = []) {
+  const at = args.indexOf('--compress');
+  if (at < 0) return null;
+  const next = args[at + 1];
+  const numeric = (name) => { const value = option(args, name); if (value === null) return undefined; if (!NUMBER.test(value)) throw new Error(name + ' needs a whole number.'); return Number(value); };
+  return {
+    targetTokens: next && NUMBER.test(next) ? Number(next) : undefined,
+    summaryTokens: numeric('--summary-tokens'),
+    keepLast: numeric('--keep-last'),
+    metricsFile: option(args, '--metrics')
+  };
+}
+
+// Values that belong to flags, so they are not taken for session IDs or the prompt file.
+function flagValues(args) {
+  const values = new Set();
+  for (const name of ['--format', '--out', '--concurrency', '--summary-tokens', '--keep-last', '--metrics']) { const value = option(args, name); if (value) values.add(value); }
+  const at = args.indexOf('--compress');
+  if (at >= 0 && args[at + 1] && NUMBER.test(args[at + 1])) values.add(args[at + 1]);
+  return values;
+}
+
+async function compressor(compress, options, env) {
+  if (!compress) return null;
+  const tools = await import('./trajectory-compress.mjs');
+  const summarize = options.summarize !== undefined ? options.summarize : await tools.providerSummarizer({ env, config: options.config || null }).catch(() => null);
+  const totals = tools.newCompressionTotals();
+  return {
+    async apply(record) {
+      try {
+        const { messages, metrics } = await tools.compressMessages(record.messages, { ...compress, summarize });
+        tools.addCompressionMetrics(totals, metrics);
+        return metrics.was_compressed ? { ...record, messages: messages.map((message) => message.role === 'user' && typeof message.content === 'string' ? { ...message, content: clean(message.content) } : message), compression_metrics: metrics } : record;
+      } catch {
+        tools.addCompressionMetrics(totals, null);
+        return record;
+      }
+    },
+    async finish() {
+      const report = tools.compressionReport(totals);
+      if (compress.metricsFile) { const { writeFile } = await import('node:fs/promises'); await writeFile(compress.metricsFile, JSON.stringify(report, null, 2) + '\n', { mode: 0o600 }); }
+      if (options.onCompression) options.onCompression(report);
+      return report;
+    }
+  };
+}
+
+/** One line for stderr after a compressed export. */
+export function compressionLine(report) {
+  const { summary, tokens } = report;
+  return 'Compressed ' + summary.trajectories_compressed + ' of ' + summary.total_trajectories + ' trajectories (' + tokens.total_before + ' -> ' + tokens.total_after + ' tokens, ratio ' + tokens.overall_compression_ratio + ')' + (summary.trajectories_still_over_limit ? '; ' + summary.trajectories_still_over_limit + ' still over the limit' : '') + (report.summarization.total_errors ? '; ' + report.summarization.total_errors + ' summaries failed and used the fixed notice' : '') + '.';
+}
+
+async function formatWith(data, format, tools, squeeze) {
+  let record = toOpenAIRecord(data, tools);
+  if (squeeze) record = await squeeze.apply(record);
+  return format === 'sharegpt' ? shareGPTFromRecord(record) : record;
 }
 
 function openOut(file, stdout) {
@@ -93,10 +162,11 @@ export async function exportSessions(root, args = [], options = {}) {
   const format = option(args, '--format', 'openai');
   formatRecord({ messages: [] }, format);
   const { listSessions, loadSession } = await import('./sessions.mjs');
-  const flagValues = new Set([option(args, '--format'), option(args, '--out')].filter(Boolean));
-  let ids = args.filter((arg) => !arg.startsWith('--') && !flagValues.has(arg));
+  const values = flagValues(args);
+  const squeeze = await compressor(compressionOptions(args), options, env);
+  let ids = args.filter((arg) => !arg.startsWith('--') && !values.has(arg));
   if (args.includes('--all') || !ids.length) {
-    if (!args.includes('--all')) throw new Error('Usage: oasis sessions export SESSION_ID... | --all [--verified] [--format sharegpt|openai] [--out FILE]');
+    if (!args.includes('--all')) throw new Error('Usage: oasis sessions export SESSION_ID... | --all [--verified] [--format sharegpt|openai] [--out FILE] [--compress [TOKENS]]');
     ids = (await listSessions(root, { env })).map((item) => item.id);
   }
   const out = openOut(option(args, '--out'), stdout);
@@ -107,10 +177,11 @@ export async function exportSessions(root, args = [], options = {}) {
   for (const id of ids) {
     const data = await loadSession(root, id, { env });
     if (verifiedOnly && !sessionVerified(await readEvents(root, data.id || id, { env }))) { skipped++; continue; }
-    out.write(JSON.stringify(formatRecord({ ...data, id: data.id || id }, format)) + '\n');
+    out.write(JSON.stringify(await formatWith({ ...data, id: data.id || id }, format, [], squeeze)) + '\n');
     count++;
   }
   await out.close();
+  if (squeeze) await squeeze.finish();
   if (options.onSkipped) options.onSkipped(skipped);
   return count;
 }
@@ -137,8 +208,9 @@ export async function runBatch(root, args = [], options = {}) {
   const env = options.env || process.env;
   const stdout = options.stdout || process.stdout;
   const stderr = options.stderr || process.stderr;
-  const file = args.find((arg) => !arg.startsWith('--') && arg !== option(args, '--out') && arg !== option(args, '--format') && arg !== option(args, '--concurrency'));
-  if (!file) throw new Error('Usage: oasis batch PROMPTS.jsonl [--out FILE] [--format sharegpt|openai] [--concurrency N]');
+  const values = flagValues(args);
+  const file = args.find((arg) => !arg.startsWith('--') && !values.has(arg));
+  if (!file) throw new Error('Usage: oasis batch PROMPTS.jsonl [--out FILE] [--format sharegpt|openai] [--concurrency N] [--compress [TOKENS]]');
   const format = option(args, '--format', 'openai');
   formatRecord({ messages: [] }, format);
   const concurrency = Math.min(8, Math.max(1, Number.parseInt(option(args, '--concurrency', '1'), 10) || 1));
@@ -147,6 +219,8 @@ export async function runBatch(root, args = [], options = {}) {
   const { loadConfig } = options.configModule || await import('./config.mjs');
   const config = options.config || await loadConfig({ env });
   if (!config.configured) throw new Error('No model provider is configured. Run `oasis setup` first.');
+  const compress = compressionOptions(args);
+  const squeeze = await compressor(compress, { ...options, config }, env);
   const out = openOut(option(args, '--out'), stdout);
   let next = 0, ok = 0, failed = 0;
   async function worker() {
@@ -159,7 +233,7 @@ export async function runBatch(root, args = [], options = {}) {
         session.headless = true;
         const turn = await agent.runAgentTurn(session, item.prompt, { env, approval: async () => false });
         ok++;
-        out.write(JSON.stringify({ id: item.id, prompt: item.prompt, ok: true, text: clean(turn && turn.text || ''), toolCalls: turn && turn.toolCalls || 0, durationMs: Date.now() - started, ...(item.metadata ? { metadata: item.metadata } : {}), trajectory: formatRecord({ id: item.id, messages: session.messages, config }, format, session.toolDefinitions || []) }) + '\n');
+        out.write(JSON.stringify({ id: item.id, prompt: item.prompt, ok: true, text: clean(turn && turn.text || ''), toolCalls: turn && turn.toolCalls || 0, durationMs: Date.now() - started, ...(item.metadata ? { metadata: item.metadata } : {}), trajectory: await formatWith({ id: item.id, messages: session.messages, config }, format, session.toolDefinitions || [], squeeze) }) + '\n');
       } catch (error) {
         failed++;
         out.write(JSON.stringify({ id: item.id, prompt: item.prompt, ok: false, error: clean(String(error && error.message || error)), durationMs: Date.now() - started }) + '\n');
@@ -171,5 +245,6 @@ export async function runBatch(root, args = [], options = {}) {
   }
   await Promise.all(Array.from({ length: Math.min(concurrency, prompts.length) }, worker));
   await out.close();
+  if (squeeze) await squeeze.finish();
   return { total: prompts.length, ok, failed };
 }

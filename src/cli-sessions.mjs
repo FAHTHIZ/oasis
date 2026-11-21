@@ -150,9 +150,9 @@ export async function manageSessions(root, rest, { approve } = {}) {
     return;
   }
   if (action === 'export') {
-    const { exportSessions } = await import('./trajectories.mjs');
+    const { exportSessions, compressionLine } = await import('./trajectories.mjs');
     let skipped = 0;
-    const count = await exportSessions(root, rest.slice(1), { onSkipped: (value) => { skipped = value; } });
+    const count = await exportSessions(root, rest.slice(1), { onSkipped: (value) => { skipped = value; }, onCompression: (report) => process.stderr.write(compressionLine(report) + '\n') });
     if (rest.includes('--out')) stdout.write('Exported ' + count + ' session(s).' + (skipped ? ' Skipped ' + skipped + ' without a passing final check.' : '') + '\n');
     else if (skipped) process.stderr.write('Skipped ' + skipped + ' session(s) without a passing final check.\n');
     return;
