@@ -263,13 +263,22 @@ export function createTelegramGateway(options = {}) {
   return { run, stop, pollOnce, handleUpdate, chats, approvals };
 }
 
+export const GATEWAY_PLATFORMS = ['telegram', 'discord', 'slack', 'matrix'];
+
+export const GATEWAY_USAGE = 'Usage: oasis gateway ' + GATEWAY_PLATFORMS.join('|') + '\n'
+  + '  telegram:   OASIS_TELEGRAM_BOT_TOKEN, OASIS_TELEGRAM_ALLOWED_CHATS\n'
+  + '  discord:    OASIS_DISCORD_BOT_TOKEN, OASIS_DISCORD_ALLOWED_USERS [, OASIS_DISCORD_CHANNELS]\n'
+  + '  slack:      OASIS_SLACK_APP_TOKEN, OASIS_SLACK_BOT_TOKEN, OASIS_SLACK_ALLOWED_USERS\n'
+  + '  matrix:     OASIS_MATRIX_HOMESERVER, OASIS_MATRIX_ACCESS_TOKEN, OASIS_MATRIX_ALLOWED_USERS [, OASIS_MATRIX_ROOMS]';
+
 export async function runGateway(args = [], options = {}) {
   const kind = String(args[0] || '').toLowerCase();
   let gateway;
   if (kind === 'telegram') gateway = createTelegramGateway(options);
   else if (kind === 'discord') gateway = (await import('./gateway-discord.mjs')).createDiscordGateway(options);
   else if (kind === 'slack') gateway = (await import('./gateway-slack.mjs')).createSlackGateway(options);
-  else throw new Error('Usage: oasis gateway telegram|discord|slack\n  telegram: OASIS_TELEGRAM_BOT_TOKEN, OASIS_TELEGRAM_ALLOWED_CHATS\n  discord:  OASIS_DISCORD_BOT_TOKEN, OASIS_DISCORD_ALLOWED_USERS [, OASIS_DISCORD_CHANNELS]\n  slack:    OASIS_SLACK_APP_TOKEN, OASIS_SLACK_BOT_TOKEN, OASIS_SLACK_ALLOWED_USERS');
+  else if (kind === 'matrix') gateway = (await import('./gateway-matrix.mjs')).createMatrixGateway(options);
+  else throw new Error(GATEWAY_USAGE);
   const onSignal = () => { gateway.stop(); process.exit(0); };
   process.once('SIGINT', onSignal);
   process.once('SIGTERM', onSignal);

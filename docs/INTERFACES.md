@@ -21,7 +21,7 @@ Integrations connect OASIS to other tools. They are not separate interfaces:
 | Cursor Cloud Agents API clients (REST, v1 and v0) | `oasis web --persistent-key` | The `oasis web` server, under `/v1` and `/v0` |
 | Node.js SDK | Import `src/sdk.mjs` | Your Node.js process |
 | GitHub Action | `action.yml` in a workflow | The Actions runner |
-| Messaging gateways (Telegram, Slack, Discord) | `oasis gateway` | The gateway process |
+| Messaging gateways (Telegram, Slack, Discord, Matrix; see [Gateways](GATEWAYS.md)) | `oasis gateway` | The gateway process |
 
 Old bookmarks to `/`, `/classic` or `/index.html` open the web app.
 
