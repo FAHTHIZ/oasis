@@ -649,6 +649,17 @@ and git remotes to suggest the apps a project uses. Nothing is executed.
 | `OASIS_NO_APP_HINTS=1` | Leave the "apps this project uses that are not connected" line out of the system prompt. |
 | `OASIS_TIP=off` | No start-up tip in the terminal, including the project-apps tip. |
 
+## Home Assistant
+
+Set `OASIS_HASS_URL` (for example `http://homeassistant.local:8123`) and `OASIS_HASS_TOKEN` to a long-lived access token (your Home Assistant profile → Security → Long-lived access tokens) and the agent gets two tools through the [REST API](https://developers.home-assistant.io/docs/api/rest/). `HASS_URL` and `HASS_TOKEN` work too.
+
+| Tool | What it does |
+| --- | --- |
+| `home_assistant` | Read-only: lists entities with their state (filter by domain or a search word), reads one entity's attributes, lists a domain's services and fields. Allowed in plan mode. |
+| `home_assistant_control` | Calls a service such as `light.turn_on` or `climate.set_temperature`. Asks for approval each time; auto mode and allow rules skip the question, except for locks, alarms, covers (garage doors), valves, sirens, cameras and climate devices, which always ask. |
+
+OASIS refuses services that run code or manage the host (`shell_command`, `command_line`, `python_script`, `pyscript`, `rest_command`, `hassio`, `recorder`, `homeassistant.restart` and `homeassistant.stop`). The token can do anything your Home Assistant user can, so give OASIS a dedicated non-admin user. With a gateway running you can then say "turn off the porch light" from Telegram or WhatsApp, or have a routine check the sensors every evening.
+
 ## Telemetry (OpenTelemetry)
 
 Telemetry is off unless `OASIS_ENABLE_TELEMETRY=1`. OASIS then sends metrics, log events and traces over OTLP/HTTP JSON to `OTEL_EXPORTER_OTLP_ENDPOINT` (per-signal `OTEL_EXPORTER_OTLP_{METRICS,LOGS,TRACES}_ENDPOINT` and `_HEADERS` work too). `OTEL_{METRICS,LOGS,TRACES}_EXPORTER` takes `otlp`, `console` or `none`.

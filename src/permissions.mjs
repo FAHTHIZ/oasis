@@ -47,7 +47,8 @@ const TOOL_ALIASES = {
   repomap: ['repo_map'],
   ls: ['list_files'],
   task: ['task'],
-  todowrite: ['todo_write']
+  todowrite: ['todo_write'],
+  homeassistant: ['home_assistant', 'home_assistant_control']
 };
 
 const EDIT_TOOLS = new Set(['edit_file', 'multi_edit', 'write_file', 'notebook_edit']);
