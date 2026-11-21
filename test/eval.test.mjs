@@ -1211,3 +1211,27 @@ test('trials where the provider never answered are not scored, and three in a ro
   const compared = await compareEvalReports([result.resultsPath, result.resultsPath], { env });
   assert.ok(compared);
 });
+
+test('an external agent out of quota is not scored and stops the run', async (t) => {
+  const tmp = await temporaryDirectory('oasis-ext-eval-quota-');
+  t.after(() => rm(tmp, { recursive: true, force: true }));
+  const tasksDir = path.join(tmp, 'tasks');
+  await mkdir(tasksDir);
+  for (const id of ['task-a', 'task-b', 'task-c', 'task-d']) await createFixtureTask(tasksDir, id);
+  let runs = 0;
+  const gemini = '{\n  "session_id": "abc",\n  "error": {\n    "type": "Error",\n    "message": "You have exhausted your daily quota on this model.",\n    "code": 429\n  }\n}\n';
+  const fakeRunner = async (args) => {
+    if (args.length === 1 && args[0] === '--version') return { exitCode: 0, stdout: '0.20.0\n', stderr: '', output: '', timedOut: false };
+    runs++;
+    return { exitCode: 1, stdout: gemini, stderr: '', output: gemini, timedOut: false };
+  };
+  const output = { text: '', write(value) { this.text += String(value); } };
+  const result = await runEvalCommand(['--gemini-cli', '--trials', '1', '--model', 'fixture-model'], {
+    autoApprove: true, env: { ...process.env }, tasksDir, resultsDir: path.join(tmp, 'results'), output, claudeRunner: fakeRunner
+  });
+  assert.equal(runs, 3);
+  assert.equal(result.ok, false);
+  assert.equal(result.summary.errored, 3);
+  assert.equal(result.summary.failed, 0);
+  assert.match(output.text, /Stopped early: .*429.*1 trials were not run/);
+});
