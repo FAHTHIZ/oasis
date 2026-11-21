@@ -84,7 +84,7 @@ export function createMatrixGateway(options = {}) {
     await api('PUT', '/_matrix/client/v3/rooms/' + encodeURIComponent(roomId) + '/typing/' + encodeURIComponent(userId), { typing: true, timeout: 30000 });
   }
 
-  const core = createChatCore({ ...options, env, log, send, typing, textApprovals: true });
+  const core = createChatCore({ ...options, platform: 'matrix', env, log, send, typing, textApprovals: true });
 
   function download(content) {
     const parsed = parseMxc(content.url);

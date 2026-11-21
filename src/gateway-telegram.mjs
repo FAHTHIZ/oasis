@@ -141,7 +141,11 @@ export function createTelegramGateway(options = {}) {
   async function command(chatId, text) {
     const [name, ...args] = text.trim().split(/\s+/);
     const cmd = name.replace(/@.*$/, '').toLowerCase();
-    if (cmd === '/start' || cmd === '/help') return say(chatId, 'OASIS agent for ' + root + '.\nSend a message to give it a task.\n/new starts a fresh session, /stop cancels the running task, /status shows the session, /mode default|acceptEdits|plan|auto changes approvals, /voice on|off|auto sets spoken replies.'), true;
+    if (cmd === '/start' || cmd === '/help') return say(chatId, 'OASIS agent for ' + root + '.\nSend a message to give it a task.\n/new starts a fresh session, /stop cancels the running task, /status shows the session, /mode default|acceptEdits|plan|auto changes approvals, /voice on|off|auto sets spoken replies, /sethome makes this chat the home channel for routine results.'), true;
+    if (cmd === '/sethome' || cmd === '/home') {
+      const { homeCommand } = await import('./gateway-home.mjs');
+      return say(chatId, homeCommand(cmd, { platform: 'telegram', chatKey: chatId, env })), true;
+    }
     if (cmd === '/new') {
       const state = chats.get(chatId);
       if (state && state.controller) state.controller.abort();

@@ -93,7 +93,7 @@ export function createMattermostGateway(options = {}) {
     if (socket && socket.readyState === 1) socket.send(JSON.stringify({ seq: seq++, action: 'user_typing', data: { channel_id: channelId, parent_id: rootId } }));
   }
 
-  const core = createChatCore({ ...options, env, log, send, typing, textApprovals: true });
+  const core = createChatCore({ ...options, platform: 'mattermost', env, log, send, typing, textApprovals: true });
 
   async function usernameOf(userId) {
     if (usernames.has(userId)) return usernames.get(userId);
