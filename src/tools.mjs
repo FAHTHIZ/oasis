@@ -2230,6 +2230,11 @@ async function executeToolUnlocked(name, args = {}, context = {}) {
         }
       });
     }
+    case 'home_assistant':
+    case 'home_assistant_control': {
+      const { runHomeAssistantTool } = await import('./home-assistant.mjs');
+      return await runHomeAssistantTool(name, args, { session: context.session, env: context.env || process.env, approval: context.approval, autoApprove: Boolean(context.autoApprove), ruleAllowed: Boolean(context.ruleAllowed), signal: context.signal, fetchImpl: context.fetchImpl });
+    }
     case 'session_search': {
       const { runSessionSearchTool } = await import('./session-search.mjs');
       return await runSessionSearchTool(args, { root, env: context.env || process.env, session: context.session });
