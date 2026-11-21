@@ -10,6 +10,7 @@ User-facing change history grouped by package version. A version heading does no
 - read_file and write_file to the same file in one reply no longer counts as reading first: the write is refused until the read result has reached the model, so it cannot overwrite code it never saw. Exact-string edits still go through.
 - The same refusal for a tool (git_commit when no commit was asked for) is counted even when the arguments change. The second refusal reminds the model what the user asked; the fourth stops the turn. If files were changed, the turn ends by naming them instead of saying "I'm stuck".
 - The unknown-tool reminder lists only the tools the model was offered, not deferred ones. "Did you mean" no longer suggests unrelated tools for three-letter names, and a call named after something in the task (the function it was asked to write) says it is code to write, not a tool.
+- `oasis eval` no longer scores provider outages as model failures. A trial with no tokens and a quota, rate-limit, 5xx or connection error is reported as `ERROR` and left out of the pass rate; three in a row stop the run with the provider's message. A keyless gateway running out of quota partway through had turned 50 untested tasks into failures.
 
 ## [1.7.1] - 2026-11-17
 
