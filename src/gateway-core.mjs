@@ -214,7 +214,23 @@ export function createChatCore(options = {}) {
   async function command(chatKey, text) {
     const [name, ...args] = text.trim().split(/\s+/);
     const cmd = name.replace(/@.*$/, '').replace(/^!/, '/').toLowerCase();
-    if (cmd === '/start' || cmd === '/help') { await send(chatKey, 'OASIS agent for ' + root + '.\nSend a message to give it a task.\n/new (or !new) starts a fresh session, /stop cancels the running task, /status shows the session, /mode default|acceptEdits|plan|auto changes approvals, /sethome makes this chat the home channel for routine results.'); return true; }
+    if (cmd === '/start' || cmd === '/help') { await send(chatKey, 'OASIS agent for ' + root + '.\nSend a message to give it a task.\n/new (or !new) starts a fresh session, /stop cancels the running task, /status shows the session, /mode default|acceptEdits|plan|auto changes approvals, /resume continues a saved session (from the terminal or another chat), /sethome makes this chat the home channel for routine results.'); return true; }
+    if (cmd === '/resume') {
+      const current = chats.get(chatKey);
+      if (current && current.controller) { await send(chatKey, 'Still working on the previous request. Send /stop first.'); return true; }
+      const { resumeCommand } = await import('./gateway-resume.mjs');
+      const result = await resumeCommand(args, { root, env, sessions: deps.sessions && deps.sessions.listSessions ? deps.sessions : undefined, currentId: current && current.session.sessionId });
+      if (result.restore) {
+        const { createSession } = deps.agent || await import('./agent.mjs');
+        const { loadConfig } = deps.config || await import('./config.mjs');
+        const config = options.config || await loadConfig({ env });
+        const session = await createSession({ root, config, env, restore: result.restore, permissionMode: options.permissionMode || null });
+        session.headless = true;
+        chats.set(chatKey, { session, controller: null });
+      }
+      await send(chatKey, result.text);
+      return true;
+    }
     if ((cmd === '/sethome' || cmd === '/home') && options.platform) {
       const { homeCommand } = await import('./gateway-home.mjs');
       await send(chatKey, homeCommand(cmd, { platform: options.platform, chatKey, env }));

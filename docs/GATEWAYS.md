@@ -35,11 +35,17 @@ Set `OASIS_GATEWAY_PAIRING=0` to turn pairing off: strangers then only see their
 
 ## Chat commands
 
-`/new` starts a fresh session, `/stop` cancels the running task, `/status` shows the session, `/mode default|acceptEdits|plan|auto` changes how approvals work, `/sethome` makes the chat your [home channel](#home-channel), `/home` shows which chat that is, and `/help` lists these. Every command also works with `!` instead of `/` (Slack reserves `/`).
+`/new` starts a fresh session, `/stop` cancels the running task, `/status` shows the session, `/mode default|acceptEdits|plan|auto` changes how approvals work, `/resume` [continues a saved session](#continue-anywhere), `/sethome` makes the chat your [home channel](#home-channel), `/home` shows which chat that is, and `/help` lists these. Every command also works with `!` instead of `/` (Slack reserves `/`).
 
 On platforms without buttons, answer an approval by replying `yes` or `no`. When more than one approval is waiting, include its number: `allow 3`, `always 3` or `reject 3`.
 
 Files, photos and voice notes you send are saved under `.oasis/inbox/` in the workspace. Images are shown to the model, and voice notes are transcribed when voice transcription is set up.
+
+## Continue anywhere
+
+Every chat saves its conversation as a normal OASIS session, and `/resume` lets any chat continue any saved session of the workspace: one you started in the terminal, in the web app or on another platform. `/resume` alone lists the recent ones; `/resume 1`, `/resume last` or `/resume ID-PREFIX` picks one. The chat then keeps saving to the same session ID, so `oasis --resume ID` back at the desk picks up what you did from your phone.
+
+Only one place should drive a session at a time: if it is still open in a terminal, the two copies diverge and the last one saved wins.
 
 ## Home channel
 
