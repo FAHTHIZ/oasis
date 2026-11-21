@@ -357,7 +357,7 @@ a routed run that gets stuck moves to the strong model as in cascade mode.
 
 Limits, stated plainly: the class is guessed from the task text with keyword
 rules. On the 52 eval task prompts it names a class for 33 and gets 23 of
-those right; the rest use `overall`. The roadmap's cost gate (cost drops with
+those right; the rest use `overall`. The cost gate (cost drops with
 no class falling more than 2 points on the harness) has not been measured, so
 this mode is off unless you turn it on.
 

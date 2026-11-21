@@ -35,14 +35,13 @@ Find the right guide without knowing the repository. The root
 - [Architecture](ARCHITECTURE.md): runtime components, a typical turn, persistence and trust boundaries.
 - [Security model](SECURITY.md): what OASIS enforces, what is outside its controls, recommended setup.
 - [Provider transport](architecture/provider-transport.md): protocol-specific requests and streaming.
-- [OASIS Neuron Network](OASIS-NEURON-NETWORK.md): the agent lineage graph today and what is planned.
+- [Agent network](OASIS-NEURON-NETWORK.md): how subagents are scheduled, budgeted, cancelled and checked.
 
 ## Evidence
 
 - [Benchmarks](BENCHMARKS.md): model-free harness results, same-model head-to-head runs and their limits.
 - [Real-world runs](REAL-WORLD-RUNS.md): unscripted tasks with real providers, plugins checked, what went wrong.
 - [Comparison](COMPARISON.md): features against Claude Code, Codex, Gemini CLI, OpenCode, Goose and others, with sources.
-- [Roadmap](ROADMAP.md): prioritised plan with measurable acceptance criteria and what is already done.
 
 ## Project records
 
