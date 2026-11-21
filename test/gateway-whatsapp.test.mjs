@@ -3,6 +3,10 @@ import assert from 'node:assert/strict';
 import { createHmac } from 'node:crypto';
 import { createWhatsAppGateway, deliverWhatsApp, extractWhatsAppMessages, verifySignature } from '../src/gateway-whatsapp.mjs';
 import { parseDeliver } from '../src/routines.mjs';
+import { mkdtempSync as pairMkdtemp } from 'node:fs';
+import { tmpdir as pairTmpdir } from 'node:os';
+import { join as pairJoin } from 'node:path';
+const PAIR_ROOT = pairMkdtemp(pairJoin(pairTmpdir(), 'oasis-pair-'));
 
 const flush = () => new Promise((resolve) => setTimeout(resolve, 30));
 const SECRET = 'app-secret-123';
@@ -29,7 +33,7 @@ const payload = (messages, phoneNumberId = '1234567') => ({ object: 'whatsapp_bu
 const text = (body, from = ME, id = 'wamid.' + Math.random()) => ({ from, id, type: 'text', text: { body } });
 
 function makeGateway(agent, graph) {
-  return createWhatsAppGateway({ token: 'EAAG-token', phoneNumberId: '1234567', appSecret: SECRET, verifyToken: 'verify-me-please', allowedUsers: new Set([ME]), port: 0, fetchImpl: graph.fetchImpl, deps: deps(agent), transcribe: null, log: () => {} });
+  return createWhatsAppGateway({ token: 'EAAG-token', phoneNumberId: '1234567', appSecret: SECRET, verifyToken: 'verify-me-please', allowedUsers: new Set([ME]), port: 0, fetchImpl: graph.fetchImpl, deps: deps(agent), transcribe: null, root: PAIR_ROOT, log: () => {} });
 }
 
 async function post(port, body, { sign = true, secret = SECRET } = {}) {
@@ -52,7 +56,7 @@ test('signature, payload parsing and configuration checks', () => {
   assert.equal(extractWhatsAppMessages(payload([text('x')], '999'), '1234567').length, 0, 'other phone numbers are ignored');
   assert.throws(() => createWhatsAppGateway({ env: {} }), /OASIS_WHATSAPP_TOKEN/);
   assert.throws(() => createWhatsAppGateway({ env: { OASIS_WHATSAPP_TOKEN: 't', OASIS_WHATSAPP_PHONE_NUMBER_ID: '1234567', OASIS_WHATSAPP_APP_SECRET: 's' } }), /VERIFY_TOKEN/);
-  assert.throws(() => createWhatsAppGateway({ env: { OASIS_WHATSAPP_TOKEN: 't', OASIS_WHATSAPP_PHONE_NUMBER_ID: '1234567', OASIS_WHATSAPP_APP_SECRET: 's', OASIS_WHATSAPP_VERIFY_TOKEN: 'verify-me' } }), /ALLOWED_USERS/);
+  assert.throws(() => createWhatsAppGateway({ env: { OASIS_GATEWAY_PAIRING: '0', OASIS_WHATSAPP_TOKEN: 't', OASIS_WHATSAPP_PHONE_NUMBER_ID: '1234567', OASIS_WHATSAPP_APP_SECRET: 's', OASIS_WHATSAPP_VERIFY_TOKEN: 'verify-me' } }), /ALLOWED_USERS/);
 });
 
 test('webhook: verification handshake, unsigned calls rejected, a task runs and buttons answer approvals', async () => {

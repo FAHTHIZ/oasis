@@ -1,6 +1,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createAllGateways, GATEWAY_PLATFORMS, GATEWAY_TRIGGERS, GATEWAY_USAGE } from '../src/gateway-telegram.mjs';
+import { mkdtempSync as pairMkdtemp } from 'node:fs';
+import { tmpdir as pairTmpdir } from 'node:os';
+import { join as pairJoin } from 'node:path';
+const PAIR_ROOT = pairMkdtemp(pairJoin(pairTmpdir(), 'oasis-pair-'));
 
 const deps = { agent: { createSession: async () => ({ messages: [] }), runAgentTurn: async () => ({ text: '' }) }, config: { loadConfig: async () => ({ configured: true }) }, sessions: { saveSession: async () => ({}) } };
 
@@ -13,11 +17,11 @@ test('every platform has a trigger variable and appears in the usage text', () =
 });
 
 test('gateway all refuses to start with nothing configured', async () => {
-  await assert.rejects(() => createAllGateways({ env: {}, log: () => {} }), /no configured platform/);
+  await assert.rejects(() => createAllGateways({ env: {}, root: PAIR_ROOT, log: () => {} }), /no configured platform/);
 });
 
 test('gateway all names the half-configured platform', async () => {
-  await assert.rejects(() => createAllGateways({ env: { OASIS_WHATSAPP_TOKEN: 't' }, log: () => {} }), /^Error: whatsapp: Set OASIS_WHATSAPP_PHONE_NUMBER_ID/);
+  await assert.rejects(() => createAllGateways({ env: { OASIS_WHATSAPP_TOKEN: 't' }, root: PAIR_ROOT, log: () => {} }), /^Error: whatsapp: Set OASIS_WHATSAPP_PHONE_NUMBER_ID/);
 });
 
 test('gateway all starts every configured platform, survives one failing and stops them all', async () => {

@@ -3,6 +3,10 @@ import assert from 'node:assert/strict';
 import { createMatrixGateway, deliverMatrix, matrixMentions, parseMxc, stripMatrixMention } from '../src/gateway-matrix.mjs';
 import { parseApprovalReply, parseList, createChatCore } from '../src/gateway-core.mjs';
 import { parseDeliver, deliverOutput } from '../src/routines.mjs';
+import { mkdtempSync as pairMkdtemp } from 'node:fs';
+import { tmpdir as pairTmpdir } from 'node:os';
+import { join as pairJoin } from 'node:path';
+const PAIR_ROOT = pairMkdtemp(pairJoin(pairTmpdir(), 'oasis-pair-'));
 
 const flush = () => new Promise((resolve) => setTimeout(resolve, 20));
 
@@ -56,7 +60,7 @@ test('matrix helpers', () => {
 test('matrix requires homeserver, token and allowlist', () => {
   assert.throws(() => createMatrixGateway({ env: {} }), /HOMESERVER/);
   assert.throws(() => createMatrixGateway({ env: { OASIS_MATRIX_HOMESERVER: 'https://m.org' } }), /ACCESS_TOKEN/);
-  assert.throws(() => createMatrixGateway({ env: { OASIS_MATRIX_HOMESERVER: 'https://m.org', OASIS_MATRIX_ACCESS_TOKEN: 'syt_abcdefgh' } }), /ALLOWED_USERS/);
+  assert.throws(() => createMatrixGateway({ env: { OASIS_GATEWAY_PAIRING: '0', OASIS_MATRIX_HOMESERVER: 'https://m.org', OASIS_MATRIX_ACCESS_TOKEN: 'syt_abcdefgh' } }), /ALLOWED_USERS/);
 });
 
 test('matrix joins invites from allowed users, skips history, answers DMs and typed approvals', async () => {
@@ -64,7 +68,7 @@ test('matrix joins invites from allowed users, skips history, answers DMs and ty
   let approved;
   const turns = [];
   const agent = fakeAgent(async (_s, text, options) => { turns.push(text); approved = await options.approval('Run npm test?', false, { suggestion: 'Bash(npm test)' }); return { text: 'done: ' + text }; });
-  const gateway = createMatrixGateway({ homeserver: 'https://m.org', token: 'syt_token_123', allowedUsers: new Set(['@me:m.org']), userId: '@bot:m.org', fetchImpl: server.fetchImpl, deps: deps(agent), log: () => {} });
+  const gateway = createMatrixGateway({ homeserver: 'https://m.org', token: 'syt_token_123', allowedUsers: new Set(['@me:m.org']), userId: '@bot:m.org', fetchImpl: server.fetchImpl, deps: deps(agent), root: PAIR_ROOT, log: () => {} });
 
   await gateway.handleSync({
     next_batch: 's1',
@@ -97,7 +101,7 @@ test('matrix ignores strangers once, encrypted rooms and unmentioned group messa
   const server = fakeHomeserver();
   const turns = [];
   const agent = fakeAgent(async (_s, text) => { turns.push(text); return { text: 'ok' }; });
-  const gateway = createMatrixGateway({ homeserver: 'https://m.org', token: 'syt_token_123', allowedUsers: new Set(['@me:m.org']), userId: '@bot:m.org', displayName: 'Oasis', fetchImpl: server.fetchImpl, deps: deps(agent), log: () => {} });
+  const gateway = createMatrixGateway({ homeserver: 'https://m.org', token: 'syt_token_123', allowedUsers: new Set(['@me:m.org']), userId: '@bot:m.org', displayName: 'Oasis', fetchImpl: server.fetchImpl, deps: deps(agent), root: PAIR_ROOT, log: () => {} });
   gateway.memberCounts.set('!group:m.org', 8);
   gateway.memberCounts.set('!dm:m.org', 2);
   await gateway.handleEvent('!group:m.org', { type: 'm.room.message', sender: '@me:m.org', content: { msgtype: 'm.text', body: 'chatting with people' } });
@@ -140,7 +144,7 @@ test('chat core: typed approvals with several pending ask for the number', async
     resolvers.push(first, second);
     return { text: String(await first) + ',' + String(await second) };
   });
-  const core = createChatCore({ send: async (key, text) => { sent.push(text); }, deps: deps(agent), textApprovals: true, transcribe: null, log: () => {} });
+  const core = createChatCore({ send: async (key, text) => { sent.push(text); }, deps: deps(agent), textApprovals: true, transcribe: null, root: PAIR_ROOT, log: () => {} });
   await core.handleText('c', 'go');
   await flush();
   await core.handleText('c', 'yes');

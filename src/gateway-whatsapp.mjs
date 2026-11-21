@@ -15,6 +15,7 @@
 import { createHmac, timingSafeEqual } from 'node:crypto';
 import http from 'node:http';
 import { chunkText, createChatCore, parseList } from './gateway-core.mjs';
+import { createPairing, strangerMessage, withPairing } from './gateway-pairing.mjs';
 
 const GRAPH = 'https://graph.facebook.com/v21.0';
 const MAX_MESSAGE = 4000;
@@ -61,8 +62,9 @@ export function createWhatsAppGateway(options = {}) {
   if (!/^\d{5,30}$/.test(phoneNumberId)) throw new Error('Set OASIS_WHATSAPP_PHONE_NUMBER_ID to the Phone number ID shown under WhatsApp → API setup.');
   if (!appSecret) throw new Error('Set OASIS_WHATSAPP_APP_SECRET (App settings → Basic → App secret); OASIS rejects webhook calls without a valid signature.');
   if (!verifyToken || String(verifyToken).length < 8) throw new Error('Set OASIS_WHATSAPP_VERIFY_TOKEN to a random string of 8+ characters and enter the same value in the webhook settings.');
-  const allowed = options.allowedUsers || new Set([...parseList(env.OASIS_WHATSAPP_ALLOWED_USERS)].map(normalizePhone).filter(Boolean));
-  if (![...allowed].length) throw new Error('Set OASIS_WHATSAPP_ALLOWED_USERS to the phone numbers allowed to use this agent, e.g. +15551234567.');
+  const pairing = createPairing({ platform: 'whatsapp', root: options.root, env, log: options.log || ((text) => process.stderr.write('[oasis gateway] ' + text + '\n')) });
+  const allowed = withPairing(options.allowedUsers || new Set([...parseList(env.OASIS_WHATSAPP_ALLOWED_USERS)].map(normalizePhone).filter(Boolean)), pairing);
+  if (!allowed.size && !pairing.enabled) throw new Error('Set OASIS_WHATSAPP_ALLOWED_USERS to the phone numbers allowed to use this agent, e.g. +15551234567.');
   const graph = String(options.graphBase || env.OASIS_WHATSAPP_GRAPH_BASE || GRAPH).replace(/\/+$/, '');
   const port = Number(options.port !== undefined ? options.port : env.OASIS_WHATSAPP_PORT || 8787);
   const host = options.host || env.OASIS_WHATSAPP_HOST || '127.0.0.1';
@@ -111,7 +113,7 @@ export function createWhatsAppGateway(options = {}) {
     if (!allowed.has(message.from)) {
       if (!toldUnknown.has(message.from)) {
         toldUnknown.add(message.from);
-        await send(message.from, 'You are not allowed to use this agent. Your WhatsApp number is +' + message.from + '. Ask the owner to add it to OASIS_WHATSAPP_ALLOWED_USERS.').catch(() => {});
+        await send(message.from, strangerMessage({ pairing, id: message.from, label: '+' + message.from, idName: 'WhatsApp number', envName: 'OASIS_WHATSAPP_ALLOWED_USERS' })).catch(() => {});
         log('ignored message from +' + message.from);
       }
       return;

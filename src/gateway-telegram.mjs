@@ -13,6 +13,7 @@
 import path from 'node:path';
 import { receiveAttachments, gatewayTranscriber, chunkText } from './gateway-core.mjs';
 import { speakableText, synthesizeSpeech, textToSpeechConfig, voiceReplyMode } from './tts.mjs';
+import { createPairing, strangerMessage, withPairing } from './gateway-pairing.mjs';
 
 const API = 'https://api.telegram.org';
 const MAX_MESSAGE = 4000;
@@ -31,8 +32,9 @@ export function createTelegramGateway(options = {}) {
   const env = options.env || process.env;
   const token = options.token || env.OASIS_TELEGRAM_BOT_TOKEN;
   if (!token || !/^\d+:[A-Za-z0-9_-]{20,}$/.test(token)) throw new Error('Set OASIS_TELEGRAM_BOT_TOKEN to the bot token from @BotFather.');
-  const allowed = options.allowedChats || parseAllowedChats(env.OASIS_TELEGRAM_ALLOWED_CHATS);
-  if (!allowed.size) throw new Error('Set OASIS_TELEGRAM_ALLOWED_CHATS to the numeric chat IDs allowed to use this agent (message the bot once to see yours).');
+  const pairing = createPairing({ platform: 'telegram', root: options.root, env, log: (line) => (options.log || ((text) => process.stderr.write('[oasis gateway] ' + text + '\n')))(line) });
+  const allowed = withPairing(options.allowedChats || parseAllowedChats(env.OASIS_TELEGRAM_ALLOWED_CHATS), pairing);
+  if (!allowed.size && !pairing.enabled) throw new Error('Set OASIS_TELEGRAM_ALLOWED_CHATS to the numeric chat IDs allowed to use this agent (message the bot once to see yours).');
   const root = path.resolve(options.root || process.cwd());
   const base = String(options.apiBase || env.OASIS_TELEGRAM_API_BASE || API).replace(/\/+$/, '');
   const fetchImpl = options.fetchImpl || fetch;
@@ -193,7 +195,7 @@ export function createTelegramGateway(options = {}) {
     if (!allowed.has(chatId)) {
       if (!toldUnknown.has(chatId)) {
         toldUnknown.add(chatId);
-        await say(chatId, 'This chat is not allowed to use this agent. Chat ID: ' + chatId + '. Ask the owner to add it to OASIS_TELEGRAM_ALLOWED_CHATS.').catch(() => {});
+        await say(chatId, strangerMessage({ pairing, id: chatId, label: [message.from && message.from.username ? '@' + message.from.username : '', message.chat.title || ''].filter(Boolean).join(' ') || chatId, idName: 'chat ID', envName: 'OASIS_TELEGRAM_ALLOWED_CHATS' })).catch(() => {});
         log('ignored message from chat ' + chatId);
       }
       return;
@@ -266,6 +268,7 @@ export function createTelegramGateway(options = {}) {
 export const GATEWAY_PLATFORMS = ['telegram', 'discord', 'slack', 'matrix', 'signal', 'email', 'whatsapp', 'mattermost'];
 
 export const GATEWAY_USAGE = 'Usage: oasis gateway ' + GATEWAY_PLATFORMS.join('|') + '|all\n'
+  + '  pair CODE | paired | unpair PLATFORM:ID   approve, list or revoke people who messaged the bot (DM pairing)\n'
   + '  all:        every platform whose token is set (OASIS_TELEGRAM_BOT_TOKEN, OASIS_DISCORD_BOT_TOKEN,\n'
   + '              OASIS_SLACK_BOT_TOKEN, OASIS_MATRIX_ACCESS_TOKEN, OASIS_SIGNAL_NUMBER, OASIS_EMAIL_USER,\n'
   + '              OASIS_WHATSAPP_TOKEN, OASIS_MATTERMOST_TOKEN), in one process\n'
@@ -332,6 +335,11 @@ export async function createAllGateways(options = {}) {
 
 export async function runGateway(args = [], options = {}) {
   const kind = String(args[0] || '').toLowerCase();
+  if (['pair', 'paired', 'unpair'].includes(kind)) {
+    const { pairingCommand } = await import('./gateway-pairing.mjs');
+    (options.stdout || process.stdout).write(pairingCommand([kind, ...args.slice(1)], { root: options.root }) + '\n');
+    return;
+  }
   const gateway = kind === 'all' ? await createAllGateways(options) : await createGateway(kind, options);
   const onSignal = () => { gateway.stop(); process.exit(0); };
   process.once('SIGINT', onSignal);

@@ -15,6 +15,7 @@
 // Each direct chat and each group gets its own saved session. Approvals are
 // answered by replying "allow 3", "always 3" or "reject 3" (or yes / no).
 import { chunkText, createChatCore, parseList } from './gateway-core.mjs';
+import { createPairing, strangerMessage, withPairing } from './gateway-pairing.mjs';
 
 const MAX_MESSAGE = 6000;
 const NUMBER_RE = /^\+[1-9]\d{6,15}$/;
@@ -57,8 +58,9 @@ export function createSignalGateway(options = {}) {
   if (!/^https?:\/\/[^\s/]+/.test(apiUrl)) throw new Error('Set OASIS_SIGNAL_API_URL to your signal-cli REST API, e.g. http://127.0.0.1:8080 (see docs/GATEWAYS.md#signal).');
   const number = String(options.number || env.OASIS_SIGNAL_NUMBER || '').trim();
   if (!NUMBER_RE.test(number)) throw new Error('Set OASIS_SIGNAL_NUMBER to the bot\'s Signal number in international format, e.g. +15551234567.');
-  const allowedUsers = options.allowedUsers || parseList(env.OASIS_SIGNAL_ALLOWED_USERS);
-  if (![...allowedUsers].length) throw new Error('Set OASIS_SIGNAL_ALLOWED_USERS to the phone numbers (or Signal UUIDs) allowed to use this agent.');
+  const pairing = createPairing({ platform: 'signal', root: options.root, env, log: options.log || ((text) => process.stderr.write('[oasis gateway] ' + text + '\n')) });
+  const allowedUsers = withPairing(options.allowedUsers || parseList(env.OASIS_SIGNAL_ALLOWED_USERS), pairing);
+  if (!allowedUsers.size && !pairing.enabled) throw new Error('Set OASIS_SIGNAL_ALLOWED_USERS to the phone numbers (or Signal UUIDs) allowed to use this agent.');
   const listenGroups = options.groups || new Set([...parseList(env.OASIS_SIGNAL_GROUPS)].map((id) => id.startsWith('group.') ? id : signalGroupRecipient(id)));
   const mode = String(options.mode || env.OASIS_SIGNAL_MODE || 'json-rpc').toLowerCase();
   const fetchImpl = options.fetchImpl || fetch;
@@ -96,7 +98,7 @@ export function createSignalGateway(options = {}) {
     if (!allowed) {
       if (!toldUnknown.has(message.sender)) {
         toldUnknown.add(message.sender);
-        await send(message.chatKey, 'You are not allowed to use this agent. Your Signal ID is ' + message.sender + '. Ask the owner to add it to OASIS_SIGNAL_ALLOWED_USERS.').catch(() => {});
+        await send(message.chatKey, strangerMessage({ pairing, id: message.sender, idName: 'Signal ID', envName: 'OASIS_SIGNAL_ALLOWED_USERS' })).catch(() => {});
         log('ignored message from ' + message.sender);
       }
       return;
