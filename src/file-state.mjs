@@ -134,6 +134,16 @@ function describeHunks(hunks) {
   }).join('\n');
 }
 
+/**
+ * The caller has checked its change against what the read returned (apply_patch
+ * matches every hunk's context lines), so that read does not count as unseen.
+ */
+export function markFileSeen(context, absolute) {
+  if (!fileStateEnabled(context)) return;
+  const record = store(context).get(absolute);
+  if (record) delete record.readBatch;
+}
+
 export function forgetFileState(context, absolute) {
   if (fileStateEnabled(context)) store(context).delete(absolute);
 }

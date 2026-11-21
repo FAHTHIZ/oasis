@@ -45,3 +45,15 @@ test('the agent exposes execute_code and nested calls use the normal tool path a
   assert.ok(asked >= 1, 'run_command inside execute_code still asks for approval');
   assert.ok(!toolMessage.content.includes('TODO one'), 'intermediate file contents stay out of the context');
 });
+
+test('a script that reads a file and writes it back in one execute_code call is not refused as unseen', async (t) => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'oasis-code-rw-'));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  await writeFile(path.join(root, 'a.txt'), 'version 1\n');
+  const code = 'const r = await tools.read_file({ path: "a.txt" }); await tools.write_file({ path: "a.txt", content: r.content.replace("1", "2") }); return "ok";';
+  const { config } = await scriptedModel(t, [toolCall('c1', 'execute_code', { code }), { content: 'Bumped.' }]);
+  const session = await createSession({ root, config: { ...config, maxSteps: 4 }, env: { ...process.env, OASIS_SANDBOX: '0' } });
+  await runAgentTurn(session, 'bump the version', { autoApprove: true, approval: async () => true });
+  const { readFile } = await import('node:fs/promises');
+  assert.equal(await readFile(path.join(root, 'a.txt'), 'utf8'), 'version 2\n');
+});

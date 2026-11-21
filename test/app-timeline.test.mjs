@@ -115,13 +115,19 @@ test('sounds are short, rendered once and never stack', () => {
     createBufferSource() { const source = { connect: (node) => node, start: () => {} }; sources.push(source); return source; }
     createGain() { return { gain: { value: 1 }, connect: (node) => node }; }
   }
-  const play = createSoundPlayer({ enabled: () => enabled, win: { AudioContext: FakeContext } });
+  // A fixed clock: rendering the first sound can take over 120 ms on a loaded
+  // machine, which made "a second sound right away" not right away.
+  let clockMs = 1_000_000;
+  const play = createSoundPlayer({ enabled: () => enabled, win: { AudioContext: FakeContext }, clock: () => clockMs });
   assert.equal(play('done'), false, 'off unless allowed');
   enabled = true;
   assert.equal(play('done'), true);
   assert.equal(sources.length, 1);
   assert.ok(buffers[0].length > 2000 && buffers[0].length < 22050, 'under a second');
+  clockMs += 50;
   assert.equal(play('fail'), false, 'a second sound right away is dropped');
+  clockMs += 200;
+  assert.equal(play('fail'), true, 'a later sound plays');
   assert.equal(play('nope'), false);
   assert.deepEqual(SOUND_KINDS.sort(), ['done', 'fail', 'input', 'send']);
   assert.equal(createSoundPlayer({ enabled: () => true, win: {} })('done'), false, 'no Web Audio, no sound, no error');
