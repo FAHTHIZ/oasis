@@ -6,15 +6,35 @@
 // mention it (or every message in channels listed in OASIS_DISCORD_CHANNELS).
 // Enable the Message Content intent for the bot in the Developer Portal.
 // Each channel gets its own saved session. Approvals arrive as Allow / Always /
-// Reject buttons that only allowlisted users can press.
+// Reject buttons that only allowlisted users can press. On connect the bot
+// registers native slash commands (/ask, /new, /model...) unless
+// OASIS_DISCORD_SLASH_COMMANDS=0.
 import { chunkText, createChatCore, parseIdList, reconnectLoop } from './gateway-core.mjs';
 import { createPairing, strangerMessage, withPairing } from './gateway-pairing.mjs';
+import { chatCommandMenu } from './gateway-commands.mjs';
 
 const API = 'https://discord.com/api/v10';
 const GATEWAY = 'wss://gateway.discord.gg/?v=10&encoding=json';
 // GUILDS | GUILD_MESSAGES | DIRECT_MESSAGES | MESSAGE_CONTENT
 export const DISCORD_INTENTS = (1 << 0) | (1 << 9) | (1 << 12) | (1 << 15);
 const MAX_MESSAGE = 1900;
+
+// Discord application commands (type 1, CHAT_INPUT) for the shared chat commands, plus /ask.
+export function discordSlashCommands() {
+  const option = (description, required = false) => [{ type: 3, name: required ? 'task' : 'args', description: description.slice(0, 100), required }];
+  return [
+    { name: 'ask', type: 1, description: 'Give the OASIS agent a task', options: option('What the agent should do', true) },
+    ...chatCommandMenu('discord').map((entry) => ({ name: entry.command, type: 1, description: entry.description.slice(0, 100), ...(entry.arg ? { options: option(entry.arg) } : {}) }))
+  ];
+}
+
+/** The text a slash-command interaction stands for: "/model gpt-5", or the task for /ask. */
+export function slashCommandText(data) {
+  const name = String(data && data.name || '').toLowerCase();
+  const value = (Array.isArray(data && data.options) ? data.options : []).map((item) => String(item && item.value !== undefined ? item.value : '')).join(' ').trim();
+  if (name === 'ask') return value;
+  return '/' + name + (value ? ' ' + value : '');
+}
 
 export function stripMention(text, botId) {
   return botId ? String(text || '').replace(new RegExp('<@!?' + botId + '>', 'g'), '').trim() : String(text || '').trim();
@@ -37,6 +57,7 @@ export function createDiscordGateway(options = {}) {
   let botId = options.botId || '';
   let stopped = false;
   let socket = null;
+  let commandsRegistered = false;
 
   async function api(method, route, body) {
     const response = await fetchImpl(apiBase + route, { method, headers: { authorization: 'Bot ' + token, 'content-type': 'application/json' }, body: body ? JSON.stringify(body) : undefined, signal: AbortSignal.timeout(30000) });
@@ -84,7 +105,30 @@ export function createDiscordGateway(options = {}) {
     await core.handleText(String(message.channel_id), text, files);
   }
 
+  async function handleSlashCommand(interaction) {
+    const user = interaction.member && interaction.member.user || interaction.user || {};
+    const userId = String(user.id || '');
+    const reply = (content, ephemeral = false) => api('POST', '/interactions/' + interaction.id + '/' + interaction.token + '/callback', { type: 4, data: { content: String(content).slice(0, 2000), allowed_mentions: { parse: [] }, ...(ephemeral ? { flags: 64 } : {}) } }).catch((error) => log(error.message));
+    if (!allowedUsers.has(userId)) {
+      await reply(strangerMessage({ pairing, id: userId, label: user.username ? '@' + user.username : '', idName: 'Discord user ID', envName: 'OASIS_DISCORD_ALLOWED_USERS' }), true);
+      log('ignored slash command from user ' + userId);
+      return;
+    }
+    const text = slashCommandText(interaction.data);
+    if (!text) { await reply('Tell the agent what to do: /ask task: ...', true); return; }
+    // Acknowledge at once (Discord allows three seconds); the answer arrives as a normal message.
+    await reply((interaction.data.name === 'ask' ? '> ' : '`') + text.slice(0, 1800) + (interaction.data.name === 'ask' ? '' : '`'));
+    await core.handleText(String(interaction.channel_id), text, []);
+  }
+
+  async function registerCommands(applicationId) {
+    if (commandsRegistered || !applicationId || /^(0|false|off|no)$/i.test(String(env.OASIS_DISCORD_SLASH_COMMANDS || ''))) return;
+    commandsRegistered = true;
+    await api('PUT', '/applications/' + applicationId + '/commands', discordSlashCommands()).catch((error) => { commandsRegistered = false; log('could not register slash commands: ' + error.message); });
+  }
+
   async function handleInteraction(interaction) {
+    if (interaction && interaction.type === 2 && interaction.data) return handleSlashCommand(interaction);
     if (!interaction || interaction.type !== 3 || !interaction.data) return;
     const [prefix, kind, id] = String(interaction.data.custom_id || '').split(':');
     if (prefix !== 'oasis') return;
@@ -98,7 +142,7 @@ export function createDiscordGateway(options = {}) {
   }
 
   async function dispatch(event, data) {
-    if (event === 'READY') { botId = String(data && data.user && data.user.id || botId); log('connected as ' + (data && data.user && data.user.username) + ' for ' + core.root + '; allowed users: ' + [...allowedUsers].join(', ')); return; }
+    if (event === 'READY') { botId = String(data && data.user && data.user.id || botId); log('connected as ' + (data && data.user && data.user.username) + ' for ' + core.root + '; allowed users: ' + [...allowedUsers].join(', ')); await registerCommands(String(data && data.application && data.application.id || botId)); return; }
     if (event === 'MESSAGE_CREATE') return handleMessage(data);
     if (event === 'INTERACTION_CREATE') return handleInteraction(data);
   }
