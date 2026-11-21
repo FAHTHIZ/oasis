@@ -243,6 +243,8 @@ export class McpServerClient extends McpHttpClient {
     super({ name: checked.name, url: 'stdio:' + checked.name }, options);
     this.config = checked;
     this.extraEnv = config.extraEnv || {};
+    // Kept (non-enumerable) so a crashed server can be restarted with the same options.
+    Object.defineProperty(this, 'startOptions', { value: options, enumerable: false, writable: true, configurable: true });
     this.root = options.root || process.cwd();
     this.child = null;
     this.exited = false;
@@ -403,12 +405,50 @@ export function mcpToolDefinitions(clients, options = {}) {
   return { definitions, map };
 }
 
+// A local (stdio) MCP server that crashed between calls is restarted on its
+// next use, a few times per session, instead of failing every later call until
+// someone runs /mcp reconnect. A server stopped on purpose is never restarted.
+export const MAX_MCP_AUTO_RESTARTS = 3;
+function crashedStdioServer(client) {
+  // terminationRequested is also set after an unexpected exit (to reap the process
+  // group), so only an explicit close() counts as a deliberate stop.
+  return client instanceof McpServerClient && client.exited && !client.terminationRequestedByClose && !client.closed;
+}
+
+export async function restartCrashedMcpServer(session, client) {
+  if (!crashedStdioServer(client)) return null;
+  const name = client.config.name;
+  const restarts = session.mcpAutoRestarts instanceof Map ? session.mcpAutoRestarts : (session.mcpAutoRestarts = new Map());
+  const count = restarts.get(name) || 0;
+  if (count >= MAX_MCP_AUTO_RESTARTS) return null;
+  restarts.set(name, count + 1);
+  const next = new McpServerClient({ ...client.config, extraEnv: client.extraEnv }, client.startOptions || { host: session.mcpHost, root: session.root });
+  next.source = client.source;
+  try { await next.start(); } catch (error) { next.close(); throw error; }
+  debugLog('mcp', 'restarted ' + name + ' after it exited (' + (count + 1) + '/' + MAX_MCP_AUTO_RESTARTS + ')');
+  session.mcpClients.set(name, next);
+  session.mcpFailures = (session.mcpFailures || []).filter((failure) => failure.name !== name);
+  refreshSessionMcpTools(session);
+  return next;
+}
+
 export async function callMappedMcpTool(session, safeName, args, options = {}) {
-  const mapped = session.mcpToolMap && session.mcpToolMap.get(safeName);
+  let mapped = session.mcpToolMap && session.mcpToolMap.get(safeName);
   if (!mapped) throw new Error('Unknown MCP tool: ' + safeName);
   if (mapped.resourceTool) return await runResourceTool(session, safeName, args);
-  const client = session.mcpClients && session.mcpClients.get(mapped.serverName);
+  let client = session.mcpClients && session.mcpClients.get(mapped.serverName);
   if (!client) throw new Error('MCP server is unavailable: ' + mapped.serverName);
+  if (crashedStdioServer(client)) {
+    const exited = client._translate(null).message;
+    let restarted = null;
+    try { restarted = await restartCrashedMcpServer(session, client); } catch (error) {
+      throw new Error(exited + ' OASIS tried to restart it, but it failed again: ' + String(error && error.message || error).slice(0, 300));
+    }
+    if (!restarted) throw new Error(exited + ' It has already been restarted ' + MAX_MCP_AUTO_RESTARTS + ' times in this session; fix the server and run /mcp reconnect ' + mapped.serverName + '.');
+    client = restarted;
+    mapped = (session.mcpToolMap && session.mcpToolMap.get(safeName)) || mapped;
+    if (!(client.tools || []).some((tool) => tool && tool.name === mapped.toolName)) throw new Error('MCP server ' + mapped.serverName + ' was restarted, but it no longer offers the tool ' + mapped.toolName + '.');
+  }
   const held = heldToolReason(mapped);
   if (held && !mapped.approvedThisSession) {
     const approval = options.approval;
@@ -418,7 +458,15 @@ export async function callMappedMcpTool(session, safeName, args, options = {}) {
     mapped.approvedThisSession = true;
     if (mapped.changed) repin(session.mcpPins, mapped.serverName, mapped.toolName, mapped.fingerprint, options.env || process.env);
   }
-  return await client.callTool(mapped.toolName, args, options);
+  try {
+    return await client.callTool(mapped.toolName, args, options);
+  } catch (error) {
+    // Died during this call: it may have run partly, so it is not retried here.
+    if (crashedStdioServer(client) && error && typeof error.message === 'string' && !/restart/.test(error.message)) {
+      error.message += ' The server will be restarted on the next call; check whether this call took effect before repeating it.';
+    }
+    throw error;
+  }
 }
 
 export function closeMcpClients(clients) {
