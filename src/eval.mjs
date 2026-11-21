@@ -1282,9 +1282,15 @@ async function runClaudeCodeEval(config, options = {}) {
 
   const startedAt = new Date().toISOString();
   const trials = [];
-  for (const dir of selectedDirs) {
+  let providerErrorsInARow = 0;
+  let stoppedEarly = null;
+  taskLoop: for (const dir of selectedDirs) {
     const task = await assertTaskShape(dir, options.snapshotsDir || DEFAULT_SNAPSHOTS_DIR);
     for (let trial = 1; trial <= config.trials; trial++) {
+      if (providerErrorsInARow >= PROVIDER_ERROR_STOP_AT) {
+        stoppedEarly = { reason: 'provider', afterTrials: trials.length, error: String(trials[trials.length - 1].error || '').split('\n').slice(0, 2).join(' ').slice(0, 300) };
+        break taskLoop;
+      }
       const tempRoot = await mkdtemp(path.join(os.tmpdir(), adapter.tempPrefix));
       const workspace = path.join(tempRoot, 'workspace');
       const trialStarted = Date.now();
@@ -1327,6 +1333,8 @@ async function runClaudeCodeEval(config, options = {}) {
       const elapsedMs = Date.now() - trialStarted;
       const changes = await workspaceChanges(task.repoDir, workspace).catch(() => null);
       const passed = !errorText && verification.exitCode === 0;
+      const providerError = !passed && !(parsed && parsed.totalTokens > 0) && isProviderFailure(errorText);
+      providerErrorsInARow = providerError ? providerErrorsInARow + 1 : 0;
       trials.push({
         taskId: task.id,
         taskFingerprint: task.taskFingerprint,
@@ -1334,7 +1342,7 @@ async function runClaudeCodeEval(config, options = {}) {
         difficulty: task.difficulty,
         trial,
         gitBaseline,
-        status: passed ? 'passed' : 'failed',
+        status: passed ? 'passed' : providerError ? 'errored' : 'failed',
         passed,
         model: parsed && parsed.model ? parsed.model : config.model || null,
         inputTokens: parsed ? parsed.inputTokens : null,
@@ -1352,7 +1360,7 @@ async function runClaudeCodeEval(config, options = {}) {
         // can be read later; secrets are removed first.
         ...(!passed && cliResult && cliResult.output ? { agentOutputTail: agentOutputTail(cliResult.output, env) } : {})
       });
-      output.write((passed ? '  PASS ' : '  FAIL ') + task.id + ' trial ' + trial +
+      output.write((passed ? '  PASS ' : providerError ? '  ERROR ' : '  FAIL ') + task.id + ' trial ' + trial +
         ' · ' + (trials[trials.length - 1].totalTokens === null ? 'tokens n/a' : trials[trials.length - 1].totalTokens + ' tokens') +
         ' · ' + elapsedMs + ' ms' +
         (trials[trials.length - 1].costUSD === null ? ' · cost n/a' : ' · $' + trials[trials.length - 1].costUSD.toFixed(6)) +
@@ -1362,7 +1370,9 @@ async function runClaudeCodeEval(config, options = {}) {
   }
 
   const passedCount = trials.filter((item) => item.status === 'passed').length;
-  const durations = trials.map((item) => item.wallTimeMs).sort((a, b) => a - b);
+  const scored = trials.filter((item) => item.status !== 'errored');
+  const erroredCount = trials.length - scored.length;
+  const durations = scored.map((item) => item.wallTimeMs).sort((a, b) => a - b);
   const middle = Math.floor(durations.length / 2);
   const medianTimeMs = durations.length
     ? (durations.length % 2 ? durations[middle] : Math.round((durations[middle - 1] + durations[middle]) / 2))
@@ -1387,9 +1397,11 @@ async function runClaudeCodeEval(config, options = {}) {
     trialsPerTask: config.trials,
     timeoutSeconds: config.timeoutSeconds,
     runtime: { node: process.version, platform: process.platform, arch: process.arch },
-    passRate: trials.length ? passedCount / trials.length : 0,
+    passRate: scored.length ? passedCount / scored.length : 0,
     passed: passedCount,
-    failed: trials.length - passedCount,
+    failed: scored.length - passedCount,
+    ...(erroredCount ? { errored: erroredCount, erroredNote: 'Trials where the provider never answered (no tokens; quota, outage or connection error) are not scored.' } : {}),
+    ...(stoppedEarly ? { stoppedEarly } : {}),
     medianTimeMs,
     totalCostUSD,
     costPerPassedTaskUSD,
@@ -1407,10 +1419,12 @@ async function runClaudeCodeEval(config, options = {}) {
   };
   const resultPath = await saveResults(trials, summary, { env, resultsDir: options.resultsDir });
   output.write(agentName + ' eval result: ' + resultPath + '\n');
-  output.write('Pass rate: ' + passedCount + '/' + trials.length + ' (' + Math.round(summary.passRate * 100) + '%)\n');
+  output.write('Pass rate: ' + passedCount + '/' + scored.length + ' (' + Math.round(summary.passRate * 100) + '%)\n');
+  if (erroredCount) output.write('Not scored: ' + erroredCount + ' trial' + (erroredCount === 1 ? '' : 's') + ' where the provider never answered.\n');
+  if (stoppedEarly) output.write('Stopped early: the provider failed ' + PROVIDER_ERROR_STOP_AT + ' trials in a row (' + stoppedEarly.error + '). ' + (selectedDirs.length * config.trials - trials.length) + ' trials were not run.\n');
   output.write('Median time: ' + (summary.medianTimeMs === null ? 'n/a' : summary.medianTimeMs + ' ms') + '\n');
   output.write('Cost per passed trial: ' + (summary.costPerPassedTaskUSD === null ? 'n/a' : '$' + summary.costPerPassedTaskUSD.toFixed(6)) + '\n');
-  return { ok: trials.every((item) => item.status === 'passed'), summary, resultsPath: resultPath, results: trials };
+  return { ok: !stoppedEarly && trials.every((item) => item.status === 'passed'), summary, resultsPath: resultPath, results: trials };
 }
 
 async function saveResults(results, metadata, options = {}) {
