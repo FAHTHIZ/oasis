@@ -1,6 +1,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createTelegramGateway, chunkMessage, parseAllowedChats } from '../src/gateway-telegram.mjs';
+import { mkdtempSync as pairMkdtemp } from 'node:fs';
+import { tmpdir as pairTmpdir } from 'node:os';
+import { join as pairJoin } from 'node:path';
+const PAIR_ROOT = pairMkdtemp(pairJoin(pairTmpdir(), 'oasis-pair-'));
 
 const TOKEN = '123456:' + 'A'.repeat(30);
 
@@ -29,20 +33,21 @@ const flush = () => new Promise((resolve) => setTimeout(resolve, 20));
 
 test('requires a token and an allowlist', () => {
   assert.throws(() => createTelegramGateway({ env: {} }), /BOT_TOKEN/);
-  assert.throws(() => createTelegramGateway({ env: { OASIS_TELEGRAM_BOT_TOKEN: TOKEN } }), /ALLOWED_CHATS/);
+  assert.throws(() => createTelegramGateway({ env: { OASIS_GATEWAY_PAIRING: '0', OASIS_TELEGRAM_BOT_TOKEN: TOKEN } }), /ALLOWED_CHATS/);
   assert.deepEqual([...parseAllowedChats('42, -1001234 nope')], ['42', '-1001234']);
 });
 
 test('unknown chats get their ID once and never reach the agent', async () => {
   const tg = fakeTelegram();
   let turns = 0;
-  const gateway = createTelegramGateway({ token: TOKEN, allowedChats: new Set(['42']), fetchImpl: tg.fetchImpl, deps: deps(fakeAgent(() => { turns++; return { text: 'x' }; })), log: () => {} });
+  const gateway = createTelegramGateway({ token: TOKEN, allowedChats: new Set(['42']), fetchImpl: tg.fetchImpl, deps: deps(fakeAgent(() => { turns++; return { text: 'x' }; })), root: PAIR_ROOT, log: () => {} });
   await gateway.handleUpdate(msg(7, 'rm -rf /'));
   await gateway.handleUpdate(msg(7, 'again'));
   await flush();
   assert.equal(turns, 0);
   assert.equal(tg.sent().length, 1);
-  assert.match(tg.sent()[0].body.text, /Chat ID: 7/);
+  assert.match(tg.sent()[0].body.text, /chat ID is 7/);
+  assert.match(tg.sent()[0].body.text, /oasis gateway pair [A-Z0-9]{4}-[A-Z0-9]{4}/);
 });
 
 test('allowed chats run turns, see approval buttons and can approve', async () => {
@@ -52,7 +57,7 @@ test('allowed chats run turns, see approval buttons and can approve', async () =
     approved = await options.approval('Run npm test?', false, { suggestion: 'Bash(npm test)' });
     return { text: 'Ran tests for: ' + text };
   });
-  const gateway = createTelegramGateway({ token: TOKEN, allowedChats: new Set(['42']), fetchImpl: tg.fetchImpl, deps: deps(agent), log: () => {} });
+  const gateway = createTelegramGateway({ token: TOKEN, allowedChats: new Set(['42']), fetchImpl: tg.fetchImpl, deps: deps(agent), root: PAIR_ROOT, log: () => {} });
   await gateway.handleUpdate(msg(42, 'run the tests'));
   await flush();
   const ask = tg.sent().find((call) => /Approval needed/.test(call.body.text));
@@ -73,7 +78,7 @@ test('approvals from another chat are ignored; /stop cancels; /mode changes appr
     options.signal.addEventListener('abort', () => resolve({ text: '' }));
     options.approval('Delete build/?', false, {}).then((value) => { agent.answer = value; });
   }));
-  const gateway = createTelegramGateway({ token: TOKEN, allowedChats: new Set(['42', '43']), fetchImpl: tg.fetchImpl, deps: deps(agent), log: () => {} });
+  const gateway = createTelegramGateway({ token: TOKEN, allowedChats: new Set(['42', '43']), fetchImpl: tg.fetchImpl, deps: deps(agent), root: PAIR_ROOT, log: () => {} });
   await gateway.handleUpdate(msg(42, 'clean up'));
   await flush();
   const id = [...gateway.approvals.keys()][0];

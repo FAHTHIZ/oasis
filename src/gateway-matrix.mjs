@@ -13,6 +13,7 @@
 // "reject 3" (or just yes / no when one is pending). End-to-end encrypted rooms are
 // not supported: the bot says so once and ignores encrypted events.
 import { chunkText, createChatCore, parseList } from './gateway-core.mjs';
+import { createPairing, strangerMessage, withPairing } from './gateway-pairing.mjs';
 
 const MAX_MESSAGE = 16000;
 const SYNC_TIMEOUT_MS = 30000;
@@ -48,8 +49,9 @@ export function createMatrixGateway(options = {}) {
   if (!/^https?:\/\/[^\s/]+/.test(homeserver)) throw new Error('Set OASIS_MATRIX_HOMESERVER to your homeserver URL, e.g. https://matrix.example.org.');
   const token = options.token || env.OASIS_MATRIX_ACCESS_TOKEN;
   if (!token || String(token).length < 8) throw new Error('Set OASIS_MATRIX_ACCESS_TOKEN to the bot account\'s access token (Element: Settings → Help & About → Access token).');
-  const allowedUsers = options.allowedUsers || parseList(env.OASIS_MATRIX_ALLOWED_USERS);
-  if (![...allowedUsers].length) throw new Error('Set OASIS_MATRIX_ALLOWED_USERS to the Matrix IDs allowed to use this agent, e.g. @me:example.org.');
+  const pairing = createPairing({ platform: 'matrix', root: options.root, env, log: options.log || ((text) => process.stderr.write('[oasis gateway] ' + text + '\n')) });
+  const allowedUsers = withPairing(options.allowedUsers || parseList(env.OASIS_MATRIX_ALLOWED_USERS), pairing);
+  if (!allowedUsers.size && !pairing.enabled) throw new Error('Set OASIS_MATRIX_ALLOWED_USERS to the Matrix IDs allowed to use this agent, e.g. @me:example.org.');
   const listenRooms = options.rooms || parseList(env.OASIS_MATRIX_ROOMS);
   const fetchImpl = options.fetchImpl || fetch;
   const log = options.log || ((text) => process.stderr.write('[oasis gateway] ' + text + '\n'));
@@ -118,7 +120,7 @@ export function createMatrixGateway(options = {}) {
     if (!allowedUsers.has(sender)) {
       if (!toldUnknown.has(sender)) {
         toldUnknown.add(sender);
-        await send(roomId, 'You are not allowed to use this agent. Your Matrix ID is ' + sender + '. Ask the owner to add it to OASIS_MATRIX_ALLOWED_USERS.').catch(() => {});
+        await send(roomId, strangerMessage({ pairing, id: sender, idName: 'Matrix ID', envName: 'OASIS_MATRIX_ALLOWED_USERS' })).catch(() => {});
         log('ignored message from ' + sender);
       }
       return;

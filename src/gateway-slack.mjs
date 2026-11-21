@@ -9,6 +9,7 @@
 // Allow / Always / Reject buttons that only allowlisted users can press.
 // Slack reserves "/", so chat commands also work as !new, !stop, !status, !mode.
 import { chunkText, createChatCore, parseIdList, reconnectLoop } from './gateway-core.mjs';
+import { createPairing, strangerMessage, withPairing } from './gateway-pairing.mjs';
 
 const API = 'https://slack.com/api';
 const MAX_MESSAGE = 3500;
@@ -29,8 +30,9 @@ export function createSlackGateway(options = {}) {
   const botToken = options.botToken || env.OASIS_SLACK_BOT_TOKEN;
   if (!appToken || !/^xapp-/.test(appToken)) throw new Error('Set OASIS_SLACK_APP_TOKEN to the app-level token (xapp-…) with connections:write, and enable Socket Mode.');
   if (!botToken || !/^xoxb-/.test(botToken)) throw new Error('Set OASIS_SLACK_BOT_TOKEN to the bot token (xoxb-…).');
-  const allowedUsers = options.allowedUsers || parseIdList(env.OASIS_SLACK_ALLOWED_USERS);
-  if (!allowedUsers.size) throw new Error('Set OASIS_SLACK_ALLOWED_USERS to the Slack member IDs allowed to use this agent (DM the app once to see yours).');
+  const pairing = createPairing({ platform: 'slack', root: options.root, env, log: options.log || ((text) => process.stderr.write('[oasis gateway] ' + text + '\n')) });
+  const allowedUsers = withPairing(options.allowedUsers || parseIdList(env.OASIS_SLACK_ALLOWED_USERS), pairing);
+  if (!allowedUsers.size && !pairing.enabled) throw new Error('Set OASIS_SLACK_ALLOWED_USERS to the Slack member IDs allowed to use this agent (DM the app once to see yours).');
   const apiBase = String(options.apiBase || env.OASIS_SLACK_API_BASE || API).replace(/\/+$/, '');
   const fetchImpl = options.fetchImpl || fetch;
   const WebSocketImpl = options.WebSocketImpl || globalThis.WebSocket;
@@ -80,7 +82,7 @@ export function createSlackGateway(options = {}) {
     if (!allowedUsers.has(userId)) {
       if (!toldUnknown.has(userId)) {
         toldUnknown.add(userId);
-        await send(chatKey, 'You are not allowed to use this agent. Your Slack member ID is ' + userId + '. Ask the owner to add it to OASIS_SLACK_ALLOWED_USERS.').catch(() => {});
+        await send(chatKey, strangerMessage({ pairing, id: userId, idName: 'Slack member ID', envName: 'OASIS_SLACK_ALLOWED_USERS' })).catch(() => {});
         log('ignored message from user ' + userId);
       }
       return;

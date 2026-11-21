@@ -1,6 +1,6 @@
 # Messaging gateways
 
-`oasis gateway PLATFORM` lets you talk to the OASIS agent of one workspace from a chat app. Each chat (or room, thread, channel) gets its own saved session, approvals come to you in the chat, and anything unanswered for ten minutes is rejected. Only allowlisted people can use the agent: anybody else gets one reply that shows them their ID, so you can add it if you meant to.
+`oasis gateway PLATFORM` lets you talk to the OASIS agent of one workspace from a chat app. Each chat (or room, thread, channel) gets its own saved session, approvals come to you in the chat, and anything unanswered for ten minutes is rejected. Only allowlisted or [paired](#pairing) people can use the agent: anybody else gets one reply that shows them their ID and a pairing code, so you can let them in if you meant to.
 
 While a gateway is running it also hosts your [routines](USER-GUIDE.md#routines-that-run-on-a-schedule), and a routine can deliver its output to any of these platforms with `--deliver PLATFORM:TARGET`.
 
@@ -14,6 +14,20 @@ While a gateway is running it also hosts your [routines](USER-GUIDE.md#routines-
 | Email (IMAP and SMTP) | `oasis gateway email` | Typed replies | `email:ADDRESS` |
 | WhatsApp (official Cloud API) | `oasis gateway whatsapp` | Buttons | `whatsapp:+NUMBER` |
 | Mattermost | `oasis gateway mattermost` | Typed replies | `mattermost:CHANNEL_ID` |
+
+## Pairing
+
+You do not have to collect IDs before starting a gateway. When somebody who is not on the allowlist messages the bot, they get a one-time code such as `K7QM-4XHP`, and the gateway log prints the same code. Approve it on the OASIS machine:
+
+```bash
+oasis gateway pair K7QM-4XHP     # let them in
+oasis gateway paired             # who is paired, and who is waiting
+oasis gateway unpair discord:1234567890
+```
+
+Codes expire after an hour and are tied to the platform and ID that asked for them, so a code from Slack cannot approve a Telegram chat. Approvals are stored per workspace in `.oasis/gateway/pairing.json` (mode 600) and take effect immediately, without a restart. With pairing on, the `ALLOWED_*` variables become optional for Telegram, Discord, Slack, Matrix, Signal, WhatsApp and Mattermost; they still work and are checked first. Email always needs `OASIS_EMAIL_ALLOWED_SENDERS`, because replying with codes to unknown senders would turn the bot into a spam source.
+
+Set `OASIS_GATEWAY_PAIRING=0` to turn pairing off: strangers then only see their ID, and every gateway requires its allowlist again.
 
 ## Every platform at once
 
