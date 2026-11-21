@@ -11,6 +11,7 @@ While a gateway is running it also hosts your [routines](USER-GUIDE.md#routines-
 | Slack | `oasis gateway slack` | Buttons | `slack:CHANNEL` |
 | Matrix (Element and any homeserver) | `oasis gateway matrix` | Typed replies | `matrix:!ROOM_ID:server` |
 | Signal (through signal-cli REST API) | `oasis gateway signal` | Typed replies | `signal:+NUMBER` or `signal:group.ID` |
+| Email (IMAP and SMTP) | `oasis gateway email` | Typed replies | `email:ADDRESS` |
 
 ## Chat commands
 
@@ -74,3 +75,22 @@ Signal has no bot API, so OASIS talks to [signal-cli-rest-api](https://github.co
 4. Run `oasis gateway signal`.
 
 Keep the bridge on `127.0.0.1` or a private network: it has no authentication of its own.
+
+## Email
+
+Email the agent from any mail app. OASIS watches a mailbox over IMAP (with IDLE, so new mail shows up within seconds) and answers over SMTP in the same thread. Each thread is its own session, and replying to the agent's message continues it.
+
+1. Create a mailbox for the agent (or use an alias) and an app password for it. For Gmail: turn on 2-Step Verification, then create an app password.
+2. Set:
+   - `OASIS_EMAIL_IMAP_HOST` (Gmail: `imap.gmail.com`) and `OASIS_EMAIL_SMTP_HOST` (Gmail: `smtp.gmail.com`)
+   - `OASIS_EMAIL_USER` and `OASIS_EMAIL_PASSWORD`
+   - `OASIS_EMAIL_ALLOWED_SENDERS`: addresses, or `@yourcompany.com` for a whole domain
+   - optional: `OASIS_EMAIL_ADDRESS` (the From address, default the user), `OASIS_EMAIL_FROM_NAME`, `OASIS_EMAIL_IMAP_PORT` (993), `OASIS_EMAIL_SMTP_PORT` (465; 587 uses STARTTLS), `OASIS_EMAIL_MAILBOX` (`INBOX`)
+3. Run `oasis gateway email`.
+
+The subject and body of a new email become the task. In a reply, only your new text counts: the quoted message, `On … wrote:` blocks and your signature are dropped, so replying `yes` answers an approval. Attachments are saved to `.oasis/inbox/`. Only mail that arrives after the gateway starts is read, and each message is marked as read.
+
+Safety:
+
+- From addresses are easy to forge. A message only counts when your mail provider's `Authentication-Results` header shows `dmarc=pass`, or `dkim=pass` for the sender's own domain. Gmail, Outlook, Fastmail and most hosted providers add this header. For a private server that adds none, set `OASIS_EMAIL_REQUIRE_AUTH=0` and make sure only trusted senders can reach the mailbox.
+- Auto-replies, mailing lists, bulk mail and bounces are ignored, and the agent's own mail carries `Auto-Submitted: auto-replied`, so it never loops with another robot.

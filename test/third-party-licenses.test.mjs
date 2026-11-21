@@ -9,10 +9,11 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const read = (relative) => readFile(path.join(root, relative), 'utf8');
 
 // Permissive licenses that need only attribution.
-const PERMISSIVE = new Set(['MIT', 'Apache-2.0', 'ISC', 'BSD-2-Clause', 'BSD-3-Clause', '0BSD', 'BlueOak-1.0.0']);
+const PERMISSIVE = new Set(['MIT', 'MIT-0', 'Apache-2.0', 'ISC', 'BSD-2-Clause', 'BSD-3-Clause', '0BSD', 'BlueOak-1.0.0']);
 // Licenses reviewed one by one in THIRD-PARTY-NOTICES.md, with the package that may carry them.
 const REVIEWED = new Map([
   ['(MPL-2.0 OR Apache-2.0)', /^node_modules\/dompurify$/],
+  ['(MIT OR EUPL-1.1+)', /^node_modules\/@zone-eu\/mailsplit$/],
   ['(BSD-3-Clause OR GPL-2.0)', /^node_modules\/node-forge$/],
   ['EPL-2.0', /^node_modules\/elkjs$/],
   ['LGPL-3.0-or-later', /^node_modules\/@img\/sharp-libvips-[^/]+$/],

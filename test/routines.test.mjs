@@ -64,7 +64,9 @@ test('delivery targets are validated', () => {
   assert.equal(parseDeliver('telegram:123'), 'telegram:123');
   assert.equal(parseDeliver('webhook:http://localhost:9/x'), 'webhook:http://localhost:9/x');
   assert.throws(() => parseDeliver('webhook:http://example.com/x'), /https/);
-  assert.throws(() => parseDeliver('email:me'), /Unknown delivery target/);
+  assert.throws(() => parseDeliver('sms:me'), /Unknown delivery target/);
+  assert.throws(() => parseDeliver('email:me'), /needs an address/);
+  assert.equal(parseDeliver('email:me@example.com'), 'email:me@example.com');
 });
 
 test('lifecycle: create, find by name, edit, pause, resume, remove; ambiguity is refused', async () => {
