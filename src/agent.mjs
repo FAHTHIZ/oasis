@@ -2059,9 +2059,20 @@ async function executeOneCall(session, call, context, options) {
   }
   if (message && typeof message.content === 'string' && message.content.includes('Unknown or unavailable tool')) {
     const hint = resolveToolAlias(call.function && call.function.name, {}, availableToolNames(session));
-    if (hint && hint.error) message.content = JSON.stringify({ error: hint.error });
+    if (hint && hint.error) message.content = JSON.stringify({ error: hint.error + taskNameToolHint(session, call.function && call.function.name) });
   }
   return message;
+}
+
+// Small models call the function the user asked them to write ("add a
+// function add(a,b)" → a call to add). Say plainly that it is code to write.
+function taskNameToolHint(session, requested) {
+  const name = String(requested || '');
+  if (!/^[A-Za-z_$][\w$]*$/.test(name)) return '';
+  if (!new RegExp('(^|[^\\w$])' + name.replace(/\$/g, '\\$') + '(?![\\w$])').test(String(session.currentRequest || ''))) return '';
+  const tools = availableToolNames(session);
+  const editing = ['read_file', 'edit_file', 'write_file'].filter((tool) => tools.has(tool));
+  return ' "' + name + '" is a name from the task, not a tool.' + (editing.length ? ' To write or change code, use ' + editing.join(', ') + '.' : '');
 }
 
 async function executeOneCallTraced(session, call, context, options) {
@@ -2859,6 +2870,26 @@ async function runAgentTurnWithTelemetry(session, prompt, options = {}) {
 // What the completion gates may call back into (see completion-gates.mjs).
 const COMPLETION_HOST = Object.freeze({ emitDisplayText, pruneHistory, recordSessionEvent, hookOptions, availableToolNames });
 
+// A tool call the harness or the user turned down, as opposed to one that ran
+// and failed: a policy "Not run: ..." refusal, a denied approval, or a block.
+const REFUSAL_WARN_AT = 2;
+const REFUSAL_HALT_AT = 4;
+function refusalText(result) {
+  if (!result || typeof result !== 'object' || result.cancelled) return '';
+  if (typeof result.error === 'string' && /^Not (?:run|executed)\b/.test(result.error)) return result.error.trim();
+  if (result.approved === false || result.blocked === true) return String(result.message || result.reason || result.error || 'not allowed').trim();
+  return '';
+}
+
+function refusalReminder(session, name) {
+  const request = String(session.currentRequest || '').trim();
+  const tools = availableToolNames(session);
+  const editing = ['read_file', 'edit_file', 'write_file', 'run_command'].filter((tool) => tools.has(tool) && tool !== name);
+  return '<system-reminder>' + name + ' has now been refused twice in this request for the same reason. Calling it again with different arguments will be refused the same way, so stop calling ' + name + '.' +
+    (request ? ' The user asked: "' + request.slice(0, 300) + '".' : '') +
+    (editing.length ? ' Do that with ' + editing.join(', ') + ', then give your answer.' : ' Do that another way, or give your answer.') + '</system-reminder>';
+}
+
 // Records each tool call's result in the conversation, in the model's order: output
 // limits, guards and gates, verification evidence, escalation and loop checks.
 // Reassigned turn state (tokens, last outcome, loop break, escalation, edit
@@ -2895,6 +2926,26 @@ async function applyToolResults(session, options, turn) {
       } else if (seenAt.length === CYCLE_WARN_AT && seenAt[seenAt.length - 1] === step && typeof item.content === 'string' && !item.cycleWarned) {
         item.cycleWarned = true;
         item.content += '\n\n<system-reminder>You have now made this exact ' + name + ' call ' + seenAt.length + ' times in the last few steps and got the same result each time, with no file changes in between. Repeating it will not tell you anything new. Use what you already have: make the change, try a different approach, or give your answer.</system-reminder>';
+      }
+      // The same policy refusal for one tool, again and again with different
+      // arguments (small models reword a git_commit message and retry). The
+      // identical-outcome checks above miss it because the inputs differ.
+      const refusal = refusalText(result);
+      if (refusal && !turn.loopBreakMessage) {
+        const refusals = gates.toolRefusals || (gates.toolRefusals = new Map());
+        const key = name + '\u0000' + refusal;
+        const count = (refusals.get(key) || 0) + 1;
+        refusals.set(key, count);
+        const changed = turn.verification && turn.verification.changedPaths instanceof Set ? [...turn.verification.changedPaths] : [];
+        if (count >= REFUSAL_HALT_AT && changed.length) {
+          // The change itself is made; only the extra step was refused. Report
+          // the work instead of "I'm stuck", which reads as nothing happened.
+          turn.loopBreakMessage = 'Changed ' + changed.slice(0, 8).join(', ') + (changed.length > 8 ? ' and ' + (changed.length - 8) + ' more' : '') + '. I stopped trying ' + name + ', which was refused ' + count + ' times: ' + refusal.replace(/^Not run:\s*/, '').split(/(?<=\.)\s/)[0] + ' Review the change with git diff.';
+        } else if (count >= REFUSAL_HALT_AT) {
+          turn.loopBreakMessage = 'I’m stuck: ' + name + ' was refused ' + count + ' times in this request with the same reason ("' + refusal.slice(0, 160) + '"), and I kept retrying it with different inputs. I stopped instead of going round in circles. I need to try a different approach or get your guidance.';
+        } else if (count === REFUSAL_WARN_AT && typeof item.content === 'string') {
+          item.content += '\n\n' + refusalReminder(session, name);
+        }
       }
       // Same failing command again and again with nothing changed in between
       // (outputs differ by timestamps, so the identical-outcome check misses it).
@@ -3650,6 +3701,9 @@ async function runAgentTurnRaw(session, prompt, options = {}) {
     const eligible = calls.slice(0, executeCount);
     const denied = calls.slice(executeCount);
     const outputs = new Map();
+    // One number per model reply; file-state uses it to tell a read the model
+    // has seen from one in the same reply (see assertFileFresh).
+    session.toolBatch = (Number.isInteger(session.toolBatch) ? session.toolBatch : 0) + 1;
 
     // Preserve the model's ordering across reads and side effects. Consecutive read-only
     // workspace calls can run concurrently, but a later read must not overtake an earlier edit.
