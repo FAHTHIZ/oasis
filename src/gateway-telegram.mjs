@@ -265,7 +265,10 @@ export function createTelegramGateway(options = {}) {
 
 export const GATEWAY_PLATFORMS = ['telegram', 'discord', 'slack', 'matrix', 'signal', 'email', 'whatsapp'];
 
-export const GATEWAY_USAGE = 'Usage: oasis gateway ' + GATEWAY_PLATFORMS.join('|') + '\n'
+export const GATEWAY_USAGE = 'Usage: oasis gateway ' + GATEWAY_PLATFORMS.join('|') + '|all\n'
+  + '  all:        every platform whose token is set (OASIS_TELEGRAM_BOT_TOKEN, OASIS_DISCORD_BOT_TOKEN,\n'
+  + '              OASIS_SLACK_BOT_TOKEN, OASIS_MATRIX_ACCESS_TOKEN, OASIS_SIGNAL_NUMBER, OASIS_EMAIL_USER,\n'
+  + '              OASIS_WHATSAPP_TOKEN), in one process\n'
   + '  telegram:   OASIS_TELEGRAM_BOT_TOKEN, OASIS_TELEGRAM_ALLOWED_CHATS\n'
   + '  discord:    OASIS_DISCORD_BOT_TOKEN, OASIS_DISCORD_ALLOWED_USERS [, OASIS_DISCORD_CHANNELS]\n'
   + '  slack:      OASIS_SLACK_APP_TOKEN, OASIS_SLACK_BOT_TOKEN, OASIS_SLACK_ALLOWED_USERS\n'
@@ -274,17 +277,59 @@ export const GATEWAY_USAGE = 'Usage: oasis gateway ' + GATEWAY_PLATFORMS.join('|
   + '  email:      OASIS_EMAIL_IMAP_HOST, OASIS_EMAIL_SMTP_HOST, OASIS_EMAIL_USER, OASIS_EMAIL_PASSWORD, OASIS_EMAIL_ALLOWED_SENDERS\n'
   + '  whatsapp:   OASIS_WHATSAPP_TOKEN, OASIS_WHATSAPP_PHONE_NUMBER_ID, OASIS_WHATSAPP_APP_SECRET, OASIS_WHATSAPP_VERIFY_TOKEN, OASIS_WHATSAPP_ALLOWED_USERS';
 
+/** The variable whose presence means "this platform is configured" for `oasis gateway all`. */
+export const GATEWAY_TRIGGERS = {
+  telegram: 'OASIS_TELEGRAM_BOT_TOKEN',
+  discord: 'OASIS_DISCORD_BOT_TOKEN',
+  slack: 'OASIS_SLACK_BOT_TOKEN',
+  matrix: 'OASIS_MATRIX_ACCESS_TOKEN',
+  signal: 'OASIS_SIGNAL_NUMBER',
+  email: 'OASIS_EMAIL_USER',
+  whatsapp: 'OASIS_WHATSAPP_TOKEN'
+};
+
+export async function createGateway(kind, options = {}) {
+  if (kind === 'telegram') return createTelegramGateway(options);
+  if (kind === 'discord') return (await import('./gateway-discord.mjs')).createDiscordGateway(options);
+  if (kind === 'slack') return (await import('./gateway-slack.mjs')).createSlackGateway(options);
+  if (kind === 'matrix') return (await import('./gateway-matrix.mjs')).createMatrixGateway(options);
+  if (kind === 'signal') return (await import('./gateway-signal.mjs')).createSignalGateway(options);
+  if (kind === 'email') return (await import('./gateway-email.mjs')).createEmailGateway(options);
+  if (kind === 'whatsapp') return (await import('./gateway-whatsapp.mjs')).createWhatsAppGateway(options);
+  throw new Error(GATEWAY_USAGE);
+}
+
+/**
+ * Every platform with its trigger variable set, started in one process.
+ * A platform that is half configured stops startup with its own error, so a
+ * typo never leaves you thinking a chat is being answered when it is not.
+ */
+export async function createAllGateways(options = {}) {
+  const env = options.env || process.env;
+  const log = options.log || ((line) => process.stderr.write(line + '\n'));
+  const kinds = GATEWAY_PLATFORMS.filter((kind) => String(env[GATEWAY_TRIGGERS[kind]] || '').trim());
+  if (!kinds.length) throw new Error('oasis gateway all found no configured platform. Set at least one of ' + Object.values(GATEWAY_TRIGGERS).join(', ') + '.\n' + GATEWAY_USAGE);
+  const gateways = [];
+  for (const kind of kinds) {
+    try { gateways.push({ kind, gateway: await createGateway(kind, { ...options, log: (line) => log('[' + kind + '] ' + line) }) }); }
+    catch (error) { throw new Error(kind + ': ' + error.message); }
+  }
+  let stopping = false;
+  return {
+    kinds,
+    gateways,
+    async run() {
+      log('Answering on ' + kinds.join(', ') + '.');
+      // One platform failing must not take the others down.
+      await Promise.all(gateways.map(({ kind, gateway }) => Promise.resolve().then(() => gateway.run()).catch((error) => { if (!stopping) log('[' + kind + '] stopped: ' + error.message); })));
+    },
+    stop() { stopping = true; for (const { gateway } of gateways) { try { gateway.stop(); } catch { /* already stopped */ } } }
+  };
+}
+
 export async function runGateway(args = [], options = {}) {
   const kind = String(args[0] || '').toLowerCase();
-  let gateway;
-  if (kind === 'telegram') gateway = createTelegramGateway(options);
-  else if (kind === 'discord') gateway = (await import('./gateway-discord.mjs')).createDiscordGateway(options);
-  else if (kind === 'slack') gateway = (await import('./gateway-slack.mjs')).createSlackGateway(options);
-  else if (kind === 'matrix') gateway = (await import('./gateway-matrix.mjs')).createMatrixGateway(options);
-  else if (kind === 'signal') gateway = (await import('./gateway-signal.mjs')).createSignalGateway(options);
-  else if (kind === 'email') gateway = (await import('./gateway-email.mjs')).createEmailGateway(options);
-  else if (kind === 'whatsapp') gateway = (await import('./gateway-whatsapp.mjs')).createWhatsAppGateway(options);
-  else throw new Error(GATEWAY_USAGE);
+  const gateway = kind === 'all' ? await createAllGateways(options) : await createGateway(kind, options);
   const onSignal = () => { gateway.stop(); process.exit(0); };
   process.once('SIGINT', onSignal);
   process.once('SIGTERM', onSignal);
