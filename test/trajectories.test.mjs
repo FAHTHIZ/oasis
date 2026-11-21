@@ -105,3 +105,53 @@ test('sessions export --verified keeps only sessions whose last check passed, re
     assert.equal(sessionVerified([]), false);
   } finally { await rm(base, { recursive: true, force: true }); }
 });
+
+test('hermes format: generated <tools> system turn, <think> and <tool_call> in gpt turns, grouped <tool_response>', async () => {
+  const { hermesFromRecord, HERMES_SYSTEM_PREFIX } = await import('../src/trajectories.mjs');
+  const messages = [
+    { role: 'system', content: 'OASIS system prompt' },
+    { role: 'user', content: 'what is in here?' },
+    { role: 'assistant', content: '', reasoning_content: 'List then read.', tool_calls: [
+      { id: 'c1', type: 'function', function: { name: 'list_files', arguments: '{"path":"."}' } },
+      { id: 'c2', type: 'function', function: { name: 'read_file', arguments: 'not json' } }
+    ] },
+    { role: 'tool', tool_call_id: 'c1', name: 'list_files', content: '{"ok":true,"files":["a.js"]}' },
+    { role: 'tool', tool_call_id: 'c2', content: '{"ok":false,"error":"ENOENT"}' },
+    { role: 'assistant', content: 'One file: a.js.' }
+  ];
+  const record = hermesFromRecord(toOpenAIRecord({ id: 'h1', messages, model: 'm' }, [{ type: 'function', function: { name: 'list_files', description: 'List', parameters: { type: 'object', properties: {} } } }, { type: 'function', function: { name: 'write_file', description: 'Write', parameters: {} } }]));
+  assert.deepEqual(record.conversations.map((turn) => turn.from), ['system', 'human', 'gpt', 'tool', 'gpt']);
+  const system = record.conversations[0].value;
+  assert.ok(system.startsWith(HERMES_SYSTEM_PREFIX));
+  assert.doesNotMatch(system, /OASIS system prompt/);
+  const tools = JSON.parse(system.match(/<tools>\n([\s\S]*?)\n<\/tools>/)[1]);
+  assert.deepEqual(tools[0], { name: 'list_files', description: 'List', parameters: { type: 'object', properties: {} }, required: null });
+  assert.match(system, /Each function call should be enclosed within <tool_call> <\/tool_call> XML tags\./);
+  assert.equal(record.conversations[2].value, '<think>\nList then read.\n</think>\n<tool_call>\n{"name": "list_files", "arguments": {"path": "."}}\n</tool_call>\n<tool_call>\n{"name": "read_file", "arguments": {}}\n</tool_call>');
+  const responses = record.conversations[3].value.split('\n</tool_response>\n<tool_response>\n');
+  assert.equal(responses.length, 2);
+  assert.match(record.conversations[3].value, /^<tool_response>\n\{"tool_call_id": "c1", "name": "list_files", "content": \{"ok": true, "files": \["a\.js"\]\}\}/);
+  assert.match(record.conversations[3].value, /"name": "read_file", "content": \{"ok": false, "error": "ENOENT"\}/);
+  assert.equal(record.conversations[4].value, '<think>\n</think>\nOne file: a.js.');
+  assert.deepEqual(record.tool_stats, { list_files: { count: 1, success: 1, failure: 0 }, write_file: { count: 0, success: 0, failure: 0 }, read_file: { count: 1, success: 0, failure: 1 } });
+  assert.deepEqual(record.tool_error_counts, { list_files: 0, write_file: 0, read_file: 1 });
+  assert.equal(record.completed, true);
+  assert.equal(record.api_calls, 2);
+});
+
+test('sessions export --format hermes fills tool schemas from the built-in tools', async () => {
+  const base = await mkdtemp(path.join(os.tmpdir(), 'oasis-hermes-'));
+  const env = { OASIS_CONFIG_DIR: path.join(base, 'cfg') };
+  try {
+    const saved = await saveSession({ root: base, messages: convo, config: { model: 'm' } }, { env });
+    let printed = '';
+    await exportSessions(base, [saved.id, '--format', 'hermes'], { env, stdout: { write: (text) => { printed += text; } } });
+    const record = JSON.parse(printed);
+    const tools = JSON.parse(record.conversations[0].value.match(/<tools>\n([\s\S]*?)\n<\/tools>/)[1]);
+    assert.deepEqual(tools.map((tool) => tool.name), ['list_files']);
+    assert.ok(tools[0].description.length > 10);
+    assert.ok(!printed.includes('a'.repeat(36)));
+  } finally {
+    await rm(base, { recursive: true, force: true });
+  }
+});
