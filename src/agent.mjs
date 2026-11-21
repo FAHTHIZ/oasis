@@ -33,6 +33,7 @@ import { validateToolArguments } from './tool-schema-validation.mjs';
 import { redactAuditValue, runTool } from './tool-kernel.mjs';
 import { toResponsesRequest, toAnthropicRequest, chatCompletionTool } from './provider-requests.mjs';
 import { startHookWatchers, needsHookWatchers } from './file-watch.mjs';
+import { externalChangesReminder } from './file-state.mjs';
 import { BROWSER_TOOL_DEFINITION, closeBrowser } from './browser-tool.mjs';
 import { WORKFLOW_TOOL_DEFINITION } from './workflows.mjs';
 import { debugLog, debugEnabled } from './debug-log.mjs';
@@ -3048,6 +3049,12 @@ async function runAgentTurnRaw(session, prompt, options = {}) {
     userContent = interruptedTurnNote(session.interruptedTurn) + '\n\n' + userContent;
     session.interruptedTurn = null;
   }
+  {
+    // Files the model read last turn may have been edited since (the user's
+    // editor, a formatter, git checkout): say so before it acts on its old view.
+    const changes = await externalChangesReminder({ session, env: options.env || process.env }, { root: session.root }).catch(() => '');
+    if (changes) userContent = changes + '\n\n' + userContent;
+  }
   session.currentRequest = request;
   if (session.pendingDynamicContext && !options.isSubagent) { userContent = '<session-context>\n' + session.pendingDynamicContext + '\n</session-context>\n\n' + userContent; session.pendingDynamicContext = null; }
   // Opt-in repository map on the first turn (settings.repoMap: true | { maxChars }, or OASIS_REPO_MAP=1).
@@ -3649,6 +3656,16 @@ async function runAgentTurnRaw(session, prompt, options = {}) {
       const what = [ranDiff ? 'the diff of your changes' : '', ranTests ? 'the project tests' : '', ranSyntax ? 'a syntax check (no test suite found)' : ''].filter(Boolean).join(' and ') || 'checks';
       const word = ranTests ? 'test' : 'check';
       if (lastTool && lastTool.role === 'tool' && typeof lastTool.content === 'string') lastTool.content += '\n\n<system-reminder>OASIS ran these checks for you: ' + what + '. Read the results. If a ' + word + ' failed, fix the code (not the test) and the checks will run again. If everything passed, give your final answer and report the ' + word + ' result.</system-reminder>';
+    }
+
+    // A command, hook or background agent in this batch may have changed files
+    // the model already read; report it now rather than on the next refused edit.
+    {
+      const lastTool = session.messages[session.messages.length - 1];
+      if (lastTool && lastTool.role === 'tool' && typeof lastTool.content === 'string') {
+        const changes = await externalChangesReminder({ session, env: options.env || process.env }, { root: session.root }).catch(() => '');
+        if (changes) lastTool.content += '\n\n' + changes;
+      }
     }
 
     // Tool output is usually English; restate the reply language so answers don't drift (Claude Code #96326).

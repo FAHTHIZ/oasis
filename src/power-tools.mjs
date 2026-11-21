@@ -782,8 +782,15 @@ export async function executePowerTool(name, args, context, root) {
       return await grepWorkspace(root, args, { signal: context.signal });
     case 'multi_edit':
       return await multiEditFile(root, args, context);
-    case 'notebook_edit':
-      return await editNotebook(root, args);
+    case 'notebook_edit': {
+      const notebookResult = await editNotebook(root, args);
+      // Keep the read-state record current so the agent's own notebook edit is
+      // neither refused as stale next time nor reported as an outside change.
+      if (notebookResult && notebookResult.changed && notebookResult.path) {
+        await resolveWorkspacePath(root, notebookResult.path).then((target) => recordFileState(context, target.absolute)).catch(() => {});
+      }
+      return notebookResult;
+    }
     case 'run_shell':
       {
         const editSnapshot = args.run_in_background === true ? null : await snapshotScriptedEdit(root, args.command, context.env || process.env).catch(() => null);

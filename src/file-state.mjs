@@ -180,3 +180,60 @@ export async function assertFileFresh(context, absolute, relative, options = {})
   }
   throw new Error('File has been modified since it was last read (by the user, a formatter/linter, a command, or another agent): ' + relative + '. Read it again with read_file and base the edit on the new contents.');
 }
+
+const CHANGE_SCAN_LIMIT = 40;
+const CHANGE_REMINDER_MAX_CHARS = 6000;
+
+/**
+ * Claude Code tells the model when a file it has read was changed by someone
+ * else (the user's editor, a formatter, a hook, a subagent, a shell command).
+ * Called between steps: checks the most recently seen files, reports small
+ * changes as hunks (and treats them as seen, so the next edit is not refused),
+ * and names larger changes and deletions so the model re-reads before relying
+ * on its old view. Each change is reported once. Returns '' when nothing changed.
+ */
+export async function externalChangesReminder(context, { root = '', limit = CHANGE_SCAN_LIMIT, maxChars = CHANGE_REMINDER_MAX_CHARS } = {}) {
+  if (!fileStateEnabled(context)) return '';
+  const records = store(context);
+  if (!records.size) return '';
+  const entries = [...records.entries()].slice(-Math.max(1, limit));
+  const display = (absolute) => {
+    if (!root) return absolute;
+    const rel = absolute.startsWith(root.endsWith('/') ? root : root + '/') ? absolute.slice(root.length).replace(/^[\\/]+/, '') : absolute;
+    return rel.split('\\').join('/');
+  };
+  const notes = [];
+  for (const [absolute, record] of entries) {
+    let info;
+    try { info = await stat(absolute); } catch (error) {
+      if (error && error.code === 'ENOENT') { records.delete(absolute); notes.push(display(absolute) + ' was deleted.'); }
+      continue;
+    }
+    if (!info.isFile() || (record.mtimeMs === info.mtimeMs && record.size === info.size)) continue;
+    let buffer = null;
+    let sha256;
+    try {
+      if (info.size <= SNAPSHOT_FILE_LIMIT) { buffer = await readFile(absolute); sha256 = createHash('sha256').update(buffer).digest('hex'); }
+      else sha256 = await hashFile(absolute, info.size);
+    } catch { continue; }
+    if (sha256 === record.sha256) { record.mtimeMs = info.mtimeMs; record.size = info.size; continue; }
+    if (record.reportedSha256 === sha256) continue;
+    const now = buffer && textSnapshot(buffer);
+    const hunks = typeof record.snapshot === 'string' && typeof now === 'string' ? lineHunks(record.snapshot, now) : null;
+    const changed = hunks ? hunks.reduce((sum, hunk) => sum + Math.max(hunk.lines.length, 1), 0) : Infinity;
+    if (hunks && hunks.length && hunks.length <= STALE_DIFF_MAX_HUNKS && changed <= STALE_DIFF_MAX_LINES) {
+      records.delete(absolute);
+      records.set(absolute, { mtimeMs: info.mtimeMs, size: info.size, sha256, ...(record.partial ? { partial: record.partial } : {}), snapshot: now });
+      notes.push(display(absolute) + ' changed:\n' + describeHunks(hunks));
+    } else {
+      // Too much to show: leave the record stale (edits stay refused until a re-read) and say so once.
+      record.reportedSha256 = sha256;
+      notes.push(display(absolute) + ' changed substantially' + (hunks ? ' (' + hunks.length + ' places)' : '') + '. Re-read it before editing or relying on what you saw earlier.');
+    }
+  }
+  if (!notes.length) return '';
+  trimSnapshots(records);
+  let body = notes.join('\n');
+  if (body.length > maxChars) body = body.slice(0, maxChars) + '\n... (more changes not shown; re-read files before editing them)';
+  return '<system-reminder>Files you read earlier were changed by something other than your file-edit tools (the user, a formatter, a hook, another agent, or a command you ran). Treat this as the current state; do not revert these changes unless asked.\n' + body + '</system-reminder>';
+}
