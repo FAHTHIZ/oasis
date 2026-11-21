@@ -35,11 +35,21 @@ Set `OASIS_GATEWAY_PAIRING=0` to turn pairing off: strangers then only see their
 
 ## Chat commands
 
-`/new` starts a fresh session, `/stop` cancels the running task, `/status` shows the session, `/mode default|acceptEdits|plan|auto` changes how approvals work and `/help` lists these. Every command also works with `!` instead of `/` (Slack reserves `/`).
+`/new` starts a fresh session, `/stop` cancels the running task, `/status` shows the session, `/mode default|acceptEdits|plan|auto` changes how approvals work, `/sethome` makes the chat your [home channel](#home-channel), `/home` shows which chat that is, and `/help` lists these. Every command also works with `!` instead of `/` (Slack reserves `/`).
 
 On platforms without buttons, answer an approval by replying `yes` or `no`. When more than one approval is waiting, include its number: `allow 3`, `always 3` or `reject 3`.
 
 Files, photos and voice notes you send are saved under `.oasis/inbox/` in the workspace. Images are shown to the model, and voice notes are transcribed when voice transcription is set up.
+
+## Home channel
+
+Send `/sethome` in the chat where you want results to arrive, on any platform. Routines created with `--deliver home` then post there, so you can move them from Telegram to Slack by sending `/sethome` in Slack without editing a single routine:
+
+```bash
+oasis schedule add "weekdays at 9am" "Summarize yesterday's CI failures" --deliver home
+```
+
+There is one home channel per OASIS profile, stored in `gateway-home.json` in the config directory. For threaded platforms (Slack, Mattermost) the home is the channel, not the thread. A routine whose target is `home` while none is set is reported as blocked instead of running.
 
 ## Telegram
 

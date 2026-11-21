@@ -70,7 +70,7 @@ export function createSlackGateway(options = {}) {
     }
   }
 
-  const core = createChatCore({ ...options, env, log, send });
+  const core = createChatCore({ ...options, platform: 'slack', env, log, send });
 
   async function handleEvent(event) {
     if (!event || event.bot_id || (event.subtype && event.subtype !== 'file_share') || (botUserId && event.user === botUserId)) return;

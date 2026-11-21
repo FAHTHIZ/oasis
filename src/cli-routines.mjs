@@ -32,8 +32,10 @@ Options:
   --model MODEL            model for this routine
   --permission-mode MODE   default, acceptEdits, plan, auto or dontAsk
   --skill NAME             load a skill first (repeatable)
-  --deliver TARGET         local (default), telegram:CHAT_ID, slack:CHANNEL,
-                           discord:CHANNEL_ID or webhook:https://...
+  --deliver TARGET         local (default), home (the chat where you sent
+                           /sethome), telegram:CHAT_ID, slack:CHANNEL,
+                           discord:CHANNEL_ID, matrix:, signal:, email:,
+                           whatsapp:, mattermost: or webhook:https://...
   --tz ZONE                time zone for cron schedules, e.g. Asia/Dhaka
   --grace MINUTES          how late a missed cron slot may still run (0 = never)
   --event NAME             webhook routines: run only for this event, e.g.

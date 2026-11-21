@@ -137,7 +137,7 @@ export function createEmailGateway(options = {}) {
     if (info && info.messageId) { thread.references = [...thread.references, ...(thread.lastId ? [thread.lastId] : [])].slice(-20); thread.lastId = info.messageId; }
   }
 
-  const core = createChatCore({ ...options, env, log, send, textApprovals: true });
+  const core = createChatCore({ ...options, platform: 'email', env, log, send, textApprovals: true });
 
   /** parsed: a mailparser ParsedMail (or the same shape). */
   async function handleParsed(parsed) {
