@@ -855,7 +855,7 @@ function setBusy(busy) {
   if (typeof renderSidebar === 'function') void renderSidebar();
   $('sendButton').setAttribute('aria-label', busy ? 'Stop' : 'Send');
   if (typeof updateSteering === 'function') updateSteering();
-  $('input').placeholder = busy ? 'Add a note for OASIS while it works…' : 'Ask OASIS to build, fix or explain…';
+  $('input').placeholder = busy ? 'Add a note for OASIS while it works…' : 'Ask OASIS to build, research, write or fix…';
   $('activityLive').hidden = !busy;
   refreshActivity();
 }
@@ -4029,15 +4029,16 @@ document.addEventListener('click', (event) => {
 const SUGGESTIONS = [
   'Explain how this project is organised',
   'Find and fix a bug, then prove the fix with a test',
-  'Write tests for the main module and run them',
-  'Build a small to-do web app in index.html'
+  'Research what changed in the latest release of a library this project uses',
+  'Write a clear README section for the main feature'
 ];
-// An empty folder has nothing to explain or fix yet: offer things to start.
+// An empty folder has nothing to explain or fix yet: offer things to start,
+// and not only code. OASIS researches, writes and analyses data too.
 const NEW_PROJECT_SUGGESTIONS = [
   'Build a small to-do web app in index.html, saved in localStorage',
+  'Research a topic on the web and write a cited brief in brief.md',
   'Make a Node.js command-line tool with a test, using only built-ins',
-  'Create a one-page portfolio site with a dark mode toggle',
-  'Write a Python script that renames photos by the date they were taken'
+  'Write a Python script that summarises a CSV file and charts it'
 ];
 function renderWelcome() {
   // Until the first status arrives only Fen shows, so "Paste a key" doesn't flash on a connected setup.
@@ -4045,7 +4046,7 @@ function renderWelcome() {
   const ready = modelReady();
   const entry = activeEntry();
   $('connectForm').hidden = ready;
-  $('welcomeTitle').textContent = RT && RT.needsToken ? 'Paste your OASIS link.' : ready ? 'What should we build?' : 'Paste a key to start.';
+  $('welcomeTitle').textContent = RT && RT.needsToken ? 'Paste your OASIS link.' : ready ? 'What should we make?' : 'Paste a key to start.';
   $('connectInput').placeholder = RT && RT.needsToken ? 'Paste the link from your terminal' : 'Paste a key or link';
   $('connectHint').hidden = Boolean(RT && RT.needsToken);
   $('rememberRow').hidden = !(RT && RT.needsToken);
@@ -4078,7 +4079,7 @@ function renderWelcome() {
   const box = $('suggestions');
   box.replaceChildren();
   const fresh = Boolean(RT && RT.status && RT.status.workspaceEmpty);
-  const SUGGESTION_ICONS = fresh ? ['check', 'plug', 'globe', 'book-open'] : ['eye', 'bug', 'check', 'globe'];
+  const SUGGESTION_ICONS = fresh ? ['globe', 'search', 'square-terminal', 'activity'] : ['eye', 'bug', 'search', 'file-text'];
   if (ready) for (const [i, text] of (fresh ? NEW_PROJECT_SUGGESTIONS : SUGGESTIONS).entries()) {
     const chip = document.createElement('button');
     chip.className = 'suggestion';
