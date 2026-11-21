@@ -141,7 +141,7 @@ export function createTelegramGateway(options = {}) {
   async function command(chatId, text) {
     const [name, ...args] = text.trim().split(/\s+/);
     const cmd = name.replace(/@.*$/, '').toLowerCase();
-    if (cmd === '/start' || cmd === '/help') return say(chatId, 'OASIS agent for ' + root + '.\nSend a message to give it a task.\n/new starts a fresh session, /stop cancels the running task, /status shows the session, /mode default|acceptEdits|plan|auto changes approvals, /voice on|off|auto sets spoken replies, /resume continues a saved session, /sethome makes this chat the home channel for routine results.'), true;
+    if (cmd === '/start' || cmd === '/help') return say(chatId, 'OASIS agent for ' + root + '.\nSend a message to give it a task.\n/new starts a fresh session, /stop cancels the running task, /status shows the session, /mode default|acceptEdits|plan|auto changes approvals, /voice on|off|auto sets spoken replies, /resume continues a saved session, /sethome makes this chat the home channel for routine results, /personality NAME changes the agent\'s voice.'), true;
     if (cmd === '/resume') {
       const current = chats.get(chatId);
       if (current && current.controller) return say(chatId, 'Still working on the previous request. Send /stop first.'), true;
@@ -184,6 +184,13 @@ export function createTelegramGateway(options = {}) {
       if (!['on', 'off', 'auto'].includes(choice)) { await say(chatId, 'Voice replies: ' + state.voiceReply + '. Usage: /voice on|off|auto (auto answers voice notes with voice).'); return true; }
       state.voiceReply = choice === 'on' ? 'always' : choice;
       await say(chatId, 'Voice replies: ' + state.voiceReply + '.' + (state.voiceReply !== 'off' && !(await speech()) ? ' Text to speech is not configured yet; set OASIS_TTS_API_KEY or OASIS_TTS_BASE_URL.' : ''));
+      return true;
+    }
+    if (cmd === '/personality') {
+      const { personalityCommand } = await import('./personalities.mjs');
+      const settings = await import('./settings.mjs').then((m) => m.loadSettings(root, { env })).catch(() => ({}));
+      const state = args.length ? await chatState(chatId) : chats.get(chatId);
+      await say(chatId, await personalityCommand(args.join(' '), { session: state && state.session, root, env, settings }));
       return true;
     }
     if (cmd === '/mode') {

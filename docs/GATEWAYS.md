@@ -35,7 +35,7 @@ Set `OASIS_GATEWAY_PAIRING=0` to turn pairing off: strangers then only see their
 
 ## Chat commands
 
-`/new` starts a fresh session, `/stop` cancels the running task, `/status` shows the session, `/mode default|acceptEdits|plan|auto` changes how approvals work, `/resume` [continues a saved session](#continue-anywhere), `/sethome` makes the chat your [home channel](#home-channel), `/home` shows which chat that is, and `/help` lists these. Every command also works with `!` instead of `/` (Slack reserves `/`).
+`/new` starts a fresh session, `/stop` cancels the running task, `/status` shows the session, `/mode default|acceptEdits|plan|auto` changes how approvals work, `/resume` [continues a saved session](#continue-anywhere), `/sethome` makes the chat your [home channel](#home-channel), `/home` shows which chat that is, `/personality NAME` changes the agent's [voice](CONFIGURATION.md#personalities) for that chat, and `/help` lists these. Every command also works with `!` instead of `/` (Slack reserves `/`).
 
 On platforms without buttons, answer an approval by replying `yes` or `no`. When more than one approval is waiting, include its number: `allow 3`, `always 3` or `reject 3`.
 
