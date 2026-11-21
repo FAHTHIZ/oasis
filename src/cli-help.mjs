@@ -168,6 +168,7 @@ export function helpText() {
     '  oasis extensions rollback NAME --commit SHA --scope project  Restore a verified extension backup',
     '  oasis extensions remove NAME --scope project Remove an unmodified import',
     '  oasis permissions [list]      Show permission rules, hooks, trust, and sandbox status',
+    '  oasis daytona up|status|stop|delete   Manage the Daytona cloud sandbox that runs this workspace\'s commands ("backend": "daytona")',
     '  oasis permissions add allow "run_command(npm test:*)" [--scope user|project|local]',
     '  oasis trust [--revoke]        Trust this workspace so its allow rules and hooks apply',
     '  oasis backups                 List snapshots made before file changes',
