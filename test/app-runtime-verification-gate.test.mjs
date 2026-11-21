@@ -63,3 +63,26 @@ test('a tool call a small model wrote as JSON text does not stay in the transcri
   await new RuntimeAgent({ client: scripted(prose), onEvent: (event) => seen2.push(event), pollMs: 1 }).send('build it');
   assert.equal(seen2.find((event) => event.type === 'assistant' && event.toolCalls && event.toolCalls.length).content, 'Writing the page now.');
 });
+
+test('the app is told why work goes on after a reply that read as final', async () => {
+  const { actionNudgeNote } = await import('../src/turn-guards.mjs');
+  assert.equal(actionNudgeNote('open-todos'), 'plan steps are still open');
+  assert.equal(actionNudgeNote('empty'), '', 'kinds with their own notice add no note');
+  const events = [
+    { id: 1, type: 'assistant_delta', data: { text: 'Fixed it.' } },
+    { id: 2, type: 'action_nudge', data: { kind: 'open-todos', note: actionNudgeNote('open-todos') } },
+    { id: 3, type: 'verification_gate', data: { steps: ['run a check', 'review the diff of math.mjs'] } },
+    { id: 4, type: 'completed', data: { text: 'Fixed it.' } }
+  ];
+  // First poll: the job is still running; second: it has finished.
+  let polls = 0;
+  const client = { async api(path) {
+    if (path === '/api/chat') return { jobId: 'j1', sessionId: 's1' };
+    if (path.startsWith('/api/jobs/j1')) return polls++ === 0 ? { status: 'running', events } : { status: 'completed', events: [] };
+    return {};
+  } };
+  const seen = [];
+  await new RuntimeAgent({ client, onEvent: (event) => seen.push(event), pollMs: 1 }).send('fix it');
+  const notes = seen.filter((event) => event.type === 'continuing').map((event) => event.note);
+  assert.deepEqual(notes, ['Not finished yet: plan steps are still open', 'Not finished yet: run a check, review the diff of math.mjs']);
+});
