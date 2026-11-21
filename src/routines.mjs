@@ -164,7 +164,8 @@ export function catchUpWindowMs(job) {
 // Each GATEWAY_DELIVERY entry names the environment variables it needs and the
 // gateway module whose deliver function posts the message.
 export const GATEWAY_DELIVERY = {
-  matrix: { need: ['OASIS_MATRIX_HOMESERVER', 'OASIS_MATRIX_ACCESS_TOKEN'], example: 'matrix:!ROOM_ID:server', load: async () => (await import('./gateway-matrix.mjs')).deliverMatrix }
+  matrix: { need: ['OASIS_MATRIX_HOMESERVER', 'OASIS_MATRIX_ACCESS_TOKEN'], example: 'matrix:!ROOM_ID:server', load: async () => (await import('./gateway-matrix.mjs')).deliverMatrix },
+  signal: { need: ['OASIS_SIGNAL_API_URL', 'OASIS_SIGNAL_NUMBER'], example: 'signal:+NUMBER', load: async () => (await import('./gateway-signal.mjs')).deliverSignal }
 };
 
 export function parseDeliver(value) {
