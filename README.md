@@ -1,19 +1,20 @@
 <p align="center">
   <a href="https://github.com/FAHTHIZ/oasis">
-    <img src="assets/readme/hero.svg" alt="Animated illustration: OASIS. The open-source coding agent for any model. A drawn terminal window shows OASIS fixing a failing login test: the request types itself out, the agent finds the bug, shows a one-line diff, runs npm test with 42 passing and finishes with a checked summary." width="100%">
+    <img src="assets/readme/hero.svg" alt="Animated illustration: OASIS. The open-source agent that lifts any model. A drawn terminal window shows OASIS fixing a failing login test: the request types itself out, the agent finds the bug, shows a one-line diff, runs npm test with 42 passing and finishes with a checked summary." width="100%">
   </a>
   <br><sub>Illustration. The recordings under <a href="#work-where-you-work">Work where you work</a> are real, unscripted runs.</sub>
 </p>
 
 <p align="center">
-  Bring any model, keep your Claude Code setup, and get work that is actually checked.<br>
-  OASIS runs on your own computer or server. It won't say "tests pass" unless it saw them pass.
+  Bring any model and OASIS turns it into an agent that builds, researches, writes and automates.<br>
+  Keep your Claude Code setup, run it on your own computer or server, and get work that is actually checked:<br>
+  it won't say "tests pass" unless it saw them pass, or cite a page it never opened.
 </p>
 
 <p align="center">
   <a href="https://github.com/FAHTHIZ/oasis/actions/workflows/quality.yml"><img alt="Quality checks" src="https://img.shields.io/github/actions/workflow/status/FAHTHIZ/oasis/quality.yml?branch=main&style=flat&label=quality&labelColor=0B0F0C&color=32E07A"></a>
   <a href="https://github.com/FAHTHIZ/oasis/releases/latest"><img alt="Latest release" src="https://img.shields.io/github/v/release/FAHTHIZ/oasis?style=flat&labelColor=0B0F0C&color=7CFF5E"></a>
-  <img alt="More than 3,400 tests" src="https://img.shields.io/badge/tests-3%2C400%2B-0ED168?style=flat&labelColor=0B0F0C">
+  <img alt="More than 3,500 tests" src="https://img.shields.io/badge/tests-3%2C500%2B-0ED168?style=flat&labelColor=0B0F0C">
   <a href="LICENSE"><img alt="Apache 2.0 license" src="https://img.shields.io/github/license/FAHTHIZ/oasis?style=flat&labelColor=0B0F0C&color=1A1F1B"></a>
   <br>
   <img alt="Windows, macOS and Linux" src="https://img.shields.io/badge/windows%20%C2%B7%20macos%20%C2%B7%20linux-1A1F1B?style=flat&logo=nodedotjs&logoColor=7CFF5E&labelColor=0B0F0C">
@@ -28,6 +29,7 @@
   <a href="#work-where-you-work"><b>Terminal and web</b></a> &nbsp;·&nbsp;
   <a href="#how-a-task-runs">How it works</a> &nbsp;·&nbsp;
   <a href="#why-oasis">Why OASIS</a> &nbsp;·&nbsp;
+  <a href="#not-just-code">Not just code</a> &nbsp;·&nbsp;
   <a href="#plugins-mcp-and-models">Plugins and models</a> &nbsp;·&nbsp;
   <a href="#how-it-compares">Comparison</a> &nbsp;·&nbsp;
   <a href="docs/README.md">Docs</a>
@@ -65,7 +67,7 @@ oasis                # 2. work in the terminal
 oasis web --open     #    …or open the web app on this folder
 ```
 
-Ask in plain words: "find out why the login test fails and fix it". OASIS reads the code, edits the files, runs the checks and shows you the diff.
+Ask in plain words: "find out why the login test fails and fix it", "compare these three vendors and cite your sources" or "turn sales.csv into a chart and a one-page summary". OASIS plans the work, uses the tools it needs, checks the result and shows you what changed.
 
 <p align="center"><picture><source media="(prefers-color-scheme: dark)" srcset="assets/readme/divider-dark.svg"><img src="assets/readme/divider-light.svg" alt="" aria-hidden="true" width="100%"></picture></p>
 
@@ -210,6 +212,20 @@ You ask in plain words. OASIS reads the code, makes the edit, then has to pass t
   </tr>
 </table>
 
+## Not just code
+
+The same loop that checks a code change checks any other deliverable. The harness does the heavy lifting, so a small or local model gets the planning, tools, memory and self-checks a frontier model would want.
+
+| Task | What OASIS brings |
+| --- | --- |
+| Research | Federated web search, page fetching and a real Chrome it can drive (`--chrome`). Claims cite only pages it actually opened. |
+| Writing and documents | Reads PDFs and images you upload; saves reports, posts and slides as files in the workspace, not just chat text. |
+| Data | Numbers come from code it ran, not mental arithmetic: CSV and spreadsheet analysis, charts, notebooks. |
+| Media | `generate_image` and `text_to_speech` through any OpenAI-compatible images or speech API, local servers included. |
+| Automation | `oasis schedule add "every 1d" "..."` runs routines without a terminal open, cron or webhook triggered, and `oasis gateway` answers in Telegram, Slack or Discord. |
+| Memory that grows | Memory across sessions, full-text recall of past conversations (`session_search`), and repeatable work proposed as reviewable skills (`/learning`). `/insights` reports how you work. |
+| Bring your history | `oasis import` brings settings, memories, skills and commands from Claude Code, Codex, Gemini CLI, Cursor, Hermes, OpenCode, Windsurf, Antigravity and Cline. |
+
 <p align="center"><picture><source media="(prefers-color-scheme: dark)" srcset="assets/readme/divider-dark.svg"><img src="assets/readme/divider-light.svg" alt="" aria-hidden="true" width="100%"></picture></p>
 
 ## Plugins, MCP and models
@@ -275,16 +291,16 @@ Every run, plugin check and rough edge is in [Real-world runs](docs/REAL-WORLD-R
 
 Harness features from public documentation, not results.
 
-| | OASIS | Claude Code | Codex | Gemini CLI | OpenCode | Goose |
-| --- | --- | --- | --- | --- | --- | --- |
-| License | Apache-2.0 | Proprietary | Apache-2.0 | Apache-2.0 | Open source | Apache-2.0 |
-| Models | Any provider or local server | Anthropic | ChatGPT plan or API key | Gemini | Many providers | 15+ providers |
-| Web interface | Self-hosted, remote-ready | Cloud sessions | Codex Web (cloud) | No | Local | No |
-| Desktop app | Yes (not yet code-signed) | Yes | Yes | No | Beta | Yes |
-| Claude Code plugins | Yes, plus Codex plugins and Gemini extensions | Yes | No (own format) | No (own extensions) | No (own plugins) | No |
-| Subagents | Parallel, background, resumable, teams, worktrees | Yes | Agent command center | Yes | `general` subagent | No |
+| | OASIS | Claude Code | Hermes Agent | Codex | Gemini CLI | OpenCode | Goose |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| License | Apache-2.0 | Proprietary | MIT | Apache-2.0 | Apache-2.0 | Open source | Apache-2.0 |
+| Models | Any provider or local server | Anthropic | Any endpoint | ChatGPT plan or API key | Gemini | Many providers | 15+ providers |
+| Web interface | Self-hosted, remote-ready | Cloud sessions | No (TUI and desktop) | Codex Web (cloud) | No | Local | No |
+| Desktop app | Yes (not yet code-signed) | Yes | Yes | Yes | No | Beta | Yes |
+| Claude Code plugins | Yes, plus Codex plugins and Gemini extensions | Yes | Imports settings and skills | No (own format) | No (own extensions) | No (own plugins) | No |
+| Subagents | Parallel, background, resumable, teams, worktrees | Yes | Yes | Agent command center | Yes | `general` subagent | No |
 
-OASIS trails in model-specific tuning, a hosted zero-setup cloud, community size and real-world hours. The full comparison, with sources and dates, is in [Comparison](docs/COMPARISON.md).
+OASIS trails in model-specific tuning, a hosted zero-setup cloud, community size and real-world hours, and Hermes still covers more chat platforms and cloud terminal backends (Modal, Daytona). The full comparison, with sources and dates, is in [Comparison](docs/COMPARISON.md).
 
 <p align="center"><picture><source media="(prefers-color-scheme: dark)" srcset="assets/readme/divider-dark.svg"><img src="assets/readme/divider-light.svg" alt="" aria-hidden="true" width="100%"></picture></p>
 
@@ -314,7 +330,7 @@ What is verified and what is not:
 
 ```sh
 npm install
-npm test                          # 3,400+ tests
+npm test                          # 3,500+ tests
 npm run check                     # tests, benchmark regressions, eval validation
 npm run lint
 node scripts/readme-art.mjs       # regenerate the animated README art in assets/readme/

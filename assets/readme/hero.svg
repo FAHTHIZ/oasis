@@ -1,5 +1,5 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1280" height="640" viewBox="0 0 1280 640" role="img" aria-labelledby="title desc">
-  <title id="title">OASIS: the open-source coding agent for any model (animated)</title>
+  <title id="title">OASIS: the open-source agent for any model (animated)</title>
   <desc id="desc">The OASIS wordmark and tagline beside a terminal window where OASIS fixes a failing login test: it finds the bug, shows a one-line diff, runs npm test with 42 passing, and finishes with a checked summary. Fen, the pixel-art fennec fox mascot, peeks over the terminal.</desc>
   <defs>
     <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#070A08"/><stop offset=".7" stop-color="#0A0F0B"/><stop offset="1" stop-color="#050806"/></linearGradient>
@@ -109,10 +109,10 @@
       <path d="M73 253H133V260H73Z M167 253H227V260H167Z"/><path d="M91 269H132V275H91Z M168 269H209V275H168Z"/>
     </g></g>
     <text x="196" y="196" font-size="92" font-weight="800" letter-spacing="9" fill="url(#word)">OASIS</text>
-    <text x="86" y="276" font-size="36" font-weight="700" fill="#F1FBF3">The open-source coding</text>
-    <text x="86" y="320" font-size="36" font-weight="700" fill="#F1FBF3">agent for <tspan fill="#7CFF5E">any model.</tspan></text>
-    <text x="86" y="364" font-size="18" fill="#C9D8CE">Terminal, web app, desktop and editors. Your Claude Code</text>
-    <text x="86" y="390" font-size="18" fill="#C9D8CE">setup as is, and work that is actually checked.</text>
+    <text x="86" y="276" font-size="36" font-weight="700" fill="#F1FBF3">The open-source agent</text>
+    <text x="86" y="320" font-size="36" font-weight="700" fill="#F1FBF3">that lifts <tspan fill="#7CFF5E">any model.</tspan></text>
+    <text x="86" y="364" font-size="18" fill="#C9D8CE">Code, research, writing and automation, in the terminal,</text>
+    <text x="86" y="390" font-size="18" fill="#C9D8CE">web, desktop or chat. Work that is actually checked.</text>
     <g transform="translate(86 420)"><rect width="106" height="32" rx="16" fill="#0B0F0C" stroke="#32E07A" stroke-opacity=".5"/><circle cx="16" cy="16" r="3.5" fill="#7CFF5E"/><text x="28" y="21" font-size="14" font-weight="600" fill="#E6F5EA">Any model</text></g>
     <g transform="translate(200 420)"><rect width="116" height="32" rx="16" fill="#0B0F0C" stroke="#32E07A" stroke-opacity=".5"/><circle cx="16" cy="16" r="3.5" fill="#7CFF5E"/><text x="28" y="21" font-size="14" font-weight="600" fill="#E6F5EA">Self-hosted</text></g>
     <g transform="translate(324 420)"><rect width="130" height="32" rx="16" fill="#0B0F0C" stroke="#32E07A" stroke-opacity=".5"/><circle cx="16" cy="16" r="3.5" fill="#7CFF5E"/><text x="28" y="21" font-size="14" font-weight="600" fill="#E6F5EA">Verified work</text></g>

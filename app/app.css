@@ -136,7 +136,7 @@ svg.icon.i-stop{fill:currentColor}
 .msg.note{color:var(--muted);font-size:13px;text-align:center}
 .msg.note.hook-blocked,.msg.note.hook-failed{text-align:left;border-left:3px solid var(--warn,#d9a441);padding:4px 10px;color:var(--text);white-space:pre-wrap;overflow-wrap:anywhere}
 .msg.note.hook-failed{border-left-color:var(--danger,#e5534b)}
-.msg.note.continuing{text-align:left;font-size:12.5px;color:var(--faint);padding-left:22px}
+.msg.note.continuing{text-align:left;font-size:12.5px;color:var(--faint);padding-left:22px;margin-top:-10px;margin-bottom:12px}
 .body p{margin:0 0 .7em}
 .body p:last-child{margin-bottom:0}
 .body h1,.body h2,.body h3{margin:1em 0 .45em;font-size:1.05em}
