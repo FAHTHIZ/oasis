@@ -238,6 +238,18 @@ key is never sent to another provider; a bare model runs on the current
 provider. Hosted providers without a key in the environment are skipped; local
 servers do not need one. Source: `src/fallback-chain.mjs`.
 
+### Advisor and mixture of agents
+
+`advisorModel` (or `--advisor MODEL`, `/advisor MODEL`) gives the agent an `advisor` tool that asks one stronger model for guidance mid-task.
+
+`mixtureModels` (or `OASIS_MIXTURE_MODELS`, `/mixture MODEL1,MODEL2,...`) gives it a `mixture_of_agents` tool: on a hard question, two to six models answer at the same time and one model merges their answers, fixing errors and naming any disagreement ([Mixture-of-Agents, Wang et al. 2024](https://arxiv.org/abs/2406.04692)). Entries use the same `provider:model` form as fallback models, so one mixture can span providers, and an entry whose provider has no key is skipped. The merging model is `mixtureAggregator`, a model on your main provider (or `OASIS_MIXTURE_AGGREGATOR`, `/mixture MODELS aggregator MODEL`), otherwise the session's own model.
+
+```json
+{ "mixtureModels": ["openrouter:deepseek/deepseek-r1", "gemini:gemini-3-pro", "groq:moonshotai/kimi-k2-instruct"], "mixtureAggregator": "claude-opus-4-6" }
+```
+
+The models see the recent conversation, so these two settings are read only from your own settings, `--settings` or policy, never from a repository. Each round costs one request per model plus one to merge; `/mixture` shows the running total. Subagents cannot start a mixture.
+
 ### Endpoints without native tool calling
 
 Some endpoints accept a request but drop the `tools` field, or drop system
