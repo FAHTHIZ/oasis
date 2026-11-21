@@ -165,7 +165,8 @@ export function catchUpWindowMs(job) {
 // gateway module whose deliver function posts the message.
 export const GATEWAY_DELIVERY = {
   matrix: { need: ['OASIS_MATRIX_HOMESERVER', 'OASIS_MATRIX_ACCESS_TOKEN'], example: 'matrix:!ROOM_ID:server', load: async () => (await import('./gateway-matrix.mjs')).deliverMatrix },
-  signal: { need: ['OASIS_SIGNAL_API_URL', 'OASIS_SIGNAL_NUMBER'], example: 'signal:+NUMBER', load: async () => (await import('./gateway-signal.mjs')).deliverSignal }
+  signal: { need: ['OASIS_SIGNAL_API_URL', 'OASIS_SIGNAL_NUMBER'], example: 'signal:+NUMBER', load: async () => (await import('./gateway-signal.mjs')).deliverSignal },
+  email: { need: ['OASIS_EMAIL_SMTP_HOST', 'OASIS_EMAIL_USER', 'OASIS_EMAIL_PASSWORD'], example: 'email:ADDRESS', load: async () => (await import('./gateway-email.mjs')).deliverEmail }
 };
 
 export function parseDeliver(value) {
@@ -173,6 +174,7 @@ export function parseDeliver(value) {
   if (text === 'local') return 'local';
   const match = new RegExp('^(telegram|slack|discord|webhook|' + Object.keys(GATEWAY_DELIVERY).join('|') + '):(.+)$').exec(text);
   if (!match) throw new Error('Unknown delivery target ' + text + '. Use local, telegram:CHAT_ID, slack:CHANNEL, discord:CHANNEL_ID, ' + Object.values(GATEWAY_DELIVERY).map((item) => item.example).join(', ') + ' or webhook:https://...');
+  if (match[1] === 'email' && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(match[2])) throw new Error('email: needs an address, e.g. email:me@example.com');
   if (match[1] === 'webhook') {
     let url;
     try { url = new URL(match[2]); } catch { throw new Error('webhook: needs a full URL.'); }

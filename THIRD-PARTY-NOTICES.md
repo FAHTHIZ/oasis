@@ -34,14 +34,16 @@ app):
 
 | License | Packages |
 | --- | --- |
-| MIT | 105 |
+| MIT | 141 |
 | Apache-2.0 | 36 |
-| BSD-2-Clause | 15 |
-| ISC | 10 |
-| BSD-3-Clause | 5 |
+| BSD-2-Clause | 20 |
+| ISC | 11 |
+| BSD-3-Clause | 6 |
 | BlueOak-1.0.0 | 2 |
 | 0BSD | 1 |
+| MIT-0 | 1 |
 | (MPL-2.0 OR Apache-2.0) | 1 |
+| (MIT OR EUPL-1.1+) | 1 |
 | (BSD-3-Clause OR GPL-2.0) | 1 |
 | EPL-2.0 | 1 |
 | LGPL-3.0-or-later, alone or combined with Apache-2.0/MIT | 14 (optional) |
@@ -49,6 +51,9 @@ app):
 Licenses that need attention:
 
 - `dompurify` (MPL-2.0 OR Apache-2.0): used under Apache-2.0.
+- `@zone-eu/mailsplit` (MIT OR EUPL-1.1+), pulled in by `imapflow` and
+  `mailparser` for the email gateway: used under MIT.
+- `nodemailer` (MIT-0): MIT without the attribution requirement.
 - `node-forge` (BSD-3-Clause OR GPL-2.0), pulled in by
   `@anthropic-ai/sandbox-runtime`: used under BSD-3-Clause.
 - `elkjs` (EPL-2.0), pulled in by `beautiful-mermaid` for diagram layout. It
