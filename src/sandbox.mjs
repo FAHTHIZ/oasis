@@ -17,7 +17,8 @@
 //   whose proxy allows only those hosts; the filesystem policy is the same.
 // Other platforms report the OS sandbox as unavailable; Oasis then falls back to
 // approvals. Enable with settings { "sandbox": { "enabled": true } } or OASIS_SANDBOX=1.
-import { normalizeSshSettings, detectSshRuntime, sshWrap } from './ssh-backend.mjs';
+import { normalizeSshSettings, detectSshRuntime, sshWrap, DEFAULT_SSH_EXCLUDES } from './ssh-backend.mjs';
+import { normalizeDaytonaSettings, ensureDaytonaSync, daytonaSshSettings } from './daytona-backend.mjs';
 import { spawnSync } from 'node:child_process';
 import { realpathSync, statSync, lstatSync, rmdirSync, unlinkSync, readFileSync } from 'node:fs';
 import os from 'node:os';
@@ -376,17 +377,30 @@ function socketPolicy(settings) {
   };
 }
 
+// Backends that run commands on another machine over SSH (Daytona through its SSH gateway).
+const REMOTE_BACKENDS = ['ssh', 'daytona'];
+
+function remoteSandboxSsh(raw, root, force) {
+  const daytona = normalizeDaytonaSettings(raw, process.env, root);
+  if (daytona.error) return { error: daytona.error };
+  const ready = ensureDaytonaSync(daytona, force ? { now: Date.now() + 3600000 } : {});
+  if (!ready.ok) return { error: 'The Daytona sandbox is not ready: ' + ready.reason };
+  const ssh = daytonaSshSettings(daytona);
+  return { ...ssh, exclude: [...(ssh.exclude || DEFAULT_SSH_EXCLUDES), '.oasis/daytona/'] };
+}
+
 export function resolveSandbox(settings = {}, root, force = false) {
   const wanted = settings.sandbox && settings.sandbox.enabled;
   if (!wanted) return { enabled: false, available: false, kind: 'none' };
-  const backend = CONTAINER_BACKENDS.includes(settings.sandbox.backend) || settings.sandbox.backend === 'ssh' ? settings.sandbox.backend : 'os';
-  const ssh = backend === 'ssh' ? normalizeSshSettings(settings.sandbox.ssh || {}, process.env, root) : null;
+  const backend = CONTAINER_BACKENDS.includes(settings.sandbox.backend) || REMOTE_BACKENDS.includes(settings.sandbox.backend) ? settings.sandbox.backend : 'os';
+  let ssh = backend === 'ssh' ? normalizeSshSettings(settings.sandbox.ssh || {}, process.env, root) : null;
+  if (backend === 'daytona') ssh = remoteSandboxSsh(settings.sandbox.daytona || {}, root, force);
   const allowedDomains = domainList(settings.sandbox.allowManagedDomainsOnly ? settings.sandbox.managedAllowedDomains || [] : settings.sandbox.allowedDomains);
   const deniedDomains = domainList(settings.sandbox.deniedDomains);
   const sockets = socketPolicy(settings);
   // A proxy port of your own also needs the domain-filtering runtime, which knows how to route to it.
   const filtered = backend === 'os' && (allowedDomains.length > 0 || sockets.httpProxyPort !== undefined || sockets.socksProxyPort !== undefined);
-  const probe = filtered ? detectSandboxRuntime(force) : backend === 'os' ? detectSandbox(force) : backend === 'ssh' ? detectSshRuntime(ssh, force) : detectContainerRuntime(backend, force);
+  const probe = filtered ? detectSandboxRuntime(force) : backend === 'os' ? detectSandbox(force) : REMOTE_BACKENDS.includes(backend) ? detectSshRuntime(ssh, force) : detectContainerRuntime(backend, force);
   // Under an admin-required sandbox a repository's additionalDirectories are not writable by commands.
   const ignoredDirs = new Set(settings.sandbox.repoWritableDirectoriesIgnored || []);
   const additionalWritable = ((settings.permissions && settings.permissions.additionalDirectories) || []).map((dir) => path.resolve(root, dir)).filter((dir) => !ignoredDirs.has(dir));
@@ -444,8 +458,8 @@ export function resolveSandbox(settings = {}, root, force = false) {
     protectedRoots: settings.sandbox.protectProjectConfig === false ? [] : [root, ...additionalWritable],
     writableCaches: backend === 'os' ? caches : [],
     backend,
-    ...(backend === 'ssh' ? { ssh, network: true } : {}),
-    ...(backend === 'os' || backend === 'ssh' ? {} : { image: settings.sandbox.image || DEFAULT_CONTAINER_IMAGE, memory: settings.sandbox.memory || '', cpus: settings.sandbox.cpus || '', readOnlyRoot: settings.sandbox.readOnlyRoot === true })
+    ...(REMOTE_BACKENDS.includes(backend) ? { ssh, network: true } : {}),
+    ...(backend === 'os' || REMOTE_BACKENDS.includes(backend) ? {} : { image: settings.sandbox.image || DEFAULT_CONTAINER_IMAGE, memory: settings.sandbox.memory || '', cpus: settings.sandbox.cpus || '', readOnlyRoot: settings.sandbox.readOnlyRoot === true })
   };
 }
 

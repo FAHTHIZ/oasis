@@ -300,7 +300,7 @@ Harness features from public documentation, not results.
 | Claude Code plugins | Yes, plus Codex plugins and Gemini extensions | Yes | Imports settings and skills | No (own format) | No (own extensions) | No (own plugins) | No |
 | Subagents | Parallel, background, resumable, teams, worktrees | Yes | Yes | Agent command center | Yes | `general` subagent | No |
 
-OASIS trails in model-specific tuning, a hosted zero-setup cloud, community size and real-world hours, and Hermes still covers more chat platforms and cloud terminal backends (Modal, Daytona). The full comparison, with sources and dates, is in [Comparison](docs/COMPARISON.md).
+OASIS trails in model-specific tuning, a hosted zero-setup cloud, community size and real-world hours, and Hermes still has a few backends and gateways OASIS lacks (Modal, Singularity, Home Assistant). The full comparison, with sources and dates, is in [Comparison](docs/COMPARISON.md).
 
 <p align="center"><picture><source media="(prefers-color-scheme: dark)" srcset="assets/readme/divider-dark.svg"><img src="assets/readme/divider-light.svg" alt="" aria-hidden="true" width="100%"></picture></p>
 
