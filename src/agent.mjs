@@ -34,7 +34,7 @@ import { validateToolArguments } from './tool-schema-validation.mjs';
 import { redactAuditValue, runTool } from './tool-kernel.mjs';
 import { toResponsesRequest, toAnthropicRequest, chatCompletionTool } from './provider-requests.mjs';
 import { startHookWatchers, needsHookWatchers } from './file-watch.mjs';
-import { externalChangesReminder, restoreFilesAfterCompaction } from './file-state.mjs';
+import { externalChangesReminder, markFileSeen, restoreFilesAfterCompaction } from './file-state.mjs';
 import { realpathSync } from 'node:fs';
 import { BROWSER_TOOL_DEFINITION, closeBrowser } from './browser-tool.mjs';
 import { WORKFLOW_TOOL_DEFINITION } from './workflows.mjs';
@@ -43,7 +43,7 @@ import path from 'node:path';
 import os from 'node:os';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
-import { TOOL_DEFINITIONS, executeTool, loadProjectInstructions, loadSkillDescriptions, setAdditionalDirectories, additionalDirectories } from './tools.mjs';
+import { TOOL_DEFINITIONS, executeTool, loadProjectInstructions, loadSkillDescriptions, setAdditionalDirectories, additionalDirectories, resolveWorkspacePath } from './tools.mjs';
 import { bridgeToolDefinition } from './tool-registry-bridge.mjs';
 import { patchFromToolCall, patchFilesNeeded, planPatch } from './apply-patch.mjs';
 import { closeTeammatePanes } from './teammate-panes.mjs';
@@ -95,6 +95,7 @@ import { exitPlanMode, permissionMode } from './plan-mode.mjs';
 import { newGateState, runCompletionGates } from './completion-gates.mjs';
 import { adoptReportedContextWindow, useCompactToolProfile } from './context-window.mjs';
 import { MIXTURE_TOOL_DEFINITION, parseMixtureModels, runMixture } from './mixture.mjs';
+import { detectRepetition, collapseRepetition, DEGENERATE_OUTPUT_NUDGE } from './degenerate-output.mjs';
 import { isContextOverflowError, stopFailureType, chargeAuxiliaryUsage, isLoopbackProvider, restorePrimaryModel, MAX_MALFORMED_CALL_RECOVERIES, MALFORMED_CALL_NUDGE, traceRecovery, requestCompletion, recordSessionEvent } from './agent-request.mjs';
 export { mergeAnthropicUsage, toolCallSlot, strayStreamError };
 export { chargeAuxiliaryUsage, defaultStreamIdleMs, fallbackCooldownMs, isContextOverflowError, isLoopbackProvider, requestTimeoutMs, restorePrimaryModel, shortProviderReason, stopFailureType, streamRestartLimit, suggestNextPrompt, summarizeFallbackFailure, testProviderConnection } from './agent-request.mjs';
@@ -1972,6 +1973,8 @@ async function executePatchCall(session, call, patchText, context, options) {
         return finish({ error: target + ' is too large to patch in one piece; use edit_file for it. Nothing was changed.' });
       }
       files[target] = typeof read.content === 'string' ? read.content : '';
+      // Every hunk is matched against this content before anything is written.
+      try { markFileSeen({ session, env: context && context.env }, (await resolveWorkspacePath(path.resolve(context && context.root || session.root), target)).absolute); } catch {}
     } catch (error) {
       return finish({ error: 'Could not read ' + target + ' for the patch: ' + (error && error.message || error) + ' Nothing was changed.' });
     }
@@ -2429,6 +2432,11 @@ async function executeOrchestrationToolWithKernel(session, name, args, context, 
               type: 'function',
               function: { name: toolName, arguments: JSON.stringify(input || {}) }
             }, executionContext, executionOptions);
+            // The script gets the read result before its next call, so a
+            // read-then-write inside one program has seen the file.
+            if (toolName === 'read_file' && message && message.result && !message.result.error && input && input.path) {
+              try { markFileSeen({ session, env: executionContext && executionContext.env }, (await resolveWorkspacePath(path.resolve(executionContext && executionContext.root || session.root), input.path)).absolute); } catch {}
+            }
             return message && message.result !== undefined ? message.result : message && message.content;
           }
         });
@@ -3316,6 +3324,7 @@ async function runAgentTurnRaw(session, prompt, options = {}) {
   let outputRecoveries = 0;
   let overflowRecoveries = 0;
   let malformedCallRecoveries = 0;
+  let degenerateRecoveries = 0;
   let pendingTruncationNotice = '';
   const { maxSteps, tokenBudget, maxToolCalls } = resolveTurnLimits(options, session.config);
   // The token budget counts tokens the provider processed anew: cache reads
@@ -3466,6 +3475,18 @@ async function runAgentTurnRaw(session, prompt, options = {}) {
     };
     flushAsyncHookFeedback(session);
     let assistant;
+    // A reply stuck repeating itself is cut here (see degenerate-output.mjs);
+    // the user's own signal stays separate, so this is not an interruption.
+    const loopCut = new AbortController();
+    let degenerate = null;
+    let checkedAt = 0;
+    const checkDegenerate = (text) => {
+      if (degenerate || text.length - checkedAt < 512) return;
+      checkedAt = text.length;
+      const found = detectRepetition(text);
+      if (found) { degenerate = { ...found, text }; loopCut.abort(); }
+    };
+    const requestSignal = options.signal ? AbortSignal.any([options.signal, loopCut.signal]) : loopCut.signal;
     const waitHook = typeof options.onModelWait === 'function' ? options.onModelWait : null;
     if (waitHook) {
       try { waitHook({ phase: 'start', step: step + 1, inputTokens: estimateTokens(session.messages || []) + countJsonTokens(session.toolDefinitions || TOOL_DEFINITIONS), model: session.config && session.config.model, local: isLoopbackProvider(session.config) && !cloudModelBehindGateway(session.config && session.config.model, session.config) }); } catch {}
@@ -3483,7 +3504,7 @@ async function runAgentTurnRaw(session, prompt, options = {}) {
     const seen = (text) => { const now = Date.now(); if (!timing.firstAt) timing.firstAt = now; if (text && !timing.firstTextAt) timing.firstTextAt = now; timing.lastVisibleAt = now; };
     try {
       assistant = await requestCompletion(session, {
-        ...(options.signal ? { signal: options.signal } : {}),
+        signal: requestSignal,
         ...(typeof options.onRateLimitWait === 'function' ? { onRateLimitWait: options.onRateLimitWait } : {}),
         ...(typeof options.onProviderRetry === 'function' ? { onProviderRetry: options.onProviderRetry } : {}),
         ...(typeof options.onFallback === 'function' ? { onFallback: options.onFallback } : {}),
@@ -3495,6 +3516,7 @@ async function runAgentTurnRaw(session, prompt, options = {}) {
         } } : {}),
         ...(typeof options.onDelta === 'function' ? { onDelta: (delta) => {
           if (delta) seen(true);
+          checkDegenerate(streamedText + String(delta || ''));
           // Past the bound the stream keeps the watchdog fed but the shown
           // text stops growing; the final onText carries the whole reply.
           if (streamedText.length >= MAX_STREAMED_REPLY_CHARS) return;
@@ -3507,7 +3529,7 @@ async function runAgentTurnRaw(session, prompt, options = {}) {
           // watchdog: a silent provider fails after OASIS_STREAM_IDLE_SECONDS
           // and is retried, instead of holding the parent for the 600 s
           // header timeout (seen live: a 300 s hang inside an explore agent).
-          onDelta: () => {}
+          onDelta: (delta) => { streamedText = (streamedText + String(delta || '')).slice(-MAX_STREAMED_REPLY_CHARS); checkDegenerate(streamedText); }
         } : {}),
         // Deltas are cumulative, so a restarted stream replaces the partial text
         // instead of appending a second copy.
@@ -3533,6 +3555,22 @@ async function runAgentTurnRaw(session, prompt, options = {}) {
       if (waitHook) { try { waitHook({ phase: 'end', step: step + 1 }); } catch {} }
     } catch (error) {
       if (waitHook) { try { waitHook({ phase: 'end', step: step + 1, error: true }); } catch {} }
+      if (degenerate && loopCut.signal.aborted && !(options.signal && options.signal.aborted)) {
+        const found = degenerate;
+        traceRecovery(options.env, 'degenerate_output', { attempt: degenerateRecoveries + 1, limit: 2, unitChars: found.unit.length, repeats: found.repeats });
+        recordSessionEvent(session, { type: 'degenerate_output', step: step + 1, unit: found.unit.slice(0, 200), repeats: found.repeats }, options.env);
+        if (typeof options.onDelta === 'function') options.onDelta('');
+        if (degenerateRecoveries < 2) {
+          degenerateRecoveries++;
+          if (typeof options.onStreamRestart === 'function') { try { options.onStreamRestart({ attempt: degenerateRecoveries, limit: 2, kind: 'degenerate-output', reason: 'the reply kept repeating the same text', partialShown: true }); } catch {} }
+          // Keep one copy so the model sees what it did, then say why it was cut.
+          session.messages.push({ role: 'assistant', content: collapseRepetition(found.text, found).slice(-4000) });
+          session.messages.push({ role: 'user', content: DEGENERATE_OUTPUT_NUDGE });
+          step--;
+          continue;
+        }
+        error = new Error('The model kept repeating the same text (' + JSON.stringify(found.unit.slice(0, 60)) + ' ' + found.repeats + ' times) in three replies in a row, so OASIS stopped. Smaller local models do this more often; try a larger model or a lower temperature.');
+      }
       if (error && error.malformedCall && malformedCallRecoveries < MAX_MALFORMED_CALL_RECOVERIES && !(options.signal && options.signal.aborted)) {
         malformedCallRecoveries++;
         traceRecovery(options.env, 'malformed_call', { attempt: malformedCallRecoveries, limit: MAX_MALFORMED_CALL_RECOVERIES, reason: error.message });
