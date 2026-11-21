@@ -122,6 +122,8 @@ When recording a live result, include at least:
 
 Compare systems using the same model, task set, provider settings and environment wherever possible. Report repetitions and variance when the benchmark is nondeterministic.
 
+`oasis eval` does not score a trial when the provider never answered: no tokens were used and the error is a quota, rate limit, HTTP 401/402/403/429/5xx, an exhausted fallback chain or a refused connection. Such trials print `ERROR`, are stored with `status: "errored"`, and are left out of the pass rate, the failure count and the median time (`summary.errored` counts them). After three in a row the run stops, prints `Stopped early: …` with the provider error and exits non-zero, rather than recording the rest of the task set as failures. A model that used tokens and then failed is still scored as a failure. `--compare` skips errored rows.
+
 ## Latest results (12 November 2026)
 
 Measured on commit `c1396e7b`, Node 22, a 2-core Linux machine. Raw files are in [bench/results](../bench/results).

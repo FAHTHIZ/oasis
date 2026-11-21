@@ -520,6 +520,7 @@ async function readComparisonRun(filePath) {
       const status = String(row.status || '').toLowerCase();
       if (['passed', 'pass', 'success', 'succeeded'].includes(status)) passed = true;
       else if (['failed', 'fail', 'failure', 'error'].includes(status)) passed = false;
+      else if (status === 'errored') return null; // the provider never answered; not scored
       else throw new Error('Result row ' + (index + 1) + ' must have passed=true/false or a recognized status in ' + String(filePath));
     }
     const fingerprint = row.taskFingerprint ?? row.fingerprint ?? null;
@@ -543,7 +544,8 @@ async function readComparisonRun(filePath) {
       wallTimeMs: comparisonMetric(row.wallTimeMs ?? row.durationMs),
       costUSD: comparisonMetric(row.costUSD ?? row.costUsd)
     };
-  });
+  }).filter(Boolean);
+  if (!results.length) throw new Error('Comparison report has no scored results (every trial was a provider error): ' + String(filePath));
   const providerLabel = report.provider && typeof report.provider.model === 'string' ? report.provider.model : '';
   const label = String(report.label || report.name || providerLabel || path.basename(resolved)).slice(0, 100);
   const sourceRevision = typeof report.sourceRevision === 'string' && /^[a-f0-9]{40}$/i.test(report.sourceRevision)
@@ -1517,11 +1519,17 @@ export async function runEvalCommand(args = [], options = {}) {
   const outputRate = readPrice(env.OASIS_EVAL_OUTPUT_USD_PER_MILLION_TOKENS);
   const trials = [];
   const originalConfigDir = process.env.OASIS_CONFIG_DIR;
+  let providerErrorsInARow = 0;
+  let stoppedEarly = null;
 
   try {
-    for (const dir of selectedDirs) {
+    taskLoop: for (const dir of selectedDirs) {
       const task = await assertTaskShape(dir, options.snapshotsDir || DEFAULT_SNAPSHOTS_DIR);
       for (let trial = 1; trial <= config.trials; trial++) {
+        if (providerErrorsInARow >= PROVIDER_ERROR_STOP_AT) {
+          stoppedEarly = { reason: 'provider', afterTrials: trials.length, error: String(trials[trials.length - 1].error || '').split('\n').slice(0, 2).join(' ').slice(0, 300) };
+          break taskLoop;
+        }
         const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'oasis-eval-run-'));
         const workspace = path.join(tempRoot, 'workspace');
         await copySnapshot(task.repoDir, workspace);
@@ -1629,9 +1637,13 @@ export async function runEvalCommand(args = [], options = {}) {
         // ended without an error or timeout. OASIS's own "verification incomplete"
         // signal is kept in the record (finished / unfinished) but does not change the score.
         const passed = !errorText && Boolean(agentResult) && verification.exitCode === 0;
+        // The provider never answered (quota, outage, refused connection): the
+        // model was not tested, so the trial is reported, not scored as a fail.
+        const providerError = !passed && totalTokens === 0 && isProviderFailure(errorText);
+        providerErrorsInARow = providerError ? providerErrorsInARow + 1 : 0;
         trials.push({
           taskId: task.id, taskFingerprint: task.taskFingerprint, category: task.category, difficulty: task.difficulty, trial,
-          status: passed ? 'passed' : 'failed',
+          status: passed ? 'passed' : providerError ? 'errored' : 'failed',
           model, requestedModel: provider.model, routeTier: routed && routed.tier || 'strong', escalation: routed && routed.escalation || null,
           routeReason: routed && routed.reason || null,
           strongModel: routed && routed.strongModel || config.routeStrongModel || provider.model,
@@ -1648,7 +1660,7 @@ export async function runEvalCommand(args = [], options = {}) {
           error: errorText,
           ...(agentResult && !agentResult.finished ? { unfinished: unfinishedReason(agentResult) } : {})
         });
-        output.write((passed ? '  PASS ' : '  FAIL ') + task.id + ' trial ' + trial +
+        output.write((passed ? '  PASS ' : providerError ? '  ERROR ' : '  FAIL ') + task.id + ' trial ' + trial +
           ' · ' + (config.routeEasyModel ? (routed && routed.tier || 'strong') + '/' : '') + model + (routed && routed.escalation ? '→' + routed.escalation.to + ' (step ' + routed.escalation.step + ')' : '') +
           ' · ' + totalTokens + ' tokens · ' + elapsedMs + ' ms' +
           (costUSD === null ? ' · cost unknown' : ' · $' + costUSD.toFixed(6)) +
@@ -1662,7 +1674,9 @@ export async function runEvalCommand(args = [], options = {}) {
   }
 
   const passedCount = trials.filter((item) => item.status === 'passed').length;
-  const durations = trials.map((item) => item.wallTimeMs).sort((a, b) => a - b);
+  const scored = trials.filter((item) => item.status !== 'errored');
+  const erroredCount = trials.length - scored.length;
+  const durations = scored.map((item) => item.wallTimeMs).sort((a, b) => a - b);
   const middle = Math.floor(durations.length / 2);
   const medianTimeMs = durations.length
     ? (durations.length % 2 ? durations[middle] : Math.round((durations[middle - 1] + durations[middle]) / 2))
@@ -1682,8 +1696,10 @@ export async function runEvalCommand(args = [], options = {}) {
     taskCount: selectedDirs.length, taskIds: selectedDirs.map((dir) => path.basename(dir)), trialsPerTask: config.trials,
     timeoutSeconds: config.timeoutSeconds,
     runtime: { node: process.version, platform: process.platform, arch: process.arch },
-    passRate: trials.length ? passedCount / trials.length : 0,
-    passed: passedCount, failed: trials.length - passedCount,
+    passRate: scored.length ? passedCount / scored.length : 0,
+    passed: passedCount, failed: scored.length - passedCount,
+    ...(erroredCount ? { errored: erroredCount, erroredNote: 'Trials where the provider never answered (no tokens; quota, outage or connection error) are not scored.' } : {}),
+    ...(stoppedEarly ? { stoppedEarly } : {}),
     medianTimeMs, totalCostUSD, costPerPassedTaskUSD,
     routing: config.routeEasyModel ? {
       enabled: true,
@@ -1699,10 +1715,19 @@ export async function runEvalCommand(args = [], options = {}) {
   };
   const resultPath = await saveResults(trials, summary, { env, resultsDir: options.resultsDir });
   output.write('Eval result: ' + resultPath + '\n');
-  output.write('Pass rate: ' + passedCount + '/' + trials.length + ' (' + Math.round(summary.passRate * 100) + '%)\n');
+  output.write('Pass rate: ' + passedCount + '/' + scored.length + ' (' + Math.round(summary.passRate * 100) + '%)\n');
+  if (erroredCount) output.write('Not scored: ' + erroredCount + ' trial' + (erroredCount === 1 ? '' : 's') + ' where the provider never answered.\n');
+  if (stoppedEarly) output.write('Stopped early: the provider failed ' + PROVIDER_ERROR_STOP_AT + ' trials in a row (' + stoppedEarly.error + '). ' + (selectedDirs.length * config.trials - trials.length) + ' trials were not run. Fix the provider (oasis connect), then run again.\n');
   output.write('Median time: ' + (summary.medianTimeMs === null ? 'n/a' : summary.medianTimeMs + ' ms') + '\n');
   output.write('Cost per passed trial: ' + (summary.costPerPassedTaskUSD === null ? 'n/a' : '$' + summary.costPerPassedTaskUSD.toFixed(6)) + '\n');
-  return { ok: trials.every((item) => item.status === 'passed'), summary, resultsPath: resultPath, results: trials };
+  return { ok: !stoppedEarly && trials.every((item) => item.status === 'passed'), summary, resultsPath: resultPath, results: trials };
+}
+
+const PROVIDER_ERROR_STOP_AT = 3;
+// Errors that mean the request never reached a working model.
+const PROVIDER_FAILURE = /fallback chain failed|circuit breaker|HTTP (?:401|402|403|429|5\d\d)\b|rate.?limit|quota|insufficient (?:credit|balance|funds)|ECONNREFUSED|ECONNRESET|ENOTFOUND|EAI_AGAIN|connection was refused|fetch failed|socket hang up|getaddrinfo/i;
+export function isProviderFailure(errorText) {
+  return Boolean(errorText) && PROVIDER_FAILURE.test(String(errorText));
 }
 
 // The OASIS code an eval runs is the code loaded when this module was
