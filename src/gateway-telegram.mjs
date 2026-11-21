@@ -263,19 +263,20 @@ export function createTelegramGateway(options = {}) {
   return { run, stop, pollOnce, handleUpdate, chats, approvals };
 }
 
-export const GATEWAY_PLATFORMS = ['telegram', 'discord', 'slack', 'matrix', 'signal', 'email', 'whatsapp'];
+export const GATEWAY_PLATFORMS = ['telegram', 'discord', 'slack', 'matrix', 'signal', 'email', 'whatsapp', 'mattermost'];
 
 export const GATEWAY_USAGE = 'Usage: oasis gateway ' + GATEWAY_PLATFORMS.join('|') + '|all\n'
   + '  all:        every platform whose token is set (OASIS_TELEGRAM_BOT_TOKEN, OASIS_DISCORD_BOT_TOKEN,\n'
   + '              OASIS_SLACK_BOT_TOKEN, OASIS_MATRIX_ACCESS_TOKEN, OASIS_SIGNAL_NUMBER, OASIS_EMAIL_USER,\n'
-  + '              OASIS_WHATSAPP_TOKEN), in one process\n'
+  + '              OASIS_WHATSAPP_TOKEN, OASIS_MATTERMOST_TOKEN), in one process\n'
   + '  telegram:   OASIS_TELEGRAM_BOT_TOKEN, OASIS_TELEGRAM_ALLOWED_CHATS\n'
   + '  discord:    OASIS_DISCORD_BOT_TOKEN, OASIS_DISCORD_ALLOWED_USERS [, OASIS_DISCORD_CHANNELS]\n'
   + '  slack:      OASIS_SLACK_APP_TOKEN, OASIS_SLACK_BOT_TOKEN, OASIS_SLACK_ALLOWED_USERS\n'
   + '  matrix:     OASIS_MATRIX_HOMESERVER, OASIS_MATRIX_ACCESS_TOKEN, OASIS_MATRIX_ALLOWED_USERS [, OASIS_MATRIX_ROOMS]\n'
   + '  signal:     OASIS_SIGNAL_API_URL, OASIS_SIGNAL_NUMBER, OASIS_SIGNAL_ALLOWED_USERS [, OASIS_SIGNAL_GROUPS]\n'
   + '  email:      OASIS_EMAIL_IMAP_HOST, OASIS_EMAIL_SMTP_HOST, OASIS_EMAIL_USER, OASIS_EMAIL_PASSWORD, OASIS_EMAIL_ALLOWED_SENDERS\n'
-  + '  whatsapp:   OASIS_WHATSAPP_TOKEN, OASIS_WHATSAPP_PHONE_NUMBER_ID, OASIS_WHATSAPP_APP_SECRET, OASIS_WHATSAPP_VERIFY_TOKEN, OASIS_WHATSAPP_ALLOWED_USERS';
+  + '  whatsapp:   OASIS_WHATSAPP_TOKEN, OASIS_WHATSAPP_PHONE_NUMBER_ID, OASIS_WHATSAPP_APP_SECRET, OASIS_WHATSAPP_VERIFY_TOKEN, OASIS_WHATSAPP_ALLOWED_USERS\n'
+  + '  mattermost: OASIS_MATTERMOST_URL, OASIS_MATTERMOST_TOKEN, OASIS_MATTERMOST_ALLOWED_USERS [, OASIS_MATTERMOST_CHANNELS]';
 
 /** The variable whose presence means "this platform is configured" for `oasis gateway all`. */
 export const GATEWAY_TRIGGERS = {
@@ -285,7 +286,8 @@ export const GATEWAY_TRIGGERS = {
   matrix: 'OASIS_MATRIX_ACCESS_TOKEN',
   signal: 'OASIS_SIGNAL_NUMBER',
   email: 'OASIS_EMAIL_USER',
-  whatsapp: 'OASIS_WHATSAPP_TOKEN'
+  whatsapp: 'OASIS_WHATSAPP_TOKEN',
+  mattermost: 'OASIS_MATTERMOST_TOKEN'
 };
 
 export async function createGateway(kind, options = {}) {
@@ -296,6 +298,7 @@ export async function createGateway(kind, options = {}) {
   if (kind === 'signal') return (await import('./gateway-signal.mjs')).createSignalGateway(options);
   if (kind === 'email') return (await import('./gateway-email.mjs')).createEmailGateway(options);
   if (kind === 'whatsapp') return (await import('./gateway-whatsapp.mjs')).createWhatsAppGateway(options);
+  if (kind === 'mattermost') return (await import('./gateway-mattermost.mjs')).createMattermostGateway(options);
   throw new Error(GATEWAY_USAGE);
 }
 
