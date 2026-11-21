@@ -60,7 +60,7 @@ const COMPLETION_SUBCOMMANDS = {
   diff: ['--watch', '--stat'],
   deploy: ['--no-build', '--dry-run', '--branch', '--message'],
   profile: ['list', 'create', 'use', 'show', 'delete'],
-  import: ['codex', 'gemini', 'cursor', 'claude', 'hermes', 'opencode', 'antigravity', 'windsurf', 'cline'],
+  import: ['codex', 'gemini', 'cursor', 'claude', 'hermes', 'openclaw', 'opencode', 'antigravity', 'windsurf', 'cline'],
   completion: COMPLETION_SHELLS,
   help: ['all'],
   web: ['--open', '--port', '--host', '--tls-cert', '--tls-key']
